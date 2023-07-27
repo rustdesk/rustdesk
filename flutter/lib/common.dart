@@ -1391,7 +1391,11 @@ Future<void> saveWindowPosition(WindowType type, {int? windowId}) async {
   }
   if (Platform.isWindows) {
     const kMinOffset = -10000;
-    if (position.dx < kMinOffset || position.dy < kMinOffset) {
+    const kMaxOffset = 10000;
+    if (position.dx < kMinOffset ||
+        position.dy < kMinOffset ||
+        position.dx > kMaxOffset ||
+        position.dy > kMaxOffset) {
       debugPrint("Invalid position: $position, ignore saving position");
       return;
     }

@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:ui' as ui;
 import 'dart:async';
 import 'dart:io';
 
@@ -432,6 +431,8 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
               dragging: _dragging,
               fractionX: _fractionX,
               show: show,
+              setFullscreen: _setFullscreen,
+              setMinimize: _minimize,
             ),
           ),
         ),
@@ -443,8 +444,6 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
     final List<Widget> toolbarItems = [];
     if (!isWebDesktop) {
       toolbarItems.add(_PinMenu(state: widget.state));
-      toolbarItems.add(
-          _FullscreenMenu(state: widget.state, setFullscreen: _setFullscreen));
       toolbarItems.add(_MobileActionMenu(ffi: widget.ffi));
     }
 
@@ -470,12 +469,6 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
       toolbarItems.add(_VoiceCallMenu(id: widget.id, ffi: widget.ffi));
     }
     toolbarItems.add(_RecordMenu(ffi: widget.ffi));
-    if (!isWebDesktop) {
-      toolbarItems.add(_MinimizeMenu(
-        state: widget.state,
-        onPressed: _minimize,
-      ));
-    }
     toolbarItems.add(_CloseMenu(id: widget.id, ffi: widget.ffi));
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -558,51 +551,6 @@ class _PinMenu extends StatelessWidget {
   }
 }
 
-class _MinimizeMenu extends StatelessWidget {
-  final ToolbarState state;
-  final Function() onPressed;
-  bool get isFullscreen => stateGlobal.fullscreen;
-  const _MinimizeMenu({
-    Key? key,
-    required this.state,
-    required this.onPressed,
-  }) : super(key: key);
-
-  @override
-  Widget build(BuildContext context) {
-    return Offstage(
-        offstage: !isFullscreen,
-        child: _IconMenuButton(
-          assetName: 'assets/minimize_black_24dp.svg',
-          tooltip: 'Minimize',
-          onPressed: onPressed,
-          color: _ToolbarTheme.blueColor,
-          hoverColor: _ToolbarTheme.hoverBlueColor,
-        ));
-  }
-}
-
-class _FullscreenMenu extends StatelessWidget {
-  final ToolbarState state;
-  final Function(bool) setFullscreen;
-  bool get isFullscreen => stateGlobal.fullscreen;
-  const _FullscreenMenu(
-      {Key? key, required this.state, required this.setFullscreen})
-      : super(key: key);
-
-  @override
-  Widget build(BuildContext context) {
-    return _IconMenuButton(
-      assetName:
-          isFullscreen ? "assets/fullscreen_exit.svg" : "assets/fullscreen.svg",
-      tooltip: isFullscreen ? 'Exit Fullscreen' : 'Fullscreen',
-      onPressed: () => setFullscreen(!isFullscreen),
-      color: _ToolbarTheme.blueColor,
-      hoverColor: _ToolbarTheme.hoverBlueColor,
-    );
-  }
-}
-
 class _MobileActionMenu extends StatelessWidget {
   final FFI ffi;
   const _MobileActionMenu({Key? key, required this.ffi}) : super(key: key);
@@ -647,7 +595,7 @@ class _MonitorMenu extends StatelessWidget {
       children: [
         SvgPicture.asset(
           "assets/screen.svg",
-          color: Colors.white,
+          colorFilter: ColorFilter.mode(Colors.white, BlendMode.srcIn),
         ),
         Obx(() {
           RxInt display = CurrentDisplayState.find(id);
@@ -683,7 +631,7 @@ class _MonitorMenu extends StatelessWidget {
             children: [
               SvgPicture.asset(
                 "assets/screen.svg",
-                color: Colors.white,
+                colorFilter: ColorFilter.mode(Colors.white, BlendMode.srcIn),
               ),
               Text(
                 (i + 1).toString(),
@@ -754,7 +702,7 @@ class ScreenAdjustor {
   bool get isFullscreen => stateGlobal.fullscreen;
   int get windowId => stateGlobal.windowId;
 
-  adjustWindow() {
+  adjustWindow(BuildContext context) {
     return futureBuilder(
         future: isWindowCanBeAdjusted(),
         hasData: (data) {
@@ -764,7 +712,7 @@ class ScreenAdjustor {
             children: [
               MenuButton(
                   child: Text(translate('Adjust Window')),
-                  onPressed: doAdjustWindow,
+                  onPressed: () => doAdjustWindow(context),
                   ffi: ffi),
               Divider(),
             ],
@@ -772,20 +720,19 @@ class ScreenAdjustor {
         });
   }
 
-  doAdjustWindow() async {
+  doAdjustWindow(BuildContext context) async {
     await updateScreen();
     if (_screen != null) {
       cbExitFullscreen();
       double scale = _screen!.scaleFactor;
       final wndRect = await WindowController.fromWindowId(windowId).getFrame();
-      final mediaSize = MediaQueryData.fromWindow(ui.window).size;
+      final mediaSize = MediaQueryData.fromView(View.of(context)).size;
       // On windows, wndRect is equal to GetWindowRect and mediaSize is equal to GetClientRect.
       // https://stackoverflow.com/a/7561083
       double magicWidth =
           wndRect.right - wndRect.left - mediaSize.width * scale;
       double magicHeight =
           wndRect.bottom - wndRect.top - mediaSize.height * scale;
-
       final canvasModel = ffi.canvasModel;
       final width = (canvasModel.getDisplayWidth() * canvasModel.scale +
                   CanvasModel.leftToEdge +
@@ -928,7 +875,7 @@ class _DisplayMenuState extends State<_DisplayMenu> {
         color: _ToolbarTheme.blueColor,
         hoverColor: _ToolbarTheme.hoverBlueColor,
         menuChildren: [
-          _screenAdjustor.adjustWindow(),
+          _screenAdjustor.adjustWindow(context),
           viewStyle(),
           scrollStyle(),
           imageQuality(),
@@ -1115,9 +1062,9 @@ class _ResolutionsMenuState extends State<_ResolutionsMenu> {
     return _SubmenuButton(
       ffi: widget.ffi,
       menuChildren: <Widget>[
-            _OriginalResolutionMenuButton(showOriginalBtn),
-            _FitLocalResolutionMenuButton(showFitLocalBtn),
-            _customResolutionMenuButton(isVirtualDisplay),
+            _OriginalResolutionMenuButton(context, showOriginalBtn),
+            _FitLocalResolutionMenuButton(context, showFitLocalBtn),
+            _customResolutionMenuButton(context, isVirtualDisplay),
             _menuDivider(showOriginalBtn, showFitLocalBtn, isVirtualDisplay),
           ] +
           _supportedResolutionMenuButtons(),
@@ -1158,7 +1105,7 @@ class _ResolutionsMenuState extends State<_ResolutionsMenu> {
     }
   }
 
-  _onChanged(String? value) async {
+  _onChanged(BuildContext context, String? value) async {
     stateGlobal.setLastResolutionGroupValue(
         widget.id, pi.currentDisplay, value);
     if (value == null) return;
@@ -1178,12 +1125,12 @@ class _ResolutionsMenuState extends State<_ResolutionsMenu> {
 
     if (w != null && h != null) {
       if (w != display.width || h != display.height) {
-        await _changeResolution(w, h);
+        await _changeResolution(context, w, h);
       }
     }
   }
 
-  _changeResolution(int w, int h) async {
+  _changeResolution(BuildContext context, int w, int h) async {
     await bind.sessionChangeResolution(
       sessionId: ffi.sessionId,
       display: pi.currentDisplay,
@@ -1194,18 +1141,19 @@ class _ResolutionsMenuState extends State<_ResolutionsMenu> {
       final display = ffiModel.display;
       if (w == display.width && h == display.height) {
         if (await widget.screenAdjustor.isWindowCanBeAdjusted()) {
-          widget.screenAdjustor.doAdjustWindow();
+          widget.screenAdjustor.doAdjustWindow(context);
         }
       }
     });
   }
 
-  Widget _OriginalResolutionMenuButton(bool showOriginalBtn) {
+  Widget _OriginalResolutionMenuButton(
+      BuildContext context, bool showOriginalBtn) {
     return Offstage(
       offstage: !showOriginalBtn,
       child: MenuButton(
-        onPressed: () =>
-            _changeResolution(display.originalWidth, display.originalHeight),
+        onPressed: () => _changeResolution(
+            context, display.originalWidth, display.originalHeight),
         ffi: widget.ffi,
         child: Text(
             '${translate('resolution_original_tip')} ${display.originalWidth}x${display.originalHeight}'),
@@ -1213,14 +1161,15 @@ class _ResolutionsMenuState extends State<_ResolutionsMenu> {
     );
   }
 
-  Widget _FitLocalResolutionMenuButton(bool showFitLocalBtn) {
+  Widget _FitLocalResolutionMenuButton(
+      BuildContext context, bool showFitLocalBtn) {
     return Offstage(
       offstage: !showFitLocalBtn,
       child: MenuButton(
         onPressed: () {
           final resolution = _getBestFitResolution();
           if (resolution != null) {
-            _changeResolution(resolution.width, resolution.height);
+            _changeResolution(context, resolution.width, resolution.height);
           }
         },
         ffi: widget.ffi,
@@ -1230,13 +1179,13 @@ class _ResolutionsMenuState extends State<_ResolutionsMenu> {
     );
   }
 
-  Widget _customResolutionMenuButton(isVirtualDisplay) {
+  Widget _customResolutionMenuButton(BuildContext context, isVirtualDisplay) {
     return Offstage(
       offstage: !isVirtualDisplay,
       child: RdoMenuButton(
         value: _kCustomResolutionValue,
         groupValue: _groupValue,
-        onChanged: _onChanged,
+        onChanged: (String? value) => _onChanged(context, value),
         ffi: widget.ffi,
         child: Row(
           children: [
@@ -1277,7 +1226,7 @@ class _ResolutionsMenuState extends State<_ResolutionsMenu> {
       .map((e) => RdoMenuButton(
           value: '${e.width}x${e.height}',
           groupValue: _groupValue,
-          onChanged: _onChanged,
+          onChanged: (String? value) => _onChanged(context, value),
           ffi: widget.ffi,
           child: Text('${e.width}x${e.height}')))
       .toList();
@@ -1707,7 +1656,7 @@ class _IconSubmenuButtonState extends State<_IconSubmenuButton> {
     final icon = widget.icon ??
         SvgPicture.asset(
           widget.svg!,
-          color: Colors.white,
+          colorFilter: ColorFilter.mode(Colors.white, BlendMode.srcIn),
           width: _ToolbarTheme.buttonSize,
           height: _ToolbarTheme.buttonSize,
         );
@@ -1856,12 +1805,18 @@ class _DraggableShowHide extends StatefulWidget {
   final RxDouble fractionX;
   final RxBool dragging;
   final RxBool show;
+
+  final Function(bool) setFullscreen;
+  final Function() setMinimize;
+
   const _DraggableShowHide({
     Key? key,
     required this.sessionId,
     required this.fractionX,
     required this.dragging,
     required this.show,
+    required this.setFullscreen,
+    required this.setMinimize,
   }) : super(key: key);
 
   @override
@@ -1915,7 +1870,7 @@ class _DraggableShowHideState extends State<_DraggableShowHide> {
         widget.dragging.value = true;
       }),
       onDragEnd: (details) {
-        final mediaSize = MediaQueryData.fromWindow(ui.window).size;
+        final mediaSize = MediaQueryData.fromView(View.of(context)).size;
         widget.fractionX.value +=
             (details.offset.dx - position.dx) / (mediaSize.width - size.width);
         if (widget.fractionX.value < left) {
@@ -1940,10 +1895,31 @@ class _DraggableShowHideState extends State<_DraggableShowHide> {
       minimumSize: MaterialStateProperty.all(const Size(0, 0)),
       padding: MaterialStateProperty.all(EdgeInsets.zero),
     );
+    final isFullscreen = stateGlobal.fullscreen;
     final child = Row(
       mainAxisSize: MainAxisSize.min,
       children: [
         _buildDraggable(context),
+        TextButton(
+          onPressed: () {
+            widget.setFullscreen(!isFullscreen);
+            setState(() {});
+          },
+          child: Icon(
+            isFullscreen ? Icons.fullscreen_exit : Icons.fullscreen,
+            size: 20,
+          ),
+        ),
+        Offstage(
+          offstage: !isFullscreen,
+          child: TextButton(
+            onPressed: () => widget.setMinimize(),
+            child: Icon(
+              Icons.minimize,
+              size: 20,
+            ),
+          ),
+        ),
         TextButton(
           onPressed: () => setState(() {
             widget.show.value = !widget.show.value;
@@ -2032,7 +2008,7 @@ class _MultiMonitorMenu extends StatelessWidget {
                 children: [
                   SvgPicture.asset(
                     "assets/screen.svg",
-                    color: Colors.white,
+                    colorFilter: ColorFilter.mode(Colors.white, BlendMode.srcIn),
                   ),
                   Obx(
                     () => Text(
