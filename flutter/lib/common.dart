@@ -1487,9 +1487,9 @@ Future<Offset?> _adjustRestoreMainWindowOffset(
         .toDouble();
   }
   final minWidth = 10.0;
-  if ((left - minWidth) > frameRight! ||
-      (top - minWidth) > frameBottom! ||
-      (left + width + minWidth) < frameLeft ||
+  if ((left + minWidth) > frameRight! ||
+      (top + minWidth) > frameBottom! ||
+      (left + width - minWidth) < frameLeft ||
       top < frameTop!) {
     return null;
   } else {
