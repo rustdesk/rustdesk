@@ -12,4 +12,4 @@ jobs:
     secrets: inherit
     with:
       upload-artifact: true
-      upload-tag: "nightly" 
+      upload-tag: "$(date +'%d-%m-%Y')-nightly" 
