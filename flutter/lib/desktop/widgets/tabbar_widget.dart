@@ -516,6 +516,7 @@ class WindowActionPanelState extends State<WindowActionPanel>
 
   void _setMaximize(bool maximize) {
     stateGlobal.setMaximize(maximize);
+    _saveFrameDebounce.call(_saveFrame);
     setState(() {});
   }
 

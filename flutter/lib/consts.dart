@@ -50,11 +50,8 @@ const int kMobileDefaultDisplayHeight = 1280;
 const int kDesktopDefaultDisplayWidth = 1080;
 const int kDesktopDefaultDisplayHeight = 720;
 
-const int kMobileMaxDisplayWidth = 720;
-const int kMobileMaxDisplayHeight = 1280;
-
-const int kDesktopMaxDisplayWidth = 1920;
-const int kDesktopMaxDisplayHeight = 1080;
+const int kMobileMaxDisplaySize = 1280;
+const int kDesktopMaxDisplaySize = 3840;
 
 const double kDesktopFileTransferNameColWidth = 200;
 const double kDesktopFileTransferModifiedColWidth = 120;
