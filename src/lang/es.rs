@@ -518,11 +518,11 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Exit", "Salir"),
         ("Open", "Abrir"),
         ("logout_tip", "¿Seguro que deseas cerrar sesión?"),
-        ("Service", ""),
-        ("Start", ""),
-        ("Stop", ""),
-        ("exceed_max_devices", ""),
-        ("Sync with recent sessions", ""),
-        ("Sort tags", ""),
+        ("Service", "Servicio"),
+        ("Start", "Iniciar"),
+        ("Stop", "Detener"),
+        ("exceed_max_devices", "Has alcanzado el máximo número de dispositivos administrados."),
+        ("Sync with recent sessions", "Sincronizar con sesiones recientes"),
+        ("Sort tags", "Ordenar etiquetas"),
     ].iter().cloned().collect();
 }
