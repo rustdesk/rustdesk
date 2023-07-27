@@ -1490,7 +1490,7 @@ Future<Offset?> _adjustRestoreMainWindowOffset(
   if ((left + minWidth) > frameRight! ||
       (top + minWidth) > frameBottom! ||
       (left + width - minWidth) < frameLeft ||
-      top < frameTop!) {
+      (top - minWidth) < frameTop!) {
     return null;
   } else {
     return Offset(left, top);
