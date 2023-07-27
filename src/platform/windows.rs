@@ -2301,15 +2301,29 @@ mod tests {
 
 pub fn message_box(text: &str) {
     let mut text = text.to_owned();
-    if !text.ends_with("!") {
+    let nodialog = std::env::var("NO_DIALOG").unwrap_or_default() == "Y";
+    if !text.ends_with("!") || nodialog {
         use arboard::Clipboard as ClipboardContext;
         match ClipboardContext::new() {
             Ok(mut ctx) => {
                 ctx.set_text(&text).ok();
-                text = format!("{}\n\nAbove text has been copied to clipboard", &text);
+                if !nodialog {
+                    text = format!("{}\n\nAbove text has been copied to clipboard", &text);
+                }
             }
             _ => {}
         }
+    }
+    if nodialog {
+        if std::env::var("PRINT_OUT").unwrap_or_default() == "Y" {
+            println!("{text}");
+        }
+        if let Ok(x) = std::env::var("WRITE_TO_FILE") {
+            if !x.is_empty() {
+                allow_err!(std::fs::write(x, text));
+            }
+        }
+        return;
     }
     let text = text
         .encode_utf16()

@@ -102,7 +102,7 @@ pub fn core_main() -> Option<Vec<String>> {
     }
     if args.len() > 0 && args[0] == "--version" {
         // not use my_println here, because check super use using this command, no dialog expected
-        println!("{}", crate::VERSION);
+        my_println!("{}", crate::VERSION);
         return None;
     }
     #[cfg(windows)]
