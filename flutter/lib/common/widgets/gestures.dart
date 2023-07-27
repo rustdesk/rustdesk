@@ -184,6 +184,8 @@ class HoldTapMoveGestureRecognizer extends GestureRecognizer {
   _TapTracker? _firstTap;
   _TapTracker? _secondTap;
 
+  PointerDownEvent? _lastPointerDownEvent;
+
   final Map<int, _TapTracker> _trackers = <int, _TapTracker>{};
 
   @override
@@ -238,6 +240,7 @@ class HoldTapMoveGestureRecognizer extends GestureRecognizer {
       gestureSettings: gestureSettings,
     );
     _trackers[event.pointer] = tracker;
+    _lastPointerDownEvent = event;
     tracker.startTrackingPointer(_handleEvent, event.transform);
   }
 
@@ -248,7 +251,11 @@ class HoldTapMoveGestureRecognizer extends GestureRecognizer {
         _registerFirstTap(tracker);
       } else if (_secondTap != null) {
         if (event.pointer == _secondTap!.pointer) {
-          if (onHoldDragEnd != null) onHoldDragEnd!(DragEndDetails());
+          if (onHoldDragEnd != null) {
+            onHoldDragEnd!(DragEndDetails());
+            _secondTap = null;
+            _isStart = false;
+          }
         }
       } else {
         _reject(tracker);
@@ -303,7 +310,11 @@ class HoldTapMoveGestureRecognizer extends GestureRecognizer {
     _secondTap?.entry.resolve(GestureDisposition.accepted);
     _isStart = true;
     // TODO start details
-    if (onHoldDragStart != null) onHoldDragStart!(DragStartDetails());
+    if (onHoldDragStart != null) {
+      onHoldDragStart!(DragStartDetails(
+        kind: _lastPointerDownEvent?.kind,
+      ));
+    }
   }
 
   void _reject(_TapTracker tracker) {
@@ -435,6 +446,8 @@ class DoubleFinerTapGestureRecognizer extends GestureRecognizer {
   Timer? _firstTapTimer;
   _TapTracker? _firstTap;
 
+  PointerDownEvent? _lastPointerDownEvent;
+
   var _isStart = false;
 
   final Set<int> _upTap = {};
@@ -476,6 +489,7 @@ class DoubleFinerTapGestureRecognizer extends GestureRecognizer {
     } else {
       // first tap
       _isStart = true;
+      _lastPointerDownEvent = event;
       _startFirstTapDownTimer();
     }
     _trackTap(event);
@@ -591,7 +605,11 @@ class DoubleFinerTapGestureRecognizer extends GestureRecognizer {
 
   void _resolve() {
     // TODO tap down details
-    if (onDoubleFinerTap != null) onDoubleFinerTap!(TapDownDetails());
+    if (onDoubleFinerTap != null) {
+      onDoubleFinerTap!(TapDownDetails(
+        kind: _lastPointerDownEvent?.kind,
+      ));
+    }
     _trackers.forEach((key, value) {
       value.entry.resolve(GestureDisposition.accepted);
     });

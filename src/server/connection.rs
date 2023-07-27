@@ -329,6 +329,7 @@ impl Connection {
             closed: false,
             delay_response_instant: Instant::now(),
         };
+        let addr = hbb_common::try_into_v4(addr);
         if !conn.on_open(addr).await {
             conn.closed = true;
             // sleep to ensure msg got received.

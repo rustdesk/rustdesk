@@ -10,14 +10,26 @@ import 'package:http/http.dart' as http;
 
 import '../common.dart';
 
+final syncAbOption = 'sync-ab-with-recent-sessions';
+bool shouldSyncAb() {
+  return bind.mainGetLocalOption(key: syncAbOption).isNotEmpty;
+}
+
+final sortAbTagsOption = 'sync-ab-tags';
+bool shouldSortTags() {
+  return bind.mainGetLocalOption(key: sortAbTagsOption).isNotEmpty;
+}
+
 class AbModel {
   final abLoading = false.obs;
   final abError = "".obs;
   final tags = [].obs;
   final peers = List<Peer>.empty(growable: true).obs;
+  final sortTags = shouldSortTags().obs;
 
   final selectedTags = List<String>.empty(growable: true).obs;
   var initialized = false;
+  var licensedDevices = 0;
 
   WeakReference<FFI> parent;
 
@@ -41,6 +53,10 @@ class AbModel {
         if (json.containsKey('error')) {
           abError.value = json['error'];
         } else if (json.containsKey('data')) {
+          try {
+            gFFI.abModel.licensedDevices = json['licensed_devices'];
+            // ignore: empty_catches
+          } catch (e) {}
           final data = jsonDecode(json['data']);
           if (data != null) {
             tags.clear();
@@ -81,6 +97,15 @@ class AbModel {
       'tags': tags,
     });
     peers.add(peer);
+  }
+
+  bool isFull(bool warn) {
+    final res = licensedDevices > 0 && peers.length >= licensedDevices;
+    if (res && warn) {
+      BotToast.showText(
+          contentColor: Colors.red, text: translate("exceed_max_devices"));
+    }
+    return res;
   }
 
   void addPeer(Peer peer) {

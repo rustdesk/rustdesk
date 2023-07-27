@@ -132,6 +132,10 @@ pub fn is_can_screen_recording(prompt: bool) -> bool {
     can_record_screen
 }
 
+pub fn install_service() -> bool {
+    is_installed_daemon(false)
+}
+
 pub fn is_installed_daemon(prompt: bool) -> bool {
     let daemon = format!("{}_service.plist", crate::get_full_name());
     let agent = format!("{}_server.plist", crate::get_full_name());

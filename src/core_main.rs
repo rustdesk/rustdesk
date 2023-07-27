@@ -208,6 +208,13 @@ pub fn core_main() -> Option<Vec<String>> {
                 crate::tray::start_tray();
             }
             return None;
+        } else if args[0] == "--install-service" {
+            log::info!("start --install-service");
+            crate::platform::install_service();
+            return None;
+        } else if args[0] == "--uninstall-service" {
+            log::info!("start --uninstall-service");
+            crate::platform::uninstall_service(false);
         } else if args[0] == "--service" {
             log::info!("start --service");
             crate::start_os_service();

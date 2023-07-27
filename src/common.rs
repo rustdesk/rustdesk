@@ -754,18 +754,28 @@ pub fn get_sysinfo() -> serde_json::Value {
     use hbb_common::sysinfo::{CpuExt, System, SystemExt};
     let system = System::new_all();
     let memory = system.total_memory();
-    let memory = (memory as f64 / 1024. / 1024. / 1024. * 100 as f64).round() / 100.;
+    let memory = (memory as f64 / 1024. / 1024. / 1024. * 100.).round() / 100.;
     let cpus = system.cpus();
     let cpu_name = cpus.first().map(|x| x.brand()).unwrap_or_default();
     let cpu_name = cpu_name.trim_end();
     let cpu_freq = cpus.first().map(|x| x.frequency()).unwrap_or_default();
+    let cpu_freq = (cpu_freq as f64 / 1024. * 100.).round() / 100.;
+    let cpu = if cpu_freq > 0. {
+        format!("{}, {}GHz, ", cpu_name, cpu_freq)
+    } else {
+        "".to_owned() // android
+    };
     let num_cpus = num_cpus::get();
     let num_pcpus = num_cpus::get_physical();
-    let os = system.distribution_id();
-    let os = format!("{} / {}", os, system.long_os_version().unwrap_or_default());
-    let hostname = system.host_name();
+    let mut os = system.distribution_id();
+    os = format!("{} / {}", os, system.long_os_version().unwrap_or_default());
+    #[cfg(windows)]
+    {
+        os = format!("{os} - {}", system.os_version().unwrap_or_default());
+    }
+    let hostname = hostname(); // sys.hostname() return localhost on android in my test
     serde_json::json!({
-        "cpu": format!("{cpu_name}, {cpu_freq}MHz, {num_cpus}/{num_pcpus} cores"),
+        "cpu": format!("{cpu}{num_cpus}/{num_pcpus} cores"),
         "memory": format!("{memory}GB"),
         "os": os,
         "hostname": hostname,

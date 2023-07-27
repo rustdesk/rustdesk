@@ -644,6 +644,9 @@ abstract class BasePeerCard extends StatelessWidget {
       ),
       proc: () {
         () async {
+          if (gFFI.abModel.isFull(true)) {
+            return;
+          }
           if (!gFFI.abModel.idContainBy(peer.id)) {
             gFFI.abModel.addPeer(peer);
             await gFFI.abModel.pushAb();
