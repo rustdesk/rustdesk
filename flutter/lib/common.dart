@@ -1486,10 +1486,11 @@ Future<Offset?> _adjustRestoreMainWindowOffset(
             : kMobileMaxDisplaySize)
         .toDouble();
   }
-  if (left > frameRight! ||
-      top > frameBottom! ||
-      (left + width) < frameLeft ||
-      (top + height) < frameTop!) {
+  final minWidth = 10.0;
+  if ((left - minWidth) > frameRight! ||
+      (top - minWidth) > frameBottom! ||
+      (left + width + minWidth) < frameLeft ||
+      top < frameTop!) {
     return null;
   } else {
     return Offset(left, top);
