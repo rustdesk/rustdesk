@@ -313,6 +313,19 @@ pub fn core_main() -> Option<Vec<String>> {
                 }
             }
             return None;
+        } else if args[0] == "--option" {
+            if crate::platform::is_installed()
+                && crate::platform::check_super_user_permission().unwrap_or_default()
+            {
+                if args.len() == 2 {
+                    let options = crate::ipc::get_options();
+                    my_println!("{}", options.get(&args[1]).unwrap_or(&"".to_owned()));
+                } else if args.len() == 3 {
+                    crate::ipc::set_option(&args[1], &args[2]);
+                }
+            } else {
+                my_println!("Installation and administrative privileges required!");
+            }
         } else if args[0] == "--check-hwcodec-config" {
             #[cfg(feature = "hwcodec")]
             scrap::hwcodec::check_config();
