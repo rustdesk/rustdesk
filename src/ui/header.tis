@@ -424,10 +424,22 @@ class Header: Reactor.Component {
 function handle_custom_image_quality() {
     var tmp = handler.get_custom_image_quality();
     var bitrate = (tmp[0] || 50);
-    msgbox("custom", "Custom Image Quality", "<div .form> \
-          <div><input type=\"hslider\" style=\"width: 50%\" name=\"bitrate\" max=\"100\" min=\"10\" value=\"" + bitrate + "\"/ buddy=\"bitrate-buddy\"><b #bitrate-buddy>x</b>% Bitrate</div> \
+    var extendedBitrate = bitrate > 100;
+    var maxRate = extendedBitrate ? 2000 : 100;
+    msgbox("custom-image-quality", "Custom Image Quality", "<div .form> \
+          <div><input #bitrate-slider type=\"hslider\" style=\"width: 50%\" name=\"bitrate\" max=\"" + maxRate + "\" min=\"10\" value=\"" + bitrate + "\"/ buddy=\"bitrate-buddy\"><b #bitrate-buddy>x</b>% Bitrate <button|checkbox #extended-slider .custom-event " + (extendedBitrate ? "checked" : "") + ">More</button></div> \
       </div>", "", function(res=null) {
         if (!res) return;
+        if (res.id === "extended-slider") {
+            var slider = res.parent.$(#bitrate-slider)
+            slider.slider.max = res.checked ? 2000 : 100;
+            if (slider.value > slider.slider.max) {
+                slider.value = slider.slider.max;
+            }
+            var buddy = res.parent.$(#bitrate-buddy);
+            buddy.value = slider.value;
+            return;
+        }
         if (!res.bitrate) return;
         handler.save_custom_image_quality(res.bitrate);
         toggleMenuState();

@@ -947,7 +947,9 @@ showSetOSPassword(
   Function()? closeCallback,
 ) async {
   final controller = TextEditingController();
-  osPassword ??= await bind.sessionGetOption(sessionId: sessionId, arg: 'os-password') ?? '';
+  osPassword ??=
+      await bind.sessionGetOption(sessionId: sessionId, arg: 'os-password') ??
+          '';
   var autoLogin =
       await bind.sessionGetOption(sessionId: sessionId, arg: 'auto-login') !=
           '';
@@ -957,6 +959,7 @@ showSetOSPassword(
       close();
       if (closeCallback != null) closeCallback();
     }
+
     submit() {
       var text = controller.text.trim();
       bind.sessionPeerOption(
@@ -1220,7 +1223,8 @@ customImageQualityDialog(SessionID sessionId, String id, FFI ffi) async {
   qualityInitValue =
       quality != null && quality.isNotEmpty ? quality[0].toDouble() : 50.0;
   const qualityMinValue = 10.0;
-  const qualityMaxValue = 100.0;
+  const qualityMoreThresholdValue = 100.0;
+  const qualityMaxValue = 2000.0;
   if (qualityInitValue < qualityMinValue) {
     qualityInitValue = qualityMinValue;
   }
@@ -1228,6 +1232,8 @@ customImageQualityDialog(SessionID sessionId, String id, FFI ffi) async {
     qualityInitValue = qualityMaxValue;
   }
   final RxDouble qualitySliderValue = RxDouble(qualityInitValue);
+  final moreQualityInitValue = qualityInitValue > qualityMoreThresholdValue;
+  final RxBool moreQualityChecked = RxBool(moreQualityInitValue);
   final debouncerQuality = Debouncer<double>(
     Duration(milliseconds: 1000),
     onChanged: (double v) {
@@ -1242,7 +1248,9 @@ customImageQualityDialog(SessionID sessionId, String id, FFI ffi) async {
               child: Slider(
                 value: qualitySliderValue.value,
                 min: qualityMinValue,
-                max: qualityMaxValue,
+                max: moreQualityChecked.value
+                    ? qualityMaxValue
+                    : qualityMoreThresholdValue,
                 divisions: 18,
                 onChanged: (double value) {
                   qualitySliderValue.value = value;
@@ -1256,10 +1264,31 @@ customImageQualityDialog(SessionID sessionId, String id, FFI ffi) async {
                 style: const TextStyle(fontSize: 15),
               )),
           Expanded(
-              flex: 2,
+              flex: 1,
               child: Text(
                 translate('Bitrate'),
                 style: const TextStyle(fontSize: 15),
+              )),
+          Expanded(
+              flex: 1,
+              child: Row(
+                children: [
+                  Checkbox(
+                    value: moreQualityChecked.value,
+                    onChanged: (bool? value) {
+                      moreQualityChecked.value = value!;
+                      if (!value &&
+                          qualitySliderValue.value >
+                              qualityMoreThresholdValue) {
+                        qualitySliderValue.value = qualityMoreThresholdValue;
+                        debouncerQuality.value = qualityMoreThresholdValue;
+                      }
+                    },
+                  ).marginOnly(right: 5),
+                  Expanded(
+                    child: Text(translate('More')),
+                  )
+                ],
               )),
         ],
       ));
