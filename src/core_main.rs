@@ -326,6 +326,7 @@ pub fn core_main() -> Option<Vec<String>> {
             } else {
                 my_println!("Installation and administrative privileges required!");
             }
+            return None;
         } else if args[0] == "--check-hwcodec-config" {
             #[cfg(feature = "hwcodec")]
             scrap::hwcodec::check_config();
