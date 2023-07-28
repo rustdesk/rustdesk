@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/models/model.dart';
@@ -47,7 +48,8 @@ class AbModel {
     try {
       var authHeaders = getHttpHeaders();
       authHeaders['Content-Type'] = "application/json";
-      final resp = await http.post(Uri.parse(api), headers: authHeaders);
+      authHeaders['Accept-Encoding'] = "gzip";
+      final resp = await http.get(Uri.parse(api), headers: authHeaders);
       if (resp.body.isNotEmpty && resp.body.toLowerCase() != "null") {
         Map<String, dynamic> json = jsonDecode(resp.body);
         if (json.containsKey('error')) {
@@ -136,8 +138,16 @@ class AbModel {
     final body = jsonEncode({
       "data": jsonEncode({"tags": tags, "peers": peersJsonData})
     });
+    var request = http.Request('POST', Uri.parse(api));
+    if (licensedDevices > 0) {
+      authHeaders['Content-Encoding'] = "gzip";
+      request.bodyBytes = GZipCodec().encode(utf8.encode(body));
+    } else {
+      request.body = body;
+    }
+    request.headers.addAll(authHeaders);
     try {
-      await http.post(Uri.parse(api), headers: authHeaders, body: body);
+      await http.Client().send(request);
       await pullAb(quiet: true);
     } catch (e) {
       BotToast.showText(contentColor: Colors.red, text: e.toString());
