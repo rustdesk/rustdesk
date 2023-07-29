@@ -1,5 +1,8 @@
 use super::{CursorData, ResultType};
 use desktop::Desktop;
+#[cfg(all(feature = "linux_headless"))]
+#[cfg(not(any(feature = "flatpak", feature = "appimage")))]
+use hbb_common::config::CONFIG_OPTION_ALLOW_LINUX_HEADLESS;
 pub use hbb_common::platform::linux::*;
 use hbb_common::{
     allow_err, bail,
@@ -9,9 +12,6 @@ use hbb_common::{
     message_proto::Resolution,
     regex::{Captures, Regex},
 };
-#[cfg(all(feature = "linux_headless"))]
-#[cfg(not(any(feature = "flatpak", feature = "appimage")))]
-use hbb_common::config::CONFIG_OPTION_ALLOW_LINUX_HEADLESS;
 use std::{
     cell::RefCell,
     io::Write,
@@ -439,13 +439,21 @@ fn get_cm() -> bool {
 }
 
 pub fn is_login_wayland() -> bool {
-    if let Ok(contents) = std::fs::read_to_string("/etc/gdm3/custom.conf") {
-        contents.contains("#WaylandEnable=false") || contents.contains("WaylandEnable=true")
-    } else if let Ok(contents) = std::fs::read_to_string("/etc/gdm/custom.conf") {
-        contents.contains("#WaylandEnable=false") || contents.contains("WaylandEnable=true")
-    } else {
-        false
+    let files = ["/etc/gdm3/custom.conf", "/etc/gdm/custom.conf"];
+    match (
+        Regex::new(r"# *WaylandEnable *= *false"),
+        Regex::new(r"WaylandEnable *= *true"),
+    ) {
+        (Ok(pat1), Ok(pat2)) => {
+            for file in files {
+                if let Ok(contents) = std::fs::read_to_string(file) {
+                    return pat1.is_match(&contents) || pat2.is_match(&contents);
+                }
+            }
+        }
+        _ => {}
     }
+    false
 }
 
 #[inline]

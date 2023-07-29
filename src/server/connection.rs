@@ -1386,6 +1386,12 @@ impl Connection {
             #[cfg(all(target_os = "linux", feature = "linux_headless"))]
             #[cfg(not(any(feature = "flatpak", feature = "appimage")))]
             let is_headless_allowed = crate::platform::is_headless_allowed();
+            #[cfg(any(
+                feature = "flatpak",
+                feature = "appimage",
+                not(all(target_os = "linux", feature = "linux_headless"))
+            ))]
+            let is_headless_allowed = false;
             #[cfg(all(target_os = "linux", feature = "linux_headless"))]
             #[cfg(not(any(feature = "flatpak", feature = "appimage")))]
             let desktop_err = if is_headless_allowed {
@@ -1406,20 +1412,10 @@ impl Connection {
             #[cfg(not(any(feature = "flatpak", feature = "appimage")))]
             let wait_ipc_timeout = 10_000;
 
-            #[cfg(all(target_os = "linux", feature = "linux_headless"))]
-            #[cfg(not(any(feature = "flatpak", feature = "appimage")))]
-            let is_headless_proc = is_headless_allowed;
-            #[cfg(any(
-                feature = "flatpak",
-                feature = "appimage",
-                not(all(target_os = "linux", feature = "linux_headless"))
-            ))]
-            let is_headless_proc = false;
-
             // If err is LOGIN_MSG_DESKTOP_SESSION_NOT_READY, just keep this msg and go on checking password.
             #[cfg(all(target_os = "linux", feature = "linux_headless"))]
             #[cfg(not(any(feature = "flatpak", feature = "appimage")))]
-            if is_headless_proc
+            if is_headless_allowed
                 && !desktop_err.is_empty()
                 && desktop_err != crate::client::LOGIN_MSG_DESKTOP_SESSION_NOT_READY
             {
@@ -1453,7 +1449,7 @@ impl Connection {
             } else if self.is_recent_session() {
                 #[cfg(all(target_os = "linux", feature = "linux_headless"))]
                 #[cfg(not(any(feature = "flatpak", feature = "appimage")))]
-                if is_headless_proc {
+                if is_headless_allowed {
                     if desktop_err.is_empty() {
                         if is_headless {
                             self.tx_desktop_ready.send(()).await.ok();
@@ -1469,7 +1465,7 @@ impl Connection {
                         self.send_login_error(desktop_err).await;
                     }
                 }
-                if !is_headless_proc {
+                if !is_headless_allowed {
                     self.try_start_cm(lr.my_id, lr.my_name, true);
                     self.send_logon_response().await;
                     if self.port_forward_socket.is_some() {
@@ -1479,7 +1475,7 @@ impl Connection {
             } else if lr.password.is_empty() {
                 #[cfg(all(target_os = "linux", feature = "linux_headless"))]
                 #[cfg(not(any(feature = "flatpak", feature = "appimage")))]
-                if is_headless_proc {
+                if is_headless_allowed {
                     if desktop_err.is_empty() {
                         self.try_start_cm(lr.my_id.clone(), lr.my_name.clone(), false);
                     } else {
@@ -1489,7 +1485,7 @@ impl Connection {
                         .await;
                     }
                 }
-                if !is_headless_proc {
+                if !is_headless_allowed {
                     self.try_start_cm(lr.my_id, lr.my_name, false);
                 }
             } else {
@@ -1532,7 +1528,7 @@ impl Connection {
                         .insert(self.ip.clone(), failure);
                     #[cfg(all(target_os = "linux", feature = "linux_headless"))]
                     #[cfg(not(any(feature = "flatpak", feature = "appimage")))]
-                    if is_headless_proc {
+                    if is_headless_allowed {
                         if desktop_err.is_empty() {
                             self.send_login_error(crate::client::LOGIN_MSG_PASSWORD_WRONG)
                                 .await;
@@ -1544,7 +1540,7 @@ impl Connection {
                             .await;
                         }
                     }
-                    if !is_headless_proc {
+                    if !is_headless_allowed {
                         self.send_login_error(crate::client::LOGIN_MSG_PASSWORD_WRONG)
                             .await;
                         self.try_start_cm(lr.my_id, lr.my_name, false);
@@ -1555,7 +1551,7 @@ impl Connection {
                     }
                     #[cfg(all(target_os = "linux", feature = "linux_headless"))]
                     #[cfg(not(any(feature = "flatpak", feature = "appimage")))]
-                    if is_headless_proc {
+                    if is_headless_allowed {
                         if desktop_err.is_empty() {
                             if is_headless {
                                 self.tx_desktop_ready.send(()).await.ok();
@@ -1571,7 +1567,7 @@ impl Connection {
                             self.send_login_error(desktop_err).await;
                         }
                     }
-                    if !is_headless_proc {
+                    if !is_headless_allowed {
                         self.send_logon_response().await;
                         self.try_start_cm(lr.my_id, lr.my_name, true);
                         if self.port_forward_socket.is_some() {
