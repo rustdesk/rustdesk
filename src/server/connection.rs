@@ -2391,10 +2391,11 @@ async fn start_ipc(
             args.push("--hide");
         };
 
+        #[cfg(target_os = "linux")]
         #[cfg(any(
             feature = "flatpak",
             feature = "appimage",
-            not(all(target_os = "linux", feature = "linux_headless"))
+            not(feature = "linux_headless")
         ))]
         let user = None;
         #[cfg(all(target_os = "linux", feature = "linux_headless"))]
