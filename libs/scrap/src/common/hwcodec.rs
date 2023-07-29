@@ -371,14 +371,7 @@ pub fn check_config_process() {
         HwCodecConfig::clear();
         if let Ok(exe) = std::env::current_exe() {
             if let Some(file_name) = exe.file_name().to_owned() {
-                let s = System::new_all();
                 let arg = "--check-hwcodec-config";
-                for process in s.processes_by_name(&file_name.to_string_lossy().to_string()) {
-                    if process.cmd().iter().any(|cmd| cmd.contains(arg)) {
-                        log::warn!("already have process {}", arg);
-                        return;
-                    }
-                }
                 if let Ok(mut child) = std::process::Command::new(exe).arg(arg).spawn() {
                     // wait up to 10 seconds
                     for _ in 0..10 {
