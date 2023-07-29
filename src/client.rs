@@ -2103,8 +2103,8 @@ lazy_static::lazy_static! {
         use hbb_common::config::LINK_HEADLESS_LINUX_SUPPORT;
         let map = HashMap::from([(LOGIN_SCREEN_WAYLAND, LoginErrorMsgBox{
             msgtype: "error",
-            title: "login_wayland_title_tip",
-            text: "login_wayland_text_tip",
+            title: "Login Error",
+            text: "Login screen using Wayland is not supported",
             link: "https://rustdesk.com/docs/en/manual/linux/#login-screen",
             try_again: true,
         }), (LOGIN_MSG_DESKTOP_SESSION_NOT_READY, LoginErrorMsgBox{

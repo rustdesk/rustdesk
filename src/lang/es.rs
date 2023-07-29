@@ -524,7 +524,5 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("exceed_max_devices", "Has alcanzado el máximo número de dispositivos administrados."),
         ("Sync with recent sessions", "Sincronizar con sesiones recientes"),
         ("Sort tags", "Ordenar etiquetas"),
-        ("login_wayland_title_tip", ""),
-        ("login_wayland_text_tip", ""),
     ].iter().cloned().collect();
 }
