@@ -1274,12 +1274,21 @@ mainSetBoolOption(String key, bool value) async {
   await bind.mainSetOption(key: key, value: v);
 }
 
+mainSetLocalBoolOption(String key, bool value) async {
+  String v = bool2option(key, value);
+  await bind.mainSetLocalOption(key: key, value: v);
+}
+
 Future<bool> mainGetBoolOption(String key) async {
   return option2bool(key, await bind.mainGetOption(key: key));
 }
 
 bool mainGetBoolOptionSync(String key) {
   return option2bool(key, bind.mainGetOptionSync(key: key));
+}
+
+bool mainGetLocalBoolOptionSync(String key) {
+  return option2bool(key, bind.mainGetLocalOption(key: key));
 }
 
 Future<bool> matchPeer(String searchText, Peer peer) async {

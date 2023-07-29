@@ -313,14 +313,15 @@ class _GeneralState extends State<_General> {
 
   Widget other() {
     return _Card(title: 'Other', children: [
-      _OptionCheckBox(context, 'Confirm before closing multiple tabs',
+      _OptionCheckBox(context, _ConfigType.local, 'Confirm before closing multiple tabs',
           'enable-confirm-closing-tabs'),
-      _OptionCheckBox(context, 'Adaptive Bitrate', 'enable-abr'),
+      _OptionCheckBox(context, _ConfigType.server, 'Adaptive Bitrate', 'enable-abr'),
       if (Platform.isLinux)
         Tooltip(
           message: translate('software_render_tip'),
           child: _OptionCheckBox(
             context,
+            _ConfigType.local,
             "Always use software rendering",
             'allow-always-software-render',
           ),
@@ -332,7 +333,7 @@ class _GeneralState extends State<_General> {
     return Offstage(
       offstage: !bind.mainHasHwcodec(),
       child: _Card(title: 'Hardware Codec', children: [
-        _OptionCheckBox(context, 'Enable hardware codec', 'enable-hwcodec'),
+        _OptionCheckBox(context, _ConfigType.local, 'Enable hardware codec', 'enable-hwcodec'),
       ]),
     );
   }
@@ -399,7 +400,7 @@ class _GeneralState extends State<_General> {
       bool canlaunch = map['canlaunch']! as bool;
 
       return _Card(title: 'Recording', children: [
-        _OptionCheckBox(context, 'Automatically record incoming sessions',
+        _OptionCheckBox(context, _ConfigType.local, 'Automatically record incoming sessions',
             'allow-auto-record-incoming'),
         Row(
           children: [
@@ -573,24 +574,24 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
             }).marginOnly(left: _kContentHMargin),
         Column(
           children: [
-            _OptionCheckBox(context, 'Enable Keyboard/Mouse', 'enable-keyboard',
+            _OptionCheckBox(context, _ConfigType.server, 'Enable Keyboard/Mouse', 'enable-keyboard',
                 enabled: enabled, fakeValue: fakeValue),
-            _OptionCheckBox(context, 'Enable Clipboard', 'enable-clipboard',
-                enabled: enabled, fakeValue: fakeValue),
-            _OptionCheckBox(
-                context, 'Enable File Transfer', 'enable-file-transfer',
-                enabled: enabled, fakeValue: fakeValue),
-            _OptionCheckBox(context, 'Enable Audio', 'enable-audio',
-                enabled: enabled, fakeValue: fakeValue),
-            _OptionCheckBox(context, 'Enable TCP Tunneling', 'enable-tunnel',
+            _OptionCheckBox(context, _ConfigType.server, 'Enable Clipboard', 'enable-clipboard',
                 enabled: enabled, fakeValue: fakeValue),
             _OptionCheckBox(
-                context, 'Enable Remote Restart', 'enable-remote-restart',
+                context, _ConfigType.server, 'Enable File Transfer', 'enable-file-transfer',
+                enabled: enabled, fakeValue: fakeValue),
+            _OptionCheckBox(context, _ConfigType.server, 'Enable Audio', 'enable-audio',
+                enabled: enabled, fakeValue: fakeValue),
+            _OptionCheckBox(context, _ConfigType.server, 'Enable TCP Tunneling', 'enable-tunnel',
                 enabled: enabled, fakeValue: fakeValue),
             _OptionCheckBox(
-                context, 'Enable Recording Session', 'enable-record-session',
+                context, _ConfigType.server, 'Enable Remote Restart', 'enable-remote-restart',
                 enabled: enabled, fakeValue: fakeValue),
-            _OptionCheckBox(context, 'Enable remote configuration modification',
+            _OptionCheckBox(
+                context, _ConfigType.server, 'Enable Recording Session', 'enable-record-session',
+                enabled: enabled, fakeValue: fakeValue),
+            _OptionCheckBox(context, _ConfigType.server, 'Enable remote configuration modification',
                 'allow-remote-config-modification',
                 enabled: enabled, fakeValue: fakeValue),
           ],
@@ -711,11 +712,11 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
     return _Card(title: 'Security', children: [
       Offstage(
         offstage: !Platform.isWindows,
-        child: _OptionCheckBox(context, 'Enable RDP', 'enable-rdp',
+        child: _OptionCheckBox(context, _ConfigType.server, 'Enable RDP', 'enable-rdp',
             enabled: enabled),
       ),
       shareRdp(context, enabled),
-      _OptionCheckBox(context, 'Deny LAN Discovery', 'enable-lan-discovery',
+      _OptionCheckBox(context, _ConfigType.server, 'Deny LAN Discovery', 'enable-lan-discovery',
           reverse: true, enabled: enabled),
       ...directIp(context),
       whitelist(),
@@ -754,7 +755,7 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
     update() => setState(() {});
     RxBool applyEnabled = false.obs;
     return [
-      _OptionCheckBox(context, 'Enable Direct IP Access', 'direct-server',
+      _OptionCheckBox(context, _ConfigType.server, 'Enable Direct IP Access', 'direct-server',
           update: update, enabled: !locked),
       () {
         // Simple temp wrapper for PR check
@@ -1654,21 +1655,30 @@ Color? _disabledTextColor(BuildContext context, bool enabled) {
       : Theme.of(context).textTheme.titleLarge?.color?.withOpacity(0.6);
 }
 
+enum _ConfigType { server, local }
+
 // ignore: non_constant_identifier_names
-Widget _OptionCheckBox(BuildContext context, String label, String key,
+Widget _OptionCheckBox(
+    BuildContext context, _ConfigType type, String label, String key,
     {Function()? update,
     bool reverse = false,
     bool enabled = true,
     Icon? checkedIcon,
     bool? fakeValue}) {
-  bool value = mainGetBoolOptionSync(key);
+  bool value =
+      type == _ConfigType.server ? mainGetBoolOptionSync(key) : mainGetLocalBoolOptionSync(key);
   if (reverse) value = !value;
   var ref = value.obs;
   onChanged(option) async {
     if (option != null) {
       if (reverse) option = !option;
-      await mainSetBoolOption(key, option);
-      ref.value = mainGetBoolOptionSync(key);
+      type == _ConfigType.server
+          ? await mainSetBoolOption(key, option)
+          : await mainSetLocalBoolOption(key, option);
+      ref.value = value = type == _ConfigType.server
+          ? mainGetBoolOptionSync(key)
+          : mainGetLocalBoolOptionSync(key);
+      ;
       update?.call();
     }
   }
