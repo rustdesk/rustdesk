@@ -33,7 +33,7 @@ const SERIAL: i32 = 3;
 const PASSWORD_ENC_VERSION: &str = "00";
 
 // config2 options
-#[cfg(all(target_os = "linux"))]
+#[cfg(target_os = "linux")]
 pub const CONFIG_OPTION_ALLOW_LINUX_HEADLESS: &str = "allow-linux-headless";
 
 #[cfg(target_os = "macos")]

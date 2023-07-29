@@ -312,20 +312,26 @@ class _GeneralState extends State<_General> {
   }
 
   Widget other() {
-    return _Card(title: 'Other', children: [
+    final children = [
       _OptionCheckBox(context, 'Confirm before closing multiple tabs',
           'enable-confirm-closing-tabs'),
-      _OptionCheckBox(context, 'Adaptive Bitrate', 'enable-abr'),
-      if (Platform.isLinux)
-        Tooltip(
-          message: translate('software_render_tip'),
-          child: _OptionCheckBox(
-            context,
-            "Always use software rendering",
-            'allow-always-software-render',
-          ),
-        )
-    ]);
+      _OptionCheckBox(context, 'Adaptive Bitrate', 'enable-abr')
+    ];
+    if (Platform.isLinux) {
+      children.add(Tooltip(
+        message: translate('software_render_tip'),
+        child: _OptionCheckBox(
+          context,
+          "Always use software rendering",
+          'allow-always-software-render',
+        ),
+      ));
+    }
+    if (bind.mainShowOption(key: 'allow-linux-headless')) {
+      children.add(_OptionCheckBox(
+          context, 'Allow linux headless', 'allow-linux-headless'));
+    }
+    return _Card(title: 'Other', children: children);
   }
 
   Widget hwcodec() {

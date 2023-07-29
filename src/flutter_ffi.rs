@@ -614,6 +614,15 @@ pub fn main_get_error() -> String {
     get_error()
 }
 
+pub fn main_show_option(key: String) -> SyncReturn<bool> {
+    if key.eq(config::CONFIG_OPTION_ALLOW_LINUX_HEADLESS) {
+        #[cfg(all(target_os = "linux", feature = "linux_headless"))]
+        #[cfg(not(any(feature = "flatpak", feature = "appimage")))]
+        return SyncReturn(true)
+    }
+    SyncReturn(false)
+}
+
 pub fn main_set_option(key: String, value: String) {
     if key.eq("custom-rendezvous-server") {
         set_option(key, value);
