@@ -32,6 +32,10 @@ pub const COMPRESS_LEVEL: i32 = 3;
 const SERIAL: i32 = 3;
 const PASSWORD_ENC_VERSION: &str = "00";
 
+// config2 options
+#[cfg(all(target_os = "linux"))]
+pub const CONFIG_OPTION_ALLOW_LINUX_HEADLESS: &str = "allow-linux-headless";
+
 #[cfg(target_os = "macos")]
 lazy_static::lazy_static! {
     pub static ref ORG: Arc<RwLock<String>> = Arc::new(RwLock::new("com.carriez".to_owned()));

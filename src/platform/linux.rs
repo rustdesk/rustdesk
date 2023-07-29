@@ -9,6 +9,9 @@ use hbb_common::{
     message_proto::Resolution,
     regex::{Captures, Regex},
 };
+#[cfg(all(feature = "linux_headless"))]
+#[cfg(not(any(feature = "flatpak", feature = "appimage")))]
+use hbb_common::config::CONFIG_OPTION_ALLOW_LINUX_HEADLESS;
 use std::{
     cell::RefCell,
     io::Write,
@@ -67,6 +70,13 @@ pub struct xcb_xfixes_get_cursor_image {
     pub yhot: u16,
     pub cursor_serial: c_long,
     pub pixels: *const c_long,
+}
+
+#[inline]
+#[cfg(feature = "linux_headless")]
+#[cfg(not(any(feature = "flatpak", feature = "appimage")))]
+pub fn is_headless_allowed() -> bool {
+    Config::get_option(CONFIG_OPTION_ALLOW_LINUX_HEADLESS) == "Y"
 }
 
 #[inline]

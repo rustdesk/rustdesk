@@ -75,7 +75,9 @@ impl RendezvousMediator {
         }
         #[cfg(all(target_os = "linux", feature = "linux_headless"))]
         #[cfg(not(any(feature = "flatpak", feature = "appimage")))]
-        crate::platform::linux_desktop_manager::start_xdesktop();
+        if crate::platform::is_headless_allowed() {
+            crate::platform::linux_desktop_manager::start_xdesktop();
+        }
         loop {
             Config::reset_online();
             if Config::get_option("stop-service").is_empty() {
