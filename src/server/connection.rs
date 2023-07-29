@@ -2324,6 +2324,7 @@ async fn start_ipc(
         };
 
         #[allow(unused_mut)]
+        #[cfg(target_os = "linux")]
         let mut user = None;
 
         // Cm run as user, wait until desktop session is ready.
