@@ -73,5 +73,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("clipboard_wait_response_timeout_tip", "Timed out waiting for copy response."),
         ("logout_tip", "Are you sure you want to log out?"),
         ("exceed_max_devices", "You have reached the maximum number of managed devices."),
+        ("login_wayland_title_tip", "Failed to connect"),
+        ("login_wayland_text_tip", "Login screen of Wayland is not supported."),
         ].iter().cloned().collect();
 }

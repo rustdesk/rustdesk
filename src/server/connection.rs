@@ -1007,14 +1007,22 @@ impl Connection {
         }
         #[cfg(target_os = "linux")]
         if !self.file_transfer.is_some() && !self.port_forward_socket.is_some() {
-            let dtype = crate::platform::linux::get_display_server();
-            if dtype != crate::platform::linux::DISPLAY_SERVER_X11
-                && dtype != crate::platform::linux::DISPLAY_SERVER_WAYLAND
-            {
-                res.set_error(format!(
-                    "Unsupported display server type \"{}\", x11 or wayland expected",
-                    dtype
-                ));
+            let mut msg = "".to_owned();
+            if crate::platform::linux::is_login_wayland() {
+                msg = crate::client::LOGIN_SCREEN_WAYLAND.to_owned();
+            } else {
+                let dtype = crate::platform::linux::get_display_server();
+                if dtype != crate::platform::linux::DISPLAY_SERVER_X11
+                    && dtype != crate::platform::linux::DISPLAY_SERVER_WAYLAND
+                {
+                    msg = format!(
+                        "Unsupported display server type \"{}\", x11 or wayland expected",
+                        dtype
+                    );
+                }
+            }
+            if !msg.is_empty() {
+                res.set_error(msg);
                 let mut msg_out = Message::new();
                 msg_out.set_login_response(res);
                 self.send(msg_out).await;
@@ -2387,7 +2395,11 @@ async fn start_ipc(
             args.push("--hide");
         };
 
-        #[cfg(any(feature = "flatpak", feature = "appimage", not(all(target_os = "linux", feature = "linux_headless"))))]
+        #[cfg(any(
+            feature = "flatpak",
+            feature = "appimage",
+            not(all(target_os = "linux", feature = "linux_headless"))
+        ))]
         let user = None;
         #[cfg(all(target_os = "linux", feature = "linux_headless"))]
         #[cfg(not(any(feature = "flatpak", feature = "appimage")))]

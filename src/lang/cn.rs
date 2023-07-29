@@ -524,5 +524,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("exceed_max_devices", "管理的设备数已达到最大值"),
         ("Sync with recent sessions", "同步最近会话"),
         ("Sort tags", "对标签进行排序"),
+        ("login_wayland_title_tip", "无法连接"),
+        ("login_wayland_text_tip", "不支持 Wayland 登录界面。"),
     ].iter().cloned().collect();
 }

@@ -91,6 +91,8 @@ pub const LOGIN_MSG_PASSWORD_WRONG: &str = "Wrong Password";
 pub const LOGIN_MSG_NO_PASSWORD_ACCESS: &str = "No Password Access";
 pub const LOGIN_MSG_OFFLINE: &str = "Offline";
 #[cfg(target_os = "linux")]
+pub const LOGIN_SCREEN_WAYLAND: &str = "Wayland login screen";
+#[cfg(target_os = "linux")]
 pub const SCRAP_UBUNTU_HIGHER_REQUIRED: &str = "Wayland requires Ubuntu 21.04 or higher version.";
 #[cfg(target_os = "linux")]
 pub const SCRAP_OTHER_VERSION_OR_X11_REQUIRED: &str =
@@ -2100,7 +2102,13 @@ struct LoginErrorMsgBox {
 lazy_static::lazy_static! {
     static ref LOGIN_ERROR_MAP: Arc<HashMap<&'static str, LoginErrorMsgBox>> = {
         use hbb_common::config::LINK_HEADLESS_LINUX_SUPPORT;
-        let map = HashMap::from([(LOGIN_MSG_DESKTOP_SESSION_NOT_READY, LoginErrorMsgBox{
+        let map = HashMap::from([(LOGIN_SCREEN_WAYLAND, LoginErrorMsgBox{
+            msgtype: "error",
+            title: "login_wayland_title_tip",
+            text: "login_wayland_text_tip",
+            link: "https://rustdesk.com/docs/en/manual/linux/#login-screen",
+            try_again: true,
+        }), (LOGIN_MSG_DESKTOP_SESSION_NOT_READY, LoginErrorMsgBox{
             msgtype: "session-login",
             title: "",
             text: "",
