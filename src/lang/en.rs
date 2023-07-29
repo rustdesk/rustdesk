@@ -74,6 +74,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("logout_tip", "Are you sure you want to log out?"),
         ("exceed_max_devices", "You have reached the maximum number of managed devices."),
         ("login_wayland_title_tip", "Failed to connect"),
-        ("login_wayland_text_tip", "Login screen of Wayland is not supported."),
+        ("login_wayland_text_tip", "Login screen using Wayland is not supported."),
         ].iter().cloned().collect();
 }

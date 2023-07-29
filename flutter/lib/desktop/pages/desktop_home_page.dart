@@ -377,7 +377,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
             link: 'https://rustdesk.com/docs/en/manual/linux/#x11-required');
       } else if (bind.mainIsLoginWayland()) {
         return buildInstallCard("Warning",
-            "Login screen using Wayland is not supported", "", () async {},
+            translate("login_wayland_text_tip"), "", () async {},
             help: 'Help',
             link: 'https://rustdesk.com/docs/en/manual/linux/#login-screen');
       }
