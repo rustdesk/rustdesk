@@ -80,6 +80,12 @@ pub fn is_headless_allowed() -> bool {
 }
 
 #[inline]
+pub fn is_login_screen_wayland() -> bool {
+    let values = get_values_of_seat0_with_gdm_wayland(&[0, 2]);
+    is_gdm_user(&values[1]) && get_display_server_of_session(&values[0]) == DISPLAY_SERVER_WAYLAND
+}
+
+#[inline]
 fn sleep_millis(millis: u64) {
     std::thread::sleep(Duration::from_millis(millis));
 }
