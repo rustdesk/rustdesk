@@ -363,14 +363,13 @@ pub fn check_config() {
 }
 
 pub fn check_config_process() {
-    use hbb_common::sysinfo::{ProcessExt, System, SystemExt};
     use std::sync::Once;
     let f = || {
         // Clear to avoid checking process errors
         // But when the program is just started, the configuration file has not been updated, and the new connection will read an empty configuration
         HwCodecConfig::clear();
         if let Ok(exe) = std::env::current_exe() {
-            if let Some(file_name) = exe.file_name().to_owned() {
+            if let Some(_) = exe.file_name().to_owned() {
                 let arg = "--check-hwcodec-config";
                 if let Ok(mut child) = std::process::Command::new(exe).arg(arg).spawn() {
                     // wait up to 10 seconds
