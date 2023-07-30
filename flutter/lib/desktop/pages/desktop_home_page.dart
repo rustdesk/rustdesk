@@ -372,7 +372,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
     } else if (Platform.isLinux) {
       if (bind.mainCurrentIsWayland()) {
         return buildInstallCard(
-            "Warning", translate("wayland_experiment_tip"), "", () async {},
+            "Warning", "wayland_experiment_tip", "", () async {},
             help: 'Help',
             link: 'https://rustdesk.com/docs/en/manual/linux/#x11-required');
       } else if (bind.mainIsLoginWayland()) {
