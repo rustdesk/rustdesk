@@ -560,7 +560,6 @@ extern "C" fn client_format_list(
         conn_id = (*clip_format_list).connID as i32;
     }
     log::debug!("client_format_list called, client id: {}, format_list: {:?}", conn_id, &format_list);
-
     let data = ClipboardFile::FormatList { format_list };
     // no need to handle result here
     if conn_id == 0 {
@@ -677,7 +676,6 @@ extern "C" fn client_file_contents_request(
         have_clip_data_id = (*file_contents_request).haveClipDataId == TRUE;
         clip_data_id = (*file_contents_request).clipDataId as i32;
     }
-
     let data = ClipboardFile::FileContentsRequest {
         stream_id,
         list_index,
@@ -689,7 +687,6 @@ extern "C" fn client_file_contents_request(
         clip_data_id,
     };
     log::debug!("client_file_contents_request called, data: {:?}", &data);
-
     send_data(conn_id, data);
 
     0

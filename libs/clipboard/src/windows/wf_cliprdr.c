@@ -2210,7 +2210,6 @@ static UINT wf_cliprdr_server_format_list(CliprdrClientContext *context,
 
 	for (i = 0; i < formatList->numFormats; i++)
 	{
-		printf("REMOVE ME ========================== idx: %d, format id: %d\n", i, formatList->formats[i].formatId);
 		format = &(formatList->formats[i]);
 		mapping = &(clipboard->format_mappings[i]);
 		mapping->remote_format_id = format->formatId;
@@ -2590,7 +2589,6 @@ wf_cliprdr_server_format_data_response(CliprdrClientContext *context,
 		{
 			// BOOL emptyRes = wf_do_empty_cliprdr((wfClipboard *)context->custom);
 			// (void)emptyRes;
-			printf("REMOVE ME ================================= msg flags: %d\n", formatDataResponse->msgFlags);
 			rc = E_FAIL;
 			break;
 		}
