@@ -129,7 +129,7 @@ pub fn get_values_of_seat0(indices: &[usize]) -> Vec<String> {
 
 #[inline]
 pub fn get_values_of_seat0_with_gdm_wayland(indices: &[usize]) -> Vec<String> {
-    _get_values_of_seat0(indices, false)
+    _get_values_of_seat0(indices, false, 20)
 }
 
 fn _get_values_of_seat0(indices: &[usize], ignore_gdm_wayland: bool, attempts: usize) -> Vec<String> {
