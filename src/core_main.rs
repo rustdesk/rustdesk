@@ -77,7 +77,7 @@ pub fn core_main() -> Option<Vec<String>> {
     #[cfg(target_os = "linux")]
     #[cfg(feature = "flutter")]
     {
-        let (k, v) = ("LIBGL_ALWAYS_SOFTWARE", "true");
+        let (k, v) = ("LIBGL_ALWAYS_SOFTWARE", "1");
         if !hbb_common::config::Config::get_option("allow-always-software-render").is_empty() {
             std::env::set_var(k, v);
         } else {
