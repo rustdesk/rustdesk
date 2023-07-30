@@ -1367,6 +1367,11 @@ static UINT cliprdr_send_format_list(wfClipboard *clipboard, UINT32 connID)
 	if (!clipboard)
 		return ERROR_INTERNAL_ERROR;
 
+	if (!IsClipboardFormatAvailable(CF_HDROP))
+	{
+		return ERROR_SUCCESS;
+	}
+
 	ZeroMemory(&formatList, sizeof(CLIPRDR_FORMAT_LIST));
 
 	/* Ignore if other app is holding clipboard */
@@ -1392,21 +1397,11 @@ static UINT cliprdr_send_format_list(wfClipboard *clipboard, UINT32 connID)
 		}
 
 		index = 0;
-
-		if (IsClipboardFormatAvailable(CF_HDROP))
-		{
-			UINT fsid = RegisterClipboardFormat(CFSTR_FILEDESCRIPTORW);
-			UINT fcid = RegisterClipboardFormat(CFSTR_FILECONTENTS);
-
-			formats[index++].formatId = fsid;
-			formats[index++].formatId = fcid;
-		}
-		else
-		{
-			while (formatId = EnumClipboardFormats(formatId) && index < numFormats)
-				formats[index++].formatId = formatId;
-		}
-
+		// IsClipboardFormatAvailable(CF_HDROP) is checked above
+		UINT fsid = RegisterClipboardFormat(CFSTR_FILEDESCRIPTORW);
+		UINT fcid = RegisterClipboardFormat(CFSTR_FILECONTENTS);
+		formats[index++].formatId = fsid;
+		formats[index++].formatId = fcid;
 		numFormats = index;
 
 		if (!CloseClipboard())
