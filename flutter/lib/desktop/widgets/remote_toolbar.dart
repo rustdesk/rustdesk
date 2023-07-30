@@ -1896,6 +1896,7 @@ class _DraggableShowHideState extends State<_DraggableShowHide> {
       padding: MaterialStateProperty.all(EdgeInsets.zero),
     );
     final isFullscreen = stateGlobal.fullscreen;
+    const double iconSize = 20;
     final child = Row(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -1905,18 +1906,24 @@ class _DraggableShowHideState extends State<_DraggableShowHide> {
             widget.setFullscreen(!isFullscreen);
             setState(() {});
           },
-          child: Icon(
-            isFullscreen ? Icons.fullscreen_exit : Icons.fullscreen,
-            size: 20,
+          child: Tooltip(
+            message: translate(isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'),
+            child: Icon(
+              isFullscreen ? Icons.fullscreen_exit : Icons.fullscreen,
+              size: iconSize,
+            ),
           ),
         ),
         Offstage(
           offstage: !isFullscreen,
           child: TextButton(
             onPressed: () => widget.setMinimize(),
-            child: Icon(
-              Icons.minimize,
-              size: 20,
+            child: Tooltip(
+              message: translate('Minimize'),
+              child: Icon(
+                Icons.remove,
+                size: iconSize,
+              ),
             ),
           ),
         ),
@@ -1924,9 +1931,13 @@ class _DraggableShowHideState extends State<_DraggableShowHide> {
           onPressed: () => setState(() {
             widget.show.value = !widget.show.value;
           }),
-          child: Obx((() => Icon(
-                widget.show.isTrue ? Icons.expand_less : Icons.expand_more,
-                size: 20,
+          child: Obx((() => Tooltip(
+                message: translate(
+                    widget.show.isTrue ? 'Hide Toolbar' : 'Show Toolbar'),
+                child: Icon(
+                  widget.show.isTrue ? Icons.expand_less : Icons.expand_more,
+                  size: iconSize,
+                ),
               ))),
         ),
       ],
@@ -2008,7 +2019,8 @@ class _MultiMonitorMenu extends StatelessWidget {
                 children: [
                   SvgPicture.asset(
                     "assets/screen.svg",
-                    colorFilter: ColorFilter.mode(Colors.white, BlendMode.srcIn),
+                    colorFilter:
+                        ColorFilter.mode(Colors.white, BlendMode.srcIn),
                   ),
                   Obx(
                     () => Text(
