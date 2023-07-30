@@ -1367,6 +1367,11 @@ static UINT cliprdr_send_format_list(wfClipboard *clipboard, UINT32 connID)
 	if (!clipboard)
 		return ERROR_INTERNAL_ERROR;
 
+	if (!IsClipboardFormatAvailable(CF_HDROP))
+	{
+		return ERROR_SUCCESS;
+	}
+
 	ZeroMemory(&formatList, sizeof(CLIPRDR_FORMAT_LIST));
 
 	/* Ignore if other app is holding clipboard */
@@ -1392,21 +1397,11 @@ static UINT cliprdr_send_format_list(wfClipboard *clipboard, UINT32 connID)
 		}
 
 		index = 0;
-
-		if (IsClipboardFormatAvailable(CF_HDROP))
-		{
-			UINT fsid = RegisterClipboardFormat(CFSTR_FILEDESCRIPTORW);
-			UINT fcid = RegisterClipboardFormat(CFSTR_FILECONTENTS);
-
-			formats[index++].formatId = fsid;
-			formats[index++].formatId = fcid;
-		}
-		else
-		{
-			while (formatId = EnumClipboardFormats(formatId) && index < numFormats)
-				formats[index++].formatId = formatId;
-		}
-
+		// IsClipboardFormatAvailable(CF_HDROP) is checked above
+		UINT fsid = RegisterClipboardFormat(CFSTR_FILEDESCRIPTORW);
+		UINT fcid = RegisterClipboardFormat(CFSTR_FILECONTENTS);
+		formats[index++].formatId = fsid;
+		formats[index++].formatId = fcid;
 		numFormats = index;
 
 		if (!CloseClipboard())
@@ -2215,6 +2210,7 @@ static UINT wf_cliprdr_server_format_list(CliprdrClientContext *context,
 
 	for (i = 0; i < formatList->numFormats; i++)
 	{
+		printf("REMOVE ME ========================== idx: %d, format id: %d\n", i, formatList->formats[i].formatId);
 		format = &(formatList->formats[i]);
 		mapping = &(clipboard->format_mappings[i]);
 		mapping->remote_format_id = format->formatId;
@@ -2594,6 +2590,7 @@ wf_cliprdr_server_format_data_response(CliprdrClientContext *context,
 		{
 			// BOOL emptyRes = wf_do_empty_cliprdr((wfClipboard *)context->custom);
 			// (void)emptyRes;
+			printf("REMOVE ME ================================= msg flags: %d\n", formatDataResponse->msgFlags);
 			rc = E_FAIL;
 			break;
 		}
