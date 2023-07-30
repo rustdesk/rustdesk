@@ -139,7 +139,8 @@ class AbModel {
       "data": jsonEncode({"tags": tags, "peers": peersJsonData})
     });
     var request = http.Request('POST', Uri.parse(api));
-    if (licensedDevices > 0) {
+    // support compression
+    if (licensedDevices > 0 && body.length > 1024) {
       authHeaders['Content-Encoding'] = "gzip";
       request.bodyBytes = GZipCodec().encode(utf8.encode(body));
     } else {

@@ -31,6 +31,7 @@ extern "C" fn breakdown_signal_handler(sig: i32) {
         s.contains(&"nouveau_pushbuf_kick")
             || s.to_lowercase().contains("nvidia")
             || s.contains("gdk_window_end_draw_frame")
+            || s.contains("glGetString")
     }) {
         Config::set_option("allow-always-software-render".to_string(), "Y".to_string());
         info = "Always use software rendering will be set.".to_string();
