@@ -52,7 +52,6 @@ lazy_static::lazy_static! {
     pub static ref EXE_RENDEZVOUS_SERVER: Arc<RwLock<String>> = Default::default();
     pub static ref APP_NAME: Arc<RwLock<String>> = Arc::new(RwLock::new("RustDesk".to_owned()));
     static ref KEY_PAIR: Arc<Mutex<Option<KeyPair>>> = Default::default();
-    static ref HW_CODEC_CONFIG: Arc<RwLock<HwCodecConfig>> = Arc::new(RwLock::new(HwCodecConfig::load()));
     static ref USER_DEFAULT_CONFIG: Arc<RwLock<(UserDefaultConfig, Instant)>> = Arc::new(RwLock::new((UserDefaultConfig::load(), Instant::now())));
 }
 
@@ -400,6 +399,11 @@ pub fn load_path<T: serde::Serialize + serde::de::DeserializeOwned + Default + s
     let cfg = match confy::load_path(&file) {
         Ok(config) => config,
         Err(err) => {
+            if let confy::ConfyError::GeneralLoadError(err) = &err {
+                if err.kind() == std::io::ErrorKind::NotFound {
+                    return T::default();
+                }
+            }
             log::error!("Failed to load config '{}': {}", file.display(), err);
             T::default()
         }
@@ -1357,16 +1361,6 @@ impl HwCodecConfig {
 
     pub fn clear() {
         HwCodecConfig::default().store();
-    }
-
-    /// refresh current global HW_CODEC_CONFIG, usually uesd after HwCodecConfig::remove()
-    pub fn refresh() {
-        *HW_CODEC_CONFIG.write().unwrap() = HwCodecConfig::load();
-        log::debug!("HW_CODEC_CONFIG refreshed successfully");
-    }
-
-    pub fn get() -> HwCodecConfig {
-        return HW_CODEC_CONFIG.read().unwrap().clone();
     }
 }
 
