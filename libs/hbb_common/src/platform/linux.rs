@@ -133,6 +133,8 @@ pub fn get_values_of_seat0_with_gdm_wayland(indices: &[usize]) -> Vec<String> {
 }
 
 fn _get_values_of_seat0(indices: &[usize], ignore_gdm_wayland: bool) -> Vec<String> {
+    let mut retry_attempt = 0;
+    loop{
     if let Ok(output) = run_loginctl(None) {
         for line in String::from_utf8_lossy(&output.stdout).lines() {
             if line.contains("seat0") {
@@ -172,7 +174,13 @@ fn _get_values_of_seat0(indices: &[usize], ignore_gdm_wayland: bool) -> Vec<Stri
         }
     }
 
-    line_values(indices, "")
+    if retry_attempt >= 1 {
+        return line_values(indices, "");
+    }
+    // Increment the retry_attempt counter and wait for 5 seconds before retrying
+    retry_attempt += 1;
+    std::thread::sleep(Duration::from_secs(5));
+    }
 }
 
 pub fn is_active(sid: &str) -> bool {
