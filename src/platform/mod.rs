@@ -26,6 +26,11 @@ use hbb_common::{message_proto::CursorData, ResultType};
 #[cfg(not(any(target_os = "macos", target_os = "android", target_os = "ios")))]
 const SERVICE_INTERVAL: u64 = 300;
 
+pub const PLATFORM_WINDOWS: &str = "Windows";
+pub const PLATFORM_LINUX: &str = "Linux";
+pub const PLATFORM_MACOS: &str = "Mac OS";
+pub const PLATFORM_ANDROID: &str = "Android";
+
 pub fn is_xfce() -> bool {
     #[cfg(target_os = "linux")]
     {

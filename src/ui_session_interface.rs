@@ -412,7 +412,7 @@ impl<T: InvokeUiSession> Session<T> {
 
     pub fn get_path_sep(&self, is_remote: bool) -> &'static str {
         let p = self.get_platform(is_remote);
-        if &p == "Windows" {
+        if &p == crate::platform::PLATFORM_WINDOWS {
             return "\\";
         } else {
             return "/";
