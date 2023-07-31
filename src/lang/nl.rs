@@ -1,4 +1,4 @@
-lazy_static::lazy_static! {
+vicelazy_static::lazy_static! {
 pub static ref T: std::collections::HashMap<&'static str, &'static str> =
     [
         ("Status", "Status"),
@@ -518,11 +518,11 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Exit", "Verlaten"),
         ("Open", "Open"),
         ("logout_tip", "Weet je zeker dat je je wilt afmelden?"),
-        ("Service", ""),
-        ("Start", ""),
-        ("Stop", ""),
-        ("exceed_max_devices", ""),
-        ("Sync with recent sessions", ""),
-        ("Sort tags", ""),
+        ("Service", "Service"),
+        ("Start", "Start"),
+        ("Stop", "Stop"),
+        ("exceed_max_devices", "Het maximum aantal gecontroleerde apparaten is bereikt."),
+        ("Sync with recent sessions", "Recente sessies synchroniseren"),
+        ("Sort tags", "Labels sorteren"),
     ].iter().cloned().collect();
 }
