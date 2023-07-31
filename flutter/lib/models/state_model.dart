@@ -65,7 +65,7 @@ class StateGlobal {
               ? kMaximizeEdgeSize
               : kWindowEdgeSize;
       print(
-          "fullscreen: ${fullscreen}, resizeEdgeSize: ${_resizeEdgeSize.value}");
+          "fullscreen: $fullscreen, resizeEdgeSize: ${_resizeEdgeSize.value}");
       _windowBorderWidth.value = fullscreen ? 0 : kWindowBorderWidth;
       WindowController.fromWindowId(windowId)
           .setFullscreen(_fullscreen)
