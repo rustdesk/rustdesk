@@ -124,48 +124,38 @@ fn line_values(indices: &[usize], line: &str) -> Vec<String> {
 
 #[inline]
 pub fn get_values_of_seat0(indices: &[usize]) -> Vec<String> {
-    _get_values_of_seat0(indices, true, 20)
+    _get_values_of_seat0_tries(indices, true, 20)
 }
 
 #[inline]
 pub fn get_values_of_seat0_with_gdm_wayland(indices: &[usize]) -> Vec<String> {
-    _get_values_of_seat0(indices, false, 20)
+    _get_values_of_seat0_tries(indices, false, 20)
 }
 
-fn _get_values_of_seat0(indices: &[usize], ignore_gdm_wayland: bool, attempts: usize) -> Vec<String> {
-    for _ in 0..attempts {
-        if let Ok(output) = run_loginctl(None) {
-            for line in String::from_utf8_lossy(&output.stdout).lines() {
-                if line.contains("seat0") {
-                    if let Some(sid) = line.split_whitespace().next() {
-                        if is_active(sid) {
-                            if ignore_gdm_wayland {
-                                if is_gdm_user(line.split_whitespace().nth(2).unwrap_or(""))
-                                    && get_display_server_of_session(sid) == DISPLAY_SERVER_WAYLAND
-                                {
-                                    continue;
-                                }
-                            }
-                            return line_values(indices, line);
-                        }
-                    }
-                }
-            }
+fn _get_values_of_seat0_tries(indices: &[usize], ignore_gdm_wayland: bool, attempts: usize) -> Vec<String> {
+    for _ in 0..attempts{
+        let value = _get_values_of_seat0(indices, ignore_gdm_wayland);
+        if value != line_values(indices, "") {
+            return value;
+        }
+        // Wait for 300ms and try again 
+        std::thread::sleep(std::time::Duration::from_millis(300));
+    }
+    line_values(indices, "")
+}
 
-            // some case, there is no seat0 https://github.com/rustdesk/rustdesk/issues/73
-            for line in String::from_utf8_lossy(&output.stdout).lines() {
+fn _get_values_of_seat0(indices: &[usize], ignore_gdm_wayland: bool) -> Vec<String> {
+    if let Ok(output) = run_loginctl(None) {
+        for line in String::from_utf8_lossy(&output.stdout).lines() {
+            if line.contains("seat0") {
                 if let Some(sid) = line.split_whitespace().next() {
                     if is_active(sid) {
-                        let d = get_display_server_of_session(sid);
                         if ignore_gdm_wayland {
                             if is_gdm_user(line.split_whitespace().nth(2).unwrap_or(""))
-                                && d == DISPLAY_SERVER_WAYLAND
+                                && get_display_server_of_session(sid) == DISPLAY_SERVER_WAYLAND
                             {
                                 continue;
                             }
-                        }
-                        if d == "tty" {
-                            continue;
                         }
                         return line_values(indices, line);
                     }
@@ -173,10 +163,28 @@ fn _get_values_of_seat0(indices: &[usize], ignore_gdm_wayland: bool, attempts: u
             }
         }
 
-    // Wait for 300ms and try again 
-    std::thread::sleep(std::time::Duration::from_millis(300));
+        // some case, there is no seat0 https://github.com/rustdesk/rustdesk/issues/73
+        for line in String::from_utf8_lossy(&output.stdout).lines() {
+            if let Some(sid) = line.split_whitespace().next() {
+                if is_active(sid) {
+                    let d = get_display_server_of_session(sid);
+                    if ignore_gdm_wayland {
+                        if is_gdm_user(line.split_whitespace().nth(2).unwrap_or(""))
+                            && d == DISPLAY_SERVER_WAYLAND
+                        {
+                            continue;
+                        }
+                    }
+                    if d == "tty" {
+                        continue;
+                    }
+                    return line_values(indices, line);
+                }
+            }
+        }
     }
-    return line_values(indices, "");
+
+    line_values(indices, "")
 }
 
 pub fn is_active(sid: &str) -> bool {
