@@ -70,6 +70,7 @@ struct MsgChannel {
 lazy_static::lazy_static! {
     static ref VEC_MSG_CHANNEL: RwLock<Vec<MsgChannel>> = Default::default();
     static ref CLIENT_CONN_ID_COUNTER: Mutex<i32> = Mutex::new(0);
+    static ref LAST_FILE_FORMAT_LIST: Arc<Mutex<Option<ClipboardFile>>> = Default::default();
 }
 
 impl ClipboardFile {
@@ -88,6 +89,11 @@ impl ClipboardFile {
             _ => false,
         }
     }
+}
+
+#[inline]
+pub fn get_last_file_format_list() -> Option<ClipboardFile> {
+    LAST_FILE_FORMAT_LIST.lock().unwrap().clone()
 }
 
 pub fn get_client_conn_id(session_uuid: &SessionID) -> Option<i32> {
@@ -561,6 +567,7 @@ extern "C" fn client_format_list(
     }
     log::debug!("client_format_list called, client id: {}, format_list: {:?}", conn_id, &format_list);
     let data = ClipboardFile::FormatList { format_list };
+    *LAST_FILE_FORMAT_LIST.lock().unwrap() = Some(data.clone());
     // no need to handle result here
     if conn_id == 0 {
         // msg_channel is used for debug, VEC_MSG_CHANNEL cannot be inspected by the debugger.
