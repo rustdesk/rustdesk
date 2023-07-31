@@ -44,7 +44,7 @@ class AbModel {
       abLoading.value = true;
       abError.value = "";
     }
-    final api = "${await bind.mainGetApiServer()}/api/ab/get";
+    final api = "${await bind.mainGetApiServer()}/api/ab";
     try {
       var authHeaders = getHttpHeaders();
       authHeaders['Content-Type'] = "application/json";
