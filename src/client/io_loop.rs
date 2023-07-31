@@ -6,9 +6,7 @@ use std::sync::{
 };
 
 #[cfg(windows)]
-use clipboard::{
-    cliprdr::CliprdrClientContext, empty_clipboard, get_last_file_format_list, ContextSend,
-};
+use clipboard::{cliprdr::CliprdrClientContext, empty_clipboard, ContextSend};
 use crossbeam_queue::ArrayQueue;
 use hbb_common::config::{PeerConfig, TransferSerde};
 use hbb_common::fs::{
@@ -1053,13 +1051,6 @@ impl<T: InvokeUiSession> Remote<T> {
                         }
 
                         self.is_connected = true;
-                        #[cfg(target_os = "windows")]
-                        if self.handler.peer_platform() == crate::platform::PLATFORM_WINDOWS {
-                            if let Some(last_file_format_list) = get_last_file_format_list() {
-                                self.handle_local_clipboard_msg(peer, Some(last_file_format_list))
-                                    .await;
-                            }
-                        }
                     }
                     _ => {}
                 },
