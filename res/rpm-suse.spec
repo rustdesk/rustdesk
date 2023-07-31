@@ -1,4 +1,4 @@
-Name:       rustdesk 
+Name:       rustdesk
 Version:    1.1.9
 Release:    0
 Summary:    RPM package
@@ -6,7 +6,7 @@ License:    GPL-3.0
 Requires:   gtk3 libxcb1 xdotool libXfixes3 alsa-utils libXtst6 libayatana-appindicator3-1 libvdpau1 libva2 pam gstreamer-plugins-base gstreamer-plugin-pipewire
 
 %description
-The best open-source remote desktop client software, written in Rust. 
+The best open-source remote desktop client software, written in Rust.
 
 %prep
 # we have no source, so nothing here
@@ -23,7 +23,7 @@ mkdir -p %{buildroot}/usr/share/rustdesk/files/
 install -m 755 $HBB/target/release/rustdesk %{buildroot}/usr/bin/rustdesk
 install $HBB/libsciter-gtk.so %{buildroot}/usr/lib/rustdesk/libsciter-gtk.so
 install $HBB/res/rustdesk.service %{buildroot}/usr/share/rustdesk/files/
-install $HBB/res/128x128@2x.png %{buildroot}/usr/share/rustdesk/files/rustdesk.png
+install $HBB/res/128x128@2x.png %{buildroot}/usr/share/icons/hicolor/256x256/apps/rustdesk.png
 install $HBB/res/rustdesk.desktop %{buildroot}/usr/share/rustdesk/files/
 install $HBB/res/rustdesk-link.desktop %{buildroot}/usr/share/rustdesk/files/
 
@@ -31,7 +31,7 @@ install $HBB/res/rustdesk-link.desktop %{buildroot}/usr/share/rustdesk/files/
 /usr/bin/rustdesk
 /usr/lib/rustdesk/libsciter-gtk.so
 /usr/share/rustdesk/files/rustdesk.service
-/usr/share/rustdesk/files/rustdesk.png
+/usr/share/icons/hicolor/256x256/apps/rustdesk.png
 /usr/share/rustdesk/files/rustdesk.desktop
 /usr/share/rustdesk/files/rustdesk-link.desktop
 
