@@ -413,6 +413,10 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
                                         if stop {
                                             ContextSend::set_is_stopped();
                                         } else {
+                                            if !self.authorized {
+                                                log::debug!("Clipboard message from client peer, but not authorized");
+                                                continue;
+                                            }
                                             let conn_id = self.conn_id;
                                             ContextSend::proc(|context: &mut Box<CliprdrClientContext>| -> u32 {
                                                 clipboard::server_clip_file(context, conn_id, _clip)
@@ -454,16 +458,25 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
                     }
                 }
                 Some(data) = self.rx.recv() => {
-                    if let Data::SwitchPermission{name: _name, enabled: _enabled} = &data {
-                        #[cfg(windows)]
-                        if _name == "file" {
-                            self.file_transfer_enabled = *_enabled;
-                        }
-                    }
                     if self.stream.send(&data).await.is_err() {
                         break;
                     }
-                }
+                    match &data {
+                        Data::SwitchPermission{name: _name, enabled: _enabled} => {
+                            #[cfg(windows)]
+                            if _name == "file" {
+                                self.file_transfer_enabled = *_enabled;
+                            }
+                        }
+                        Data::Authorize => {
+                            self.authorized = true;
+                            self.running = true;
+                            break;
+                        }
+                        _ => {
+                        }
+                    }
+                },
                 clip_file = rx_clip.recv() => match clip_file {
                     Some(_clip) => {
                         #[cfg(windows)]
