@@ -693,7 +693,8 @@ pub fn check_super_user_permission() -> ResultType<bool> {
     }
     // https://github.com/rustdesk/rustdesk/issues/2756
     if let Ok(status) = Command::new("pkexec").arg(arg).status() {
-        Ok(status.code() != Some(126))
+        // https://github.com/rustdesk/rustdesk/issues/5205#issuecomment-1658059657s
+        Ok(status.code() != Some(126) && status.code() != Some(127))
     } else {
         Ok(true)
     }
