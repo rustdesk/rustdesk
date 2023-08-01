@@ -251,7 +251,7 @@ impl<T: InvokeUiSession> Remote<T> {
         #[cfg(windows)]
         {
             let conn_id = self.client_conn_id;
-            ContextSend::proc(|context: &mut Box<CliprdrClientContext>| -> u32 {
+            ContextSend::proc(|context: &mut CliprdrClientContext| -> u32 {
                 empty_clipboard(context, conn_id);
                 0
             });
@@ -1624,7 +1624,7 @@ impl<T: InvokeUiSession> Remote<T> {
                 "Process clipboard message from server peer, stop: {}, is_stopping_allowed: {}, file_transfer_enabled: {}",
                 stop, is_stopping_allowed, file_transfer_enabled);
             if !stop {
-                ContextSend::proc(|context: &mut Box<CliprdrClientContext>| -> u32 {
+                ContextSend::proc(|context: &mut CliprdrClientContext| -> u32 {
                     clipboard::server_clip_file(context, self.client_conn_id, clip)
                 });
             }

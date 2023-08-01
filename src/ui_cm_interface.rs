@@ -184,7 +184,7 @@ impl<T: InvokeUiCM> ConnectionManager<T> {
 
         #[cfg(windows)]
         {
-            ContextSend::proc(|context: &mut Box<CliprdrClientContext>| -> u32 {
+            ContextSend::proc(|context: &mut CliprdrClientContext| -> u32 {
                 empty_clipboard(context, id);
                 0
             });
@@ -427,7 +427,7 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
                                                 continue;
                                             }
                                             let conn_id = self.conn_id;
-                                            ContextSend::proc(|context: &mut Box<CliprdrClientContext>| -> u32 {
+                                            ContextSend::proc(|context: &mut CliprdrClientContext| -> u32 {
                                                 clipboard::server_clip_file(context, conn_id, _clip)
                                             });
                                         }

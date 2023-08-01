@@ -164,12 +164,12 @@ fn send_data(conn_id: i32, data: ClipboardFile) {
     }
 }
 
-pub fn empty_clipboard(context: &mut Box<CliprdrClientContext>, conn_id: i32) -> bool {
-    unsafe { TRUE == cliprdr::empty_cliprdr(&mut (**context), conn_id as u32) }
+pub fn empty_clipboard(context: &mut CliprdrClientContext, conn_id: i32) -> bool {
+    unsafe { TRUE == cliprdr::empty_cliprdr(context, conn_id as u32) }
 }
 
 pub fn server_clip_file(
-    context: &mut Box<CliprdrClientContext>,
+    context: &mut CliprdrClientContext,
     conn_id: i32,
     msg: ClipboardFile,
 ) -> u32 {
@@ -294,7 +294,7 @@ pub fn server_clip_file(
     ret
 }
 
-pub fn server_monitor_ready(context: &mut Box<CliprdrClientContext>, conn_id: i32) -> u32 {
+pub fn server_monitor_ready(context: &mut CliprdrClientContext, conn_id: i32) -> u32 {
     unsafe {
         let monitor_ready = CLIPRDR_MONITOR_READY {
             connID: conn_id as UINT32,
@@ -302,8 +302,8 @@ pub fn server_monitor_ready(context: &mut Box<CliprdrClientContext>, conn_id: i3
             msgFlags: 0 as UINT16,
             dataLen: 0 as UINT32,
         };
-        if let Some(f) = (**context).MonitorReady {
-            let ret = f(&mut (**context), &monitor_ready);
+        if let Some(f) = context.MonitorReady {
+            let ret = f(context, &monitor_ready);
             ret as u32
         } else {
             ERR_CODE_SERVER_FUNCTION_NONE
@@ -312,7 +312,7 @@ pub fn server_monitor_ready(context: &mut Box<CliprdrClientContext>, conn_id: i3
 }
 
 pub fn server_format_list(
-    context: &mut Box<CliprdrClientContext>,
+    context: &mut CliprdrClientContext,
     conn_id: i32,
     format_list: Vec<(i32, String)>,
 ) -> u32 {
@@ -348,8 +348,8 @@ pub fn server_format_list(
             formats: formats.as_mut_ptr(),
         };
 
-        let ret = if let Some(f) = (**context).ServerFormatList {
-            f(&mut (**context), &format_list)
+        let ret = if let Some(f) = context.ServerFormatList {
+            f(context, &format_list)
         } else {
             ERR_CODE_SERVER_FUNCTION_NONE
         };
@@ -366,7 +366,7 @@ pub fn server_format_list(
 }
 
 pub fn server_format_list_response(
-    context: &mut Box<CliprdrClientContext>,
+    context: &mut CliprdrClientContext,
     conn_id: i32,
     msg_flags: i32,
 ) -> u32 {
@@ -378,8 +378,8 @@ pub fn server_format_list_response(
             dataLen: 0 as UINT32,
         };
 
-        if let Some(f) = (**context).ServerFormatListResponse {
-            f(&mut (**context), &format_list_response)
+        if let Some(f) = context.ServerFormatListResponse {
+            f(context, &format_list_response)
         } else {
             ERR_CODE_SERVER_FUNCTION_NONE
         }
@@ -387,7 +387,7 @@ pub fn server_format_list_response(
 }
 
 pub fn server_format_data_request(
-    context: &mut Box<CliprdrClientContext>,
+    context: &mut CliprdrClientContext,
     conn_id: i32,
     requested_format_id: i32,
 ) -> u32 {
@@ -399,8 +399,8 @@ pub fn server_format_data_request(
             dataLen: 0 as UINT32,
             requestedFormatId: requested_format_id as UINT32,
         };
-        if let Some(f) = (**context).ServerFormatDataRequest {
-            f(&mut (**context), &format_data_request)
+        if let Some(f) = context.ServerFormatDataRequest {
+            f(context, &format_data_request)
         } else {
             ERR_CODE_SERVER_FUNCTION_NONE
         }
@@ -408,7 +408,7 @@ pub fn server_format_data_request(
 }
 
 pub fn server_format_data_response(
-    context: &mut Box<CliprdrClientContext>,
+    context: &mut CliprdrClientContext,
     conn_id: i32,
     msg_flags: i32,
     mut format_data: Vec<u8>,
@@ -421,8 +421,8 @@ pub fn server_format_data_response(
             dataLen: format_data.len() as UINT32,
             requestedFormatData: format_data.as_mut_ptr(),
         };
-        if let Some(f) = (**context).ServerFormatDataResponse {
-            f(&mut (**context), &format_data_response)
+        if let Some(f) = context.ServerFormatDataResponse {
+            f(context, &format_data_response)
         } else {
             ERR_CODE_SERVER_FUNCTION_NONE
         }
@@ -430,7 +430,7 @@ pub fn server_format_data_response(
 }
 
 pub fn server_file_contents_request(
-    context: &mut Box<CliprdrClientContext>,
+    context: &mut CliprdrClientContext,
     conn_id: i32,
     stream_id: i32,
     list_index: i32,
@@ -456,8 +456,8 @@ pub fn server_file_contents_request(
             haveClipDataId: if have_clip_data_id { TRUE } else { FALSE },
             clipDataId: clip_data_id as UINT32,
         };
-        if let Some(f) = (**context).ServerFileContentsRequest {
-            f(&mut (**context), &file_contents_request)
+        if let Some(f) = context.ServerFileContentsRequest {
+            f(context, &file_contents_request)
         } else {
             ERR_CODE_SERVER_FUNCTION_NONE
         }
@@ -465,7 +465,7 @@ pub fn server_file_contents_request(
 }
 
 pub fn server_file_contents_response(
-    context: &mut Box<CliprdrClientContext>,
+    context: &mut CliprdrClientContext,
     conn_id: i32,
     msg_flags: i32,
     stream_id: i32,
@@ -481,8 +481,8 @@ pub fn server_file_contents_response(
             cbRequested: requested_data.len() as UINT32,
             requestedData: requested_data.as_mut_ptr(),
         };
-        if let Some(f) = (**context).ServerFileContentsResponse {
-            f(&mut (**context), &file_contents_response)
+        if let Some(f) = context.ServerFileContentsResponse {
+            f(context, &file_contents_response)
         } else {
             ERR_CODE_SERVER_FUNCTION_NONE
         }
