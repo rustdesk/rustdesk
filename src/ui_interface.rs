@@ -65,6 +65,7 @@ lazy_static::lazy_static! {
     static ref OPTION_SYNCED: Arc<Mutex<bool>> = Default::default();
     static ref OPTIONS : Arc<Mutex<HashMap<String, String>>> = Arc::new(Mutex::new(Config::get_options()));
     pub static ref SENDER : Mutex<mpsc::UnboundedSender<ipc::Data>> = Mutex::new(check_connect_status(true));
+    static ref CHILDREN : Children = Default::default();
 }
 
 const INIT_ASYNC_JOB_STATUS: &str = " ";
@@ -827,11 +828,11 @@ pub fn check_super_user_permission() -> bool {
     return true;
 }
 
-#[allow(dead_code)]
-pub fn check_zombie(children: Children) {
+#[cfg(not(any(target_os = "android", target_os = "ios", feature = "flutter")))]
+pub fn check_zombie() {
     let mut deads = Vec::new();
     loop {
-        let mut lock = children.lock().unwrap();
+        let mut lock = CHILDREN.lock().unwrap();
         let mut n = 0;
         for (id, c) in lock.1.iter_mut() {
             if let Ok(Some(_)) = c.try_wait() {
@@ -847,6 +848,51 @@ pub fn check_zombie(children: Children) {
         }
         drop(lock);
         std::thread::sleep(std::time::Duration::from_millis(100));
+    }
+}
+
+#[inline]
+#[cfg(not(any(target_os = "android", target_os = "ios", feature = "flutter")))]
+pub fn recent_sessions_updated() -> bool {
+    let mut children = CHILDREN.lock().unwrap();
+    if children.0 {
+        children.0 = false;
+        true
+    } else {
+        false
+    }
+}
+
+#[cfg(not(any(target_os = "android", target_os = "ios", feature = "flutter")))]
+pub fn new_remote(id: String, remote_type: String, force_relay: bool) {
+    let mut lock = CHILDREN.lock().unwrap();
+    let mut args = vec![format!("--{}", remote_type), id.clone()];
+    if force_relay {
+        args.push("".to_string()); // password
+        args.push("--relay".to_string());
+    }
+    let key = (id.clone(), remote_type.clone());
+    if let Some(c) = lock.1.get_mut(&key) {
+        if let Ok(Some(_)) = c.try_wait() {
+            lock.1.remove(&key);
+        } else {
+            if remote_type == "rdp" {
+                allow_err!(c.kill());
+                std::thread::sleep(std::time::Duration::from_millis(30));
+                c.try_wait().ok();
+                lock.1.remove(&key);
+            } else {
+                return;
+            }
+        }
+    }
+    match crate::run_me(args) {
+        Ok(child) => {
+            lock.1.insert(key, child);
+        }
+        Err(err) => {
+            log::error!("Failed to spawn remote: {}", err);
+        }
     }
 }
 

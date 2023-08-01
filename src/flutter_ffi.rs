@@ -15,7 +15,7 @@ use flutter_rust_bridge::{StreamSink, SyncReturn};
 use hbb_common::allow_err;
 use hbb_common::{
     config::{self, LocalConfig, PeerConfig, PeerInfoSerde},
-    fs, log,
+    fs, lazy_static, log,
     message_proto::KeyboardMode,
     ResultType,
 };
@@ -24,10 +24,18 @@ use std::{
     ffi::{CStr, CString},
     os::raw::c_char,
     str::FromStr,
+    sync::{
+        atomic::{AtomicI32, Ordering},
+        Arc,
+    },
     time::SystemTime,
 };
 
 pub type SessionID = uuid::Uuid;
+
+lazy_static::lazy_static! {
+    static ref TEXTURE_RENDER_KEY: Arc<AtomicI32> = Arc::new(AtomicI32::new(0));
+}
 
 fn initialize(app_dir: &str) {
     *config::APP_DIR.write().unwrap() = app_dir.to_owned();
@@ -195,6 +203,11 @@ pub fn session_set_flutter_config(session_id: SessionID, k: String, v: String) {
     if let Some(session) = SESSIONS.write().unwrap().get_mut(&session_id) {
         session.save_flutter_config(k, v);
     }
+}
+
+pub fn get_next_texture_key() -> SyncReturn<i32> {
+    let k = TEXTURE_RENDER_KEY.fetch_add(1, Ordering::SeqCst) + 1;
+    SyncReturn(k)
 }
 
 pub fn get_local_flutter_config(k: String) -> SyncReturn<String> {

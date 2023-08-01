@@ -19,7 +19,6 @@ import 'package:flutter_hbb/utils/multi_window_manager.dart';
 import 'package:flutter_hbb/utils/platform_channel.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:get/get.dart';
-import 'package:texture_rgba_renderer/texture_rgba_renderer.dart';
 import 'package:uni_links/uni_links.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:uuid/uuid.dart';
@@ -46,11 +45,6 @@ var isWebDesktop = false;
 var isMobile = isAndroid || isIOS;
 var version = "";
 int androidVersion = 0;
-
-/// Incriment count for textureId.
-int _textureId = 0;
-int get newTextureId => _textureId++;
-final textureRenderer = TextureRgbaRenderer();
 
 /// only available for Windows target
 int windowsBuildNumber = 0;
@@ -1698,7 +1692,7 @@ bool handleUriLink({List<String>? cmdArgs, Uri? uri, String? uriString}) {
         Future.delayed(Duration.zero, () {
           rustDeskWinManager.newRemoteDesktop(id!,
               password: password,
-              switch_uuid: switchUuid,
+              switchUuid: switchUuid,
               forceRelay: forceRelay);
         });
         break;

@@ -18,6 +18,7 @@ import '../../common/widgets/remote_input.dart';
 import '../../common.dart';
 import '../../common/widgets/dialog.dart';
 import '../../models/model.dart';
+import '../../models/desktop_render_texture.dart';
 import '../../models/platform_model.dart';
 import '../../common/shared_state.dart';
 import '../../utils/image.dart';
@@ -66,9 +67,7 @@ class _RemotePageState extends State<RemotePage>
   late RxBool _zoomCursor;
   late RxBool _remoteCursorMoved;
   late RxBool _keyboardEnabled;
-  late RxInt _textureId;
-  late int _textureKey;
-  final useTextureRender = bind.mainUseTextureRender();
+  late RenderTexture _renderTexture;
 
   final _blockableOverlayState = BlockableOverlayState();
 
@@ -86,8 +85,6 @@ class _RemotePageState extends State<RemotePage>
     _showRemoteCursor = ShowRemoteCursorState.find(id);
     _keyboardEnabled = KeyboardEnabledState.find(id);
     _remoteCursorMoved = RemoteCursorMovedState.find(id);
-    _textureKey = newTextureId;
-    _textureId = RxInt(-1);
   }
 
   @override
@@ -115,17 +112,13 @@ class _RemotePageState extends State<RemotePage>
       Wakelock.enable();
     }
     // Register texture.
-    _textureId.value = -1;
-    if (useTextureRender) {
-      textureRenderer.createTexture(_textureKey).then((id) async {
-        debugPrint("id: $id, texture_key: $_textureKey");
-        if (id != -1) {
-          final ptr = await textureRenderer.getTexturePtr(_textureKey);
-          platformFFI.registerTexture(sessionId, ptr);
-          _textureId.value = id;
-        }
-      });
+    if (mainGetBoolOptionSync(kOptionSeparateRemoteWindow)) {
+      _renderTexture = renderTexture;
+    } else {
+      _renderTexture = RenderTexture();
     }
+    _renderTexture.create(sessionId);
+
     _ffi.ffiModel.updateEventListener(sessionId, widget.id);
     bind.pluginSyncUi(syncTo: kAppTypeDesktopRemote);
     _ffi.qualityMonitorModel.checkShowQualityMonitor(sessionId);
@@ -208,13 +201,8 @@ class _RemotePageState extends State<RemotePage>
   Future<void> dispose() async {
     // https://github.com/flutter/flutter/issues/64935
     super.dispose();
-    debugPrint("REMOTE PAGE dispose ${widget.id}");
-    if (useTextureRender) {
-      platformFFI.registerTexture(sessionId, 0);
-      // sleep for a while to avoid the texture is used after it's unregistered.
-      await Future.delayed(Duration(milliseconds: 100));
-      await textureRenderer.closeTexture(_textureKey);
-    }
+    debugPrint("REMOTE PAGE dispose session $sessionId ${widget.id}");
+    await _renderTexture.destroy();
     // ensure we leave this session, this is a double check
     bind.sessionEnterOrLeave(sessionId: sessionId, enter: false);
     DesktopMultiWindow.removeListener(this);
@@ -392,8 +380,8 @@ class _RemotePageState extends State<RemotePage>
           cursorOverImage: _cursorOverImage,
           keyboardEnabled: _keyboardEnabled,
           remoteCursorMoved: _remoteCursorMoved,
-          textureId: _textureId,
-          useTextureRender: useTextureRender,
+          textureId: _renderTexture.textureId,
+          useTextureRender: _renderTexture.useTextureRender,
           listenerBuilder: (child) =>
               _buildRawTouchAndPointerRegion(child, enterView, leaveView),
         );

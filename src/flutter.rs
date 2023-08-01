@@ -186,7 +186,7 @@ pub type FlutterRgbaRendererPluginOnRgba = unsafe extern "C" fn(
 #[derive(Clone)]
 struct VideoRenderer {
     // TextureRgba pointer in flutter native.
-    ptr: usize,
+    ptr: Arc<RwLock<usize>>,
     width: usize,
     height: usize,
     on_rgba_func: Option<Symbol<'static, FlutterRgbaRendererPluginOnRgba>>,
@@ -214,7 +214,7 @@ impl Default for VideoRenderer {
             }
         };
         Self {
-            ptr: 0,
+            ptr: Default::default(),
             width: 0,
             height: 0,
             on_rgba_func,
@@ -231,7 +231,8 @@ impl VideoRenderer {
     }
 
     pub fn on_rgba(&self, rgba: &mut scrap::ImageRgb) {
-        if self.ptr == usize::default() {
+        let ptr = self.ptr.read().unwrap();
+        if *ptr == usize::default() {
             return;
         }
 
@@ -243,7 +244,7 @@ impl VideoRenderer {
         if let Some(func) = &self.on_rgba_func {
             unsafe {
                 func(
-                    self.ptr as _,
+                    *ptr as _,
                     rgba.raw.as_ptr() as _,
                     rgba.raw.len() as _,
                     rgba.w as _,
@@ -328,7 +329,7 @@ impl FlutterHandler {
     #[inline]
     #[cfg(feature = "flutter_texture_render")]
     pub fn register_texture(&mut self, ptr: usize) {
-        self.renderer.write().unwrap().ptr = ptr;
+        *self.renderer.read().unwrap().ptr.write().unwrap() = ptr;
     }
 
     #[inline]

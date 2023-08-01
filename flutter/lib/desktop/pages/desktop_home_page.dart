@@ -554,7 +554,13 @@ class _DesktopHomePageState extends State<DesktopHomePage>
       } else if (call.method == kWindowEventShow) {
         await rustDeskWinManager.registerActiveWindow(call.arguments["id"]);
       } else if (call.method == kWindowEventHide) {
-        await rustDeskWinManager.unregisterActiveWindow(call.arguments["id"]);
+        final wId = call.arguments['id'];
+        final isSeparateWindowEnabled =
+            mainGetBoolOptionSync(kOptionSeparateRemoteWindow);
+        if (isSeparateWindowEnabled && !kCloseMultiWindowByHide) {
+          await rustDeskWinManager.destroyWindow(wId);
+        }
+        await rustDeskWinManager.unregisterActiveWindow(wId);
       } else if (call.method == kWindowConnect) {
         await connectMainDesktop(
           call.arguments['id'],
