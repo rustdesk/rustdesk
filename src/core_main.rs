@@ -18,6 +18,14 @@ macro_rules! my_println{
     };
 }
 
+#[inline]
+fn is_empty_uni_link(arg: &str) -> bool {
+    if !arg.starts_with("rustdesk://") {
+        return false;
+    }
+    arg["rustdesk://".len()..].chars().all(|c| c == '/')
+}
+
 /// shared by flutter and sciter main function
 ///
 /// [Note]
@@ -141,13 +149,15 @@ pub fn core_main() -> Option<Vec<String>> {
     }
     #[cfg(windows)]
     if !crate::platform::is_installed() && (_is_elevate || _is_run_as_system) {
+        clipboard::ContextSend::enable(true);
         crate::platform::elevate_or_run_as_system(click_setup, _is_elevate, _is_run_as_system);
         return None;
     }
     #[cfg(all(feature = "flutter", feature = "plugin_framework"))]
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     init_plugins(&args);
-    if args.is_empty() {
+    log::info!("main start args:{:?}", args);
+    if args.is_empty() || is_empty_uni_link(&args[0]) {
         #[cfg(windows)]
         clipboard::ContextSend::enable(true);
         std::thread::spawn(move || crate::start_server(false));
