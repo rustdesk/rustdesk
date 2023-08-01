@@ -149,7 +149,6 @@ pub fn core_main() -> Option<Vec<String>> {
     }
     #[cfg(windows)]
     if !crate::platform::is_installed() && (_is_elevate || _is_run_as_system) {
-        clipboard::ContextSend::enable(true);
         crate::platform::elevate_or_run_as_system(click_setup, _is_elevate, _is_run_as_system);
         return None;
     }
@@ -158,8 +157,6 @@ pub fn core_main() -> Option<Vec<String>> {
     init_plugins(&args);
     log::info!("main start args:{:?}", args);
     if args.is_empty() || is_empty_uni_link(&args[0]) {
-        #[cfg(windows)]
-        clipboard::ContextSend::enable(true);
         std::thread::spawn(move || crate::start_server(false));
     } else {
         #[cfg(windows)]
