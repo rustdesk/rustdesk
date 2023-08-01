@@ -20,6 +20,8 @@ The best open-source remote desktop client software, written in Rust.
 mkdir -p %{buildroot}/usr/bin/
 mkdir -p %{buildroot}/usr/lib/rustdesk/
 mkdir -p %{buildroot}/usr/share/rustdesk/files/
+mkdir -p %{buildroot}/usr/share/icons/hicolor/256x256/apps/
+mkdir -p %{buildroot}/usr/share/icons/hicolor/scalable/apps/
 install -m 755 $HBB/target/release/rustdesk %{buildroot}/usr/bin/rustdesk
 install $HBB/libsciter-gtk.so %{buildroot}/usr/lib/rustdesk/libsciter-gtk.so
 install $HBB/res/rustdesk.service %{buildroot}/usr/share/rustdesk/files/
