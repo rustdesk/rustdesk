@@ -1187,7 +1187,9 @@ impl<T: InvokeUiSession> Session<T> {
 pub async fn io_loop<T: InvokeUiSession>(handler: Session<T>) {
     // It is ok to call this function multiple times.
     #[cfg(target_os ="windows")]
-    clipboard::ContextSend::enable(true);
+    if !handler.is_file_transfer() && !handler.is_port_forward() {
+        clipboard::ContextSend::enable(true);
+    }
 
     #[cfg(any(target_os = "android", target_os = "ios"))]
     let (sender, receiver) = mpsc::unbounded_channel::<Data>();
