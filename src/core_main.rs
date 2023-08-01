@@ -147,7 +147,9 @@ pub fn core_main() -> Option<Vec<String>> {
     #[cfg(all(feature = "flutter", feature = "plugin_framework"))]
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     init_plugins(&args);
-    if args.is_empty() {
+    log::info!("main start args:{:?}", args);
+    let empty_uni_link = "rustdesk:///";
+    if args.is_empty() || args[0] == empty_uni_link {
         #[cfg(windows)]
         clipboard::ContextSend::enable(true);
         std::thread::spawn(move || crate::start_server(false));
