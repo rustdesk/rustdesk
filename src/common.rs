@@ -49,6 +49,11 @@ pub const DST_STRIDE_RGBA: usize = 1;
 // the executable name of the portable version
 pub const PORTABLE_APPNAME_RUNTIME_ENV_KEY: &str = "RUSTDESK_APPNAME";
 
+pub const PLATFORM_WINDOWS: &str = "Windows";
+pub const PLATFORM_LINUX: &str = "Linux";
+pub const PLATFORM_MACOS: &str = "Mac OS";
+pub const PLATFORM_ANDROID: &str = "Android";
+
 pub mod input {
     pub const MOUSE_TYPE_MOVE: i32 = 0;
     pub const MOUSE_TYPE_DOWN: i32 = 1;
