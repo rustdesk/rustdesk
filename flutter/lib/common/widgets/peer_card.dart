@@ -399,10 +399,14 @@ abstract class BasePeerCard extends StatelessWidget {
   Future<List<MenuEntryBase<String>>> _buildMenuItems(BuildContext context);
 
   MenuEntryBase<String> _connectCommonAction(
-      BuildContext context, String id, String title,
-      {bool isFileTransfer = false,
-      bool isTcpTunneling = false,
-      bool isRDP = false}) {
+    BuildContext context,
+    String id,
+    String title, {
+    bool isFileTransfer = false,
+    bool isTcpTunneling = false,
+    bool isRDP = false,
+    bool forceSeparateWindow = false,
+  }) {
     return MenuEntryButton<String>(
       childBuilder: (TextStyle? style) => Text(
         title,
@@ -415,6 +419,7 @@ abstract class BasePeerCard extends StatelessWidget {
           isFileTransfer: isFileTransfer,
           isTcpTunneling: isTcpTunneling,
           isRDP: isRDP,
+          forceSeparateWindow: forceSeparateWindow,
         );
       },
       padding: menuPadding,
@@ -423,13 +428,26 @@ abstract class BasePeerCard extends StatelessWidget {
   }
 
   @protected
-  MenuEntryBase<String> _connectAction(BuildContext context, Peer peer) {
+  List<MenuEntryBase<String>> _connectActions(BuildContext context, Peer peer) {
+    final actions = [_connectAction(context, peer, false)];
+    if (!mainGetLocalBoolOptionSync(kOptionSeparateRemoteWindow)) {
+      actions.add(_connectAction(context, peer, true));
+    }
+    return actions;
+  }
+
+  @protected
+  MenuEntryBase<String> _connectAction(
+      BuildContext context, Peer peer, bool forceSeparateWindow) {
     return _connectCommonAction(
-        context,
-        peer.id,
-        peer.alias.isEmpty
-            ? translate('Connect')
-            : "${translate('Connect')} ${peer.id}");
+      context,
+      peer.id,
+      (peer.alias.isEmpty
+              ? translate('Connect')
+              : '${translate('Connect')} ${peer.id}') +
+          (forceSeparateWindow ? ' (${translate('separate window')})' : ''),
+      forceSeparateWindow: forceSeparateWindow,
+    );
   }
 
   @protected
@@ -796,7 +814,7 @@ class RecentPeerCard extends BasePeerCard {
   Future<List<MenuEntryBase<String>>> _buildMenuItems(
       BuildContext context) async {
     final List<MenuEntryBase<String>> menuItems = [
-      _connectAction(context, peer),
+      ..._connectActions(context, peer),
       _transferFileAction(context, peer.id),
     ];
 
@@ -852,7 +870,7 @@ class FavoritePeerCard extends BasePeerCard {
   Future<List<MenuEntryBase<String>>> _buildMenuItems(
       BuildContext context) async {
     final List<MenuEntryBase<String>> menuItems = [
-      _connectAction(context, peer),
+      ..._connectActions(context, peer),
       _transferFileAction(context, peer.id),
     ];
     if (isDesktop && peer.platform != 'Android') {
@@ -902,7 +920,7 @@ class DiscoveredPeerCard extends BasePeerCard {
   Future<List<MenuEntryBase<String>>> _buildMenuItems(
       BuildContext context) async {
     final List<MenuEntryBase<String>> menuItems = [
-      _connectAction(context, peer),
+      ..._connectActions(context, peer),
       _transferFileAction(context, peer.id),
     ];
 
@@ -954,7 +972,7 @@ class AddressBookPeerCard extends BasePeerCard {
   Future<List<MenuEntryBase<String>>> _buildMenuItems(
       BuildContext context) async {
     final List<MenuEntryBase<String>> menuItems = [
-      _connectAction(context, peer),
+      ..._connectActions(context, peer),
       _transferFileAction(context, peer.id),
     ];
     if (isDesktop && peer.platform != 'Android') {
@@ -1016,7 +1034,7 @@ class MyGroupPeerCard extends BasePeerCard {
   Future<List<MenuEntryBase<String>>> _buildMenuItems(
       BuildContext context) async {
     final List<MenuEntryBase<String>> menuItems = [
-      _connectAction(context, peer),
+      ..._connectActions(context, peer),
       _transferFileAction(context, peer.id),
     ];
     if (isDesktop && peer.platform != 'Android') {

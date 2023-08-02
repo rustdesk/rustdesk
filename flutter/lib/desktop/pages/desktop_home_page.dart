@@ -556,7 +556,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
       } else if (call.method == kWindowEventHide) {
         final wId = call.arguments['id'];
         final isSeparateWindowEnabled =
-            mainGetBoolOptionSync(kOptionSeparateRemoteWindow);
+            mainGetLocalBoolOptionSync(kOptionSeparateRemoteWindow);
         if (isSeparateWindowEnabled && !kCloseMultiWindowByHide) {
           await rustDeskWinManager.destroyWindow(wId);
         }
@@ -568,6 +568,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
           isTcpTunneling: call.arguments['isTcpTunneling'],
           isRDP: call.arguments['isRDP'],
           forceRelay: call.arguments['forceRelay'],
+          forceSeparateWindow: call.arguments['forceSeparateWindow'],
         );
       }
     });

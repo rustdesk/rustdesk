@@ -1515,7 +1515,8 @@ Future<Offset?> _adjustRestoreMainWindowOffset(
 
 /// Restore window position and size on start
 /// Note that windowId must be provided if it's subwindow
-Future<bool> restoreWindowPosition(WindowType type, {int? windowId, String? peerId}) async {
+Future<bool> restoreWindowPosition(WindowType type,
+    {int? windowId, String? peerId}) async {
   if (bind
       .mainGetEnv(key: "DISABLE_RUSTDESK_RESTORE_WINDOW_POSITION")
       .isNotEmpty) {
@@ -1529,11 +1530,11 @@ Future<bool> restoreWindowPosition(WindowType type, {int? windowId, String? peer
 
   String? pos;
   if (type == WindowType.RemoteDesktop && windowId != null && peerId != null) {
-    pos = await bind.sessionGetFlutterConfigByPeerId(id: peerId, k: kWindowPrefix);
+    pos = await bind.sessionGetFlutterConfigByPeerId(
+        id: peerId, k: kWindowPrefix);
   }
   pos ??= bind.getLocalFlutterConfig(k: kWindowPrefix + type.name);
-  
-  
+
   var lpos = LastWindowPosition.loadFromString(pos);
   if (lpos == null) {
     debugPrint("no window position saved, ignoring position restoration");
@@ -1781,17 +1782,20 @@ List<String>? urlLinkToCmdArgs(Uri uri) {
   return null;
 }
 
-connectMainDesktop(String id,
-    {required bool isFileTransfer,
-    required bool isTcpTunneling,
-    required bool isRDP,
-    bool? forceRelay}) async {
+connectMainDesktop(
+  String id, {
+  required bool isFileTransfer,
+  required bool isTcpTunneling,
+  required bool isRDP,
+  bool? forceRelay,
+  bool forceSeparateWindow = false,
+}) async {
   if (isFileTransfer) {
     await rustDeskWinManager.newFileTransfer(id, forceRelay: forceRelay);
   } else if (isTcpTunneling || isRDP) {
     await rustDeskWinManager.newPortForward(id, isRDP, forceRelay: forceRelay);
   } else {
-    await rustDeskWinManager.newRemoteDesktop(id, forceRelay: forceRelay);
+    await rustDeskWinManager.newRemoteDesktop(id, forceRelay: forceRelay, forceSeparateWindow: forceSeparateWindow);
   }
 }
 
@@ -1799,10 +1803,14 @@ connectMainDesktop(String id,
 /// If [isFileTransfer], starts a session only for file transfer.
 /// If [isTcpTunneling], starts a session only for tcp tunneling.
 /// If [isRDP], starts a session only for rdp.
-connect(BuildContext context, String id,
-    {bool isFileTransfer = false,
-    bool isTcpTunneling = false,
-    bool isRDP = false}) async {
+connect(
+  BuildContext context,
+  String id, {
+  bool isFileTransfer = false,
+  bool isTcpTunneling = false,
+  bool isRDP = false,
+  bool forceSeparateWindow = false,
+}) async {
   if (id == '') return;
   id = id.replaceAll(' ', '');
   final oldId = id;
@@ -1813,18 +1821,22 @@ connect(BuildContext context, String id,
 
   if (isDesktop) {
     if (desktopType == DesktopType.main) {
-      await connectMainDesktop(id,
-          isFileTransfer: isFileTransfer,
-          isTcpTunneling: isTcpTunneling,
-          isRDP: isRDP,
-          forceRelay: forceRelay);
+      await connectMainDesktop(
+        id,
+        isFileTransfer: isFileTransfer,
+        isTcpTunneling: isTcpTunneling,
+        isRDP: isRDP,
+        forceRelay: forceRelay,
+        forceSeparateWindow: forceSeparateWindow,
+      );
     } else {
       await rustDeskWinManager.call(WindowType.Main, kWindowConnect, {
         'id': id,
         'isFileTransfer': isFileTransfer,
         'isTcpTunneling': isTcpTunneling,
         'isRDP': isRDP,
-        "forceRelay": forceRelay,
+        'forceRelay': forceRelay,
+        'forceSeparateWindow': forceSeparateWindow,
       });
     }
   } else {
