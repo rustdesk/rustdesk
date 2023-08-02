@@ -412,7 +412,7 @@ impl UI {
 
     fn get_recent_sessions(&mut self) -> Value {
         // to-do: limit number of recent sessions, and remove old peer file
-        let peers: Vec<Value> = PeerConfig::peers()
+        let peers: Vec<Value> = PeerConfig::peers(None)
             .drain(..)
             .map(|p| Self::get_peer_value(p.0, p.2))
             .collect();

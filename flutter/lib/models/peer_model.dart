@@ -4,6 +4,7 @@ import 'platform_model.dart';
 
 class Peer {
   final String id;
+  String hash;
   final String username;
   final String hostname;
   final String platform;
@@ -23,6 +24,7 @@ class Peer {
 
   Peer.fromJson(Map<String, dynamic> json)
       : id = json['id'] ?? '',
+        hash = json['hash'] ?? '',
         username = json['username'] ?? '',
         hostname = json['hostname'] ?? '',
         platform = json['platform'] ?? '',
@@ -35,6 +37,7 @@ class Peer {
   Map<String, dynamic> toJson() {
     return <String, dynamic>{
       "id": id,
+      "hash": hash,
       "username": username,
       "hostname": hostname,
       "platform": platform,
@@ -46,8 +49,20 @@ class Peer {
     };
   }
 
+  Map<String, dynamic> toAbUploadJson() {
+    return <String, dynamic>{
+      "id": id,
+      "hash": hash,
+      "username": username,
+      "hostname": hostname,
+      "platform": platform,
+      "tags": tags,
+    };
+  }
+
   Peer({
     required this.id,
+    required this.hash,
     required this.username,
     required this.hostname,
     required this.platform,
@@ -61,6 +76,7 @@ class Peer {
   Peer.loading()
       : this(
           id: '...',
+          hash: '',
           username: '...',
           hostname: '...',
           platform: '...',

@@ -34,7 +34,8 @@ use hbb_common::{
     anyhow::{anyhow, Context},
     bail,
     config::{
-        Config, PeerConfig, PeerInfoSerde, Resolution, CONNECT_TIMEOUT, READ_TIMEOUT, RELAY_PORT,
+        Config, LocalConfig, PeerConfig, PeerInfoSerde, Resolution, CONNECT_TIMEOUT, READ_TIMEOUT,
+        RELAY_PORT,
     },
     get_version_number, log,
     message_proto::{option_message::BoolOption, *},
@@ -42,6 +43,7 @@ use hbb_common::{
     rand,
     rendezvous_proto::*,
     socket_client,
+    sodiumoxide::base64,
     sodiumoxide::crypto::{box_, secretbox, sign},
     tcp::FramedStream,
     timeout,
@@ -2234,6 +2236,22 @@ pub async fn handle_hash(
     }
     if password.is_empty() {
         password = lc.read().unwrap().config.password.clone();
+    }
+    if password.is_empty() {
+        let access_token = LocalConfig::get_option("access_token");
+        let ab = hbb_common::config::Ab::load();
+        if !access_token.is_empty() && access_token == ab.access_token {
+            let id = lc.read().unwrap().id.clone();
+            if let Some(p) = ab
+                .peers
+                .iter()
+                .find_map(|p| if p.id == id { Some(p) } else { None })
+            {
+                if let Ok(hash) = base64::decode(p.hash.clone(), base64::Variant::Original) {
+                    password = hash;
+                }
+            }
+        }
     }
     let password = if password.is_empty() {
         // login without password, the remote side can click accept
