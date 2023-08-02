@@ -543,7 +543,7 @@ closeConnection({String? id}) {
   }
 }
 
-void window_on_top(int? id) async {
+void windowOnTop(int? id) async {
   if (!isDesktop) {
     return;
   }

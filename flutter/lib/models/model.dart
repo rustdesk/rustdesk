@@ -260,7 +260,7 @@ class FfiModel with ChangeNotifier {
         });
         break;
       default:
-        window_on_top(null);
+        windowOnTop(null);
         break;
     }
   }

@@ -527,7 +527,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
       debugPrint(
           "[Main] call ${call.method} with args ${call.arguments} from window $fromWindowId");
       if (call.method == kWindowMainWindowOnTop) {
-        window_on_top(null);
+        windowOnTop(null);
       } else if (call.method == kWindowGetWindowInfo) {
         final screen = (await window_size.getWindowInfo()).screen;
         if (screen == null) {

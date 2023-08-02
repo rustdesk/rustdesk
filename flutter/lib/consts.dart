@@ -32,6 +32,11 @@ const String kWindowEventHide = "hide";
 const String kWindowEventShow = "show";
 const String kWindowConnect = "connect";
 
+const String kWindowEventNewRemoteDesktop = "new_remote_desktop";
+const String kWindowEventNewFileTransfer = "new_file_transfer";
+const String kWindowEventNewPortForward = "new_port_forward";
+const String kWindowEventActiveSession = "active_session";
+
 const String kOptionSeparateRemoteWindow = "enable-separate-remote-window";
 
 const String kUniLinksPrefix = "rustdesk://";

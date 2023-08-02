@@ -60,10 +60,10 @@ class _FileManagerTabPageState extends State<FileManagerTabPage> {
       print(
           "[FileTransfer] call ${call.method} with args ${call.arguments} from window $fromWindowId to ${windowId()}");
       // for simplify, just replace connectionId
-      if (call.method == "new_file_transfer") {
+      if (call.method == kWindowEventNewFileTransfer) {
         final args = jsonDecode(call.arguments);
         final id = args['id'];
-        window_on_top(windowId());
+        windowOnTop(windowId());
         tabController.add(TabInfo(
             key: id,
             label: id,

@@ -39,15 +39,15 @@ class RustDeskMultiWindowManager {
   final Set<int> _inactiveWindows = {};
   final Set<int> _activeWindows = {};
   final List<AsyncCallback> _windowActiveCallbacks = List.empty(growable: true);
-  final Map<int, Set<String>> _remoteDesktopWindows = {};
-  final Map<int, Set<String>> _fileTransferWindows = {};
-  final Map<int, Set<String>> _portForwardWindows = {};
+  final List<int> _remoteDesktopWindows = List.empty(growable: true);
+  final List<int> _fileTransferWindows = List.empty(growable: true);
+  final List<int> _portForwardWindows = List.empty(growable: true);
 
   Future<dynamic> newSession(
     WindowType type,
     String methodName,
     String remoteId,
-    Map<int, Set<String>> windows, {
+    List<int> windows, {
     String? password,
     bool? forceRelay,
     String? switchUuid,
@@ -80,27 +80,23 @@ class RustDeskMultiWindowManager {
         Future.microtask(() => windowController.show());
       }
       registerActiveWindow(windowController.windowId);
-      windows[windowController.windowId] = {remoteId};
+      windows.add(windowController.windowId);
     }
 
     // separate window for file transfer is not supported
     bool separateWindow = type != WindowType.FileTransfer &&
         mainGetBoolOptionSync(kOptionSeparateRemoteWindow);
 
-    if (separateWindow) {
-      for (final item in windows.entries) {
-        if (_activeWindows.contains(item.key) &&
-            item.value.contains(remoteId)) {
-          // already has a window for this remote
-          final windowController = WindowController.fromWindowId(item.key);
-          windowController.show();
-          // to-do: macos?
-          // if (Platform.isMacOS) {
-          //   Future.microtask(() => windowController.show());
-          // }
+    if (windows.length > 1 || separateWindow) {
+      for (final windowId in windows) {
+        if (await DesktopMultiWindow.invokeMethod(
+            windowId, kWindowEventActiveSession, remoteId)) {
           return;
         }
       }
+    }
+
+    if (separateWindow) {
       if (kCloseMultiWindowByHide && _inactiveWindows.isNotEmpty) {
         final windowId = _inactiveWindows.first;
         final invokeRes =
@@ -108,7 +104,7 @@ class RustDeskMultiWindowManager {
         final windowController = WindowController.fromWindowId(windowId);
         windowController.show();
         registerActiveWindow(windowController.windowId);
-        windows[windowController.windowId] = {remoteId};
+        windows.add(windowController.windowId);
         return invokeRes;
       } else {
         await newSessionWindow();
@@ -130,7 +126,7 @@ class RustDeskMultiWindowManager {
   }) async {
     return await newSession(
       WindowType.RemoteDesktop,
-      'new_remote_desktop',
+      kWindowEventNewRemoteDesktop,
       remoteId,
       _remoteDesktopWindows,
       password: password,
@@ -143,7 +139,7 @@ class RustDeskMultiWindowManager {
       {String? password, bool? forceRelay}) async {
     return await newSession(
       WindowType.FileTransfer,
-      'new_file_transfer',
+      kWindowEventNewFileTransfer,
       remoteId,
       _fileTransferWindows,
       password: password,
@@ -155,7 +151,7 @@ class RustDeskMultiWindowManager {
       {String? password, bool? forceRelay}) async {
     return await newSession(
       WindowType.PortForward,
-      'new_port_forward',
+      kWindowEventNewPortForward,
       remoteId,
       _portForwardWindows,
       password: password,
@@ -170,15 +166,13 @@ class RustDeskMultiWindowManager {
       return;
     }
     return await DesktopMultiWindow.invokeMethod(
-        wnds.keys.toList()[0], methodName, args);
+        wnds[0], methodName, args);
   }
 
-  Map<int, Set<String>> _findWindowsByType(WindowType type) {
+  List<int> _findWindowsByType(WindowType type) {
     switch (type) {
       case WindowType.Main:
-        return {
-          0: {''}
-        };
+        return [0];
       case WindowType.RemoteDesktop:
         return _remoteDesktopWindows;
       case WindowType.FileTransfer:
@@ -188,7 +182,7 @@ class RustDeskMultiWindowManager {
       case WindowType.Unknown:
         break;
     }
-    return {};
+    return [];
   }
 
   void clearWindowType(WindowType type) {

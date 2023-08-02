@@ -147,8 +147,10 @@ class DesktopTabController {
 
   /// For addTab, tabPage has not been initialized, set [callOnSelected] to false,
   /// and call [onSelected] at the end of initState
-  void jumpTo(int index, {bool callOnSelected = true}) {
-    if (!isDesktop || index < 0) return;
+  bool jumpTo(int index, {bool callOnSelected = true}) {
+    if (!isDesktop || index < 0) {
+      return false;
+    }
     state.update((val) {
       val!.selected = index;
       Future.delayed(Duration(milliseconds: 100), (() {
@@ -169,7 +171,12 @@ class DesktopTabController {
         onSelected?.call(key);
       }
     }
+    return true;
   }
+
+  bool jumpToByKey(String key, {bool callOnSelected = true}) =>
+      jumpTo(state.value.tabs.indexWhere((tab) => tab.key == key),
+          callOnSelected: callOnSelected);
 
   void closeBy(String? key) {
     if (!isDesktop) return;

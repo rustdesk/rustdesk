@@ -367,7 +367,7 @@ class ChatModel with ChangeNotifier {
           // not minisized: add count
           if (await WindowController.fromWindowId(stateGlobal.windowId)
               .isMinimized()) {
-            window_on_top(stateGlobal.windowId);
+            windowOnTop(stateGlobal.windowId);
             if (notSelected) {
               tabController.jumpTo(index);
             }
@@ -386,7 +386,7 @@ class ChatModel with ChangeNotifier {
         return;
       }
       if (isDesktop) {
-        window_on_top(null);
+        windowOnTop(null);
         // disable auto jumpTo other tab when hasFocus, and mark unread message
         final currentSelectedTab =
             session.serverModel.tabController.state.value.selectedTabInfo;

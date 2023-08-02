@@ -95,11 +95,11 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
           "[Remote Page] call ${call.method} with args ${call.arguments} from window $fromWindowId");
 
       // for simplify, just replace connectionId
-      if (call.method == "new_remote_desktop") {
+      if (call.method == kWindowEventNewRemoteDesktop) {
         final args = jsonDecode(call.arguments);
         final id = args['id'];
         final switchUuid = args['switch_uuid'];
-        window_on_top(windowId());
+        windowOnTop(windowId());
         ConnectionTypeState.init(id);
         _toolbarState.setShow(
             bind.mainGetUserDefaultOption(key: 'collapse_toolbar') != 'Y');
@@ -125,6 +125,12 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
         tabController.clear();
       } else if (call.method == kWindowActionRebuild) {
         reloadCurrentWindow();
+      } else if (call.method == kWindowEventActiveSession) {
+        final jumpOk = tabController.jumpToByKey(call.arguments);
+        if (jumpOk) {
+          windowOnTop(windowId());
+        }
+        return jumpOk;
       }
       _update_remote_count();
     });
