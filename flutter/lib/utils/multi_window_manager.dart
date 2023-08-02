@@ -70,7 +70,7 @@ class RustDeskMultiWindowManager {
     newSessionWindow() async {
       final windowController = await DesktopMultiWindow.createWindow(msg);
       windowController
-        ..setFrame(const Offset(0, 0) & const Size(1280, 720))
+        ..setFrame(const Offset(0, 0) & Size(1280 + windowController.windowId * 20, 720 + windowController.windowId * 20))
         ..center()
         ..setTitle(getWindowNameWithId(
           remoteId,

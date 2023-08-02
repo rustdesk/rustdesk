@@ -197,7 +197,7 @@ void runMultiWindow(
   switch (appType) {
     case kAppTypeDesktopRemote:
       await restoreWindowPosition(WindowType.RemoteDesktop,
-          windowId: kWindowId!);
+          windowId: kWindowId!, peerId: argument['id'] as String?);
       break;
     case kAppTypeDesktopFileTransfer:
       await restoreWindowPosition(WindowType.FileTransfer,

@@ -131,11 +131,22 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
           windowOnTop(windowId());
         }
         return jumpOk;
+      } else if (call.method == kWindowEventGetRemoteList) {
+        return tabController.state.value.tabs
+            .map((e) => e.key)
+            .toList()
+            .join(',');
       }
       _update_remote_count();
     });
     Future.delayed(Duration.zero, () {
-      restoreWindowPosition(WindowType.RemoteDesktop, windowId: windowId());
+      restoreWindowPosition(
+        WindowType.RemoteDesktop,
+        windowId: windowId(),
+        peerId: tabController.state.value.tabs.isEmpty
+            ? null
+            : tabController.state.value.tabs[0].key,
+      );
     });
   }
 

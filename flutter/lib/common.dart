@@ -1408,8 +1408,24 @@ Future<void> saveWindowPosition(WindowType type, {int? windowId}) async {
       sz.width, sz.height, position.dx, position.dy, isMaximized);
   debugPrint(
       "Saving frame: $windowId: ${pos.width}/${pos.height}, offset:${pos.offsetWidth}/${pos.offsetHeight}");
+
   await bind.setLocalFlutterConfig(
       k: kWindowPrefix + type.name, v: pos.toString());
+
+  if (type == WindowType.RemoteDesktop && windowId != null) {
+    await _saveSessionWindowPosition(windowId, pos);
+  }
+}
+
+Future _saveSessionWindowPosition(int windowId, LastWindowPosition pos) async {
+  final remoteList = await DesktopMultiWindow.invokeMethod(
+      windowId, kWindowEventGetRemoteList, null);
+  if (remoteList != null) {
+    for (final peerId in remoteList.split(',')) {
+      bind.sessionSetFlutterConfigByPeerId(
+          id: peerId, k: kWindowPrefix, v: pos.toString());
+    }
+  }
 }
 
 Future<Size> _adjustRestoreMainWindowSize(double? width, double? height) async {
@@ -1499,7 +1515,7 @@ Future<Offset?> _adjustRestoreMainWindowOffset(
 
 /// Restore window position and size on start
 /// Note that windowId must be provided if it's subwindow
-Future<bool> restoreWindowPosition(WindowType type, {int? windowId}) async {
+Future<bool> restoreWindowPosition(WindowType type, {int? windowId, String? peerId}) async {
   if (bind
       .mainGetEnv(key: "DISABLE_RUSTDESK_RESTORE_WINDOW_POSITION")
       .isNotEmpty) {
@@ -1508,8 +1524,16 @@ Future<bool> restoreWindowPosition(WindowType type, {int? windowId}) async {
   if (type != WindowType.Main && windowId == null) {
     debugPrint(
         "Error: windowId cannot be null when saving positions for sub window");
+    return false;
   }
-  final pos = bind.getLocalFlutterConfig(k: kWindowPrefix + type.name);
+
+  String? pos;
+  if (type == WindowType.RemoteDesktop && windowId != null && peerId != null) {
+    pos = await bind.sessionGetFlutterConfigByPeerId(id: peerId, k: kWindowPrefix);
+  }
+  pos ??= bind.getLocalFlutterConfig(k: kWindowPrefix + type.name);
+  
+  
   var lpos = LastWindowPosition.loadFromString(pos);
   if (lpos == null) {
     debugPrint("no window position saved, ignoring position restoration");
