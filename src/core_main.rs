@@ -323,6 +323,55 @@ pub fn core_main() -> Option<Vec<String>> {
                 println!("Installation and administrative privileges required!");
             }
             return None;
+        } else if args[0] == "--assign" {
+            if crate::platform::is_installed() && is_root() {
+                let max = args.len() - 1;
+                let pos = args.iter().position(|x| x == "--token").unwrap_or(max);
+                if pos < max {
+                    let token = args[pos + 1].to_owned();
+                    let id = crate::ipc::get_id();
+                    let uuid = crate::encode64(hbb_common::get_uuid());
+                    let mut user_name = None;
+                    let pos = args.iter().position(|x| x == "--user_name").unwrap_or(max);
+                    if pos < max {
+                        user_name = Some(args[pos + 1].to_owned());
+                    }
+                    let mut strategy_name = None;
+                    let pos = args
+                        .iter()
+                        .position(|x| x == "--strategy_name")
+                        .unwrap_or(max);
+                    if pos < max {
+                        strategy_name = Some(args[pos + 1].to_owned());
+                    }
+                    let mut body = serde_json::json!({
+                        "id": id,
+                        "uuid": uuid,
+                    });
+                    let header = "Authorization: Bearer ".to_owned() + &token;
+                    if user_name.is_none() && strategy_name.is_none() {
+                        println!("--user_name or --strategy_name is required!");
+                    } else {
+                        if let Some(name) = user_name {
+                            body["user_name"] = serde_json::json!(name);
+                        }
+                        if let Some(name) = strategy_name {
+                            body["strategy_name"] = serde_json::json!(name);
+                        }
+                        let url = crate::ui_interface::get_api_server() + "/api/devices/cli";
+                        if let Err(err) = crate::post_request_sync(url, body.to_string(), &header) {
+                            println!("{}", err);
+                        } else {
+                            println!("Done!");
+                        }
+                    }
+                } else {
+                    println!("--token is required!");
+                }
+            } else {
+                println!("Installation and administrative privileges required!");
+            }
+            return None;
         } else if args[0] == "--check-hwcodec-config" {
             #[cfg(feature = "hwcodec")]
             scrap::hwcodec::check_config();
