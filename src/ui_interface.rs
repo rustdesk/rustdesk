@@ -3,7 +3,9 @@ use hbb_common::password_security;
 use hbb_common::{
     allow_err,
     config::{self, Config, LocalConfig, PeerConfig},
-    directories_next, log, tokio,
+    directories_next, log,
+    sodiumoxide::base64,
+    tokio,
 };
 use hbb_common::{
     bytes::Bytes,
@@ -608,6 +610,16 @@ pub fn peer_to_map(id: String, p: PeerConfig) -> HashMap<&'static str, String> {
             p.options.get("alias").unwrap_or(&"".to_owned()).to_owned(),
         ),
     ])
+}
+
+#[cfg(feature = "flutter")]
+pub fn peer_to_map_ab(id: String, p: PeerConfig) -> HashMap<&'static str, String> {
+    let mut m = peer_to_map(id, p.clone());
+    m.insert(
+        "hash",
+        base64::encode(p.password, base64::Variant::Original),
+    );
+    m
 }
 
 #[inline]

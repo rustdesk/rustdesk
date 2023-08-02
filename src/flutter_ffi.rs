@@ -618,7 +618,7 @@ pub fn main_show_option(_key: String) -> SyncReturn<bool> {
     #[cfg(all(target_os = "linux", feature = "linux_headless"))]
     #[cfg(not(any(feature = "flatpak", feature = "appimage")))]
     if _key.eq(config::CONFIG_OPTION_ALLOW_LINUX_HEADLESS) {
-        return SyncReturn(true)
+        return SyncReturn(true);
     }
     SyncReturn(false)
 }
@@ -777,6 +777,15 @@ pub fn main_set_peer_alias(id: String, alias: String) {
     set_peer_option(id, "alias".to_owned(), alias)
 }
 
+pub fn main_get_new_stored_peers() -> String {
+    let peers: Vec<String> = config::NEW_STORED_PEER_CONFIG
+        .lock()
+        .unwrap()
+        .drain()
+        .collect();
+    serde_json::to_string(&peers).unwrap_or_default()
+}
+
 pub fn main_forget_password(id: String) {
     forget_password(id)
 }
@@ -787,7 +796,7 @@ pub fn main_peer_has_password(id: String) -> bool {
 
 pub fn main_load_recent_peers() {
     if !config::APP_DIR.read().unwrap().is_empty() {
-        let peers: Vec<HashMap<&str, String>> = PeerConfig::peers()
+        let peers: Vec<HashMap<&str, String>> = PeerConfig::peers(None)
             .drain(..)
             .map(|(id, _, p)| peer_to_map(id, p))
             .collect();
@@ -808,7 +817,7 @@ pub fn main_load_recent_peers() {
 
 pub fn main_load_recent_peers_sync() -> SyncReturn<String> {
     if !config::APP_DIR.read().unwrap().is_empty() {
-        let peers: Vec<HashMap<&str, String>> = PeerConfig::peers()
+        let peers: Vec<HashMap<&str, String>> = PeerConfig::peers(None)
             .drain(..)
             .map(|(id, _, p)| peer_to_map(id, p))
             .collect();
@@ -825,10 +834,22 @@ pub fn main_load_recent_peers_sync() -> SyncReturn<String> {
     SyncReturn("".to_string())
 }
 
+pub fn main_load_recent_peers_for_ab(filter: String) -> String {
+    let id_filters = serde_json::from_str::<Vec<String>>(&filter).unwrap_or_default();
+    if !config::APP_DIR.read().unwrap().is_empty() {
+        let peers: Vec<HashMap<&str, String>> = PeerConfig::peers(Some(id_filters))
+            .drain(..)
+            .map(|(id, _, p)| peer_to_map_ab(id, p))
+            .collect();
+        return serde_json::ser::to_string(&peers).unwrap_or("".to_owned());
+    }
+    "".to_string()
+}
+
 pub fn main_load_fav_peers() {
     if !config::APP_DIR.read().unwrap().is_empty() {
         let favs = get_fav();
-        let mut recent = PeerConfig::peers();
+        let mut recent = PeerConfig::peers(None);
         let mut lan = config::LanPeers::load()
             .peers
             .iter()
@@ -1084,6 +1105,20 @@ pub fn main_start_dbus_server() {
             let _ = start_dbus_server();
         });
     }
+}
+
+pub fn main_save_ab(json: String) {
+    if json.len() > 1024 {
+        std::thread::spawn(|| {
+            config::Ab::store(json);
+        });
+    } else {
+        config::Ab::store(json);
+    }
+}
+
+pub fn main_clear_ab() {
+    config::Ab::remove();
 }
 
 pub fn session_send_pointer(session_id: SessionID, msg: String) {

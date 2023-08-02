@@ -500,7 +500,6 @@ abstract class BasePeerCard extends StatelessWidget {
         return await _isForceAlwaysRelay(id);
       },
       setter: (bool v) async {
-        gFFI.abModel.setPeerForceAlwaysRelay(id, v);
         await bind.mainSetPeerOption(
             id: id, key: option, value: bool2option(option, v));
       },
@@ -671,7 +670,6 @@ abstract class BasePeerCard extends StatelessWidget {
         isInProgress.value = true;
         String name = controller.text.trim();
         await bind.mainSetPeerAlias(id: id, alias: name);
-        gFFI.abModel.setPeerAlias(id, name);
         _update();
         close();
         isInProgress.value = false;
@@ -967,16 +965,6 @@ class AddressBookPeerCard extends BasePeerCard {
 
   @protected
   @override
-  Future<bool> _isForceAlwaysRelay(String id) async =>
-      gFFI.abModel.find(id)?.forceAlwaysRelay ?? false;
-
-  @protected
-  @override
-  Future<String> _getAlias(String id) async =>
-      gFFI.abModel.find(id)?.alias ?? '';
-
-  @protected
-  @override
   void _update() => gFFI.abModel.pullAb();
 
   @protected
@@ -1122,7 +1110,6 @@ void _rdpDialog(String id) async {
           id: id, key: 'rdp_username', value: username);
       await bind.mainSetPeerOption(
           id: id, key: 'rdp_password', value: password);
-      gFFI.abModel.setRdp(id, port, username);
       close();
     }
 

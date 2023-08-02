@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -31,12 +32,21 @@ class AbModel {
   final selectedTags = List<String>.empty(growable: true).obs;
   var initialized = false;
   var licensedDevices = 0;
+  var sync_all_from_recent = true;
+  var _timerCounter = 0;
 
   WeakReference<FFI> parent;
 
-  AbModel(this.parent);
+  AbModel(this.parent) {
+    if (desktopType == DesktopType.main) {
+      Timer.periodic(Duration(milliseconds: 500), (timer) async {
+        if (_timerCounter++ % 6 == 0) syncFromRecent();
+      });
+    }
+  }
 
   Future<void> pullAb({force = true, quiet = false}) async {
+    debugPrint("pullAb, force:$force, quite:$quiet");
     if (gFFI.userModel.userName.isEmpty) return;
     if (abLoading.value) return;
     if (!force && initialized) return;
@@ -75,18 +85,24 @@ class AbModel {
         }
       }
     } catch (err) {
+      reset();
       abError.value = err.toString();
     } finally {
       abLoading.value = false;
       initialized = true;
+      sync_all_from_recent = true;
+      _timerCounter = 0;
+      save();
     }
   }
 
   Future<void> reset() async {
+    abError.value = '';
     await bind.mainSetLocalOption(key: "selected-tags", value: '');
     tags.clear();
     peers.clear();
     initialized = false;
+    await bind.mainClearAb();
   }
 
   void addId(String id, String alias, List<dynamic> tags) {
@@ -131,10 +147,11 @@ class AbModel {
   }
 
   Future<void> pushAb() async {
+    debugPrint("pushAb");
     final api = "${await bind.mainGetApiServer()}/api/ab";
     var authHeaders = getHttpHeaders();
     authHeaders['Content-Type'] = "application/json";
-    final peersJsonData = peers.map((e) => e.toJson()).toList();
+    final peersJsonData = peers.map((e) => e.toAbUploadJson()).toList();
     final body = jsonEncode({
       "data": jsonEncode({"tags": tags, "peers": peersJsonData})
     });
@@ -149,10 +166,14 @@ class AbModel {
     request.headers.addAll(authHeaders);
     try {
       await http.Client().send(request);
-      await pullAb(quiet: true);
+      // await pullAb(quiet: true);
     } catch (e) {
       BotToast.showText(contentColor: Colors.red, text: e.toString());
-    } finally {}
+    } finally {
+      sync_all_from_recent = true;
+      _timerCounter = 0;
+      save();
+    }
   }
 
   Peer? find(String id) {
@@ -197,28 +218,111 @@ class AbModel {
     }
   }
 
-  Future<void> setPeerAlias(String id, String value) async {
-    final it = peers.where((p0) => p0.id == id);
-    if (it.isNotEmpty) {
-      it.first.alias = value;
-      await pushAb();
+  void syncFromRecent() async {
+    Peer merge(Peer r, Peer p) {
+      return Peer(
+          id: p.id,
+          hash: r.hash.isEmpty ? p.hash : r.hash,
+          username: r.username.isEmpty ? p.username : r.username,
+          hostname: r.hostname.isEmpty ? p.hostname : r.hostname,
+          platform: r.platform.isEmpty ? p.platform : r.platform,
+          alias: r.alias,
+          tags: p.tags,
+          forceAlwaysRelay: r.forceAlwaysRelay,
+          rdpPort: r.rdpPort,
+          rdpUsername: r.rdpUsername);
+    }
+
+    bool shouldSync(Peer a, Peer b) {
+      return a.hash != b.hash ||
+          a.username != b.username ||
+          a.platform != b.platform ||
+          a.hostname != b.hostname;
+    }
+
+    Future<List<Peer>> getRecentPeers() async {
+      try {
+        if (peers.isEmpty) [];
+        List<String> filteredPeerIDs;
+        if (sync_all_from_recent) {
+          sync_all_from_recent = false;
+          filteredPeerIDs = peers.map((e) => e.id).toList();
+        } else {
+          final new_stored_str = await bind.mainGetNewStoredPeers();
+          if (new_stored_str.isEmpty) return [];
+          List<String> new_stores =
+              (jsonDecode(new_stored_str) as List<dynamic>)
+                  .map((e) => e.toString())
+                  .toList();
+          final abPeerIds = peers.map((e) => e.id).toList();
+          filteredPeerIDs =
+              new_stores.where((e) => abPeerIds.contains(e)).toList();
+        }
+        if (filteredPeerIDs.isEmpty) return [];
+        final loadStr = await bind.mainLoadRecentPeersForAb(
+            filter: jsonEncode(filteredPeerIDs));
+        if (loadStr.isEmpty) {
+          return [];
+        }
+        List<dynamic> mapPeers = jsonDecode(loadStr);
+        List<Peer> recents = List.empty(growable: true);
+        for (var m in mapPeers) {
+          if (m is Map<String, dynamic>) {
+            recents.add(Peer.fromJson(m));
+          }
+        }
+        return recents;
+      } catch (e) {
+        debugPrint('getRecentPeers:$e');
+      }
+      return [];
+    }
+
+    try {
+      if (!shouldSyncAb()) return;
+      final oldPeers = peers.toList();
+      final recents = await getRecentPeers();
+      if (recents.isEmpty) return;
+      for (var i = 0; i < peers.length; i++) {
+        var p = peers[i];
+        var r = recents.firstWhereOrNull((r) => p.id == r.id);
+        if (r != null) {
+          peers[i] = merge(r, p);
+        }
+      }
+      bool changed = false;
+      for (var i = 0; i < peers.length; i++) {
+        final o = oldPeers[i];
+        final p = peers[i];
+        if (shouldSync(o, p)) {
+          changed = true;
+          break;
+        }
+      }
+      // Be careful with loop calls
+      if (changed) {
+        pushAb();
+      }
+    } catch (e) {
+      debugPrint('syncFromRecent:$e');
     }
   }
 
-  Future<void> setPeerForceAlwaysRelay(String id, bool value) async {
-    final it = peers.where((p0) => p0.id == id);
-    if (it.isNotEmpty) {
-      it.first.forceAlwaysRelay = value;
-      await pushAb();
-    }
-  }
-
-  Future<void> setRdp(String id, String port, String username) async {
-    final it = peers.where((p0) => p0.id == id);
-    if (it.isNotEmpty) {
-      it.first.rdpPort = port;
-      it.first.rdpUsername = username;
-      await pushAb();
+  save() {
+    try {
+      final infos = peers
+          .map((e) => (<String, dynamic>{
+                "id": e.id,
+                "hash": e.hash,
+              }))
+          .toList();
+      final m = <String, dynamic>{
+        "access_token": bind.mainGetLocalOption(key: 'access_token'),
+        "peers": infos,
+      };
+      bind.mainSaveAb(json: jsonEncode(m));
+    } catch (e) {
+      debugPrint('ab save:$e');
     }
   }
 }
