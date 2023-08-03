@@ -9,6 +9,7 @@ import 'package:get/get.dart';
 import '../../common.dart';
 import '../../models/model.dart';
 import '../../models/platform_model.dart';
+import 'address_book.dart';
 
 void clientClose(SessionID sessionId, OverlayDialogManager dialogManager) {
   msgBox(sessionId, 'info', 'Close', 'Are you sure to close the connection?',
@@ -1349,4 +1350,99 @@ customImageQualityDialog(SessionID sessionId, String id, FFI ffi) async {
     children: [qualitySlider, fpsSlider],
   );
   msgBoxCommon(ffi.dialogManager, 'Custom Image Quality', content, [btnClose]);
+}
+
+void deletePeerConfirmDialog(Function onSubmit) async {
+  gFFI.dialogManager.show(
+    (setState, close, context) {
+      submit() async {
+        await onSubmit();
+        close();
+      }
+
+      return CustomAlertDialog(
+        title: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.delete_rounded,
+              color: Colors.red,
+            ),
+            Text(translate('Delete')).paddingOnly(
+              left: 10,
+            ),
+          ],
+        ),
+        content: SizedBox.shrink(),
+        actions: [
+          dialogButton(
+            "Cancel",
+            icon: Icon(Icons.close_rounded),
+            onPressed: close,
+            isOutline: true,
+          ),
+          dialogButton(
+            "OK",
+            icon: Icon(Icons.done_rounded),
+            onPressed: submit,
+          ),
+        ],
+        onSubmit: submit,
+        onCancel: close,
+      );
+    },
+  );
+}
+
+void editAbTagDialog(
+    List<dynamic> currentTags, Function(List<dynamic>) onSubmit) {
+  var isInProgress = false;
+
+  final tags = List.of(gFFI.abModel.tags);
+  var selectedTag = currentTags.obs;
+
+  gFFI.dialogManager.show((setState, close, context) {
+    submit() async {
+      setState(() {
+        isInProgress = true;
+      });
+      await onSubmit(selectedTag);
+      close();
+    }
+
+    return CustomAlertDialog(
+      title: Text(translate("Edit Tag")),
+      content: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(vertical: 8.0),
+            child: Wrap(
+              children: tags
+                  .map((e) => AddressBookTag(
+                      name: e,
+                      tags: selectedTag,
+                      onTap: () {
+                        if (selectedTag.contains(e)) {
+                          selectedTag.remove(e);
+                        } else {
+                          selectedTag.add(e);
+                        }
+                      },
+                      showActionMenu: false))
+                  .toList(growable: false),
+            ),
+          ),
+          Offstage(
+              offstage: !isInProgress, child: const LinearProgressIndicator())
+        ],
+      ),
+      actions: [
+        dialogButton("Cancel", onPressed: close, isOutline: true),
+        dialogButton("OK", onPressed: submit),
+      ],
+      onSubmit: submit,
+      onCancel: close,
+    );
+  });
 }

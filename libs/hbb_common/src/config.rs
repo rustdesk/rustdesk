@@ -978,6 +978,11 @@ impl PeerConfig {
                 config
             }
             Err(err) => {
+                if let confy::ConfyError::GeneralLoadError(err) = &err {
+                    if err.kind() == std::io::ErrorKind::NotFound {
+                        return Default::default();
+                    }
+                }
                 log::error!("Failed to load peer config '{}': {}", id, err);
                 Default::default()
             }

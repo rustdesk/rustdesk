@@ -131,6 +131,12 @@ class AbModel {
     peers.add(peer);
   }
 
+  void addPeers(List<Peer> ps) {
+    for (var p in ps) {
+      addPeer(p);
+    }
+  }
+
   void addTag(String tag) async {
     if (tagContainBy(tag)) {
       return;
@@ -144,6 +150,14 @@ class AbModel {
       return;
     }
     it.first.tags = tags;
+  }
+
+  void changeTagForPeers(List<String> ids, List<dynamic> tags) {
+    peers.map((e) {
+      if (ids.contains(e.id)) {
+        e.tags = tags;
+      }
+    }).toList();
   }
 
   Future<void> pushAb() async {
@@ -190,6 +204,10 @@ class AbModel {
 
   void deletePeer(String id) {
     peers.removeWhere((element) => element.id == id);
+  }
+
+  void deletePeers(List<String> ids) {
+    peers.removeWhere((e) => ids.contains(e.id));
   }
 
   void deleteTag(String tag) {

@@ -1,10 +1,19 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_hbb/models/peer_model.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
+import 'package:get/get.dart';
 
 import '../common.dart';
 import 'model.dart';
 
-const int groupTabIndex = 4;
+enum PeerTabIndex {
+  recent,
+  fav,
+  lan,
+  ab,
+  group,
+}
+
 const String defaultGroupTabname = 'Group';
 
 class PeerTabModel with ChangeNotifier {
@@ -26,6 +35,11 @@ class PeerTabModel with ChangeNotifier {
     Icons.group,
   ];
   List<int> get indexs => List.generate(tabNames.length, (index) => index);
+  List<Peer> _selectedPeers = List.empty(growable: true);
+  List<Peer> get selectedPeers => _selectedPeers;
+  bool get multiSelectionMode => _selectedPeers.isNotEmpty;
+  List<Peer> _currentTabCachedPeers = List.empty(growable: true);
+  List<Peer> get currentTabCachedPeers => _currentTabCachedPeers;
 
   PeerTabModel(this.parent) {
     // init currentTab
@@ -45,7 +59,7 @@ class PeerTabModel with ChangeNotifier {
 
   String tabTooltip(int index, String groupName) {
     if (index >= 0 && index < tabNames.length) {
-      if (index == groupTabIndex) {
+      if (index == PeerTabIndex.group.index) {
         if (gFFI.userModel.isAdmin.value || groupName.isEmpty) {
           return translate(defaultGroupTabname);
         } else {
@@ -65,5 +79,40 @@ class PeerTabModel with ChangeNotifier {
     }
     assert(false);
     return Icons.help;
+  }
+
+  togglePeerSelect(Peer peer) {
+    if (_selectedPeers.firstWhereOrNull((p) => p.id == peer.id) != null) {
+      _selectedPeers.removeWhere((p) => p.id == peer.id);
+    } else {
+      _selectedPeers.add(peer);
+    }
+    notifyListeners();
+  }
+
+  onPeerCardTap(Peer peer) {
+    if (!multiSelectionMode) return;
+    togglePeerSelect(peer);
+  }
+
+  closeSelection() {
+    _selectedPeers.clear();
+    notifyListeners();
+  }
+
+  setCurrentTabCachedPeers(List<Peer> peers) {
+    Future.delayed(Duration.zero, () {
+      _currentTabCachedPeers = peers;
+      notifyListeners();
+    });
+  }
+
+  selectAll() {
+    _selectedPeers = _currentTabCachedPeers.toList();
+    notifyListeners();
+  }
+
+  bool isPeerSelected(String id) {
+    return selectedPeers.firstWhereOrNull((p) => p.id == id) != null;
   }
 }
