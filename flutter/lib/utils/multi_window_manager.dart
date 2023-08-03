@@ -45,25 +45,29 @@ class RustDeskMultiWindowManager {
 
   separateWindows() async {
     for (final windowId in _remoteDesktopWindows) {
-      final sessionIdList = await DesktopMultiWindow.invokeMethod(
+      final String sessionIdList = await DesktopMultiWindow.invokeMethod(
           windowId, kWindowEventGetSessionIdList, null);
-      if (sessionIdList != null) {
-        final idList = sessionIdList.split(';') as List<String>;
-        if (idList.length <= 1) {
-          continue;
-        }
-        for (final idPair in idList.sublist(1)) {
-          final peerSession = idPair.split(',');
-          var params = {
-            'type': WindowType.RemoteDesktop.index,
-            'id': peerSession[0],
-            'sessionId': peerSession[1],
-          };
-          await newSessionWindow(WindowType.RemoteDesktop, peerSession[0],
-              jsonEncode(params), _remoteDesktopWindows);
-          await DesktopMultiWindow.invokeMethod(
-              windowId, kWindowEventCloseForSeparateWindow, peerSession[0]);
-        }
+      final idList = sessionIdList.split(';');
+      if (idList.length <= 1) {
+        continue;
+      }
+      for (final idPair in idList.sublist(1)) {
+        final peerSession = idPair.split(',');
+        var params = {
+          'type': WindowType.RemoteDesktop.index,
+          'id': peerSession[0],
+          'sessionId': peerSession[1],
+        };
+        await _newSession(
+          true,
+          WindowType.RemoteDesktop,
+          kWindowEventNewRemoteDesktop,
+          peerSession[0],
+          _remoteDesktopWindows,
+          jsonEncode(params),
+        );
+        await DesktopMultiWindow.invokeMethod(
+            windowId, kWindowEventCloseForSeparateWindow, peerSession[0]);
       }
     }
   }
@@ -85,6 +89,36 @@ class RustDeskMultiWindowManager {
     }
     registerActiveWindow(windowController.windowId);
     windows.add(windowController.windowId);
+  }
+
+  _newSession(
+    bool separateWindow,
+    WindowType type,
+    String methodName,
+    String remoteId,
+    List<int> windows,
+    String msg,
+  ) async {
+    if (separateWindow) {
+      if (kCloseMultiWindowByHide && _inactiveWindows.isNotEmpty) {
+        final windowId = _inactiveWindows.first;
+        final invokeRes =
+            await DesktopMultiWindow.invokeMethod(windowId, methodName, msg);
+        final windowController = WindowController.fromWindowId(windowId);
+        windowController.show();
+        registerActiveWindow(windowController.windowId);
+        windows.add(windowController.windowId);
+        return invokeRes;
+      } else {
+        await newSessionWindow(type, remoteId, msg, windows);
+      }
+    } else {
+      if (windows.isEmpty) {
+        await newSessionWindow(type, remoteId, msg, windows);
+      } else {
+        return call(type, methodName, msg);
+      }
+    }
   }
 
   Future<dynamic> newSession(
@@ -126,26 +160,7 @@ class RustDeskMultiWindowManager {
       }
     }
 
-    if (separateWindow) {
-      if (kCloseMultiWindowByHide && _inactiveWindows.isNotEmpty) {
-        final windowId = _inactiveWindows.first;
-        final invokeRes =
-            await DesktopMultiWindow.invokeMethod(windowId, methodName, msg);
-        final windowController = WindowController.fromWindowId(windowId);
-        windowController.show();
-        registerActiveWindow(windowController.windowId);
-        windows.add(windowController.windowId);
-        return invokeRes;
-      } else {
-        await newSessionWindow(type, remoteId, msg, windows);
-      }
-    } else {
-      if (windows.isEmpty) {
-        await newSessionWindow(type, remoteId, msg, windows);
-      } else {
-        return call(type, methodName, msg);
-      }
-    }
+    await _newSession(separateWindow, type, methodName, remoteId, windows, msg);
   }
 
   Future<dynamic> newRemoteDesktop(
