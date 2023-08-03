@@ -1702,6 +1702,10 @@ class FFI {
     });
     // every instance will bind a stream
     this.id = id;
+
+    if (isSessionAdded) {
+      bind.sessionHandlePeerInfo(sessionId: sessionId);
+    }
   }
 
   /// Login with [password], choose if the client should [remember] it.

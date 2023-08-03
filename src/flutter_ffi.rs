@@ -1,7 +1,7 @@
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use crate::common::get_default_sound_input;
 use crate::{
-    client::file_trait::FileManager,
+    client::{file_trait::FileManager, Interface},
     common::is_keyboard_mode_supported,
     common::make_fd_to_json,
     flutter::{self, SESSIONS},
@@ -598,6 +598,13 @@ pub fn session_switch_sides(session_id: SessionID) {
 pub fn session_change_resolution(session_id: SessionID, display: i32, width: i32, height: i32) {
     if let Some(session) = SESSIONS.read().unwrap().get(&session_id) {
         session.change_resolution(display, width, height);
+    }
+}
+
+pub fn session_handle_peer_info(session_id: SessionID) {
+    if let Some(session) = SESSIONS.write().unwrap().get_mut(&session_id) {
+        session.handle_peer_info(session.pi.clone());
+        session.handle_peer_switch_display(&session.switch_display);
     }
 }
 

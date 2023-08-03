@@ -62,6 +62,10 @@ pub struct Session<T: InvokeUiSession> {
     pub server_file_transfer_enabled: Arc<RwLock<bool>>,
     pub server_clipboard_enabled: Arc<RwLock<bool>>,
     pub last_change_display: Arc<Mutex<ChangeDisplayRecord>>,
+    #[cfg(feature = "flutter")]
+    pub pi: PeerInfo,
+    #[cfg(feature = "flutter")]
+    pub switch_display: SwitchDisplay,
 }
 
 #[derive(Clone)]
@@ -1186,7 +1190,7 @@ impl<T: InvokeUiSession> Session<T> {
 #[tokio::main(flavor = "current_thread")]
 pub async fn io_loop<T: InvokeUiSession>(handler: Session<T>) {
     // It is ok to call this function multiple times.
-    #[cfg(target_os ="windows")]
+    #[cfg(target_os = "windows")]
     if !handler.is_file_transfer() && !handler.is_port_forward() {
         clipboard::ContextSend::enable(true);
     }

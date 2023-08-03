@@ -28,7 +28,7 @@ import '../widgets/tabbar_widget.dart';
 
 final SimpleWrapper<bool> _firstEnterImage = SimpleWrapper(false);
 
-final Map<String, bool> noCloseSessionOnDispose = {};
+final Map<String, bool> closeSessionOnDispose = {};
 
 class RemotePage extends StatefulWidget {
   RemotePage({
@@ -203,7 +203,7 @@ class _RemotePageState extends State<RemotePage>
 
   @override
   Future<void> dispose() async {
-    final closeSession = noCloseSessionOnDispose.remove(widget.id) ?? false;
+    final closeSession = closeSessionOnDispose.remove(widget.id) ?? true;
 
     // https://github.com/flutter/flutter/issues/64935
     super.dispose();

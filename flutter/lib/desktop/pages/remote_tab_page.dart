@@ -147,7 +147,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
             .join(';');
       } else if (call.method == kWindowEventCloseForSeparateWindow) {
         final peerId = call.arguments;
-        noCloseSessionOnDispose[peerId] = true;
+        closeSessionOnDispose[peerId] = false;
         tabController.closeBy(peerId);
       }
       _update_remote_count();

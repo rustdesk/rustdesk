@@ -1008,6 +1008,10 @@ impl<T: InvokeUiSession> Remote<T> {
                         }
                     }
                     Some(login_response::Union::PeerInfo(pi)) => {
+                        #[cfg(feature = "flutter")]
+                        {
+                            self.handler.pi = pi.clone();
+                        }
                         self.handler.handle_peer_info(pi);
                         #[cfg(not(feature = "flutter"))]
                         self.check_clipboard_file_context();
@@ -1274,6 +1278,10 @@ impl<T: InvokeUiSession> Remote<T> {
                         }
                     }
                     Some(misc::Union::SwitchDisplay(s)) => {
+                        #[cfg(feature = "flutter")]
+                        {
+                            self.handler.switch_display = s.clone();
+                        }
                         self.handler.handle_peer_switch_display(&s);
                         self.video_sender.send(MediaData::Reset).ok();
                         if s.width > 0 && s.height > 0 {
