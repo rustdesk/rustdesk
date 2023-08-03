@@ -782,11 +782,15 @@ pub fn session_start_(
         );
         #[cfg(not(feature = "flutter_texture_render"))]
         log::info!("Session {} start, render by flutter paint widget", id);
+        let is_pre_added = session.event_stream.read().unwrap().is_some();
+        session.close_event_stream();
         *session.event_stream.write().unwrap() = Some(event_stream);
-        let session = session.clone();
-        std::thread::spawn(move || {
-            io_loop(session);
-        });
+        if !is_pre_added {
+            let session = session.clone();
+            std::thread::spawn(move || {
+                io_loop(session);
+            });
+        }
         Ok(())
     } else {
         bail!("No session with peer id {}", id)

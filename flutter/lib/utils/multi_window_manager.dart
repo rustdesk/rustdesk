@@ -43,6 +43,46 @@ class RustDeskMultiWindowManager {
   final List<int> _fileTransferWindows = List.empty(growable: true);
   final List<int> _portForwardWindows = List.empty(growable: true);
 
+  separateWindows() async {
+    for (final windowId in _remoteDesktopWindows) {
+      final sessionIdList = await DesktopMultiWindow.invokeMethod(
+          windowId, kWindowEventGetSessionIdList, null);
+      if (sessionIdList != null) {
+        for (final idPair in sessionIdList.split(';')) {
+          final peerSession = idPair.split(',');
+          var params = {
+            'type': WindowType.RemoteDesktop.index,
+            'id': peerSession[0],
+            'sessionId': peerSession[1],
+          };
+          await newSessionWindow(WindowType.RemoteDesktop, peerSession[0],
+              jsonEncode(params), _remoteDesktopWindows);
+          await DesktopMultiWindow.invokeMethod(
+          windowId, kWindowEventCloseForSeparateWindow, peerSession[0]);
+        }
+      }
+    }
+  }
+
+  newSessionWindow(
+      WindowType type, String remoteId, String msg, List<int> windows) async {
+    final windowController = await DesktopMultiWindow.createWindow(msg);
+    windowController
+      ..setFrame(const Offset(0, 0) &
+          Size(1280 + windowController.windowId * 20,
+              720 + windowController.windowId * 20))
+      ..center()
+      ..setTitle(getWindowNameWithId(
+        remoteId,
+        overrideType: type,
+      ));
+    if (Platform.isMacOS) {
+      Future.microtask(() => windowController.show());
+    }
+    registerActiveWindow(windowController.windowId);
+    windows.add(windowController.windowId);
+  }
+
   Future<dynamic> newSession(
     WindowType type,
     String methodName,
@@ -67,24 +107,6 @@ class RustDeskMultiWindowManager {
       params['isRDP'] = isRDP;
     }
     final msg = jsonEncode(params);
-
-    newSessionWindow() async {
-      final windowController = await DesktopMultiWindow.createWindow(msg);
-      windowController
-        ..setFrame(const Offset(0, 0) &
-            Size(1280 + windowController.windowId * 20,
-                720 + windowController.windowId * 20))
-        ..center()
-        ..setTitle(getWindowNameWithId(
-          remoteId,
-          overrideType: type,
-        ));
-      if (Platform.isMacOS) {
-        Future.microtask(() => windowController.show());
-      }
-      registerActiveWindow(windowController.windowId);
-      windows.add(windowController.windowId);
-    }
 
     // separate window for file transfer is not supported
     bool separateWindow = forceSeparateWindow ||
@@ -111,11 +133,11 @@ class RustDeskMultiWindowManager {
         windows.add(windowController.windowId);
         return invokeRes;
       } else {
-        await newSessionWindow();
+        await newSessionWindow(type, remoteId, msg, windows);
       }
     } else {
       if (windows.isEmpty) {
-        await newSessionWindow();
+        await newSessionWindow(type, remoteId, msg, windows);
       } else {
         return call(type, methodName, msg);
       }

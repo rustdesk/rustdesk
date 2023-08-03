@@ -28,10 +28,13 @@ import '../widgets/tabbar_widget.dart';
 
 final SimpleWrapper<bool> _firstEnterImage = SimpleWrapper(false);
 
+final Map<String, bool> noCloseSessionOnDispose = {};
+
 class RemotePage extends StatefulWidget {
   RemotePage({
     Key? key,
     required this.id,
+    required this.sessionId,
     required this.password,
     required this.toolbarState,
     required this.tabController,
@@ -40,6 +43,7 @@ class RemotePage extends StatefulWidget {
   }) : super(key: key);
 
   final String id;
+  final SessionID? sessionId;
   final String? password;
   final ToolbarState toolbarState;
   final String? switchUuid;
@@ -91,7 +95,7 @@ class _RemotePageState extends State<RemotePage>
   void initState() {
     super.initState();
     _initStates(widget.id);
-    _ffi = FFI();
+    _ffi = FFI(widget.sessionId);
     Get.put(_ffi, tag: widget.id);
     _ffi.imageModel.addCallbackOnFirstImage((String peerId) {
       showKBLayoutTypeChooserIfNeeded(
@@ -199,6 +203,8 @@ class _RemotePageState extends State<RemotePage>
 
   @override
   Future<void> dispose() async {
+    final closeSession = noCloseSessionOnDispose.remove(widget.id) ?? false;
+
     // https://github.com/flutter/flutter/issues/64935
     super.dispose();
     debugPrint("REMOTE PAGE dispose session $sessionId ${widget.id}");
@@ -209,11 +215,13 @@ class _RemotePageState extends State<RemotePage>
     _ffi.dialogManager.hideMobileActionsOverlay();
     _ffi.recordingModel.onClose();
     _rawKeyFocusNode.dispose();
-    await _ffi.close();
+    await _ffi.close(closeSession: closeSession);
     _timer?.cancel();
     _ffi.dialogManager.dismissAll();
-    await SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual,
-        overlays: SystemUiOverlay.values);
+    if (closeSession) {
+      await SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual,
+          overlays: SystemUiOverlay.values);
+    }
     if (!Platform.isLinux) {
       await Wakelock.disable();
     }

@@ -37,6 +37,9 @@ const String kWindowEventNewFileTransfer = "new_file_transfer";
 const String kWindowEventNewPortForward = "new_port_forward";
 const String kWindowEventActiveSession = "active_session";
 const String kWindowEventGetRemoteList = "get_remote_list";
+const String kWindowEventGetSessionIdList = "get_session_id_list";
+
+const String kWindowEventCloseForSeparateWindow = "close_for_separate_window";
 
 const String kOptionSeparateRemoteWindow = "enable-separate-remote-window";
 

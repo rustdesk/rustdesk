@@ -52,6 +52,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
     _toolbarState = ToolbarState();
     RemoteCountState.init();
     final peerId = params['id'];
+    final sessionId = params['session_id'];
     if (peerId != null) {
       ConnectionTypeState.init(peerId);
       tabController.onSelected = (id) {
@@ -73,6 +74,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
         page: RemotePage(
           key: ValueKey(peerId),
           id: peerId,
+          sessionId: sessionId == null ? null : SessionID(sessionId),
           password: params['password'],
           toolbarState: _toolbarState,
           tabController: tabController,
@@ -99,6 +101,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
         final args = jsonDecode(call.arguments);
         final id = args['id'];
         final switchUuid = args['switch_uuid'];
+        final sessionId = args['session_id'];
         windowOnTop(windowId());
         ConnectionTypeState.init(id);
         _toolbarState.setShow(
@@ -112,6 +115,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
           page: RemotePage(
             key: ValueKey(id),
             id: id,
+            sessionId: sessionId == null ? null : SessionID(sessionId),
             password: args['password'],
             toolbarState: _toolbarState,
             tabController: tabController,
@@ -136,6 +140,15 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
             .map((e) => e.key)
             .toList()
             .join(',');
+      } else if (call.method == kWindowEventGetSessionIdList) {
+        return tabController.state.value.tabs
+            .map((e) => '${e.key},${(e.page as RemotePage).ffi.sessionId}')
+            .toList()
+            .join(';');
+      } else if (call.method == kWindowEventCloseForSeparateWindow) {
+        final peerId = call.arguments;
+        noCloseSessionOnDispose[peerId] = true;
+        tabController.closeBy(peerId);
       }
       _update_remote_count();
     });
