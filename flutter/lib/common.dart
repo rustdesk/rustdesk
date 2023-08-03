@@ -1419,24 +1419,10 @@ Future<void> saveWindowPosition(WindowType type, {int? windowId}) async {
 }
 
 Future<Size> _adjustRestoreMainWindowSize(double? width, double? height) async {
-  const double minWidth = 600;
-  const double minHeight = 100;
-  double maxWidth = (((isDesktop || isWebDesktop)
-          ? kDesktopMaxDisplaySize
-          : kMobileMaxDisplaySize))
-      .toDouble();
-  double maxHeight = ((isDesktop || isWebDesktop)
-          ? kDesktopMaxDisplaySize
-          : kMobileMaxDisplaySize)
-      .toDouble();
-
-  if (isDesktop || isWebDesktop) {
-    final screen = (await window_size.getWindowInfo()).screen;
-    if (screen != null) {
-      maxWidth = screen.visibleFrame.width;
-      maxHeight = screen.visibleFrame.height;
-    }
-  }
+  const double minWidth = 1;
+  const double minHeight = 1;
+  const double maxWidth = 6480;
+  const double maxHeight = 6480;
 
   final defaultWidth =
       ((isDesktop || isWebDesktop) ? 1280 : kMobileDefaultDisplayWidth)
