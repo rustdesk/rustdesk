@@ -324,7 +324,11 @@ class _GeneralState extends State<_General> {
         kOptionSeparateRemoteWindow,
         isServer: false,
         update: () {
-          rustDeskWinManager.separateWindows();  
+          final useSeparateWindow =
+              mainGetLocalBoolOptionSync(kOptionSeparateRemoteWindow);
+          if (useSeparateWindow) {
+            rustDeskWinManager.separateWindows();
+          }
         },
       ),
     ];
@@ -1681,11 +1685,13 @@ Widget _OptionCheckBox(BuildContext context, String label, String key,
   var ref = value.obs;
   onChanged(option) async {
     if (option != null) {
-      ref.value = option;
       if (reverse) option = !option;
       isServer
           ? await mainSetBoolOption(key, option)
           : await mainSetLocalBoolOption(key, option);
+      ref.value = isServer
+          ? mainGetBoolOptionSync(key)
+          : mainGetLocalBoolOptionSync(key);
       update?.call();
     }
   }
