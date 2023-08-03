@@ -1639,7 +1639,7 @@ class FFI {
       imageModel.id = id;
       cursorModel.id = id;
     }
-    if (isSessionAdded) {
+    if (!isSessionAdded) {
       // ignore: unused_local_variable
       final addRes = bind.sessionAddSync(
         sessionId: sessionId,
@@ -1647,9 +1647,9 @@ class FFI {
         isFileTransfer: isFileTransfer,
         isPortForward: isPortForward,
         isRdp: isRdp,
-        switchUuid: switchUuid ?? "",
+        switchUuid: switchUuid ?? '',
         forceRelay: forceRelay ?? false,
-        password: password ?? "",
+        password: password ?? '',
       );
     }
     final stream = bind.sessionStart(sessionId: sessionId, id: id);
