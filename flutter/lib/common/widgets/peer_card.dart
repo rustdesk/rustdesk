@@ -68,7 +68,7 @@ class _PeerCardState extends State<_PeerCard>
         child: GestureDetector(
             onTap: () {
               if (peerTabModel.multiSelectionMode) {
-                peerTabModel.onPeerCardTap(peer);
+                peerTabModel.togglePeerSelect(peer);
               } else {
                 if (!isWebDesktop) connect(context, peer.id);
               }
@@ -167,7 +167,7 @@ class _PeerCardState extends State<_PeerCard>
             peerTabModel.togglePeerSelect(peer);
           },
           onTap: peerTabModel.multiSelectionMode
-              ? () => peerTabModel.onPeerCardTap(peer)
+              ? () => peerTabModel.togglePeerSelect(peer)
               : null,
           child: Obx(() => peerCardUiType.value == PeerUiType.grid
               ? _buildPeerCard(context, peer, deco)
