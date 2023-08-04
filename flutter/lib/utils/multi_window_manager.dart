@@ -49,10 +49,10 @@ class RustDeskMultiWindowManager {
       final String sessionIdList = await DesktopMultiWindow.invokeMethod(
           windowId, kWindowEventGetSessionIdList, null);
       final idList = sessionIdList.split(';');
-      // if (idList.length <= 1) {
-      //   continue;
-      // }
-      for (final idPair in idList) {
+      if (idList.length <= 1) {
+        continue;
+      }
+      for (final idPair in idList.sublist(1)) {
         final peerSession = idPair.split(',');
         var params = {
           'type': WindowType.RemoteDesktop.index,

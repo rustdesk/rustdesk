@@ -1010,7 +1010,7 @@ impl<T: InvokeUiSession> Remote<T> {
                     Some(login_response::Union::PeerInfo(pi)) => {
                         #[cfg(feature = "flutter")]
                         {
-                            *self.handler.pi.write().unwrap() = pi.clone();
+                            self.handler.cache_flutter.write().unwrap().pi = pi.clone();
                         }
                         self.handler.handle_peer_info(pi);
                         #[cfg(not(feature = "flutter"))]
@@ -1059,9 +1059,20 @@ impl<T: InvokeUiSession> Remote<T> {
                     _ => {}
                 },
                 Some(message::Union::CursorData(cd)) => {
+                    #[cfg(feature = "flutter")]
+                    {
+                        let mut lock = self.handler.cache_flutter.write().unwrap();
+                        if !lock.cursor_data.contains_key(&cd.id) {
+                            lock.cursor_data.insert(cd.id, cd.clone());
+                        }
+                    }
                     self.handler.set_cursor_data(cd);
                 }
                 Some(message::Union::CursorId(id)) => {
+                    #[cfg(feature = "flutter")]
+                    {
+                        self.handler.cache_flutter.write().unwrap().cursor_id = id;
+                    }
                     self.handler.set_cursor_id(id.to_string());
                 }
                 Some(message::Union::CursorPosition(cp)) => {
@@ -1280,7 +1291,7 @@ impl<T: InvokeUiSession> Remote<T> {
                     Some(misc::Union::SwitchDisplay(s)) => {
                         #[cfg(feature = "flutter")]
                         {
-                            *self.handler.switch_display.write().unwrap() = s.clone();
+                            self.handler.cache_flutter.write().unwrap().sp = s.clone();
                         }
                         self.handler.handle_peer_switch_display(&s);
                         self.video_sender.send(MediaData::Reset).ok();

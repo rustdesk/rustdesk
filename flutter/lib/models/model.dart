@@ -1656,13 +1656,13 @@ class FFI {
     final cb = ffiModel.startEventListener(sessionId, id);
     final useTextureRender = bind.mainUseTextureRender();
 
-    final SimpleWrapper<bool> isPeerInfoSent = SimpleWrapper(false);
+    final SimpleWrapper<bool> isCacheRestored = SimpleWrapper(false);
     // Preserved for the rgba data.
     stream.listen((message) {
       if (closed) return;
-      if (isSessionAdded && !isPeerInfoSent.value) {
-        bind.sessionHandlePeerInfo(sessionId: sessionId);
-        isPeerInfoSent.value = true;
+      if (isSessionAdded && !isCacheRestored.value) {
+        bind.sessionRestoreCache(sessionId: sessionId);
+        isCacheRestored.value = true;
       }
       () async {
         if (message is EventToUI_Event) {

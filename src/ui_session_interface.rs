@@ -48,6 +48,15 @@ pub static IS_IN: AtomicBool = AtomicBool::new(false);
 
 const CHANGE_RESOLUTION_VALID_TIMEOUT_SECS: u64 = 15;
 
+#[cfg(feature = "flutter")]
+#[derive(Default)]
+pub struct CacheFlutter {
+    pub pi: PeerInfo,
+    pub sp: SwitchDisplay,
+    pub cursor_data: HashMap<u64, CursorData>,
+    pub cursor_id: u64,
+}
+
 #[derive(Clone, Default)]
 pub struct Session<T: InvokeUiSession> {
     pub session_id: SessionID, // different from the one in LoginConfigHandler, used for flutter UI message pass
@@ -63,9 +72,7 @@ pub struct Session<T: InvokeUiSession> {
     pub server_clipboard_enabled: Arc<RwLock<bool>>,
     pub last_change_display: Arc<Mutex<ChangeDisplayRecord>>,
     #[cfg(feature = "flutter")]
-    pub pi: Arc<RwLock<PeerInfo>>,
-    #[cfg(feature = "flutter")]
-    pub switch_display: Arc<RwLock<SwitchDisplay>>,
+    pub cache_flutter: Arc<RwLock<CacheFlutter>>,
 }
 
 #[derive(Clone)]
@@ -1184,6 +1191,17 @@ impl<T: InvokeUiSession> Session<T> {
     }
     pub fn ctrl_alt_del(&self) {
         self.send_key_event(&crate::keyboard::client::event_ctrl_alt_del());
+    }
+
+    #[cfg(feature = "flutter")]
+    pub fn restore_flutter_cache(&mut self) {
+        let pi = self.cache_flutter.read().unwrap().pi.clone();
+        self.handle_peer_info(pi);
+        self.handle_peer_switch_display(&self.cache_flutter.read().unwrap().sp);
+        for (_, cd) in self.cache_flutter.read().unwrap().cursor_data.iter() {
+            self.set_cursor_data(cd.clone());
+        }
+        self.set_cursor_id(self.cache_flutter.read().unwrap().cursor_id.to_string());
     }
 }
 
