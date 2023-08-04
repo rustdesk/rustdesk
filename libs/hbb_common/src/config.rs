@@ -23,7 +23,7 @@ use crate::{
     log,
     password_security::{
         decrypt_str_or_original, decrypt_vec_or_original, encrypt_str_or_original,
-        encrypt_vec_or_original,
+        encrypt_vec_or_original, symmetric_crypt,
     },
 };
 
@@ -1504,13 +1504,14 @@ impl Ab {
     pub fn store(json: String) {
         if let Ok(mut file) = std::fs::File::create(Self::path()) {
             let data = compress(json.as_bytes());
-            let max_len = 32 * 1024 * 1024;
+            let max_len = 64 * 1024 * 1024;
             if data.len() > max_len {
-                // not store original
+                // maxlen of function decompress
                 return;
             }
-            let data = encrypt_vec_or_original(&data, PASSWORD_ENC_VERSION, max_len);
-            file.write_all(&data).ok();
+            if let Ok(data) = symmetric_crypt(&data, true) {
+                file.write_all(&data).ok();
+            }
         };
     }
 
@@ -1518,8 +1519,7 @@ impl Ab {
         if let Ok(mut file) = std::fs::File::open(Self::path()) {
             let mut data = vec![];
             if file.read_to_end(&mut data).is_ok() {
-                let (data, succ, _) = decrypt_vec_or_original(&data, PASSWORD_ENC_VERSION);
-                if succ {
+                if let Ok(data) = symmetric_crypt(&data, false) {
                     let data = decompress(&data);
                     if let Ok(ab) = serde_json::from_str::<Ab>(&String::from_utf8_lossy(&data)) {
                         return ab;
@@ -1527,6 +1527,7 @@ impl Ab {
                 }
             }
         };
+        Self::remove();
         Ab::default()
     }
 

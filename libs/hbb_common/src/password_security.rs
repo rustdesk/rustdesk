@@ -164,7 +164,7 @@ fn decrypt(v: &[u8]) -> Result<Vec<u8>, ()> {
     }
 }
 
-fn symmetric_crypt(data: &[u8], encrypt: bool) -> Result<Vec<u8>, ()> {
+pub fn symmetric_crypt(data: &[u8], encrypt: bool) -> Result<Vec<u8>, ()> {
     use sodiumoxide::crypto::secretbox;
     use std::convert::TryInto;
 

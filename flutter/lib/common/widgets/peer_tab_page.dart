@@ -309,6 +309,7 @@ class _PeerTabPageState extends State<PeerTabPage>
                 break;
             }
             gFFI.peerTabModel.closeSelection();
+            showToast(translate('Successful'));
           }
 
           deletePeerConfirmDialog(onSubmit);
@@ -334,6 +335,7 @@ class _PeerTabPageState extends State<PeerTabPage>
           }
           await bind.mainStoreFav(favs: favs);
           gFFI.peerTabModel.closeSelection();
+          showToast(translate('Successful'));
         },
         child: Tooltip(
                 message: translate('Add to Favorites'),
@@ -354,6 +356,7 @@ class _PeerTabPageState extends State<PeerTabPage>
           gFFI.abModel.addPeers(peers);
           gFFI.abModel.pushAb();
           gFFI.peerTabModel.closeSelection();
+          showToast(translate('Successful'));
         },
         child: Tooltip(
                 message: translate('Add to Address Book'),
@@ -377,6 +380,7 @@ class _PeerTabPageState extends State<PeerTabPage>
                       peers.map((p) => p.id).toList(), selectedTags);
                   gFFI.abModel.pushAb();
                   gFFI.peerTabModel.closeSelection();
+                  showToast(translate('Successful'));
                 });
               },
               child: Tooltip(
