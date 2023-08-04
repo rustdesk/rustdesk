@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/models/peer_model.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
@@ -40,6 +42,8 @@ class PeerTabModel with ChangeNotifier {
   bool get multiSelectionMode => _selectedPeers.isNotEmpty;
   List<Peer> _currentTabCachedPeers = List.empty(growable: true);
   List<Peer> get currentTabCachedPeers => _currentTabCachedPeers;
+  bool isShiftDown = false;
+  String? _shiftAnchorId;
 
   PeerTabModel(this.parent) {
     // init currentTab
@@ -82,21 +86,53 @@ class PeerTabModel with ChangeNotifier {
   }
 
   togglePeerSelect(Peer peer) {
-    if (_selectedPeers.firstWhereOrNull((p) => p.id == peer.id) != null) {
-      _selectedPeers.removeWhere((p) => p.id == peer.id);
+    final cached = _currentTabCachedPeers.map((e) => e.id).toList();
+    int thisIndex = cached.indexOf(peer.id);
+    int closestIndex = -1;
+    String? closestId;
+    int smallestDiff = -1;
+    for (var i = 0; i < cached.length; i++) {
+      if (isPeerSelected(cached[i])) {
+        int diff = (i - thisIndex).abs();
+        if (smallestDiff == -1 || diff < smallestDiff) {
+          closestIndex = i;
+          closestId = cached[i];
+          smallestDiff = diff;
+        }
+      }
+    }
+    if (isShiftDown &&
+        thisIndex >= 0 &&
+        closestIndex >= 0 &&
+        closestId != null) {
+      int shiftAnchorIndex = cached.indexOf(_shiftAnchorId ?? '');
+      if (shiftAnchorIndex < 0) {
+        // use closest as shift anchor, rather than focused which we don't have
+        shiftAnchorIndex = closestIndex;
+        _shiftAnchorId = closestId;
+      }
+      int start = min(shiftAnchorIndex, thisIndex);
+      int end = max(shiftAnchorIndex, thisIndex);
+      _selectedPeers.clear();
+      for (var i = start; i <= end; i++) {
+        if (!isPeerSelected(cached[i])) {
+          _selectedPeers.add(_currentTabCachedPeers[i]);
+        }
+      }
     } else {
-      _selectedPeers.add(peer);
+      if (isPeerSelected(peer.id)) {
+        _selectedPeers.removeWhere((p) => p.id == peer.id);
+      } else {
+        _selectedPeers.add(peer);
+      }
+      _shiftAnchorId = null;
     }
     notifyListeners();
   }
 
-  onPeerCardTap(Peer peer) {
-    if (!multiSelectionMode) return;
-    togglePeerSelect(peer);
-  }
-
   closeSelection() {
     _selectedPeers.clear();
+    _shiftAnchorId = null;
     notifyListeners();
   }
 
