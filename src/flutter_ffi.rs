@@ -603,8 +603,9 @@ pub fn session_change_resolution(session_id: SessionID, display: i32, width: i32
 
 pub fn session_handle_peer_info(session_id: SessionID) {
     if let Some(session) = SESSIONS.write().unwrap().get_mut(&session_id) {
-        session.handle_peer_info(session.pi.clone());
-        session.handle_peer_switch_display(&session.switch_display);
+        let pi = session.pi.read().unwrap().clone();
+        session.handle_peer_info(pi);
+        session.handle_peer_switch_display(&session.switch_display.read().unwrap());
     }
 }
 

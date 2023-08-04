@@ -63,9 +63,9 @@ pub struct Session<T: InvokeUiSession> {
     pub server_clipboard_enabled: Arc<RwLock<bool>>,
     pub last_change_display: Arc<Mutex<ChangeDisplayRecord>>,
     #[cfg(feature = "flutter")]
-    pub pi: PeerInfo,
+    pub pi: Arc<RwLock<PeerInfo>>,
     #[cfg(feature = "flutter")]
-    pub switch_display: SwitchDisplay,
+    pub switch_display: Arc<RwLock<SwitchDisplay>>,
 }
 
 #[derive(Clone)]

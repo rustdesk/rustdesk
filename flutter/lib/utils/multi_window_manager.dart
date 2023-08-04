@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/common.dart';
+import 'package:flutter_hbb/models/platform_model.dart';
 
 /// must keep the order
 enum WindowType { Main, RemoteDesktop, FileTransfer, PortForward, Unknown }
@@ -48,10 +49,10 @@ class RustDeskMultiWindowManager {
       final String sessionIdList = await DesktopMultiWindow.invokeMethod(
           windowId, kWindowEventGetSessionIdList, null);
       final idList = sessionIdList.split(';');
-      if (idList.length <= 1) {
-        continue;
-      }
-      for (final idPair in idList.sublist(1)) {
+      // if (idList.length <= 1) {
+      //   continue;
+      // }
+      for (final idPair in idList) {
         final peerSession = idPair.split(',');
         var params = {
           'type': WindowType.RemoteDesktop.index,

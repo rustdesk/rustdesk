@@ -326,9 +326,9 @@ class _GeneralState extends State<_General> {
         update: () {
           final useSeparateWindow =
               mainGetLocalBoolOptionSync(kOptionSeparateRemoteWindow);
-          if (useSeparateWindow) {
+         // if (useSeparateWindow) {
             rustDeskWinManager.separateWindows();
-          }
+         // }
         },
       ),
     ];

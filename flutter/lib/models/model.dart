@@ -1655,9 +1655,15 @@ class FFI {
     final stream = bind.sessionStart(sessionId: sessionId, id: id);
     final cb = ffiModel.startEventListener(sessionId, id);
     final useTextureRender = bind.mainUseTextureRender();
+
+    final SimpleWrapper<bool> isPeerInfoSent = SimpleWrapper(false);
     // Preserved for the rgba data.
     stream.listen((message) {
       if (closed) return;
+      if (isSessionAdded && !isPeerInfoSent.value) {
+        bind.sessionHandlePeerInfo(sessionId: sessionId);
+        isPeerInfoSent.value = true;
+      }
       () async {
         if (message is EventToUI_Event) {
           if (message.field0 == "close") {
@@ -1702,10 +1708,6 @@ class FFI {
     });
     // every instance will bind a stream
     this.id = id;
-
-    if (isSessionAdded) {
-      bind.sessionHandlePeerInfo(sessionId: sessionId);
-    }
   }
 
   /// Login with [password], choose if the client should [remember] it.

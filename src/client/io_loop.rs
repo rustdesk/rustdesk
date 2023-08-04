@@ -1010,7 +1010,7 @@ impl<T: InvokeUiSession> Remote<T> {
                     Some(login_response::Union::PeerInfo(pi)) => {
                         #[cfg(feature = "flutter")]
                         {
-                            self.handler.pi = pi.clone();
+                            *self.handler.pi.write().unwrap() = pi.clone();
                         }
                         self.handler.handle_peer_info(pi);
                         #[cfg(not(feature = "flutter"))]
@@ -1280,7 +1280,7 @@ impl<T: InvokeUiSession> Remote<T> {
                     Some(misc::Union::SwitchDisplay(s)) => {
                         #[cfg(feature = "flutter")]
                         {
-                            self.handler.switch_display = s.clone();
+                            *self.handler.switch_display.write().unwrap() = s.clone();
                         }
                         self.handler.handle_peer_switch_display(&s);
                         self.video_sender.send(MediaData::Reset).ok();
