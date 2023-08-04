@@ -3,8 +3,11 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hbb/common/widgets/address_book.dart';
+import 'package:flutter_hbb/common/widgets/dialog.dart';
 import 'package:flutter_hbb/consts.dart';
+import 'package:flutter_hbb/models/peer_tab_model.dart';
 import 'package:get/get.dart';
+import 'package:provider/provider.dart';
 
 import '../../common.dart';
 import '../../common/formatter/id_formatter.dart';
@@ -58,17 +61,21 @@ class _PeerCardState extends State<_PeerCard>
     final peer = super.widget.peer;
     final name =
         '${peer.username}${peer.username.isNotEmpty && peer.hostname.isNotEmpty ? '@' : ''}${peer.hostname}';
-
+    final PeerTabModel peerTabModel = Provider.of(context);
+    final selected = peerTabModel.isPeerSelected(peer.id);
     return Card(
         margin: EdgeInsets.symmetric(horizontal: 2),
         child: GestureDetector(
-            onTap: !isWebDesktop ? () => connect(context, peer.id) : null,
+            onTap: () {
+              if (peerTabModel.multiSelectionMode) {
+                peerTabModel.onPeerCardTap(peer);
+              } else {
+                if (!isWebDesktop) connect(context, peer.id);
+              }
+            },
             onDoubleTap: isWebDesktop ? () => connect(context, peer.id) : null,
-            onLongPressStart: (details) {
-              final x = details.globalPosition.dx;
-              final y = details.globalPosition.dy;
-              _menuPos = RelativeRect.fromLTRB(x, y, x, y);
-              _showPeerMenu(peer.id);
+            onLongPress: () {
+              peerTabModel.togglePeerSelect(peer);
             },
             child: Container(
               padding: EdgeInsets.only(left: 12, top: 8, bottom: 8),
@@ -97,24 +104,30 @@ class _PeerCardState extends State<_PeerCard>
                       ],
                     ).paddingOnly(left: 8.0),
                   ),
-                  InkWell(
-                      child: const Padding(
-                          padding: EdgeInsets.all(12),
-                          child: Icon(Icons.more_vert)),
-                      onTapDown: (e) {
-                        final x = e.globalPosition.dx;
-                        final y = e.globalPosition.dy;
-                        _menuPos = RelativeRect.fromLTRB(x, y, x, y);
-                      },
-                      onTap: () {
-                        _showPeerMenu(peer.id);
-                      })
+                  selected
+                      ? Padding(
+                          padding: const EdgeInsets.all(12),
+                          child: checkBox(),
+                        )
+                      : InkWell(
+                          child: const Padding(
+                              padding: EdgeInsets.all(12),
+                              child: Icon(Icons.more_vert)),
+                          onTapDown: (e) {
+                            final x = e.globalPosition.dx;
+                            final y = e.globalPosition.dy;
+                            _menuPos = RelativeRect.fromLTRB(x, y, x, y);
+                          },
+                          onTap: () {
+                            _showPeerMenu(peer.id);
+                          }),
                 ],
               ),
             )));
   }
 
   Widget _buildDesktop() {
+    final PeerTabModel peerTabModel = Provider.of(context);
     final peer = super.widget.peer;
     var deco = Rx<BoxDecoration?>(
       BoxDecoration(
@@ -144,7 +157,18 @@ class _PeerCardState extends State<_PeerCard>
         );
       },
       child: GestureDetector(
-          onDoubleTap: () => widget.connect(context, peer.id),
+          onDoubleTap: peerTabModel.multiSelectionMode
+              ? null
+              : () => widget.connect(context, peer.id),
+          onLongPress: () {
+            peerTabModel.togglePeerSelect(peer);
+          },
+          onSecondaryTapDown: (_) {
+            peerTabModel.togglePeerSelect(peer);
+          },
+          onTap: peerTabModel.multiSelectionMode
+              ? () => peerTabModel.onPeerCardTap(peer)
+              : null,
           child: Obx(() => peerCardUiType.value == PeerUiType.grid
               ? _buildPeerCard(context, peer, deco)
               : _buildPeerTile(context, peer, deco))),
@@ -153,6 +177,8 @@ class _PeerCardState extends State<_PeerCard>
 
   Widget _buildPeerTile(
       BuildContext context, Peer peer, Rx<BoxDecoration?> deco) {
+    final PeerTabModel peerTabModel = Provider.of(context);
+    final selected = peerTabModel.isPeerSelected(peer.id);
     final name =
         '${peer.username}${peer.username.isNotEmpty && peer.hostname.isNotEmpty ? '@' : ''}${peer.hostname}';
     final greyStyle = TextStyle(
@@ -212,7 +238,7 @@ class _PeerCardState extends State<_PeerCard>
                         ],
                       ).marginOnly(top: 2),
                     ),
-                    _actionMore(peer),
+                    selected ? checkBox() : _actionMore(peer),
                   ],
                 ).paddingOnly(left: 10.0, top: 3.0),
               ),
@@ -225,6 +251,8 @@ class _PeerCardState extends State<_PeerCard>
 
   Widget _buildPeerCard(
       BuildContext context, Peer peer, Rx<BoxDecoration?> deco) {
+    final PeerTabModel peerTabModel = Provider.of(context);
+    final selected = peerTabModel.isPeerSelected(peer.id);
     final name =
         '${peer.username}${peer.username.isNotEmpty && peer.hostname.isNotEmpty ? '@' : ''}${peer.hostname}';
     return Card(
@@ -294,7 +322,7 @@ class _PeerCardState extends State<_PeerCard>
                           style: Theme.of(context).textTheme.titleSmall,
                         )),
                       ]).paddingSymmetric(vertical: 8)),
-                      _actionMore(peer),
+                      selected ? checkBox() : _actionMore(peer),
                     ],
                   ).paddingSymmetric(horizontal: 12.0),
                 )
@@ -303,6 +331,13 @@ class _PeerCardState extends State<_PeerCard>
           ),
         ),
       ),
+    );
+  }
+
+  Widget checkBox() {
+    return Icon(
+      Icons.check_box,
+      color: MyTheme.accent,
     );
   }
 
@@ -332,9 +367,11 @@ class _PeerCardState extends State<_PeerCard>
 
 abstract class BasePeerCard extends StatelessWidget {
   final Peer peer;
+  final PeerTabIndex tab;
   final EdgeInsets? menuPadding;
 
-  BasePeerCard({required this.peer, this.menuPadding, Key? key})
+  BasePeerCard(
+      {required this.peer, required this.tab, this.menuPadding, Key? key})
       : super(key: key);
 
   @override
@@ -524,9 +561,7 @@ abstract class BasePeerCard extends StatelessWidget {
   }
 
   @protected
-  MenuEntryBase<String> _removeAction(
-      String id, Future<void> Function() reloadFunc,
-      {bool isLan = false}) {
+  MenuEntryBase<String> _removeAction(String id) {
     return MenuEntryButton<String>(
       childBuilder: (TextStyle? style) => Row(
         children: [
@@ -545,7 +580,33 @@ abstract class BasePeerCard extends StatelessWidget {
         ],
       ),
       proc: () {
-        _delete(id, isLan, reloadFunc);
+        onSubmit() async {
+          switch (tab) {
+            case PeerTabIndex.recent:
+              await bind.mainRemovePeer(id: id);
+              await bind.mainLoadRecentPeers();
+              break;
+            case PeerTabIndex.fav:
+              final favs = (await bind.mainGetFav()).toList();
+              if (favs.remove(id)) {
+                await bind.mainStoreFav(favs: favs);
+                await bind.mainLoadFavPeers();
+              }
+              break;
+            case PeerTabIndex.lan:
+              await bind.mainRemoveDiscovered(id: id);
+              await bind.mainLoadLanPeers();
+              break;
+            case PeerTabIndex.ab:
+              gFFI.abModel.deletePeer(id);
+              await gFFI.abModel.pushAb();
+              break;
+            case PeerTabIndex.group:
+              break;
+          }
+        }
+
+        deletePeerConfirmDialog(onSubmit);
       },
       padding: menuPadding,
       dismissOnClicked: true,
@@ -721,62 +782,15 @@ abstract class BasePeerCard extends StatelessWidget {
 
   @protected
   void _update();
-
-  void _delete(String id, bool isLan, Function reloadFunc) async {
-    gFFI.dialogManager.show(
-      (setState, close, context) {
-        submit() async {
-          if (isLan) {
-            await bind.mainRemoveDiscovered(id: id);
-          } else {
-            final favs = (await bind.mainGetFav()).toList();
-            if (favs.remove(id)) {
-              await bind.mainStoreFav(favs: favs);
-            }
-            await bind.mainRemovePeer(id: id);
-          }
-          await reloadFunc();
-          close();
-        }
-
-        return CustomAlertDialog(
-          title: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(
-                Icons.delete_rounded,
-                color: Colors.red,
-              ),
-              Text(translate('Delete')).paddingOnly(
-                left: 10,
-              ),
-            ],
-          ),
-          content: SizedBox.shrink(),
-          actions: [
-            dialogButton(
-              "Cancel",
-              icon: Icon(Icons.close_rounded),
-              onPressed: close,
-              isOutline: true,
-            ),
-            dialogButton(
-              "OK",
-              icon: Icon(Icons.done_rounded),
-              onPressed: submit,
-            ),
-          ],
-          onSubmit: submit,
-          onCancel: close,
-        );
-      },
-    );
-  }
 }
 
 class RecentPeerCard extends BasePeerCard {
   RecentPeerCard({required Peer peer, EdgeInsets? menuPadding, Key? key})
-      : super(peer: peer, menuPadding: menuPadding, key: key);
+      : super(
+            peer: peer,
+            tab: PeerTabIndex.recent,
+            menuPadding: menuPadding,
+            key: key);
 
   @override
   Future<List<MenuEntryBase<String>>> _buildMenuItems(
@@ -817,9 +831,7 @@ class RecentPeerCard extends BasePeerCard {
     }
 
     menuItems.add(MenuEntryDivider());
-    menuItems.add(_removeAction(peer.id, () async {
-      await bind.mainLoadRecentPeers();
-    }));
+    menuItems.add(_removeAction(peer.id));
     return menuItems;
   }
 
@@ -830,7 +842,11 @@ class RecentPeerCard extends BasePeerCard {
 
 class FavoritePeerCard extends BasePeerCard {
   FavoritePeerCard({required Peer peer, EdgeInsets? menuPadding, Key? key})
-      : super(peer: peer, menuPadding: menuPadding, key: key);
+      : super(
+            peer: peer,
+            tab: PeerTabIndex.fav,
+            menuPadding: menuPadding,
+            key: key);
 
   @override
   Future<List<MenuEntryBase<String>>> _buildMenuItems(
@@ -865,9 +881,7 @@ class FavoritePeerCard extends BasePeerCard {
     }
 
     menuItems.add(MenuEntryDivider());
-    menuItems.add(_removeAction(peer.id, () async {
-      await bind.mainLoadFavPeers();
-    }));
+    menuItems.add(_removeAction(peer.id));
     return menuItems;
   }
 
@@ -878,7 +892,11 @@ class FavoritePeerCard extends BasePeerCard {
 
 class DiscoveredPeerCard extends BasePeerCard {
   DiscoveredPeerCard({required Peer peer, EdgeInsets? menuPadding, Key? key})
-      : super(peer: peer, menuPadding: menuPadding, key: key);
+      : super(
+            peer: peer,
+            tab: PeerTabIndex.lan,
+            menuPadding: menuPadding,
+            key: key);
 
   @override
   Future<List<MenuEntryBase<String>>> _buildMenuItems(
@@ -915,11 +933,7 @@ class DiscoveredPeerCard extends BasePeerCard {
     }
 
     menuItems.add(MenuEntryDivider());
-    menuItems.add(
-      _removeAction(peer.id, () async {
-        await bind.mainLoadLanPeers();
-      }, isLan: true),
-    );
+    menuItems.add(_removeAction(peer.id));
     return menuItems;
   }
 
@@ -930,7 +944,11 @@ class DiscoveredPeerCard extends BasePeerCard {
 
 class AddressBookPeerCard extends BasePeerCard {
   AddressBookPeerCard({required Peer peer, EdgeInsets? menuPadding, Key? key})
-      : super(peer: peer, menuPadding: menuPadding, key: key);
+      : super(
+            peer: peer,
+            tab: PeerTabIndex.ab,
+            menuPadding: menuPadding,
+            key: key);
 
   @override
   Future<List<MenuEntryBase<String>>> _buildMenuItems(
@@ -959,34 +977,13 @@ class AddressBookPeerCard extends BasePeerCard {
     }
 
     menuItems.add(MenuEntryDivider());
-    menuItems.add(_removeAction(peer.id, () async {}));
+    menuItems.add(_removeAction(peer.id));
     return menuItems;
   }
 
   @protected
   @override
   void _update() => gFFI.abModel.pullAb();
-
-  @protected
-  @override
-  MenuEntryBase<String> _removeAction(
-      String id, Future<void> Function() reloadFunc,
-      {bool isLan = false}) {
-    return MenuEntryButton<String>(
-      childBuilder: (TextStyle? style) => Text(
-        translate('Remove'),
-        style: style,
-      ),
-      proc: () {
-        () async {
-          gFFI.abModel.deletePeer(id);
-          await gFFI.abModel.pushAb();
-        }();
-      },
-      padding: super.menuPadding,
-      dismissOnClicked: true,
-    );
-  }
 
   @protected
   MenuEntryBase<String> _editTagAction(String id) {
@@ -996,70 +993,24 @@ class AddressBookPeerCard extends BasePeerCard {
         style: style,
       ),
       proc: () {
-        _abEditTag(id);
+        editAbTagDialog(gFFI.abModel.getPeerTags(id), (selectedTag) async {
+          gFFI.abModel.changeTagForPeer(id, selectedTag);
+          await gFFI.abModel.pushAb();
+        });
       },
       padding: super.menuPadding,
       dismissOnClicked: true,
     );
   }
-
-  void _abEditTag(String id) {
-    var isInProgress = false;
-
-    final tags = List.of(gFFI.abModel.tags);
-    var selectedTag = gFFI.abModel.getPeerTags(id).obs;
-
-    gFFI.dialogManager.show((setState, close, context) {
-      submit() async {
-        setState(() {
-          isInProgress = true;
-        });
-        gFFI.abModel.changeTagForPeer(id, selectedTag);
-        await gFFI.abModel.pushAb();
-        close();
-      }
-
-      return CustomAlertDialog(
-        title: Text(translate("Edit Tag")),
-        content: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              padding: const EdgeInsets.symmetric(vertical: 8.0),
-              child: Wrap(
-                children: tags
-                    .map((e) => AddressBookTag(
-                        name: e,
-                        tags: selectedTag,
-                        onTap: () {
-                          if (selectedTag.contains(e)) {
-                            selectedTag.remove(e);
-                          } else {
-                            selectedTag.add(e);
-                          }
-                        },
-                        showActionMenu: false))
-                    .toList(growable: false),
-              ),
-            ),
-            Offstage(
-                offstage: !isInProgress, child: const LinearProgressIndicator())
-          ],
-        ),
-        actions: [
-          dialogButton("Cancel", onPressed: close, isOutline: true),
-          dialogButton("OK", onPressed: submit),
-        ],
-        onSubmit: submit,
-        onCancel: close,
-      );
-    });
-  }
 }
 
 class MyGroupPeerCard extends BasePeerCard {
   MyGroupPeerCard({required Peer peer, EdgeInsets? menuPadding, Key? key})
-      : super(peer: peer, menuPadding: menuPadding, key: key);
+      : super(
+            peer: peer,
+            tab: PeerTabIndex.group,
+            menuPadding: menuPadding,
+            key: key);
 
   @override
   Future<List<MenuEntryBase<String>>> _buildMenuItems(

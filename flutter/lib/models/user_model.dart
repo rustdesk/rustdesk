@@ -15,6 +15,7 @@ bool refreshingUser = false;
 class UserModel {
   final RxString userName = ''.obs;
   final RxBool isAdmin = false.obs;
+  bool get isLogin => userName.isNotEmpty;
   WeakReference<FFI> parent;
 
   UserModel(this.parent);

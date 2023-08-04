@@ -172,6 +172,7 @@ class _PeersViewState extends State<_PeersView> with WindowListener {
         builder: (context, snapshot) {
           if (snapshot.hasData) {
             final peers = snapshot.data!;
+            gFFI.peerTabModel.setCurrentTabCachedPeers(peers);
             final cards = <Widget>[];
             for (final peer in peers) {
               final visibilityChild = VisibilityDetector(
