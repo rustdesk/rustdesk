@@ -61,7 +61,7 @@ class AbModel {
       authHeaders['Accept-Encoding'] = "gzip";
       final resp = await http.get(Uri.parse(api), headers: authHeaders);
       if (resp.body.isNotEmpty && resp.body.toLowerCase() != "null") {
-        Map<String, dynamic> json = jsonDecode(resp.body);
+        Map<String, dynamic> json = jsonDecode(utf8.decode(resp.bodyBytes));
         if (json.containsKey('error')) {
           abError.value = json['error'];
         } else if (json.containsKey('data')) {
