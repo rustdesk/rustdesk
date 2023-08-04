@@ -90,6 +90,7 @@ async fn start_hbbs_sync_async() {
                 last_sent = Some(Instant::now());
                 let mut v = Value::default();
                 v["id"] = json!(Config::get_id());
+                v["uuid"] = json!(crate::encode64(hbb_common::get_uuid()));
                 v["ver"] = json!(hbb_common::get_version_number(crate::VERSION));
                 if !conns.is_empty() {
                     v["conns"] = json!(conns);
