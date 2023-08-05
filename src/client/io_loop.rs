@@ -1009,6 +1009,7 @@ impl<T: InvokeUiSession> Remote<T> {
                     }
                     Some(login_response::Union::PeerInfo(pi)) => {
                         #[cfg(feature = "flutter")]
+                        #[cfg(not(any(target_os = "android", target_os = "ios")))]
                         {
                             self.handler.cache_flutter.write().unwrap().pi = pi.clone();
                         }
@@ -1060,6 +1061,7 @@ impl<T: InvokeUiSession> Remote<T> {
                 },
                 Some(message::Union::CursorData(cd)) => {
                     #[cfg(feature = "flutter")]
+                    #[cfg(not(any(target_os = "android", target_os = "ios")))]
                     {
                         let mut lock = self.handler.cache_flutter.write().unwrap();
                         if !lock.cursor_data.contains_key(&cd.id) {
@@ -1070,6 +1072,7 @@ impl<T: InvokeUiSession> Remote<T> {
                 }
                 Some(message::Union::CursorId(id)) => {
                     #[cfg(feature = "flutter")]
+                    #[cfg(not(any(target_os = "android", target_os = "ios")))]
                     {
                         self.handler.cache_flutter.write().unwrap().cursor_id = id;
                     }
@@ -1290,6 +1293,7 @@ impl<T: InvokeUiSession> Remote<T> {
                     }
                     Some(misc::Union::SwitchDisplay(s)) => {
                         #[cfg(feature = "flutter")]
+                        #[cfg(not(any(target_os = "android", target_os = "ios")))]
                         {
                             self.handler
                                 .cache_flutter

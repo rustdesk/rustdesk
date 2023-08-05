@@ -602,6 +602,7 @@ pub fn session_change_resolution(session_id: SessionID, display: i32, width: i32
 }
 
 pub fn session_restore_cache(session_id: SessionID) {
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     if let Some(session) = SESSIONS.write().unwrap().get_mut(&session_id) {
         session.restore_flutter_cache();
     }

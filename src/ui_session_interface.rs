@@ -49,6 +49,7 @@ pub static IS_IN: AtomicBool = AtomicBool::new(false);
 const CHANGE_RESOLUTION_VALID_TIMEOUT_SECS: u64 = 15;
 
 #[cfg(feature = "flutter")]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 #[derive(Default)]
 pub struct CacheFlutter {
     pub pi: PeerInfo,
@@ -72,6 +73,7 @@ pub struct Session<T: InvokeUiSession> {
     pub server_clipboard_enabled: Arc<RwLock<bool>>,
     pub last_change_display: Arc<Mutex<ChangeDisplayRecord>>,
     #[cfg(feature = "flutter")]
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     pub cache_flutter: Arc<RwLock<CacheFlutter>>,
 }
 
@@ -1194,6 +1196,7 @@ impl<T: InvokeUiSession> Session<T> {
     }
 
     #[cfg(feature = "flutter")]
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     pub fn restore_flutter_cache(&mut self) {
         let pi = self.cache_flutter.read().unwrap().pi.clone();
         self.handle_peer_info(pi);
