@@ -3,7 +3,7 @@ FROM debian
 WORKDIR /
 RUN apt update -y && apt install -y g++ gcc git curl wget nasm yasm libgtk-3-dev clang libxcb-randr0-dev libxdo-dev libxfixes-dev libxcb-shape0-dev libxcb-xfixes0-dev libasound2-dev libpulse-dev cmake unzip zip sudo libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev cmake ninja-build
 
-RUN git clone https://github.com/microsoft/vcpkg && cd vcpkg && git checkout 2023.04.15
+RUN git clone --branch 2023.04.15 --depth=1 https://github.com/microsoft/vcpkg
 RUN /vcpkg/bootstrap-vcpkg.sh -disableMetrics
 RUN /vcpkg/vcpkg --disable-metrics install libvpx libyuv opus aom
 
