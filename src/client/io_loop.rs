@@ -1291,7 +1291,12 @@ impl<T: InvokeUiSession> Remote<T> {
                     Some(misc::Union::SwitchDisplay(s)) => {
                         #[cfg(feature = "flutter")]
                         {
-                            self.handler.cache_flutter.write().unwrap().sp = s.clone();
+                            self.handler
+                                .cache_flutter
+                                .write()
+                                .unwrap()
+                                .sp
+                                .replace(s.clone());
                         }
                         self.handler.handle_peer_switch_display(&s);
                         self.video_sender.send(MediaData::Reset).ok();

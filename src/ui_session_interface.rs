@@ -52,7 +52,7 @@ const CHANGE_RESOLUTION_VALID_TIMEOUT_SECS: u64 = 15;
 #[derive(Default)]
 pub struct CacheFlutter {
     pub pi: PeerInfo,
-    pub sp: SwitchDisplay,
+    pub sp: Option<SwitchDisplay>,
     pub cursor_data: HashMap<u64, CursorData>,
     pub cursor_id: u64,
 }
@@ -1197,7 +1197,9 @@ impl<T: InvokeUiSession> Session<T> {
     pub fn restore_flutter_cache(&mut self) {
         let pi = self.cache_flutter.read().unwrap().pi.clone();
         self.handle_peer_info(pi);
-        self.handle_peer_switch_display(&self.cache_flutter.read().unwrap().sp);
+        if let Some(sp) = self.cache_flutter.read().unwrap().sp.as_ref() {
+            self.handle_peer_switch_display(sp);
+        }
         for (_, cd) in self.cache_flutter.read().unwrap().cursor_data.iter() {
             self.set_cursor_data(cd.clone());
         }
