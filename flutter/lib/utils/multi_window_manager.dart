@@ -7,7 +7,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/common.dart';
-import 'package:flutter_hbb/models/platform_model.dart';
 
 /// must keep the order
 enum WindowType { Main, RemoteDesktop, FileTransfer, PortForward, Unknown }
@@ -212,6 +211,11 @@ class RustDeskMultiWindowManager {
     final wnds = _findWindowsByType(type);
     if (wnds.isEmpty) {
       return;
+    }
+    for (final windowId in wnds) {
+      if (_activeWindows.contains(windowId)) {
+        return await DesktopMultiWindow.invokeMethod(windowId, methodName, args);
+      }
     }
     return await DesktopMultiWindow.invokeMethod(wnds[0], methodName, args);
   }
