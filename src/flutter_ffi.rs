@@ -389,6 +389,7 @@ pub fn session_enter_or_leave(_session_id: SessionID, _enter: bool) -> SyncRetur
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     if let Some(session) = SESSIONS.read().unwrap().get(&_session_id) {
         if _enter {
+            set_cur_session_id(_session_id);
             session.enter();
         } else {
             session.leave();
