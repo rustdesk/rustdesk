@@ -42,7 +42,7 @@ const String kWindowEventGetSessionIdList = "get_session_id_list";
 const String kWindowEventMoveTabToNewWindow = "move_tab_to_new_window";
 const String kWindowEventCloseForSeparateWindow = "close_for_separate_window";
 
-const String kOptionSeparateRemoteWindow = "enable-separate-remote-window";
+const String kOptionSeparateRemoteWindow = "allow-separate-remote-window";
 
 const String kUniLinksPrefix = "rustdesk://";
 const String kUrlActionClose = "close";
