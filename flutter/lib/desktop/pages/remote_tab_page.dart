@@ -20,7 +20,6 @@ import 'package:get/get.dart';
 import 'package:bot_toast/bot_toast.dart';
 
 import '../../common/widgets/dialog.dart';
-import '../../common/widgets/toolbar.dart';
 import '../../models/platform_model.dart';
 
 class _MenuTheme {
@@ -305,7 +304,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
       ),
     ]);
 
-    if (tabController.state.value.tabs.length > 1) {
+    if (!Platform.isLinux && tabController.state.value.tabs.length > 1) {
       final splitAction = MenuEntryButton<String>(
         childBuilder: (TextStyle? style) => Text(
           translate('Move tab to new window'),

@@ -429,7 +429,7 @@ abstract class BasePeerCard extends StatelessWidget {
   @protected
   List<MenuEntryBase<String>> _connectActions(BuildContext context, Peer peer) {
     final actions = [_connectAction(context, peer, false)];
-    if (!mainGetLocalBoolOptionSync(kOptionSeparateRemoteWindow)) {
+    if (!Platform.isLinux && !mainGetLocalBoolOptionSync(kOptionSeparateRemoteWindow)) {
       actions.add(_connectAction(context, peer, true));
     }
     return actions;

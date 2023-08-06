@@ -317,13 +317,16 @@ class _GeneralState extends State<_General> {
           'enable-confirm-closing-tabs',
           isServer: false),
       _OptionCheckBox(context, 'Adaptive bitrate', 'enable-abr'),
-      _OptionCheckBox(
+    ];
+    if (!Platform.isLinux) {
+      children.add(_OptionCheckBox(
         context,
         'Separate remote windows',
         kOptionSeparateRemoteWindow,
         isServer: false,
-      ),
-    ];
+      ));
+    }
+
     // though this is related to GUI, but opengl problem affects all users, so put in config rather than local
     children.add(Tooltip(
       message: translate('software_render_tip'),

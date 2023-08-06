@@ -1285,6 +1285,9 @@ mainSetLocalBoolOption(String key, bool value) async {
 }
 
 bool mainGetLocalBoolOptionSync(String key) {
+  if (key == kOptionSeparateRemoteWindow && Platform.isLinux) {
+    return false;
+  }
   return option2bool(key, bind.mainGetLocalOption(key: key));
 }
 
