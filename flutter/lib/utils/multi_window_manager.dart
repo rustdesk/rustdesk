@@ -90,22 +90,21 @@ class RustDeskMultiWindowManager {
   ) async {
     if (separateWindow) {
       if (kCloseMultiWindowByHide && _inactiveWindows.isNotEmpty) {
-        final windowId = _inactiveWindows.first;
-        final invokeRes =
-            await DesktopMultiWindow.invokeMethod(windowId, methodName, msg);
-        final windowController = WindowController.fromWindowId(windowId);
-        windowController.show();
-        registerActiveWindow(windowController.windowId);
-        windows.add(windowController.windowId);
-        return invokeRes;
-      } else {
-        await newSessionWindow(type, remoteId, msg, windows);
+        for (final windowId in windows) {
+          if (_inactiveWindows.contains(windowId)) {
+            await DesktopMultiWindow.invokeMethod(
+                windowId, methodName, msg);
+            WindowController.fromWindowId(windowId).show();
+            registerActiveWindow(windowId);
+          }
+        }
       }
+      await newSessionWindow(type, remoteId, msg, windows);
     } else {
       if (windows.isEmpty) {
         await newSessionWindow(type, remoteId, msg, windows);
       } else {
-        return call(type, methodName, msg);
+        call(type, methodName, msg);
       }
     }
   }
