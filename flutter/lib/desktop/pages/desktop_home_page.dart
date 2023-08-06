@@ -570,6 +570,17 @@ class _DesktopHomePageState extends State<DesktopHomePage>
           forceRelay: call.arguments['forceRelay'],
           forceSeparateWindow: call.arguments['forceSeparateWindow'],
         );
+      } else if (call.method == kWindowEventSplit) {
+        final args = call.arguments.split(',');
+        int? windowId;
+        try {
+          windowId = int.parse(args[0]);
+        } catch (e) {
+          debugPrint("Failed to parse window id '${call.arguments}': $e");
+        }
+        if (windowId != null) {
+          await rustDeskWinManager.splitWindow(windowId, args[1], args[2]);
+        }
       }
     });
     _uniLinksSubscription = listenUniLinks();

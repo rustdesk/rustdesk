@@ -6,7 +6,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/consts.dart';
-import 'package:flutter_hbb/utils/multi_window_manager.dart';
 import 'package:flutter_hbb/desktop/pages/desktop_home_page.dart';
 import 'package:flutter_hbb/desktop/pages/desktop_tab_page.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
@@ -323,13 +322,6 @@ class _GeneralState extends State<_General> {
         'Separate remote window',
         kOptionSeparateRemoteWindow,
         isServer: false,
-        update: () {
-          final useSeparateWindow =
-              mainGetLocalBoolOptionSync(kOptionSeparateRemoteWindow);
-          if (useSeparateWindow) {
-            rustDeskWinManager.separateWindows();
-          }
-        },
       ),
     ];
     // though this is related to GUI, but opengl problem affects all users, so put in config rather than local
