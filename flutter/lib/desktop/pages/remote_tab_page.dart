@@ -19,6 +19,8 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:get/get.dart';
 import 'package:bot_toast/bot_toast.dart';
 
+import '../../common/widgets/dialog.dart';
+import '../../common/widgets/toolbar.dart';
 import '../../models/platform_model.dart';
 
 class _MenuTheme {
@@ -45,16 +47,17 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
   static const IconData unselectedIcon = Icons.desktop_windows_outlined;
 
   late ToolbarState _toolbarState;
+  String? peerId;
 
   var connectionMap = RxList<Widget>.empty(growable: true);
 
   _ConnectionTabPageState(Map<String, dynamic> params) {
     _toolbarState = ToolbarState();
     RemoteCountState.init();
-    final peerId = params['id'];
+    peerId = params['id'];
     final sessionId = params['session_id'];
     if (peerId != null) {
-      ConnectionTypeState.init(peerId);
+      ConnectionTypeState.init(peerId!);
       tabController.onSelected = (id) {
         final remotePage = tabController.widget(id);
         if (remotePage is RemotePage) {
@@ -66,14 +69,14 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
         UnreadChatCountState.find(id).value = 0;
       };
       tabController.add(TabInfo(
-        key: peerId,
-        label: peerId,
+        key: peerId!,
+        label: peerId!,
         selectedIcon: selectedIcon,
         unselectedIcon: unselectedIcon,
         onTabCloseButton: () => tabController.closeBy(peerId),
         page: RemotePage(
           key: ValueKey(peerId),
-          id: peerId,
+          id: peerId!,
           sessionId: sessionId == null ? null : SessionID(sessionId),
           password: params['password'],
           toolbarState: _toolbarState,
@@ -213,6 +216,9 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
                 }
                 var msgFingerprint = '${translate('Fingerprint')}:\n';
                 var fingerprint = FingerprintState.find(key).value;
+                if (fingerprint.isEmpty) {
+                  fingerprint = 'N/A';
+                }
                 if (fingerprint.length > 5 * 8) {
                   var first = fingerprint.substring(0, 39);
                   var second = fingerprint.substring(40);
@@ -286,17 +292,6 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
     final sessionId = ffi.sessionId;
     menu.addAll([
       MenuEntryButton<String>(
-        childBuilder: (TextStyle? style) => Text(
-          translate('Close'),
-          style: style,
-        ),
-        proc: () {
-          tabController.closeBy(key);
-          cancelFunc();
-        },
-        padding: padding,
-      ),
-      MenuEntryButton<String>(
         childBuilder: (TextStyle? style) => Obx(() => Text(
               translate(
                   _toolbarState.show.isTrue ? 'Hide Toolbar' : 'Show Toolbar'),
@@ -308,26 +303,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
         },
         padding: padding,
       ),
-      MenuEntryDivider<String>(),
-      RemoteMenuEntry.viewStyle(
-        key,
-        ffi,
-        padding,
-        dismissFunc: cancelFunc,
-      ),
     ]);
-
-    if (!ffi.canvasModel.cursorEmbedded &&
-        !ffi.ffiModel.viewOnly &&
-        !pi.is_wayland) {
-      menu.add(MenuEntryDivider<String>());
-      menu.add(RemoteMenuEntry.showRemoteCursor(
-        key,
-        sessionId,
-        padding,
-        dismissFunc: cancelFunc,
-      ));
-    }
 
     if (tabController.state.value.tabs.length > 1) {
       final splitAction = MenuEntryButton<String>(
@@ -336,8 +312,8 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
           style: style,
         ),
         proc: () async {
-          await DesktopMultiWindow.invokeMethod(
-              kMainWindowId, kWindowEventMoveTabToNewWindow, '${windowId()},$key,$sessionId');
+          await DesktopMultiWindow.invokeMethod(kMainWindowId,
+              kWindowEventMoveTabToNewWindow, '${windowId()},$key,$sessionId');
           cancelFunc();
         },
         padding: padding,
@@ -345,31 +321,49 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
       menu.insert(1, splitAction);
     }
 
-    if (perms['keyboard'] != false && !ffi.ffiModel.viewOnly) {
-      if (perms['clipboard'] != false) {
-        menu.add(RemoteMenuEntry.disableClipboard(sessionId, padding,
-            dismissFunc: cancelFunc));
-      }
-
-      menu.add(RemoteMenuEntry.insertLock(sessionId, padding,
-          dismissFunc: cancelFunc));
-
-      if (pi.platform == kPeerPlatformLinux || pi.sasEnabled) {
-        menu.add(RemoteMenuEntry.insertCtrlAltDel(sessionId, padding,
-            dismissFunc: cancelFunc));
-      }
+    if (perms['restart'] != false &&
+        (pi.platform == kPeerPlatformLinux ||
+            pi.platform == kPeerPlatformWindows ||
+            pi.platform == kPeerPlatformMacOS)) {
+      menu.add(MenuEntryButton<String>(
+        childBuilder: (TextStyle? style) => Text(
+          translate('Restart Remote Device'),
+          style: style,
+        ),
+        proc: () => showRestartRemoteDevice(
+            pi, peerId ?? '', sessionId, ffi.dialogManager),
+        padding: padding,
+        dismissOnClicked: true,
+        dismissCallback: cancelFunc,
+      ));
     }
 
-    menu.add(MenuEntryButton<String>(
-      childBuilder: (TextStyle? style) => Text(
-        translate('Copy Fingerprint'),
-        style: style,
+    if (perms['keyboard'] != false && !ffi.ffiModel.viewOnly) {}
+
+    menu.addAll([
+      MenuEntryDivider<String>(),
+      MenuEntryButton<String>(
+        childBuilder: (TextStyle? style) => Text(
+          translate('Copy Fingerprint'),
+          style: style,
+        ),
+        proc: () => onCopyFingerprint(FingerprintState.find(key).value),
+        padding: padding,
+        dismissOnClicked: true,
+        dismissCallback: cancelFunc,
       ),
-      proc: () => onCopyFingerprint(FingerprintState.find(key).value),
-      padding: padding,
-      dismissOnClicked: true,
-      dismissCallback: cancelFunc,
-    ));
+      MenuEntryButton<String>(
+        childBuilder: (TextStyle? style) => Text(
+          translate('Close'),
+          style: style,
+        ),
+        proc: () {
+          tabController.closeBy(key);
+          cancelFunc();
+        },
+        padding: padding,
+      )
+    ]);
 
     return mod_menu.PopupMenu<String>(
       items: menu
@@ -405,7 +399,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
     } else {
       final opt = "enable-confirm-closing-tabs";
       final bool res;
-      if (!option2bool(opt, await bind.mainGetLocalOption(key: opt))) {
+      if (!option2bool(opt, bind.mainGetLocalOption(key: opt))) {
         res = true;
       } else {
         res = await closeConfirmDialog();
