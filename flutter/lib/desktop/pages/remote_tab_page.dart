@@ -332,12 +332,12 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
     if (tabController.state.value.tabs.length > 1) {
       final splitAction = MenuEntryButton<String>(
         childBuilder: (TextStyle? style) => Text(
-          translate('Split'),
+          translate('Move tab to new window'),
           style: style,
         ),
         proc: () async {
           await DesktopMultiWindow.invokeMethod(
-              kMainWindowId, kWindowEventSplit, '${windowId()},$key,$sessionId');
+              kMainWindowId, kWindowEventMoveTabToNewWindow, '${windowId()},$key,$sessionId');
           cancelFunc();
         },
         padding: padding,
