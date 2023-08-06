@@ -118,9 +118,29 @@ message TouchScaleUpdate {
   int32 scale = 1;
 }
 
+message TouchPanStart {
+  int32 x = 1;
+  int32 y = 2;
+}
+
+message TouchPanUpdate {
+  // The delta x position relative to the previous position.
+  int32 x = 1;
+  // The delta y position relative to the previous position.
+  int32 y = 2;
+}
+
+message TouchPanEnd {
+  int32 x = 1;
+  int32 y = 2;
+}
+
 message TouchEvent {
   oneof union {
     TouchScaleUpdate scale_update = 1;
+    TouchPanStart pan_start = 2;
+    TouchPanUpdate pan_update = 3;
+    TouchPanEnd pan_end = 4;
   }
 }
 

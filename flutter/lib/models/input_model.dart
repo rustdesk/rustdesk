@@ -592,17 +592,52 @@ class InputModel {
         return;
     }
     evt['type'] = type;
+
+    final pos = handlePointerDevicePos(
+      x,
+      y,
+      isMove,
+      type,
+      onExit: onExit,
+      buttons: evt['buttons'],
+    );
+    if (pos == null) {
+      return;
+    }
+    evt['x'] = '${pos.x}}';
+    evt['y'] = '${pos.y}';
+
+    Map<int, String> mapButtons = {
+      kPrimaryMouseButton: 'left',
+      kSecondaryMouseButton: 'right',
+      kMiddleMouseButton: 'wheel',
+      kBackMouseButton: 'back',
+      kForwardMouseButton: 'forward'
+    };
+    evt['buttons'] = mapButtons[evt['buttons']] ?? '';
+
+    bind.sessionSendMouse(sessionId: sessionId, msg: json.encode(evt));
+  }
+
+  Point? handlePointerDevicePos(
+    double x,
+    double y,
+    bool isMove,
+    String evtType, {
+    bool onExit = false,
+    int buttons = kPrimaryMouseButton,
+  }) {
     y -= CanvasModel.topToEdge;
     x -= CanvasModel.leftToEdge;
     final canvasModel = parent.target!.canvasModel;
-    final nearThr = 3;
-    var nearRight = (canvasModel.size.width - x) < nearThr;
-    var nearBottom = (canvasModel.size.height - y) < nearThr;
-
     final ffiModel = parent.target!.ffiModel;
     if (isMove) {
       canvasModel.moveDesktopMouse(x, y);
     }
+
+    final nearThr = 3;
+    var nearRight = (canvasModel.size.width - x) < nearThr;
+    var nearBottom = (canvasModel.size.height - y) < nearThr;
     final d = ffiModel.display;
     final imageWidth = d.width * canvasModel.scale;
     final imageHeight = d.height * canvasModel.scale;
@@ -650,7 +685,7 @@ class InputModel {
     } catch (e) {
       debugPrintStack(
           label: 'canvasModel.scale value ${canvasModel.scale}, $e');
-      return;
+      return null;
     }
 
     int minX = d.x.toInt();
@@ -661,38 +696,17 @@ class InputModel {
     evtY = trySetNearestRange(evtY, minY, maxY, 5);
     if (evtX < minX || evtY < minY || evtX > maxX || evtY > maxY) {
       // If left mouse up, no early return.
-      if (evt['buttons'] != kPrimaryMouseButton || type != 'up') {
-        return;
+      if (buttons != kPrimaryMouseButton || evtType != 'up') {
+        return null;
       }
     }
 
-    if (type != '') {
+    if (evtType != '') {
       evtX = 0;
       evtY = 0;
     }
 
-    evt['x'] = '$evtX';
-    evt['y'] = '$evtY';
-    var buttons = '';
-    switch (evt['buttons']) {
-      case kPrimaryMouseButton:
-        buttons = 'left';
-        break;
-      case kSecondaryMouseButton:
-        buttons = 'right';
-        break;
-      case kMiddleMouseButton:
-        buttons = 'wheel';
-        break;
-      case kBackMouseButton:
-        buttons = 'back';
-        break;
-      case kForwardMouseButton:
-        buttons = 'forward';
-        break;
-    }
-    evt['buttons'] = buttons;
-    bind.sessionSendMouse(sessionId: sessionId, msg: json.encode(evt));
+    return Point(evtX, evtY);
   }
 
   /// Web only
