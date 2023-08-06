@@ -351,6 +351,8 @@ class FfiModel with ChangeNotifier {
       showElevationError(sessionId, type, title, text, dialogManager);
     } else if (type == 'relay-hint') {
       showRelayHintDialog(sessionId, type, title, text, dialogManager, peerId);
+    } else if (text == 'Connected, waiting for image...') {
+      showConnectedWaitingForImage(dialogManager, sessionId, type, title, text);
     } else {
       var hasRetry = evt['hasRetry'] == 'true';
       showMsgBox(sessionId, type, title, text, link, hasRetry, dialogManager);
@@ -416,6 +418,25 @@ class FfiModel with ChangeNotifier {
     });
   }
 
+  void showConnectedWaitingForImage(OverlayDialogManager dialogManager,
+      SessionID sessionId, String type, String title, String text) {
+    onClose() {
+      closeConnection();
+    }
+
+    dialogManager.show(
+      (setState, close, context) => CustomAlertDialog(
+          title: null,
+          content: SelectionArea(child: msgboxContent(type, title, text)),
+          actions: [
+            dialogButton("Cancel", onPressed: onClose, isOutline: true)
+          ],
+          onCancel: onClose),
+      tag: '$sessionId-waiting-for-image',
+    );
+    _waitForImage[sessionId] = true;
+  }
+
   _updateSessionWidthHeight(SessionID sessionId) {
     parent.target?.canvasModel.updateViewStyle();
     if (display.width <= 0 || display.height <= 0) {
@@ -478,13 +499,7 @@ class FfiModel with ChangeNotifier {
         _updateSessionWidthHeight(sessionId);
       }
       if (displays.isNotEmpty) {
-        parent.target?.dialogManager.showLoading(
-            translate('Connected, waiting for image...'),
-            onCancel: closeConnection,
-            tag: '$peerId-waiting-for-image');
-        _waitForImage[sessionId] = true;
         _reconnects = 1;
-        bind.sessionOnWaitingForImageDialogShow(sessionId: sessionId);
       }
       Map<String, dynamic> features = json.decode(evt['features']);
       _pi.features.privacyMode = features['privacy_mode'] == 1;
@@ -638,7 +653,7 @@ class ImageModel with ChangeNotifier {
     if (waitforImage == true) {
       _waitForImage[sessionId] = false;
       parent.target?.dialogManager.dismissAll();
-      clearWaitingForImage(parent.target?.dialogManager, id);
+      clearWaitingForImage(parent.target?.dialogManager, sessionId);
 
       if (isDesktop) {
         for (final cb in callbacksOnFirstImage) {
@@ -1687,7 +1702,7 @@ class FFI {
           }
         } else if (message is EventToUI_Rgba) {
           if (useTextureRender) {
-            if (_waitForImage[sessionId]!) {
+            if (_waitForImage[sessionId] != false) {
               _waitForImage[sessionId] = false;
               dialogManager.dismissAll();
               for (final cb in imageModel.callbacksOnFirstImage) {
@@ -1695,7 +1710,7 @@ class FFI {
               }
               await canvasModel.updateViewStyle();
               await canvasModel.updateScrollStyle();
-              clearWaitingForImage(dialogManager, id);
+              clearWaitingForImage(dialogManager, sessionId);
             }
           } else {
             // Fetch the image buffer from rust codes.
@@ -1891,11 +1906,11 @@ Future<void> initializeCursorAndCanvas(FFI ffi) async {
   ffi.canvasModel.update(xCanvas, yCanvas, scale);
 }
 
-clearWaitingForImage(OverlayDialogManager? dialogManager, String id) {
+clearWaitingForImage(OverlayDialogManager? dialogManager, SessionID sessionId) {
   final durations = [100, 500, 1000, 2000];
   for (var duration in durations) {
     Future.delayed(Duration(milliseconds: duration), () {
-      dialogManager?.dismissByTag('$id-waiting-for-image');
+      dialogManager?.dismissByTag('$sessionId-waiting-for-image');
     });
   }
 }
