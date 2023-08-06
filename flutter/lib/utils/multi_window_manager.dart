@@ -96,6 +96,7 @@ class RustDeskMultiWindowManager {
                 windowId, methodName, msg);
             WindowController.fromWindowId(windowId).show();
             registerActiveWindow(windowId);
+            return;
           }
         }
       }
