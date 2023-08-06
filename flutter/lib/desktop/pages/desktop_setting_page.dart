@@ -316,10 +316,10 @@ class _GeneralState extends State<_General> {
       _OptionCheckBox(context, 'Confirm before closing multiple tabs',
           'enable-confirm-closing-tabs',
           isServer: false),
-      _OptionCheckBox(context, 'Adaptive Bitrate', 'enable-abr'),
+      _OptionCheckBox(context, 'Adaptive bitrate', 'enable-abr'),
       _OptionCheckBox(
         context,
-        'Separate remote window',
+        'Separate remote windows',
         kOptionSeparateRemoteWindow,
         isServer: false,
       ),

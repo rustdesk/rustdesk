@@ -53,7 +53,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Audio Input", "音频输入"),
         ("Enhancements", "增强功能"),
         ("Hardware Codec", "硬件编解码"),
-        ("Adaptive Bitrate", "自适应码率"),
+        ("Adaptive bitrate", "自适应码率"),
         ("ID Server", "ID 服务器"),
         ("Relay Server", "中继服务器"),
         ("API Server", "API 服务器"),
@@ -524,7 +524,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("exceed_max_devices", "管理的设备数已达到最大值"),
         ("Sync with recent sessions", "同步最近会话"),
         ("Sort tags", "对标签进行排序"),
-        ("Separate remote window", "使用独立远程窗口"),
+        ("Separate remote windows", "使用独立远程窗口"),
         ("separate window", "独立窗口"),
         ("Move tab to new window", "将标签页移至新窗口"),
     ].iter().cloned().collect();

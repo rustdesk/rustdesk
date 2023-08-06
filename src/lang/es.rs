@@ -53,7 +53,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Audio Input", "Entrada de audio"),
         ("Enhancements", "Mejoras"),
         ("Hardware Codec", "Códec de hardware"),
-        ("Adaptive Bitrate", "Tasa de bits adaptativa"),
+        ("Adaptive bitrate", "Tasa de bits adaptativa"),
         ("ID Server", "Servidor de IDs"),
         ("Relay Server", "Servidor Relay"),
         ("API Server", "Servidor API"),
@@ -524,7 +524,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("exceed_max_devices", "Has alcanzado el máximo número de dispositivos administrados."),
         ("Sync with recent sessions", "Sincronizar con sesiones recientes"),
         ("Sort tags", "Ordenar etiquetas"),
-        ("Separate remote window", ""),
+        ("Separate remote windows", ""),
         ("separate window", ""),
         ("Move tab to new window", ""),
     ].iter().cloned().collect();
