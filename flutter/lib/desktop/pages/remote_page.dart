@@ -18,6 +18,7 @@ import '../../common/widgets/remote_input.dart';
 import '../../common.dart';
 import '../../common/widgets/dialog.dart';
 import '../../models/model.dart';
+import '../../models/desktop_render_texture.dart';
 import '../../models/platform_model.dart';
 import '../../common/shared_state.dart';
 import '../../utils/image.dart';
@@ -27,10 +28,13 @@ import '../widgets/tabbar_widget.dart';
 
 final SimpleWrapper<bool> _firstEnterImage = SimpleWrapper(false);
 
+final Map<String, bool> closeSessionOnDispose = {};
+
 class RemotePage extends StatefulWidget {
   RemotePage({
     Key? key,
     required this.id,
+    required this.sessionId,
     required this.password,
     required this.toolbarState,
     required this.tabController,
@@ -39,6 +43,7 @@ class RemotePage extends StatefulWidget {
   }) : super(key: key);
 
   final String id;
+  final SessionID? sessionId;
   final String? password;
   final ToolbarState toolbarState;
   final String? switchUuid;
@@ -66,9 +71,7 @@ class _RemotePageState extends State<RemotePage>
   late RxBool _zoomCursor;
   late RxBool _remoteCursorMoved;
   late RxBool _keyboardEnabled;
-  late RxInt _textureId;
-  late int _textureKey;
-  final useTextureRender = bind.mainUseTextureRender();
+  late RenderTexture _renderTexture;
 
   final _blockableOverlayState = BlockableOverlayState();
 
@@ -86,15 +89,13 @@ class _RemotePageState extends State<RemotePage>
     _showRemoteCursor = ShowRemoteCursorState.find(id);
     _keyboardEnabled = KeyboardEnabledState.find(id);
     _remoteCursorMoved = RemoteCursorMovedState.find(id);
-    _textureKey = newTextureId;
-    _textureId = RxInt(-1);
   }
 
   @override
   void initState() {
     super.initState();
     _initStates(widget.id);
-    _ffi = FFI();
+    _ffi = FFI(widget.sessionId);
     Get.put(_ffi, tag: widget.id);
     _ffi.imageModel.addCallbackOnFirstImage((String peerId) {
       showKBLayoutTypeChooserIfNeeded(
@@ -115,17 +116,13 @@ class _RemotePageState extends State<RemotePage>
       Wakelock.enable();
     }
     // Register texture.
-    _textureId.value = -1;
-    if (useTextureRender) {
-      textureRenderer.createTexture(_textureKey).then((id) async {
-        debugPrint("id: $id, texture_key: $_textureKey");
-        if (id != -1) {
-          final ptr = await textureRenderer.getTexturePtr(_textureKey);
-          platformFFI.registerTexture(sessionId, ptr);
-          _textureId.value = id;
-        }
-      });
+    if (mainGetLocalBoolOptionSync(kOptionSeparateRemoteWindow)) {
+      _renderTexture = renderTexture;
+    } else {
+      _renderTexture = RenderTexture();
     }
+    _renderTexture.create(sessionId);
+
     _ffi.ffiModel.updateEventListener(sessionId, widget.id);
     bind.pluginSyncUi(syncTo: kAppTypeDesktopRemote);
     _ffi.qualityMonitorModel.checkShowQualityMonitor(sessionId);
@@ -206,26 +203,25 @@ class _RemotePageState extends State<RemotePage>
 
   @override
   Future<void> dispose() async {
+    final closeSession = closeSessionOnDispose.remove(widget.id) ?? true;
+
     // https://github.com/flutter/flutter/issues/64935
     super.dispose();
-    debugPrint("REMOTE PAGE dispose ${widget.id}");
-    if (useTextureRender) {
-      platformFFI.registerTexture(sessionId, 0);
-      // sleep for a while to avoid the texture is used after it's unregistered.
-      await Future.delayed(Duration(milliseconds: 100));
-      await textureRenderer.closeTexture(_textureKey);
-    }
+    debugPrint("REMOTE PAGE dispose session $sessionId ${widget.id}");
+    await _renderTexture.destroy();
     // ensure we leave this session, this is a double check
     bind.sessionEnterOrLeave(sessionId: sessionId, enter: false);
     DesktopMultiWindow.removeListener(this);
     _ffi.dialogManager.hideMobileActionsOverlay();
     _ffi.recordingModel.onClose();
     _rawKeyFocusNode.dispose();
-    await _ffi.close();
+    await _ffi.close(closeSession: closeSession);
     _timer?.cancel();
     _ffi.dialogManager.dismissAll();
-    await SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual,
-        overlays: SystemUiOverlay.values);
+    if (closeSession) {
+      await SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual,
+          overlays: SystemUiOverlay.values);
+    }
     if (!Platform.isLinux) {
       await Wakelock.disable();
     }
@@ -392,8 +388,8 @@ class _RemotePageState extends State<RemotePage>
           cursorOverImage: _cursorOverImage,
           keyboardEnabled: _keyboardEnabled,
           remoteCursorMoved: _remoteCursorMoved,
-          textureId: _textureId,
-          useTextureRender: useTextureRender,
+          textureId: _renderTexture.textureId,
+          useTextureRender: _renderTexture.useTextureRender,
           listenerBuilder: (child) =>
               _buildRawTouchAndPointerRegion(child, enterView, leaveView),
         );

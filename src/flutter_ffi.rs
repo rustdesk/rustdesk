@@ -15,7 +15,7 @@ use flutter_rust_bridge::{StreamSink, SyncReturn};
 use hbb_common::allow_err;
 use hbb_common::{
     config::{self, LocalConfig, PeerConfig, PeerInfoSerde},
-    fs, log,
+    fs, lazy_static, log,
     message_proto::KeyboardMode,
     ResultType,
 };
@@ -24,10 +24,18 @@ use std::{
     ffi::{CStr, CString},
     os::raw::c_char,
     str::FromStr,
+    sync::{
+        atomic::{AtomicI32, Ordering},
+        Arc,
+    },
     time::SystemTime,
 };
 
 pub type SessionID = uuid::Uuid;
+
+lazy_static::lazy_static! {
+    static ref TEXTURE_RENDER_KEY: Arc<AtomicI32> = Arc::new(AtomicI32::new(0));
+}
 
 fn initialize(app_dir: &str) {
     *config::APP_DIR.write().unwrap() = app_dir.to_owned();
@@ -195,6 +203,30 @@ pub fn session_set_flutter_config(session_id: SessionID, k: String, v: String) {
     if let Some(session) = SESSIONS.write().unwrap().get_mut(&session_id) {
         session.save_flutter_config(k, v);
     }
+}
+
+pub fn session_get_flutter_config_by_peer_id(id: String, k: String) -> Option<String> {
+    if let Some((_, session)) = SESSIONS.read().unwrap().iter().find(|(_, s)| s.id == id) {
+        Some(session.get_flutter_config(k))
+    } else {
+        None
+    }
+}
+
+pub fn session_set_flutter_config_by_peer_id(id: String, k: String, v: String) {
+    if let Some((_, session)) = SESSIONS
+        .write()
+        .unwrap()
+        .iter_mut()
+        .find(|(_, s)| s.id == id)
+    {
+        session.save_flutter_config(k, v);
+    }
+}
+
+pub fn get_next_texture_key() -> SyncReturn<i32> {
+    let k = TEXTURE_RENDER_KEY.fetch_add(1, Ordering::SeqCst) + 1;
+    SyncReturn(k)
 }
 
 pub fn get_local_flutter_config(k: String) -> SyncReturn<String> {
@@ -566,6 +598,14 @@ pub fn session_switch_sides(session_id: SessionID) {
 pub fn session_change_resolution(session_id: SessionID, display: i32, width: i32, height: i32) {
     if let Some(session) = SESSIONS.read().unwrap().get(&session_id) {
         session.change_resolution(display, width, height);
+    }
+}
+
+pub fn session_ready_to_new_window(session_id: SessionID) {
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    if let Some(session) = SESSIONS.write().unwrap().get_mut(&session_id) {
+        session.restore_flutter_cache();
+        session.refresh_video();
     }
 }
 

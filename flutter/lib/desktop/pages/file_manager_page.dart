@@ -80,7 +80,7 @@ class _FileManagerPageState extends State<FileManagerPage>
   @override
   void initState() {
     super.initState();
-    _ffi = FFI();
+    _ffi = FFI(null);
     _ffi.start(widget.id,
         isFileTransfer: true,
         password: widget.password,

@@ -13,6 +13,7 @@ import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/main.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:flutter_hbb/models/state_model.dart';
+import 'package:flutter_hbb/models/desktop_render_texture.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:get/get.dart';
 import 'package:get/get_rx/src/rx_workers/utils/debouncer.dart';
@@ -146,8 +147,10 @@ class DesktopTabController {
 
   /// For addTab, tabPage has not been initialized, set [callOnSelected] to false,
   /// and call [onSelected] at the end of initState
-  void jumpTo(int index, {bool callOnSelected = true}) {
-    if (!isDesktop || index < 0) return;
+  bool jumpTo(int index, {bool callOnSelected = true}) {
+    if (!isDesktop || index < 0) {
+      return false;
+    }
     state.update((val) {
       val!.selected = index;
       Future.delayed(Duration(milliseconds: 100), (() {
@@ -168,7 +171,12 @@ class DesktopTabController {
         onSelected?.call(key);
       }
     }
+    return true;
   }
+
+  bool jumpToByKey(String key, {bool callOnSelected = true}) =>
+      jumpTo(state.value.tabs.indexWhere((tab) => tab.key == key),
+          callOnSelected: callOnSelected);
 
   void closeBy(String? key) {
     if (!isDesktop) return;
@@ -574,6 +582,8 @@ class WindowActionPanelState extends State<WindowActionPanel>
       }
       await windowManager.hide();
     } else {
+      renderTexture.destroy();
+
       // it's safe to hide the subwindow
       final controller = WindowController.fromWindowId(kWindowId!);
       if (Platform.isMacOS && await controller.isFullScreen()) {

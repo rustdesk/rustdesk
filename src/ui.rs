@@ -94,8 +94,7 @@ pub fn start(args: &mut [String]) {
         args[1] = id;
     }
     if args.is_empty() {
-        let children: Children = Default::default();
-        std::thread::spawn(move || check_zombie(children));
+        std::thread::spawn(move || check_zombie());
         crate::common::check_software_update();
         frame.event_handler(UI {});
         frame.sciter_handler(UIHostHandler {});
@@ -693,28 +692,6 @@ impl sciter::host::HostHandler for UIHostHandler {
     }
 }
 
-pub fn check_zombie(children: Children) {
-    let mut deads = Vec::new();
-    loop {
-        let mut lock = children.lock().unwrap();
-        let mut n = 0;
-        for (id, c) in lock.1.iter_mut() {
-            if let Ok(Some(_)) = c.try_wait() {
-                deads.push(id.clone());
-                n += 1;
-            }
-        }
-        for ref id in deads.drain(..) {
-            lock.1.remove(id);
-        }
-        if n > 0 {
-            lock.0 = true;
-        }
-        drop(lock);
-        std::thread::sleep(std::time::Duration::from_millis(100));
-    }
-}
-
 #[cfg(not(target_os = "linux"))]
 fn get_sound_inputs() -> Vec<String> {
     let mut out = Vec::new();
@@ -746,50 +723,6 @@ pub fn value_crash_workaround(values: &[Value]) -> Arc<Vec<Value>> {
     let persist = Arc::new(values.to_vec());
     STUPID_VALUES.lock().unwrap().push(persist.clone());
     persist
-}
-
-#[inline]
-pub fn new_remote(id: String, remote_type: String, force_relay: bool) {
-    let mut lock = CHILDREN.lock().unwrap();
-    let mut args = vec![format!("--{}", remote_type), id.clone()];
-    if force_relay {
-        args.push("".to_string()); // password
-        args.push("--relay".to_string());
-    }
-    let key = (id.clone(), remote_type.clone());
-    if let Some(c) = lock.1.get_mut(&key) {
-        if let Ok(Some(_)) = c.try_wait() {
-            lock.1.remove(&key);
-        } else {
-            if remote_type == "rdp" {
-                allow_err!(c.kill());
-                std::thread::sleep(std::time::Duration::from_millis(30));
-                c.try_wait().ok();
-                lock.1.remove(&key);
-            } else {
-                return;
-            }
-        }
-    }
-    match crate::run_me(args) {
-        Ok(child) => {
-            lock.1.insert(key, child);
-        }
-        Err(err) => {
-            log::error!("Failed to spawn remote: {}", err);
-        }
-    }
-}
-
-#[inline]
-pub fn recent_sessions_updated() -> bool {
-    let mut children = CHILDREN.lock().unwrap();
-    if children.0 {
-        children.0 = false;
-        true
-    } else {
-        false
-    }
 }
 
 pub fn get_icon() -> String {

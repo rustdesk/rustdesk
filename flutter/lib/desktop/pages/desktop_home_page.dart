@@ -527,7 +527,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
       debugPrint(
           "[Main] call ${call.method} with args ${call.arguments} from window $fromWindowId");
       if (call.method == kWindowMainWindowOnTop) {
-        window_on_top(null);
+        windowOnTop(null);
       } else if (call.method == kWindowGetWindowInfo) {
         final screen = (await window_size.getWindowInfo()).screen;
         if (screen == null) {
@@ -554,7 +554,13 @@ class _DesktopHomePageState extends State<DesktopHomePage>
       } else if (call.method == kWindowEventShow) {
         await rustDeskWinManager.registerActiveWindow(call.arguments["id"]);
       } else if (call.method == kWindowEventHide) {
-        await rustDeskWinManager.unregisterActiveWindow(call.arguments["id"]);
+        final wId = call.arguments['id'];
+        final isSeparateWindowEnabled =
+            mainGetLocalBoolOptionSync(kOptionSeparateRemoteWindow);
+        if (isSeparateWindowEnabled && !kCloseMultiWindowByHide) {
+          await rustDeskWinManager.destroyWindow(wId);
+        }
+        await rustDeskWinManager.unregisterActiveWindow(wId);
       } else if (call.method == kWindowConnect) {
         await connectMainDesktop(
           call.arguments['id'],
@@ -562,6 +568,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
           isTcpTunneling: call.arguments['isTcpTunneling'],
           isRDP: call.arguments['isRDP'],
           forceRelay: call.arguments['forceRelay'],
+          forceSeparateWindow: call.arguments['forceSeparateWindow'],
         );
       }
     });

@@ -473,7 +473,7 @@ class ServerModel with ChangeNotifier {
         onTap: () {},
         page: desktop.buildConnectionCard(client)));
     Future.delayed(Duration.zero, () async {
-      if (!hideCm) window_on_top(null);
+      if (!hideCm) windowOnTop(null);
     });
     // Only do the hidden task when on Desktop.
     if (client.authorized && isDesktop) {
@@ -612,7 +612,7 @@ class ServerModel with ChangeNotifier {
         if (client.incomingVoiceCall) {
           // Has incoming phone call, let's set the window on top.
           Future.delayed(Duration.zero, () {
-            window_on_top(null);
+            windowOnTop(null);
           });
         }
         notifyListeners();
