@@ -39,7 +39,7 @@ const String kWindowEventActiveSession = "active_session";
 const String kWindowEventGetRemoteList = "get_remote_list";
 const String kWindowEventGetSessionIdList = "get_session_id_list";
 
-const String kWindowEventSplit = "split";
+const String kWindowEventMoveTabToNewWindow = "move_tab_to_new_window";
 const String kWindowEventCloseForSeparateWindow = "close_for_separate_window";
 
 const String kOptionSeparateRemoteWindow = "enable-separate-remote-window";

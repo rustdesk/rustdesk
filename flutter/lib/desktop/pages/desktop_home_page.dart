@@ -570,7 +570,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
           forceRelay: call.arguments['forceRelay'],
           forceSeparateWindow: call.arguments['forceSeparateWindow'],
         );
-      } else if (call.method == kWindowEventSplit) {
+      } else if (call.method == kWindowEventMoveTabToNewWindow) {
         final args = call.arguments.split(',');
         int? windowId;
         try {
@@ -579,7 +579,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
           debugPrint("Failed to parse window id '${call.arguments}': $e");
         }
         if (windowId != null) {
-          await rustDeskWinManager.splitWindow(windowId, args[1], args[2]);
+          await rustDeskWinManager.moveTabToNewWindow(windowId, args[1], args[2]);
         }
       }
     });
