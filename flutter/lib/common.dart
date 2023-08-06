@@ -689,9 +689,12 @@ class OverlayDialogManager {
   String showLoading(String text,
       {bool clickMaskDismiss = false,
       bool showCancel = true,
-      VoidCallback? onCancel}) {
-    final tag = _tagCount.toString();
-    _tagCount++;
+      VoidCallback? onCancel,
+      String? tag}) {
+    if (tag == null) {
+      tag = _tagCount.toString();
+      _tagCount++;
+    }
     show((setState, close, context) {
       cancel() {
         dismissAll();

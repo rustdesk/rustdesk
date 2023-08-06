@@ -480,9 +480,11 @@ class FfiModel with ChangeNotifier {
       if (displays.isNotEmpty) {
         parent.target?.dialogManager.showLoading(
             translate('Connected, waiting for image...'),
-            onCancel: closeConnection);
+            onCancel: closeConnection,
+            tag: '$peerId-waiting-for-image');
         _waitForImage[sessionId] = true;
         _reconnects = 1;
+        bind.sessionOnWaitingForImageDialogShow(sessionId: sessionId);
       }
       Map<String, dynamic> features = json.decode(evt['features']);
       _pi.features.privacyMode = features['privacy_mode'] == 1;
@@ -636,6 +638,8 @@ class ImageModel with ChangeNotifier {
     if (waitforImage == true) {
       _waitForImage[sessionId] = false;
       parent.target?.dialogManager.dismissAll();
+      clearWaitingForImage(parent.target?.dialogManager, id);
+
       if (isDesktop) {
         for (final cb in callbacksOnFirstImage) {
           cb(id);
@@ -1681,6 +1685,7 @@ class FFI {
               }
               await canvasModel.updateViewStyle();
               await canvasModel.updateScrollStyle();
+              clearWaitingForImage(dialogManager, id);
             }
           } else {
             // Fetch the image buffer from rust codes.
@@ -1872,4 +1877,13 @@ Future<void> initializeCursorAndCanvas(FFI ffi) async {
   ffi.cursorModel.updateDisplayOriginWithCursor(
       ffi.ffiModel.display.x, ffi.ffiModel.display.y, xCursor, yCursor);
   ffi.canvasModel.update(xCanvas, yCanvas, scale);
+}
+
+clearWaitingForImage(OverlayDialogManager? dialogManager, String id) {
+  final durations = [100, 500, 1000, 2000];
+  for (var duration in durations) {
+    Future.delayed(Duration(milliseconds: duration), () {
+      dialogManager?.dismissByTag('$id-waiting-for-image');
+    });
+  }
 }

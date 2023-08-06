@@ -1216,6 +1216,12 @@ pub fn session_change_prefer_codec(session_id: SessionID) {
     }
 }
 
+pub fn session_on_waiting_for_image_dialog_show(session_id: SessionID) {
+    if let Some(session) = SESSIONS.read().unwrap().get(&session_id) {
+        session.ui_handler.on_waiting_for_image_dialog_show();
+    }
+}
+
 pub fn main_set_home_dir(_home: String) {
     #[cfg(any(target_os = "android", target_os = "ios"))]
     {
