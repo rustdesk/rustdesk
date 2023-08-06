@@ -526,5 +526,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Sort tags", "对标签进行排序"),
         ("Separate remote window", "使用独立远程窗口"),
         ("separate window", "独立窗口"),
+        ("Split", "拆分"),
     ].iter().cloned().collect();
 }

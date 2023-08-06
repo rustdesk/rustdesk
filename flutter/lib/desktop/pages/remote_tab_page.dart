@@ -329,6 +329,22 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
       ));
     }
 
+    if (tabController.state.value.tabs.length > 1) {
+      final splitAction = MenuEntryButton<String>(
+        childBuilder: (TextStyle? style) => Text(
+          translate('Split'),
+          style: style,
+        ),
+        proc: () async {
+          await DesktopMultiWindow.invokeMethod(
+              kMainWindowId, kWindowEventSplit, '${windowId()},$key,$sessionId');
+          cancelFunc();
+        },
+        padding: padding,
+      );
+      menu.insert(1, splitAction);
+    }
+
     if (perms['keyboard'] != false && !ffi.ffiModel.viewOnly) {
       if (perms['clipboard'] != false) {
         menu.add(RemoteMenuEntry.disableClipboard(sessionId, padding,

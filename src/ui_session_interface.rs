@@ -56,6 +56,7 @@ pub struct CacheFlutter {
     pub sp: Option<SwitchDisplay>,
     pub cursor_data: HashMap<u64, CursorData>,
     pub cursor_id: u64,
+    pub is_secured_direct: Option<(bool, bool)>,
 }
 
 #[derive(Clone, Default)]
@@ -1198,6 +1199,9 @@ impl<T: InvokeUiSession> Session<T> {
     #[cfg(feature = "flutter")]
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     pub fn restore_flutter_cache(&mut self) {
+        if let Some((is_secured, direct)) = self.cache_flutter.read().unwrap().is_secured_direct {
+            self.set_connection_type(is_secured, direct);
+        }
         let pi = self.cache_flutter.read().unwrap().pi.clone();
         self.handle_peer_info(pi);
         if let Some(sp) = self.cache_flutter.read().unwrap().sp.as_ref() {

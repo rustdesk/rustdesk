@@ -43,33 +43,22 @@ class RustDeskMultiWindowManager {
   final List<int> _fileTransferWindows = List.empty(growable: true);
   final List<int> _portForwardWindows = List.empty(growable: true);
 
-  separateWindows() async {
-    for (final windowId in _remoteDesktopWindows.toList()) {
-      final String sessionIdList = await DesktopMultiWindow.invokeMethod(
-          windowId, kWindowEventGetSessionIdList, null);
-      final idList = sessionIdList.split(';');
-      if (idList.length <= 1) {
-        continue;
-      }
-      for (final idPair in idList.sublist(1)) {
-        final peerSession = idPair.split(',');
-        var params = {
-          'type': WindowType.RemoteDesktop.index,
-          'id': peerSession[0],
-          'session_id': peerSession[1],
-        };
-        await _newSession(
-          true,
-          WindowType.RemoteDesktop,
-          kWindowEventNewRemoteDesktop,
-          peerSession[0],
-          _remoteDesktopWindows,
-          jsonEncode(params),
-        );
-        await DesktopMultiWindow.invokeMethod(
-            windowId, kWindowEventCloseForSeparateWindow, peerSession[0]);
-      }
-    }
+  splitWindow(int windowId, String peerId, String sessionId) async {
+    var params = {
+      'type': WindowType.RemoteDesktop.index,
+      'id': peerId,
+      'session_id': sessionId,
+    };
+    await _newSession(
+      true,
+      WindowType.RemoteDesktop,
+      kWindowEventNewRemoteDesktop,
+      peerId,
+      _remoteDesktopWindows,
+      jsonEncode(params),
+    );
+    await DesktopMultiWindow.invokeMethod(
+        windowId, kWindowEventCloseForSeparateWindow, peerId);
   }
 
   newSessionWindow(
@@ -214,7 +203,8 @@ class RustDeskMultiWindowManager {
     }
     for (final windowId in wnds) {
       if (_activeWindows.contains(windowId)) {
-        return await DesktopMultiWindow.invokeMethod(windowId, methodName, args);
+        return await DesktopMultiWindow.invokeMethod(
+            windowId, methodName, args);
       }
     }
     return await DesktopMultiWindow.invokeMethod(wnds[0], methodName, args);
@@ -223,7 +213,7 @@ class RustDeskMultiWindowManager {
   List<int> _findWindowsByType(WindowType type) {
     switch (type) {
       case WindowType.Main:
-        return [0];
+        return [kMainWindowId];
       case WindowType.RemoteDesktop:
         return _remoteDesktopWindows;
       case WindowType.FileTransfer:

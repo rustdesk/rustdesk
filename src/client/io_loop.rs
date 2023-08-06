@@ -125,7 +125,18 @@ impl<T: InvokeUiSession> Remote<T> {
         .await
         {
             Ok((mut peer, direct, pk)) => {
-                self.handler.set_connection_type(peer.is_secured(), direct); // flutter -> connection_ready
+                let is_secured = peer.is_secured();
+                #[cfg(feature = "flutter")]
+                #[cfg(not(any(target_os = "android", target_os = "ios")))]
+                {
+                    self.handler
+                        .cache_flutter
+                        .write()
+                        .unwrap()
+                        .is_secured_direct
+                        .replace((is_secured, direct));
+                }
+                self.handler.set_connection_type(is_secured, direct); // flutter -> connection_ready
                 self.handler.update_direct(Some(direct));
                 if conn_type == ConnType::DEFAULT_CONN {
                     self.handler
