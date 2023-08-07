@@ -37,7 +37,8 @@ import 'platform_model.dart';
 
 typedef HandleMsgBox = Function(Map<String, dynamic> evt, String id);
 typedef ReconnectHandle = Function(OverlayDialogManager, SessionID, bool);
-final _waitForImage = <UuidValue, bool>{};
+final _waitForImageDialogShow = <UuidValue, bool>{};
+final _waitForFirstImage = <UuidValue, bool>{};
 final _constSessionId = Uuid().v4obj();
 
 class FfiModel with ChangeNotifier {
@@ -424,17 +425,19 @@ class FfiModel with ChangeNotifier {
       closeConnection();
     }
 
-    dialogManager.show(
-      (setState, close, context) => CustomAlertDialog(
-          title: null,
-          content: SelectionArea(child: msgboxContent(type, title, text)),
-          actions: [
-            dialogButton("Cancel", onPressed: onClose, isOutline: true)
-          ],
-          onCancel: onClose),
-      tag: '$sessionId-waiting-for-image',
-    );
-    _waitForImage[sessionId] = true;
+    Future.delayed(Duration.zero, () async {
+      await dialogManager.show(
+        (setState, close, context) => CustomAlertDialog(
+            title: null,
+            content: SelectionArea(child: msgboxContent(type, title, text)),
+            actions: [
+              dialogButton("Cancel", onPressed: onClose, isOutline: true)
+            ],
+            onCancel: onClose),
+        tag: '$sessionId-waiting-for-image',
+      );
+      _waitForImageDialogShow[sessionId] = true;
+    });
   }
 
   _updateSessionWidthHeight(SessionID sessionId) {
@@ -500,6 +503,7 @@ class FfiModel with ChangeNotifier {
       }
       if (displays.isNotEmpty) {
         _reconnects = 1;
+        _waitForFirstImage[sessionId] = true;
       }
       Map<String, dynamic> features = json.decode(evt['features']);
       _pi.features.privacyMode = features['privacy_mode'] == 1;
@@ -644,24 +648,6 @@ class ImageModel with ChangeNotifier {
   addCallbackOnFirstImage(Function(String) cb) => callbacksOnFirstImage.add(cb);
 
   onRgba(Uint8List rgba) {
-    final waitforImage = _waitForImage[sessionId];
-    if (waitforImage == null) {
-      debugPrint('Exception, peer $id not found for waiting image');
-      return;
-    }
-
-    if (waitforImage == true) {
-      _waitForImage[sessionId] = false;
-      parent.target?.dialogManager.dismissAll();
-      clearWaitingForImage(parent.target?.dialogManager, sessionId);
-
-      if (isDesktop) {
-        for (final cb in callbacksOnFirstImage) {
-          cb(id);
-        }
-      }
-    }
-
     final pid = parent.target?.id;
     img.decodeImageFromPixels(
         rgba,
@@ -1702,16 +1688,7 @@ class FFI {
           }
         } else if (message is EventToUI_Rgba) {
           if (useTextureRender) {
-            if (_waitForImage[sessionId] != false) {
-              _waitForImage[sessionId] = false;
-              dialogManager.dismissAll();
-              for (final cb in imageModel.callbacksOnFirstImage) {
-                cb(id);
-              }
-              await canvasModel.updateViewStyle();
-              await canvasModel.updateScrollStyle();
-              clearWaitingForImage(dialogManager, sessionId);
-            }
+            onEvent2UIRgba();
           } else {
             // Fetch the image buffer from rust codes.
             final sz = platformFFI.getRgbaSize(sessionId);
@@ -1720,6 +1697,7 @@ class FFI {
             }
             final rgba = platformFFI.getRgba(sessionId, sz);
             if (rgba != null) {
+              onEvent2UIRgba();
               imageModel.onRgba(rgba);
             }
           }
@@ -1728,6 +1706,22 @@ class FFI {
     });
     // every instance will bind a stream
     this.id = id;
+  }
+
+  void onEvent2UIRgba() async {
+    if (_waitForImageDialogShow[sessionId] == true) {
+      _waitForImageDialogShow[sessionId] = false;
+      clearWaitingForImage(dialogManager, sessionId);
+    }
+    if (_waitForFirstImage[sessionId] == true) {
+      _waitForFirstImage[sessionId] = false;
+      dialogManager.dismissAll();
+      await canvasModel.updateViewStyle();
+      await canvasModel.updateScrollStyle();
+      for (final cb in imageModel.callbacksOnFirstImage) {
+        cb(id);
+      }
+    }
   }
 
   /// Login with [password], choose if the client should [remember] it.
