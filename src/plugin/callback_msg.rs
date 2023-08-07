@@ -368,6 +368,7 @@ fn push_event_to_ui(channel: u16, peer: &str, content: &str) {
     m.insert("peer", &peer);
     m.insert("content", &content);
     let event = serde_json::to_string(&m).unwrap_or("".to_string());
+    // Send to main and cm
     for (k, v) in MSG_TO_UI_FLUTTER_CHANNELS.iter() {
         if channel & k != 0 {
             let _res = flutter::push_global_event(v as _, event.to_string());

@@ -628,13 +628,7 @@ fn reload_ui(desc: &Desc, sync_to: Option<&str>) {
                     // The first element is the "client" or "host".
                     // The second element is the "main", "remote", "cm", "file transfer", "port forward".
                     if v.len() >= 2 {
-                        let available_channels = vec![
-                            flutter::APP_TYPE_MAIN,
-                            flutter::APP_TYPE_DESKTOP_REMOTE,
-                            flutter::APP_TYPE_CM,
-                            flutter::APP_TYPE_DESKTOP_FILE_TRANSFER,
-                            flutter::APP_TYPE_DESKTOP_PORT_FORWARD,
-                        ];
+                        let available_channels = flutter::get_global_event_channels();
                         if available_channels.contains(&v[1]) {
                             let _res = flutter::push_global_event(v[1], make_event(&ui));
                         }
