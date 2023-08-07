@@ -125,6 +125,10 @@ void runMainApp(bool startService) async {
     bind.pluginSyncUi(syncTo: kAppTypeMain);
     bind.pluginListReload();
   }
+  final v= await bind.mainGetOption(key: "stop-service") == "Y";
+  if(v){
+    start_service(true);
+  }
   gFFI.userModel.refreshCurrentUser();
   runApp(App());
   // Set window option.
@@ -157,10 +161,10 @@ void runMobileApp() async {
 }
 
 void runMultiWindow(
-  Map<String, dynamic> argument,
-  String appType,
-  String title,
-) async {
+    Map<String, dynamic> argument,
+    String appType,
+    String title,
+    ) async {
   await initEnv(appType);
   // set prevent close to true, we handle close event manually
   WindowController.fromWindowId(kWindowId!).setPreventClose(true);
@@ -182,7 +186,7 @@ void runMultiWindow(
       );
       break;
     default:
-      // no such appType
+    // no such appType
       exit(0);
   }
   _runApp(
@@ -207,7 +211,7 @@ void runMultiWindow(
       await restoreWindowPosition(WindowType.PortForward, windowId: kWindowId!);
       break;
     default:
-      // no such appType
+    // no such appType
       exit(0);
   }
   // show window from hidden status
@@ -274,10 +278,10 @@ hideCmWindow({bool isStartup = false}) async {
 }
 
 void _runApp(
-  String title,
-  Widget home,
-  ThemeMode themeMode,
-) {
+    String title,
+    Widget home,
+    ThemeMode themeMode,
+    ) {
   final botToastBuilder = BotToastInit();
   runApp(RefreshWrapper(
     builder: (context) => GetMaterialApp(
@@ -312,7 +316,7 @@ void runInstallPage() async {
   await initEnv(kAppTypeMain);
   _runApp('', const InstallPage(), MyTheme.currentThemeMode());
   WindowOptions windowOptions =
-      getHiddenTitleBarWindowOptions(size: Size(800, 600), center: true);
+  getHiddenTitleBarWindowOptions(size: Size(800, 600), center: true);
   windowManager.waitUntilReadyToShow(windowOptions, () async {
     windowManager.show();
     windowManager.focus();
@@ -394,8 +398,8 @@ class _AppState extends State<App> {
           home: isDesktop
               ? const DesktopTabPage()
               : !isAndroid
-                  ? WebHomePage()
-                  : HomePage(),
+              ? WebHomePage()
+              : HomePage(),
           localizationsDelegates: const [
             GlobalMaterialLocalizations.delegate,
             GlobalWidgetsLocalizations.delegate,
@@ -408,21 +412,21 @@ class _AppState extends State<App> {
           ],
           builder: isAndroid
               ? (context, child) => AccessibilityListener(
-                    child: MediaQuery(
-                      data: MediaQuery.of(context).copyWith(
-                        textScaleFactor: 1.0,
-                      ),
-                      child: child ?? Container(),
-                    ),
-                  )
+            child: MediaQuery(
+              data: MediaQuery.of(context).copyWith(
+                textScaleFactor: 1.0,
+              ),
+              child: child ?? Container(),
+            ),
+          )
               : (context, child) {
-                  child = _keepScaleBuilder(context, child);
-                  child = botToastBuilder(context, child);
-                  if (desktopType == DesktopType.main) {
-                    child = keyListenerBuilder(context, child);
-                  }
-                  return child;
-                },
+            child = _keepScaleBuilder(context, child);
+            child = botToastBuilder(context, child);
+            if (desktopType == DesktopType.main) {
+              child = keyListenerBuilder(context, child);
+            }
+            return child;
+          },
         ),
       );
     });

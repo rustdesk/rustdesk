@@ -642,10 +642,10 @@ impl<T: InvokeUiSession> Session<T> {
         let position_code: KeyCode = position_code as _;
 
         #[cfg(not(target_os = "windows"))]
-        let key = rdev::key_from_code(position_code) as rdev::Key;
+            let key = rdev::key_from_code(position_code) as rdev::Key;
         // Windows requires special handling
         #[cfg(target_os = "windows")]
-        let key = rdev::get_win_key(platform_code, position_code);
+            let key = rdev::get_win_key(platform_code, position_code);
 
         let event_type = if down_or_up {
             KeyPress(key)
@@ -727,7 +727,7 @@ impl<T: InvokeUiSession> Session<T> {
         command: bool,
     ) {
         #[allow(unused_mut)]
-        let mut command = command;
+            let mut command = command;
         #[cfg(windows)]
         {
             if !command && crate::platform::windows::get_win_key_state() {
@@ -768,7 +768,7 @@ impl<T: InvokeUiSession> Session<T> {
         self.send(Data::Close);
         let cloned = self.clone();
         // override only if true
-        if true == force_relay {
+        if true == true {
             cloned.lc.write().unwrap().force_relay = true;
         }
         let mut lock = self.thread.lock().unwrap();
@@ -1152,7 +1152,7 @@ impl<T: InvokeUiSession> Interface for Session<T> {
             remember,
             peer,
         )
-        .await;
+            .await;
     }
 
     async fn handle_test_delay(&mut self, t: TestDelay, peer: &mut Stream) {
@@ -1223,9 +1223,9 @@ pub async fn io_loop<T: InvokeUiSession>(handler: Session<T>) {
     }
 
     #[cfg(any(target_os = "android", target_os = "ios"))]
-    let (sender, receiver) = mpsc::unbounded_channel::<Data>();
+        let (sender, receiver) = mpsc::unbounded_channel::<Data>();
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    let (sender, mut receiver) = mpsc::unbounded_channel::<Data>();
+        let (sender, mut receiver) = mpsc::unbounded_channel::<Data>();
     *handler.sender.write().unwrap() = Some(sender.clone());
     let token = LocalConfig::get_option("access_token");
     let key = crate::get_key(false).await;
@@ -1273,7 +1273,7 @@ pub async fn io_loop<T: InvokeUiSession>(handler: Session<T>) {
                                 &key,
                                 &token,
                             )
-                            .await;
+                                .await;
                         });
                     }
                     Some(Data::RemovePortForward(port)) => {
@@ -1311,7 +1311,7 @@ pub async fn io_loop<T: InvokeUiSession>(handler: Session<T>) {
                 &key,
                 &token,
             )
-            .await;
+                .await;
         }
         return;
     }
@@ -1360,7 +1360,7 @@ async fn start_one_port_forward<T: InvokeUiSession>(
         remote_host,
         remote_port,
     )
-    .await
+        .await
     {
         handler.on_error(&format!("Failed to listen on {}: {}", port, err));
     }

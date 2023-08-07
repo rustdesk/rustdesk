@@ -70,7 +70,7 @@ function createNewConnect(id, type) {
         return;
     }
     handler.set_remote_id(id);
-    handler.new_remote(id, type, force_relay);
+    handler.new_remote(id, type, true);
 }
 
 class ShareRdp: Reactor.Component {
@@ -79,7 +79,7 @@ class ShareRdp: Reactor.Component {
         var cls = handler.is_share_rdp()  ? "selected" : "line-through";
         return <li class={cls}><span>{svg_checkmark}</span>{rdp_shared_string}</li>;
     }
-    
+
     function onClick() {
         handler.set_share_rdp(!handler.is_share_rdp());
         this.update();
@@ -98,7 +98,7 @@ class DirectServer: Reactor.Component {
         var cls = enabled ? "selected" : "line-through";
         return <li class={cls}><span>{svg_checkmark}</span>{text}{enabled && <EditDirectAccessPort />}</li>;
     }
-    
+
     function onClick() {
         if (is_edit_rdp_port) {
             is_edit_rdp_port = false;
@@ -296,8 +296,8 @@ class MyIdMenu: Reactor.Component {
             <menu.context #config-options>
                 <li #enable-keyboard><span>{svg_checkmark}</span>{translate('Enable Keyboard/Mouse')}</li>
                 <li #enable-clipboard><span>{svg_checkmark}</span>{translate('Enable Clipboard')}</li>
-                <li #enable-file-transfer><span>{svg_checkmark}</span>{translate('Enable File Transfer')}</li> 
-                <li #enable-remote-restart><span>{svg_checkmark}</span>{translate('Enable Remote Restart')}</li> 
+                <li #enable-file-transfer><span>{svg_checkmark}</span>{translate('Enable File Transfer')}</li>
+                <li #enable-remote-restart><span>{svg_checkmark}</span>{translate('Enable Remote Restart')}</li>
                 <li #enable-tunnel><span>{svg_checkmark}</span>{translate('Enable TCP Tunneling')}</li>
                 <li #enable-lan-discovery><span>{svg_checkmark}</span>{translate('Enable LAN Discovery')}</li>
                 <AudioInputs />
@@ -311,7 +311,7 @@ class MyIdMenu: Reactor.Component {
                 <li #stop-service class={service_stopped ? "line-through" : "selected"}><span>{svg_checkmark}</span>{translate("Enable Service")}</li>
                 {handler.is_rdp_service_open() ? <ShareRdp /> : ""}
                 <DirectServer />
-                {false && handler.using_public_server() && <li #allow-always-relay><span>{svg_checkmark}</span>{translate('Always connect via relay')}</li>}
+                {true && handler.using_public_server() && <li #allow-always-relay><span>{svg_checkmark}</span>{translate('Always connect via relay')}</li>}
                 {handler.is_ok_change_id() ? <div .separator /> : ""}
                 {username ? 
                 <li #logout>{translate('Logout')} ({username})</li> :

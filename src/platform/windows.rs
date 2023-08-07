@@ -64,7 +64,7 @@ use winreg::RegKey;
 pub fn get_cursor_pos() -> Option<(i32, i32)> {
     unsafe {
         #[allow(invalid_value)]
-        let mut out = mem::MaybeUninit::uninit().assume_init();
+            let mut out = mem::MaybeUninit::uninit().assume_init();
         if GetCursorPos(&mut out) == FALSE {
             return None;
         }
@@ -77,7 +77,7 @@ pub fn reset_input_cache() {}
 pub fn get_cursor() -> ResultType<Option<u64>> {
     unsafe {
         #[allow(invalid_value)]
-        let mut ci: CURSORINFO = mem::MaybeUninit::uninit().assume_init();
+            let mut ci: CURSORINFO = mem::MaybeUninit::uninit().assume_init();
         ci.cbSize = std::mem::size_of::<CURSORINFO>() as _;
         if crate::portable_service::client::get_cursor_info(&mut ci) == FALSE {
             return Err(io::Error::last_os_error().into());
@@ -96,7 +96,7 @@ impl IconInfo {
     fn new(icon: HICON) -> ResultType<Self> {
         unsafe {
             #[allow(invalid_value)]
-            let mut ii = mem::MaybeUninit::uninit().assume_init();
+                let mut ii = mem::MaybeUninit::uninit().assume_init();
             if GetIconInfo(icon, &mut ii) == FALSE {
                 Err(io::Error::last_os_error().into())
             } else {
@@ -542,8 +542,8 @@ async fn run_service(_arguments: Vec<OsString>) -> ResultType<()> {
                     let mut exit_code: DWORD = 0;
                     if h_process.is_null()
                         || (GetExitCodeProcess(h_process, &mut exit_code) == TRUE
-                            && exit_code != STILL_ACTIVE
-                            && CloseHandle(h_process) == TRUE)
+                        && exit_code != STILL_ACTIVE
+                        && CloseHandle(h_process) == TRUE)
                     {
                         match launch_server(session_id, !close_sent).await {
                             Ok(ptr) => {
@@ -1001,9 +1001,9 @@ oLink.Save
         "vbs",
         "mk_shortcut",
     )?
-    .to_str()
-    .unwrap_or("")
-    .to_owned();
+        .to_str()
+        .unwrap_or("")
+        .to_owned();
     // https://superuser.com/questions/392061/how-to-make-a-shortcut-from-cmd
     let uninstall_shortcut = write_cmds(
         format!(
@@ -1020,9 +1020,9 @@ oLink.Save
         "vbs",
         "uninstall_shortcut",
     )?
-    .to_str()
-    .unwrap_or("")
-    .to_owned();
+        .to_str()
+        .unwrap_or("")
+        .to_owned();
     let tray_shortcut = get_tray_shortcut(&exe, &tmp_path)?;
     let mut shortcuts = Default::default();
     if options.contains("desktopicon") {
@@ -1369,9 +1369,9 @@ oLink.Save
         "vbs",
         "connect_shortcut",
     )?
-    .to_str()
-    .unwrap_or("")
-    .to_owned();
+        .to_str()
+        .unwrap_or("")
+        .to_owned();
     std::process::Command::new("cscript")
         .arg(&shortcut)
         .output()?;
@@ -1409,10 +1409,10 @@ pub fn get_user_token(session_id: u32, as_user: bool) -> HANDLE {
     unsafe {
         if FALSE
             == GetSessionUserTokenWin(
-                &mut token as _,
-                session_id,
-                if as_user { TRUE } else { FALSE },
-            )
+            &mut token as _,
+            session_id,
+            if as_user { TRUE } else { FALSE },
+        )
         {
             NULL as _
         } else {
@@ -1701,18 +1701,18 @@ pub fn create_process_with_logon(user: &str, pwd: &str, exe: &str, arg: &str) ->
         let wexe = wide_string(exe);
         if FALSE
             == CreateProcessWithLogonW(
-                wuser.as_ptr(),
-                wpc.as_ptr(),
-                wpwd.as_ptr(),
-                LOGON_WITH_PROFILE,
-                wexe.as_ptr(),
-                wcmd.as_mut_ptr(),
-                CREATE_UNICODE_ENVIRONMENT,
-                NULL,
-                NULL as _,
-                &mut si as *mut STARTUPINFOW,
-                &mut pi as *mut PROCESS_INFORMATION,
-            )
+            wuser.as_ptr(),
+            wpc.as_ptr(),
+            wpwd.as_ptr(),
+            LOGON_WITH_PROFILE,
+            wexe.as_ptr(),
+            wcmd.as_mut_ptr(),
+            CREATE_UNICODE_ENVIRONMENT,
+            NULL,
+            NULL as _,
+            &mut si as *mut STARTUPINFOW,
+            &mut pi as *mut PROCESS_INFORMATION,
+        )
         {
             let last_error = GetLastError();
             bail!(
@@ -1973,13 +1973,13 @@ mod cert {
             let mut cert_ctx: PCCERT_CONTEXT = std::ptr::null_mut();
             if FALSE
                 == CertAddEncodedCertificateToStore(
-                    store_handle,
-                    X509_ASN_ENCODING,
-                    cert_bytes.as_mut_ptr(),
-                    cert_bytes.len() as _,
-                    CERT_STORE_ADD_REPLACE_EXISTING,
-                    &mut cert_ctx as _,
-                )
+                store_handle,
+                X509_ASN_ENCODING,
+                cert_bytes.as_mut_ptr(),
+                cert_bytes.len() as _,
+                CERT_STORE_ADD_REPLACE_EXISTING,
+                &mut cert_ctx as _,
+            )
             {
                 log::error!(
                     "Failed to call CertAddEncodedCertificateToStore: {}",
@@ -2214,9 +2214,9 @@ oLink.Save
         "vbs",
         "tray_shortcut",
     )?
-    .to_str()
-    .unwrap_or("")
-    .to_owned())
+        .to_str()
+        .unwrap_or("")
+        .to_owned())
 }
 
 fn get_import_config(exe: &str) -> String {
@@ -2228,9 +2228,9 @@ sc start {app_name}
 sc stop {app_name}
 sc delete {app_name}
 ",
-    app_name = crate::get_app_name(),
-    config_path=Config::file().to_str().unwrap_or(""),
-)
+            app_name = crate::get_app_name(),
+            config_path=Config::file().to_str().unwrap_or(""),
+    )
 }
 
 fn get_create_service(exe: &str) -> String {
@@ -2244,7 +2244,7 @@ if exist \"%PROGRAMDATA%\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\{ap
 sc create {app_name} binpath= \"\\\"{exe}\\\" --service\" start= auto DisplayName= \"{app_name} Service\"
 sc start {app_name}
 ",
-    app_name = crate::get_app_name())
+                app_name = crate::get_app_name())
     }
 }
 
@@ -2299,40 +2299,16 @@ mod tests {
 }
 
 pub fn message_box(text: &str) {
+    use arboard::Clipboard as ClipboardContext;
     let mut text = text.to_owned();
-    let nodialog = std::env::var("NO_DIALOG").unwrap_or_default() == "Y";
-    if !text.ends_with("!") || nodialog {
-        use arboard::Clipboard as ClipboardContext;
+    if !text.ends_with("!") {
         match ClipboardContext::new() {
             Ok(mut ctx) => {
                 ctx.set_text(&text).ok();
-                if !nodialog {
-                    text = format!("{}\n\nAbove text has been copied to clipboard", &text);
-                }
             }
             _ => {}
         }
     }
-    if nodialog {
-        if std::env::var("PRINT_OUT").unwrap_or_default() == "Y" {
-            println!("{text}");
-        }
-        if let Ok(x) = std::env::var("WRITE_TO_FILE") {
-            if !x.is_empty() {
-                allow_err!(std::fs::write(x, text));
-            }
-        }
-        return;
-    }
-    let text = text
-        .encode_utf16()
-        .chain(std::iter::once(0))
-        .collect::<Vec<u16>>();
-    let caption = "RustDesk Output"
-        .encode_utf16()
-        .chain(std::iter::once(0))
-        .collect::<Vec<u16>>();
-    unsafe { MessageBoxW(std::ptr::null_mut(), text.as_ptr(), caption.as_ptr(), MB_OK) };
 }
 
 pub fn alloc_console() {

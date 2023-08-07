@@ -469,7 +469,7 @@ impl sciter::EventHandler for SciterSession {
 
 impl SciterSession {
     pub fn new(cmd: String, id: String, password: String, args: Vec<String>) -> Self {
-        let force_relay = args.contains(&"--relay".to_string());
+        let force_relay = true
         let session: Session<SciterHandler> = Session {
             id: id.clone(),
             password: password.clone(),
@@ -494,7 +494,7 @@ impl SciterSession {
             .lc
             .write()
             .unwrap()
-            .initialize(id, conn_type, None, force_relay);
+            .initialize(id, conn_type, None, true);
 
         Self(session)
     }

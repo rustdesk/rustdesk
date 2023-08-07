@@ -248,7 +248,7 @@ impl Client {
                     crate::check_port(peer, RELAY_PORT + 1),
                     CONNECT_TIMEOUT,
                 )
-                .await?,
+                    .await?,
                 true,
                 None,
             ));
@@ -360,7 +360,7 @@ impl Client {
                             conn_type,
                             my_addr.is_ipv4(),
                         )
-                        .await?;
+                            .await?;
                         let pk =
                             Self::secure_connection(peer, signed_id_pk, key, &mut conn).await?;
                         return Ok((conn, false, pk));
@@ -402,7 +402,7 @@ impl Client {
             conn_type,
             interface,
         )
-        .await
+            .await
     }
 
     /// Connect to the peer.
@@ -472,7 +472,7 @@ impl Client {
                     token,
                     conn_type,
                 )
-                .await;
+                    .await;
                 interface.update_direct(Some(false));
                 if let Err(e) = conn {
                     bail!("Failed to connect via relay server: {}", e);
@@ -650,8 +650,8 @@ impl Client {
             socket_client::ipv4_to_ipv6(crate::check_port(relay_server, RELAY_PORT), ipv4),
             CONNECT_TIMEOUT,
         )
-        .await
-        .with_context(|| "Failed to connect to relay server")?;
+            .await
+            .with_context(|| "Failed to connect to relay server")?;
         let mut msg_out = RendezvousMessage::new();
         msg_out.set_request_relay(RequestRelay {
             licence_key: key.to_owned(),
@@ -1046,7 +1046,7 @@ impl VideoHandler {
                 format: scrap::CodecFormat::VP9,
                 tx: None,
             })
-            .map_or(Default::default(), |r| Arc::new(Mutex::new(Some(r))));
+                .map_or(Default::default(), |r| Arc::new(Mutex::new(Some(r))));
         } else {
             self.recorder = Default::default();
         }
@@ -1121,7 +1121,7 @@ impl LoginConfigHandler {
         self.session_id = sid;
         self.supported_encoding = Default::default();
         self.restarting_remote_device = false;
-        self.force_relay = !self.get_option("force-always-relay").is_empty() || force_relay;
+        self.force_relay = !self.get_option("force-always-relay").is_empty() || true;
         self.direct = None;
         self.received = false;
         self.switch_uuid = switch_uuid;
@@ -1243,7 +1243,7 @@ impl LoginConfigHandler {
             } else {
                 BoolOption::No
             })
-            .into();
+                .into();
         } else if name == "disable-audio" {
             config.disable_audio.v = !config.disable_audio.v;
             option.disable_audio = (if config.disable_audio.v {
@@ -1251,7 +1251,7 @@ impl LoginConfigHandler {
             } else {
                 BoolOption::No
             })
-            .into();
+                .into();
         } else if name == "disable-clipboard" {
             config.disable_clipboard.v = !config.disable_clipboard.v;
             option.disable_clipboard = (if config.disable_clipboard.v {
@@ -1259,7 +1259,7 @@ impl LoginConfigHandler {
             } else {
                 BoolOption::No
             })
-            .into();
+                .into();
         } else if name == "lock-after-session-end" {
             config.lock_after_session_end.v = !config.lock_after_session_end.v;
             option.lock_after_session_end = (if config.lock_after_session_end.v {
@@ -1267,7 +1267,7 @@ impl LoginConfigHandler {
             } else {
                 BoolOption::No
             })
-            .into();
+                .into();
         } else if name == "privacy-mode" {
             // try toggle privacy mode
             option.privacy_mode = (if config.privacy_mode.v {
@@ -1275,7 +1275,7 @@ impl LoginConfigHandler {
             } else {
                 BoolOption::Yes
             })
-            .into();
+                .into();
         } else if name == "enable-file-transfer" {
             config.enable_file_transfer.v = !config.enable_file_transfer.v;
             option.enable_file_transfer = (if config.enable_file_transfer.v {
@@ -1283,7 +1283,7 @@ impl LoginConfigHandler {
             } else {
                 BoolOption::No
             })
-            .into();
+                .into();
         } else if name == "block-input" {
             option.block_input = BoolOption::Yes.into();
         } else if name == "unblock-input" {
@@ -1694,9 +1694,9 @@ impl LoginConfigHandler {
         password: Vec<u8>,
     ) -> Message {
         #[cfg(any(target_os = "android", target_os = "ios"))]
-        let my_id = Config::get_id_or(crate::DEVICE_ID.lock().unwrap().clone());
+            let my_id = Config::get_id_or(crate::DEVICE_ID.lock().unwrap().clone());
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
-        let my_id = Config::get_id();
+            let my_id = Config::get_id();
         let mut lr = LoginRequest {
             username: self.id.clone(),
             password: password.into(),
@@ -1710,7 +1710,7 @@ impl LoginConfigHandler {
                 password: os_password,
                 ..Default::default()
             })
-            .into(),
+                .into(),
             ..Default::default()
         };
         match self.conn_type {
@@ -1779,8 +1779,8 @@ pub fn start_video_audio_threads<F>(
     Arc<ArrayQueue<VideoFrame>>,
     Arc<AtomicUsize>,
 )
-where
-    F: 'static + FnMut(&mut scrap::ImageRgb) + Send,
+    where
+        F: 'static + FnMut(&mut scrap::ImageRgb) + Send,
 {
     let (video_sender, video_receiver) = mpsc::channel::<MediaData>();
     let video_queue = Arc::new(ArrayQueue::<VideoFrame>::new(VIDEO_QUEUE_SIZE));
@@ -2405,7 +2405,7 @@ pub trait Interface: Send + Clone + 'static + Sized {
         let errno = errno::errno().0;
         if relay_condition
             && (cfg!(windows) && (errno == 10054 || err.contains("10054"))
-                || !cfg!(windows) && (errno == 104 || err.contains("104")))
+            || !cfg!(windows) && (errno == 104 || err.contains("104")))
         {
             lc.write().unwrap().force_relay = true;
             lc.write()
@@ -2594,14 +2594,14 @@ pub fn check_if_retry(msgtype: &str, title: &str, text: &str, retry_for_relay: b
     msgtype == "error"
         && title == "Connection Error"
         && ((text.contains("10054") || text.contains("104")) && retry_for_relay
-            || (!text.to_lowercase().contains("offline")
-                && !text.to_lowercase().contains("exist")
-                && !text.to_lowercase().contains("handshake")
-                && !text.to_lowercase().contains("failed")
-                && !text.to_lowercase().contains("resolve")
-                && !text.to_lowercase().contains("mismatch")
-                && !text.to_lowercase().contains("manually")
-                && !text.to_lowercase().contains("not allowed")))
+        || (!text.to_lowercase().contains("offline")
+        && !text.to_lowercase().contains("exist")
+        && !text.to_lowercase().contains("handshake")
+        && !text.to_lowercase().contains("failed")
+        && !text.to_lowercase().contains("resolve")
+        && !text.to_lowercase().contains("mismatch")
+        && !text.to_lowercase().contains("manually")
+        && !text.to_lowercase().contains("not allowed")))
 }
 
 #[inline]
