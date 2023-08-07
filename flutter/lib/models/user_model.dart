@@ -15,6 +15,7 @@ bool refreshingUser = false;
 class UserModel {
   final RxString userName = ''.obs;
   final RxBool isAdmin = false.obs;
+  bool get isLogin => userName.isNotEmpty;
   WeakReference<FFI> parent;
 
   UserModel(this.parent);
@@ -162,15 +163,27 @@ class UserModel {
     return loginResponse;
   }
 
-  static Future<List<dynamic>> queryLoginOptions() async {
+  static Future<List<dynamic>> queryOidcLoginOptions() async {
     try {
       final url = await bind.mainGetApiServer();
       if (url.trim().isEmpty) return [];
       final resp = await http.get(Uri.parse('$url/api/login-options'));
-      return jsonDecode(resp.body);
+      final List<String> ops = [];
+      for (final item in jsonDecode(resp.body)) {
+        ops.add(item as String);
+      }
+      for (final item in ops) {
+        if (item.startsWith('common-oidc/')) {
+          return jsonDecode(item.substring('common-oidc/'.length));
+        }
+      }
+      return ops
+          .where((item) => item.startsWith('oidc/'))
+          .map((item) => {'name': item.substring('oidc/'.length)})
+          .toList();
     } catch (e) {
       debugPrint(
-          "queryLoginOptions: jsonDecode resp body failed: ${e.toString()}");
+          "queryOidcLoginOptions: jsonDecode resp body failed: ${e.toString()}");
       return [];
     }
   }

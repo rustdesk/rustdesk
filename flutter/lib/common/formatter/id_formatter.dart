@@ -26,6 +26,8 @@ class IDTextInputFormatter extends TextInputFormatter {
         selection: TextSelection.collapsed(
           offset: newID.length - selectionIndexFromTheRight,
         ),
+        // https://github.com/flutter/flutter/issues/78066#issuecomment-797869906
+        composing: newValue.composing,
       );
     }
   }

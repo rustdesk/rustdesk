@@ -15,7 +15,7 @@ use flutter_rust_bridge::{StreamSink, SyncReturn};
 use hbb_common::allow_err;
 use hbb_common::{
     config::{self, LocalConfig, PeerConfig, PeerInfoSerde},
-    fs, log,
+    fs, lazy_static, log,
     message_proto::KeyboardMode,
     ResultType,
 };
@@ -24,10 +24,18 @@ use std::{
     ffi::{CStr, CString},
     os::raw::c_char,
     str::FromStr,
+    sync::{
+        atomic::{AtomicI32, Ordering},
+        Arc,
+    },
     time::SystemTime,
 };
 
 pub type SessionID = uuid::Uuid;
+
+lazy_static::lazy_static! {
+    static ref TEXTURE_RENDER_KEY: Arc<AtomicI32> = Arc::new(AtomicI32::new(0));
+}
 
 fn initialize(app_dir: &str) {
     *config::APP_DIR.write().unwrap() = app_dir.to_owned();
@@ -197,6 +205,30 @@ pub fn session_set_flutter_config(session_id: SessionID, k: String, v: String) {
     }
 }
 
+pub fn session_get_flutter_config_by_peer_id(id: String, k: String) -> Option<String> {
+    if let Some((_, session)) = SESSIONS.read().unwrap().iter().find(|(_, s)| s.id == id) {
+        Some(session.get_flutter_config(k))
+    } else {
+        None
+    }
+}
+
+pub fn session_set_flutter_config_by_peer_id(id: String, k: String, v: String) {
+    if let Some((_, session)) = SESSIONS
+        .write()
+        .unwrap()
+        .iter_mut()
+        .find(|(_, s)| s.id == id)
+    {
+        session.save_flutter_config(k, v);
+    }
+}
+
+pub fn get_next_texture_key() -> SyncReturn<i32> {
+    let k = TEXTURE_RENDER_KEY.fetch_add(1, Ordering::SeqCst) + 1;
+    SyncReturn(k)
+}
+
 pub fn get_local_flutter_config(k: String) -> SyncReturn<String> {
     SyncReturn(ui_interface::get_local_flutter_config(k))
 }
@@ -357,6 +389,7 @@ pub fn session_enter_or_leave(_session_id: SessionID, _enter: bool) -> SyncRetur
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     if let Some(session) = SESSIONS.read().unwrap().get(&_session_id) {
         if _enter {
+            set_cur_session_id(_session_id);
             session.enter();
         } else {
             session.leave();
@@ -569,6 +602,14 @@ pub fn session_change_resolution(session_id: SessionID, display: i32, width: i32
     }
 }
 
+pub fn session_ready_to_new_window(session_id: SessionID) {
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    if let Some(session) = SESSIONS.write().unwrap().get_mut(&session_id) {
+        session.restore_flutter_cache();
+        session.refresh_video();
+    }
+}
+
 pub fn session_set_size(_session_id: SessionID, _width: usize, _height: usize) {
     #[cfg(feature = "flutter_texture_render")]
     if let Some(session) = SESSIONS.write().unwrap().get_mut(&_session_id) {
@@ -612,6 +653,15 @@ pub fn main_get_option_sync(key: String) -> SyncReturn<String> {
 
 pub fn main_get_error() -> String {
     get_error()
+}
+
+pub fn main_show_option(_key: String) -> SyncReturn<bool> {
+    #[cfg(all(target_os = "linux", feature = "linux_headless"))]
+    #[cfg(not(any(feature = "flatpak", feature = "appimage")))]
+    if _key.eq(config::CONFIG_OPTION_ALLOW_LINUX_HEADLESS) {
+        return SyncReturn(true);
+    }
+    SyncReturn(false)
 }
 
 pub fn main_set_option(key: String, value: String) {
@@ -768,6 +818,15 @@ pub fn main_set_peer_alias(id: String, alias: String) {
     set_peer_option(id, "alias".to_owned(), alias)
 }
 
+pub fn main_get_new_stored_peers() -> String {
+    let peers: Vec<String> = config::NEW_STORED_PEER_CONFIG
+        .lock()
+        .unwrap()
+        .drain()
+        .collect();
+    serde_json::to_string(&peers).unwrap_or_default()
+}
+
 pub fn main_forget_password(id: String) {
     forget_password(id)
 }
@@ -778,7 +837,7 @@ pub fn main_peer_has_password(id: String) -> bool {
 
 pub fn main_load_recent_peers() {
     if !config::APP_DIR.read().unwrap().is_empty() {
-        let peers: Vec<HashMap<&str, String>> = PeerConfig::peers()
+        let peers: Vec<HashMap<&str, String>> = PeerConfig::peers(None)
             .drain(..)
             .map(|(id, _, p)| peer_to_map(id, p))
             .collect();
@@ -799,7 +858,7 @@ pub fn main_load_recent_peers() {
 
 pub fn main_load_recent_peers_sync() -> SyncReturn<String> {
     if !config::APP_DIR.read().unwrap().is_empty() {
-        let peers: Vec<HashMap<&str, String>> = PeerConfig::peers()
+        let peers: Vec<HashMap<&str, String>> = PeerConfig::peers(None)
             .drain(..)
             .map(|(id, _, p)| peer_to_map(id, p))
             .collect();
@@ -816,10 +875,22 @@ pub fn main_load_recent_peers_sync() -> SyncReturn<String> {
     SyncReturn("".to_string())
 }
 
+pub fn main_load_recent_peers_for_ab(filter: String) -> String {
+    let id_filters = serde_json::from_str::<Vec<String>>(&filter).unwrap_or_default();
+    if !config::APP_DIR.read().unwrap().is_empty() {
+        let peers: Vec<HashMap<&str, String>> = PeerConfig::peers(Some(id_filters))
+            .drain(..)
+            .map(|(id, _, p)| peer_to_map_ab(id, p))
+            .collect();
+        return serde_json::ser::to_string(&peers).unwrap_or("".to_owned());
+    }
+    "".to_string()
+}
+
 pub fn main_load_fav_peers() {
     if !config::APP_DIR.read().unwrap().is_empty() {
         let favs = get_fav();
-        let mut recent = PeerConfig::peers();
+        let mut recent = PeerConfig::peers(None);
         let mut lan = config::LanPeers::load()
             .peers
             .iter()
@@ -884,15 +955,12 @@ pub fn main_remove_discovered(id: String) {
 }
 
 fn main_broadcast_message(data: &HashMap<&str, &str>) {
-    let apps = vec![
-        flutter::APP_TYPE_DESKTOP_REMOTE,
-        flutter::APP_TYPE_DESKTOP_FILE_TRANSFER,
-        flutter::APP_TYPE_DESKTOP_PORT_FORWARD,
-    ];
-
     let event = serde_json::ser::to_string(&data).unwrap_or("".to_owned());
-    for app in apps {
-        let _res = flutter::push_global_event(app, event.clone());
+    for app in flutter::get_global_event_channels() {
+        if app == flutter::APP_TYPE_MAIN || app == flutter::APP_TYPE_CM {
+            continue;
+        }
+        let _res = flutter::push_global_event(&app, event.clone());
     }
 }
 
@@ -1075,6 +1143,20 @@ pub fn main_start_dbus_server() {
             let _ = start_dbus_server();
         });
     }
+}
+
+pub fn main_save_ab(json: String) {
+    if json.len() > 1024 {
+        std::thread::spawn(|| {
+            config::Ab::store(json);
+        });
+    } else {
+        config::Ab::store(json);
+    }
+}
+
+pub fn main_clear_ab() {
+    config::Ab::remove();
 }
 
 pub fn session_send_pointer(session_id: SessionID, msg: String) {

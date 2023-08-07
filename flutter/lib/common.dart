@@ -19,7 +19,6 @@ import 'package:flutter_hbb/utils/multi_window_manager.dart';
 import 'package:flutter_hbb/utils/platform_channel.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:get/get.dart';
-import 'package:texture_rgba_renderer/texture_rgba_renderer.dart';
 import 'package:uni_links/uni_links.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:uuid/uuid.dart';
@@ -46,11 +45,6 @@ var isWebDesktop = false;
 var isMobile = isAndroid || isIOS;
 var version = "";
 int androidVersion = 0;
-
-/// Incriment count for textureId.
-int _textureId = 0;
-int get newTextureId => _textureId++;
-final textureRenderer = TextureRgbaRenderer();
 
 /// only available for Windows target
 int windowsBuildNumber = 0;
@@ -549,7 +543,7 @@ closeConnection({String? id}) {
   }
 }
 
-void window_on_top(int? id) async {
+void windowOnTop(int? id) async {
   if (!isDesktop) {
     return;
   }
@@ -689,9 +683,12 @@ class OverlayDialogManager {
   String showLoading(String text,
       {bool clickMaskDismiss = false,
       bool showCancel = true,
-      VoidCallback? onCancel}) {
-    final tag = _tagCount.toString();
-    _tagCount++;
+      VoidCallback? onCancel,
+      String? tag}) {
+    if (tag == null) {
+      tag = _tagCount.toString();
+      _tagCount++;
+    }
     show((setState, close, context) {
       cancel() {
         dismissAll();
@@ -1222,7 +1219,7 @@ FFI get gFFI => _globalFFI;
 
 Future<void> initGlobalFFI() async {
   debugPrint("_globalFFI init");
-  _globalFFI = FFI();
+  _globalFFI = FFI(null);
   debugPrint("_globalFFI init end");
   // after `put`, can also be globally found by Get.find<FFI>();
   Get.put(_globalFFI, permanent: true);
@@ -1280,6 +1277,15 @@ Future<bool> mainGetBoolOption(String key) async {
 
 bool mainGetBoolOptionSync(String key) {
   return option2bool(key, bind.mainGetOptionSync(key: key));
+}
+
+mainSetLocalBoolOption(String key, bool value) async {
+  String v = bool2option(key, value);
+  await bind.mainSetLocalOption(key: key, value: v);
+}
+
+bool mainGetLocalBoolOptionSync(String key) {
+  return option2bool(key, bind.mainGetLocalOption(key: key));
 }
 
 Future<bool> matchPeer(String searchText, Peer peer) async {
@@ -1389,34 +1395,47 @@ Future<void> saveWindowPosition(WindowType type, {int? windowId}) async {
       isMaximized = await wc.isMaximized();
       break;
   }
+  if (Platform.isWindows) {
+    const kMinOffset = -10000;
+    const kMaxOffset = 10000;
+    if (position.dx < kMinOffset ||
+        position.dy < kMinOffset ||
+        position.dx > kMaxOffset ||
+        position.dy > kMaxOffset) {
+      debugPrint("Invalid position: $position, ignore saving position");
+      return;
+    }
+  }
 
   final pos = LastWindowPosition(
       sz.width, sz.height, position.dx, position.dy, isMaximized);
   debugPrint(
       "Saving frame: $windowId: ${pos.width}/${pos.height}, offset:${pos.offsetWidth}/${pos.offsetHeight}");
+
   await bind.setLocalFlutterConfig(
       k: kWindowPrefix + type.name, v: pos.toString());
+
+  if (type == WindowType.RemoteDesktop && windowId != null) {
+    await _saveSessionWindowPosition(windowId, pos);
+  }
+}
+
+Future _saveSessionWindowPosition(int windowId, LastWindowPosition pos) async {
+  final remoteList = await DesktopMultiWindow.invokeMethod(
+      windowId, kWindowEventGetRemoteList, null);
+  if (remoteList != null) {
+    for (final peerId in remoteList.split(',')) {
+      bind.sessionSetFlutterConfigByPeerId(
+          id: peerId, k: kWindowPrefix, v: pos.toString());
+    }
+  }
 }
 
 Future<Size> _adjustRestoreMainWindowSize(double? width, double? height) async {
-  const double minWidth = 600;
-  const double minHeight = 100;
-  double maxWidth = (((isDesktop || isWebDesktop)
-          ? kDesktopMaxDisplaySize
-          : kMobileMaxDisplaySize))
-      .toDouble();
-  double maxHeight = ((isDesktop || isWebDesktop)
-          ? kDesktopMaxDisplaySize
-          : kMobileMaxDisplaySize)
-      .toDouble();
-
-  if (isDesktop || isWebDesktop) {
-    final screen = (await window_size.getWindowInfo()).screen;
-    if (screen != null) {
-      maxWidth = screen.visibleFrame.width;
-      maxHeight = screen.visibleFrame.height;
-    }
-  }
+  const double minWidth = 1;
+  const double minHeight = 1;
+  const double maxWidth = 6480;
+  const double maxHeight = 6480;
 
   final defaultWidth =
       ((isDesktop || isWebDesktop) ? 1280 : kMobileDefaultDisplayWidth)
@@ -1499,7 +1518,8 @@ Future<Offset?> _adjustRestoreMainWindowOffset(
 
 /// Restore window position and size on start
 /// Note that windowId must be provided if it's subwindow
-Future<bool> restoreWindowPosition(WindowType type, {int? windowId}) async {
+Future<bool> restoreWindowPosition(WindowType type,
+    {int? windowId, String? peerId}) async {
   if (bind
       .mainGetEnv(key: "DISABLE_RUSTDESK_RESTORE_WINDOW_POSITION")
       .isNotEmpty) {
@@ -1508,12 +1528,30 @@ Future<bool> restoreWindowPosition(WindowType type, {int? windowId}) async {
   if (type != WindowType.Main && windowId == null) {
     debugPrint(
         "Error: windowId cannot be null when saving positions for sub window");
+    return false;
   }
-  final pos = bind.getLocalFlutterConfig(k: kWindowPrefix + type.name);
+
+  bool isRemotePeerPos = false;
+  String? pos;
+  if (type == WindowType.RemoteDesktop && windowId != null && peerId != null) {
+    pos = await bind.sessionGetFlutterConfigByPeerId(
+        id: peerId, k: kWindowPrefix);
+    isRemotePeerPos = pos != null;
+  }
+  pos ??= bind.getLocalFlutterConfig(k: kWindowPrefix + type.name);
+
   var lpos = LastWindowPosition.loadFromString(pos);
   if (lpos == null) {
     debugPrint("no window position saved, ignoring position restoration");
     return false;
+  }
+  if (type == WindowType.RemoteDesktop && !isRemotePeerPos && windowId != null) {
+    if (lpos.offsetWidth != null) {
+      lpos.offsetWidth = lpos.offsetWidth! + windowId * 20;
+    }
+    if (lpos.offsetHeight != null) {
+      lpos.offsetHeight = lpos.offsetHeight! + windowId * 20;
+    }
   }
 
   switch (type) {
@@ -1692,7 +1730,7 @@ bool handleUriLink({List<String>? cmdArgs, Uri? uri, String? uriString}) {
         Future.delayed(Duration.zero, () {
           rustDeskWinManager.newRemoteDesktop(id!,
               password: password,
-              switch_uuid: switchUuid,
+              switchUuid: switchUuid,
               forceRelay: forceRelay);
         });
         break;
@@ -1757,17 +1795,20 @@ List<String>? urlLinkToCmdArgs(Uri uri) {
   return null;
 }
 
-connectMainDesktop(String id,
-    {required bool isFileTransfer,
-    required bool isTcpTunneling,
-    required bool isRDP,
-    bool? forceRelay}) async {
+connectMainDesktop(
+  String id, {
+  required bool isFileTransfer,
+  required bool isTcpTunneling,
+  required bool isRDP,
+  bool? forceRelay,
+  bool forceSeparateWindow = false,
+}) async {
   if (isFileTransfer) {
     await rustDeskWinManager.newFileTransfer(id, forceRelay: forceRelay);
   } else if (isTcpTunneling || isRDP) {
     await rustDeskWinManager.newPortForward(id, isRDP, forceRelay: forceRelay);
   } else {
-    await rustDeskWinManager.newRemoteDesktop(id, forceRelay: forceRelay);
+    await rustDeskWinManager.newRemoteDesktop(id, forceRelay: forceRelay, forceSeparateWindow: forceSeparateWindow);
   }
 }
 
@@ -1775,10 +1816,14 @@ connectMainDesktop(String id,
 /// If [isFileTransfer], starts a session only for file transfer.
 /// If [isTcpTunneling], starts a session only for tcp tunneling.
 /// If [isRDP], starts a session only for rdp.
-connect(BuildContext context, String id,
-    {bool isFileTransfer = false,
-    bool isTcpTunneling = false,
-    bool isRDP = false}) async {
+connect(
+  BuildContext context,
+  String id, {
+  bool isFileTransfer = false,
+  bool isTcpTunneling = false,
+  bool isRDP = false,
+  bool forceSeparateWindow = false,
+}) async {
   if (id == '') return;
   id = id.replaceAll(' ', '');
   final oldId = id;
@@ -1789,18 +1834,22 @@ connect(BuildContext context, String id,
 
   if (isDesktop) {
     if (desktopType == DesktopType.main) {
-      await connectMainDesktop(id,
-          isFileTransfer: isFileTransfer,
-          isTcpTunneling: isTcpTunneling,
-          isRDP: isRDP,
-          forceRelay: forceRelay);
+      await connectMainDesktop(
+        id,
+        isFileTransfer: isFileTransfer,
+        isTcpTunneling: isTcpTunneling,
+        isRDP: isRDP,
+        forceRelay: forceRelay,
+        forceSeparateWindow: forceSeparateWindow,
+      );
     } else {
       await rustDeskWinManager.call(WindowType.Main, kWindowConnect, {
         'id': id,
         'isFileTransfer': isFileTransfer,
         'isTcpTunneling': isTcpTunneling,
         'isRDP': isRDP,
-        "forceRelay": forceRelay,
+        'forceRelay': forceRelay,
+        'forceSeparateWindow': forceSeparateWindow,
       });
     }
   } else {
@@ -2264,4 +2313,11 @@ Widget unreadTopRightBuilder(RxInt? count, {Widget? icon}) {
           child: unreadMessageCountBuilder(count, size: 12, fontSize: 8))
     ],
   );
+}
+
+String toCapitalized(String s) {
+  if (s.isEmpty) {
+    return s;
+  }
+  return s.substring(0, 1).toUpperCase() + s.substring(1);
 }

@@ -53,7 +53,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Audio Input", "Garso įvestis"),
         ("Enhancements", "Patobulinimai"),
         ("Hardware Codec", "Aparatinės įrangos paspartinimas"),
-        ("Adaptive Bitrate", "Adaptyvusis pralaidumas"),
+        ("Adaptive bitrate", "Adaptyvusis pralaidumas"),
         ("ID Server", "ID serveris"),
         ("Relay Server", "Perdavimo serveris"),
         ("API Server", "API serveris"),
@@ -524,5 +524,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("exceed_max_devices", ""),
         ("Sync with recent sessions", ""),
         ("Sort tags", ""),
+        ("Separate remote windows", ""),
+        ("separate window", ""),
+        ("Move tab to new window", ""),
     ].iter().cloned().collect();
 }

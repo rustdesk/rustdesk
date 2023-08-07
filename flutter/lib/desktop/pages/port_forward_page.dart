@@ -54,7 +54,7 @@ class _PortForwardPageState extends State<PortForwardPage>
   @override
   void initState() {
     super.initState();
-    _ffi = FFI();
+    _ffi = FFI(null);
     _ffi.start(widget.id,
         isPortForward: true,
         password: widget.password,

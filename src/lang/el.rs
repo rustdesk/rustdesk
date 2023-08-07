@@ -53,7 +53,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Audio Input", "Είσοδος ήχου"),
         ("Enhancements", "Βελτιώσεις"),
         ("Hardware Codec", "Κωδικοποιητής υλικού"),
-        ("Adaptive Bitrate", "Adaptive Bitrate"),
+        ("Adaptive bitrate", "Adaptive bitrate"),
         ("ID Server", "Διακομιστής ID"),
         ("Relay Server", "Διακομιστής αναμετάδοσης"),
         ("API Server", "Διακομιστής API"),
@@ -524,5 +524,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("exceed_max_devices", ""),
         ("Sync with recent sessions", ""),
         ("Sort tags", ""),
+        ("Separate remote windows", ""),
+        ("separate window", ""),
+        ("Move tab to new window", ""),
     ].iter().cloned().collect();
 }

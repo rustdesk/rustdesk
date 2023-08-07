@@ -56,6 +56,7 @@ pub struct Remote<T: InvokeUiSession> {
     remove_jobs: HashMap<i32, RemoveJob>,
     timer: Interval,
     last_update_jobs_status: (Instant, HashMap<i32, u64>),
+    is_connected: bool,
     first_frame: bool,
     #[cfg(windows)]
     client_conn_id: i32, // used for file clipboard
@@ -90,6 +91,7 @@ impl<T: InvokeUiSession> Remote<T> {
             remove_jobs: Default::default(),
             timer: time::interval(SEC30),
             last_update_jobs_status: (Instant::now(), Default::default()),
+            is_connected: false,
             first_frame: false,
             #[cfg(windows)]
             client_conn_id: 0,
@@ -123,7 +125,18 @@ impl<T: InvokeUiSession> Remote<T> {
         .await
         {
             Ok((mut peer, direct, pk)) => {
-                self.handler.set_connection_type(peer.is_secured(), direct); // flutter -> connection_ready
+                let is_secured = peer.is_secured();
+                #[cfg(feature = "flutter")]
+                #[cfg(not(any(target_os = "android", target_os = "ios")))]
+                {
+                    self.handler
+                        .cache_flutter
+                        .write()
+                        .unwrap()
+                        .is_secured_direct
+                        .replace((is_secured, direct));
+                }
+                self.handler.set_connection_type(is_secured, direct); // flutter -> connection_ready
                 self.handler.update_direct(Some(direct));
                 if conn_type == ConnType::DEFAULT_CONN {
                     self.handler
@@ -195,28 +208,7 @@ impl<T: InvokeUiSession> Remote<T> {
                         }
                         _msg = rx_clip_client.recv() => {
                             #[cfg(windows)]
-                            match _msg {
-                                Some(clip) => match clip {
-                                    clipboard::ClipboardFile::NotifyCallback{r#type, title, text} => {
-                                        self.handler.msgbox(&r#type, &title, &text, "");
-                                    }
-                                    _ => {
-                                        let is_stopping_allowed = clip.is_stopping_allowed();
-                                        let server_file_transfer_enabled = *self.handler.server_file_transfer_enabled.read().unwrap();
-                                        let file_transfer_enabled = self.handler.lc.read().unwrap().enable_file_transfer.v;
-                                        let stop = is_stopping_allowed && !(server_file_transfer_enabled && file_transfer_enabled);
-                                        log::debug!("Process clipboard message from system, stop: {}, is_stopping_allowed: {}, server_file_transfer_enabled: {}, file_transfer_enabled: {}", stop, is_stopping_allowed, server_file_transfer_enabled, file_transfer_enabled);
-                                        if stop {
-                                            ContextSend::set_is_stopped();
-                                        } else {
-                                            allow_err!(peer.send(&crate::clipboard_file::clip_2_msg(clip)).await);
-                                        }
-                                    }
-                                }
-                                None => {
-                                    // unreachable!()
-                                }
-                            }
+                            self.handle_local_clipboard_msg(&mut peer, _msg).await;
                         }
                         _ = self.timer.tick() => {
                             if last_recv_time.elapsed() >= SEC30 {
@@ -270,10 +262,48 @@ impl<T: InvokeUiSession> Remote<T> {
         #[cfg(windows)]
         {
             let conn_id = self.client_conn_id;
-            ContextSend::proc(|context: &mut Box<CliprdrClientContext>| -> u32 {
+            ContextSend::proc(|context: &mut CliprdrClientContext| -> u32 {
                 empty_clipboard(context, conn_id);
                 0
             });
+        }
+    }
+
+    #[cfg(windows)]
+    async fn handle_local_clipboard_msg(
+        &self,
+        peer: &mut crate::client::FramedStream,
+        msg: Option<clipboard::ClipboardFile>,
+    ) {
+        match msg {
+            Some(clip) => match clip {
+                clipboard::ClipboardFile::NotifyCallback {
+                    r#type,
+                    title,
+                    text,
+                } => {
+                    self.handler.msgbox(&r#type, &title, &text, "");
+                }
+                _ => {
+                    let is_stopping_allowed = clip.is_stopping_allowed();
+                    let server_file_transfer_enabled =
+                        *self.handler.server_file_transfer_enabled.read().unwrap();
+                    let file_transfer_enabled =
+                        self.handler.lc.read().unwrap().enable_file_transfer.v;
+                    let stop = is_stopping_allowed
+                        && (!self.is_connected
+                            || !(server_file_transfer_enabled && file_transfer_enabled));
+                    log::debug!("Process clipboard message from system, stop: {}, is_stopping_allowed: {}, server_file_transfer_enabled: {}, file_transfer_enabled: {}", stop, is_stopping_allowed, server_file_transfer_enabled, file_transfer_enabled);
+                    if stop {
+                        ContextSend::set_is_stopped();
+                    } else {
+                        allow_err!(peer.send(&crate::clipboard_file::clip_2_msg(clip)).await);
+                    }
+                }
+            },
+            None => {
+                // unreachable!()
+            }
         }
     }
 
@@ -989,6 +1019,11 @@ impl<T: InvokeUiSession> Remote<T> {
                         }
                     }
                     Some(login_response::Union::PeerInfo(pi)) => {
+                        #[cfg(feature = "flutter")]
+                        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+                        {
+                            self.handler.cache_flutter.write().unwrap().pi = pi.clone();
+                        }
                         self.handler.handle_peer_info(pi);
                         #[cfg(not(feature = "flutter"))]
                         self.check_clipboard_file_context();
@@ -1030,13 +1065,28 @@ impl<T: InvokeUiSession> Remote<T> {
                         if self.handler.is_file_transfer() {
                             self.handler.load_last_jobs();
                         }
+
+                        self.is_connected = true;
                     }
                     _ => {}
                 },
                 Some(message::Union::CursorData(cd)) => {
+                    #[cfg(feature = "flutter")]
+                    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+                    {
+                        let mut lock = self.handler.cache_flutter.write().unwrap();
+                        if !lock.cursor_data.contains_key(&cd.id) {
+                            lock.cursor_data.insert(cd.id, cd.clone());
+                        }
+                    }
                     self.handler.set_cursor_data(cd);
                 }
                 Some(message::Union::CursorId(id)) => {
+                    #[cfg(feature = "flutter")]
+                    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+                    {
+                        self.handler.cache_flutter.write().unwrap().cursor_id = id;
+                    }
                     self.handler.set_cursor_id(id.to_string());
                 }
                 Some(message::Union::CursorPosition(cp)) => {
@@ -1253,6 +1303,16 @@ impl<T: InvokeUiSession> Remote<T> {
                         }
                     }
                     Some(misc::Union::SwitchDisplay(s)) => {
+                        #[cfg(feature = "flutter")]
+                        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+                        {
+                            self.handler
+                                .cache_flutter
+                                .write()
+                                .unwrap()
+                                .sp
+                                .replace(s.clone());
+                        }
                         self.handler.handle_peer_switch_display(&s);
                         self.video_sender.send(MediaData::Reset).ok();
                         if s.width > 0 && s.height > 0 {
@@ -1603,7 +1663,7 @@ impl<T: InvokeUiSession> Remote<T> {
                 "Process clipboard message from server peer, stop: {}, is_stopping_allowed: {}, file_transfer_enabled: {}",
                 stop, is_stopping_allowed, file_transfer_enabled);
             if !stop {
-                ContextSend::proc(|context: &mut Box<CliprdrClientContext>| -> u32 {
+                ContextSend::proc(|context: &mut CliprdrClientContext| -> u32 {
                     clipboard::server_clip_file(context, self.client_conn_id, clip)
                 });
             }

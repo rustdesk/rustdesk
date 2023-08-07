@@ -248,7 +248,7 @@ class _General extends StatefulWidget {
 
 class _GeneralState extends State<_General> {
   final RxBool serviceStop = Get.find<RxBool>(tag: 'stop-service');
-  RxBool serviceBtnEabled = true.obs;
+  RxBool serviceBtnEnabled = true.obs;
 
   @override
   Widget build(BuildContext context) {
@@ -300,32 +300,41 @@ class _GeneralState extends State<_General> {
     return _Card(title: 'Service', children: [
       Obx(() => _Button(serviceStop.value ? 'Start' : 'Stop', () {
             () async {
-              serviceBtnEabled.value = false;
+              serviceBtnEnabled.value = false;
               await start_service(serviceStop.value);
               // enable the button after 1 second
               Future.delayed(const Duration(seconds: 1), () {
-                serviceBtnEabled.value = true;
+                serviceBtnEnabled.value = true;
               });
             }();
-          }, enabled: serviceBtnEabled.value))
+          }, enabled: serviceBtnEnabled.value))
     ]);
   }
 
   Widget other() {
-    return _Card(title: 'Other', children: [
+    final children = [
       _OptionCheckBox(context, 'Confirm before closing multiple tabs',
-          'enable-confirm-closing-tabs'),
-      _OptionCheckBox(context, 'Adaptive Bitrate', 'enable-abr'),
-      if (Platform.isLinux)
-        Tooltip(
-          message: translate('software_render_tip'),
-          child: _OptionCheckBox(
-            context,
-            "Always use software rendering",
-            'allow-always-software-render',
-          ),
-        )
-    ]);
+          'enable-confirm-closing-tabs',
+          isServer: false),
+      _OptionCheckBox(context, 'Adaptive bitrate', 'enable-abr'),
+      _OptionCheckBox(
+        context,
+        'Separate remote windows',
+        kOptionSeparateRemoteWindow,
+        isServer: false,
+      ),
+    ];
+    // though this is related to GUI, but opengl problem affects all users, so put in config rather than local
+    children.add(Tooltip(
+      message: translate('software_render_tip'),
+      child: _OptionCheckBox(context, "Always use software rendering",
+          'allow-always-software-render'),
+    ));
+    if (bind.mainShowOption(key: 'allow-linux-headless')) {
+      children.add(_OptionCheckBox(
+          context, 'Allow linux headless', 'allow-linux-headless'));
+    }
+    return _Card(title: 'Other', children: children);
   }
 
   Widget hwcodec() {
@@ -1660,15 +1669,21 @@ Widget _OptionCheckBox(BuildContext context, String label, String key,
     bool reverse = false,
     bool enabled = true,
     Icon? checkedIcon,
-    bool? fakeValue}) {
-  bool value = mainGetBoolOptionSync(key);
+    bool? fakeValue,
+    bool isServer = true}) {
+  bool value =
+      isServer ? mainGetBoolOptionSync(key) : mainGetLocalBoolOptionSync(key);
   if (reverse) value = !value;
   var ref = value.obs;
   onChanged(option) async {
     if (option != null) {
       if (reverse) option = !option;
-      await mainSetBoolOption(key, option);
-      ref.value = mainGetBoolOptionSync(key);
+      isServer
+          ? await mainSetBoolOption(key, option)
+          : await mainSetLocalBoolOption(key, option);
+      ref.value = isServer
+          ? mainGetBoolOptionSync(key)
+          : mainGetLocalBoolOptionSync(key);
       update?.call();
     }
   }

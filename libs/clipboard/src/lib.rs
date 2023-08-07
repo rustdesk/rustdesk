@@ -164,12 +164,12 @@ fn send_data(conn_id: i32, data: ClipboardFile) {
     }
 }
 
-pub fn empty_clipboard(context: &mut Box<CliprdrClientContext>, conn_id: i32) -> bool {
-    unsafe { TRUE == cliprdr::empty_cliprdr(&mut (**context), conn_id as u32) }
+pub fn empty_clipboard(context: &mut CliprdrClientContext, conn_id: i32) -> bool {
+    unsafe { TRUE == cliprdr::empty_cliprdr(context, conn_id as u32) }
 }
 
 pub fn server_clip_file(
-    context: &mut Box<CliprdrClientContext>,
+    context: &mut CliprdrClientContext,
     conn_id: i32,
     msg: ClipboardFile,
 ) -> u32 {
@@ -181,32 +181,59 @@ pub fn server_clip_file(
         ClipboardFile::MonitorReady => {
             log::debug!("server_monitor_ready called");
             ret = server_monitor_ready(context, conn_id);
-            log::debug!("server_monitor_ready called, return {}", ret);
+            log::debug!(
+                "server_monitor_ready called, conn_id {}, return {}",
+                conn_id,
+                ret
+            );
         }
         ClipboardFile::FormatList { format_list } => {
-            log::debug!("server_format_list called");
+            log::debug!(
+                "server_format_list called, conn_id {}, format_list: {:?}",
+                conn_id,
+                &format_list
+            );
             ret = server_format_list(context, conn_id, format_list);
-            log::debug!("server_format_list called, return {}", ret);
+            log::debug!(
+                "server_format_list called, conn_id {}, return {}",
+                conn_id,
+                ret
+            );
         }
         ClipboardFile::FormatListResponse { msg_flags } => {
-            log::debug!("format_list_response called");
+            log::debug!("server_format_list_response called");
             ret = server_format_list_response(context, conn_id, msg_flags);
-            log::debug!("server_format_list_response called, return {}", ret);
+            log::debug!(
+                "server_format_list_response called, conn_id {}, msg_flags {}, return {}",
+                conn_id,
+                msg_flags,
+                ret
+            );
         }
         ClipboardFile::FormatDataRequest {
             requested_format_id,
         } => {
-            log::debug!("format_data_request called");
+            log::debug!("server_format_data_request called");
             ret = server_format_data_request(context, conn_id, requested_format_id);
-            log::debug!("server_format_data_request called, return {}", ret);
+            log::debug!(
+                "server_format_data_request called, conn_id {}, requested_format_id {}, return {}",
+                conn_id,
+                requested_format_id,
+                ret
+            );
         }
         ClipboardFile::FormatDataResponse {
             msg_flags,
             format_data,
         } => {
-            log::debug!("format_data_response called");
+            log::debug!("server_format_data_response called");
             ret = server_format_data_response(context, conn_id, msg_flags, format_data);
-            log::debug!("server_format_data_response called, return {}", ret);
+            log::debug!(
+                "server_format_data_response called, conn_id {}, msg_flags: {}, return {}",
+                conn_id,
+                msg_flags,
+                ret
+            );
         }
         ClipboardFile::FileContentsRequest {
             stream_id,
@@ -218,7 +245,7 @@ pub fn server_clip_file(
             have_clip_data_id,
             clip_data_id,
         } => {
-            log::debug!("file_contents_request called");
+            log::debug!("server_file_contents_request called");
             ret = server_file_contents_request(
                 context,
                 conn_id,
@@ -231,14 +258,24 @@ pub fn server_clip_file(
                 have_clip_data_id,
                 clip_data_id,
             );
-            log::debug!("server_file_contents_request called, return {}", ret);
+            log::debug!("server_file_contents_request called, conn_id {}, stream_id: {}, list_index {}, dw_flags {}, n_position_low {}, n_position_high {}, cb_requested {}, have_clip_data_id {}, clip_data_id {}, return {}",                 conn_id,
+                stream_id,
+                list_index,
+                dw_flags,
+                n_position_low,
+                n_position_high,
+                cb_requested,
+                have_clip_data_id,
+                clip_data_id,
+                ret
+            );
         }
         ClipboardFile::FileContentsResponse {
             msg_flags,
             stream_id,
             requested_data,
         } => {
-            log::debug!("file_contents_response called");
+            log::debug!("server_file_contents_response called");
             ret = server_file_contents_response(
                 context,
                 conn_id,
@@ -246,13 +283,18 @@ pub fn server_clip_file(
                 stream_id,
                 requested_data,
             );
-            log::debug!("server_file_contents_response called, return {}", ret);
+            log::debug!("server_file_contents_response called, conn_id {}, msg_flags {}, stream_id {}, return {}",
+                conn_id,
+                msg_flags,
+                stream_id,
+                ret
+            );
         }
     }
     ret
 }
 
-pub fn server_monitor_ready(context: &mut Box<CliprdrClientContext>, conn_id: i32) -> u32 {
+pub fn server_monitor_ready(context: &mut CliprdrClientContext, conn_id: i32) -> u32 {
     unsafe {
         let monitor_ready = CLIPRDR_MONITOR_READY {
             connID: conn_id as UINT32,
@@ -260,8 +302,8 @@ pub fn server_monitor_ready(context: &mut Box<CliprdrClientContext>, conn_id: i3
             msgFlags: 0 as UINT16,
             dataLen: 0 as UINT32,
         };
-        if let Some(f) = (**context).MonitorReady {
-            let ret = f(&mut (**context), &monitor_ready);
+        if let Some(f) = context.MonitorReady {
+            let ret = f(context, &monitor_ready);
             ret as u32
         } else {
             ERR_CODE_SERVER_FUNCTION_NONE
@@ -270,7 +312,7 @@ pub fn server_monitor_ready(context: &mut Box<CliprdrClientContext>, conn_id: i3
 }
 
 pub fn server_format_list(
-    context: &mut Box<CliprdrClientContext>,
+    context: &mut CliprdrClientContext,
     conn_id: i32,
     format_list: Vec<(i32, String)>,
 ) -> u32 {
@@ -306,8 +348,8 @@ pub fn server_format_list(
             formats: formats.as_mut_ptr(),
         };
 
-        let ret = if let Some(f) = (**context).ServerFormatList {
-            f(&mut (**context), &format_list)
+        let ret = if let Some(f) = context.ServerFormatList {
+            f(context, &format_list)
         } else {
             ERR_CODE_SERVER_FUNCTION_NONE
         };
@@ -324,7 +366,7 @@ pub fn server_format_list(
 }
 
 pub fn server_format_list_response(
-    context: &mut Box<CliprdrClientContext>,
+    context: &mut CliprdrClientContext,
     conn_id: i32,
     msg_flags: i32,
 ) -> u32 {
@@ -336,8 +378,8 @@ pub fn server_format_list_response(
             dataLen: 0 as UINT32,
         };
 
-        if let Some(f) = (**context).ServerFormatListResponse {
-            f(&mut (**context), &format_list_response)
+        if let Some(f) = context.ServerFormatListResponse {
+            f(context, &format_list_response)
         } else {
             ERR_CODE_SERVER_FUNCTION_NONE
         }
@@ -345,7 +387,7 @@ pub fn server_format_list_response(
 }
 
 pub fn server_format_data_request(
-    context: &mut Box<CliprdrClientContext>,
+    context: &mut CliprdrClientContext,
     conn_id: i32,
     requested_format_id: i32,
 ) -> u32 {
@@ -357,8 +399,8 @@ pub fn server_format_data_request(
             dataLen: 0 as UINT32,
             requestedFormatId: requested_format_id as UINT32,
         };
-        if let Some(f) = (**context).ServerFormatDataRequest {
-            f(&mut (**context), &format_data_request)
+        if let Some(f) = context.ServerFormatDataRequest {
+            f(context, &format_data_request)
         } else {
             ERR_CODE_SERVER_FUNCTION_NONE
         }
@@ -366,7 +408,7 @@ pub fn server_format_data_request(
 }
 
 pub fn server_format_data_response(
-    context: &mut Box<CliprdrClientContext>,
+    context: &mut CliprdrClientContext,
     conn_id: i32,
     msg_flags: i32,
     mut format_data: Vec<u8>,
@@ -379,8 +421,8 @@ pub fn server_format_data_response(
             dataLen: format_data.len() as UINT32,
             requestedFormatData: format_data.as_mut_ptr(),
         };
-        if let Some(f) = (**context).ServerFormatDataResponse {
-            f(&mut (**context), &format_data_response)
+        if let Some(f) = context.ServerFormatDataResponse {
+            f(context, &format_data_response)
         } else {
             ERR_CODE_SERVER_FUNCTION_NONE
         }
@@ -388,7 +430,7 @@ pub fn server_format_data_response(
 }
 
 pub fn server_file_contents_request(
-    context: &mut Box<CliprdrClientContext>,
+    context: &mut CliprdrClientContext,
     conn_id: i32,
     stream_id: i32,
     list_index: i32,
@@ -414,8 +456,8 @@ pub fn server_file_contents_request(
             haveClipDataId: if have_clip_data_id { TRUE } else { FALSE },
             clipDataId: clip_data_id as UINT32,
         };
-        if let Some(f) = (**context).ServerFileContentsRequest {
-            f(&mut (**context), &file_contents_request)
+        if let Some(f) = context.ServerFileContentsRequest {
+            f(context, &file_contents_request)
         } else {
             ERR_CODE_SERVER_FUNCTION_NONE
         }
@@ -423,7 +465,7 @@ pub fn server_file_contents_request(
 }
 
 pub fn server_file_contents_response(
-    context: &mut Box<CliprdrClientContext>,
+    context: &mut CliprdrClientContext,
     conn_id: i32,
     msg_flags: i32,
     stream_id: i32,
@@ -439,8 +481,8 @@ pub fn server_file_contents_response(
             cbRequested: requested_data.len() as UINT32,
             requestedData: requested_data.as_mut_ptr(),
         };
-        if let Some(f) = (**context).ServerFileContentsResponse {
-            f(&mut (**context), &file_contents_response)
+        if let Some(f) = context.ServerFileContentsResponse {
+            f(context, &file_contents_response)
         } else {
             ERR_CODE_SERVER_FUNCTION_NONE
         }
@@ -515,8 +557,6 @@ extern "C" fn client_format_list(
     _context: *mut CliprdrClientContext,
     clip_format_list: *const CLIPRDR_FORMAT_LIST,
 ) -> UINT {
-    log::debug!("client_format_list called");
-
     let conn_id;
     let mut format_list: Vec<(i32, String)> = Vec::new();
     unsafe {
@@ -541,6 +581,11 @@ extern "C" fn client_format_list(
         }
         conn_id = (*clip_format_list).connID as i32;
     }
+    log::debug!(
+        "client_format_list called, client id: {}, format_list: {:?}",
+        conn_id,
+        &format_list
+    );
     let data = ClipboardFile::FormatList { format_list };
     // no need to handle result here
     if conn_id == 0 {
@@ -560,14 +605,17 @@ extern "C" fn client_format_list_response(
     _context: *mut CliprdrClientContext,
     format_list_response: *const CLIPRDR_FORMAT_LIST_RESPONSE,
 ) -> UINT {
-    log::debug!("client_format_list_response called");
-
     let conn_id;
     let msg_flags;
     unsafe {
         conn_id = (*format_list_response).connID as i32;
         msg_flags = (*format_list_response).msgFlags as i32;
     }
+    log::debug!(
+        "client_format_list_response called, client id: {}, msg_flags: {}",
+        conn_id,
+        msg_flags
+    );
     let data = ClipboardFile::FormatListResponse { msg_flags };
     send_data(conn_id, data);
 
@@ -578,8 +626,6 @@ extern "C" fn client_format_data_request(
     _context: *mut CliprdrClientContext,
     format_data_request: *const CLIPRDR_FORMAT_DATA_REQUEST,
 ) -> UINT {
-    log::debug!("client_format_data_request called");
-
     let conn_id;
     let requested_format_id;
     unsafe {
@@ -589,6 +635,11 @@ extern "C" fn client_format_data_request(
     let data = ClipboardFile::FormatDataRequest {
         requested_format_id,
     };
+    log::debug!(
+        "client_format_data_request called, conn_id: {}, requested_format_id: {}",
+        conn_id,
+        requested_format_id
+    );
     // no need to handle result here
     send_data(conn_id, data);
 
@@ -599,8 +650,6 @@ extern "C" fn client_format_data_response(
     _context: *mut CliprdrClientContext,
     format_data_response: *const CLIPRDR_FORMAT_DATA_RESPONSE,
 ) -> UINT {
-    log::debug!("cconn_idlient_format_data_response called");
-
     let conn_id;
     let msg_flags;
     let format_data;
@@ -617,6 +666,11 @@ extern "C" fn client_format_data_response(
             .to_vec();
         }
     }
+    log::debug!(
+        "client_format_data_response called, client id: {}, msg_flags: {}",
+        conn_id,
+        msg_flags
+    );
     let data = ClipboardFile::FormatDataResponse {
         msg_flags,
         format_data,
@@ -630,8 +684,6 @@ extern "C" fn client_file_contents_request(
     _context: *mut CliprdrClientContext,
     file_contents_request: *const CLIPRDR_FILE_CONTENTS_REQUEST,
 ) -> UINT {
-    log::debug!("client_file_contents_request called");
-
     // TODO: support huge file?
     // if (!cliprdr->hasHugeFileSupport)
     // {
@@ -662,7 +714,6 @@ extern "C" fn client_file_contents_request(
         have_clip_data_id = (*file_contents_request).haveClipDataId == TRUE;
         clip_data_id = (*file_contents_request).clipDataId as i32;
     }
-
     let data = ClipboardFile::FileContentsRequest {
         stream_id,
         list_index,
@@ -673,6 +724,7 @@ extern "C" fn client_file_contents_request(
         have_clip_data_id,
         clip_data_id,
     };
+    log::debug!("client_file_contents_request called, data: {:?}", &data);
     send_data(conn_id, data);
 
     0
@@ -682,8 +734,6 @@ extern "C" fn client_file_contents_response(
     _context: *mut CliprdrClientContext,
     file_contents_response: *const CLIPRDR_FILE_CONTENTS_RESPONSE,
 ) -> UINT {
-    log::debug!("client_file_contents_response called");
-
     let conn_id;
     let msg_flags;
     let stream_id;
@@ -707,6 +757,12 @@ extern "C" fn client_file_contents_response(
         stream_id,
         requested_data,
     };
+    log::debug!(
+        "client_file_contents_response called, conn_id: {}, msg_flags: {}, stream_id: {}",
+        conn_id,
+        msg_flags,
+        stream_id
+    );
     send_data(conn_id, data);
 
     0

@@ -9,6 +9,7 @@ import 'package:get/get.dart';
 import '../../common.dart';
 import '../../models/model.dart';
 import '../../models/platform_model.dart';
+import 'address_book.dart';
 
 void clientClose(SessionID sessionId, OverlayDialogManager dialogManager) {
   msgBox(sessionId, 'info', 'Close', 'Are you sure to close the connection?',
@@ -947,7 +948,9 @@ showSetOSPassword(
   Function()? closeCallback,
 ) async {
   final controller = TextEditingController();
-  osPassword ??= await bind.sessionGetOption(sessionId: sessionId, arg: 'os-password') ?? '';
+  osPassword ??=
+      await bind.sessionGetOption(sessionId: sessionId, arg: 'os-password') ??
+          '';
   var autoLogin =
       await bind.sessionGetOption(sessionId: sessionId, arg: 'auto-login') !=
           '';
@@ -957,6 +960,7 @@ showSetOSPassword(
       close();
       if (closeCallback != null) closeCallback();
     }
+
     submit() {
       var text = controller.text.trim();
       bind.sessionPeerOption(
@@ -1220,7 +1224,8 @@ customImageQualityDialog(SessionID sessionId, String id, FFI ffi) async {
   qualityInitValue =
       quality != null && quality.isNotEmpty ? quality[0].toDouble() : 50.0;
   const qualityMinValue = 10.0;
-  const qualityMaxValue = 100.0;
+  const qualityMoreThresholdValue = 100.0;
+  const qualityMaxValue = 2000.0;
   if (qualityInitValue < qualityMinValue) {
     qualityInitValue = qualityMinValue;
   }
@@ -1228,6 +1233,8 @@ customImageQualityDialog(SessionID sessionId, String id, FFI ffi) async {
     qualityInitValue = qualityMaxValue;
   }
   final RxDouble qualitySliderValue = RxDouble(qualityInitValue);
+  final moreQualityInitValue = qualityInitValue > qualityMoreThresholdValue;
+  final RxBool moreQualityChecked = RxBool(moreQualityInitValue);
   final debouncerQuality = Debouncer<double>(
     Duration(milliseconds: 1000),
     onChanged: (double v) {
@@ -1242,7 +1249,9 @@ customImageQualityDialog(SessionID sessionId, String id, FFI ffi) async {
               child: Slider(
                 value: qualitySliderValue.value,
                 min: qualityMinValue,
-                max: qualityMaxValue,
+                max: moreQualityChecked.value
+                    ? qualityMaxValue
+                    : qualityMoreThresholdValue,
                 divisions: 18,
                 onChanged: (double value) {
                   qualitySliderValue.value = value;
@@ -1256,10 +1265,31 @@ customImageQualityDialog(SessionID sessionId, String id, FFI ffi) async {
                 style: const TextStyle(fontSize: 15),
               )),
           Expanded(
-              flex: 2,
+              flex: 1,
               child: Text(
                 translate('Bitrate'),
                 style: const TextStyle(fontSize: 15),
+              )),
+          Expanded(
+              flex: 1,
+              child: Row(
+                children: [
+                  Checkbox(
+                    value: moreQualityChecked.value,
+                    onChanged: (bool? value) {
+                      moreQualityChecked.value = value!;
+                      if (!value &&
+                          qualitySliderValue.value >
+                              qualityMoreThresholdValue) {
+                        qualitySliderValue.value = qualityMoreThresholdValue;
+                        debouncerQuality.value = qualityMoreThresholdValue;
+                      }
+                    },
+                  ).marginOnly(right: 5),
+                  Expanded(
+                    child: Text(translate('More')),
+                  )
+                ],
               )),
         ],
       ));
@@ -1320,4 +1350,99 @@ customImageQualityDialog(SessionID sessionId, String id, FFI ffi) async {
     children: [qualitySlider, fpsSlider],
   );
   msgBoxCommon(ffi.dialogManager, 'Custom Image Quality', content, [btnClose]);
+}
+
+void deletePeerConfirmDialog(Function onSubmit) async {
+  gFFI.dialogManager.show(
+    (setState, close, context) {
+      submit() async {
+        await onSubmit();
+        close();
+      }
+
+      return CustomAlertDialog(
+        title: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.delete_rounded,
+              color: Colors.red,
+            ),
+            Text(translate('Delete')).paddingOnly(
+              left: 10,
+            ),
+          ],
+        ),
+        content: SizedBox.shrink(),
+        actions: [
+          dialogButton(
+            "Cancel",
+            icon: Icon(Icons.close_rounded),
+            onPressed: close,
+            isOutline: true,
+          ),
+          dialogButton(
+            "OK",
+            icon: Icon(Icons.done_rounded),
+            onPressed: submit,
+          ),
+        ],
+        onSubmit: submit,
+        onCancel: close,
+      );
+    },
+  );
+}
+
+void editAbTagDialog(
+    List<dynamic> currentTags, Function(List<dynamic>) onSubmit) {
+  var isInProgress = false;
+
+  final tags = List.of(gFFI.abModel.tags);
+  var selectedTag = currentTags.obs;
+
+  gFFI.dialogManager.show((setState, close, context) {
+    submit() async {
+      setState(() {
+        isInProgress = true;
+      });
+      await onSubmit(selectedTag);
+      close();
+    }
+
+    return CustomAlertDialog(
+      title: Text(translate("Edit Tag")),
+      content: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(vertical: 8.0),
+            child: Wrap(
+              children: tags
+                  .map((e) => AddressBookTag(
+                      name: e,
+                      tags: selectedTag,
+                      onTap: () {
+                        if (selectedTag.contains(e)) {
+                          selectedTag.remove(e);
+                        } else {
+                          selectedTag.add(e);
+                        }
+                      },
+                      showActionMenu: false))
+                  .toList(growable: false),
+            ),
+          ),
+          Offstage(
+              offstage: !isInProgress, child: const LinearProgressIndicator())
+        ],
+      ),
+      actions: [
+        dialogButton("Cancel", onPressed: close, isOutline: true),
+        dialogButton("OK", onPressed: submit),
+      ],
+      onSubmit: submit,
+      onCancel: close,
+    );
+  });
 }

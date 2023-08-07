@@ -68,7 +68,6 @@ struct IpcTaskRunner<T: InvokeUiCM> {
     rx: mpsc::UnboundedReceiver<Data>,
     close: bool,
     running: bool,
-    authorized: bool,
     conn_id: i32,
     #[cfg(windows)]
     file_transfer_enabled: bool,
@@ -162,6 +161,16 @@ impl<T: InvokeUiCM> ConnectionManager<T> {
         self.ui_handler.add_connection(&client);
     }
 
+    #[inline]
+    fn is_authorized(&self, id: i32) -> bool {
+        CLIENTS
+            .read()
+            .unwrap()
+            .get(&id)
+            .map(|c| c.authorized)
+            .unwrap_or(false)
+    }
+
     fn remove_connection(&self, id: i32, close: bool) {
         if close {
             CLIENTS.write().unwrap().remove(&id);
@@ -175,7 +184,7 @@ impl<T: InvokeUiCM> ConnectionManager<T> {
 
         #[cfg(windows)]
         {
-            ContextSend::proc(|context: &mut Box<CliprdrClientContext>| -> u32 {
+            ContextSend::proc(|context: &mut CliprdrClientContext| -> u32 {
                 empty_clipboard(context, id);
                 0
             });
@@ -316,13 +325,14 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
 
         // for tmp use, without real conn id
         let mut write_jobs: Vec<fs::TransferJob> = Vec::new();
+        let is_authorized = self.cm.is_authorized(self.conn_id);
 
         #[cfg(windows)]
         let rx_clip1;
         let mut rx_clip;
         let _tx_clip;
         #[cfg(windows)]
-        if self.conn_id > 0 && self.authorized {
+        if is_authorized {
             rx_clip1 = clipboard::get_rx_cliprdr_server(self.conn_id);
             rx_clip = rx_clip1.lock().await;
         } else {
@@ -361,7 +371,6 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
                                 Data::Login{id, is_file_transfer, port_forward, peer_id, name, authorized, keyboard, clipboard, audio, file, file_transfer_enabled: _file_transfer_enabled, restart, recording, from_switch} => {
                                     log::debug!("conn_id: {}", id);
                                     self.cm.add_connection(id, is_file_transfer, port_forward, peer_id, name, authorized, keyboard, clipboard, audio, file, restart, recording, from_switch,self.tx.clone());
-                                    self.authorized = authorized;
                                     self.conn_id = id;
                                     #[cfg(windows)]
                                     {
@@ -413,8 +422,12 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
                                         if stop {
                                             ContextSend::set_is_stopped();
                                         } else {
+                                            if !is_authorized {
+                                                log::debug!("Clipboard message from client peer, but not authorized");
+                                                continue;
+                                            }
                                             let conn_id = self.conn_id;
-                                            ContextSend::proc(|context: &mut Box<CliprdrClientContext>| -> u32 {
+                                            ContextSend::proc(|context: &mut CliprdrClientContext| -> u32 {
                                                 clipboard::server_clip_file(context, conn_id, _clip)
                                             });
                                         }
@@ -454,16 +467,24 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
                     }
                 }
                 Some(data) = self.rx.recv() => {
-                    if let Data::SwitchPermission{name: _name, enabled: _enabled} = &data {
-                        #[cfg(windows)]
-                        if _name == "file" {
-                            self.file_transfer_enabled = *_enabled;
-                        }
-                    }
                     if self.stream.send(&data).await.is_err() {
                         break;
                     }
-                }
+                    match &data {
+                        Data::SwitchPermission{name: _name, enabled: _enabled} => {
+                            #[cfg(windows)]
+                            if _name == "file" {
+                                self.file_transfer_enabled = *_enabled;
+                            }
+                        }
+                        Data::Authorize => {
+                            self.running = true;
+                            break;
+                        }
+                        _ => {
+                        }
+                    }
+                },
                 clip_file = rx_clip.recv() => match clip_file {
                     Some(_clip) => {
                         #[cfg(windows)]
@@ -501,7 +522,6 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
             rx,
             close: true,
             running: true,
-            authorized: false,
             conn_id: 0,
             #[cfg(windows)]
             file_transfer_enabled: false,

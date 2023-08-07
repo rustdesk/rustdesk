@@ -344,7 +344,7 @@ impl AomEncoder {
     fn calc_q_values(b: u32) -> (u32, u32) {
         let b = std::cmp::min(b, 200);
         let q_min1: i32 = 24;
-        let q_min2 = 12;
+        let q_min2 = 5;
         let q_max1 = 45;
         let q_max2 = 25;
 

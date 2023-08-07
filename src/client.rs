@@ -34,7 +34,8 @@ use hbb_common::{
     anyhow::{anyhow, Context},
     bail,
     config::{
-        Config, PeerConfig, PeerInfoSerde, Resolution, CONNECT_TIMEOUT, READ_TIMEOUT, RELAY_PORT,
+        Config, LocalConfig, PeerConfig, PeerInfoSerde, Resolution, CONNECT_TIMEOUT, READ_TIMEOUT,
+        RELAY_PORT,
     },
     get_version_number, log,
     message_proto::{option_message::BoolOption, *},
@@ -42,6 +43,7 @@ use hbb_common::{
     rand,
     rendezvous_proto::*,
     socket_client,
+    sodiumoxide::base64,
     sodiumoxide::crypto::{box_, secretbox, sign},
     tcp::FramedStream,
     timeout,
@@ -90,6 +92,7 @@ pub const LOGIN_MSG_PASSWORD_EMPTY: &str = "Empty Password";
 pub const LOGIN_MSG_PASSWORD_WRONG: &str = "Wrong Password";
 pub const LOGIN_MSG_NO_PASSWORD_ACCESS: &str = "No Password Access";
 pub const LOGIN_MSG_OFFLINE: &str = "Offline";
+pub const LOGIN_SCREEN_WAYLAND: &str = "Wayland login screen is not supported";
 #[cfg(target_os = "linux")]
 pub const SCRAP_UBUNTU_HIGHER_REQUIRED: &str = "Wayland requires Ubuntu 21.04 or higher version.";
 #[cfg(target_os = "linux")]
@@ -2100,7 +2103,13 @@ struct LoginErrorMsgBox {
 lazy_static::lazy_static! {
     static ref LOGIN_ERROR_MAP: Arc<HashMap<&'static str, LoginErrorMsgBox>> = {
         use hbb_common::config::LINK_HEADLESS_LINUX_SUPPORT;
-        let map = HashMap::from([(LOGIN_MSG_DESKTOP_SESSION_NOT_READY, LoginErrorMsgBox{
+        let map = HashMap::from([(LOGIN_SCREEN_WAYLAND, LoginErrorMsgBox{
+            msgtype: "error",
+            title: "Login Error",
+            text: "Login screen using Wayland is not supported",
+            link: "https://rustdesk.com/docs/en/manual/linux/#login-screen",
+            try_again: true,
+        }), (LOGIN_MSG_DESKTOP_SESSION_NOT_READY, LoginErrorMsgBox{
             msgtype: "session-login",
             title: "",
             text: "",
@@ -2227,6 +2236,22 @@ pub async fn handle_hash(
     }
     if password.is_empty() {
         password = lc.read().unwrap().config.password.clone();
+    }
+    if password.is_empty() {
+        let access_token = LocalConfig::get_option("access_token");
+        let ab = hbb_common::config::Ab::load();
+        if !access_token.is_empty() && access_token == ab.access_token {
+            let id = lc.read().unwrap().id.clone();
+            if let Some(p) = ab
+                .peers
+                .iter()
+                .find_map(|p| if p.id == id { Some(p) } else { None })
+            {
+                if let Ok(hash) = base64::decode(p.hash.clone(), base64::Variant::Original) {
+                    password = hash;
+                }
+            }
+        }
     }
     let password = if password.is_empty() {
         // login without password, the remote side can click accept

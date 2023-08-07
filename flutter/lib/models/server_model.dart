@@ -410,18 +410,25 @@ class ServerModel with ChangeNotifier {
   updateClientState([String? json]) async {
     if (isTest) return;
     var res = await bind.cmGetClientsState();
+    List<dynamic> clientsJson;
     try {
-      final List clientsJson = jsonDecode(res);
-      _clients.clear();
-      tabController.state.value.tabs.clear();
-      for (var clientJson in clientsJson) {
+      clientsJson = jsonDecode(res);
+    } catch (e) {
+      debugPrint("Failed to decode clientsJson: '$res', error $e");
+      return;
+    }
+
+    _clients.clear();
+    tabController.state.value.tabs.clear();
+
+    for (var clientJson in clientsJson) {
+      try {
         final client = Client.fromJson(clientJson);
         _clients.add(client);
         _addTab(client);
+      } catch (e) {
+        debugPrint("Failed to decode clientJson '$clientJson', error $e");
       }
-      notifyListeners();
-    } catch (e) {
-      debugPrint("Failed to updateClientState:$e");
     }
   }
 
@@ -466,7 +473,7 @@ class ServerModel with ChangeNotifier {
         onTap: () {},
         page: desktop.buildConnectionCard(client)));
     Future.delayed(Duration.zero, () async {
-      if (!hideCm) window_on_top(null);
+      if (!hideCm) windowOnTop(null);
     });
     // Only do the hidden task when on Desktop.
     if (client.authorized && isDesktop) {
@@ -605,7 +612,7 @@ class ServerModel with ChangeNotifier {
         if (client.incomingVoiceCall) {
           // Has incoming phone call, let's set the window on top.
           Future.delayed(Duration.zero, () {
-            window_on_top(null);
+            windowOnTop(null);
           });
         }
         notifyListeners();

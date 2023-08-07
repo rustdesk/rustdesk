@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common/widgets/address_book.dart';
+import 'package:flutter_hbb/common/widgets/dialog.dart';
 import 'package:flutter_hbb/common/widgets/my_group.dart';
 import 'package:flutter_hbb/common/widgets/peers_view.dart';
 import 'package:flutter_hbb/common/widgets/peer_card.dart';
@@ -83,6 +84,11 @@ class _PeerTabPageState extends State<PeerTabPage>
 
   @override
   Widget build(BuildContext context) {
+    final model = Provider.of<PeerTabModel>(context);
+    Widget selectionWrap(Widget widget) {
+      return model.multiSelectionMode ? createMultiSelectionBar() : widget;
+    }
+
     return Column(
       textBaseline: TextBaseline.ideographic,
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -91,7 +97,7 @@ class _PeerTabPageState extends State<PeerTabPage>
           height: 32,
           child: Container(
             padding: isDesktop ? null : EdgeInsets.symmetric(horizontal: 2),
-            child: Row(
+            child: selectionWrap(Row(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 Expanded(child: _createSwitchBar(context)),
@@ -127,7 +133,7 @@ class _PeerTabPageState extends State<PeerTabPage>
                   ).marginOnly(left: 8),
                 ),
               ],
-            ),
+            )),
           ),
         ),
         _createPeersView(),
@@ -250,6 +256,171 @@ class _PeerTabPageState extends State<PeerTabPage>
             )),
       ),
     );
+  }
+
+  Widget createMultiSelectionBar() {
+    final model = Provider.of<PeerTabModel>(context);
+    return Row(
+      children: [
+        deleteSelection(),
+        addSelectionToFav(),
+        addSelectionToAb(),
+        editSelectionTags(),
+        Expanded(child: Container()),
+        selectionCount(model.selectedPeers.length),
+        selectAll(),
+        closeSelection(),
+      ],
+    );
+  }
+
+  Widget deleteSelection() {
+    final model = Provider.of<PeerTabModel>(context);
+    return InkWell(
+        onTap: () {
+          onSubmit() async {
+            final peers = model.selectedPeers;
+            switch (model.currentTab) {
+              case 0:
+                peers.map((p) async {
+                  await bind.mainRemovePeer(id: p.id);
+                }).toList();
+                await bind.mainLoadRecentPeers();
+                break;
+              case 1:
+                final favs = (await bind.mainGetFav()).toList();
+                peers.map((p) {
+                  favs.remove(p.id);
+                }).toList();
+                await bind.mainStoreFav(favs: favs);
+                await bind.mainLoadFavPeers();
+                break;
+              case 2:
+                peers.map((p) async {
+                  await bind.mainRemoveDiscovered(id: p.id);
+                }).toList();
+                await bind.mainLoadLanPeers();
+                break;
+              case 3:
+                gFFI.abModel.deletePeers(peers.map((p) => p.id).toList());
+                await gFFI.abModel.pushAb();
+                break;
+              default:
+                break;
+            }
+            gFFI.peerTabModel.closeSelection();
+            showToast(translate('Successful'));
+          }
+
+          deletePeerConfirmDialog(onSubmit);
+        },
+        child: Tooltip(
+            message: translate('Delete'),
+            child: Icon(Icons.delete, color: Colors.red)));
+  }
+
+  Widget addSelectionToFav() {
+    final model = Provider.of<PeerTabModel>(context);
+    return Offstage(
+      offstage:
+          model.currentTab != PeerTabIndex.recent.index, // show based on recent
+      child: InkWell(
+        onTap: () async {
+          final peers = model.selectedPeers;
+          final favs = (await bind.mainGetFav()).toList();
+          for (var p in peers) {
+            if (!favs.contains(p.id)) {
+              favs.add(p.id);
+            }
+          }
+          await bind.mainStoreFav(favs: favs);
+          gFFI.peerTabModel.closeSelection();
+          showToast(translate('Successful'));
+        },
+        child: Tooltip(
+                message: translate('Add to Favorites'),
+                child: Icon(model.icons[PeerTabIndex.fav.index]))
+            .marginOnly(left: isMobile ? 15 : 10),
+      ),
+    );
+  }
+
+  Widget addSelectionToAb() {
+    final model = Provider.of<PeerTabModel>(context);
+    return Offstage(
+      offstage:
+          !gFFI.userModel.isLogin || model.currentTab == PeerTabIndex.ab.index,
+      child: InkWell(
+        onTap: () {
+          final peers = model.selectedPeers;
+          gFFI.abModel.addPeers(peers);
+          gFFI.abModel.pushAb();
+          gFFI.peerTabModel.closeSelection();
+          showToast(translate('Successful'));
+        },
+        child: Tooltip(
+                message: translate('Add to Address Book'),
+                child: Icon(model.icons[PeerTabIndex.ab.index]))
+            .marginOnly(left: isMobile ? 15 : 10),
+      ),
+    );
+  }
+
+  Widget editSelectionTags() {
+    final model = Provider.of<PeerTabModel>(context);
+    return Offstage(
+      offstage: !gFFI.userModel.isLogin ||
+          model.currentTab != PeerTabIndex.ab.index ||
+          gFFI.abModel.tags.isEmpty,
+      child: InkWell(
+              onTap: () {
+                editAbTagDialog(List.empty(), (selectedTags) async {
+                  final peers = model.selectedPeers;
+                  gFFI.abModel.changeTagForPeers(
+                      peers.map((p) => p.id).toList(), selectedTags);
+                  gFFI.abModel.pushAb();
+                  gFFI.peerTabModel.closeSelection();
+                  showToast(translate('Successful'));
+                });
+              },
+              child: Tooltip(
+                  message: translate('Edit Tag'), child: Icon(Icons.tag)))
+          .marginOnly(left: isMobile ? 15 : 10),
+    );
+  }
+
+  Widget selectionCount(int count) {
+    return Align(
+      alignment: Alignment.center,
+      child: Text('$count selected'),
+    );
+  }
+
+  Widget selectAll() {
+    final model = Provider.of<PeerTabModel>(context);
+    return Offstage(
+      offstage:
+          model.selectedPeers.length >= model.currentTabCachedPeers.length,
+      child: InkWell(
+        onTap: () {
+          model.selectAll();
+        },
+        child: Tooltip(
+                message: translate('Select All'), child: Icon(Icons.select_all))
+            .marginOnly(left: 10),
+      ),
+    );
+  }
+
+  Widget closeSelection() {
+    final model = Provider.of<PeerTabModel>(context);
+    return InkWell(
+            onTap: () {
+              model.closeSelection();
+            },
+            child:
+                Tooltip(message: translate('Close'), child: Icon(Icons.clear)))
+        .marginOnly(left: 10);
   }
 }
 

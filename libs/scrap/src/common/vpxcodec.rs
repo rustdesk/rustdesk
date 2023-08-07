@@ -303,7 +303,7 @@ impl VpxEncoder {
     fn calc_q_values(b: u32) -> (u32, u32) {
         let b = std::cmp::min(b, 200);
         let q_min1: i32 = 36;
-        let q_min2 = 12;
+        let q_min2 = 0;
         let q_max1 = 56;
         let q_max2 = 37;
 

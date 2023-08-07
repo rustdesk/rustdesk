@@ -299,9 +299,9 @@ impl VideoQoS {
             } else if q == ImageQuality::Best.value() {
                 Quality::Best
             } else {
-                let mut b = (q >> 8 & 0xFF) * 2;
-                b = std::cmp::max(b, 10);
-                b = std::cmp::min(b, 200);
+                let mut b = (q >> 8 & 0xFFF) * 2;
+                b = std::cmp::max(b, 20);
+                b = std::cmp::min(b, 8000);
                 Quality::Custom(b as u32)
             }
         };

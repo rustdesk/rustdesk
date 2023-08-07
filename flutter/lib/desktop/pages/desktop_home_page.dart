@@ -372,7 +372,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
     } else if (Platform.isLinux) {
       if (bind.mainCurrentIsWayland()) {
         return buildInstallCard(
-            "Warning", translate("wayland_experiment_tip"), "", () async {},
+            "Warning", "wayland_experiment_tip", "", () async {},
             help: 'Help',
             link: 'https://rustdesk.com/docs/en/manual/linux/#x11-required');
       } else if (bind.mainIsLoginWayland()) {
@@ -527,7 +527,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
       debugPrint(
           "[Main] call ${call.method} with args ${call.arguments} from window $fromWindowId");
       if (call.method == kWindowMainWindowOnTop) {
-        window_on_top(null);
+        windowOnTop(null);
       } else if (call.method == kWindowGetWindowInfo) {
         final screen = (await window_size.getWindowInfo()).screen;
         if (screen == null) {
@@ -554,7 +554,13 @@ class _DesktopHomePageState extends State<DesktopHomePage>
       } else if (call.method == kWindowEventShow) {
         await rustDeskWinManager.registerActiveWindow(call.arguments["id"]);
       } else if (call.method == kWindowEventHide) {
-        await rustDeskWinManager.unregisterActiveWindow(call.arguments["id"]);
+        final wId = call.arguments['id'];
+        final isSeparateWindowEnabled =
+            mainGetLocalBoolOptionSync(kOptionSeparateRemoteWindow);
+        if (isSeparateWindowEnabled && !kCloseMultiWindowByHide) {
+          await rustDeskWinManager.destroyWindow(wId);
+        }
+        await rustDeskWinManager.unregisterActiveWindow(wId);
       } else if (call.method == kWindowConnect) {
         await connectMainDesktop(
           call.arguments['id'],
@@ -562,7 +568,19 @@ class _DesktopHomePageState extends State<DesktopHomePage>
           isTcpTunneling: call.arguments['isTcpTunneling'],
           isRDP: call.arguments['isRDP'],
           forceRelay: call.arguments['forceRelay'],
+          forceSeparateWindow: call.arguments['forceSeparateWindow'],
         );
+      } else if (call.method == kWindowEventMoveTabToNewWindow) {
+        final args = call.arguments.split(',');
+        int? windowId;
+        try {
+          windowId = int.parse(args[0]);
+        } catch (e) {
+          debugPrint("Failed to parse window id '${call.arguments}': $e");
+        }
+        if (windowId != null) {
+          await rustDeskWinManager.moveTabToNewWindow(windowId, args[1], args[2]);
+        }
       }
     });
     _uniLinksSubscription = listenUniLinks();

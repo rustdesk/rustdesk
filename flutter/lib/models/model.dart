@@ -37,7 +37,8 @@ import 'platform_model.dart';
 
 typedef HandleMsgBox = Function(Map<String, dynamic> evt, String id);
 typedef ReconnectHandle = Function(OverlayDialogManager, SessionID, bool);
-final _waitForImage = <UuidValue, bool>{};
+final _waitForImageDialogShow = <UuidValue, bool>{};
+final _waitForFirstImage = <UuidValue, bool>{};
 final _constSessionId = Uuid().v4obj();
 
 class FfiModel with ChangeNotifier {
@@ -260,7 +261,7 @@ class FfiModel with ChangeNotifier {
         });
         break;
       default:
-        window_on_top(null);
+        windowOnTop(null);
         break;
     }
   }
@@ -351,6 +352,8 @@ class FfiModel with ChangeNotifier {
       showElevationError(sessionId, type, title, text, dialogManager);
     } else if (type == 'relay-hint') {
       showRelayHintDialog(sessionId, type, title, text, dialogManager, peerId);
+    } else if (text == 'Connected, waiting for image...') {
+      showConnectedWaitingForImage(dialogManager, sessionId, type, title, text);
     } else {
       var hasRetry = evt['hasRetry'] == 'true';
       showMsgBox(sessionId, type, title, text, link, hasRetry, dialogManager);
@@ -416,6 +419,27 @@ class FfiModel with ChangeNotifier {
     });
   }
 
+  void showConnectedWaitingForImage(OverlayDialogManager dialogManager,
+      SessionID sessionId, String type, String title, String text) {
+    onClose() {
+      closeConnection();
+    }
+
+    Future.delayed(Duration.zero, () async {
+      await dialogManager.show(
+        (setState, close, context) => CustomAlertDialog(
+            title: null,
+            content: SelectionArea(child: msgboxContent(type, title, text)),
+            actions: [
+              dialogButton("Cancel", onPressed: onClose, isOutline: true)
+            ],
+            onCancel: onClose),
+        tag: '$sessionId-waiting-for-image',
+      );
+      _waitForImageDialogShow[sessionId] = true;
+    });
+  }
+
   _updateSessionWidthHeight(SessionID sessionId) {
     parent.target?.canvasModel.updateViewStyle();
     if (display.width <= 0 || display.height <= 0) {
@@ -478,11 +502,8 @@ class FfiModel with ChangeNotifier {
         _updateSessionWidthHeight(sessionId);
       }
       if (displays.isNotEmpty) {
-        parent.target?.dialogManager.showLoading(
-            translate('Connected, waiting for image...'),
-            onCancel: closeConnection);
-        _waitForImage[sessionId] = true;
         _reconnects = 1;
+        _waitForFirstImage[sessionId] = true;
       }
       Map<String, dynamic> features = json.decode(evt['features']);
       _pi.features.privacyMode = features['privacy_mode'] == 1;
@@ -627,22 +648,6 @@ class ImageModel with ChangeNotifier {
   addCallbackOnFirstImage(Function(String) cb) => callbacksOnFirstImage.add(cb);
 
   onRgba(Uint8List rgba) {
-    final waitforImage = _waitForImage[sessionId];
-    if (waitforImage == null) {
-      debugPrint('Exception, peer $id not found for waiting image');
-      return;
-    }
-
-    if (waitforImage == true) {
-      _waitForImage[sessionId] = false;
-      parent.target?.dialogManager.dismissAll();
-      if (isDesktop) {
-        for (final cb in callbacksOnFirstImage) {
-          cb(id);
-        }
-      }
-    }
-
     final pid = parent.target?.id;
     img.decodeImageFromPixels(
         rgba,
@@ -1579,6 +1584,7 @@ class FFI {
   /// dialogManager use late to ensure init after main page binding [globalKey]
   late final dialogManager = OverlayDialogManager();
 
+  late final bool isSessionAdded;
   late final SessionID sessionId;
   late final ImageModel imageModel; // session
   late final FfiModel ffiModel; // session
@@ -1596,8 +1602,9 @@ class FFI {
   late final InputModel inputModel; // session
   late final ElevationModel elevationModel; // session
 
-  FFI() {
-    sessionId = isDesktop ? Uuid().v4obj() : _constSessionId;
+  FFI(SessionID? sId) {
+    isSessionAdded = sId != null;
+    sessionId = sId ?? (isDesktop ? Uuid().v4obj() : _constSessionId);
     imageModel = ImageModel(WeakReference(this));
     ffiModel = FfiModel(WeakReference(this));
     cursorModel = CursorModel(WeakReference(this));
@@ -1637,23 +1644,31 @@ class FFI {
       imageModel.id = id;
       cursorModel.id = id;
     }
-    // ignore: unused_local_variable
-    final addRes = bind.sessionAddSync(
-      sessionId: sessionId,
-      id: id,
-      isFileTransfer: isFileTransfer,
-      isPortForward: isPortForward,
-      isRdp: isRdp,
-      switchUuid: switchUuid ?? "",
-      forceRelay: forceRelay ?? false,
-      password: password ?? "",
-    );
+    if (!isSessionAdded) {
+      // ignore: unused_local_variable
+      final addRes = bind.sessionAddSync(
+        sessionId: sessionId,
+        id: id,
+        isFileTransfer: isFileTransfer,
+        isPortForward: isPortForward,
+        isRdp: isRdp,
+        switchUuid: switchUuid ?? '',
+        forceRelay: forceRelay ?? false,
+        password: password ?? '',
+      );
+    }
     final stream = bind.sessionStart(sessionId: sessionId, id: id);
     final cb = ffiModel.startEventListener(sessionId, id);
     final useTextureRender = bind.mainUseTextureRender();
+
+    final SimpleWrapper<bool> isToNewWindowNotified = SimpleWrapper(false);
     // Preserved for the rgba data.
     stream.listen((message) {
       if (closed) return;
+      if (isSessionAdded && !isToNewWindowNotified.value) {
+        bind.sessionReadyToNewWindow(sessionId: sessionId);
+        isToNewWindowNotified.value = true;
+      }
       () async {
         if (message is EventToUI_Event) {
           if (message.field0 == "close") {
@@ -1673,15 +1688,7 @@ class FFI {
           }
         } else if (message is EventToUI_Rgba) {
           if (useTextureRender) {
-            if (_waitForImage[sessionId]!) {
-              _waitForImage[sessionId] = false;
-              dialogManager.dismissAll();
-              for (final cb in imageModel.callbacksOnFirstImage) {
-                cb(id);
-              }
-              await canvasModel.updateViewStyle();
-              await canvasModel.updateScrollStyle();
-            }
+            onEvent2UIRgba();
           } else {
             // Fetch the image buffer from rust codes.
             final sz = platformFFI.getRgbaSize(sessionId);
@@ -1690,6 +1697,7 @@ class FFI {
             }
             final rgba = platformFFI.getRgba(sessionId, sz);
             if (rgba != null) {
+              onEvent2UIRgba();
               imageModel.onRgba(rgba);
             }
           }
@@ -1698,6 +1706,22 @@ class FFI {
     });
     // every instance will bind a stream
     this.id = id;
+  }
+
+  void onEvent2UIRgba() async {
+    if (_waitForImageDialogShow[sessionId] == true) {
+      _waitForImageDialogShow[sessionId] = false;
+      clearWaitingForImage(dialogManager, sessionId);
+    }
+    if (_waitForFirstImage[sessionId] == true) {
+      _waitForFirstImage[sessionId] = false;
+      dialogManager.dismissAll();
+      await canvasModel.updateViewStyle();
+      await canvasModel.updateScrollStyle();
+      for (final cb in imageModel.callbacksOnFirstImage) {
+        cb(id);
+      }
+    }
   }
 
   /// Login with [password], choose if the client should [remember] it.
@@ -1712,7 +1736,7 @@ class FFI {
   }
 
   /// Close the remote session.
-  Future<void> close() async {
+  Future<void> close({bool closeSession = true}) async {
     closed = true;
     chatModel.close();
     if (imageModel.image != null && !isWebDesktop) {
@@ -1730,7 +1754,9 @@ class FFI {
     ffiModel.clear();
     canvasModel.clear();
     inputModel.resetModifiers();
-    await bind.sessionClose(sessionId: sessionId);
+    if (closeSession) {
+      await bind.sessionClose(sessionId: sessionId);
+    }
     debugPrint('model $id closed');
     id = '';
   }
@@ -1872,4 +1898,13 @@ Future<void> initializeCursorAndCanvas(FFI ffi) async {
   ffi.cursorModel.updateDisplayOriginWithCursor(
       ffi.ffiModel.display.x, ffi.ffiModel.display.y, xCursor, yCursor);
   ffi.canvasModel.update(xCanvas, yCanvas, scale);
+}
+
+clearWaitingForImage(OverlayDialogManager? dialogManager, SessionID sessionId) {
+  final durations = [100, 500, 1000, 2000];
+  for (var duration in durations) {
+    Future.delayed(Duration(milliseconds: duration), () {
+      dialogManager?.dismissByTag('$sessionId-waiting-for-image');
+    });
+  }
 }

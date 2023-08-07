@@ -57,15 +57,10 @@ impl ContextSend {
         }
     }
 
-    pub fn proc<F: FnOnce(&mut Box<CliprdrClientContext>) -> u32>(f: F) -> u32 {
+    pub fn proc<F: FnOnce(&mut CliprdrClientContext) -> u32>(f: F) -> u32 {
         let lock = CONTEXT_SEND.addr.lock().unwrap();
         if *lock != 0 {
-            unsafe {
-                let mut context = Box::from_raw(*lock as *mut CliprdrClientContext);
-                let code = f(&mut context);
-                std::mem::forget(context);
-                code
-            }
+            unsafe { f(&mut *(*lock as *mut CliprdrClientContext)) }
         } else {
             0
         }

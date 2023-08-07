@@ -314,7 +314,7 @@ impl HwDecoderImage<'_> {
 }
 
 fn get_config(k: &str) -> ResultType<CodecInfos> {
-    let v = HwCodecConfig::get()
+    let v = HwCodecConfig::load()
         .options
         .get(k)
         .unwrap_or(&"".to_owned())
@@ -363,30 +363,19 @@ pub fn check_config() {
 }
 
 pub fn check_config_process() {
-    use hbb_common::sysinfo::{ProcessExt, System, SystemExt};
     use std::sync::Once;
     let f = || {
         // Clear to avoid checking process errors
         // But when the program is just started, the configuration file has not been updated, and the new connection will read an empty configuration
         HwCodecConfig::clear();
         if let Ok(exe) = std::env::current_exe() {
-            if let Some(file_name) = exe.file_name().to_owned() {
-                let s = System::new_all();
+            if let Some(_) = exe.file_name().to_owned() {
                 let arg = "--check-hwcodec-config";
-                for process in s.processes_by_name(&file_name.to_string_lossy().to_string()) {
-                    if process.cmd().iter().any(|cmd| cmd.contains(arg)) {
-                        log::warn!("already have process {}", arg);
-                        return;
-                    }
-                }
                 if let Ok(mut child) = std::process::Command::new(exe).arg(arg).spawn() {
                     // wait up to 10 seconds
                     for _ in 0..10 {
                         std::thread::sleep(std::time::Duration::from_secs(1));
-                        if let Ok(Some(status)) = child.try_wait() {
-                            if status.success() {
-                                HwCodecConfig::refresh();
-                            }
+                        if let Ok(Some(_)) = child.try_wait() {
                             break;
                         }
                     }
@@ -407,7 +396,6 @@ pub fn check_config_process() {
                             log::error!("Check hwcodec config, error attempting to wait: {e}")
                         }
                     }
-                    HwCodecConfig::refresh();
                 }
             }
         };

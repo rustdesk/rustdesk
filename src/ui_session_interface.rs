@@ -48,6 +48,17 @@ pub static IS_IN: AtomicBool = AtomicBool::new(false);
 
 const CHANGE_RESOLUTION_VALID_TIMEOUT_SECS: u64 = 15;
 
+#[cfg(feature = "flutter")]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[derive(Default)]
+pub struct CacheFlutter {
+    pub pi: PeerInfo,
+    pub sp: Option<SwitchDisplay>,
+    pub cursor_data: HashMap<u64, CursorData>,
+    pub cursor_id: u64,
+    pub is_secured_direct: Option<(bool, bool)>,
+}
+
 #[derive(Clone, Default)]
 pub struct Session<T: InvokeUiSession> {
     pub session_id: SessionID, // different from the one in LoginConfigHandler, used for flutter UI message pass
@@ -62,6 +73,9 @@ pub struct Session<T: InvokeUiSession> {
     pub server_file_transfer_enabled: Arc<RwLock<bool>>,
     pub server_clipboard_enabled: Arc<RwLock<bool>>,
     pub last_change_display: Arc<Mutex<ChangeDisplayRecord>>,
+    #[cfg(feature = "flutter")]
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    pub cache_flutter: Arc<RwLock<CacheFlutter>>,
 }
 
 #[derive(Clone)]
@@ -412,7 +426,7 @@ impl<T: InvokeUiSession> Session<T> {
 
     pub fn get_path_sep(&self, is_remote: bool) -> &'static str {
         let p = self.get_platform(is_remote);
-        if &p == "Windows" {
+        if &p == crate::PLATFORM_WINDOWS {
             return "\\";
         } else {
             return "/";
@@ -1181,10 +1195,33 @@ impl<T: InvokeUiSession> Session<T> {
     pub fn ctrl_alt_del(&self) {
         self.send_key_event(&crate::keyboard::client::event_ctrl_alt_del());
     }
+
+    #[cfg(feature = "flutter")]
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    pub fn restore_flutter_cache(&mut self) {
+        if let Some((is_secured, direct)) = self.cache_flutter.read().unwrap().is_secured_direct {
+            self.set_connection_type(is_secured, direct);
+        }
+        let pi = self.cache_flutter.read().unwrap().pi.clone();
+        self.handle_peer_info(pi);
+        if let Some(sp) = self.cache_flutter.read().unwrap().sp.as_ref() {
+            self.handle_peer_switch_display(sp);
+        }
+        for (_, cd) in self.cache_flutter.read().unwrap().cursor_data.iter() {
+            self.set_cursor_data(cd.clone());
+        }
+        self.set_cursor_id(self.cache_flutter.read().unwrap().cursor_id.to_string());
+    }
 }
 
 #[tokio::main(flavor = "current_thread")]
 pub async fn io_loop<T: InvokeUiSession>(handler: Session<T>) {
+    // It is ok to call this function multiple times.
+    #[cfg(target_os = "windows")]
+    if !handler.is_file_transfer() && !handler.is_port_forward() {
+        clipboard::ContextSend::enable(true);
+    }
+
     #[cfg(any(target_os = "android", target_os = "ios"))]
     let (sender, receiver) = mpsc::unbounded_channel::<Data>();
     #[cfg(not(any(target_os = "android", target_os = "ios")))]

@@ -186,7 +186,7 @@ pub type FlutterRgbaRendererPluginOnRgba = unsafe extern "C" fn(
 #[derive(Clone)]
 struct VideoRenderer {
     // TextureRgba pointer in flutter native.
-    ptr: usize,
+    ptr: Arc<RwLock<usize>>,
     width: usize,
     height: usize,
     on_rgba_func: Option<Symbol<'static, FlutterRgbaRendererPluginOnRgba>>,
@@ -214,7 +214,7 @@ impl Default for VideoRenderer {
             }
         };
         Self {
-            ptr: 0,
+            ptr: Default::default(),
             width: 0,
             height: 0,
             on_rgba_func,
@@ -231,19 +231,27 @@ impl VideoRenderer {
     }
 
     pub fn on_rgba(&self, rgba: &mut scrap::ImageRgb) {
-        if self.ptr == usize::default() {
+        let ptr = self.ptr.read().unwrap();
+        if *ptr == usize::default() {
             return;
         }
 
         // It is also Ok to skip this check.
         if self.width != rgba.w || self.height != rgba.h {
+            log::error!(
+                "width/height mismatch: ({},{}) != ({},{})",
+                self.width,
+                self.height,
+                rgba.w,
+                rgba.h
+            );
             return;
         }
 
         if let Some(func) = &self.on_rgba_func {
             unsafe {
                 func(
-                    self.ptr as _,
+                    *ptr as _,
                     rgba.raw.as_ptr() as _,
                     rgba.raw.len() as _,
                     rgba.w as _,
@@ -328,7 +336,7 @@ impl FlutterHandler {
     #[inline]
     #[cfg(feature = "flutter_texture_render")]
     pub fn register_texture(&mut self, ptr: usize) {
-        self.renderer.write().unwrap().ptr = ptr;
+        *self.renderer.read().unwrap().ptr.write().unwrap() = ptr;
     }
 
     #[inline]
@@ -781,11 +789,15 @@ pub fn session_start_(
         );
         #[cfg(not(feature = "flutter_texture_render"))]
         log::info!("Session {} start, render by flutter paint widget", id);
+        let is_pre_added = session.event_stream.read().unwrap().is_some();
+        session.close_event_stream();
         *session.event_stream.write().unwrap() = Some(event_stream);
-        let session = session.clone();
-        std::thread::spawn(move || {
-            io_loop(session);
-        });
+        if !is_pre_added {
+            let session = session.clone();
+            std::thread::spawn(move || {
+                io_loop(session);
+            });
+        }
         Ok(())
     } else {
         bail!("No session with peer id {}", id)
@@ -1080,16 +1092,28 @@ pub fn push_global_event(channel: &str, event: String) -> Option<bool> {
     Some(GLOBAL_EVENT_STREAM.read().unwrap().get(channel)?.add(event))
 }
 
-pub fn start_global_event_stream(s: StreamSink<String>, app_type: String) -> ResultType<()> {
-    if let Some(_) = GLOBAL_EVENT_STREAM
-        .write()
+#[inline]
+pub fn get_global_event_channels() -> Vec<String> {
+    GLOBAL_EVENT_STREAM
+        .read()
         .unwrap()
-        .insert(app_type.clone(), s)
-    {
-        log::warn!(
-            "Global event stream of type {} is started before, but now removed",
-            app_type
-        );
+        .keys()
+        .cloned()
+        .collect()
+}
+
+pub fn start_global_event_stream(s: StreamSink<String>, app_type: String) -> ResultType<()> {
+    let app_type_values = app_type.split(",").collect::<Vec<&str>>();
+    let mut lock = GLOBAL_EVENT_STREAM.write().unwrap();
+    if !lock.contains_key(app_type_values[0]) {
+        lock.insert(app_type_values[0].to_string(), s);
+    } else {
+        if let Some(_) = lock.insert(app_type.clone(), s) {
+            log::warn!(
+                "Global event stream of type {} is started before, but now removed",
+                app_type
+            );
+        }
     }
     Ok(())
 }

@@ -53,7 +53,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Audio Input", "Đầu vào âm thanh"),
         ("Enhancements", "Các tiện ích"),
         ("Hardware Codec", "Codec phần cứng"),
-        ("Adaptive Bitrate", "Bitrate thích ứng"),
+        ("Adaptive bitrate", "Bitrate thích ứng"),
         ("ID Server", "Máy chủ ID"),
         ("Relay Server", "Máy chủ Chuyển tiếp"),
         ("API Server", "Máy chủ API"),
@@ -524,5 +524,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("exceed_max_devices", ""),
         ("Sync with recent sessions", ""),
         ("Sort tags", ""),
+        ("Separate remote windows", ""),
+        ("separate window", ""),
+        ("Move tab to new window", ""),
     ].iter().cloned().collect();
 }
