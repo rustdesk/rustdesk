@@ -20,7 +20,6 @@ import 'package:get/get.dart';
 import 'package:bot_toast/bot_toast.dart';
 
 import '../../common/widgets/dialog.dart';
-import '../../common/widgets/toolbar.dart';
 import '../../models/platform_model.dart';
 
 class _MenuTheme {

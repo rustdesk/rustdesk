@@ -955,15 +955,12 @@ pub fn main_remove_discovered(id: String) {
 }
 
 fn main_broadcast_message(data: &HashMap<&str, &str>) {
-    let apps = vec![
-        flutter::APP_TYPE_DESKTOP_REMOTE,
-        flutter::APP_TYPE_DESKTOP_FILE_TRANSFER,
-        flutter::APP_TYPE_DESKTOP_PORT_FORWARD,
-    ];
-
     let event = serde_json::ser::to_string(&data).unwrap_or("".to_owned());
-    for app in apps {
-        let _res = flutter::push_global_event(app, event.clone());
+    for app in flutter::get_global_event_channels() {
+        if app == flutter::APP_TYPE_MAIN || app == flutter::APP_TYPE_CM {
+            continue;
+        }
+        let _res = flutter::push_global_event(&app, event.clone());
     }
 }
 
