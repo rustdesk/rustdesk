@@ -174,6 +174,12 @@ pub fn session_record_screen(session_id: SessionID, start: bool, width: usize, h
     }
 }
 
+pub fn session_record_status(session_id: SessionID, status: bool) {
+    if let Some(session) = SESSIONS.read().unwrap().get(&session_id) {
+        session.record_status(status);
+    }
+}
+
 pub fn session_reconnect(session_id: SessionID, force_relay: bool) {
     if let Some(session) = SESSIONS.read().unwrap().get(&session_id) {
         session.reconnect(force_relay);

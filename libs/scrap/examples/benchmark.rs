@@ -114,9 +114,9 @@ fn test_vpx(
     let config = EncoderCfg::VPX(VpxEncoderConfig {
         width: width as _,
         height: height as _,
-        timebase: [1, 1000],
         quality,
         codec: codec_id,
+        keyframe_interval: None,
     });
     let mut encoder = VpxEncoder::new(config).unwrap();
     let mut vpxs = vec![];
@@ -161,6 +161,7 @@ fn test_av1(yuvs: &Vec<Vec<u8>>, width: usize, height: usize, quality: Q, yuv_co
         width: width as _,
         height: height as _,
         quality,
+        keyframe_interval: None,
     });
     let mut encoder = AomEncoder::new(config).unwrap();
     let start = Instant::now();
