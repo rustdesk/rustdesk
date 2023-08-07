@@ -1107,7 +1107,7 @@ pub fn start_global_event_stream(s: StreamSink<String>, app_type: String) -> Res
     let app_type_values = app_type.split(",").collect::<Vec<&str>>();
     let mut lock = GLOBAL_EVENT_STREAM.write().unwrap();
     if !lock.contains_key(app_type_values[0]) {
-        lock.insert(app_type.clone(), s);
+        lock.insert(app_type_values[0].to_string(), s);
     } else {
         if let Some(_) = lock.insert(app_type.clone(), s) {
             log::warn!(
