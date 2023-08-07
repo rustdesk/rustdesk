@@ -478,7 +478,7 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
       toolbarItems.add(_ChatMenu(id: widget.id, ffi: widget.ffi));
       toolbarItems.add(_VoiceCallMenu(id: widget.id, ffi: widget.ffi));
     }
-    toolbarItems.add(_RecordMenu(ffi: widget.ffi));
+    toolbarItems.add(_RecordMenu());
     toolbarItems.add(_CloseMenu(id: widget.id, ffi: widget.ffi));
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -1370,12 +1370,11 @@ class _ResolutionsMenuState extends State<_ResolutionsMenu> {
     }
 
     for (final r in resolutions) {
-      if (r.width == _localResolution!.width &&
-          r.height == _localResolution!.height) {
+      if (r.width == _localResolution!.width && r.height == _localResolution!.height) {
         return r;
       }
     }
-
+  
     return null;
   }
 
@@ -1646,17 +1645,16 @@ class _VoiceCallMenu extends StatelessWidget {
 }
 
 class _RecordMenu extends StatelessWidget {
-  final FFI ffi;
-  const _RecordMenu({Key? key, required this.ffi}) : super(key: key);
+  const _RecordMenu({Key? key}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
-    var ffiModel = Provider.of<FfiModel>(context);
+    var ffi = Provider.of<FfiModel>(context);
     var recordingModel = Provider.of<RecordingModel>(context);
     final visible =
-        recordingModel.start || ffiModel.permissions['recording'] != false;
+        recordingModel.start || ffi.permissions['recording'] != false;
     if (!visible) return Offstage();
-    final menuButton = _IconMenuButton(
+    return _IconMenuButton(
       assetName: 'assets/rec.svg',
       tooltip: recordingModel.start
           ? 'Stop session recording'
@@ -1669,14 +1667,6 @@ class _RecordMenu extends StatelessWidget {
           ? _ToolbarTheme.hoverRedColor
           : _ToolbarTheme.hoverBlueColor,
     );
-    return ChangeNotifierProvider.value(
-        value: ffi.qualityMonitorModel,
-        child: Consumer<QualityMonitorModel>(
-            builder: (context, model, child) => Offstage(
-                  // If already started, AV1->Hidden/Stop, Other->Start, same as actual
-                  offstage: model.data.codecFormat == 'AV1',
-                  child: menuButton,
-                )));
   }
 }
 

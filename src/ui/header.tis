@@ -144,7 +144,7 @@ class Header: Reactor.Component {
             <span #action>{svg_action}</span>
             <span #display>{svg_display}</span>
             <span #keyboard>{svg_keyboard}</span>
-            {recording_enabled && qualityMonitorData[4] != "AV1" ? <span #recording>{recording ? svg_recording_on : svg_recording_off}</span> : ""}
+            {recording_enabled ? <span #recording>{recording ? svg_recording_on : svg_recording_off}</span> : ""}
             {this.renderKeyboardPop()}
             {this.renderDisplayPop()}
             {this.renderActionPop()}
