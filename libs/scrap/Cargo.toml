@@ -19,7 +19,7 @@ cfg-if = "1.0"
 num_cpus = "1.15"
 lazy_static = "1.4"
 hbb_common = { path = "../hbb_common" }
-webm = "1.0"
+webm = { git = "https://github.com/21pages/rust-webm" }
 
 [dependencies.winapi]
 version = "0.3"

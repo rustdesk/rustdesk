@@ -51,7 +51,10 @@ impl RecorderContext {
             + &self.id.clone()
             + &chrono::Local::now().format("_%Y%m%d%H%M%S_").to_string()
             + &self.format.to_string()
-            + if self.format == CodecFormat::VP9 || self.format == CodecFormat::VP8 {
+            + if self.format == CodecFormat::VP9
+                || self.format == CodecFormat::VP8
+                || self.format == CodecFormat::AV1
+            {
                 ".webm"
             } else {
                 ".mp4"
@@ -103,7 +106,7 @@ impl Recorder {
     pub fn new(mut ctx: RecorderContext) -> ResultType<Self> {
         ctx.set_filename()?;
         let recorder = match ctx.format {
-            CodecFormat::VP8 | CodecFormat::VP9 => Recorder {
+            CodecFormat::VP8 | CodecFormat::VP9 | CodecFormat::AV1 => Recorder {
                 inner: Box::new(WebmRecorder::new(ctx.clone())?),
                 ctx,
             },
@@ -122,7 +125,9 @@ impl Recorder {
     fn change(&mut self, mut ctx: RecorderContext) -> ResultType<()> {
         ctx.set_filename()?;
         self.inner = match ctx.format {
-            CodecFormat::VP8 | CodecFormat::VP9 => Box::new(WebmRecorder::new(ctx.clone())?),
+            CodecFormat::VP8 | CodecFormat::VP9 | CodecFormat::AV1 => {
+                Box::new(WebmRecorder::new(ctx.clone())?)
+            }
             #[cfg(feature = "hwcodec")]
             _ => Box::new(HwRecorder::new(ctx.clone())?),
             #[cfg(not(feature = "hwcodec"))]
@@ -160,6 +165,15 @@ impl Recorder {
                     })?;
                 }
                 vp9s.frames.iter().map(|f| self.write_video(f)).count();
+            }
+            video_frame::Union::Av1s(av1s) => {
+                if self.ctx.format != CodecFormat::AV1 {
+                    self.change(RecorderContext {
+                        format: CodecFormat::AV1,
+                        ..self.ctx.clone()
+                    })?;
+                }
+                av1s.frames.iter().map(|f| self.write_video(f)).count();
             }
             #[cfg(feature = "hwcodec")]
             video_frame::Union::H264s(h264s) => {
@@ -227,10 +241,17 @@ impl RecorderApi for WebmRecorder {
             None,
             if ctx.format == CodecFormat::VP9 {
                 mux::VideoCodecId::VP9
-            } else {
+            } else if ctx.format == CodecFormat::VP8 {
                 mux::VideoCodecId::VP8
+            } else {
+                mux::VideoCodecId::AV1
             },
         );
+        if ctx.format == CodecFormat::AV1 {
+            // [129, 8, 12, 0] in 3.6.0, but zero works
+            let codec_private = vec![0, 0, 0, 0];
+            webm.set_codec_private(vt.track_number(), &codec_private);
+        }
         Ok(WebmRecorder {
             vt,
             webm: Some(webm),

@@ -436,8 +436,7 @@ fn run(vs: VideoService) -> ResultType<()> {
     log::info!("init quality={:?}, abr enabled:{}", quality, abr);
     let codec_name = Encoder::negotiated_codec();
     let recorder = get_recorder(c.width, c.height, &codec_name);
-    let last_recording =
-        (recorder.lock().unwrap().is_some() || video_qos.record()) && codec_name != CodecName::AV1;
+    let last_recording = recorder.lock().unwrap().is_some() || video_qos.record();
     drop(video_qos);
     let encoder_cfg = get_encoder_config(&c, quality, last_recording);
 
@@ -479,8 +478,7 @@ fn run(vs: VideoService) -> ResultType<()> {
             allow_err!(encoder.set_quality(quality));
             video_qos.store_bitrate(encoder.bitrate());
         }
-        let recording = (recorder.lock().unwrap().is_some() || video_qos.record())
-            && codec_name != CodecName::AV1;
+        let recording = recorder.lock().unwrap().is_some() || video_qos.record();
         if recording != last_recording {
             bail!("SWITCH");
         }
