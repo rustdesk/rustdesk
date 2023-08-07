@@ -238,6 +238,13 @@ impl VideoRenderer {
 
         // It is also Ok to skip this check.
         if self.width != rgba.w || self.height != rgba.h {
+            log::error!(
+                "width/height mismatch: ({},{}) != ({},{})",
+                self.width,
+                self.height,
+                rgba.w,
+                rgba.h
+            );
             return;
         }
 
@@ -337,14 +344,6 @@ impl FlutterHandler {
     pub fn set_size(&mut self, width: usize, height: usize) {
         *self.notify_rendered.write().unwrap() = false;
         self.renderer.write().unwrap().set_size(width, height);
-    }
-
-    pub fn on_waiting_for_image_dialog_show(&self) {
-        #[cfg(any(feature = "flutter_texture_render"))]
-        {
-            *self.notify_rendered.write().unwrap() = false;
-        }
-        // rgba array render will notify every frame
     }
 }
 
