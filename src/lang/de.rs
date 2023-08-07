@@ -410,7 +410,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Hide connection management window", "Fenster zur Verwaltung der Verbindung verstecken"),
         ("hide_cm_tip", "Dies ist nur möglich, wenn der Zugriff über ein permanentes Passwort erfolgt."),
         ("wayland_experiment_tip", "Die Unterstützung von Wayland ist nur experimentell. Bitte nutzen Sie X11, wenn Sie einen unbeaufsichtigten Zugriff benötigen."),
-        ("Right click to select tabs", "Register mit rechtem Mausklick auswählen"),
+        ("Right click to select tabs", "Tabs mit rechtem Mausklick auswählen"),
         ("Skipped", "Übersprungen"),
         ("Add to Address Book", "Zum Adressbuch hinzufügen"),
         ("Group", "Gruppe"),
@@ -524,8 +524,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("exceed_max_devices", "Sie haben die maximale Anzahl der verwalteten Geräte erreicht."),
         ("Sync with recent sessions", "Synchronisierung mit den letzten Sitzungen"),
         ("Sort tags", "Tags sortieren"),
-        ("Separate remote windows", ""),
-        ("separate window", ""),
-        ("Move tab to new window", ""),
+        ("Separate remote windows", "Separate entfernte Fenster"),
+        ("separate window", "Separates Fenster"),
+        ("Move tab to new window", "Tab in neues Fenster verschieben"),
     ].iter().cloned().collect();
 }
