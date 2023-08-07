@@ -1077,6 +1077,8 @@ mod desktop {
                 return;
             }
 
+            // wait 2 seconds before getting seat0 values; was required for lightdm to get correct values
+            std::thread::sleep(Duration::from_secs(2));
             let seat0_values = get_values_of_seat0(&[0, 1, 2]);
             if seat0_values[0].is_empty() {
                 *self = Self::default();
