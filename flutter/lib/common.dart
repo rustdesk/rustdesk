@@ -2314,3 +2314,10 @@ Widget unreadTopRightBuilder(RxInt? count, {Widget? icon}) {
     ],
   );
 }
+
+String toCapitalized(String s) {
+  if (s.isEmpty) {
+    return s;
+  }
+  return s.substring(0, 1).toUpperCase() + s.substring(1);
+}

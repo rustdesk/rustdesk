@@ -12,25 +12,33 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../common.dart';
 import './dialog.dart';
 
+const kOpSvgList = ['github', 'google', 'apple', 'okta', 'facebook', 'azure', 'auth0'];
+
 class _IconOP extends StatelessWidget {
-  final String icon;
-  final double iconWidth;
+  final String op;
+  final String? icon;
   final EdgeInsets margin;
   const _IconOP(
       {Key? key,
+      required this.op,
       required this.icon,
-      required this.iconWidth,
       this.margin = const EdgeInsets.symmetric(horizontal: 4.0)})
       : super(key: key);
 
   @override
   Widget build(BuildContext context) {
+    final svgFile = kOpSvgList.contains(op.toLowerCase()) ? op.toLowerCase() : 'default';
     return Container(
       margin: margin,
-      child: SvgPicture.asset(
-        'assets/$icon.svg',
-        width: iconWidth,
-      ),
+      child: icon == null
+          ? SvgPicture.asset(
+              'assets/auth-$svgFile.svg',
+              width: 20,
+            )
+          : SvgPicture.string(
+              icon!,
+              width: 20,
+            ),
     );
   }
 }
@@ -38,7 +46,7 @@ class _IconOP extends StatelessWidget {
 class ButtonOP extends StatelessWidget {
   final String op;
   final RxString curOP;
-  final double iconWidth;
+  final String? icon;
   final Color primaryColor;
   final double height;
   final Function() onTap;
@@ -47,7 +55,7 @@ class ButtonOP extends StatelessWidget {
     Key? key,
     required this.op,
     required this.curOP,
-    required this.iconWidth,
+    required this.icon,
     required this.primaryColor,
     required this.height,
     required this.onTap,
@@ -61,7 +69,7 @@ class ButtonOP extends StatelessWidget {
         width: 200,
         child: Obx(() => ElevatedButton(
             style: ElevatedButton.styleFrom(
-              primary: curOP.value.isEmpty || curOP.value == op
+              backgroundColor: curOP.value.isEmpty || curOP.value == op
                   ? primaryColor
                   : Colors.grey,
             ).copyWith(elevation: ButtonStyleButton.allOrNull(0.0)),
@@ -69,17 +77,21 @@ class ButtonOP extends StatelessWidget {
             child: Row(
               children: [
                 SizedBox(
-                    width: 30,
-                    child: _IconOP(
-                      icon: op,
-                      iconWidth: iconWidth,
-                      margin: EdgeInsets.only(right: 5),
-                    )),
+                  width: 30,
+                  child: _IconOP(
+                    op: op,
+                    icon: icon,
+                    margin: EdgeInsets.only(right: 5),
+                  ),
+                ),
                 Expanded(
-                    child: FittedBox(
-                        fit: BoxFit.scaleDown,
-                        child: Center(
-                            child: Text('${translate("Continue with")} $op')))),
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Center(
+                        child: Text(
+                            '${translate("Continue with")} ${op.toLowerCase() == "github" ? "GitHub" : toCapitalized(op)}')),
+                  ),
+                ),
               ],
             ))),
       ),
@@ -89,8 +101,8 @@ class ButtonOP extends StatelessWidget {
 
 class ConfigOP {
   final String op;
-  final double iconWidth;
-  ConfigOP({required this.op, required this.iconWidth});
+  final String? icon;
+  ConfigOP({required this.op, required this.icon});
 }
 
 class WidgetOP extends StatefulWidget {
@@ -182,7 +194,7 @@ class _WidgetOPState extends State<WidgetOP> {
         ButtonOP(
           op: widget.config.op,
           curOP: widget.curOP,
-          iconWidth: widget.config.iconWidth,
+          icon: widget.config.icon,
           primaryColor: str2color(widget.config.op, 0x7f),
           height: 36,
           onTap: () async {
@@ -380,7 +392,7 @@ Future<bool?> loginDialog() async {
 
   final loginOptions = [].obs;
   Future.delayed(Duration.zero, () async {
-    loginOptions.value = await UserModel.queryLoginOptions();
+    loginOptions.value = await UserModel.queryOidcLoginOptions();
   });
 
   final res = await gFFI.dialogManager.show<bool>((setState, close, context) {
@@ -460,12 +472,8 @@ Future<bool?> loginDialog() async {
     }
 
     thirdAuthWidget() => Obx(() {
-          final oidcOptions = loginOptions
-              .where((opt) => opt.startsWith(kAuthReqTypeOidc))
-              .map((opt) => opt.substring(kAuthReqTypeOidc.length))
-              .toList();
           return Offstage(
-            offstage: oidcOptions.isEmpty,
+            offstage: loginOptions.isEmpty,
             child: Column(
               children: [
                 const SizedBox(
@@ -480,12 +488,8 @@ Future<bool?> loginDialog() async {
                   height: 8.0,
                 ),
                 LoginWidgetOP(
-                  ops: [
-                    ConfigOP(op: 'GitHub', iconWidth: 20),
-                    ConfigOP(op: 'Google', iconWidth: 20),
-                    ConfigOP(op: 'Okta', iconWidth: 38),
-                  ]
-                      .where((op) => oidcOptions.contains(op.op.toLowerCase()))
+                  ops: loginOptions
+                      .map((e) => ConfigOP(op: e['name'], icon: e['icon']))
                       .toList(),
                   curOP: curOP,
                   cbLogin: (Map<String, dynamic> authBody) {
