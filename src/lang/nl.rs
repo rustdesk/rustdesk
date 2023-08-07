@@ -461,7 +461,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("No transfers in progress", "Geen overdrachten in uitvoering"),
         ("Set one-time password length", "Stel de lengte van het eenmalige wachtwoord in"),
         ("install_cert_tip", ""),
-        ("comfirm_install_cert_tip", ""),
+        ("confirm_install_cert_tip", ""),
         ("RDP Settings", "RDP Instellingen"),
         ("Sort by", "Sorteren op"),
         ("New Connection", "Nieuwe Verbinding"),

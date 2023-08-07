@@ -461,7 +461,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("No transfers in progress", "Pas de transfert en cours"),
         ("Set one-time password length", "Définir la longueur du mot de passe à usage unique"),
         ("install_cert_tip", ""),
-        ("comfirm_install_cert_tip", ""),
+        ("confirm_install_cert_tip", ""),
         ("RDP Settings", "Configuration RDP"),
         ("Sort by", "Trier par"),
         ("New Connection", "Nouvelle connexion"),

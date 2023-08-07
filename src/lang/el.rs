@@ -461,7 +461,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("No transfers in progress", "Δεν υπάρχει μεταφορά σε εξέλιξη"),
         ("Set one-time password length", "Μέγεθος κωδικού μιας χρήσης"),
         ("install_cert_tip", ""),
-        ("comfirm_install_cert_tip", ""),
+        ("confirm_install_cert_tip", ""),
         ("RDP Settings", "Ρυθμίσεις RDP"),
         ("Sort by", "Ταξινόμηση κατά"),
         ("New Connection", "Νέα σύνδεση"),
