@@ -12,6 +12,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("not_close_tcp_tip", "Don't close this window while you are using the tunnel"),
         ("setup_server_tip", "For faster connection, please set up your own server"),
         ("Auto Login", "Auto Login (Only valid if you set \"Lock after session end\")"),
+        ("Always connect via relay", "Always Connect via Relay"),
         ("whitelist_tip", "Only whitelisted IP can access me"),
         ("whitelist_sep", "Separated by comma, semicolon, spaces or new line"),
         ("Wrong credentials", "Wrong username or password"),
