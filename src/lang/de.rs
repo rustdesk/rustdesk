@@ -506,7 +506,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Enable", "Aktivieren"),
         ("Disable", "Deaktivieren"),
         ("Options", "Einstellungen"),
-        ("resolution_original_tip", "Originalauflösung"),
+        ("resolution_original_tip", "Originale Auflösung"),
         ("resolution_fit_local_tip", "Lokale Auflösung anpassen"),
         ("resolution_custom_tip", "Benutzerdefinierte Auflösung"),
         ("Collapse toolbar", "Symbolleiste einklappen"),
@@ -524,7 +524,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("exceed_max_devices", "Sie haben die maximale Anzahl der verwalteten Geräte erreicht."),
         ("Sync with recent sessions", "Synchronisierung mit den letzten Sitzungen"),
         ("Sort tags", "Tags sortieren"),
-        ("Open connection in new tab", ""),
+        ("Open connection in new tab", "Verbindung in neuem Tab öffnen"),
         ("Move tab to new window", "Tab in neues Fenster verschieben"),
     ].iter().cloned().collect();
 }
