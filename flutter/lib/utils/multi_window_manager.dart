@@ -134,14 +134,8 @@ class RustDeskMultiWindowManager {
     final msg = jsonEncode(params);
 
     // separate window for file transfer is not supported
-    bool openInTabs = false;
-    if (type == WindowType.RemoteDesktop) {
-      if (mainGetLocalBoolOptionSync(kOptionOpenNewConnInTabs)) {
-        openInTabs = !mainGetPeerBoolOptionSync(remoteId, kOptionOpenInWindows);
-      } else {
-        openInTabs = mainGetPeerBoolOptionSync(remoteId, kOptionOpenInTabs);
-      }
-    }
+    bool openInTabs = type != WindowType.RemoteDesktop ||
+        mainGetLocalBoolOptionSync(kOptionOpenNewConnInTabs);
 
     if (windows.length > 1 || !openInTabs) {
       for (final windowId in windows) {

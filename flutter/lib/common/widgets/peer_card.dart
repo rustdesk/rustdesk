@@ -835,7 +835,7 @@ class RecentPeerCard extends BasePeerCard {
     if (isDesktop && peer.platform != 'Android') {
       menuItems.add(_tcpTunnelingAction(context, peer.id));
     }
-    menuItems.add(await _openNewConnInOptAction(peer.id));
+    // menuItems.add(await _openNewConnInOptAction(peer.id));
     menuItems.add(await _forceAlwaysRelayAction(peer.id));
     if (peer.platform == 'Windows') {
       menuItems.add(_rdpAction(context, peer.id));
@@ -889,7 +889,7 @@ class FavoritePeerCard extends BasePeerCard {
     if (isDesktop && peer.platform != 'Android') {
       menuItems.add(_tcpTunnelingAction(context, peer.id));
     }
-    menuItems.add(await _openNewConnInOptAction(peer.id));
+    // menuItems.add(await _openNewConnInOptAction(peer.id));
     menuItems.add(await _forceAlwaysRelayAction(peer.id));
     if (peer.platform == 'Windows') {
       menuItems.add(_rdpAction(context, peer.id));
@@ -943,7 +943,7 @@ class DiscoveredPeerCard extends BasePeerCard {
     if (isDesktop && peer.platform != 'Android') {
       menuItems.add(_tcpTunnelingAction(context, peer.id));
     }
-    menuItems.add(await _openNewConnInOptAction(peer.id));
+    // menuItems.add(await _openNewConnInOptAction(peer.id));
     menuItems.add(await _forceAlwaysRelayAction(peer.id));
     if (peer.platform == 'Windows') {
       menuItems.add(_rdpAction(context, peer.id));
@@ -993,7 +993,7 @@ class AddressBookPeerCard extends BasePeerCard {
     if (isDesktop && peer.platform != 'Android') {
       menuItems.add(_tcpTunnelingAction(context, peer.id));
     }
-    menuItems.add(await _openNewConnInOptAction(peer.id));
+    // menuItems.add(await _openNewConnInOptAction(peer.id));
     menuItems.add(await _forceAlwaysRelayAction(peer.id));
     if (peer.platform == 'Windows') {
       menuItems.add(_rdpAction(context, peer.id));
@@ -1056,7 +1056,7 @@ class MyGroupPeerCard extends BasePeerCard {
     if (isDesktop && peer.platform != 'Android') {
       menuItems.add(_tcpTunnelingAction(context, peer.id));
     }
-    menuItems.add(await _openNewConnInOptAction(peer.id));
+    // menuItems.add(await _openNewConnInOptAction(peer.id));
     menuItems.add(await _forceAlwaysRelayAction(peer.id));
     if (peer.platform == 'Windows') {
       menuItems.add(_rdpAction(context, peer.id));
