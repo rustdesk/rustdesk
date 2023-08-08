@@ -62,11 +62,11 @@ class InputModel {
   int _lastButtons = 0;
   Offset lastMousePos = Offset.zero;
 
-  get id => parent.target?.id ?? "";
-
   late final SessionID sessionId;
 
   bool get keyboardPerm => parent.target!.ffiModel.keyboard;
+  String get id => parent.target?.id ?? '';
+  String? get peerPlatform => parent.target?.ffiModel.pi.platform;
 
   InputModel(this.parent) {
     sessionId = parent.target!.sessionId;
@@ -334,21 +334,26 @@ class InputModel {
   void onPointerPanZoomStart(PointerPanZoomStartEvent e) {
     _lastScale = 1.0;
     _stopFling = true;
-    handlePointerEvent('touch', 'pan_start', e);
+
+    if (peerPlatform == kPeerPlatformAndroid) {
+      handlePointerEvent('touch', 'pan_start', e.position);
+    }
   }
 
   // https://docs.flutter.dev/release/breaking-changes/trackpad-gestures
   void onPointerPanZoomUpdate(PointerPanZoomUpdateEvent e) {
-    final scale = ((e.scale - _lastScale) * 1000).toInt();
-    _lastScale = e.scale;
+    if (peerPlatform != kPeerPlatformAndroid) {
+      final scale = ((e.scale - _lastScale) * 1000).toInt();
+      _lastScale = e.scale;
 
-    if (scale != 0) {
-      bind.sessionSendPointer(
-          sessionId: sessionId,
-          msg: json.encode({
-            'touch': {'scale': scale}
-          }));
-      return;
+      if (scale != 0) {
+        bind.sessionSendPointer(
+            sessionId: sessionId,
+            msg: json.encode({
+              'touch': {'scale': scale}
+            }));
+        return;
+      }
     }
 
     final delta = e.panDelta;
@@ -356,7 +361,8 @@ class InputModel {
 
     var x = delta.dx.toInt();
     var y = delta.dy.toInt();
-    if (parent.target?.ffiModel.pi.platform == kPeerPlatformLinux) {
+    if (peerPlatform == kPeerPlatformLinux ||
+        peerPlatform == kPeerPlatformAndroid) {
       _trackpadScrollUnsent += (delta * _trackpadSpeed);
       x = _trackpadScrollUnsent.dx.truncate();
       y = _trackpadScrollUnsent.dy.truncate();
@@ -372,9 +378,13 @@ class InputModel {
       }
     }
     if (x != 0 || y != 0) {
-      bind.sessionSendMouse(
-          sessionId: sessionId,
-          msg: '{"type": "trackpad", "x": "$x", "y": "$y"}');
+      if (peerPlatform == kPeerPlatformAndroid) {
+        handlePointerEvent('touch', 'pan_move', e.delta);
+      } else {
+        bind.sessionSendMouse(
+            sessionId: sessionId,
+            msg: '{"type": "trackpad", "x": "$x", "y": "$y"}');
+      }
     }
   }
 
@@ -430,6 +440,11 @@ class InputModel {
   }
 
   void onPointerPanZoomEnd(PointerPanZoomEndEvent e) {
+    if (peerPlatform == kPeerPlatformAndroid) {
+      handlePointerEvent('touch', 'pan_end', e.position);
+      return;
+    }
+
     bind.sessionSendPointer(
         sessionId: sessionId,
         msg: json.encode({
@@ -541,23 +556,39 @@ class InputModel {
     return Offset(x, y);
   }
 
-  void handlePointerEvent(String kind, String type, PointerEvent e) {
-    if (checkPeerControlProtected(e.position.dx, max(0.0, e.position.dy))) {
+  void handlePointerEvent(String kind, String type, Offset offset) {
+    double x = offset.dx;
+    double y = max(0.0, offset.dy);
+    if (_checkPeerControlProtected(x, y)) {
       return;
     }
     // Only touch events are handled for now. So we can just ignore buttons.
     // to-do: handle mouse events
-    bind.sessionSendPointer(
-      sessionId: sessionId,
-      msg: json.encode({
-        modify({
-          kind: {type: e.position.toString()}
-        })
-      }),
+
+    final isMoveTypes = ['pan', 'pan_start', 'pan_end'];
+    final pos = handlePointerDevicePos(
+      x,
+      y,
+      isMoveTypes.contains(type),
+      type,
     );
+    if (pos == null) {
+      return;
+    }
+
+    final evt = {
+      kind: {
+        type: {
+          'x': '${pos.x}',
+          'y': '${pos.y}',
+        }
+      }
+    };
+    bind.sessionSendPointer(
+        sessionId: sessionId, msg: json.encode({modify(evt)}));
   }
 
-  bool checkPeerControlProtected(double x, double y) {
+  bool _checkPeerControlProtected(double x, double y) {
     final cursorModel = parent.target!.cursorModel;
     if (cursorModel.isPeerControlProtected) {
       lastMousePos = ui.Offset(x, y);
@@ -586,7 +617,7 @@ class InputModel {
   }) {
     double x = offset.dx;
     double y = max(0.0, offset.dy);
-    if (checkPeerControlProtected(x, y)) {
+    if (_checkPeerControlProtected(x, y)) {
       return;
     }
 
