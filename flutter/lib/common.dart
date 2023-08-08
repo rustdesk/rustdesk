@@ -1240,7 +1240,7 @@ bool option2bool(String option, String value) {
       option == "stop-service" ||
       option == "direct-server" ||
       option == "stop-rendezvous-service" ||
-      option == "force-always-relay") {
+      option == kOptionForceAlwaysRelay) {
     res = value == "Y";
   } else {
     assert(false);
@@ -1257,7 +1257,7 @@ String bool2option(String option, bool b) {
       option == "stop-service" ||
       option == "direct-server" ||
       option == "stop-rendezvous-service" ||
-      option == "force-always-relay") {
+      option == kOptionForceAlwaysRelay) {
     res = b ? 'Y' : '';
   } else {
     assert(false);
@@ -1286,6 +1286,14 @@ mainSetLocalBoolOption(String key, bool value) async {
 
 bool mainGetLocalBoolOptionSync(String key) {
   return option2bool(key, bind.mainGetLocalOption(key: key));
+}
+
+bool mainGetPeerBoolOptionSync(String id, String key) {
+  return option2bool(key, bind.mainGetPeerOptionSync(id: id, key: key));
+}
+
+mainSetPeerBoolOptionSync(String id, String key, bool v) {
+  bind.mainSetPeerOptionSync(id: id, key: key, value: bool2option(key, v));
 }
 
 Future<bool> matchPeer(String searchText, Peer peer) async {
@@ -1545,7 +1553,9 @@ Future<bool> restoreWindowPosition(WindowType type,
     debugPrint("no window position saved, ignoring position restoration");
     return false;
   }
-  if (type == WindowType.RemoteDesktop && !isRemotePeerPos && windowId != null) {
+  if (type == WindowType.RemoteDesktop &&
+      !isRemotePeerPos &&
+      windowId != null) {
     if (lpos.offsetWidth != null) {
       lpos.offsetWidth = lpos.offsetWidth! + windowId * 20;
     }
@@ -1801,14 +1811,13 @@ connectMainDesktop(
   required bool isTcpTunneling,
   required bool isRDP,
   bool? forceRelay,
-  bool forceSeparateWindow = false,
 }) async {
   if (isFileTransfer) {
     await rustDeskWinManager.newFileTransfer(id, forceRelay: forceRelay);
   } else if (isTcpTunneling || isRDP) {
     await rustDeskWinManager.newPortForward(id, isRDP, forceRelay: forceRelay);
   } else {
-    await rustDeskWinManager.newRemoteDesktop(id, forceRelay: forceRelay, forceSeparateWindow: forceSeparateWindow);
+    await rustDeskWinManager.newRemoteDesktop(id, forceRelay: forceRelay);
   }
 }
 
@@ -1822,7 +1831,6 @@ connect(
   bool isFileTransfer = false,
   bool isTcpTunneling = false,
   bool isRDP = false,
-  bool forceSeparateWindow = false,
 }) async {
   if (id == '') return;
   id = id.replaceAll(' ', '');
@@ -1840,7 +1848,6 @@ connect(
         isTcpTunneling: isTcpTunneling,
         isRDP: isRDP,
         forceRelay: forceRelay,
-        forceSeparateWindow: forceSeparateWindow,
       );
     } else {
       await rustDeskWinManager.call(WindowType.Main, kWindowConnect, {
@@ -1849,7 +1856,6 @@ connect(
         'isTcpTunneling': isTcpTunneling,
         'isRDP': isRDP,
         'forceRelay': forceRelay,
-        'forceSeparateWindow': forceSeparateWindow,
       });
     }
   } else {

@@ -22,8 +22,6 @@ const String kAppTypeDesktopRemote = "remote";
 const String kAppTypeDesktopFileTransfer = "file transfer";
 const String kAppTypeDesktopPortForward = "port forward";
 
-const bool kCloseMultiWindowByHide = true;
-
 const String kWindowMainWindowOnTop = "main_window_on_top";
 const String kWindowGetWindowInfo = "get_window_info";
 const String kWindowDisableGrabKeyboard = "disable_grab_keyboard";
@@ -42,7 +40,10 @@ const String kWindowEventGetSessionIdList = "get_session_id_list";
 const String kWindowEventMoveTabToNewWindow = "move_tab_to_new_window";
 const String kWindowEventCloseForSeparateWindow = "close_for_separate_window";
 
-const String kOptionSeparateRemoteWindow = "allow-separate-remote-window";
+const String kOptionOpenNewConnInTabs = "enable-open-new-connections-in-tabs";
+const String kOptionOpenInTabs = "allow-open-in-tabs";
+const String kOptionOpenInWindows = "allow-open-in-windows";
+const String kOptionForceAlwaysRelay = "force-always-relay";
 
 const String kUniLinksPrefix = "rustdesk://";
 const String kUrlActionClose = "close";

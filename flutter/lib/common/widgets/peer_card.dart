@@ -404,7 +404,6 @@ abstract class BasePeerCard extends StatelessWidget {
     bool isFileTransfer = false,
     bool isTcpTunneling = false,
     bool isRDP = false,
-    bool forceSeparateWindow = false,
   }) {
     return MenuEntryButton<String>(
       childBuilder: (TextStyle? style) => Text(
@@ -418,7 +417,6 @@ abstract class BasePeerCard extends StatelessWidget {
           isFileTransfer: isFileTransfer,
           isTcpTunneling: isTcpTunneling,
           isRDP: isRDP,
-          forceSeparateWindow: forceSeparateWindow,
         );
       },
       padding: menuPadding,
@@ -427,25 +425,13 @@ abstract class BasePeerCard extends StatelessWidget {
   }
 
   @protected
-  List<MenuEntryBase<String>> _connectActions(BuildContext context, Peer peer) {
-    final actions = [_connectAction(context, peer, false)];
-    if (!mainGetLocalBoolOptionSync(kOptionSeparateRemoteWindow)) {
-      actions.add(_connectAction(context, peer, true));
-    }
-    return actions;
-  }
-
-  @protected
-  MenuEntryBase<String> _connectAction(
-      BuildContext context, Peer peer, bool forceSeparateWindow) {
+  MenuEntryBase<String> _connectAction(BuildContext context, Peer peer) {
     return _connectCommonAction(
       context,
       peer.id,
       (peer.alias.isEmpty
-              ? translate('Connect')
-              : '${translate('Connect')} ${peer.id}') +
-          (forceSeparateWindow ? ' (${translate('separate window')})' : ''),
-      forceSeparateWindow: forceSeparateWindow,
+          ? translate('Connect')
+          : '${translate('Connect')} ${peer.id}'),
     );
   }
 
@@ -538,15 +524,40 @@ abstract class BasePeerCard extends StatelessWidget {
     );
   }
 
+  Future<MenuEntryBase<String>> _openNewConnInAction(
+      String id, String label, String key) async {
+    return MenuEntrySwitch<String>(
+      switchType: SwitchType.scheckbox,
+      text: translate(label),
+      getter: () async => mainGetPeerBoolOptionSync(id, key),
+      setter: (bool v) async {
+        await bind.mainSetPeerOption(
+            id: id, key: key, value: bool2option(key, v));
+      },
+      padding: menuPadding,
+      dismissOnClicked: true,
+    );
+  }
+
+  _openInTabsAction(String id) async =>
+      await _openNewConnInAction(id, 'Open in Tabs', kOptionOpenInTabs);
+
+  _openInWindowsAction(String id) async =>
+      await _openNewConnInAction(id, 'Open with New Window', kOptionOpenInWindows);
+
+  _openNewConnInOptAction(String id) async =>
+      mainGetLocalBoolOptionSync(kOptionOpenNewConnInTabs)
+          ? await _openInWindowsAction(id)
+          : await _openInTabsAction(id);
+
   @protected
   Future<bool> _isForceAlwaysRelay(String id) async {
-    return (await bind.mainGetPeerOption(id: id, key: 'force-always-relay'))
+    return (await bind.mainGetPeerOption(id: id, key: kOptionForceAlwaysRelay))
         .isNotEmpty;
   }
 
   @protected
   Future<MenuEntryBase<String>> _forceAlwaysRelayAction(String id) async {
-    const option = 'force-always-relay';
     return MenuEntrySwitch<String>(
       switchType: SwitchType.scheckbox,
       text: translate('Always connect via relay'),
@@ -555,7 +566,9 @@ abstract class BasePeerCard extends StatelessWidget {
       },
       setter: (bool v) async {
         await bind.mainSetPeerOption(
-            id: id, key: option, value: bool2option(option, v));
+            id: id,
+            key: kOptionForceAlwaysRelay,
+            value: bool2option(kOptionForceAlwaysRelay, v));
       },
       padding: menuPadding,
       dismissOnClicked: true,
@@ -813,7 +826,7 @@ class RecentPeerCard extends BasePeerCard {
   Future<List<MenuEntryBase<String>>> _buildMenuItems(
       BuildContext context) async {
     final List<MenuEntryBase<String>> menuItems = [
-      ..._connectActions(context, peer),
+      _connectAction(context, peer),
       _transferFileAction(context, peer.id),
     ];
 
@@ -822,6 +835,7 @@ class RecentPeerCard extends BasePeerCard {
     if (isDesktop && peer.platform != 'Android') {
       menuItems.add(_tcpTunnelingAction(context, peer.id));
     }
+    // menuItems.add(await _openNewConnInOptAction(peer.id));
     menuItems.add(await _forceAlwaysRelayAction(peer.id));
     if (peer.platform == 'Windows') {
       menuItems.add(_rdpAction(context, peer.id));
@@ -869,12 +883,13 @@ class FavoritePeerCard extends BasePeerCard {
   Future<List<MenuEntryBase<String>>> _buildMenuItems(
       BuildContext context) async {
     final List<MenuEntryBase<String>> menuItems = [
-      ..._connectActions(context, peer),
+      _connectAction(context, peer),
       _transferFileAction(context, peer.id),
     ];
     if (isDesktop && peer.platform != 'Android') {
       menuItems.add(_tcpTunnelingAction(context, peer.id));
     }
+    // menuItems.add(await _openNewConnInOptAction(peer.id));
     menuItems.add(await _forceAlwaysRelayAction(peer.id));
     if (peer.platform == 'Windows') {
       menuItems.add(_rdpAction(context, peer.id));
@@ -919,7 +934,7 @@ class DiscoveredPeerCard extends BasePeerCard {
   Future<List<MenuEntryBase<String>>> _buildMenuItems(
       BuildContext context) async {
     final List<MenuEntryBase<String>> menuItems = [
-      ..._connectActions(context, peer),
+      _connectAction(context, peer),
       _transferFileAction(context, peer.id),
     ];
 
@@ -928,6 +943,7 @@ class DiscoveredPeerCard extends BasePeerCard {
     if (isDesktop && peer.platform != 'Android') {
       menuItems.add(_tcpTunnelingAction(context, peer.id));
     }
+    // menuItems.add(await _openNewConnInOptAction(peer.id));
     menuItems.add(await _forceAlwaysRelayAction(peer.id));
     if (peer.platform == 'Windows') {
       menuItems.add(_rdpAction(context, peer.id));
@@ -971,12 +987,13 @@ class AddressBookPeerCard extends BasePeerCard {
   Future<List<MenuEntryBase<String>>> _buildMenuItems(
       BuildContext context) async {
     final List<MenuEntryBase<String>> menuItems = [
-      ..._connectActions(context, peer),
+      _connectAction(context, peer),
       _transferFileAction(context, peer.id),
     ];
     if (isDesktop && peer.platform != 'Android') {
       menuItems.add(_tcpTunnelingAction(context, peer.id));
     }
+    // menuItems.add(await _openNewConnInOptAction(peer.id));
     menuItems.add(await _forceAlwaysRelayAction(peer.id));
     if (peer.platform == 'Windows') {
       menuItems.add(_rdpAction(context, peer.id));
@@ -1033,12 +1050,13 @@ class MyGroupPeerCard extends BasePeerCard {
   Future<List<MenuEntryBase<String>>> _buildMenuItems(
       BuildContext context) async {
     final List<MenuEntryBase<String>> menuItems = [
-      ..._connectActions(context, peer),
+      _connectAction(context, peer),
       _transferFileAction(context, peer.id),
     ];
     if (isDesktop && peer.platform != 'Android') {
       menuItems.add(_tcpTunnelingAction(context, peer.id));
     }
+    // menuItems.add(await _openNewConnInOptAction(peer.id));
     menuItems.add(await _forceAlwaysRelayAction(peer.id));
     if (peer.platform == 'Windows') {
       menuItems.add(_rdpAction(context, peer.id));

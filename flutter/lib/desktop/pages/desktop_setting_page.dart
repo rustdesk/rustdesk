@@ -319,8 +319,8 @@ class _GeneralState extends State<_General> {
       _OptionCheckBox(context, 'Adaptive bitrate', 'enable-abr'),
       _OptionCheckBox(
         context,
-        'Separate remote windows',
-        kOptionSeparateRemoteWindow,
+        'Open new connections in tabs',
+        kOptionOpenNewConnInTabs,
         isServer: false,
       ),
     ];

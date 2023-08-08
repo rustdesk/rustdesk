@@ -116,7 +116,7 @@ class _RemotePageState extends State<RemotePage>
       Wakelock.enable();
     }
     // Register texture.
-    if (mainGetLocalBoolOptionSync(kOptionSeparateRemoteWindow)) {
+    if (mainGetLocalBoolOptionSync(kOptionOpenNewConnInTabs)) {
       _renderTexture = renderTexture;
     } else {
       _renderTexture = RenderTexture();

@@ -554,13 +554,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
       } else if (call.method == kWindowEventShow) {
         await rustDeskWinManager.registerActiveWindow(call.arguments["id"]);
       } else if (call.method == kWindowEventHide) {
-        final wId = call.arguments['id'];
-        final isSeparateWindowEnabled =
-            mainGetLocalBoolOptionSync(kOptionSeparateRemoteWindow);
-        if (isSeparateWindowEnabled && !kCloseMultiWindowByHide) {
-          await rustDeskWinManager.destroyWindow(wId);
-        }
-        await rustDeskWinManager.unregisterActiveWindow(wId);
+        await rustDeskWinManager.unregisterActiveWindow(call.arguments['id']);
       } else if (call.method == kWindowConnect) {
         await connectMainDesktop(
           call.arguments['id'],
@@ -568,7 +562,6 @@ class _DesktopHomePageState extends State<DesktopHomePage>
           isTcpTunneling: call.arguments['isTcpTunneling'],
           isRDP: call.arguments['isRDP'],
           forceRelay: call.arguments['forceRelay'],
-          forceSeparateWindow: call.arguments['forceSeparateWindow'],
         );
       } else if (call.method == kWindowEventMoveTabToNewWindow) {
         final args = call.arguments.split(',');
