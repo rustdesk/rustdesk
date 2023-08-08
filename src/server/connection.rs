@@ -1907,6 +1907,10 @@ impl Connection {
                         .lock()
                         .unwrap()
                         .user_auto_adjust_fps(self.inner.id(), fps),
+                    Some(misc::Union::ClientRecordStatus(status)) => video_service::VIDEO_QOS
+                        .lock()
+                        .unwrap()
+                        .user_record(self.inner.id(), status),
                     _ => {}
                 },
                 Some(message::Union::AudioFrame(frame)) => {

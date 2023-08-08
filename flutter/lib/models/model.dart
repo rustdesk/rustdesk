@@ -1532,12 +1532,13 @@ class RecordingModel with ChangeNotifier {
         sessionId: sessionId, start: true, width: width, height: height);
   }
 
-  toggle() {
+  toggle() async {
     if (isIOS) return;
     final sessionId = parent.target?.sessionId;
     if (sessionId == null) return;
     _start = !_start;
     notifyListeners();
+    await bind.sessionRecordStatus(sessionId: sessionId, status: _start);
     if (_start) {
       bind.sessionRefresh(sessionId: sessionId);
     } else {

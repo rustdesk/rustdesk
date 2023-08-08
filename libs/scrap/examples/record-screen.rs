@@ -113,9 +113,9 @@ fn main() -> io::Result<()> {
     let mut vpx = vpx_encode::VpxEncoder::new(EncoderCfg::VPX(vpx_encode::VpxEncoderConfig {
         width,
         height,
-        timebase: [1, 1000],
         quality,
         codec: vpx_codec,
+        keyframe_interval: None,
     }))
     .unwrap();
 
