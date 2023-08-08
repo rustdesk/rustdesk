@@ -461,7 +461,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("No transfers in progress", "Keine Übertragungen im Gange"),
         ("Set one-time password length", "Länge des Einmalpassworts festlegen"),
         ("install_cert_tip", "RustDesk-Zertifikat installieren"),
-        ("comfirm_install_cert_tip", "Dies ist ein RustDesk-Testzertifikat, dem vertraut werden kann. Das Zertifikat wird verwendet, um RustDesk-Treibern bei Bedarf zu vertrauen und diese zu installieren."),
+        ("confirm_install_cert_tip", "Dies ist ein RustDesk-Testzertifikat, dem vertraut werden kann. Das Zertifikat wird verwendet, um RustDesk-Treibern bei Bedarf zu vertrauen und diese zu installieren."),
         ("RDP Settings", "RDP-Einstellungen"),
         ("Sort by", "Sortieren nach"),
         ("New Connection", "Neue Verbindung"),
@@ -506,7 +506,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Enable", "Aktivieren"),
         ("Disable", "Deaktivieren"),
         ("Options", "Einstellungen"),
-        ("resolution_original_tip", "Originalauflösung"),
+        ("resolution_original_tip", "Originale Auflösung"),
         ("resolution_fit_local_tip", "Lokale Auflösung anpassen"),
         ("resolution_custom_tip", "Benutzerdefinierte Auflösung"),
         ("Collapse toolbar", "Symbolleiste einklappen"),
@@ -524,8 +524,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("exceed_max_devices", "Sie haben die maximale Anzahl der verwalteten Geräte erreicht."),
         ("Sync with recent sessions", "Synchronisierung mit den letzten Sitzungen"),
         ("Sort tags", "Tags sortieren"),
-        ("Separate remote windows", "Separate entfernte Fenster"),
-        ("separate window", "Separates Fenster"),
+        ("Open connection in new tab", "Verbindung in neuem Tab öffnen"),
         ("Move tab to new window", "Tab in neues Fenster verschieben"),
     ].iter().cloned().collect();
 }

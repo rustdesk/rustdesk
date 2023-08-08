@@ -240,6 +240,14 @@ impl<T: InvokeUiSession> Session<T> {
         self.send(Data::RecordScreen(start, w, h, self.id.clone()));
     }
 
+    pub fn record_status(&self, status: bool) {
+        let mut misc = Misc::new();
+        misc.set_client_record_status(status);
+        let mut msg = Message::new();
+        msg.set_misc(misc);
+        self.send(Data::Message(msg));
+    }
+
     pub fn save_custom_image_quality(&mut self, custom_image_quality: i32) {
         let msg = self
             .lc

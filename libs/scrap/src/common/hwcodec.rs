@@ -52,6 +52,7 @@ impl EncoderApi for HwEncoder {
                 if base_bitrate <= 0 {
                     bitrate = base_bitrate;
                 }
+                let gop = config.keyframe_interval.unwrap_or(DEFAULT_GOP as _) as i32;
                 let ctx = EncodeContext {
                     name: config.name.clone(),
                     width: config.width as _,
@@ -60,7 +61,7 @@ impl EncoderApi for HwEncoder {
                     align: HW_STRIDE_ALIGN as _,
                     bitrate: bitrate as i32 * 1000,
                     timebase: DEFAULT_TIME_BASE,
-                    gop: DEFAULT_GOP,
+                    gop,
                     quality: DEFAULT_HW_QUALITY,
                     rc: DEFAULT_RC,
                     thread_count: codec_thread_num() as _, // ffmpeg's thread_count is used for cpu

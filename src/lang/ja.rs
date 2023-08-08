@@ -461,7 +461,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("No transfers in progress", ""),
         ("Set one-time password length", ""),
         ("install_cert_tip", ""),
-        ("comfirm_install_cert_tip", ""),
+        ("confirm_install_cert_tip", ""),
         ("RDP Settings", ""),
         ("Sort by", ""),
         ("New Connection", ""),
@@ -524,8 +524,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("exceed_max_devices", ""),
         ("Sync with recent sessions", ""),
         ("Sort tags", ""),
-        ("Separate remote windows", ""),
-        ("separate window", ""),
+        ("Open connection in new tab", ""),
         ("Move tab to new window", ""),
     ].iter().cloned().collect();
 }

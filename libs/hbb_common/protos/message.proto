@@ -664,6 +664,7 @@ message Misc {
     PluginFailure plugin_failure = 26;
     uint32 full_speed_fps = 27;
     uint32 auto_adjust_fps = 28;
+    bool client_record_status = 29;
   }
 }
 

@@ -461,7 +461,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("No transfers in progress", "无进行中的传输"),
         ("Set one-time password length", "设置一次性密码长度"),
         ("install_cert_tip", "安装 RustDesk 证书"),
-        ("comfirm_install_cert_tip", "此证书为 RustDesk 测试证书，您可以信任此证书。证书将被用于信任和安装 RustDesk 驱动。"),
+        ("confirm_install_cert_tip", "此证书为 RustDesk 测试证书，您可以信任此证书。证书将被用于信任和安装 RustDesk 驱动。"),
         ("RDP Settings", "RDP 设置"),
         ("Sort by", "排序方式"),
         ("New Connection", "新连接"),
@@ -524,8 +524,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("exceed_max_devices", "管理的设备数已达到最大值"),
         ("Sync with recent sessions", "同步最近会话"),
         ("Sort tags", "对标签进行排序"),
-        ("Separate remote windows", "使用独立远程窗口"),
-        ("separate window", "独立窗口"),
+        ("Open connection in new tab", "在选项卡中打开新连接"),
         ("Move tab to new window", "将标签页移至新窗口"),
     ].iter().cloned().collect();
 }

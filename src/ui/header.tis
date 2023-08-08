@@ -297,6 +297,7 @@ class Header: Reactor.Component {
     event click $(span#recording) (_, me) {
         recording = !recording;
         header.update();
+        handler.record_status(recording);
         if (recording)
             handler.refresh_video();
         else

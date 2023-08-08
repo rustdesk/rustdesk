@@ -451,6 +451,7 @@ impl sciter::EventHandler for SciterSession {
         fn save_custom_image_quality(i32);
         fn refresh_video();
         fn record_screen(bool, i32, i32);
+        fn record_status(bool);
         fn get_toggle_option(String);
         fn is_privacy_mode_supported();
         fn toggle_option(String);

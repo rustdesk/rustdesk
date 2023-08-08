@@ -36,7 +36,7 @@ use hbb_common::{
 use scrap::Capturer;
 use scrap::{
     aom::AomEncoderConfig,
-    codec::{Encoder, EncoderCfg, HwEncoderConfig},
+    codec::{Encoder, EncoderCfg, HwEncoderConfig, Quality},
     record::{Recorder, RecorderContext},
     vpxcodec::{VpxEncoderConfig, VpxVideoCodecId},
     CodecName, Display, TraitCapturer,
@@ -518,37 +518,13 @@ fn run(sp: GenericService) -> ResultType<()> {
     let mut spf;
     let mut quality = video_qos.quality();
     let abr = VideoQoS::abr_enabled();
-    drop(video_qos);
     log::info!("init quality={:?}, abr enabled:{}", quality, abr);
-
-    let encoder_cfg = match Encoder::negotiated_codec() {
-        scrap::CodecName::H264(name) | scrap::CodecName::H265(name) => {
-            EncoderCfg::HW(HwEncoderConfig {
-                name,
-                width: c.width,
-                height: c.height,
-                quality,
-            })
-        }
-        name @ (scrap::CodecName::VP8 | scrap::CodecName::VP9) => {
-            EncoderCfg::VPX(VpxEncoderConfig {
-                width: c.width as _,
-                height: c.height as _,
-                timebase: [1, 1000], // Output timestamp precision
-                quality,
-                codec: if name == scrap::CodecName::VP8 {
-                    VpxVideoCodecId::VP8
-                } else {
-                    VpxVideoCodecId::VP9
-                },
-            })
-        }
-        scrap::CodecName::AV1 => EncoderCfg::AOM(AomEncoderConfig {
-            width: c.width as _,
-            height: c.height as _,
-            quality,
-        }),
-    };
+    let codec_name = Encoder::negotiated_codec();
+    let recorder = get_recorder(c.width, c.height, &codec_name);
+    let last_recording =
+        (recorder.lock().unwrap().is_some() || video_qos.record()) && codec_name != CodecName::AV1;
+    drop(video_qos);
+    let encoder_cfg = get_encoder_config(&c, quality, last_recording);
 
     let mut encoder;
     match Encoder::new(encoder_cfg) {
@@ -597,8 +573,6 @@ fn run(sp: GenericService) -> ResultType<()> {
     let mut try_gdi = 1;
     #[cfg(windows)]
     log::info!("gdi: {}", c.is_gdi());
-    let codec_name = Encoder::negotiated_codec();
-    let recorder = get_recorder(c.width, c.height, &codec_name);
     #[cfg(windows)]
     start_uac_elevation_check();
 
@@ -616,6 +590,11 @@ fn run(sp: GenericService) -> ResultType<()> {
             quality = video_qos.quality();
             allow_err!(encoder.set_quality(quality));
             video_qos.store_bitrate(encoder.bitrate());
+        }
+        let recording = (recorder.lock().unwrap().is_some() || video_qos.record())
+            && codec_name != CodecName::AV1;
+        if recording != last_recording {
+            bail!("SWITCH");
         }
         drop(video_qos);
 
@@ -787,6 +766,41 @@ fn run(sp: GenericService) -> ResultType<()> {
     super::wayland::clear();
 
     Ok(())
+}
+
+fn get_encoder_config(c: &CapturerInfo, quality: Quality, recording: bool) -> EncoderCfg {
+    // https://www.wowza.com/community/t/the-correct-keyframe-interval-in-obs-studio/95162
+    let keyframe_interval = if recording { Some(240) } else { None };
+    match Encoder::negotiated_codec() {
+        scrap::CodecName::H264(name) | scrap::CodecName::H265(name) => {
+            EncoderCfg::HW(HwEncoderConfig {
+                name,
+                width: c.width,
+                height: c.height,
+                quality,
+                keyframe_interval,
+            })
+        }
+        name @ (scrap::CodecName::VP8 | scrap::CodecName::VP9) => {
+            EncoderCfg::VPX(VpxEncoderConfig {
+                width: c.width as _,
+                height: c.height as _,
+                quality,
+                codec: if name == scrap::CodecName::VP8 {
+                    VpxVideoCodecId::VP8
+                } else {
+                    VpxVideoCodecId::VP9
+                },
+                keyframe_interval,
+            })
+        }
+        scrap::CodecName::AV1 => EncoderCfg::AOM(AomEncoderConfig {
+            width: c.width as _,
+            height: c.height as _,
+            quality,
+            keyframe_interval,
+        }),
+    }
 }
 
 fn get_recorder(
