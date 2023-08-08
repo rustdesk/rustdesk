@@ -202,6 +202,13 @@ pub fn get_peer_option(id: String, name: String) -> String {
 }
 
 #[inline]
+#[cfg(feature = "flutter")]
+pub fn get_peer_flutter_config(id: String, name: String) -> String {
+    let c = PeerConfig::load(&id);
+    c.ui_flutter.get(&name).unwrap_or(&"".to_owned()).to_owned()
+}
+
+#[inline]
 pub fn set_peer_option(id: String, name: String, value: String) {
     let mut c = PeerConfig::load(&id);
     if value.is_empty() {

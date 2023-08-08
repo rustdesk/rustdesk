@@ -1542,8 +1542,13 @@ Future<bool> restoreWindowPosition(WindowType type,
   bool isRemotePeerPos = false;
   String? pos;
   if (type == WindowType.RemoteDesktop && windowId != null && peerId != null) {
-    pos = await bind.sessionGetFlutterConfigByPeerId(
-        id: peerId, k: kWindowPrefix);
+    if (desktopType == DesktopType.main) {
+      pos = bind.mainGetPeerFlutterConfigSync(
+          id: peerId, k: kWindowPrefix + type.name);
+    } else {
+      pos = await bind.sessionGetFlutterConfigByPeerId(
+          id: peerId, k: kWindowPrefix);
+    }
     isRemotePeerPos = pos != null;
   }
   pos ??= bind.getLocalFlutterConfig(k: kWindowPrefix + type.name);
