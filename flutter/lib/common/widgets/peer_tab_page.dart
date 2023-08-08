@@ -312,7 +312,7 @@ class _PeerTabPageState extends State<PeerTabPage>
             showToast(translate('Successful'));
           }
 
-          deletePeerConfirmDialog(onSubmit);
+          deletePeerConfirmDialog(onSubmit, translate('Delete'));
         },
         child: Tooltip(
             message: translate('Delete'),

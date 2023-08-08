@@ -542,8 +542,8 @@ abstract class BasePeerCard extends StatelessWidget {
   _openInTabsAction(String id) async =>
       await _openNewConnInAction(id, 'Open in New Tab', kOptionOpenInTabs);
 
-  _openInWindowsAction(String id) async =>
-      await _openNewConnInAction(id, 'Open in New Window', kOptionOpenInWindows);
+  _openInWindowsAction(String id) async => await _openNewConnInAction(
+      id, 'Open in New Window', kOptionOpenInWindows);
 
   _openNewConnInOptAction(String id) async =>
       mainGetLocalBoolOptionSync(kOptionOpenNewConnInTabs)
@@ -636,7 +636,8 @@ abstract class BasePeerCard extends StatelessWidget {
           }
         }
 
-        deletePeerConfirmDialog(onSubmit);
+        deletePeerConfirmDialog(onSubmit,
+            '${translate('Delete')} "${peer.alias.isEmpty ? formatID(peer.id) : peer.alias}"?');
       },
       padding: menuPadding,
       dismissOnClicked: true,
