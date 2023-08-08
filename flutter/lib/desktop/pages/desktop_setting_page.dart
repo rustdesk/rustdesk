@@ -1006,7 +1006,7 @@ class _NetworkState extends State<_Network> with AutomaticKeepAliveClientMixin {
 
         final newApiServer = await bind.mainGetApiServer();
         if (oldApiServer.isNotEmpty && oldApiServer != newApiServer) {
-          await gFFI.userModel.logOut();
+          await gFFI.userModel.logOut(apiServer: oldApiServer);
         }
         return true;
       }

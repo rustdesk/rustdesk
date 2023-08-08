@@ -101,10 +101,10 @@ class UserModel {
     await Future.wait([gFFI.abModel.pullAb(), gFFI.groupModel.pull()]);
   }
 
-  Future<void> logOut() async {
+  Future<void> logOut({String? apiServer}) async {
     final tag = gFFI.dialogManager.showLoading(translate('Waiting'));
     try {
-      final url = await bind.mainGetApiServer();
+      final url = apiServer ?? await bind.mainGetApiServer();
       final authHeaders = getHttpHeaders();
       authHeaders['Content-Type'] = "application/json";
       await http
