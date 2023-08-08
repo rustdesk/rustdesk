@@ -806,6 +806,8 @@ pub fn main_get_peer_option_sync(id: String, key: String) -> SyncReturn<String> 
     SyncReturn(get_peer_option(id, key))
 }
 
+// Sometimes we need to get the flutter config of a peer by reading the file.
+// Because the session may not be established yet.
 pub fn main_get_peer_flutter_config_sync(id: String, k: String) -> SyncReturn<String> {
     SyncReturn(get_peer_flutter_config(id, k))
 }

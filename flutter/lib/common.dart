@@ -1543,6 +1543,9 @@ Future<bool> restoreWindowPosition(WindowType type,
   bool isRemotePeerPos = false;
   String? pos;
   if (type == WindowType.RemoteDesktop && windowId != null && peerId != null) {
+    // If the restore position is called by main window, and the peer id is not null
+    // then we may need to get the position by reading the peer config.
+    // Because the session may not be read at this time.
     if (desktopType == DesktopType.main) {
       pos = bind.mainGetPeerFlutterConfigSync(
           id: peerId, k: kWindowPrefix + type.name);
