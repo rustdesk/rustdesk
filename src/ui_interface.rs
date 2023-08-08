@@ -919,7 +919,7 @@ fn check_connect_status(reconnect: bool) -> mpsc::UnboundedSender<ipc::Data> {
 
 #[cfg(feature = "flutter")]
 pub fn account_auth(op: String, id: String, uuid: String, remember_me: bool) {
-    account::OidcSession::account_auth(op, id, uuid, remember_me);
+    account::OidcSession::account_auth(get_api_server(), op, id, uuid, remember_me);
 }
 
 #[cfg(feature = "flutter")]
