@@ -282,7 +282,7 @@ class _InstallPageBodyState extends State<_InstallPageBody>
           title: null,
           content: SelectionArea(
               child:
-                  msgboxContent('info', 'Warning', 'comfirm_install_cert_tip')),
+                  msgboxContent('info', 'Warning', 'confirm_install_cert_tip')),
           actions: btns,
           onCancel: close,
         ),

@@ -461,7 +461,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("No transfers in progress", "Keine Übertragungen im Gange"),
         ("Set one-time password length", "Länge des Einmalpassworts festlegen"),
         ("install_cert_tip", "RustDesk-Zertifikat installieren"),
-        ("comfirm_install_cert_tip", "Dies ist ein RustDesk-Testzertifikat, dem vertraut werden kann. Das Zertifikat wird verwendet, um RustDesk-Treibern bei Bedarf zu vertrauen und diese zu installieren."),
+        ("confirm_install_cert_tip", "Dies ist ein RustDesk-Testzertifikat, dem vertraut werden kann. Das Zertifikat wird verwendet, um RustDesk-Treibern bei Bedarf zu vertrauen und diese zu installieren."),
         ("RDP Settings", "RDP-Einstellungen"),
         ("Sort by", "Sortieren nach"),
         ("New Connection", "Neue Verbindung"),
