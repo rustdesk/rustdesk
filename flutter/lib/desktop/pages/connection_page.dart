@@ -68,6 +68,7 @@ class _ConnectionPageState extends State<ConnectionPage>
       _idController.selection = TextSelection(
           baseOffset: 0, extentOffset: _idController.value.text.length);
     });
+    Get.put<IDTextEditingController>(_idController);
     windowManager.addListener(this);
   }
 

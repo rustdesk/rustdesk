@@ -66,6 +66,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
     _idController.addListener(() {
       _idEmpty.value = _idController.text.isEmpty;
     });
+    Get.put<IDTextEditingController>(_idController);
   }
 
   @override
