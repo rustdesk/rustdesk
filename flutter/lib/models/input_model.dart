@@ -223,14 +223,8 @@ class InputModel {
         command: command);
   }
 
-  Map<String, dynamic> getEvent(PointerEvent evt, String type) {
+  Map<String, dynamic> _getMouseEvent(PointerEvent evt, String type) {
     final Map<String, dynamic> out = {};
-    out['x'] = evt.position.dx;
-    out['y'] = evt.position.dy;
-    if (alt) out['alt'] = 'true';
-    if (shift) out['shift'] = 'true';
-    if (ctrl) out['ctrl'] = 'true';
-    if (command) out['command'] = 'true';
 
     // Check update event type and set buttons to be sent.
     int buttons = _lastButtons;
@@ -260,7 +254,6 @@ class InputModel {
 
     out['buttons'] = buttons;
     out['type'] = type;
-
     return out;
   }
 
@@ -292,7 +285,7 @@ class InputModel {
   }
 
   /// Modify the given modifier map [evt] based on current modifier key status.
-  Map<String, String> modify(Map<String, String> evt) {
+  Map<String, dynamic> modify(Map<String, dynamic> evt) {
     if (ctrl) evt['ctrl'] = 'true';
     if (shift) evt['shift'] = 'true';
     if (alt) evt['alt'] = 'true';
@@ -334,13 +327,14 @@ class InputModel {
       isPhysicalMouse.value = true;
     }
     if (isPhysicalMouse.value) {
-      handleMouse(getEvent(e, _kMouseEventMove));
+      handleMouse(_getMouseEvent(e, _kMouseEventMove), e.position);
     }
   }
 
   void onPointerPanZoomStart(PointerPanZoomStartEvent e) {
     _lastScale = 1.0;
     _stopFling = true;
+    handlePointerEvent('touch', 'pan_start', e);
   }
 
   // https://docs.flutter.dev/release/breaking-changes/trackpad-gestures
@@ -465,21 +459,21 @@ class InputModel {
       }
     }
     if (isPhysicalMouse.value) {
-      handleMouse(getEvent(e, _kMouseEventDown));
+      handleMouse(_getMouseEvent(e, _kMouseEventDown), e.position);
     }
   }
 
   void onPointUpImage(PointerUpEvent e) {
     if (e.kind != ui.PointerDeviceKind.mouse) return;
     if (isPhysicalMouse.value) {
-      handleMouse(getEvent(e, _kMouseEventUp));
+      handleMouse(_getMouseEvent(e, _kMouseEventUp), e.position);
     }
   }
 
   void onPointMoveImage(PointerMoveEvent e) {
     if (e.kind != ui.PointerDeviceKind.mouse) return;
     if (isPhysicalMouse.value) {
-      handleMouse(getEvent(e, _kMouseEventMove));
+      handleMouse(_getMouseEvent(e, _kMouseEventMove), e.position);
     }
   }
 
@@ -504,19 +498,16 @@ class InputModel {
   }
 
   void refreshMousePos() => handleMouse({
-        'x': lastMousePos.dx,
-        'y': lastMousePos.dy,
         'buttons': 0,
         'type': _kMouseEventMove,
-      });
+      }, lastMousePos);
 
   void tryMoveEdgeOnExit(Offset pos) => handleMouse(
         {
-          'x': pos.dx,
-          'y': pos.dy,
           'buttons': 0,
           'type': _kMouseEventMove,
         },
+        pos,
         onExit: true,
       );
 
@@ -550,17 +541,27 @@ class InputModel {
     return Offset(x, y);
   }
 
-  void handleMouse(
-    Map<String, dynamic> evt, {
-    bool onExit = false,
-  }) {
-    double x = evt['x'];
-    double y = max(0.0, evt['y']);
-    final cursorModel = parent.target!.cursorModel;
+  void handlePointerEvent(String kind, String type, PointerEvent e) {
+    if (checkPeerControlProtected(e.position.dx, max(0.0, e.position.dy))) {
+      return;
+    }
+    // Only touch events are handled for now. So we can just ignore buttons.
+    // to-do: handle mouse events
+    bind.sessionSendPointer(
+      sessionId: sessionId,
+      msg: json.encode({
+        modify({
+          kind: {type: e.position.toString()}
+        })
+      }),
+    );
+  }
 
+  bool checkPeerControlProtected(double x, double y) {
+    final cursorModel = parent.target!.cursorModel;
     if (cursorModel.isPeerControlProtected) {
       lastMousePos = ui.Offset(x, y);
-      return;
+      return true;
     }
 
     if (!cursorModel.gotMouseControl) {
@@ -571,10 +572,23 @@ class InputModel {
         cursorModel.gotMouseControl = true;
       } else {
         lastMousePos = ui.Offset(x, y);
-        return;
+        return true;
       }
     }
     lastMousePos = ui.Offset(x, y);
+    return false;
+  }
+
+  void handleMouse(
+    Map<String, dynamic> evt,
+    Offset offset, {
+    bool onExit = false,
+  }) {
+    double x = offset.dx;
+    double y = max(0.0, offset.dy);
+    if (checkPeerControlProtected(x, y)) {
+      return;
+    }
 
     var type = '';
     var isMove = false;
@@ -615,8 +629,7 @@ class InputModel {
       kForwardMouseButton: 'forward'
     };
     evt['buttons'] = mapButtons[evt['buttons']] ?? '';
-
-    bind.sessionSendMouse(sessionId: sessionId, msg: json.encode(evt));
+    bind.sessionSendMouse(sessionId: sessionId, msg: json.encode(modify(evt)));
   }
 
   Point? handlePointerDevicePos(
