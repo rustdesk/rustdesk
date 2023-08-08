@@ -806,6 +806,10 @@ pub fn main_get_peer_option_sync(id: String, key: String) -> SyncReturn<String> 
     SyncReturn(get_peer_option(id, key))
 }
 
+pub fn main_get_peer_flutter_config_sync(id: String, k: String) -> SyncReturn<String> {
+    SyncReturn(get_peer_flutter_config(id, k))
+}
+
 pub fn main_set_peer_option(id: String, key: String, value: String) {
     set_peer_option(id, key, value)
 }
