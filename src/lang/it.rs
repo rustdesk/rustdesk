@@ -526,7 +526,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Sort tags", "Ordina etichette"),
         ("Open new connections in tabs", ""),
         ("Open in Tabs", ""),
-        ("Open with New window", ""),
+        ("Open with New Window", ""),
         ("separate window", "Separa finestra"),
         ("Move tab to new window", "Sposta scheda nella finestra successiva"),
     ].iter().cloned().collect();

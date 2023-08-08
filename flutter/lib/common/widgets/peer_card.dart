@@ -543,7 +543,7 @@ abstract class BasePeerCard extends StatelessWidget {
       await _openNewConnInAction(id, 'Open in Tabs', kOptionOpenInTabs);
 
   _openInWindowsAction(String id) async =>
-      await _openNewConnInAction(id, 'Open with New window', kOptionOpenInWindows);
+      await _openNewConnInAction(id, 'Open with New Window', kOptionOpenInWindows);
 
   _openNewConnInOptAction(String id) async =>
       mainGetLocalBoolOptionSync(kOptionOpenNewConnInTabs)
