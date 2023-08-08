@@ -1424,17 +1424,18 @@ Future<void> saveWindowPosition(WindowType type, {int? windowId}) async {
       k: kWindowPrefix + type.name, v: pos.toString());
 
   if (type == WindowType.RemoteDesktop && windowId != null) {
-    await _saveSessionWindowPosition(windowId, pos);
+    await _saveSessionWindowPosition(type, windowId, pos);
   }
 }
 
-Future _saveSessionWindowPosition(int windowId, LastWindowPosition pos) async {
+Future _saveSessionWindowPosition(
+    WindowType windowType, int windowId, LastWindowPosition pos) async {
   final remoteList = await DesktopMultiWindow.invokeMethod(
       windowId, kWindowEventGetRemoteList, null);
   if (remoteList != null) {
     for (final peerId in remoteList.split(',')) {
       bind.sessionSetFlutterConfigByPeerId(
-          id: peerId, k: kWindowPrefix, v: pos.toString());
+          id: peerId, k: kWindowPrefix + windowType.name, v: pos.toString());
     }
   }
 }
@@ -1547,7 +1548,7 @@ Future<bool> restoreWindowPosition(WindowType type,
           id: peerId, k: kWindowPrefix + type.name);
     } else {
       pos = await bind.sessionGetFlutterConfigByPeerId(
-          id: peerId, k: kWindowPrefix);
+          id: peerId, k: kWindowPrefix + type.name);
     }
     isRemotePeerPos = pos != null;
   }
