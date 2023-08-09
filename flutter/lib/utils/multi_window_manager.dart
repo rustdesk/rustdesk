@@ -50,7 +50,7 @@ class RustDeskMultiWindowManager {
       'session_id': sessionId,
     };
     await _newSession(
-      true,
+      false,
       WindowType.RemoteDesktop,
       kWindowEventNewRemoteDesktop,
       peerId,
@@ -81,19 +81,26 @@ class RustDeskMultiWindowManager {
   }
 
   _newSession(
-    bool separateWindow,
+    bool openInTabs,
     WindowType type,
     String methodName,
     String remoteId,
     List<int> windows,
     String msg,
   ) async {
-    if (separateWindow) {
-      if (kCloseMultiWindowByHide && _inactiveWindows.isNotEmpty) {
+    if (openInTabs) {
+      if (windows.isEmpty) {
+        await newSessionWindow(type, remoteId, msg, windows);
+      } else {
+        call(type, methodName, msg);
+      }
+    } else {
+      if (_inactiveWindows.isNotEmpty) {
         for (final windowId in windows) {
           if (_inactiveWindows.contains(windowId)) {
-            await DesktopMultiWindow.invokeMethod(
-                windowId, methodName, msg);
+            await restoreWindowPosition(type,
+                windowId: windowId, peerId: remoteId);
+            await DesktopMultiWindow.invokeMethod(windowId, methodName, msg);
             WindowController.fromWindowId(windowId).show();
             registerActiveWindow(windowId);
             return;
@@ -101,12 +108,6 @@ class RustDeskMultiWindowManager {
         }
       }
       await newSessionWindow(type, remoteId, msg, windows);
-    } else {
-      if (windows.isEmpty) {
-        await newSessionWindow(type, remoteId, msg, windows);
-      } else {
-        call(type, methodName, msg);
-      }
     }
   }
 
@@ -119,7 +120,6 @@ class RustDeskMultiWindowManager {
     bool? forceRelay,
     String? switchUuid,
     bool? isRDP,
-    bool forceSeparateWindow = false,
   }) async {
     var params = {
       "type": type.index,
@@ -136,11 +136,10 @@ class RustDeskMultiWindowManager {
     final msg = jsonEncode(params);
 
     // separate window for file transfer is not supported
-    bool separateWindow = forceSeparateWindow ||
-        (type != WindowType.FileTransfer &&
-            mainGetLocalBoolOptionSync(kOptionSeparateRemoteWindow));
+    bool openInTabs = type != WindowType.RemoteDesktop ||
+        mainGetLocalBoolOptionSync(kOptionOpenNewConnInTabs);
 
-    if (windows.length > 1 || separateWindow) {
+    if (windows.length > 1 || !openInTabs) {
       for (final windowId in windows) {
         if (await DesktopMultiWindow.invokeMethod(
             windowId, kWindowEventActiveSession, remoteId)) {
@@ -149,7 +148,7 @@ class RustDeskMultiWindowManager {
       }
     }
 
-    await _newSession(separateWindow, type, methodName, remoteId, windows, msg);
+    await _newSession(openInTabs, type, methodName, remoteId, windows, msg);
   }
 
   Future<dynamic> newRemoteDesktop(
@@ -157,7 +156,6 @@ class RustDeskMultiWindowManager {
     String? password,
     String? switchUuid,
     bool? forceRelay,
-    bool forceSeparateWindow = false,
   }) async {
     return await newSession(
       WindowType.RemoteDesktop,
@@ -167,7 +165,6 @@ class RustDeskMultiWindowManager {
       password: password,
       forceRelay: forceRelay,
       switchUuid: switchUuid,
-      forceSeparateWindow: forceSeparateWindow,
     );
   }
 

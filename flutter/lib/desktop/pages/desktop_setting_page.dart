@@ -319,8 +319,8 @@ class _GeneralState extends State<_General> {
       _OptionCheckBox(context, 'Adaptive bitrate', 'enable-abr'),
       _OptionCheckBox(
         context,
-        'Separate remote windows',
-        kOptionSeparateRemoteWindow,
+        'Open new connections in tabs',
+        kOptionOpenNewConnInTabs,
         isServer: false,
       ),
     ];
@@ -995,16 +995,19 @@ class _NetworkState extends State<_Network> with AutomaticKeepAliveClientMixin {
             return false;
           }
         }
-        final old = await bind.mainGetOption(key: 'custom-rendezvous-server');
-        if (old.isNotEmpty && old != idServer) {
-          await gFFI.userModel.logOut();
-        }
+        final oldApiServer = await bind.mainGetApiServer();
+
         // should set one by one
         await bind.mainSetOption(
             key: 'custom-rendezvous-server', value: idServer);
         await bind.mainSetOption(key: 'relay-server', value: relayServer);
         await bind.mainSetOption(key: 'api-server', value: apiServer);
         await bind.mainSetOption(key: 'key', value: key);
+
+        final newApiServer = await bind.mainGetApiServer();
+        if (oldApiServer.isNotEmpty && oldApiServer != newApiServer) {
+          await gFFI.userModel.logOut(apiServer: oldApiServer);
+        }
         return true;
       }
 

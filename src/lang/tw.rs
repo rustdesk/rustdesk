@@ -461,7 +461,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("No transfers in progress", "沒有正在進行的傳輸"),
         ("Set one-time password length", "設定一次性密碼長度"),
         ("install_cert_tip", ""),
-        ("comfirm_install_cert_tip", ""),
+        ("confirm_install_cert_tip", ""),
         ("RDP Settings", "RDP 設定"),
         ("Sort by", "排序方式"),
         ("New Connection", "新連線"),
@@ -524,8 +524,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("exceed_max_devices", ""),
         ("Sync with recent sessions", ""),
         ("Sort tags", ""),
-        ("Separate remote windows", ""),
-        ("separate window", ""),
+        ("Open connection in new tab", ""),
         ("Move tab to new window", ""),
     ].iter().cloned().collect();
 }

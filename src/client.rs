@@ -1209,6 +1209,10 @@ impl LoginConfigHandler {
     /// * `k` - key of option
     /// * `v` - value of option
     pub fn save_ui_flutter(&mut self, k: String, v: String) {
+        if self.version == 0 && k == "wm_" {
+            log::info!("skip saving {k}");
+            return;
+        }
         let mut config = self.load_config();
         config.ui_flutter.insert(k, v);
         self.save_config(config);

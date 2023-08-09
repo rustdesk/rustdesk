@@ -45,6 +45,7 @@ pub struct AomEncoderConfig {
     pub width: u32,
     pub height: u32,
     pub quality: Quality,
+    pub keyframe_interval: Option<usize>,
 }
 
 pub struct AomEncoder {
@@ -105,7 +106,12 @@ mod webrtc {
         c.g_timebase.num = 1;
         c.g_timebase.den = kRtpTicksPerSecond;
         c.g_input_bit_depth = kBitDepth;
-        c.kf_mode = aom_kf_mode::AOM_KF_DISABLED;
+        if let Some(keyframe_interval) = cfg.keyframe_interval {
+            c.kf_min_dist = 0;
+            c.kf_max_dist = keyframe_interval as _;
+        } else {
+            c.kf_mode = aom_kf_mode::AOM_KF_DISABLED;
+        }
         let (q_min, q_max, b) = AomEncoder::convert_quality(cfg.quality);
         if q_min > 0 && q_min < q_max && q_max < 64 {
             c.rc_min_quantizer = q_min;

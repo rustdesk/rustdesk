@@ -425,19 +425,18 @@ class FfiModel with ChangeNotifier {
       closeConnection();
     }
 
-    Future.delayed(Duration.zero, () async {
-      await dialogManager.show(
-        (setState, close, context) => CustomAlertDialog(
-            title: null,
-            content: SelectionArea(child: msgboxContent(type, title, text)),
-            actions: [
-              dialogButton("Cancel", onPressed: onClose, isOutline: true)
-            ],
-            onCancel: onClose),
-        tag: '$sessionId-waiting-for-image',
-      );
-      _waitForImageDialogShow[sessionId] = true;
-    });
+    dialogManager.show(
+      (setState, close, context) => CustomAlertDialog(
+          title: null,
+          content: SelectionArea(child: msgboxContent(type, title, text)),
+          actions: [
+            dialogButton("Cancel", onPressed: onClose, isOutline: true)
+          ],
+          onCancel: onClose),
+      tag: '$sessionId-waiting-for-image',
+    );
+    _waitForImageDialogShow[sessionId] = true;
+    bind.sessionOnWaitingForImageDialogShow(sessionId: sessionId);
   }
 
   _updateSessionWidthHeight(SessionID sessionId) {
@@ -1532,12 +1531,13 @@ class RecordingModel with ChangeNotifier {
         sessionId: sessionId, start: true, width: width, height: height);
   }
 
-  toggle() {
+  toggle() async {
     if (isIOS) return;
     final sessionId = parent.target?.sessionId;
     if (sessionId == null) return;
     _start = !_start;
     notifyListeners();
+    await bind.sessionRecordStatus(sessionId: sessionId, status: _start);
     if (_start) {
       bind.sessionRefresh(sessionId: sessionId);
     } else {
@@ -1901,10 +1901,5 @@ Future<void> initializeCursorAndCanvas(FFI ffi) async {
 }
 
 clearWaitingForImage(OverlayDialogManager? dialogManager, SessionID sessionId) {
-  final durations = [100, 500, 1000, 2000];
-  for (var duration in durations) {
-    Future.delayed(Duration(milliseconds: duration), () {
-      dialogManager?.dismissByTag('$sessionId-waiting-for-image');
-    });
-  }
+  dialogManager?.dismissByTag('$sessionId-waiting-for-image');
 }

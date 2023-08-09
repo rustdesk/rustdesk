@@ -202,6 +202,13 @@ pub fn get_peer_option(id: String, name: String) -> String {
 }
 
 #[inline]
+#[cfg(feature = "flutter")]
+pub fn get_peer_flutter_config(id: String, name: String) -> String {
+    let c = PeerConfig::load(&id);
+    c.ui_flutter.get(&name).unwrap_or(&"".to_owned()).to_owned()
+}
+
+#[inline]
 pub fn set_peer_option(id: String, name: String, value: String) {
     let mut c = PeerConfig::load(&id);
     if value.is_empty() {
@@ -912,7 +919,7 @@ fn check_connect_status(reconnect: bool) -> mpsc::UnboundedSender<ipc::Data> {
 
 #[cfg(feature = "flutter")]
 pub fn account_auth(op: String, id: String, uuid: String, remember_me: bool) {
-    account::OidcSession::account_auth(op, id, uuid, remember_me);
+    account::OidcSession::account_auth(get_api_server(), op, id, uuid, remember_me);
 }
 
 #[cfg(feature = "flutter")]

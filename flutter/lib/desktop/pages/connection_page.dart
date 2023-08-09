@@ -68,6 +68,7 @@ class _ConnectionPageState extends State<ConnectionPage>
       _idController.selection = TextSelection(
           baseOffset: 0, extentOffset: _idController.value.text.length);
     });
+    Get.put<IDTextEditingController>(_idController);
     windowManager.addListener(this);
   }
 
@@ -76,6 +77,9 @@ class _ConnectionPageState extends State<ConnectionPage>
     _idController.dispose();
     _updateTimer?.cancel();
     windowManager.removeListener(this);
+    if (Get.isRegistered<IDTextEditingController>()) {
+      Get.delete<IDTextEditingController>();
+    }
     super.dispose();
   }
 

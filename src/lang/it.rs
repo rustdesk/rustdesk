@@ -461,7 +461,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("No transfers in progress", "Nessun trasferimento in corso"),
         ("Set one-time password length", "Imposta lunghezza password monouso"),
         ("install_cert_tip", "Installa certificato RustDesk"),
-        ("comfirm_install_cert_tip", "Questo è un certificato di test RustDesk, che può essere considerato attendibile.\nIl certificato verrà usato per certificarsi ed installare i driver RustDesk quando richiesto."),
+        ("confirm_install_cert_tip", "Questo è un certificato di test RustDesk, che può essere considerato attendibile.\nIl certificato verrà usato per certificarsi ed installare i driver RustDesk quando richiesto."),
         ("RDP Settings", "Impostazioni RDP"),
         ("Sort by", "Ordina per"),
         ("New Connection", "Nuova connessione"),
@@ -524,8 +524,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("exceed_max_devices", "Hai raggiunto il numero massimo di dispositivi gestibili."),
         ("Sync with recent sessions", "Sincronizza con le sessioni recenti"),
         ("Sort tags", "Ordina etichette"),
-        ("Separate remote windows", "Separa finestre remote"),
-        ("separate window", "Separa finestra"),
+        ("Open connection in new tab", "Apri connessione in una nuova scheda"),
         ("Move tab to new window", "Sposta scheda nella finestra successiva"),
     ].iter().cloned().collect();
 }
