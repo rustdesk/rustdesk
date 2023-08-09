@@ -164,7 +164,7 @@ pub fn call_main_service_pointer_input(kind: String, mask: i32, x: i32, y: i32) 
             ctx,
             "rustPointerInput",
             "(III)V",
-            &[JValue(kind), JValue::Int(mask), JValue::Int(x), JValue::Int(y)],
+            &[JValue::String(kind), JValue::Int(mask), JValue::Int(x), JValue::Int(y)],
         )?;
         return Ok(());
     } else {
