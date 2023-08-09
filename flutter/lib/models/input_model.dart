@@ -638,6 +638,7 @@ class InputModel {
     Offset offset, {
     bool onExit = false,
   }) {
+    debugPrint('REMOVE ME ========================= 111');
     double x = offset.dx;
     double y = max(0.0, offset.dy);
     if (_checkPeerControlProtected(x, y)) {
@@ -671,11 +672,12 @@ class InputModel {
       buttons: evt['buttons'],
     );
     if (pos == null) {
+      debugPrint('REMOVE ME ========================= 222');
       return;
     }
     if (type != '') {
-      evt['x'] = 0;
-      evt['y'] = 0;
+      evt['x'] = '0';
+      evt['y'] = '0';
     } else {
       evt['x'] = '${pos.x}';
       evt['y'] = '${pos.y}';
@@ -689,6 +691,7 @@ class InputModel {
       kForwardMouseButton: 'forward'
     };
     evt['buttons'] = mapButtons[evt['buttons']] ?? '';
+    debugPrint('REMOVE ME ========================= 333 $evt');
     bind.sessionSendMouse(sessionId: sessionId, msg: json.encode(modify(evt)));
   }
 
