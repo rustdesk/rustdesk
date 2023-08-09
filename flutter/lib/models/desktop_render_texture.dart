@@ -38,9 +38,4 @@ class RenderTexture {
       _textureKey = -1;
     }
   }
-
-  static final RenderTexture instance = RenderTexture();
 }
-
-// Global instance for separate texture
-final renderTexture = RenderTexture.instance;
