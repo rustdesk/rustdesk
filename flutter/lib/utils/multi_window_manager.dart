@@ -98,9 +98,9 @@ class RustDeskMultiWindowManager {
       if (_inactiveWindows.isNotEmpty) {
         for (final windowId in windows) {
           if (_inactiveWindows.contains(windowId)) {
-            await DesktopMultiWindow.invokeMethod(windowId, methodName, msg);
             await restoreWindowPosition(type,
                 windowId: windowId, peerId: remoteId);
+            await DesktopMultiWindow.invokeMethod(windowId, methodName, msg);
             WindowController.fromWindowId(windowId).show();
             registerActiveWindow(windowId);
             return;
