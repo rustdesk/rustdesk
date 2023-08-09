@@ -425,19 +425,18 @@ class FfiModel with ChangeNotifier {
       closeConnection();
     }
 
-    Future.delayed(Duration.zero, () async {
-      await dialogManager.show(
-        (setState, close, context) => CustomAlertDialog(
-            title: null,
-            content: SelectionArea(child: msgboxContent(type, title, text)),
-            actions: [
-              dialogButton("Cancel", onPressed: onClose, isOutline: true)
-            ],
-            onCancel: onClose),
-        tag: '$sessionId-waiting-for-image',
-      );
-      _waitForImageDialogShow[sessionId] = true;
-    });
+    dialogManager.show(
+      (setState, close, context) => CustomAlertDialog(
+          title: null,
+          content: SelectionArea(child: msgboxContent(type, title, text)),
+          actions: [
+            dialogButton("Cancel", onPressed: onClose, isOutline: true)
+          ],
+          onCancel: onClose),
+      tag: '$sessionId-waiting-for-image',
+    );
+    _waitForImageDialogShow[sessionId] = true;
+    bind.sessionOnWaitingForImageDialogShow(sessionId: sessionId);
   }
 
   _updateSessionWidthHeight(SessionID sessionId) {
@@ -1902,7 +1901,7 @@ Future<void> initializeCursorAndCanvas(FFI ffi) async {
 }
 
 clearWaitingForImage(OverlayDialogManager? dialogManager, SessionID sessionId) {
-  final durations = [100, 500, 1000, 2000];
+  final durations = [0, 100, 500, 1000, 2000];
   for (var duration in durations) {
     Future.delayed(Duration(milliseconds: duration), () {
       dialogManager?.dismissByTag('$sessionId-waiting-for-image');
