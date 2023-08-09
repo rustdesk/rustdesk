@@ -116,11 +116,7 @@ class _RemotePageState extends State<RemotePage>
       Wakelock.enable();
     }
     // Register texture.
-    if (mainGetLocalBoolOptionSync(kOptionOpenNewConnInTabs)) {
-      _renderTexture = RenderTexture();
-    } else {
-      _renderTexture = renderTexture;
-    }
+    _renderTexture = RenderTexture();
     _renderTexture.create(sessionId);
 
     _ffi.ffiModel.updateEventListener(sessionId, widget.id);

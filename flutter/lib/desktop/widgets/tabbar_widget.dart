@@ -582,8 +582,6 @@ class WindowActionPanelState extends State<WindowActionPanel>
       }
       await windowManager.hide();
     } else {
-      renderTexture.destroy();
-
       // it's safe to hide the subwindow
       final controller = WindowController.fromWindowId(kWindowId!);
       if (Platform.isMacOS && await controller.isFullScreen()) {
