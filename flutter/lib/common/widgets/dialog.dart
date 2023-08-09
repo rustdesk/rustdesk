@@ -1352,7 +1352,7 @@ customImageQualityDialog(SessionID sessionId, String id, FFI ffi) async {
   msgBoxCommon(ffi.dialogManager, 'Custom Image Quality', content, [btnClose]);
 }
 
-void deletePeerConfirmDialog(Function onSubmit) async {
+void deletePeerConfirmDialog(Function onSubmit, String title) async {
   gFFI.dialogManager.show(
     (setState, close, context) {
       submit() async {
@@ -1368,8 +1368,10 @@ void deletePeerConfirmDialog(Function onSubmit) async {
               Icons.delete_rounded,
               color: Colors.red,
             ),
-            Text(translate('Delete')).paddingOnly(
-              left: 10,
+            Expanded(
+              child: Text(title, overflow: TextOverflow.ellipsis).paddingOnly(
+                left: 10,
+              ),
             ),
           ],
         ),
