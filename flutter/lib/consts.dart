@@ -54,6 +54,9 @@ const String kTabLabelSettingPage = "Settings";
 const String kWindowPrefix = "wm_";
 const int kWindowMainId = 0;
 
+const String kPointerEventKindTouch = "touch";
+const String kPointerEventKindMouse = "mouse";
+
 // the executable name of the portable version
 const String kEnvPortableExecutable = "RUSTDESK_APPNAME";
 

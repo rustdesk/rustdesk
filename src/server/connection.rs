@@ -1573,20 +1573,20 @@ impl Connection {
                                     pan_start.y,
                                 )
                             }
-                            Some(touch_event::Union::PanUpdate(pan_start)) => {
+                            Some(touch_event::Union::PanUpdate(pan_update)) => {
                                 call_main_service_pointer_input(
                                     "touch".to_string(),
                                     5,
-                                    pan_start.x,
-                                    pan_start.y,
+                                    pan_update.x,
+                                    pan_update.y,
                                 )
                             }
-                            Some(touch_event::Union::PanEnd(pan_start)) => {
+                            Some(touch_event::Union::PanEnd(pan_end)) => {
                                 call_main_service_pointer_input(
                                     "touch".to_string(),
                                     6,
-                                    pan_start.x,
-                                    pan_start.y,
+                                    pan_end.x,
+                                    pan_end.y,
                                 )
                             }
                             _ => Ok(()),

@@ -1177,14 +1177,39 @@ pub fn session_send_pointer(session_id: SessionID, msg: String) {
         let ctrl = m.get("ctrl").is_some();
         let shift = m.get("shift").is_some();
         let command = m.get("command").is_some();
-        if let Some(touch_event) = m.get("touch") {
-            if let Some(scale) = touch_event.get("scale") {
-                if let Some(session) = SESSIONS.read().unwrap().get(&session_id) {
-                    if let Some(scale) = scale.as_i64() {
-                        session.send_touch_scale(scale as _, alt, ctrl, shift, command);
-                    }
-                }
-            }
+        match (m.get("k"), m.get("v")) {
+            (Some(k), Some(v)) => match k.as_str() {
+                Some("touch") => match v.as_str() {
+                    Some("scale") => match v.get("v") {
+                        Some(scale) => {
+                            if let Some(scale) = scale.as_i64() {
+                                if let Some(session) = SESSIONS.read().unwrap().get(&session_id) {
+                                    session.send_touch_scale(scale as _, alt, ctrl, shift, command);
+                                }
+                            }
+                        }
+                        None => {}
+                    },
+                    Some(pan_event) => match (v.get("x"), v.get("y")) {
+                        (Some(x), Some(y)) => {
+                            if let Some(x) = x.as_i64() {
+                                if let Some(y) = y.as_i64() {
+                                    if let Some(session) = SESSIONS.read().unwrap().get(&session_id)
+                                    {
+                                        session.send_touch_pan_event(
+                                            pan_event, x as _, y as _, alt, ctrl, shift, command,
+                                        );
+                                    }
+                                }
+                            }
+                        }
+                        _ => {}
+                    },
+                    _ => {}
+                },
+                _ => {}
+            },
+            _ => {}
         }
     }
 }
