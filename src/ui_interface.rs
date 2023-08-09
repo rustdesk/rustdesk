@@ -63,13 +63,6 @@ lazy_static::lazy_static! {
     }));
     static ref ASYNC_JOB_STATUS : Arc<Mutex<String>> = Default::default();
     static ref TEMPORARY_PASSWD : Arc<Mutex<String>> = Arc::new(Mutex::new("".to_owned()));
-    static ref LOGIN_DEVICE_INFO: Arc<LoginDeviceInfo> = Arc::new(LoginDeviceInfo{
-        // std::env::consts::OS is better than whoami::platform() here.
-        os: std::env::consts::OS.to_owned(),
-        r#type: "client".to_owned(),
-        name: crate::common::hostname(),
-    });
-    static ref LOGIN_DEVICE_INFO_JSON: Arc<String> = Arc::new(serde_json::to_string(&**LOGIN_DEVICE_INFO).unwrap_or_default());
 }
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -975,12 +968,17 @@ pub fn get_hostname() -> String {
 
 #[inline]
 pub fn get_login_device_info() -> LoginDeviceInfo {
-    (**LOGIN_DEVICE_INFO).clone()
+    LoginDeviceInfo {
+        // std::env::consts::OS is better than whoami::platform() here.
+        os: std::env::consts::OS.to_owned(),
+        r#type: "client".to_owned(),
+        name: crate::common::hostname(),
+    }
 }
 
 #[inline]
 pub fn get_login_device_info_json() -> String {
-    (**LOGIN_DEVICE_INFO_JSON).clone()
+    serde_json::to_string(&get_login_device_info()).unwrap_or_default()
 }
 
 // notice: avoiding create ipc connection repeatedly,
