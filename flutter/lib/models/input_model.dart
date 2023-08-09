@@ -649,7 +649,7 @@ class InputModel {
     if (pos == null) {
       return;
     }
-    evt['x'] = '${pos.x}}';
+    evt['x'] = '${pos.x}';
     evt['y'] = '${pos.y}';
 
     Map<int, String> mapButtons = {
