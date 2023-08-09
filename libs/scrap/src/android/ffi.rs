@@ -154,7 +154,7 @@ pub extern "system" fn Java_com_carriez_flutter_1hbb_MainService_init(
     }
 }
 
-pub fn call_main_service_mouse_input(mask: i32, x: i32, y: i32) -> JniResult<()> {
+pub fn call_main_service_pointer_input(kind: String, mask: i32, x: i32, y: i32) -> JniResult<()> {
     if let (Some(jvm), Some(ctx)) = (
         JVM.read().unwrap().as_ref(),
         MAIN_SERVICE_CTX.read().unwrap().as_ref(),
@@ -162,9 +162,9 @@ pub fn call_main_service_mouse_input(mask: i32, x: i32, y: i32) -> JniResult<()>
         let mut env = jvm.attach_current_thread_as_daemon()?;
         env.call_method(
             ctx,
-            "rustMouseInput",
+            "rustPointerInput",
             "(III)V",
-            &[JValue::Int(mask), JValue::Int(x), JValue::Int(y)],
+            &[JValue(kind), JValue::Int(mask), JValue::Int(x), JValue::Int(y)],
         )?;
         return Ok(());
     } else {

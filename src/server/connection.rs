@@ -1546,8 +1546,10 @@ impl Connection {
             match msg.union {
                 Some(message::Union::MouseEvent(me)) => {
                     #[cfg(any(target_os = "android", target_os = "ios"))]
-                    if let Err(e) = call_main_service_mouse_input(me.mask, me.x, me.y) {
-                        log::debug!("call_main_service_mouse_input fail:{}", e);
+                    if let Err(e) =
+                        call_main_service_pointer_input("mouse".to_string(), me.mask, me.x, me.y)
+                    {
+                        log::debug!("call_main_service_pointer_input fail:{}", e);
                     }
                     #[cfg(not(any(target_os = "android", target_os = "ios")))]
                     if self.peer_keyboard_enabled() {
@@ -1559,8 +1561,40 @@ impl Connection {
                         self.input_mouse(me, self.inner.id());
                     }
                 }
-                Some(message::Union::PointerDeviceEvent(pde)) =>
-                {
+                Some(message::Union::PointerDeviceEvent(pde)) => {
+                    #[cfg(any(target_os = "android", target_os = "ios"))]
+                    if let Err(e) = match pde.union {
+                        Some(pointer_device_event::Union::TouchEvent(touch)) => match touch.union {
+                            Some(touch_event::Union::PanStart(pan_start)) => {
+                                call_main_service_pointer_input(
+                                    "touch".to_string(),
+                                    4,
+                                    pan_start.x,
+                                    pan_start.y,
+                                )
+                            }
+                            Some(touch_event::Union::PanUpdate(pan_start)) => {
+                                call_main_service_pointer_input(
+                                    "touch".to_string(),
+                                    5,
+                                    pan_start.x,
+                                    pan_start.y,
+                                )
+                            }
+                            Some(touch_event::Union::PanEnd(pan_start)) => {
+                                call_main_service_pointer_input(
+                                    "touch".to_string(),
+                                    6,
+                                    pan_start.x,
+                                    pan_start.y,
+                                )
+                            }
+                            _ => Ok(()),
+                        },
+                        _ => Ok(()),
+                    } {
+                        log::debug!("call_main_service_pointer_input fail:{}", e);
+                    }
                     #[cfg(not(any(target_os = "android", target_os = "ios")))]
                     if self.peer_keyboard_enabled() {
                         MOUSE_MOVE_TIME.store(get_time(), Ordering::SeqCst);
