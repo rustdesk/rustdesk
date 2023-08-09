@@ -637,8 +637,8 @@ pub fn main_get_default_sound_input() -> Option<String> {
     None
 }
 
-pub fn main_get_hostname() -> SyncReturn<String> {
-    SyncReturn(get_hostname())
+pub fn main_get_login_device_info() -> SyncReturn<String> {
+    SyncReturn(get_login_device_info_json())
 }
 
 pub fn main_change_id(new_id: String) {

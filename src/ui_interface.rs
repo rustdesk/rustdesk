@@ -44,6 +44,13 @@ pub struct UiStatus {
     pub id: String,
 }
 
+#[derive(Debug, Clone, Serialize)]
+pub struct LoginDeviceInfo {
+    pub os: String,
+    pub r#type: String,
+    pub name: String,
+}
+
 lazy_static::lazy_static! {
     static ref UI_STATUS : Arc<Mutex<UiStatus>> = Arc::new(Mutex::new(UiStatus{
         status_num: 0,
@@ -56,6 +63,13 @@ lazy_static::lazy_static! {
     }));
     static ref ASYNC_JOB_STATUS : Arc<Mutex<String>> = Default::default();
     static ref TEMPORARY_PASSWD : Arc<Mutex<String>> = Arc::new(Mutex::new("".to_owned()));
+    static ref LOGIN_DEVICE_INFO: Arc<LoginDeviceInfo> = Arc::new(LoginDeviceInfo{
+        // std::env::consts::OS is better than whoami::platform() here.
+        os: std::env::consts::OS.to_owned(),
+        r#type: "client".to_owned(),
+        name: crate::common::hostname(),
+    });
+    static ref LOGIN_DEVICE_INFO_JSON: Arc<String> = Arc::new(serde_json::to_string(&**LOGIN_DEVICE_INFO).unwrap_or_default());
 }
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -957,6 +971,16 @@ pub fn get_fingerprint() -> String {
 
 pub fn get_hostname() -> String {
     crate::common::hostname()
+}
+
+#[inline]
+pub fn get_login_device_info() -> LoginDeviceInfo {
+    (**LOGIN_DEVICE_INFO).clone()
+}
+
+#[inline]
+pub fn get_login_device_info_json() -> String {
+    (**LOGIN_DEVICE_INFO_JSON).clone()
 }
 
 // notice: avoiding create ipc connection repeatedly,
