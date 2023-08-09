@@ -81,7 +81,7 @@ class MainService : Service() {
             Log.d(logTag,"Turn on Screen")
             wakeLock.acquire(5000)
         } else {
-            when (name) {
+            when (kind) {
                 "touch" -> {
                     InputService.ctx?.onTouchInput(mask, x, y)
                 }

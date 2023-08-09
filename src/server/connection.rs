@@ -39,7 +39,7 @@ use hbb_common::{
     tokio_util::codec::{BytesCodec, Framed},
 };
 #[cfg(any(target_os = "android", target_os = "ios"))]
-use scrap::android::call_main_service_mouse_input;
+use scrap::android::call_main_service_pointer_input;
 use serde_json::{json, value::Value};
 use sha2::{Digest, Sha256};
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -1547,7 +1547,7 @@ impl Connection {
                 Some(message::Union::MouseEvent(me)) => {
                     #[cfg(any(target_os = "android", target_os = "ios"))]
                     if let Err(e) =
-                        call_main_service_pointer_input("mouse".to_string(), me.mask, me.x, me.y)
+                        call_main_service_pointer_input("mouse", me.mask, me.x, me.y)
                     {
                         log::debug!("call_main_service_pointer_input fail:{}", e);
                     }
@@ -1567,7 +1567,7 @@ impl Connection {
                         Some(pointer_device_event::Union::TouchEvent(touch)) => match touch.union {
                             Some(touch_event::Union::PanStart(pan_start)) => {
                                 call_main_service_pointer_input(
-                                    "touch".to_string(),
+                                    "touch",
                                     4,
                                     pan_start.x,
                                     pan_start.y,
@@ -1575,7 +1575,7 @@ impl Connection {
                             }
                             Some(touch_event::Union::PanUpdate(pan_update)) => {
                                 call_main_service_pointer_input(
-                                    "touch".to_string(),
+                                    "touch",
                                     5,
                                     pan_update.x,
                                     pan_update.y,
@@ -1583,7 +1583,7 @@ impl Connection {
                             }
                             Some(touch_event::Union::PanEnd(pan_end)) => {
                                 call_main_service_pointer_input(
-                                    "touch".to_string(),
+                                    "touch",
                                     6,
                                     pan_end.x,
                                     pan_end.y,
