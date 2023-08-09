@@ -50,7 +50,7 @@ class RustDeskMultiWindowManager {
       'session_id': sessionId,
     };
     await _newSession(
-      true,
+      false,
       WindowType.RemoteDesktop,
       kWindowEventNewRemoteDesktop,
       peerId,
