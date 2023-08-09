@@ -919,18 +919,12 @@ mod desktop {
         }
 
         fn get_display(&mut self) {
-            // skip env tries for lightdm login screen
-            if self.username != "lightdm"{
-                let display_envs = vec![GNOME_SESSION_BINARY, XFCE4_PANEL, SDDM_GREETER, PLASMA_X11];
-                for display_env in display_envs {
-                    self.display = get_env_tries("DISPLAY", &self.uid, display_env, 10);
-                    if !self.display.is_empty() {
-                        break;
-                    }
+            let display_envs = vec![GNOME_SESSION_BINARY, XFCE4_PANEL, SDDM_GREETER, PLASMA_X11];
+            for diplay_env in display_envs {
+                self.display = get_env_tries("DISPLAY", &self.uid, diplay_env, 20);
+                if !self.display.is_empty() {
+                    break;
                 }
-            }
-            else {
-                    self.display = String::new();
             }
 
             if self.display.is_empty() {
@@ -988,18 +982,12 @@ mod desktop {
 
         fn get_xauth(&mut self) {
             // try by direct access to window manager process by name
-            // skip env tries for lightdm login screen
-            if self.username != "lightdm"{
-                let display_envs = vec![GNOME_SESSION_BINARY, XFCE4_PANEL, SDDM_GREETER, PLASMA_X11];
-                for display_env in display_envs {
-                    self.xauth = get_env_tries("XAUTHORITY", &self.uid, display_env, 20);
-                    if !self.xauth.is_empty() {
-                        break;
-                    }
+            let display_envs = vec![GNOME_SESSION_BINARY, XFCE4_PANEL, SDDM_GREETER, PLASMA_X11];
+            for diplay_env in display_envs {
+                self.xauth = get_env_tries("XAUTHORITY", &self.uid, diplay_env, 20);
+                if !self.xauth.is_empty() {
+                    break;
                 }
-            }
-            else {
-                self.xauth = String::new();
             }
 
             // get from Xorg process, parameter and environment
