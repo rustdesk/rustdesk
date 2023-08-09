@@ -1901,10 +1901,5 @@ Future<void> initializeCursorAndCanvas(FFI ffi) async {
 }
 
 clearWaitingForImage(OverlayDialogManager? dialogManager, SessionID sessionId) {
-  final durations = [0, 100, 500, 1000, 2000];
-  for (var duration in durations) {
-    Future.delayed(Duration(milliseconds: duration), () {
-      dialogManager?.dismissByTag('$sessionId-waiting-for-image');
-    });
-  }
+  dialogManager?.dismissByTag('$sessionId-waiting-for-image');
 }
