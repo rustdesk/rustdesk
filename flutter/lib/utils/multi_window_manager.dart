@@ -50,7 +50,7 @@ class RustDeskMultiWindowManager {
       'session_id': sessionId,
     };
     await _newSession(
-      true,
+      false,
       WindowType.RemoteDesktop,
       kWindowEventNewRemoteDesktop,
       peerId,
@@ -98,6 +98,8 @@ class RustDeskMultiWindowManager {
       if (_inactiveWindows.isNotEmpty) {
         for (final windowId in windows) {
           if (_inactiveWindows.contains(windowId)) {
+            await restoreWindowPosition(type,
+                windowId: windowId, peerId: remoteId);
             await DesktopMultiWindow.invokeMethod(windowId, methodName, msg);
             WindowController.fromWindowId(windowId).show();
             registerActiveWindow(windowId);

@@ -11,6 +11,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_hbb/common/formatter/id_formatter.dart';
 import 'package:flutter_hbb/desktop/widgets/refresh_wrapper.dart';
 import 'package:flutter_hbb/desktop/widgets/tabbar_widget.dart';
 import 'package:flutter_hbb/main.dart';
@@ -1424,17 +1425,18 @@ Future<void> saveWindowPosition(WindowType type, {int? windowId}) async {
       k: kWindowPrefix + type.name, v: pos.toString());
 
   if (type == WindowType.RemoteDesktop && windowId != null) {
-    await _saveSessionWindowPosition(windowId, pos);
+    await _saveSessionWindowPosition(type, windowId, pos);
   }
 }
 
-Future _saveSessionWindowPosition(int windowId, LastWindowPosition pos) async {
+Future _saveSessionWindowPosition(
+    WindowType windowType, int windowId, LastWindowPosition pos) async {
   final remoteList = await DesktopMultiWindow.invokeMethod(
       windowId, kWindowEventGetRemoteList, null);
   if (remoteList != null) {
     for (final peerId in remoteList.split(',')) {
       bind.sessionSetFlutterConfigByPeerId(
-          id: peerId, k: kWindowPrefix, v: pos.toString());
+          id: peerId, k: kWindowPrefix + windowType.name, v: pos.toString());
     }
   }
 }
@@ -1541,9 +1543,19 @@ Future<bool> restoreWindowPosition(WindowType type,
 
   bool isRemotePeerPos = false;
   String? pos;
+  // No need to check mainGetLocalBoolOptionSync(kOptionOpenNewConnInTabs)
+  // Though "open in tabs" is true and the new window restore peer position, it's ok.  
   if (type == WindowType.RemoteDesktop && windowId != null && peerId != null) {
-    pos = await bind.sessionGetFlutterConfigByPeerId(
-        id: peerId, k: kWindowPrefix);
+    // If the restore position is called by main window, and the peer id is not null
+    // then we may need to get the position by reading the peer config.
+    // Because the session may not be read at this time.
+    if (desktopType == DesktopType.main) {
+      pos = bind.mainGetPeerFlutterConfigSync(
+          id: peerId, k: kWindowPrefix + type.name);
+    } else {
+      pos = await bind.sessionGetFlutterConfigByPeerId(
+          id: peerId, k: kWindowPrefix + type.name);
+    }
     isRemotePeerPos = pos != null;
   }
   pos ??= bind.getLocalFlutterConfig(k: kWindowPrefix + type.name);
@@ -1833,6 +1845,14 @@ connect(
   bool isRDP = false,
 }) async {
   if (id == '') return;
+  if (!isDesktop || desktopType == DesktopType.main) {
+    try {
+      if (Get.isRegistered<IDTextEditingController>()) {
+        final idController = Get.find<IDTextEditingController>();
+        idController.text = formatID(id);
+      }
+    } catch (_) {}
+  }
   id = id.replaceAll(' ', '');
   final oldId = id;
   id = await bind.mainHandleRelayId(id: id);

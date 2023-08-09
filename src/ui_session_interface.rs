@@ -202,7 +202,7 @@ impl<T: InvokeUiSession> Session<T> {
     }
 
     pub fn get_flutter_config(&self, k: String) -> String {
-        self.lc.write().unwrap().get_ui_flutter(&k)
+        self.lc.read().unwrap().get_ui_flutter(&k)
     }
 
     pub fn toggle_option(&mut self, name: String) {
