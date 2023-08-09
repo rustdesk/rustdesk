@@ -585,8 +585,8 @@ class InputModel {
     late final dynamic evtValue;
     if (type == 'pan_update') {
       evtValue = {
-        'x': '${x.toInt()}',
-        'y': '${y.toInt()}',
+        'x': x.toInt(),
+        'y': y.toInt(),
       };
     } else {
       final isMoveTypes = ['pan_start', 'pan_end'];
@@ -601,8 +601,8 @@ class InputModel {
         return;
       }
       evtValue = {
-        'x': '${pos.x}',
-        'y': '${pos.y}',
+        'x': pos.x,
+        'y': pos.y,
       };
     }
 
