@@ -77,6 +77,9 @@ class _ConnectionPageState extends State<ConnectionPage>
     _idController.dispose();
     _updateTimer?.cancel();
     windowManager.removeListener(this);
+    if (Get.isRegistered<IDTextEditingController>()) {
+      Get.delete<IDTextEditingController>();
+    }
     super.dispose();
   }
 
