@@ -345,6 +345,14 @@ impl FlutterHandler {
         *self.notify_rendered.write().unwrap() = false;
         self.renderer.write().unwrap().set_size(width, height);
     }
+
+    pub fn on_waiting_for_image_dialog_show(&self) {
+        #[cfg(any(feature = "flutter_texture_render"))]
+        {
+            *self.notify_rendered.write().unwrap() = false;
+        }
+        // rgba array render will notify every frame
+    }
 }
 
 impl InvokeUiSession for FlutterHandler {
