@@ -163,8 +163,8 @@ pub fn call_main_service_pointer_input(kind: String, mask: i32, x: i32, y: i32) 
         env.call_method(
             ctx,
             "rustPointerInput",
-            "(III)V",
-            &[JValue::String(kind), JValue::Int(mask), JValue::Int(x), JValue::Int(y)],
+            "(Ljava/lang/String;III)V",
+            &[JValue::Object(&JObject::from(name)), JValue::Int(mask), JValue::Int(x), JValue::Int(y)],
         )?;
         return Ok(());
     } else {
