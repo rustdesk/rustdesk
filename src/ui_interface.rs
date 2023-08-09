@@ -44,6 +44,13 @@ pub struct UiStatus {
     pub id: String,
 }
 
+#[derive(Debug, Clone, Serialize)]
+pub struct LoginDeviceInfo {
+    pub os: String,
+    pub r#type: String,
+    pub name: String,
+}
+
 lazy_static::lazy_static! {
     static ref UI_STATUS : Arc<Mutex<UiStatus>> = Arc::new(Mutex::new(UiStatus{
         status_num: 0,
@@ -957,6 +964,21 @@ pub fn get_fingerprint() -> String {
 
 pub fn get_hostname() -> String {
     crate::common::hostname()
+}
+
+#[inline]
+pub fn get_login_device_info() -> LoginDeviceInfo {
+    LoginDeviceInfo {
+        // std::env::consts::OS is better than whoami::platform() here.
+        os: std::env::consts::OS.to_owned(),
+        r#type: "client".to_owned(),
+        name: crate::common::hostname(),
+    }
+}
+
+#[inline]
+pub fn get_login_device_info_json() -> String {
+    serde_json::to_string(&get_login_device_info()).unwrap_or_default()
 }
 
 // notice: avoiding create ipc connection repeatedly,
