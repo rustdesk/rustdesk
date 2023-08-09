@@ -117,9 +117,9 @@ class _RemotePageState extends State<RemotePage>
     }
     // Register texture.
     if (mainGetLocalBoolOptionSync(kOptionOpenNewConnInTabs)) {
-      _renderTexture = renderTexture;
-    } else {
       _renderTexture = RenderTexture();
+    } else {
+      _renderTexture = renderTexture;
     }
     _renderTexture.create(sessionId);
 
