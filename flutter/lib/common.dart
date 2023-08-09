@@ -1543,6 +1543,8 @@ Future<bool> restoreWindowPosition(WindowType type,
 
   bool isRemotePeerPos = false;
   String? pos;
+  // No need to check mainGetLocalBoolOptionSync(kOptionOpenNewConnInTabs)
+  // Though "open in tabs" is true and the new window restore peer position, it's ok.  
   if (type == WindowType.RemoteDesktop && windowId != null && peerId != null) {
     // If the restore position is called by main window, and the peer id is not null
     // then we may need to get the position by reading the peer config.
