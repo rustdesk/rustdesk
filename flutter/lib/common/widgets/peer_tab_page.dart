@@ -103,6 +103,7 @@ class _PeerTabPageState extends State<PeerTabPage>
                 Expanded(child: _createSwitchBar(context)),
                 const PeerSearchBar().marginOnly(right: isMobile ? 0 : 13),
                 _createRefresh(),
+                _createMultiSelection(),
                 Offstage(
                     offstage: !isDesktop,
                     child: _createPeerViewTypeSwitch(context)),
@@ -258,6 +259,24 @@ class _PeerTabPageState extends State<PeerTabPage>
     );
   }
 
+  Widget _createMultiSelection() {
+    final textColor = Theme.of(context).textTheme.titleLarge?.color;
+    final model = Provider.of<PeerTabModel>(context);
+    return Container(
+      padding: EdgeInsets.all(4.0),
+      child: InkWell(
+        onTap: () {
+          model.setMultiSelectionMode(true);
+        },
+        child: Icon(
+          IconFont.checkbox,
+          size: 18,
+          color: textColor,
+        ),
+      ),
+    );
+  }
+
   Widget createMultiSelectionBar() {
     final model = Provider.of<PeerTabModel>(context);
     return Row(
@@ -308,7 +327,7 @@ class _PeerTabPageState extends State<PeerTabPage>
               default:
                 break;
             }
-            gFFI.peerTabModel.closeSelection();
+            gFFI.peerTabModel.setMultiSelectionMode(false);
             showToast(translate('Successful'));
           }
 
@@ -334,7 +353,7 @@ class _PeerTabPageState extends State<PeerTabPage>
             }
           }
           await bind.mainStoreFav(favs: favs);
-          gFFI.peerTabModel.closeSelection();
+          model.setMultiSelectionMode(false);
           showToast(translate('Successful'));
         },
         child: Tooltip(
@@ -355,7 +374,7 @@ class _PeerTabPageState extends State<PeerTabPage>
           final peers = model.selectedPeers;
           gFFI.abModel.addPeers(peers);
           gFFI.abModel.pushAb();
-          gFFI.peerTabModel.closeSelection();
+          model.setMultiSelectionMode(false);
           showToast(translate('Successful'));
         },
         child: Tooltip(
@@ -379,7 +398,7 @@ class _PeerTabPageState extends State<PeerTabPage>
                   gFFI.abModel.changeTagForPeers(
                       peers.map((p) => p.id).toList(), selectedTags);
                   gFFI.abModel.pushAb();
-                  gFFI.peerTabModel.closeSelection();
+                  model.setMultiSelectionMode(false);
                   showToast(translate('Successful'));
                 });
               },
@@ -416,7 +435,7 @@ class _PeerTabPageState extends State<PeerTabPage>
     final model = Provider.of<PeerTabModel>(context);
     return InkWell(
             onTap: () {
-              model.closeSelection();
+              model.setMultiSelectionMode(false);
             },
             child:
                 Tooltip(message: translate('Close'), child: Icon(Icons.clear)))
