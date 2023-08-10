@@ -157,9 +157,6 @@ class _RawTouchGestureDetectorRegionState
     if (lastDeviceKind != PointerDeviceKind.touch) {
       return;
     }
-    if (isDesktop) {
-      return;
-    }
     if (handleTouch) {
       ffi.cursorModel
           .move(_cacheLongPressPosition.dx, _cacheLongPressPosition.dy);
