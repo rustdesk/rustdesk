@@ -180,8 +180,8 @@ class InputService : AccessibilityService() {
         val y = max(0, _y)
         when (mask) {
             TOUCH_PAN_UPDATE -> {
-                mouseX += x * SCREEN_INFO.scale
-                mouseY += y * SCREEN_INFO.scale
+                mouseX -= x * SCREEN_INFO.scale
+                mouseY -= y * SCREEN_INFO.scale
                 continueGesture(mouseX, mouseY)
             }
             TOUCH_PAN_START -> {
@@ -193,8 +193,6 @@ class InputService : AccessibilityService() {
                 endGesture(mouseX, mouseY)
                 mouseX = x * SCREEN_INFO.scale
                 mouseY = y * SCREEN_INFO.scale
-                continueGesture(mouseX, mouseY)
-                endGesture(mouseX, mouseY)
             }
             else -> {}
         }
