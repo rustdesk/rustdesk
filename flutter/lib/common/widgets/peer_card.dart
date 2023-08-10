@@ -139,9 +139,10 @@ class _PeerCardState extends State<_PeerCard>
         );
       },
       child: GestureDetector(
-          onDoubleTap: peerTabModel.multiSelectionMode
-              ? null
-              : () => widget.connect(context, peer.id),
+          onDoubleTap:
+              peerTabModel.multiSelectionMode || peerTabModel.isShiftDown
+                  ? null
+                  : () => widget.connect(context, peer.id),
           onTap: () => peerTabModel.select(peer),
           onLongPress: () => peerTabModel.select(peer),
           child: Obx(() => peerCardUiType.value == PeerUiType.grid
@@ -600,8 +601,16 @@ abstract class BasePeerCard extends StatelessWidget {
         translate('Rename'),
         style: style,
       ),
-      proc: () {
-        _rename(id);
+      proc: () async {
+        String oldName = await _getAlias(id);
+        renameDialog(
+            oldName: oldName,
+            onSubmit: (String newName) async {
+              if (newName != oldName) {
+                await bind.mainSetPeerAlias(id: id, alias: newName);
+                _update();
+              }
+            });
       },
       padding: menuPadding,
       dismissOnClicked: true,
@@ -770,64 +779,6 @@ abstract class BasePeerCard extends StatelessWidget {
   @protected
   Future<String> _getAlias(String id) async =>
       await bind.mainGetPeerOption(id: id, key: 'alias');
-
-  void _rename(String id) async {
-    RxBool isInProgress = false.obs;
-    String name = await _getAlias(id);
-    var controller = TextEditingController(text: name);
-    gFFI.dialogManager.show((setState, close, context) {
-      submit() async {
-        isInProgress.value = true;
-        String name = controller.text.trim();
-        await bind.mainSetPeerAlias(id: id, alias: name);
-        _update();
-        close();
-        isInProgress.value = false;
-      }
-
-      return CustomAlertDialog(
-        title: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.edit_rounded, color: MyTheme.accent),
-            Text(translate('Rename')).paddingOnly(left: 10),
-          ],
-        ),
-        content: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              child: Form(
-                child: TextFormField(
-                  controller: controller,
-                  autofocus: true,
-                  decoration: InputDecoration(labelText: translate('Name')),
-                ),
-              ),
-            ),
-            Obx(() => Offstage(
-                offstage: isInProgress.isFalse,
-                child: const LinearProgressIndicator())),
-          ],
-        ),
-        actions: [
-          dialogButton(
-            "Cancel",
-            icon: Icon(Icons.close_rounded),
-            onPressed: close,
-            isOutline: true,
-          ),
-          dialogButton(
-            "OK",
-            icon: Icon(Icons.done_rounded),
-            onPressed: submit,
-          ),
-        ],
-        onSubmit: submit,
-        onCancel: close,
-      );
-    });
-  }
 
   @protected
   void _update();

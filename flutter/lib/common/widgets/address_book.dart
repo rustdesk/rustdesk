@@ -9,6 +9,7 @@ import '../../desktop/widgets/material_mod_popup_menu.dart' as mod_menu;
 import 'package:get/get.dart';
 
 import '../../common.dart';
+import 'dialog.dart';
 import 'login.dart';
 
 final hideAbTagsPanel = false.obs;
@@ -473,6 +474,29 @@ class AddressBookTag extends StatelessWidget {
 
   void _showMenu(BuildContext context, RelativeRect pos) {
     final items = [
+      getEntry(translate("Rename"), () {
+        renameDialog(
+            oldName: name,
+            validator: (String? newName) {
+              if (newName == null || newName.isEmpty) {
+                return translate('Can not be empty');
+              }
+              if (newName != name && gFFI.abModel.tags.contains(newName)) {
+                return translate('Already exists');
+              }
+              return null;
+            },
+            onSubmit: (String newName) {
+              if (name != newName) {
+                gFFI.abModel.renameTag(name, newName);
+                gFFI.abModel.pushAb();
+              }
+              Future.delayed(Duration.zero, () => Get.back());
+            },
+            onCancel: () {
+              Future.delayed(Duration.zero, () => Get.back());
+            });
+      }),
       getEntry(translate("Delete"), () {
         gFFI.abModel.deleteTag(name);
         gFFI.abModel.pushAb();
