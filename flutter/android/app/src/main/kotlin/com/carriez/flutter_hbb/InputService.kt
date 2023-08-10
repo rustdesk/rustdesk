@@ -176,23 +176,21 @@ class InputService : AccessibilityService() {
 
     @RequiresApi(Build.VERSION_CODES.N)
     fun onTouchInput(mask: Int, _x: Int, _y: Int) {
-        val x = max(0, _x)
-        val y = max(0, _y)
         when (mask) {
             TOUCH_PAN_UPDATE -> {
-                mouseX -= x * SCREEN_INFO.scale
-                mouseY -= y * SCREEN_INFO.scale
+                mouseX -= _x * SCREEN_INFO.scale
+                mouseY -= _y * SCREEN_INFO.scale
                 continueGesture(mouseX, mouseY)
             }
             TOUCH_PAN_START -> {
-                mouseX = x * SCREEN_INFO.scale
-                mouseY = y * SCREEN_INFO.scale
+                mouseX = max(0, _x) * SCREEN_INFO.scale
+                mouseY = max(0, _y) * SCREEN_INFO.scale
                 startGesture(mouseX, mouseY)
             }
             TOUCH_PAN_END -> {
                 endGesture(mouseX, mouseY)
-                mouseX = x * SCREEN_INFO.scale
-                mouseY = y * SCREEN_INFO.scale
+                mouseX = max(0, _x) * SCREEN_INFO.scale
+                mouseY = max(0, _y) * SCREEN_INFO.scale
             }
             else -> {}
         }
