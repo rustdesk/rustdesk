@@ -2009,7 +2009,7 @@ class _MultiMonitorMenu extends StatelessWidget {
         Obx(() {
           RxInt display = CurrentDisplayState.find(id);
           return _IconMenuButton(
-            tooltip: "Multi monitor",
+            tooltip: "",
             topLevel: false,
             color: i == display.value
                 ? _ToolbarTheme.blueColor
