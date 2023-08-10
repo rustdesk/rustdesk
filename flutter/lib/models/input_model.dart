@@ -379,8 +379,7 @@ class InputModel {
 
     var x = delta.dx.toInt();
     var y = delta.dy.toInt();
-    if (peerPlatform == kPeerPlatformLinux ||
-        peerPlatform == kPeerPlatformAndroid) {
+    if (peerPlatform == kPeerPlatformLinux) {
       _trackpadScrollUnsent += (delta * _trackpadSpeed);
       x = _trackpadScrollUnsent.dx.truncate();
       y = _trackpadScrollUnsent.dy.truncate();
@@ -638,7 +637,6 @@ class InputModel {
     Offset offset, {
     bool onExit = false,
   }) {
-    debugPrint('REMOVE ME ========================= 111');
     double x = offset.dx;
     double y = max(0.0, offset.dy);
     if (_checkPeerControlProtected(x, y)) {
@@ -672,7 +670,6 @@ class InputModel {
       buttons: evt['buttons'],
     );
     if (pos == null) {
-      debugPrint('REMOVE ME ========================= 222');
       return;
     }
     if (type != '') {
@@ -691,7 +688,6 @@ class InputModel {
       kForwardMouseButton: 'forward'
     };
     evt['buttons'] = mapButtons[evt['buttons']] ?? '';
-    debugPrint('REMOVE ME ========================= 333 $evt');
     bind.sessionSendMouse(sessionId: sessionId, msg: json.encode(modify(evt)));
   }
 

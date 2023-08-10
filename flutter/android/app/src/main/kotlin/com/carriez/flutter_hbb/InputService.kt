@@ -190,8 +190,10 @@ class InputService : AccessibilityService() {
                 startGesture(mouseX, mouseY)
             }
             TOUCH_PAN_END -> {
+                endGesture(mouseX, mouseY)
                 mouseX = x * SCREEN_INFO.scale
                 mouseY = y * SCREEN_INFO.scale
+                continueGesture(mouseX, mouseY)
                 endGesture(mouseX, mouseY)
             }
             else -> {}
