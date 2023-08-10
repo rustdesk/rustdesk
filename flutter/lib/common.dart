@@ -1436,7 +1436,7 @@ Future _saveSessionWindowPosition(
       windowId, kWindowEventGetRemoteList, null);
   if (remoteList != null) {
     for (final peerId in remoteList.split(',')) {
-      bind.sessionSetFlutterConfigByPeerId(
+      bind.mainSetPeerFlutterConfigSync(
           id: peerId, k: kWindowPrefix + windowType.name, v: pos.toString());
     }
   }

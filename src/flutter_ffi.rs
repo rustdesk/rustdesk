@@ -219,17 +219,6 @@ pub fn session_get_flutter_config_by_peer_id(id: String, k: String) -> Option<St
     }
 }
 
-pub fn session_set_flutter_config_by_peer_id(id: String, k: String, v: String) {
-    if let Some((_, session)) = SESSIONS
-        .write()
-        .unwrap()
-        .iter_mut()
-        .find(|(_, s)| s.id == id)
-    {
-        session.save_flutter_config(k, v);
-    }
-}
-
 pub fn get_next_texture_key() -> SyncReturn<i32> {
     let k = TEXTURE_RENDER_KEY.fetch_add(1, Ordering::SeqCst) + 1;
     SyncReturn(k)
@@ -810,6 +799,11 @@ pub fn main_get_peer_option_sync(id: String, key: String) -> SyncReturn<String> 
 // Because the session may not be established yet.
 pub fn main_get_peer_flutter_config_sync(id: String, k: String) -> SyncReturn<String> {
     SyncReturn(get_peer_flutter_config(id, k))
+}
+
+pub fn main_set_peer_flutter_config_sync(id: String, k: String, v: String) -> SyncReturn<()> {
+    set_peer_flutter_config(id, k, v);
+    SyncReturn(())
 }
 
 pub fn main_set_peer_option(id: String, key: String, value: String) {

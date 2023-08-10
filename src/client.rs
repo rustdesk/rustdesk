@@ -1214,7 +1214,11 @@ impl LoginConfigHandler {
     /// * `v` - value of option
     pub fn save_ui_flutter(&mut self, k: String, v: String) {
         let mut config = self.load_config();
-        config.ui_flutter.insert(k, v);
+        if v.is_empty() {
+            config.ui_flutter.remove(&k);
+        } else {
+            config.ui_flutter.insert(k, v);
+        }
         self.save_config(config);
     }
 

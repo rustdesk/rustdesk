@@ -216,6 +216,18 @@ pub fn get_peer_flutter_config(id: String, name: String) -> String {
 }
 
 #[inline]
+#[cfg(feature = "flutter")]
+pub fn set_peer_flutter_config(id: String, name: String, value: String) {
+    let mut c = PeerConfig::load(&id);
+    if value.is_empty() {
+        c.ui_flutter.remove(&name);
+    } else {
+        c.ui_flutter.insert(name, value);
+    }
+    c.store(&id);
+}
+
+#[inline]
 pub fn set_peer_option(id: String, name: String, value: String) {
     let mut c = PeerConfig::load(&id);
     if value.is_empty() {
