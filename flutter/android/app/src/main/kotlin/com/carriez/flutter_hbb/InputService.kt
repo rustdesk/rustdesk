@@ -180,6 +180,8 @@ class InputService : AccessibilityService() {
             TOUCH_PAN_UPDATE -> {
                 mouseX -= _x * SCREEN_INFO.scale
                 mouseY -= _y * SCREEN_INFO.scale
+                mouseX = max(0, mouseX);
+                mouseY = max(0, mouseY);
                 continueGesture(mouseX, mouseY)
             }
             TOUCH_PAN_START -> {
