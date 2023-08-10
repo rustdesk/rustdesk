@@ -1172,45 +1172,7 @@ pub fn main_clear_ab() {
 }
 
 pub fn session_send_pointer(session_id: SessionID, msg: String) {
-    if let Ok(m) = serde_json::from_str::<HashMap<String, serde_json::Value>>(&msg) {
-        let alt = m.get("alt").is_some();
-        let ctrl = m.get("ctrl").is_some();
-        let shift = m.get("shift").is_some();
-        let command = m.get("command").is_some();
-        match (m.get("k"), m.get("v")) {
-            (Some(k), Some(v)) => match k.as_str() {
-                Some("touch") => match v.get("t").and_then(|t| t.as_str()) {
-                    Some("scale") => match v.get("v").and_then(|s| s.as_i64()) {
-                        Some(scale) => {
-                            if let Some(session) = SESSIONS.read().unwrap().get(&session_id) {
-                                session.send_touch_scale(scale as _, alt, ctrl, shift, command);
-                            }
-                        }
-                        None => {}
-                    },
-                    Some(pan_event) => match v.get("v") {
-                        Some(v) => match (
-                            v.get("x").and_then(|x| x.as_i64()),
-                            v.get("y").and_then(|y| y.as_i64()),
-                        ) {
-                            (Some(x), Some(y)) => {
-                                if let Some(session) = SESSIONS.read().unwrap().get(&session_id) {
-                                    session.send_touch_pan_event(
-                                        pan_event, x as _, y as _, alt, ctrl, shift, command,
-                                    );
-                                }
-                            }
-                            _ => {}
-                        },
-                        _ => {}
-                    },
-                    _ => {}
-                },
-                _ => {}
-            },
-            _ => {}
-        }
-    }
+    super::flutter::session_send_pointer(session_id, msg);
 }
 
 pub fn session_send_mouse(session_id: SessionID, msg: String) {
