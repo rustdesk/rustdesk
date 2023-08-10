@@ -223,6 +223,33 @@ class AbModel {
     }
   }
 
+  void renameTag(String oldTag, String newTag) {
+    if (tags.contains(newTag)) return;
+    tags.value = tags.map((e) {
+      if (e == oldTag) {
+        return newTag;
+      } else {
+        return oldTag;
+      }
+    }).toList();
+    selectedTags.value = selectedTags.map((e) {
+      if (e == oldTag) {
+        return newTag;
+      } else {
+        return oldTag;
+      }
+    }).toList();
+    for (var peer in peers) {
+      peer.tags = peer.tags.map((e) {
+        if (e == oldTag) {
+          return newTag;
+        } else {
+          return oldTag;
+        }
+      }).toList();
+    }
+  }
+
   void unsetSelectedTags() {
     selectedTags.clear();
   }
