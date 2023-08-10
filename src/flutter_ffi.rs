@@ -197,23 +197,23 @@ pub fn session_toggle_option(session_id: SessionID, value: String) {
     }
 }
 
-pub fn session_get_flutter_config(session_id: SessionID, k: String) -> Option<String> {
+pub fn session_get_flutter_option(session_id: SessionID, k: String) -> Option<String> {
     if let Some(session) = SESSIONS.read().unwrap().get(&session_id) {
-        Some(session.get_flutter_config(k))
+        Some(session.get_flutter_option(k))
     } else {
         None
     }
 }
 
-pub fn session_set_flutter_config(session_id: SessionID, k: String, v: String) {
+pub fn session_set_flutter_option(session_id: SessionID, k: String, v: String) {
     if let Some(session) = SESSIONS.write().unwrap().get_mut(&session_id) {
-        session.save_flutter_config(k, v);
+        session.save_flutter_option(k, v);
     }
 }
 
-pub fn session_get_flutter_config_by_peer_id(id: String, k: String) -> Option<String> {
+pub fn session_get_flutter_option_by_peer_id(id: String, k: String) -> Option<String> {
     if let Some((_, session)) = SESSIONS.read().unwrap().iter().find(|(_, s)| s.id == id) {
-        Some(session.get_flutter_config(k))
+        Some(session.get_flutter_option(k))
     } else {
         None
     }
@@ -224,12 +224,12 @@ pub fn get_next_texture_key() -> SyncReturn<i32> {
     SyncReturn(k)
 }
 
-pub fn get_local_flutter_config(k: String) -> SyncReturn<String> {
-    SyncReturn(ui_interface::get_local_flutter_config(k))
+pub fn get_local_flutter_option(k: String) -> SyncReturn<String> {
+    SyncReturn(ui_interface::get_local_flutter_option(k))
 }
 
-pub fn set_local_flutter_config(k: String, v: String) {
-    ui_interface::set_local_flutter_config(k, v);
+pub fn set_local_flutter_option(k: String, v: String) {
+    ui_interface::set_local_flutter_option(k, v);
 }
 
 pub fn get_local_kb_layout_type() -> SyncReturn<String> {
@@ -795,14 +795,14 @@ pub fn main_get_peer_option_sync(id: String, key: String) -> SyncReturn<String> 
     SyncReturn(get_peer_option(id, key))
 }
 
-// Sometimes we need to get the flutter config of a peer by reading the file.
+// Sometimes we need to get the flutter option of a peer by reading the file.
 // Because the session may not be established yet.
-pub fn main_get_peer_flutter_config_sync(id: String, k: String) -> SyncReturn<String> {
-    SyncReturn(get_peer_flutter_config(id, k))
+pub fn main_get_peer_flutter_option_sync(id: String, k: String) -> SyncReturn<String> {
+    SyncReturn(get_peer_flutter_option(id, k))
 }
 
-pub fn main_set_peer_flutter_config_sync(id: String, k: String, v: String) -> SyncReturn<()> {
-    set_peer_flutter_config(id, k, v);
+pub fn main_set_peer_flutter_option_sync(id: String, k: String, v: String) -> SyncReturn<()> {
+    set_peer_flutter_option(id, k, v);
     SyncReturn(())
 }
 

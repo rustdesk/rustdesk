@@ -197,11 +197,11 @@ impl<T: InvokeUiSession> Session<T> {
         self.lc.write().unwrap().save_scroll_style(value);
     }
 
-    pub fn save_flutter_config(&mut self, k: String, v: String) {
+    pub fn save_flutter_option(&mut self, k: String, v: String) {
         self.lc.write().unwrap().save_ui_flutter(k, v);
     }
 
-    pub fn get_flutter_config(&self, k: String) -> String {
+    pub fn get_flutter_option(&self, k: String) -> String {
         self.lc.read().unwrap().get_ui_flutter(&k)
     }
 

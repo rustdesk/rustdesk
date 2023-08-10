@@ -1290,7 +1290,7 @@ impl LocalConfig {
         }
     }
 
-    pub fn get_flutter_config(k: &str) -> String {
+    pub fn get_flutter_option(k: &str) -> String {
         if let Some(v) = LOCAL_CONFIG.read().unwrap().ui_flutter.get(k) {
             v.clone()
         } else {
@@ -1298,7 +1298,7 @@ impl LocalConfig {
         }
     }
 
-    pub fn set_flutter_config(k: String, v: String) {
+    pub fn set_flutter_option(k: String, v: String) {
         let mut config = LOCAL_CONFIG.write().unwrap();
         let v2 = if v.is_empty() { None } else { Some(&v) };
         if v2 != config.ui_flutter.get(&k) {
