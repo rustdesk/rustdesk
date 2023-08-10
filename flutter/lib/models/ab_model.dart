@@ -229,14 +229,14 @@ class AbModel {
       if (e == oldTag) {
         return newTag;
       } else {
-        return oldTag;
+        return e;
       }
     }).toList();
     selectedTags.value = selectedTags.map((e) {
       if (e == oldTag) {
         return newTag;
       } else {
-        return oldTag;
+        return e;
       }
     }).toList();
     for (var peer in peers) {
@@ -244,7 +244,7 @@ class AbModel {
         if (e == oldTag) {
           return newTag;
         } else {
-          return oldTag;
+          return e;
         }
       }).toList();
     }
