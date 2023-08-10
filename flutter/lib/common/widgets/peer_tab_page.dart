@@ -262,6 +262,7 @@ class _PeerTabPageState extends State<PeerTabPage>
   Widget _createMultiSelection() {
     final textColor = Theme.of(context).textTheme.titleLarge?.color;
     final model = Provider.of<PeerTabModel>(context);
+    if (model.currentTabCachedPeers.isEmpty) return Offstage();
     return Container(
       padding: EdgeInsets.all(4.0),
       child: InkWell(
