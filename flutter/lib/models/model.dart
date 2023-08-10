@@ -425,6 +425,7 @@ class FfiModel with ChangeNotifier {
       closeConnection();
     }
 
+    if (_waitForFirstImage[sessionId] == false) return;
     dialogManager.show(
       (setState, close, context) => CustomAlertDialog(
           title: null,
