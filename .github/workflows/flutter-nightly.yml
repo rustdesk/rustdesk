@@ -8,7 +8,7 @@ on:
 
 jobs:
   run-flutter-nightly-build:
-    uses: ./.github/workflows/flutter-build.yml
+    uses: ./.github/workflows/flutter-build-macos.yml.yml
     secrets: inherit
     with:
       upload-artifact: true
