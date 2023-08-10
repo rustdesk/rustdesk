@@ -529,5 +529,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Sort tags", "排序標籤"),
         ("Open connection in new tab", "在新分頁開啟連線"),
         ("Move tab to new window", "移動標籤到新視窗"),
+        ("Can not be empty", "不能為空"),
+        ("Already exists", "已經存在"),
     ].iter().cloned().collect();
 }

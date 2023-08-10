@@ -55,13 +55,24 @@ class AbModel {
       abError.value = "";
     }
     final api = "${await bind.mainGetApiServer()}/api/ab";
+    int? statusCode;
     try {
       var authHeaders = getHttpHeaders();
       authHeaders['Content-Type'] = "application/json";
       authHeaders['Accept-Encoding'] = "gzip";
       final resp = await http.get(Uri.parse(api), headers: authHeaders);
+      statusCode = resp.statusCode;
       if (resp.body.isNotEmpty && resp.body.toLowerCase() != "null") {
-        Map<String, dynamic> json = jsonDecode(utf8.decode(resp.bodyBytes));
+        Map<String, dynamic> json;
+        try {
+          json = jsonDecode(utf8.decode(resp.bodyBytes));
+        } catch (e) {
+          if (resp.statusCode != 200) {
+            BotToast.showText(
+                contentColor: Colors.red, text: 'HTTP ${resp.statusCode}');
+          }
+          rethrow;
+        }
         if (json.containsKey('error')) {
           abError.value = json['error'];
         } else if (json.containsKey('data')) {
@@ -81,28 +92,33 @@ class AbModel {
                 peers.add(Peer.fromJson(peer));
               }
             }
+            save(); // save on success
           }
         }
       }
     } catch (err) {
-      reset();
       abError.value = err.toString();
     } finally {
       abLoading.value = false;
       initialized = true;
       sync_all_from_recent = true;
       _timerCounter = 0;
-      save();
+      if (abError.isNotEmpty) {
+        if (statusCode == 401) {
+          gFFI.userModel.reset(clearAbCache: true);
+        } else {
+          reset(clearCache: false);
+        }
+      }
     }
   }
 
-  Future<void> reset() async {
-    abError.value = '';
+  Future<void> reset({bool clearCache = false}) async {
     await bind.mainSetLocalOption(key: "selected-tags", value: '');
     tags.clear();
     peers.clear();
     initialized = false;
-    await bind.mainClearAb();
+    if (clearCache) await bind.mainClearAb();
   }
 
   void addId(String id, String alias, List<dynamic> tags) {
@@ -181,12 +197,12 @@ class AbModel {
     try {
       await http.Client().send(request);
       // await pullAb(quiet: true);
+      save(); // save on success
     } catch (e) {
       BotToast.showText(contentColor: Colors.red, text: e.toString());
     } finally {
       sync_all_from_recent = true;
       _timerCounter = 0;
-      save();
     }
   }
 
@@ -220,6 +236,33 @@ class AbModel {
       if (peer.tags.contains(tag)) {
         ((peer.tags)).remove(tag);
       }
+    }
+  }
+
+  void renameTag(String oldTag, String newTag) {
+    if (tags.contains(newTag)) return;
+    tags.value = tags.map((e) {
+      if (e == oldTag) {
+        return newTag;
+      } else {
+        return e;
+      }
+    }).toList();
+    selectedTags.value = selectedTags.map((e) {
+      if (e == oldTag) {
+        return newTag;
+      } else {
+        return e;
+      }
+    }).toList();
+    for (var peer in peers) {
+      peer.tags = peer.tags.map((e) {
+        if (e == oldTag) {
+          return newTag;
+        } else {
+          return e;
+        }
+      }).toList();
     }
   }
 
