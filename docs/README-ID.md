@@ -24,11 +24,8 @@ RustDesk menyambut baik kontribusi dari semua orang. Lihat [`docs/CONTRIBUTING.m
 Di bawah ini adalah server yang bisa Anda gunakan secara gratis, dapat berubah seiring waktu. Jika Anda tidak dekat dengan salah satu dari ini, jaringan Anda mungkin lambat.
 | Lokasi | Vendor | Spesifikasi |
 | --------- | ------------- | ------------------ |
-| Seoul | AWS lightsail | 1 vCPU / 0.5GB RAM |
 | Germany | Hetzner | 2 vCPU / 4GB RAM |
 | Germany | Codext | 4 vCPU / 8GB RAM |
-| Finland (Helsinki) | [Netlock](https://netlockendpoint.com) | 4 vCPU / 8GB RAM |
-| USA (Ashburn) | [Netlock](https://netlockendpoint.com) | 4 vCPU / 8GB RAM |
 | Ukraine (Kyiv) | [dc.volia](https://dc.volia.com) | 2 vCPU / 4GB RAM |
 
 ## Dependencies
@@ -45,8 +42,8 @@ Versi desktop menggunakan [sciter](https://sciter.com/) untuk GUI, silahkan down
 
 - Install [vcpkg](https://github.com/microsoft/vcpkg), dan arahkan `VCPKG_ROOT` env variable dengan benar
 
-  - Windows: vcpkg install libvpx:x64-windows-static libyuv:x64-windows-static opus:x64-windows-static
-  - Linux/MacOS: vcpkg install libvpx libyuv opus
+  - Windows: vcpkg install libvpx:x64-windows-static libyuv:x64-windows-static opus:x64-windows-static aom:x64-windows-static
+  - Linux/MacOS: vcpkg install libvpx libyuv opus aom
 
 - jalankan `cargo run`
 
@@ -75,11 +72,11 @@ sudo pacman -Syu --needed unzip git cmake gcc curl wget yasm nasm zip make pkg-c
 ```sh
 git clone https://github.com/microsoft/vcpkg
 cd vcpkg
-git checkout 2021.12.01
+git checkout 2023.04.15
 cd ..
 vcpkg/bootstrap-vcpkg.sh
 export VCPKG_ROOT=$HOME/vcpkg
-vcpkg/vcpkg install libvpx libyuv opus
+vcpkg/vcpkg install libvpx libyuv opus aom
 ```
 
 ### Perbaiki libvpx (Untuk Fedora)

@@ -19,8 +19,6 @@ import '../../common/widgets/peer_tab_page.dart';
 import '../../models/platform_model.dart';
 import '../widgets/button.dart';
 
-import 'package:flutter_hbb/common/widgets/dialog.dart';
-
 /// Connection page for connecting to a remote peer.
 class ConnectionPage extends StatefulWidget {
   const ConnectionPage({Key? key}) : super(key: key);
@@ -44,7 +42,6 @@ class _ConnectionPageState extends State<ConnectionPage>
   final FocusNode _idFocusNode = FocusNode();
 
   var svcStopped = Get.find<RxBool>(tag: 'stop-service');
-  var svcStatusCode = 0.obs;
   var svcIsUsingPublicServer = true.obs;
 
   bool isWindowMinimized = false;
@@ -71,6 +68,7 @@ class _ConnectionPageState extends State<ConnectionPage>
       _idController.selection = TextSelection(
           baseOffset: 0, extentOffset: _idController.value.text.length);
     });
+    Get.put<IDTextEditingController>(_idController);
     windowManager.addListener(this);
   }
 
@@ -79,6 +77,9 @@ class _ConnectionPageState extends State<ConnectionPage>
     _idController.dispose();
     _updateTimer?.cancel();
     windowManager.removeListener(this);
+    if (Get.isRegistered<IDTextEditingController>()) {
+      Get.delete<IDTextEditingController>();
+    }
     super.dispose();
   }
 
@@ -245,8 +246,8 @@ class _ConnectionPageState extends State<ConnectionPage>
 
   Widget buildStatus() {
     final em = 14.0;
-    return ConstrainedBox(
-      constraints: BoxConstraints.tightFor(height: 3 * em),
+    return Container(
+      height: 3 * em,
       child: Obx(() => Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
@@ -255,9 +256,10 @@ class _ConnectionPageState extends State<ConnectionPage>
                 width: 8,
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(4),
-                  color: svcStopped.value || svcStatusCode.value == 0
+                  color: svcStopped.value ||
+                          stateGlobal.svcStatus.value == SvcStatus.connecting
                       ? kColorWarn
-                      : (svcStatusCode.value == 1
+                      : (stateGlobal.svcStatus.value == SvcStatus.ready
                           ? Color.fromARGB(255, 50, 190, 166)
                           : Color.fromARGB(255, 224, 79, 95)),
                 ),
@@ -265,9 +267,9 @@ class _ConnectionPageState extends State<ConnectionPage>
               Text(
                   svcStopped.value
                       ? translate("Service is not running")
-                      : svcStatusCode.value == 0
+                      : stateGlobal.svcStatus.value == SvcStatus.connecting
                           ? translate("connecting_status")
-                          : svcStatusCode.value == -1
+                          : stateGlobal.svcStatus.value == SvcStatus.notReady
                               ? translate("not_ready_status")
                               : translate('Ready'),
                   style: TextStyle(fontSize: em)),
@@ -276,12 +278,7 @@ class _ConnectionPageState extends State<ConnectionPage>
                 offstage: !svcStopped.value,
                 child: InkWell(
                         onTap: () async {
-                          bool checked = !bind.mainIsInstalled() ||
-                              await bind.mainCheckSuperUserPermission();
-                          if (checked) {
-                            bind.mainSetOption(key: "stop-service", value: "");
-                            bind.mainSetOption(key: "access-mode", value: "");
-                          }
+                          await start_service(true);
                         },
                         child: Text(translate("Start Service"),
                             style: TextStyle(
@@ -293,7 +290,7 @@ class _ConnectionPageState extends State<ConnectionPage>
               Flexible(
                 child: Offstage(
                   offstage: !(!svcStopped.value &&
-                      svcStatusCode.value == 1 &&
+                      stateGlobal.svcStatus.value == SvcStatus.ready &&
                       svcIsUsingPublicServer.value),
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.center,
@@ -337,7 +334,20 @@ class _ConnectionPageState extends State<ConnectionPage>
   updateStatus() async {
     final status =
         jsonDecode(await bind.mainGetConnectStatus()) as Map<String, dynamic>;
-    svcStatusCode.value = status["status_num"];
+    final statusNum = status['status_num'] as int;
+    final preStatus = stateGlobal.svcStatus.value;
+    if (statusNum == 0) {
+      stateGlobal.svcStatus.value = SvcStatus.connecting;
+    } else if (statusNum == -1) {
+      stateGlobal.svcStatus.value = SvcStatus.notReady;
+    } else if (statusNum == 1) {
+      stateGlobal.svcStatus.value = SvcStatus.ready;
+      if (preStatus != SvcStatus.ready) {
+        gFFI.userModel.refreshCurrentUser();
+      }
+    } else {
+      stateGlobal.svcStatus.value = SvcStatus.notReady;
+    }
     svcIsUsingPublicServer.value = await bind.mainIsUsingPublicServer();
   }
 }

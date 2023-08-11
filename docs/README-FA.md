@@ -30,11 +30,8 @@
 شما مي‌توانید از سرورهای زیر به رایگان استفاده کنید. این لیست ممکن است به مرور زمان تغییر می‌کند. اگر به این سرورها نزدیک نیستید، ممکن است اتصال شما کند باشد.
 | موقعیت | سرویس دهنده | مشخصات |
 | --------- | ------------- | ------------------ |
-| کره‌ی جنوبی، سئول | AWS lightsail | 1 vCPU / 0.5GB RAM |
 | آلمان | Hetzner | 2 vCPU / 4GB RAM |
 | آلمان | Codext | 4 vCPU / 8GB RAM |
-| فنلاند، هلسینکی | 0x101 Cyber Security | 4 vCPU / 8GB RAM |
-| ایالات متحده، اَشبرن | 0x101 Cyber Security | 4 vCPU / 8GB RAM |
 
 ## وابستگی ها
 
@@ -52,8 +49,8 @@
 
 - نرم افزار [vcpkg](https://github.com/microsoft/vcpkg) را نصب کنید و متغیر `VCPKG_ROOT` را به درستی تنظیم کنید.
 - بسته‌های vcpkg مورد نیاز را نصب کنید:
-  - ویندوز: `vcpkg install libvpx:x64-windows-static libyuv:x64-windows-static opus:x64-windows-static`
-  - مک و لینوکس: `vcpkg install libvpx libyuv opus`
+  - ویندوز: `vcpkg install libvpx:x64-windows-static libyuv:x64-windows-static opus:x64-windows-static aom:x64-windows-static`
+  - مک و لینوکس: `vcpkg install libvpx libyuv opus aom`
 - این دستور را اجرا کنید: `cargo run`
 
 ## [ساخت](https://rustdesk.com/docs/en/dev/build/)
@@ -83,11 +80,11 @@ sudo pacman -Syu --needed unzip git cmake gcc curl wget yasm nasm zip make pkg-c
 ```sh
 git clone https://github.com/microsoft/vcpkg
 cd vcpkg
-git checkout 2021.12.01
+git checkout 2023.04.15
 cd ..
 vcpkg/bootstrap-vcpkg.sh
 export VCPKG_ROOT=$HOME/vcpkg
-vcpkg/vcpkg install libvpx libyuv opus
+vcpkg/vcpkg install libvpx libyuv opus aom
 ```
 
 ### رفع ایراد libvpx (برای فدورا)

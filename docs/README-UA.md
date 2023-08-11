@@ -34,13 +34,8 @@ RustDesk вітає внесок кожного. Дивіться [`docs/CONTRIB
 Нижче наведені сервери, для безкоштовного використання, вони можуть змінюватися з часом. Якщо ви не перебуваєте поруч з одним із них, ваша мережа може працювати повільно.
 | Місцезнаходження | Постачальник | Технічні характеристики |
 | --------- | ------------- | ------------------ |
-| Південна Корея (Сеул) | AWS lightsail | 1 vCPU / 0.5GB RAM |
-| Сінгапур | Vultr | 1 vCPU / 1GB RAM |
-| США (Даллас) | Vultr | 1 vCPU / 1GB RAM
 | Німеччина | Hetzner | 2 VCPU / 4GB RAM |
 | Німеччина | Codext | 4 vCPU / 8GB RAM |
-| Фінляндія (Гельсінкі) | [Netlock](https://netlockendpoint.com) | 4 vCPU / 8GB RAM |
-| США (Ешберн) | [Netlock](https://netlockendpoint.com) | 4 vCPU / 8GB RAM |
 | Україна (Київ) | [dc.volia](https://dc.volia.com) | 2 vCPU / 4GB RAM |
 
 ## Dev Container
@@ -67,8 +62,8 @@ RustDesk вітає внесок кожного. Дивіться [`docs/CONTRIB
 
 - Встановіть [vcpkg](https://github.com/microsoft/vcpkg), і правильно встановіть змінну `VCPKG_ROOT`.
 
-  - Windows: vcpkg install libvpx:x64-windows-static libyuv:x64-windows-static opus:x64-windows-static
-  - Linux/MacOS: vcpkg install libvpx libyuv opus
+  - Windows: vcpkg install libvpx:x64-windows-static libyuv:x64-windows-static opus:x64-windows-static aom:x64-windows-static
+  - Linux/MacOS: vcpkg install libvpx libyuv opus aom
 
 - Запустіть `cargo run`
 
@@ -104,11 +99,11 @@ sudo pacman -Syu --needed unzip git cmake gcc curl wget yasm nasm zip make pkg-c
 ```sh
 git clone https://github.com/microsoft/vcpkg
 cd vcpkg
-git checkout 2021.12.01
+git checkout 2023.04.15
 cd ...
 vcpkg/bootstrap-vcpkg.sh
 export VCPKG_ROOT=$HOME/vcpkg
-vcpkg/vcpkg install libvpx libyuv opus
+vcpkg/vcpkg install libvpx libyuv opus aom
 ```
 
 ### Виправлення libvpx (для Fedora)

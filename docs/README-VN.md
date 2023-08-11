@@ -33,11 +33,8 @@ Dưới đây là những máy chủ mà bạn có thể sử dụng mà không 
 
 | Địa điểm | Nhà cung cấp | Cấu hình |
 | --------- | ------------- | ------------------ |
-| Seoul | AWS lightsail | 1 vCPU / 0.5GB RAM |
 | Germany | Hetzner | 2 vCPU / 4GB RAM |
 | Germany | Codext | 4 vCPU / 8GB RAM |
-| Finland (Helsinki) | 0x101 Cyber Security | 4 vCPU / 8GB RAM |
-| USA (Ashburn) | 0x101 Cyber Security | 4 vCPU / 8GB RAM |
 
 ## Dependencies
 
@@ -55,8 +52,8 @@ Phiên bản cho điện thoại sử dụng Flutter. Chúng tôi sẽ chuyển 
 
 - Tải và cài [vcpkg](https://github.com/microsoft/vcpkg), và đặt biến môi trường `VCPKG_ROOT` sao cho đúng.
 
-  - Đối với Windows: vcpkg install libvpx:x64-windows-static libyuv:x64-windows-static opus:x64-windows-static
-  - Đối với Linux/MacOS: vcpkg install libvpx libyuv opus
+  - Đối với Windows: vcpkg install libvpx:x64-windows-static libyuv:x64-windows-static opus:x64-windows-static aom:x64-windows-static
+  - Đối với Linux/MacOS: vcpkg install libvpx libyuv opus aom
 
 - Chạy lệnh `cargo run`
 
@@ -87,11 +84,11 @@ sudo pacman -Syu --needed unzip git cmake gcc curl wget yasm nasm zip make pkg-c
 ```sh
 git clone https://github.com/microsoft/vcpkg
 cd vcpkg
-git checkout 2021.12.01
+git checkout 2023.04.15
 cd ..
 vcpkg/bootstrap-vcpkg.sh
 export VCPKG_ROOT=$HOME/vcpkg
-vcpkg/vcpkg install libvpx libyuv opus
+vcpkg/vcpkg install libvpx libyuv opus aom
 ```
 
 ### Cách sửa lỗi libvpx (Dành cho hệ điều hành Fedora)

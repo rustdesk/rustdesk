@@ -1,20 +1,21 @@
 extern crate repng;
 extern crate scrap;
 
-use std::fs::File;
-
+use scrap::Display;
 #[cfg(windows)]
-use scrap::{CapturerMag, TraitCapturer};
-use scrap::{i420_to_rgb, Display};
+use scrap::{i420_to_rgb, CapturerMag, TraitCapturer};
+#[cfg(windows)]
+use std::fs::File;
 
 fn main() {
     let n = Display::all().unwrap().len();
-    for i in 0..n {
+    for _i in 0..n {
         #[cfg(windows)]
-        record(i);
+        record(_i);
     }
 }
 
+#[cfg(windows)]
 fn get_display(i: usize) -> Display {
     Display::all().unwrap().remove(i)
 }

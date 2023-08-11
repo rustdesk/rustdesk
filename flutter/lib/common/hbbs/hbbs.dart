@@ -1,4 +1,5 @@
-import 'dart:io';
+import 'dart:convert';
+import 'package:flutter/material.dart';
 
 import 'package:flutter_hbb/models/peer_model.dart';
 
@@ -14,21 +15,39 @@ class HttpType {
   static const kAuthResTypeEmailCheck = "email_check";
 }
 
+enum UserStatus { kDisabled, kNormal, kUnverified }
+
+// to-do: The UserPayload does not contain all the fields of the user.
+// Is all the fields of the user needed?
 class UserPayload {
   String name = '';
   String email = '';
   String note = '';
-  int? status;
-  String grp = '';
+  UserStatus status;
   bool isAdmin = false;
 
   UserPayload.fromJson(Map<String, dynamic> json)
       : name = json['name'] ?? '',
         email = json['email'] ?? '',
         note = json['note'] ?? '',
-        status = json['status'],
-        grp = json['grp'] ?? '',
+        status = json['status'] == 0
+            ? UserStatus.kDisabled
+            : json['status'] == -1
+                ? UserStatus.kUnverified
+                : UserStatus.kNormal,
         isAdmin = json['is_admin'] == true;
+
+  Map<String, dynamic> toJson() {
+    final Map<String, dynamic> map = {
+      'name': name,
+      'status': status == UserStatus.kDisabled
+          ? 0
+          : status == UserStatus.kUnverified
+              ? -1
+              : 1,
+    };
+    return map;
+  }
 }
 
 class PeerPayload {
@@ -48,17 +67,7 @@ class PeerPayload {
         note = json['note'] ?? '';
 
   static Peer toPeer(PeerPayload p) {
-    return Peer.fromJson({"id": p.id});
-  }
-}
-
-class DeviceInfo {
-  static Map<String, dynamic> toJson() {
-    final Map<String, dynamic> data = <String, dynamic>{};
-    data['os'] = Platform.operatingSystem;
-    data['type'] = "client";
-    data['name'] = bind.mainGetHostname();
-    return data;
+    return Peer.fromJson({"id": p.id, "username": p.user_name});
   }
 }
 
@@ -70,7 +79,6 @@ class LoginRequest {
   bool? autoLogin;
   String? type;
   String? verificationCode;
-  Map<String, dynamic> deviceInfo = DeviceInfo.toJson();
 
   LoginRequest(
       {this.username,
@@ -83,13 +91,22 @@ class LoginRequest {
 
   Map<String, dynamic> toJson() {
     final Map<String, dynamic> data = <String, dynamic>{};
-    data['username'] = username ?? '';
-    data['password'] = password ?? '';
-    data['id'] = id ?? '';
-    data['uuid'] = uuid ?? '';
-    data['autoLogin'] = autoLogin ?? '';
-    data['type'] = type ?? '';
-    data['verificationCode'] = verificationCode ?? '';
+    if (username != null) data['username'] = username;
+    if (password != null) data['password'] = password;
+    if (id != null) data['id'] = id;
+    if (uuid != null) data['uuid'] = uuid;
+    if (autoLogin != null) data['autoLogin'] = autoLogin;
+    if (type != null) data['type'] = type;
+    if (verificationCode != null) {
+      data['verificationCode'] = verificationCode;
+    }
+
+    Map<String, dynamic> deviceInfo = {};
+    try {
+      deviceInfo = jsonDecode(bind.mainGetLoginDeviceInfo());
+    } catch (e) {
+      debugPrint('Failed to decode get device info: $e');
+    }
     data['deviceInfo'] = deviceInfo;
     return data;
   }

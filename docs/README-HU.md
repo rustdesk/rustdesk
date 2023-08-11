@@ -32,11 +32,8 @@ A RustDesk szívesen fogad minden contributiont, támogatást mindenkitől. Lás
 Ezalatt az üzenet alatt találhatóak azok a publikus szerverek, amelyeket ingyen használhatsz. Ezek a szerverek változhatnak a jövőben, illetve a hálózatuk lehet hogy lassú lehet.
 | Hely | Host | Specifikáció |
 | --------- | ------------- | ------------------ |
-| Seoul | AWS lightsail | 1 vCPU / 0.5GB RAM |
 | Germany | Hetzner | 2 vCPU / 4GB RAM |
 | Germany | Codext | 4 vCPU / 8GB RAM |
-| Finland (Helsinki) | [Netlock](https://netlockendpoint.com) | 4 vCPU / 8GB RAM |
-| USA (Ashburn) | [Netlock](https://netlockendpoint.com) | 4 vCPU / 8GB RAM |
 | Ukraine (Kyiv) | [dc.volia](https://dc.volia.com) | 2 vCPU / 4GB RAM |
 
 ## Dependencies
@@ -55,8 +52,8 @@ A telefonos verziók Flutter-t hasznának. Később lehetséges hogy Sciterről 
 
 - Telepítsd a [vcpkg](https://github.com/microsoft/vcpkg)-t, és állítsd be a `VCPKG_ROOT` környezeti változót helyesen
 
-  - Windows: vcpkg install libvpx:x64-windows-static libyuv:x64-windows-static opus:x64-windows-static
-  - Linux/MacOS: vcpkg install libvpx libyuv opus
+  - Windows: vcpkg install libvpx:x64-windows-static libyuv:x64-windows-static opus:x64-windows-static aom:x64-windows-static
+  - Linux/MacOS: vcpkg install libvpx libyuv opus aom
 
 - Futtasd a `cargo run` parancsot
 
@@ -87,11 +84,11 @@ sudo pacman -Syu --needed unzip git cmake gcc curl wget yasm nasm zip make pkg-c
 ```sh
 git clone https://github.com/microsoft/vcpkg
 cd vcpkg
-git checkout 2021.12.01
+git checkout 2023.04.15
 cd ..
 vcpkg/bootstrap-vcpkg.sh
 export VCPKG_ROOT=$HOME/vcpkg
-vcpkg/vcpkg install libvpx libyuv opus
+vcpkg/vcpkg install libvpx libyuv opus aom
 ```
 
 ### Fixeld a libvpx-t (Fedora-n csak)

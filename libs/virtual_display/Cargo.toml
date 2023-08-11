@@ -7,5 +7,4 @@ edition = "2021"
 
 [dependencies]
 lazy_static = "1.4"
-libloading = "0.7"
 hbb_common = { path = "../hbb_common" }

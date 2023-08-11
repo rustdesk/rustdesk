@@ -24,11 +24,8 @@ RustDesk toivottaa avustukset tervetulleiksi kaikilta. Katso lisätietoja [`docs
 Alla on palvelimia, joita voit käyttää ilmaiseksi, ne saattavat muuttua ajan mittaan. Jos et ole lähellä yhtä näistä, verkkosi voi olla hidas.
 | Sijainti | Myyjä | Määrittely |
 | --------- | ------------- | ------------------ |
-| Seoul | AWS lightsail | 1 vCPU / 0.5GB RAM |
 | Germany | Hetzner | 2 vCPU / 4GB RAM |
 | Germany | Codext | 4 vCPU / 8GB RAM |
-| Finland (Helsinki) | [Netlock](https://netlockendpoint.com) | 4 vCPU / 8GB RAM |
-| USA (Ashburn) | [Netlock](https://netlockendpoint.com) | 4 vCPU / 8GB RAM |
 | Ukraine (Kyiv) | [dc.volia](https://dc.volia.com) | 2 vCPU / 4GB RAM |
 
 ## Riippuvuudet
@@ -45,8 +42,8 @@ Desktop-versiot käyttävät [sciter](https://sciter.com/) graafisena käyttöli
 
 - Asenna [vcpkg](https://github.com/microsoft/vcpkg), ja aseta `VCPKG_ROOT`-ympäristömuuttuja oikein
 
-  - Windows: vcpkg install libvpx:x64-windows-static libyuv:x64-windows-static opus:x64-windows-static
-  - Linux/MacOS: vcpkg install libvpx libyuv opus
+  - Windows: vcpkg install libvpx:x64-windows-static libyuv:x64-windows-static opus:x64-windows-static aom:x64-windows-static
+  - Linux/MacOS: vcpkg install libvpx libyuv opus aom
 
 - suorita `cargo run`
 
@@ -75,11 +72,11 @@ sudo pacman -Syu --needed unzip git cmake gcc curl wget yasm nasm zip make pkg-c
 ```sh
 git clone https://github.com/microsoft/vcpkg
 cd vcpkg
-git checkout 2021.12.01
+git checkout 2023.04.15
 cd ..
 vcpkg/bootstrap-vcpkg.sh
 export VCPKG_ROOT=$HOME/vcpkg
-vcpkg/vcpkg install libvpx libyuv opus
+vcpkg/vcpkg install libvpx libyuv opus aom
 ```
 
 ### Korjaa libvpx (Fedora)

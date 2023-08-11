@@ -29,11 +29,8 @@ RustDesk는 모든 기여를 환영합니다. 기여하고자 한다면 [`docs/C
 표에 있는 서버는 무료로 사용할 수 있지만 추후 변경될 수도 있습니다. 이 서버에서 멀다면, 네트워크가 느려질 가능성도 있습니다.
 | Location | Vendor | Specification |
 | --------- | ------------- | ------------------ |
-| Seoul | AWS lightsail | 1 vCPU / 0.5GB RAM |
 | Germany | Hetzner | 2 vCPU / 4GB RAM |
 | Germany | Codext | 4 vCPU / 8GB RAM |
-| Finland (Helsinki) | 0x101 Cyber Security | 4 vCPU / 8GB RAM |
-| USA (Ashburn) | 0x101 Cyber Security | 4 vCPU / 8GB RAM |
 
 ## 의존관계
 
@@ -51,8 +48,8 @@ RustDesk는 모든 기여를 환영합니다. 기여하고자 한다면 [`docs/C
 
 - [vcpkg](https://github.com/microsoft/vcpkg) 설치하고 `VCPKG_ROOT` 환경변수를 정확히 설정합니다.
 
-  - Windows: vcpkg install libvpx:x64-windows-static libyuv:x64-windows-static opus:x64-windows-static
-  - Linux/MacOS: vcpkg install libvpx libyuv opus
+  - Windows: vcpkg install libvpx:x64-windows-static libyuv:x64-windows-static opus:x64-windows-static aom:x64-windows-static
+  - Linux/MacOS: vcpkg install libvpx libyuv opus aom
 
 - run `cargo run`
 
@@ -83,11 +80,11 @@ sudo pacman -Syu --needed unzip git cmake gcc curl wget yasm nasm zip make pkg-c
 ```sh
 git clone https://github.com/microsoft/vcpkg
 cd vcpkg
-git checkout 2021.12.01
+git checkout 2023.04.15
 cd ..
 vcpkg/bootstrap-vcpkg.sh
 export VCPKG_ROOT=$HOME/vcpkg
-vcpkg/vcpkg install libvpx libyuv opus
+vcpkg/vcpkg install libvpx libyuv opus aom
 ```
 
 ### Fix libvpx (For Fedora)

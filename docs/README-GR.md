@@ -34,11 +34,8 @@
 Παρακάτω είναι οι διακομιστές που χρησιμοποιούνται δωρεάν, ενδέχεται να αλλάξουν με την πάροδο του χρόνου. Εάν δεν είστε κοντά σε ένα από αυτούς, το δίκτυό σας ίσως να είναι αργό.
 | Περιοχή | Πάροχος | Προδιαγραφές |
 | --------- | ------------- | ------------------ |
-| Σεούλ | AWS lightsail | 1 vCPU / 0.5GB RAM |
 | Γερμανία | Hetzner | 2 vCPU / 4GB RAM |
 | Γερμανία | Codext | 4 vCPU / 8GB RAM |
-| Φινλανδία (Ελσίνκι) | [Netlock](https://netlockendpoint.com) | 4 vCPU / 8GB RAM |
-| ΗΠΑ (Άσμπερν) | [Netlock](https://netlockendpoint.com) | 4 vCPU / 8GB RAM |
 | Ουκρανία (Κίεβο) | [dc.volia](https://dc.volia.com) | 2 vCPU / 4GB RAM |
 
 ## Dev Container
@@ -65,8 +62,8 @@
 
 - Εγκαταστήσετε το [vcpkg](https://github.com/microsoft/vcpkg), και ρυθμίστε σωστά την παράμετρο συστήματος `VCPKG_ROOT`
 
-  - Windows: vcpkg install libvpx:x64-windows-static libyuv:x64-windows-static opus:x64-windows-static
-  - Linux/MacOS: vcpkg install libvpx libyuv opus
+  - Windows: vcpkg install libvpx:x64-windows-static libyuv:x64-windows-static opus:x64-windows-static aom:x64-windows-static
+  - Linux/MacOS: vcpkg install libvpx libyuv opus aom
 
 - Εκτελέστε `cargo run`
 
@@ -104,11 +101,11 @@ sudo pacman -Syu --needed unzip git cmake gcc curl wget yasm nasm zip make pkg-c
 ```sh
 git clone https://github.com/microsoft/vcpkg
 cd vcpkg
-git checkout 2021.12.01
+git checkout 2023.04.15
 cd ..
 vcpkg/bootstrap-vcpkg.sh
 export VCPKG_ROOT=$HOME/vcpkg
-vcpkg/vcpkg install libvpx libyuv opus
+vcpkg/vcpkg install libvpx libyuv opus aom
 ```
 
 ### Διόρθωση libvpx (για Fedora)

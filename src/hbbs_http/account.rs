@@ -1,10 +1,8 @@
 use super::HbbHttpResponse;
-use hbb_common::{
-    config::{Config, LocalConfig},
-    log, ResultType,
-};
+use hbb_common::{config::LocalConfig, log, ResultType};
 use reqwest::blocking::Client;
 use serde_derive::{Deserialize, Serialize};
+use serde_repr::{Deserialize_repr, Serialize_repr};
 use std::{
     collections::HashMap,
     sync::{Arc, RwLock},
@@ -13,8 +11,6 @@ use std::{
 use url::Url;
 
 lazy_static::lazy_static! {
-    static ref API_SERVER: String = crate::get_api_server(
-        Config::get_option("api-server"), Config::get_option("custom-rendezvous-server"));
     static ref OIDC_SESSION: Arc<RwLock<OidcSession>> = Arc::new(RwLock::new(OidcSession::new()));
 }
 
@@ -30,21 +26,75 @@ pub struct OidcAuthUrl {
     url: Url,
 }
 
-#[derive(Default, Debug, Clone, Serialize, Deserialize)]
-pub struct UserPayload {
-    pub id: String,
+#[derive(Debug, Deserialize, Serialize, Default, Clone)]
+pub struct DeviceInfo {
+    /// Linux , Windows , Android ...
+    #[serde(default)]
+    pub os: String,
+
+    /// `browser` or `client`
+    #[serde(default)]
+    pub r#type: String,
+
+    /// device name from rustdesk client,
+    /// browser info(name + version) from browser
+    #[serde(default)]
     pub name: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct WhitelistItem {
+    data: String, // ip / device uuid
+    info: DeviceInfo,
+    exp: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct UserInfo {
+    #[serde(default, flatten)]
+    pub settings: UserSettings,
+    #[serde(default)]
+    pub login_device_whitelist: Vec<WhitelistItem>,
+    #[serde(default)]
+    pub other: HashMap<String, String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct UserSettings {
+    #[serde(default)]
+    pub email_verification: bool,
+    #[serde(default)]
+    pub email_alarm_notification: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Serialize_repr, Deserialize_repr)]
+#[repr(i64)]
+pub enum UserStatus {
+    Disabled = 0,
+    Normal = 1,
+    Unverified = -1,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UserPayload {
+    pub name: String,
+    #[serde(default)]
     pub email: Option<String>,
+    #[serde(default)]
     pub note: Option<String>,
-    pub status: Option<i64>,
-    pub grp: Option<String>,
-    pub is_admin: Option<bool>,
+    #[serde(default)]
+    pub status: UserStatus,
+    pub info: UserInfo,
+    #[serde(default)]
+    pub is_admin: bool,
+    #[serde(default)]
+    pub third_auth_type: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AuthBody {
     pub access_token: String,
-    pub token_type: String,
+    pub r#type: String,
     pub user: UserPayload,
 }
 
@@ -67,6 +117,12 @@ pub struct AuthResult {
     pub auth_body: Option<AuthBody>,
 }
 
+impl Default for UserStatus {
+    fn default() -> Self {
+        UserStatus::Normal
+    }
+}
+
 impl OidcSession {
     fn new() -> Self {
         Self {
@@ -81,20 +137,35 @@ impl OidcSession {
         }
     }
 
-    fn auth(op: &str, id: &str, uuid: &str) -> ResultType<HbbHttpResponse<OidcAuthUrl>> {
+    fn auth(
+        api_server: &str,
+        op: &str,
+        id: &str,
+        uuid: &str,
+    ) -> ResultType<HbbHttpResponse<OidcAuthUrl>> {
         Ok(OIDC_SESSION
             .read()
             .unwrap()
             .client
-            .post(format!("{}/api/oidc/auth", *API_SERVER))
-            .json(&HashMap::from([("op", op), ("id", id), ("uuid", uuid)]))
+            .post(format!("{}/api/oidc/auth", api_server))
+            .json(&serde_json::json!({
+                "op": op,
+                "id": id,
+                "uuid": uuid,
+                "deviceInfo": crate::ui_interface::get_login_device_info(),
+            }))
             .send()?
             .try_into()?)
     }
 
-    fn query(code: &str, id: &str, uuid: &str) -> ResultType<HbbHttpResponse<AuthBody>> {
+    fn query(
+        api_server: &str,
+        code: &str,
+        id: &str,
+        uuid: &str,
+    ) -> ResultType<HbbHttpResponse<AuthBody>> {
         let url = reqwest::Url::parse_with_params(
-            &format!("{}/api/oidc/auth-query", *API_SERVER),
+            &format!("{}/api/oidc/auth-query", api_server),
             &[("code", code), ("id", id), ("uuid", uuid)],
         )?;
         Ok(OIDC_SESSION
@@ -128,8 +199,8 @@ impl OidcSession {
         std::thread::sleep(std::time::Duration::from_secs_f32(secs));
     }
 
-    fn auth_task(op: String, id: String, uuid: String) {
-        let auth_request_res = Self::auth(&op, &id, &uuid);
+    fn auth_task(api_server: String, op: String, id: String, uuid: String, remember_me: bool) {
+        let auth_request_res = Self::auth(&api_server, &op, &id, &uuid);
         log::info!("Request oidc auth result: {:?}", &auth_request_res);
         let code_url = match auth_request_res {
             Ok(HbbHttpResponse::<_>::Data(code_url)) => code_url,
@@ -165,16 +236,18 @@ impl OidcSession {
         let begin = Instant::now();
         let query_timeout = OIDC_SESSION.read().unwrap().query_timeout;
         while OIDC_SESSION.read().unwrap().keep_querying && begin.elapsed() < query_timeout {
-            match Self::query(&code_url.code, &id, &uuid) {
+            match Self::query(&api_server, &code_url.code, &id, &uuid) {
                 Ok(HbbHttpResponse::<_>::Data(auth_body)) => {
-                    LocalConfig::set_option(
-                        "access_token".to_owned(),
-                        auth_body.access_token.clone(),
-                    );
-                    LocalConfig::set_option(
-                        "user_info".to_owned(),
-                        serde_json::to_string(&auth_body.user).unwrap_or_default(),
-                    );
+                    if remember_me {
+                        LocalConfig::set_option(
+                            "access_token".to_owned(),
+                            auth_body.access_token.clone(),
+                        );
+                        LocalConfig::set_option(
+                            "user_info".to_owned(),
+                            serde_json::json!({ "name": auth_body.user.name, "status": auth_body.user.status }).to_string(),
+                        );
+                    }
                     OIDC_SESSION
                         .write()
                         .unwrap()
@@ -226,12 +299,18 @@ impl OidcSession {
         }
     }
 
-    pub fn account_auth(op: String, id: String, uuid: String) {
+    pub fn account_auth(
+        api_server: String,
+        op: String,
+        id: String,
+        uuid: String,
+        remember_me: bool,
+    ) {
         Self::auth_cancel();
         Self::wait_stop_querying();
         OIDC_SESSION.write().unwrap().before_task();
-        std::thread::spawn(|| {
-            Self::auth_task(op, id, uuid);
+        std::thread::spawn(move || {
+            Self::auth_task(api_server, op, id, uuid, remember_me);
             OIDC_SESSION.write().unwrap().after_task();
         });
     }

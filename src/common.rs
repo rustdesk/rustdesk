@@ -1,6 +1,6 @@
 use std::{
     future::Future,
-    sync::{Arc, Mutex},
+    sync::{Arc, Mutex, RwLock},
 };
 
 #[derive(Debug, Eq, PartialEq)]
@@ -19,13 +19,15 @@ use hbb_common::compress::decompress;
 use hbb_common::{
     allow_err,
     compress::compress as compress_func,
-    config::{self, Config, COMPRESS_LEVEL, RENDEZVOUS_TIMEOUT},
+    config::{self, Config, CONNECT_TIMEOUT, READ_TIMEOUT},
     get_version_number, log,
     message_proto::*,
     protobuf::Enum,
     protobuf::Message as _,
     rendezvous_proto::*,
-    sleep, socket_client, tokio, ResultType,
+    sleep, socket_client,
+    tcp::FramedStream,
+    tokio, ResultType,
 };
 // #[cfg(any(target_os = "android", target_os = "ios", feature = "cli"))]
 use hbb_common::{config::RENDEZVOUS_PORT, futures::future::join_all};
@@ -37,8 +39,6 @@ pub type NotifyMessageBox = fn(String, String, String, String) -> dyn Future<Out
 pub const CLIPBOARD_NAME: &'static str = "clipboard";
 pub const CLIPBOARD_INTERVAL: u64 = 333;
 
-pub const SYNC_PEER_INFO_DISPLAYS: i32 = 1;
-
 #[cfg(all(target_os = "macos", feature = "flutter_texture_render"))]
 // https://developer.apple.com/forums/thread/712709
 // Memory alignment should be multiple of 64.
@@ -48,6 +48,25 @@ pub const DST_STRIDE_RGBA: usize = 1;
 
 // the executable name of the portable version
 pub const PORTABLE_APPNAME_RUNTIME_ENV_KEY: &str = "RUSTDESK_APPNAME";
+
+pub const PLATFORM_WINDOWS: &str = "Windows";
+pub const PLATFORM_LINUX: &str = "Linux";
+pub const PLATFORM_MACOS: &str = "Mac OS";
+pub const PLATFORM_ANDROID: &str = "Android";
+
+pub mod input {
+    pub const MOUSE_TYPE_MOVE: i32 = 0;
+    pub const MOUSE_TYPE_DOWN: i32 = 1;
+    pub const MOUSE_TYPE_UP: i32 = 2;
+    pub const MOUSE_TYPE_WHEEL: i32 = 3;
+    pub const MOUSE_TYPE_TRACKPAD: i32 = 4;
+
+    pub const MOUSE_BUTTON_LEFT: i32 = 0x01;
+    pub const MOUSE_BUTTON_RIGHT: i32 = 0x02;
+    pub const MOUSE_BUTTON_WHEEL: i32 = 0x04;
+    pub const MOUSE_BUTTON_BACK: i32 = 0x08;
+    pub const MOUSE_BUTTON_FORWARD: i32 = 0x10;
+}
 
 lazy_static::lazy_static! {
     pub static ref CONTENT: Arc<Mutex<String>> = Default::default();
@@ -59,9 +78,29 @@ lazy_static::lazy_static! {
     pub static ref DEVICE_NAME: Arc<Mutex<String>> = Default::default();
 }
 
+lazy_static::lazy_static! {
+    // Is server process, with "--server" args
+    static ref IS_SERVER: bool = std::env::args().nth(1) == Some("--server".to_owned());
+    // Is server logic running. The server code can invoked to run by the main process if --server is not running.
+    static ref SERVER_RUNNING: Arc<RwLock<bool>> = Default::default();
+}
+
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 lazy_static::lazy_static! {
     static ref ARBOARD_MTX: Arc<Mutex<()>> = Arc::new(Mutex::new(()));
+}
+
+pub struct SimpleCallOnReturn {
+    pub b: bool,
+    pub f: Box<dyn Fn() + 'static>,
+}
+
+impl Drop for SimpleCallOnReturn {
+    fn drop(&mut self) {
+        if self.b {
+            (self.f)();
+        }
+    }
 }
 
 pub fn global_init() -> bool {
@@ -77,6 +116,23 @@ pub fn global_init() -> bool {
 pub fn global_clean() {}
 
 #[inline]
+pub fn set_server_running(b: bool) {
+    *SERVER_RUNNING.write().unwrap() = b;
+}
+
+// is server process, with "--server" args
+#[inline]
+pub fn is_server() -> bool {
+    *IS_SERVER
+}
+
+// Is server logic running.
+#[inline]
+pub fn is_server_running() -> bool {
+    *SERVER_RUNNING.read().unwrap()
+}
+
+#[inline]
 pub fn valid_for_numlock(evt: &KeyEvent) -> bool {
     if let Some(key_event::Union::ControlKey(ck)) = evt.union {
         let v = ck.value();
@@ -89,7 +145,7 @@ pub fn valid_for_numlock(evt: &KeyEvent) -> bool {
 
 pub fn create_clipboard_msg(content: String) -> Message {
     let bytes = content.into_bytes();
-    let compressed = compress_func(&bytes, COMPRESS_LEVEL);
+    let compressed = compress_func(&bytes);
     let compress = compressed.len() < bytes.len();
     let content = if compress { compressed } else { bytes };
     let mut msg = Message::new();
@@ -203,7 +259,7 @@ pub fn update_clipboard(clipboard: Clipboard, old: Option<&Arc<Mutex<String>>>) 
 
 pub async fn send_opts_after_login(
     config: &crate::client::LoginConfigHandler,
-    peer: &mut hbb_common::tcp::FramedStream,
+    peer: &mut FramedStream,
 ) {
     if let Some(opts) = config.get_option_message_after_login() {
         let mut misc = Misc::new();
@@ -273,7 +329,7 @@ pub fn resample_channels(
 }
 
 #[cfg(feature = "use_dasp")]
-pub fn resample_channels(
+pub fn audio_resample(
     data: &[f32],
     sample_rate0: u32,
     sample_rate: u32,
@@ -309,7 +365,7 @@ pub fn resample_channels(
 }
 
 #[cfg(feature = "use_samplerate")]
-pub fn resample_channels(
+pub fn audio_resample(
     data: &[f32],
     sample_rate0: u32,
     sample_rate: u32,
@@ -325,6 +381,158 @@ pub fn resample_channels(
     )
     .unwrap_or_default()
 }
+
+pub fn audio_rechannel(
+    input: Vec<f32>,
+    in_hz: u32,
+    out_hz: u32,
+    in_chan: u16,
+    output_chan: u16,
+) -> Vec<f32> {
+    if in_chan == output_chan {
+        return input;
+    }
+    let mut input = input;
+    input.truncate(input.len() / in_chan as usize * in_chan as usize);
+    match (in_chan, output_chan) {
+        (1, 2) => audio_rechannel_1_2(&input, in_hz, out_hz),
+        (1, 3) => audio_rechannel_1_3(&input, in_hz, out_hz),
+        (1, 4) => audio_rechannel_1_4(&input, in_hz, out_hz),
+        (1, 5) => audio_rechannel_1_5(&input, in_hz, out_hz),
+        (1, 6) => audio_rechannel_1_6(&input, in_hz, out_hz),
+        (1, 7) => audio_rechannel_1_7(&input, in_hz, out_hz),
+        (1, 8) => audio_rechannel_1_8(&input, in_hz, out_hz),
+        (2, 1) => audio_rechannel_2_1(&input, in_hz, out_hz),
+        (2, 3) => audio_rechannel_2_3(&input, in_hz, out_hz),
+        (2, 4) => audio_rechannel_2_4(&input, in_hz, out_hz),
+        (2, 5) => audio_rechannel_2_5(&input, in_hz, out_hz),
+        (2, 6) => audio_rechannel_2_6(&input, in_hz, out_hz),
+        (2, 7) => audio_rechannel_2_7(&input, in_hz, out_hz),
+        (2, 8) => audio_rechannel_2_8(&input, in_hz, out_hz),
+        (3, 1) => audio_rechannel_3_1(&input, in_hz, out_hz),
+        (3, 2) => audio_rechannel_3_2(&input, in_hz, out_hz),
+        (3, 4) => audio_rechannel_3_4(&input, in_hz, out_hz),
+        (3, 5) => audio_rechannel_3_5(&input, in_hz, out_hz),
+        (3, 6) => audio_rechannel_3_6(&input, in_hz, out_hz),
+        (3, 7) => audio_rechannel_3_7(&input, in_hz, out_hz),
+        (3, 8) => audio_rechannel_3_8(&input, in_hz, out_hz),
+        (4, 1) => audio_rechannel_4_1(&input, in_hz, out_hz),
+        (4, 2) => audio_rechannel_4_2(&input, in_hz, out_hz),
+        (4, 3) => audio_rechannel_4_3(&input, in_hz, out_hz),
+        (4, 5) => audio_rechannel_4_5(&input, in_hz, out_hz),
+        (4, 6) => audio_rechannel_4_6(&input, in_hz, out_hz),
+        (4, 7) => audio_rechannel_4_7(&input, in_hz, out_hz),
+        (4, 8) => audio_rechannel_4_8(&input, in_hz, out_hz),
+        (5, 1) => audio_rechannel_5_1(&input, in_hz, out_hz),
+        (5, 2) => audio_rechannel_5_2(&input, in_hz, out_hz),
+        (5, 3) => audio_rechannel_5_3(&input, in_hz, out_hz),
+        (5, 4) => audio_rechannel_5_4(&input, in_hz, out_hz),
+        (5, 6) => audio_rechannel_5_6(&input, in_hz, out_hz),
+        (5, 7) => audio_rechannel_5_7(&input, in_hz, out_hz),
+        (5, 8) => audio_rechannel_5_8(&input, in_hz, out_hz),
+        (6, 1) => audio_rechannel_6_1(&input, in_hz, out_hz),
+        (6, 2) => audio_rechannel_6_2(&input, in_hz, out_hz),
+        (6, 3) => audio_rechannel_6_3(&input, in_hz, out_hz),
+        (6, 4) => audio_rechannel_6_4(&input, in_hz, out_hz),
+        (6, 5) => audio_rechannel_6_5(&input, in_hz, out_hz),
+        (6, 7) => audio_rechannel_6_7(&input, in_hz, out_hz),
+        (6, 8) => audio_rechannel_6_8(&input, in_hz, out_hz),
+        (7, 1) => audio_rechannel_7_1(&input, in_hz, out_hz),
+        (7, 2) => audio_rechannel_7_2(&input, in_hz, out_hz),
+        (7, 3) => audio_rechannel_7_3(&input, in_hz, out_hz),
+        (7, 4) => audio_rechannel_7_4(&input, in_hz, out_hz),
+        (7, 5) => audio_rechannel_7_5(&input, in_hz, out_hz),
+        (7, 6) => audio_rechannel_7_6(&input, in_hz, out_hz),
+        (7, 8) => audio_rechannel_7_8(&input, in_hz, out_hz),
+        (8, 1) => audio_rechannel_8_1(&input, in_hz, out_hz),
+        (8, 2) => audio_rechannel_8_2(&input, in_hz, out_hz),
+        (8, 3) => audio_rechannel_8_3(&input, in_hz, out_hz),
+        (8, 4) => audio_rechannel_8_4(&input, in_hz, out_hz),
+        (8, 5) => audio_rechannel_8_5(&input, in_hz, out_hz),
+        (8, 6) => audio_rechannel_8_6(&input, in_hz, out_hz),
+        (8, 7) => audio_rechannel_8_7(&input, in_hz, out_hz),
+        _ => input,
+    }
+}
+
+macro_rules! audio_rechannel {
+    ($name:ident, $in_channels:expr, $out_channels:expr) => {
+        fn $name(input: &[f32], in_hz: u32, out_hz: u32) -> Vec<f32> {
+            use fon::{chan::Ch32, Audio, Frame};
+            let mut in_audio =
+                Audio::<Ch32, $in_channels>::with_silence(in_hz, input.len() / $in_channels);
+            for (x, y) in input.chunks_exact($in_channels).zip(in_audio.iter_mut()) {
+                let mut f = Frame::<Ch32, $in_channels>::default();
+                let mut i = 0;
+                for c in f.channels_mut() {
+                    *c = x[i].into();
+                    i += 1;
+                }
+                *y = f;
+            }
+            Audio::<Ch32, $out_channels>::with_audio(out_hz, &in_audio)
+                .as_f32_slice()
+                .to_owned()
+        }
+    };
+}
+
+audio_rechannel!(audio_rechannel_1_2, 1, 2);
+audio_rechannel!(audio_rechannel_1_3, 1, 3);
+audio_rechannel!(audio_rechannel_1_4, 1, 4);
+audio_rechannel!(audio_rechannel_1_5, 1, 5);
+audio_rechannel!(audio_rechannel_1_6, 1, 6);
+audio_rechannel!(audio_rechannel_1_7, 1, 7);
+audio_rechannel!(audio_rechannel_1_8, 1, 8);
+audio_rechannel!(audio_rechannel_2_1, 2, 1);
+audio_rechannel!(audio_rechannel_2_3, 2, 3);
+audio_rechannel!(audio_rechannel_2_4, 2, 4);
+audio_rechannel!(audio_rechannel_2_5, 2, 5);
+audio_rechannel!(audio_rechannel_2_6, 2, 6);
+audio_rechannel!(audio_rechannel_2_7, 2, 7);
+audio_rechannel!(audio_rechannel_2_8, 2, 8);
+audio_rechannel!(audio_rechannel_3_1, 3, 1);
+audio_rechannel!(audio_rechannel_3_2, 3, 2);
+audio_rechannel!(audio_rechannel_3_4, 3, 4);
+audio_rechannel!(audio_rechannel_3_5, 3, 5);
+audio_rechannel!(audio_rechannel_3_6, 3, 6);
+audio_rechannel!(audio_rechannel_3_7, 3, 7);
+audio_rechannel!(audio_rechannel_3_8, 3, 8);
+audio_rechannel!(audio_rechannel_4_1, 4, 1);
+audio_rechannel!(audio_rechannel_4_2, 4, 2);
+audio_rechannel!(audio_rechannel_4_3, 4, 3);
+audio_rechannel!(audio_rechannel_4_5, 4, 5);
+audio_rechannel!(audio_rechannel_4_6, 4, 6);
+audio_rechannel!(audio_rechannel_4_7, 4, 7);
+audio_rechannel!(audio_rechannel_4_8, 4, 8);
+audio_rechannel!(audio_rechannel_5_1, 5, 1);
+audio_rechannel!(audio_rechannel_5_2, 5, 2);
+audio_rechannel!(audio_rechannel_5_3, 5, 3);
+audio_rechannel!(audio_rechannel_5_4, 5, 4);
+audio_rechannel!(audio_rechannel_5_6, 5, 6);
+audio_rechannel!(audio_rechannel_5_7, 5, 7);
+audio_rechannel!(audio_rechannel_5_8, 5, 8);
+audio_rechannel!(audio_rechannel_6_1, 6, 1);
+audio_rechannel!(audio_rechannel_6_2, 6, 2);
+audio_rechannel!(audio_rechannel_6_3, 6, 3);
+audio_rechannel!(audio_rechannel_6_4, 6, 4);
+audio_rechannel!(audio_rechannel_6_5, 6, 5);
+audio_rechannel!(audio_rechannel_6_7, 6, 7);
+audio_rechannel!(audio_rechannel_6_8, 6, 8);
+audio_rechannel!(audio_rechannel_7_1, 7, 1);
+audio_rechannel!(audio_rechannel_7_2, 7, 2);
+audio_rechannel!(audio_rechannel_7_3, 7, 3);
+audio_rechannel!(audio_rechannel_7_4, 7, 4);
+audio_rechannel!(audio_rechannel_7_5, 7, 5);
+audio_rechannel!(audio_rechannel_7_6, 7, 6);
+audio_rechannel!(audio_rechannel_7_8, 7, 8);
+audio_rechannel!(audio_rechannel_8_1, 8, 1);
+audio_rechannel!(audio_rechannel_8_2, 8, 2);
+audio_rechannel!(audio_rechannel_8_3, 8, 3);
+audio_rechannel!(audio_rechannel_8_4, 8, 4);
+audio_rechannel!(audio_rechannel_8_5, 8, 5);
+audio_rechannel!(audio_rechannel_8_6, 8, 6);
+audio_rechannel!(audio_rechannel_8_7, 8, 7);
 
 pub fn test_nat_type() {
     let mut i = 0;
@@ -370,34 +578,34 @@ async fn test_nat_type_() -> ResultType<bool> {
     });
     let mut port1 = 0;
     let mut port2 = 0;
+    let mut local_addr = None;
     for i in 0..2 {
-        let mut socket = socket_client::connect_tcp(
-            if i == 0 { &*server1 } else { &*server2 },
-            RENDEZVOUS_TIMEOUT,
-        )
-        .await?;
+        let server = if i == 0 { &*server1 } else { &*server2 };
+        let mut socket =
+            socket_client::connect_tcp_local(server, local_addr, CONNECT_TIMEOUT).await?;
         if i == 0 {
+            // reuse the local addr is required for nat test
+            local_addr = Some(socket.local_addr());
             Config::set_option(
                 "local-ip-addr".to_owned(),
                 socket.local_addr().ip().to_string(),
             );
         }
         socket.send(&msg_out).await?;
-        if let Some(Ok(bytes)) = socket.next_timeout(RENDEZVOUS_TIMEOUT).await {
-            if let Ok(msg_in) = RendezvousMessage::parse_from_bytes(&bytes) {
-                if let Some(rendezvous_message::Union::TestNatResponse(tnr)) = msg_in.union {
-                    if i == 0 {
-                        port1 = tnr.port;
-                    } else {
-                        port2 = tnr.port;
-                    }
-                    if let Some(cu) = tnr.cu.as_ref() {
-                        Config::set_option(
-                            "rendezvous-servers".to_owned(),
-                            cu.rendezvous_servers.join(","),
-                        );
-                        Config::set_serial(cu.serial);
-                    }
+        if let Some(msg_in) = get_next_nonkeyexchange_msg(&mut socket, None).await {
+            if let Some(rendezvous_message::Union::TestNatResponse(tnr)) = msg_in.union {
+                log::debug!("Got nat response from {}: port={}", server, tnr.port);
+                if i == 0 {
+                    port1 = tnr.port;
+                } else {
+                    port2 = tnr.port;
+                }
+                if let Some(cu) = tnr.cu.as_ref() {
+                    Config::set_option(
+                        "rendezvous-servers".to_owned(),
+                        cu.rendezvous_servers.join(","),
+                    );
+                    Config::set_serial(cu.serial);
                 }
             }
         } else {
@@ -422,6 +630,12 @@ pub async fn get_rendezvous_server(ms_timeout: u64) -> (String, Vec<String>, boo
     let (mut a, mut b) = get_rendezvous_server_(ms_timeout);
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     let (mut a, mut b) = get_rendezvous_server_(ms_timeout).await;
+    #[cfg(windows)]
+    if let Ok(lic) = crate::platform::get_license_from_exe_name() {
+        if !lic.host.is_empty() {
+            a = lic.host;
+        }
+    }
     let mut b: Vec<String> = b
         .drain(..)
         .map(|x| socket_client::check_port(x, config::RENDEZVOUS_PORT))
@@ -463,18 +677,20 @@ pub async fn get_nat_type(ms_timeout: u64) -> i32 {
     crate::ipc::get_nat_type(ms_timeout).await
 }
 
-// #[cfg(any(target_os = "android", target_os = "ios", feature = "cli"))]
+// used for client to test which server is faster in case stop-servic=Y
 #[tokio::main(flavor = "current_thread")]
 async fn test_rendezvous_server_() {
     let servers = Config::get_rendezvous_servers();
-    Config::reset_online();
+    if servers.len() <= 1 {
+        return;
+    }
     let mut futs = Vec::new();
     for host in servers {
         futs.push(tokio::spawn(async move {
             let tm = std::time::Instant::now();
             if socket_client::connect_tcp(
                 crate::check_port(&host, RENDEZVOUS_PORT),
-                RENDEZVOUS_TIMEOUT,
+                CONNECT_TIMEOUT,
             )
             .await
             .is_ok()
@@ -487,6 +703,7 @@ async fn test_rendezvous_server_() {
         }));
     }
     join_all(futs).await;
+    Config::reset_online();
 }
 
 // #[cfg(any(target_os = "android", target_os = "ios", feature = "cli"))]
@@ -513,7 +730,7 @@ pub fn run_me<T: AsRef<std::ffi::OsStr>>(args: Vec<T>) -> std::io::Result<std::p
     }
     #[cfg(feature = "appimage")]
     {
-        let appdir = std::env::var("APPDIR").unwrap();
+        let appdir = std::env::var("APPDIR").map_err(|_| std::io::ErrorKind::Other)?;
         let appimage_cmd = std::path::Path::new(&appdir).join("AppRun");
         log::info!("path: {:?}", appimage_cmd);
         return std::process::Command::new(appimage_cmd).args(&args).spawn();
@@ -535,6 +752,39 @@ pub fn hostname() -> String {
     return whoami::hostname();
     #[cfg(any(target_os = "android", target_os = "ios"))]
     return DEVICE_NAME.lock().unwrap().clone();
+}
+
+#[inline]
+pub fn get_sysinfo() -> serde_json::Value {
+    use hbb_common::sysinfo::{CpuExt, System, SystemExt};
+    let system = System::new_all();
+    let memory = system.total_memory();
+    let memory = (memory as f64 / 1024. / 1024. / 1024. * 100.).round() / 100.;
+    let cpus = system.cpus();
+    let cpu_name = cpus.first().map(|x| x.brand()).unwrap_or_default();
+    let cpu_name = cpu_name.trim_end();
+    let cpu_freq = cpus.first().map(|x| x.frequency()).unwrap_or_default();
+    let cpu_freq = (cpu_freq as f64 / 1024. * 100.).round() / 100.;
+    let cpu = if cpu_freq > 0. {
+        format!("{}, {}GHz, ", cpu_name, cpu_freq)
+    } else {
+        "".to_owned() // android
+    };
+    let num_cpus = num_cpus::get();
+    let num_pcpus = num_cpus::get_physical();
+    let mut os = system.distribution_id();
+    os = format!("{} / {}", os, system.long_os_version().unwrap_or_default());
+    #[cfg(windows)]
+    {
+        os = format!("{os} - {}", system.os_version().unwrap_or_default());
+    }
+    let hostname = hostname(); // sys.hostname() return localhost on android in my test
+    serde_json::json!({
+        "cpu": format!("{cpu}{num_cpus}/{num_pcpus} cores"),
+        "memory": format!("{memory}GB"),
+        "os": os,
+        "hostname": hostname,
+    })
 }
 
 #[inline]
@@ -585,7 +835,7 @@ async fn check_software_update_() -> hbb_common::ResultType<()> {
 
     let rendezvous_server = format!("rs-sg.rustdesk.com:{}", config::RENDEZVOUS_PORT);
     let (mut socket, rendezvous_server) =
-        socket_client::new_udp_for(&rendezvous_server, RENDEZVOUS_TIMEOUT).await?;
+        socket_client::new_udp_for(&rendezvous_server, CONNECT_TIMEOUT).await?;
 
     let mut msg_out = RendezvousMessage::new();
     msg_out.set_software_update(SoftwareUpdate {
@@ -594,12 +844,14 @@ async fn check_software_update_() -> hbb_common::ResultType<()> {
     });
     socket.send(&msg_out, rendezvous_server).await?;
     use hbb_common::protobuf::Message;
-    if let Some(Ok((bytes, _))) = socket.next_timeout(30_000).await {
-        if let Ok(msg_in) = RendezvousMessage::parse_from_bytes(&bytes) {
-            if let Some(rendezvous_message::Union::SoftwareUpdate(su)) = msg_in.union {
-                let version = hbb_common::get_version_from_url(&su.url);
-                if get_version_number(&version) > get_version_number(crate::VERSION) {
-                    *SOFTWARE_UPDATE_URL.lock().unwrap() = su.url;
+    for _ in 0..2 {
+        if let Some(Ok((bytes, _))) = socket.next_timeout(READ_TIMEOUT).await {
+            if let Ok(msg_in) = RendezvousMessage::parse_from_bytes(&bytes) {
+                if let Some(rendezvous_message::Union::SoftwareUpdate(su)) = msg_in.union {
+                    let version = hbb_common::get_version_from_url(&su.url);
+                    if get_version_number(&version) > get_version_number(crate::VERSION) {
+                        *SOFTWARE_UPDATE_URL.lock().unwrap() = su.url;
+                    }
                 }
             }
         }
@@ -625,14 +877,14 @@ pub fn is_setup(name: &str) -> bool {
 }
 
 pub fn get_custom_rendezvous_server(custom: String) -> String {
-    if !custom.is_empty() {
-        return custom;
-    }
     #[cfg(windows)]
-    if let Some(lic) = crate::platform::windows::get_license() {
+    if let Ok(lic) = crate::platform::windows::get_license_from_exe_name() {
         if !lic.host.is_empty() {
             return lic.host.clone();
         }
+    }
+    if !custom.is_empty() {
+        return custom;
     }
     if !config::PROD_RENDEZVOUS_SERVER.read().unwrap().is_empty() {
         return config::PROD_RENDEZVOUS_SERVER.read().unwrap().clone();
@@ -641,14 +893,18 @@ pub fn get_custom_rendezvous_server(custom: String) -> String {
 }
 
 pub fn get_api_server(api: String, custom: String) -> String {
-    if !api.is_empty() {
-        return api.to_owned();
-    }
     #[cfg(windows)]
-    if let Some(lic) = crate::platform::windows::get_license() {
+    if let Ok(lic) = crate::platform::windows::get_license_from_exe_name() {
         if !lic.api.is_empty() {
             return lic.api.clone();
         }
+    }
+    if !api.is_empty() {
+        return api.to_owned();
+    }
+    let api = option_env!("API_SERVER").unwrap_or_default();
+    if !api.is_empty() {
+        return api.into();
     }
     let s0 = get_custom_rendezvous_server(custom);
     if !s0.is_empty() {
@@ -671,48 +927,16 @@ pub fn get_audit_server(api: String, custom: String, typ: String) -> String {
 }
 
 pub async fn post_request(url: String, body: String, header: &str) -> ResultType<String> {
-    #[cfg(not(target_os = "linux"))]
-    {
-        let mut req = reqwest::Client::new().post(url);
-        if !header.is_empty() {
-            let tmp: Vec<&str> = header.split(": ").collect();
-            if tmp.len() == 2 {
-                req = req.header(tmp[0], tmp[1]);
-            }
+    let mut req = reqwest::Client::new().post(url);
+    if !header.is_empty() {
+        let tmp: Vec<&str> = header.split(": ").collect();
+        if tmp.len() == 2 {
+            req = req.header(tmp[0], tmp[1]);
         }
-        req = req.header("Content-Type", "application/json");
-        let to = std::time::Duration::from_secs(12);
-        Ok(req.body(body).timeout(to).send().await?.text().await?)
     }
-    #[cfg(target_os = "linux")]
-    {
-        let mut data = vec![
-            "curl",
-            "-sS",
-            "-X",
-            "POST",
-            &url,
-            "-H",
-            "Content-Type: application/json",
-            "-d",
-            &body,
-            "--connect-timeout",
-            "12",
-        ];
-        if !header.is_empty() {
-            data.push("-H");
-            data.push(header);
-        }
-        let output = async_process::Command::new("curl")
-            .args(&data)
-            .output()
-            .await?;
-        let res = String::from_utf8_lossy(&output.stdout).to_string();
-        if !res.is_empty() {
-            return Ok(res);
-        }
-        hbb_common::bail!(String::from_utf8_lossy(&output.stderr).to_string());
-    }
+    req = req.header("Content-Type", "application/json");
+    let to = std::time::Duration::from_secs(12);
+    Ok(req.body(body).timeout(to).send().await?.text().await?)
 }
 
 #[tokio::main(flavor = "current_thread")]
@@ -782,6 +1006,7 @@ pub fn make_fd_to_json(id: i32, path: String, entries: &Vec<FileEntry>) -> Strin
 /// 1. Try to send the url scheme from ipc.
 /// 2. If failed to send the url scheme, we open a new main window to handle this url scheme.
 pub fn handle_url_scheme(url: String) {
+    #[cfg(not(target_os = "ios"))]
     if let Err(err) = crate::ipc::send_url_scheme(url.clone()) {
         log::debug!("Send the url to the existing flutter process failed, {}. Let's open a new program to handle this.", err);
         let _ = crate::run_me(vec![url]);
@@ -801,20 +1026,114 @@ pub fn decode64<T: AsRef<[u8]>>(input: T) -> Result<Vec<u8>, base64::DecodeError
 }
 
 pub async fn get_key(sync: bool) -> String {
+    #[cfg(windows)]
+    if let Ok(lic) = crate::platform::windows::get_license_from_exe_name() {
+        if !lic.key.is_empty() {
+            return lic.key;
+        }
+    }
+    #[cfg(target_os = "ios")]
+    let mut key = Config::get_option("key");
+    #[cfg(not(target_os = "ios"))]
     let mut key = if sync {
         Config::get_option("key")
     } else {
         let mut options = crate::ipc::get_options_async().await;
         options.remove("key").unwrap_or_default()
     };
-    if key.is_empty() {
-        #[cfg(windows)]
-        if let Some(lic) = crate::platform::windows::get_license() {
-            return lic.key;
-        }
-    }
     if key.is_empty() && !option_env!("RENDEZVOUS_SERVER").unwrap_or("").is_empty() {
         key = config::RS_PUB_KEY.to_owned();
     }
     key
+}
+
+pub fn is_peer_version_ge(v: &str) -> bool {
+    #[cfg(not(any(feature = "flutter", feature = "cli")))]
+    if let Some(session) = crate::ui::CUR_SESSION.lock().unwrap().as_ref() {
+        return session.get_peer_version() >= hbb_common::get_version_number(v);
+    }
+
+    #[cfg(feature = "flutter")]
+    if let Some(session) = crate::flutter::SESSIONS
+        .read()
+        .unwrap()
+        .get(&*crate::flutter::CUR_SESSION_ID.read().unwrap())
+    {
+        return session.get_peer_version() >= hbb_common::get_version_number(v);
+    }
+
+    false
+}
+
+pub fn pk_to_fingerprint(pk: Vec<u8>) -> String {
+    let s: String = pk.iter().map(|u| format!("{:02x}", u)).collect();
+    s.chars()
+        .enumerate()
+        .map(|(i, c)| {
+            if i > 0 && i % 4 == 0 {
+                format!(" {}", c)
+            } else {
+                format!("{}", c)
+            }
+        })
+        .collect()
+}
+
+#[inline]
+pub async fn get_next_nonkeyexchange_msg(
+    conn: &mut FramedStream,
+    timeout: Option<u64>,
+) -> Option<RendezvousMessage> {
+    let timeout = timeout.unwrap_or(READ_TIMEOUT);
+    for _ in 0..2 {
+        if let Some(Ok(bytes)) = conn.next_timeout(timeout).await {
+            if let Ok(msg_in) = RendezvousMessage::parse_from_bytes(&bytes) {
+                match &msg_in.union {
+                    Some(rendezvous_message::Union::KeyExchange(_)) => {
+                        continue;
+                    }
+                    _ => {
+                        return Some(msg_in);
+                    }
+                }
+            }
+        }
+        break;
+    }
+    None
+}
+
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+pub fn check_process(arg: &str, same_uid: bool) -> bool {
+    use hbb_common::sysinfo::{ProcessExt, System, SystemExt};
+    let mut sys = System::new();
+    sys.refresh_processes();
+    let mut path = std::env::current_exe().unwrap_or_default();
+    if let Ok(linked) = path.read_link() {
+        path = linked;
+    }
+    let my_uid = sys
+        .process((std::process::id() as usize).into())
+        .map(|x| x.user_id())
+        .unwrap_or_default();
+    for (_, p) in sys.processes().iter() {
+        let mut cur_path = p.exe().to_path_buf();
+        if let Ok(linked) = cur_path.read_link() {
+            cur_path = linked;
+        }
+        if cur_path != path {
+            continue;
+        }
+        if p.pid().to_string() == std::process::id().to_string() {
+            continue;
+        }
+        if same_uid && p.user_id() != my_uid {
+            continue;
+        }
+        let parg = if p.cmd().len() <= 1 { "" } else { &p.cmd()[1] };
+        if arg == parg {
+            return true;
+        }
+    }
+    false
 }

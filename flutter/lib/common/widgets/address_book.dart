@@ -3,12 +3,17 @@ import 'package:flutter_hbb/common/formatter/id_formatter.dart';
 import 'package:flutter_hbb/common/widgets/peer_card.dart';
 import 'package:flutter_hbb/common/widgets/peers_view.dart';
 import 'package:flutter_hbb/desktop/widgets/popup_menu.dart';
-import '../../consts.dart';
+import 'package:flutter_hbb/models/ab_model.dart';
+import 'package:flutter_hbb/models/platform_model.dart';
 import '../../desktop/widgets/material_mod_popup_menu.dart' as mod_menu;
 import 'package:get/get.dart';
 
 import '../../common.dart';
+import 'dialog.dart';
+import 'loading_dot_widget.dart';
 import 'login.dart';
+
+final hideAbTagsPanel = false.obs;
 
 class AddressBook extends StatefulWidget {
   final EdgeInsets? menuPadding;
@@ -29,37 +34,31 @@ class _AddressBookState extends State<AddressBook> {
   }
 
   @override
-  Widget build(BuildContext context) => FutureBuilder<Widget>(
-      future: buildBody(context),
-      builder: (context, snapshot) {
-        if (snapshot.hasData) {
-          return snapshot.data!;
+  Widget build(BuildContext context) => Obx(() {
+        if (gFFI.userModel.userName.value.isEmpty) {
+          return Center(
+              child: ElevatedButton(
+                  onPressed: loginDialog, child: Text(translate("Login"))));
         } else {
-          return const Offstage();
-        }
-      });
-
-  Future<Widget> buildBody(BuildContext context) async {
-    return Obx(() {
-      if (gFFI.userModel.userName.value.isEmpty) {
-        return Center(
-            child: ElevatedButton(
-                onPressed: loginDialog, child: Text(translate("Login"))));
-      } else {
-        if (gFFI.abModel.abLoading.value) {
-          return const Center(
-            child: CircularProgressIndicator(),
+          if (gFFI.abModel.abLoading.value && gFFI.abModel.emtpy) {
+            return const Center(
+              child: CircularProgressIndicator(),
+            );
+          }
+          if (gFFI.abModel.abError.isNotEmpty) {
+            return _buildShowError(gFFI.abModel.abError.value);
+          }
+          return Column(
+            children: [
+              _buildLoadingHavingPeers(),
+              Expanded(
+                  child: isDesktop
+                      ? _buildAddressBookDesktop()
+                      : _buildAddressBookMobile())
+            ],
           );
         }
-        if (gFFI.abModel.abError.isNotEmpty) {
-          return _buildShowError(gFFI.abModel.abError.value);
-        }
-        return isDesktop
-            ? _buildAddressBookDesktop()
-            : _buildAddressBookMobile();
-      }
-    });
-  }
+      });
 
   Widget _buildShowError(String error) {
     return Center(
@@ -76,37 +75,50 @@ class _AddressBookState extends State<AddressBook> {
     ));
   }
 
+  Widget _buildLoadingHavingPeers() {
+    double size = 15;
+    return Obx(() => Offstage(
+          offstage: !(gFFI.abModel.abLoading.value && !gFFI.abModel.emtpy),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              SizedBox(
+                      height: size,
+                      child: Center(child: LoadingDotWidget(size: size)))
+                  .marginSymmetric(vertical: 10)
+            ],
+          ),
+        ));
+  }
+
   Widget _buildAddressBookDesktop() {
     return Row(
       children: [
-        Card(
-          margin: EdgeInsets.symmetric(horizontal: 4.0),
-          shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-              side:
-                  BorderSide(color: Theme.of(context).scaffoldBackgroundColor)),
-          child: Container(
-            width: 200,
-            height: double.infinity,
-            padding:
-                const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
-            child: Column(
-              children: [
-                _buildTagHeader(),
-                Expanded(
-                  child: Container(
-                    width: double.infinity,
-                    height: double.infinity,
-                    decoration: BoxDecoration(
-                        border: Border.all(color: MyTheme.darkGray),
-                        borderRadius: BorderRadius.circular(2)),
-                    child: _buildTags(),
-                  ).marginSymmetric(vertical: 8.0),
-                )
-              ],
-            ),
-          ),
-        ).marginOnly(right: 8.0),
+        Offstage(
+            offstage: hideAbTagsPanel.value,
+            child: Container(
+              decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                      color: Theme.of(context).colorScheme.background)),
+              child: Container(
+                width: 150,
+                height: double.infinity,
+                padding: const EdgeInsets.all(8.0),
+                child: Column(
+                  children: [
+                    _buildTagHeader().marginOnly(left: 8.0, right: 0),
+                    Expanded(
+                      child: Container(
+                        width: double.infinity,
+                        height: double.infinity,
+                        child: _buildTags(),
+                      ),
+                    )
+                  ],
+                ),
+              ),
+            ).marginOnly(right: 12.0)),
         _buildPeersViews()
       ],
     );
@@ -115,31 +127,27 @@ class _AddressBookState extends State<AddressBook> {
   Widget _buildAddressBookMobile() {
     return Column(
       children: [
-        Card(
-          margin: EdgeInsets.symmetric(horizontal: 1.0),
-          shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(6),
-              side:
-                  BorderSide(color: Theme.of(context).scaffoldBackgroundColor)),
-          child: Container(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                _buildTagHeader(),
-                Container(
-                  width: double.infinity,
-                  decoration: BoxDecoration(
-                      border: Border.all(color: MyTheme.darkGray),
-                      borderRadius: BorderRadius.circular(4)),
-                  child: _buildTags(),
-                ).marginSymmetric(vertical: 8.0),
-              ],
-            ),
-          ),
-        ),
-        Divider(),
+        Offstage(
+            offstage: hideAbTagsPanel.value,
+            child: Container(
+              decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(
+                      color: Theme.of(context).colorScheme.background)),
+              child: Container(
+                padding: const EdgeInsets.all(8.0),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _buildTagHeader().marginOnly(left: 8.0, right: 0),
+                    Container(
+                      width: double.infinity,
+                      child: _buildTags(),
+                    ),
+                  ],
+                ),
+              ),
+            ).marginOnly(bottom: 12.0)),
         _buildPeersViews()
       ],
     );
@@ -157,15 +165,22 @@ class _AddressBookState extends State<AddressBook> {
               menuPos = RelativeRect.fromLTRB(x, y, x, y);
             },
             onPointerUp: (_) => _showMenu(menuPos),
-            child: ActionMore()),
+            child: build_more(context, invert: true)),
       ],
     );
   }
 
   Widget _buildTags() {
-    return Obx(
-      () => Wrap(
-        children: gFFI.abModel.tags
+    return Obx(() {
+      final List tags;
+      if (gFFI.abModel.sortTags.value) {
+        tags = gFFI.abModel.tags.toList();
+        tags.sort();
+      } else {
+        tags = gFFI.abModel.tags;
+      }
+      return Wrap(
+        children: tags
             .map((e) => AddressBookTag(
                 name: e,
                 tags: gFFI.abModel.selectedTags,
@@ -177,8 +192,8 @@ class _AddressBookState extends State<AddressBook> {
                   }
                 }))
             .toList(),
-      ),
-    );
+      );
+    });
   }
 
   Widget _buildPeersViews() {
@@ -187,8 +202,40 @@ class _AddressBookState extends State<AddressBook> {
           alignment: Alignment.topLeft,
           child: Obx(() => AddressBookPeersView(
                 menuPadding: widget.menuPadding,
+                // ignore: invalid_use_of_protected_member
                 initPeers: gFFI.abModel.peers.value,
               ))),
+    );
+  }
+
+  @protected
+  MenuEntryBase<String> syncMenuItem() {
+    return MenuEntrySwitch<String>(
+      switchType: SwitchType.scheckbox,
+      text: translate('Sync with recent sessions'),
+      getter: () async {
+        return shouldSyncAb();
+      },
+      setter: (bool v) async {
+        bind.mainSetLocalOption(key: syncAbOption, value: v ? 'Y' : '');
+      },
+      dismissOnClicked: true,
+    );
+  }
+
+  @protected
+  MenuEntryBase<String> sortMenuItem() {
+    return MenuEntrySwitch<String>(
+      switchType: SwitchType.scheckbox,
+      text: translate('Sort tags'),
+      getter: () async {
+        return shouldSortTags();
+      },
+      setter: (bool v) async {
+        bind.mainSetLocalOption(key: sortAbTagsOption, value: v ? 'Y' : '');
+        gFFI.abModel.sortTags.value = v;
+      },
+      dismissOnClicked: true,
     );
   }
 
@@ -197,6 +244,8 @@ class _AddressBookState extends State<AddressBook> {
       getEntry(translate("Add ID"), abAddId),
       getEntry(translate("Add Tag"), abAddTag),
       getEntry(translate("Unselect all tags"), gFFI.abModel.unsetSelectedTags),
+      sortMenuItem(),
+      syncMenuItem(),
     ];
 
     mod_menu.showMenu(
@@ -216,6 +265,9 @@ class _AddressBookState extends State<AddressBook> {
   }
 
   void abAddId() async {
+    if (gFFI.abModel.isFull(true)) {
+      return;
+    }
     var isInProgress = false;
     IDTextEditingController idController = IDTextEditingController(text: '');
     TextEditingController aliasController = TextEditingController(text: '');
@@ -224,7 +276,7 @@ class _AddressBookState extends State<AddressBook> {
     final style = TextStyle(fontSize: 14.0);
     String? errorMsg;
 
-    gFFI.dialogManager.show((setState, close) {
+    gFFI.dialogManager.show((setState, close, context) {
       submit() async {
         setState(() {
           isInProgress = true;
@@ -334,7 +386,7 @@ class _AddressBookState extends State<AddressBook> {
     var msg = "";
     var isInProgress = false;
     TextEditingController controller = TextEditingController(text: field);
-    gFFI.dialogManager.show((setState, close) {
+    gFFI.dialogManager.show((setState, close, context) {
       submit() async {
         setState(() {
           msg = "";
@@ -429,8 +481,9 @@ class AddressBookTag extends StatelessWidget {
       child: Obx(
         () => Container(
           decoration: BoxDecoration(
-              color: tags.contains(name) ? Colors.blue : null,
-              border: Border.all(color: MyTheme.darkGray),
+              color: tags.contains(name)
+                  ? Colors.blue
+                  : Theme.of(context).colorScheme.background,
               borderRadius: BorderRadius.circular(6)),
           margin: const EdgeInsets.symmetric(horizontal: 4.0, vertical: 8.0),
           padding: const EdgeInsets.symmetric(vertical: 2.0, horizontal: 8.0),
@@ -444,6 +497,29 @@ class AddressBookTag extends StatelessWidget {
 
   void _showMenu(BuildContext context, RelativeRect pos) {
     final items = [
+      getEntry(translate("Rename"), () {
+        renameDialog(
+            oldName: name,
+            validator: (String? newName) {
+              if (newName == null || newName.isEmpty) {
+                return translate('Can not be empty');
+              }
+              if (newName != name && gFFI.abModel.tags.contains(newName)) {
+                return translate('Already exists');
+              }
+              return null;
+            },
+            onSubmit: (String newName) {
+              if (name != newName) {
+                gFFI.abModel.renameTag(name, newName);
+                gFFI.abModel.pushAb();
+              }
+              Future.delayed(Duration.zero, () => Get.back());
+            },
+            onCancel: () {
+              Future.delayed(Duration.zero, () => Get.back());
+            });
+      }),
       getEntry(translate("Delete"), () {
         gFFI.abModel.deleteTag(name);
         gFFI.abModel.pushAb();
@@ -475,7 +551,6 @@ MenuEntryButton<String> getEntry(String title, VoidCallback proc) {
       style: style,
     ),
     proc: proc,
-    padding: kDesktopMenuPadding,
     dismissOnClicked: true,
   );
 }

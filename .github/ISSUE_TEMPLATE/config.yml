@@ -1,5 +1,8 @@
 blank_issues_enabled: false
 contact_links:
+  - name: Feature Request
+    url: https://github.com/rustdesk/rustdesk/discussions/categories/feature-request
+    about: Discuss ideas for new features or enhancements, it will be converted to GitHub issue when we commit to building those changes or are helping a community member contribute their own changes
   - name: Ask a question
     url: https://github.com/rustdesk/rustdesk/discussions/category_choices
     about: Ask questions and discuss with other community members.

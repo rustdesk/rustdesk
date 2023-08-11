@@ -41,20 +41,6 @@ fn build_manifest() {
     }
 }
 
-#[cfg(all(windows, feature = "with_rc"))]
-fn build_rc_source() {
-    use simple_rc::{generate_with_conf, Config, ConfigItem};
-    generate_with_conf(&Config {
-        outfile: "src/rc.rs".to_owned(),
-        confs: vec![ConfigItem {
-            inc: "resources".to_owned(),
-            exc: vec![],
-            suppressed_front: "resources".to_owned(),
-        }],
-    })
-    .unwrap();
-}
-
 fn install_oboe() {
     let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap();
     if target_os != "android" {
@@ -92,6 +78,9 @@ fn install_oboe() {
 
 #[cfg(feature = "flutter")]
 fn gen_flutter_rust_bridge() {
+    if !std::env::var("RUN_FFIGEN").is_ok() {
+        return;
+    }
     use lib_flutter_rust_bridge_codegen::{
         config_parse, frb_codegen, get_symbols_if_no_duplicates, RawOpts,
     };
@@ -133,15 +122,15 @@ fn main() {
     gen_flutter_rust_bridge();
     //     return;
     // }
-    #[cfg(all(windows, feature = "with_rc"))]
-    build_rc_source();
     #[cfg(all(windows, feature = "inline"))]
     build_manifest();
     #[cfg(windows)]
     build_windows();
-    #[cfg(target_os = "macos")]
-    build_mac();
-    #[cfg(target_os = "macos")]
-    println!("cargo:rustc-link-lib=framework=ApplicationServices");
+    let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap();
+    if target_os == "macos" {
+        #[cfg(target_os = "macos")]
+        build_mac();
+        println!("cargo:rustc-link-lib=framework=ApplicationServices");
+    }
     println!("cargo:rerun-if-changed=build.rs");
 }

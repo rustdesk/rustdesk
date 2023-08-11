@@ -1378,7 +1378,6 @@ class PopupMenuButtonState<T> extends State<PopupMenuButton<T>> {
 
   @override
   Widget build(BuildContext context) {
-    final IconThemeData iconTheme = IconTheme.of(context);
     final bool enableFeedback = widget.enableFeedback ??
         PopupMenuTheme.of(context).enableFeedback ??
         true;

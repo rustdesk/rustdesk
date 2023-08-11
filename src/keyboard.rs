@@ -1,12 +1,11 @@
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
-use crate::client::get_key_state;
-use crate::common::GrabState;
 #[cfg(feature = "flutter")]
 use crate::flutter::{CUR_SESSION_ID, SESSIONS};
 #[cfg(target_os = "windows")]
 use crate::platform::windows::{get_char_from_vk, get_unicode_from_vk};
 #[cfg(not(any(feature = "flutter", feature = "cli")))]
 use crate::ui::CUR_SESSION;
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+use crate::{client::get_key_state, common::GrabState};
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use hbb_common::log;
 use hbb_common::message_proto::*;
@@ -15,10 +14,11 @@ use rdev::KeyCode;
 use rdev::{Event, EventType, Key};
 #[cfg(any(target_os = "windows", target_os = "macos"))]
 use std::sync::atomic::{AtomicBool, Ordering};
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+use std::time::SystemTime;
 use std::{
     collections::{HashMap, HashSet},
     sync::{Arc, Mutex},
-    time::SystemTime,
 };
 
 #[cfg(windows)]
@@ -52,6 +52,9 @@ lazy_static::lazy_static! {
 
 pub mod client {
     use super::*;
+    lazy_static::lazy_static! {
+        static ref IS_GRAB_STARTED: Arc<Mutex<bool>> = Arc::new(Mutex::new(false));
+    }
 
     pub fn get_keyboard_mode() -> String {
         #[cfg(not(any(feature = "flutter", feature = "cli")))]
@@ -70,9 +73,15 @@ pub mod client {
     }
 
     pub fn start_grab_loop() {
+        let mut lock = IS_GRAB_STARTED.lock().unwrap();
+        if *lock {
+            return;
+        }
         super::start_grab_loop();
+        *lock = true;
     }
 
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     pub fn change_grab_status(state: GrabState) {
         match state {
             GrabState::Ready => {}
@@ -320,6 +329,7 @@ pub fn is_long_press(event: &Event) -> bool {
     return false;
 }
 
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub fn release_remote_keys() {
     // todo!: client quit suddenly, how to release keys?
     let to_release = TO_RELEASE.lock().unwrap().clone();
@@ -339,24 +349,8 @@ pub fn get_keyboard_mode_enum() -> KeyboardMode {
         "translate" => KeyboardMode::Translate,
         "legacy" => KeyboardMode::Legacy,
         _ => {
-            // Set "map" as default mode if version > 1.2.0.
-            let mut is_peer_version_gt_1_2_0 = false;
-
-            #[cfg(not(any(feature = "flutter", feature = "cli")))]
-            if let Some(session) = CUR_SESSION.lock().unwrap().as_ref() {
-                is_peer_version_gt_1_2_0 =
-                    session.get_peer_version() > hbb_common::get_version_number("1.2.0");
-            }
-            #[cfg(feature = "flutter")]
-            if let Some(session) = SESSIONS
-                .read()
-                .unwrap()
-                .get(&*CUR_SESSION_ID.read().unwrap())
-            {
-                is_peer_version_gt_1_2_0 =
-                    session.get_peer_version() > hbb_common::get_version_number("1.2.0");
-            }
-            if is_peer_version_gt_1_2_0 {
+            // Set "map" as default mode if version >= 1.2.0.
+            if crate::is_peer_version_ge("1.2.0") {
                 KeyboardMode::Map
             } else {
                 KeyboardMode::Legacy
@@ -366,6 +360,7 @@ pub fn get_keyboard_mode_enum() -> KeyboardMode {
 }
 
 #[inline]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub fn is_modifier(key: &rdev::Key) -> bool {
     matches!(
         key,
@@ -382,24 +377,71 @@ pub fn is_modifier(key: &rdev::Key) -> bool {
 
 #[inline]
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
+pub fn is_numpad_rdev_key(key: &rdev::Key) -> bool {
+    matches!(
+        key,
+        Key::Kp0
+            | Key::Kp1
+            | Key::Kp2
+            | Key::Kp3
+            | Key::Kp4
+            | Key::Kp5
+            | Key::Kp6
+            | Key::Kp7
+            | Key::Kp8
+            | Key::Kp9
+            | Key::KpMinus
+            | Key::KpMultiply
+            | Key::KpDivide
+            | Key::KpPlus
+            | Key::KpDecimal
+    )
+}
+
+#[inline]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+pub fn is_letter_rdev_key(key: &rdev::Key) -> bool {
+    matches!(
+        key,
+        Key::KeyA
+            | Key::KeyB
+            | Key::KeyC
+            | Key::KeyD
+            | Key::KeyE
+            | Key::KeyF
+            | Key::KeyG
+            | Key::KeyH
+            | Key::KeyI
+            | Key::KeyJ
+            | Key::KeyK
+            | Key::KeyL
+            | Key::KeyM
+            | Key::KeyN
+            | Key::KeyO
+            | Key::KeyP
+            | Key::KeyQ
+            | Key::KeyR
+            | Key::KeyS
+            | Key::KeyT
+            | Key::KeyU
+            | Key::KeyV
+            | Key::KeyW
+            | Key::KeyX
+            | Key::KeyY
+            | Key::KeyZ
+    )
+}
+
+#[inline]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 fn is_numpad_key(event: &Event) -> bool {
-    matches!(event.event_type, EventType::KeyPress(key) | EventType::KeyRelease(key) if match key {
-        Key::Kp0 | Key::Kp1 | Key::Kp2 | Key::Kp3 | Key::Kp4 | Key::Kp5 | Key::Kp6 | Key::Kp7 | Key::Kp8 |
-        Key::Kp9 | Key::KpMinus | Key::KpMultiply | Key::KpDivide | Key::KpPlus | Key::KpDecimal => true,
-        _ => false
-    })
+    matches!(event.event_type, EventType::KeyPress(key) | EventType::KeyRelease(key) if is_numpad_rdev_key(&key))
 }
 
 #[inline]
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 fn is_letter_key(event: &Event) -> bool {
-    matches!(event.event_type, EventType::KeyPress(key) | EventType::KeyRelease(key) if match key {
-        Key::KeyA | Key::KeyB | Key::KeyC | Key::KeyD | Key::KeyE | Key::KeyF | Key::KeyG | Key::KeyH |
-        Key::KeyI | Key::KeyJ | Key::KeyK | Key::KeyL | Key::KeyM | Key::KeyN | Key::KeyO | Key::KeyP |
-        Key::KeyQ | Key::KeyR | Key::KeyS | Key::KeyT | Key::KeyU | Key::KeyV | Key::KeyW | Key::KeyX |
-        Key::KeyY | Key::KeyZ => true,
-        _ => false
-    })
+    matches!(event.event_type, EventType::KeyPress(key) | EventType::KeyRelease(key) if is_letter_rdev_key(&key))
 }
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -518,8 +560,9 @@ pub fn event_to_key_events(
     };
 
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    if keyboard_mode != KeyboardMode::Translate {
-        let is_numpad_key = is_numpad_key(&event);
+    let is_numpad_key = is_numpad_key(&event);
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    if keyboard_mode != KeyboardMode::Translate || is_numpad_key {
         let is_letter_key = is_letter_key(&event);
         for key_event in &mut key_events {
             if let Some(lock_modes) = _lock_modes {
@@ -532,6 +575,7 @@ pub fn event_to_key_events(
     key_events
 }
 
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub fn event_type_to_event(event_type: EventType) -> Event {
     Event {
         event_type,
@@ -672,7 +716,7 @@ pub fn legacy_keyboard_mode(event: &Event, mut key_event: KeyEvent) -> Vec<KeyEv
         Key::Final => Some(ControlKey::Final),
         Key::Hanja => Some(ControlKey::Hanja),
         Key::Hanji => Some(ControlKey::Hanja),
-        Key::Convert => Some(ControlKey::Convert),
+        Key::Lang2 => Some(ControlKey::Convert),
         Key::Print => Some(ControlKey::Print),
         Key::Select => Some(ControlKey::Select),
         Key::Execute => Some(ControlKey::Execute),

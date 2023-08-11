@@ -56,9 +56,15 @@ impl Interface for Session {
             }
             "re-input-password" => {
                 log::error!("{}: {}", title, text);
-                let password = rpassword::prompt_password("Enter password: ").unwrap();
-                let login_data = Data::Login((password, true));
-                self.sender.send(login_data).ok();
+                match rpassword::prompt_password("Enter password: ") {
+                    Ok(password) => {
+                        let login_data = Data::Login((password, true));
+                        self.sender.send(login_data).ok();
+                    }
+                    Err(e) => {
+                        log::error!("reinput password failed, {:?}", e);
+                    }
+                }
             }
             msg if msg.contains("error") => {
                 log::error!("{}: {}: {}", msgtype, title, text);
@@ -85,8 +91,23 @@ impl Interface for Session {
         handle_hash(self.lc.clone(), &pass, hash, self, peer).await;
     }
 
-    async fn handle_login_from_ui(&mut self, os_username: String, os_password: String, password: String, remember: bool, peer: &mut Stream) {
-        handle_login_from_ui(self.lc.clone(), os_username, os_password, password, remember, peer).await;
+    async fn handle_login_from_ui(
+        &mut self,
+        os_username: String,
+        os_password: String,
+        password: String,
+        remember: bool,
+        peer: &mut Stream,
+    ) {
+        handle_login_from_ui(
+            self.lc.clone(),
+            os_username,
+            os_password,
+            password,
+            remember,
+            peer,
+        )
+        .await;
     }
 
     async fn handle_test_delay(&mut self, t: TestDelay, peer: &mut Stream) {
@@ -117,13 +138,14 @@ pub async fn connect_test(id: &str, key: String, token: String) {
                             break;
                         }
                         Ok(Some(Ok(bytes))) => {
-                            let msg_in = Message::parse_from_bytes(&bytes).unwrap();
-                            match msg_in.union {
-                                Some(message::Union::Hash(hash)) => {
-                                    log::info!("Got hash");
-                                    break;
+                            if let Ok(msg_in) = Message::parse_from_bytes(&bytes) {
+                                match msg_in.union {
+                                    Some(message::Union::Hash(hash)) => {
+                                        log::info!("Got hash");
+                                        break;
+                                    }
+                                    _ => {}
                                 }
-                                _ => {}
                             }
                         }
                         _ => {}

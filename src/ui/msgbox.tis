@@ -5,6 +5,15 @@ function translate_text(text) {
             fds[i] = translate(fds[i]);
         }
         text = fds.join(': ');
+    } else {
+        var fds = text.split(' ');
+        if (fds.length > 1 && fds[0].slice(-4) === '_tip') {
+            fds[0] = translate(fds[0]);
+            var rest = text.substring(fds[0].length + 1);
+            text = fds[0] + ' ' + translate(rest);
+        } else {
+            text = translate(text);
+        }
     }
     return text;
 }
@@ -26,7 +35,7 @@ class MsgboxComponent: Reactor.Component {
         this.remember = params.remember;
         this.callback = params.callback;
         this.hasRetry = params.hasRetry;
-        this.auto_login = params.auto_login;
+        this.autoLogin = params.autoLogin;
         this.contentStyle = params.contentStyle;
         try { this.content = translate_text(this.content); } catch (e) {}
     }
@@ -86,10 +95,10 @@ class MsgboxComponent: Reactor.Component {
         } else if (this.type == "session-login-password") {
             return this.getXsessionPasswordContent();
         } else if (this.type == "custom-os-password") {
-            var ts = this.auto_login ? { checked: true } : {};
+            var ts = this.autoLogin ? { checked: true } : {};
             return <div .form>
               <PasswordComponent value={this.content} />
-              <div><button|checkbox(auto_login) {ts} style="width: *; word-wrap: break-word; overflow-wrap: break-word; white-space: normal; height: auto; overflow: hidden;">{translate('Auto Login')}</button></div>
+              <div><button|checkbox(autoLogin) {ts} style="width: *; word-wrap: break-word; overflow-wrap: break-word; white-space: normal; height: auto; overflow: hidden;">{translate('Auto Login')}</button></div>
               </div>;
         }
         return this.content;

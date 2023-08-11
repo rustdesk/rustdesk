@@ -8,9 +8,10 @@ edition = "2021"
 build = "build.rs"
 
 [build-dependencies]
-embed-resource = "1.7"
+embed-resource = "2.1"
 
 [dependencies]
-brotli = "3.3.4"
-dirs = "4.0.0"
-md5 = "0.7.0"
+brotli = "3.3"
+dirs = "5.0"
+md5 = "0.7"
+winapi = { version = "0.3", features = ["winbase"] }

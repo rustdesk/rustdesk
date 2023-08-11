@@ -34,11 +34,8 @@ RustDesk heißt jegliche Mitarbeit willkommen. Schauen Sie sich [CONTRIBUTING-DE
 Nachfolgend sind die Server gelistet, die Sie kostenlos nutzen können. Es kann sein, dass sich diese Liste immer mal wieder ändert. Falls Sie nicht in der Nähe einer dieser Server sind, kann es sein, dass Ihre Verbindung langsam sein wird.
 | Standort | Anbieter | Spezifikation |
 | --------- | ------------- | ------------------ |
-| Südkorea (Seoul) | [AWS lightsail](https://aws.amazon.com/de/) | 1 vCPU / 0,5 GB RAM |
 | Deutschland | [Hetzner](https://www.hetzner.com/de/) | 2 vCPU / 4 GB RAM |
 | Deutschland | [Codext](https://codext.de/) | 4 vCPU / 8 GB RAM |
-| Finnland (Helsinki) | [Netlock](https://netlockendpoint.com/de/index.html) | 4 vCPU / 8 GB RAM |
-| USA (Ashburn) | [Netlock](https://netlockendpoint.com/de/index.html) | 4 vCPU / 8 GB RAM |
 | Ukraine (Kiew) | [dc.volia](https://dc.volia.com) | 2 vCPU / 4 GB RAM |
 
 ## Dev-Container
@@ -65,8 +62,8 @@ Bitte laden Sie die dynamische Bibliothek Sciter selbst herunter.
 
 - Installieren Sie [vcpkg](https://github.com/microsoft/vcpkg) und fügen Sie die Systemumgebungsvariable `VCPKG_ROOT` hinzu
 
-  - Windows: `vcpkg install libvpx:x64-windows-static libyuv:x64-windows-static opus:x64-windows-static`
-  - Linux/macOS: `vcpkg install libvpx libyuv opus`
+  - Windows: `vcpkg install libvpx:x64-windows-static libyuv:x64-windows-static opus:x64-windows-static aom:x64-windows-static`
+  - Linux/macOS: `vcpkg install libvpx libyuv opus aom`
 
 - Nutzen Sie `cargo run`
 
@@ -104,11 +101,11 @@ sudo pacman -Syu --needed unzip git cmake gcc curl wget yasm nasm zip make pkg-c
 ```sh
 git clone https://github.com/microsoft/vcpkg
 cd vcpkg
-git checkout 2021.12.01
+git checkout 2023.04.15
 cd ..
 vcpkg/bootstrap-vcpkg.sh
 export VCPKG_ROOT=$HOME/vcpkg
-vcpkg/vcpkg install libvpx libyuv opus
+vcpkg/vcpkg install libvpx libyuv opus aom
 ```
 
 ### libvpx reparieren (für Fedora)

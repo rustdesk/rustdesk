@@ -1,9 +1,11 @@
 use std::io::{self, Read};
+#[cfg(windows)]
 use virtual_display;
 
+#[cfg(windows)]
 fn prompt_input() -> u8 {
     println!("Press  key          execute:");
-    println!("       1. 'x'       1. exit");
+    println!("       1. 'q'       1. quit");
     println!("       2. 'i'       2. install or update driver");
     println!("       3. 'u'       3. uninstall driver");
     println!("       4. 'c'       4. create device");
@@ -18,28 +20,32 @@ fn prompt_input() -> u8 {
         .unwrap_or(0)
 }
 
-fn plug_in() {
+#[cfg(windows)]
+fn plug_in(monitor_index: u32) {
     println!("Plug in monitor begin");
-    if let Err(e) = virtual_display::plug_in_monitor() {
+    if let Err(e) = virtual_display::plug_in_monitor(monitor_index as _) {
         println!("{}", e);
     } else {
         println!("Plug in monitor done");
     }
 }
 
-fn plug_out() {
+#[cfg(windows)]
+fn plug_out(monitor_index: u32) {
     println!("Plug out monitor begin");
-    if let Err(e) = virtual_display::plug_out_monitor() {
+    if let Err(e) = virtual_display::plug_out_monitor(monitor_index as _) {
         println!("{}", e);
     } else {
         println!("Plug out monitor done");
     }
 }
 
+#[cfg(windows)]
 fn main() {
     loop {
-        match prompt_input() as char {
-            'x' => break,
+        let chr = prompt_input();
+        match chr as char {
+            'q' => break,
             'i' => {
                 println!("Install or update driver begin");
                 let mut reboot_required = false;
@@ -81,9 +87,16 @@ fn main() {
                 virtual_display::close_device();
                 println!("Close device done");
             }
-            '1' => plug_in(),
-            '4' => plug_out(),
+            '1' => plug_in(0),
+            '2' => plug_in(1),
+            '3' => plug_in(2),
+            '4' => plug_out(0),
+            '5' => plug_out(1),
+            '6' => plug_out(2),
             _ => {}
         }
     }
 }
+
+#[cfg(not(windows))]
+fn main() {}

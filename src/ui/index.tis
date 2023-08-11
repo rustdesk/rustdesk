@@ -21,7 +21,7 @@ var svg_menu = <svg #menu viewBox="0 0 512 512">
 </svg>;
 var svg_refresh_password = <svg #refresh-password xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 2v6h6M2.66 15.57a10 10 0 1 0 .57-8.38"/></svg>;
 
-var my_id = "";
+var my_id = handler.get_id();
 function get_id() {
   my_id = handler.get_id();
   return my_id;
@@ -215,7 +215,7 @@ class Enhancements: Reactor.Component {
         return <li>{translate('Enhancements')}
             <menu #enhancements-menu>
                 {has_hwcodec ? <li #enable-hwcodec><span>{svg_checkmark}</span>{translate("Hardware Codec")} (beta)</li> : ""}
-                <li #enable-abr><span>{svg_checkmark}</span>{translate("Adaptive Bitrate")} (beta)</li>
+                <li #enable-abr><span>{svg_checkmark}</span>{translate("Adaptive bitrate")} (beta)</li>
                 <li #screen-recording>{translate("Recording")}</li>
             </menu>
         </li>;
@@ -311,12 +311,12 @@ class MyIdMenu: Reactor.Component {
                 <li #stop-service class={service_stopped ? "line-through" : "selected"}><span>{svg_checkmark}</span>{translate("Enable Service")}</li>
                 {handler.is_rdp_service_open() ? <ShareRdp /> : ""}
                 <DirectServer />
-                {false && handler.using_public_server() && <li #allow-always-relay><span>{svg_checkmark}</span>{translate('Always connected via relay')}</li>}
+                {false && handler.using_public_server() && <li #allow-always-relay><span>{svg_checkmark}</span>{translate('Always connect via relay')}</li>}
                 {handler.is_ok_change_id() ? <div .separator /> : ""}
                 {username ? 
                 <li #logout>{translate('Logout')} ({username})</li> :
                 <li #login>{translate('Login')}</li>}
-                {handler.is_ok_change_id() && key_confirmed ? <li #change-id>{translate('Change ID')}</li> : ""}
+                {handler.is_ok_change_id() && key_confirmed && connect_status > 0 ? <li #change-id>{translate('Change ID')}</li> : ""}
                 <div .separator />
                 <li #allow-darktheme><span>{svg_checkmark}</span>{translate('Dark Theme')}</li>
                 <Languages />
@@ -364,11 +364,12 @@ class MyIdMenu: Reactor.Component {
         var name = handler.get_app_name();
         msgbox("custom-nocancel-nook-hasclose", translate("About") + " " + name, "<div style='line-height: 2em'> \
             <div>Version: " + handler.get_version() + " \
-            <div .link .custom-event url='https://rustdesk.com/privacy'>Privacy Statement</div> \
-            <div .link .custom-event url='https://rustdesk.com'>Website</div> \
-            <div style='background: #2c8cff; color: white; padding: 1em; margin-top: 1em;'>Copyright &copy; 2022 Purslane Ltd.\
+            <div>Fingerprint: " + handler.get_fingerprint() + " \
+            <div .link .custom-event url='https://rustdesk.com/privacy.html'>" + translate("Privacy Statement") + "</div> \
+            <div .link .custom-event url='https://rustdesk.com'>" + translate("Website") + "</div> \
+	    <div style='background: #2c8cff; color: white; padding: 1em; margin-top: 1em;'>Copyright &copy; 2023 Purslane Ltd.\
             <br />" + handler.get_license() + " \
-            <p style='font-weight: bold'>Made with heart in this chaotic world!</p>\
+            <p style='font-weight: bold'>" + translate("Slogan_tip") + "</p>\
             </div>\
         </div>", "", function(el) {
             if (el && el.attributes) {
@@ -658,7 +659,7 @@ class UpdateMe: Reactor.Component {
     }
 
     event click $(#install-me) {
-        handler.open_url("https://rustdesk.com");
+        handler.open_url("https://rustdesk.com/download");
         return;
         if (!is_win) {
             handler.open_url("https://rustdesk.com");
@@ -1116,6 +1117,7 @@ function checkConnectStatus() {
         if (tmp[0] != connect_status) {
             connect_status = tmp[0];
             app.connect_status.update();
+            myIdMenu.update();
         }
         if (tmp[1] != key_confirmed) {
             key_confirmed = tmp[1];
@@ -1173,6 +1175,14 @@ function check_if_overlay() {
 
 checkConnectStatus();
 
+function set_local_user_info(user) {
+    var user_info = {name: user.name};
+    if (user.status) {
+        user_info.status = user.status;
+    }
+    handler.set_local_option("user_info", JSON.stringify(user_info));
+}
+
 function login() {
     var name0 = getUserName();
     var pass0 = '';
@@ -1194,15 +1204,21 @@ function login() {
         }
         abLoading = true;
         var url = handler.get_api_server();
-        httpRequest(url + "/api/login", #post, {username: name, password: pass, id: my_id, uuid: handler.get_uuid()}, function(data) {
+        httpRequest(url + "/api/login", #post, {username: name, password: pass, id: my_id, uuid: handler.get_uuid(), type: 'account', deviceInfo: getDeviceInfo()}, function(data) {
             if (data.error) {
                 abLoading = false;
                 var err = translate(data.error);
                 show_progress(false, err);
                 return;
             }
+            if (data.type == 'email_check') {
+                abLoading = false;
+                show_progress(-1);
+                on_email_check(data);
+                return;
+            }
             handler.set_local_option("access_token", data.access_token);
-            handler.set_local_option("user_info", JSON.stringify(data.user));
+            set_local_user_info(data.user);
             show_progress(-1);
             myIdMenu.update();
             getAb();
@@ -1214,6 +1230,48 @@ function login() {
         });
         return " ";
       });
+}
+
+function on_email_check(last_msg) {
+    var emailHint = last_msg.user.email;
+    msgbox("custom-email-verification-code", translate('Verification code'), <div .form .set-password> 
+            <div><span>{translate('Email')}:</span><span>{emailHint}</span></div> 
+            <div><span>{translate('Verification code')}:</span><input|text name="verification_code" .outline-focus /></div> 
+            <div style="font-size:0.9em; margin-bottom:1em;">{translate('verification_tip')}</div>
+        </div>, "", 
+        function(res=null, show_progress) {
+            if (!res) return;
+            show_progress();
+            var code = (res.verification_code || '').trim();
+            if (!code || code.length < 6) {
+                show_progress(false, translate("Too short, at least 6 characters."));
+                return " ";
+            }
+            abLoading = true;
+            var url = handler.get_api_server();
+            httpRequest(url + "/api/login", #post, {username: last_msg.user.name, id: my_id, uuid: handler.get_uuid(), type: 'email_code', autoLogin: true, verificationCode: code, deviceInfo: getDeviceInfo()}, 
+                function(data) {
+                    if (data.error) {
+                        abLoading = false;
+                        show_progress(false, data.error);
+                        return;
+                    }
+                    handler.set_local_option("access_token", data.access_token);
+                    set_local_user_info(data.user);
+                    show_progress(-1);
+                    myIdMenu.update();
+                    getAb();
+                },
+                function(err, status) {
+                    abLoading = false;
+                    err = translate(err);
+                    if (url.indexOf('rustdesk') < 0) err = url + ', ' + err;
+                    show_progress(false, err);
+                }
+            );
+            return " ";
+        }
+    );
 }
 
 function reset_token() {
@@ -1243,10 +1301,13 @@ function refreshCurrentUser() {
     app.update();
     httpRequest(handler.get_api_server() + "/api/currentUser", #post, {id: my_id, uuid: handler.get_uuid()}, function(data) {
         if (data.error) {
+            if (data.error == 'Invalid token') {
+              reset_token();
+            }
             handleAbError(data.error);
             return;
         }
-        handler.set_local_option("user_info", JSON.stringify(data));
+        set_local_user_info(data);
         myIdMenu.update();
         getAb();
     }, function(err, status) {
@@ -1259,4 +1320,8 @@ function refreshCurrentUser() {
 
 function getHttpHeaders() {
     return "Authorization: Bearer " + handler.get_local_option("access_token");
+}
+
+function getDeviceInfo() {
+    return JSON.parse(handler.get_login_device_info());
 }

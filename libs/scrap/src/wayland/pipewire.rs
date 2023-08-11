@@ -594,13 +594,14 @@ fn request_screen_cast(
     }
     let fd_res = fd_res.lock().unwrap();
     let streams_res = streams_res.lock().unwrap();
-    if fd_res.is_some() && !streams_res.is_empty() {
-        Ok((conn, fd_res.clone().unwrap(), streams_res.clone()))
-    } else {
-        Err(Box::new(DBusError(
-            "Failed to obtain screen capture.".into(),
-        )))
+    if let Some(fd_res) = fd_res.clone() {
+        if !streams_res.is_empty() {
+            return Ok((conn, fd_res, streams_res.clone()));
+        }
     }
+    Err(Box::new(DBusError(
+        "Failed to obtain screen capture.".into(),
+    )))
 }
 
 pub fn get_capturables(capture_cursor: bool) -> Result<Vec<PipeWireCapturable>, Box<dyn Error>> {

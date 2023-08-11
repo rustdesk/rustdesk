@@ -63,7 +63,7 @@ jobs:
                 pushd vcpkg
                 git reset --hard ${{ env.VCPKG_COMMIT_ID }}
                 ./bootstrap-vcpkg.sh
-                ./vcpkg install libvpx libyuv opus
+                ./vcpkg install libvpx libyuv opus aom
                 ;;
               aarch64)
                 pushd /artifacts

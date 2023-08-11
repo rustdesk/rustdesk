@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hbb/mobile/widgets/dialog.dart';
+import 'package:flutter_hbb/models/chat_model.dart';
 import 'package:get/get.dart';
 import 'package:provider/provider.dart';
 
@@ -23,70 +24,86 @@ class ServerPage extends StatefulWidget implements PageShape {
   @override
   final appBarActions = [
     PopupMenuButton<String>(
+        tooltip: "",
         icon: const Icon(Icons.more_vert),
         itemBuilder: (context) {
+          listTile(String text, bool checked) {
+            return ListTile(
+                title: Text(translate(text)),
+                trailing: Icon(
+                  Icons.check,
+                  color: checked ? null : Colors.transparent,
+                ));
+          }
+
+          final approveMode = gFFI.serverModel.approveMode;
+          final verificationMethod = gFFI.serverModel.verificationMethod;
+          final showPasswordOption = approveMode != 'click';
           return [
             PopupMenuItem(
+              enabled: gFFI.serverModel.connectStatus > 0,
               padding: const EdgeInsets.symmetric(horizontal: 16.0),
               value: "changeID",
               child: Text(translate("Change ID")),
             ),
-            PopupMenuItem(
-              padding: const EdgeInsets.symmetric(horizontal: 16.0),
-              value: "setPermanentPassword",
-              enabled:
-                  gFFI.serverModel.verificationMethod != kUseTemporaryPassword,
-              child: Text(translate("Set permanent password")),
-            ),
-            PopupMenuItem(
-              padding: const EdgeInsets.symmetric(horizontal: 16.0),
-              value: "setTemporaryPasswordLength",
-              enabled:
-                  gFFI.serverModel.verificationMethod != kUsePermanentPassword,
-              child: Text(translate("One-time password length")),
-            ),
             const PopupMenuDivider(),
             PopupMenuItem(
               padding: const EdgeInsets.symmetric(horizontal: 0.0),
-              value: kUseTemporaryPassword,
-              child: ListTile(
-                  title: Text(translate("Use one-time password")),
-                  trailing: Icon(
-                    Icons.check,
-                    color: gFFI.serverModel.verificationMethod ==
-                            kUseTemporaryPassword
-                        ? null
-                        : Colors.transparent,
-                  )),
+              value: 'AcceptSessionsViaPassword',
+              child: listTile(
+                  'Accept sessions via password', approveMode == 'password'),
             ),
             PopupMenuItem(
               padding: const EdgeInsets.symmetric(horizontal: 0.0),
-              value: kUsePermanentPassword,
-              child: ListTile(
-                  title: Text(translate("Use permanent password")),
-                  trailing: Icon(
-                    Icons.check,
-                    color: gFFI.serverModel.verificationMethod ==
-                            kUsePermanentPassword
-                        ? null
-                        : Colors.transparent,
-                  )),
+              value: 'AcceptSessionsViaClick',
+              child:
+                  listTile('Accept sessions via click', approveMode == 'click'),
             ),
             PopupMenuItem(
               padding: const EdgeInsets.symmetric(horizontal: 0.0),
-              value: kUseBothPasswords,
-              child: ListTile(
-                  title: Text(translate("Use both passwords")),
-                  trailing: Icon(
-                    Icons.check,
-                    color: gFFI.serverModel.verificationMethod !=
-                                kUseTemporaryPassword &&
-                            gFFI.serverModel.verificationMethod !=
-                                kUsePermanentPassword
-                        ? null
-                        : Colors.transparent,
-                  )),
+              value: "AcceptSessionsViaBoth",
+              child: listTile("Accept sessions via both",
+                  approveMode != 'password' && approveMode != 'click'),
             ),
+            if (showPasswordOption) const PopupMenuDivider(),
+            if (showPasswordOption &&
+                verificationMethod != kUseTemporaryPassword)
+              PopupMenuItem(
+                padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                value: "setPermanentPassword",
+                child: Text(translate("Set permanent password")),
+              ),
+            if (showPasswordOption &&
+                verificationMethod != kUsePermanentPassword)
+              PopupMenuItem(
+                padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                value: "setTemporaryPasswordLength",
+                child: Text(translate("One-time password length")),
+              ),
+            if (showPasswordOption) const PopupMenuDivider(),
+            if (showPasswordOption)
+              PopupMenuItem(
+                padding: const EdgeInsets.symmetric(horizontal: 0.0),
+                value: kUseTemporaryPassword,
+                child: listTile('Use one-time password',
+                    verificationMethod == kUseTemporaryPassword),
+              ),
+            if (showPasswordOption)
+              PopupMenuItem(
+                padding: const EdgeInsets.symmetric(horizontal: 0.0),
+                value: kUsePermanentPassword,
+                child: listTile('Use permanent password',
+                    verificationMethod == kUsePermanentPassword),
+              ),
+            if (showPasswordOption)
+              PopupMenuItem(
+                padding: const EdgeInsets.symmetric(horizontal: 0.0),
+                value: kUseBothPasswords,
+                child: listTile(
+                    'Use both passwords',
+                    verificationMethod != kUseTemporaryPassword &&
+                        verificationMethod != kUsePermanentPassword),
+              ),
           ];
         },
         onSelected: (value) {
@@ -101,6 +118,15 @@ class ServerPage extends StatefulWidget implements PageShape {
               value == kUseBothPasswords) {
             bind.mainSetOption(key: "verification-method", value: value);
             gFFI.serverModel.updatePasswordModel();
+          } else if (value.startsWith("AcceptSessionsVia")) {
+            value = value.substring("AcceptSessionsVia".length);
+            if (value == "Password") {
+              gFFI.serverModel.setApproveMode('password');
+            } else if (value == "Click") {
+              gFFI.serverModel.setApproveMode('click');
+            } else {
+              gFFI.serverModel.setApproveMode('');
+            }
           }
         })
   ];
@@ -394,14 +420,16 @@ class ConnectionManager extends StatelessWidget {
                               ? const SizedBox.shrink()
                               : IconButton(
                                   onPressed: () {
-                                    gFFI.chatModel.changeCurrentID(client.id);
+                                    gFFI.chatModel.changeCurrentKey(
+                                        MessageKey(client.peerId, client.id));
                                     final bar = navigationBarKey.currentWidget;
                                     if (bar != null) {
                                       bar as BottomNavigationBar;
                                       bar.onTap!(1);
                                     }
                                   },
-                                  icon: const Icon(Icons.chat)))
+                                  icon: unreadTopRightBuilder(
+                                      client.unreadChatMessageCount)))
                     ],
                   ),
                   client.authorized
@@ -433,12 +461,14 @@ class ConnectionManager extends StatelessWidget {
                                     serverModel.sendLoginResponse(
                                         client, false);
                                   }).marginOnly(right: 15),
-                              ElevatedButton.icon(
-                                  icon: const Icon(Icons.check),
-                                  label: Text(translate("Accept")),
-                                  onPressed: () {
-                                    serverModel.sendLoginResponse(client, true);
-                                  }),
+                              if (serverModel.approveMode != 'password')
+                                ElevatedButton.icon(
+                                    icon: const Icon(Icons.check),
+                                    label: Text(translate("Accept")),
+                                    onPressed: () {
+                                      serverModel.sendLoginResponse(
+                                          client, true);
+                                    }),
                             ]),
                 ])))
             .toList());

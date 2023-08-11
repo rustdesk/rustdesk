@@ -7,6 +7,7 @@ import 'package:flutter_hbb/desktop/widgets/tabbar_widget.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:flutter_hbb/models/state_model.dart';
 import 'package:get/get.dart';
+import 'package:path/path.dart';
 import 'package:url_launcher/url_launcher_string.dart';
 import 'package:window_manager/window_manager.dart';
 
@@ -24,13 +25,13 @@ class _InstallPageState extends State<InstallPage> {
   void initState() {
     super.initState();
     Get.put<DesktopTabController>(tabController);
-    const lable = "install";
+    const label = "install";
     tabController.add(TabInfo(
-        key: lable,
-        label: lable,
+        key: label,
+        label: label,
         closable: false,
         page: _InstallPageBody(
-          key: const ValueKey(lable),
+          key: const ValueKey(label),
         )));
   }
 
@@ -69,6 +70,12 @@ class _InstallPageBodyState extends State<_InstallPageBody>
   final RxBool showProgress = false.obs;
   final RxBool btnEnabled = true.obs;
 
+  // todo move to theme.
+  final buttonStyle = OutlinedButton.styleFrom(
+    textStyle: TextStyle(fontSize: 14, fontWeight: FontWeight.normal),
+    padding: EdgeInsets.symmetric(vertical: 15, horizontal: 12),
+  );
+
   @override
   void initState() {
     windowManager.addListener(this);
@@ -90,177 +97,153 @@ class _InstallPageBodyState extends State<_InstallPageBody>
     windowManager.close();
   }
 
+  InkWell Option(RxBool option, {String label = ''}) {
+    return InkWell(
+      // todo mouseCursor: "SystemMouseCursors.forbidden" or no cursor on btnEnabled == false
+      borderRadius: BorderRadius.circular(6),
+      onTap: () => btnEnabled.value ? option.value = !option.value : null,
+      child: Row(
+        children: [
+          Obx(
+            () => Checkbox(
+              visualDensity: VisualDensity(horizontal: -4, vertical: -4),
+              value: option.value,
+              onChanged: (v) =>
+                  btnEnabled.value ? option.value = !option.value : null,
+            ).marginOnly(right: 8),
+          ),
+          Expanded(
+            child: Text(translate(label)),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final double em = 13;
-    final btnFontSize = 0.9 * em;
-    final double button_radius = 6;
     final isDarkTheme = MyTheme.currentThemeMode() == ThemeMode.dark;
-    final buttonStyle = OutlinedButton.styleFrom(
-        shape: RoundedRectangleBorder(
-      borderRadius: BorderRadius.all(Radius.circular(button_radius)),
-    ));
-    final inputBorder = OutlineInputBorder(
-        borderRadius: BorderRadius.zero,
-        borderSide:
-            BorderSide(color: isDarkTheme ? Colors.white70 : Colors.black12));
-    final textColor = isDarkTheme ? null : Colors.black87;
-    final dividerColor = isDarkTheme ? Colors.white70 : Colors.black87;
     return Scaffold(
         backgroundColor: null,
         body: SingleChildScrollView(
           child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              Text(translate('Installation'),
+                  style: Theme.of(context).textTheme.headlineMedium),
               Row(
                 children: [
-                  Text(
-                    translate('Installation'),
-                    style: TextStyle(
-                        fontSize: 2 * em, fontWeight: FontWeight.w500),
-                  ),
-                ],
-              ),
-              Row(
-                children: [
-                  Text('${translate('Installation Path')}: '),
+                  Text('${translate('Installation Path')}:')
+                      .marginOnly(right: 10),
                   Expanded(
-                      child: TextField(
-                    controller: controller,
-                    readOnly: true,
-                    style: TextStyle(
-                        fontSize: 1.5 * em, fontWeight: FontWeight.w400),
-                    decoration: InputDecoration(
-                      isDense: true,
-                      contentPadding: EdgeInsets.all(0.75 * em),
-                      enabledBorder: inputBorder,
-                      border: inputBorder,
-                      focusedBorder: inputBorder,
-                      constraints: BoxConstraints(maxHeight: 3 * em),
+                    child: TextField(
+                      controller: controller,
+                      readOnly: true,
+                      decoration: InputDecoration(
+                        contentPadding: EdgeInsets.all(0.75 * em),
+                      ),
+                    ).marginOnly(right: 10),
+                  ),
+                  Obx(
+                    () => OutlinedButton.icon(
+                      icon: Icon(Icons.folder_outlined, size: 16),
+                      onPressed: btnEnabled.value ? selectInstallPath : null,
+                      style: buttonStyle,
+                      label: Text(translate('Change Path')),
                     ),
-                  )),
-                  Obx(() => OutlinedButton(
-                          onPressed:
-                              btnEnabled.value ? selectInstallPath : null,
-                          style: buttonStyle,
-                          child: Text(translate('Change Path'),
-                              style: TextStyle(
-                                  color: textColor, fontSize: btnFontSize)))
-                      .marginOnly(left: em))
+                  )
                 ],
               ).marginSymmetric(vertical: 2 * em),
-              TextButton(
-                onPressed: () => startmenu.value = !startmenu.value,
-                child: Row(
-                  children: [
-                    Obx(() => Checkbox(
-                        value: startmenu.value,
-                        onChanged: (b) {
-                          if (b != null) startmenu.value = b;
-                        })),
-                    RichText(
-                      text: TextSpan(
-                        text: translate('Create start menu shortcuts'),
-                        style: DefaultTextStyle.of(context).style,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              TextButton(
-                onPressed: () => desktopicon.value = !desktopicon.value,
-                child: Row(
-                  children: [
-                    Obx(() => Checkbox(
-                        value: desktopicon.value,
-                        onChanged: (b) {
-                          if (b != null) desktopicon.value = b;
-                        })),
-                    RichText(
-                      text: TextSpan(
-                        text: translate('Create desktop icon'),
-                        style: DefaultTextStyle.of(context).style,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+              Option(startmenu, label: 'Create start menu shortcuts')
+                  .marginOnly(bottom: 7),
+              Option(desktopicon, label: 'Create desktop icon'),
               Offstage(
                 offstage: !Platform.isWindows,
-                child: TextButton(
-                  onPressed: () => driverCert.value = !driverCert.value,
-                  child: Row(
-                    children: [
-                      Obx(() => Checkbox(
-                          value: driverCert.value,
-                          onChanged: (b) {
-                            if (b != null) driverCert.value = b;
-                          })),
-                      RichText(
-                        text: TextSpan(
-                          text: translate('idd_driver_tip'),
-                          style: DefaultTextStyle.of(context).style,
-                        ),
-                      ),
-                    ],
+                child: Option(driverCert, label: 'install_cert_tip'),
+              ).marginOnly(top: 7),
+              Container(
+                  padding: EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: isDarkTheme
+                        ? Color.fromARGB(135, 87, 87, 90)
+                        : Colors.grey[100],
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.grey),
                   ),
-                ),
-              ),
-              GestureDetector(
-                  onTap: () => launchUrlString('http://rustdesk.com/privacy'),
                   child: Row(
                     children: [
-                      Text(translate('End-user license agreement'),
-                          style: const TextStyle(
-                              decoration: TextDecoration.underline))
+                      Icon(Icons.info_outline_rounded, size: 32)
+                          .marginOnly(right: 16),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(translate('agreement_tip'))
+                              .marginOnly(bottom: em),
+                          InkWell(
+                            hoverColor: Colors.transparent,
+                            onTap: () =>
+                                launchUrlString('https://rustdesk.com/privacy.html'),
+                            child: Tooltip(
+                              message: 'https://rustdesk.com/privacy.html',
+                              child: Row(children: [
+                                Icon(Icons.launch_outlined, size: 16)
+                                    .marginOnly(right: 5),
+                                Text(
+                                  translate('End-user license agreement'),
+                                  style: const TextStyle(
+                                      decoration: TextDecoration.underline),
+                                )
+                              ]),
+                            ),
+                          ),
+                        ],
+                      )
                     ],
-                  )).marginOnly(top: 2 * em),
-              Row(children: [Text(translate('agreement_tip'))])
-                  .marginOnly(top: em),
-              Divider(color: dividerColor).marginSymmetric(vertical: 0.5 * em),
+                  )).marginSymmetric(vertical: 2 * em),
               Row(
                 children: [
                   Expanded(
-                      child: Obx(() => Offstage(
-                            offstage: !showProgress.value,
-                            child: LinearProgressIndicator(),
-                          ))),
-                  Obx(() => OutlinedButton(
-                          onPressed: btnEnabled.value
-                              ? () => windowManager.close()
-                              : null,
-                          style: buttonStyle,
-                          child: Text(translate('Cancel'),
-                              style: TextStyle(
-                                  color: textColor, fontSize: btnFontSize)))
-                      .marginOnly(right: 2 * em)),
-                  Obx(() => ElevatedButton(
+                    child: Obx(() => Offstage(
+                          offstage: !showProgress.value,
+                          child:
+                              LinearProgressIndicator().marginOnly(right: 10),
+                        )),
+                  ),
+                  Obx(
+                    () => OutlinedButton.icon(
+                      icon: Icon(Icons.close_rounded, size: 16),
+                      label: Text(translate('Cancel')),
+                      onPressed:
+                          btnEnabled.value ? () => windowManager.close() : null,
+                      style: buttonStyle,
+                    ).marginOnly(right: 10),
+                  ),
+                  Obx(
+                    () => ElevatedButton.icon(
+                      icon: Icon(Icons.done_rounded, size: 16),
+                      label: Text(translate('Accept and Install')),
                       onPressed: btnEnabled.value ? install : null,
-                      style: ElevatedButton.styleFrom(
-                          primary: MyTheme.button,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.all(
-                                Radius.circular(button_radius)),
-                          )),
-                      child: Text(
-                        translate('Accept and Install'),
-                        style: TextStyle(fontSize: btnFontSize),
-                      ))),
+                      style: buttonStyle,
+                    ),
+                  ),
                   Offstage(
                     offstage: bind.installShowRunWithoutInstall(),
-                    child: Obx(() => OutlinedButton(
-                            onPressed: btnEnabled.value
-                                ? () => bind.installRunWithoutInstall()
-                                : null,
-                            style: buttonStyle,
-                            child: Text(translate('Run without install'),
-                                style: TextStyle(
-                                    color: textColor, fontSize: btnFontSize)))
-                        .marginOnly(left: 2 * em)),
+                    child: Obx(
+                      () => OutlinedButton.icon(
+                        icon: Icon(Icons.screen_share_outlined, size: 16),
+                        label: Text(translate('Run without install')),
+                        onPressed: btnEnabled.value
+                            ? () => bind.installRunWithoutInstall()
+                            : null,
+                        style: buttonStyle,
+                      ).marginOnly(left: 10),
+                    ),
                   ),
                 ],
               )
             ],
-          ).paddingSymmetric(horizontal: 8 * em, vertical: 2 * em),
+          ).paddingSymmetric(horizontal: 4 * em, vertical: 3 * em),
         ));
   }
 
@@ -278,26 +261,28 @@ class _InstallPageBodyState extends State<_InstallPageBody>
     if (driverCert.isTrue) {
       final tag = 'install-info-install-cert-confirm';
       final btns = [
-        dialogButton(
-          'Cancel',
+        OutlinedButton.icon(
+          icon: Icon(Icons.close_rounded, size: 16),
+          label: Text(translate('Cancel')),
           onPressed: () => gFFI.dialogManager.dismissByTag(tag),
-          isOutline: true,
+          style: buttonStyle,
         ),
-        dialogButton(
-          'OK',
+        ElevatedButton.icon(
+          icon: Icon(Icons.done_rounded, size: 16),
+          label: Text(translate('OK')),
           onPressed: () {
             gFFI.dialogManager.dismissByTag(tag);
             do_install();
           },
-          isOutline: false,
-        ),
+          style: buttonStyle,
+        )
       ];
       gFFI.dialogManager.show(
-        (setState, close) => CustomAlertDialog(
+        (setState, close, context) => CustomAlertDialog(
           title: null,
           content: SelectionArea(
               child:
-                  msgboxContent('info', 'Warning', 'confirm_idd_driver_tip')),
+                  msgboxContent('info', 'Warning', 'confirm_install_cert_tip')),
           actions: btns,
           onCancel: close,
         ),
@@ -312,8 +297,7 @@ class _InstallPageBodyState extends State<_InstallPageBody>
     String? install_path = await FilePicker.platform
         .getDirectoryPath(initialDirectory: controller.text);
     if (install_path != null) {
-      install_path = '$install_path\\${await bind.mainGetAppName()}';
-      controller.text = install_path;
+      controller.text = join(install_path, await bind.mainGetAppName());
     }
   }
 }

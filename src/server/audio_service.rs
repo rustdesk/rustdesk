@@ -13,6 +13,8 @@
 // https://github.com/krruzic/pulsectl
 
 use super::*;
+#[cfg(not(any(target_os = "linux", target_os = "android")))]
+use hbb_common::anyhow::anyhow;
 use magnum_opus::{Application::*, Channels::*, Encoder};
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -104,11 +106,12 @@ mod cpal_impl {
     use super::*;
     use cpal::{
         traits::{DeviceTrait, HostTrait, StreamTrait},
-        Device, Host, SupportedStreamConfig,
+        BufferSize, Device, Host, InputCallbackInfo, StreamConfig, SupportedStreamConfig,
     };
 
     lazy_static::lazy_static! {
         static ref HOST: Host = cpal::default_host();
+        static ref INPUT_BUFFER: Arc<Mutex<std::collections::VecDeque<f32>>> = Default::default();
     }
 
     #[derive(Default)]
@@ -139,21 +142,28 @@ mod cpal_impl {
     }
 
     fn send(
-        data: &[f32],
+        data: Vec<f32>,
         sample_rate0: u32,
         sample_rate: u32,
-        channels: u16,
+        device_channel: u16,
+        encode_channel: u16,
         encoder: &mut Encoder,
         sp: &GenericService,
     ) {
-        let buffer;
-        let data = if sample_rate0 != sample_rate {
-            buffer = crate::common::resample_channels(data, sample_rate0, sample_rate, channels);
-            &buffer
-        } else {
-            data
-        };
-        send_f32(data, encoder, sp);
+        let mut data = data;
+        if sample_rate0 != sample_rate {
+            data = crate::common::audio_resample(&data, sample_rate0, sample_rate, device_channel);
+        }
+        if device_channel != encode_channel {
+            data = crate::common::audio_rechannel(
+                data,
+                sample_rate,
+                sample_rate,
+                device_channel,
+                encode_channel,
+            )
+        }
+        send_f32(&data, encoder, sp);
     }
 
     #[cfg(windows)]
@@ -196,13 +206,10 @@ mod cpal_impl {
                 }
             }
         }
-        if device.is_none() {
-            device = Some(
-                HOST.default_input_device()
-                    .with_context(|| "Failed to get default input device for loopback")?,
-            );
-        }
-        let device = device.unwrap();
+        let device = device.unwrap_or(
+            HOST.default_input_device()
+                .with_context(|| "Failed to get default input device for loopback")?,
+        );
         log::info!("Input device: {}", device.name().unwrap_or("".to_owned()));
         let format = device
             .default_input_config()
@@ -213,12 +220,9 @@ mod cpal_impl {
     }
 
     fn play(sp: &GenericService) -> ResultType<(Box<dyn StreamTrait>, Arc<Message>)> {
+        use cpal::SampleFormat::*;
         let (device, config) = get_device()?;
         let sp = sp.clone();
-        let err_fn = move |err| {
-            // too many UnknownErrno, will improve later
-            log::trace!("an error occurred on stream: {}", err);
-        };
         // Sample rate must be one of 8000, 12000, 16000, 24000, or 48000.
         let sample_rate_0 = config.sample_rate().0;
         let sample_rate = if sample_rate_0 < 12000 {
@@ -232,67 +236,83 @@ mod cpal_impl {
         } else {
             48000
         };
-        log::debug!("Audio sample rate : {}", sample_rate);
-        unsafe {
-            AUDIO_ZERO_COUNT = 0;
-        }
-        let mut encoder = Encoder::new(
-            sample_rate,
-            if config.channels() > 1 { Stereo } else { Mono },
-            LowDelay,
-        )?;
-        let channels = config.channels();
+        let ch = if config.channels() > 1 { Stereo } else { Mono };
         let stream = match config.sample_format() {
-            cpal::SampleFormat::F32 => device.build_input_stream(
-                &config.into(),
-                move |data, _: &_| {
-                    send(
-                        data,
-                        sample_rate_0,
-                        sample_rate,
-                        channels,
-                        &mut encoder,
-                        &sp,
-                    );
-                },
-                err_fn,
-            )?,
-            cpal::SampleFormat::I16 => device.build_input_stream(
-                &config.into(),
-                move |data: &[i16], _: &_| {
-                    let buffer: Vec<_> = data.iter().map(|s| cpal::Sample::to_f32(s)).collect();
-                    send(
-                        &buffer,
-                        sample_rate_0,
-                        sample_rate,
-                        channels,
-                        &mut encoder,
-                        &sp,
-                    );
-                },
-                err_fn,
-            )?,
-            cpal::SampleFormat::U16 => device.build_input_stream(
-                &config.into(),
-                move |data: &[u16], _: &_| {
-                    let buffer: Vec<_> = data.iter().map(|s| cpal::Sample::to_f32(s)).collect();
-                    send(
-                        &buffer,
-                        sample_rate_0,
-                        sample_rate,
-                        channels,
-                        &mut encoder,
-                        &sp,
-                    );
-                },
-                err_fn,
-            )?,
+            I8 => build_input_stream::<i8>(device, &config, sp, sample_rate, ch)?,
+            I16 => build_input_stream::<i16>(device, &config, sp, sample_rate, ch)?,
+            I32 => build_input_stream::<i32>(device, &config, sp, sample_rate, ch)?,
+            I64 => build_input_stream::<i64>(device, &config, sp, sample_rate, ch)?,
+            U8 => build_input_stream::<u8>(device, &config, sp, sample_rate, ch)?,
+            U16 => build_input_stream::<u16>(device, &config, sp, sample_rate, ch)?,
+            U32 => build_input_stream::<u32>(device, &config, sp, sample_rate, ch)?,
+            U64 => build_input_stream::<u64>(device, &config, sp, sample_rate, ch)?,
+            F32 => build_input_stream::<f32>(device, &config, sp, sample_rate, ch)?,
+            F64 => build_input_stream::<f64>(device, &config, sp, sample_rate, ch)?,
+            f => bail!("unsupported audio format: {:?}", f),
         };
         stream.play()?;
         Ok((
             Box::new(stream),
-            Arc::new(create_format_msg(sample_rate, channels)),
+            Arc::new(create_format_msg(sample_rate, ch as _)),
         ))
+    }
+
+    fn build_input_stream<T>(
+        device: cpal::Device,
+        config: &cpal::SupportedStreamConfig,
+        sp: GenericService,
+        sample_rate: u32,
+        encode_channel: magnum_opus::Channels,
+    ) -> ResultType<cpal::Stream>
+    where
+        T: cpal::SizedSample + dasp::sample::ToSample<f32>,
+    {
+        let err_fn = move |err| {
+            // too many UnknownErrno, will improve later
+            log::trace!("an error occurred on stream: {}", err);
+        };
+        let sample_rate_0 = config.sample_rate().0;
+        log::debug!("Audio sample rate : {}", sample_rate);
+        unsafe {
+            AUDIO_ZERO_COUNT = 0;
+        }
+        let device_channel = config.channels();
+        let mut encoder = Encoder::new(sample_rate, encode_channel, LowDelay)?;
+        // https://www.opus-codec.org/docs/html_api/group__opusencoder.html#gace941e4ef26ed844879fde342ffbe546
+        // https://chromium.googlesource.com/chromium/deps/opus/+/1.1.1/include/opus.h
+        let frame_size = sample_rate as usize / 100; // 10 ms
+        let encode_len = frame_size * encode_channel as usize;
+        let rechannel_len = encode_len * device_channel as usize / encode_channel as usize;
+        INPUT_BUFFER.lock().unwrap().clear();
+        let timeout = None;
+        let stream_config = StreamConfig {
+            channels: device_channel,
+            sample_rate: config.sample_rate(),
+            buffer_size: BufferSize::Default,
+        };
+        let stream = device.build_input_stream(
+            &stream_config,
+            move |data: &[T], _: &InputCallbackInfo| {
+                let buffer: Vec<f32> = data.iter().map(|s| T::to_sample(*s)).collect();
+                let mut lock = INPUT_BUFFER.lock().unwrap();
+                lock.extend(buffer);
+                while lock.len() >= rechannel_len {
+                    let frame: Vec<f32> = lock.drain(0..rechannel_len).collect();
+                    send(
+                        frame,
+                        sample_rate_0,
+                        sample_rate,
+                        device_channel,
+                        encode_channel as _,
+                        &mut encoder,
+                        &sp,
+                    );
+                }
+            },
+            err_fn,
+            timeout,
+        )?;
+        Ok(stream)
     }
 }
 

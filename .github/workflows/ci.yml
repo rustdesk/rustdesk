@@ -13,8 +13,6 @@ on:
   push:
     branches:
       - master
-    tags:
-      - '*'
     paths-ignore:
       - ".github/**"
       - "docs/**"
@@ -94,11 +92,11 @@ jobs:
       uses: lukka/run-vcpkg@v7
       with:
         setupOnly: true
-        vcpkgGitCommitId: '1d4128f08e30cec31b94500840c7eca8ebc579cb'
+        vcpkgGitCommitId: '501db0f17ef6df184fcdbfbe0f87cde2313b6ab1' #2023.04.15
     
     - name: Install vcpkg dependencies
       run: |
-        $VCPKG_ROOT/vcpkg install libvpx libyuv opus
+        $VCPKG_ROOT/vcpkg install libvpx libyuv opus aom
       shell: bash        
 
     - name: Install Rust toolchain
@@ -126,7 +124,12 @@ jobs:
       with:
         use-cross: ${{ matrix.job.use-cross }}
         command: build
-        args: --locked --release --target=${{ matrix.job.target }}
+        args: --locked --target=${{ matrix.job.target }}
+
+    - name: clean
+      shell: bash
+      run: |
+        cargo clean
 
     # - name: Strip debug information from executable
     #   id: strip
@@ -170,19 +173,21 @@ jobs:
       run: |
         # test only library unit tests and binary for arm-type targets
         unset CARGO_TEST_OPTIONS
-        unset CARGO_TEST_OPTIONS ; case ${{ matrix.job.target }} in arm-* | aarch64-*) CARGO_TEST_OPTIONS="--lib --bin ${PROJECT_NAME}" ;; esac;
-        echo ::set-output name=CARGO_TEST_OPTIONS::${CARGO_TEST_OPTIONS}
 
-    - name: Build tests
+        case ${{ matrix.job.target }} in
+          arm-* | aarch64-*)
+            CARGO_TEST_OPTIONS="--lib --bin ${PROJECT_NAME}"
+            ;;
+          *)
+            CARGO_TEST_OPTIONS="--workspace --no-fail-fast -- --skip test_get_cursor_pos --skip test_get_key_state"
+            ;;
+        esac;
+
+        echo ::set-output name=CARGO_TEST_OPTIONS::${CARGO_TEST_OPTIONS}  
+
+    - name: Run tests
       uses: actions-rs/cargo@v1
       with:
         use-cross: ${{ matrix.job.use-cross }}
-        command: build
-        args: --locked --tests --target=${{ matrix.job.target }}        
-
-    # - name: Run tests
-    #   uses: actions-rs/cargo@v1
-    #   with:
-    #     use-cross: ${{ matrix.job.use-cross }}
-    #     command: test
-    #     args: --locked --target=${{ matrix.job.target }} ${{ steps.test-options.outputs.CARGO_TEST_OPTIONS}}
+        command: test
+        args: --locked --target=${{ matrix.job.target }} ${{ steps.test-options.outputs.CARGO_TEST_OPTIONS}}

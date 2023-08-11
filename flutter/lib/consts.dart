@@ -30,7 +30,23 @@ const String kWindowEventHide = "hide";
 const String kWindowEventShow = "show";
 const String kWindowConnect = "connect";
 
+const String kWindowEventNewRemoteDesktop = "new_remote_desktop";
+const String kWindowEventNewFileTransfer = "new_file_transfer";
+const String kWindowEventNewPortForward = "new_port_forward";
+const String kWindowEventActiveSession = "active_session";
+const String kWindowEventGetRemoteList = "get_remote_list";
+const String kWindowEventGetSessionIdList = "get_session_id_list";
+
+const String kWindowEventMoveTabToNewWindow = "move_tab_to_new_window";
+const String kWindowEventCloseForSeparateWindow = "close_for_separate_window";
+
+const String kOptionOpenNewConnInTabs = "enable-open-new-connections-in-tabs";
+const String kOptionOpenInTabs = "allow-open-in-tabs";
+const String kOptionOpenInWindows = "allow-open-in-windows";
+const String kOptionForceAlwaysRelay = "force-always-relay";
+
 const String kUniLinksPrefix = "rustdesk://";
+const String kUrlActionClose = "close";
 
 const String kTabLabelHomePage = "Home";
 const String kTabLabelSettingPage = "Settings";
@@ -49,11 +65,8 @@ const int kMobileDefaultDisplayHeight = 1280;
 const int kDesktopDefaultDisplayWidth = 1080;
 const int kDesktopDefaultDisplayHeight = 720;
 
-const int kMobileMaxDisplayWidth = 720;
-const int kMobileMaxDisplayHeight = 1280;
-
-const int kDesktopMaxDisplayWidth = 1920;
-const int kDesktopMaxDisplayHeight = 1080;
+const int kMobileMaxDisplaySize = 1280;
+const int kDesktopMaxDisplaySize = 3840;
 
 const double kDesktopFileTransferNameColWidth = 200;
 const double kDesktopFileTransferModifiedColWidth = 120;
@@ -64,7 +77,7 @@ const double kDesktopFileTransferHeaderHeight = 25.0;
 
 EdgeInsets get kDragToResizeAreaPadding =>
     !kUseCompatibleUiMode && Platform.isLinux
-        ? stateGlobal.fullscreen || stateGlobal.maximize
+        ? stateGlobal.fullscreen || stateGlobal.isMaximized.value
             ? EdgeInsets.zero
             : EdgeInsets.all(5.0)
         : EdgeInsets.zero;
@@ -75,7 +88,8 @@ extension StringExtension on String {
   String get nonBreaking => replaceAll(' ', String.fromCharCode($nbsp));
 }
 
-const Size kConnectionManagerWindowSize = Size(300, 400);
+const Size kConnectionManagerWindowSizeClosedChat = Size(300, 490);
+const Size kConnectionManagerWindowSizeOpenChat = Size(700, 490);
 // Tabbar transition duration, now we remove the duration
 const Duration kTabTransitionDuration = Duration.zero;
 const double kEmptyMarginTop = 50;

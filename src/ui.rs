@@ -72,10 +72,6 @@ pub fn start(args: &mut [String]) {
     allow_err!(sciter::set_options(sciter::RuntimeOptions::GfxLayer(
         sciter::GFX_LAYER::WARP
     )));
-    #[cfg(all(windows, not(feature = "inline")))]
-    unsafe {
-        winapi::um::shellscalingapi::SetProcessDpiAwareness(2);
-    }
     use sciter::SCRIPT_RUNTIME_FEATURES::*;
     allow_err!(sciter::set_options(sciter::RuntimeOptions::ScriptFeatures(
         ALLOW_FILE_IO as u8 | ALLOW_SOCKET_IO as u8 | ALLOW_EVAL as u8 | ALLOW_SYSINFO as u8
@@ -98,8 +94,7 @@ pub fn start(args: &mut [String]) {
         args[1] = id;
     }
     if args.is_empty() {
-        let children: Children = Default::default();
-        std::thread::spawn(move || check_zombie(children));
+        std::thread::spawn(move || check_zombie());
         crate::common::check_software_update();
         frame.event_handler(UI {});
         frame.sciter_handler(UIHostHandler {});
@@ -128,8 +123,16 @@ pub fn start(args: &mut [String]) {
             crate::platform::windows::enable_lowlevel_keyboard(hw as _);
         }
         let mut iter = args.iter();
-        let cmd = iter.next().unwrap().clone();
-        let id = iter.next().unwrap().clone();
+        let Some(cmd) = iter.next() else {
+            log::error!("Failed to get cmd arg");
+            return;
+        };
+        let cmd = cmd.to_owned();
+        let Some(id) = iter.next() else {
+            log::error!("Failed to get id arg");
+            return;
+        };
+        let id = id.to_owned();
         let pass = iter.next().unwrap_or(&"".to_owned()).clone();
         let args: Vec<String> = iter.map(|x| x.clone()).collect();
         frame.set_title(&id);
@@ -263,7 +266,8 @@ impl UI {
     }
 
     fn get_options(&self) -> Value {
-        let hashmap: HashMap<String, String> = serde_json::from_str(&get_options()).unwrap();
+        let hashmap: HashMap<String, String> =
+            serde_json::from_str(&get_options()).unwrap_or_default();
         let mut m = Value::map();
         for (k, v) in hashmap {
             m.set_item(k, v);
@@ -366,9 +370,9 @@ impl UI {
     fn get_connect_status(&mut self) -> Value {
         let mut v = Value::array(0);
         let x = get_connect_status();
-        v.push(x.0);
-        v.push(x.1);
-        v.push(x.3);
+        v.push(x.status_num);
+        v.push(x.key_confirmed);
+        v.push(x.id);
         v
     }
 
@@ -407,7 +411,7 @@ impl UI {
 
     fn get_recent_sessions(&mut self) -> Value {
         // to-do: limit number of recent sessions, and remove old peer file
-        let peers: Vec<Value> = PeerConfig::peers()
+        let peers: Vec<Value> = PeerConfig::peers(None)
             .drain(..)
             .map(|p| Self::get_peer_value(p.0, p.2))
             .collect();
@@ -468,6 +472,10 @@ impl UI {
 
     fn get_version(&self) -> String {
         get_version()
+    }
+
+    fn get_fingerprint(&self) -> String {
+        get_fingerprint()
     }
 
     fn get_app_name(&self) -> String {
@@ -542,6 +550,7 @@ impl UI {
     }
 
     fn change_id(&self, id: String) {
+        reset_async_job_status();
         let old_id = self.get_id();
         change_id_shared(id, old_id);
     }
@@ -551,7 +560,7 @@ impl UI {
     }
 
     fn is_ok_change_id(&self) -> bool {
-        machine_uid::get().is_ok()
+        hbb_common::machine_uid::get().is_ok()
     }
 
     fn get_async_job_status(&self) -> String {
@@ -584,6 +593,10 @@ impl UI {
 
     fn handle_relay_id(&self, id: String) -> String {
         handle_relay_id(id)
+    }
+
+    fn get_login_device_info(&self) -> String {
+        get_login_device_info_json()
     }
 }
 
@@ -649,6 +662,7 @@ impl sciter::EventHandler for UI {
         fn get_software_update_url();
         fn get_new_version();
         fn get_version();
+        fn get_fingerprint();
         fn update_me(String);
         fn show_run_without_install();
         fn run_without_install();
@@ -668,34 +682,13 @@ impl sciter::EventHandler for UI {
         fn get_langs();
         fn default_video_save_directory();
         fn handle_relay_id(String);
+        fn get_login_device_info();
     }
 }
 
 impl sciter::host::HostHandler for UIHostHandler {
     fn on_graphics_critical_failure(&mut self) {
         log::error!("Critical rendering error: e.g. DirectX gfx driver error. Most probably bad gfx drivers.");
-    }
-}
-
-pub fn check_zombie(children: Children) {
-    let mut deads = Vec::new();
-    loop {
-        let mut lock = children.lock().unwrap();
-        let mut n = 0;
-        for (id, c) in lock.1.iter_mut() {
-            if let Ok(Some(_)) = c.try_wait() {
-                deads.push(id.clone());
-                n += 1;
-            }
-        }
-        for ref id in deads.drain(..) {
-            lock.1.remove(id);
-        }
-        if n > 0 {
-            lock.0 = true;
-        }
-        drop(lock);
-        std::thread::sleep(std::time::Duration::from_millis(100));
     }
 }
 
@@ -730,50 +723,6 @@ pub fn value_crash_workaround(values: &[Value]) -> Arc<Vec<Value>> {
     let persist = Arc::new(values.to_vec());
     STUPID_VALUES.lock().unwrap().push(persist.clone());
     persist
-}
-
-#[inline]
-pub fn new_remote(id: String, remote_type: String, force_relay: bool) {
-    let mut lock = CHILDREN.lock().unwrap();
-    let mut args = vec![format!("--{}", remote_type), id.clone()];
-    if force_relay {
-        args.push("".to_string()); // password
-        args.push("--relay".to_string());
-    }
-    let key = (id.clone(), remote_type.clone());
-    if let Some(c) = lock.1.get_mut(&key) {
-        if let Ok(Some(_)) = c.try_wait() {
-            lock.1.remove(&key);
-        } else {
-            if remote_type == "rdp" {
-                allow_err!(c.kill());
-                std::thread::sleep(std::time::Duration::from_millis(30));
-                c.try_wait().ok();
-                lock.1.remove(&key);
-            } else {
-                return;
-            }
-        }
-    }
-    match crate::run_me(args) {
-        Ok(child) => {
-            lock.1.insert(key, child);
-        }
-        Err(err) => {
-            log::error!("Failed to spawn remote: {}", err);
-        }
-    }
-}
-
-#[inline]
-pub fn recent_sessions_updated() -> bool {
-    let mut children = CHILDREN.lock().unwrap();
-    if children.0 {
-        children.0 = false;
-        true
-    } else {
-        false
-    }
 }
 
 pub fn get_icon() -> String {

@@ -6,6 +6,7 @@ import 'package:auto_size_text/auto_size_text.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hbb/common.dart';
+import 'package:flutter_hbb/common/widgets/animated_rotation_widget.dart';
 import 'package:flutter_hbb/common/widgets/custom_password.dart';
 import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/desktop/pages/connection_page.dart';
@@ -14,6 +15,7 @@ import 'package:flutter_hbb/desktop/pages/desktop_tab_page.dart';
 import 'package:flutter_hbb/desktop/widgets/scroll_wrapper.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:flutter_hbb/models/server_model.dart';
+import 'package:flutter_hbb/plugin/ui_manager.dart';
 import 'package:flutter_hbb/utils/multi_window_manager.dart';
 import 'package:get/get.dart';
 import 'package:provider/provider.dart';
@@ -88,6 +90,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
                     }
                   },
                 ),
+                buildPluginEntry()
               ],
             ),
           ),
@@ -245,19 +248,19 @@ class _DesktopHomePageState extends State<DesktopHomePage>
                           ),
                         ),
                       ),
-                      InkWell(
-                        child: Obx(
-                          () => Icon(
-                            Icons.refresh,
-                            color: refreshHover.value
-                                ? textColor
-                                : Color(0xFFDDDDDD),
-                            size: 22,
-                          ).marginOnly(right: 8, top: 4),
-                        ),
-                        onTap: () => bind.mainUpdateTemporaryPassword(),
+                      AnimatedRotationWidget(
+                        onPressed: () => bind.mainUpdateTemporaryPassword(),
+                        child: Obx(() => RotatedBox(
+                            quarterTurns: 2,
+                            child: Icon(
+                              Icons.refresh,
+                              color: refreshHover.value
+                                  ? textColor
+                                  : Color(0xFFDDDDDD),
+                              size: 22,
+                            ))),
                         onHover: (value) => refreshHover.value = value,
-                      ),
+                      ).marginOnly(right: 8, top: 4),
                       InkWell(
                         child: Obx(
                           () => Icon(
@@ -316,7 +319,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
           "Status",
           "There is a newer version of ${bind.mainGetAppNameSync()} ${bind.mainGetNewVersion()} available.",
           "Click to download", () async {
-        final Uri url = Uri.parse('https://rustdesk.com');
+        final Uri url = Uri.parse('https://rustdesk.com/download');
         await launchUrl(url);
       });
     }
@@ -369,7 +372,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
     } else if (Platform.isLinux) {
       if (bind.mainCurrentIsWayland()) {
         return buildInstallCard(
-            "Warning", translate("wayland_experiment_tip"), "", () async {},
+            "Warning", "wayland_experiment_tip", "", () async {},
             help: 'Help',
             link: 'https://rustdesk.com/docs/en/manual/linux/#x11-required');
       } else if (bind.mainIsLoginWayland()) {
@@ -524,7 +527,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
       debugPrint(
           "[Main] call ${call.method} with args ${call.arguments} from window $fromWindowId");
       if (call.method == kWindowMainWindowOnTop) {
-        window_on_top(null);
+        windowOnTop(null);
       } else if (call.method == kWindowGetWindowInfo) {
         final screen = (await window_size.getWindowInfo()).screen;
         if (screen == null) {
@@ -551,7 +554,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
       } else if (call.method == kWindowEventShow) {
         await rustDeskWinManager.registerActiveWindow(call.arguments["id"]);
       } else if (call.method == kWindowEventHide) {
-        await rustDeskWinManager.unregisterActiveWindow(call.arguments["id"]);
+        await rustDeskWinManager.unregisterActiveWindow(call.arguments['id']);
       } else if (call.method == kWindowConnect) {
         await connectMainDesktop(
           call.arguments['id'],
@@ -560,6 +563,17 @@ class _DesktopHomePageState extends State<DesktopHomePage>
           isRDP: call.arguments['isRDP'],
           forceRelay: call.arguments['forceRelay'],
         );
+      } else if (call.method == kWindowEventMoveTabToNewWindow) {
+        final args = call.arguments.split(',');
+        int? windowId;
+        try {
+          windowId = int.parse(args[0]);
+        } catch (e) {
+          debugPrint("Failed to parse window id '${call.arguments}': $e");
+        }
+        if (windowId != null) {
+          await rustDeskWinManager.moveTabToNewWindow(windowId, args[1], args[2]);
+        }
       }
     });
     _uniLinksSubscription = listenUniLinks();
@@ -571,6 +585,21 @@ class _DesktopHomePageState extends State<DesktopHomePage>
     Get.delete<RxBool>(tag: 'stop-service');
     _updateTimer?.cancel();
     super.dispose();
+  }
+
+  Widget buildPluginEntry() {
+    final entries = PluginUiManager.instance.entries.entries;
+    return Offstage(
+      offstage: entries.isEmpty,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          ...entries.map((entry) {
+            return entry.value;
+          })
+        ],
+      ),
+    );
   }
 }
 
@@ -589,7 +618,7 @@ void setPasswordDialog() async {
     MinCharactersValidationRule(8),
   ];
 
-  gFFI.dialogManager.show((setState, close) {
+  gFFI.dialogManager.show((setState, close, context) {
     submit() {
       setState(() {
         errMsg0 = "";

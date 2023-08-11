@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'dart:ffi';
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:external_path/external_path.dart';
@@ -9,10 +8,9 @@ import 'package:ffi/ffi.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hbb/consts.dart';
-import 'package:get/get.dart';
+import 'package:flutter_hbb/main.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:win32/win32.dart' as win32;
 
 import '../common.dart';
 import '../generated_bridge.dart';
@@ -104,9 +102,10 @@ class PlatformFFI {
     return res;
   }
 
-  Uint8List? getRgba(String id, int bufSize) {
+  Uint8List? getRgba(SessionID sessionId, int bufSize) {
     if (_session_get_rgba == null) return null;
-    var a = id.toNativeUtf8();
+    final sessionIdStr = sessionId.toString();
+    var a = sessionIdStr.toNativeUtf8();
     try {
       final buffer = _session_get_rgba!(a);
       if (buffer == nullptr) {
@@ -119,24 +118,27 @@ class PlatformFFI {
     }
   }
 
-  int? getRgbaSize(String id) {
+  int? getRgbaSize(SessionID sessionId) {
     if (_session_get_rgba_size == null) return null;
-    var a = id.toNativeUtf8();
+    final sessionIdStr = sessionId.toString();
+    var a = sessionIdStr.toNativeUtf8();
     final bufferSize = _session_get_rgba_size!(a);
     malloc.free(a);
     return bufferSize;
   }
 
-  void nextRgba(String id) {
+  void nextRgba(SessionID sessionId) {
     if (_session_next_rgba == null) return;
-    final a = id.toNativeUtf8();
+    final sessionIdStr = sessionId.toString();
+    final a = sessionIdStr.toNativeUtf8();
     _session_next_rgba!(a);
     malloc.free(a);
   }
 
-  void registerTexture(String id, int ptr) {
+  void registerTexture(SessionID sessionId, int ptr) {
     if (_session_register_texture == null) return;
-    final a = id.toNativeUtf8();
+    final sessionIdStr = sessionId.toString();
+    final a = sessionIdStr.toNativeUtf8();
     _session_register_texture!(a, ptr);
     malloc.free(a);
   }
@@ -173,13 +175,10 @@ class PlatformFFI {
       if (Platform.isLinux) {
         // Start a dbus service, no need to await
         _ffiBind.mainStartDbusServer();
+        _ffiBind.mainStartPa();
       } else if (Platform.isMacOS && isMain) {
-        Future.wait([
-          // Start dbus service.
-          _ffiBind.mainStartDbusServer(),
-          // Start local audio pulseaudio server.
-          _ffiBind.mainStartPa()
-        ]);
+        // Start ipc service for uri links.
+        _ffiBind.mainStartIpcUrlServer();
       }
       _startListenEvent(_ffiBind); // global event
       try {
@@ -235,7 +234,7 @@ class PlatformFFI {
             '_appType:$_appType,info1-id:$id,info2-name:$name,dir:$_dir');
       }
       if (desktopType == DesktopType.cm) {
-        await _ffiBind.cmStartListenIpcThread();
+        await _ffiBind.cmInit();
       }
       await _ffiBind.mainDeviceId(id: id);
       await _ffiBind.mainDeviceName(name: name);
@@ -265,9 +264,10 @@ class PlatformFFI {
 
   /// Start listening to the Rust core's events and frames.
   void _startListenEvent(RustdeskImpl rustdeskImpl) {
-    () async {
-      await for (final message
-          in rustdeskImpl.startGlobalEventStream(appType: _appType)) {
+    final appType = _appType == kAppTypeDesktopRemote ? '$_appType,$kWindowId' : _appType;
+    var sink = rustdeskImpl.startGlobalEventStream(appType: appType);
+    sink.listen((message) {
+      () async {
         try {
           Map<String, dynamic> event = json.decode(message);
           // _tryHandle here may be more flexible than _eventCallback
@@ -279,8 +279,8 @@ class PlatformFFI {
         } catch (e) {
           debugPrint('json.decode fail(): $e');
         }
-      }
-    }();
+      }();
+    });
   }
 
   void setEventCallback(StreamEventHandler fun) async {

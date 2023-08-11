@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:io';
-import 'dart:ui' as ui;
 
 import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:flutter/material.dart';
@@ -19,30 +18,38 @@ import '../../common/widgets/remote_input.dart';
 import '../../common.dart';
 import '../../common/widgets/dialog.dart';
 import '../../models/model.dart';
+import '../../models/desktop_render_texture.dart';
 import '../../models/platform_model.dart';
 import '../../common/shared_state.dart';
 import '../../utils/image.dart';
 import '../widgets/remote_toolbar.dart';
 import '../widgets/kb_layout_type_chooser.dart';
+import '../widgets/tabbar_widget.dart';
 
 final SimpleWrapper<bool> _firstEnterImage = SimpleWrapper(false);
+
+final Map<String, bool> closeSessionOnDispose = {};
 
 class RemotePage extends StatefulWidget {
   RemotePage({
     Key? key,
     required this.id,
+    required this.sessionId,
     required this.password,
-    required this.menubarState,
+    required this.toolbarState,
+    required this.tabController,
     this.switchUuid,
     this.forceRelay,
   }) : super(key: key);
 
   final String id;
+  final SessionID? sessionId;
   final String? password;
-  final MenubarState menubarState;
+  final ToolbarState toolbarState;
   final String? switchUuid;
   final bool? forceRelay;
   final SimpleWrapper<State<RemotePage>?> _lastState = SimpleWrapper(null);
+  final DesktopTabController tabController;
 
   FFI get ffi => (_lastState.value! as _RemotePageState)._ffi;
 
@@ -64,49 +71,31 @@ class _RemotePageState extends State<RemotePage>
   late RxBool _zoomCursor;
   late RxBool _remoteCursorMoved;
   late RxBool _keyboardEnabled;
-  late RxInt _textureId;
-  late int _textureKey;
-  final useTextureRender = bind.mainUseTextureRender();
+  late RenderTexture _renderTexture;
 
   final _blockableOverlayState = BlockableOverlayState();
 
   final FocusNode _rawKeyFocusNode = FocusNode(debugLabel: "rawkeyFocusNode");
 
-  Function(bool)? _onEnterOrLeaveImage4Menubar;
+  Function(bool)? _onEnterOrLeaveImage4Toolbar;
 
   late FFI _ffi;
 
+  SessionID get sessionId => _ffi.sessionId;
+
   void _initStates(String id) {
-    PrivacyModeState.init(id);
-    BlockInputState.init(id);
-    CurrentDisplayState.init(id);
-    KeyboardEnabledState.init(id);
-    ShowRemoteCursorState.init(id);
-    RemoteCursorMovedState.init(id);
-    final optZoomCursor = 'zoom-cursor';
-    PeerBoolOption.init(id, optZoomCursor, () => false);
-    _zoomCursor = PeerBoolOption.find(id, optZoomCursor);
+    initSharedStates(id);
+    _zoomCursor = PeerBoolOption.find(id, 'zoom-cursor');
     _showRemoteCursor = ShowRemoteCursorState.find(id);
     _keyboardEnabled = KeyboardEnabledState.find(id);
     _remoteCursorMoved = RemoteCursorMovedState.find(id);
-    _textureKey = newTextureId;
-    _textureId = RxInt(-1);
-  }
-
-  void _removeStates(String id) {
-    PrivacyModeState.delete(id);
-    BlockInputState.delete(id);
-    CurrentDisplayState.delete(id);
-    ShowRemoteCursorState.delete(id);
-    KeyboardEnabledState.delete(id);
-    RemoteCursorMovedState.delete(id);
   }
 
   @override
   void initState() {
     super.initState();
     _initStates(widget.id);
-    _ffi = FFI();
+    _ffi = FFI(widget.sessionId);
     Get.put(_ffi, tag: widget.id);
     _ffi.imageModel.addCallbackOnFirstImage((String peerId) {
       showKBLayoutTypeChooserIfNeeded(
@@ -127,24 +116,17 @@ class _RemotePageState extends State<RemotePage>
       Wakelock.enable();
     }
     // Register texture.
-    _textureId.value = -1;
-    if (useTextureRender) {
-      textureRenderer.createTexture(_textureKey).then((id) async {
-        debugPrint("id: $id, texture_key: $_textureKey");
-        if (id != -1) {
-          final ptr = await textureRenderer.getTexturePtr(_textureKey);
-          platformFFI.registerTexture(widget.id, ptr);
-          _textureId.value = id;
-        }
-      });
-    }
-    _ffi.ffiModel.updateEventListener(widget.id);
-    _ffi.qualityMonitorModel.checkShowQualityMonitor(widget.id);
+    _renderTexture = RenderTexture();
+    _renderTexture.create(sessionId);
+
+    _ffi.ffiModel.updateEventListener(sessionId, widget.id);
+    bind.pluginSyncUi(syncTo: kAppTypeDesktopRemote);
+    _ffi.qualityMonitorModel.checkShowQualityMonitor(sessionId);
     // Session option should be set after models.dart/FFI.start
     _showRemoteCursor.value = bind.sessionGetToggleOptionSync(
-        id: widget.id, arg: 'show-remote-cursor');
-    _zoomCursor.value =
-        bind.sessionGetToggleOptionSync(id: widget.id, arg: 'zoom-cursor');
+        sessionId: sessionId, arg: 'show-remote-cursor');
+    _zoomCursor.value = bind.sessionGetToggleOptionSync(
+        sessionId: sessionId, arg: 'zoom-cursor');
     DesktopMultiWindow.addListener(this);
     // if (!_isCustomCursorInited) {
     //   customCursorController.registerNeedUpdateCursorCallback(
@@ -159,6 +141,7 @@ class _RemotePageState extends State<RemotePage>
     // }
 
     _blockableOverlayState.applyFfi(_ffi);
+    widget.tabController.onSelected?.call(widget.id);
   }
 
   @override
@@ -192,32 +175,54 @@ class _RemotePageState extends State<RemotePage>
     if (Platform.isWindows) {
       _isWindowBlur = false;
     }
+    if (!Platform.isLinux) {
+      Wakelock.enable();
+    }
+  }
+
+  // When the window is unminimized, onWindowMaximize or onWindowRestore can be called when the old state was maximized or not.
+  @override
+  void onWindowMaximize() {
+    super.onWindowMaximize();
+    if (!Platform.isLinux) {
+      Wakelock.enable();
+    }
   }
 
   @override
-  void dispose() {
-    debugPrint("REMOTE PAGE dispose ${widget.id}");
-    if (useTextureRender) {
-      platformFFI.registerTexture(widget.id, 0);
-      textureRenderer.closeTexture(_textureKey);
+  void onWindowMinimize() {
+    super.onWindowMinimize();
+    if (!Platform.isLinux) {
+      Wakelock.disable();
     }
+  }
+
+  @override
+  Future<void> dispose() async {
+    final closeSession = closeSessionOnDispose.remove(widget.id) ?? true;
+
+    // https://github.com/flutter/flutter/issues/64935
+    super.dispose();
+    debugPrint("REMOTE PAGE dispose session $sessionId ${widget.id}");
+    await _renderTexture.destroy();
     // ensure we leave this session, this is a double check
-    bind.sessionEnterOrLeave(id: widget.id, enter: false);
+    bind.sessionEnterOrLeave(sessionId: sessionId, enter: false);
     DesktopMultiWindow.removeListener(this);
     _ffi.dialogManager.hideMobileActionsOverlay();
     _ffi.recordingModel.onClose();
     _rawKeyFocusNode.dispose();
-    _ffi.close();
+    await _ffi.close(closeSession: closeSession);
     _timer?.cancel();
     _ffi.dialogManager.dismissAll();
-    SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual,
-        overlays: SystemUiOverlay.values);
-    if (!Platform.isLinux) {
-      Wakelock.disable();
+    if (closeSession) {
+      await SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual,
+          overlays: SystemUiOverlay.values);
     }
-    Get.delete<FFI>(tag: widget.id);
-    super.dispose();
-    _removeStates(widget.id);
+    if (!Platform.isLinux) {
+      await Wakelock.disable();
+    }
+    await Get.delete<FFI>(tag: widget.id);
+    removeSharedStates(widget.id);
   }
 
   Widget buildBody(BuildContext context) {
@@ -254,14 +259,14 @@ class _RemotePageState extends State<RemotePage>
                 child: getBodyForDesktop(context))),
         upperLayer: [
           OverlayEntry(
-              builder: (context) => RemoteMenubar(
+              builder: (context) => RemoteToolbar(
                     id: widget.id,
                     ffi: _ffi,
-                    state: widget.menubarState,
+                    state: widget.toolbarState,
                     onEnterOrLeaveImageSetter: (func) =>
-                        _onEnterOrLeaveImage4Menubar = func,
+                        _onEnterOrLeaveImage4Toolbar = func,
                     onEnterOrLeaveImageCleaner: () =>
-                        _onEnterOrLeaveImage4Menubar = null,
+                        _onEnterOrLeaveImage4Toolbar = null,
                   ))
         ],
       ),
@@ -273,7 +278,7 @@ class _RemotePageState extends State<RemotePage>
     super.build(context);
     return WillPopScope(
         onWillPop: () async {
-          clientClose(widget.id, _ffi.dialogManager);
+          clientClose(sessionId, _ffi.dialogManager);
           return false;
         },
         child: MultiProvider(providers: [
@@ -288,9 +293,9 @@ class _RemotePageState extends State<RemotePage>
   void enterView(PointerEnterEvent evt) {
     _cursorOverImage.value = true;
     _firstEnterImage.value = true;
-    if (_onEnterOrLeaveImage4Menubar != null) {
+    if (_onEnterOrLeaveImage4Toolbar != null) {
       try {
-        _onEnterOrLeaveImage4Menubar!(true);
+        _onEnterOrLeaveImage4Toolbar!(true);
       } catch (e) {
         //
       }
@@ -300,7 +305,7 @@ class _RemotePageState extends State<RemotePage>
       if (!_rawKeyFocusNode.hasFocus) {
         _rawKeyFocusNode.requestFocus();
       }
-      bind.sessionEnterOrLeave(id: widget.id, enter: true);
+      bind.sessionEnterOrLeave(sessionId: sessionId, enter: true);
     }
   }
 
@@ -311,17 +316,28 @@ class _RemotePageState extends State<RemotePage>
 
     _cursorOverImage.value = false;
     _firstEnterImage.value = false;
-    if (_onEnterOrLeaveImage4Menubar != null) {
+    if (_onEnterOrLeaveImage4Toolbar != null) {
       try {
-        _onEnterOrLeaveImage4Menubar!(false);
+        _onEnterOrLeaveImage4Toolbar!(false);
       } catch (e) {
         //
       }
     }
     // See [onWindowBlur].
     if (!Platform.isWindows) {
-      bind.sessionEnterOrLeave(id: widget.id, enter: false);
+      bind.sessionEnterOrLeave(sessionId: sessionId, enter: false);
     }
+  }
+
+  Widget _buildRawTouchAndPointerRegion(
+    Widget child,
+    PointerEnterEventListener? onEnter,
+    PointerExitEventListener? onExit,
+  ) {
+    return RawTouchGestureDetectorRegion(
+      child: _buildRawPointerMouseRegion(child, onEnter, onExit),
+      ffi: _ffi,
+    );
   }
 
   Widget _buildRawPointerMouseRegion(
@@ -368,10 +384,10 @@ class _RemotePageState extends State<RemotePage>
           cursorOverImage: _cursorOverImage,
           keyboardEnabled: _keyboardEnabled,
           remoteCursorMoved: _remoteCursorMoved,
-          textureId: _textureId,
-          useTextureRender: useTextureRender,
+          textureId: _renderTexture.textureId,
+          useTextureRender: _renderTexture.useTextureRender,
           listenerBuilder: (child) =>
-              _buildRawPointerMouseRegion(child, enterView, leaveView),
+              _buildRawTouchAndPointerRegion(child, enterView, leaveView),
         );
       }))
     ];
@@ -388,7 +404,7 @@ class _RemotePageState extends State<RemotePage>
       Positioned(
         top: 10,
         right: 10,
-        child: _buildRawPointerMouseRegion(
+        child: _buildRawTouchAndPointerRegion(
             QualityMonitor(_ffi.qualityMonitorModel), null, null),
       ),
     );
@@ -536,8 +552,8 @@ class _ImagePaintState extends State<ImagePaint> {
           imageWidget = Stack(
             children: [
               Positioned(
-                left: c.x,
-                top: c.y,
+                left: c.x.toInt().toDouble(),
+                top: c.y.toInt().toDouble(),
                 width: c.getDisplayWidth() * s,
                 height: c.getDisplayHeight() * s,
                 child: Texture(textureId: widget.textureId.value),

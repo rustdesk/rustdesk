@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:auto_size_text_field/auto_size_text_field.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common/formatter/id_formatter.dart';
 import 'package:get/get.dart';
@@ -37,6 +38,7 @@ class ConnectionPage extends StatefulWidget implements PageShape {
 class _ConnectionPageState extends State<ConnectionPage> {
   /// Controller for the id input bar.
   final _idController = IDTextEditingController();
+  final RxBool _idEmpty = true.obs;
 
   /// Update url. If it's not null, means an update is available.
   var _updateUrl = '';
@@ -60,6 +62,11 @@ class _ConnectionPageState extends State<ConnectionPage> {
         if (_updateUrl.isNotEmpty) setState(() {});
       });
     }
+
+    _idController.addListener(() {
+      _idEmpty.value = _idController.text.isEmpty;
+    });
+    Get.put<IDTextEditingController>(_idController);
   }
 
   @override
@@ -94,7 +101,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
         ? const SizedBox(height: 0)
         : InkWell(
             onTap: () async {
-              final url = '$_updateUrl.apk';
+              final url = 'https://rustdesk.com/download';
               if (await canLaunchUrl(Uri.parse(url))) {
                 await launchUrl(Uri.parse(url));
               }
@@ -126,7 +133,8 @@ class _ConnectionPageState extends State<ConnectionPage> {
               Expanded(
                 child: Container(
                   padding: const EdgeInsets.only(left: 16, right: 16),
-                  child: TextField(
+                  child: AutoSizeTextField(
+                    minFontSize: 18,
                     autocorrect: false,
                     enableSuggestions: false,
                     keyboardType: TextInputType.visiblePassword,
@@ -158,6 +166,14 @@ class _ConnectionPageState extends State<ConnectionPage> {
                   ),
                 ),
               ),
+              Obx(() => Offstage(
+                    offstage: _idEmpty.value,
+                    child: IconButton(
+                        onPressed: () {
+                          _idController.clear();
+                        },
+                        icon: Icon(Icons.clear, color: MyTheme.darkGray)),
+                  )),
               SizedBox(
                 width: 60,
                 height: 60,
@@ -173,13 +189,16 @@ class _ConnectionPageState extends State<ConnectionPage> {
       ),
     );
     return Align(
-        alignment: Alignment.topLeft,
+        alignment: Alignment.topCenter,
         child: Container(constraints: kMobilePageConstraints, child: w));
   }
 
   @override
   void dispose() {
     _idController.dispose();
+    if (Get.isRegistered<IDTextEditingController>()) {
+      Get.delete<IDTextEditingController>();
+    }
     super.dispose();
   }
 }
@@ -215,6 +234,7 @@ class _WebMenuState extends State<WebMenu> {
   Widget build(BuildContext context) {
     Provider.of<FfiModel>(context);
     return PopupMenuButton<String>(
+        tooltip: "",
         icon: const Icon(Icons.more_vert),
         itemBuilder: (context) {
           return (isIOS
@@ -259,7 +279,7 @@ class _WebMenuState extends State<WebMenu> {
             if (gFFI.userModel.userName.value.isEmpty) {
               loginDialog();
             } else {
-              gFFI.userModel.logOut();
+              logOutConfirmDialog();
             }
           }
           if (value == 'scan') {

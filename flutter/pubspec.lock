@@ -45,10 +45,10 @@ packages:
     dependency: transitive
     description:
       name: args
-      sha256: "139d809800a412ebb26a3892da228b2d0ba36f0ef5d9a82166e5e52ec8d61611"
+      sha256: c372bb384f273f0c2a8aaaa226dad84dc27c8519a691b888725dec59518ad53a
       url: "https://pub.dev"
     source: hosted
-    version: "2.3.2"
+    version: "2.4.1"
   async:
     dependency: transitive
     description:
@@ -65,6 +65,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "3.0.0"
+  auto_size_text_field:
+    dependency: "direct main"
+    description:
+      name: auto_size_text_field
+      sha256: "8967129167193fefbb7a8707ade1bb71f9e52b9a5cf6da0132b7f6b7946c5a3f"
+      url: "https://pub.dev"
+    source: hosted
+    version: "2.2.1"
   back_button_interceptor:
     dependency: "direct main"
     description:
@@ -181,10 +189,10 @@ packages:
     dependency: transitive
     description:
       name: characters
-      sha256: e6a326c8af69605aec75ed6c187d06b349707a27fbff8222ca9cc2cff167975c
+      sha256: "04a925763edad70e8443c99234dc3328f442e811f1d8fd1a72f1c8ad0f69a605"
       url: "https://pub.dev"
     source: hosted
-    version: "1.2.1"
+    version: "1.3.0"
   charcode:
     dependency: transitive
     description:
@@ -205,10 +213,10 @@ packages:
     dependency: transitive
     description:
       name: cli_util
-      sha256: "66f86e916d285c1a93d3b79587d94bd71984a66aac4ff74e524cfa7877f1395c"
+      sha256: b8db3080e59b2503ca9e7922c3df2072cf13992354d5e944074ffa836fba43b7
       url: "https://pub.dev"
     source: hosted
-    version: "0.3.5"
+    version: "0.4.0"
   clock:
     dependency: transitive
     description:
@@ -229,10 +237,10 @@ packages:
     dependency: transitive
     description:
       name: collection
-      sha256: cfc915e6923fe5ce6e153b0723c753045de46de1b4d63771530504004a45fae0
+      sha256: "4a07be6cb69c84d677a6c3096fcf960cc3285a8330b4603e0d463d15d9bd934c"
       url: "https://pub.dev"
     source: hosted
-    version: "1.17.0"
+    version: "1.17.1"
   colorize:
     dependency: transitive
     description:
@@ -281,14 +289,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "0.17.2"
-  cupertino_icons:
-    dependency: "direct main"
-    description:
-      name: cupertino_icons
-      sha256: e35129dc44c9118cee2a5603506d823bab99c68393879edb440e0090d07586be
-      url: "https://pub.dev"
-    source: hosted
-    version: "1.0.5"
   dart_style:
     dependency: transitive
     description:
@@ -301,10 +301,10 @@ packages:
     dependency: "direct main"
     description:
       name: dash_chat_2
-      sha256: "7ffdeb023fb2c9e194e2147ef8e967d36e4481493178051ceb36d98c62396ddd"
+      sha256: e9e08b2a030d340d60f7adbeb977d3d6481db1f172b51440bfa02488b92fa19c
       url: "https://pub.dev"
     source: hosted
-    version: "0.0.15"
+    version: "0.0.17"
   debounce_throttle:
     dependency: "direct main"
     description:
@@ -316,18 +316,19 @@ packages:
   desktop_drop:
     dependency: "direct main"
     description:
-      name: desktop_drop
-      sha256: "0cd056191b701a2b5ba040f2306349e461fafdaa5df4569b2228cdf87b58eced"
-      url: "https://pub.dev"
-    source: hosted
-    version: "0.3.3"
+      path: "packages/desktop_drop"
+      ref: HEAD
+      resolved-ref: "21725af7fd5be4e928acfb84146ebd10d1364a97"
+      url: "https://github.com/rustdesk-org/flutter-plugins"
+    source: git
+    version: "0.4.1"
   desktop_multi_window:
     dependency: "direct main"
     description:
       path: "."
-      ref: "6cd00db1d68443aeeb13dc89f6a090a0ad5dbb3e"
-      resolved-ref: "6cd00db1d68443aeeb13dc89f6a090a0ad5dbb3e"
-      url: "https://github.com/Kingtous/rustdesk_desktop_multi_window"
+      ref: HEAD
+      resolved-ref: "6c4181330f4ed80c1cb5670bd61aa75115f9f748"
+      url: "https://github.com/rustdesk-org/rustdesk_desktop_multi_window"
     source: git
     version: "0.1.0"
   device_info_plus:
@@ -422,10 +423,10 @@ packages:
     dependency: "direct dev"
     description:
       name: ffigen
-      sha256: "42bbfddebacef09c9a4eb2d9ef4049fa6a39edb8622b72ca69200cb6f1e3a6c0"
+      sha256: "4bbf1fa19723a90578e991b9a95afca43bea856809890a26609618fa29087427"
       url: "https://pub.dev"
     source: hosted
-    version: "7.2.4"
+    version: "7.2.11"
   file:
     dependency: transitive
     description:
@@ -491,9 +492,9 @@ packages:
     dependency: "direct main"
     description:
       path: "."
-      ref: "62f09545149f320616467c306c8c5f71714a18e6"
+      ref: HEAD
       resolved-ref: "62f09545149f320616467c306c8c5f71714a18e6"
-      url: "https://github.com/Kingtous/flutter_improved_scrolling"
+      url: "https://github.com/rustdesk-org/flutter_improved_scrolling"
     source: git
     version: "0.0.3"
   flutter_keyboard_visibility:
@@ -548,10 +549,10 @@ packages:
     dependency: "direct main"
     description:
       name: flutter_launcher_icons
-      sha256: ce0e501cfc258907842238e4ca605e74b7fd1cdf04b3b43e86c43f3e40a1592c
+      sha256: "526faf84284b86a4cb36d20a5e45147747b7563d921373d4ee0559c54fcdbcea"
       url: "https://pub.dev"
     source: hosted
-    version: "0.11.0"
+    version: "0.13.1"
   flutter_lints:
     dependency: "direct dev"
     description:
@@ -585,18 +586,18 @@ packages:
     dependency: "direct main"
     description:
       name: flutter_rust_bridge
-      sha256: "5aea0f3980dcd314f1890ef0d2392263817899cc15e543734b5d4dbe66b761eb"
+      sha256: "36e11b79ac7011d9203313468c5827fe1215b0fa03df384cfe2891a68ed74ed5"
       url: "https://pub.dev"
     source: hosted
-    version: "1.62.0"
+    version: "1.75.3"
   flutter_svg:
     dependency: "direct main"
     description:
       name: flutter_svg
-      sha256: "6ff9fa12892ae074092de2fa6a9938fb21dbabfdaa2ff57dc697ff912fc8d4b2"
+      sha256: f991fdb1533c3caeee0cdc14b04f50f0c3916f0dbcbc05237ccbe4e3c6b93f3f
       url: "https://pub.dev"
     source: hosted
-    version: "1.1.6"
+    version: "2.0.5"
   flutter_web_plugins:
     dependency: transitive
     description: flutter
@@ -686,18 +687,18 @@ packages:
     dependency: "direct dev"
     description:
       name: icons_launcher
-      sha256: c8e3ae1263822feafaec8a3c666ec84c2143470e1612f5481f1c875024c5f37e
+      sha256: f8ccfb80b56856b6eac586980bdd9c14f5ec24fb87127514055445ceb9424f4c
       url: "https://pub.dev"
     source: hosted
-    version: "2.0.6"
+    version: "2.1.0"
   image:
     dependency: "direct main"
     description:
       name: image
-      sha256: "8e9d133755c3e84c73288363e6343157c383a0c6c56fc51afcc5d4d7180306d6"
+      sha256: a72242c9a0ffb65d03de1b7113bc4e189686fc07c7147b8b41811d0dd0e0d9bf
       url: "https://pub.dev"
     source: hosted
-    version: "3.3.0"
+    version: "4.0.17"
   image_picker:
     dependency: "direct main"
     description:
@@ -742,10 +743,10 @@ packages:
     dependency: transitive
     description:
       name: intl
-      sha256: "910f85bce16fb5c6f614e117efa303e85a1731bb0081edf3604a2ae6e9a3cc91"
+      sha256: a3715e3bc90294e971cb7dc063fbf3cd9ee0ebf8604ffeafabd9e6f16abbdbe6
       url: "https://pub.dev"
     source: hosted
-    version: "0.17.0"
+    version: "0.18.0"
   io:
     dependency: transitive
     description:
@@ -758,10 +759,10 @@ packages:
     dependency: transitive
     description:
       name: js
-      sha256: "5528c2f391ededb7775ec1daa69e65a2d61276f7552de2b5f7b8d34ee9fd4ab7"
+      sha256: f2c445dce49627136094980615a031419f7f3eb393237e4ecd97ac15dea343f3
       url: "https://pub.dev"
     source: hosted
-    version: "0.6.5"
+    version: "0.6.7"
   json_annotation:
     dependency: transitive
     description:
@@ -806,10 +807,10 @@ packages:
     dependency: transitive
     description:
       name: meta
-      sha256: "6c268b42ed578a53088d834796959e4a1814b5e9e164f147f580a386e5decf42"
+      sha256: "3c74dbf8763d36539f114c799d8a2d87343b5067e9d796ca22b5eb8437090ee3"
       url: "https://pub.dev"
     source: hosted
-    version: "1.8.0"
+    version: "1.9.1"
   mime:
     dependency: transitive
     description:
@@ -846,50 +847,18 @@ packages:
     dependency: "direct main"
     description:
       name: package_info_plus
-      sha256: f62d7253edc197fe3c88d7c2ddab82d68f555e778d55390ccc3537eca8e8d637
+      sha256: "10259b111176fba5c505b102e3a5b022b51dd97e30522e906d6922c745584745"
       url: "https://pub.dev"
     source: hosted
-    version: "1.4.3+1"
-  package_info_plus_linux:
-    dependency: transitive
-    description:
-      name: package_info_plus_linux
-      sha256: "04b575f44233d30edbb80a94e57cad9107aada334fc02aabb42b6becd13c43fc"
-      url: "https://pub.dev"
-    source: hosted
-    version: "1.0.5"
-  package_info_plus_macos:
-    dependency: transitive
-    description:
-      name: package_info_plus_macos
-      sha256: a2ad8b4acf4cd479d4a0afa5a74ea3f5b1c7563b77e52cc32b3ee6956d5482a6
-      url: "https://pub.dev"
-    source: hosted
-    version: "1.3.0"
+    version: "3.1.2"
   package_info_plus_platform_interface:
     dependency: transitive
     description:
       name: package_info_plus_platform_interface
-      sha256: f7a0c8f1e7e981bc65f8b64137a53fd3c195b18d429fba960babc59a5a1c7ae8
+      sha256: "9bc8ba46813a4cc42c66ab781470711781940780fd8beddd0c3da62506d3a6c6"
       url: "https://pub.dev"
     source: hosted
-    version: "1.0.2"
-  package_info_plus_web:
-    dependency: transitive
-    description:
-      name: package_info_plus_web
-      sha256: f0829327eb534789e0a16ccac8936a80beed4e2401c4d3a74f3f39094a822d3b
-      url: "https://pub.dev"
-    source: hosted
-    version: "1.0.6"
-  package_info_plus_windows:
-    dependency: transitive
-    description:
-      name: package_info_plus_windows
-      sha256: "79524f11c42dd9078b96d797b3cf79c0a2883a50c4920dc43da8562c115089bc"
-      url: "https://pub.dev"
-    source: hosted
-    version: "2.1.0"
+    version: "2.0.1"
   password_strength:
     dependency: "direct main"
     description:
@@ -902,18 +871,10 @@ packages:
     dependency: "direct main"
     description:
       name: path
-      sha256: db9d4f58c908a4ba5953fcee2ae317c94889433e5024c27ce74a37f94267945b
+      sha256: "8829d8a55c13fc0e37127c29fedf290c102f4e40ae94ada574091fe0ff96c917"
       url: "https://pub.dev"
     source: hosted
-    version: "1.8.2"
-  path_drawing:
-    dependency: transitive
-    description:
-      name: path_drawing
-      sha256: bbb1934c0cbb03091af082a6389ca2080345291ef07a5fa6d6e078ba8682f977
-      url: "https://pub.dev"
-    source: hosted
-    version: "1.0.1"
+    version: "1.8.3"
   path_parsing:
     dependency: transitive
     description:
@@ -1103,10 +1064,10 @@ packages:
     dependency: "direct main"
     description:
       name: scroll_pos
-      sha256: cfca311b6b8d51538ff90e206fbe6ce3b36e7125ea6da4a40eb626c7f9f083b1
+      sha256: "4246bff3afc779d87cdf650a67d42d67ae71b23ff020d14592e6b89e28a7f9cc"
       url: "https://pub.dev"
     source: hosted
-    version: "0.3.0"
+    version: "0.4.0"
   settings_ui:
     dependency: "direct main"
     description:
@@ -1252,10 +1213,10 @@ packages:
     dependency: "direct main"
     description:
       name: toggle_switch
-      sha256: "3814548f25ee11f88d3b1905e2e7c8e47e4a406752f553ed287f6d86a2dcf91d"
+      sha256: "9e6af1f0c5a97d9de41109dc7b9e1b3bbe73417f89b10e0e44dc834fb493d4cb"
       url: "https://pub.dev"
     source: hosted
-    version: "1.4.0"
+    version: "2.1.0"
   tuple:
     dependency: "direct main"
     description:
@@ -1283,11 +1244,12 @@ packages:
   uni_links_desktop:
     dependency: "direct main"
     description:
-      name: uni_links_desktop
-      sha256: "205484c01890259b56d9271bcf299adf9889e881616c976f13061e29e94bb9f0"
-      url: "https://pub.dev"
-    source: hosted
-    version: "0.1.4"
+      path: "."
+      ref: HEAD
+      resolved-ref: e1d25263ae7c214ff52a66a9cf28aea8f408742e
+      url: "https://github.com/rustdesk-org/uni_links_desktop"
+    source: git
+    version: "0.1.6"
   uni_links_platform_interface:
     dependency: transitive
     description:
@@ -1377,13 +1339,37 @@ packages:
     source: hosted
     version: "3.0.3"
   uuid:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: uuid
       sha256: "648e103079f7c64a36dc7d39369cabb358d377078a051d6ae2ad3aa539519313"
       url: "https://pub.dev"
     source: hosted
     version: "3.0.7"
+  vector_graphics:
+    dependency: transitive
+    description:
+      name: vector_graphics
+      sha256: ea8d3fc7b2e0f35de38a7465063ecfcf03d8217f7962aa2a6717132cb5d43a79
+      url: "https://pub.dev"
+    source: hosted
+    version: "1.1.5"
+  vector_graphics_codec:
+    dependency: transitive
+    description:
+      name: vector_graphics_codec
+      sha256: a5eaa5d19e123ad4f61c3718ca1ed921c4e6254238d9145f82aa214955d9aced
+      url: "https://pub.dev"
+    source: hosted
+    version: "1.1.5"
+  vector_graphics_compiler:
+    dependency: transitive
+    description:
+      name: vector_graphics_compiler
+      sha256: "15edc42f7eaa478ce854eaf1fbb9062a899c0e4e56e775dd73b7f4709c97c4ca"
+      url: "https://pub.dev"
+    source: hosted
+    version: "1.1.5"
   vector_math:
     dependency: transitive
     description:
@@ -1436,10 +1422,10 @@ packages:
     dependency: "direct main"
     description:
       name: visibility_detector
-      sha256: "15c54a459ec2c17b4705450483f3d5a2858e733aee893dcee9d75fd04814940d"
+      sha256: dd5cc11e13494f432d15939c3aa8ae76844c42b723398643ce9addb88a5ed420
       url: "https://pub.dev"
     source: hosted
-    version: "0.3.3"
+    version: "0.4.0+2"
   wakelock:
     dependency: "direct main"
     description:
@@ -1516,11 +1502,11 @@ packages:
     dependency: "direct main"
     description:
       path: "."
-      ref: "94ff0eeb7e20e93f50022b2090f0b6ffb725c7df"
-      resolved-ref: "94ff0eeb7e20e93f50022b2090f0b6ffb725c7df"
-      url: "https://github.com/Kingtous/rustdesk_window_manager"
+      ref: HEAD
+      resolved-ref: "2c4b242e668acf4e652b09b13f650bcfbbaa3871"
+      url: "https://github.com/rustdesk-org/window_manager"
     source: git
-    version: "0.3.1"
+    version: "0.3.4"
   window_size:
     dependency: "direct main"
     description:
@@ -1566,10 +1552,10 @@ packages:
     dependency: "direct main"
     description:
       name: zxing2
-      sha256: "1913c33844c68b62573741134ef5f987f1e15e331c95ac7dc327afbb9896e9ec"
+      sha256: "1e141568c9646bc262fa75aacf739bc151ef6ad0226997c0016cc3da358a1bbc"
       url: "https://pub.dev"
     source: hosted
-    version: "0.1.1"
+    version: "0.2.0"
 sdks:
-  dart: ">=2.18.0 <4.0.0"
-  flutter: ">=3.3.0"
+  dart: ">=3.0.0-0 <4.0.0"
+  flutter: ">=3.7.0-0"

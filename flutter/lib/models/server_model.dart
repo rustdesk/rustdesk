@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/main.dart';
+import 'package:flutter_hbb/models/chat_model.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:get/get.dart';
 import 'package:wakelock/wakelock.dart';
@@ -120,12 +121,11 @@ class ServerModel with ChangeNotifier {
     _serverId = IDTextEditingController(text: _emptyIdShow);
 
     timerCallback() async {
-      var status = await bind.mainGetOnlineStatue();
-      if (status > 0) {
-        status = 1;
-      }
-      if (status != _connectStatus) {
-        _connectStatus = status;
+      final connectionStatus =
+          jsonDecode(await bind.mainGetConnectStatus()) as Map<String, dynamic>;
+      final statusNum = connectionStatus['status_num'] as int;
+      if (statusNum != _connectStatus) {
+        _connectStatus = statusNum;
         notifyListeners();
       }
 
@@ -202,7 +202,10 @@ class ServerModel with ChangeNotifier {
         temporaryPassword.isNotEmpty) {
       _serverPasswd.text = temporaryPassword;
     }
-    if (verificationMethod == kUsePermanentPassword ||
+    var stopped = option2bool(
+        "stop-service", await bind.mainGetOption(key: "stop-service"));
+    if (stopped ||
+        verificationMethod == kUsePermanentPassword ||
         _approveMode == 'click') {
       _serverPasswd.text = '-';
     }
@@ -214,6 +217,9 @@ class ServerModel with ChangeNotifier {
       update = true;
     }
     if (_temporaryPasswordLength != temporaryPasswordLength) {
+      if (_temporaryPasswordLength.isNotEmpty) {
+        bind.mainUpdateTemporaryPassword();
+      }
       _temporaryPasswordLength = temporaryPasswordLength;
       update = true;
     }
@@ -221,9 +227,9 @@ class ServerModel with ChangeNotifier {
       _hideCm = hideCm;
       if (desktopType == DesktopType.cm) {
         if (hideCm) {
-          hideCmWindow();
+          await hideCmWindow();
         } else {
-          showCmWindow();
+          await showCmWindow();
         }
       }
       update = true;
@@ -288,8 +294,8 @@ class ServerModel with ChangeNotifier {
   /// Toggle the screen sharing service.
   toggleService() async {
     if (_isStart) {
-      final res =
-          await parent.target?.dialogManager.show<bool>((setState, close) {
+      final res = await parent.target?.dialogManager
+          .show<bool>((setState, close, context) {
         submit() => close(true);
         return CustomAlertDialog(
           title: Row(children: [
@@ -311,8 +317,8 @@ class ServerModel with ChangeNotifier {
         stopService();
       }
     } else {
-      final res =
-          await parent.target?.dialogManager.show<bool>((setState, close) {
+      final res = await parent.target?.dialogManager
+          .show<bool>((setState, close, context) {
         submit() => close(true);
         return CustomAlertDialog(
           title: Row(children: [
@@ -340,7 +346,7 @@ class ServerModel with ChangeNotifier {
   Future<void> startService() async {
     _isStart = true;
     notifyListeners();
-    parent.target?.ffiModel.updateEventListener("");
+    parent.target?.ffiModel.updateEventListener(parent.target!.sessionId, "");
     await parent.target?.invokeMethod("init_service");
     // ugly is here, because for desktop, below is useless
     await bind.mainStartService();
@@ -407,18 +413,25 @@ class ServerModel with ChangeNotifier {
   updateClientState([String? json]) async {
     if (isTest) return;
     var res = await bind.cmGetClientsState();
+    List<dynamic> clientsJson;
     try {
-      final List clientsJson = jsonDecode(res);
-      _clients.clear();
-      tabController.state.value.tabs.clear();
-      for (var clientJson in clientsJson) {
+      clientsJson = jsonDecode(res);
+    } catch (e) {
+      debugPrint("Failed to decode clientsJson: '$res', error $e");
+      return;
+    }
+
+    _clients.clear();
+    tabController.state.value.tabs.clear();
+
+    for (var clientJson in clientsJson) {
+      try {
         final client = Client.fromJson(clientJson);
         _clients.add(client);
         _addTab(client);
+      } catch (e) {
+        debugPrint("Failed to decode clientJson '$clientJson', error $e");
       }
-      notifyListeners();
-    } catch (e) {
-      debugPrint("Failed to updateClientState:$e");
     }
   }
 
@@ -460,16 +473,10 @@ class ServerModel with ChangeNotifier {
         key: client.id.toString(),
         label: client.name,
         closable: false,
-        onTap: () {
-          if (client.hasUnreadChatMessage.value) {
-            client.hasUnreadChatMessage.value = false;
-            final chatModel = parent.target!.chatModel;
-            chatModel.showChatPage(client.id);
-          }
-        },
+        onTap: () {},
         page: desktop.buildConnectionCard(client)));
     Future.delayed(Duration.zero, () async {
-      if (!hideCm) window_on_top(null);
+      if (!hideCm) windowOnTop(null);
     });
     // Only do the hidden task when on Desktop.
     if (client.authorized && isDesktop) {
@@ -478,10 +485,12 @@ class ServerModel with ChangeNotifier {
         cmHiddenTimer = null;
       });
     }
+    parent.target?.chatModel
+        .updateConnIdOfKey(MessageKey(client.peerId, client.id));
   }
 
   void showLoginDialog(Client client) {
-    parent.target?.dialogManager.show((setState, close) {
+    parent.target?.dialogManager.show((setState, close, context) {
       cancel() {
         sendLoginResponse(client, false);
         close();
@@ -518,7 +527,8 @@ class ServerModel with ChangeNotifier {
         ),
         actions: [
           dialogButton("Dismiss", onPressed: cancel, isOutline: true),
-          dialogButton("Accept", onPressed: submit),
+          if (approveMode != 'password')
+            dialogButton("Accept", onPressed: submit),
         ],
         onSubmit: submit,
         onCancel: cancel,
@@ -605,7 +615,7 @@ class ServerModel with ChangeNotifier {
         if (client.incomingVoiceCall) {
           // Has incoming phone call, let's set the window on top.
           Future.delayed(Duration.zero, () {
-            window_on_top(null);
+            windowOnTop(null);
           });
         }
         notifyListeners();
@@ -640,7 +650,7 @@ class Client {
   bool inVoiceCall = false;
   bool incomingVoiceCall = false;
 
-  RxBool hasUnreadChatMessage = false.obs;
+  RxInt unreadChatMessageCount = 0.obs;
 
   Client(this.id, this.authorized, this.isFileTransfer, this.name, this.peerId,
       this.keyboard, this.clipboard, this.audio);
@@ -699,7 +709,7 @@ String getLoginDialogTag(int id) {
 }
 
 showInputWarnAlert(FFI ffi) {
-  ffi.dialogManager.show((setState, close) {
+  ffi.dialogManager.show((setState, close, context) {
     submit() {
       AndroidPermissionManager.startAction(kActionAccessibilitySettings);
       close();
@@ -726,7 +736,7 @@ showInputWarnAlert(FFI ffi) {
 }
 
 Future<void> showClientsMayNotBeChangedAlert(FFI? ffi) async {
-  await ffi?.dialogManager.show((setState, close) {
+  await ffi?.dialogManager.show((setState, close, context) {
     return CustomAlertDialog(
       title: Text(translate("Permissions")),
       content: Column(

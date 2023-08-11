@@ -3,16 +3,24 @@
 // https://github.com/rust-av/vpx-rs/blob/master/src/decoder.rs
 
 use hbb_common::anyhow::{anyhow, Context};
+use hbb_common::log;
 use hbb_common::message_proto::{EncodedVideoFrame, EncodedVideoFrames, Message, VideoFrame};
 use hbb_common::ResultType;
 
-use crate::STRIDE_ALIGN;
-use crate::{codec::EncoderApi, ImageFormat};
+use crate::codec::{base_bitrate, codec_thread_num, EncoderApi, Quality};
+use crate::{GoogleImage, STRIDE_ALIGN};
 
 use super::vpx::{vp8e_enc_control_id::*, vpx_codec_err_t::*, *};
+use crate::{generate_call_macro, generate_call_ptr_macro, Error, Result};
 use hbb_common::bytes::Bytes;
 use std::os::raw::{c_int, c_uint};
 use std::{ptr, slice};
+
+generate_call_macro!(call_vpx, false);
+generate_call_ptr_macro!(call_vpx_ptr);
+
+const DEFAULT_QP_MAX: u32 = 56; // no more than 63
+const DEFAULT_QP_MIN: u32 = 12; // no more than 63
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub enum VpxVideoCodecId {
@@ -37,60 +45,6 @@ pub struct VpxDecoder {
     ctx: vpx_codec_ctx_t,
 }
 
-#[derive(Debug)]
-pub enum Error {
-    FailedCall(String),
-    BadPtr(String),
-}
-
-impl std::fmt::Display for Error {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::result::Result<(), std::fmt::Error> {
-        write!(f, "{:?}", self)
-    }
-}
-
-impl std::error::Error for Error {}
-
-pub type Result<T> = std::result::Result<T, Error>;
-
-macro_rules! call_vpx {
-    ($x:expr) => {{
-        let result = unsafe { $x }; // original expression
-        let result_int = unsafe { std::mem::transmute::<_, i32>(result) };
-        if result_int != 0 {
-            return Err(Error::FailedCall(format!(
-                "errcode={} {}:{}:{}:{}",
-                result_int,
-                module_path!(),
-                file!(),
-                line!(),
-                column!()
-            ))
-            .into());
-        }
-        result
-    }};
-}
-
-macro_rules! call_vpx_ptr {
-    ($x:expr) => {{
-        let result = unsafe { $x }; // original expression
-        let result_int = unsafe { std::mem::transmute::<_, isize>(result) };
-        if result_int == 0 {
-            return Err(Error::BadPtr(format!(
-                "errcode={} {}:{}:{}:{}",
-                result_int,
-                module_path!(),
-                file!(),
-                line!(),
-                column!()
-            ))
-            .into());
-        }
-        result
-    }};
-}
-
 impl EncoderApi for VpxEncoder {
     fn new(cfg: crate::codec::EncoderCfg) -> ResultType<Self>
     where
@@ -111,28 +65,46 @@ impl EncoderApi for VpxEncoder {
 
                 c.g_w = config.width;
                 c.g_h = config.height;
-                c.g_timebase.num = config.timebase[0];
-                c.g_timebase.den = config.timebase[1];
-                c.rc_target_bitrate = config.bitrate;
+                c.g_timebase.num = 1;
+                c.g_timebase.den = 1000; // Output timestamp precision
                 c.rc_undershoot_pct = 95;
+                // When the data buffer falls below this percentage of fullness, a dropped frame is indicated. Set the threshold to zero (0) to disable this feature.
+                // In dynamic scenes, low bitrate gets low fps while high bitrate gets high fps.
                 c.rc_dropframe_thresh = 25;
-                c.g_threads = if config.num_threads == 0 {
-                    num_cpus::get() as _
-                } else {
-                    config.num_threads
-                };
+                c.g_threads = codec_thread_num() as _;
                 c.g_error_resilient = VPX_ERROR_RESILIENT_DEFAULT;
                 // https://developers.google.com/media/vp9/bitrate-modes/
                 // Constant Bitrate mode (CBR) is recommended for live streaming with VP9.
                 c.rc_end_usage = vpx_rc_mode::VPX_CBR;
-                // c.kf_min_dist = 0;
-                // c.kf_max_dist = 999999;
-                c.kf_mode = vpx_kf_mode::VPX_KF_DISABLED; // reduce bandwidth a lot
+                if let Some(keyframe_interval) = config.keyframe_interval {
+                    c.kf_min_dist = 0;
+                    c.kf_max_dist = keyframe_interval as _;
+                } else {
+                    c.kf_mode = vpx_kf_mode::VPX_KF_DISABLED; // reduce bandwidth a lot
+                }
+
+                let (q_min, q_max, b) = Self::convert_quality(config.quality);
+                if q_min > 0 && q_min < q_max && q_max < 64 {
+                    c.rc_min_quantizer = q_min;
+                    c.rc_max_quantizer = q_max;
+                } else {
+                    c.rc_min_quantizer = DEFAULT_QP_MIN;
+                    c.rc_max_quantizer = DEFAULT_QP_MAX;
+                }
+                let base_bitrate = base_bitrate(config.width as _, config.height as _);
+                let bitrate = base_bitrate * b / 100;
+                if bitrate > 0 {
+                    c.rc_target_bitrate = bitrate;
+                } else {
+                    c.rc_target_bitrate = base_bitrate;
+                }
 
                 /*
-                VPX encoder支持two-pass encode，这是为了rate control的。
-                对于两遍编码，就是需要整个编码过程做两次，第一次会得到一些新的控制参数来进行第二遍的编码，
-                这样可以在相同的bitrate下得到最好的PSNR
+                The VPX encoder supports two-pass encoding for rate control purposes.
+                In two-pass encoding, the entire encoding process is performed twice.
+                The first pass generates new control parameters for the second pass.
+
+                This approach enables the best PSNR at the same bit rate.
                 */
 
                 let mut ctx = Default::default();
@@ -224,11 +196,24 @@ impl EncoderApi for VpxEncoder {
         true
     }
 
-    fn set_bitrate(&mut self, bitrate: u32) -> ResultType<()> {
-        let mut new_enc_cfg = unsafe { *self.ctx.config.enc.to_owned() };
-        new_enc_cfg.rc_target_bitrate = bitrate;
-        call_vpx!(vpx_codec_enc_config_set(&mut self.ctx, &new_enc_cfg));
-        return Ok(());
+    fn set_quality(&mut self, quality: Quality) -> ResultType<()> {
+        let mut c = unsafe { *self.ctx.config.enc.to_owned() };
+        let (q_min, q_max, b) = Self::convert_quality(quality);
+        if q_min > 0 && q_min < q_max && q_max < 64 {
+            c.rc_min_quantizer = q_min;
+            c.rc_max_quantizer = q_max;
+        }
+        let bitrate = base_bitrate(self.width as _, self.height as _) * b / 100;
+        if bitrate > 0 {
+            c.rc_target_bitrate = bitrate;
+        }
+        call_vpx!(vpx_codec_enc_config_set(&mut self.ctx, &c));
+        Ok(())
+    }
+
+    fn bitrate(&self) -> u32 {
+        let c = unsafe { *self.ctx.config.enc.to_owned() };
+        c.rc_target_bitrate
     }
 }
 
@@ -305,6 +290,34 @@ impl VpxEncoder {
             ..Default::default()
         }
     }
+
+    fn convert_quality(quality: Quality) -> (u32, u32, u32) {
+        match quality {
+            Quality::Best => (6, 45, 150),
+            Quality::Balanced => (12, 56, 100 * 2 / 3),
+            Quality::Low => (18, 56, 50),
+            Quality::Custom(b) => {
+                let (q_min, q_max) = Self::calc_q_values(b);
+                (q_min, q_max, b)
+            }
+        }
+    }
+
+    #[inline]
+    fn calc_q_values(b: u32) -> (u32, u32) {
+        let b = std::cmp::min(b, 200);
+        let q_min1: i32 = 36;
+        let q_min2 = 0;
+        let q_max1 = 56;
+        let q_max2 = 37;
+
+        let t = b as f32 / 200.0;
+
+        let q_min: u32 = ((1.0 - t) * q_min1 as f32 + t * q_min2 as f32).round() as u32;
+        let q_max = ((1.0 - t) * q_max1 as f32 + t * q_max2 as f32).round() as u32;
+
+        (q_min, q_max)
+    }
 }
 
 impl Drop for VpxEncoder {
@@ -334,19 +347,17 @@ pub struct VpxEncoderConfig {
     pub width: c_uint,
     /// The height (in pixels).
     pub height: c_uint,
-    /// The timebase numerator and denominator (in seconds).
-    pub timebase: [c_int; 2],
-    /// The target bitrate (in kilobits per second).
-    pub bitrate: c_uint,
+    /// The image quality
+    pub quality: Quality,
     /// The codec
     pub codec: VpxVideoCodecId,
-    pub num_threads: u32,
+    /// keyframe interval
+    pub keyframe_interval: Option<usize>,
 }
 
 #[derive(Clone, Copy, Debug)]
 pub struct VpxDecoderConfig {
     pub codec: VpxVideoCodecId,
-    pub num_threads: u32,
 }
 
 pub struct EncodeFrames<'a> {
@@ -393,11 +404,7 @@ impl VpxDecoder {
         };
         let mut ctx = Default::default();
         let cfg = vpx_codec_dec_cfg_t {
-            threads: if config.num_threads == 0 {
-                num_cpus::get() as _
-            } else {
-                config.num_threads
-            },
+            threads: codec_thread_num() as _,
             w: 0,
             h: 0,
         };
@@ -414,25 +421,6 @@ impl VpxDecoder {
             VPX_DECODER_ABI_VERSION as _,
         ));
         Ok(Self { ctx })
-    }
-
-    pub fn decode2rgb(&mut self, data: &[u8], fmt: ImageFormat) -> Result<Vec<u8>> {
-        let mut img = Image::new();
-        for frame in self.decode(data)? {
-            drop(img);
-            img = frame;
-        }
-        for frame in self.flush()? {
-            drop(img);
-            img = frame;
-        }
-        if img.is_null() {
-            Ok(Vec::new())
-        } else {
-            let mut out = Default::default();
-            img.to(fmt, 1, &mut out);
-            Ok(out)
-        }
     }
 
     /// Feed some compressed data to the encoder
@@ -513,16 +501,6 @@ impl Image {
     }
 
     #[inline]
-    pub fn width(&self) -> usize {
-        self.inner().d_w as _
-    }
-
-    #[inline]
-    pub fn height(&self) -> usize {
-        self.inner().d_h as _
-    }
-
-    #[inline]
     pub fn format(&self) -> vpx_img_fmt_t {
         // VPX_IMG_FMT_I420
         self.inner().fmt
@@ -532,84 +510,27 @@ impl Image {
     pub fn inner(&self) -> &vpx_image_t {
         unsafe { &*self.0 }
     }
+}
 
+impl GoogleImage for Image {
     #[inline]
-    pub fn stride(&self, iplane: usize) -> i32 {
-        self.inner().stride[iplane]
-    }
-
-    pub fn to(&self, fmt: ImageFormat, stride: usize, dst: &mut Vec<u8>) {
-        let h = self.height();
-        let w = self.width();
-        let bytes_per_pixel = match fmt {
-            ImageFormat::Raw => 3,
-            ImageFormat::ARGB | ImageFormat::ABGR => 4,
-        };
-        // https://github.com/lemenkov/libyuv/blob/6900494d90ae095d44405cd4cc3f346971fa69c9/source/convert_argb.cc#L128
-        // https://github.com/lemenkov/libyuv/blob/6900494d90ae095d44405cd4cc3f346971fa69c9/source/convert_argb.cc#L129
-        let bytes_per_row = (w * bytes_per_pixel + stride - 1) & !(stride - 1);
-        dst.resize(h * bytes_per_row, 0);
-        let img = self.inner();
-        unsafe {
-            match fmt {
-                ImageFormat::Raw => {
-                    super::I420ToRAW(
-                        img.planes[0],
-                        img.stride[0],
-                        img.planes[1],
-                        img.stride[1],
-                        img.planes[2],
-                        img.stride[2],
-                        dst.as_mut_ptr(),
-                        bytes_per_row as _,
-                        self.width() as _,
-                        self.height() as _,
-                    );
-                }
-                ImageFormat::ARGB => {
-                    super::I420ToARGB(
-                        img.planes[0],
-                        img.stride[0],
-                        img.planes[1],
-                        img.stride[1],
-                        img.planes[2],
-                        img.stride[2],
-                        dst.as_mut_ptr(),
-                        bytes_per_row as _,
-                        self.width() as _,
-                        self.height() as _,
-                    );
-                }
-                ImageFormat::ABGR => {
-                    super::I420ToABGR(
-                        img.planes[0],
-                        img.stride[0],
-                        img.planes[1],
-                        img.stride[1],
-                        img.planes[2],
-                        img.stride[2],
-                        dst.as_mut_ptr(),
-                        bytes_per_row as _,
-                        self.width() as _,
-                        self.height() as _,
-                    );
-                }
-            }
-        }
+    fn width(&self) -> usize {
+        self.inner().d_w as _
     }
 
     #[inline]
-    pub fn data(&self) -> (&[u8], &[u8], &[u8]) {
-        unsafe {
-            let img = self.inner();
-            let h = (img.d_h as usize + 1) & !1;
-            let n = img.stride[0] as usize * h;
-            let y = slice::from_raw_parts(img.planes[0], n);
-            let n = img.stride[1] as usize * (h >> 1);
-            let u = slice::from_raw_parts(img.planes[1], n);
-            let v = slice::from_raw_parts(img.planes[2], n);
-            (y, u, v)
-        }
+    fn height(&self) -> usize {
+        self.inner().d_h as _
+    }
+
+    #[inline]
+    fn stride(&self) -> Vec<i32> {
+        self.inner().stride.iter().map(|x| *x as i32).collect()
+    }
+
+    #[inline]
+    fn planes(&self) -> Vec<*mut u8> {
+        self.inner().planes.iter().map(|p| *p as *mut u8).collect()
     }
 }
 

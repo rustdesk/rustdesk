@@ -18,6 +18,7 @@ pub mod delegate;
 pub mod linux;
 
 #[cfg(all(target_os = "linux", feature = "linux_headless"))]
+#[cfg(not(any(feature = "flatpak", feature = "appimage")))]
 pub mod linux_desktop_manager;
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -41,6 +42,23 @@ pub fn breakdown_callback() {
     crate::input_service::clear_remapped_keycode();
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     crate::input_service::release_device_modifiers();
+}
+
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+pub fn change_resolution(name: &str, width: usize, height: usize) -> ResultType<()> {
+    let cur_resolution = current_resolution(name)?;
+    // For MacOS
+    // to-do: Make sure the following comparison works.
+    // For Linux
+    // Just run "xrandr", dpi may not be taken into consideration.
+    // For Windows
+    // dmPelsWidth and dmPelsHeight is the same to width and height
+    // Because this process is running in dpi awareness mode.
+    if cur_resolution.width as usize == width && cur_resolution.height as usize == height {
+        return Ok(());
+    }
+    hbb_common::log::warn!("Change resolution of '{}' to ({},{})", name, width, height);
+    change_resolution_directly(name, width, height)
 }
 
 // Android

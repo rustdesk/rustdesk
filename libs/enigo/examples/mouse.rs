@@ -1,4 +1,6 @@
 use enigo::{Enigo, MouseButton, MouseControllable};
+#[cfg(windows)]
+use winapi::um::winuser::WHEEL_DELTA;
 use std::thread;
 use std::time::Duration;
 
@@ -25,15 +27,27 @@ fn main() {
 
     #[cfg(not(target_os = "macos"))]
     {
+        #[cfg(windows)]
+        enigo.mouse_scroll_x(2 * WHEEL_DELTA as i32);
+        #[cfg(not(windows))]
         enigo.mouse_scroll_x(2);
         thread::sleep(wait_time);
 
+        #[cfg(windows)]
+        enigo.mouse_scroll_x(-2 * WHEEL_DELTA as i32);
+        #[cfg(not(windows))]
         enigo.mouse_scroll_x(-2);
         thread::sleep(wait_time);
 
+        #[cfg(windows)]
+        enigo.mouse_scroll_y(2 * WHEEL_DELTA as i32);
+        #[cfg(not(windows))]
         enigo.mouse_scroll_y(2);
         thread::sleep(wait_time);
 
+        #[cfg(windows)]
+        enigo.mouse_scroll_y(-2 * WHEEL_DELTA as i32);
+        #[cfg(not(windows))]
         enigo.mouse_scroll_y(-2);
         thread::sleep(wait_time);
     }

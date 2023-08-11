@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import 'package:provider/provider.dart';
 import 'package:settings_ui/settings_ui.dart';
@@ -45,6 +46,8 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
   var _autoRecordIncomingSession = false;
   var _localIP = "";
   var _directAccessPort = "";
+  var _fingerprint = "";
+  var _buildDate = "";
 
   @override
   void initState() {
@@ -133,6 +136,18 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
       if (directAccessPort != _directAccessPort) {
         update = true;
         _directAccessPort = directAccessPort;
+      }
+
+      final fingerprint = await bind.mainGetFingerprint();
+      if (_fingerprint != fingerprint) {
+        update = true;
+        _fingerprint = fingerprint;
+      }
+
+      final buildDate = await bind.mainGetBuildDate();
+      if (_buildDate != buildDate) {
+        update = true;
+        _buildDate = buildDate;
       }
 
       if (update) {
@@ -227,7 +242,7 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
         },
       ),
       SettingsTile.switchTile(
-        title: Text('${translate('Adaptive Bitrate')} (beta)'),
+        title: Text('${translate('Adaptive bitrate')} (beta)'),
         initialValue: _enableAbr,
         onToggle: (v) async {
           await bind.mainSetOption(key: "enable-abr", value: v ? "" : "N");
@@ -309,8 +324,8 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
                   await AndroidPermissionManager.request(
                       kRequestIgnoreBatteryOptimizations);
                 } else {
-                  final res = await gFFI.dialogManager
-                      .show<bool>((setState, close) => CustomAlertDialog(
+                  final res = await gFFI.dialogManager.show<bool>(
+                      (setState, close, context) => CustomAlertDialog(
                             title: Text(translate("Open System Setting")),
                             content: Text(translate(
                                 "android_open_battery_optimizations_tip")),
@@ -377,7 +392,7 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
                 if (gFFI.userModel.userName.value.isEmpty) {
                   loginDialog();
                 } else {
-                  gFFI.userModel.logOut();
+                  logOutConfirmDialog();
                 }
               },
             ),
@@ -462,6 +477,21 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
                       )),
                 ),
                 leading: Icon(Icons.info)),
+            SettingsTile.navigation(
+                title: Text(translate("Build Date")),
+                value: Padding(
+                  padding: EdgeInsets.symmetric(vertical: 8),
+                  child: Text(_buildDate),
+                ),
+                leading: Icon(Icons.query_builder)),
+            SettingsTile.navigation(
+                onPressed: (context) => onCopyFingerprint(_fingerprint),
+                title: Text(translate("Fingerprint")),
+                value: Padding(
+                  padding: EdgeInsets.symmetric(vertical: 8),
+                  child: Text(_fingerprint),
+                ),
+                leading: Icon(Icons.fingerprint)),
           ],
         ),
       ],
@@ -489,13 +519,13 @@ void showLanguageSettings(OverlayDialogManager dialogManager) async {
   try {
     final langs = json.decode(await bind.mainGetLangs()) as List<dynamic>;
     var lang = bind.mainGetLocalOption(key: "lang");
-    dialogManager.show((setState, close) {
-      setLang(v) {
+    dialogManager.show((setState, close, context) {
+      setLang(v) async {
         if (lang != v) {
           setState(() {
             lang = v;
           });
-          bind.mainSetLocalOption(key: "lang", value: v);
+          await bind.mainSetLocalOption(key: "lang", value: v);
           HomePage.homeKey.currentState?.refreshPages();
           Future.delayed(Duration(milliseconds: 200), close);
         }
@@ -504,13 +534,13 @@ void showLanguageSettings(OverlayDialogManager dialogManager) async {
       return CustomAlertDialog(
         content: Column(
           children: [
-                getRadio('Default', '', lang, setLang),
+                getRadio(Text(translate('Default')), '', lang, setLang),
                 Divider(color: MyTheme.border),
               ] +
               langs.map((e) {
                 final key = e[0] as String;
                 final name = e[1] as String;
-                return getRadio(name, key, lang, setLang);
+                return getRadio(Text(translate(name)), key, lang, setLang);
               }).toList(),
         ),
       );
@@ -523,7 +553,7 @@ void showLanguageSettings(OverlayDialogManager dialogManager) async {
 void showThemeSettings(OverlayDialogManager dialogManager) async {
   var themeMode = MyTheme.getThemeModePreference();
 
-  dialogManager.show((setState, close) {
+  dialogManager.show((setState, close, context) {
     setTheme(v) {
       if (themeMode != v) {
         setState(() {
@@ -536,16 +566,18 @@ void showThemeSettings(OverlayDialogManager dialogManager) async {
 
     return CustomAlertDialog(
       content: Column(children: [
-        getRadio('Light', ThemeMode.light, themeMode, setTheme),
-        getRadio('Dark', ThemeMode.dark, themeMode, setTheme),
-        getRadio('Follow System', ThemeMode.system, themeMode, setTheme)
+        getRadio(
+            Text(translate('Light')), ThemeMode.light, themeMode, setTheme),
+        getRadio(Text(translate('Dark')), ThemeMode.dark, themeMode, setTheme),
+        getRadio(Text(translate('Follow System')), ThemeMode.system, themeMode,
+            setTheme)
       ]),
     );
   }, backDismiss: true, clickMaskDismiss: true);
 }
 
 void showAbout(OverlayDialogManager dialogManager) {
-  dialogManager.show((setState, close) {
+  dialogManager.show((setState, close, context) {
     return CustomAlertDialog(
       title: Text('${translate('About')} RustDesk'),
       content: Wrap(direction: Axis.vertical, spacing: 12, children: [

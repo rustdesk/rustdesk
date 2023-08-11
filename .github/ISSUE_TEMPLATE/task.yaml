@@ -1,14 +1,14 @@
 name: 📝 Task
-description: Create a task for the team to work on
+description: Create a task for the team to work on, used internally only. We will delete tasks created by non-team members.
 title: "[Task]: "
 labels: [Task]
 body:
 - type: checkboxes
   attributes:
-    label: Is there an existing issue for this?
-    description: Please search to see if an issue related to this already exists.
+    label: Are you our team member?
+    description: If you are not our team member, please go to discussions.
     options:
-    - label: I have searched the existing issues
+    - label: Yes, I am?
       required: true
 - type: textarea
   attributes:
