@@ -11,7 +11,8 @@ enum SvcStatus { notReady, connecting, ready }
 class StateGlobal {
   int _windowId = -1;
   bool _fullscreen = false;
-  bool _maximize = false;
+  bool _maximized = false;
+  bool _minimized = false;
   bool grabKeyboard = false;
   final RxBool _showTabBar = true.obs;
   final RxDouble _resizeEdgeSize = RxDouble(kWindowEdgeSize);
@@ -25,7 +26,8 @@ class StateGlobal {
 
   int get windowId => _windowId;
   bool get fullscreen => _fullscreen;
-  bool get maximize => _maximize;
+  bool get maximized => _maximized;
+  bool get minimized => _minimized;
   double get tabBarHeight => fullscreen ? 0 : kDesktopRemoteTabBarHeight;
   RxBool get showTabBar => _showTabBar;
   RxDouble get resizeEdgeSize => _resizeEdgeSize;
@@ -48,12 +50,13 @@ class StateGlobal {
   }
 
   setWindowId(int id) => _windowId = id;
-  setMaximize(bool v) {
-    if (_maximize != v && !_fullscreen) {
-      _maximize = v;
-      _resizeEdgeSize.value = _maximize ? kMaximizeEdgeSize : kWindowEdgeSize;
+  setMaximized(bool v) {
+    if (_maximized != v && !_fullscreen) {
+      _maximized = v;
+      _resizeEdgeSize.value = _maximized ? kMaximizeEdgeSize : kWindowEdgeSize;
     }
   }
+  setMinimized(bool v) => _minimized = v;
 
   setFullscreen(bool v) {
     if (_fullscreen != v) {
@@ -61,7 +64,7 @@ class StateGlobal {
       _showTabBar.value = !_fullscreen;
       _resizeEdgeSize.value = fullscreen
           ? kFullScreenEdgeSize
-          : _maximize
+          : _maximized
               ? kMaximizeEdgeSize
               : kWindowEdgeSize;
       print(
