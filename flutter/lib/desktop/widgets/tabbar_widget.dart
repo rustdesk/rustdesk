@@ -237,7 +237,6 @@ class DesktopTab extends StatelessWidget {
   final DesktopTabController controller;
 
   Rx<DesktopTabState> get state => controller.state;
-  final isMaximized = false.obs;
   final _scrollDebounce = Debouncer(delay: Duration(milliseconds: 50));
 
   late final DesktopTabType tabType;
@@ -373,7 +372,7 @@ class DesktopTab extends StatelessWidget {
                         if (elapsed < bind.getDoubleClickTime()) {
                           // onDoubleTap
                           toggleMaximize(isMainWindow)
-                              .then((value) => isMaximized.value = value);
+                              .then((value) => stateGlobal.setMaximized(value));
                         }
                       }
                     : null,
@@ -441,7 +440,7 @@ class DesktopTab extends StatelessWidget {
           tabType: tabType,
           state: state,
           tail: tail,
-          isMaximized: isMaximized,
+          isMaximized: stateGlobal.isMaximized,
           showMinimize: showMinimize,
           showMaximize: showMaximize,
           showClose: showClose,

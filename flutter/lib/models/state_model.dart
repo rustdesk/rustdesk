@@ -10,10 +10,10 @@ enum SvcStatus { notReady, connecting, ready }
 
 class StateGlobal {
   int _windowId = -1;
-  bool _fullscreen = false;
-  bool _maximized = false;
-  bool _minimized = false;
   bool grabKeyboard = false;
+  bool _fullscreen = false;
+  bool _isMinimized = false;
+  final RxBool isMaximized = false.obs;
   final RxBool _showTabBar = true.obs;
   final RxDouble _resizeEdgeSize = RxDouble(kWindowEdgeSize);
   final RxDouble _windowBorderWidth = RxDouble(kWindowBorderWidth);
@@ -26,8 +26,7 @@ class StateGlobal {
 
   int get windowId => _windowId;
   bool get fullscreen => _fullscreen;
-  bool get maximized => _maximized;
-  bool get minimized => _minimized;
+  bool get isMinimized => _isMinimized;
   double get tabBarHeight => fullscreen ? 0 : kDesktopRemoteTabBarHeight;
   RxBool get showTabBar => _showTabBar;
   RxDouble get resizeEdgeSize => _resizeEdgeSize;
@@ -51,12 +50,12 @@ class StateGlobal {
 
   setWindowId(int id) => _windowId = id;
   setMaximized(bool v) {
-    if (_maximized != v && !_fullscreen) {
-      _maximized = v;
-      _resizeEdgeSize.value = _maximized ? kMaximizeEdgeSize : kWindowEdgeSize;
+    if (isMaximized.value != v && !_fullscreen) {
+      isMaximized.value = v;
+      _resizeEdgeSize.value = isMaximized.isTrue ? kMaximizeEdgeSize : kWindowEdgeSize;
     }
   }
-  setMinimized(bool v) => _minimized = v;
+  setMinimized(bool v) => _isMinimized = v;
 
   setFullscreen(bool v) {
     if (_fullscreen != v) {
@@ -64,7 +63,7 @@ class StateGlobal {
       _showTabBar.value = !_fullscreen;
       _resizeEdgeSize.value = fullscreen
           ? kFullScreenEdgeSize
-          : _maximized
+          : isMaximized.isTrue
               ? kMaximizeEdgeSize
               : kWindowEdgeSize;
       print(
