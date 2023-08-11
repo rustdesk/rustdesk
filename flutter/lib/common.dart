@@ -219,6 +219,13 @@ class MyTheme {
     ),
   );
 
+  //tooltip
+  static TooltipThemeData tooltipTheme() {
+    return TooltipThemeData(
+      waitDuration: Duration(seconds: 1, milliseconds: 500), 
+    );
+  }
+
   // Dialogs
   static const double dialogPadding = 24;
 
@@ -288,6 +295,7 @@ class MyTheme {
     tabBarTheme: const TabBarTheme(
       labelColor: Colors.black87,
     ),
+    tooltipTheme: tooltipTheme(),
     splashColor: isDesktop ? Colors.transparent : null,
     highlightColor: isDesktop ? Colors.transparent : null,
     splashFactory: isDesktop ? NoSplash.splashFactory : null,
@@ -377,6 +385,7 @@ class MyTheme {
     scrollbarTheme: ScrollbarThemeData(
       thumbColor: MaterialStateProperty.all(Colors.grey[500]),
     ),
+    tooltipTheme: tooltipTheme(),
     splashColor: isDesktop ? Colors.transparent : null,
     highlightColor: isDesktop ? Colors.transparent : null,
     splashFactory: isDesktop ? NoSplash.splashFactory : null,
