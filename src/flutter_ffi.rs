@@ -1165,6 +1165,10 @@ pub fn main_clear_ab() {
     config::Ab::remove();
 }
 
+pub fn main_load_ab() -> String {
+    serde_json::to_string(&config::Ab::load()).unwrap_or_default()
+}
+
 pub fn session_send_pointer(session_id: SessionID, msg: String) {
     if let Ok(m) = serde_json::from_str::<HashMap<String, serde_json::Value>>(&msg) {
         let alt = m.get("alt").is_some();

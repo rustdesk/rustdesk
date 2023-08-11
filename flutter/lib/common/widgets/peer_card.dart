@@ -987,7 +987,7 @@ class AddressBookPeerCard extends BasePeerCard {
 
   @protected
   @override
-  void _update() => gFFI.abModel.pullAb();
+  void _update() => gFFI.abModel.pullAb(quiet: true);
 
   @protected
   MenuEntryBase<String> _editTagAction(String id) {
