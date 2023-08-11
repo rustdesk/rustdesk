@@ -1151,10 +1151,6 @@ impl LoginConfigHandler {
     ///
     /// * `config` - [`PeerConfig`] to save.
     pub fn save_config(&mut self, config: PeerConfig) {
-        if self.version == 0 {
-            log::info!("skip saving peer config {}", self.id);
-            return;
-        }
         config.store(&self.id);
         self.config = config;
     }
