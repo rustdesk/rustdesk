@@ -10,6 +10,7 @@ import 'package:get/get.dart';
 
 import '../../common.dart';
 import 'dialog.dart';
+import 'loading_dot_widget.dart';
 import 'login.dart';
 
 final hideAbTagsPanel = false.obs;
@@ -39,7 +40,7 @@ class _AddressBookState extends State<AddressBook> {
               child: ElevatedButton(
                   onPressed: loginDialog, child: Text(translate("Login"))));
         } else {
-          if (gFFI.abModel.abLoading.value) {
+          if (gFFI.abModel.abLoading.value && gFFI.abModel.emtpy) {
             return const Center(
               child: CircularProgressIndicator(),
             );
@@ -47,9 +48,15 @@ class _AddressBookState extends State<AddressBook> {
           if (gFFI.abModel.abError.isNotEmpty) {
             return _buildShowError(gFFI.abModel.abError.value);
           }
-          return isDesktop
-              ? _buildAddressBookDesktop()
-              : _buildAddressBookMobile();
+          return Column(
+            children: [
+              _buildLoadingHavingPeers(),
+              Expanded(
+                  child: isDesktop
+                      ? _buildAddressBookDesktop()
+                      : _buildAddressBookMobile())
+            ],
+          );
         }
       });
 
@@ -66,6 +73,22 @@ class _AddressBookState extends State<AddressBook> {
             child: Text(translate("Retry")))
       ],
     ));
+  }
+
+  Widget _buildLoadingHavingPeers() {
+    double size = 15;
+    return Obx(() => Offstage(
+          offstage: !(gFFI.abModel.abLoading.value && !gFFI.abModel.emtpy),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              SizedBox(
+                      height: size,
+                      child: Center(child: LoadingDotWidget(size: size)))
+                  .marginSymmetric(vertical: 10)
+            ],
+          ),
+        ));
   }
 
   Widget _buildAddressBookDesktop() {

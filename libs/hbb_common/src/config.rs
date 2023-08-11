@@ -1481,6 +1481,26 @@ pub struct AbPeer {
         skip_serializing_if = "String::is_empty"
     )]
     pub hash: String,
+    #[serde(
+        default,
+        deserialize_with = "deserialize_string",
+        skip_serializing_if = "String::is_empty"
+    )]
+    pub username: String,
+    #[serde(
+        default,
+        deserialize_with = "deserialize_string",
+        skip_serializing_if = "String::is_empty"
+    )]
+    pub hostname: String,
+    #[serde(
+        default,
+        deserialize_with = "deserialize_string",
+        skip_serializing_if = "String::is_empty"
+    )]
+    pub platform: String,
+    #[serde(default, deserialize_with = "deserialize_vec_string")]
+    pub tags: Vec<String>,
 }
 
 #[derive(Debug, Default, Serialize, Deserialize, Clone)]
@@ -1493,6 +1513,8 @@ pub struct Ab {
     pub access_token: String,
     #[serde(default, deserialize_with = "deserialize_vec_abpeer")]
     pub peers: Vec<AbPeer>,
+    #[serde(default, deserialize_with = "deserialize_vec_string")]
+    pub tags: Vec<String>,
 }
 
 impl Ab {
