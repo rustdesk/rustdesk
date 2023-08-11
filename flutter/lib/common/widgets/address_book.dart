@@ -9,6 +9,8 @@ import '../../desktop/widgets/material_mod_popup_menu.dart' as mod_menu;
 import 'package:get/get.dart';
 
 import '../../common.dart';
+import 'dialog.dart';
+import 'loading_dot_widget.dart';
 import 'login.dart';
 
 final hideAbTagsPanel = false.obs;
@@ -38,7 +40,7 @@ class _AddressBookState extends State<AddressBook> {
               child: ElevatedButton(
                   onPressed: loginDialog, child: Text(translate("Login"))));
         } else {
-          if (gFFI.abModel.abLoading.value) {
+          if (gFFI.abModel.abLoading.value && gFFI.abModel.emtpy) {
             return const Center(
               child: CircularProgressIndicator(),
             );
@@ -46,9 +48,15 @@ class _AddressBookState extends State<AddressBook> {
           if (gFFI.abModel.abError.isNotEmpty) {
             return _buildShowError(gFFI.abModel.abError.value);
           }
-          return isDesktop
-              ? _buildAddressBookDesktop()
-              : _buildAddressBookMobile();
+          return Column(
+            children: [
+              _buildLoadingHavingPeers(),
+              Expanded(
+                  child: isDesktop
+                      ? _buildAddressBookDesktop()
+                      : _buildAddressBookMobile())
+            ],
+          );
         }
       });
 
@@ -65,6 +73,22 @@ class _AddressBookState extends State<AddressBook> {
             child: Text(translate("Retry")))
       ],
     ));
+  }
+
+  Widget _buildLoadingHavingPeers() {
+    double size = 15;
+    return Obx(() => Offstage(
+          offstage: !(gFFI.abModel.abLoading.value && !gFFI.abModel.emtpy),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              SizedBox(
+                      height: size,
+                      child: Center(child: LoadingDotWidget(size: size)))
+                  .marginSymmetric(vertical: 10)
+            ],
+          ),
+        ));
   }
 
   Widget _buildAddressBookDesktop() {
@@ -473,6 +497,29 @@ class AddressBookTag extends StatelessWidget {
 
   void _showMenu(BuildContext context, RelativeRect pos) {
     final items = [
+      getEntry(translate("Rename"), () {
+        renameDialog(
+            oldName: name,
+            validator: (String? newName) {
+              if (newName == null || newName.isEmpty) {
+                return translate('Can not be empty');
+              }
+              if (newName != name && gFFI.abModel.tags.contains(newName)) {
+                return translate('Already exists');
+              }
+              return null;
+            },
+            onSubmit: (String newName) {
+              if (name != newName) {
+                gFFI.abModel.renameTag(name, newName);
+                gFFI.abModel.pushAb();
+              }
+              Future.delayed(Duration.zero, () => Get.back());
+            },
+            onCancel: () {
+              Future.delayed(Duration.zero, () => Get.back());
+            });
+      }),
       getEntry(translate("Delete"), () {
         gFFI.abModel.deleteTag(name);
         gFFI.abModel.pushAb();

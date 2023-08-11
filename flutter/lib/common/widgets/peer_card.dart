@@ -61,20 +61,19 @@ class _PeerCardState extends State<_PeerCard>
     final name =
         '${peer.username}${peer.username.isNotEmpty && peer.hostname.isNotEmpty ? '@' : ''}${peer.hostname}';
     final PeerTabModel peerTabModel = Provider.of(context);
-    final selected = peerTabModel.isPeerSelected(peer.id);
     return Card(
         margin: EdgeInsets.symmetric(horizontal: 2),
         child: GestureDetector(
             onTap: () {
               if (peerTabModel.multiSelectionMode) {
-                peerTabModel.togglePeerSelect(peer);
+                peerTabModel.select(peer);
               } else {
                 if (!isWebDesktop) connect(context, peer.id);
               }
             },
             onDoubleTap: isWebDesktop ? () => connect(context, peer.id) : null,
             onLongPress: () {
-              peerTabModel.togglePeerSelect(peer);
+              peerTabModel.select(peer);
             },
             child: Container(
               padding: EdgeInsets.only(left: 12, top: 8, bottom: 8),
@@ -103,23 +102,7 @@ class _PeerCardState extends State<_PeerCard>
                       ],
                     ).paddingOnly(left: 8.0),
                   ),
-                  selected
-                      ? Padding(
-                          padding: const EdgeInsets.all(12),
-                          child: checkBox(),
-                        )
-                      : InkWell(
-                          child: const Padding(
-                              padding: EdgeInsets.all(12),
-                              child: Icon(Icons.more_vert)),
-                          onTapDown: (e) {
-                            final x = e.globalPosition.dx;
-                            final y = e.globalPosition.dy;
-                            _menuPos = RelativeRect.fromLTRB(x, y, x, y);
-                          },
-                          onTap: () {
-                            _showPeerMenu(peer.id);
-                          }),
+                  checkBoxOrActionMoreMobile(peer),
                 ],
               ),
             )));
@@ -156,18 +139,12 @@ class _PeerCardState extends State<_PeerCard>
         );
       },
       child: GestureDetector(
-          onDoubleTap: peerTabModel.multiSelectionMode
-              ? null
-              : () => widget.connect(context, peer.id),
-          onLongPress: () {
-            peerTabModel.togglePeerSelect(peer);
-          },
-          onSecondaryTapDown: (_) {
-            peerTabModel.togglePeerSelect(peer);
-          },
-          onTap: peerTabModel.multiSelectionMode
-              ? () => peerTabModel.togglePeerSelect(peer)
-              : null,
+          onDoubleTap:
+              peerTabModel.multiSelectionMode || peerTabModel.isShiftDown
+                  ? null
+                  : () => widget.connect(context, peer.id),
+          onTap: () => peerTabModel.select(peer),
+          onLongPress: () => peerTabModel.select(peer),
           child: Obx(() => peerCardUiType.value == PeerUiType.grid
               ? _buildPeerCard(context, peer, deco)
               : _buildPeerTile(context, peer, deco))),
@@ -176,8 +153,6 @@ class _PeerCardState extends State<_PeerCard>
 
   Widget _buildPeerTile(
       BuildContext context, Peer peer, Rx<BoxDecoration?> deco) {
-    final PeerTabModel peerTabModel = Provider.of(context);
-    final selected = peerTabModel.isPeerSelected(peer.id);
     final name =
         '${peer.username}${peer.username.isNotEmpty && peer.hostname.isNotEmpty ? '@' : ''}${peer.hostname}';
     final greyStyle = TextStyle(
@@ -237,7 +212,7 @@ class _PeerCardState extends State<_PeerCard>
                         ],
                       ).marginOnly(top: 2),
                     ),
-                    selected ? checkBox() : _actionMore(peer),
+                    checkBoxOrActionMoreDesktop(peer),
                   ],
                 ).paddingOnly(left: 10.0, top: 3.0),
               ),
@@ -250,8 +225,6 @@ class _PeerCardState extends State<_PeerCard>
 
   Widget _buildPeerCard(
       BuildContext context, Peer peer, Rx<BoxDecoration?> deco) {
-    final PeerTabModel peerTabModel = Provider.of(context);
-    final selected = peerTabModel.isPeerSelected(peer.id);
     final name =
         '${peer.username}${peer.username.isNotEmpty && peer.hostname.isNotEmpty ? '@' : ''}${peer.hostname}';
     return Card(
@@ -321,7 +294,7 @@ class _PeerCardState extends State<_PeerCard>
                           style: Theme.of(context).textTheme.titleSmall,
                         )),
                       ]).paddingSymmetric(vertical: 8)),
-                      selected ? checkBox() : _actionMore(peer),
+                      checkBoxOrActionMoreDesktop(peer),
                     ],
                   ).paddingSymmetric(horizontal: 12.0),
                 )
@@ -333,11 +306,57 @@ class _PeerCardState extends State<_PeerCard>
     );
   }
 
-  Widget checkBox() {
-    return Icon(
-      Icons.check_box,
-      color: MyTheme.accent,
-    );
+  Widget checkBoxOrActionMoreMobile(Peer peer) {
+    final PeerTabModel peerTabModel = Provider.of(context);
+    final selected = peerTabModel.isPeerSelected(peer.id);
+    if (peerTabModel.multiSelectionMode) {
+      return Padding(
+        padding: const EdgeInsets.all(12),
+        child: selected
+            ? Icon(
+                Icons.check_box,
+                color: MyTheme.accent,
+              )
+            : Icon(Icons.check_box_outline_blank),
+      );
+    } else {
+      return InkWell(
+          child: const Padding(
+              padding: EdgeInsets.all(12), child: Icon(Icons.more_vert)),
+          onTapDown: (e) {
+            final x = e.globalPosition.dx;
+            final y = e.globalPosition.dy;
+            _menuPos = RelativeRect.fromLTRB(x, y, x, y);
+          },
+          onTap: () {
+            _showPeerMenu(peer.id);
+          });
+    }
+  }
+
+  Widget checkBoxOrActionMoreDesktop(Peer peer) {
+    final PeerTabModel peerTabModel = Provider.of(context);
+    final selected = peerTabModel.isPeerSelected(peer.id);
+    if (peerTabModel.multiSelectionMode) {
+      final icon = selected
+          ? Icon(
+              Icons.check_box,
+              color: MyTheme.accent,
+            )
+          : Icon(Icons.check_box_outline_blank);
+      bool last = peerTabModel.isShiftDown && peer.id == peerTabModel.lastId;
+      if (last) {
+        return Container(
+          decoration: BoxDecoration(
+              border: Border.all(color: MyTheme.accent, width: 1)),
+          child: icon,
+        );
+      } else {
+        return icon;
+      }
+    } else {
+      return _actionMore(peer);
+    }
   }
 
   Widget _actionMore(Peer peer) => Listener(
@@ -582,8 +601,16 @@ abstract class BasePeerCard extends StatelessWidget {
         translate('Rename'),
         style: style,
       ),
-      proc: () {
-        _rename(id);
+      proc: () async {
+        String oldName = await _getAlias(id);
+        renameDialog(
+            oldName: oldName,
+            onSubmit: (String newName) async {
+              if (newName != oldName) {
+                await bind.mainSetPeerAlias(id: id, alias: newName);
+                _update();
+              }
+            });
       },
       padding: menuPadding,
       dismissOnClicked: true,
@@ -752,64 +779,6 @@ abstract class BasePeerCard extends StatelessWidget {
   @protected
   Future<String> _getAlias(String id) async =>
       await bind.mainGetPeerOption(id: id, key: 'alias');
-
-  void _rename(String id) async {
-    RxBool isInProgress = false.obs;
-    String name = await _getAlias(id);
-    var controller = TextEditingController(text: name);
-    gFFI.dialogManager.show((setState, close, context) {
-      submit() async {
-        isInProgress.value = true;
-        String name = controller.text.trim();
-        await bind.mainSetPeerAlias(id: id, alias: name);
-        _update();
-        close();
-        isInProgress.value = false;
-      }
-
-      return CustomAlertDialog(
-        title: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.edit_rounded, color: MyTheme.accent),
-            Text(translate('Rename')).paddingOnly(left: 10),
-          ],
-        ),
-        content: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              child: Form(
-                child: TextFormField(
-                  controller: controller,
-                  autofocus: true,
-                  decoration: InputDecoration(labelText: translate('Name')),
-                ),
-              ),
-            ),
-            Obx(() => Offstage(
-                offstage: isInProgress.isFalse,
-                child: const LinearProgressIndicator())),
-          ],
-        ),
-        actions: [
-          dialogButton(
-            "Cancel",
-            icon: Icon(Icons.close_rounded),
-            onPressed: close,
-            isOutline: true,
-          ),
-          dialogButton(
-            "OK",
-            icon: Icon(Icons.done_rounded),
-            onPressed: submit,
-          ),
-        ],
-        onSubmit: submit,
-        onCancel: close,
-      );
-    });
-  }
 
   @protected
   void _update();
@@ -1018,7 +987,7 @@ class AddressBookPeerCard extends BasePeerCard {
 
   @protected
   @override
-  void _update() => gFFI.abModel.pullAb();
+  void _update() => gFFI.abModel.pullAb(quiet: true);
 
   @protected
   MenuEntryBase<String> _editTagAction(String id) {

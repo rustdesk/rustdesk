@@ -28,6 +28,7 @@ class AbModel {
   final tags = [].obs;
   final peers = List<Peer>.empty(growable: true).obs;
   final sortTags = shouldSortTags().obs;
+  bool get emtpy => peers.isEmpty && tags.isEmpty;
 
   final selectedTags = List<String>.empty(growable: true).obs;
   var initialized = false;
@@ -46,22 +47,36 @@ class AbModel {
   }
 
   Future<void> pullAb({force = true, quiet = false}) async {
-    debugPrint("pullAb, force:$force, quite:$quiet");
+    debugPrint("pullAb, force:$force, quiet:$quiet");
     if (gFFI.userModel.userName.isEmpty) return;
     if (abLoading.value) return;
     if (!force && initialized) return;
+    if (!initialized) {
+      await _loadCache();
+    }
     if (!quiet) {
       abLoading.value = true;
       abError.value = "";
     }
     final api = "${await bind.mainGetApiServer()}/api/ab";
+    int? statusCode;
     try {
       var authHeaders = getHttpHeaders();
       authHeaders['Content-Type'] = "application/json";
       authHeaders['Accept-Encoding'] = "gzip";
       final resp = await http.get(Uri.parse(api), headers: authHeaders);
+      statusCode = resp.statusCode;
       if (resp.body.isNotEmpty && resp.body.toLowerCase() != "null") {
-        Map<String, dynamic> json = jsonDecode(utf8.decode(resp.bodyBytes));
+        Map<String, dynamic> json;
+        try {
+          json = jsonDecode(utf8.decode(resp.bodyBytes));
+        } catch (e) {
+          if (resp.statusCode != 200) {
+            BotToast.showText(
+                contentColor: Colors.red, text: 'HTTP ${resp.statusCode}');
+          }
+          rethrow;
+        }
         if (json.containsKey('error')) {
           abError.value = json['error'];
         } else if (json.containsKey('data')) {
@@ -81,28 +96,40 @@ class AbModel {
                 peers.add(Peer.fromJson(peer));
               }
             }
+            _saveCache(); // save on success
           }
         }
       }
     } catch (err) {
-      reset();
       abError.value = err.toString();
     } finally {
-      abLoading.value = false;
+      if (initialized) {
+        // make loading effect obvious
+        Future.delayed(Duration(milliseconds: 300), () {
+          abLoading.value = false;
+        });
+      } else {
+        abLoading.value = false;
+      }
       initialized = true;
       sync_all_from_recent = true;
       _timerCounter = 0;
-      save();
+      if (abError.isNotEmpty) {
+        if (statusCode == 401) {
+          gFFI.userModel.reset(clearAbCache: true);
+        } else {
+          reset(clearCache: false);
+        }
+      }
     }
   }
 
-  Future<void> reset() async {
-    abError.value = '';
+  Future<void> reset({bool clearCache = false}) async {
     await bind.mainSetLocalOption(key: "selected-tags", value: '');
     tags.clear();
     peers.clear();
     initialized = false;
-    await bind.mainClearAb();
+    if (clearCache) await bind.mainClearAb();
   }
 
   void addId(String id, String alias, List<dynamic> tags) {
@@ -181,12 +208,12 @@ class AbModel {
     try {
       await http.Client().send(request);
       // await pullAb(quiet: true);
+      _saveCache(); // save on success
     } catch (e) {
       BotToast.showText(contentColor: Colors.red, text: e.toString());
     } finally {
       sync_all_from_recent = true;
       _timerCounter = 0;
-      save();
     }
   }
 
@@ -220,6 +247,33 @@ class AbModel {
       if (peer.tags.contains(tag)) {
         ((peer.tags)).remove(tag);
       }
+    }
+  }
+
+  void renameTag(String oldTag, String newTag) {
+    if (tags.contains(newTag)) return;
+    tags.value = tags.map((e) {
+      if (e == oldTag) {
+        return newTag;
+      } else {
+        return e;
+      }
+    }).toList();
+    selectedTags.value = selectedTags.map((e) {
+      if (e == oldTag) {
+        return newTag;
+      } else {
+        return e;
+      }
+    }).toList();
+    for (var peer in peers) {
+      peer.tags = peer.tags.map((e) {
+        if (e == oldTag) {
+          return newTag;
+        } else {
+          return e;
+        }
+      }).toList();
     }
   }
 
@@ -326,21 +380,39 @@ class AbModel {
     }
   }
 
-  save() {
+  _saveCache() {
     try {
-      final infos = peers
-          .map((e) => (<String, dynamic>{
-                "id": e.id,
-                "hash": e.hash,
-              }))
-          .toList();
+      final peersJsonData = peers.map((e) => e.toAbUploadJson()).toList();
       final m = <String, dynamic>{
         "access_token": bind.mainGetLocalOption(key: 'access_token'),
-        "peers": infos,
+        "peers": peersJsonData,
+        "tags": tags.map((e) => e.toString()).toList(),
       };
       bind.mainSaveAb(json: jsonEncode(m));
     } catch (e) {
       debugPrint('ab save:$e');
+    }
+  }
+
+  _loadCache() async {
+    try {
+      final access_token = bind.mainGetLocalOption(key: 'access_token');
+      if (access_token.isEmpty) return;
+      final cache = await bind.mainLoadAb();
+      final data = jsonDecode(cache);
+      if (data == null || data['access_token'] != access_token) return;
+      tags.clear();
+      peers.clear();
+      if (data['tags'] is List) {
+        tags.value = data['tags'];
+      }
+      if (data['peers'] is List) {
+        for (final peer in data['peers']) {
+          peers.add(Peer.fromJson(peer));
+        }
+      }
+    } catch (e) {
+      debugPrint("load ab cache: $e");
     }
   }
 }

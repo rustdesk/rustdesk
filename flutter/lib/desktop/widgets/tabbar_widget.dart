@@ -13,7 +13,6 @@ import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/main.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:flutter_hbb/models/state_model.dart';
-import 'package:flutter_hbb/models/desktop_render_texture.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:get/get.dart';
 import 'package:get/get_rx/src/rx_workers/utils/debouncer.dart';
@@ -238,7 +237,6 @@ class DesktopTab extends StatelessWidget {
   final DesktopTabController controller;
 
   Rx<DesktopTabState> get state => controller.state;
-  final isMaximized = false.obs;
   final _scrollDebounce = Debouncer(delay: Duration(milliseconds: 50));
 
   late final DesktopTabType tabType;
@@ -374,7 +372,7 @@ class DesktopTab extends StatelessWidget {
                         if (elapsed < bind.getDoubleClickTime()) {
                           // onDoubleTap
                           toggleMaximize(isMainWindow)
-                              .then((value) => isMaximized.value = value);
+                              .then((value) => stateGlobal.setMaximized(value));
                         }
                       }
                     : null,
@@ -442,7 +440,7 @@ class DesktopTab extends StatelessWidget {
           tabType: tabType,
           state: state,
           tail: tail,
-          isMaximized: isMaximized,
+          isMaximized: stateGlobal.isMaximized,
           showMinimize: showMinimize,
           showMaximize: showMaximize,
           showClose: showClose,
@@ -522,10 +520,17 @@ class WindowActionPanelState extends State<WindowActionPanel>
     super.dispose();
   }
 
-  void _setMaximize(bool maximize) {
-    stateGlobal.setMaximize(maximize);
+  void _setMaximized(bool maximize) {
+    stateGlobal.setMaximized(maximize);
     _saveFrameDebounce.call(_saveFrame);
     setState(() {});
+  }
+
+  @override
+  void onWindowMinimize() {
+    stateGlobal.setMinimized(true);
+    stateGlobal.setMaximized(false);
+    super.onWindowMinimize();
   }
 
   @override
@@ -534,7 +539,8 @@ class WindowActionPanelState extends State<WindowActionPanel>
     if (!widget.isMaximized.value) {
       widget.isMaximized.value = true;
     }
-    _setMaximize(true);
+    stateGlobal.setMinimized(false);
+    _setMaximized(true);
     super.onWindowMaximize();
   }
 
@@ -544,7 +550,8 @@ class WindowActionPanelState extends State<WindowActionPanel>
     if (widget.isMaximized.value) {
       widget.isMaximized.value = false;
     }
-    _setMaximize(false);
+    stateGlobal.setMinimized(false);
+    _setMaximized(false);
     super.onWindowUnmaximize();
   }
 

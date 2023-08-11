@@ -850,11 +850,6 @@ impl<T: InvokeUiSession> Remote<T> {
     }
 
     pub async fn sync_jobs_status_to_local(&mut self) -> bool {
-        let peer_version = self.handler.lc.read().unwrap().version;
-        if peer_version == 0 {
-            log::info!("skip saving job status");
-            return false;
-        }
         log::info!("sync transfer job status");
         let mut config: PeerConfig = self.handler.load_config();
         let mut transfer_metas = TransferSerde::default();
@@ -867,8 +862,10 @@ impl<T: InvokeUiSession> Remote<T> {
             transfer_metas.write_jobs.push(json_str);
         }
         log::info!("meta: {:?}", transfer_metas);
-        config.transfer = transfer_metas;
-        self.handler.save_config(config);
+        if config.transfer != transfer_metas {
+            config.transfer = transfer_metas;
+            self.handler.save_config(config);
+        }
         true
     }
 

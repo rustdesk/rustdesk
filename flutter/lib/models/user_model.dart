@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:bot_toast/bot_toast.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common/hbbs/hbbs.dart';
 import 'package:get/get.dart';
@@ -44,7 +45,7 @@ class UserModel {
       refreshingUser = false;
       final status = response.statusCode;
       if (status == 401 || status == 400) {
-        reset();
+        reset(clearAbCache: status == 401);
         return;
       }
       final data = json.decode(utf8.decode(response.bodyBytes));
@@ -83,10 +84,10 @@ class UserModel {
     }
   }
 
-  Future<void> reset() async {
+  Future<void> reset({bool clearAbCache = false}) async {
     await bind.mainSetLocalOption(key: 'access_token', value: '');
     await bind.mainSetLocalOption(key: 'user_info', value: '');
-    await gFFI.abModel.reset();
+    await gFFI.abModel.reset(clearCache: clearAbCache);
     await gFFI.groupModel.reset();
     userName.value = '';
   }
@@ -118,7 +119,7 @@ class UserModel {
     } catch (e) {
       debugPrint("request /api/logout failed: err=$e");
     } finally {
-      await reset();
+      await reset(clearAbCache: true);
       gFFI.dialogManager.dismissByTag(tag);
     }
   }
@@ -135,6 +136,10 @@ class UserModel {
       body = jsonDecode(utf8.decode(resp.bodyBytes));
     } catch (e) {
       debugPrint("login: jsonDecode resp body failed: ${e.toString()}");
+      if (resp.statusCode != 200) {
+        BotToast.showText(
+            contentColor: Colors.red, text: 'HTTP ${resp.statusCode}');
+      }
       rethrow;
     }
     if (resp.statusCode != 200) {

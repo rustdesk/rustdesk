@@ -148,7 +148,12 @@ impl OidcSession {
             .unwrap()
             .client
             .post(format!("{}/api/oidc/auth", api_server))
-            .json(&HashMap::from([("op", op), ("id", id), ("uuid", uuid)]))
+            .json(&serde_json::json!({
+                "op": op,
+                "id": id,
+                "uuid": uuid,
+                "deviceInfo": crate::ui_interface::get_login_device_info(),
+            }))
             .send()?
             .try_into()?)
     }

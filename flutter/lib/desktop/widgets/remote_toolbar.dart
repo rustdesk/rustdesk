@@ -36,7 +36,7 @@ class ToolbarState {
   late RxBool _pin;
 
   ToolbarState() {
-    final s = bind.getLocalFlutterConfig(k: kStoreKey);
+    final s = bind.getLocalFlutterOption(k: kStoreKey);
     if (s.isEmpty) {
       _initSet(false, false);
       return;
@@ -89,7 +89,7 @@ class ToolbarState {
   }
 
   _savePin() async {
-    bind.setLocalFlutterConfig(
+    bind.setLocalFlutterOption(
         k: kStoreKey, v: jsonEncode({'pin': _pin.value}));
   }
 
@@ -620,7 +620,7 @@ class _MonitorMenu extends StatelessWidget {
         topLevel: false,
         color: _ToolbarTheme.blueColor,
         hoverColor: _ToolbarTheme.hoverBlueColor,
-        tooltip: "",
+        tooltip: "#${i + 1} monitor",
         hMargin: 6,
         vMargin: 12,
         icon: Container(
@@ -1546,7 +1546,7 @@ class _CloseMenu extends StatelessWidget {
 class _IconMenuButton extends StatefulWidget {
   final String? assetName;
   final Widget? icon;
-  final String? tooltip;
+  final String tooltip;
   final Color color;
   final Color hoverColor;
   final VoidCallback? onPressed;
@@ -1557,7 +1557,7 @@ class _IconMenuButton extends StatefulWidget {
     Key? key,
     this.assetName,
     this.icon,
-    this.tooltip,
+    required this.tooltip,
     required this.color,
     required this.hoverColor,
     required this.onPressed,
@@ -1595,24 +1595,25 @@ class _IconMenuButtonState extends State<_IconMenuButton> {
           hover = value;
         }),
         onPressed: widget.onPressed,
-        child: Material(
-            type: MaterialType.transparency,
-            child: Ink(
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(_ToolbarTheme.iconRadius),
-                  color: hover ? widget.hoverColor : widget.color,
-                ),
-                child: icon)),
+        child: Tooltip(
+          message: translate(widget.tooltip),
+          child: Material(
+              type: MaterialType.transparency,
+              child: Ink(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(_ToolbarTheme.iconRadius),
+                    color: hover ? widget.hoverColor : widget.color,
+                  ),
+                  child: icon)),
+        )
       ),
     ).marginSymmetric(
         horizontal: widget.hMargin ?? _ToolbarTheme.buttonHMargin,
         vertical: widget.vMargin ?? _ToolbarTheme.buttonVMargin);
-    if (widget.tooltip != null) {
-      button = Tooltip(
-        message: widget.tooltip!,
-        child: button,
-      );
-    }
+    button = Tooltip(
+      message: widget.tooltip,
+      child: button,
+    );
     if (widget.topLevel) {
       return MenuBar(children: [button]);
     } else {
@@ -1669,15 +1670,18 @@ class _IconSubmenuButtonState extends State<_IconSubmenuButton> {
             onHover: (value) => setState(() {
                   hover = value;
                 }),
-            child: Material(
-                type: MaterialType.transparency,
-                child: Ink(
-                    decoration: BoxDecoration(
-                      borderRadius:
+                child: Tooltip(
+                  message: translate(widget.tooltip),
+                  child: Material(
+                    type: MaterialType.transparency,
+                    child: Ink(
+                      decoration: BoxDecoration(
+                        borderRadius:
                           BorderRadius.circular(_ToolbarTheme.iconRadius),
-                      color: hover ? widget.hoverColor : widget.color,
+                          color: hover ? widget.hoverColor : widget.color,
+                      ),
+                      child: icon))
                     ),
-                    child: icon)),
             menuChildren: widget.menuChildren
                 .map((e) => _buildPointerTrackWidget(e, widget.ffi))
                 .toList()));
@@ -2003,6 +2007,7 @@ class _MultiMonitorMenu extends StatelessWidget {
         Obx(() {
           RxInt display = CurrentDisplayState.find(id);
           return _IconMenuButton(
+            tooltip: "",
             topLevel: false,
             color: i == display.value
                 ? _ToolbarTheme.blueColor

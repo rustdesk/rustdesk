@@ -595,8 +595,8 @@ impl UI {
         handle_relay_id(id)
     }
 
-    fn get_hostname(&self) -> String {
-        get_hostname()
+    fn get_login_device_info(&self) -> String {
+        get_login_device_info_json()
     }
 }
 
@@ -682,7 +682,7 @@ impl sciter::EventHandler for UI {
         fn get_langs();
         fn default_video_save_directory();
         fn handle_relay_id(String);
-        fn get_hostname();
+        fn get_login_device_info();
     }
 }
 

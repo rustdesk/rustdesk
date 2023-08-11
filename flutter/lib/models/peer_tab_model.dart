@@ -39,16 +39,19 @@ class PeerTabModel with ChangeNotifier {
   List<int> get indexs => List.generate(tabNames.length, (index) => index);
   List<Peer> _selectedPeers = List.empty(growable: true);
   List<Peer> get selectedPeers => _selectedPeers;
-  bool get multiSelectionMode => _selectedPeers.isNotEmpty;
+  bool _multiSelectionMode = false;
+  bool get multiSelectionMode => _multiSelectionMode;
   List<Peer> _currentTabCachedPeers = List.empty(growable: true);
   List<Peer> get currentTabCachedPeers => _currentTabCachedPeers;
-  bool isShiftDown = false;
-  String? _shiftAnchorId;
+  bool _isShiftDown = false;
+  bool get isShiftDown => _isShiftDown;
+  String _lastId = '';
+  String get lastId => _lastId;
 
   PeerTabModel(this.parent) {
     // init currentTab
     _currentTab =
-        int.tryParse(bind.getLocalFlutterConfig(k: 'peer-tab-index')) ?? 0;
+        int.tryParse(bind.getLocalFlutterOption(k: 'peer-tab-index')) ?? 0;
     if (_currentTab < 0 || _currentTab >= tabNames.length) {
       _currentTab = 0;
     }
@@ -85,38 +88,39 @@ class PeerTabModel with ChangeNotifier {
     return Icons.help;
   }
 
-  togglePeerSelect(Peer peer) {
+  setMultiSelectionMode(bool mode) {
+    _multiSelectionMode = mode;
+    if (!mode) {
+      _selectedPeers.clear();
+      _lastId = '';
+    }
+    notifyListeners();
+  }
+
+  select(Peer peer) {
+    if (!_multiSelectionMode) {
+      // https://github.com/flutter/flutter/issues/101275#issuecomment-1604541700
+      // After onTap, the shift key should be pressed for a while when not in multiselection mode,
+      // because onTap is delayed when onDoubleTap is not null
+      if (isDesktop && !_isShiftDown) return;
+      _multiSelectionMode = true;
+    }
     final cached = _currentTabCachedPeers.map((e) => e.id).toList();
     int thisIndex = cached.indexOf(peer.id);
-    int closestIndex = -1;
-    String? closestId;
-    int smallestDiff = -1;
-    for (var i = 0; i < cached.length; i++) {
-      if (isPeerSelected(cached[i])) {
-        int diff = (i - thisIndex).abs();
-        if (smallestDiff == -1 || diff < smallestDiff) {
-          closestIndex = i;
-          closestId = cached[i];
-          smallestDiff = diff;
-        }
-      }
-    }
-    if (isShiftDown &&
-        thisIndex >= 0 &&
-        closestIndex >= 0 &&
-        closestId != null) {
-      int shiftAnchorIndex = cached.indexOf(_shiftAnchorId ?? '');
-      if (shiftAnchorIndex < 0) {
-        // use closest as shift anchor, rather than focused which we don't have
-        shiftAnchorIndex = closestIndex;
-        _shiftAnchorId = closestId;
-      }
-      int start = min(shiftAnchorIndex, thisIndex);
-      int end = max(shiftAnchorIndex, thisIndex);
-      _selectedPeers.clear();
+    int lastIndex = cached.indexOf(_lastId);
+    if (_isShiftDown && thisIndex >= 0 && lastIndex >= 0) {
+      int start = min(thisIndex, lastIndex);
+      int end = max(thisIndex, lastIndex);
+      bool remove = isPeerSelected(peer.id);
       for (var i = start; i <= end; i++) {
-        if (!isPeerSelected(cached[i])) {
-          _selectedPeers.add(_currentTabCachedPeers[i]);
+        if (remove) {
+          if (isPeerSelected(cached[i])) {
+            _selectedPeers.removeWhere((p) => p.id == cached[i]);
+          }
+        } else {
+          if (!isPeerSelected(cached[i])) {
+            _selectedPeers.add(_currentTabCachedPeers[i]);
+          }
         }
       }
     } else {
@@ -125,14 +129,8 @@ class PeerTabModel with ChangeNotifier {
       } else {
         _selectedPeers.add(peer);
       }
-      _shiftAnchorId = null;
     }
-    notifyListeners();
-  }
-
-  closeSelection() {
-    _selectedPeers.clear();
-    _shiftAnchorId = null;
+    _lastId = peer.id;
     notifyListeners();
   }
 
@@ -150,5 +148,14 @@ class PeerTabModel with ChangeNotifier {
 
   bool isPeerSelected(String id) {
     return selectedPeers.firstWhereOrNull((p) => p.id == id) != null;
+  }
+
+  setShiftDown(bool v) {
+    if (_isShiftDown != v) {
+      _isShiftDown = v;
+      if (_multiSelectionMode) {
+        notifyListeners();
+      }
+    }
   }
 }

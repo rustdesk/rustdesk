@@ -16,6 +16,7 @@ import 'package:flutter_hbb/desktop/widgets/refresh_wrapper.dart';
 import 'package:flutter_hbb/desktop/widgets/tabbar_widget.dart';
 import 'package:flutter_hbb/main.dart';
 import 'package:flutter_hbb/models/peer_model.dart';
+import 'package:flutter_hbb/models/state_model.dart';
 import 'package:flutter_hbb/utils/multi_window_manager.dart';
 import 'package:flutter_hbb/utils/platform_channel.dart';
 import 'package:flutter_svg/flutter_svg.dart';
@@ -90,6 +91,7 @@ class IconFont {
   static const IconData roundClose = IconData(0xe6ed, fontFamily: _family2);
   static const IconData addressBook =
       IconData(0xe602, fontFamily: "AddressBook");
+  static const IconData checkbox = IconData(0xe7d6, fontFamily: "CheckBox");
 }
 
 class ColorThemeExtension extends ThemeExtension<ColorThemeExtension> {
@@ -218,6 +220,13 @@ class MyTheme {
     ),
   );
 
+  //tooltip
+  static TooltipThemeData tooltipTheme() {
+    return TooltipThemeData(
+      waitDuration: Duration(seconds: 1, milliseconds: 500),
+    );
+  }
+
   // Dialogs
   static const double dialogPadding = 24;
 
@@ -287,6 +296,7 @@ class MyTheme {
     tabBarTheme: const TabBarTheme(
       labelColor: Colors.black87,
     ),
+    tooltipTheme: tooltipTheme(),
     splashColor: isDesktop ? Colors.transparent : null,
     highlightColor: isDesktop ? Colors.transparent : null,
     splashFactory: isDesktop ? NoSplash.splashFactory : null,
@@ -376,6 +386,7 @@ class MyTheme {
     scrollbarTheme: ScrollbarThemeData(
       thumbColor: MaterialStateProperty.all(Colors.grey[500]),
     ),
+    tooltipTheme: tooltipTheme(),
     splashColor: isDesktop ? Colors.transparent : null,
     highlightColor: isDesktop ? Colors.transparent : null,
     splashFactory: isDesktop ? NoSplash.splashFactory : null,
@@ -548,13 +559,15 @@ void windowOnTop(int? id) async {
   if (!isDesktop) {
     return;
   }
+  print("Bring window '$id' on top");
   if (id == null) {
-    print("Bring window on top");
     // main window
-    windowManager.restore();
-    windowManager.show();
-    windowManager.focus();
-    rustDeskWinManager.registerActiveWindow(kWindowMainId);
+    if (stateGlobal.isMinimized) {
+      await windowManager.restore();
+    }
+    await windowManager.show();
+    await windowManager.focus();
+    await rustDeskWinManager.registerActiveWindow(kWindowMainId);
   } else {
     WindowController.fromWindowId(id)
       ..focus()
@@ -1384,14 +1397,26 @@ Future<void> saveWindowPosition(WindowType type, {int? windowId}) async {
   late Offset position;
   late Size sz;
   late bool isMaximized;
+  setFrameIfMaximized() {
+    if (isMaximized) {
+      final pos = bind.getLocalFlutterOption(k: kWindowPrefix + type.name);
+      var lpos = LastWindowPosition.loadFromString(pos);
+      position = Offset(
+          lpos?.offsetWidth ?? position.dx, lpos?.offsetHeight ?? position.dy);
+      sz = Size(lpos?.width ?? sz.width, lpos?.height ?? sz.height);
+    }
+  }
+
   switch (type) {
     case WindowType.Main:
+      isMaximized = await windowManager.isMaximized();
       position = await windowManager.getPosition();
       sz = await windowManager.getSize();
-      isMaximized = await windowManager.isMaximized();
+      setFrameIfMaximized();
       break;
     default:
       final wc = WindowController.fromWindowId(windowId!);
+      isMaximized = await wc.isMaximized();
       final Rect frame;
       try {
         frame = await wc.getFrame();
@@ -1401,7 +1426,7 @@ Future<void> saveWindowPosition(WindowType type, {int? windowId}) async {
       }
       position = frame.topLeft;
       sz = frame.size;
-      isMaximized = await wc.isMaximized();
+      setFrameIfMaximized();
       break;
   }
   if (Platform.isWindows) {
@@ -1419,24 +1444,43 @@ Future<void> saveWindowPosition(WindowType type, {int? windowId}) async {
   final pos = LastWindowPosition(
       sz.width, sz.height, position.dx, position.dy, isMaximized);
   debugPrint(
-      "Saving frame: $windowId: ${pos.width}/${pos.height}, offset:${pos.offsetWidth}/${pos.offsetHeight}");
+      "Saving frame: $windowId: ${pos.width}/${pos.height}, offset:${pos.offsetWidth}/${pos.offsetHeight}, isMaximized:${pos.isMaximized}");
 
-  await bind.setLocalFlutterConfig(
+  await bind.setLocalFlutterOption(
       k: kWindowPrefix + type.name, v: pos.toString());
 
   if (type == WindowType.RemoteDesktop && windowId != null) {
-    await _saveSessionWindowPosition(type, windowId, pos);
+    await _saveSessionWindowPosition(type, windowId, isMaximized, pos);
   }
 }
 
-Future _saveSessionWindowPosition(
-    WindowType windowType, int windowId, LastWindowPosition pos) async {
+Future _saveSessionWindowPosition(WindowType windowType, int windowId,
+    bool isMaximized, LastWindowPosition pos) async {
   final remoteList = await DesktopMultiWindow.invokeMethod(
       windowId, kWindowEventGetRemoteList, null);
+  getPeerPos(String peerId) {
+    if (isMaximized) {
+      final peerPos = bind.mainGetPeerFlutterOptionSync(
+          id: peerId, k: kWindowPrefix + windowType.name);
+      var lpos = LastWindowPosition.loadFromString(peerPos);
+      return LastWindowPosition(
+              lpos?.width ?? pos.offsetWidth,
+              lpos?.height ?? pos.offsetHeight,
+              lpos?.offsetWidth ?? pos.offsetWidth,
+              lpos?.offsetHeight ?? pos.offsetHeight,
+              isMaximized)
+          .toString();
+    } else {
+      return pos.toString();
+    }
+  }
+
   if (remoteList != null) {
     for (final peerId in remoteList.split(',')) {
-      bind.sessionSetFlutterConfigByPeerId(
-          id: peerId, k: kWindowPrefix + windowType.name, v: pos.toString());
+      bind.mainSetPeerFlutterOptionSync(
+          id: peerId,
+          k: kWindowPrefix + windowType.name,
+          v: getPeerPos(peerId));
     }
   }
 }
@@ -1519,7 +1563,7 @@ Future<Offset?> _adjustRestoreMainWindowOffset(
   if ((left + minWidth) > frameRight! ||
       (top + minWidth) > frameBottom! ||
       (left + width - minWidth) < frameLeft ||
-      (top - minWidth) < frameTop!) {
+      top < frameTop!) {
     return null;
   } else {
     return Offset(left, top);
@@ -1544,21 +1588,21 @@ Future<bool> restoreWindowPosition(WindowType type,
   bool isRemotePeerPos = false;
   String? pos;
   // No need to check mainGetLocalBoolOptionSync(kOptionOpenNewConnInTabs)
-  // Though "open in tabs" is true and the new window restore peer position, it's ok.  
+  // Though "open in tabs" is true and the new window restore peer position, it's ok.
   if (type == WindowType.RemoteDesktop && windowId != null && peerId != null) {
     // If the restore position is called by main window, and the peer id is not null
     // then we may need to get the position by reading the peer config.
     // Because the session may not be read at this time.
     if (desktopType == DesktopType.main) {
-      pos = bind.mainGetPeerFlutterConfigSync(
+      pos = bind.mainGetPeerFlutterOptionSync(
           id: peerId, k: kWindowPrefix + type.name);
     } else {
-      pos = await bind.sessionGetFlutterConfigByPeerId(
+      pos = await bind.sessionGetFlutterOptionByPeerId(
           id: peerId, k: kWindowPrefix + type.name);
     }
     isRemotePeerPos = pos != null;
   }
-  pos ??= bind.getLocalFlutterConfig(k: kWindowPrefix + type.name);
+  pos ??= bind.getLocalFlutterOption(k: kWindowPrefix + type.name);
 
   var lpos = LastWindowPosition.loadFromString(pos);
   if (lpos == null) {
@@ -1576,42 +1620,36 @@ Future<bool> restoreWindowPosition(WindowType type,
     }
   }
 
+  final size = await _adjustRestoreMainWindowSize(lpos.width, lpos.height);
+  final offset = await _adjustRestoreMainWindowOffset(
+    lpos.offsetWidth,
+    lpos.offsetHeight,
+    size.width,
+    size.height,
+  );
+  debugPrint(
+      "restore lpos: ${size.width}/${size.height}, offset:${offset?.dx}/${offset?.dy}");
+
   switch (type) {
     case WindowType.Main:
-      if (lpos.isMaximized == true) {
-        await windowManager.maximize();
-      } else {
-        final size =
-            await _adjustRestoreMainWindowSize(lpos.width, lpos.height);
-        final offset = await _adjustRestoreMainWindowOffset(
-          lpos.offsetWidth,
-          lpos.offsetHeight,
-          size.width,
-          size.height,
-        );
-        await windowManager.setSize(size);
+      restorePos() async {
         if (offset == null) {
           await windowManager.center();
         } else {
           await windowManager.setPosition(offset);
         }
       }
+      if (lpos.isMaximized == true) {
+        await restorePos();
+        await windowManager.maximize();
+      } else {
+        await windowManager.setSize(size);
+        await restorePos();
+      }
       return true;
     default:
       final wc = WindowController.fromWindowId(windowId!);
-      if (lpos.isMaximized == true) {
-        await wc.maximize();
-      } else {
-        final size =
-            await _adjustRestoreMainWindowSize(lpos.width, lpos.height);
-        final offset = await _adjustRestoreMainWindowOffset(
-          lpos.offsetWidth,
-          lpos.offsetHeight,
-          size.width,
-          size.height,
-        );
-        debugPrint(
-            "restore lpos: ${size.width}/${size.height}, offset:${offset?.dx}/${offset?.dy}");
+      restoreFrame() async {
         if (offset == null) {
           await wc.center();
         } else {
@@ -1619,6 +1657,12 @@ Future<bool> restoreWindowPosition(WindowType type,
               Rect.fromLTWH(offset.dx, offset.dy, size.width, size.height);
           await wc.setFrame(frame);
         }
+      }
+      if (lpos.isMaximized == true) {
+        await restoreFrame();
+        await wc.maximize();
+      } else {
+        await restoreFrame();
       }
       break;
   }
@@ -1658,7 +1702,7 @@ StreamSubscription? listenUniLinks({handleByFlutter = true}) {
   }
 
   final sub = uriLinkStream.listen((Uri? uri) {
-    debugPrint("A uri was received: $uri.");
+    debugPrint("A uri was received: $uri. handleByFlutter $handleByFlutter");
     if (uri != null) {
       if (handleByFlutter) {
         handleUriLink(uri: uri);
@@ -1701,7 +1745,14 @@ bool handleUriLink({List<String>? cmdArgs, Uri? uri, String? uriString}) {
       args = urlLinkToCmdArgs(uri);
     }
   }
-  if (args == null) return false;
+  if (args == null) {
+    return false;
+  }
+
+  if (args.isEmpty) {
+    windowOnTop(null);
+    return true;
+  }
 
   UriLinkType? type;
   String? id;
@@ -1785,7 +1836,10 @@ bool handleUriLink({List<String>? cmdArgs, Uri? uri, String? uriString}) {
 List<String>? urlLinkToCmdArgs(Uri uri) {
   String? command;
   String? id;
-  if (uri.authority == "connection" && uri.path.startsWith("/new/")) {
+  if (uri.authority.isEmpty &&
+      uri.path.split('').every((char) => char == '/')) {
+    return [];
+  } else if (uri.authority == "connection" && uri.path.startsWith("/new/")) {
     // For compatibility
     command = '--connect';
     id = uri.path.substring("/new/".length);

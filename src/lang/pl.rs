@@ -524,7 +524,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("exceed_max_devices", "Przekroczona maks. liczba urządzeń"),
         ("Sync with recent sessions", "Synchronizacja z ostatnimi sesjami"),
         ("Sort tags", "Znaczniki sortowania"),
-        ("Open connection in new tab", ""),
+        ("Open connection in new tab", "Otwórz połączenie w nowej zakładce"),
         ("Move tab to new window", "Przenieś zakładkę do nowego okna"),
+        ("Can not be empty", "Nie może być puste"),
+        ("Already exists", "Już istnieje"),
     ].iter().cloned().collect();
 }

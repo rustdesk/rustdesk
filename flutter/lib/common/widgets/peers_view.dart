@@ -41,7 +41,7 @@ class LoadEvent {
 final peerSearchText = "".obs;
 
 /// for peer sort, global obs value
-final peerSort = bind.getLocalFlutterConfig(k: 'peer-sorting').obs;
+final peerSort = bind.getLocalFlutterOption(k: 'peer-sorting').obs;
 
 // list for listener
 final obslist = [peerSearchText, peerSort].obs;
@@ -124,31 +124,34 @@ class _PeersViewState extends State<_PeersView> with WindowListener {
   Widget build(BuildContext context) {
     return ChangeNotifierProvider<Peers>(
       create: (context) => widget.peers,
-      child: Consumer<Peers>(
-        builder: (context, peers, child) => peers.peers.isEmpty
-            ? Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(
-                      Icons.sentiment_very_dissatisfied_rounded,
-                      color: Theme.of(context).tabBarTheme.labelColor,
-                      size: 40,
-                    ).paddingOnly(bottom: 10),
-                    Text(
-                      translate(
-                        _emptyMessages[widget.peers.loadEvent] ?? 'Empty',
-                      ),
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: Theme.of(context).tabBarTheme.labelColor,
-                      ),
-                    ),
-                  ],
+      child: Consumer<Peers>(builder: (context, peers, child) {
+        if (peers.peers.isEmpty) {
+          gFFI.peerTabModel.setCurrentTabCachedPeers([]);
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.sentiment_very_dissatisfied_rounded,
+                  color: Theme.of(context).tabBarTheme.labelColor,
+                  size: 40,
+                ).paddingOnly(bottom: 10),
+                Text(
+                  translate(
+                    _emptyMessages[widget.peers.loadEvent] ?? 'Empty',
+                  ),
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: Theme.of(context).tabBarTheme.labelColor,
+                  ),
                 ),
-              )
-            : _buildPeersView(peers),
-      ),
+              ],
+            ),
+          );
+        } else {
+          return _buildPeersView(peers);
+        }
+      }),
     );
   }
 
@@ -261,7 +264,7 @@ class _PeersViewState extends State<_PeersView> with WindowListener {
     // fallback to id sorting
     if (!PeerSortType.values.contains(sortedBy)) {
       sortedBy = PeerSortType.remoteId;
-      bind.setLocalFlutterConfig(
+      bind.setLocalFlutterOption(
         k: "peer-sorting",
         v: sortedBy,
       );
