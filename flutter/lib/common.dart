@@ -222,7 +222,7 @@ class MyTheme {
   //tooltip
   static TooltipThemeData tooltipTheme() {
     return TooltipThemeData(
-      waitDuration: Duration(seconds: 1, milliseconds: 500), 
+      waitDuration: Duration(seconds: 1, milliseconds: 500),
     );
   }
 
@@ -1394,14 +1394,26 @@ Future<void> saveWindowPosition(WindowType type, {int? windowId}) async {
   late Offset position;
   late Size sz;
   late bool isMaximized;
+  setFrameIfMaximized() {
+    if (isMaximized) {
+      final pos = bind.getLocalFlutterOption(k: kWindowPrefix + type.name);
+      var lpos = LastWindowPosition.loadFromString(pos);
+      position = Offset(
+          lpos?.offsetWidth ?? position.dx, lpos?.offsetHeight ?? position.dy);
+      sz = Size(lpos?.width ?? sz.width, lpos?.height ?? sz.height);
+    }
+  }
+
   switch (type) {
     case WindowType.Main:
+      isMaximized = await windowManager.isMaximized();
       position = await windowManager.getPosition();
       sz = await windowManager.getSize();
-      isMaximized = await windowManager.isMaximized();
+      setFrameIfMaximized();
       break;
     default:
       final wc = WindowController.fromWindowId(windowId!);
+      isMaximized = await wc.isMaximized();
       final Rect frame;
       try {
         frame = await wc.getFrame();
@@ -1411,7 +1423,7 @@ Future<void> saveWindowPosition(WindowType type, {int? windowId}) async {
       }
       position = frame.topLeft;
       sz = frame.size;
-      isMaximized = await wc.isMaximized();
+      setFrameIfMaximized();
       break;
   }
   if (Platform.isWindows) {
@@ -1429,24 +1441,43 @@ Future<void> saveWindowPosition(WindowType type, {int? windowId}) async {
   final pos = LastWindowPosition(
       sz.width, sz.height, position.dx, position.dy, isMaximized);
   debugPrint(
-      "Saving frame: $windowId: ${pos.width}/${pos.height}, offset:${pos.offsetWidth}/${pos.offsetHeight}");
+      "Saving frame: $windowId: ${pos.width}/${pos.height}, offset:${pos.offsetWidth}/${pos.offsetHeight}, isMaximized:${pos.isMaximized}");
 
   await bind.setLocalFlutterOption(
       k: kWindowPrefix + type.name, v: pos.toString());
 
   if (type == WindowType.RemoteDesktop && windowId != null) {
-    await _saveSessionWindowPosition(type, windowId, pos);
+    await _saveSessionWindowPosition(type, windowId, isMaximized, pos);
   }
 }
 
-Future _saveSessionWindowPosition(
-    WindowType windowType, int windowId, LastWindowPosition pos) async {
+Future _saveSessionWindowPosition(WindowType windowType, int windowId,
+    bool isMaximized, LastWindowPosition pos) async {
   final remoteList = await DesktopMultiWindow.invokeMethod(
       windowId, kWindowEventGetRemoteList, null);
+  getPeerPos(String peerId) {
+    if (isMaximized) {
+      final peerPos = bind.mainGetPeerFlutterOptionSync(
+          id: peerId, k: kWindowPrefix + windowType.name);
+      var lpos = LastWindowPosition.loadFromString(peerPos);
+      return LastWindowPosition(
+              lpos?.width ?? pos.offsetWidth,
+              lpos?.height ?? pos.offsetHeight,
+              lpos?.offsetWidth ?? pos.offsetWidth,
+              lpos?.offsetHeight ?? pos.offsetHeight,
+              isMaximized)
+          .toString();
+    } else {
+      return pos.toString();
+    }
+  }
+
   if (remoteList != null) {
     for (final peerId in remoteList.split(',')) {
       bind.mainSetPeerFlutterOptionSync(
-          id: peerId, k: kWindowPrefix + windowType.name, v: pos.toString());
+          id: peerId,
+          k: kWindowPrefix + windowType.name,
+          v: getPeerPos(peerId));
     }
   }
 }
@@ -1529,7 +1560,7 @@ Future<Offset?> _adjustRestoreMainWindowOffset(
   if ((left + minWidth) > frameRight! ||
       (top + minWidth) > frameBottom! ||
       (left + width - minWidth) < frameLeft ||
-      (top - minWidth) < frameTop!) {
+      top < frameTop!) {
     return null;
   } else {
     return Offset(left, top);
@@ -1554,7 +1585,7 @@ Future<bool> restoreWindowPosition(WindowType type,
   bool isRemotePeerPos = false;
   String? pos;
   // No need to check mainGetLocalBoolOptionSync(kOptionOpenNewConnInTabs)
-  // Though "open in tabs" is true and the new window restore peer position, it's ok.  
+  // Though "open in tabs" is true and the new window restore peer position, it's ok.
   if (type == WindowType.RemoteDesktop && windowId != null && peerId != null) {
     // If the restore position is called by main window, and the peer id is not null
     // then we may need to get the position by reading the peer config.
@@ -1586,42 +1617,36 @@ Future<bool> restoreWindowPosition(WindowType type,
     }
   }
 
+  final size = await _adjustRestoreMainWindowSize(lpos.width, lpos.height);
+  final offset = await _adjustRestoreMainWindowOffset(
+    lpos.offsetWidth,
+    lpos.offsetHeight,
+    size.width,
+    size.height,
+  );
+  debugPrint(
+      "restore lpos: ${size.width}/${size.height}, offset:${offset?.dx}/${offset?.dy}");
+
   switch (type) {
     case WindowType.Main:
-      if (lpos.isMaximized == true) {
-        await windowManager.maximize();
-      } else {
-        final size =
-            await _adjustRestoreMainWindowSize(lpos.width, lpos.height);
-        final offset = await _adjustRestoreMainWindowOffset(
-          lpos.offsetWidth,
-          lpos.offsetHeight,
-          size.width,
-          size.height,
-        );
-        await windowManager.setSize(size);
+      restorePos() async {
         if (offset == null) {
           await windowManager.center();
         } else {
           await windowManager.setPosition(offset);
         }
       }
+      if (lpos.isMaximized == true) {
+        await restorePos();
+        await windowManager.maximize();
+      } else {
+        await windowManager.setSize(size);
+        await restorePos();
+      }
       return true;
     default:
       final wc = WindowController.fromWindowId(windowId!);
-      if (lpos.isMaximized == true) {
-        await wc.maximize();
-      } else {
-        final size =
-            await _adjustRestoreMainWindowSize(lpos.width, lpos.height);
-        final offset = await _adjustRestoreMainWindowOffset(
-          lpos.offsetWidth,
-          lpos.offsetHeight,
-          size.width,
-          size.height,
-        );
-        debugPrint(
-            "restore lpos: ${size.width}/${size.height}, offset:${offset?.dx}/${offset?.dy}");
+      restoreFrame() async {
         if (offset == null) {
           await wc.center();
         } else {
@@ -1629,6 +1654,12 @@ Future<bool> restoreWindowPosition(WindowType type,
               Rect.fromLTWH(offset.dx, offset.dy, size.width, size.height);
           await wc.setFrame(frame);
         }
+      }
+      if (lpos.isMaximized == true) {
+        await restoreFrame();
+        await wc.maximize();
+      } else {
+        await restoreFrame();
       }
       break;
   }
