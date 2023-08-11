@@ -974,10 +974,6 @@ pub fn get_fingerprint() -> String {
     return ipc::get_fingerprint();
 }
 
-pub fn get_hostname() -> String {
-    crate::common::hostname()
-}
-
 #[inline]
 pub fn get_login_device_info() -> LoginDeviceInfo {
     LoginDeviceInfo {
@@ -990,7 +986,7 @@ pub fn get_login_device_info() -> LoginDeviceInfo {
 
 #[inline]
 pub fn get_login_device_info_json() -> String {
-    serde_json::to_string(&get_login_device_info()).unwrap_or_default()
+    serde_json::to_string(&get_login_device_info()).unwrap_or("{}".to_string())
 }
 
 // notice: avoiding create ipc connection repeatedly,
