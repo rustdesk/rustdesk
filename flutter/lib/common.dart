@@ -562,7 +562,7 @@ void windowOnTop(int? id) async {
   print("Bring window '$id' on top");
   if (id == null) {
     // main window
-    if (stateGlobal.minimized) {
+    if (stateGlobal.isMinimized) {
       await windowManager.restore();
     }
     await windowManager.show();
