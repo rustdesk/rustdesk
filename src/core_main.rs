@@ -359,10 +359,15 @@ pub fn core_main() -> Option<Vec<String>> {
                             body["strategy_name"] = serde_json::json!(name);
                         }
                         let url = crate::ui_interface::get_api_server() + "/api/devices/cli";
-                        if let Err(err) = crate::post_request_sync(url, body.to_string(), &header) {
-                            println!("{}", err);
-                        } else {
-                            println!("Done!");
+                        match crate::post_request_sync(url, body.to_string(), &header) {
+                            Err(err) => println!("{}", err),
+                            Ok(text) => {
+                                if text.is_empty() {
+                                    println!("Done!");
+                                } else {
+                                    println!("{}", text);
+                                }
+                            }
                         }
                     }
                 } else {
