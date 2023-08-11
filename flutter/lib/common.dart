@@ -16,6 +16,7 @@ import 'package:flutter_hbb/desktop/widgets/refresh_wrapper.dart';
 import 'package:flutter_hbb/desktop/widgets/tabbar_widget.dart';
 import 'package:flutter_hbb/main.dart';
 import 'package:flutter_hbb/models/peer_model.dart';
+import 'package:flutter_hbb/models/state_model.dart';
 import 'package:flutter_hbb/utils/multi_window_manager.dart';
 import 'package:flutter_hbb/utils/platform_channel.dart';
 import 'package:flutter_svg/flutter_svg.dart';
@@ -558,13 +559,15 @@ void windowOnTop(int? id) async {
   if (!isDesktop) {
     return;
   }
+  print("Bring window '$id' on top");
   if (id == null) {
-    print("Bring window on top");
     // main window
-    windowManager.restore();
-    windowManager.show();
-    windowManager.focus();
-    rustDeskWinManager.registerActiveWindow(kWindowMainId);
+    if (stateGlobal.minimized) {
+      await windowManager.restore();
+    }
+    await windowManager.show();
+    await windowManager.focus();
+    await rustDeskWinManager.registerActiveWindow(kWindowMainId);
   } else {
     WindowController.fromWindowId(id)
       ..focus()
