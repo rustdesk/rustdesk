@@ -41,7 +41,7 @@ class LoadEvent {
 final peerSearchText = "".obs;
 
 /// for peer sort, global obs value
-final peerSort = bind.getLocalFlutterConfig(k: 'peer-sorting').obs;
+final peerSort = bind.getLocalFlutterOption(k: 'peer-sorting').obs;
 
 // list for listener
 final obslist = [peerSearchText, peerSort].obs;
@@ -264,7 +264,7 @@ class _PeersViewState extends State<_PeersView> with WindowListener {
     // fallback to id sorting
     if (!PeerSortType.values.contains(sortedBy)) {
       sortedBy = PeerSortType.remoteId;
-      bind.setLocalFlutterConfig(
+      bind.setLocalFlutterOption(
         k: "peer-sorting",
         v: sortedBy,
       );

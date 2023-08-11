@@ -64,7 +64,7 @@ class _PeerTabPageState extends State<PeerTabPage>
 
   @override
   void initState() {
-    final uiType = bind.getLocalFlutterConfig(k: 'peer-card-ui-type');
+    final uiType = bind.getLocalFlutterOption(k: 'peer-card-ui-type');
     if (uiType != '') {
       peerCardUiType.value = int.parse(uiType) == PeerUiType.list.index
           ? PeerUiType.list
@@ -174,7 +174,7 @@ class _PeerTabPageState extends State<PeerTabPage>
                 ).paddingSymmetric(horizontal: 4),
                 onTap: () async {
                   await handleTabSelection(t);
-                  await bind.setLocalFlutterConfig(
+                  await bind.setLocalFlutterOption(
                       k: 'peer-tab-index', v: t.toString());
                 },
                 onHover: (value) => hover.value = value,
@@ -244,7 +244,7 @@ class _PeerTabPageState extends State<PeerTabPage>
             onTap: () async {
               final type = types.elementAt(
                   peerCardUiType.value == types.elementAt(0) ? 1 : 0);
-              await bind.setLocalFlutterConfig(
+              await bind.setLocalFlutterOption(
                   k: 'peer-card-ui-type', v: type.index.toString());
               peerCardUiType.value = type;
             },
@@ -562,7 +562,7 @@ class _PeerSortDropdownState extends State<PeerSortDropdown> {
   void initState() {
     if (!PeerSortType.values.contains(peerSort.value)) {
       peerSort.value = PeerSortType.remoteId;
-      bind.setLocalFlutterConfig(
+      bind.setLocalFlutterOption(
         k: "peer-sorting",
         v: peerSort.value,
       );
@@ -592,7 +592,7 @@ class _PeerSortDropdownState extends State<PeerSortDropdown> {
                       dense: true, (String? v) async {
                     if (v != null) {
                       peerSort.value = v;
-                      await bind.setLocalFlutterConfig(
+                      await bind.setLocalFlutterOption(
                         k: "peer-sorting",
                         v: peerSort.value,
                       );

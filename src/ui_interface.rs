@@ -168,14 +168,14 @@ pub fn set_local_option(key: String, value: String) {
 
 #[cfg(any(target_os = "android", target_os = "ios", feature = "flutter"))]
 #[inline]
-pub fn get_local_flutter_config(key: String) -> String {
-    LocalConfig::get_flutter_config(&key)
+pub fn get_local_flutter_option(key: String) -> String {
+    LocalConfig::get_flutter_option(&key)
 }
 
 #[cfg(any(target_os = "android", target_os = "ios", feature = "flutter"))]
 #[inline]
-pub fn set_local_flutter_config(key: String, value: String) {
-    LocalConfig::set_flutter_config(key, value);
+pub fn set_local_flutter_option(key: String, value: String) {
+    LocalConfig::set_flutter_option(key, value);
 }
 
 #[cfg(feature = "flutter")]
@@ -210,9 +210,21 @@ pub fn get_peer_option(id: String, name: String) -> String {
 
 #[inline]
 #[cfg(feature = "flutter")]
-pub fn get_peer_flutter_config(id: String, name: String) -> String {
+pub fn get_peer_flutter_option(id: String, name: String) -> String {
     let c = PeerConfig::load(&id);
     c.ui_flutter.get(&name).unwrap_or(&"".to_owned()).to_owned()
+}
+
+#[inline]
+#[cfg(feature = "flutter")]
+pub fn set_peer_flutter_option(id: String, name: String, value: String) {
+    let mut c = PeerConfig::load(&id);
+    if value.is_empty() {
+        c.ui_flutter.remove(&name);
+    } else {
+        c.ui_flutter.insert(name, value);
+    }
+    c.store(&id);
 }
 
 #[inline]

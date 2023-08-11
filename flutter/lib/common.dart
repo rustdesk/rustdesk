@@ -1422,7 +1422,7 @@ Future<void> saveWindowPosition(WindowType type, {int? windowId}) async {
   debugPrint(
       "Saving frame: $windowId: ${pos.width}/${pos.height}, offset:${pos.offsetWidth}/${pos.offsetHeight}");
 
-  await bind.setLocalFlutterConfig(
+  await bind.setLocalFlutterOption(
       k: kWindowPrefix + type.name, v: pos.toString());
 
   if (type == WindowType.RemoteDesktop && windowId != null) {
@@ -1436,7 +1436,7 @@ Future _saveSessionWindowPosition(
       windowId, kWindowEventGetRemoteList, null);
   if (remoteList != null) {
     for (final peerId in remoteList.split(',')) {
-      bind.sessionSetFlutterConfigByPeerId(
+      bind.mainSetPeerFlutterOptionSync(
           id: peerId, k: kWindowPrefix + windowType.name, v: pos.toString());
     }
   }
@@ -1551,15 +1551,15 @@ Future<bool> restoreWindowPosition(WindowType type,
     // then we may need to get the position by reading the peer config.
     // Because the session may not be read at this time.
     if (desktopType == DesktopType.main) {
-      pos = bind.mainGetPeerFlutterConfigSync(
+      pos = bind.mainGetPeerFlutterOptionSync(
           id: peerId, k: kWindowPrefix + type.name);
     } else {
-      pos = await bind.sessionGetFlutterConfigByPeerId(
+      pos = await bind.sessionGetFlutterOptionByPeerId(
           id: peerId, k: kWindowPrefix + type.name);
     }
     isRemotePeerPos = pos != null;
   }
-  pos ??= bind.getLocalFlutterConfig(k: kWindowPrefix + type.name);
+  pos ??= bind.getLocalFlutterOption(k: kWindowPrefix + type.name);
 
   var lpos = LastWindowPosition.loadFromString(pos);
   if (lpos == null) {

@@ -51,7 +51,7 @@ class PeerTabModel with ChangeNotifier {
   PeerTabModel(this.parent) {
     // init currentTab
     _currentTab =
-        int.tryParse(bind.getLocalFlutterConfig(k: 'peer-tab-index')) ?? 0;
+        int.tryParse(bind.getLocalFlutterOption(k: 'peer-tab-index')) ?? 0;
     if (_currentTab < 0 || _currentTab >= tabNames.length) {
       _currentTab = 0;
     }

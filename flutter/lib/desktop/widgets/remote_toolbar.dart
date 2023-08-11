@@ -36,7 +36,7 @@ class ToolbarState {
   late RxBool _pin;
 
   ToolbarState() {
-    final s = bind.getLocalFlutterConfig(k: kStoreKey);
+    final s = bind.getLocalFlutterOption(k: kStoreKey);
     if (s.isEmpty) {
       _initSet(false, false);
       return;
@@ -89,7 +89,7 @@ class ToolbarState {
   }
 
   _savePin() async {
-    bind.setLocalFlutterConfig(
+    bind.setLocalFlutterOption(
         k: kStoreKey, v: jsonEncode({'pin': _pin.value}));
   }
 
