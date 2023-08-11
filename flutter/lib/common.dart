@@ -1699,7 +1699,7 @@ StreamSubscription? listenUniLinks({handleByFlutter = true}) {
   }
 
   final sub = uriLinkStream.listen((Uri? uri) {
-    debugPrint("A uri was received: $uri.");
+    debugPrint("A uri was received: $uri. handleByFlutter $handleByFlutter");
     if (uri != null) {
       if (handleByFlutter) {
         handleUriLink(uri: uri);
@@ -1742,7 +1742,14 @@ bool handleUriLink({List<String>? cmdArgs, Uri? uri, String? uriString}) {
       args = urlLinkToCmdArgs(uri);
     }
   }
-  if (args == null) return false;
+  if (args == null) {
+    return false;
+  }
+
+  if (args.isEmpty) {
+    windowOnTop(null);
+    return true;
+  }
 
   UriLinkType? type;
   String? id;
@@ -1826,7 +1833,10 @@ bool handleUriLink({List<String>? cmdArgs, Uri? uri, String? uriString}) {
 List<String>? urlLinkToCmdArgs(Uri uri) {
   String? command;
   String? id;
-  if (uri.authority == "connection" && uri.path.startsWith("/new/")) {
+  if (uri.authority.isEmpty &&
+      uri.path.split('').every((char) => char == '/')) {
+    return [];
+  } else if (uri.authority == "connection" && uri.path.startsWith("/new/")) {
     // For compatibility
     command = '--connect';
     id = uri.path.substring("/new/".length);
