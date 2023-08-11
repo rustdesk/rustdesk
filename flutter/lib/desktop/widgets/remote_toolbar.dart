@@ -620,7 +620,7 @@ class _MonitorMenu extends StatelessWidget {
         topLevel: false,
         color: _ToolbarTheme.blueColor,
         hoverColor: _ToolbarTheme.hoverBlueColor,
-        tooltip: "",
+        tooltip: "#${i + 1} monitor",
         hMargin: 6,
         vMargin: 12,
         icon: Container(
