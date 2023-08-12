@@ -67,11 +67,26 @@ lazy_static::lazy_static! {
     pub static ref IS_FOREGROUND_WINDOW_ELEVATED: Arc<Mutex<bool>> = Default::default();
     pub static ref LAST_SYNC_DISPLAYS: Arc<RwLock<Vec<DisplayInfo>>> = Default::default();
     static ref ORIGINAL_RESOLUTIONS: Arc<RwLock<HashMap<String, (i32, i32)>>> = Default::default();
+    static ref LAST_CHANGED_RESOLUTION: Arc<RwLock<(String, (i32, i32))>> = Default::default();
+}
+
+#[inline]
+pub fn set_last_changed_resolution(display_name: &str, wh: (i32, i32)) {
+    *LAST_CHANGED_RESOLUTION.write().unwrap() = (display_name.to_owned(), wh);
+}
+
+#[inline]
+fn set_original_resolution_(display_name: &str, wh: (i32, i32)) -> (i32, i32) {
+    ORIGINAL_RESOLUTIONS
+        .write()
+        .unwrap()
+        .insert(display_name.to_owned(), wh.clone());
+    wh
 }
 
 // Not virtual display
 #[inline]
-fn set_original_resolution_(display_name: &str, wh: (i32, i32)) -> (i32, i32) {
+fn try_set_original_resolution_(display_name: &str, wh: (i32, i32)) -> (i32, i32) {
     let mut original_resolutions = ORIGINAL_RESOLUTIONS.write().unwrap();
     match original_resolutions.get(display_name) {
         Some(r) => r.clone(),
@@ -99,7 +114,7 @@ fn get_or_set_original_resolution_(display_name: &str, wh: (i32, i32)) -> (i32, 
     if let Some(r) = r {
         return r;
     }
-    set_original_resolution_(display_name, wh)
+    try_set_original_resolution_(display_name, wh)
 }
 
 // Not virtual display
@@ -466,10 +481,17 @@ fn check_displays_new() -> Option<Vec<Display>> {
         Some(displays)
     } else {
         for i in 0..displays.len() {
-            if displays[i].height() != (last_sync_displays[i].height as usize) {
-                return Some(displays);
-            }
-            if displays[i].width() != (last_sync_displays[i].width as usize) {
+            let (w, h) = (displays[i].width(), displays[i].height());
+            if h != (last_sync_displays[i].height as usize)
+                || w != (last_sync_displays[i].width as usize)
+            {
+                let last_changed_res = LAST_CHANGED_RESOLUTION.read().unwrap();
+                let is_res_changed_by_third_process = displays[i].name() != last_changed_res.0
+                    || w != last_changed_res.1 .0 as usize
+                    || h != last_changed_res.1 .1 as usize;
+                if is_res_changed_by_third_process {
+                    set_original_resolution_(&displays[i].name(), (w, h));
+                }
                 return Some(displays);
             }
             if displays[i].origin() != (last_sync_displays[i].x, last_sync_displays[i].y) {

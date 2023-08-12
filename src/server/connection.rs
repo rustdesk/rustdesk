@@ -1959,6 +1959,7 @@ impl Connection {
                 {
                     return;
                 }
+                video_service::set_last_changed_resolution(&name, (r.width, r.height));
                 if let Err(e) =
                     crate::platform::change_resolution(&name, r.width as _, r.height as _)
                 {
