@@ -248,6 +248,10 @@ pub fn uninstall_service(show_new_window: bool) -> bool {
                         .args(&["remove", &format!("{}_server", crate::get_full_name())])
                         .status()
                         .ok();
+                    std::process::Command::new("pkill")
+                        .arg(crate::get_app_name())
+                        .status()
+                        .ok();
                     if show_new_window {
                         std::process::Command::new("sh")
                             .arg("-c")
@@ -256,11 +260,6 @@ pub fn uninstall_service(show_new_window: bool) -> bool {
                                 crate::get_app_name(),
                             ))
                             .spawn()
-                            .ok();
-                    } else {
-                        std::process::Command::new("pkill")
-                            .arg(crate::get_app_name())
-                            .status()
                             .ok();
                     }
                     quit_gui();
