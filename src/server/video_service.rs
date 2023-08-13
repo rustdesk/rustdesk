@@ -52,6 +52,11 @@ use std::{
 
 pub const NAME: &'static str = "video";
 
+struct ChangedResolution {
+    original: (i32, i32),
+    changed: (i32, i32),
+}
+
 lazy_static::lazy_static! {
     pub static ref CURRENT_DISPLAY: Arc<Mutex<usize>> = Arc::new(Mutex::new(usize::MAX));
     static ref LAST_ACTIVE: Arc<Mutex<Instant>> = Arc::new(Mutex::new(Instant::now()));
@@ -66,58 +71,29 @@ lazy_static::lazy_static! {
     pub static ref IS_UAC_RUNNING: Arc<Mutex<bool>> = Default::default();
     pub static ref IS_FOREGROUND_WINDOW_ELEVATED: Arc<Mutex<bool>> = Default::default();
     pub static ref LAST_SYNC_DISPLAYS: Arc<RwLock<Vec<DisplayInfo>>> = Default::default();
-    static ref ORIGINAL_RESOLUTIONS: Arc<RwLock<HashMap<String, (i32, i32)>>> = Default::default();
+    static ref CHANGED_RESOLUTIONS: Arc<RwLock<HashMap<String, ChangedResolution>>> = Default::default();
 }
 
-// Not virtual display
 #[inline]
-fn set_original_resolution_(display_name: &str, wh: (i32, i32)) -> (i32, i32) {
-    let mut original_resolutions = ORIGINAL_RESOLUTIONS.write().unwrap();
-    match original_resolutions.get(display_name) {
-        Some(r) => r.clone(),
+pub fn set_last_changed_resolution(display_name: &str, original: (i32, i32), changed: (i32, i32)) {
+    let mut lock = CHANGED_RESOLUTIONS.write().unwrap();
+    match lock.get_mut(display_name) {
+        Some(res) => res.changed = changed,
         None => {
-            original_resolutions.insert(display_name.to_owned(), wh.clone());
-            wh
+            lock.insert(
+                display_name.to_owned(),
+                ChangedResolution { original, changed },
+            );
         }
-    }
-}
-
-// Not virtual display
-#[inline]
-fn get_original_resolution_(display_name: &str) -> Option<(i32, i32)> {
-    ORIGINAL_RESOLUTIONS
-        .read()
-        .unwrap()
-        .get(display_name)
-        .map(|r| r.clone())
-}
-
-// Not virtual display
-#[inline]
-fn get_or_set_original_resolution_(display_name: &str, wh: (i32, i32)) -> (i32, i32) {
-    let r = get_original_resolution_(display_name);
-    if let Some(r) = r {
-        return r;
-    }
-    set_original_resolution_(display_name, wh)
-}
-
-// Not virtual display
-#[inline]
-fn update_get_original_resolution_(display_name: &str, w: usize, h: usize) -> Resolution {
-    let wh = get_or_set_original_resolution_(display_name, (w as _, h as _));
-    Resolution {
-        width: wh.0,
-        height: wh.1,
-        ..Default::default()
     }
 }
 
 #[inline]
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub fn reset_resolutions() {
-    for (name, (w, h)) in ORIGINAL_RESOLUTIONS.read().unwrap().iter() {
-        if let Err(e) = crate::platform::change_resolution(name, *w as _, *h as _) {
+    for (name, res) in CHANGED_RESOLUTIONS.read().unwrap().iter() {
+        let (w, h) = res.original;
+        if let Err(e) = crate::platform::change_resolution(name, w as _, h as _) {
             log::error!(
                 "Failed to reset resolution of display '{}' to ({},{}): {}",
                 name,
@@ -461,27 +437,17 @@ fn get_capturer(use_yuv: bool, portable_service_running: bool) -> ResultType<Cap
 fn check_displays_new() -> Option<Vec<Display>> {
     let displays = try_get_displays().ok()?;
     let last_sync_displays = &*LAST_SYNC_DISPLAYS.read().unwrap();
-
     if displays.len() != last_sync_displays.len() {
+        // No need to check if the resolutions are changed by third process.
         Some(displays)
     } else {
-        for i in 0..displays.len() {
-            if displays[i].height() != (last_sync_displays[i].height as usize) {
-                return Some(displays);
-            }
-            if displays[i].width() != (last_sync_displays[i].width as usize) {
-                return Some(displays);
-            }
-            if displays[i].origin() != (last_sync_displays[i].x, last_sync_displays[i].y) {
-                return Some(displays);
-            }
-        }
         None
     }
 }
 
 fn check_get_displays_changed_msg() -> Option<Message> {
     let displays = check_displays_new()?;
+    // Display to DisplayInfo
     let (current, displays) = get_displays_2(&displays);
     let mut pi = PeerInfo {
         ..Default::default()
@@ -537,7 +503,9 @@ fn run(sp: GenericService) -> ResultType<()> {
     if *SWITCH.lock().unwrap() {
         log::debug!("Broadcasting display switch");
         let mut misc = Misc::new();
-        let display_name = get_current_display_name().unwrap_or_default();
+        let display_name = get_current_display()
+            .map(|(_, _, d)| d.name())
+            .unwrap_or_default();
         let original_resolution = get_original_resolution(&display_name, c.width, c.height);
         misc.set_switch_display(SwitchDisplay {
             display: c.current as _,
@@ -895,7 +863,24 @@ fn get_original_resolution(display_name: &str, w: usize, h: usize) -> MessageFie
             ..Default::default()
         }
     } else {
-        update_get_original_resolution_(&display_name, w, h)
+        let mut changed_resolutions = CHANGED_RESOLUTIONS.write().unwrap();
+        let (width, height) = match changed_resolutions.get(display_name) {
+            Some(res) => {
+                if res.changed.0 != w as i32 || res.changed.1 != h as i32 {
+                    // If the resolution is changed by third process, remove the record in changed_resolutions.
+                    changed_resolutions.remove(display_name);
+                    (w as _, h as _)
+                } else {
+                    res.original
+                }
+            }
+            None => (w as _, h as _),
+        };
+        Resolution {
+            width,
+            height,
+            ..Default::default()
+        }
     })
     .into()
 }
@@ -1055,13 +1040,6 @@ pub(super) fn get_current_display_2(mut all: Vec<Display>) -> ResultType<(usize,
 #[inline]
 pub fn get_current_display() -> ResultType<(usize, usize, Display)> {
     get_current_display_2(try_get_displays()?)
-}
-
-// `try_reset_current_display` is needed because `get_displays` may change the current display,
-// which may cause the mismatch of current display and the current display name.
-#[inline]
-pub fn get_current_display_name() -> ResultType<String> {
-    Ok(get_current_display_2(try_get_displays()?)?.2.name())
 }
 
 #[cfg(windows)]
