@@ -67,12 +67,15 @@ lazy_static::lazy_static! {
     pub static ref IS_FOREGROUND_WINDOW_ELEVATED: Arc<Mutex<bool>> = Default::default();
     pub static ref LAST_SYNC_DISPLAYS: Arc<RwLock<Vec<DisplayInfo>>> = Default::default();
     static ref ORIGINAL_RESOLUTIONS: Arc<RwLock<HashMap<String, (i32, i32)>>> = Default::default();
-    static ref LAST_CHANGED_RESOLUTION: Arc<RwLock<(String, (i32, i32))>> = Default::default();
+    static ref LAST_CHANGED_RESOLUTIONS: Arc<RwLock<HashMap<String, (i32, i32)>>> = Default::default();
 }
 
 #[inline]
 pub fn set_last_changed_resolution(display_name: &str, wh: (i32, i32)) {
-    *LAST_CHANGED_RESOLUTION.write().unwrap() = (display_name.to_owned(), wh);
+    LAST_CHANGED_RESOLUTIONS
+        .write()
+        .unwrap()
+        .insert(display_name.to_owned(), wh);
 }
 
 #[inline]
@@ -132,6 +135,9 @@ fn update_get_original_resolution_(display_name: &str, w: usize, h: usize) -> Re
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub fn reset_resolutions() {
     for (name, (w, h)) in ORIGINAL_RESOLUTIONS.read().unwrap().iter() {
+        if !LAST_CHANGED_RESOLUTIONS.read().unwrap().contains_key(name) {
+            continue;
+        }
         if let Err(e) = crate::platform::change_resolution(name, *w as _, *h as _) {
             log::error!(
                 "Failed to reset resolution of display '{}' to ({},{}): {}",
@@ -478,17 +484,21 @@ fn check_res_changed_by_third_process(
     displays: &Vec<Display>,
     last_sync_displays: &Vec<DisplayInfo>,
 ) {
+    let mut last_changed_resolutions = LAST_CHANGED_RESOLUTIONS.write().unwrap();
     for i in 0..displays.len() {
+        let name = &displays[i].name();
         let (w, h) = (displays[i].width(), displays[i].height());
-        let last_changed_res = LAST_CHANGED_RESOLUTION.read().unwrap();
-        let is_changed_by_the_peer = displays[i].name() == last_changed_res.0
-            && w == last_changed_res.1 .0 as usize
-            && h == last_changed_res.1 .1 as usize;
+        let is_changed_by_the_peer = last_changed_resolutions
+            .get(name)
+            .map(|res| w == res.0 as usize && h == res.1 as usize)
+            .unwrap_or(false);
         if !is_changed_by_the_peer {
             if displays[i].height() != (last_sync_displays[i].height as usize)
                 || displays[i].width() != (last_sync_displays[i].width as usize)
             {
-                set_original_resolution_(&displays[i].name(), (w as _, h as _));
+                set_original_resolution_(name, (w as _, h as _));
+                // Remove change record if the resolution is not changed by the peer side.
+                last_changed_resolutions.remove(name);
             }
         }
     }
