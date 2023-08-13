@@ -50,11 +50,18 @@ class StateGlobal {
 
   setWindowId(int id) => _windowId = id;
   setMaximized(bool v) {
-    if (isMaximized.value != v && !_fullscreen) {
-      isMaximized.value = v;
-      _resizeEdgeSize.value = isMaximized.isTrue ? kMaximizeEdgeSize : kWindowEdgeSize;
+    if (!_fullscreen) {
+      if (isMaximized.value != v) {
+        isMaximized.value = v;
+        _resizeEdgeSize.value =
+            isMaximized.isTrue ? kMaximizeEdgeSize : kWindowEdgeSize;
+      }
+      if (!Platform.isMacOS) {
+        _windowBorderWidth.value = v ? 0 : kWindowBorderWidth;
+      }
     }
   }
+
   setMinimized(bool v) => _isMinimized = v;
 
   setFullscreen(bool v) {
