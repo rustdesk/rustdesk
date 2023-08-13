@@ -75,28 +75,17 @@ lazy_static::lazy_static! {
 }
 
 #[inline]
-pub fn set_last_changed_resolution(display_name: &str, wh: (i32, i32)) -> ResultType<()> {
+pub fn set_last_changed_resolution(display_name: &str, original: (i32, i32), changed: (i32, i32)) {
     let mut lock = CHANGED_RESOLUTIONS.write().unwrap();
     match lock.get_mut(display_name) {
-        Some(res) => {
-            res.changed = wh;
-        }
+        Some(res) => res.changed = changed,
         None => {
-            for display in Display::all()?.iter() {
-                if display.name() == display_name {
-                    lock.insert(
-                        display_name.to_owned(),
-                        ChangedResolution {
-                            original: (display.width() as _, display.height() as _),
-                            changed: wh,
-                        },
-                    );
-                }
-            }
-            bail!("No display '{}' is found", display_name);
+            lock.insert(
+                display_name.to_owned(),
+                ChangedResolution { original, changed },
+            );
         }
     }
-    Ok(())
 }
 
 #[inline]
@@ -560,7 +549,9 @@ fn run(sp: GenericService) -> ResultType<()> {
     if *SWITCH.lock().unwrap() {
         log::debug!("Broadcasting display switch");
         let mut misc = Misc::new();
-        let display_name = get_current_display_name().unwrap_or_default();
+        let display_name = get_current_display()
+            .map(|(_, _, d)| d.name())
+            .unwrap_or_default();
         // This function is only called when display is switched.
         // It is not a frequent operation.
         try_update_original_resolutions();
@@ -1089,13 +1080,6 @@ pub(super) fn get_current_display_2(mut all: Vec<Display>) -> ResultType<(usize,
 #[inline]
 pub fn get_current_display() -> ResultType<(usize, usize, Display)> {
     get_current_display_2(try_get_displays()?)
-}
-
-// `try_reset_current_display` is needed because `get_displays` may change the current display,
-// which may cause the mismatch of current display and the current display name.
-#[inline]
-pub fn get_current_display_name() -> ResultType<String> {
-    Ok(get_current_display_2(try_get_displays()?)?.2.name())
 }
 
 #[cfg(windows)]
