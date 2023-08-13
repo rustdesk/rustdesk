@@ -528,5 +528,12 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Move tab to new window", "将标签页移至新窗口"),
         ("Can not be empty", "不能为空"),
         ("Already exists", "已经存在"),
+        ("Change Password", ""),
+        ("Refresh Password", ""),
+        ("ID", ""),
+        ("Grid View", ""),
+        ("List View", ""),
+        ("Select", ""),
+        ("Toggle Tags", ""),
     ].iter().cloned().collect();
 }
