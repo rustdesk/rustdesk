@@ -480,18 +480,26 @@ fn check_displays_new() -> Option<Vec<Display>> {
     if displays.len() != last_sync_displays.len() {
         Some(displays)
     } else {
+        // Update the original resolutions if changed
         for i in 0..displays.len() {
             let (w, h) = (displays[i].width(), displays[i].height());
-            if h != (last_sync_displays[i].height as usize)
-                || w != (last_sync_displays[i].width as usize)
-            {
-                let last_changed_res = LAST_CHANGED_RESOLUTION.read().unwrap();
-                let is_res_changed_by_third_process = displays[i].name() != last_changed_res.0
-                    || w != last_changed_res.1 .0 as usize
-                    || h != last_changed_res.1 .1 as usize;
-                if is_res_changed_by_third_process {
-                    set_original_resolution_(&displays[i].name(), (w, h));
+            let last_changed_res = LAST_CHANGED_RESOLUTION.read().unwrap();
+            let is_changed_by_the_peer = displays[i].name() == last_changed_res.0
+                && w == last_changed_res.1 .0 as usize
+                && h == last_changed_res.1 .1 as usize;
+            if !is_changed_by_the_peer {
+                if displays[i].height() != (last_sync_displays[i].height as usize)
+                    || displays[i].width() != (last_sync_displays[i].width as usize)
+                {
+                    set_original_resolution_(&displays[i].name(), (w as _, h as _));
                 }
+            }
+        }
+
+        for i in 0..displays.len() {
+            if displays[i].height() != (last_sync_displays[i].height as usize)
+                || displays[i].width() != (last_sync_displays[i].width as usize)
+            {
                 return Some(displays);
             }
             if displays[i].origin() != (last_sync_displays[i].x, last_sync_displays[i].y) {
@@ -504,6 +512,7 @@ fn check_displays_new() -> Option<Vec<Display>> {
 
 fn check_get_displays_changed_msg() -> Option<Message> {
     let displays = check_displays_new()?;
+    // Display to DisplayInfo 
     let (current, displays) = get_displays_2(&displays);
     let mut pi = PeerInfo {
         ..Default::default()
