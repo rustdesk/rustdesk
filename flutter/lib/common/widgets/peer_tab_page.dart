@@ -624,7 +624,7 @@ class _PeerSortDropdownState extends State<PeerSortDropdown> {
     var menuPos = RelativeRect.fromLTRB(0, 0, 0, 0);
     return InkWell(
       child: Tooltip(
-          message: translate('Sort By'),
+          message: translate('Sort by'),
           child: Icon(
             Icons.sort_rounded,
             size: 18,
