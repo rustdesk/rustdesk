@@ -52,6 +52,7 @@ const CHANGE_RESOLUTION_VALID_TIMEOUT_SECS: u64 = 15;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 #[derive(Default)]
 pub struct CacheFlutter {
+    pub pi: PeerInfo,
     pub sp: Option<SwitchDisplay>,
     pub cursor_data: HashMap<u64, CursorData>,
     pub cursor_id: u64,
@@ -75,7 +76,6 @@ pub struct Session<T: InvokeUiSession> {
     #[cfg(feature = "flutter")]
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     pub cache_flutter: Arc<RwLock<CacheFlutter>>,
-    pub cache_pi: Arc<RwLock<PeerInfo>>,
 }
 
 #[derive(Clone)]
@@ -1220,7 +1220,7 @@ impl<T: InvokeUiSession> Session<T> {
         if let Some((is_secured, direct)) = self.cache_flutter.read().unwrap().is_secured_direct {
             self.set_connection_type(is_secured, direct);
         }
-        let pi = self.cache_pi.read().unwrap().clone();
+        let pi = self.cache_flutter.read().unwrap().pi.clone();
         self.handle_peer_info(pi, true);
         if let Some(sp) = self.cache_flutter.read().unwrap().sp.as_ref() {
             self.handle_peer_switch_display(sp);

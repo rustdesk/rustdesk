@@ -1021,7 +1021,11 @@ impl<T: InvokeUiSession> Remote<T> {
                         }
                     }
                     Some(login_response::Union::PeerInfo(pi)) => {
-                        *self.handler.cache_pi.write().unwrap() = pi.clone();
+                        #[cfg(feature = "flutter")]
+                        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+                        {
+                            self.handler.cache_flutter.write().unwrap().pi = pi.clone();
+                        }
                         self.handler.handle_peer_info(pi, false);
                         #[cfg(not(feature = "flutter"))]
                         self.check_clipboard_file_context();
