@@ -1832,12 +1832,9 @@ Widget _lock(
                             Text(translate(label)).marginOnly(left: 5),
                           ]).marginSymmetric(vertical: 2)),
                   onPressed: () async {
-                    bool checked = await bind.mainCheckSuperUserPermission();
+                    bool checked = await callMainCheckSuperUserPermission();
                     if (checked) {
                       onUnlock();
-                    }
-                    if (Platform.isMacOS) {
-                      await windowManager.show();
                     }
                   },
                 ).marginSymmetric(horizontal: 2, vertical: 4),

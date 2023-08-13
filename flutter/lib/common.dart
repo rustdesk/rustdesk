@@ -222,7 +222,7 @@ class MyTheme {
   //tooltip
   static TooltipThemeData tooltipTheme() {
     return TooltipThemeData(
-      waitDuration: Duration(seconds: 1, milliseconds: 500), 
+      waitDuration: Duration(seconds: 1, milliseconds: 500),
     );
   }
 
@@ -1554,7 +1554,7 @@ Future<bool> restoreWindowPosition(WindowType type,
   bool isRemotePeerPos = false;
   String? pos;
   // No need to check mainGetLocalBoolOptionSync(kOptionOpenNewConnInTabs)
-  // Though "open in tabs" is true and the new window restore peer position, it's ok.  
+  // Though "open in tabs" is true and the new window restore peer position, it's ok.
   if (type == WindowType.RemoteDesktop && windowId != null && peerId != null) {
     // If the restore position is called by main window, and the peer id is not null
     // then we may need to get the position by reading the peer config.
@@ -2281,10 +2281,18 @@ void onCopyFingerprint(String value) {
   }
 }
 
+Future<bool> callMainCheckSuperUserPermission() async {
+  bool checked = await bind.mainCheckSuperUserPermission();
+  if (Platform.isMacOS) {
+    await windowManager.show();
+  }
+  return checked;
+}
+
 Future<void> start_service(bool is_start) async {
   bool checked = !bind.mainIsInstalled() ||
       !Platform.isMacOS ||
-      await bind.mainCheckSuperUserPermission();
+      await callMainCheckSuperUserPermission();
   if (checked) {
     bind.mainSetOption(key: "stop-service", value: is_start ? "" : "Y");
   }
