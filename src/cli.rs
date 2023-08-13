@@ -79,8 +79,8 @@ impl Interface for Session {
         handle_login_error(self.lc.clone(), err, self)
     }
 
-    fn handle_peer_info(&mut self, pi: PeerInfo) {
-        self.lc.write().unwrap().handle_peer_info(&pi);
+    fn handle_peer_info(&mut self, pi: PeerInfo, is_cached_pi: bool) {
+        self.lc.write().unwrap().handle_peer_info(&pi, is_cached_pi);
     }
 
     async fn handle_hash(&mut self, pass: &str, hash: Hash, peer: &mut Stream) {

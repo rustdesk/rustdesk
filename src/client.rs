@@ -1590,6 +1590,13 @@ impl LoginConfigHandler {
     }
 
     #[inline]
+    pub fn clear_custom_resolutions(&self) {
+        let mut config = self.load_config();
+        config.custom_resolutions.clear();
+        self.save_config(config);
+    }
+
+    #[inline]
     pub fn set_custom_resolution(&mut self, display: i32, wh: Option<(i32, i32)>) {
         let display = display.to_string();
         let mut config = self.load_config();
@@ -2366,7 +2373,7 @@ pub trait Interface: Send + Clone + 'static + Sized {
     fn send(&self, data: Data);
     fn msgbox(&self, msgtype: &str, title: &str, text: &str, link: &str);
     fn handle_login_error(&mut self, err: &str) -> bool;
-    fn handle_peer_info(&mut self, pi: PeerInfo);
+    fn handle_peer_info(&mut self, pi: PeerInfo, is_cached_pi: bool);
     fn on_error(&self, err: &str) {
         self.msgbox("error", "Error", err, "");
     }

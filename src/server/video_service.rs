@@ -473,29 +473,46 @@ fn get_capturer(use_yuv: bool, portable_service_running: bool) -> ResultType<Cap
     })
 }
 
+// Update the original resolutions if changed by a process other than rustdesk
+fn check_res_changed_by_third_process(
+    displays: &Vec<Display>,
+    last_sync_displays: &Vec<DisplayInfo>,
+) {
+    for i in 0..displays.len() {
+        let (w, h) = (displays[i].width(), displays[i].height());
+        let last_changed_res = LAST_CHANGED_RESOLUTION.read().unwrap();
+        let is_changed_by_the_peer = displays[i].name() == last_changed_res.0
+            && w == last_changed_res.1 .0 as usize
+            && h == last_changed_res.1 .1 as usize;
+        if !is_changed_by_the_peer {
+            if displays[i].height() != (last_sync_displays[i].height as usize)
+                || displays[i].width() != (last_sync_displays[i].width as usize)
+            {
+                set_original_resolution_(&displays[i].name(), (w as _, h as _));
+            }
+        }
+    }
+}
+
+#[inline]
+fn try_update_original_resolutions() {
+    if let Ok(displays) = try_get_displays() {
+        let last_sync_displays = &*LAST_SYNC_DISPLAYS.read().unwrap();
+        check_res_changed_by_third_process(&displays, &last_sync_displays);
+    }
+}
+
 fn check_displays_new() -> Option<Vec<Display>> {
     let displays = try_get_displays().ok()?;
     let last_sync_displays = &*LAST_SYNC_DISPLAYS.read().unwrap();
 
     if displays.len() != last_sync_displays.len() {
+        // No need to check if the resolutions are changed by third process.
         Some(displays)
     } else {
-        // Update the original resolutions if changed
-        for i in 0..displays.len() {
-            let (w, h) = (displays[i].width(), displays[i].height());
-            let last_changed_res = LAST_CHANGED_RESOLUTION.read().unwrap();
-            let is_changed_by_the_peer = displays[i].name() == last_changed_res.0
-                && w == last_changed_res.1 .0 as usize
-                && h == last_changed_res.1 .1 as usize;
-            if !is_changed_by_the_peer {
-                if displays[i].height() != (last_sync_displays[i].height as usize)
-                    || displays[i].width() != (last_sync_displays[i].width as usize)
-                {
-                    set_original_resolution_(&displays[i].name(), (w as _, h as _));
-                }
-            }
-        }
+        check_res_changed_by_third_process(&displays, &last_sync_displays);
 
+        // Return displays if (width, height, origin) is changed.
         for i in 0..displays.len() {
             if displays[i].height() != (last_sync_displays[i].height as usize)
                 || displays[i].width() != (last_sync_displays[i].width as usize)
@@ -512,7 +529,7 @@ fn check_displays_new() -> Option<Vec<Display>> {
 
 fn check_get_displays_changed_msg() -> Option<Message> {
     let displays = check_displays_new()?;
-    // Display to DisplayInfo 
+    // Display to DisplayInfo
     let (current, displays) = get_displays_2(&displays);
     let mut pi = PeerInfo {
         ..Default::default()
@@ -569,6 +586,9 @@ fn run(sp: GenericService) -> ResultType<()> {
         log::debug!("Broadcasting display switch");
         let mut misc = Misc::new();
         let display_name = get_current_display_name().unwrap_or_default();
+        // This function is only called when display is switched.
+        // It is not a frequent operation.
+        try_update_original_resolutions();
         let original_resolution = get_original_resolution(&display_name, c.width, c.height);
         misc.set_switch_display(SwitchDisplay {
             display: c.current as _,
