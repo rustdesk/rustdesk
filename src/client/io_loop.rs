@@ -1506,6 +1506,12 @@ impl<T: InvokeUiSession> Remote<T> {
                     }
                 }
                 Some(message::Union::PeerInfo(pi)) => {
+                    #[cfg(feature = "flutter")]
+                    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+                    {
+                        self.handler.cache_flutter.write().unwrap().pi.displays =
+                            pi.displays.clone();
+                    }
                     self.handler.set_displays(&pi.displays);
                 }
                 _ => {}
