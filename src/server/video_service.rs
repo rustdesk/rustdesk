@@ -52,6 +52,11 @@ use std::{
 
 pub const NAME: &'static str = "video";
 
+struct ChangedResolution {
+    original: (i32, i32),
+    changed: (i32, i32),
+}
+
 lazy_static::lazy_static! {
     pub static ref CURRENT_DISPLAY: Arc<Mutex<usize>> = Arc::new(Mutex::new(usize::MAX));
     static ref LAST_ACTIVE: Arc<Mutex<Instant>> = Arc::new(Mutex::new(Instant::now()));
@@ -66,79 +71,40 @@ lazy_static::lazy_static! {
     pub static ref IS_UAC_RUNNING: Arc<Mutex<bool>> = Default::default();
     pub static ref IS_FOREGROUND_WINDOW_ELEVATED: Arc<Mutex<bool>> = Default::default();
     pub static ref LAST_SYNC_DISPLAYS: Arc<RwLock<Vec<DisplayInfo>>> = Default::default();
-    static ref ORIGINAL_RESOLUTIONS: Arc<RwLock<HashMap<String, (i32, i32)>>> = Default::default();
-    static ref LAST_CHANGED_RESOLUTIONS: Arc<RwLock<HashMap<String, (i32, i32)>>> = Default::default();
+    static ref CHANGED_RESOLUTIONS: Arc<RwLock<HashMap<String, ChangedResolution>>> = Default::default();
 }
 
 #[inline]
-pub fn set_last_changed_resolution(display_name: &str, wh: (i32, i32)) {
-    LAST_CHANGED_RESOLUTIONS
-        .write()
-        .unwrap()
-        .insert(display_name.to_owned(), wh);
-}
-
-#[inline]
-fn set_original_resolution_(display_name: &str, wh: (i32, i32)) -> (i32, i32) {
-    ORIGINAL_RESOLUTIONS
-        .write()
-        .unwrap()
-        .insert(display_name.to_owned(), wh.clone());
-    wh
-}
-
-// Not virtual display
-#[inline]
-fn try_set_original_resolution_(display_name: &str, wh: (i32, i32)) -> (i32, i32) {
-    let mut original_resolutions = ORIGINAL_RESOLUTIONS.write().unwrap();
-    match original_resolutions.get(display_name) {
-        Some(r) => r.clone(),
+pub fn set_last_changed_resolution(display_name: &str, wh: (i32, i32)) -> ResultType<()> {
+    let mut lock = CHANGED_RESOLUTIONS.write().unwrap();
+    match lock.get_mut(display_name) {
+        Some(res) => {
+            res.changed = wh;
+        }
         None => {
-            original_resolutions.insert(display_name.to_owned(), wh.clone());
-            wh
+            for display in Display::all()?.iter() {
+                if display.name() == display_name {
+                    lock.insert(
+                        display_name.to_owned(),
+                        ChangedResolution {
+                            original: (display.width() as _, display.height() as _),
+                            changed: wh,
+                        },
+                    );
+                }
+            }
+            bail!("No display '{}' is found", display_name);
         }
     }
-}
-
-// Not virtual display
-#[inline]
-fn get_original_resolution_(display_name: &str) -> Option<(i32, i32)> {
-    ORIGINAL_RESOLUTIONS
-        .read()
-        .unwrap()
-        .get(display_name)
-        .map(|r| r.clone())
-}
-
-// Not virtual display
-#[inline]
-fn get_or_set_original_resolution_(display_name: &str, wh: (i32, i32)) -> (i32, i32) {
-    let r = get_original_resolution_(display_name);
-    if let Some(r) = r {
-        return r;
-    }
-    try_set_original_resolution_(display_name, wh)
-}
-
-// Not virtual display
-#[inline]
-fn update_get_original_resolution_(display_name: &str, w: usize, h: usize) -> Resolution {
-    let wh = get_or_set_original_resolution_(display_name, (w as _, h as _));
-    Resolution {
-        width: wh.0,
-        height: wh.1,
-        ..Default::default()
-    }
+    Ok(())
 }
 
 #[inline]
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub fn reset_resolutions() {
-    for (name, (w, h)) in ORIGINAL_RESOLUTIONS.read().unwrap().iter() {
-        if !LAST_CHANGED_RESOLUTIONS.read().unwrap().contains_key(name) {
-            continue;
-        }
-        if let Err(e) = crate::platform::change_resolution(name, *w as _, *h as _) {
+    for (name, res) in CHANGED_RESOLUTIONS.read().unwrap().iter() {
+        let (w, h) = res.original;
+        if let Err(e) = crate::platform::change_resolution(name, w as _, h as _) {
             log::error!(
                 "Failed to reset resolution of display '{}' to ({},{}): {}",
                 name,
@@ -484,21 +450,20 @@ fn check_res_changed_by_third_process(
     displays: &Vec<Display>,
     last_sync_displays: &Vec<DisplayInfo>,
 ) {
-    let mut last_changed_resolutions = LAST_CHANGED_RESOLUTIONS.write().unwrap();
+    let mut changed_resolutions = CHANGED_RESOLUTIONS.write().unwrap();
     for i in 0..displays.len() {
         let name = &displays[i].name();
-        let (w, h) = (displays[i].width(), displays[i].height());
-        let is_changed_by_the_peer = last_changed_resolutions
-            .get(name)
-            .map(|res| w == res.0 as usize && h == res.1 as usize)
-            .unwrap_or(false);
-        if !is_changed_by_the_peer {
-            if displays[i].height() != (last_sync_displays[i].height as usize)
-                || displays[i].width() != (last_sync_displays[i].width as usize)
-            {
-                set_original_resolution_(name, (w as _, h as _));
+        let is_wh_changed = displays[i].height() != (last_sync_displays[i].height as usize)
+            || displays[i].width() != (last_sync_displays[i].width as usize);
+        if is_wh_changed {
+            let (w, h) = (displays[i].width(), displays[i].height());
+            let is_changed_by_the_peer = changed_resolutions
+                .get(name)
+                .map(|res| w == res.changed.0 as usize && h == res.changed.1 as usize)
+                .unwrap_or(false);
+            if !is_changed_by_the_peer {
                 // Remove change record if the resolution is not changed by the peer side.
-                last_changed_resolutions.remove(name);
+                changed_resolutions.remove(name);
             }
         }
     }
@@ -956,7 +921,15 @@ fn get_original_resolution(display_name: &str, w: usize, h: usize) -> MessageFie
             ..Default::default()
         }
     } else {
-        update_get_original_resolution_(&display_name, w, h)
+        let (width, height) = match CHANGED_RESOLUTIONS.read().unwrap().get(display_name) {
+            Some(res) => res.original,
+            None => (w as _, h as _),
+        };
+        Resolution {
+            width,
+            height,
+            ..Default::default()
+        }
     })
     .into()
 }
