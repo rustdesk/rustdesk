@@ -1502,47 +1502,12 @@ impl<T: InvokeUiSession> Remote<T> {
                     }
                 }
                 Some(message::Union::PeerInfo(pi)) => {
-                    self.update_custom_resolutions(&pi.displays);
                     self.handler.set_displays(&pi.displays);
                 }
                 _ => {}
             }
         }
         true
-    }
-
-    fn update_custom_resolutions(&self, cur_displays: &Vec<DisplayInfo>) {
-        let cached_displays = &self.handler.cache_pi.read().unwrap().displays;
-
-        // It does not distinguish which display's custom resolution needs to be updated based on the name.
-        // Because name is index under macos, it will be confusing.
-        // It's possible to do different processing according to the OS, but there is no need to do complex logic here.
-        if cached_displays.len() != cur_displays.len() {
-            self.handler.lc.write().unwrap().clear_custom_resolutions();
-            return;
-        }
-
-        for i in 0..cur_displays.len() {
-            // Not work on macOS
-            if cur_displays[i].name != cached_displays[i].name {
-                self.handler.lc.write().unwrap().clear_custom_resolutions();
-                return;
-            }
-
-            let cached_origin_res = &*cached_displays[i].original_resolution;
-            let cur_origin_res = &*cur_displays[i].original_resolution;
-
-            // If the original resolution is changed, just clear the custom resolution.
-            if cached_origin_res.width != cur_origin_res.width
-                || cached_origin_res.height != cur_origin_res.height
-            {
-                self.handler
-                    .lc
-                    .write()
-                    .unwrap()
-                    .set_custom_resolution(i as _, None);
-            }
-        }
     }
 
     async fn handle_back_notification(&mut self, notification: BackNotification) -> bool {

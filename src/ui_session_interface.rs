@@ -928,25 +928,23 @@ impl<T: InvokeUiSession> Session<T> {
     }
 
     fn set_custom_resolution(&self, display: &SwitchDisplay) {
-        let custom_resolution = if self.last_change_display.lock().unwrap().is_the_same_record(
+        if self.last_change_display.lock().unwrap().is_the_same_record(
             display.display,
             display.width,
             display.height,
         ) {
-            if display.width != display.original_resolution.width
+            let custom_resolution = if display.width != display.original_resolution.width
                 || display.height != display.original_resolution.height
             {
                 Some((display.width, display.height))
             } else {
                 None
-            }
-        } else {
-            None
-        };
-        self.lc
-            .write()
-            .unwrap()
-            .set_custom_resolution(display.display, custom_resolution);
+            };
+            self.lc
+                .write()
+                .unwrap()
+                .set_custom_resolution(display.display, custom_resolution);
+        }
     }
 
     #[inline]
