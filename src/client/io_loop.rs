@@ -1529,8 +1529,8 @@ impl<T: InvokeUiSession> Remote<T> {
                 return;
             }
 
-            let cached_origin_res = cached_displays[i].original_resolution;
-            let cur_origin_res = cur_displays[i].original_resolution;
+            let cached_origin_res = &*cached_displays[i].original_resolution;
+            let cur_origin_res = &*cur_displays[i].original_resolution;
 
             // If the original resolution is changed, just clear the custom resolution.
             if cached_origin_res.width != cur_origin_res.width

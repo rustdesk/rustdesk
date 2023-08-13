@@ -1590,7 +1590,7 @@ impl LoginConfigHandler {
     }
 
     #[inline]
-    pub fn clear_custom_resolutions(&self) {
+    pub fn clear_custom_resolutions(&mut self) {
         let mut config = self.load_config();
         config.custom_resolutions.clear();
         self.save_config(config);
