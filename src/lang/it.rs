@@ -535,5 +535,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("List View", "Vista elenco"),
         ("Select", "Seleziona"),
         ("Toggle Tags", "Attiva/disattiva tag"),
+        ("pull_ab_failed_tip", ""),
+        ("push_ab_failed_tip", ""),
     ].iter().cloned().collect();
 }
