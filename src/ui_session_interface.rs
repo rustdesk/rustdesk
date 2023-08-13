@@ -1078,7 +1078,7 @@ impl<T: InvokeUiSession> Interface for Session<T> {
         handle_login_error(self.lc.clone(), err, self)
     }
 
-    fn handle_peer_info(&mut self, mut pi: PeerInfo) {
+    fn handle_peer_info(&mut self, mut pi: PeerInfo, is_cached_pi: bool) {
         log::debug!("handle_peer_info :{:?}", pi);
         pi.username = self.lc.read().unwrap().get_username(&pi);
         if pi.current_display as usize >= pi.displays.len() {
@@ -1099,10 +1099,12 @@ impl<T: InvokeUiSession> Interface for Session<T> {
                 self.msgbox("error", "Remote Error", "No Display", "");
                 return;
             }
-            self.try_change_init_resolution(pi.current_display);
-            let p = self.lc.read().unwrap().should_auto_login();
-            if !p.is_empty() {
-                input_os_password(p, true, self.clone());
+            if !is_cached_pi {
+                self.try_change_init_resolution(pi.current_display);
+                let p = self.lc.read().unwrap().should_auto_login();
+                if !p.is_empty() {
+                    input_os_password(p, true, self.clone());
+                }
             }
             let current = &pi.displays[pi.current_display as usize];
             self.set_display(
@@ -1211,7 +1213,7 @@ impl<T: InvokeUiSession> Session<T> {
             self.set_connection_type(is_secured, direct);
         }
         let pi = self.cache_flutter.read().unwrap().pi.clone();
-        self.handle_peer_info(pi);
+        self.handle_peer_info(pi, true);
         if let Some(sp) = self.cache_flutter.read().unwrap().sp.as_ref() {
             self.handle_peer_switch_display(sp);
         }

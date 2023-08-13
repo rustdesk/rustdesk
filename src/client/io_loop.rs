@@ -1026,7 +1026,7 @@ impl<T: InvokeUiSession> Remote<T> {
                         {
                             self.handler.cache_flutter.write().unwrap().pi = pi.clone();
                         }
-                        self.handler.handle_peer_info(pi);
+                        self.handler.handle_peer_info(pi, false);
                         #[cfg(not(feature = "flutter"))]
                         self.check_clipboard_file_context();
                         if !(self.handler.is_file_transfer() || self.handler.is_port_forward()) {
