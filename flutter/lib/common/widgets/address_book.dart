@@ -449,26 +449,43 @@ class AddressBookTag extends StatelessWidget {
       pos = RelativeRect.fromLTRB(x, y, x, y);
     }
 
+    const double radius = 8;
     return GestureDetector(
       onTap: onTap,
       onTapDown: showActionMenu ? setPosition : null,
       onSecondaryTapDown: showActionMenu ? setPosition : null,
       onSecondaryTap: showActionMenu ? () => _showMenu(context, pos) : null,
       onLongPress: showActionMenu ? () => _showMenu(context, pos) : null,
-      child: Obx(
-        () => Container(
-          decoration: BoxDecoration(
-              color: tags.contains(name)
-                  ? Colors.blue
-                  : Theme.of(context).colorScheme.background,
-              borderRadius: BorderRadius.circular(6)),
-          margin: const EdgeInsets.symmetric(horizontal: 4.0, vertical: 8.0),
-          padding: const EdgeInsets.symmetric(vertical: 2.0, horizontal: 8.0),
-          child: Text(name,
-              style:
-                  TextStyle(color: tags.contains(name) ? Colors.white : null)),
-        ),
-      ),
+      child: Obx(() => Container(
+            decoration: BoxDecoration(
+                color: tags.contains(name)
+                    ? str2color2(name, 0xFF)
+                    : Theme.of(context).colorScheme.background,
+                borderRadius: BorderRadius.circular(4)),
+            margin: const EdgeInsets.symmetric(horizontal: 4.0, vertical: 4.0),
+            padding: const EdgeInsets.symmetric(vertical: 2.0, horizontal: 6.0),
+            child: IntrinsicWidth(
+              child: Row(
+                children: [
+                  Container(
+                    width: radius,
+                    height: radius,
+                    decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: tags.contains(name)
+                            ? Colors.white
+                            : str2color2(name)),
+                  ).marginOnly(right: radius / 2),
+                  Expanded(
+                    child: Text(name,
+                        style: TextStyle(
+                            overflow: TextOverflow.ellipsis,
+                            color: tags.contains(name) ? Colors.white : null)),
+                  ),
+                ],
+              ),
+            ),
+          )),
     );
   }
 
