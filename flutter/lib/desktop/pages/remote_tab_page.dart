@@ -7,7 +7,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/common/shared_state.dart';
 import 'package:flutter_hbb/consts.dart';
-import 'package:flutter_hbb/models/model.dart';
 import 'package:flutter_hbb/models/state_model.dart';
 import 'package:flutter_hbb/desktop/pages/remote_page.dart';
 import 'package:flutter_hbb/desktop/widgets/remote_toolbar.dart';
@@ -56,6 +55,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
     RemoteCountState.init();
     peerId = params['id'];
     final sessionId = params['session_id'];
+    final tabWindowId = params['tab_window_id'];
     if (peerId != null) {
       ConnectionTypeState.init(peerId!);
       tabController.onSelected = (id) {
@@ -78,6 +78,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
           key: ValueKey(peerId),
           id: peerId!,
           sessionId: sessionId == null ? null : SessionID(sessionId),
+          tabWindowId: tabWindowId,
           password: params['password'],
           toolbarState: _toolbarState,
           tabController: tabController,
@@ -99,12 +100,14 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
       print(
           "[Remote Page] call ${call.method} with args ${call.arguments} from window $fromWindowId");
 
+      dynamic returnValue;
       // for simplify, just replace connectionId
       if (call.method == kWindowEventNewRemoteDesktop) {
         final args = jsonDecode(call.arguments);
         final id = args['id'];
         final switchUuid = args['switch_uuid'];
         final sessionId = args['session_id'];
+        final tabWindowId = args['tab_window_id'];
         windowOnTop(windowId());
         ConnectionTypeState.init(id);
         _toolbarState.setShow(
@@ -119,6 +122,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
             key: ValueKey(id),
             id: id,
             sessionId: sessionId == null ? null : SessionID(sessionId),
+            tabWindowId: tabWindowId,
             password: args['password'],
             toolbarState: _toolbarState,
             tabController: tabController,
@@ -148,43 +152,24 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
             .map((e) => '${e.key},${(e.page as RemotePage).ffi.sessionId}')
             .toList()
             .join(';');
-      } else if (call.method == kWindowEventCloseForSeparateWindow) {
-        debugPrint('REMOVE ME ============================= ${call.arguments}');
-        final peerId = call.arguments['peerId'];
-        final newWindowId = call.arguments['newWindowId'];
-        late RemotePage page;
+      } else if (call.method == kWindowEventGetCachedSessionData) {
+        // Ready to show new window and close old tab.
+        final peerId = call.arguments;
         try {
-          page = tabController.state.value.tabs.firstWhere((tab) {
-            return tab.key == peerId;
-          }).page as RemotePage;
+          final remotePage = tabController.state.value.tabs
+              .firstWhere((tab) => tab.key == peerId)
+              .page as RemotePage;
+          returnValue = remotePage.ffi.ffiModel.cachedPeerData.toString();
         } catch (e) {
-          debugPrint('Failed to find tab for peerId $peerId');
-          return false;
+          debugPrint('Failed to get cached session data: $e');
         }
-        final sendRes = await rustDeskWinManager.call(
-            newWindowId,
-            kWindowEventSendNewWindowData,
-            page.ffi.ffiModel.cachedPeerData) as bool;
-        if (!sendRes) {
-          return false;
+        if (returnValue != null) {
+          closeSessionOnDispose[peerId] = false;
+          tabController.closeBy(peerId);
         }
-        // Pass the required data to new window.
-        closeSessionOnDispose[peerId] = false;
-        tabController.closeBy(peerId);
-        return true;
-      } else if (call.method == kWindowEventSendNewWindowData) {
-        if (peerId == null) {
-          return false;
-        }
-        if (tabController.state.value.tabs.isEmpty) {
-          return false;
-        }
-        final page = tabController.state.value.tabs[0].page as RemotePage;
-        page.ffi.ffiModel
-            .handleCachedPeerData(call.arguments as CachedPeerData, peerId!);
-        return true;
       }
       _update_remote_count();
+      return returnValue;
     });
     Future.delayed(Duration.zero, () {
       restoreWindowPosition(

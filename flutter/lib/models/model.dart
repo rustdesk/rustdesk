@@ -4,6 +4,7 @@ import 'dart:io';
 import 'dart:math';
 import 'dart:ui' as ui;
 
+import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hbb/consts.dart';
@@ -50,6 +51,37 @@ class CachedPeerData {
   bool direct = false;
 
   CachedPeerData();
+
+  @override
+  String toString() {
+    return jsonEncode({
+      'updatePrivacyMode': updatePrivacyMode,
+      'peerInfo': peerInfo,
+      'cursorDataList': cursorDataList,
+      'lastCursorId': lastCursorId,
+      'secure': secure,
+      'direct': direct,
+    });
+  }
+
+  static CachedPeerData? fromString(String s) {
+    try {
+      final map = jsonDecode(s);
+      final data = CachedPeerData();
+      data.updatePrivacyMode = map['updatePrivacyMode'];
+      data.peerInfo = map['peerInfo'];
+      for (final cursorData in map['cursorDataList']) {
+        data.cursorDataList.add(cursorData);
+      }
+      data.lastCursorId = map['lastCursorId'];
+      data.secure = map['secure'];
+      data.direct = map['direct'];
+      return data;
+    } catch (e) {
+      debugPrint('Failed to parse CachedPeerData: $e');
+      return null;
+    }
+  }
 }
 
 class FfiModel with ChangeNotifier {
@@ -1628,7 +1660,6 @@ class FFI {
   /// dialogManager use late to ensure init after main page binding [globalKey]
   late final dialogManager = OverlayDialogManager();
 
-  late final bool isSessionAdded;
   late final SessionID sessionId;
   late final ImageModel imageModel; // session
   late final FfiModel ffiModel; // session
@@ -1647,7 +1678,6 @@ class FFI {
   late final ElevationModel elevationModel; // session
 
   FFI(SessionID? sId) {
-    isSessionAdded = sId != null;
     sessionId = sId ?? (isDesktop ? Uuid().v4obj() : _constSessionId);
     imageModel = ImageModel(WeakReference(this));
     ffiModel = FfiModel(WeakReference(this));
@@ -1673,7 +1703,8 @@ class FFI {
       bool isRdp = false,
       String? switchUuid,
       String? password,
-      bool? forceRelay}) {
+      bool? forceRelay,
+      int? tabWindowId}) {
     closed = false;
     auditNote = '';
     assert(!(isFileTransfer && isPortForward), 'more than one connect type');
@@ -1688,7 +1719,9 @@ class FFI {
       imageModel.id = id;
       cursorModel.id = id;
     }
-    if (!isSessionAdded) {
+    // If tabWindowId != null, this session is a "tab -> window" one.
+    // Else this session is a new one.
+    if (tabWindowId == null) {
       // ignore: unused_local_variable
       final addRes = bind.sessionAddSync(
         sessionId: sessionId,
@@ -1709,9 +1742,25 @@ class FFI {
     // Preserved for the rgba data.
     stream.listen((message) {
       if (closed) return;
-      if (isSessionAdded && !isToNewWindowNotified.value) {
-        // bind.sessionReadyToNewWindow(sessionId: sessionId);
-        bind.sessionRefresh(sessionId: sessionId);
+      if (tabWindowId != null && !isToNewWindowNotified.value) {
+        // Session is read to be moved to a new window.
+        // Get the cached data and handle the cached data.
+        Future.delayed(Duration.zero, () async {
+          final cachedData = await DesktopMultiWindow.invokeMethod(
+              tabWindowId, kWindowEventGetCachedSessionData, id);
+          if (cachedData == null) {
+            // unreachable
+            debugPrint('Unreachable, the cached data is empty.');
+            return;
+          }
+          final data = CachedPeerData.fromString(cachedData);
+          if (data == null) {
+            debugPrint('Unreachable, the cached data cannot be decoded.');
+            return;
+          }
+          ffiModel.handleCachedPeerData(data, id);
+          await bind.sessionRefresh(sessionId: sessionId);
+        });
         isToNewWindowNotified.value = true;
       }
       () async {

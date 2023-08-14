@@ -54,12 +54,10 @@ class RustDeskMultiWindowManager {
     var params = {
       'type': WindowType.RemoteDesktop.index,
       'id': peerId,
+      'tab_window_id': windowId,
       'session_id': sessionId,
     };
-    // It's better to use the window id that returned by _newSession.
-    // Do not pass original window id to _newSession,
-    // as this function cann't promise the necessary data is passed to new window.
-    final multiWindowRes = await _newSession(
+    await _newSession(
       false,
       WindowType.RemoteDesktop,
       kWindowEventNewRemoteDesktop,
@@ -67,12 +65,6 @@ class RustDeskMultiWindowManager {
       _remoteDesktopWindows,
       jsonEncode(params),
     );
-    // kWindowEventCloseForSeparateWindow will not only close the tab, but also pass the required data to new window.
-    await DesktopMultiWindow.invokeMethod(
-        windowId, kWindowEventCloseForSeparateWindow, {
-      'peerId': peerId,
-      'newWindowId': multiWindowRes.windowId,
-    });
   }
 
   Future<int> newSessionWindow(

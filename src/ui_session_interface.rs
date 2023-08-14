@@ -48,17 +48,6 @@ pub static IS_IN: AtomicBool = AtomicBool::new(false);
 
 const CHANGE_RESOLUTION_VALID_TIMEOUT_SECS: u64 = 15;
 
-#[cfg(feature = "flutter")]
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
-#[derive(Default)]
-pub struct CacheFlutter {
-    pub pi: PeerInfo,
-    pub sp: Option<SwitchDisplay>,
-    pub cursor_data: HashMap<u64, CursorData>,
-    pub cursor_id: u64,
-    pub is_secured_direct: Option<(bool, bool)>,
-}
-
 #[derive(Clone, Default)]
 pub struct Session<T: InvokeUiSession> {
     pub session_id: SessionID, // different from the one in LoginConfigHandler, used for flutter UI message pass
@@ -73,9 +62,6 @@ pub struct Session<T: InvokeUiSession> {
     pub server_file_transfer_enabled: Arc<RwLock<bool>>,
     pub server_clipboard_enabled: Arc<RwLock<bool>>,
     pub last_change_display: Arc<Mutex<ChangeDisplayRecord>>,
-    #[cfg(feature = "flutter")]
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    pub cache_flutter: Arc<RwLock<CacheFlutter>>,
 }
 
 #[derive(Clone)]
@@ -1095,7 +1081,7 @@ impl<T: InvokeUiSession> Interface for Session<T> {
         handle_login_error(self.lc.clone(), err, self)
     }
 
-    fn handle_peer_info(&mut self, mut pi: PeerInfo, is_cached_pi: bool) {
+    fn handle_peer_info(&mut self, mut pi: PeerInfo) {
         log::debug!("handle_peer_info :{:?}", pi);
         pi.username = self.lc.read().unwrap().get_username(&pi);
         if pi.current_display as usize >= pi.displays.len() {
@@ -1116,12 +1102,10 @@ impl<T: InvokeUiSession> Interface for Session<T> {
                 self.msgbox("error", "Remote Error", "No Display", "");
                 return;
             }
-            if !is_cached_pi {
-                self.try_change_init_resolution(pi.current_display);
-                let p = self.lc.read().unwrap().should_auto_login();
-                if !p.is_empty() {
-                    input_os_password(p, true, self.clone());
-                }
+            self.try_change_init_resolution(pi.current_display);
+            let p = self.lc.read().unwrap().should_auto_login();
+            if !p.is_empty() {
+                input_os_password(p, true, self.clone());
             }
             let current = &pi.displays[pi.current_display as usize];
             self.set_display(
@@ -1221,23 +1205,6 @@ impl<T: InvokeUiSession> Session<T> {
     }
     pub fn ctrl_alt_del(&self) {
         self.send_key_event(&crate::keyboard::client::event_ctrl_alt_del());
-    }
-
-    #[cfg(feature = "flutter")]
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    pub fn restore_flutter_cache(&mut self) {
-        if let Some((is_secured, direct)) = self.cache_flutter.read().unwrap().is_secured_direct {
-            self.set_connection_type(is_secured, direct);
-        }
-        let pi = self.cache_flutter.read().unwrap().pi.clone();
-        self.handle_peer_info(pi, true);
-        if let Some(sp) = self.cache_flutter.read().unwrap().sp.as_ref() {
-            self.handle_peer_switch_display(sp);
-        }
-        for (_, cd) in self.cache_flutter.read().unwrap().cursor_data.iter() {
-            self.set_cursor_data(cd.clone());
-        }
-        self.set_cursor_id(self.cache_flutter.read().unwrap().cursor_id.to_string());
     }
 }
 

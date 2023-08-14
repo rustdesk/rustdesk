@@ -36,9 +36,11 @@ pub(crate) const APP_TYPE_CM: &str = "cm";
 #[cfg(any(target_os = "android", target_os = "ios"))]
 pub(crate) const APP_TYPE_CM: &str = "main";
 
-pub(crate) const APP_TYPE_DESKTOP_REMOTE: &str = "remote";
-pub(crate) const APP_TYPE_DESKTOP_FILE_TRANSFER: &str = "file transfer";
-pub(crate) const APP_TYPE_DESKTOP_PORT_FORWARD: &str = "port forward";
+// Do not remove the following constants.
+// Uncomment them when they are used.
+// pub(crate) const APP_TYPE_DESKTOP_REMOTE: &str = "remote";
+// pub(crate) const APP_TYPE_DESKTOP_FILE_TRANSFER: &str = "file transfer";
+// pub(crate) const APP_TYPE_DESKTOP_PORT_FORWARD: &str = "port forward";
 
 lazy_static::lazy_static! {
     pub(crate) static ref CUR_SESSION_ID: RwLock<SessionID> = Default::default();
