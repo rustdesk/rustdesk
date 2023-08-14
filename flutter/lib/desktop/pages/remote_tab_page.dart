@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/common/shared_state.dart';
 import 'package:flutter_hbb/consts.dart';
+import 'package:flutter_hbb/models/model.dart';
 import 'package:flutter_hbb/models/state_model.dart';
 import 'package:flutter_hbb/desktop/pages/remote_page.dart';
 import 'package:flutter_hbb/desktop/widgets/remote_toolbar.dart';
@@ -148,9 +149,40 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
             .toList()
             .join(';');
       } else if (call.method == kWindowEventCloseForSeparateWindow) {
-        final peerId = call.arguments;
+        debugPrint('REMOVE ME ============================= ${call.arguments}');
+        final peerId = call.arguments['peerId'];
+        final newWindowId = call.arguments['newWindowId'];
+        late RemotePage page;
+        try {
+          page = tabController.state.value.tabs.firstWhere((tab) {
+            return tab.key == peerId;
+          }).page as RemotePage;
+        } catch (e) {
+          debugPrint('Failed to find tab for peerId $peerId');
+          return false;
+        }
+        final sendRes = await rustDeskWinManager.call(
+            newWindowId,
+            kWindowEventSendNewWindowData,
+            page.ffi.ffiModel.cachedPeerData) as bool;
+        if (!sendRes) {
+          return false;
+        }
+        // Pass the required data to new window.
         closeSessionOnDispose[peerId] = false;
         tabController.closeBy(peerId);
+        return true;
+      } else if (call.method == kWindowEventSendNewWindowData) {
+        if (peerId == null) {
+          return false;
+        }
+        if (tabController.state.value.tabs.isEmpty) {
+          return false;
+        }
+        final page = tabController.state.value.tabs[0].page as RemotePage;
+        page.ffi.ffiModel
+            .handleCachedPeerData(call.arguments as CachedPeerData, peerId!);
+        return true;
       }
       _update_remote_count();
     });
