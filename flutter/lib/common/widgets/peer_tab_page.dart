@@ -121,10 +121,13 @@ class _PeerTabPageState extends State<PeerTabPage>
                             : BoxDecoration(
                                 color: Theme.of(context).colorScheme.background,
                                 borderRadius: BorderRadius.circular(6)),
-                        child: Icon(
-                          Icons.tag_rounded,
-                          size: 18,
-                        ))),
+                        child: Tooltip(
+                          message: translate('Toggle Tags'),
+                          child: Icon(
+                            Icons.tag_rounded,
+                            size: 18,
+                        ))
+                    )),
                     onTap: () async {
                       await bind.mainSetLocalOption(
                           key: "hideAbTagsPanel",
@@ -217,11 +220,14 @@ class _PeerTabPageState extends State<PeerTabPage>
             },
             child: RotatedBox(
                 quarterTurns: 2,
-                child: Icon(
-                  Icons.refresh,
-                  size: 18,
-                  color: textColor,
-                ))),
+                child: Tooltip(
+                  message: translate('Refresh'),
+                  child: Icon(
+                    Icons.refresh,
+                    size: 18,
+                    color: textColor,
+                ))
+            )),
       ),
     );
   }
@@ -248,14 +254,18 @@ class _PeerTabPageState extends State<PeerTabPage>
                   k: 'peer-card-ui-type', v: type.index.toString());
               peerCardUiType.value = type;
             },
-            child: Icon(
-              peerCardUiType.value == PeerUiType.grid
-                  ? Icons.view_list_rounded
-                  : Icons.grid_view_rounded,
-              size: 18,
-              color: textColor,
-            )),
-      ),
+            child: Tooltip(
+                message: peerCardUiType.value == PeerUiType.grid
+                    ? translate('List View')
+                    : translate('Grid View'),
+                child: Icon(
+                  peerCardUiType.value == PeerUiType.grid
+                      ? Icons.view_list_rounded
+                      : Icons.grid_view_rounded,
+                  size: 18,
+                  color: textColor,
+            ))
+        )),
     );
   }
 
@@ -269,11 +279,13 @@ class _PeerTabPageState extends State<PeerTabPage>
         onTap: () {
           model.setMultiSelectionMode(true);
         },
-        child: Icon(
-          IconFont.checkbox,
-          size: 18,
-          color: textColor,
-        ),
+        child: Tooltip(
+          message: translate('Select'),
+          child: Icon(
+            IconFont.checkbox,
+            size: 18,
+            color: textColor,
+          )),
       ),
     );
   }
@@ -466,10 +478,13 @@ class _PeerSearchBarState extends State<PeerSearchBar> {
                 drawer = true;
               });
             },
-            icon: Icon(
-              Icons.search_rounded,
-              color: Theme.of(context).hintColor,
-            ));
+            icon: Tooltip(
+                message: translate('Search'),
+                child: Icon(
+                  Icons.search_rounded,
+                  color: Theme.of(context).hintColor,
+            ))
+          );
   }
 
   Widget _buildSearchBar() {
@@ -537,10 +552,14 @@ class _PeerSearchBarState extends State<PeerSearchBar> {
                             drawer = false;
                           });
                         },
-                        icon: Icon(
-                          Icons.close,
-                          color: Theme.of(context).hintColor,
+                        icon: Tooltip(
+                            message: translate('Close'),
+                            child:
+                            Icon(
+                              Icons.close,
+                              color: Theme.of(context).hintColor,
                         )),
+                    ),
                   ],
                 ),
               )
@@ -604,10 +623,12 @@ class _PeerSortDropdownState extends State<PeerSortDropdown> {
 
     var menuPos = RelativeRect.fromLTRB(0, 0, 0, 0);
     return InkWell(
-      child: Icon(
-        Icons.sort_rounded,
-        size: 18,
-      ),
+      child: Tooltip(
+          message: translate('Sort by'),
+          child: Icon(
+            Icons.sort_rounded,
+            size: 18,
+      )),
       onTapDown: (details) {
         final x = details.globalPosition.dx;
         final y = details.globalPosition.dy;

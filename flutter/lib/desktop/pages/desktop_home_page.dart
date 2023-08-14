@@ -185,11 +185,13 @@ class _DesktopHomePageState extends State<DesktopHomePage>
           backgroundColor: hover.value
               ? Theme.of(context).scaffoldBackgroundColor
               : Theme.of(context).colorScheme.background,
-          child: Icon(
-            Icons.more_vert_outlined,
-            size: 20,
-            color: hover.value ? textColor : textColor?.withOpacity(0.5),
-          ),
+          child: Tooltip(
+            message: translate('Settings'),
+            child: Icon(
+              Icons.more_vert_outlined,
+              size: 20,
+              color: hover.value ? textColor : textColor?.withOpacity(0.5),
+            )),
         ),
       ),
       onHover: (value) => hover.value = value,
@@ -252,23 +254,28 @@ class _DesktopHomePageState extends State<DesktopHomePage>
                         onPressed: () => bind.mainUpdateTemporaryPassword(),
                         child: Obx(() => RotatedBox(
                             quarterTurns: 2,
-                            child: Icon(
-                              Icons.refresh,
-                              color: refreshHover.value
-                                  ? textColor
-                                  : Color(0xFFDDDDDD),
-                              size: 22,
-                            ))),
+                            child: Tooltip(
+                              message: translate('Refresh Password'),
+                              child: Icon(
+                                Icons.refresh,
+                                color: refreshHover.value
+                                    ? textColor
+                                    : Color(0xFFDDDDDD),
+                                size: 22,
+                              ))
+                            )),
                         onHover: (value) => refreshHover.value = value,
                       ).marginOnly(right: 8, top: 4),
                       InkWell(
                         child: Obx(
-                          () => Icon(
-                            Icons.edit,
-                            color:
-                                editHover.value ? textColor : Color(0xFFDDDDDD),
-                            size: 22,
-                          ).marginOnly(right: 8, top: 4),
+                          () => Tooltip(
+                            message: translate('Change Password'),
+                            child: Icon(
+                              Icons.edit,
+                              color:
+                                  editHover.value ? textColor : Color(0xFFDDDDDD),
+                              size: 22,
+                            )).marginOnly(right: 8, top: 4),
                         ),
                         onTap: () => DesktopSettingPage.switch2page(1),
                         onHover: (value) => editHover.value = value,

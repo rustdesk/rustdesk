@@ -927,34 +927,49 @@ impl<T: InvokeUiSession> Session<T> {
         }
     }
 
-    pub fn handle_peer_switch_display(&self, display: &SwitchDisplay) {
-        self.ui_handler.switch_display(display);
-
-        if self.last_change_display.lock().unwrap().is_the_same_record(
-            display.display,
-            display.width,
-            display.height,
-        ) {
-            let custom_resolution = if display.width != display.original_resolution.width
-                || display.height != display.original_resolution.height
-            {
-                Some((display.width, display.height))
-            } else {
-                None
-            };
+    fn set_custom_resolution(&self, display: &SwitchDisplay) {
+        if display.width == display.original_resolution.width
+            && display.height == display.original_resolution.height
+        {
             self.lc
                 .write()
                 .unwrap()
-                .set_custom_resolution(display.display, custom_resolution);
+                .set_custom_resolution(display.display, None);
+        } else {
+            let last_change_display = self.last_change_display.lock().unwrap();
+            if last_change_display.display == display.display {
+                let wh = if last_change_display.is_the_same_record(
+                    display.display,
+                    display.width,
+                    display.height,
+                ) {
+                    Some((display.width, display.height))
+                } else {
+                    // display origin is changed, or some other events.
+                    None
+                };
+                self.lc
+                    .write()
+                    .unwrap()
+                    .set_custom_resolution(display.display, wh);
+            }
         }
     }
 
+    #[inline]
+    pub fn handle_peer_switch_display(&self, display: &SwitchDisplay) {
+        self.ui_handler.switch_display(display);
+        self.set_custom_resolution(display);
+    }
+
+    #[inline]
     pub fn change_resolution(&self, display: i32, width: i32, height: i32) {
         *self.last_change_display.lock().unwrap() =
             ChangeDisplayRecord::new(display, width, height);
         self.do_change_resolution(width, height);
     }
 
+    #[inline]
     fn try_change_init_resolution(&self, display: i32) {
         if let Some((w, h)) = self.lc.read().unwrap().get_custom_resolution(display) {
             self.do_change_resolution(w, h);
@@ -973,10 +988,12 @@ impl<T: InvokeUiSession> Session<T> {
         self.send(Data::Message(msg));
     }
 
+    #[inline]
     pub fn request_voice_call(&self) {
         self.send(Data::NewVoiceCall);
     }
 
+    #[inline]
     pub fn close_voice_call(&self) {
         self.send(Data::CloseVoiceCall);
     }

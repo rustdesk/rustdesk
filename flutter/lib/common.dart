@@ -1077,6 +1077,30 @@ Color str2color(String str, [alpha = 0xFF]) {
   return Color((hash & 0xFF7FFF) | (alpha << 24));
 }
 
+Color str2color2(String str, [alpha = 0xFF]) {
+  List<Color> colorList = [
+    Colors.red,
+    Colors.green,
+    Colors.blue,
+    Colors.orange,
+    Colors.yellow,
+    Colors.purple,
+    Colors.grey,
+    Colors.cyan,
+    Colors.lime,
+    Colors.teal,
+    Colors.pink,
+    Colors.indigo,
+    Colors.brown,
+  ];
+  var hash = 0;
+  for (var i = 0; i < str.length; i++) {
+    hash += str.codeUnitAt(i);
+  }
+  hash = hash % colorList.length;
+  return colorList[hash].withAlpha(alpha);
+}
+
 const K = 1024;
 const M = K * K;
 const G = M * K;
@@ -2325,10 +2349,18 @@ void onCopyFingerprint(String value) {
   }
 }
 
+Future<bool> callMainCheckSuperUserPermission() async {
+  bool checked = await bind.mainCheckSuperUserPermission();
+  if (Platform.isMacOS) {
+    await windowManager.show();
+  }
+  return checked;
+}
+
 Future<void> start_service(bool is_start) async {
   bool checked = !bind.mainIsInstalled() ||
       !Platform.isMacOS ||
-      await bind.mainCheckSuperUserPermission();
+      await callMainCheckSuperUserPermission();
   if (checked) {
     bind.mainSetOption(key: "stop-service", value: is_start ? "" : "Y");
   }

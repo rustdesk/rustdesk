@@ -1112,6 +1112,7 @@ pub fn check_process(arg: &str, same_uid: bool) -> bool {
     if let Ok(linked) = path.read_link() {
         path = linked;
     }
+    let path = path.to_string_lossy().to_lowercase();
     let my_uid = sys
         .process((std::process::id() as usize).into())
         .map(|x| x.user_id())
@@ -1121,7 +1122,7 @@ pub fn check_process(arg: &str, same_uid: bool) -> bool {
         if let Ok(linked) = cur_path.read_link() {
             cur_path = linked;
         }
-        if cur_path != path {
+        if cur_path.to_string_lossy().to_lowercase() != path {
             continue;
         }
         if p.pid().to_string() == std::process::id().to_string() {
