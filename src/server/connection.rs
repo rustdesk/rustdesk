@@ -175,7 +175,6 @@ pub struct Connection {
     tx_input: std_mpsc::Sender<MessageInput>,
     // handle input messages
     video_ack_required: bool,
-    peer_info: (String, String),
     server_audit_conn: String,
     server_audit_file: String,
     lr: LoginRequest,
@@ -306,7 +305,6 @@ impl Connection {
             disable_keyboard: false,
             tx_input,
             video_ack_required: false,
-            peer_info: Default::default(),
             server_audit_conn: "".to_owned(),
             server_audit_file: "".to_owned(),
             lr: Default::default(),
@@ -955,7 +953,9 @@ impl Connection {
         } else {
             0
         };
-        self.post_conn_audit(json!({"peer": self.peer_info, "type": conn_type}));
+        self.post_conn_audit(
+            json!({"peer": ((&self.lr.my_id, &self.lr.my_name)), "type": conn_type}),
+        );
         #[allow(unused_mut)]
         let mut username = crate::platform::get_active_username();
         let mut res = LoginResponse::new();
@@ -1142,7 +1142,6 @@ impl Connection {
     }
 
     fn try_start_cm(&mut self, peer_id: String, name: String, authorized: bool) {
-        self.peer_info = (peer_id.clone(), name.clone());
         self.send_to_cm(ipc::Data::Login {
             id: self.inner.id(),
             is_file_transfer: self.file_transfer.is_some(),
