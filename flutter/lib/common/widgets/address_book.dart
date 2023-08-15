@@ -346,6 +346,7 @@ class _AddressBookState extends State<AddressBook> {
         close();
       }
 
+      double marginBottom = 4;
       return CustomAlertDialog(
         title: Text(translate("Add ID")),
         content: Column(
@@ -367,7 +368,7 @@ class _AddressBookState extends State<AddressBook> {
                       ),
                     ],
                   ),
-                ),
+                ).marginOnly(bottom: marginBottom),
                 TextField(
                   controller: idController,
                   inputFormatters: [IDTextInputFormatter()],
@@ -379,7 +380,7 @@ class _AddressBookState extends State<AddressBook> {
                     translate('Alias'),
                     style: style,
                   ),
-                ).marginOnly(top: 8, bottom: 2),
+                ).marginOnly(top: 8, bottom: marginBottom),
                 TextField(
                   controller: aliasController,
                 ),
@@ -389,8 +390,9 @@ class _AddressBookState extends State<AddressBook> {
                     translate('Tags'),
                     style: style,
                   ),
-                ).marginOnly(top: 8),
-                Container(
+                ).marginOnly(top: 8, bottom: marginBottom),
+                Align(
+                  alignment: Alignment.centerLeft,
                   child: Wrap(
                     children: tags
                         .map((e) => AddressBookTag(
