@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/models/model.dart';
 import 'package:flutter_hbb/models/peer_model.dart';
+import 'package:flutter_hbb/models/peer_tab_model.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:get/get.dart';
 import 'package:bot_toast/bot_toast.dart';
@@ -24,7 +25,8 @@ bool shouldSortTags() {
 
 class AbModel {
   final abLoading = false.obs;
-  final abError = "".obs;
+  final pullError = "".obs;
+  final pushError = "".obs;
   final tags = [].obs;
   final peers = List<Peer>.empty(growable: true).obs;
   final sortTags = shouldSortTags().obs;
@@ -33,8 +35,10 @@ class AbModel {
   final selectedTags = List<String>.empty(growable: true).obs;
   var initialized = false;
   var licensedDevices = 0;
-  var sync_all_from_recent = true;
+  var _syncAllFromRecent = true;
+  var _syncFromRecentLock = false;
   var _timerCounter = 0;
+  var _cacheLoadOnceFlag = false;
 
   WeakReference<FFI> parent;
 
@@ -51,12 +55,15 @@ class AbModel {
     if (gFFI.userModel.userName.isEmpty) return;
     if (abLoading.value) return;
     if (!force && initialized) return;
-    if (!initialized) {
-      await _loadCache();
+    if (pushError.isNotEmpty) {
+      try {
+        // push to retry
+        pushAb(toast: false);
+      } catch (_) {}
     }
     if (!quiet) {
       abLoading.value = true;
-      abError.value = "";
+      pullError.value = "";
     }
     final api = "${await bind.mainGetApiServer()}/api/ab";
     int? statusCode;
@@ -66,19 +73,22 @@ class AbModel {
       authHeaders['Accept-Encoding'] = "gzip";
       final resp = await http.get(Uri.parse(api), headers: authHeaders);
       statusCode = resp.statusCode;
-      if (resp.body.isNotEmpty && resp.body.toLowerCase() != "null") {
+      if (resp.body.toLowerCase() == "null") {
+        // normal reply, emtpy ab return null
+        tags.clear();
+        peers.clear();
+      } else if (resp.body.isNotEmpty) {
         Map<String, dynamic> json;
         try {
           json = jsonDecode(utf8.decode(resp.bodyBytes));
         } catch (e) {
           if (resp.statusCode != 200) {
-            BotToast.showText(
-                contentColor: Colors.red, text: 'HTTP ${resp.statusCode}');
+            throw 'HTTP ${resp.statusCode}, $e';
           }
           rethrow;
         }
         if (json.containsKey('error')) {
-          abError.value = json['error'];
+          throw json['error'];
         } else if (json.containsKey('data')) {
           try {
             gFFI.abModel.licensedDevices = json['licensed_devices'];
@@ -101,7 +111,13 @@ class AbModel {
         }
       }
     } catch (err) {
-      abError.value = err.toString();
+      if (!quiet) {
+        pullError.value =
+            '${translate('pull_ab_failed_tip')}: ${translate(err.toString())}';
+        if (gFFI.peerTabModel.currentTab != PeerTabIndex.ab.index) {
+          BotToast.showText(contentColor: Colors.red, text: pullError.value);
+        }
+      }
     } finally {
       if (initialized) {
         // make loading effect obvious
@@ -112,24 +128,14 @@ class AbModel {
         abLoading.value = false;
       }
       initialized = true;
-      sync_all_from_recent = true;
+      _syncAllFromRecent = true;
       _timerCounter = 0;
-      if (abError.isNotEmpty) {
+      if (pullError.isNotEmpty) {
         if (statusCode == 401) {
           gFFI.userModel.reset(clearAbCache: true);
-        } else {
-          reset(clearCache: false);
         }
       }
     }
-  }
-
-  Future<void> reset({bool clearCache = false}) async {
-    await bind.mainSetLocalOption(key: "selected-tags", value: '');
-    tags.clear();
-    peers.clear();
-    initialized = false;
-    if (clearCache) await bind.mainClearAb();
   }
 
   void addId(String id, String alias, List<dynamic> tags) {
@@ -154,8 +160,12 @@ class AbModel {
   }
 
   void addPeer(Peer peer) {
-    peers.removeWhere((e) => e.id == peer.id);
-    peers.add(peer);
+    final index = peers.indexWhere((e) => e.id == peer.id);
+    if (index >= 0) {
+      peers[index] = merge(peer, peers[index]);
+    } else {
+      peers.add(peer);
+    }
   }
 
   void addPeers(List<Peer> ps) {
@@ -187,33 +197,66 @@ class AbModel {
     }).toList();
   }
 
-  Future<void> pushAb() async {
-    debugPrint("pushAb");
-    final api = "${await bind.mainGetApiServer()}/api/ab";
-    var authHeaders = getHttpHeaders();
-    authHeaders['Content-Type'] = "application/json";
-    final peersJsonData = peers.map((e) => e.toAbUploadJson()).toList();
-    final body = jsonEncode({
-      "data": jsonEncode({"tags": tags, "peers": peersJsonData})
-    });
-    var request = http.Request('POST', Uri.parse(api));
-    // support compression
-    if (licensedDevices > 0 && body.length > 1024) {
-      authHeaders['Content-Encoding'] = "gzip";
-      request.bodyBytes = GZipCodec().encode(utf8.encode(body));
-    } else {
-      request.body = body;
+  void changeAlias({required String id, required String alias}) {
+    final it = peers.where((element) => element.id == id);
+    if (it.isEmpty) {
+      return;
     }
-    request.headers.addAll(authHeaders);
+    it.first.alias = alias;
+  }
+
+  Future<void> pushAb({bool toast = true}) async {
+    debugPrint("pushAb");
+    pushError.value = '';
     try {
-      await http.Client().send(request);
-      // await pullAb(quiet: true);
-      _saveCache(); // save on success
+      // avoid double pushes in a row
+      _syncAllFromRecent = true;
+      syncFromRecent(push: false);
+      final api = "${await bind.mainGetApiServer()}/api/ab";
+      var authHeaders = getHttpHeaders();
+      authHeaders['Content-Type'] = "application/json";
+      final peersJsonData = peers.map((e) => e.toAbUploadJson()).toList();
+      final body = jsonEncode({
+        "data": jsonEncode({"tags": tags, "peers": peersJsonData})
+      });
+      http.Response resp;
+      // support compression
+      if (licensedDevices > 0 && body.length > 1024) {
+        authHeaders['Content-Encoding'] = "gzip";
+        resp = await http.post(Uri.parse(api),
+            headers: authHeaders, body: GZipCodec().encode(utf8.encode(body)));
+      } else {
+        resp =
+            await http.post(Uri.parse(api), headers: authHeaders, body: body);
+      }
+      try {
+        if (resp.statusCode == 200 &&
+            (resp.body.isEmpty || resp.body.toLowerCase() == 'null')) {
+          _saveCache();
+        } else {
+          final json = jsonDecode(resp.body);
+          if (json.containsKey('error')) {
+            throw json['error'];
+          } else if (resp.statusCode == 200) {
+            _saveCache();
+          } else {
+            throw 'HTTP ${resp.statusCode}';
+          }
+        }
+      } catch (e) {
+        if (resp.statusCode != 200) {
+          throw 'HTTP ${resp.statusCode}, $e';
+        }
+        rethrow;
+      }
     } catch (e) {
-      BotToast.showText(contentColor: Colors.red, text: e.toString());
+      pushError.value =
+          '${translate('push_ab_failed_tip')}: ${translate(e.toString())}';
+      if (toast && gFFI.peerTabModel.currentTab != PeerTabIndex.ab.index) {
+        BotToast.showText(contentColor: Colors.red, text: pushError.value);
+      }
     } finally {
-      sync_all_from_recent = true;
-      _timerCounter = 0;
+      _syncAllFromRecent = true;
     }
   }
 
@@ -290,34 +333,43 @@ class AbModel {
     }
   }
 
-  void syncFromRecent() async {
-    Peer merge(Peer r, Peer p) {
-      return Peer(
-          id: p.id,
-          hash: r.hash.isEmpty ? p.hash : r.hash,
-          username: r.username.isEmpty ? p.username : r.username,
-          hostname: r.hostname.isEmpty ? p.hostname : r.hostname,
-          platform: r.platform.isEmpty ? p.platform : r.platform,
-          alias: r.alias,
-          tags: p.tags,
-          forceAlwaysRelay: r.forceAlwaysRelay,
-          rdpPort: r.rdpPort,
-          rdpUsername: r.rdpUsername);
-    }
+  Peer merge(Peer r, Peer p) {
+    return Peer(
+        id: p.id,
+        hash: r.hash.isEmpty ? p.hash : r.hash,
+        username: r.username.isEmpty ? p.username : r.username,
+        hostname: r.hostname.isEmpty ? p.hostname : r.hostname,
+        platform: r.platform.isEmpty ? p.platform : r.platform,
+        alias: p.alias.isEmpty ? r.alias : p.alias,
+        tags: p.tags,
+        forceAlwaysRelay: r.forceAlwaysRelay,
+        rdpPort: r.rdpPort,
+        rdpUsername: r.rdpUsername);
+  }
 
+  void syncFromRecent({bool push = true}) async {
+    if (!_syncFromRecentLock) {
+      _syncFromRecentLock = true;
+      _syncFromRecentWithoutLock(push: push);
+      _syncFromRecentLock = false;
+    }
+  }
+
+  void _syncFromRecentWithoutLock({bool push = true}) async {
     bool shouldSync(Peer a, Peer b) {
       return a.hash != b.hash ||
           a.username != b.username ||
           a.platform != b.platform ||
-          a.hostname != b.hostname;
+          a.hostname != b.hostname ||
+          a.alias != b.alias;
     }
 
     Future<List<Peer>> getRecentPeers() async {
       try {
         if (peers.isEmpty) [];
         List<String> filteredPeerIDs;
-        if (sync_all_from_recent) {
-          sync_all_from_recent = false;
+        if (_syncAllFromRecent) {
+          _syncAllFromRecent = false;
           filteredPeerIDs = peers.map((e) => e.id).toList();
         } else {
           final new_stored_str = await bind.mainGetNewStoredPeers();
@@ -372,7 +424,7 @@ class AbModel {
         }
       }
       // Be careful with loop calls
-      if (changed) {
+      if (changed && push) {
         pushAb();
       }
     } catch (e) {
@@ -394,8 +446,10 @@ class AbModel {
     }
   }
 
-  _loadCache() async {
+  loadCache() async {
     try {
+      if (_cacheLoadOnceFlag || abLoading.value) return;
+      _cacheLoadOnceFlag = true;
       final access_token = bind.mainGetLocalOption(key: 'access_token');
       if (access_token.isEmpty) return;
       final cache = await bind.mainLoadAb();

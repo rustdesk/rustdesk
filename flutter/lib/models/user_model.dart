@@ -87,7 +87,7 @@ class UserModel {
   Future<void> reset({bool clearAbCache = false}) async {
     await bind.mainSetLocalOption(key: 'access_token', value: '');
     await bind.mainSetLocalOption(key: 'user_info', value: '');
-    await gFFI.abModel.reset(clearCache: clearAbCache);
+    if (clearAbCache) await bind.mainClearAb();
     await gFFI.groupModel.reset();
     userName.value = '';
   }

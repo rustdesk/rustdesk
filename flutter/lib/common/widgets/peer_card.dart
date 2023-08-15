@@ -159,7 +159,6 @@ class _PeerCardState extends State<_PeerCard>
     final greyStyle = TextStyle(
         fontSize: 11,
         color: Theme.of(context).textTheme.titleLarge?.color?.withOpacity(0.6));
-    final alias = bind.mainGetPeerOptionSync(id: peer.id, key: 'alias');
     final child = Obx(
       () => Container(
         foregroundDecoration: deco.value,
@@ -196,7 +195,9 @@ class _PeerCardState extends State<_PeerCard>
                             getOnline(8, peer.online),
                             Expanded(
                                 child: Text(
-                              alias.isEmpty ? formatID(peer.id) : alias,
+                              peer.alias.isEmpty
+                                  ? formatID(peer.id)
+                                  : peer.alias,
                               overflow: TextOverflow.ellipsis,
                               style: Theme.of(context).textTheme.titleSmall,
                             )),
@@ -229,13 +230,14 @@ class _PeerCardState extends State<_PeerCard>
           : '',
       child: Stack(children: [
         child,
-        Positioned(
-          top: 2,
-          right: 10,
-          child: CustomPaint(
-            painter: TagPainter(radius: 3, colors: colors),
-          ),
-        )
+        if (colors.isNotEmpty)
+          Positioned(
+            top: 2,
+            right: 10,
+            child: CustomPaint(
+              painter: TagPainter(radius: 3, colors: colors),
+            ),
+          )
       ]),
     );
   }
@@ -329,13 +331,14 @@ class _PeerCardState extends State<_PeerCard>
           : '',
       child: Stack(children: [
         child,
-        Positioned(
-          top: 4,
-          right: 12,
-          child: CustomPaint(
-            painter: TagPainter(radius: 4, colors: colors),
-          ),
-        )
+        if (colors.isNotEmpty)
+          Positioned(
+            top: 4,
+            right: 12,
+            child: CustomPaint(
+              painter: TagPainter(radius: 4, colors: colors),
+            ),
+          )
       ]),
     );
   }
@@ -649,8 +652,13 @@ abstract class BasePeerCard extends StatelessWidget {
             oldName: oldName,
             onSubmit: (String newName) async {
               if (newName != oldName) {
-                await bind.mainSetPeerAlias(id: id, alias: newName);
-                _update();
+                if (tab == PeerTabIndex.ab) {
+                  gFFI.abModel.changeAlias(id: id, alias: newName);
+                  gFFI.abModel.pushAb();
+                } else {
+                  await bind.mainSetPeerAlias(id: id, alias: newName);
+                  _update();
+                }
               }
             });
       },
@@ -1048,6 +1056,11 @@ class AddressBookPeerCard extends BasePeerCard {
       dismissOnClicked: true,
     );
   }
+
+  @protected
+  @override
+  Future<String> _getAlias(String id) async =>
+      gFFI.abModel.find(id)?.alias ?? '';
 }
 
 class MyGroupPeerCard extends BasePeerCard {

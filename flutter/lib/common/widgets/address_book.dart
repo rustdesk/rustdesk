@@ -45,12 +45,17 @@ class _AddressBookState extends State<AddressBook> {
               child: CircularProgressIndicator(),
             );
           }
-          if (gFFI.abModel.abError.isNotEmpty) {
-            return _buildShowError(gFFI.abModel.abError.value);
-          }
           return Column(
             children: [
-              _buildLoadingHavingPeers(),
+              _buildNotEmptyLoading(),
+              _buildErrorBanner(
+                  err: gFFI.abModel.pullError,
+                  retry: null,
+                  close: () => gFFI.abModel.pullError.value = ''),
+              _buildErrorBanner(
+                  err: gFFI.abModel.pushError,
+                  retry: () => gFFI.abModel.pushAb(),
+                  close: () => gFFI.abModel.pushError.value = ''),
               Expanded(
                   child: isDesktop
                       ? _buildAddressBookDesktop()
@@ -60,22 +65,62 @@ class _AddressBookState extends State<AddressBook> {
         }
       });
 
-  Widget _buildShowError(String error) {
-    return Center(
-        child: Column(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        Text(translate(error)),
-        TextButton(
-            onPressed: () {
-              gFFI.abModel.pullAb();
-            },
-            child: Text(translate("Retry")))
-      ],
-    ));
+  Widget _buildErrorBanner(
+      {required RxString err,
+      required Function? retry,
+      required Function close}) {
+    const double height = 25;
+    return Obx(() => Offstage(
+          offstage: !(!gFFI.abModel.abLoading.value && err.value.isNotEmpty),
+          child: Center(
+              child: Container(
+            height: height,
+            color: Color.fromARGB(255, 253, 238, 235),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                FittedBox(
+                  child: Icon(
+                    Icons.info,
+                    color: Color.fromARGB(255, 249, 81, 81),
+                  ),
+                ).marginAll(4),
+                Flexible(
+                  child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: Tooltip(
+                        message: translate(err.value),
+                        child: Text(
+                          translate(err.value),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      )).marginSymmetric(vertical: 2),
+                ),
+                if (retry != null)
+                  InkWell(
+                      onTap: () {
+                        retry.call();
+                      },
+                      child: Text(
+                        translate("Retry"),
+                        style: TextStyle(color: MyTheme.accent),
+                      )).marginSymmetric(horizontal: 5),
+                FittedBox(
+                  child: InkWell(
+                    onTap: () {
+                      close.call();
+                    },
+                    child: Icon(Icons.close).marginSymmetric(horizontal: 5),
+                  ),
+                ).marginAll(4)
+              ],
+            ),
+          )).marginOnly(bottom: 14),
+        ));
   }
 
-  Widget _buildLoadingHavingPeers() {
+  Widget _buildNotEmptyLoading() {
     double size = 15;
     return Obx(() => Offstage(
           offstage: !(gFFI.abModel.abLoading.value && !gFFI.abModel.emtpy),
@@ -301,6 +346,7 @@ class _AddressBookState extends State<AddressBook> {
         close();
       }
 
+      double marginBottom = 4;
       return CustomAlertDialog(
         title: Text(translate("Add ID")),
         content: Column(
@@ -322,7 +368,7 @@ class _AddressBookState extends State<AddressBook> {
                       ),
                     ],
                   ),
-                ),
+                ).marginOnly(bottom: marginBottom),
                 TextField(
                   controller: idController,
                   inputFormatters: [IDTextInputFormatter()],
@@ -334,7 +380,7 @@ class _AddressBookState extends State<AddressBook> {
                     translate('Alias'),
                     style: style,
                   ),
-                ).marginOnly(top: 8, bottom: 2),
+                ).marginOnly(top: 8, bottom: marginBottom),
                 TextField(
                   controller: aliasController,
                 ),
@@ -344,8 +390,9 @@ class _AddressBookState extends State<AddressBook> {
                     translate('Tags'),
                     style: style,
                   ),
-                ).marginOnly(top: 8),
-                Container(
+                ).marginOnly(top: 8, bottom: marginBottom),
+                Align(
+                  alignment: Alignment.centerLeft,
                   child: Wrap(
                     children: tags
                         .map((e) => AddressBookTag(
