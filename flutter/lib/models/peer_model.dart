@@ -56,6 +56,7 @@ class Peer {
       "username": username,
       "hostname": hostname,
       "platform": platform,
+      "alias": alias,
       "tags": tags,
     };
   }

@@ -197,6 +197,14 @@ class AbModel {
     }).toList();
   }
 
+  void changeAlias({required String id, required String alias}) {
+    final it = peers.where((element) => element.id == id);
+    if (it.isEmpty) {
+      return;
+    }
+    it.first.alias = alias;
+  }
+
   Future<void> pushAb({bool toast = true}) async {
     debugPrint("pushAb");
     pushError.value = '';
@@ -332,7 +340,7 @@ class AbModel {
         username: r.username.isEmpty ? p.username : r.username,
         hostname: r.hostname.isEmpty ? p.hostname : r.hostname,
         platform: r.platform.isEmpty ? p.platform : r.platform,
-        alias: r.alias,
+        alias: p.alias.isEmpty ? r.alias : p.alias,
         tags: p.tags,
         forceAlwaysRelay: r.forceAlwaysRelay,
         rdpPort: r.rdpPort,
@@ -352,7 +360,8 @@ class AbModel {
       return a.hash != b.hash ||
           a.username != b.username ||
           a.platform != b.platform ||
-          a.hostname != b.hostname;
+          a.hostname != b.hostname ||
+          a.alias != b.alias;
     }
 
     Future<List<Peer>> getRecentPeers() async {
