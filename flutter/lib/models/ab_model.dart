@@ -78,15 +78,8 @@ class AbModel {
         tags.clear();
         peers.clear();
       } else if (resp.body.isNotEmpty) {
-        Map<String, dynamic> json;
-        try {
-          json = jsonDecode(utf8.decode(resp.bodyBytes));
-        } catch (e) {
-          if (resp.statusCode != 200) {
-            throw 'HTTP ${resp.statusCode}, $e';
-          }
-          rethrow;
-        }
+        Map<String, dynamic> json =
+            _jsonDecode(utf8.decode(resp.bodyBytes), resp.statusCode);
         if (json.containsKey('error')) {
           throw json['error'];
         } else if (json.containsKey('data')) {
@@ -221,7 +214,7 @@ class AbModel {
       });
       http.Response resp;
       // support compression
-      if (licensedDevices > 0 && body.length > 1024) {
+      if (licensedDevices > 0 && body.length > 102400) {
         authHeaders['Content-Encoding'] = "gzip";
         resp = await http.post(Uri.parse(api),
             headers: authHeaders, body: GZipCodec().encode(utf8.encode(body)));
@@ -229,25 +222,18 @@ class AbModel {
         resp =
             await http.post(Uri.parse(api), headers: authHeaders, body: body);
       }
-      try {
-        if (resp.statusCode == 200 &&
-            (resp.body.isEmpty || resp.body.toLowerCase() == 'null')) {
+      if (resp.statusCode == 200 &&
+          (resp.body.isEmpty || resp.body.toLowerCase() == 'null')) {
+        _saveCache();
+      } else {
+        Map<String, dynamic> json = _jsonDecode(resp.body, resp.statusCode);
+        if (json.containsKey('error')) {
+          throw json['error'];
+        } else if (resp.statusCode == 200) {
           _saveCache();
         } else {
-          final json = jsonDecode(resp.body);
-          if (json.containsKey('error')) {
-            throw json['error'];
-          } else if (resp.statusCode == 200) {
-            _saveCache();
-          } else {
-            throw 'HTTP ${resp.statusCode}';
-          }
+          throw 'HTTP ${resp.statusCode}';
         }
-      } catch (e) {
-        if (resp.statusCode != 200) {
-          throw 'HTTP ${resp.statusCode}, $e';
-        }
-        rethrow;
       }
     } catch (e) {
       pushError.value =
@@ -467,6 +453,19 @@ class AbModel {
       }
     } catch (e) {
       debugPrint("load ab cache: $e");
+    }
+  }
+
+  Map<String, dynamic> _jsonDecode(String body, int statusCode) {
+    try {
+      Map<String, dynamic> json = jsonDecode(body);
+      return json;
+    } catch (e) {
+      final err = body.isNotEmpty && body.length < 128 ? body : e.toString();
+      if (statusCode != 200) {
+        throw 'HTTP $statusCode, $err';
+      }
+      throw err;
     }
   }
 }
