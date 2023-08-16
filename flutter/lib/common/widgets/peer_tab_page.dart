@@ -343,12 +343,17 @@ class _PeerTabPageState extends State<PeerTabPage>
                     }
                   }
                   gFFI.abModel.deletePeers(peers.map((p) => p.id).toList());
-                  await gFFI.abModel.pushAb();
+                  final future = gFFI.abModel.pushAb();
                   if (hasSynced) {
-                    Future.delayed(Duration(seconds: 2), () {
-                      BotToast.showText(
-                          contentColor: Colors.lightBlue,
-                          text: translate('synced_peer_readded_tip'));
+                    Future.delayed(Duration.zero, () async {
+                      final succ = await future;
+                      if (succ) {
+                        await Future.delayed(
+                            Duration(seconds: 2)); // success msg
+                        BotToast.showText(
+                            contentColor: Colors.lightBlue,
+                            text: translate('synced_peer_readded_tip'));
+                      }
                     });
                   }
                 }
@@ -357,7 +362,7 @@ class _PeerTabPageState extends State<PeerTabPage>
                 break;
             }
             gFFI.peerTabModel.setMultiSelectionMode(false);
-            showToast(translate('Successful'));
+            if (model.currentTab != 3) showToast(translate('Successful'));
           }
 
           deletePeerConfirmDialog(onSubmit, translate('Delete'));
@@ -404,7 +409,6 @@ class _PeerTabPageState extends State<PeerTabPage>
           gFFI.abModel.addPeers(peers);
           gFFI.abModel.pushAb();
           model.setMultiSelectionMode(false);
-          showToast(translate('Successful'));
         },
         child: Tooltip(
                 message: translate('Add to Address Book'),

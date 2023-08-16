@@ -30,6 +30,7 @@ class AbModel {
   final tags = [].obs;
   final peers = List<Peer>.empty(growable: true).obs;
   final sortTags = shouldSortTags().obs;
+  final retrying = false.obs;
   bool get emtpy => peers.isEmpty && tags.isEmpty;
 
   final selectedTags = List<String>.empty(growable: true).obs;
@@ -55,10 +56,11 @@ class AbModel {
     if (gFFI.userModel.userName.isEmpty) return;
     if (abLoading.value) return;
     if (!force && initialized) return;
+    DateTime startTime = DateTime.now();
     if (pushError.isNotEmpty) {
       try {
         // push to retry
-        pushAb(toast: false);
+        pushAb(toastIfFail: false, toastIfSucc: false);
       } catch (_) {}
     }
     if (!quiet) {
@@ -112,14 +114,14 @@ class AbModel {
         }
       }
     } finally {
-      if (initialized) {
-        // make loading effect obvious
-        Future.delayed(Duration(milliseconds: 300), () {
-          abLoading.value = false;
-        });
-      } else {
+      var ms =
+          (Duration(milliseconds: 300) - DateTime.now().difference(startTime))
+              .inMilliseconds;
+      ms = ms > 0 ? ms : 0;
+      Future.delayed(Duration(milliseconds: ms), () {
         abLoading.value = false;
-      }
+      });
+
       initialized = true;
       _syncAllFromRecent = true;
       _timerCounter = 0;
@@ -198,9 +200,16 @@ class AbModel {
     it.first.alias = alias;
   }
 
-  Future<void> pushAb({bool toast = true}) async {
-    debugPrint("pushAb");
+  Future<bool> pushAb(
+      {bool toastIfFail = true,
+      bool toastIfSucc = true,
+      bool isRetry = false}) async {
+    debugPrint(
+        "pushAb: toastIfFail:$toastIfFail, toastIfSucc:$toastIfSucc, isRetry:$isRetry");
     pushError.value = '';
+    if (isRetry) retrying.value = true;
+    DateTime startTime = DateTime.now();
+    bool ret = false;
     try {
       // avoid double pushes in a row
       _syncAllFromRecent = true;
@@ -226,12 +235,14 @@ class AbModel {
       }
       if (resp.statusCode == 200 &&
           (resp.body.isEmpty || resp.body.toLowerCase() == 'null')) {
+        ret = true;
         _saveCache();
       } else {
         Map<String, dynamic> json = _jsonDecode(resp.body, resp.statusCode);
         if (json.containsKey('error')) {
           throw json['error'];
         } else if (resp.statusCode == 200) {
+          ret = true;
           _saveCache();
         } else {
           throw 'HTTP ${resp.statusCode}';
@@ -240,12 +251,25 @@ class AbModel {
     } catch (e) {
       pushError.value =
           '${translate('push_ab_failed_tip')}: ${translate(e.toString())}';
-      if (toast && gFFI.peerTabModel.currentTab != PeerTabIndex.ab.index) {
-        BotToast.showText(contentColor: Colors.red, text: pushError.value);
-      }
-    } finally {
-      _syncAllFromRecent = true;
     }
+    _syncAllFromRecent = true;
+    if (isRetry) {
+      var ms =
+          (Duration(milliseconds: 200) - DateTime.now().difference(startTime))
+              .inMilliseconds;
+      ms = ms > 0 ? ms : 0;
+      Future.delayed(Duration(milliseconds: ms), () {
+        retrying.value = false;
+      });
+    }
+
+    if (!ret && toastIfFail) {
+      BotToast.showText(contentColor: Colors.red, text: pushError.value);
+    }
+    if (ret && toastIfSucc) {
+      showToast(translate('Successful'));
+    }
+    return ret;
   }
 
   Peer? find(String id) {
@@ -410,7 +434,7 @@ class AbModel {
       }
       // Be careful with loop calls
       if (syncChanged && push) {
-        pushAb();
+        pushAb(toastIfSucc: false);
       } else if (uiChanged) {
         peers.refresh();
       }
