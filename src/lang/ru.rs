@@ -537,5 +537,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Toggle Tags", "Переключить метки"),
         ("pull_ab_failed_tip", "Невозможно обновить адресную книгу"),
         ("push_ab_failed_tip", "Невозможно синхронизировать адресную книгу с сервером"),
+        ("synced_peer_readded_tip", ""),
     ].iter().cloned().collect();
 }

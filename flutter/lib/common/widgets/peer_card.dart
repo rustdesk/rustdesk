@@ -1,9 +1,11 @@
 import 'dart:io';
 
+import 'package:bot_toast/bot_toast.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hbb/common/widgets/dialog.dart';
 import 'package:flutter_hbb/consts.dart';
+import 'package:flutter_hbb/models/ab_model.dart';
 import 'package:flutter_hbb/models/peer_tab_model.dart';
 import 'package:get/get.dart';
 import 'package:provider/provider.dart';
@@ -707,6 +709,11 @@ abstract class BasePeerCard extends StatelessWidget {
             case PeerTabIndex.ab:
               gFFI.abModel.deletePeer(id);
               await gFFI.abModel.pushAb();
+              if (shouldSyncAb() && await bind.mainPeerExists(id: peer.id)) {
+                BotToast.showText(
+                    contentColor: Colors.lightBlue,
+                    text: translate('synced_peer_readded_tip'));
+              }
               break;
             case PeerTabIndex.group:
               break;

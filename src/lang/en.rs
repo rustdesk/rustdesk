@@ -76,5 +76,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("exceed_max_devices", "You have reached the maximum number of managed devices."),
         ("pull_ab_failed_tip", "Failed to refresh address book"),
         ("push_ab_failed_tip", "Failed to sync address book to server"),
+        ("synced_peer_readded_tip", "The devices present in the recent sessions will be re-added to the address book."),
         ].iter().cloned().collect();
 }

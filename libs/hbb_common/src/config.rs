@@ -1079,6 +1079,10 @@ impl PeerConfig {
         Default::default()
     }
 
+    pub fn exists(id: &str) -> bool {
+        Self::path(id).exists()
+    }
+
     serde_field_string!(
         default_view_style,
         deserialize_view_style,

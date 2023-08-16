@@ -344,33 +344,28 @@ class AbModel {
   }
 
   Future<void> _syncFromRecentWithoutLock({bool push = true}) async {
-    bool shouldSync(Peer a, Peer b) {
-      return a.hash != b.hash ||
-          a.username != b.username ||
-          a.platform != b.platform ||
-          a.hostname != b.hostname ||
-          a.alias != b.alias;
+    bool shouldSync(Peer r, Peer p) {
+      return r.hash != p.hash ||
+          r.username != p.username ||
+          r.platform != p.platform ||
+          r.hostname != p.hostname ||
+          (p.alias.isEmpty && r.alias.isNotEmpty);
     }
 
     Future<List<Peer>> getRecentPeers() async {
       try {
-        if (peers.isEmpty) [];
         List<String> filteredPeerIDs;
         if (_syncAllFromRecent) {
           _syncAllFromRecent = false;
-          filteredPeerIDs = peers.map((e) => e.id).toList();
+          filteredPeerIDs = [];
         } else {
           final new_stored_str = await bind.mainGetNewStoredPeers();
           if (new_stored_str.isEmpty) return [];
-          List<String> new_stores =
-              (jsonDecode(new_stored_str) as List<dynamic>)
-                  .map((e) => e.toString())
-                  .toList();
-          final abPeerIds = peers.map((e) => e.id).toList();
-          filteredPeerIDs =
-              new_stores.where((e) => abPeerIds.contains(e)).toList();
+          filteredPeerIDs = (jsonDecode(new_stored_str) as List<dynamic>)
+              .map((e) => e.toString())
+              .toList();
+          if (filteredPeerIDs.isEmpty) return [];
         }
-        if (filteredPeerIDs.isEmpty) return [];
         final loadStr = await bind.mainLoadRecentPeersForAb(
             filter: jsonEncode(filteredPeerIDs));
         if (loadStr.isEmpty) {
@@ -392,28 +387,32 @@ class AbModel {
 
     try {
       if (!shouldSyncAb()) return;
-      final oldPeers = peers.toList();
       final recents = await getRecentPeers();
       if (recents.isEmpty) return;
-      for (var i = 0; i < peers.length; i++) {
-        var p = peers[i];
-        var r = recents.firstWhereOrNull((r) => p.id == r.id);
-        if (r != null) {
-          peers[i] = merge(r, p);
-        }
-      }
-      bool changed = false;
-      for (var i = 0; i < peers.length; i++) {
-        final o = oldPeers[i];
-        final p = peers[i];
-        if (shouldSync(o, p)) {
-          changed = true;
-          break;
+      bool syncChanged = false;
+      bool uiChanged = false;
+      for (var i = 0; i < recents.length; i++) {
+        var r = recents[i];
+        var index = peers.indexWhere((e) => e.id == r.id);
+        if (index < 0) {
+          peers.add(r);
+          syncChanged = true;
+          uiChanged = true;
+        } else {
+          if (!r.equal(peers[index])) {
+            uiChanged = true;
+          }
+          if (shouldSync(r, peers[index])) {
+            syncChanged = true;
+          }
+          peers[index] = merge(r, peers[index]);
         }
       }
       // Be careful with loop calls
-      if (changed && push) {
+      if (syncChanged && push) {
         pushAb();
+      } else if (uiChanged) {
+        peers.refresh();
       }
     } catch (e) {
       debugPrint('syncFromRecent:$e');
