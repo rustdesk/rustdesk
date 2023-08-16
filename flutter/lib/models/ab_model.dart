@@ -46,14 +46,17 @@ class AbModel {
   AbModel(this.parent) {
     if (desktopType == DesktopType.main) {
       Timer.periodic(Duration(milliseconds: 500), (timer) async {
-        if (_timerCounter++ % 6 == 0) syncFromRecent();
+        if (_timerCounter++ % 6 == 0) {
+          if (!gFFI.userModel.isLogin) return;
+          syncFromRecent();
+        }
       });
     }
   }
 
   Future<void> pullAb({force = true, quiet = false}) async {
     debugPrint("pullAb, force:$force, quiet:$quiet");
-    if (gFFI.userModel.userName.isEmpty) return;
+    if (!gFFI.userModel.isLogin) return;
     if (abLoading.value) return;
     if (!force && initialized) return;
     DateTime startTime = DateTime.now();
@@ -100,6 +103,9 @@ class AbModel {
               for (final peer in data['peers']) {
                 peers.add(Peer.fromJson(peer));
               }
+            }
+            if (isFull(false)) {
+              peers.removeRange(licensedDevices, peers.length);
             }
             _saveCache(); // save on success
           }
@@ -442,7 +448,7 @@ class AbModel {
       }
       // Be careful with loop calls
       if (syncChanged && push) {
-        pushAb(toastIfSucc: false);
+        pushAb(toastIfSucc: false, toastIfFail: false);
       } else if (uiChanged) {
         peers.refresh();
       }
