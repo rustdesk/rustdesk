@@ -163,10 +163,16 @@ class AbModel {
     }
   }
 
-  void addPeers(List<Peer> ps) {
+  bool addPeers(List<Peer> ps) {
+    bool allAdded = true;
     for (var p in ps) {
-      addPeer(p);
+      if (!isFull(false)) {
+        addPeer(p);
+      } else {
+        allAdded = false;
+      }
     }
+    return allAdded;
   }
 
   void addTag(String tag) async {
@@ -419,9 +425,11 @@ class AbModel {
         var r = recents[i];
         var index = peers.indexWhere((e) => e.id == r.id);
         if (index < 0) {
-          peers.add(r);
-          syncChanged = true;
-          uiChanged = true;
+          if (!isFull(false)) {
+            peers.add(r);
+            syncChanged = true;
+            uiChanged = true;
+          }
         } else {
           if (!r.equal(peers[index])) {
             uiChanged = true;

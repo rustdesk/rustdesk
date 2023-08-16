@@ -405,10 +405,18 @@ class _PeerTabPageState extends State<PeerTabPage>
           !gFFI.userModel.isLogin || model.currentTab == PeerTabIndex.ab.index,
       child: InkWell(
         onTap: () {
+          if (gFFI.abModel.isFull(true)) {
+            return;
+          }
           final peers = model.selectedPeers;
           gFFI.abModel.addPeers(peers);
-          gFFI.abModel.pushAb();
+          final future = gFFI.abModel.pushAb();
           model.setMultiSelectionMode(false);
+          Future.delayed(Duration.zero, () async {
+            await future;
+            await Future.delayed(Duration(seconds: 2)); // toast
+            gFFI.abModel.isFull(true);
+          });
         },
         child: Tooltip(
                 message: translate('Add to Address Book'),
