@@ -26,7 +26,6 @@ Abaixo estão os servidores que você está utilizando de graça, ele pode mudar
 | Localização | Fornecedor    | Especificações     |
 | ----------- | ------------- | ------------------ |
 | Germany | Hetzner | 2 vCPU / 4GB RAM |
-| Germany | Codext | 4 vCPU / 8GB RAM |
 
 ## Dependências
 

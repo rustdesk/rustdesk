@@ -25,7 +25,6 @@ Alla on palvelimia, joita voit käyttää ilmaiseksi, ne saattavat muuttua ajan 
 | Sijainti | Myyjä | Määrittely |
 | --------- | ------------- | ------------------ |
 | Germany | Hetzner | 2 vCPU / 4GB RAM |
-| Germany | Codext | 4 vCPU / 8GB RAM |
 | Ukraine (Kyiv) | [dc.volia](https://dc.volia.com) | 2 vCPU / 4GB RAM |
 
 ## Riippuvuudet

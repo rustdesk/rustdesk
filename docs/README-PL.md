@@ -35,7 +35,6 @@ Poniżej znajdują się serwery, z których można korzystać za darmo, może si
 | Lokalizacja | Dostawca | Specyfikacja |
 | --------- | ------------- | ------------------ |
 | Niemcy | Hetzner | 2 vCPU / 4GB RAM |
-| Niemcy | Codext | 4 vCPU / 8GB RAM |
 | Ukraina (Kijów) | [dc.volia](https://dc.volia.com) | 2 vCPU / 4GB RAM |
 
 ## Konterner Programisty (Dev Container)

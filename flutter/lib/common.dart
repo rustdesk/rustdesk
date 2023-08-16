@@ -1078,25 +1078,32 @@ Color str2color(String str, [alpha = 0xFF]) {
 }
 
 Color str2color2(String str, [alpha = 0xFF]) {
-  List<Color> colorList = [
-    Colors.red,
-    Colors.green,
-    Colors.blue,
-    Colors.orange,
-    Colors.yellow,
-    Colors.purple,
-    Colors.grey,
-    Colors.cyan,
-    Colors.lime,
-    Colors.teal,
-    Colors.pink,
-    Colors.indigo,
-    Colors.brown,
-  ];
+  Map<String, Color> colorMap = {
+    "red": Colors.red,
+    "green": Colors.green,
+    "blue": Colors.blue,
+    "orange": Colors.orange,
+    "purple": Colors.purple,
+    "grey": Colors.grey,
+    "cyan": Colors.cyan,
+    "lime": Colors.lime,
+    "teal": Colors.teal,
+    "pink": Colors.pink[200]!,
+    "indigo": Colors.indigo,
+    "brown": Colors.brown,
+  };
+  final color = colorMap[str.toLowerCase()];
+  if (color != null) {
+    return color.withAlpha(alpha);
+  }
+  if (str.toLowerCase() == 'yellow') {
+    return Colors.yellow.withAlpha(alpha);
+  }
   var hash = 0;
   for (var i = 0; i < str.length; i++) {
     hash += str.codeUnitAt(i);
   }
+  List<Color> colorList = colorMap.values.toList();
   hash = hash % colorList.length;
   return colorList[hash].withAlpha(alpha);
 }

@@ -1079,6 +1079,10 @@ impl PeerConfig {
         Default::default()
     }
 
+    pub fn exists(id: &str) -> bool {
+        Self::path(id).exists()
+    }
+
     serde_field_string!(
         default_view_style,
         deserialize_view_style,
@@ -1499,6 +1503,12 @@ pub struct AbPeer {
         skip_serializing_if = "String::is_empty"
     )]
     pub platform: String,
+    #[serde(
+        default,
+        deserialize_with = "deserialize_string",
+        skip_serializing_if = "String::is_empty"
+    )]
+    pub alias: String,
     #[serde(default, deserialize_with = "deserialize_vec_string")]
     pub tags: Vec<String>,
 }

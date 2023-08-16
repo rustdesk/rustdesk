@@ -33,7 +33,6 @@ Hieronder staan de servers die u gratis gebruikt, ze kunnen in de loop van de ti
 | Locatie | Aanbieder | Specificaties |
 | --------- | ------------- | ------------------ |
 | Duitsland | Hetzner | 2 vCPU / 4GB RAM |
-| Duitsland | Codext | 4 vCPU / 8GB RAM |
 | Oekraine (Kyiv) | [dc.volia](https://dc.volia.com) | 2 vCPU / 4GB RAM |
 
 ## Dev Container

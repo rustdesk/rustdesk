@@ -33,7 +33,6 @@ Ezalatt az üzenet alatt találhatóak azok a publikus szerverek, amelyeket ingy
 | Hely | Host | Specifikáció |
 | --------- | ------------- | ------------------ |
 | Germany | Hetzner | 2 vCPU / 4GB RAM |
-| Germany | Codext | 4 vCPU / 8GB RAM |
 | Ukraine (Kyiv) | [dc.volia](https://dc.volia.com) | 2 vCPU / 4GB RAM |
 
 ## Dependencies

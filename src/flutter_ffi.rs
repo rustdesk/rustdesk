@@ -841,6 +841,10 @@ pub fn main_peer_has_password(id: String) -> bool {
     peer_has_password(id)
 }
 
+pub fn main_peer_exists(id: String) -> bool {
+    peer_exists(&id)
+}
+
 pub fn main_load_recent_peers() {
     if !config::APP_DIR.read().unwrap().is_empty() {
         let peers: Vec<HashMap<&str, String>> = PeerConfig::peers(None)
@@ -883,8 +887,13 @@ pub fn main_load_recent_peers_sync() -> SyncReturn<String> {
 
 pub fn main_load_recent_peers_for_ab(filter: String) -> String {
     let id_filters = serde_json::from_str::<Vec<String>>(&filter).unwrap_or_default();
+    let id_filters = if id_filters.is_empty() {
+        None
+    } else {
+        Some(id_filters)
+    };
     if !config::APP_DIR.read().unwrap().is_empty() {
-        let peers: Vec<HashMap<&str, String>> = PeerConfig::peers(Some(id_filters))
+        let peers: Vec<HashMap<&str, String>> = PeerConfig::peers(id_filters)
             .drain(..)
             .map(|(id, _, p)| peer_to_map_ab(id, p))
             .collect();

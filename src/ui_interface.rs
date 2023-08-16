@@ -648,6 +648,11 @@ pub fn peer_to_map_ab(id: String, p: PeerConfig) -> HashMap<&'static str, String
     m
 }
 
+#[cfg(feature = "flutter")]
+pub fn peer_exists(id: &str) -> bool {
+    PeerConfig::exists(id)
+}
+
 #[inline]
 pub fn get_lan_peers() -> Vec<HashMap<&'static str, String>> {
     config::LanPeers::load()

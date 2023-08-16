@@ -556,8 +556,10 @@ class FileController {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             const Icon(Icons.warning_rounded, color: Colors.red),
-            Text(title).paddingOnly(
-              left: 10,
+            Expanded(
+              child: Text(title).paddingOnly(
+                left: 10,
+              ),
             ),
           ],
         ),

@@ -1,3 +1,4 @@
+import 'package:bot_toast/bot_toast.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common/widgets/address_book.dart';
 import 'package:flutter_hbb/common/widgets/dialog.dart';
@@ -7,6 +8,7 @@ import 'package:flutter_hbb/common/widgets/peer_card.dart';
 import 'package:flutter_hbb/common/widgets/animated_rotation_widget.dart';
 import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/desktop/widgets/popup_menu.dart';
+import 'package:flutter_hbb/models/ab_model.dart';
 
 import 'package:flutter_hbb/models/peer_tab_model.dart';
 import 'package:get/get.dart';
@@ -122,12 +124,11 @@ class _PeerTabPageState extends State<PeerTabPage>
                                 color: Theme.of(context).colorScheme.background,
                                 borderRadius: BorderRadius.circular(6)),
                         child: Tooltip(
-                          message: translate('Toggle Tags'),
-                          child: Icon(
-                            Icons.tag_rounded,
-                            size: 18,
-                        ))
-                    )),
+                            message: translate('Toggle Tags'),
+                            child: Icon(
+                              Icons.tag_rounded,
+                              size: 18,
+                            )))),
                     onTap: () async {
                       await bind.mainSetLocalOption(
                           key: "hideAbTagsPanel",
@@ -221,13 +222,12 @@ class _PeerTabPageState extends State<PeerTabPage>
             child: RotatedBox(
                 quarterTurns: 2,
                 child: Tooltip(
-                  message: translate('Refresh'),
-                  child: Icon(
-                    Icons.refresh,
-                    size: 18,
-                    color: textColor,
-                ))
-            )),
+                    message: translate('Refresh'),
+                    child: Icon(
+                      Icons.refresh,
+                      size: 18,
+                      color: textColor,
+                    )))),
       ),
     );
   }
@@ -243,29 +243,28 @@ class _PeerTabPageState extends State<PeerTabPage>
 
     return Obx(
       () => Container(
-        padding: EdgeInsets.all(4.0),
-        decoration: hover.value ? deco : null,
-        child: InkWell(
-            onHover: (value) => hover.value = value,
-            onTap: () async {
-              final type = types.elementAt(
-                  peerCardUiType.value == types.elementAt(0) ? 1 : 0);
-              await bind.setLocalFlutterOption(
-                  k: 'peer-card-ui-type', v: type.index.toString());
-              peerCardUiType.value = type;
-            },
-            child: Tooltip(
-                message: peerCardUiType.value == PeerUiType.grid
-                    ? translate('List View')
-                    : translate('Grid View'),
-                child: Icon(
-                  peerCardUiType.value == PeerUiType.grid
-                      ? Icons.view_list_rounded
-                      : Icons.grid_view_rounded,
-                  size: 18,
-                  color: textColor,
-            ))
-        )),
+          padding: EdgeInsets.all(4.0),
+          decoration: hover.value ? deco : null,
+          child: InkWell(
+              onHover: (value) => hover.value = value,
+              onTap: () async {
+                final type = types.elementAt(
+                    peerCardUiType.value == types.elementAt(0) ? 1 : 0);
+                await bind.setLocalFlutterOption(
+                    k: 'peer-card-ui-type', v: type.index.toString());
+                peerCardUiType.value = type;
+              },
+              child: Tooltip(
+                  message: peerCardUiType.value == PeerUiType.grid
+                      ? translate('List View')
+                      : translate('Grid View'),
+                  child: Icon(
+                    peerCardUiType.value == PeerUiType.grid
+                        ? Icons.view_list_rounded
+                        : Icons.grid_view_rounded,
+                    size: 18,
+                    color: textColor,
+                  )))),
     );
   }
 
@@ -280,12 +279,12 @@ class _PeerTabPageState extends State<PeerTabPage>
           model.setMultiSelectionMode(true);
         },
         child: Tooltip(
-          message: translate('Select'),
-          child: Icon(
-            IconFont.checkbox,
-            size: 18,
-            color: textColor,
-          )),
+            message: translate('Select'),
+            child: Icon(
+              IconFont.checkbox,
+              size: 18,
+              color: textColor,
+            )),
       ),
     );
   }
@@ -334,14 +333,36 @@ class _PeerTabPageState extends State<PeerTabPage>
                 await bind.mainLoadLanPeers();
                 break;
               case 3:
-                gFFI.abModel.deletePeers(peers.map((p) => p.id).toList());
-                await gFFI.abModel.pushAb();
+                {
+                  bool hasSynced = false;
+                  if (shouldSyncAb()) {
+                    for (var p in peers) {
+                      if (await bind.mainPeerExists(id: p.id)) {
+                        hasSynced = true;
+                      }
+                    }
+                  }
+                  gFFI.abModel.deletePeers(peers.map((p) => p.id).toList());
+                  final future = gFFI.abModel.pushAb();
+                  if (hasSynced) {
+                    Future.delayed(Duration.zero, () async {
+                      final succ = await future;
+                      if (succ) {
+                        await Future.delayed(
+                            Duration(seconds: 2)); // success msg
+                        BotToast.showText(
+                            contentColor: Colors.lightBlue,
+                            text: translate('synced_peer_readded_tip'));
+                      }
+                    });
+                  }
+                }
                 break;
               default:
                 break;
             }
             gFFI.peerTabModel.setMultiSelectionMode(false);
-            showToast(translate('Successful'));
+            if (model.currentTab != 3) showToast(translate('Successful'));
           }
 
           deletePeerConfirmDialog(onSubmit, translate('Delete'));
@@ -384,11 +405,18 @@ class _PeerTabPageState extends State<PeerTabPage>
           !gFFI.userModel.isLogin || model.currentTab == PeerTabIndex.ab.index,
       child: InkWell(
         onTap: () {
+          if (gFFI.abModel.isFull(true)) {
+            return;
+          }
           final peers = model.selectedPeers;
           gFFI.abModel.addPeers(peers);
-          gFFI.abModel.pushAb();
+          final future = gFFI.abModel.pushAb();
           model.setMultiSelectionMode(false);
-          showToast(translate('Successful'));
+          Future.delayed(Duration.zero, () async {
+            await future;
+            await Future.delayed(Duration(seconds: 2)); // toast
+            gFFI.abModel.isFull(true);
+          });
         },
         child: Tooltip(
                 message: translate('Add to Address Book'),
@@ -483,8 +511,7 @@ class _PeerSearchBarState extends State<PeerSearchBar> {
                 child: Icon(
                   Icons.search_rounded,
                   color: Theme.of(context).hintColor,
-            ))
-          );
+                )));
   }
 
   Widget _buildSearchBar() {
@@ -543,22 +570,21 @@ class _PeerSearchBarState extends State<PeerSearchBar> {
                     ),
                     // Icon(Icons.close),
                     IconButton(
-                        alignment: Alignment.centerRight,
-                        padding: const EdgeInsets.only(right: 2),
-                        onPressed: () {
-                          setState(() {
-                            peerSearchTextController.clear();
-                            peerSearchText.value = "";
-                            drawer = false;
-                          });
-                        },
-                        icon: Tooltip(
-                            message: translate('Close'),
-                            child:
-                            Icon(
-                              Icons.close,
-                              color: Theme.of(context).hintColor,
-                        )),
+                      alignment: Alignment.centerRight,
+                      padding: const EdgeInsets.only(right: 2),
+                      onPressed: () {
+                        setState(() {
+                          peerSearchTextController.clear();
+                          peerSearchText.value = "";
+                          drawer = false;
+                        });
+                      },
+                      icon: Tooltip(
+                          message: translate('Close'),
+                          child: Icon(
+                            Icons.close,
+                            color: Theme.of(context).hintColor,
+                          )),
                     ),
                   ],
                 ),
@@ -628,7 +654,7 @@ class _PeerSortDropdownState extends State<PeerSortDropdown> {
           child: Icon(
             Icons.sort_rounded,
             size: 18,
-      )),
+          )),
       onTapDown: (details) {
         final x = details.globalPosition.dx;
         final y = details.globalPosition.dy;

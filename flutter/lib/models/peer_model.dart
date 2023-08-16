@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'platform_model.dart';
+// ignore: depend_on_referenced_packages
+import 'package:collection/collection.dart';
 
 class Peer {
   final String id;
@@ -56,6 +58,7 @@ class Peer {
       "username": username,
       "hostname": hostname,
       "platform": platform,
+      "alias": alias,
       "tags": tags,
     };
   }
@@ -86,6 +89,18 @@ class Peer {
           rdpPort: '',
           rdpUsername: '',
         );
+  bool equal(Peer other) {
+    return id == other.id &&
+        hash == other.hash &&
+        username == other.username &&
+        hostname == other.hostname &&
+        platform == other.platform &&
+        alias == other.alias &&
+        tags.equals(other.tags) &&
+        forceAlwaysRelay == other.forceAlwaysRelay &&
+        rdpPort == other.rdpPort &&
+        rdpUsername == other.rdpUsername;
+  }
 }
 
 enum UpdateEvent { online, load }
