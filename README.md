@@ -35,7 +35,6 @@ Below are the servers you are using for free, they may change over time. If you 
 | Location | Vendor | Specification |
 | --------- | ------------- | ------------------ |
 | Germany | [Hetzner](https://www.hetzner.com) | 2 vCPU / 4 GB RAM |
-| Germany | [Codext](https://codext.de) | 4 vCPU / 8 GB RAM |
 | Ukraine (Kyiv) | [dc.volia](https://dc.volia.com) | 2 vCPU / 4 GB RAM |
 
 ## Dev Container
