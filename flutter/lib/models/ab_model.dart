@@ -204,7 +204,9 @@ class AbModel {
     try {
       // avoid double pushes in a row
       _syncAllFromRecent = true;
-      syncFromRecent(push: false);
+      await syncFromRecent(push: false);
+      //https: //stackoverflow.com/questions/68249333/flutter-getx-updating-item-in-children-list-is-not-reactive
+      peers.refresh();
       final api = "${await bind.mainGetApiServer()}/api/ab";
       var authHeaders = getHttpHeaders();
       authHeaders['Content-Type'] = "application/json";
@@ -333,15 +335,15 @@ class AbModel {
         rdpUsername: r.rdpUsername);
   }
 
-  void syncFromRecent({bool push = true}) async {
+  Future<void> syncFromRecent({bool push = true}) async {
     if (!_syncFromRecentLock) {
       _syncFromRecentLock = true;
-      _syncFromRecentWithoutLock(push: push);
+      await _syncFromRecentWithoutLock(push: push);
       _syncFromRecentLock = false;
     }
   }
 
-  void _syncFromRecentWithoutLock({bool push = true}) async {
+  Future<void> _syncFromRecentWithoutLock({bool push = true}) async {
     bool shouldSync(Peer a, Peer b) {
       return a.hash != b.hash ||
           a.username != b.username ||
