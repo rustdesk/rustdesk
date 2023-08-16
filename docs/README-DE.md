@@ -35,7 +35,6 @@ Nachfolgend sind die Server gelistet, die Sie kostenlos nutzen können. Es kann 
 | Standort | Anbieter | Spezifikation |
 | --------- | ------------- | ------------------ |
 | Deutschland | [Hetzner](https://www.hetzner.com/de/) | 2 vCPU / 4 GB RAM |
-| Deutschland | [Codext](https://codext.de/) | 4 vCPU / 8 GB RAM |
 | Ukraine (Kiew) | [dc.volia](https://dc.volia.com) | 2 vCPU / 4 GB RAM |
 
 ## Dev-Container

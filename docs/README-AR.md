@@ -33,7 +33,6 @@
 | الموقع | المورد | المواصفات |
 | --------- | ------------- | ------------------ |
 | Germany | Hetzner | 2 vCPU / 4GB RAM |
-| Germany | Codext | 4 vCPU / 8GB RAM |
 | Ukraine (Kyiv) | [dc.volia](https://dc.volia.com) | 2 vCPU / 4 GB RAM |
 
 ## التبعيات

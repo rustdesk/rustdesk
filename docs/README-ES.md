@@ -32,7 +32,6 @@ A continuación se muestran los servidores gratuitos, pueden cambiar a medida qu
 | Ubicación | Compañía | Especificación |
 | --------- | ------------- | ------------------ |
 | Germany | Hetzner | 2 vCPU / 4GB RAM |
-| Germany | Codext | 4 vCPU / 8GB RAM |
 | Ukraine (Kyiv) | [dc.volia](https://dc.volia.com) | 2 vCPU / 4GB RAM |
 
 ## Dependencias
