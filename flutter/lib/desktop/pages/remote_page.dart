@@ -204,7 +204,7 @@ class _RemotePageState extends State<RemotePage>
     // https://github.com/flutter/flutter/issues/64935
     super.dispose();
     debugPrint("REMOTE PAGE dispose session $sessionId ${widget.id}");
-    await _renderTexture.destroy();
+    await _renderTexture.destroy(closeSession);
     // ensure we leave this session, this is a double check
     bind.sessionEnterOrLeave(sessionId: sessionId, enter: false);
     DesktopMultiWindow.removeListener(this);
