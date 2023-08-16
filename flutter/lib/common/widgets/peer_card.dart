@@ -1,9 +1,11 @@
 import 'dart:io';
 
+import 'package:bot_toast/bot_toast.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hbb/common/widgets/dialog.dart';
 import 'package:flutter_hbb/consts.dart';
+import 'package:flutter_hbb/models/ab_model.dart';
 import 'package:flutter_hbb/models/peer_tab_model.dart';
 import 'package:get/get.dart';
 import 'package:provider/provider.dart';
@@ -582,6 +584,7 @@ abstract class BasePeerCard extends StatelessWidget {
       ),
       proc: () {
         bind.mainCreateShortcut(id: id);
+        showToast(translate('Successful'));
       },
       padding: menuPadding,
       dismissOnClicked: true,
@@ -597,6 +600,7 @@ abstract class BasePeerCard extends StatelessWidget {
       setter: (bool v) async {
         await bind.mainSetPeerOption(
             id: id, key: key, value: bool2option(key, v));
+        showToast(translate('Successful'));
       },
       padding: menuPadding,
       dismissOnClicked: true,
@@ -633,6 +637,7 @@ abstract class BasePeerCard extends StatelessWidget {
             id: id,
             key: kOptionForceAlwaysRelay,
             value: bool2option(kOptionForceAlwaysRelay, v));
+        showToast(translate('Successful'));
       },
       padding: menuPadding,
       dismissOnClicked: true,
@@ -657,6 +662,7 @@ abstract class BasePeerCard extends StatelessWidget {
                   gFFI.abModel.pushAb();
                 } else {
                   await bind.mainSetPeerAlias(id: id, alias: newName);
+                  showToast(translate('Successful'));
                   _update();
                 }
               }
@@ -706,10 +712,24 @@ abstract class BasePeerCard extends StatelessWidget {
               break;
             case PeerTabIndex.ab:
               gFFI.abModel.deletePeer(id);
-              await gFFI.abModel.pushAb();
+              final future = gFFI.abModel.pushAb();
+              if (shouldSyncAb() && await bind.mainPeerExists(id: peer.id)) {
+                Future.delayed(Duration.zero, () async {
+                  final succ = await future;
+                  if (succ) {
+                    await Future.delayed(Duration(seconds: 2)); // success msg
+                    BotToast.showText(
+                        contentColor: Colors.lightBlue,
+                        text: translate('synced_peer_readded_tip'));
+                  }
+                });
+              }
               break;
             case PeerTabIndex.group:
               break;
+          }
+          if (tab != PeerTabIndex.ab) {
+            showToast(translate('Successful'));
           }
         }
 
@@ -730,6 +750,7 @@ abstract class BasePeerCard extends StatelessWidget {
       ),
       proc: () {
         bind.mainForgetPassword(id: id);
+        showToast(translate('Successful'));
       },
       padding: menuPadding,
       dismissOnClicked: true,
@@ -762,6 +783,7 @@ abstract class BasePeerCard extends StatelessWidget {
             favs.add(id);
             await bind.mainStoreFav(favs: favs);
           }
+          showToast(translate('Successful'));
         }();
       },
       padding: menuPadding,
@@ -796,6 +818,7 @@ abstract class BasePeerCard extends StatelessWidget {
             await bind.mainStoreFav(favs: favs);
             await reloadFunc();
           }
+          showToast(translate('Successful'));
         }();
       },
       padding: menuPadding,
@@ -817,7 +840,7 @@ abstract class BasePeerCard extends StatelessWidget {
           }
           if (!gFFI.abModel.idContainBy(peer.id)) {
             gFFI.abModel.addPeer(peer);
-            await gFFI.abModel.pushAb();
+            gFFI.abModel.pushAb();
           }
         }();
       },
@@ -1049,7 +1072,7 @@ class AddressBookPeerCard extends BasePeerCard {
       proc: () {
         editAbTagDialog(gFFI.abModel.getPeerTags(id), (selectedTag) async {
           gFFI.abModel.changeTagForPeer(id, selectedTag);
-          await gFFI.abModel.pushAb();
+          gFFI.abModel.pushAb();
         });
       },
       padding: super.menuPadding,
@@ -1121,6 +1144,7 @@ void _rdpDialog(String id) async {
           id: id, key: 'rdp_username', value: username);
       await bind.mainSetPeerOption(
           id: id, key: 'rdp_password', value: password);
+      showToast(translate('Successful'));
       close();
     }
 

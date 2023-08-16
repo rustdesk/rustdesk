@@ -48,13 +48,14 @@ class _AddressBookState extends State<AddressBook> {
           return Column(
             children: [
               _buildNotEmptyLoading(),
+              _buildRetryProgress(),
               _buildErrorBanner(
                   err: gFFI.abModel.pullError,
                   retry: null,
                   close: () => gFFI.abModel.pullError.value = ''),
               _buildErrorBanner(
                   err: gFFI.abModel.pushError,
-                  retry: () => gFFI.abModel.pushAb(),
+                  retry: () => gFFI.abModel.pushAb(isRetry: true),
                   close: () => gFFI.abModel.pushError.value = ''),
               Expanded(
                   child: isDesktop
@@ -133,6 +134,13 @@ class _AddressBookState extends State<AddressBook> {
                   .marginSymmetric(vertical: 10)
             ],
           ),
+        ));
+  }
+
+  Widget _buildRetryProgress() {
+    return Obx(() => Offstage(
+          offstage: !gFFI.abModel.retrying.value,
+          child: LinearProgressIndicator(),
         ));
   }
 
@@ -339,7 +347,7 @@ class _AddressBookState extends State<AddressBook> {
             return;
           }
           gFFI.abModel.addId(id, aliasController.text.trim(), selectedTag);
-          await gFFI.abModel.pushAb();
+          gFFI.abModel.pushAb();
           this.setState(() {});
           // final currentPeers
         }
@@ -448,7 +456,7 @@ class _AddressBookState extends State<AddressBook> {
           for (final tag in tags) {
             gFFI.abModel.addTag(tag);
           }
-          await gFFI.abModel.pushAb();
+          gFFI.abModel.pushAb();
           // final currentPeers
         }
         close();
