@@ -659,6 +659,7 @@ abstract class BasePeerCard extends StatelessWidget {
               if (newName != oldName) {
                 if (tab == PeerTabIndex.ab) {
                   gFFI.abModel.changeAlias(id: id, alias: newName);
+                  await bind.mainSetPeerAlias(id: id, alias: newName);
                   gFFI.abModel.pushAb();
                 } else {
                   await bind.mainSetPeerAlias(id: id, alias: newName);
@@ -713,16 +714,8 @@ abstract class BasePeerCard extends StatelessWidget {
             case PeerTabIndex.ab:
               gFFI.abModel.deletePeer(id);
               final future = gFFI.abModel.pushAb();
-              if (shouldSyncAb() && await bind.mainPeerExists(id: peer.id)) {
-                Future.delayed(Duration.zero, () async {
-                  final succ = await future;
-                  if (succ) {
-                    await Future.delayed(Duration(seconds: 2)); // success msg
-                    BotToast.showText(
-                        contentColor: Colors.lightBlue,
-                        text: translate('synced_peer_readded_tip'));
-                  }
-                });
+              if (await bind.mainPeerExists(id: peer.id)) {
+                gFFI.abModel.reSyncToast(future);
               }
               break;
             case PeerTabIndex.group:
@@ -748,9 +741,15 @@ abstract class BasePeerCard extends StatelessWidget {
         translate('Unremember Password'),
         style: style,
       ),
-      proc: () {
-        bind.mainForgetPassword(id: id);
-        showToast(translate('Successful'));
+      proc: () async {
+        if (tab == PeerTabIndex.ab) {
+          gFFI.abModel.unrememberPassword(id);
+          await bind.mainForgetPassword(id: id);
+          gFFI.abModel.pushAb();
+        } else {
+          bind.mainForgetPassword(id: id);
+          showToast(translate('Successful'));
+        }
       },
       padding: menuPadding,
       dismissOnClicked: true,
@@ -1046,7 +1045,7 @@ class AddressBookPeerCard extends BasePeerCard {
     }
     menuItems.add(MenuEntryDivider());
     menuItems.add(_renameAction(peer.id));
-    if (await bind.mainPeerHasPassword(id: peer.id)) {
+    if (peer.hash.isNotEmpty) {
       menuItems.add(_unrememberPasswordAction(peer.id));
     }
     if (gFFI.abModel.tags.isNotEmpty) {

@@ -212,6 +212,14 @@ class AbModel {
     it.first.alias = alias;
   }
 
+  void unrememberPassword(String id) {
+    final it = peers.where((element) => element.id == id);
+    if (it.isEmpty) {
+      return;
+    }
+    it.first.hash = '';
+  }
+
   Future<bool> pushAb(
       {bool toastIfFail = true,
       bool toastIfSucc = true,
@@ -506,5 +514,18 @@ class AbModel {
       }
       throw err;
     }
+  }
+
+  reSyncToast(Future<bool> future) {
+    if (!shouldSyncAb()) return;
+    Future.delayed(Duration.zero, () async {
+      final succ = await future;
+      if (succ) {
+        await Future.delayed(Duration(seconds: 2)); // success msg
+        BotToast.showText(
+            contentColor: Colors.lightBlue,
+            text: translate('synced_peer_readded_tip'));
+      }
+    });
   }
 }
