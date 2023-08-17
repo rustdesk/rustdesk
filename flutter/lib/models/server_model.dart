@@ -197,17 +197,18 @@ class ServerModel with ChangeNotifier {
       _approveMode = approveMode;
       update = true;
     }
-    final oldPwdText = _serverPasswd.text;
-    if (_serverPasswd.text != temporaryPassword &&
-        temporaryPassword.isNotEmpty) {
-      _serverPasswd.text = temporaryPassword;
-    }
     var stopped = option2bool(
         "stop-service", await bind.mainGetOption(key: "stop-service"));
+    final oldPwdText = _serverPasswd.text;
     if (stopped ||
         verificationMethod == kUsePermanentPassword ||
         _approveMode == 'click') {
       _serverPasswd.text = '-';
+    } else {
+      if (_serverPasswd.text != temporaryPassword &&
+          temporaryPassword.isNotEmpty) {
+        _serverPasswd.text = temporaryPassword;
+      }
     }
     if (oldPwdText != _serverPasswd.text) {
       update = true;
