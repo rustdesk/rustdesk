@@ -14,7 +14,7 @@ env:
 
 jobs:
   build-for-history-windows:
-    name: ${{ matrix.job.target }} (${{ matrix.job.os }})
+    name: ${{ matrix.job.date }})
     runs-on: ${{ matrix.job.os }}
     strategy:
       fail-fast: false
