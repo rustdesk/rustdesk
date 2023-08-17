@@ -137,20 +137,6 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
           windowOnTop(windowId());
         }
         return jumpOk;
-      } else if (call.method == kWindowEventGetRemoteList) {
-        return tabController.state.value.tabs
-            .map((e) => e.key)
-            .toList()
-            .join(',');
-      } else if (call.method == kWindowEventGetSessionIdList) {
-        return tabController.state.value.tabs
-            .map((e) => '${e.key},${(e.page as RemotePage).ffi.sessionId}')
-            .toList()
-            .join(';');
-      } else if (call.method == kWindowEventCloseForSeparateWindow) {
-        final peerId = call.arguments;
-        closeSessionOnDispose[peerId] = false;
-        tabController.closeBy(peerId);
       }
       _update_remote_count();
     });
@@ -303,22 +289,6 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
         padding: padding,
       ),
     ]);
-
-    if (tabController.state.value.tabs.length > 1) {
-      final splitAction = MenuEntryButton<String>(
-        childBuilder: (TextStyle? style) => Text(
-          translate('Move tab to new window'),
-          style: style,
-        ),
-        proc: () async {
-          await DesktopMultiWindow.invokeMethod(kMainWindowId,
-              kWindowEventMoveTabToNewWindow, '${windowId()},$key,$sessionId');
-          cancelFunc();
-        },
-        padding: padding,
-      );
-      menu.insert(1, splitAction);
-    }
 
     if (perms['restart'] != false &&
         (pi.platform == kPeerPlatformLinux ||

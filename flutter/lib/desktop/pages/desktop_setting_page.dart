@@ -316,13 +316,7 @@ class _GeneralState extends State<_General> {
       _OptionCheckBox(context, 'Confirm before closing multiple tabs',
           'enable-confirm-closing-tabs',
           isServer: false),
-      _OptionCheckBox(context, 'Adaptive bitrate', 'enable-abr'),
-      _OptionCheckBox(
-        context,
-        'Open connection in new tab',
-        kOptionOpenNewConnInTabs,
-        isServer: false,
-      ),
+      _OptionCheckBox(context, 'Adaptive bitrate', 'enable-abr')
     ];
     // though this is related to GUI, but opengl problem affects all users, so put in config rather than local
     children.add(Tooltip(

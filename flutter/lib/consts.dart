@@ -34,15 +34,7 @@ const String kWindowEventNewRemoteDesktop = "new_remote_desktop";
 const String kWindowEventNewFileTransfer = "new_file_transfer";
 const String kWindowEventNewPortForward = "new_port_forward";
 const String kWindowEventActiveSession = "active_session";
-const String kWindowEventGetRemoteList = "get_remote_list";
-const String kWindowEventGetSessionIdList = "get_session_id_list";
 
-const String kWindowEventMoveTabToNewWindow = "move_tab_to_new_window";
-const String kWindowEventCloseForSeparateWindow = "close_for_separate_window";
-
-const String kOptionOpenNewConnInTabs = "enable-open-new-connections-in-tabs";
-const String kOptionOpenInTabs = "allow-open-in-tabs";
-const String kOptionOpenInWindows = "allow-open-in-windows";
 const String kOptionForceAlwaysRelay = "force-always-relay";
 
 const String kUniLinksPrefix = "rustdesk://";

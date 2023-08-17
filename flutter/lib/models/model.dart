@@ -1737,7 +1737,7 @@ class FFI {
   }
 
   /// Close the remote session.
-  Future<void> close({bool closeSession = true}) async {
+  Future<void> close() async {
     closed = true;
     chatModel.close();
     if (imageModel.image != null && !isWebDesktop) {
@@ -1755,9 +1755,7 @@ class FFI {
     ffiModel.clear();
     canvasModel.clear();
     inputModel.resetModifiers();
-    if (closeSession) {
-      await bind.sessionClose(sessionId: sessionId);
-    }
+    await bind.sessionClose(sessionId: sessionId);
     debugPrint('model $id closed');
     id = '';
   }

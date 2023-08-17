@@ -28,8 +28,6 @@ import '../widgets/tabbar_widget.dart';
 
 final SimpleWrapper<bool> _firstEnterImage = SimpleWrapper(false);
 
-final Map<String, bool> closeSessionOnDispose = {};
-
 class RemotePage extends StatefulWidget {
   RemotePage({
     Key? key,
@@ -199,25 +197,21 @@ class _RemotePageState extends State<RemotePage>
 
   @override
   Future<void> dispose() async {
-    final closeSession = closeSessionOnDispose.remove(widget.id) ?? true;
-
     // https://github.com/flutter/flutter/issues/64935
     super.dispose();
     debugPrint("REMOTE PAGE dispose session $sessionId ${widget.id}");
-    await _renderTexture.destroy(closeSession);
+    await _renderTexture.destroy();
     // ensure we leave this session, this is a double check
     bind.sessionEnterOrLeave(sessionId: sessionId, enter: false);
     DesktopMultiWindow.removeListener(this);
     _ffi.dialogManager.hideMobileActionsOverlay();
     _ffi.recordingModel.onClose();
     _rawKeyFocusNode.dispose();
-    await _ffi.close(closeSession: closeSession);
+    await _ffi.close();
     _timer?.cancel();
     _ffi.dialogManager.dismissAll();
-    if (closeSession) {
-      await SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual,
-          overlays: SystemUiOverlay.values);
-    }
+    await SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual,
+        overlays: SystemUiOverlay.values);
     if (!Platform.isLinux) {
       await Wakelock.disable();
     }

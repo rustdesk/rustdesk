@@ -1479,41 +1479,6 @@ Future<void> saveWindowPosition(WindowType type, {int? windowId}) async {
 
   await bind.setLocalFlutterOption(
       k: kWindowPrefix + type.name, v: pos.toString());
-
-  if (type == WindowType.RemoteDesktop && windowId != null) {
-    await _saveSessionWindowPosition(type, windowId, isMaximized, pos);
-  }
-}
-
-Future _saveSessionWindowPosition(WindowType windowType, int windowId,
-    bool isMaximized, LastWindowPosition pos) async {
-  final remoteList = await DesktopMultiWindow.invokeMethod(
-      windowId, kWindowEventGetRemoteList, null);
-  getPeerPos(String peerId) {
-    if (isMaximized) {
-      final peerPos = bind.mainGetPeerFlutterOptionSync(
-          id: peerId, k: kWindowPrefix + windowType.name);
-      var lpos = LastWindowPosition.loadFromString(peerPos);
-      return LastWindowPosition(
-              lpos?.width ?? pos.offsetWidth,
-              lpos?.height ?? pos.offsetHeight,
-              lpos?.offsetWidth ?? pos.offsetWidth,
-              lpos?.offsetHeight ?? pos.offsetHeight,
-              isMaximized)
-          .toString();
-    } else {
-      return pos.toString();
-    }
-  }
-
-  if (remoteList != null) {
-    for (final peerId in remoteList.split(',')) {
-      bind.mainSetPeerFlutterOptionSync(
-          id: peerId,
-          k: kWindowPrefix + windowType.name,
-          v: getPeerPos(peerId));
-    }
-  }
 }
 
 Future<Size> _adjustRestoreMainWindowSize(double? width, double? height) async {

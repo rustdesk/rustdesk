@@ -607,17 +607,6 @@ abstract class BasePeerCard extends StatelessWidget {
     );
   }
 
-  _openInTabsAction(String id) async =>
-      await _openNewConnInAction(id, 'Open in New Tab', kOptionOpenInTabs);
-
-  _openInWindowsAction(String id) async => await _openNewConnInAction(
-      id, 'Open in New Window', kOptionOpenInWindows);
-
-  _openNewConnInOptAction(String id) async =>
-      mainGetLocalBoolOptionSync(kOptionOpenNewConnInTabs)
-          ? await _openInWindowsAction(id)
-          : await _openInTabsAction(id);
-
   @protected
   Future<bool> _isForceAlwaysRelay(String id) async {
     return (await bind.mainGetPeerOption(id: id, key: kOptionForceAlwaysRelay))

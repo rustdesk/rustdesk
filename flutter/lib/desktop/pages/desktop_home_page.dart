@@ -570,17 +570,6 @@ class _DesktopHomePageState extends State<DesktopHomePage>
           isRDP: call.arguments['isRDP'],
           forceRelay: call.arguments['forceRelay'],
         );
-      } else if (call.method == kWindowEventMoveTabToNewWindow) {
-        final args = call.arguments.split(',');
-        int? windowId;
-        try {
-          windowId = int.parse(args[0]);
-        } catch (e) {
-          debugPrint("Failed to parse window id '${call.arguments}': $e");
-        }
-        if (windowId != null) {
-          await rustDeskWinManager.moveTabToNewWindow(windowId, args[1], args[2]);
-        }
       }
     });
     _uniLinksSubscription = listenUniLinks();
