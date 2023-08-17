@@ -267,7 +267,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Pinch to Zoom", "Přiblížíte roztažením dvěma prsty"),
         ("Canvas Zoom", "Přiblížení zobrazení"),
         ("Reset canvas", "Vrátit měřtko zobrazení na výchozí"),
-        ("No permission of file transfer", "Žádné oprávnění přenosu souborů"),
+        ("No permission of file transfer", "Žádné oprávnění k přenosu souborů"),
         ("Note", "Poznámka"),
         ("Connection", "Připojení"),
         ("Share Screen", "Sdílet obrazovku"),
