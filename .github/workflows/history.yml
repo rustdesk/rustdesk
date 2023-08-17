@@ -51,11 +51,6 @@ jobs:
           components: rustfmt
           profile: minimal # minimal component installation (ie, no documentation)
 
-      - uses: Swatinem/rust-cache@v2
-        with:
-          prefix-key: ${{ matrix.job.os }}
-
-
       - name: Install flutter rust bridge deps
         run: |
           cargo install flutter_rust_bridge_codegen --version ${{ env.FLUTTER_RUST_BRIDGE_VERSION }} --features "uuid"
@@ -64,10 +59,12 @@ jobs:
 
       - name: Install vcpkg dependencies
         run: |
-          $VCPKG_ROOT/vcpkg install libvpx:x64-windows-static libyuv:x64-windows-static opus:x64-windows-static
-        shell: bash
-
+          cd C:\
+          git clone https://github.com/Kingtous/rustdesk_thirdpary_lib --depth=1 
+          
       - name: Build rustdesk
+        env:
+          VCPKG_ROOT: C:\rustdesk_thirdpary_lib\vcpkg
         run: python3 .\build.py --portable --hwcodec --flutter --feature IddDriver
 
       - name: Build self-extracted executable
