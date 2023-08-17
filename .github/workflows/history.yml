@@ -12,7 +12,7 @@ env:
   VERSION: "1.2.2"
 
 jobs:
-  build-for-windows-2023-08-04:
+  build-for-history-windows:
     name: ${{ matrix.job.target }} (${{ matrix.job.os }})
     runs-on: ${{ matrix.job.os }}
     strategy:
@@ -21,13 +21,13 @@ jobs:
         job:
           # - { target: i686-pc-windows-msvc        , os: windows-2019                  }
           # - { target: x86_64-pc-windows-gnu       , os: windows-2019                  }
-          - { target: x86_64-pc-windows-msvc, os: windows-2019, arch: x86_64 }
+          - { target: x86_64-pc-windows-msvc, os: windows-2019, arch: x86_64, date: 2023-08-04, ref: 72c198a1e94cc1e0242fce88f92b3f3caedcd0c3 }
           # - { target: aarch64-pc-windows-msvc, os: windows-2019, arch: aarch64 }
     steps:
       - name: Checkout source code
         uses: actions/checkout@v3
         with:
-          ref: '72c198a1e94cc1e0242fce88f92b3f3caedcd0c3'
+          ref: ${{ matrix.job.ref }}
 
       - name: Install LLVM and Clang
         uses: KyleMayes/install-llvm-action@v1
@@ -76,7 +76,7 @@ jobs:
           python3 ./generate.py -f ../../flutter/build/windows/runner/Release/ -o . -e ../../flutter/build/windows/runner/Release/rustdesk.exe
           popd
           mkdir -p ./SignOutput
-          mv ./target/release/rustdesk-portable-packer.exe ./SignOutput/rustdesk-2022-12-05-${{ matrix.job.target }}.exe
+          mv ./target/release/rustdesk-portable-packer.exe ./SignOutput/rustdesk-${{ matrix.job.date }}-${{ matrix.job.target }}.exe
           
       - name: Publish Release
         uses: softprops/action-gh-release@v1
