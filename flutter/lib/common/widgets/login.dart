@@ -12,7 +12,15 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../common.dart';
 import './dialog.dart';
 
-const kOpSvgList = ['github', 'google', 'apple', 'okta', 'facebook', 'azure', 'auth0'];
+const kOpSvgList = [
+  'github',
+  'google',
+  'apple',
+  'okta',
+  'facebook',
+  'azure',
+  'auth0'
+];
 
 class _IconOP extends StatelessWidget {
   final String op;
@@ -27,7 +35,8 @@ class _IconOP extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final svgFile = kOpSvgList.contains(op.toLowerCase()) ? op.toLowerCase() : 'default';
+    final svgFile =
+        kOpSvgList.contains(op.toLowerCase()) ? op.toLowerCase() : 'default';
     return Container(
       margin: margin,
       child: icon == null
@@ -345,9 +354,8 @@ class LoginWidgetUserPass extends StatelessWidget {
               autoFocus: false,
               errorText: passMsg,
             ),
-            Offstage(
-                offstage: !isInProgress,
-                child: const LinearProgressIndicator()),
+            // NOT use Offstage to wrap LinearProgressIndicator
+            if (isInProgress) const LinearProgressIndicator(),
             const SizedBox(height: 12.0),
             FittedBox(
                 child:
@@ -664,9 +672,8 @@ Future<bool?> verificationCodeDialog(UserPayload? user) async {
               },
             ),
             */
-            Offstage(
-                offstage: !isInProgress,
-                child: const LinearProgressIndicator()),
+            // NOT use Offstage to wrap LinearProgressIndicator
+            if (isInProgress) const LinearProgressIndicator(),
           ],
         ),
         onCancel: close,

@@ -208,28 +208,26 @@ class _PeerTabPageState extends State<PeerTabPage>
   }
 
   Widget _createRefresh() {
+    if (gFFI.peerTabModel.currentTab < 3) return Offstage();
     final textColor = Theme.of(context).textTheme.titleLarge?.color;
-    return Offstage(
-      offstage: gFFI.peerTabModel.currentTab < 3, // local tab can't see effect
-      child: Container(
-        padding: EdgeInsets.all(4.0),
-        child: AnimatedRotationWidget(
-            onPressed: () {
-              if (gFFI.peerTabModel.currentTab < entries.length) {
-                entries[gFFI.peerTabModel.currentTab].load();
-              }
-            },
-            spinning: gFFI.abModel.abLoading,
-            child: RotatedBox(
-                quarterTurns: 2,
-                child: Tooltip(
-                    message: translate('Refresh'),
-                    child: Icon(
-                      Icons.refresh,
-                      size: 18,
-                      color: textColor,
-                    )))),
-      ),
+    return Container(
+      padding: EdgeInsets.all(4.0),
+      child: AnimatedRotationWidget(
+          onPressed: () {
+            if (gFFI.peerTabModel.currentTab < entries.length) {
+              entries[gFFI.peerTabModel.currentTab].load();
+            }
+          },
+          spinning: gFFI.abModel.abLoading,
+          child: RotatedBox(
+              quarterTurns: 2,
+              child: Tooltip(
+                  message: translate('Refresh'),
+                  child: Icon(
+                    Icons.refresh,
+                    size: 18,
+                    color: textColor,
+                  )))),
     );
   }
 
