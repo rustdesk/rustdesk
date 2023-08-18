@@ -62,7 +62,7 @@ class AbModel {
     if (pushError.isNotEmpty) {
       try {
         // push to retry
-        pushAb(toastIfFail: false, toastIfSucc: false);
+        await pushAb(toastIfFail: false, toastIfSucc: false);
       } catch (_) {}
     }
     if (!quiet) {
