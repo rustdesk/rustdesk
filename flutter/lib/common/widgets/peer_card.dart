@@ -27,11 +27,13 @@ final peerCardUiType = PeerUiType.grid.obs;
 
 class _PeerCard extends StatefulWidget {
   final Peer peer;
+  final PeerTabIndex tab;
   final Function(BuildContext, String) connect;
   final PopupMenuEntryBuilder popupMenuEntryBuilder;
 
   const _PeerCard(
       {required this.peer,
+      required this.tab,
       required this.connect,
       required this.popupMenuEntryBuilder,
       Key? key})
@@ -71,10 +73,14 @@ class _PeerCardState extends State<_PeerCard>
               if (peerTabModel.multiSelectionMode) {
                 peerTabModel.select(peer);
               } else {
-                if (!isWebDesktop) connect(context, peer.id);
+                if (!isWebDesktop) {
+                  connectInPeerTab(context, peer.id, widget.tab);
+                }
               }
             },
-            onDoubleTap: isWebDesktop ? () => connect(context, peer.id) : null,
+            onDoubleTap: isWebDesktop
+                ? () => connectInPeerTab(context, peer.id, widget.tab)
+                : null,
             onLongPress: () {
               peerTabModel.select(peer);
             },
@@ -443,7 +449,9 @@ abstract class BasePeerCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return _PeerCard(
       peer: peer,
-      connect: (BuildContext context, String id) => connect(context, id),
+      tab: tab,
+      connect: (BuildContext context, String id) =>
+          connectInPeerTab(context, id, tab),
       popupMenuEntryBuilder: _buildPopupMenuEntry,
     );
   }
@@ -477,9 +485,10 @@ abstract class BasePeerCard extends StatelessWidget {
         style: style,
       ),
       proc: () {
-        connect(
+        connectInPeerTab(
           context,
           peer.id,
+          tab,
           isFileTransfer: isFileTransfer,
           isTcpTunneling: isTcpTunneling,
           isRDP: isRDP,
@@ -552,7 +561,7 @@ abstract class BasePeerCard extends StatelessWidget {
             ],
           )),
       proc: () {
-        connect(context, id, isRDP: true);
+        connectInPeerTab(context, id, tab, isRDP: true);
       },
       padding: menuPadding,
       dismissOnClicked: true,
@@ -1308,4 +1317,27 @@ class TagPainter extends CustomPainter {
   bool shouldRepaint(covariant CustomPainter oldDelegate) {
     return true;
   }
+}
+
+void connectInPeerTab(BuildContext context, String id, PeerTabIndex tab,
+    {bool isFileTransfer = false,
+    bool isTcpTunneling = false,
+    bool isRDP = false}) async {
+  if (tab == PeerTabIndex.ab) {
+    // If recent peer's alias is empty, set it to ab's alias
+    // Because the platform is not set, it may not take effect, but it is more important not to display if the connection is not successful
+    Peer? p = gFFI.abModel.find(id);
+    if (p != null &&
+        p.alias.isNotEmpty &&
+        (await bind.mainGetPeerOption(id: id, key: "alias")).isEmpty) {
+      await bind.mainSetPeerAlias(
+        id: id,
+        alias: p.alias,
+      );
+    }
+  }
+  connect(context, id,
+      isFileTransfer: isFileTransfer,
+      isTcpTunneling: isTcpTunneling,
+      isRDP: isRDP);
 }
