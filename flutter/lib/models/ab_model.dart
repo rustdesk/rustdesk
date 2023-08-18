@@ -163,7 +163,7 @@ class AbModel {
   void addPeer(Peer peer) {
     final index = peers.indexWhere((e) => e.id == peer.id);
     if (index >= 0) {
-      peers[index] = merge(peer, peers[index]);
+      merge(peer, peers[index]);
     } else {
       peers.add(peer);
     }
@@ -365,18 +365,14 @@ class AbModel {
     }
   }
 
-  Peer merge(Peer r, Peer p) {
-    return Peer(
-        id: p.id,
-        hash: r.hash.isEmpty ? p.hash : r.hash,
-        username: r.username.isEmpty ? p.username : r.username,
-        hostname: r.hostname.isEmpty ? p.hostname : r.hostname,
-        platform: r.platform.isEmpty ? p.platform : r.platform,
-        alias: p.alias.isEmpty ? r.alias : p.alias,
-        tags: p.tags,
-        forceAlwaysRelay: r.forceAlwaysRelay,
-        rdpPort: r.rdpPort,
-        rdpUsername: r.rdpUsername);
+  void merge(Peer r, Peer p) {
+    p.hash = r.hash.isEmpty ? p.hash : r.hash;
+    p.username = r.username.isEmpty ? p.username : r.username;
+    p.hostname = r.hostname.isEmpty ? p.hostname : r.hostname;
+    p.alias = p.alias.isEmpty ? r.alias : p.alias;
+    p.forceAlwaysRelay = r.forceAlwaysRelay;
+    p.rdpPort = r.rdpPort;
+    p.rdpUsername = r.rdpUsername;
   }
 
   Future<void> syncFromRecent({bool push = true}) async {
@@ -445,13 +441,13 @@ class AbModel {
             needSync = true;
           }
         } else {
-          if (!r.equal(peers[index])) {
-            uiChanged = true;
-          }
           Peer old = Peer.copy(peers[index]);
-          peers[index] = merge(r, peers[index]);
+          merge(r, peers[index]);
           if (!peerSyncEqual(peers[index], old)) {
             needSync = true;
+          }
+          if (!old.equal(peers[index])) {
+            uiChanged = true;
           }
         }
       }
