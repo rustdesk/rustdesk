@@ -219,6 +219,7 @@ class _PeerTabPageState extends State<PeerTabPage>
                 entries[gFFI.peerTabModel.currentTab].load();
               }
             },
+            spinning: gFFI.abModel.abLoading,
             child: RotatedBox(
                 quarterTurns: 2,
                 child: Tooltip(
