@@ -356,7 +356,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Enable hardware codec", "Povolit hardwarový kodek"),
         ("Unlock Security Settings", "Odemknout nastavení zabezpečení"),
         ("Enable Audio", "Povolit zvuk"),
-        ("Unlock Network Settings", "Odemknutí na"),
+        ("Unlock Network Settings", "Odemknout nastavení sítě"),
         ("Server", "Server"),
         ("Direct IP Access", "Přímý IP přístup"),
         ("Proxy", "Proxy"),
