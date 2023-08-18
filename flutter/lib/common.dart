@@ -1352,7 +1352,7 @@ Future<bool> matchPeer(String searchText, Peer peer) async {
       peer.username.toLowerCase().contains(searchText)) {
     return true;
   }
-  final alias = await bind.mainGetPeerOption(id: peer.id, key: 'alias');
+  final alias = peer.alias;
   if (alias.isEmpty) {
     return false;
   }

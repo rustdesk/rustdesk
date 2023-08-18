@@ -7,9 +7,9 @@ import 'package:collection/collection.dart';
 class Peer {
   final String id;
   String hash;
-  final String username;
-  final String hostname;
-  final String platform;
+  String username;
+  String hostname;
+  String platform;
   String alias;
   List<dynamic> tags;
   bool forceAlwaysRelay = false;
@@ -101,6 +101,19 @@ class Peer {
         rdpPort == other.rdpPort &&
         rdpUsername == other.rdpUsername;
   }
+
+  Peer.copy(Peer other)
+      : this(
+            id: other.id,
+            hash: other.hash,
+            username: other.username,
+            hostname: other.hostname,
+            platform: other.platform,
+            alias: other.alias,
+            tags: other.tags.toList(),
+            forceAlwaysRelay: other.forceAlwaysRelay,
+            rdpPort: other.rdpPort,
+            rdpUsername: other.rdpUsername);
 }
 
 enum UpdateEvent { online, load }

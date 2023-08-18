@@ -400,8 +400,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Elevate", "Повысить"),
         ("Zoom cursor", "Масштабировать курсор"),
         ("Accept sessions via password", "Принимать сеансы по паролю"),
-        ("Accept sessions via click", "Принимать сеансы по нажатию"),
-        ("Accept sessions via both", "Принимать сеансы по паролю+нажатию"),
+        ("Accept sessions via click", "Принимать сеансы нажатем кнопки"),
+        ("Accept sessions via both", "Принимать сеансы по паролю и нажатию кнопки"),
         ("Please wait for the remote side to accept your session request...", "Подождите, пока удалённая сторона примет ваш запрос на сеанс..."),
         ("One-time Password", "Одноразовый пароль"),
         ("Use one-time password", "Использовать одноразовый пароль"),
@@ -522,7 +522,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Start", "Запустить"),
         ("Stop", "Остановить"),
         ("exceed_max_devices", "Достигнуто максимальное количество управляемых устройств."),
-        ("Sync with recent sessions", "Синхронизация последних сессий"),
+        ("Sync with recent sessions", "Синхронизация последних сеансов"),
         ("Sort tags", "Сортировка меток"),
         ("Open connection in new tab", "Открыть подключение в новой вкладке"),
         ("Move tab to new window", "Переместить вкладку в отдельное окно"),
@@ -537,6 +537,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Toggle Tags", "Переключить метки"),
         ("pull_ab_failed_tip", "Невозможно обновить адресную книгу"),
         ("push_ab_failed_tip", "Невозможно синхронизировать адресную книгу с сервером"),
-        ("synced_peer_readded_tip", ""),
+        ("synced_peer_readded_tip", "Устройства, присутствовавшие в последних сеансах, будут синхронизированы с адресной книгой."),
     ].iter().cloned().collect();
 }

@@ -54,7 +54,7 @@ fn execute(path: PathBuf, args: Vec<String>) {
         .stdin(Stdio::inherit())
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit())
-        .output()
+        .spawn()
         .ok();
 }
 

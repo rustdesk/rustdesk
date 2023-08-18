@@ -13,10 +13,10 @@ on:
 env:
   CARGO_NDK_VERSION: "3.1.2"
   LLVM_VERSION: "15.0.6"
-  FLUTTER_VERSION: "3.10.5"
+  FLUTTER_VERSION: "3.10.6"
   FLUTTER_RUST_BRIDGE_VERSION: "1.75.3"
   # for arm64 linux
-  FLUTTER_ELINUX_VERSION: "3.10.5"
+  FLUTTER_ELINUX_VERSION: "3.10.6"
   FLUTTER_ELINUX_COMMIT_ID: "410b3ca42f2cd0c485edf517a1666652bab442d4"
   TAG_NAME: "${{ inputs.upload-tag }}"
   # vcpkg version: 2023.04.15
@@ -895,7 +895,8 @@ jobs:
             if ${{ matrix.job.enable-headless }}; then
               export DEFAULT_FEAT=linux_headless
             fi
-            cargo build --lib --features flutter,flutter_texture_render,${{ matrix.job.extra-build-features }},$DEFAULT_FEAT --release
+            export CARGO_INCREMENTAL=0
+            cargo build --jobs 1 --lib --features flutter,flutter_texture_render,${{ matrix.job.extra-build-features }},$DEFAULT_FEAT --release
 
       - name: Upload Artifacts
         uses: actions/upload-artifact@master
@@ -1007,10 +1008,11 @@ jobs:
             export VCPKG_ROOT=/opt/artifacts/vcpkg
             export ARCH=armhf
             export DEFAULT_FEAT=""
+            export CARGO_INCREMENTAL=0
             if ${{ matrix.job.enable-headless }}; then
               export DEFAULT_FEAT=linux_headless
             fi
-            cargo build --features inline,${{ matrix.job.extra-build-features }},$DEFAULT_FEAT --release --bins
+            cargo build --jobs 1 --features inline,${{ matrix.job.extra-build-features }},$DEFAULT_FEAT --release --bins
             # package
             mkdir -p ./Release
             mv ./target/release/rustdesk ./Release/rustdesk
@@ -1153,6 +1155,7 @@ jobs:
                 sed -i "s/x64\/release/arm\/release/g" ./build.py
               ;;
             esac
+            export CARGO_INCREMENTAL=0
             python3 ./build.py --flutter --hwcodec --skip-cargo
             # rpm package
             echo -e "start packaging fedora package"

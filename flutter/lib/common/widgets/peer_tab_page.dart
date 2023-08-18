@@ -219,6 +219,7 @@ class _PeerTabPageState extends State<PeerTabPage>
                 entries[gFFI.peerTabModel.currentTab].load();
               }
             },
+            spinning: gFFI.abModel.abLoading,
             child: RotatedBox(
                 quarterTurns: 2,
                 child: Tooltip(
@@ -345,16 +346,7 @@ class _PeerTabPageState extends State<PeerTabPage>
                   gFFI.abModel.deletePeers(peers.map((p) => p.id).toList());
                   final future = gFFI.abModel.pushAb();
                   if (hasSynced) {
-                    Future.delayed(Duration.zero, () async {
-                      final succ = await future;
-                      if (succ) {
-                        await Future.delayed(
-                            Duration(seconds: 2)); // success msg
-                        BotToast.showText(
-                            contentColor: Colors.lightBlue,
-                            text: translate('synced_peer_readded_tip'));
-                      }
-                    });
+                    gFFI.abModel.reSyncToast(future);
                   }
                 }
                 break;

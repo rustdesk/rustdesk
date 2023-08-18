@@ -102,9 +102,9 @@ dev_dependencies:
   icons_launcher: ^2.0.4
   #flutter_test:
   #sdk: flutter
-  build_runner: ^2.1.11
-  freezed: ^2.0.3
-  flutter_lints: ^2.0.0
+  build_runner: ^2.4.6
+  freezed: ^2.4.2
+  flutter_lints: ^2.0.2
   ffigen: ^7.2.4
 
 # rerun: flutter pub run flutter_launcher_icons
