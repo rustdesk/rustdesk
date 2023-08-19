@@ -89,6 +89,9 @@ pub fn encrypt_str_or_original(s: &str, version: &str, max_len: usize) -> String
         log::error!("Duplicate encryption!");
         return s.to_owned();
     }
+    if s.bytes().len() > max_len {
+        return String::default();
+    }
     if version == "00" {
         if let Ok(s) = encrypt(s.as_bytes(), max_len) {
             return version.to_owned() + &s;
@@ -121,6 +124,9 @@ pub fn encrypt_vec_or_original(v: &[u8], version: &str, max_len: usize) -> Vec<u
     if decrypt_vec_or_original(v, version).1 {
         log::error!("Duplicate encryption!");
         return v.to_owned();
+    }
+    if v.len() > max_len {
+        return vec![];
     }
     if version == "00" {
         if let Ok(s) = encrypt(v, max_len) {
