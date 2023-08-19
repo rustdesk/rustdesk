@@ -203,9 +203,9 @@ class _PeerTabPageState extends State<PeerTabPage>
   }
 
   Widget _createRefresh() {
-    if (gFFI.peerTabModel.currentTab < 3) return Offstage();
     final textColor = Theme.of(context).textTheme.titleLarge?.color;
-    return Container(
+    return Offstage(
+      offstage: gFFI.peerTabModel.currentTab != PeerTabIndex.ab.index,
       child: RefreshWidget(
           onPressed: () {
             if (gFFI.peerTabModel.currentTab < entries.length) {
