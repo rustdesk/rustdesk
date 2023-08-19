@@ -93,6 +93,8 @@ class AbModel {
           } catch (e) {}
           final data = jsonDecode(json['data']);
           if (data != null) {
+            final oldOnlineIDs =
+                peers.where((e) => e.online).map((e) => e.id).toList();
             tags.clear();
             peers.clear();
             if (data['tags'] is List) {
@@ -106,6 +108,11 @@ class AbModel {
             if (isFull(false)) {
               peers.removeRange(licensedDevices, peers.length);
             }
+            // restore online
+            peers
+                .where((e) => oldOnlineIDs.contains(e.id))
+                .map((e) => e.online = true)
+                .toList();
             _saveCache(); // save on success
           }
         }

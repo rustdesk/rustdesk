@@ -222,7 +222,7 @@ class _PeerCardState extends State<_PeerCard>
                         ],
                       ).marginOnly(top: 2),
                     ),
-                    checkBoxOrActionMoreDesktop(peer),
+                    checkBoxOrActionMoreDesktop(peer, isTile: true),
                   ],
                 ).paddingOnly(left: 10.0, top: 3.0),
               ),
@@ -321,7 +321,7 @@ class _PeerCardState extends State<_PeerCard>
                           style: Theme.of(context).textTheme.titleSmall,
                         )),
                       ]).paddingSymmetric(vertical: 8)),
-                      checkBoxOrActionMoreDesktop(peer),
+                      checkBoxOrActionMoreDesktop(peer, isTile: false),
                     ],
                   ).paddingSymmetric(horizontal: 12.0),
                 )
@@ -387,7 +387,7 @@ class _PeerCardState extends State<_PeerCard>
     }
   }
 
-  Widget checkBoxOrActionMoreDesktop(Peer peer) {
+  Widget checkBoxOrActionMoreDesktop(Peer peer, {required bool isTile}) {
     final PeerTabModel peerTabModel = Provider.of(context);
     final selected = peerTabModel.isPeerSelected(peer.id);
     if (peerTabModel.multiSelectionMode) {
@@ -398,14 +398,15 @@ class _PeerCardState extends State<_PeerCard>
             )
           : Icon(Icons.check_box_outline_blank);
       bool last = peerTabModel.isShiftDown && peer.id == peerTabModel.lastId;
+      double right = isTile ? 4 : 0;
       if (last) {
         return Container(
           decoration: BoxDecoration(
               border: Border.all(color: MyTheme.accent, width: 1)),
           child: icon,
-        );
+        ).marginOnly(right: right);
       } else {
-        return icon;
+        return icon.marginOnly(right: right);
       }
     } else {
       return _actionMore(peer);
