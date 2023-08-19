@@ -1197,7 +1197,7 @@ dependencies = [
  "js-sys",
  "libc",
  "mach2",
- "ndk 0.7.0",
+ "ndk",
  "ndk-context",
  "oboe",
  "once_cell",
@@ -3766,26 +3766,13 @@ dependencies = [
 
 [[package]]
 name = "ndk"
-version = "0.6.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2032c77e030ddee34a6787a64166008da93f6a352b629261d0fee232b8742dd4"
-dependencies = [
- "bitflags",
- "jni-sys",
- "ndk-sys 0.3.0",
- "num_enum",
- "thiserror",
-]
-
-[[package]]
-name = "ndk"
 version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "451422b7e4718271c8b5b3aadf5adedba43dc76312454b387e98fae0fc951aa0"
 dependencies = [
  "bitflags",
  "jni-sys",
- "ndk-sys 0.4.1+23.1.7779620",
+ "ndk-sys",
  "num_enum",
  "raw-window-handle",
  "thiserror",
@@ -3796,15 +3783,6 @@ name = "ndk-context"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "27b02d87554356db9e9a873add8782d4ea6e3e58ea071a9adb9a2e8ddb884a8b"
-
-[[package]]
-name = "ndk-sys"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6e5a6ae77c8ee183dcbbba6150e2e6b9f3f4196a7666c02a715a95692ec1fa97"
-dependencies = [
- "jni-sys",
-]
 
 [[package]]
 name = "ndk-sys"
@@ -4116,7 +4094,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8868cc237ee02e2d9618539a23a8d228b9bb3fc2e7a5b11eed3831de77c395d0"
 dependencies = [
  "jni 0.20.0",
- "ndk 0.7.0",
+ "ndk",
  "ndk-context",
  "num-derive",
  "num-traits 0.2.15",
@@ -5409,7 +5387,7 @@ dependencies = [
  "jni 0.21.1",
  "lazy_static",
  "log",
- "ndk 0.7.0",
+ "ndk",
  "num_cpus",
  "pkg-config",
  "quest",
@@ -5915,8 +5893,8 @@ dependencies = [
 
 [[package]]
 name = "tao"
-version = "0.19.1"
-source = "git+https://github.com/rustdesk-org/tao?branch=muda#173f128608d282dc4036f213c1c42137464ff096"
+version = "0.22.2"
+source = "git+https://github.com/rustdesk-org/tao?branch=dev#1e5b97258cf42a30f80f85a6aa0b1a4aece1977e"
 dependencies = [
  "bitflags",
  "cairo-rs",
@@ -5937,13 +5915,13 @@ dependencies = [
  "gtk",
  "image",
  "instant",
- "jni 0.20.0",
+ "jni 0.21.1",
  "lazy_static",
  "libc",
  "log",
- "ndk 0.6.0",
+ "ndk",
  "ndk-context",
- "ndk-sys 0.3.0",
+ "ndk-sys",
  "objc",
  "once_cell",
  "parking_lot",
@@ -5952,16 +5930,18 @@ dependencies = [
  "scopeguard",
  "tao-macros",
  "unicode-segmentation",
+ "url",
  "uuid",
- "windows 0.44.0",
+ "windows 0.48.0",
  "windows-implement",
  "x11-dl",
+ "zbus",
 ]
 
 [[package]]
 name = "tao-macros"
-version = "0.1.1"
-source = "git+https://github.com/rustdesk-org/tao?branch=muda#173f128608d282dc4036f213c1c42137464ff096"
+version = "0.1.2"
+source = "git+https://github.com/rustdesk-org/tao?branch=dev#1e5b97258cf42a30f80f85a6aa0b1a4aece1977e"
 dependencies = [
  "proc-macro2 1.0.63",
  "quote 1.0.27",
@@ -6850,8 +6830,6 @@ version = "0.44.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9e745dab35a0c4c77aa3ce42d595e13d2003d6902d6b08c9ef5fc326d08da12b"
 dependencies = [
- "windows-implement",
- "windows-interface",
  "windows-targets 0.42.2",
 ]
 
@@ -6870,14 +6848,16 @@ version = "0.48.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e686886bc078bc1b0b600cac0147aadb815089b6e4da64016cbd754b6342700f"
 dependencies = [
+ "windows-implement",
+ "windows-interface",
  "windows-targets 0.48.0",
 ]
 
 [[package]]
 name = "windows-implement"
-version = "0.44.0"
+version = "0.48.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6ce87ca8e3417b02dc2a8a22769306658670ec92d78f1bd420d6310a67c245c6"
+checksum = "5e2ee588991b9e7e6c8338edf3333fbe4da35dc72092643958ebb43f0ab2c49c"
 dependencies = [
  "proc-macro2 1.0.63",
  "quote 1.0.27",
@@ -6886,9 +6866,9 @@ dependencies = [
 
 [[package]]
 name = "windows-interface"
-version = "0.44.0"
+version = "0.48.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "853f69a591ecd4f810d29f17e902d40e349fb05b0b11fff63b08b826bfe39c7f"
+checksum = "e6fb8df20c9bcaa8ad6ab513f7b40104840c8867d5751126e4df3b08388d0cc7"
 dependencies = [
  "proc-macro2 1.0.63",
  "quote 1.0.27",
