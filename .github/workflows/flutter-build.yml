@@ -617,7 +617,7 @@ jobs:
   build-rustdesk-lib-linux-amd64:
     needs: [generate-bridge-linux, build-vcpkg-deps-linux]
     name: build-rust-lib ${{ matrix.job.target }} (${{ matrix.job.os }}) [${{ matrix.job.extra-build-features }}]
-    runs-on: ${{ matrix.job.os }}
+    runs-on: [self-hosted]
     strategy:
       fail-fast: false
       matrix:
@@ -648,25 +648,26 @@ jobs:
             }
           # - { target: x86_64-unknown-linux-musl   , os: ubuntu-20.04, use-cross: true }
     steps:
-      - name: Maximize build space
-        run: |
-          sudo rm -rf /opt/ghc
-          sudo rm -rf /usr/local/lib/android
-          sudo rm -rf /usr/share/dotnet
-          sudo apt update -y
-          sudo apt install qemu-user-static
+      #- name: Maximize build space
+      #  run: |
+      #    sudo rm -rf /opt/ghc
+      #    sudo rm -rf /usr/local/lib/android
+      #    sudo rm -rf /usr/share/dotnet
+      #    sudo apt update -y
+      #    sudo apt install qemu-user-static -y
 
       - name: Checkout source code
         uses: actions/checkout@v3
 
-      - name: Set Swap Space
-        uses: pierotofy/set-swap-space@master
-        with:
-          swap-size-gb: 12
+      #- name: Set Swap Space
+      #  uses: pierotofy/set-swap-space@master
+      #  with:
+      #    swap-size-gb: 12
 
       - name: Free Space
         run: |
-          df
+          df -h
+          free -m
 
       - name: Install Rust toolchain
         uses: actions-rs/toolchain@v1
@@ -765,7 +766,7 @@ jobs:
     if: ${{ inputs.upload-artifact }}
     needs: [generate-bridge-linux, build-vcpkg-deps-linux]
     name: build-rust-lib ${{ matrix.job.target }} (${{ matrix.job.os }}) [${{ matrix.job.extra-build-features }}]
-    runs-on: ${{ matrix.job.os }}
+    runs-on: [self-hosted]
     strategy:
       fail-fast: false
       matrix:
@@ -798,25 +799,26 @@ jobs:
           # - { arch: armv7, target: armv7-unknown-linux-gnueabihf , os: ubuntu-20.04, use-cross: true, extra-build-features: "appimage" }
           # - { target: arm-unknown-linux-musleabihf, os: ubuntu-20.04, use-cross: true }
     steps:
-      - name: Maximize build space
-        run: |
-          sudo rm -rf /opt/ghc
-          sudo rm -rf /usr/local/lib/android
-          sudo rm -rf /usr/share/dotnet
-          sudo apt update -y
-          sudo apt install qemu-user-static
+      #- name: Maximize build space
+      #  run: |
+      #    sudo rm -rf /opt/ghc
+      #    sudo rm -rf /usr/local/lib/android
+      #    sudo rm -rf /usr/share/dotnet
+      #    sudo apt update -y
+      #    sudo apt install qemu-user-static -y
 
       - name: Checkout source code
         uses: actions/checkout@v3
 
-      - name: Set Swap Space
-        uses: pierotofy/set-swap-space@master
-        with:
-          swap-size-gb: 12
+      #- name: Set Swap Space
+      #  uses: pierotofy/set-swap-space@master
+      #  with:
+      #    swap-size-gb: 12
 
       - name: Free Space
         run: |
-          df
+          df -h
+          free -m
 
       - name: Install Rust toolchain
         uses: actions-rs/toolchain@v1
@@ -908,7 +910,7 @@ jobs:
     if: ${{ inputs.upload-artifact }}
     needs: [build-vcpkg-deps-linux]
     name: build-rustdesk(sciter) ${{ matrix.job.target }} (${{ matrix.job.os }}) [${{ matrix.job.extra-build-features }}]
-    runs-on: ${{ matrix.job.os }}
+    runs-on: [self-hosted]
     strategy:
       fail-fast: false
       matrix:
@@ -927,25 +929,26 @@ jobs:
           # - { target: arm-unknown-linux-musleabihf, os: ubuntu-20.04, use-cross: true }
     steps:
 
-      - name: Maximize build space
-        run: |
-          sudo rm -rf /opt/ghc
-          sudo rm -rf /usr/local/lib/android
-          sudo rm -rf /usr/share/dotnet
-          sudo apt update -y
-          sudo apt install qemu-user-static
+      #- name: Maximize build space
+      #  run: |
+      #    sudo rm -rf /opt/ghc
+      #    sudo rm -rf /usr/local/lib/android
+      #    sudo rm -rf /usr/share/dotnet
+      #    sudo apt update -y
+      #    sudo apt install qemu-user-static -y
 
       - name: Checkout source code
         uses: actions/checkout@v3
 
-      - name: Set Swap Space
-        uses: pierotofy/set-swap-space@master
-        with:
-          swap-size-gb: 12
+      #- name: Set Swap Space
+      #  uses: pierotofy/set-swap-space@master
+      #  with:
+      #    swap-size-gb: 12
 
       - name: Free Space
         run: |
-          df
+          df -h
+          free -m
 
       - name: Install Rust toolchain
         uses: actions-rs/toolchain@v1
