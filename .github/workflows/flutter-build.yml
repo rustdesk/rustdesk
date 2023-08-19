@@ -617,7 +617,7 @@ jobs:
   build-rustdesk-lib-linux-amd64:
     needs: [generate-bridge-linux, build-vcpkg-deps-linux]
     name: build-rust-lib ${{ matrix.job.target }} (${{ matrix.job.os }}) [${{ matrix.job.extra-build-features }}]
-    runs-on: [self-hosted]
+    runs-on: ${{ matrix.job.os }}
     strategy:
       fail-fast: false
       matrix:
@@ -648,21 +648,21 @@ jobs:
             }
           # - { target: x86_64-unknown-linux-musl   , os: ubuntu-20.04, use-cross: true }
     steps:
-      #- name: Maximize build space
-      #  run: |
-      #    sudo rm -rf /opt/ghc
-      #    sudo rm -rf /usr/local/lib/android
-      #    sudo rm -rf /usr/share/dotnet
-      #    sudo apt update -y
-      #    sudo apt install qemu-user-static -y
+      - name: Maximize build space
+        run: |
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /usr/share/dotnet
+          sudo apt update -y
+          sudo apt install qemu-user-static -y
 
       - name: Checkout source code
         uses: actions/checkout@v3
 
-      #- name: Set Swap Space
-      #  uses: pierotofy/set-swap-space@master
-      #  with:
-      #    swap-size-gb: 12
+      - name: Set Swap Space
+        uses: pierotofy/set-swap-space@master
+        with:
+          swap-size-gb: 12
 
       - name: Free Space
         run: |
