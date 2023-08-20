@@ -95,6 +95,7 @@ class UserModel {
   _parseAndUpdateUser(UserPayload user) {
     userName.value = user.name;
     isAdmin.value = user.isAdmin;
+    bind.mainSetLocalOption(key: 'user_info', value: jsonEncode(user));
   }
 
   // update ab and group status
