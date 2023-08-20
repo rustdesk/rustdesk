@@ -895,7 +895,7 @@ pub fn main_load_recent_peers_for_ab(filter: String) -> String {
     if !config::APP_DIR.read().unwrap().is_empty() {
         let peers: Vec<HashMap<&str, String>> = PeerConfig::peers(id_filters)
             .drain(..)
-            .map(|(id, _, p)| peer_to_map_ab(id, p))
+            .map(|(id, _, p)| peer_to_map(id, p))
             .collect();
         return serde_json::ser::to_string(&peers).unwrap_or("".to_owned());
     }
