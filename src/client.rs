@@ -1074,6 +1074,7 @@ pub struct LoginConfigHandler {
     pub direct: Option<bool>,
     pub received: bool,
     switch_uuid: Option<String>,
+    pub save_ab_password_to_recent: bool,
 }
 
 impl Deref for LoginConfigHandler {
@@ -1647,7 +1648,10 @@ impl LoginConfigHandler {
                 log::debug!("remember password of {}", self.id);
             }
         } else {
-            if !password0.is_empty() {
+            if self.save_ab_password_to_recent {
+                config.password = password;
+                log::debug!("save ab password of {} to recent", self.id);
+            } else if !password0.is_empty() {
                 config.password = Default::default();
                 log::debug!("remove password of {}", self.id);
             }
@@ -2173,6 +2177,7 @@ pub fn handle_login_error(
     err: &str,
     interface: &impl Interface,
 ) -> bool {
+    lc.write().unwrap().save_ab_password_to_recent = false;
     if err == LOGIN_MSG_PASSWORD_EMPTY {
         lc.write().unwrap().password = Default::default();
         interface.msgbox("input-password", "Password Required", "", "");
@@ -2252,7 +2257,11 @@ pub async fn handle_hash(
                 .find_map(|p| if p.id == id { Some(p) } else { None })
             {
                 if let Ok(hash) = base64::decode(p.hash.clone(), base64::Variant::Original) {
-                    password = hash;
+                    if !hash.is_empty() {
+                        password = hash;
+                        lc.write().unwrap().save_ab_password_to_recent = true;
+                        lc.write().unwrap().password = password.clone();
+                    }
                 }
             }
         }
