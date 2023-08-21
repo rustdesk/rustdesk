@@ -1074,6 +1074,7 @@ pub struct LoginConfigHandler {
     pub direct: Option<bool>,
     pub received: bool,
     switch_uuid: Option<String>,
+    pub save_ab_password_to_recent: bool, // true: connected with ab password
 }
 
 impl Deref for LoginConfigHandler {
@@ -1647,10 +1648,25 @@ impl LoginConfigHandler {
                 log::debug!("remember password of {}", self.id);
             }
         } else {
-            if !password0.is_empty() {
+            if self.save_ab_password_to_recent {
+                config.password = password;
+                log::debug!("save ab password of {} to recent", self.id);
+            } else if !password0.is_empty() {
                 config.password = Default::default();
                 log::debug!("remove password of {}", self.id);
             }
+        }
+        #[cfg(feature = "flutter")]
+        {
+            // sync ab password with PeerConfig password
+            let password = base64::encode(config.password.clone(), base64::Variant::Original);
+            let evt: HashMap<&str, String> = HashMap::from([
+                ("name", "sync_peer_password_to_ab".to_string()),
+                ("id", self.id.clone()),
+                ("password", password),
+            ]);
+            let evt = serde_json::ser::to_string(&evt).unwrap_or("".to_owned());
+            crate::flutter::push_global_event(crate::flutter::APP_TYPE_MAIN, evt);
         }
         if config.keyboard_mode.is_empty() {
             if is_keyboard_mode_supported(&KeyboardMode::Map, get_version_number(&pi.version)) {
@@ -2173,6 +2189,7 @@ pub fn handle_login_error(
     err: &str,
     interface: &impl Interface,
 ) -> bool {
+    lc.write().unwrap().save_ab_password_to_recent = false;
     if err == LOGIN_MSG_PASSWORD_EMPTY {
         lc.write().unwrap().password = Default::default();
         interface.msgbox("input-password", "Password Required", "", "");
@@ -2252,11 +2269,15 @@ pub async fn handle_hash(
                 .find_map(|p| if p.id == id { Some(p) } else { None })
             {
                 if let Ok(hash) = base64::decode(p.hash.clone(), base64::Variant::Original) {
-                    password = hash;
+                    if !hash.is_empty() {
+                        password = hash;
+                        lc.write().unwrap().save_ab_password_to_recent = true;
+                    }
                 }
             }
         }
     }
+    lc.write().unwrap().password = password.clone();
     let password = if password.is_empty() {
         // login without password, the remote side can click accept
         interface.msgbox("input-password", "Password Required", "", "");
@@ -2328,9 +2349,9 @@ pub async fn handle_login_from_ui(
         hasher.update(&lc.read().unwrap().hash.salt);
         let res = hasher.finalize();
         lc.write().unwrap().remember = remember;
-        lc.write().unwrap().password = res[..].into();
         res[..].into()
     };
+    lc.write().unwrap().password = hash_password.clone();
     let mut hasher2 = Sha256::new();
     hasher2.update(&hash_password[..]);
     hasher2.update(&lc.read().unwrap().hash.challenge);

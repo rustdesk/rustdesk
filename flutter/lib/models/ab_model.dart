@@ -62,7 +62,7 @@ class AbModel {
     if (pushError.isNotEmpty) {
       try {
         // push to retry
-        pushAb(toastIfFail: false, toastIfSucc: false);
+        await pushAb(toastIfFail: false, toastIfSucc: false);
       } catch (_) {}
     }
     if (!quiet) {
@@ -93,6 +93,8 @@ class AbModel {
           } catch (e) {}
           final data = jsonDecode(json['data']);
           if (data != null) {
+            final oldOnlineIDs =
+                peers.where((e) => e.online).map((e) => e.id).toList();
             tags.clear();
             peers.clear();
             if (data['tags'] is List) {
@@ -106,6 +108,11 @@ class AbModel {
             if (isFull(false)) {
               peers.removeRange(licensedDevices, peers.length);
             }
+            // restore online
+            peers
+                .where((e) => oldOnlineIDs.contains(e.id))
+                .map((e) => e.online = true)
+                .toList();
             _saveCache(); // save on success
           }
         }
@@ -204,12 +211,15 @@ class AbModel {
     it.first.alias = alias;
   }
 
-  void unrememberPassword(String id) {
+  bool changePassword(String id, String hash) {
     final it = peers.where((element) => element.id == id);
-    if (it.isEmpty) {
-      return;
+    if (it.isNotEmpty) {
+      if (it.first.hash != hash) {
+        it.first.hash = hash;
+        return true;
+      }
     }
-    it.first.hash = '';
+    return false;
   }
 
   Future<bool> pushAb(
@@ -218,6 +228,7 @@ class AbModel {
       bool isRetry = false}) async {
     debugPrint(
         "pushAb: toastIfFail:$toastIfFail, toastIfSucc:$toastIfSucc, isRetry:$isRetry");
+    if (!gFFI.userModel.isLogin) return false;
     pushError.value = '';
     if (isRetry) retrying.value = true;
     DateTime startTime = DateTime.now();

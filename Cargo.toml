@@ -111,7 +111,7 @@ objc_id = "0.1"
 
 [target.'cfg(any(target_os = "macos", target_os = "linux", target_os = "windows"))'.dependencies]
 tray-icon = { git = "https://github.com/rustdesk-org/tray-icon" }
-tao = { git = "https://github.com/rustdesk-org/tao", branch = "muda" }
+tao = { git = "https://github.com/rustdesk-org/tao", branch = "dev" }
 image = "0.24"
 
 [target.'cfg(any(target_os = "macos", target_os = "linux"))'.dependencies]

@@ -46,6 +46,7 @@ class _AddressBookState extends State<AddressBook> {
           }
           return Column(
             children: [
+              // NOT use Offstage to wrap LinearProgressIndicator
               if (gFFI.abModel.retrying.value) LinearProgressIndicator(),
               _buildErrorBanner(
                   err: gFFI.abModel.pullError,
@@ -397,8 +398,8 @@ class _AddressBookState extends State<AddressBook> {
             const SizedBox(
               height: 4.0,
             ),
-            Offstage(
-                offstage: !isInProgress, child: const LinearProgressIndicator())
+            // NOT use Offstage to wrap LinearProgressIndicator
+            if (isInProgress) const LinearProgressIndicator(),
           ],
         ),
         actions: [
@@ -463,8 +464,8 @@ class _AddressBookState extends State<AddressBook> {
             const SizedBox(
               height: 4.0,
             ),
-            Offstage(
-                offstage: !isInProgress, child: const LinearProgressIndicator())
+            // NOT use Offstage to wrap LinearProgressIndicator
+            if (isInProgress) const LinearProgressIndicator(),
           ],
         ),
         actions: [

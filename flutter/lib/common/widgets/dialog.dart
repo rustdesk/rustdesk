@@ -156,8 +156,8 @@ void changeIdDialog() {
                     }).toList(),
                   )).marginOnly(bottom: 8)
               : SizedBox.shrink(),
-          Offstage(
-              offstage: !isInProgress, child: const LinearProgressIndicator())
+          // NOT use Offstage to wrap LinearProgressIndicator
+          if (isInProgress) const LinearProgressIndicator(),
         ],
       ),
       actions: [
@@ -202,8 +202,8 @@ void changeWhiteList({Function()? callback}) async {
           const SizedBox(
             height: 4.0,
           ),
-          Offstage(
-              offstage: !isInProgress, child: const LinearProgressIndicator())
+          // NOT use Offstage to wrap LinearProgressIndicator
+          if (isInProgress) const LinearProgressIndicator(),
         ],
       ),
       actions: [
@@ -1435,8 +1435,8 @@ void editAbTagDialog(
                   .toList(growable: false),
             ),
           ),
-          Offstage(
-              offstage: !isInProgress, child: const LinearProgressIndicator())
+          // NOT use Offstage to wrap LinearProgressIndicator
+          if (isInProgress) const LinearProgressIndicator(),
         ],
       ),
       actions: [
@@ -1496,9 +1496,9 @@ void renameDialog(
               ),
             ),
           ),
-          Obx(() => Offstage(
-              offstage: isInProgress.isFalse,
-              child: const LinearProgressIndicator())),
+          // NOT use Offstage to wrap LinearProgressIndicator
+          Obx(() =>
+              isInProgress.value ? const LinearProgressIndicator() : Offstage())
         ],
       ),
       actions: [
