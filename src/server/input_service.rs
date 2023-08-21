@@ -338,6 +338,7 @@ lazy_static::lazy_static! {
     static ref KEYS_DOWN: Arc<Mutex<HashMap<KeysDown, Instant>>> = Default::default();
     static ref LATEST_PEER_INPUT_CURSOR: Arc<Mutex<Input>> = Default::default();
     static ref LATEST_SYS_CURSOR_POS: Arc<Mutex<(Instant, (i32, i32))>> = Arc::new(Mutex::new((Instant::now().sub(MOUSE_MOVE_PROTECTION_TIMEOUT), (INVALID_CURSOR_POS, INVALID_CURSOR_POS))));
+    static ref NON_RUSTDESK_INPUT_SENT: Arc<Mutex<Instant>> = Arc::new(Mutex::new(Instant::now().sub(MOUSE_MOVE_PROTECTION_TIMEOUT)));
 }
 static EXITING: AtomicBool = AtomicBool::new(false);
 
@@ -346,6 +347,20 @@ const MOUSE_MOVE_PROTECTION_TIMEOUT: Duration = Duration::from_millis(1_000);
 const MOUSE_ACTIVE_DISTANCE: i32 = 5;
 
 static RECORD_CURSOR_POS_RUNNING: AtomicBool = AtomicBool::new(false);
+
+#[cfg(any(target_os = "windows", target_os = "macos"))]
+pub fn start_check_non_rustdesk_input() {
+    std::thread::spawn(move || {
+        if let Err(error) = rdev::grab(|event: rdev::Event| {
+            if event.extra_data != enigo::ENIGO_INPUT_EXTRA_VALUE {
+                *NON_RUSTDESK_INPUT_SENT.lock().unwrap() = Instant::now();
+            }
+            Some(event)
+        }) {
+            log::error!("rdev Error: {:?}", error)
+        }
+    });
+}
 
 pub fn try_start_record_cursor_pos() -> Option<thread::JoinHandle<()>> {
     if RECORD_CURSOR_POS_RUNNING.load(Ordering::SeqCst) {
@@ -708,8 +723,8 @@ fn get_last_input_cursor_pos() -> (i32, i32) {
 }
 
 // check if mouse is moved by the controlled side user to make controlled side has higher mouse priority than remote.
-fn active_mouse_(conn: i32) -> bool {
-    true
+fn active_mouse_(_conn: i32) -> bool {
+    NON_RUSTDESK_INPUT_SENT.lock().unwrap().elapsed() > MOUSE_MOVE_PROTECTION_TIMEOUT
     /* this method is buggy (not working on macOS, making fast moving mouse event discarded here) and added latency (this is blocking way, must do in async way), so we disable it for now
     // out of time protection
     if LATEST_SYS_CURSOR_POS.lock().unwrap().0.elapsed() > MOUSE_MOVE_PROTECTION_TIMEOUT {

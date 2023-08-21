@@ -666,6 +666,8 @@ impl<T: InvokeUiSession> Session<T> {
             platform_code,
             position_code: position_code as _,
             event_type,
+            #[cfg(any(target_os = "windows", target_os = "macos"))]
+            extra_data: 0,
         };
         keyboard::client::process_event(&event, Some(lock_modes));
     }

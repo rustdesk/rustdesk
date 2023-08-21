@@ -103,6 +103,8 @@ pub fn new() -> ServerPtr {
             server.add_service(Box::new(input_service::new_pos()));
         }
     }
+    #[cfg(any(target_os = "windows", target_os = "macos"))]
+    input_service::start_check_non_rustdesk_input();
     Arc::new(RwLock::new(server))
 }
 
