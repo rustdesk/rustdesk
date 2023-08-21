@@ -6,52 +6,64 @@
   <a href="#file-structure">Structure</a> •
   <a href="#snapshot">Snapshot</a><br>
   [<a href="../README.md">English</a>] | [<a href="README-UA.md">Українська</a>] | [<a href="README-CS.md">česky</a>] | [<a href="README-ZH.md">中文</a>] | [<a href="README-HU.md">Magyar</a>] | [<a href="README-ES.md">Español</a>] | [<a href="README-FA.md">فارسی</a>] | [<a href="README-FR.md">Français</a>] | [<a href="README-DE.md">Deutsch</a>] | [<a href="README-PL.md">Polski</a>] | [<a href="README-FI.md">Suomi</a>] | [<a href="README-ML.md">മലയാളം</a>] | [<a href="README-JP.md">日本語</a>] | [<a href="README-NL.md">Nederlands</a>] | [<a href="README-IT.md">Italiano</a>] | [<a href="README-RU.md">Русский</a>] | [<a href="README-PTBR.md">Português (Brasil)</a>] | [<a href="README-EO.md">Esperanto</a>] | [<a href="README-KR.md">한국어</a>] | [<a href="README-AR.md">العربي</a>] | [<a href="README-VN.md">Tiếng Việt</a>] | [<a href="README-GR.md">Ελληνικά</a>]<br>
-  <b>Kami membutuhkan bantuan Anda untuk menerjemahkan README ini dan <a href="https://github.com/rustdesk/rustdesk/tree/master/src/lang">RustDesk UI</a> ke bahasa asli anda</b>
+  <b>Kami membutuhkan bantuanmu untuk menterjemahkan file README dan <a href="https://github.com/rustdesk/rustdesk/tree/master/src/lang">RustDesk UI</a> ke Bahasa Indonesia</b>
 </p>
 
-Birbincang bersama kami: [Discord](https://discord.gg/nDceKgxnkV) | [Twitter](https://twitter.com/rustdesk) | [Reddit](https://www.reddit.com/r/rustdesk)
+Mari mengobrol bersama kami: [Discord](https://discord.gg/nDceKgxnkV) | [Twitter](https://twitter.com/rustdesk) | [Reddit](https://www.reddit.com/r/rustdesk)
 
 [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/I2I04VU09)
 
-Perangkat lunak desktop jarak jauh lainnya, ditulis dengan Rust. Bekerja begitu saja, tidak memerlukan konfigurasi. Anda memiliki kendali penuh atas data Anda, tanpa khawatir tentang keamanan. Anda dapat menggunakan server rendezvous/relay kami, [konfigurasi server sendiri](https://rustdesk.com/server), or [tulis rendezvous/relay server anda sendiri](https://github.com/rustdesk/rustdesk-server-demo).
+Merupakan perangkat lunak Remote Desktop yang baru, dibangun dengan Rust. kamu bisa langsung menggunakannya tanpa perlu konfigurasi tambahan. Serta ,emiliki kontrol penuh terhadap semua data, tanpa perlu merasa was-was tentang isu keamanan, dan yang lebih menarik adalah memiliki opsi untuk menggunakan server rendezvous/relay milik kami, [konfigurasi server sendiri](https://rustdesk.com/server), atau [tulis rendezvous/relay server anda sendiri](https://github.com/rustdesk/rustdesk-server-demo).
 
-RustDesk menyambut baik kontribusi dari semua orang. Lihat [`docs/CONTRIBUTING.md`](CONTRIBUTING.md) untuk membantu sebelum memulai.
+RustDesk mengajak semua orang untuk ikut berkontribusi. Lihat [`docs/CONTRIBUTING.md`](CONTRIBUTING.md) untuk melihat panduan.
 
-[**BINARY DOWNLOAD**](https://github.com/rustdesk/rustdesk/releases)
+[**UNDUH BINARY**](https://github.com/rustdesk/rustdesk/releases)
 
-## Publik Server Gratis
+## Server Publik Gratis
 
-Di bawah ini adalah server yang bisa Anda gunakan secara gratis, dapat berubah seiring waktu. Jika Anda tidak dekat dengan salah satu dari ini, jaringan Anda mungkin lambat.
-| Lokasi | Vendor | Spesifikasi |
+Di bawah ini merupakan server gratis yang bisa kamu gunakan, seiring waktu kemungkinan akan terjadi perubahan spesifikasi pada setiap server. Jika lokasi kamu berada jauh dengan salah satu server yang tersedia, kemungkinan koneksi akan terasa lambat ketika melakukan proses remote.
+| Lokasi | Penyedia | Spesifikasi |
 | --------- | ------------- | ------------------ |
-| Germany | Hetzner | 2 vCPU / 4GB RAM |
-| Ukraine (Kyiv) | [dc.volia](https://dc.volia.com) | 2 vCPU / 4GB RAM |
+| Jerman | [Hetzner](https://www.hetzner.com) | 2 vCPU / 4GB RAM |
+| Ukraina (Kyiv) | [dc.volia](https://dc.volia.com) | 2 vCPU / 4GB RAM |
 
-## Dependencies
+## Dev Container
 
-Versi desktop menggunakan [sciter](https://sciter.com/) untuk GUI, silahkan download sendiri sciter dynamic library.
+[![Open in Dev Containers](https://img.shields.io/static/v1?label=Dev%20Container&message=Open&color=blue&logo=visualstudiocode)](https://vscode.dev/redirect?url=vscode://ms-vscode-remote.remote-containers/cloneInVolume?url=https://github.com/rustdesk/rustdesk)
+
+Apabila kamu sudah menginstall VS Code dan Docker, kamu bisa mengklik badge yang ada diatas untuk memulainya. Dengan mengklik badge tersebut secara otomatis akan menginstal ekstensi pada VS Code, lakukan kloning (clone) source code kedalam container volume, dan aktifkan dev container untuk menggunakannya.
+
+## Dependensi
+
+Pada versi desktop, antarmuka pengguna (GUI) menggunakan [Sciter](https://sciter.com/) atau flutter, tutorial ini hanya berlaku untuk Sciter
+
+Kamu bisa mengunduh Sciter dynamic library disini.
 
 [Windows](https://raw.githubusercontent.com/c-smile/sciter-sdk/master/bin.win/x64/sciter.dll) |
 [Linux](https://raw.githubusercontent.com/c-smile/sciter-sdk/master/bin.lnx/x64/libsciter-gtk.so) |
 [MacOS](https://raw.githubusercontent.com/c-smile/sciter-sdk/master/bin.osx/libsciter.dylib)
 
-## Langkah untuk RAW Build
+## Langkah awal untuk memulai
 
-- Siapkan env pengembangan Rust dan C++ build env
+- Siapkan env development Rust dan env build C++
 
-- Install [vcpkg](https://github.com/microsoft/vcpkg), dan arahkan `VCPKG_ROOT` env variable dengan benar
+- Install [vcpkg](https://github.com/microsoft/vcpkg), dan atur variabel env `VCPKG_ROOT` dengan benar
 
   - Windows: vcpkg install libvpx:x64-windows-static libyuv:x64-windows-static opus:x64-windows-static aom:x64-windows-static
   - Linux/MacOS: vcpkg install libvpx libyuv opus aom
 
 - jalankan `cargo run`
 
-## Bagaimana Build di Linux
+## [Build](https://rustdesk.com/docs/en/dev/build/)
+
+## Cara Build di Linux
 
 ### Ubuntu 18 (Debian 10)
 
 ```sh
-sudo apt install -y g++ gcc git curl wget nasm yasm libgtk-3-dev clang libxcb-randr0-dev libxdo-dev libxfixes-dev libxcb-shape0-dev libxcb-xfixes0-dev libasound2-dev libpulse-dev cmake
+sudo apt install -y zip g++ gcc git curl wget nasm yasm libgtk-3-dev clang libxcb-randr0-dev libxdo-dev \
+        libxfixes-dev libxcb-shape0-dev libxcb-xfixes0-dev libasound2-dev libpulse-dev cmake make \
+        libclang-dev ninja-build libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev
 ```
 
 ### Fedora 28 (CentOS 8)
@@ -78,7 +90,7 @@ export VCPKG_ROOT=$HOME/vcpkg
 vcpkg/vcpkg install libvpx libyuv opus aom
 ```
 
-### Perbaiki libvpx (Untuk Fedora)
+### Mengatasi masalah libvpx (Untuk Fedora)
 
 ```sh
 cd vcpkg/buildtrees/libvpx/src
@@ -104,13 +116,40 @@ mv libsciter-gtk.so target/debug
 VCPKG_ROOT=$HOME/vcpkg cargo run
 ```
 
-### Ubah Wayland menjadi X11 (Xorg)
+### Mengubah Wayland ke X11 (Xorg)
 
-RustDesk tidak mendukung Wayland. Cek [ini](https://docs.fedoraproject.org/en-US/quick-docs/configuring-xorg-as-default-gnome-session/) untuk mengonfigurasi Xorg sebagai sesi GNOME default.
+RustDesk tidak mendukung Wayland. Cek [ini](https://docs.fedoraproject.org/en-US/quick-docs/configuring-xorg-as-default-gnome-session/) untuk mengonfigurasi Xorg sebagai sesi standar di GNOME.
 
-## Bagaimana build dengan Docker
+## Kompatibilitas dengan Wayland
 
-Mulailah dengan mengkloning repositori dan build dengan docker container:
+Sepertinya Wayland tidak memiliki API untuk mengirimkan ketukan tombol ke jendela lain. Maka dari itu, RustDesk menggunakan API dari level yang lebih rendah, lebih tepatnya perangkat `/dev/uinput` (linux kernel level)
+
+Saat Wayland menjadi sisi yang dikendalikan atau sisi yang sedang diremote, kamu harus memulai dengan cara ini
+
+```bash
+# Start uinput service
+$ sudo rustdesk --service
+$ rustdesk
+```
+
+**Harap Diperhatikan**: Saat Perekaman layar menggunakan Wayland antarmuka (UI) yang ditampilkan akan berbeda. Untuk saat ini RustDesk hanya mendukung org.freedesktop.portal.ScreenCast.
+
+```bash
+$ dbus-send --session --print-reply       \
+  --dest=org.freedesktop.portal.Desktop \
+  /org/freedesktop/portal/desktop       \
+  org.freedesktop.DBus.Properties.Get   \
+  string:org.freedesktop.portal.ScreenCast string:version
+# Not support
+Error org.freedesktop.DBus.Error.InvalidArgs: No such interface “org.freedesktop.portal.ScreenCast”
+# Support
+method return time=1662544486.931020 sender=:1.54 -> destination=:1.139 serial=257 reply_serial=2
+   variant       uint32 4
+```
+
+## Cara Build dengan Docker
+
+Mulailah dengan melakukan kloning (clone) repositori dan build dengan docker container:
 
 ```sh
 git clone https://github.com/rustdesk/rustdesk
@@ -118,25 +157,25 @@ cd rustdesk
 docker build -t "rustdesk-builder" .
 ```
 
-Kemudian, setiap kali Anda perlu build aplikasi, jalankan perintah berikut:
+Selanjutnya, setiap kali ketika kamu akan melakukan build aplikasi, jalankan perintah berikut:
 
 ```sh
 docker run --rm -it -v $PWD:/home/user/rustdesk -v rustdesk-git-cache:/home/user/.cargo/git -v rustdesk-registry-cache:/home/user/.cargo/registry -e PUID="$(id -u)" -e PGID="$(id -g)" rustdesk-builder
 ```
 
-Perhatikan bahwa build pertama mungkin memerlukan waktu lebih lama sebelum dependensi di-cache, build berikutnya akan lebih cepat. Selain itu, jika Anda perlu menentukan argumen yang berbeda untuk perintah build, Anda dapat melakukannya di akhir perintah di posisi `<OPTIONAL-ARGS>`. Misalnya, jika Anda ingin membangun versi rilis yang dioptimalkan, Anda akan menjalankan perintah di atas diikuti oleh `--release`. Hasil eksekusi akan tersedia pada target folder di sistem anda, dan dapat dijalankan dengan:
+Perlu diingat bahwa pada saat build pertama kali, mungkin memerlukan waktu lebih lama sebelum dependensi di-cache, build berikutnya akan lebih cepat. Selain itu, jika perlu menentukan argumen yang berbeda untuk perintah build, kamu dapat melakukannya di akhir perintah di posisi `<OPTIONAL-ARGS>`. Misalnya, jika ingin membangun versi rilis yang dioptimalkan, jalankan perintah di atas dan tambahkan `--release`. Hasil eksekusi perintah tersebut akan tersimpan pada target folder di sistem kamu, dan dapat dijalankan dengan:
 
 ```sh
 target/debug/rustdesk
 ```
 
-Atau, jika Anda menjalankan rilis yang dapat dieksekusi:
+Atau, jika kamu menjalankan rilis yang dapat dieksekusi:
 
 ```sh
 target/release/rustdesk
 ```
 
-Harap pastikan bahwa Anda menjalankan perintah ini dari root repositori RustDesk, jika tidak, aplikasi mungkin tidak dapat menemukan sumber daya yang diperlukan. Perhatikan juga perintah cargo seperti `install` atau `run` saat ini tidak didukung melalui metode ini karena mereka akan menginstal atau menjalankan program di dalam container bukan pada host.
+Harap pastikan bahwa kamu menjalankan perintah ini dari repositori root RustDesk, jika tidak demikian, aplikasi mungkin tidak dapat menemukan sumber yang diperlukan. Dan juga, perintah cargo seperti `install` atau `run` saat ini tidak didukung melalui metode ini karena, proses menginstal atau menjalankan program terjadi di dalam container bukan pada host.
 
 ## Struktur File
 
