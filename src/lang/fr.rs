@@ -274,7 +274,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Chat", "Discuter"),
         ("Total", "Total"),
         ("items", "éléments"),
-        ("Selected", "Sélectionné"),
+        ("Selected", "Sélectionné(s)"),
         ("Screen Capture", "Capture d'écran"),
         ("Input Control", "Contrôle de saisie"),
         ("Audio Capture", "Capture audio"),
