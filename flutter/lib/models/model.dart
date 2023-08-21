@@ -241,6 +241,17 @@ class FfiModel with ChangeNotifier {
         handleReloading(evt);
       } else if (name == 'plugin_option') {
         handleOption(evt);
+      } else if (name == "sync_peer_password_to_ab") {
+        if (desktopType == DesktopType.main) {
+          final id = evt['id'];
+          final password = evt['password'];
+          if (id != null && password != null) {
+            if (gFFI.abModel
+                .changePassword(id.toString(), password.toString())) {
+              gFFI.abModel.pushAb(toastIfFail: false, toastIfSucc: false);
+            }
+          }
+        }
       } else {
         debugPrint('Unknown event name: $name');
       }
