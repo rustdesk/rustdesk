@@ -211,12 +211,15 @@ class AbModel {
     it.first.alias = alias;
   }
 
-  void unrememberPassword(String id) {
+  bool changePassword(String id, String hash) {
     final it = peers.where((element) => element.id == id);
-    if (it.isEmpty) {
-      return;
+    if (it.isNotEmpty) {
+      if (it.first.hash != hash) {
+        it.first.hash = hash;
+        return true;
+      }
     }
-    it.first.hash = '';
+    return false;
   }
 
   Future<bool> pushAb(
@@ -225,6 +228,7 @@ class AbModel {
       bool isRetry = false}) async {
     debugPrint(
         "pushAb: toastIfFail:$toastIfFail, toastIfSucc:$toastIfSucc, isRetry:$isRetry");
+    if (!gFFI.userModel.isLogin) return false;
     pushError.value = '';
     if (isRetry) retrying.value = true;
     DateTime startTime = DateTime.now();

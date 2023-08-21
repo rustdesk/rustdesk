@@ -752,14 +752,13 @@ abstract class BasePeerCard extends StatelessWidget {
         style: style,
       ),
       proc: () async {
-        if (tab == PeerTabIndex.ab) {
-          gFFI.abModel.unrememberPassword(id);
-          await bind.mainForgetPassword(id: id);
-          gFFI.abModel.pushAb();
-        } else {
-          bind.mainForgetPassword(id: id);
-          showToast(translate('Successful'));
+        bool result = gFFI.abModel.changePassword(id, '');
+        await bind.mainForgetPassword(id: id);
+        if (result) {
+          bool toast = tab == PeerTabIndex.ab;
+          gFFI.abModel.pushAb(toastIfFail: toast, toastIfSucc: toast);
         }
+        showToast(translate('Successful'));
       },
       padding: menuPadding,
       dismissOnClicked: true,
