@@ -766,7 +766,7 @@ jobs:
     if: ${{ inputs.upload-artifact }}
     needs: [generate-bridge-linux, build-vcpkg-deps-linux]
     name: build-rust-lib ${{ matrix.job.target }} (${{ matrix.job.os }}) [${{ matrix.job.extra-build-features }}]
-    runs-on: [self-hosted, Linux, X64]
+    runs-on: [self-hosted, Linux, ARM64]
     strategy:
       fail-fast: false
       matrix:
@@ -898,7 +898,7 @@ jobs:
               export DEFAULT_FEAT=linux_headless
             fi
             export CARGO_INCREMENTAL=0
-            cargo build --jobs 1 --lib --features flutter,flutter_texture_render,${{ matrix.job.extra-build-features }},$DEFAULT_FEAT --release
+            cargo build --lib --features flutter,flutter_texture_render,${{ matrix.job.extra-build-features }},$DEFAULT_FEAT --release
 
       - name: Upload Artifacts
         uses: actions/upload-artifact@master
@@ -1015,7 +1015,7 @@ jobs:
             if ${{ matrix.job.enable-headless }}; then
               export DEFAULT_FEAT=linux_headless
             fi
-            cargo build --jobs 1 --features inline,${{ matrix.job.extra-build-features }},$DEFAULT_FEAT --release --bins
+            cargo build --features inline,${{ matrix.job.extra-build-features }},$DEFAULT_FEAT --release --bins
             # package
             mkdir -p ./Release
             mv ./target/release/rustdesk ./Release/rustdesk
