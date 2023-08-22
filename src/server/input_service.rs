@@ -367,6 +367,9 @@ pub fn try_start_record_cursor_pos() -> Option<thread::JoinHandle<()>> {
         return None;
     }
 
+    #[cfg(any(target_os = "windows", target_os = "macos"))]
+    input_service::start_check_non_rustdesk_input();
+
     RECORD_CURSOR_POS_RUNNING.store(true, Ordering::SeqCst);
     let handle = thread::spawn(|| {
         let interval = time::Duration::from_millis(33);
@@ -395,6 +398,8 @@ pub fn try_stop_record_cursor_pos() {
         return;
     }
     RECORD_CURSOR_POS_RUNNING.store(false, Ordering::SeqCst);
+    #[cfg(any(target_os = "windows", target_os = "macos"))]
+    rdev::exit_grab();
 }
 
 // mac key input must be run in main thread, otherwise crash on >= osx 10.15
