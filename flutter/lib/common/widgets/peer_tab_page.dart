@@ -426,7 +426,7 @@ class _PeerTabPageState extends State<PeerTabPage>
   Widget selectionCount(int count) {
     return Align(
       alignment: Alignment.center,
-      child: Text('$count selected'),
+      child: Text('$count ${translate('Selected')}'),
     );
   }
 
