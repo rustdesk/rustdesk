@@ -538,5 +538,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("pull_ab_failed_tip", "未成功获取地址簿"),
         ("push_ab_failed_tip", "未成功上传地址簿"),
         ("synced_peer_readded_tip", "最近会话中存在的设备将会被重新同步到地址簿。"),
+        ("Change Color", "更改颜色"),
     ].iter().cloned().collect();
 }

@@ -7,6 +7,7 @@ import 'package:flutter_hbb/models/ab_model.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
 import '../../desktop/widgets/material_mod_popup_menu.dart' as mod_menu;
 import 'package:get/get.dart';
+import 'package:flex_color_picker/flex_color_picker.dart';
 
 import '../../common.dart';
 import 'dialog.dart';
@@ -513,7 +514,7 @@ class AddressBookTag extends StatelessWidget {
       child: Obx(() => Container(
             decoration: BoxDecoration(
                 color: tags.contains(name)
-                    ? str2color2(name, 0xFF)
+                    ? gFFI.abModel.getTagColor(name)
                     : Theme.of(context).colorScheme.background,
                 borderRadius: BorderRadius.circular(4)),
             margin: const EdgeInsets.symmetric(horizontal: 4.0, vertical: 4.0),
@@ -528,7 +529,7 @@ class AddressBookTag extends StatelessWidget {
                         shape: BoxShape.circle,
                         color: tags.contains(name)
                             ? Colors.white
-                            : str2color2(name)),
+                            : gFFI.abModel.getTagColor(name)),
                   ).marginOnly(right: radius / 2),
                   Expanded(
                     child: Text(name,
@@ -567,6 +568,23 @@ class AddressBookTag extends StatelessWidget {
             onCancel: () {
               Future.delayed(Duration.zero, () => Get.back());
             });
+      }),
+      getEntry(translate(translate('Change Color')), () async {
+        final model = gFFI.abModel;
+        Color oldColor = model.getTagColor(name);
+        Color newColor = await showColorPickerDialog(
+          context,
+          oldColor,
+          pickersEnabled: {
+            ColorPickerType.accent: false,
+            ColorPickerType.wheel: true,
+          },
+          showColorCode: true,
+        );
+        if (oldColor != newColor) {
+          model.setTagColor(name, newColor);
+          model.pushAb();
+        }
       }),
       getEntry(translate("Delete"), () {
         gFFI.abModel.deleteTag(name);

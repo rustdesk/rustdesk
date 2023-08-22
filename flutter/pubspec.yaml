@@ -97,6 +97,7 @@ dependencies:
   dropdown_button2: ^2.0.0
   uuid: ^3.0.7
   auto_size_text_field: ^2.2.1
+  flex_color_picker: ^3.3.0
 
 dev_dependencies:
   icons_launcher: ^2.0.4
