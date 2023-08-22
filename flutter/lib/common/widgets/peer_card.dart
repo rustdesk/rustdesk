@@ -201,7 +201,8 @@ class _PeerCardState extends State<_PeerCard>
         )
       ],
     );
-    final colors = _frontN(peer.tags, 25).map((e) => str2color2(e)).toList();
+    final colors =
+        _frontN(peer.tags, 25).map((e) => gFFI.abModel.getTagColor(e)).toList();
     return Tooltip(
       message: isMobile
           ? ''
@@ -311,7 +312,8 @@ class _PeerCardState extends State<_PeerCard>
       ),
     );
 
-    final colors = _frontN(peer.tags, 25).map((e) => str2color2(e)).toList();
+    final colors =
+        _frontN(peer.tags, 25).map((e) => gFFI.abModel.getTagColor(e)).toList();
     return Tooltip(
       message: peer.tags.isNotEmpty
           ? '${translate('Tags')}: ${peer.tags.join(', ')}'
