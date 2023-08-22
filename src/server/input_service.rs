@@ -366,11 +366,13 @@ pub fn try_start_record_cursor_pos() -> Option<thread::JoinHandle<()>> {
     if RECORD_CURSOR_POS_RUNNING.load(Ordering::SeqCst) {
         return None;
     }
+    RECORD_CURSOR_POS_RUNNING.store(true, Ordering::SeqCst);
 
+    // Check non-rustdesk input is temporarily used here.
+    // And this function is only used to disable rustdesk mouse input if non-rustdesk input is detected.
     #[cfg(any(target_os = "windows", target_os = "macos"))]
     input_service::start_check_non_rustdesk_input();
 
-    RECORD_CURSOR_POS_RUNNING.store(true, Ordering::SeqCst);
     let handle = thread::spawn(|| {
         let interval = time::Duration::from_millis(33);
         loop {
@@ -398,6 +400,7 @@ pub fn try_stop_record_cursor_pos() {
         return;
     }
     RECORD_CURSOR_POS_RUNNING.store(false, Ordering::SeqCst);
+
     #[cfg(any(target_os = "windows", target_os = "macos"))]
     let _r = rdev::exit_grab();
 }
