@@ -66,7 +66,7 @@ class _PeerCardState extends State<_PeerCard>
     final name =
         '${peer.username}${peer.username.isNotEmpty && peer.hostname.isNotEmpty ? '@' : ''}${peer.hostname}';
     final PeerTabModel peerTabModel = Provider.of(context);
-    return Card(
+    final child = Card(
         margin: EdgeInsets.symmetric(horizontal: 2),
         child: GestureDetector(
             onTap: () {
@@ -115,6 +115,23 @@ class _PeerCardState extends State<_PeerCard>
                 ],
               ),
             )));
+    final colors = _frontN(peer.tags, 25).map((e) => str2color2(e)).toList();
+    return Tooltip(
+      message: peer.tags.isNotEmpty
+          ? '${translate('Tags')}: ${peer.tags.join(', ')}'
+          : '',
+      child: Stack(children: [
+        child,
+        if (colors.isNotEmpty)
+          Positioned(
+            top: 2,
+            right: 10,
+            child: CustomPaint(
+              painter: TagPainter(radius: 3, colors: colors),
+            ),
+          )
+      ]),
+    );
   }
 
   Widget _buildDesktop() {
