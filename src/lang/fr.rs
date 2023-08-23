@@ -539,5 +539,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("push_ab_failed_tip", "Échec de la synchronisation du carnet d'adresses"),
         ("synced_peer_readded_tip", "Les appareils qui étaient présents dans les sessions récentes seront synchronisés avec le carnet d'adresses."),
         ("Change Color", ""),
+        ("Primary Color", ""),
+        ("HSV Color", ""),
     ].iter().cloned().collect();
 }

@@ -539,5 +539,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("push_ab_failed_tip", "No se ha podido sincronizar el directorio con el servidor"),
         ("synced_peer_readded_tip", "Los dispositivos presentes en sesiones recientes se sincronizarán con el directorio."),
         ("Change Color", ""),
+        ("Primary Color", ""),
+        ("HSV Color", ""),
     ].iter().cloned().collect();
 }
