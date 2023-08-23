@@ -25,7 +25,7 @@ use hbb_common::{
     protobuf::Enum,
     protobuf::Message as _,
     rendezvous_proto::*,
-    sleep, socket_client,
+    socket_client,
     tcp::FramedStream,
     tokio, ResultType,
 };

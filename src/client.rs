@@ -2100,6 +2100,9 @@ fn _input_os_password(p: String, activate: bool, interface: impl Interface) {
         activate_os(&interface);
         std::thread::sleep(Duration::from_millis(1200));
     }
+    if p.is_empty() {
+        return;
+    }
     let mut key_event = KeyEvent::new();
     key_event.press = true;
     let mut msg_out = Message::new();
