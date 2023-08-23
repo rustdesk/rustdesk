@@ -225,7 +225,7 @@ class AbModel {
       final api = "${await bind.mainGetApiServer()}/api/ab";
       var authHeaders = getHttpHeaders();
       authHeaders['Content-Type'] = "application/json";
-      final body = jsonEncode(_serialize());
+      final body = jsonEncode({"data": jsonEncode(_serialize())});
       http.Response resp;
       // support compression
       if (licensedDevices > 0 && body.length > 1024) {
