@@ -35,6 +35,7 @@ class RemotePage extends StatefulWidget {
     Key? key,
     required this.id,
     required this.sessionId,
+    required this.tabWindowId,
     required this.password,
     required this.toolbarState,
     required this.tabController,
@@ -44,6 +45,7 @@ class RemotePage extends StatefulWidget {
 
   final String id;
   final SessionID? sessionId;
+  final int? tabWindowId;
   final String? password;
   final ToolbarState toolbarState;
   final String? switchUuid;
@@ -106,6 +108,7 @@ class _RemotePageState extends State<RemotePage>
       password: widget.password,
       switchUuid: widget.switchUuid,
       forceRelay: widget.forceRelay,
+      tabWindowId: widget.tabWindowId,
     );
     WidgetsBinding.instance.addPostFrameCallback((_) {
       SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual, overlays: []);
