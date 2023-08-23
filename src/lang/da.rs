@@ -539,5 +539,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("push_ab_failed_tip", ""),
         ("synced_peer_readded_tip", ""),
         ("Change Color", ""),
+        ("Primary Color", ""),
+        ("HSV Color", ""),
     ].iter().cloned().collect();
 }

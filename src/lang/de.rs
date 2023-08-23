@@ -539,5 +539,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("push_ab_failed_tip", "Synchronisierung des Adressbuchs mit dem Server fehlgeschlagen"),
         ("synced_peer_readded_tip", "Die Geräte, die in den letzten Sitzungen vorhanden waren, werden erneut zum Adressbuch hinzugefügt."),
         ("Change Color", ""),
+        ("Primary Color", ""),
+        ("HSV Color", ""),
     ].iter().cloned().collect();
 }
