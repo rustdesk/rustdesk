@@ -38,8 +38,6 @@ import 'platform_model.dart';
 
 typedef HandleMsgBox = Function(Map<String, dynamic> evt, String id);
 typedef ReconnectHandle = Function(OverlayDialogManager, SessionID, bool);
-final _waitForImageDialogShow = <UuidValue, bool>{};
-final _waitForFirstImage = <UuidValue, bool>{};
 final _constSessionId = Uuid().v4obj();
 
 class CachedPeerData {
@@ -99,6 +97,9 @@ class FfiModel with ChangeNotifier {
   bool _viewOnly = false;
   WeakReference<FFI> parent;
   late final SessionID sessionId;
+
+  RxBool waitForImageDialogShow = true.obs;
+  RxBool waitForFirstImage = true.obs;
 
   Map<String, bool> get permissions => _permissions;
 
@@ -498,7 +499,7 @@ class FfiModel with ChangeNotifier {
       closeConnection();
     }
 
-    if (_waitForFirstImage[sessionId] == false) return;
+    if (waitForFirstImage.isFalse) return;
     dialogManager.show(
       (setState, close, context) => CustomAlertDialog(
           title: null,
@@ -509,7 +510,7 @@ class FfiModel with ChangeNotifier {
           onCancel: onClose),
       tag: '$sessionId-waiting-for-image',
     );
-    _waitForImageDialogShow[sessionId] = true;
+    waitForImageDialogShow.value = true;
     bind.sessionOnWaitingForImageDialogShow(sessionId: sessionId);
   }
 
@@ -578,7 +579,7 @@ class FfiModel with ChangeNotifier {
       }
       if (displays.isNotEmpty) {
         _reconnects = 1;
-        _waitForFirstImage[sessionId] = true;
+        waitForFirstImage.value = true;
       }
       Map<String, dynamic> features = json.decode(evt['features']);
       _pi.features.privacyMode = features['privacy_mode'] == 1;
@@ -1814,12 +1815,12 @@ class FFI {
   }
 
   void onEvent2UIRgba() async {
-    if (_waitForImageDialogShow[sessionId] == true) {
-      _waitForImageDialogShow[sessionId] = false;
+    if (ffiModel.waitForImageDialogShow.isTrue) {
+      ffiModel.waitForImageDialogShow.value = false;
       clearWaitingForImage(dialogManager, sessionId);
     }
-    if (_waitForFirstImage[sessionId] == true) {
-      _waitForFirstImage[sessionId] = false;
+    if (ffiModel.waitForFirstImage.value == true) {
+      ffiModel.waitForFirstImage.value = false;
       dialogManager.dismissAll();
       await canvasModel.updateViewStyle();
       await canvasModel.updateScrollStyle();

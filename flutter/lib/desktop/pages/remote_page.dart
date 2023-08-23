@@ -234,6 +234,8 @@ class _RemotePageState extends State<RemotePage>
           bind.sessionInputOsPassword(sessionId: sessionId, value: '');
         },
         child: BlockableOverlay(
+          /// the Overlay key will be set with _blockableOverlayState in BlockableOverlay
+          /// see override build() in [BlockableOverlay]
           state: _blockableOverlayState,
           underlying: Container(
             color: Colors.transparent,
@@ -244,9 +246,6 @@ class _RemotePageState extends State<RemotePage>
   Widget buildBody(BuildContext context) {
     return Scaffold(
       backgroundColor: Theme.of(context).colorScheme.background,
-
-      /// the Overlay key will be set with _blockableOverlayState in BlockableOverlay
-      /// see override build() in [BlockableOverlay]
       body: Stack(
         children: [
           Container(
@@ -273,7 +272,11 @@ class _RemotePageState extends State<RemotePage>
                   },
                   inputModel: _ffi.inputModel,
                   child: getBodyForDesktop(context))),
-          emptyOverlay(),
+          Obx(
+            () => _ffi.ffiModel.waitForFirstImage.isTrue
+                ? emptyOverlay()
+                : Offstage(),
+          ),
           RemoteToolbar(
             id: widget.id,
             ffi: _ffi,
