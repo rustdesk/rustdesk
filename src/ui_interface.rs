@@ -594,7 +594,6 @@ pub fn current_is_wayland() -> bool {
 
 #[inline]
 pub fn get_new_version() -> String {
-    // hbb_common::get_version_from_url(&*SOFTWARE_UPDATE_URL.lock().unwrap())
     (*SOFTWARE_UPDATE_URL.lock().unwrap().rsplit('/').next().unwrap_or("")).to_string()
 }
 
