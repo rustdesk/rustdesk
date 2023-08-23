@@ -724,6 +724,49 @@ impl<T: InvokeUiSession> Session<T> {
         send_pointer_device_event(evt, alt, ctrl, shift, command, self);
     }
 
+    pub fn send_touch_pan_event(
+        &self,
+        event: &str,
+        x: i32,
+        y: i32,
+        alt: bool,
+        ctrl: bool,
+        shift: bool,
+        command: bool,
+    ) {
+        let mut touch_evt = TouchEvent::new();
+        match event {
+            "pan_start" => {
+                touch_evt.set_pan_start(TouchPanStart {
+                    x,
+                    y,
+                    ..Default::default()
+                });
+            }
+            "pan_update" => {
+                touch_evt.set_pan_update(TouchPanUpdate {
+                    x,
+                    y,
+                    ..Default::default()
+                });
+            }
+            "pan_end" => {
+                touch_evt.set_pan_end(TouchPanEnd {
+                    x,
+                    y,
+                    ..Default::default()
+                });
+            }
+            _ => {
+                log::warn!("unknown touch pan event: {}", event);
+                return;
+            }
+        };
+        let mut evt = PointerDeviceEvent::new();
+        evt.set_touch_event(touch_evt);
+        send_pointer_device_event(evt, alt, ctrl, shift, command, self);
+    }
+
     pub fn send_mouse(
         &self,
         mask: i32,
