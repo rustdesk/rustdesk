@@ -539,7 +539,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("push_ab_failed_tip", "Невозможно синхронизировать адресную книгу с сервером"),
         ("synced_peer_readded_tip", "Устройства, присутствовавшие в последних сеансах, будут синхронизированы с адресной книгой."),
         ("Change Color", "Изменить цвет"),
-        ("Primary Color", ""),
-        ("HSV Color", ""),
+        ("Primary Color", "Основной цвет"),
+        ("HSV Color", "HSV цвет"),
     ].iter().cloned().collect();
 }
