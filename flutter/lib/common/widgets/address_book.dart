@@ -579,6 +579,13 @@ class AddressBookTag extends StatelessWidget {
             ColorPickerType.accent: false,
             ColorPickerType.wheel: true,
           },
+          pickerTypeLabels: {
+            ColorPickerType.primary: translate("Primary Color"),
+            ColorPickerType.wheel: translate("HSV Color"),
+          },
+          actionButtons: ColorPickerActionButtons(
+              dialogOkButtonLabel: translate("OK"),
+              dialogCancelButtonLabel: translate("Cancel")),
           showColorCode: true,
         );
         if (oldColor != newColor) {

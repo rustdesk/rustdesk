@@ -539,5 +539,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("push_ab_failed_tip", "Gagal menyinkronkan buku alamat ke server"),
         ("synced_peer_readded_tip", "Perangkat yang terdaftar dalam sesi-sesi terbaru akan di-sinkronkan kembali ke buku alamat."),
         ("Change Color", ""),
+        ("Primary Color", ""),
+        ("HSV Color", ""),
     ].iter().cloned().collect();
 }

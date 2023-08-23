@@ -539,5 +539,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("push_ab_failed_tip", "Nepodařilo se synchronizovat adresář se serverem"),
         ("synced_peer_readded_tip", "Zařízení, která byla přítomna v posledních relacích, budou synchronizována zpět do adresáře."),
         ("Change Color", ""),
+        ("Primary Color", ""),
+        ("HSV Color", ""),
     ].iter().cloned().collect();
 }
