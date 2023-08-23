@@ -125,18 +125,7 @@ impl<T: InvokeUiSession> Remote<T> {
         .await
         {
             Ok((mut peer, direct, pk)) => {
-                let is_secured = peer.is_secured();
-                #[cfg(feature = "flutter")]
-                #[cfg(not(any(target_os = "android", target_os = "ios")))]
-                {
-                    self.handler
-                        .cache_flutter
-                        .write()
-                        .unwrap()
-                        .is_secured_direct
-                        .replace((is_secured, direct));
-                }
-                self.handler.set_connection_type(is_secured, direct); // flutter -> connection_ready
+                self.handler.set_connection_type(peer.is_secured(), direct); // flutter -> connection_ready
                 self.handler.update_direct(Some(direct));
                 if conn_type == ConnType::DEFAULT_CONN {
                     self.handler
@@ -1021,12 +1010,7 @@ impl<T: InvokeUiSession> Remote<T> {
                         }
                     }
                     Some(login_response::Union::PeerInfo(pi)) => {
-                        #[cfg(feature = "flutter")]
-                        #[cfg(not(any(target_os = "android", target_os = "ios")))]
-                        {
-                            self.handler.cache_flutter.write().unwrap().pi = pi.clone();
-                        }
-                        self.handler.handle_peer_info(pi, false);
+                        self.handler.handle_peer_info(pi);
                         #[cfg(not(feature = "flutter"))]
                         self.check_clipboard_file_context();
                         if !(self.handler.is_file_transfer() || self.handler.is_port_forward()) {
@@ -1073,22 +1057,9 @@ impl<T: InvokeUiSession> Remote<T> {
                     _ => {}
                 },
                 Some(message::Union::CursorData(cd)) => {
-                    #[cfg(feature = "flutter")]
-                    #[cfg(not(any(target_os = "android", target_os = "ios")))]
-                    {
-                        let mut lock = self.handler.cache_flutter.write().unwrap();
-                        if !lock.cursor_data.contains_key(&cd.id) {
-                            lock.cursor_data.insert(cd.id, cd.clone());
-                        }
-                    }
                     self.handler.set_cursor_data(cd);
                 }
                 Some(message::Union::CursorId(id)) => {
-                    #[cfg(feature = "flutter")]
-                    #[cfg(not(any(target_os = "android", target_os = "ios")))]
-                    {
-                        self.handler.cache_flutter.write().unwrap().cursor_id = id;
-                    }
                     self.handler.set_cursor_id(id.to_string());
                 }
                 Some(message::Union::CursorPosition(cp)) => {
@@ -1305,16 +1276,6 @@ impl<T: InvokeUiSession> Remote<T> {
                         }
                     }
                     Some(misc::Union::SwitchDisplay(s)) => {
-                        #[cfg(feature = "flutter")]
-                        #[cfg(not(any(target_os = "android", target_os = "ios")))]
-                        {
-                            self.handler
-                                .cache_flutter
-                                .write()
-                                .unwrap()
-                                .sp
-                                .replace(s.clone());
-                        }
                         self.handler.handle_peer_switch_display(&s);
                         self.video_sender.send(MediaData::Reset).ok();
                         if s.width > 0 && s.height > 0 {
@@ -1506,12 +1467,6 @@ impl<T: InvokeUiSession> Remote<T> {
                     }
                 }
                 Some(message::Union::PeerInfo(pi)) => {
-                    #[cfg(feature = "flutter")]
-                    #[cfg(not(any(target_os = "android", target_os = "ios")))]
-                    {
-                        self.handler.cache_flutter.write().unwrap().pi.displays =
-                            pi.displays.clone();
-                    }
                     self.handler.set_displays(&pi.displays);
                 }
                 _ => {}

@@ -325,6 +325,7 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
 
         // for tmp use, without real conn id
         let mut write_jobs: Vec<fs::TransferJob> = Vec::new();
+        #[cfg(windows)]
         let is_authorized = self.cm.is_authorized(self.conn_id);
 
         #[cfg(windows)]

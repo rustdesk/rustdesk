@@ -28,6 +28,13 @@ extension Index on int {
   }
 }
 
+class MultiWindowCallResult {
+  int windowId;
+  dynamic result;
+
+  MultiWindowCallResult(this.windowId, this.result);
+}
+
 /// Window Manager
 /// mainly use it in `Main Window`
 /// use it in sub window is not recommended
@@ -47,6 +54,7 @@ class RustDeskMultiWindowManager {
     var params = {
       'type': WindowType.RemoteDesktop.index,
       'id': peerId,
+      'tab_window_id': windowId,
       'session_id': sessionId,
     };
     await _newSession(
@@ -57,17 +65,15 @@ class RustDeskMultiWindowManager {
       _remoteDesktopWindows,
       jsonEncode(params),
     );
-    await DesktopMultiWindow.invokeMethod(
-        windowId, kWindowEventCloseForSeparateWindow, peerId);
   }
 
-  newSessionWindow(
+  Future<int> newSessionWindow(
       WindowType type, String remoteId, String msg, List<int> windows) async {
     final windowController = await DesktopMultiWindow.createWindow(msg);
+    final windowId = windowController.windowId;
     windowController
-      ..setFrame(const Offset(0, 0) &
-          Size(1280 + windowController.windowId * 20,
-              720 + windowController.windowId * 20))
+      ..setFrame(
+          const Offset(0, 0) & Size(1280 + windowId * 20, 720 + windowId * 20))
       ..center()
       ..setTitle(getWindowNameWithId(
         remoteId,
@@ -76,11 +82,12 @@ class RustDeskMultiWindowManager {
     if (Platform.isMacOS) {
       Future.microtask(() => windowController.show());
     }
-    registerActiveWindow(windowController.windowId);
-    windows.add(windowController.windowId);
+    registerActiveWindow(windowId);
+    windows.add(windowId);
+    return windowId;
   }
 
-  _newSession(
+  Future<MultiWindowCallResult> _newSession(
     bool openInTabs,
     WindowType type,
     String methodName,
@@ -90,9 +97,10 @@ class RustDeskMultiWindowManager {
   ) async {
     if (openInTabs) {
       if (windows.isEmpty) {
-        await newSessionWindow(type, remoteId, msg, windows);
+        final windowId = await newSessionWindow(type, remoteId, msg, windows);
+        return MultiWindowCallResult(windowId, null);
       } else {
-        call(type, methodName, msg);
+        return call(type, methodName, msg);
       }
     } else {
       if (_inactiveWindows.isNotEmpty) {
@@ -103,15 +111,16 @@ class RustDeskMultiWindowManager {
             await DesktopMultiWindow.invokeMethod(windowId, methodName, msg);
             WindowController.fromWindowId(windowId).show();
             registerActiveWindow(windowId);
-            return;
+            return MultiWindowCallResult(windowId, null);
           }
         }
       }
-      await newSessionWindow(type, remoteId, msg, windows);
+      final windowId = await newSessionWindow(type, remoteId, msg, windows);
+      return MultiWindowCallResult(windowId, null);
     }
   }
 
-  Future<dynamic> newSession(
+  Future<MultiWindowCallResult> newSession(
     WindowType type,
     String methodName,
     String remoteId,
@@ -143,15 +152,15 @@ class RustDeskMultiWindowManager {
       for (final windowId in windows) {
         if (await DesktopMultiWindow.invokeMethod(
             windowId, kWindowEventActiveSession, remoteId)) {
-          return;
+          return MultiWindowCallResult(windowId, null);
         }
       }
     }
 
-    await _newSession(openInTabs, type, methodName, remoteId, windows, msg);
+    return _newSession(openInTabs, type, methodName, remoteId, windows, msg);
   }
 
-  Future<dynamic> newRemoteDesktop(
+  Future<MultiWindowCallResult> newRemoteDesktop(
     String remoteId, {
     String? password,
     String? switchUuid,
@@ -168,7 +177,7 @@ class RustDeskMultiWindowManager {
     );
   }
 
-  Future<dynamic> newFileTransfer(String remoteId,
+  Future<MultiWindowCallResult> newFileTransfer(String remoteId,
       {String? password, bool? forceRelay}) async {
     return await newSession(
       WindowType.FileTransfer,
@@ -180,7 +189,7 @@ class RustDeskMultiWindowManager {
     );
   }
 
-  Future<dynamic> newPortForward(String remoteId, bool isRDP,
+  Future<MultiWindowCallResult> newPortForward(String remoteId, bool isRDP,
       {String? password, bool? forceRelay}) async {
     return await newSession(
       WindowType.PortForward,
@@ -193,18 +202,22 @@ class RustDeskMultiWindowManager {
     );
   }
 
-  Future<dynamic> call(WindowType type, String methodName, dynamic args) async {
+  Future<MultiWindowCallResult> call(
+      WindowType type, String methodName, dynamic args) async {
     final wnds = _findWindowsByType(type);
     if (wnds.isEmpty) {
-      return;
+      return MultiWindowCallResult(kInvalidWindowId, null);
     }
     for (final windowId in wnds) {
       if (_activeWindows.contains(windowId)) {
-        return await DesktopMultiWindow.invokeMethod(
-            windowId, methodName, args);
+        final res =
+            await DesktopMultiWindow.invokeMethod(windowId, methodName, args);
+        return MultiWindowCallResult(windowId, res);
       }
     }
-    return await DesktopMultiWindow.invokeMethod(wnds[0], methodName, args);
+    final res =
+        await DesktopMultiWindow.invokeMethod(wnds[0], methodName, args);
+    return MultiWindowCallResult(wnds[0], res);
   }
 
   List<int> _findWindowsByType(WindowType type) {
