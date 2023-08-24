@@ -1,33 +1,22 @@
 import 'dart:convert';
 import 'dart:io';
-import 'dart:ui' as ui;
 
 import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/common/shared_state.dart';
+import 'package:flutter_hbb/common/widgets/context_menu.dart';
 import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/models/state_model.dart';
 import 'package:flutter_hbb/desktop/pages/remote_page.dart';
 import 'package:flutter_hbb/desktop/widgets/remote_toolbar.dart';
 import 'package:flutter_hbb/desktop/widgets/tabbar_widget.dart';
-import 'package:flutter_hbb/desktop/widgets/material_mod_popup_menu.dart'
-    as mod_menu;
-import 'package:flutter_hbb/desktop/widgets/popup_menu.dart';
 import 'package:flutter_hbb/utils/multi_window_manager.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:get/get.dart';
-import 'package:bot_toast/bot_toast.dart';
 
 import '../../common/widgets/dialog.dart';
 import '../../models/platform_model.dart';
-
-class _MenuTheme {
-  static const Color blueColor = MyTheme.button;
-  // kMinInteractiveDimension
-  static const double height = 20.0;
-  static const double dividerHeight = 12.0;
-}
 
 class ConnectionTabPage extends StatefulWidget {
   final Map<String, dynamic> params;
@@ -261,26 +250,14 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
                   ],
                 );
 
-                return Listener(
-                  onPointerDown: (e) {
-                    if (e.kind != ui.PointerDeviceKind.mouse) {
-                      return;
-                    }
-                    final remotePage = tabController.state.value.tabs
-                        .firstWhere((tab) => tab.key == key)
-                        .page as RemotePage;
-                    if (remotePage.ffi.ffiModel.pi.isSet.isTrue &&
-                        e.buttons == 2) {
-                      showRightMenu(
-                        (CancelFunc cancelFunc) {
-                          return _tabMenuBuilder(key, cancelFunc);
-                        },
-                        target: e.position,
-                      );
-                    }
-                  },
-                  child: tab,
-                );
+                return Obx(() {
+                  final remotePage = tabController.state.value.tabs
+                      .firstWhere((tab) => tab.key == key)
+                      .page as RemotePage;
+                  return remotePage.ffi.ffiModel.pi.isSet.isTrue
+                      ? withContextMenu(tab, _tabMenuItems(key))
+                      : tab;
+                });
               }
             }),
           ),
@@ -299,10 +276,8 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
             ));
   }
 
-  // Note: Some dup code to ../widgets/remote_toolbar
-  Widget _tabMenuBuilder(String key, CancelFunc cancelFunc) {
-    final List<MenuEntryBase<String>> menu = [];
-    const EdgeInsets padding = EdgeInsets.only(left: 8.0, right: 5.0);
+  List<ContextMenuButtonItem> _tabMenuItems(String key) {
+    final List<ContextMenuButtonItem> items = [];
     final remotePage = tabController.state.value.tabs
         .firstWhere((tab) => tab.key == key)
         .page as RemotePage;
@@ -310,101 +285,55 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
     final pi = ffi.ffiModel.pi;
     final perms = ffi.ffiModel.permissions;
     final sessionId = ffi.sessionId;
-    menu.addAll([
-      MenuEntryButton<String>(
-        childBuilder: (TextStyle? style) => Obx(() => Text(
-              translate(
-                  _toolbarState.show.isTrue ? 'Hide Toolbar' : 'Show Toolbar'),
-              style: style,
-            )),
-        proc: () {
-          _toolbarState.switchShow();
-          cancelFunc();
-        },
-        padding: padding,
+    items.add(
+      ContextMenuButtonItem(
+        onPressed: () => _toolbarState.switchShow(),
+        label: translate(
+            _toolbarState.show.isTrue ? 'Hide Toolbar' : 'Show Toolbar'),
       ),
-    ]);
+    );
 
     if (tabController.state.value.tabs.length > 1) {
-      final splitAction = MenuEntryButton<String>(
-        childBuilder: (TextStyle? style) => Text(
-          translate('Move tab to new window'),
-          style: style,
+      items.add(
+        ContextMenuButtonItem(
+          onPressed: () => DesktopMultiWindow.invokeMethod(
+            kMainWindowId,
+            kWindowEventMoveTabToNewWindow,
+            '${windowId()},$key,$sessionId',
+          ),
+          label: translate('Move tab to new window'),
         ),
-        proc: () async {
-          await DesktopMultiWindow.invokeMethod(kMainWindowId,
-              kWindowEventMoveTabToNewWindow, '${windowId()},$key,$sessionId');
-          cancelFunc();
-        },
-        padding: padding,
       );
-      menu.insert(1, splitAction);
     }
 
     if (perms['restart'] != false &&
         (pi.platform == kPeerPlatformLinux ||
             pi.platform == kPeerPlatformWindows ||
             pi.platform == kPeerPlatformMacOS)) {
-      menu.add(MenuEntryButton<String>(
-        childBuilder: (TextStyle? style) => Text(
-          translate('Restart Remote Device'),
-          style: style,
+      items.add(
+        ContextMenuButtonItem(
+          onPressed: () => showRestartRemoteDevice(
+              pi, peerId ?? '', sessionId, ffi.dialogManager),
+          label: translate('Restart Remote Device'),
         ),
-        proc: () => showRestartRemoteDevice(
-            pi, peerId ?? '', sessionId, ffi.dialogManager),
-        padding: padding,
-        dismissOnClicked: true,
-        dismissCallback: cancelFunc,
-      ));
+      );
     }
 
-    if (perms['keyboard'] != false && !ffi.ffiModel.viewOnly) {
-      menu.add(RemoteMenuEntry.insertLock(sessionId, padding,
-          dismissFunc: cancelFunc));
+    if (perms['keyboard'] != false && !ffi.ffiModel.viewOnly) {}
 
-      if (pi.platform == kPeerPlatformLinux || pi.sasEnabled) {
-        menu.add(RemoteMenuEntry.insertCtrlAltDel(sessionId, padding,
-            dismissFunc: cancelFunc));
-      }
-    }
-
-    menu.addAll([
-      MenuEntryDivider<String>(),
-      MenuEntryButton<String>(
-        childBuilder: (TextStyle? style) => Text(
-          translate('Copy Fingerprint'),
-          style: style,
-        ),
-        proc: () => onCopyFingerprint(FingerprintState.find(key).value),
-        padding: padding,
-        dismissOnClicked: true,
-        dismissCallback: cancelFunc,
+    items.addAll([
+      ContextMenuButtonItem(
+        onPressed: () => onCopyFingerprint(FingerprintState.find(key).value),
+        label: translate('Copy Fingerprint'),
       ),
-      MenuEntryButton<String>(
-        childBuilder: (TextStyle? style) => Text(
-          translate('Close'),
-          style: style,
-        ),
-        proc: () {
+      ContextMenuButtonItem(
+        onPressed: () {
           tabController.closeBy(key);
-          cancelFunc();
         },
-        padding: padding,
-      )
+        label: translate('Close'),
+      ),
     ]);
-
-    return mod_menu.PopupMenu<String>(
-      items: menu
-          .map((entry) => entry.build(
-              context,
-              const MenuConfig(
-                commonColor: _MenuTheme.blueColor,
-                height: _MenuTheme.height,
-                dividerHeight: _MenuTheme.dividerHeight,
-              )))
-          .expand((i) => i)
-          .toList(),
-    );
+    return items;
   }
 
   void onRemoveId(String id) async {
