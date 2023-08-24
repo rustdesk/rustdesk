@@ -55,6 +55,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
     RemoteCountState.init();
     peerId = params['id'];
     final sessionId = params['session_id'];
+    final tabWindowId = params['tab_window_id'];
     if (peerId != null) {
       ConnectionTypeState.init(peerId!);
       tabController.onSelected = (id) {
@@ -77,6 +78,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
           key: ValueKey(peerId),
           id: peerId!,
           sessionId: sessionId == null ? null : SessionID(sessionId),
+          tabWindowId: tabWindowId,
           password: params['password'],
           toolbarState: _toolbarState,
           tabController: tabController,
@@ -98,12 +100,14 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
       print(
           "[Remote Page] call ${call.method} with args ${call.arguments} from window $fromWindowId");
 
+      dynamic returnValue;
       // for simplify, just replace connectionId
       if (call.method == kWindowEventNewRemoteDesktop) {
         final args = jsonDecode(call.arguments);
         final id = args['id'];
         final switchUuid = args['switch_uuid'];
         final sessionId = args['session_id'];
+        final tabWindowId = args['tab_window_id'];
         windowOnTop(windowId());
         ConnectionTypeState.init(id);
         _toolbarState.setShow(
@@ -118,6 +122,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
             key: ValueKey(id),
             id: id,
             sessionId: sessionId == null ? null : SessionID(sessionId),
+            tabWindowId: tabWindowId,
             password: args['password'],
             toolbarState: _toolbarState,
             tabController: tabController,
@@ -147,12 +152,24 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
             .map((e) => '${e.key},${(e.page as RemotePage).ffi.sessionId}')
             .toList()
             .join(';');
-      } else if (call.method == kWindowEventCloseForSeparateWindow) {
+      } else if (call.method == kWindowEventGetCachedSessionData) {
+        // Ready to show new window and close old tab.
         final peerId = call.arguments;
-        closeSessionOnDispose[peerId] = false;
-        tabController.closeBy(peerId);
+        try {
+          final remotePage = tabController.state.value.tabs
+              .firstWhere((tab) => tab.key == peerId)
+              .page as RemotePage;
+          returnValue = remotePage.ffi.ffiModel.cachedPeerData.toString();
+        } catch (e) {
+          debugPrint('Failed to get cached session data: $e');
+        }
+        if (returnValue != null) {
+          closeSessionOnDispose[peerId] = false;
+          tabController.closeBy(peerId);
+        }
       }
       _update_remote_count();
+      return returnValue;
     });
     Future.delayed(Duration.zero, () {
       restoreWindowPosition(
@@ -337,7 +354,15 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
       ));
     }
 
-    if (perms['keyboard'] != false && !ffi.ffiModel.viewOnly) {}
+    if (perms['keyboard'] != false && !ffi.ffiModel.viewOnly) {
+      menu.add(RemoteMenuEntry.insertLock(sessionId, padding,
+          dismissFunc: cancelFunc));
+
+      if (pi.platform == kPeerPlatformLinux || pi.sasEnabled) {
+        menu.add(RemoteMenuEntry.insertCtrlAltDel(sessionId, padding,
+            dismissFunc: cancelFunc));
+      }
+    }
 
     menu.addAll([
       MenuEntryDivider<String>(),

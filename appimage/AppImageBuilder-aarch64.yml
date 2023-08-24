@@ -2,7 +2,7 @@
 version: 1
 script:
  - rm -rf ./AppDir || true
- - bsdtar -zxvf ../rustdesk-1.2.2.deb
+ - bsdtar -zxvf ../rustdesk-1.2.3.deb
  - tar -xvf ./data.tar.xz
  - mkdir ./AppDir
  - mv ./usr ./AppDir/usr
@@ -18,7 +18,7 @@ AppDir:
     id: rustdesk
     name: rustdesk
     icon: rustdesk
-    version: 1.2.2
+    version: 1.2.3
     exec: usr/lib/rustdesk/rustdesk
     exec_args: $@
   apt:

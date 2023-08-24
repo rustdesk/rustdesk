@@ -1525,6 +1525,12 @@ pub struct Ab {
     pub peers: Vec<AbPeer>,
     #[serde(default, deserialize_with = "deserialize_vec_string")]
     pub tags: Vec<String>,
+    #[serde(
+        default,
+        deserialize_with = "deserialize_string",
+        skip_serializing_if = "String::is_empty"
+    )]
+    pub tag_colors: String,
 }
 
 impl Ab {

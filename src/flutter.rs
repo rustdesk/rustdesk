@@ -36,9 +36,11 @@ pub(crate) const APP_TYPE_CM: &str = "cm";
 #[cfg(any(target_os = "android", target_os = "ios"))]
 pub(crate) const APP_TYPE_CM: &str = "main";
 
-pub(crate) const APP_TYPE_DESKTOP_REMOTE: &str = "remote";
-pub(crate) const APP_TYPE_DESKTOP_FILE_TRANSFER: &str = "file transfer";
-pub(crate) const APP_TYPE_DESKTOP_PORT_FORWARD: &str = "port forward";
+// Do not remove the following constants.
+// Uncomment them when they are used.
+// pub(crate) const APP_TYPE_DESKTOP_REMOTE: &str = "remote";
+// pub(crate) const APP_TYPE_DESKTOP_FILE_TRANSFER: &str = "file transfer";
+// pub(crate) const APP_TYPE_DESKTOP_PORT_FORWARD: &str = "port forward";
 
 lazy_static::lazy_static! {
     pub(crate) static ref CUR_SESSION_ID: RwLock<SessionID> = Default::default();
@@ -1128,6 +1130,85 @@ pub fn start_global_event_stream(s: StreamSink<String>, app_type: String) -> Res
 
 pub fn stop_global_event_stream(app_type: String) {
     let _ = GLOBAL_EVENT_STREAM.write().unwrap().remove(&app_type);
+}
+
+#[inline]
+fn session_send_touch_scale(
+    session_id: SessionID,
+    v: &serde_json::Value,
+    alt: bool,
+    ctrl: bool,
+    shift: bool,
+    command: bool,
+) {
+    match v.get("v").and_then(|s| s.as_i64()) {
+        Some(scale) => {
+            if let Some(session) = SESSIONS.read().unwrap().get(&session_id) {
+                session.send_touch_scale(scale as _, alt, ctrl, shift, command);
+            }
+        }
+        None => {}
+    }
+}
+
+#[inline]
+fn session_send_touch_pan(
+    session_id: SessionID,
+    v: &serde_json::Value,
+    pan_event: &str,
+    alt: bool,
+    ctrl: bool,
+    shift: bool,
+    command: bool,
+) {
+    match v.get("v") {
+        Some(v) => match (
+            v.get("x").and_then(|x| x.as_i64()),
+            v.get("y").and_then(|y| y.as_i64()),
+        ) {
+            (Some(x), Some(y)) => {
+                if let Some(session) = SESSIONS.read().unwrap().get(&session_id) {
+                    session
+                        .send_touch_pan_event(pan_event, x as _, y as _, alt, ctrl, shift, command);
+                }
+            }
+            _ => {}
+        },
+        _ => {}
+    }
+}
+
+fn session_send_touch_event(
+    session_id: SessionID,
+    v: &serde_json::Value,
+    alt: bool,
+    ctrl: bool,
+    shift: bool,
+    command: bool,
+) {
+    match v.get("t").and_then(|t| t.as_str()) {
+        Some("scale") => session_send_touch_scale(session_id, v, alt, ctrl, shift, command),
+        Some(pan_event) => {
+            session_send_touch_pan(session_id, v, pan_event, alt, ctrl, shift, command)
+        }
+        _ => {}
+    }
+}
+
+pub fn session_send_pointer(session_id: SessionID, msg: String) {
+    if let Ok(m) = serde_json::from_str::<HashMap<String, serde_json::Value>>(&msg) {
+        let alt = m.get("alt").is_some();
+        let ctrl = m.get("ctrl").is_some();
+        let shift = m.get("shift").is_some();
+        let command = m.get("command").is_some();
+        match (m.get("k"), m.get("v")) {
+            (Some(k), Some(v)) => match k.as_str() {
+                Some("touch") => session_send_touch_event(session_id, v, alt, ctrl, shift, command),
+                _ => {}
+            },
+            _ => {}
+        }
+    }
 }
 
 #[no_mangle]

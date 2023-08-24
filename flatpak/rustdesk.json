@@ -12,7 +12,7 @@
       "name": "rustdesk",
       "buildsystem": "simple",
       "build-commands": [
-        "bsdtar -zxvf rustdesk-1.2.2.deb",
+        "bsdtar -zxvf rustdesk-1.2.3.deb",
         "tar -xvf ./data.tar.xz",
         "cp -r ./usr/*  /app/",
         "mkdir -p /app/bin && ln -s /app/lib/rustdesk/rustdesk /app/bin/rustdesk",
@@ -26,7 +26,7 @@
       "sources": [
         {
           "type": "file",
-          "path": "../rustdesk-1.2.2.deb"
+          "path": "../rustdesk-1.2.3.deb"
         },
         {
           "type": "file",

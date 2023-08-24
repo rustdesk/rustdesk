@@ -2387,7 +2387,7 @@ pub trait Interface: Send + Clone + 'static + Sized {
     fn send(&self, data: Data);
     fn msgbox(&self, msgtype: &str, title: &str, text: &str, link: &str);
     fn handle_login_error(&mut self, err: &str) -> bool;
-    fn handle_peer_info(&mut self, pi: PeerInfo, is_cached_pi: bool);
+    fn handle_peer_info(&mut self, pi: PeerInfo);
     fn on_error(&self, err: &str) {
         self.msgbox("error", "Error", err, "");
     }
