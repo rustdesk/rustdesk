@@ -238,6 +238,14 @@ class _RemotePageState extends State<RemotePage>
       );
 
   Widget buildBody(BuildContext context) {
+    remoteToolbar(BuildContext context) => RemoteToolbar(
+          id: widget.id,
+          ffi: _ffi,
+          state: widget.toolbarState,
+          onEnterOrLeaveImageSetter: (func) =>
+              _onEnterOrLeaveImage4Toolbar = func,
+          onEnterOrLeaveImageCleaner: () => _onEnterOrLeaveImage4Toolbar = null,
+        );
     return Scaffold(
       backgroundColor: Theme.of(context).colorScheme.background,
       body: Stack(
@@ -272,15 +280,12 @@ class _RemotePageState extends State<RemotePage>
                           _ffi.ffiModel.waitForFirstImage.isTrue
                       ? emptyOverlay()
                       : Offstage(),
-                  RemoteToolbar(
-                    id: widget.id,
-                    ffi: _ffi,
-                    state: widget.toolbarState,
-                    onEnterOrLeaveImageSetter: (func) =>
-                        _onEnterOrLeaveImage4Toolbar = func,
-                    onEnterOrLeaveImageCleaner: () =>
-                        _onEnterOrLeaveImage4Toolbar = null,
-                  ),
+                  // Use Overlay to enable rebuild every time on menu button click.
+                  _ffi.ffiModel.pi.isSet.isTrue
+                      ? Overlay(initialEntries: [
+                          OverlayEntry(builder: remoteToolbar)
+                        ])
+                      : remoteToolbar(context),
                   _ffi.ffiModel.pi.isSet.isFalse ? emptyOverlay() : Offstage(),
                 ],
               )),
