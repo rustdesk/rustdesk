@@ -20,7 +20,6 @@ import 'package:get/get.dart';
 import 'package:bot_toast/bot_toast.dart';
 
 import '../../common/widgets/dialog.dart';
-import '../../models/model.dart';
 import '../../models/platform_model.dart';
 
 class _MenuTheme {
@@ -359,7 +358,15 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
       ));
     }
 
-    if (perms['keyboard'] != false && !ffi.ffiModel.viewOnly) {}
+    if (perms['keyboard'] != false && !ffi.ffiModel.viewOnly) {
+      menu.add(RemoteMenuEntry.insertLock(sessionId, padding,
+          dismissFunc: cancelFunc));
+
+      if (pi.platform == kPeerPlatformLinux || pi.sasEnabled) {
+        menu.add(RemoteMenuEntry.insertCtrlAltDel(sessionId, padding,
+            dismissFunc: cancelFunc));
+      }
+    }
 
     menu.addAll([
       MenuEntryDivider<String>(),
