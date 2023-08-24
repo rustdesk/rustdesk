@@ -182,8 +182,8 @@ class _InstallPageBodyState extends State<_InstallPageBody>
                               .marginOnly(bottom: em),
                           InkWell(
                             hoverColor: Colors.transparent,
-                            onTap: () =>
-                                launchUrlString('https://rustdesk.com/privacy.html'),
+                            onTap: () => launchUrlString(
+                                'https://rustdesk.com/privacy.html'),
                             child: Tooltip(
                               message: 'https://rustdesk.com/privacy.html',
                               child: Row(children: [
@@ -204,11 +204,10 @@ class _InstallPageBodyState extends State<_InstallPageBody>
               Row(
                 children: [
                   Expanded(
-                    child: Obx(() => Offstage(
-                          offstage: !showProgress.value,
-                          child:
-                              LinearProgressIndicator().marginOnly(right: 10),
-                        )),
+                    // NOT use Offstage to wrap LinearProgressIndicator
+                    child: Obx(() => showProgress.value
+                        ? LinearProgressIndicator().marginOnly(right: 10)
+                        : Offstage()),
                   ),
                   Obx(
                     () => OutlinedButton.icon(
@@ -282,7 +281,7 @@ class _InstallPageBodyState extends State<_InstallPageBody>
           title: null,
           content: SelectionArea(
               child:
-                  msgboxContent('info', 'Warning', 'comfirm_install_cert_tip')),
+                  msgboxContent('info', 'Warning', 'confirm_install_cert_tip')),
           actions: btns,
           onCancel: close,
         ),

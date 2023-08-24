@@ -23,7 +23,6 @@ Kolay kullanımlı VITS tabanlı ses dönüşümü (ses değiştirme) çerçeves
 
 [**İngilizce**](./docs/README.en.md) | [**中文简体**](./README.md) | [**日本語**](./docs/README.ja.md) | [**한국어**](./docs/README.ko.md) ([**韓國語**](./docs/README.ko.han.md)) | [**Türkçe**](./docs/README.tr.md)
 
-[Demo videosunu buradan izleyin](https://www.bilibili.com/video/BV1pm4y1z7Gm/) !
 
 > Gerçek zamanlı ses dönüşümü RVC kullanılarak gerçekleştirilmiştir: [w-okada/voice-changer](https://github.com/w-okada/voice-changer)
 

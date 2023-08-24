@@ -31,7 +31,9 @@ fn get_license_from_string_(s: &str) -> ResultType<License> {
 }
 
 pub fn get_license_from_string(s: &str) -> ResultType<License> {
-    let s = if s.to_lowercase().ends_with(".exe") {
+    let s = if s.to_lowercase().ends_with(".exe.exe") {
+        &s[0..s.len() - 8]
+    } else if s.to_lowercase().ends_with(".exe") {
         &s[0..s.len() - 4]
     } else {
         s

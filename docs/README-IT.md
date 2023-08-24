@@ -30,7 +30,6 @@ Se non sei vicino a uno di questi server, la connessione potrebbe essere lenta.
 | Posizione | Venditore | Specifiche |
 | --------- | ------------- | ------------------ |
 | Germania | Hetzner | 2 vCPU / 4GB RAM |
-| Germania | Codext | 4 vCPU / 8GB RAM |
 | Ucraina (Kyev) | [dc.volia](https://dc.volia.com) | 2 vCPU / 4GB RAM |
 
 ## Dipendenze

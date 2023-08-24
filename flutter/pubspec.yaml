@@ -16,7 +16,7 @@ publish_to: "none" # Remove this line if you wish to publish to pub.dev
 # Read more about iOS versioning at
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # 1.1.9-1 works for android, but for ios it becomes 1.1.91, need to set it to 1.1.9-a.1 for iOS, will get 1.1.9.1, but iOS store not allow 4 numbers
-version: 1.2.2
+version: 1.2.3
 
 environment:
   sdk: ">=2.17.0"
@@ -97,14 +97,15 @@ dependencies:
   dropdown_button2: ^2.0.0
   uuid: ^3.0.7
   auto_size_text_field: ^2.2.1
+  flex_color_picker: ^3.3.0
 
 dev_dependencies:
   icons_launcher: ^2.0.4
   #flutter_test:
   #sdk: flutter
-  build_runner: ^2.1.11
-  freezed: ^2.0.3
-  flutter_lints: ^2.0.0
+  build_runner: ^2.4.6
+  freezed: ^2.4.2
+  flutter_lints: ^2.0.2
   ffigen: ^7.2.4
 
 # rerun: flutter pub run flutter_launcher_icons
@@ -149,6 +150,9 @@ flutter:
     - family: AddressBook
       fonts:
         - asset: assets/address_book.ttf
+    - family: CheckBox
+      fonts:
+        - asset: assets/checkbox.ttf
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/assets-and-images/#resolution-aware.

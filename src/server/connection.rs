@@ -39,7 +39,7 @@ use hbb_common::{
     tokio_util::codec::{BytesCodec, Framed},
 };
 #[cfg(any(target_os = "android", target_os = "ios"))]
-use scrap::android::call_main_service_mouse_input;
+use scrap::android::call_main_service_pointer_input;
 use serde_json::{json, value::Value};
 use sha2::{Digest, Sha256};
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -175,7 +175,6 @@ pub struct Connection {
     tx_input: std_mpsc::Sender<MessageInput>,
     // handle input messages
     video_ack_required: bool,
-    peer_info: (String, String),
     server_audit_conn: String,
     server_audit_file: String,
     lr: LoginRequest,
@@ -191,10 +190,7 @@ pub struct Connection {
     pressed_modifiers: HashSet<rdev::Key>,
     #[cfg(all(target_os = "linux", feature = "linux_headless"))]
     #[cfg(not(any(feature = "flatpak", feature = "appimage")))]
-    rx_cm_stream_ready: mpsc::Receiver<()>,
-    #[cfg(all(target_os = "linux", feature = "linux_headless"))]
-    #[cfg(not(any(feature = "flatpak", feature = "appimage")))]
-    tx_desktop_ready: mpsc::Sender<()>,
+    linux_headless_handle: LinuxHeadlessHandle,
     closed: bool,
     delay_response_instant: Instant,
 }
@@ -266,6 +262,10 @@ impl Connection {
         let (tx_cm_stream_ready, _rx_cm_stream_ready) = mpsc::channel(1);
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
         let (_tx_desktop_ready, rx_desktop_ready) = mpsc::channel(1);
+        #[cfg(all(target_os = "linux", feature = "linux_headless"))]
+        #[cfg(not(any(feature = "flatpak", feature = "appimage")))]
+        let linux_headless_handle =
+            LinuxHeadlessHandle::new(_rx_cm_stream_ready, _tx_desktop_ready);
 
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
         let tx_cloned = tx.clone();
@@ -305,7 +305,6 @@ impl Connection {
             disable_keyboard: false,
             tx_input,
             video_ack_required: false,
-            peer_info: Default::default(),
             server_audit_conn: "".to_owned(),
             server_audit_file: "".to_owned(),
             lr: Default::default(),
@@ -322,10 +321,7 @@ impl Connection {
             pressed_modifiers: Default::default(),
             #[cfg(all(target_os = "linux", feature = "linux_headless"))]
             #[cfg(not(any(feature = "flatpak", feature = "appimage")))]
-            rx_cm_stream_ready: _rx_cm_stream_ready,
-            #[cfg(all(target_os = "linux", feature = "linux_headless"))]
-            #[cfg(not(any(feature = "flatpak", feature = "appimage")))]
-            tx_desktop_ready: _tx_desktop_ready,
+            linux_headless_handle,
             closed: false,
             delay_response_instant: Instant::now(),
         };
@@ -957,7 +953,9 @@ impl Connection {
         } else {
             0
         };
-        self.post_conn_audit(json!({"peer": self.peer_info, "type": conn_type}));
+        self.post_conn_audit(
+            json!({"peer": ((&self.lr.my_id, &self.lr.my_name)), "type": conn_type}),
+        );
         #[allow(unused_mut)]
         let mut username = crate::platform::get_active_username();
         let mut res = LoginResponse::new();
@@ -985,8 +983,10 @@ impl Connection {
             }
             #[cfg(feature = "linux_headless")]
             #[cfg(not(any(feature = "flatpak", feature = "appimage")))]
-            if linux_desktop_manager::is_headless() {
-                platform_additions.insert("headless".into(), json!(true));
+            if crate::platform::is_headless_allowed() {
+                if linux_desktop_manager::is_headless() {
+                    platform_additions.insert("headless".into(), json!(true));
+                }
             }
             if !platform_additions.is_empty() {
                 pi.platform_additions =
@@ -1009,10 +1009,15 @@ impl Connection {
             if dtype != crate::platform::linux::DISPLAY_SERVER_X11
                 && dtype != crate::platform::linux::DISPLAY_SERVER_WAYLAND
             {
-                res.set_error(format!(
-                    "Unsupported display server type \"{}\", x11 or wayland expected",
-                    dtype
-                ));
+                let msg = if crate::platform::linux::is_login_screen_wayland() {
+                    crate::client::LOGIN_SCREEN_WAYLAND.to_owned()
+                } else {
+                    format!(
+                        "Unsupported display server type \"{}\", x11 or wayland expected",
+                        dtype
+                    )
+                };
+                res.set_error(msg);
                 let mut msg_out = Message::new();
                 msg_out.set_login_response(res);
                 self.send(msg_out).await;
@@ -1046,13 +1051,15 @@ impl Connection {
             ..Default::default()
         })
         .into();
+        // `try_reset_current_display` is needed because `get_displays` may change the current display,
+        // which may cause the mismatch of current display and the current display name.
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
         video_service::try_reset_current_display();
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
         {
             pi.resolutions = Some(SupportedResolutions {
-                resolutions: video_service::get_current_display_name()
-                    .map(|name| crate::platform::resolutions(&name))
+                resolutions: video_service::get_current_display()
+                    .map(|(_, _, d)| crate::platform::resolutions(&d.name()))
                     .unwrap_or(vec![]),
                 ..Default::default()
             })
@@ -1135,7 +1142,6 @@ impl Connection {
     }
 
     fn try_start_cm(&mut self, peer_id: String, name: String, authorized: bool) {
-        self.peer_info = (peer_id.clone(), name.clone());
         self.send_to_cm(ipc::Data::Login {
             id: self.inner.id(),
             is_file_transfer: self.file_transfer.is_some(),
@@ -1373,28 +1379,22 @@ impl Connection {
                 }
             }
 
+            #[cfg(any(
+                feature = "flatpak",
+                feature = "appimage",
+                not(all(target_os = "linux", feature = "linux_headless"))
+            ))]
+            let err_msg = "".to_owned();
             #[cfg(all(target_os = "linux", feature = "linux_headless"))]
             #[cfg(not(any(feature = "flatpak", feature = "appimage")))]
-            let desktop_err = match lr.os_login.as_ref() {
-                Some(os_login) => {
-                    linux_desktop_manager::try_start_desktop(&os_login.username, &os_login.password)
-                }
-                None => linux_desktop_manager::try_start_desktop("", ""),
-            };
-            #[cfg(all(target_os = "linux", feature = "linux_headless"))]
-            #[cfg(not(any(feature = "flatpak", feature = "appimage")))]
-            let is_headless = linux_desktop_manager::is_headless();
-            #[cfg(all(target_os = "linux", feature = "linux_headless"))]
-            #[cfg(not(any(feature = "flatpak", feature = "appimage")))]
-            let wait_ipc_timeout = 10_000;
+            let err_msg = self
+                .linux_headless_handle
+                .try_start_desktop(lr.os_login.as_ref());
 
             // If err is LOGIN_MSG_DESKTOP_SESSION_NOT_READY, just keep this msg and go on checking password.
-            #[cfg(all(target_os = "linux", feature = "linux_headless"))]
-            #[cfg(not(any(feature = "flatpak", feature = "appimage")))]
-            if !desktop_err.is_empty()
-                && desktop_err != crate::client::LOGIN_MSG_DESKTOP_SESSION_NOT_READY
+            if !err_msg.is_empty() && err_msg != crate::client::LOGIN_MSG_DESKTOP_SESSION_NOT_READY
             {
-                self.send_login_error(desktop_err).await;
+                self.send_login_error(err_msg).await;
                 return true;
             }
 
@@ -1422,34 +1422,20 @@ impl Connection {
                 self.send_login_error("Connection not allowed").await;
                 return false;
             } else if self.is_recent_session() {
-                #[cfg(all(target_os = "linux", feature = "linux_headless"))]
-                #[cfg(not(any(feature = "flatpak", feature = "appimage")))]
-                if desktop_err.is_empty() {
-                    #[cfg(target_os = "linux")]
-                    if is_headless {
-                        self.tx_desktop_ready.send(()).await.ok();
-                        let _res = timeout(wait_ipc_timeout, self.rx_cm_stream_ready.recv()).await;
-                    }
-                    self.try_start_cm(lr.my_id, lr.my_name, true);
+                if err_msg.is_empty() {
+                    #[cfg(all(target_os = "linux", feature = "linux_headless"))]
+                    #[cfg(not(any(feature = "flatpak", feature = "appimage")))]
+                    self.linux_headless_handle.wait_desktop_cm_ready().await;
+                    self.try_start_cm(lr.my_id.clone(), lr.my_name.clone(), true);
                     self.send_logon_response().await;
                     if self.port_forward_socket.is_some() {
                         return false;
                     }
                 } else {
-                    self.send_login_error(desktop_err).await;
-                }
-                #[cfg(not(all(target_os = "linux", feature = "linux_headless")))]
-                {
-                    self.try_start_cm(lr.my_id, lr.my_name, true);
-                    self.send_logon_response().await;
-                    if self.port_forward_socket.is_some() {
-                        return false;
-                    }
+                    self.send_login_error(err_msg).await;
                 }
             } else if lr.password.is_empty() {
-                #[cfg(all(target_os = "linux", feature = "linux_headless"))]
-                #[cfg(not(any(feature = "flatpak", feature = "appimage")))]
-                if desktop_err.is_empty() {
+                if err_msg.is_empty() {
                     self.try_start_cm(lr.my_id, lr.my_name, false);
                 } else {
                     self.send_login_error(
@@ -1457,8 +1443,6 @@ impl Connection {
                     )
                     .await;
                 }
-                #[cfg(not(all(target_os = "linux", feature = "linux_headless")))]
-                self.try_start_cm(lr.my_id, lr.my_name, false);
             } else {
                 let mut failure = LOGIN_FAILURES
                     .lock()
@@ -1471,17 +1455,21 @@ impl Connection {
                     self.send_login_error("Too many wrong password attempts")
                         .await;
                     Self::post_alarm_audit(
-                        AlarmAuditType::ManyWrongPassword,
+                        AlarmAuditType::ExceedThirtyAttempts,
                         json!({
                                     "ip":self.ip,
+                                    "id":lr.my_id.clone(),
+                                    "name": lr.my_name.clone(),
                         }),
                     );
                 } else if time == failure.0 && failure.1 > 6 {
                     self.send_login_error("Please try 1 minute later").await;
                     Self::post_alarm_audit(
-                        AlarmAuditType::FrequentAttempt,
+                        AlarmAuditType::SixAttemptsWithinOneMinute,
                         json!({
                                     "ip":self.ip,
+                                    "id":lr.my_id.clone(),
+                                    "name": lr.my_name.clone(),
                         }),
                     );
                 } else if !self.validate_password() {
@@ -1497,9 +1485,7 @@ impl Connection {
                         .lock()
                         .unwrap()
                         .insert(self.ip.clone(), failure);
-                    #[cfg(all(target_os = "linux", feature = "linux_headless"))]
-                    #[cfg(not(any(feature = "flatpak", feature = "appimage")))]
-                    if desktop_err.is_empty() {
+                    if err_msg.is_empty() {
                         self.send_login_error(crate::client::LOGIN_MSG_PASSWORD_WRONG)
                             .await;
                         self.try_start_cm(lr.my_id, lr.my_name, false);
@@ -1509,40 +1495,21 @@ impl Connection {
                         )
                         .await;
                     }
-                    #[cfg(not(all(target_os = "linux", feature = "linux_headless")))]
-                    {
-                        self.send_login_error(crate::client::LOGIN_MSG_PASSWORD_WRONG)
-                            .await;
-                        self.try_start_cm(lr.my_id, lr.my_name, false);
-                    }
                 } else {
                     if failure.0 != 0 {
                         LOGIN_FAILURES.lock().unwrap().remove(&self.ip);
                     }
-                    #[cfg(all(target_os = "linux", feature = "linux_headless"))]
-                    #[cfg(not(any(feature = "flatpak", feature = "appimage")))]
-                    if desktop_err.is_empty() {
-                        #[cfg(target_os = "linux")]
-                        if is_headless {
-                            self.tx_desktop_ready.send(()).await.ok();
-                            let _res =
-                                timeout(wait_ipc_timeout, self.rx_cm_stream_ready.recv()).await;
-                        }
+                    if err_msg.is_empty() {
+                        #[cfg(all(target_os = "linux", feature = "linux_headless"))]
+                        #[cfg(not(any(feature = "flatpak", feature = "appimage")))]
+                        self.linux_headless_handle.wait_desktop_cm_ready().await;
                         self.send_logon_response().await;
                         self.try_start_cm(lr.my_id, lr.my_name, true);
                         if self.port_forward_socket.is_some() {
                             return false;
                         }
                     } else {
-                        self.send_login_error(desktop_err).await;
-                    }
-                    #[cfg(not(all(target_os = "linux", feature = "linux_headless")))]
-                    {
-                        self.send_logon_response().await;
-                        self.try_start_cm(lr.my_id, lr.my_name, true);
-                        if self.port_forward_socket.is_some() {
-                            return false;
-                        }
+                        self.send_login_error(err_msg).await;
                     }
                 }
             }
@@ -1584,8 +1551,8 @@ impl Connection {
             match msg.union {
                 Some(message::Union::MouseEvent(me)) => {
                     #[cfg(any(target_os = "android", target_os = "ios"))]
-                    if let Err(e) = call_main_service_mouse_input(me.mask, me.x, me.y) {
-                        log::debug!("call_main_service_mouse_input fail:{}", e);
+                    if let Err(e) = call_main_service_pointer_input("mouse", me.mask, me.x, me.y) {
+                        log::debug!("call_main_service_pointer_input fail:{}", e);
                     }
                     #[cfg(not(any(target_os = "android", target_os = "ios")))]
                     if self.peer_keyboard_enabled() {
@@ -1597,8 +1564,35 @@ impl Connection {
                         self.input_mouse(me, self.inner.id());
                     }
                 }
-                Some(message::Union::PointerDeviceEvent(pde)) =>
-                {
+                Some(message::Union::PointerDeviceEvent(pde)) => {
+                    #[cfg(any(target_os = "android", target_os = "ios"))]
+                    if let Err(e) = match pde.union {
+                        Some(pointer_device_event::Union::TouchEvent(touch)) => match touch.union {
+                            Some(touch_event::Union::PanStart(pan_start)) => {
+                                call_main_service_pointer_input(
+                                    "touch",
+                                    4,
+                                    pan_start.x,
+                                    pan_start.y,
+                                )
+                            }
+                            Some(touch_event::Union::PanUpdate(pan_update)) => {
+                                call_main_service_pointer_input(
+                                    "touch",
+                                    5,
+                                    pan_update.x,
+                                    pan_update.y,
+                                )
+                            }
+                            Some(touch_event::Union::PanEnd(pan_end)) => {
+                                call_main_service_pointer_input("touch", 6, pan_end.x, pan_end.y)
+                            }
+                            _ => Ok(()),
+                        },
+                        _ => Ok(()),
+                    } {
+                        log::debug!("call_main_service_pointer_input fail:{}", e);
+                    }
                     #[cfg(not(any(target_os = "android", target_os = "ios")))]
                     if self.peer_keyboard_enabled() {
                         MOUSE_MOVE_TIME.store(get_time(), Ordering::SeqCst);
@@ -1945,6 +1939,10 @@ impl Connection {
                         .lock()
                         .unwrap()
                         .user_auto_adjust_fps(self.inner.id(), fps),
+                    Some(misc::Union::ClientRecordStatus(status)) => video_service::VIDEO_QOS
+                        .lock()
+                        .unwrap()
+                        .user_record(self.inner.id(), status),
                     _ => {}
                 },
                 Some(message::Union::AudioFrame(frame)) => {
@@ -1982,7 +1980,8 @@ impl Connection {
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     fn change_resolution(&mut self, r: &Resolution) {
         if self.keyboard {
-            if let Ok(name) = video_service::get_current_display_name() {
+            if let Ok((_, _, display)) = video_service::get_current_display() {
+                let name = display.name();
                 #[cfg(all(windows, feature = "virtual_display_driver"))]
                 if let Some(_ok) =
                     crate::virtual_display_manager::change_resolution_if_is_virtual_display(
@@ -1993,6 +1992,11 @@ impl Connection {
                 {
                     return;
                 }
+                video_service::set_last_changed_resolution(
+                    &name,
+                    (display.width() as _, display.height() as _),
+                    (r.width, r.height),
+                );
                 if let Err(e) =
                     crate::platform::change_resolution(&name, r.width as _, r.height as _)
                 {
@@ -2361,19 +2365,14 @@ async fn start_ipc(
             args.push("--hide");
         };
 
+        #[allow(unused_mut)]
         #[cfg(target_os = "linux")]
-        #[cfg(not(feature = "linux_headless"))]
-        let user = None;
-        #[cfg(all(target_os = "linux", feature = "linux_headless"))]
-        #[cfg(any(feature = "flatpak", feature = "appimage"))]
-        let user = None;
-        #[cfg(all(target_os = "linux", feature = "linux_headless"))]
-        #[cfg(not(any(feature = "flatpak", feature = "appimage")))]
         let mut user = None;
+
         // Cm run as user, wait until desktop session is ready.
         #[cfg(all(target_os = "linux", feature = "linux_headless"))]
         #[cfg(not(any(feature = "flatpak", feature = "appimage")))]
-        if linux_desktop_manager::is_headless() {
+        if crate::platform::is_headless_allowed() && linux_desktop_manager::is_headless() {
             let mut username = linux_desktop_manager::get_username();
             loop {
                 if !username.is_empty() {
@@ -2536,8 +2535,8 @@ mod privacy_mode {
 
 pub enum AlarmAuditType {
     IpWhitelist = 0,
-    ManyWrongPassword = 1,
-    FrequentAttempt = 2,
+    ExceedThirtyAttempts = 1,
+    SixAttemptsWithinOneMinute = 2,
 }
 
 pub enum FileAuditType {
@@ -2569,6 +2568,52 @@ impl Drop for Connection {
     fn drop(&mut self) {
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
         self.release_pressed_modifiers();
+    }
+}
+
+#[cfg(all(target_os = "linux", feature = "linux_headless"))]
+#[cfg(not(any(feature = "flatpak", feature = "appimage")))]
+struct LinuxHeadlessHandle {
+    pub is_headless_allowed: bool,
+    pub is_headless: bool,
+    pub wait_ipc_timeout: u64,
+    pub rx_cm_stream_ready: mpsc::Receiver<()>,
+    pub tx_desktop_ready: mpsc::Sender<()>,
+}
+
+#[cfg(all(target_os = "linux", feature = "linux_headless"))]
+#[cfg(not(any(feature = "flatpak", feature = "appimage")))]
+impl LinuxHeadlessHandle {
+    pub fn new(rx_cm_stream_ready: mpsc::Receiver<()>, tx_desktop_ready: mpsc::Sender<()>) -> Self {
+        let is_headless_allowed = crate::platform::is_headless_allowed();
+        let is_headless = is_headless_allowed && linux_desktop_manager::is_headless();
+        Self {
+            is_headless_allowed,
+            is_headless,
+            wait_ipc_timeout: 10_000,
+            rx_cm_stream_ready,
+            tx_desktop_ready,
+        }
+    }
+
+    pub fn try_start_desktop(&mut self, os_login: Option<&OSLogin>) -> String {
+        if self.is_headless_allowed {
+            match os_login {
+                Some(os_login) => {
+                    linux_desktop_manager::try_start_desktop(&os_login.username, &os_login.password)
+                }
+                None => linux_desktop_manager::try_start_desktop("", ""),
+            }
+        } else {
+            "".to_string()
+        }
+    }
+
+    pub async fn wait_desktop_cm_ready(&mut self) {
+        if self.is_headless {
+            self.tx_desktop_ready.send(()).await.ok();
+            let _res = timeout(self.wait_ipc_timeout, self.rx_cm_stream_ready.recv()).await;
+        }
     }
 }
 

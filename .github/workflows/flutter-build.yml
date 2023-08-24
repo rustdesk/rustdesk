@@ -13,16 +13,16 @@ on:
 env:
   CARGO_NDK_VERSION: "3.1.2"
   LLVM_VERSION: "15.0.6"
-  FLUTTER_VERSION: "3.10.5"
+  FLUTTER_VERSION: "3.10.6"
   FLUTTER_RUST_BRIDGE_VERSION: "1.75.3"
   # for arm64 linux
-  FLUTTER_ELINUX_VERSION: "3.10.5"
+  FLUTTER_ELINUX_VERSION: "3.10.6"
   FLUTTER_ELINUX_COMMIT_ID: "410b3ca42f2cd0c485edf517a1666652bab442d4"
   TAG_NAME: "${{ inputs.upload-tag }}"
   # vcpkg version: 2023.04.15
   # for multiarch gcc compatibility
   VCPKG_COMMIT_ID: "501db0f17ef6df184fcdbfbe0f87cde2313b6ab1"
-  VERSION: "1.2.2"
+  VERSION: "1.2.3"
   NDK_VERSION: "r25c"
   #signing keys env variable checks
   ANDROID_SIGNING_KEY: '${{ secrets.ANDROID_SIGNING_KEY }}'
@@ -654,7 +654,7 @@ jobs:
           sudo rm -rf /usr/local/lib/android
           sudo rm -rf /usr/share/dotnet
           sudo apt update -y
-          sudo apt install qemu-user-static
+          sudo apt install qemu-user-static -y
 
       - name: Checkout source code
         uses: actions/checkout@v3
@@ -666,7 +666,8 @@ jobs:
 
       - name: Free Space
         run: |
-          df
+          df -h
+          free -m
 
       - name: Install Rust toolchain
         uses: actions-rs/toolchain@v1
@@ -765,7 +766,7 @@ jobs:
     if: ${{ inputs.upload-artifact }}
     needs: [generate-bridge-linux, build-vcpkg-deps-linux]
     name: build-rust-lib ${{ matrix.job.target }} (${{ matrix.job.os }}) [${{ matrix.job.extra-build-features }}]
-    runs-on: ${{ matrix.job.os }}
+    runs-on: [self-hosted, Linux, ARM64]
     strategy:
       fail-fast: false
       matrix:
@@ -798,25 +799,26 @@ jobs:
           # - { arch: armv7, target: armv7-unknown-linux-gnueabihf , os: ubuntu-20.04, use-cross: true, extra-build-features: "appimage" }
           # - { target: arm-unknown-linux-musleabihf, os: ubuntu-20.04, use-cross: true }
     steps:
-      - name: Maximize build space
-        run: |
-          sudo rm -rf /opt/ghc
-          sudo rm -rf /usr/local/lib/android
-          sudo rm -rf /usr/share/dotnet
-          sudo apt update -y
-          sudo apt install qemu-user-static
+      #- name: Maximize build space
+      #  run: |
+      #    sudo rm -rf /opt/ghc
+      #    sudo rm -rf /usr/local/lib/android
+      #    sudo rm -rf /usr/share/dotnet
+      #    sudo apt update -y
+      #    sudo apt install qemu-user-static -y
 
       - name: Checkout source code
         uses: actions/checkout@v3
 
-      - name: Set Swap Space
-        uses: pierotofy/set-swap-space@master
-        with:
-          swap-size-gb: 12
+      #- name: Set Swap Space
+      #  uses: pierotofy/set-swap-space@master
+      #  with:
+      #    swap-size-gb: 12
 
       - name: Free Space
         run: |
-          df
+          df -h
+          free -m
 
       - name: Install Rust toolchain
         uses: actions-rs/toolchain@v1
@@ -895,6 +897,7 @@ jobs:
             if ${{ matrix.job.enable-headless }}; then
               export DEFAULT_FEAT=linux_headless
             fi
+            export CARGO_INCREMENTAL=0
             cargo build --lib --features flutter,flutter_texture_render,${{ matrix.job.extra-build-features }},$DEFAULT_FEAT --release
 
       - name: Upload Artifacts
@@ -907,7 +910,7 @@ jobs:
     if: ${{ inputs.upload-artifact }}
     needs: [build-vcpkg-deps-linux]
     name: build-rustdesk(sciter) ${{ matrix.job.target }} (${{ matrix.job.os }}) [${{ matrix.job.extra-build-features }}]
-    runs-on: ${{ matrix.job.os }}
+    runs-on: [self-hosted, Linux, ARM64]
     strategy:
       fail-fast: false
       matrix:
@@ -926,25 +929,26 @@ jobs:
           # - { target: arm-unknown-linux-musleabihf, os: ubuntu-20.04, use-cross: true }
     steps:
 
-      - name: Maximize build space
-        run: |
-          sudo rm -rf /opt/ghc
-          sudo rm -rf /usr/local/lib/android
-          sudo rm -rf /usr/share/dotnet
-          sudo apt update -y
-          sudo apt install qemu-user-static
+      #- name: Maximize build space
+      #  run: |
+      #    sudo rm -rf /opt/ghc
+      #    sudo rm -rf /usr/local/lib/android
+      #    sudo rm -rf /usr/share/dotnet
+      #    sudo apt update -y
+      #    sudo apt install qemu-user-static -y
 
       - name: Checkout source code
         uses: actions/checkout@v3
 
-      - name: Set Swap Space
-        uses: pierotofy/set-swap-space@master
-        with:
-          swap-size-gb: 12
+      #- name: Set Swap Space
+      #  uses: pierotofy/set-swap-space@master
+      #  with:
+      #    swap-size-gb: 12
 
       - name: Free Space
         run: |
-          df
+          df -h
+          free -m
 
       - name: Install Rust toolchain
         uses: actions-rs/toolchain@v1
@@ -1007,6 +1011,7 @@ jobs:
             export VCPKG_ROOT=/opt/artifacts/vcpkg
             export ARCH=armhf
             export DEFAULT_FEAT=""
+            export CARGO_INCREMENTAL=0
             if ${{ matrix.job.enable-headless }}; then
               export DEFAULT_FEAT=linux_headless
             fi
@@ -1153,6 +1158,7 @@ jobs:
                 sed -i "s/x64\/release/arm\/release/g" ./build.py
               ;;
             esac
+            export CARGO_INCREMENTAL=0
             python3 ./build.py --flutter --hwcodec --skip-cargo
             # rpm package
             echo -e "start packaging fedora package"

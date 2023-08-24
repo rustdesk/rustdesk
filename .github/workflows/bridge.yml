@@ -6,7 +6,7 @@ on:
   workflow_call:
 
 env:
-  FLUTTER_VERSION: "3.10.5"
+  FLUTTER_VERSION: "3.10.6"
   FLUTTER_RUST_BRIDGE_VERSION: "1.75.3"
   
 jobs:

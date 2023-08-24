@@ -26,8 +26,6 @@ Nedenfor er de servere, du bruger gratis, det kan ændre sig med tiden. Hvis du 
 | Beliggenhed | Udbyder | Specifikation |
 | ---------- | ------------- | ------------------ |
 | Germany | Hetzner | 2 vCPU / 4GB RAM |
-| Germany | Codext | 4 vCPU / 8GB RAM |
-| Seoul | AWS lightsail | 1 vCPU / 0.5GB RAM |
 
 ## Afhængigheder
 

@@ -35,7 +35,6 @@
 | Περιοχή | Πάροχος | Προδιαγραφές |
 | --------- | ------------- | ------------------ |
 | Γερμανία | Hetzner | 2 vCPU / 4GB RAM |
-| Γερμανία | Codext | 4 vCPU / 8GB RAM |
 | Ουκρανία (Κίεβο) | [dc.volia](https://dc.volia.com) | 2 vCPU / 4GB RAM |
 
 ## Dev Container

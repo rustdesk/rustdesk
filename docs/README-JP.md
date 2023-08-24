@@ -30,7 +30,6 @@ RustDeskは誰からの貢献も歓迎します。 貢献するには [`docs/CON
 | Location | Vendor | Specification |
 | --------- | ------------- | ------------------ |
 | Germany | Hetzner | 2 vCPU / 4GB RAM |
-| Germany | Codext | 4 vCPU / 8GB RAM |
 
 ## 依存関係
 

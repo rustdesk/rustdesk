@@ -28,7 +28,6 @@ Níže jsou uvedeny servery zdarma k vašemu použití (údaje se mohou v čase 
 | umístění | dodavatel | parametry |
 | --------- | ------------- | ------------------ |
 | Germany | Hetzner | 2 vCPU / 4GB RAM |
-| Germany | Codext | 4 vCPU / 8GB RAM |
 | Ukraine (Kyiv) | [dc.volia](https://dc.volia.com) | 2 vCPU / 4 GB RAM |
 
 ## Softwarové součásti, na kterých závisí

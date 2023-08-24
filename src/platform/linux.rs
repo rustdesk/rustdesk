@@ -1,5 +1,8 @@
 use super::{CursorData, ResultType};
 use desktop::Desktop;
+#[cfg(all(feature = "linux_headless"))]
+#[cfg(not(any(feature = "flatpak", feature = "appimage")))]
+use hbb_common::config::CONFIG_OPTION_ALLOW_LINUX_HEADLESS;
 pub use hbb_common::platform::linux::*;
 use hbb_common::{
     allow_err, bail,
@@ -67,6 +70,19 @@ pub struct xcb_xfixes_get_cursor_image {
     pub yhot: u16,
     pub cursor_serial: c_long,
     pub pixels: *const c_long,
+}
+
+#[inline]
+#[cfg(feature = "linux_headless")]
+#[cfg(not(any(feature = "flatpak", feature = "appimage")))]
+pub fn is_headless_allowed() -> bool {
+    Config::get_option(CONFIG_OPTION_ALLOW_LINUX_HEADLESS) == "Y"
+}
+
+#[inline]
+pub fn is_login_screen_wayland() -> bool {
+    let values = get_values_of_seat0_with_gdm_wayland(&[0, 2]);
+    is_gdm_user(&values[1]) && get_display_server_of_session(&values[0]) == DISPLAY_SERVER_WAYLAND
 }
 
 #[inline]
@@ -429,13 +445,21 @@ fn get_cm() -> bool {
 }
 
 pub fn is_login_wayland() -> bool {
-    if let Ok(contents) = std::fs::read_to_string("/etc/gdm3/custom.conf") {
-        contents.contains("#WaylandEnable=false") || contents.contains("WaylandEnable=true")
-    } else if let Ok(contents) = std::fs::read_to_string("/etc/gdm/custom.conf") {
-        contents.contains("#WaylandEnable=false") || contents.contains("WaylandEnable=true")
-    } else {
-        false
+    let files = ["/etc/gdm3/custom.conf", "/etc/gdm/custom.conf"];
+    match (
+        Regex::new(r"# *WaylandEnable *= *false"),
+        Regex::new(r"WaylandEnable *= *true"),
+    ) {
+        (Ok(pat1), Ok(pat2)) => {
+            for file in files {
+                if let Ok(contents) = std::fs::read_to_string(file) {
+                    return pat1.is_match(&contents) || pat2.is_match(&contents);
+                }
+            }
+        }
+        _ => {}
     }
+    false
 }
 
 #[inline]
@@ -669,7 +693,8 @@ pub fn check_super_user_permission() -> ResultType<bool> {
     }
     // https://github.com/rustdesk/rustdesk/issues/2756
     if let Ok(status) = Command::new("pkexec").arg(arg).status() {
-        Ok(status.code() != Some(126))
+        // https://github.com/rustdesk/rustdesk/issues/5205#issuecomment-1658059657s
+        Ok(status.code() != Some(126) && status.code() != Some(127))
     } else {
         Ok(true)
     }
@@ -1048,11 +1073,13 @@ mod desktop {
         }
 
         pub fn refresh(&mut self) {
+            let seat0_values = get_values_of_seat0(&[0, 1, 2]);
             if !self.sid.is_empty() && is_active(&self.sid) {
-                return;
+                if self.sid == seat0_values[0] {
+                     return;
+                 }
             }
 
-            let seat0_values = get_values_of_seat0(&[0, 1, 2]);
             if seat0_values[0].is_empty() {
                 *self = Self::default();
                 self.is_rustdesk_subprocess = false;

@@ -24,6 +24,7 @@ directories-next = "2.0"
 rand = "0.8"
 serde_derive = "1.0"
 serde = "1.0"
+serde_json = "1.0"
 lazy_static = "1.4"
 confy = { git = "https://github.com/open-trade/confy" }
 dirs-next = "2.0"
@@ -56,5 +57,3 @@ winapi = { version = "0.3", features = ["winuser"] }
 [target.'cfg(target_os = "macos")'.dependencies]
 osascript = "0.3"
 
-[dev-dependencies]
-serde_json = "1.0"

@@ -36,6 +36,7 @@ struct UserData {
     quality: Option<(i64, Quality)>, // (time, quality)
     delay: Option<Delay>,
     response_delayed: bool,
+    record: bool,
 }
 
 pub struct VideoQoS {
@@ -112,6 +113,10 @@ impl VideoQoS {
 
     pub fn quality(&self) -> Quality {
         self.quality
+    }
+
+    pub fn record(&self) -> bool {
+        self.users.iter().any(|u| u.1.record)
     }
 
     pub fn abr_enabled() -> bool {
@@ -299,9 +304,9 @@ impl VideoQoS {
             } else if q == ImageQuality::Best.value() {
                 Quality::Best
             } else {
-                let mut b = (q >> 8 & 0xFF) * 2;
-                b = std::cmp::max(b, 10);
-                b = std::cmp::min(b, 200);
+                let mut b = (q >> 8 & 0xFFF) * 2;
+                b = std::cmp::max(b, 20);
+                b = std::cmp::min(b, 8000);
                 Quality::Custom(b as u32)
             }
         };
@@ -385,6 +390,12 @@ impl VideoQoS {
             if old != user.response_delayed {
                 self.refresh(None);
             }
+        }
+    }
+
+    pub fn user_record(&mut self, id: i32, v: bool) {
+        if let Some(user) = self.users.get_mut(&id) {
+            user.record = v;
         }
     }
 

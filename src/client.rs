@@ -34,7 +34,8 @@ use hbb_common::{
     anyhow::{anyhow, Context},
     bail,
     config::{
-        Config, PeerConfig, PeerInfoSerde, Resolution, CONNECT_TIMEOUT, READ_TIMEOUT, RELAY_PORT,
+        Config, LocalConfig, PeerConfig, PeerInfoSerde, Resolution, CONNECT_TIMEOUT, READ_TIMEOUT,
+        RELAY_PORT,
     },
     get_version_number, log,
     message_proto::{option_message::BoolOption, *},
@@ -42,6 +43,7 @@ use hbb_common::{
     rand,
     rendezvous_proto::*,
     socket_client,
+    sodiumoxide::base64,
     sodiumoxide::crypto::{box_, secretbox, sign},
     tcp::FramedStream,
     timeout,
@@ -55,7 +57,10 @@ use scrap::{
     ImageFormat, ImageRgb,
 };
 
-use crate::is_keyboard_mode_supported;
+use crate::{
+    common::input::{MOUSE_BUTTON_LEFT, MOUSE_TYPE_DOWN, MOUSE_TYPE_UP},
+    is_keyboard_mode_supported,
+};
 
 #[cfg(not(feature = "flutter"))]
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -90,6 +95,7 @@ pub const LOGIN_MSG_PASSWORD_EMPTY: &str = "Empty Password";
 pub const LOGIN_MSG_PASSWORD_WRONG: &str = "Wrong Password";
 pub const LOGIN_MSG_NO_PASSWORD_ACCESS: &str = "No Password Access";
 pub const LOGIN_MSG_OFFLINE: &str = "Offline";
+pub const LOGIN_SCREEN_WAYLAND: &str = "Wayland login screen is not supported";
 #[cfg(target_os = "linux")]
 pub const SCRAP_UBUNTU_HIGHER_REQUIRED: &str = "Wayland requires Ubuntu 21.04 or higher version.";
 #[cfg(target_os = "linux")]
@@ -1071,6 +1077,7 @@ pub struct LoginConfigHandler {
     pub direct: Option<bool>,
     pub received: bool,
     switch_uuid: Option<String>,
+    pub save_ab_password_to_recent: bool, // true: connected with ab password
 }
 
 impl Deref for LoginConfigHandler {
@@ -1207,7 +1214,11 @@ impl LoginConfigHandler {
     /// * `v` - value of option
     pub fn save_ui_flutter(&mut self, k: String, v: String) {
         let mut config = self.load_config();
-        config.ui_flutter.insert(k, v);
+        if v.is_empty() {
+            config.ui_flutter.remove(&k);
+        } else {
+            config.ui_flutter.insert(k, v);
+        }
         self.save_config(config);
     }
 
@@ -1640,10 +1651,25 @@ impl LoginConfigHandler {
                 log::debug!("remember password of {}", self.id);
             }
         } else {
-            if !password0.is_empty() {
+            if self.save_ab_password_to_recent {
+                config.password = password;
+                log::debug!("save ab password of {} to recent", self.id);
+            } else if !password0.is_empty() {
                 config.password = Default::default();
                 log::debug!("remove password of {}", self.id);
             }
+        }
+        #[cfg(feature = "flutter")]
+        {
+            // sync ab password with PeerConfig password
+            let password = base64::encode(config.password.clone(), base64::Variant::Original);
+            let evt: HashMap<&str, String> = HashMap::from([
+                ("name", "sync_peer_password_to_ab".to_string()),
+                ("id", self.id.clone()),
+                ("password", password),
+            ]);
+            let evt = serde_json::ser::to_string(&evt).unwrap_or("".to_owned());
+            crate::flutter::push_global_event(crate::flutter::APP_TYPE_MAIN, evt);
         }
         if config.keyboard_mode.is_empty() {
             if is_keyboard_mode_supported(&KeyboardMode::Map, get_version_number(&pi.version)) {
@@ -2034,13 +2060,20 @@ pub fn send_pointer_device_event(
 /// # Arguments
 ///
 /// * `interface` - The interface for sending data.
-fn activate_os(interface: &impl Interface) {
+/// * `send_click` - Whether to send a click event.
+fn activate_os(interface: &impl Interface, send_click: bool) {
+    let left_down = MOUSE_BUTTON_LEFT << 3 | MOUSE_TYPE_DOWN;
+    let left_up = MOUSE_BUTTON_LEFT << 3 | MOUSE_TYPE_UP;
+    send_mouse(left_up, 0, 0, false, false, false, false, interface);
+    std::thread::sleep(Duration::from_millis(50));
     send_mouse(0, 0, 0, false, false, false, false, interface);
     std::thread::sleep(Duration::from_millis(50));
     send_mouse(0, 3, 3, false, false, false, false, interface);
-    std::thread::sleep(Duration::from_millis(50));
-    send_mouse(1 | 1 << 3, 0, 0, false, false, false, false, interface);
-    send_mouse(2 | 1 << 3, 0, 0, false, false, false, false, interface);
+    if send_click {
+        std::thread::sleep(Duration::from_millis(50));
+        send_mouse(left_down, 0, 0, false, false, false, false, interface);
+        send_mouse(left_up, 0, 0, false, false, false, false, interface);
+    }
     /*
     let mut key_event = KeyEvent::new();
     // do not use Esc, which has problem with Linux
@@ -2073,9 +2106,14 @@ pub fn input_os_password(p: String, activate: bool, interface: impl Interface) {
 /// * `activate` - Whether to activate OS.
 /// * `interface` - The interface for sending data.
 fn _input_os_password(p: String, activate: bool, interface: impl Interface) {
+    let input_password = !p.is_empty();
     if activate {
-        activate_os(&interface);
+        // Click event is used to bring up the password input box.
+        activate_os(&interface, input_password);
         std::thread::sleep(Duration::from_millis(1200));
+    }
+    if !input_password {
+        return;
     }
     let mut key_event = KeyEvent::new();
     key_event.press = true;
@@ -2100,7 +2138,13 @@ struct LoginErrorMsgBox {
 lazy_static::lazy_static! {
     static ref LOGIN_ERROR_MAP: Arc<HashMap<&'static str, LoginErrorMsgBox>> = {
         use hbb_common::config::LINK_HEADLESS_LINUX_SUPPORT;
-        let map = HashMap::from([(LOGIN_MSG_DESKTOP_SESSION_NOT_READY, LoginErrorMsgBox{
+        let map = HashMap::from([(LOGIN_SCREEN_WAYLAND, LoginErrorMsgBox{
+            msgtype: "error",
+            title: "Login Error",
+            text: "Login screen using Wayland is not supported",
+            link: "https://rustdesk.com/docs/en/manual/linux/#login-screen",
+            try_again: true,
+        }), (LOGIN_MSG_DESKTOP_SESSION_NOT_READY, LoginErrorMsgBox{
             msgtype: "session-login",
             title: "",
             text: "",
@@ -2160,6 +2204,7 @@ pub fn handle_login_error(
     err: &str,
     interface: &impl Interface,
 ) -> bool {
+    lc.write().unwrap().save_ab_password_to_recent = false;
     if err == LOGIN_MSG_PASSWORD_EMPTY {
         lc.write().unwrap().password = Default::default();
         interface.msgbox("input-password", "Password Required", "", "");
@@ -2228,6 +2273,26 @@ pub async fn handle_hash(
     if password.is_empty() {
         password = lc.read().unwrap().config.password.clone();
     }
+    if password.is_empty() {
+        let access_token = LocalConfig::get_option("access_token");
+        let ab = hbb_common::config::Ab::load();
+        if !access_token.is_empty() && access_token == ab.access_token {
+            let id = lc.read().unwrap().id.clone();
+            if let Some(p) = ab
+                .peers
+                .iter()
+                .find_map(|p| if p.id == id { Some(p) } else { None })
+            {
+                if let Ok(hash) = base64::decode(p.hash.clone(), base64::Variant::Original) {
+                    if !hash.is_empty() {
+                        password = hash;
+                        lc.write().unwrap().save_ab_password_to_recent = true;
+                    }
+                }
+            }
+        }
+    }
+    lc.write().unwrap().password = password.clone();
     let password = if password.is_empty() {
         // login without password, the remote side can click accept
         interface.msgbox("input-password", "Password Required", "", "");
@@ -2299,9 +2364,9 @@ pub async fn handle_login_from_ui(
         hasher.update(&lc.read().unwrap().hash.salt);
         let res = hasher.finalize();
         lc.write().unwrap().remember = remember;
-        lc.write().unwrap().password = res[..].into();
         res[..].into()
     };
+    lc.write().unwrap().password = hash_password.clone();
     let mut hasher2 = Sha256::new();
     hasher2.update(&hash_password[..]);
     hasher2.update(&lc.read().unwrap().hash.challenge);

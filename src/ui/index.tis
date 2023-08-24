@@ -215,7 +215,7 @@ class Enhancements: Reactor.Component {
         return <li>{translate('Enhancements')}
             <menu #enhancements-menu>
                 {has_hwcodec ? <li #enable-hwcodec><span>{svg_checkmark}</span>{translate("Hardware Codec")} (beta)</li> : ""}
-                <li #enable-abr><span>{svg_checkmark}</span>{translate("Adaptive Bitrate")} (beta)</li>
+                <li #enable-abr><span>{svg_checkmark}</span>{translate("Adaptive bitrate")} (beta)</li>
                 <li #screen-recording>{translate("Recording")}</li>
             </menu>
         </li>;
@@ -1323,18 +1323,5 @@ function getHttpHeaders() {
 }
 
 function getDeviceInfo() {
-    var os;
-    if (is_win) {
-        os = 'windows';
-    } else if (is_linux) {
-        os = 'linux';
-    } else if (is_osx) {
-        os = 'macos';
-    }
-
-    return {
-        os: os,
-        type: 'client',
-        name: handler.get_hostname()
-    };
+    return JSON.parse(handler.get_login_device_info());
 }

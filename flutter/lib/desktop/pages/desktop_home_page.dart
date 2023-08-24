@@ -185,11 +185,13 @@ class _DesktopHomePageState extends State<DesktopHomePage>
           backgroundColor: hover.value
               ? Theme.of(context).scaffoldBackgroundColor
               : Theme.of(context).colorScheme.background,
-          child: Icon(
-            Icons.more_vert_outlined,
-            size: 20,
-            color: hover.value ? textColor : textColor?.withOpacity(0.5),
-          ),
+          child: Tooltip(
+            message: translate('Settings'),
+            child: Icon(
+              Icons.more_vert_outlined,
+              size: 20,
+              color: hover.value ? textColor : textColor?.withOpacity(0.5),
+            )),
         ),
       ),
       onHover: (value) => hover.value = value,
@@ -252,23 +254,28 @@ class _DesktopHomePageState extends State<DesktopHomePage>
                         onPressed: () => bind.mainUpdateTemporaryPassword(),
                         child: Obx(() => RotatedBox(
                             quarterTurns: 2,
-                            child: Icon(
-                              Icons.refresh,
-                              color: refreshHover.value
-                                  ? textColor
-                                  : Color(0xFFDDDDDD),
-                              size: 22,
-                            ))),
+                            child: Tooltip(
+                              message: translate('Refresh Password'),
+                              child: Icon(
+                                Icons.refresh,
+                                color: refreshHover.value
+                                    ? textColor
+                                    : Color(0xFFDDDDDD),
+                                size: 22,
+                              ))
+                            )),
                         onHover: (value) => refreshHover.value = value,
                       ).marginOnly(right: 8, top: 4),
                       InkWell(
                         child: Obx(
-                          () => Icon(
-                            Icons.edit,
-                            color:
-                                editHover.value ? textColor : Color(0xFFDDDDDD),
-                            size: 22,
-                          ).marginOnly(right: 8, top: 4),
+                          () => Tooltip(
+                            message: translate('Change Password'),
+                            child: Icon(
+                              Icons.edit,
+                              color:
+                                  editHover.value ? textColor : Color(0xFFDDDDDD),
+                              size: 22,
+                            )).marginOnly(right: 8, top: 4),
                         ),
                         onTap: () => DesktopSettingPage.switch2page(1),
                         onHover: (value) => editHover.value = value,
@@ -372,7 +379,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
     } else if (Platform.isLinux) {
       if (bind.mainCurrentIsWayland()) {
         return buildInstallCard(
-            "Warning", translate("wayland_experiment_tip"), "", () async {},
+            "Warning", "wayland_experiment_tip", "", () async {},
             help: 'Help',
             link: 'https://rustdesk.com/docs/en/manual/linux/#x11-required');
       } else if (bind.mainIsLoginWayland()) {
@@ -527,7 +534,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
       debugPrint(
           "[Main] call ${call.method} with args ${call.arguments} from window $fromWindowId");
       if (call.method == kWindowMainWindowOnTop) {
-        window_on_top(null);
+        windowOnTop(null);
       } else if (call.method == kWindowGetWindowInfo) {
         final screen = (await window_size.getWindowInfo()).screen;
         if (screen == null) {
@@ -554,7 +561,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
       } else if (call.method == kWindowEventShow) {
         await rustDeskWinManager.registerActiveWindow(call.arguments["id"]);
       } else if (call.method == kWindowEventHide) {
-        await rustDeskWinManager.unregisterActiveWindow(call.arguments["id"]);
+        await rustDeskWinManager.unregisterActiveWindow(call.arguments['id']);
       } else if (call.method == kWindowConnect) {
         await connectMainDesktop(
           call.arguments['id'],
@@ -563,6 +570,17 @@ class _DesktopHomePageState extends State<DesktopHomePage>
           isRDP: call.arguments['isRDP'],
           forceRelay: call.arguments['forceRelay'],
         );
+      } else if (call.method == kWindowEventMoveTabToNewWindow) {
+        final args = call.arguments.split(',');
+        int? windowId;
+        try {
+          windowId = int.parse(args[0]);
+        } catch (e) {
+          debugPrint("Failed to parse window id '${call.arguments}': $e");
+        }
+        if (windowId != null) {
+          await rustDeskWinManager.moveTabToNewWindow(windowId, args[1], args[2]);
+        }
       }
     });
     _uniLinksSubscription = listenUniLinks();

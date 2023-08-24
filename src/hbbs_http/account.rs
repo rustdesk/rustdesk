@@ -1,8 +1,5 @@
 use super::HbbHttpResponse;
-use hbb_common::{
-    config::{Config, LocalConfig},
-    log, ResultType,
-};
+use hbb_common::{config::LocalConfig, log, ResultType};
 use reqwest::blocking::Client;
 use serde_derive::{Deserialize, Serialize};
 use serde_repr::{Deserialize_repr, Serialize_repr};
@@ -14,8 +11,6 @@ use std::{
 use url::Url;
 
 lazy_static::lazy_static! {
-    static ref API_SERVER: String = crate::get_api_server(
-        Config::get_option("api-server"), Config::get_option("custom-rendezvous-server"));
     static ref OIDC_SESSION: Arc<RwLock<OidcSession>> = Arc::new(RwLock::new(OidcSession::new()));
 }
 
@@ -142,20 +137,35 @@ impl OidcSession {
         }
     }
 
-    fn auth(op: &str, id: &str, uuid: &str) -> ResultType<HbbHttpResponse<OidcAuthUrl>> {
+    fn auth(
+        api_server: &str,
+        op: &str,
+        id: &str,
+        uuid: &str,
+    ) -> ResultType<HbbHttpResponse<OidcAuthUrl>> {
         Ok(OIDC_SESSION
             .read()
             .unwrap()
             .client
-            .post(format!("{}/api/oidc/auth", *API_SERVER))
-            .json(&HashMap::from([("op", op), ("id", id), ("uuid", uuid)]))
+            .post(format!("{}/api/oidc/auth", api_server))
+            .json(&serde_json::json!({
+                "op": op,
+                "id": id,
+                "uuid": uuid,
+                "deviceInfo": crate::ui_interface::get_login_device_info(),
+            }))
             .send()?
             .try_into()?)
     }
 
-    fn query(code: &str, id: &str, uuid: &str) -> ResultType<HbbHttpResponse<AuthBody>> {
+    fn query(
+        api_server: &str,
+        code: &str,
+        id: &str,
+        uuid: &str,
+    ) -> ResultType<HbbHttpResponse<AuthBody>> {
         let url = reqwest::Url::parse_with_params(
-            &format!("{}/api/oidc/auth-query", *API_SERVER),
+            &format!("{}/api/oidc/auth-query", api_server),
             &[("code", code), ("id", id), ("uuid", uuid)],
         )?;
         Ok(OIDC_SESSION
@@ -189,8 +199,8 @@ impl OidcSession {
         std::thread::sleep(std::time::Duration::from_secs_f32(secs));
     }
 
-    fn auth_task(op: String, id: String, uuid: String, remember_me: bool) {
-        let auth_request_res = Self::auth(&op, &id, &uuid);
+    fn auth_task(api_server: String, op: String, id: String, uuid: String, remember_me: bool) {
+        let auth_request_res = Self::auth(&api_server, &op, &id, &uuid);
         log::info!("Request oidc auth result: {:?}", &auth_request_res);
         let code_url = match auth_request_res {
             Ok(HbbHttpResponse::<_>::Data(code_url)) => code_url,
@@ -226,7 +236,7 @@ impl OidcSession {
         let begin = Instant::now();
         let query_timeout = OIDC_SESSION.read().unwrap().query_timeout;
         while OIDC_SESSION.read().unwrap().keep_querying && begin.elapsed() < query_timeout {
-            match Self::query(&code_url.code, &id, &uuid) {
+            match Self::query(&api_server, &code_url.code, &id, &uuid) {
                 Ok(HbbHttpResponse::<_>::Data(auth_body)) => {
                     if remember_me {
                         LocalConfig::set_option(
@@ -289,12 +299,18 @@ impl OidcSession {
         }
     }
 
-    pub fn account_auth(op: String, id: String, uuid: String, remember_me: bool) {
+    pub fn account_auth(
+        api_server: String,
+        op: String,
+        id: String,
+        uuid: String,
+        remember_me: bool,
+    ) {
         Self::auth_cancel();
         Self::wait_stop_querying();
         OIDC_SESSION.write().unwrap().before_task();
         std::thread::spawn(move || {
-            Self::auth_task(op, id, uuid, remember_me);
+            Self::auth_task(api_server, op, id, uuid, remember_me);
             OIDC_SESSION.write().unwrap().after_task();
         });
     }

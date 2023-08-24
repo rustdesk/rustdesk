@@ -65,8 +65,8 @@ impl EncoderApi for VpxEncoder {
 
                 c.g_w = config.width;
                 c.g_h = config.height;
-                c.g_timebase.num = config.timebase[0];
-                c.g_timebase.den = config.timebase[1];
+                c.g_timebase.num = 1;
+                c.g_timebase.den = 1000; // Output timestamp precision
                 c.rc_undershoot_pct = 95;
                 // When the data buffer falls below this percentage of fullness, a dropped frame is indicated. Set the threshold to zero (0) to disable this feature.
                 // In dynamic scenes, low bitrate gets low fps while high bitrate gets high fps.
@@ -76,9 +76,13 @@ impl EncoderApi for VpxEncoder {
                 // https://developers.google.com/media/vp9/bitrate-modes/
                 // Constant Bitrate mode (CBR) is recommended for live streaming with VP9.
                 c.rc_end_usage = vpx_rc_mode::VPX_CBR;
-                // c.kf_min_dist = 0;
-                // c.kf_max_dist = 999999;
-                c.kf_mode = vpx_kf_mode::VPX_KF_DISABLED; // reduce bandwidth a lot
+                if let Some(keyframe_interval) = config.keyframe_interval {
+                    c.kf_min_dist = 0;
+                    c.kf_max_dist = keyframe_interval as _;
+                } else {
+                    c.kf_mode = vpx_kf_mode::VPX_KF_DISABLED; // reduce bandwidth a lot
+                }
+
                 let (q_min, q_max, b) = Self::convert_quality(config.quality);
                 if q_min > 0 && q_min < q_max && q_max < 64 {
                     c.rc_min_quantizer = q_min;
@@ -303,7 +307,7 @@ impl VpxEncoder {
     fn calc_q_values(b: u32) -> (u32, u32) {
         let b = std::cmp::min(b, 200);
         let q_min1: i32 = 36;
-        let q_min2 = 12;
+        let q_min2 = 0;
         let q_max1 = 56;
         let q_max2 = 37;
 
@@ -343,12 +347,12 @@ pub struct VpxEncoderConfig {
     pub width: c_uint,
     /// The height (in pixels).
     pub height: c_uint,
-    /// The timebase numerator and denominator (in seconds).
-    pub timebase: [c_int; 2],
     /// The image quality
     pub quality: Quality,
     /// The codec
     pub codec: VpxVideoCodecId,
+    /// keyframe interval
+    pub keyframe_interval: Option<usize>,
 }
 
 #[derive(Clone, Copy, Debug)]
