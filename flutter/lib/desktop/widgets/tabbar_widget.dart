@@ -68,26 +68,6 @@ class DesktopTabState {
   }
 }
 
-// CancelFunc showRightMenu(ToastBuilder builder,
-//     {BuildContext? context, Offset? target}) {
-//   return BotToast.showAttachedWidget(
-//     target: target,
-//     targetContext: context,
-//     verticalOffset: 0,
-//     horizontalOffset: 0,
-//     duration: Duration(seconds: 300),
-//     animationDuration: Duration(milliseconds: 0),
-//     animationReverseDuration: Duration(milliseconds: 0),
-//     preferDirection: PreferDirection.rightTop,
-//     ignoreContentClick: false,
-//     onlyOne: true,
-//     allowClick: true,
-//     enableSafeArea: true,
-//     backgroundColor: Color(0x00000000),
-//     attachedBuilder: builder,
-//   );
-// }
-
 class DesktopTabController {
   final state = DesktopTabState().obs;
   final DesktopTabType tabType;
