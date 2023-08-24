@@ -13,15 +13,15 @@ Mari mengobrol bersama kami: [Discord](https://discord.gg/nDceKgxnkV) | [Twitter
 
 [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/I2I04VU09)
 
-Merupakan perangkat lunak Remote Desktop yang baru, dibangun dengan Rust. kamu bisa langsung menggunakannya tanpa perlu konfigurasi tambahan. Serta ,emiliki kontrol penuh terhadap semua data, tanpa perlu merasa was-was tentang isu keamanan, dan yang lebih menarik adalah memiliki opsi untuk menggunakan server rendezvous/relay milik kami, [konfigurasi server sendiri](https://rustdesk.com/server), atau [tulis rendezvous/relay server anda sendiri](https://github.com/rustdesk/rustdesk-server-demo).
+Merupakan perangkat lunak Remote Desktop yang baru, dan dibangun dengan Rust. Bahkan kamu bisa langsung menggunakannya tanpa perlu melakukan konfigurasi tambahan. Serta memiliki kontrol penuh terhadap semua data, tanpa perlu merasa was-was tentang isu keamanan, dan yang lebih menarik adalah memiliki opsi untuk menggunakan server rendezvous/relay milik kami, [konfigurasi server sendiri](https://rustdesk.com/server), atau [tulis rendezvous/relay server anda sendiri](https://github.com/rustdesk/rustdesk-server-demo).
 
-RustDesk mengajak semua orang untuk ikut berkontribusi. Lihat [`docs/CONTRIBUTING.md`](CONTRIBUTING.md) untuk melihat panduan.
+RustDesk mengajak semua orang untuk ikut berkontribusi. Lihat [`docs/CONTRIBUTING-ID.md`](CONTRIBUTING-ID.md) untuk melihat panduan.
 
 [**UNDUH BINARY**](https://github.com/rustdesk/rustdesk/releases)
 
 ## Server Publik Gratis
 
-Di bawah ini merupakan server gratis yang bisa kamu gunakan, seiring waktu kemungkinan akan terjadi perubahan spesifikasi pada setiap server. Jika lokasi kamu berada jauh dengan salah satu server yang tersedia, kemungkinan koneksi akan terasa lambat ketika melakukan proses remote.
+Di bawah ini merupakan server gratis yang bisa kamu gunakan, seiring dengan waktu mungkin akan terjadi perubahan spesifikasi pada setiap server yang ada. Jika lokasi kamu berada jauh dengan salah satu server yang tersedia, kemungkinan koneksi akan terasa lambat ketika melakukan proses remote.
 | Lokasi | Penyedia | Spesifikasi |
 | --------- | ------------- | ------------------ |
 | Jerman | [Hetzner](https://www.hetzner.com) | 2 vCPU / 4GB RAM |
@@ -31,11 +31,11 @@ Di bawah ini merupakan server gratis yang bisa kamu gunakan, seiring waktu kemun
 
 [![Open in Dev Containers](https://img.shields.io/static/v1?label=Dev%20Container&message=Open&color=blue&logo=visualstudiocode)](https://vscode.dev/redirect?url=vscode://ms-vscode-remote.remote-containers/cloneInVolume?url=https://github.com/rustdesk/rustdesk)
 
-Apabila kamu sudah menginstall VS Code dan Docker, kamu bisa mengklik badge yang ada diatas untuk memulainya. Dengan mengklik badge tersebut secara otomatis akan menginstal ekstensi pada VS Code, lakukan kloning (clone) source code kedalam container volume, dan aktifkan dev container untuk menggunakannya.
+Apabila PC kamu sudah terinstal VS Code dan Docker, kamu bisa mengklik badge yang ada diatas untuk memulainya. Dengan mengklik badge tersebut secara otomatis akan menginstal ekstensi pada VS Code, lakukan kloning (clone) source code kedalam container volume, dan aktifkan dev container untuk menggunakannya.
 
 ## Dependensi
 
-Pada versi desktop, antarmuka pengguna (GUI) menggunakan [Sciter](https://sciter.com/) atau flutter, tutorial ini hanya berlaku untuk Sciter
+Pada versi desktop, antarmuka pengguna (GUI) menggunakan [Sciter](https://sciter.com/) atau flutter
 
 Kamu bisa mengunduh Sciter dynamic library disini.
 
