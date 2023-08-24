@@ -266,24 +266,24 @@ class _RemotePageState extends State<RemotePage>
                   },
                   inputModel: _ffi.inputModel,
                   child: getBodyForDesktop(context))),
-          Obx(
-            () => _ffi.ffiModel.pi.isSet.isTrue &&
-                    _ffi.ffiModel.waitForFirstImage.isTrue
-                ? emptyOverlay()
-                : Offstage(),
-          ),
-          RemoteToolbar(
-            id: widget.id,
-            ffi: _ffi,
-            state: widget.toolbarState,
-            onEnterOrLeaveImageSetter: (func) =>
-                _onEnterOrLeaveImage4Toolbar = func,
-            onEnterOrLeaveImageCleaner: () =>
-                _onEnterOrLeaveImage4Toolbar = null,
-          ),
-          Obx(
-            () => _ffi.ffiModel.pi.isSet.isFalse ? emptyOverlay() : Offstage(),
-          ),
+          Obx(() => Stack(
+                children: [
+                  _ffi.ffiModel.pi.isSet.isTrue &&
+                          _ffi.ffiModel.waitForFirstImage.isTrue
+                      ? emptyOverlay()
+                      : Offstage(),
+                  RemoteToolbar(
+                    id: widget.id,
+                    ffi: _ffi,
+                    state: widget.toolbarState,
+                    onEnterOrLeaveImageSetter: (func) =>
+                        _onEnterOrLeaveImage4Toolbar = func,
+                    onEnterOrLeaveImageCleaner: () =>
+                        _onEnterOrLeaveImage4Toolbar = null,
+                  ),
+                  _ffi.ffiModel.pi.isSet.isFalse ? emptyOverlay() : Offstage(),
+                ],
+              )),
         ],
       ),
     );
