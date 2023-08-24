@@ -1,216 +1,149 @@
-<p align="center">
-  <img src="res/logo-header.svg" alt="RustDesk - Your remote desktop"><br>
-  <a href="#free-public-servers">Servers</a> •
-  <a href="#raw-steps-to-build">Build</a> •
-  <a href="#how-to-build-with-docker">Docker</a> •
-  <a href="#file-structure">Structure</a> •
-  <a href="#snapshot">Snapshot</a><br>
-  [<a href="docs/README-UA.md">Українська</a>] | [<a href="docs/README-CS.md">česky</a>] | [<a href="docs/README-ZH.md">中文</a>] | [<a href="docs/README-HU.md">Magyar</a>] | [<a href="docs/README-ES.md">Español</a>] | [<a href="docs/README-FA.md">فارسی</a>] | [<a href="docs/README-FR.md">Français</a>] | [<a href="docs/README-DE.md">Deutsch</a>] | [<a href="docs/README-PL.md">Polski</a>] | [<a href="docs/README-ID.md">Indonesian</a>] | [<a href="docs/README-FI.md">Suomi</a>] | [<a href="docs/README-ML.md">മലയാളം</a>] | [<a href="docs/README-JP.md">日本語</a>] | [<a href="docs/README-NL.md">Nederlands</a>] | [<a href="docs/README-IT.md">Italiano</a>] | [<a href="docs/README-RU.md">Русский</a>] | [<a href="docs/README-PTBR.md">Português (Brasil)</a>] | [<a href="docs/README-EO.md">Esperanto</a>] | [<a href="docs/README-KR.md">한국어</a>] | [<a href="docs/README-AR.md">العربي</a>] | [<a href="docs/README-VN.md">Tiếng Việt</a>] | [<a href="docs/README-DA.md">Dansk</a>] | [<a href="docs/README-GR.md">Ελληνικά</a>]<br>
-  <b>We need your help to translate this README, <a href="https://github.com/rustdesk/rustdesk/tree/master/src/lang">RustDesk UI</a> and <a href="https://github.com/rustdesk/doc.rustdesk.com">RustDesk Doc</a> to your native language</b>
-</p>
 
-Chat with us: [Discord](https://discord.gg/nDceKgxnkV) | [Twitter](https://twitter.com/rustdesk) | [Reddit](https://www.reddit.com/r/rustdesk)
+<div align="center">
 
-[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/I2I04VU09)
+<h1>Çekme Tabanlı Ses Dönüşümü Web Arayüzü</h1>
+Kolay kullanımlı VITS tabanlı ses dönüşümü (ses değiştirme) çerçevesi<br><br>
 
-Yet another remote desktop software, written in Rust. Works out of the box, no configuration required. You have full control of your data, with no concerns about security. You can use our rendezvous/relay server, [set up your own](https://rustdesk.com/server), or [write your own rendezvous/relay server](https://github.com/rustdesk/rustdesk-server-demo).
+[![madewithlove](https://img.shields.io/badge/made_with-%E2%9D%A4-red?style=for-the-badge&labelColor=orange
+)](https://github.com/RVC-Project/Retrieval-based-Voice-Conversion-WebUI)
 
-![image](https://user-images.githubusercontent.com/71636191/171661982-430285f0-2e12-4b1d-9957-4a58e375304d.png)
+<img src="https://counter.seku.su/cmoe?name=rvc&theme=r34" /><br>
 
-RustDesk welcomes contribution from everyone. See [CONTRIBUTING.md](docs/CONTRIBUTING.md) for help getting started.
+[![Open In Colab](https://img.shields.io/badge/Colab-F9AB00?style=for-the-badge&logo=googlecolab&color=525252)](https://colab.research.google.com/github/RVC-Project/Retrieval-based-Voice-Conversion-WebUI/blob/main/Retrieval_based_Voice_Conversion_WebUI.ipynb)
+[![Lisans](https://img.shields.io/badge/LICENSE-MIT-green.svg?style=for-the-badge)](https://github.com/RVC-Project/Retrieval-based-Voice-Conversion-WebUI/blob/main/LICENSE)
+[![Huggingface](https://img.shields.io/badge/🤗%20-Spaces-yellow.svg?style=for-the-badge)](https://huggingface.co/lj1995/VoiceConversionWebUI/tree/main/)
 
-[**FAQ**](https://github.com/rustdesk/rustdesk/wiki/FAQ)
+[![Discord](https://img.shields.io/badge/RVC%20Geliştiricileri-Discord-7289DA?style=for-the-badge&logo=discord&logoColor=white)](https://discord.gg/HcsmBBGyVk)
 
-[**BINARY DOWNLOAD**](https://github.com/rustdesk/rustdesk/releases)
+[**Güncelleme Günlüğü**](https://github.com/RVC-Project/Retrieval-based-Voice-Conversion-WebUI/blob/main/docs/Changelog_TR.md) | [**Sıkça Sorulan Sorular**](https://github.com/RVC-Project/Retrieval-based-Voice-Conversion-WebUI/wiki/S%C4%B1k%C3%A7a-Sorulan-Sorular) | [**AutoDL·5 Kuruşla AI Şarkıcısı Eğitme**](https://github.com/RVC-Project/Retrieval-based-Voice-Conversion-WebUI/wiki/Autodl%E2%80%A25-Kuru%C5%9Fla-AI-%C5%9Eark%C4%B1c%C4%B1s%C4%B1-E%C4%9Fitme) | [**Karşılaştırmalı Deney Kayıtları**](https://github.com/RVC-Project/Retrieval-based-Voice-Conversion-WebUI/wiki/Autodl%E2%80%A25-Kuru%C5%9Fla-AI-%C5%9Eark%C4%B1c%C4%B1s%C4%B1-E%C4%9Fitme) | [**Çevrimiçi Demo**](https://huggingface.co/spaces/Ricecake123/RVC-demo)
 
-[**NIGHTLY BUILD**](https://github.com/rustdesk/rustdesk/releases/tag/nightly)
+</div>
 
-[<img src="https://fdroid.gitlab.io/artwork/badge/get-it-on.png"
-    alt="Get it on F-Droid"
-    height="80">](https://f-droid.org/en/packages/com.carriez.flutter_hbb)
+------
 
-## Free Public Servers
+[**İngilizce**](./docs/README.en.md) | [**中文简体**](./README.md) | [**日本語**](./docs/README.ja.md) | [**한국어**](./docs/README.ko.md) ([**韓國語**](./docs/README.ko.han.md)) | [**Türkçe**](./docs/README.tr.md)
 
-Below are the servers you are using for free, they may change over time. If you are not close to one of these, your network may be slow.
-| Location | Vendor | Specification |
-| --------- | ------------- | ------------------ |
-| Germany | [Hetzner](https://www.hetzner.com) | 2 vCPU / 4 GB RAM |
-| Germany | [Codext](https://codext.de) | 4 vCPU / 8 GB RAM |
-| Ukraine (Kyiv) | [dc.volia](https://dc.volia.com) | 2 vCPU / 4 GB RAM |
+[Demo videosunu buradan izleyin](https://www.bilibili.com/video/BV1pm4y1z7Gm/) !
 
-## Dev Container
+> Gerçek zamanlı ses dönüşümü RVC kullanılarak gerçekleştirilmiştir: [w-okada/voice-changer](https://github.com/w-okada/voice-changer)
 
-[![Open in Dev Containers](https://img.shields.io/static/v1?label=Dev%20Container&message=Open&color=blue&logo=visualstudiocode)](https://vscode.dev/redirect?url=vscode://ms-vscode-remote.remote-containers/cloneInVolume?url=https://github.com/rustdesk/rustdesk)
+> Temel model, telif hakkı endişesi olmaksızın yaklaşık 50 saatlik açık kaynaklı yüksek kaliteli VCTK eğitim seti ile eğitilmiştir. 
 
-If you already have VS Code and Docker installed, you can click the badge above to get started. Clicking will cause VS Code to automatically install the Dev Containers extension if needed, clone the source code into a container volume, and spin up a dev container for use.
+> RVCv3 modelini bekleyin, daha büyük parametreler, daha fazla veri, daha iyi sonuçlar, temel hızı korurken daha az eğitim verisi gerektirir.
 
-Go through [DEVCONTAINER.md](docs/DEVCONTAINER.md) for more info.
+## Tanıtım
+Bu depo aşağıdaki özelliklere sahiptir:
++ Ses renk sızdırmasını önlemek için giriş kaynağı özelliklerini eğitim seti özellikleri ile değiştirme üzerine en iyi 1 öğeyi kullanma
++ Daha düşük kaliteli ekran kartlarında bile hızlı eğitim yapabilme
++ Az miktarda veri ile bile iyi sonuçlar elde edebilme (en azından 10 dakika düşük gürültülü ses verisi toplamanızı öneririz)
++ Model birleştirme ile ses rengini değiştirebilme (ckpt işleme sekmesindeki ckpt-merge seçeneği ile)
++ Kullanımı kolay web arayüzü
++ İnsan sesini hızla ayırmak için UVR5 modelini çağırabilme
++ İleri seviyede [Ses Yüksekliği Çıkarma Algoritması InterSpeech2023-RMVPE](#Referans-Projeler) ile sessiz dönüşüme son verme. En iyi sonuç (belirgin şekilde) sunar, ancak crepe_full'den daha hızlı ve daha az kaynak tüketir
++ Nvidia A ve I kart hızlandırma desteği
 
-## Dependencies
+## Ortam Kurulumu
+Aşağıdaki komutları Python sürümünün 3.8'den büyük olduğu bir ortamda çalıştırmanız gerekmektedir.  
 
-Desktop versions use [Sciter](https://sciter.com/) or Flutter for GUI, this tutorial is for Sciter only.
-
-Please download Sciter dynamic library yourself.
-
-[Windows](https://raw.githubusercontent.com/c-smile/sciter-sdk/master/bin.win/x64/sciter.dll) |
-[Linux](https://raw.githubusercontent.com/c-smile/sciter-sdk/master/bin.lnx/x64/libsciter-gtk.so) |
-[macOS](https://raw.githubusercontent.com/c-smile/sciter-sdk/master/bin.osx/libsciter.dylib)
-
-## Raw steps to build
-
-- Prepare your Rust development env and C++ build env
-
-- Install [vcpkg](https://github.com/microsoft/vcpkg), and set `VCPKG_ROOT` env variable correctly
-
-  - Windows: vcpkg install libvpx:x64-windows-static libyuv:x64-windows-static opus:x64-windows-static aom:x64-windows-static
-  - Linux/macOS: vcpkg install libvpx libyuv opus aom
-
-- run `cargo run`
-
-## [Build](https://rustdesk.com/docs/en/dev/build/)
-
-## How to build on Linux
-
-### Ubuntu 18 (Debian 10)
-
-```sh
-sudo apt install -y zip g++ gcc git curl wget nasm yasm libgtk-3-dev clang libxcb-randr0-dev libxdo-dev \
-        libxfixes-dev libxcb-shape0-dev libxcb-xfixes0-dev libasound2-dev libpulse-dev cmake make \
-        libclang-dev ninja-build libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev
-```
-
-### openSUSE Tumbleweed 
-
-```sh
-sudo zypper install gcc-c++ git curl wget nasm yasm gcc gtk3-devel clang libxcb-devel libXfixes-devel cmake alsa-lib-devel gstreamer-devel gstreamer-plugins-base-devel xdotool-devel
-```
-### Fedora 28 (CentOS 8)
-
-```sh
-sudo yum -y install gcc-c++ git curl wget nasm yasm gcc gtk3-devel clang libxcb-devel libxdo-devel libXfixes-devel pulseaudio-libs-devel cmake alsa-lib-devel
-```
-
-### Arch (Manjaro)
-
-```sh
-sudo pacman -Syu --needed unzip git cmake gcc curl wget yasm nasm zip make pkg-config clang gtk3 xdotool libxcb libxfixes alsa-lib pipewire
-```
-
-### Install vcpkg
-
-```sh
-git clone https://github.com/microsoft/vcpkg
-cd vcpkg
-git checkout 2023.04.15
-cd ..
-vcpkg/bootstrap-vcpkg.sh
-export VCPKG_ROOT=$HOME/vcpkg
-vcpkg/vcpkg install libvpx libyuv opus aom
-```
-
-### Fix libvpx (For Fedora)
-
-```sh
-cd vcpkg/buildtrees/libvpx/src
-cd *
-./configure
-sed -i 's/CFLAGS+=-I/CFLAGS+=-fPIC -I/g' Makefile
-sed -i 's/CXXFLAGS+=-I/CXXFLAGS+=-fPIC -I/g' Makefile
-make
-cp libvpx.a $HOME/vcpkg/installed/x64-linux/lib/
-cd
-```
-
-### Build
-
-```sh
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-source $HOME/.cargo/env
-git clone https://github.com/rustdesk/rustdesk
-cd rustdesk
-mkdir -p target/debug
-wget https://raw.githubusercontent.com/c-smile/sciter-sdk/master/bin.lnx/x64/libsciter-gtk.so
-mv libsciter-gtk.so target/debug
-VCPKG_ROOT=$HOME/vcpkg cargo run
-```
-
-### Change Wayland to X11 (Xorg)
-
-RustDesk does not support Wayland. Check [this](https://docs.fedoraproject.org/en-US/quick-docs/configuring-xorg-as-default-gnome-session/) to configuring Xorg as the default GNOME session.
-
-## Wayland support
-
-Wayland does not seem to provide any API for sending keypresses to other windows. Therefore, the RustDesk uses an API from a lower level, namely the `/dev/uinput` device (Linux kernel level).
-
-When Wayland is the controlled side, you have to start in the following way:
+(Windows/Linux)  
+Önce ana bağımlılıkları pip ile kurun:
 ```bash
-# Start uinput service
-$ sudo rustdesk --service
-$ rustdesk
+# Pytorch ve temel bağımlılıkları yükleyin, zaten yüklüyse atlayabilirsiniz
+# Referans: https://pytorch.org/get-started/locally/
+pip install torch torchvision torchaudio
+
+# Eğer Windows işletim sistemi kullanıyorsanız ve Nvidia Ampere mimarisine (RTX30xx) sahipseniz, #21 numaralı işlemin deneyimine göre, pytorch'un doğru cuda sürümünü belirtmeniz
+
+ gerekebilir.
+#pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu117
 ```
-**Notice**: Wayland screen recording uses different interfaces. RustDesk currently only supports org.freedesktop.portal.ScreenCast.
+
+Bağımlılıkları poetry kullanarak kurmak isterseniz:
 ```bash
-$ dbus-send --session --print-reply       \
-  --dest=org.freedesktop.portal.Desktop \
-  /org/freedesktop/portal/desktop       \
-  org.freedesktop.DBus.Properties.Get   \
-  string:org.freedesktop.portal.ScreenCast string:version
-# Not support
-Error org.freedesktop.DBus.Error.InvalidArgs: No such interface “org.freedesktop.portal.ScreenCast”
-# Support
-method return time=1662544486.931020 sender=:1.54 -> destination=:1.139 serial=257 reply_serial=2
-   variant       uint32 4
+# Poetry bağımlılık yönetim aracını yükleyin, zaten yüklüyse atlayabilirsiniz
+# Referans: https://python-poetry.org/docs/#installation
+curl -sSL https://install.python-poetry.org | python3 -
+
+# Poetry ile bağımlılıkları kurun
+poetry install
 ```
 
-## How to build with Docker
+Bağımlılıkları pip kullanarak kurmak isterseniz:
+```bash
+N kartı kullanıyorsanız:
 
-Begin by cloning the repository and building the Docker container:
+pip install -r requirements.txt
 
-```sh
-git clone https://github.com/rustdesk/rustdesk
-cd rustdesk
-docker build -t "rustdesk-builder" .
+A kartı/I kartı kullanıyorsanız:
+pip install -r requirements-dml.txt
+
 ```
 
-Then, each time you need to build the application, run the following command:
-
-```sh
-docker run --rm -it -v $PWD:/home/user/rustdesk -v rustdesk-git-cache:/home/user/.cargo/git -v rustdesk-registry-cache:/home/user/.cargo/registry -e PUID="$(id -u)" -e PGID="$(id -g)" rustdesk-builder
+------
+Mac kullanıcıları `run.sh` dosyasını kullanarak bağımlılıkları kurabilir:
+```bash
+sh ./run.sh
 ```
 
-Note that the first build may take longer before dependencies are cached, subsequent builds will be faster. Additionally, if you need to specify different arguments to the build command, you may do so at the end of the command in the `<OPTIONAL-ARGS>` position. For instance, if you wanted to build an optimized release version, you would run the command above followed by `--release`. The resulting executable will be available in the target folder on your system, and can be run with:
+## Diğer Ön Model Hazırlıkları
+RVC, çıkarım ve eğitim için bazı önceden eğitilmiş modellere ihtiyaç duyar.
 
-```sh
-target/debug/rustdesk
+Bu modelleri [Hugging Face alanımızdan](https://huggingface.co/lj1995/VoiceConversionWebUI/tree/main/) indirebilirsiniz.
+
+Aşağıda, RVC'nin gerektirdiği ön model ve diğer dosyaların adlarını içeren bir liste bulunmaktadır:
+```bash
+hubert_base.pt
+
+./pretrained 
+
+./uvr5_weights
+
+v2 sürümü modelini test etmek isterseniz, ek olarak indirmeniz gerekebilir
+
+./pretrained_v2 
+
+Eğer Windows kullanıyorsanız, muhtemelen bu dosyaya ihtiyacınız olacaktır. Ffmpeg ve ffprobe zaten kuruluysa bu adımı atlayabilirsiniz; Ubuntu/Debian kullanıcıları apt install ffmpeg komutunu kullanarak bu kütüphaneleri kurabilirler, Mac kullanıcıları ise brew install ffmpeg komutunu kullanarak kurabilirler (önceden Brew'ı kurmanız gerekebilir).
+
+./ffmpeg
+
+https://huggingface.co/lj1995/VoiceConversionWebUI/blob/main/ffmpeg.exe
+
+./ffprobe
+
+https://huggingface.co/lj1995/VoiceConversionWebUI/blob/main/ffprobe.exe
+
+Eğer en son RMVPE insan sesi yüksekliği çıkarma algoritmasını kullanmak isterseniz, ses yüksekliği çıkarma modeli parametrelerini indirip RVC ana dizinine koymalısınız.
+
+https://huggingface.co/lj1995/VoiceConversionWebUI/blob/main/rmvpe.pt
+
+    A kartı/I kartı kullanıcıları için dml ortamında kullanmak üzere, aşağıdaki dosyayı indirin
+
+    https://huggingface.co/lj1995/VoiceConversionWebUI/blob/main/rmvpe.onnx
+
+```
+Daha sonra aşağıdaki komutu kullanarak WebUI'yi başlatabilirsiniz:
+```bash
+python infer-web.py
 ```
 
-Or, if you're running a release executable:
+Windows veya macOS kullanıyorsanız, `RVC-beta.7z` dosyasını indirebilir ve çıkarabilirsiniz. Windows kullanıcıları `go-web.bat` dosyasını çalıştırarak WebUI'yi başlatabilirler, macOS kullanıcıları ise `sh ./run.sh` komutunu kullanarak başlatabilirler.
 
-```sh
-target/release/rustdesk
+Reponun içinde `Kolay Kullanım Kılavuzu.doc` adında bir belge de bulunmaktadır.
+
+## Referans Projeler
++ [ContentVec](https://github.com/auspicious3000/contentvec/)
++ [VITS](https://github.com/jaywalnut310/vits)
++ [HIFIGAN](https://github.com/jik876/hifi-gan)
++ [Gradio](https://github.com/gradio-app/gradio)
++ [FFmpeg](https://github.com/FFmpeg/FFmpeg)
++ [Ultimate Vocal Remover](https://github.com/Anjok07/ultimatevocalremovergui)
++ [audio-slicer](https://github.com/openvpi/audio-slicer)
++ [Vocal pitch extraction: RMVPE](https://github.com/Dream-High/RMVPE)
+  + Önceden eğitilmiş model [yxlllc](https://github.com/yxlllc/RMVPE) ve [RVC-Boss](https://github.com/RVC-Boss) tarafından eğitilmiş ve test edilmiştir.
+
+## Katkı Sağlayan Tüm Kişilere Teşekkürler
+<a href="https://github.com/RVC-Project/Retrieval-based-Voice-Conversion-WebUI/graphs/contributors" target="_blank">
+  <img src="https://contrib.rocks/image?repo=RVC-Project/Retrieval-based-Voice-Conversion-WebUI" />
+</a>
 ```
 
-Please ensure that you are running these commands from the root of the RustDesk repository, otherwise the application might not be able to find the required resources. Also note that other cargo subcommands such as `install` or `run` are not currently supported via this method as they would install or run the program inside the container instead of the host.
-
-## File Structure
-
-- **[libs/hbb_common](https://github.com/rustdesk/rustdesk/tree/master/libs/hbb_common)**: video codec, config, tcp/udp wrapper, protobuf, fs functions for file transfer, and some other utility functions
-- **[libs/scrap](https://github.com/rustdesk/rustdesk/tree/master/libs/scrap)**: screen capture
-- **[libs/enigo](https://github.com/rustdesk/rustdesk/tree/master/libs/enigo)**: platform specific keyboard/mouse control
-- **[src/ui](https://github.com/rustdesk/rustdesk/tree/master/src/ui)**: GUI
-- **[src/server](https://github.com/rustdesk/rustdesk/tree/master/src/server)**: audio/clipboard/input/video services, and network connections
-- **[src/client.rs](https://github.com/rustdesk/rustdesk/tree/master/src/client.rs)**: start a peer connection
-- **[src/rendezvous_mediator.rs](https://github.com/rustdesk/rustdesk/tree/master/src/rendezvous_mediator.rs)**: Communicate with [rustdesk-server](https://github.com/rustdesk/rustdesk-server), wait for remote direct (TCP hole punching) or relayed connection
-- **[src/platform](https://github.com/rustdesk/rustdesk/tree/master/src/platform)**: platform specific code
-- **[flutter](https://github.com/rustdesk/rustdesk/tree/master/flutter)**: Flutter code for mobile
-- **[flutter/web/js](https://github.com/rustdesk/rustdesk/tree/master/flutter/web/js)**: JavaScript for Flutter web client
-
-## Snapshots
-
-![image](https://user-images.githubusercontent.com/71636191/113112362-ae4deb80-923b-11eb-957d-ff88daad4f06.png)
-
-![image](https://user-images.githubusercontent.com/71636191/113112619-f705a480-923b-11eb-911d-97e984ef52b6.png)
-
-![image](https://user-images.githubusercontent.com/71636191/113112857-3fbd5d80-923c-11eb-9836-768325faf906.png)
-
-![image](https://user-images.githubusercontent.com/71636191/135385039-38fdbd72-379a-422d-b97f-33df71fb1cec.png)
