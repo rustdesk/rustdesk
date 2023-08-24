@@ -99,6 +99,7 @@ class FfiModel with ChangeNotifier {
   late final SessionID sessionId;
 
   RxBool waitForImageDialogShow = true.obs;
+  Timer? waitForImageTimer;
   RxBool waitForFirstImage = true.obs;
 
   Map<String, bool> get permissions => _permissions;
@@ -159,6 +160,7 @@ class FfiModel with ChangeNotifier {
     _timer?.cancel();
     _timer = null;
     clearPermissions();
+    waitForImageTimer?.cancel();
   }
 
   setConnectionType(String peerId, bool secure, bool direct) {
@@ -511,6 +513,11 @@ class FfiModel with ChangeNotifier {
       tag: '$sessionId-waiting-for-image',
     );
     waitForImageDialogShow.value = true;
+    waitForImageTimer = Timer(Duration(milliseconds: 1500), () {
+      if (waitForFirstImage.isTrue) {
+        bind.sessionInputOsPassword(sessionId: sessionId, value: '');
+      }
+    });
     bind.sessionOnWaitingForImageDialogShow(sessionId: sessionId);
   }
 
@@ -603,6 +610,7 @@ class FfiModel with ChangeNotifier {
       }
     }
 
+    _pi.isSet.value = true;
     stateGlobal.resetLastResolutionGroupValues(peerId);
 
     notifyListeners();
@@ -1817,6 +1825,7 @@ class FFI {
   void onEvent2UIRgba() async {
     if (ffiModel.waitForImageDialogShow.isTrue) {
       ffiModel.waitForImageDialogShow.value = false;
+      ffiModel.waitForImageTimer?.cancel();
       clearWaitingForImage(dialogManager, sessionId);
     }
     if (ffiModel.waitForFirstImage.value == true) {
@@ -1935,7 +1944,7 @@ class Features {
   bool privacyMode = false;
 }
 
-class PeerInfo {
+class PeerInfo with ChangeNotifier {
   String version = '';
   String username = '';
   String hostname = '';
@@ -1946,6 +1955,8 @@ class PeerInfo {
   Features features = Features();
   List<Resolution> resolutions = [];
   Map<String, dynamic> platform_additions = {};
+
+  RxBool isSet = false.obs;
 
   bool get is_wayland => platform_additions['is_wayland'] == true;
   bool get is_headless => platform_additions['headless'] == true;

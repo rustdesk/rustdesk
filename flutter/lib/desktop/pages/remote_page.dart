@@ -228,18 +228,12 @@ class _RemotePageState extends State<RemotePage>
     removeSharedStates(widget.id);
   }
 
-  Widget emptyOverlay() => GestureDetector(
-        behavior: HitTestBehavior.translucent,
-        onTap: () {
-          bind.sessionInputOsPassword(sessionId: sessionId, value: '');
-        },
-        child: BlockableOverlay(
-          /// the Overlay key will be set with _blockableOverlayState in BlockableOverlay
-          /// see override build() in [BlockableOverlay]
-          state: _blockableOverlayState,
-          underlying: Container(
-            color: Colors.transparent,
-          ),
+  Widget emptyOverlay() => BlockableOverlay(
+        /// the Overlay key will be set with _blockableOverlayState in BlockableOverlay
+        /// see override build() in [BlockableOverlay]
+        state: _blockableOverlayState,
+        underlying: Container(
+          color: Colors.transparent,
         ),
       );
 
@@ -273,7 +267,8 @@ class _RemotePageState extends State<RemotePage>
                   inputModel: _ffi.inputModel,
                   child: getBodyForDesktop(context))),
           Obx(
-            () => _ffi.ffiModel.waitForFirstImage.isTrue
+            () => _ffi.ffiModel.pi.isSet.isTrue &&
+                    _ffi.ffiModel.waitForFirstImage.isTrue
                 ? emptyOverlay()
                 : Offstage(),
           ),
@@ -285,6 +280,9 @@ class _RemotePageState extends State<RemotePage>
                 _onEnterOrLeaveImage4Toolbar = func,
             onEnterOrLeaveImageCleaner: () =>
                 _onEnterOrLeaveImage4Toolbar = null,
+          ),
+          Obx(
+            () => _ffi.ffiModel.pi.isSet.isFalse ? emptyOverlay() : Offstage(),
           ),
         ],
       ),

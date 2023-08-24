@@ -20,6 +20,7 @@ import 'package:get/get.dart';
 import 'package:bot_toast/bot_toast.dart';
 
 import '../../common/widgets/dialog.dart';
+import '../../models/model.dart';
 import '../../models/platform_model.dart';
 
 class _MenuTheme {
@@ -266,7 +267,11 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
                     if (e.kind != ui.PointerDeviceKind.mouse) {
                       return;
                     }
-                    if (e.buttons == 2) {
+                    final remotePage = tabController.state.value.tabs
+                        .firstWhere((tab) => tab.key == key)
+                        .page as RemotePage;
+                    if (remotePage.ffi.ffiModel.pi.isSet.isTrue &&
+                        e.buttons == 2) {
                       showRightMenu(
                         (CancelFunc cancelFunc) {
                           return _tabMenuBuilder(key, cancelFunc);
