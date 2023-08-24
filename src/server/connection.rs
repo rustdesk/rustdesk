@@ -1455,17 +1455,21 @@ impl Connection {
                     self.send_login_error("Too many wrong password attempts")
                         .await;
                     Self::post_alarm_audit(
-                        AlarmAuditType::ManyWrongPassword,
+                        AlarmAuditType::ExceedThirtyAttempts,
                         json!({
                                     "ip":self.ip,
+                                    "id":lr.my_id.clone(),
+                                    "name": lr.my_name.clone(),
                         }),
                     );
                 } else if time == failure.0 && failure.1 > 6 {
                     self.send_login_error("Please try 1 minute later").await;
                     Self::post_alarm_audit(
-                        AlarmAuditType::FrequentAttempt,
+                        AlarmAuditType::SixAttemptsWithinOneMinute,
                         json!({
                                     "ip":self.ip,
+                                    "id":lr.my_id.clone(),
+                                    "name": lr.my_name.clone(),
                         }),
                     );
                 } else if !self.validate_password() {
@@ -2531,8 +2535,8 @@ mod privacy_mode {
 
 pub enum AlarmAuditType {
     IpWhitelist = 0,
-    ManyWrongPassword = 1,
-    FrequentAttempt = 2,
+    ExceedThirtyAttempts = 1,
+    SixAttemptsWithinOneMinute = 2,
 }
 
 pub enum FileAuditType {
