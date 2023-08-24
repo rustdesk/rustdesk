@@ -5,8 +5,6 @@ Widget withContextMenu(Widget child, List<ContextMenuButtonItem> items) {
   return _ContextMenuRegion(
     child: child,
     contextMenuBuilder: (BuildContext context, Offset offset) {
-      // The custom context menu will look like the default context menu
-      // on the current platform with a single 'Print' button.
       return AdaptiveTextSelectionToolbar.buttonItems(
         anchors: TextSelectionToolbarAnchors(
           primaryAnchor: offset,
