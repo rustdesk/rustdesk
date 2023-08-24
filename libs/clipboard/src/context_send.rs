@@ -1,34 +1,32 @@
-use crate::cliprdr::*;
-use hbb_common::log;
+use hbb_common::{log, ResultType};
 use std::sync::Mutex;
+
+use crate::CliprdrServiceContext;
 
 const CLIPBOARD_RESPONSE_WAIT_TIMEOUT_SECS: u32 = 30;
 
 lazy_static::lazy_static! {
-    static ref CONTEXT_SEND: ContextSend = ContextSend{addr: Mutex::new(0)};
+    static ref CONTEXT_SEND: ContextSend = ContextSend{addr: Mutex::new(None)};
 }
 
 pub struct ContextSend {
-    addr: Mutex<u64>,
+    addr: Mutex<Option<Box<dyn CliprdrServiceContext>>>,
 }
 
 impl ContextSend {
     #[inline]
     pub fn is_enabled() -> bool {
-        *CONTEXT_SEND.addr.lock().unwrap() != 0
+        CONTEXT_SEND.addr.lock().unwrap().is_some()
     }
 
     pub fn set_is_stopped() {
-        let _res = Self::proc(|c| {
-            c.IsStopped = TRUE;
-            0
-        });
+        let _res = Self::proc(|c| c.set_is_stopped().map_err(|e| e.into()));
     }
 
     pub fn enable(enabled: bool) {
         let mut lock = CONTEXT_SEND.addr.lock().unwrap();
         if enabled {
-            if *lock == 0 {
+            if lock.is_none() {
                 match crate::create_cliprdr_context(
                     true,
                     false,
@@ -36,7 +34,7 @@ impl ContextSend {
                 ) {
                     Ok(context) => {
                         log::info!("clipboard context for file transfer created.");
-                        *lock = Box::into_raw(context) as _;
+                        *lock = Some(context)
                     }
                     Err(err) => {
                         log::error!(
@@ -47,27 +45,20 @@ impl ContextSend {
                 }
             }
         } else {
-            if *lock != 0 {
-                unsafe {
-                    let _ = Box::from_raw(*lock as *mut CliprdrClientContext);
-                }
+            if let Some(_clp) = lock.take() {
+                *lock = None;
                 log::info!("clipboard context for file transfer destroyed.");
-                *lock = 0;
             }
         }
     }
 
-    pub fn proc<F: FnOnce(&mut Box<CliprdrClientContext>) -> u32>(f: F) -> u32 {
-        let lock = CONTEXT_SEND.addr.lock().unwrap();
-        if *lock != 0 {
-            unsafe {
-                let mut context = Box::from_raw(*lock as *mut CliprdrClientContext);
-                let code = f(&mut context);
-                std::mem::forget(context);
-                code
-            }
-        } else {
-            0
+    pub fn proc<F: FnOnce(&mut Box<dyn CliprdrServiceContext>) -> ResultType<()>>(
+        f: F,
+    ) -> ResultType<()> {
+        let mut lock = CONTEXT_SEND.addr.lock().unwrap();
+        match lock.as_mut() {
+            Some(context) => f(context),
+            None => Ok(()),
         }
     }
 }

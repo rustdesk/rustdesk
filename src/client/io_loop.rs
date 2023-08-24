@@ -6,7 +6,7 @@ use std::sync::{
 };
 
 #[cfg(windows)]
-use clipboard::{cliprdr::CliprdrClientContext, empty_clipboard, ContextSend};
+use clipboard::ContextSend;
 use crossbeam_queue::ArrayQueue;
 use hbb_common::config::{PeerConfig, TransferSerde};
 use hbb_common::fs::{
@@ -27,7 +27,7 @@ use hbb_common::tokio::{
     sync::mpsc,
     time::{self, Duration, Instant, Interval},
 };
-use hbb_common::{allow_err, fs, get_time, log, message_proto::*, Stream};
+use hbb_common::{allow_err, fs, get_time, log, message_proto::*, ResultType, Stream};
 use scrap::CodecFormat;
 
 use crate::client::{
@@ -281,9 +281,9 @@ impl<T: InvokeUiSession> Remote<T> {
         #[cfg(windows)]
         {
             let conn_id = self.client_conn_id;
-            ContextSend::proc(|context: &mut Box<CliprdrClientContext>| -> u32 {
-                empty_clipboard(context, conn_id);
-                0
+            let _ = ContextSend::proc(|context| -> ResultType<()> {
+                context.empty_clipboard(conn_id);
+                Ok(())
             });
         }
     }
@@ -1578,8 +1578,10 @@ impl<T: InvokeUiSession> Remote<T> {
                 "Process clipboard message from server peer, stop: {}, is_stopping_allowed: {}, file_transfer_enabled: {}",
                 stop, is_stopping_allowed, file_transfer_enabled);
             if !stop {
-                ContextSend::proc(|context: &mut Box<CliprdrClientContext>| -> u32 {
-                    clipboard::server_clip_file(context, self.client_conn_id, clip)
+                let _ = ContextSend::proc(|context| -> ResultType<()> {
+                    context
+                        .server_clip_file(self.client_conn_id, clip)
+                        .map_err(|e| e.into())
                 });
             }
         }
