@@ -545,13 +545,6 @@ def main():
                     'cp libsciter.dylib target/release/bundle/osx/RustDesk.app/Contents/MacOS/')
                 # https://github.com/sindresorhus/create-dmg
                 system2('/bin/rm -rf *.dmg')
-                plist = "target/release/bundle/osx/RustDesk.app/Contents/Info.plist"
-                txt = open(plist).read()
-                with open(plist, "wt") as fh:
-                    fh.write(txt.replace("</dict>", """
-    <key>LSUIElement</key>
-    <string>1</string>
-    </dict>"""))
                 pa = os.environ.get('P')
                 if pa:
                     system2('''
