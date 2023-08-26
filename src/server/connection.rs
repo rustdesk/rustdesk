@@ -135,6 +135,14 @@ struct Session {
     random_password: String,
 }
 
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+struct StartCmIpcPara {
+    rx_to_cm: mpsc::UnboundedReceiver<ipc::Data>,
+    tx_from_cm: mpsc::UnboundedSender<ipc::Data>,
+    rx_desktop_ready: mpsc::Receiver<()>,
+    tx_cm_stream_ready: mpsc::Sender<()>,
+}
+
 pub struct Connection {
     inner: ConnInner,
     stream: super::Stream,
@@ -193,6 +201,8 @@ pub struct Connection {
     linux_headless_handle: LinuxHeadlessHandle,
     closed: bool,
     delay_response_instant: Instant,
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    start_cm_ipc_para: Option<StartCmIpcPara>,
 }
 
 impl ConnInner {
@@ -324,6 +334,13 @@ impl Connection {
             linux_headless_handle,
             closed: false,
             delay_response_instant: Instant::now(),
+            #[cfg(not(any(target_os = "android", target_os = "ios")))]
+            start_cm_ipc_para: Some(StartCmIpcPara {
+                rx_to_cm,
+                tx_from_cm,
+                rx_desktop_ready,
+                tx_cm_stream_ready,
+            }),
         };
         let addr = hbb_common::try_into_v4(addr);
         if !conn.on_open(addr).await {
@@ -332,14 +349,6 @@ impl Connection {
             sleep(1.).await;
             return;
         }
-        #[cfg(not(any(target_os = "android", target_os = "ios")))]
-        tokio::spawn(async move {
-            if let Err(err) =
-                start_ipc(rx_to_cm, tx_from_cm, rx_desktop_ready, tx_cm_stream_ready).await
-            {
-                log::error!("ipc to connection manager exit: {}", err);
-            }
-        });
         #[cfg(target_os = "android")]
         start_channel(rx_to_cm, tx_from_cm);
         if !conn.keyboard {
@@ -1316,6 +1325,24 @@ impl Connection {
         self.video_ack_required = lr.video_ack_required;
     }
 
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    fn try_start_cm_ipc(&mut self) {
+        if let Some(p) = self.start_cm_ipc_para.take() {
+            tokio::spawn(async move {
+                if let Err(err) = start_ipc(
+                    p.rx_to_cm,
+                    p.tx_from_cm,
+                    p.rx_desktop_ready,
+                    p.tx_cm_stream_ready,
+                )
+                .await
+                {
+                    log::error!("ipc to connection manager exit: {}", err);
+                }
+            });
+        }
+    }
+
     async fn on_message(&mut self, msg: Message) -> bool {
         if let Some(message::Union::LoginRequest(lr)) = msg.union {
             self.handle_login_request_without_validation(&lr).await;
@@ -1378,6 +1405,9 @@ impl Connection {
                     }
                 }
             }
+
+            #[cfg(not(any(target_os = "android", target_os = "ios")))]
+            self.try_start_cm_ipc();
 
             #[cfg(any(
                 feature = "flatpak",
@@ -1543,6 +1573,8 @@ impl Connection {
                             self.from_switch = true;
                             self.try_start_cm(lr.my_id.clone(), lr.my_name.clone(), true);
                             self.send_logon_response().await;
+                            #[cfg(not(any(target_os = "android", target_os = "ios")))]
+                            self.try_start_cm_ipc();
                         }
                     }
                 }
