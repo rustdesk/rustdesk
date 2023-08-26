@@ -37,8 +37,6 @@
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>$(MACOSX_DEPLOYMENT_TARGET)</string>
-	<key>LSUIElement</key>
-	<string>1</string>
 	<key>NSHumanReadableCopyright</key>
 	<string>$(PRODUCT_COPYRIGHT)</string>
 	<key>NSMainNibFile</key>

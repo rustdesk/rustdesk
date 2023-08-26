@@ -146,7 +146,7 @@ async fn connect_and_login(
                                 return Ok(None);
                             }
                             Some(login_response::Union::PeerInfo(pi)) => {
-                                interface.handle_peer_info(pi, false);
+                                interface.handle_peer_info(pi);
                                 break;
                             }
                             _ => {}

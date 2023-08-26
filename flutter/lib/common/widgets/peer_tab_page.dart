@@ -426,7 +426,7 @@ class _PeerTabPageState extends State<PeerTabPage>
   Widget selectionCount(int count) {
     return Align(
       alignment: Alignment.center,
-      child: Text('$count selected'),
+      child: Text('$count ${translate('Selected')}'),
     );
   }
 
@@ -722,7 +722,6 @@ Widget _hoverAction(
   );
   return Obx(
     () => Container(
-        padding: padding,
         margin: EdgeInsets.symmetric(horizontal: 1),
         decoration:
             (hover.value || hoverableWhenfalse?.value == false) ? deco : null,
@@ -730,6 +729,6 @@ Widget _hoverAction(
             onHover: (value) => hover.value = value,
             onTap: onTap,
             onTapDown: onTapDown,
-            child: child)),
+            child: Container(padding: padding, child: child))),
   );
 }

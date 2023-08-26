@@ -22,7 +22,7 @@ env:
   # vcpkg version: 2023.04.15
   # for multiarch gcc compatibility
   VCPKG_COMMIT_ID: "501db0f17ef6df184fcdbfbe0f87cde2313b6ab1"
-  VERSION: "1.2.2"
+  VERSION: "1.2.3"
   NDK_VERSION: "r25c"
   #signing keys env variable checks
   ANDROID_SIGNING_KEY: '${{ secrets.ANDROID_SIGNING_KEY }}'
@@ -766,7 +766,7 @@ jobs:
     if: ${{ inputs.upload-artifact }}
     needs: [generate-bridge-linux, build-vcpkg-deps-linux]
     name: build-rust-lib ${{ matrix.job.target }} (${{ matrix.job.os }}) [${{ matrix.job.extra-build-features }}]
-    runs-on: [self-hosted]
+    runs-on: [self-hosted, Linux, ARM64]
     strategy:
       fail-fast: false
       matrix:
@@ -898,7 +898,7 @@ jobs:
               export DEFAULT_FEAT=linux_headless
             fi
             export CARGO_INCREMENTAL=0
-            cargo build --jobs 1 --lib --features flutter,flutter_texture_render,${{ matrix.job.extra-build-features }},$DEFAULT_FEAT --release
+            cargo build --lib --features flutter,flutter_texture_render,${{ matrix.job.extra-build-features }},$DEFAULT_FEAT --release
 
       - name: Upload Artifacts
         uses: actions/upload-artifact@master
@@ -910,7 +910,7 @@ jobs:
     if: ${{ inputs.upload-artifact }}
     needs: [build-vcpkg-deps-linux]
     name: build-rustdesk(sciter) ${{ matrix.job.target }} (${{ matrix.job.os }}) [${{ matrix.job.extra-build-features }}]
-    runs-on: [self-hosted]
+    runs-on: [self-hosted, Linux, ARM64]
     strategy:
       fail-fast: false
       matrix:
@@ -1015,7 +1015,7 @@ jobs:
             if ${{ matrix.job.enable-headless }}; then
               export DEFAULT_FEAT=linux_headless
             fi
-            cargo build --jobs 1 --features inline,${{ matrix.job.extra-build-features }},$DEFAULT_FEAT --release --bins
+            cargo build --features inline,${{ matrix.job.extra-build-features }},$DEFAULT_FEAT --release --bins
             # package
             mkdir -p ./Release
             mv ./target/release/rustdesk ./Release/rustdesk

@@ -421,15 +421,12 @@ class AddressBookPeersView extends BasePeersView {
     if (selectedTags.isEmpty) {
       return true;
     }
-    if (idents.isEmpty) {
-      return false;
-    }
     for (final tag in selectedTags) {
-      if (!idents.contains(tag)) {
-        return false;
+      if (idents.contains(tag)) {
+        return true;
       }
     }
-    return true;
+    return false;
   }
 }
 

@@ -597,14 +597,6 @@ pub fn session_change_resolution(session_id: SessionID, display: i32, width: i32
     }
 }
 
-pub fn session_ready_to_new_window(session_id: SessionID) {
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    if let Some(session) = SESSIONS.write().unwrap().get_mut(&session_id) {
-        session.restore_flutter_cache();
-        session.refresh_video();
-    }
-}
-
 pub fn session_set_size(_session_id: SessionID, _width: usize, _height: usize) {
     #[cfg(feature = "flutter_texture_render")]
     if let Some(session) = SESSIONS.write().unwrap().get_mut(&_session_id) {
@@ -895,7 +887,7 @@ pub fn main_load_recent_peers_for_ab(filter: String) -> String {
     if !config::APP_DIR.read().unwrap().is_empty() {
         let peers: Vec<HashMap<&str, String>> = PeerConfig::peers(id_filters)
             .drain(..)
-            .map(|(id, _, p)| peer_to_map_ab(id, p))
+            .map(|(id, _, p)| peer_to_map(id, p))
             .collect();
         return serde_json::ser::to_string(&peers).unwrap_or("".to_owned());
     }
@@ -1179,21 +1171,7 @@ pub fn main_load_ab() -> String {
 }
 
 pub fn session_send_pointer(session_id: SessionID, msg: String) {
-    if let Ok(m) = serde_json::from_str::<HashMap<String, serde_json::Value>>(&msg) {
-        let alt = m.get("alt").is_some();
-        let ctrl = m.get("ctrl").is_some();
-        let shift = m.get("shift").is_some();
-        let command = m.get("command").is_some();
-        if let Some(touch_event) = m.get("touch") {
-            if let Some(scale) = touch_event.get("scale") {
-                if let Some(session) = SESSIONS.read().unwrap().get(&session_id) {
-                    if let Some(scale) = scale.as_i64() {
-                        session.send_touch_scale(scale as _, alt, ctrl, shift, command);
-                    }
-                }
-            }
-        }
-    }
+    super::flutter::session_send_pointer(session_id, msg);
 }
 
 pub fn session_send_mouse(session_id: SessionID, msg: String) {
