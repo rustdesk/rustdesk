@@ -36,6 +36,7 @@ class ServerModel with ChangeNotifier {
   String _verificationMethod = "";
   String _temporaryPasswordLength = "";
   String _approveMode = "";
+  int _zeroClientLengthCounter = 0;
 
   late String _emptyIdShow;
   late final IDTextEditingController _serverId;
@@ -120,6 +121,17 @@ class ServerModel with ChangeNotifier {
     _emptyIdShow = translate("Generating ...");
     _serverId = IDTextEditingController(text: _emptyIdShow);
 
+    // initital _hideCm at startup
+    final verificationMethod =
+        bind.mainGetOptionSync(key: "verification-method");
+    final approveMode = bind.mainGetOptionSync(key: 'approve-mode');
+    _hideCm = option2bool(
+        'allow-hide-cm', bind.mainGetOptionSync(key: 'allow-hide-cm'));
+    if (!(approveMode == 'password' &&
+        verificationMethod == kUsePermanentPassword)) {
+      _hideCm = false;
+    }
+
     timerCallback() async {
       final connectionStatus =
           jsonDecode(await bind.mainGetConnectStatus()) as Map<String, dynamic>;
@@ -134,6 +146,17 @@ class ServerModel with ChangeNotifier {
         if (res != null) {
           debugPrint("clients not match!");
           updateClientState(res);
+        } else {
+          if (_clients.isEmpty) {
+            hideCmWindow();
+            if (_zeroClientLengthCounter++ == 12) {
+              // 6 second
+              windowManager.close();
+            }
+          } else {
+            _zeroClientLengthCounter = 0;
+            if (!_hideCm) showCmWindow();
+          }
         }
       }
 
@@ -422,6 +445,7 @@ class ServerModel with ChangeNotifier {
       return;
     }
 
+    final oldClientLenght = _clients.length;
     _clients.clear();
     tabController.state.value.tabs.clear();
 
@@ -433,6 +457,16 @@ class ServerModel with ChangeNotifier {
       } catch (e) {
         debugPrint("Failed to decode clientJson '$clientJson', error $e");
       }
+    }
+    if (desktopType == DesktopType.cm) {
+      if (_clients.isEmpty) {
+        hideCmWindow();
+      } else if (!_hideCm) {
+        showCmWindow();
+      }
+    }
+    if (_clients.length != oldClientLenght) {
+      notifyListeners();
     }
   }
 
@@ -460,6 +494,9 @@ class ServerModel with ChangeNotifier {
       if (index_disconnected >= 0) {
         _clients.removeAt(index_disconnected);
         tabController.remove(index_disconnected);
+      }
+      if (desktopType == DesktopType.cm && !_hideCm) {
+        showCmWindow();
       }
       scrollToBottom();
       notifyListeners();
@@ -580,6 +617,9 @@ class ServerModel with ChangeNotifier {
         }
         parent.target?.dialogManager.dismissByTag(getLoginDialogTag(id));
         parent.target?.invokeMethod("cancel_notification", id);
+      }
+      if (desktopType == DesktopType.cm && _clients.isEmpty) {
+        hideCmWindow();
       }
       notifyListeners();
     } catch (e) {

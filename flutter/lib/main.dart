@@ -268,10 +268,12 @@ hideCmWindow({bool isStartup = false}) async {
       await windowManager.hide();
     });
   } else {
-    await windowManager.setOpacity(0);
-    bind.mainHideDocker();
-    await windowManager.minimize();
-    await windowManager.hide();
+    if (await windowManager.getOpacity() != 0) {
+      await windowManager.setOpacity(0);
+      bind.mainHideDocker();
+      await windowManager.minimize();
+      await windowManager.hide();
+    }
   }
 }
 
