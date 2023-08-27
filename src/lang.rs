@@ -69,7 +69,7 @@ pub const LANGS: &[(&str, &str)] = &[
     ("sl", "Slovenščina"),
     ("ro", "Română"),
     ("lt", "Lietuvių"),
-    ("ar": "العربية"),
+    ("ar", "العربية"),
 ];
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
