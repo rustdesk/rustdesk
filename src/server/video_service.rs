@@ -997,8 +997,18 @@ fn no_displays(displays: &Vec<Display>) -> bool {
     } else if display_len == 1 {
         let display = &displays[0];
         let dummy_display_side_max_size = 800;
-        display.width() <= dummy_display_side_max_size
-            && display.height() <= dummy_display_side_max_size
+        if display.width() > dummy_display_side_max_size
+            || display.height() > dummy_display_side_max_size
+        {
+            return false;
+        }
+        let any_real = crate::platform::resolutions(&display.name())
+            .iter()
+            .any(|r| {
+                (r.height as usize) > dummy_display_side_max_size
+                    || (r.width as usize) > dummy_display_side_max_size
+            });
+        !any_real
     } else {
         false
     }
