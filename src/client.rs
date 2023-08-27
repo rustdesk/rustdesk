@@ -58,7 +58,7 @@ use scrap::{
 };
 
 use crate::{
-    common::input::{MOUSE_BUTTON_LEFT, MOUSE_TYPE_DOWN, MOUSE_TYPE_UP},
+    common::input::{MOUSE_BUTTON_LEFT, MOUSE_BUTTON_RIGHT, MOUSE_TYPE_DOWN, MOUSE_TYPE_UP},
     is_keyboard_mode_supported,
 };
 
@@ -2060,20 +2060,25 @@ pub fn send_pointer_device_event(
 /// # Arguments
 ///
 /// * `interface` - The interface for sending data.
-/// * `send_click` - Whether to send a click event.
-fn activate_os(interface: &impl Interface, send_click: bool) {
+/// * `send_left_click` - Whether to send a click event.
+fn activate_os(interface: &impl Interface, send_left_click: bool) {
     let left_down = MOUSE_BUTTON_LEFT << 3 | MOUSE_TYPE_DOWN;
     let left_up = MOUSE_BUTTON_LEFT << 3 | MOUSE_TYPE_UP;
+    let right_down = MOUSE_BUTTON_RIGHT << 3 | MOUSE_TYPE_DOWN;
+    let right_up = MOUSE_BUTTON_RIGHT << 3 | MOUSE_TYPE_UP;
     send_mouse(left_up, 0, 0, false, false, false, false, interface);
     std::thread::sleep(Duration::from_millis(50));
     send_mouse(0, 0, 0, false, false, false, false, interface);
     std::thread::sleep(Duration::from_millis(50));
     send_mouse(0, 3, 3, false, false, false, false, interface);
-    if send_click {
-        std::thread::sleep(Duration::from_millis(50));
-        send_mouse(left_down, 0, 0, false, false, false, false, interface);
-        send_mouse(left_up, 0, 0, false, false, false, false, interface);
-    }
+    let (click_down, click_up) = if send_left_click {
+        (left_down, left_up)
+    } else {
+        (right_down, right_up)
+    };
+    std::thread::sleep(Duration::from_millis(50));
+    send_mouse(click_down, 0, 0, false, false, false, false, interface);
+    send_mouse(click_up, 0, 0, false, false, false, false, interface);
     /*
     let mut key_event = KeyEvent::new();
     // do not use Esc, which has problem with Linux
