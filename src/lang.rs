@@ -33,7 +33,7 @@ mod tw;
 mod ua;
 mod vn;
 mod lt;
-mod ar；
+mod ar;
 
 pub const LANGS: &[(&str, &str)] = &[
     ("en", "English"),
