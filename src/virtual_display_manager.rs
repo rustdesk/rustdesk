@@ -1,3 +1,4 @@
+use crate::platform::windows::cert::{get_thumbprints_of_issuers, CERT_ISSUER_1};
 use hbb_common::{allow_err, bail, lazy_static, log, ResultType};
 use std::{
     collections::{HashMap, HashSet},
@@ -35,7 +36,11 @@ impl VirtualDisplayManager {
         Ok(())
     }
 
-    fn plug_in_monitor(index: u32, retries: u32, modes: &[virtual_display::MonitorMode]) -> ResultType<()> {
+    fn plug_in_monitor(
+        index: u32,
+        retries: u32,
+        modes: &[virtual_display::MonitorMode],
+    ) -> ResultType<()> {
         if let Err(e) = virtual_display::plug_in_monitor(index, retries) {
             bail!("Plug in monitor failed {}", e);
         }
@@ -47,11 +52,25 @@ impl VirtualDisplayManager {
 }
 
 #[inline]
+fn check_if_cert_is_installed() -> ResultType<()> {
+    if get_thumbprints_of_issuers(&[CERT_ISSUER_1])
+        .map(|cs| cs.len())
+        .unwrap_or(0)
+        > 0
+    {
+        bail!("Cert is not installed");
+    }
+    Ok(())
+}
+
+#[inline]
 pub fn prepare_driver() -> ResultType<()> {
+    check_if_cert_is_installed()?;
     VirtualDisplayManager::prepare_driver()
 }
 
 pub fn plug_in_headless(retries: u32) -> ResultType<()> {
+    check_if_cert_is_installed()?;
     let mut manager = VIRTUAL_DISPLAY_MANAGER.lock().unwrap();
     VirtualDisplayManager::prepare_driver()?;
     let modes = [virtual_display::MonitorMode {
@@ -67,6 +86,9 @@ pub fn plug_in_headless(retries: u32) -> ResultType<()> {
 }
 
 pub fn plug_out_headless() -> bool {
+    if check_if_cert_is_installed().is_err() {
+        return false;
+    }
     let mut manager = VIRTUAL_DISPLAY_MANAGER.lock().unwrap();
     if let Some((index, _)) = manager.headless_index_name.take() {
         if let Err(e) = virtual_display::plug_out_monitor(index) {
@@ -98,7 +120,11 @@ fn get_new_device_name(device_names: &HashSet<String>) -> String {
     "".to_string()
 }
 
-pub fn plug_in_peer_request(modes: Vec<Vec<virtual_display::MonitorMode>>, retries: u32) -> ResultType<Vec<u32>> {
+pub fn plug_in_peer_request(
+    modes: Vec<Vec<virtual_display::MonitorMode>>,
+    retries: u32,
+) -> ResultType<Vec<u32>> {
+    check_if_cert_is_installed()?;
     let mut manager = VIRTUAL_DISPLAY_MANAGER.lock().unwrap();
     VirtualDisplayManager::prepare_driver()?;
 
@@ -125,6 +151,7 @@ pub fn plug_in_peer_request(modes: Vec<Vec<virtual_display::MonitorMode>>, retri
 }
 
 pub fn plug_out_peer_request(modes: &[u32]) -> ResultType<()> {
+    check_if_cert_is_installed()?;
     let mut manager = VIRTUAL_DISPLAY_MANAGER.lock().unwrap();
     for idx in modes.iter() {
         if manager.peer_index_name.contains_key(idx) {
@@ -151,6 +178,9 @@ pub fn is_virtual_display(name: &str) -> bool {
 }
 
 fn change_resolution(index: u32, w: u32, h: u32) -> bool {
+    if check_if_cert_is_installed().is_err() {
+        return false;
+    }
     let modes = [virtual_display::MonitorMode {
         width: w,
         height: h,

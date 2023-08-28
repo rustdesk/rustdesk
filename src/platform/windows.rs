@@ -1857,7 +1857,7 @@ pub fn uninstall_cert() -> ResultType<()> {
     cert::uninstall_cert()
 }
 
-mod cert {
+pub mod cert {
     use hbb_common::{allow_err, bail, log, ResultType};
     use std::{path::Path, str::from_utf8};
     use winapi::{
@@ -1887,7 +1887,7 @@ mod cert {
     const THUMBPRINT_ALG: ALG_ID = CALG_SHA1;
     const THUMBPRINT_LEN: DWORD = 20;
 
-    const CERT_ISSUER_1: &str = "CN=\"WDKTestCert admin,133225435702113567\"\0";
+    pub const CERT_ISSUER_1: &str = "CN=\"WDKTestCert admin,133225435702113567\"\0";
 
     #[inline]
     unsafe fn compute_thumbprint(pb_encoded: *const BYTE, cb_encoded: DWORD) -> (Vec<u8>, String) {
@@ -1994,9 +1994,7 @@ mod cert {
         Ok(())
     }
 
-    fn get_thumbprints_to_rm() -> ResultType<Vec<String>> {
-        let issuers_to_rm = [CERT_ISSUER_1];
-
+    pub fn get_thumbprints_of_issuers(issuers: &[&str]) -> ResultType<Vec<String>> {
         let mut thumbprints = Vec::new();
         let mut buf = [0u8; 1024];
 
@@ -2020,7 +2018,7 @@ mod cert {
                 if cb_size != 1 {
                     let mut add_ctx = false;
                     if let Ok(issuer) = from_utf8(&buf[..cb_size as _]) {
-                        for iss in issuers_to_rm.iter() {
+                        for iss in issuers.iter() {
                             if issuer == *iss {
                                 add_ctx = true;
                                 let (_, thumbprint) = compute_thumbprint(
@@ -2046,6 +2044,11 @@ mod cert {
         }
 
         Ok(thumbprints)
+    }
+
+    #[inline]
+    fn get_thumbprints_to_rm() -> ResultType<Vec<String>> {
+        get_thumbprints_of_issuers(&[CERT_ISSUER_1])
     }
 
     pub fn uninstall_cert() -> ResultType<()> {
