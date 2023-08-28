@@ -46,6 +46,11 @@ impl VirtualDisplayManager {
     }
 }
 
+#[inline]
+pub fn prepare_driver() -> ResultType<()> {
+    VirtualDisplayManager::prepare_driver()
+}
+
 pub fn plug_in_headless(retries: u32) -> ResultType<()> {
     let mut manager = VIRTUAL_DISPLAY_MANAGER.lock().unwrap();
     VirtualDisplayManager::prepare_driver()?;

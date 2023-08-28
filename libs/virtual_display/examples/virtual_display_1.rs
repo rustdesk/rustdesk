@@ -10,8 +10,8 @@ fn prompt_input() -> u8 {
     println!("       3. 'u'       3. uninstall driver");
     println!("       4. 'c'       4. create device");
     println!("       5. 'd'       5. destroy device");
-    println!("       6. '1'       6. plug in monitor 0,1,2");
-    println!("       7. '4'       7. plug out monitor 0,1,2");
+    println!("       6. 'a'       6. plug in monitor");
+    println!("       7. 'b'       7. plug out monitor");
 
     io::stdin()
         .bytes()
@@ -42,6 +42,7 @@ fn plug_out(monitor_index: u32) {
 
 #[cfg(windows)]
 fn main() {
+    let mut idx = 0;
     loop {
         let chr = prompt_input();
         match chr as char {
@@ -87,12 +88,19 @@ fn main() {
                 virtual_display::close_device();
                 println!("Close device done");
             }
-            '1' => plug_in(0),
-            '2' => plug_in(1),
-            '3' => plug_in(2),
-            '4' => plug_out(0),
-            '5' => plug_out(1),
-            '6' => plug_out(2),
+            'a' => {
+                plug_in(idx);
+                idx += 1;
+            }
+            'b' => {
+                if idx == 0 {
+                    println!("No virtual monitors\n");
+                    break;
+                } else {
+                    idx -= 1;
+                    plug_out(idx);
+                }
+            }
             _ => {}
         }
     }

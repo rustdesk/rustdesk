@@ -380,6 +380,8 @@ pub async fn start_server(is_server: bool) {
         if crate::platform::current_is_wayland() {
             allow_err!(input_service::setup_uinput(0, 1920, 0, 1080).await);
         }
+        #[cfg(all(windows, feature = "virtual_display_driver"))]
+        let _r = crate::virtual_display_manager::prepare_driver();
         #[cfg(any(target_os = "macos", target_os = "linux"))]
         tokio::spawn(async { sync_and_watch_config_dir().await });
         #[cfg(target_os = "windows")]

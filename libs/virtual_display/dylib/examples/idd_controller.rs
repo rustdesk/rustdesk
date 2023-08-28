@@ -16,8 +16,8 @@ fn prompt_input() -> u8 {
     println!("       3. 'u'               3. uninstall driver");
     println!("       4. 'c'               4. create device");
     println!("       5. 'd'               5. destroy device");
-    println!("       6. '1','2','3'       6. plug in monitor 0,1,2");
-    println!("       7. '4','5','6'       7. plug out monitor 0,1,2");
+    println!("       6. 'a'               6. plug in monitor");
+    println!("       7. 'b'               7. plug out monitor");
 
     io::stdin()
         .bytes()
@@ -79,6 +79,7 @@ unsafe fn plug_out(index: idd::UINT) {
 fn main() {
     #[cfg(windows)]
     {
+        let mut idx = 0;
         let abs_path = match Path::new(DRIVER_INSTALL_PATH).canonicalize() {
             Ok(p) => p,
             Err(e) => {
@@ -172,12 +173,19 @@ fn main() {
                         h_sw_device = invalid_device;
                         println!("Close device done");
                     }
-                    '1' => plug_in(0, 0),
-                    '2' => plug_in(1, 0),
-                    '3' => plug_in(2, 0),
-                    '4' => plug_out(0),
-                    '5' => plug_out(1),
-                    '6' => plug_out(2),
+                    'a' => {
+                        plug_in(idx, 0);
+                        idx += 1;
+                    },
+                    'b' => {
+                        if idx == 0 {
+                            println!("No virtual monitors\n");
+                            break;
+                        } else {
+                            idx -= 1;
+                            plug_out(idx);
+                        }
+                    },
                     _ => {}
                 }
             }
