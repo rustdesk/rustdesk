@@ -1016,16 +1016,16 @@ fn no_displays(displays: &Vec<Display>) -> bool {
 
 #[cfg(all(windows, feature = "virtual_display_driver"))]
 fn try_get_displays() -> ResultType<Vec<Display>> {
-    let mut displays = Display::all()?;
-    if no_displays(&displays) {
-        log::debug!("no displays, create virtual display");
-        if let Err(e) = virtual_display_manager::plug_in_headless() {
-            log::error!("plug in headless failed {}", e);
-        } else {
-            displays = Display::all()?;
-        }
-    }
-    Ok(displays)
+    // let mut displays = Display::all()?;
+    // if no_displays(&displays) {
+    //     log::debug!("no displays, create virtual display");
+    //     if let Err(e) = virtual_display_manager::plug_in_headless() {
+    //         log::error!("plug in headless failed {}", e);
+    //     } else {
+    //         displays = Display::all()?;
+    //     }
+    // }
+    Ok( Display::all()?)
 }
 
 pub(super) fn get_current_display_2(mut all: Vec<Display>) -> ResultType<(usize, usize, Display)> {
