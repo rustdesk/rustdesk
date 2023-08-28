@@ -9,37 +9,41 @@
 
 #include "./Public.h"
 
-const GUID GUID_DEVINTERFACE_IDD_DRIVER_DEVICE =
-    {0x781EF630, 0x72B2, 0x11d2, {0xB8, 0x52, 0x00, 0xC0, 0x4E, 0xAF, 0x52, 0x72}};
+
+const GUID GUID_DEVINTERFACE_IDD_DRIVER_DEVICE = \
+{ 0x781EF630, 0x72B2, 0x11d2, { 0xB8, 0x52,  0x00,  0xC0,  0x4E,  0xAF,  0x52,  0x72 } };
 //{781EF630-72B2-11d2-B852-00C04EAF5272}
 
 BOOL g_printMsg = TRUE;
 char g_lastMsg[1024];
-const char *g_msgHeader = "RustDeskIdd: ";
+const char* g_msgHeader = "RustDeskIdd: ";
 
 VOID WINAPI
 CreationCallback(
     _In_ HSWDEVICE hSwDevice,
     _In_ HRESULT hrCreateResult,
     _In_opt_ PVOID pContext,
-    _In_opt_ PCWSTR pszDeviceInstanceId);
+    _In_opt_ PCWSTR pszDeviceInstanceId
+);
 // https://github.com/microsoft/Windows-driver-samples/blob/9f03207ae1e8df83325f067de84494ae55ab5e97/general/DCHU/osrfx2_DCHU_base/osrfx2_DCHU_testapp/testapp.c#L88
 // Not a good way for this device, I don't not why. I'm not familiar with dirver.
 BOOLEAN GetDevicePath(
     _In_ LPCGUID InterfaceGuid,
     _Out_writes_(BufLen) PTCHAR DevicePath,
-    _In_ size_t BufLen);
+    _In_ size_t BufLen
+);
 // https://github.com/microsoft/Windows-driver-samples/blob/9f03207ae1e8df83325f067de84494ae55ab5e97/usb/umdf_fx2/exe/testapp.c#L90
 // Works good to check whether device is created before.
 BOOLEAN GetDevicePath2(
     _In_ LPCGUID InterfaceGuid,
     _Out_writes_(BufLen) PTCHAR DevicePath,
-    _In_ size_t BufLen);
+    _In_ size_t BufLen
+);
 
 HANDLE DeviceOpenHandle();
 VOID DeviceCloseHandle(HANDLE handle);
 
-void SetLastMsg(const char *format, ...)
+void SetLastMsg(const char* format, ...)
 {
     memset(g_lastMsg, 0, sizeof(g_lastMsg));
     memcpy_s(g_lastMsg, sizeof(g_lastMsg), g_msgHeader, strlen(g_msgHeader));
@@ -55,7 +59,7 @@ void SetLastMsg(const char *format, ...)
     va_end(args);
 }
 
-const char *GetLastMsg()
+const char* GetLastMsg()
 {
     return g_lastMsg;
 }
@@ -66,13 +70,14 @@ BOOL InstallUpdate(LPCWSTR fullInfPath, PBOOL rebootRequired)
 
     // UpdateDriverForPlugAndPlayDevicesW may return FALSE while driver was successfully installed...
     if (FALSE == UpdateDriverForPlugAndPlayDevicesW(
-                     NULL,
-                     L"RustDeskIddDriver", // match hardware id in the inf file
-                     fullInfPath,
-                     INSTALLFLAG_FORCE
-                     // | INSTALLFLAG_NONINTERACTIVE  // INSTALLFLAG_NONINTERACTIVE may cause error 0xe0000247
-                     ,
-                     rebootRequired))
+        NULL,
+        L"RustDeskIddDriver",    // match hardware id in the inf file
+        fullInfPath,
+        INSTALLFLAG_FORCE
+            // | INSTALLFLAG_NONINTERACTIVE  // INSTALLFLAG_NONINTERACTIVE may cause error 0xe0000247
+        ,
+        rebootRequired
+    ))
     {
         DWORD error = GetLastError();
         if (error != 0)
@@ -94,10 +99,11 @@ BOOL Uninstall(LPCWSTR fullInfPath, PBOOL rebootRequired)
     SetLastMsg("Success");
 
     if (FALSE == DiUninstallDriverW(
-                     NULL,
-                     fullInfPath,
-                     0,
-                     rebootRequired))
+        NULL,
+        fullInfPath,
+        0,
+        rebootRequired
+    ))
     {
         DWORD error = GetLastError();
         if (error != 0)
@@ -120,10 +126,10 @@ BOOL IsDeviceCreated(PBOOL created)
 
     HDEVINFO hardwareDeviceInfo = SetupDiGetClassDevs(
         &GUID_DEVINTERFACE_IDD_DRIVER_DEVICE,
-        NULL,                     // Define no enumerator (global)
-        NULL,                     // Define no
-        (DIGCF_PRESENT |          // Only Devices present
-         DIGCF_DEVICEINTERFACE)); // Function class devices.
+        NULL, // Define no enumerator (global)
+        NULL, // Define no
+        (DIGCF_PRESENT | // Only Devices present
+            DIGCF_DEVICEINTERFACE)); // Function class devices.
     if (INVALID_HANDLE_VALUE == hardwareDeviceInfo)
     {
         SetLastMsg("Idd device: Failed IsDeviceCreated SetupDiGetClassDevs, last error 0x%x\n", GetLastError());
@@ -134,17 +140,17 @@ BOOL IsDeviceCreated(PBOOL created)
         return FALSE;
     }
 
-    SP_DEVICE_INTERFACE_DATA deviceInterfaceData;
+    SP_DEVICE_INTERFACE_DATA            deviceInterfaceData;
     deviceInterfaceData.cbSize = sizeof(SP_DEVICE_INTERFACE_DATA);
 
     BOOL ret = FALSE;
     do
     {
         if (TRUE == SetupDiEnumDeviceInterfaces(hardwareDeviceInfo,
-                                                0, // No care about specific PDOs
-                                                &GUID_DEVINTERFACE_IDD_DRIVER_DEVICE,
-                                                0, //
-                                                &deviceInterfaceData))
+            0, // No care about specific PDOs
+            &GUID_DEVINTERFACE_IDD_DRIVER_DEVICE,
+            0, //
+            &deviceInterfaceData))
         {
             *created = TRUE;
             ret = TRUE;
@@ -169,7 +175,7 @@ BOOL IsDeviceCreated(PBOOL created)
 
     } while (0);
 
-    (VOID) SetupDiDestroyDeviceInfoList(hardwareDeviceInfo);
+    (VOID)SetupDiDestroyDeviceInfoList(hardwareDeviceInfo);
     return ret;
 }
 
@@ -212,7 +218,7 @@ BOOL DeviceCreate(PHSWDEVICE hSwDevice)
         return FALSE;
     }
 
-    SW_DEVICE_CREATE_INFO createInfo = {0};
+    SW_DEVICE_CREATE_INFO createInfo = { 0 };
     PCWSTR description = L"RustDesk Idd Driver";
 
     // These match the Pnp id's in the inf file so OS will load the driver when the device is created
@@ -227,18 +233,18 @@ BOOL DeviceCreate(PHSWDEVICE hSwDevice)
     createInfo.pszDeviceDescription = description;
 
     createInfo.CapabilityFlags = SWDeviceCapabilitiesRemovable |
-                                 SWDeviceCapabilitiesSilentInstall |
-                                 SWDeviceCapabilitiesDriverRequired;
+        SWDeviceCapabilitiesSilentInstall |
+        SWDeviceCapabilitiesDriverRequired;
 
     // Create the device
     HRESULT hr = SwDeviceCreate(L"RustDeskIddDriver",
-                                L"HTREE\\ROOT\\0",
-                                &createInfo,
-                                0,
-                                NULL,
-                                CreationCallback,
-                                &hEvent,
-                                hSwDevice);
+        L"HTREE\\ROOT\\0",
+        &createInfo,
+        0,
+        NULL,
+        CreationCallback,
+        &hEvent,
+        hSwDevice);
     if (FAILED(hr))
     {
         SetLastMsg("Failed DeviceCreate SwDeviceCreate 0x%lx\n", hr);
@@ -331,14 +337,14 @@ BOOL MonitorPlugIn(UINT index, UINT edid, INT retries)
         for (; retries >= 0; --retries)
         {
             if (TRUE == DeviceIoControl(
-                            hDevice,
-                            IOCTL_CHANGER_IDD_PLUG_IN,
-                            &plugIn,           // Ptr to InBuffer
-                            sizeof(CtlPlugIn), // Length of InBuffer
-                            NULL,              // Ptr to OutBuffer
-                            0,                 // Length of OutBuffer
-                            &junk,             // BytesReturned
-                            0))                // Ptr to Overlapped structure
+                hDevice,
+                IOCTL_CHANGER_IDD_PLUG_IN,
+                &plugIn,                    // Ptr to InBuffer
+                sizeof(CtlPlugIn),          // Length of InBuffer
+                NULL,                       // Ptr to OutBuffer
+                0,                          // Length of OutBuffer
+                &junk,                      // BytesReturned
+                0))                         // Ptr to Overlapped structure
             {
                 ret = TRUE;
                 break;
@@ -371,14 +377,14 @@ BOOL MonitorPlugOut(UINT index)
     CtlPlugOut plugOut;
     plugOut.ConnectorIndex = index;
     if (!DeviceIoControl(
-            hDevice,
-            IOCTL_CHANGER_IDD_PLUG_OUT,
-            &plugOut,           // Ptr to InBuffer
-            sizeof(CtlPlugOut), // Length of InBuffer
-            NULL,               // Ptr to OutBuffer
-            0,                  // Length of OutBuffer
-            &junk,              // BytesReturned
-            0))                 // Ptr to Overlapped structure
+        hDevice,
+        IOCTL_CHANGER_IDD_PLUG_OUT,
+        &plugOut,               // Ptr to InBuffer
+        sizeof(CtlPlugOut),     // Length of InBuffer
+        NULL,                   // Ptr to OutBuffer
+        0,                      // Length of OutBuffer
+        &junk,                  // BytesReturned
+        0))                     // Ptr to Overlapped structure
     {
         DWORD error = GetLastError();
         SetLastMsg("Failed MonitorPlugOut DeviceIoControl 0x%lx\n", error);
@@ -430,14 +436,14 @@ BOOL MonitorModesUpdate(UINT index, UINT modeCount, PMonitorMode modes)
         pMonitorModes->Modes[i].Sync = modes[i].sync;
     }
     if (!DeviceIoControl(
-            hDevice,
-            IOCTL_CHANGER_IDD_UPDATE_MONITOR_MODE,
-            pMonitorModes, // Ptr to InBuffer
-            buflen,        // Length of InBuffer
-            NULL,          // Ptr to OutBuffer
-            0,             // Length of OutBuffer
-            &junk,         // BytesReturned
-            0))            // Ptr to Overlapped structure
+        hDevice,
+        IOCTL_CHANGER_IDD_UPDATE_MONITOR_MODE,
+        pMonitorModes,               // Ptr to InBuffer
+        buflen,                     // Length of InBuffer
+        NULL,                       // Ptr to OutBuffer
+        0,                          // Length of OutBuffer
+        &junk,                      // BytesReturned
+        0))                         // Ptr to Overlapped structure
     {
         DWORD error = GetLastError();
         SetLastMsg("Failed MonitorModesUpdate DeviceIoControl 0x%lx\n", error);
@@ -462,9 +468,10 @@ CreationCallback(
     _In_ HSWDEVICE hSwDevice,
     _In_ HRESULT hrCreateResult,
     _In_opt_ PVOID pContext,
-    _In_opt_ PCWSTR pszDeviceInstanceId)
+    _In_opt_ PCWSTR pszDeviceInstanceId
+)
 {
-    HANDLE hEvent = *(HANDLE *)pContext;
+    HANDLE hEvent = *(HANDLE*)pContext;
 
     SetEvent(hEvent);
     UNREFERENCED_PARAMETER(hSwDevice);
@@ -476,7 +483,8 @@ BOOLEAN
 GetDevicePath(
     _In_ LPCGUID InterfaceGuid,
     _Out_writes_(BufLen) PTCHAR DevicePath,
-    _In_ size_t BufLen)
+    _In_ size_t BufLen
+)
 {
     CONFIGRET cr = CR_SUCCESS;
     PTSTR deviceInterfaceList = NULL;
@@ -550,14 +558,12 @@ GetDevicePath(
 
     nextInterface = deviceInterfaceList + _tcslen(deviceInterfaceList) + 1;
 #ifdef UNICODE
-    if (*nextInterface != UNICODE_NULL)
-    {
+    if (*nextInterface != UNICODE_NULL) {
 #else
-    if (*nextInterface != ANSI_NULL)
-    {
+    if (*nextInterface != ANSI_NULL) {
 #endif
         printf("Warning: More than one device interface instance found. \n"
-               "Selecting first matching device.\n\n");
+            "Selecting first matching device.\n\n");
     }
 
     printf("begin copy device path\n");
@@ -589,24 +595,25 @@ clean0:
 BOOLEAN GetDevicePath2(
     _In_ LPCGUID InterfaceGuid,
     _Out_writes_(BufLen) PTCHAR DevicePath,
-    _In_ size_t BufLen)
+    _In_ size_t BufLen
+)
 {
-    HANDLE hDevice = INVALID_HANDLE_VALUE;
-    PSP_DEVICE_INTERFACE_DETAIL_DATA deviceInterfaceDetailData = NULL;
-    ULONG predictedLength = 0;
-    ULONG requiredLength = 0;
-    ULONG bytes;
-    HDEVINFO hardwareDeviceInfo;
-    SP_DEVICE_INTERFACE_DATA deviceInterfaceData;
-    BOOLEAN status = FALSE;
-    HRESULT hr;
+    HANDLE                              hDevice = INVALID_HANDLE_VALUE;
+    PSP_DEVICE_INTERFACE_DETAIL_DATA    deviceInterfaceDetailData = NULL;
+    ULONG                               predictedLength = 0;
+    ULONG                               requiredLength = 0;
+    ULONG                               bytes;
+    HDEVINFO                            hardwareDeviceInfo;
+    SP_DEVICE_INTERFACE_DATA            deviceInterfaceData;
+    BOOLEAN                             status = FALSE;
+    HRESULT                             hr;
 
     hardwareDeviceInfo = SetupDiGetClassDevs(
         InterfaceGuid,
-        NULL,                     // Define no enumerator (global)
-        NULL,                     // Define no
-        (DIGCF_PRESENT |          // Only Devices present
-         DIGCF_DEVICEINTERFACE)); // Function class devices.
+        NULL, // Define no enumerator (global)
+        NULL, // Define no
+        (DIGCF_PRESENT | // Only Devices present
+            DIGCF_DEVICEINTERFACE)); // Function class devices.
     if (INVALID_HANDLE_VALUE == hardwareDeviceInfo)
     {
         SetLastMsg("Idd device: GetDevicePath2 SetupDiGetClassDevs failed, last error 0x%x\n", GetLastError());
@@ -620,10 +627,10 @@ BOOLEAN GetDevicePath2(
     deviceInterfaceData.cbSize = sizeof(SP_DEVICE_INTERFACE_DATA);
 
     if (!SetupDiEnumDeviceInterfaces(hardwareDeviceInfo,
-                                     0, // No care about specific PDOs
-                                     InterfaceGuid,
-                                     0, //
-                                     &deviceInterfaceData))
+        0, // No care about specific PDOs
+        InterfaceGuid,
+        0, //
+        &deviceInterfaceData))
     {
         SetLastMsg("Idd device: GetDevicePath2 SetupDiEnumDeviceInterfaces failed, last error 0x%x\n", GetLastError());
         if (g_printMsg)
@@ -641,9 +648,9 @@ BOOLEAN GetDevicePath2(
         hardwareDeviceInfo,
         &deviceInterfaceData,
         NULL, // probing so no output buffer yet
-        0,    // probing so output buffer length of zero
+        0, // probing so output buffer length of zero
         &requiredLength,
-        NULL); // not interested in the specific dev-node
+        NULL);//not interested in the specific dev-node
 
     if (ERROR_INSUFFICIENT_BUFFER != GetLastError())
     {
@@ -659,7 +666,8 @@ BOOLEAN GetDevicePath2(
     deviceInterfaceDetailData = (PSP_DEVICE_INTERFACE_DETAIL_DATA)HeapAlloc(
         GetProcessHeap(),
         HEAP_ZERO_MEMORY,
-        predictedLength);
+        predictedLength
+    );
 
     if (deviceInterfaceDetailData)
     {
@@ -677,12 +685,12 @@ BOOLEAN GetDevicePath2(
     }
 
     if (!SetupDiGetDeviceInterfaceDetail(
-            hardwareDeviceInfo,
-            &deviceInterfaceData,
-            deviceInterfaceDetailData,
-            predictedLength,
-            &requiredLength,
-            NULL))
+        hardwareDeviceInfo,
+        &deviceInterfaceData,
+        deviceInterfaceDetailData,
+        predictedLength,
+        &requiredLength,
+        NULL))
     {
         SetLastMsg("Idd device: Failed GetDevicePath2 SetupDiGetDeviceInterfaceDetail, last error 0x%x\n", GetLastError());
         if (g_printMsg)
@@ -709,9 +717,9 @@ BOOLEAN GetDevicePath2(
     }
 
 Clean1:
-    (VOID) HeapFree(GetProcessHeap(), 0, deviceInterfaceDetailData);
+    (VOID)HeapFree(GetProcessHeap(), 0, deviceInterfaceDetailData);
 Clean0:
-    (VOID) SetupDiDestroyDeviceInfoList(hardwareDeviceInfo);
+    (VOID)SetupDiDestroyDeviceInfoList(hardwareDeviceInfo);
     return status;
 }
 
@@ -721,14 +729,14 @@ HANDLE DeviceOpenHandle()
     SetLastMsg("Success");
 
     // const int maxDevPathLen = 256;
-    TCHAR devicePath[256] = {0};
+    TCHAR devicePath[256] = { 0 };
     HANDLE hDevice = INVALID_HANDLE_VALUE;
     do
     {
         if (FALSE == GetDevicePath2(
-                         &GUID_DEVINTERFACE_IDD_DRIVER_DEVICE,
-                         devicePath,
-                         sizeof(devicePath) / sizeof(devicePath[0])))
+            &GUID_DEVINTERFACE_IDD_DRIVER_DEVICE,
+            devicePath,
+            sizeof(devicePath) / sizeof(devicePath[0])))
         {
             break;
         }
@@ -748,10 +756,11 @@ HANDLE DeviceOpenHandle()
             GENERIC_READ | GENERIC_WRITE,
             // FILE_SHARE_READ | FILE_SHARE_WRITE,
             0,
-            NULL,          // no SECURITY_ATTRIBUTES structure
+            NULL, // no SECURITY_ATTRIBUTES structure
             OPEN_EXISTING, // No special create flags
-            0,             // No special attributes
-            NULL);
+            0, // No special attributes
+            NULL
+        );
         if (hDevice == INVALID_HANDLE_VALUE || hDevice == NULL)
         {
             DWORD error = GetLastError();
