@@ -35,8 +35,8 @@ impl VirtualDisplayManager {
         Ok(())
     }
 
-    fn plug_in_monitor(index: u32, modes: &[virtual_display::MonitorMode]) -> ResultType<()> {
-        if let Err(e) = virtual_display::plug_in_monitor(index) {
+    fn plug_in_monitor(index: u32, retries: u32, modes: &[virtual_display::MonitorMode]) -> ResultType<()> {
+        if let Err(e) = virtual_display::plug_in_monitor(index, retries) {
             bail!("Plug in monitor failed {}", e);
         }
         if let Err(e) = virtual_display::update_monitor_modes(index, &modes) {
@@ -46,7 +46,7 @@ impl VirtualDisplayManager {
     }
 }
 
-pub fn plug_in_headless() -> ResultType<()> {
+pub fn plug_in_headless(retries: u32) -> ResultType<()> {
     let mut manager = VIRTUAL_DISPLAY_MANAGER.lock().unwrap();
     VirtualDisplayManager::prepare_driver()?;
     let modes = [virtual_display::MonitorMode {
@@ -55,7 +55,7 @@ pub fn plug_in_headless() -> ResultType<()> {
         sync: 60,
     }];
     let device_names = windows::get_device_names();
-    VirtualDisplayManager::plug_in_monitor(VIRTUAL_DISPLAY_INDEX_FOR_HEADLESS, &modes)?;
+    VirtualDisplayManager::plug_in_monitor(VIRTUAL_DISPLAY_INDEX_FOR_HEADLESS, retries, &modes)?;
     let device_name = get_new_device_name(&device_names);
     manager.headless_index_name = Some((VIRTUAL_DISPLAY_INDEX_FOR_HEADLESS, device_name));
     Ok(())
@@ -93,7 +93,7 @@ fn get_new_device_name(device_names: &HashSet<String>) -> String {
     "".to_string()
 }
 
-pub fn plug_in_peer_request(modes: Vec<Vec<virtual_display::MonitorMode>>) -> ResultType<Vec<u32>> {
+pub fn plug_in_peer_request(modes: Vec<Vec<virtual_display::MonitorMode>>, retries: u32) -> ResultType<Vec<u32>> {
     let mut manager = VIRTUAL_DISPLAY_MANAGER.lock().unwrap();
     VirtualDisplayManager::prepare_driver()?;
 
@@ -102,7 +102,7 @@ pub fn plug_in_peer_request(modes: Vec<Vec<virtual_display::MonitorMode>>) -> Re
         for idx in VIRTUAL_DISPLAY_START_FOR_PEER..VIRTUAL_DISPLAY_MAX_COUNT {
             if !manager.peer_index_name.contains_key(&idx) {
                 let device_names = windows::get_device_names();
-                match VirtualDisplayManager::plug_in_monitor(idx, m) {
+                match VirtualDisplayManager::plug_in_monitor(idx, retries, m) {
                     Ok(_) => {
                         let device_name = get_new_device_name(&device_names);
                         manager.peer_index_name.insert(idx, device_name);

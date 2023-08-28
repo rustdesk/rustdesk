@@ -212,7 +212,7 @@ fn check_display_changed(
         }
     }
 
-    let displays = match try_get_displays() {
+    let displays = match Display::all() {
         Ok(d) => d,
         _ => return false,
     };
@@ -435,7 +435,7 @@ fn get_capturer(use_yuv: bool, portable_service_running: bool) -> ResultType<Cap
 }
 
 fn check_displays_new() -> Option<Vec<Display>> {
-    let displays = try_get_displays().ok()?;
+    let displays = Display::all().ok()?;
     let last_sync_displays = &*LAST_SYNC_DISPLAYS.read().unwrap();
     if displays.len() != last_sync_displays.len() {
         // No need to check if the resolutions are changed by third process.
@@ -468,6 +468,9 @@ pub fn try_plug_out_virtual_display() {
 fn run(sp: GenericService) -> ResultType<()> {
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     let _wake_lock = get_wake_lock();
+
+    #[cfg(all(windows, feature = "virtual_display_driver"))]
+    let _r = try_plug_in_virtual_display(0);
 
     // ensure_inited() is needed because clear() may be called.
     #[cfg(target_os = "linux")]
@@ -937,7 +940,7 @@ pub async fn get_displays() -> ResultType<(usize, Vec<DisplayInfo>)> {
             return super::wayland::get_displays().await;
         }
     }
-    Ok(get_displays_2(&try_get_displays()?))
+    Ok(get_displays_2(&Display::all()?))
 }
 
 pub async fn switch_display(i: i32) {
@@ -967,7 +970,7 @@ fn get_primary() -> usize {
         }
     }
 
-    if let Ok(all) = try_get_displays() {
+    if let Ok(all) = Display::all() {
         for (i, d) in all.iter().enumerate() {
             if d.is_primary() {
                 return i;
@@ -980,12 +983,6 @@ fn get_primary() -> usize {
 #[inline]
 pub async fn switch_to_primary() {
     switch_display(get_primary() as _).await;
-}
-
-#[inline]
-#[cfg(not(all(windows, feature = "virtual_display_driver")))]
-fn try_get_displays() -> ResultType<Vec<Display>> {
-    Ok(Display::all()?)
 }
 
 #[inline]
@@ -1014,18 +1011,17 @@ fn no_displays(displays: &Vec<Display>) -> bool {
     }
 }
 
+// If there is no display, create virtual display.
+// Every retry interval 1 second.
 #[cfg(all(windows, feature = "virtual_display_driver"))]
-fn try_get_displays() -> ResultType<Vec<Display>> {
-    // let mut displays = Display::all()?;
-    // if no_displays(&displays) {
-    //     log::debug!("no displays, create virtual display");
-    //     if let Err(e) = virtual_display_manager::plug_in_headless() {
-    //         log::error!("plug in headless failed {}", e);
-    //     } else {
-    //         displays = Display::all()?;
-    //     }
-    // }
-    Ok( Display::all()?)
+pub fn try_plug_in_virtual_display(retries: u32) -> ResultType<()> {
+    if no_displays(&Display::all()?) {
+        log::debug!("no displays, create virtual display");
+        if let Err(e) = virtual_display_manager::plug_in_headless(retries) {
+            log::error!("plug in headless failed {}", e);
+        }
+    }
+    Ok(())
 }
 
 pub(super) fn get_current_display_2(mut all: Vec<Display>) -> ResultType<(usize, usize, Display)> {
@@ -1049,7 +1045,7 @@ pub(super) fn get_current_display_2(mut all: Vec<Display>) -> ResultType<(usize,
 
 #[inline]
 pub fn get_current_display() -> ResultType<(usize, usize, Display)> {
-    get_current_display_2(try_get_displays()?)
+    get_current_display_2(Display::all()?)
 }
 
 #[cfg(windows)]

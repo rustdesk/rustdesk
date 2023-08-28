@@ -159,7 +159,7 @@ pub fn uninstall_driver(reboot_required: &mut bool) -> ResultType<()> {
 }
 
 #[cfg(windows)]
-pub fn plug_in_monitor(monitor_index: u32) -> ResultType<()> {
+pub fn plug_in_monitor(monitor_index: u32, retries: u32) -> ResultType<()> {
     let mut lock = MONITOR_INDICES.lock().unwrap();
     if lock.contains(&monitor_index) {
         return Ok(());
@@ -169,20 +169,21 @@ pub fn plug_in_monitor(monitor_index: u32) -> ResultType<()> {
         .unwrap()
         .plug_in_monitor
         .ok_or(anyhow::Error::msg("plug_in_monitor method not found"))?;
-    f(monitor_index, 0, 20)?;
+    f(monitor_index, 0, retries)?;
     lock.insert(monitor_index);
     Ok(())
 }
 
 #[cfg(windows)]
 pub fn plug_out_monitor(monitor_index: u32) -> ResultType<()> {
+    let mut lock = MONITOR_INDICES.lock().unwrap();
     let f = LIB_WRAPPER
         .lock()
         .unwrap()
         .plug_out_monitor
         .ok_or(anyhow::Error::msg("plug_out_monitor method not found"))?;
     f(monitor_index)?;
-    MONITOR_INDICES.lock().unwrap().remove(&monitor_index);
+    lock.remove(&monitor_index);
     Ok(())
 }
 

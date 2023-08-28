@@ -1064,6 +1064,8 @@ impl Connection {
         // which may cause the mismatch of current display and the current display name.
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
         video_service::try_reset_current_display();
+        #[cfg(all(windows, feature = "virtual_display_driver"))]
+        let _r = video_service::try_plug_in_virtual_display(10);
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
         {
             pi.resolutions = Some(SupportedResolutions {

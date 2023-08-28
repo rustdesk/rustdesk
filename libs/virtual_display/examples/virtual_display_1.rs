@@ -23,7 +23,7 @@ fn prompt_input() -> u8 {
 #[cfg(windows)]
 fn plug_in(monitor_index: u32) {
     println!("Plug in monitor begin");
-    if let Err(e) = virtual_display::plug_in_monitor(monitor_index as _) {
+    if let Err(e) = virtual_display::plug_in_monitor(monitor_index as _, 10) {
         println!("{}", e);
     } else {
         println!("Plug in monitor done");
