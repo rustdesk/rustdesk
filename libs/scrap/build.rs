@@ -1,7 +1,8 @@
 use std::{
     env, fs,
     path::{Path, PathBuf},
-    println,
+    process::Command,
+    println
 };
 
 #[cfg(all(target_os = "linux", feature = "linux-pkg-config"))]
@@ -70,6 +71,71 @@ fn link_vcpkg(mut path: PathBuf, name: &str) -> PathBuf {
     include
 }
 
+#[cfg(not(all(target_os = "linux", feature = "linux-pkg-config")))]
+fn is_macports_installed() -> bool {
+    Command::new("which")
+        .arg("port")
+        .stdout(std::process::Stdio::null())
+        .status()
+        .map(|status| status.success())
+        .unwrap_or(false)
+}
+
+#[cfg(not(all(target_os = "linux", feature = "linux-pkg-config")))]
+fn is_homebrew_installed() -> bool {
+    Command::new("which")
+        .arg("brew")
+        .stdout(std::process::Stdio::null())
+        .status()
+        .map(|status| status.success())
+        .unwrap_or(false)
+}
+
+#[cfg(not(all(target_os = "linux", feature = "linux-pkg-config")))]
+fn link_package_m1(name: &str, include_path: PathBuf, lib_path: PathBuf) -> PathBuf {
+    let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap();
+    let target_arch = std::env::var("CARGO_CFG_TARGET_ARCH").unwrap();
+    if target_os != "macos" || target_arch != "aarch64" {
+        panic!("Couldn't find VCPKG_ROOT, also can't fallback to MacPorts because it's only for macos aarch64.");
+    }
+    let entries = if let Ok(dir) = std::fs::read_dir(include_path.join(name)) {
+        dir
+    } else {
+        panic!("Could not find package in {}. Make sure your MacPorts and package {} are all installed.", include_path.to_str().unwrap(), &name);
+    };
+    let include_directory = entries
+        .into_iter()
+        .filter(|x| x.is_ok())
+        .map(|x| x.unwrap().path())
+        .filter(|x| x.is_file())
+        .collect::<Vec<_>>();
+    if include_directory.is_empty() {
+        panic!(
+            "There's no headers in {} in {}",
+            name, include_path.to_str().unwrap()
+        );
+    }
+    // Add the library path.
+    println!(
+        "{}",
+        format!(
+            "cargo:rustc-link-search={}",
+            lib_path.to_str().unwrap()
+        )
+    );
+    // Add link to library.
+    println!(
+        "{}",
+        format!(
+            "cargo:rustc-link-lib=static={}",
+            name.trim_start_matches("lib")
+        )
+    );
+    // Add the include path.
+    println!("{}", format!("cargo:include={}", include_path.to_str().unwrap()));
+    include_path
+}
+
 /// Link homebrew package(for Mac M1).
 fn link_homebrew_m1(name: &str) -> PathBuf {
     let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap();
@@ -99,20 +165,20 @@ fn link_homebrew_m1(name: &str) -> PathBuf {
         );
     }
     path.push(directories.pop().unwrap());
+        // Add the library path.
+    println!(
+        "{}",
+        format!(
+            "cargo:rustc-link-search={}",
+            path.join("lib").to_str().unwrap()
+        )
+    );
     // Link the library.
     println!(
         "{}",
         format!(
             "cargo:rustc-link-lib=static={}",
             name.trim_start_matches("lib")
-        )
-    );
-    // Add the library path.
-    println!(
-        "{}",
-        format!(
-            "cargo:rustc-link-search={}",
-            path.join("lib").to_str().unwrap()
         )
     );
     // Add the include path.
@@ -133,9 +199,15 @@ fn find_package(name: &str) -> Vec<PathBuf> {
         link_pkg_config(name)
     } else if let Ok(vcpkg_root) = std::env::var("VCPKG_ROOT") {
         vec![link_vcpkg(vcpkg_root.into(), name)]
+    } else if is_macports_installed() {
+        // Try using MacPorts
+        return vec![link_package_m1(name, PathBuf::from("/opt/local/include"), PathBuf::from("/opt/local/lib"))]
+    } else if is_homebrew_installed() {
+        // Try using Homebrew
+        return vec![link_homebrew_m1(name)]
     } else {
-        // Try using homebrew
-        vec![link_homebrew_m1(name)]
+        // Local installation
+        return vec![link_package_m1(name, PathBuf::from("/usr/local/include"), PathBuf::from("/usr/local/lib"))]
     }
 }
 
@@ -195,7 +267,11 @@ fn main() {
     env::set_var("CARGO_CFG_TARGET_FEATURE", "crt-static");
 
     find_package("libyuv");
-    gen_vcpkg_package("libvpx", "vpx_ffi.h", "vpx_ffi.rs", "^[vV].*");
+    if !is_homebrew_installed() {
+        gen_vcpkg_package("vpx", "vpx_ffi.h", "vpx_ffi.rs", "^[vV].*");
+    } else {
+        gen_vcpkg_package("libvpx", "vpx_ffi.h", "vpx_ffi.rs", "^[vV].*");
+    }
     gen_vcpkg_package("aom", "aom_ffi.h", "aom_ffi.rs", "^(aom|AOM|OBU|AV1).*");
 
     // there is problem with cfg(target_os) in build.rs, so use our workaround
