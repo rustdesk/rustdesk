@@ -1716,6 +1716,14 @@ class FFI {
     elevationModel = ElevationModel(WeakReference(this));
   }
 
+  /// Mobile reuse FFI
+  void mobileReset() {
+    ffiModel.waitForFirstImage.value = true;
+    ffiModel.waitForImageDialogShow.value = true;
+    ffiModel.waitForImageTimer?.cancel();
+    ffiModel.waitForImageTimer = null;
+  }
+
   /// Start with the given [id]. Only transfer file if [isFileTransfer], only port forward if [isPortForward].
   void start(String id,
       {bool isFileTransfer = false,
@@ -1727,6 +1735,7 @@ class FFI {
       int? tabWindowId}) {
     closed = false;
     auditNote = '';
+    if (isMobile) mobileReset();
     assert(!(isFileTransfer && isPortForward), 'more than one connect type');
     if (isFileTransfer) {
       connType = ConnType.fileTransfer;
