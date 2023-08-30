@@ -398,7 +398,7 @@ class _AppState extends State<App> {
           themeMode: MyTheme.currentThemeMode(),
           home: isDesktop
               ? const DesktopTabPage()
-              : !isAndroid
+              : isWeb
                   ? WebHomePage()
                   : HomePage(),
           localizationsDelegates: const [

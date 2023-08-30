@@ -28,7 +28,7 @@ class ConnectionPage extends StatefulWidget implements PageShape {
   final title = translate("Connection");
 
   @override
-  final appBarActions = !isAndroid ? <Widget>[const WebMenu()] : <Widget>[];
+  final appBarActions = isWeb ? <Widget>[const WebMenu()] : <Widget>[];
 
   @override
   State<ConnectionPage> createState() => _ConnectionPageState();

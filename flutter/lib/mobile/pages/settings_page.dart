@@ -424,41 +424,45 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
             },
           )
         ]),
-        SettingsSection(
-          title: Text(translate("Recording")),
-          tiles: [
-            SettingsTile.switchTile(
-              title: Text(translate('Automatically record incoming sessions')),
-              leading: Icon(Icons.videocam),
-              description: FutureBuilder(
-                  builder: (ctx, data) => Offstage(
-                      offstage: !data.hasData,
-                      child: Text("${translate("Directory")}: ${data.data}")),
-                  future: bind.mainDefaultVideoSaveDirectory()),
-              initialValue: _autoRecordIncomingSession,
-              onToggle: (v) async {
-                await bind.mainSetOption(
-                    key: "allow-auto-record-incoming",
-                    value: bool2option("allow-auto-record-incoming", v));
-                final newValue = option2bool(
-                    'allow-auto-record-incoming',
-                    await bind.mainGetOption(
-                        key: 'allow-auto-record-incoming'));
-                setState(() {
-                  _autoRecordIncomingSession = newValue;
-                });
-              },
-            ),
-          ],
-        ),
-        SettingsSection(
-          title: Text(translate("Share Screen")),
-          tiles: shareScreenTiles,
-        ),
-        SettingsSection(
-          title: Text(translate("Enhancements")),
-          tiles: enhancementsTiles,
-        ),
+        if (isAndroid)
+          SettingsSection(
+            title: Text(translate("Recording")),
+            tiles: [
+              SettingsTile.switchTile(
+                title:
+                    Text(translate('Automatically record incoming sessions')),
+                leading: Icon(Icons.videocam),
+                description: FutureBuilder(
+                    builder: (ctx, data) => Offstage(
+                        offstage: !data.hasData,
+                        child: Text("${translate("Directory")}: ${data.data}")),
+                    future: bind.mainDefaultVideoSaveDirectory()),
+                initialValue: _autoRecordIncomingSession,
+                onToggle: (v) async {
+                  await bind.mainSetOption(
+                      key: "allow-auto-record-incoming",
+                      value: bool2option("allow-auto-record-incoming", v));
+                  final newValue = option2bool(
+                      'allow-auto-record-incoming',
+                      await bind.mainGetOption(
+                          key: 'allow-auto-record-incoming'));
+                  setState(() {
+                    _autoRecordIncomingSession = newValue;
+                  });
+                },
+              ),
+            ],
+          ),
+        if (isAndroid)
+          SettingsSection(
+            title: Text(translate("Share Screen")),
+            tiles: shareScreenTiles,
+          ),
+        if (isAndroid)
+          SettingsSection(
+            title: Text(translate("Enhancements")),
+            tiles: enhancementsTiles,
+          ),
         SettingsSection(
           title: Text(translate("About")),
           tiles: [
