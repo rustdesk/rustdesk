@@ -211,25 +211,6 @@ class WebMenu extends StatefulWidget {
 }
 
 class _WebMenuState extends State<WebMenu> {
-  String url = "";
-
-  @override
-  void initState() {
-    super.initState();
-    () async {
-      final urlRes = await bind.mainGetApiServer();
-      var update = false;
-      if (urlRes != url) {
-        url = urlRes;
-        update = true;
-      }
-
-      if (update) {
-        setState(() {});
-      }
-    }();
-  }
-
   @override
   Widget build(BuildContext context) {
     Provider.of<FfiModel>(context);
@@ -251,16 +232,14 @@ class _WebMenuState extends State<WebMenu> {
                   child: Text(translate('ID/Relay Server')),
                 )
               ] +
-              (url.contains('admin.rustdesk.com')
-                  ? <PopupMenuItem<String>>[]
-                  : [
-                      PopupMenuItem(
-                        value: "login",
-                        child: Text(gFFI.userModel.userName.value.isEmpty
-                            ? translate("Login")
-                            : '${translate("Logout")} (${gFFI.userModel.userName.value})'),
-                      )
-                    ]) +
+              [
+                PopupMenuItem(
+                  value: "login",
+                  child: Text(gFFI.userModel.userName.value.isEmpty
+                      ? translate("Login")
+                      : '${translate("Logout")} (${gFFI.userModel.userName.value})'),
+                )
+              ] +
               [
                 PopupMenuItem(
                   value: "about",
