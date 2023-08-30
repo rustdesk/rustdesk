@@ -812,6 +812,8 @@ void showRequestElevationDialog(
       } else {
         bind.sessionElevateDirect(sessionId: sessionId);
       }
+      close();
+      showWaitUacDialog(sessionId, dialogManager, "wait-uac");
     }
 
     return CustomAlertDialog(
