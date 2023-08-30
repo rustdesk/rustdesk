@@ -31,7 +31,7 @@ class ServerModel with ChangeNotifier {
   bool _audioOk = false;
   bool _fileOk = false;
   bool _showElevation = false;
-  bool _hideCm = false;
+  bool hideCm = false;
   int _connectStatus = 0; // Rendezvous Server status
   String _verificationMethod = "";
   String _temporaryPasswordLength = "";
@@ -60,8 +60,6 @@ class ServerModel with ChangeNotifier {
   bool get fileOk => _fileOk;
 
   bool get showElevation => _showElevation;
-
-  bool get hideCm => _hideCm;
 
   int get connectStatus => _connectStatus;
 
@@ -121,17 +119,6 @@ class ServerModel with ChangeNotifier {
     _emptyIdShow = translate("Generating ...");
     _serverId = IDTextEditingController(text: _emptyIdShow);
 
-    // initital _hideCm at startup
-    final verificationMethod =
-        bind.mainGetOptionSync(key: "verification-method");
-    final approveMode = bind.mainGetOptionSync(key: 'approve-mode');
-    _hideCm = option2bool(
-        'allow-hide-cm', bind.mainGetOptionSync(key: 'allow-hide-cm'));
-    if (!(approveMode == 'password' &&
-        verificationMethod == kUsePermanentPassword)) {
-      _hideCm = false;
-    }
-
     timerCallback() async {
       final connectionStatus =
           jsonDecode(await bind.mainGetConnectStatus()) as Map<String, dynamic>;
@@ -155,7 +142,7 @@ class ServerModel with ChangeNotifier {
             }
           } else {
             _zeroClientLengthCounter = 0;
-            if (!_hideCm) showCmWindow();
+            if (!hideCm) showCmWindow();
           }
         }
       }
@@ -210,12 +197,6 @@ class ServerModel with ChangeNotifier {
     final temporaryPasswordLength =
         await bind.mainGetOption(key: "temporary-password-length");
     final approveMode = await bind.mainGetOption(key: 'approve-mode');
-    var hideCm = option2bool(
-        'allow-hide-cm', await bind.mainGetOption(key: 'allow-hide-cm'));
-    if (!(approveMode == 'password' &&
-        verificationMethod == kUsePermanentPassword)) {
-      hideCm = false;
-    }
     if (_approveMode != approveMode) {
       _approveMode = approveMode;
       update = true;
@@ -245,17 +226,6 @@ class ServerModel with ChangeNotifier {
         bind.mainUpdateTemporaryPassword();
       }
       _temporaryPasswordLength = temporaryPasswordLength;
-      update = true;
-    }
-    if (_hideCm != hideCm) {
-      _hideCm = hideCm;
-      if (desktopType == DesktopType.cm) {
-        if (hideCm) {
-          await hideCmWindow();
-        } else {
-          await showCmWindow();
-        }
-      }
       update = true;
     }
     if (update) {
@@ -461,7 +431,7 @@ class ServerModel with ChangeNotifier {
     if (desktopType == DesktopType.cm) {
       if (_clients.isEmpty) {
         hideCmWindow();
-      } else if (!_hideCm) {
+      } else if (!hideCm) {
         showCmWindow();
       }
     }
@@ -495,7 +465,7 @@ class ServerModel with ChangeNotifier {
         _clients.removeAt(index_disconnected);
         tabController.remove(index_disconnected);
       }
-      if (desktopType == DesktopType.cm && !_hideCm) {
+      if (desktopType == DesktopType.cm && !hideCm) {
         showCmWindow();
       }
       scrollToBottom();
