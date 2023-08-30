@@ -223,6 +223,7 @@ void runConnectionManagerScreen(bool hide) async {
     const DesktopServerPage(),
     MyTheme.currentThemeMode(),
   );
+  gFFI.serverModel.hideCm = hide;
   if (hide) {
     await hideCmWindow(isStartup: true);
   } else {

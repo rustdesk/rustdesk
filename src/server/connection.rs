@@ -2393,10 +2393,9 @@ async fn start_ipc(
         stream = Some(s);
     } else {
         let mut args = vec!["--cm"];
-        if password::hide_cm() {
+        if crate::hbbs_http::sync::is_pro() && password::hide_cm() {
             args.push("--hide");
-        };
-
+        }
         #[allow(unused_mut)]
         #[cfg(target_os = "linux")]
         let mut user = None;
