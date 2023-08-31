@@ -90,6 +90,18 @@ jobs:
         run: |
           cd C:\
           git clone https://github.com/Kingtous/rustdesk_thirdpary_lib --depth=1 
+
+      - name: change year in Copyright, 2022 to 2023
+        continue-on-error: true
+        shell: bash
+        run: |
+          sed -i 's|Copyright (C) 2022 com.carriez.|Copyright (C) 2023 com.carriez.|' ./flutter/windows/runner/Runner.rc;
+
+      - name: print Runner.rc
+        continue-on-error: true
+        shell: bash
+        run: |
+          cat ./flutter/windows/runner/Runner.rc
           
       - name: Build rustdesk
         env:
