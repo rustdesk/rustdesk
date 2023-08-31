@@ -1179,6 +1179,10 @@ impl PeerConfig {
         if !mp.contains_key(key) {
             mp.insert(key.to_owned(), UserDefaultConfig::read().get(key));
         }
+        key = "touch-mode";
+        if !mp.contains_key(key) {
+            mp.insert(key.to_owned(), UserDefaultConfig::read().get(key));
+        }
     }
 }
 
