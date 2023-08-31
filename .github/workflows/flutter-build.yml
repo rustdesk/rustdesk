@@ -107,6 +107,18 @@ jobs:
           folder: './flutter/build/windows/runner/Release/'
           recursive: true
 
+      - name: Add version information for self-extract
+        continue-on-error: true
+        shell: bash
+        run: |
+          sed -i 's|embed_resource::compile("icon.rc", embed_resource::NONE);|println!("cargo:rustc-link-lib=dylib:+verbatim=./flutter/build/windows/runner/rustdesk.dir/Release/Runner.res");|' ./libs/portable/build.rs;
+
+      - name: print build.rs
+        continue-on-error: true
+        shell: bash
+        run: |
+          cat ./libs/portable/build.rs
+
       - name: Build self-extracted executable
         shell: bash
         if: env.UPLOAD_ARTIFACT == 'true'
