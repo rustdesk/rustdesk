@@ -383,7 +383,7 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
         SettingsSection(
           title: Text(translate('Account')),
           tiles: [
-            SettingsTile.navigation(
+            SettingsTile(
               title: Obx(() => Text(gFFI.userModel.userName.value.isEmpty
                   ? translate('Login')
                   : '${translate('Logout')} (${gFFI.userModel.userName.value})')),
@@ -399,19 +399,19 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
           ],
         ),
         SettingsSection(title: Text(translate("Settings")), tiles: [
-          SettingsTile.navigation(
+          SettingsTile(
               title: Text(translate('ID/Relay Server')),
               leading: Icon(Icons.cloud),
               onPressed: (context) {
                 showServerSettings(gFFI.dialogManager);
               }),
-          SettingsTile.navigation(
+          SettingsTile(
               title: Text(translate('Language')),
               leading: Icon(Icons.translate),
               onPressed: (context) {
                 showLanguageSettings(gFFI.dialogManager);
               }),
-          SettingsTile.navigation(
+          SettingsTile(
             title: Text(translate(
                 Theme.of(context).brightness == Brightness.light
                     ? 'Dark Theme'
@@ -466,7 +466,7 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
         SettingsSection(
           title: Text(translate("About")),
           tiles: [
-            SettingsTile.navigation(
+            SettingsTile(
                 onPressed: (context) async {
                   if (await canLaunchUrl(Uri.parse(url))) {
                     await launchUrl(Uri.parse(url));
@@ -481,21 +481,22 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
                       )),
                 ),
                 leading: Icon(Icons.info)),
-            SettingsTile.navigation(
+            SettingsTile(
                 title: Text(translate("Build Date")),
                 value: Padding(
                   padding: EdgeInsets.symmetric(vertical: 8),
                   child: Text(_buildDate),
                 ),
                 leading: Icon(Icons.query_builder)),
-            SettingsTile.navigation(
-                onPressed: (context) => onCopyFingerprint(_fingerprint),
-                title: Text(translate("Fingerprint")),
-                value: Padding(
-                  padding: EdgeInsets.symmetric(vertical: 8),
-                  child: Text(_fingerprint),
-                ),
-                leading: Icon(Icons.fingerprint)),
+            if (isAndroid)
+              SettingsTile(
+                  onPressed: (context) => onCopyFingerprint(_fingerprint),
+                  title: Text(translate("Fingerprint")),
+                  value: Padding(
+                    padding: EdgeInsets.symmetric(vertical: 8),
+                    child: Text(_fingerprint),
+                  ),
+                  leading: Icon(Icons.fingerprint)),
           ],
         ),
       ],
