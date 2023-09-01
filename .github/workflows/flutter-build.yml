@@ -96,6 +96,14 @@ jobs:
           VCPKG_ROOT: C:\rustdesk_thirdpary_lib\vcpkg
         run: python3 .\build.py --portable --hwcodec --flutter --feature IddDriver
 
+      - name: find Runner.res
+        shell: bash
+        run: |
+          runner_res=$(find . Runner.res)
+          if [ runner_res != '' ]; then
+            cp $runner.res ./Runner.res
+          fi
+
       - name: Sign rustdesk files
         uses: GermanBluefox/code-sign-action@v7
         if: env.UPLOAD_ARTIFACT == 'true'
