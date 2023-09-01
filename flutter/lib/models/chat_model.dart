@@ -63,7 +63,7 @@ class ChatModel with ChangeNotifier {
   bool isConnManager = false;
 
   RxBool isWindowFocus = true.obs;
-  BlockableOverlayState? _blockableOverlayState;
+  BlockableOverlayState _blockableOverlayState = BlockableOverlayState();
   final Rx<VoiceCallStatus> _voiceCallStatus = Rx(VoiceCallStatus.notStarted);
 
   Rx<VoiceCallStatus> get voiceCallStatus => _voiceCallStatus;
@@ -154,7 +154,7 @@ class ChatModel with ChangeNotifier {
       }
     }
 
-    final overlayState = _blockableOverlayState?.state;
+    final overlayState = _blockableOverlayState.state;
     if (overlayState == null) return;
 
     final overlay = OverlayEntry(builder: (context) {
