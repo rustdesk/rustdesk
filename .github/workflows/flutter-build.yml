@@ -99,7 +99,7 @@ jobs:
       - name: find Runner.res
         shell: bash
         run: |
-          runner_res=$(find . Runner.res)
+          runner_res=$(find . -name Runner.res)
           if [ runner_res != '' ]; then
             cp $runner.res ./Runner.res
           fi
@@ -209,7 +209,7 @@ jobs:
       - name: find Runner.res
         shell: bash
         run: |
-          runner_res=$(find . Runner.res)
+          runner_res=$(find . -name Runner.res)
           if [ runner_res != '' ]; then
             cp $runner.res ./Runner.res
           fi
