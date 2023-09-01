@@ -102,10 +102,12 @@ jobs:
         continue-on-error: true
         shell: bash
         run: |
-          runner_res=$(find . -name Runner.res)
-          if [ runner_res != '' ]; then
+          runner_res=$(find . -name "Runner.res")
+          if [ $runner_res == '' ]; then
+            echo "Runner.res: not found"
+          else
             echo "Runner.res: $runner_res"
-            cp $runner.res ./Runner.res
+            cp $runner_res ./Runner.res
           fi
 
       - name: Sign rustdesk files
@@ -216,10 +218,12 @@ jobs:
         continue-on-error: true
         shell: bash
         run: |
-          runner_res=$(find . -name Runner.res)
-          if [ runner_res != '' ]; then
+          runner_res=$(find . -name "Runner.res")
+          if [ $runner_res == '' ]; then
+            echo "Runner.res: not found"
+          else
             echo "Runner.res: $runner_res"
-            cp $runner.res ./Runner.res
+            cp $runner_res ./Runner.res
           fi
 
       - name: Sign rustdesk files
