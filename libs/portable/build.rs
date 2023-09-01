@@ -1,5 +1,10 @@
 extern crate embed_resource;
+use std::fs;
 
 fn main() {
-    println!("cargo:rustc-link-lib=dylib:+verbatim=./Runner.res");
+    let runner_res_path = "./Runner.res";
+    match fs::metadata(runner_res_path) {
+        Ok(_) => println!("cargo:rustc-link-lib=dylib:+verbatim=./Runner.res"),
+        Err(_) => embed_resource::compile("icon.rc", embed_resource::NONE),
+    }
 }
