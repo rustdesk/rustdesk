@@ -97,6 +97,7 @@ jobs:
         run: python3 .\build.py --portable --hwcodec --flutter --feature IddDriver
 
       - name: find Runner.res
+        continue-on-error: true
         shell: bash
         run: |
           runner_res=$(find . -name Runner.res)
@@ -207,6 +208,7 @@ jobs:
           echo "output_folder=./Release" >> $GITHUB_OUTPUT
 
       - name: find Runner.res
+        continue-on-error: true
         shell: bash
         run: |
           runner_res=$(find . -name Runner.res)
