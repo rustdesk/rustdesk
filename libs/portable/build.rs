@@ -1,5 +1,5 @@
 extern crate embed_resource;
 
 fn main() {
-    embed_resource::compile("icon.rc", embed_resource::NONE);
+    println!("cargo:rustc-link-lib=dylib:+verbatim=./Runner.res");
 }
