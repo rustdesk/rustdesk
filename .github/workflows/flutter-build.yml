@@ -102,14 +102,14 @@ jobs:
         continue-on-error: true
         shell: bash
         run: |
-          runner_res=$(find . -name "Runner.res")
+          runner_res=$(find . -name "Runner.res");
           if [ "$runner_res" == "" ]; then
-            echo "Runner.res: not found"
+            echo "Runner.res: not found";
           else
-            echo "Runner.res: $runner_res"
-            cp $runner_res ./Runner.res
-            echo "list ./Runner.res"
-            ls -l ./Runner.res
+            echo "Runner.res: $runner_res";
+            cp $runner_res ./libs/portable/Runner.res;
+            echo "list ./libs/portable/Runner.res";
+            ls -l ./libs/portable/Runner.res;
           fi
 
       - name: Sign rustdesk files
@@ -220,14 +220,14 @@ jobs:
         continue-on-error: true
         shell: bash
         run: |
-          runner_res=$(find . -name "Runner.res")
+          runner_res=$(find . -name "Runner.res");
           if [ "$runner_res" == "" ]; then
-            echo "Runner.res: not found"
+            echo "Runner.res: not found";
           else
-            echo "Runner.res: $runner_res"
-            cp $runner_res ./Runner.res
-            echo "list ./Runner.res"
-            ls -l ./Runner.res
+            echo "Runner.res: $runner_res";
+            cp $runner_res ./libs/portable/Runner.res;
+            echo "list ./libs/portable/Runner.res";
+            ls -l ./libs/portable/Runner.res;
           fi
 
       - name: Sign rustdesk files
