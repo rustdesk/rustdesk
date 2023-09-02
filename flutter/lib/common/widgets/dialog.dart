@@ -1,9 +1,9 @@
 import 'dart:async';
 
-import 'package:debounce_throttle/debounce_throttle.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hbb/common/shared_state.dart';
+import 'package:flutter_hbb/common/widgets/setting_widgets.dart';
 import 'package:get/get.dart';
 
 import '../../common.dart';
@@ -1225,76 +1225,9 @@ customImageQualityDialog(SessionID sessionId, String id, FFI ffi) async {
   final quality = await bind.sessionGetCustomImageQuality(sessionId: sessionId);
   qualityInitValue =
       quality != null && quality.isNotEmpty ? quality[0].toDouble() : 50.0;
-  const qualityMinValue = 10.0;
-  const qualityMoreThresholdValue = 100.0;
-  const qualityMaxValue = 2000.0;
-  if (qualityInitValue < qualityMinValue) {
-    qualityInitValue = qualityMinValue;
+  if (qualityInitValue < 10 || qualityInitValue > 2000) {
+    qualityInitValue = 50;
   }
-  if (qualityInitValue > qualityMaxValue) {
-    qualityInitValue = qualityMaxValue;
-  }
-  final RxDouble qualitySliderValue = RxDouble(qualityInitValue);
-  final moreQualityInitValue = qualityInitValue > qualityMoreThresholdValue;
-  final RxBool moreQualityChecked = RxBool(moreQualityInitValue);
-  final debouncerQuality = Debouncer<double>(
-    Duration(milliseconds: 1000),
-    onChanged: (double v) {
-      setCustomValues(quality: v);
-    },
-    initialValue: qualityInitValue,
-  );
-  final qualitySlider = Obx(() => Row(
-        children: [
-          Expanded(
-              flex: 3,
-              child: Slider(
-                value: qualitySliderValue.value,
-                min: qualityMinValue,
-                max: moreQualityChecked.value
-                    ? qualityMaxValue
-                    : qualityMoreThresholdValue,
-                divisions: 18,
-                onChanged: (double value) {
-                  qualitySliderValue.value = value;
-                  debouncerQuality.value = value;
-                },
-              )),
-          Expanded(
-              flex: 1,
-              child: Text(
-                '${qualitySliderValue.value.round()}%',
-                style: const TextStyle(fontSize: 15),
-              )),
-          Expanded(
-              flex: 1,
-              child: Text(
-                translate('Bitrate'),
-                style: const TextStyle(fontSize: 15),
-              )),
-          Expanded(
-              flex: 1,
-              child: Row(
-                children: [
-                  Checkbox(
-                    value: moreQualityChecked.value,
-                    onChanged: (bool? value) {
-                      moreQualityChecked.value = value!;
-                      if (!value &&
-                          qualitySliderValue.value >
-                              qualityMoreThresholdValue) {
-                        qualitySliderValue.value = qualityMoreThresholdValue;
-                        debouncerQuality.value = qualityMoreThresholdValue;
-                      }
-                    },
-                  ).marginOnly(right: 5),
-                  Expanded(
-                    child: Text(translate('More')),
-                  )
-                ],
-              )),
-        ],
-      ));
   // fps
   final fpsOption =
       await bind.sessionGetOption(sessionId: sessionId, arg: 'custom-fps');
@@ -1302,55 +1235,20 @@ customImageQualityDialog(SessionID sessionId, String id, FFI ffi) async {
   if (fpsInitValue < 5 || fpsInitValue > 120) {
     fpsInitValue = 30;
   }
-  final RxDouble fpsSliderValue = RxDouble(fpsInitValue);
-  final debouncerFps = Debouncer<double>(
-    Duration(milliseconds: 1000),
-    onChanged: (double v) {
-      setCustomValues(fps: v);
-    },
-    initialValue: qualityInitValue,
-  );
   bool? direct;
   try {
     direct =
         ConnectionTypeState.find(id).direct.value == ConnectionType.strDirect;
   } catch (_) {}
-  final fpsSlider = Offstage(
-    offstage: (await bind.mainIsUsingPublicServer() && direct != true) ||
-        version_cmp(ffi.ffiModel.pi.version, '1.2.0') < 0,
-    child: Row(
-      children: [
-        Expanded(
-            flex: 3,
-            child: Obx((() => Slider(
-                  value: fpsSliderValue.value,
-                  min: 5,
-                  max: 120,
-                  divisions: 23,
-                  onChanged: (double value) {
-                    fpsSliderValue.value = value;
-                    debouncerFps.value = value;
-                  },
-                )))),
-        Expanded(
-            flex: 1,
-            child: Obx(() => Text(
-                  '${fpsSliderValue.value.round()}',
-                  style: const TextStyle(fontSize: 15),
-                ))),
-        Expanded(
-            flex: 2,
-            child: Text(
-              translate('FPS'),
-              style: const TextStyle(fontSize: 15),
-            ))
-      ],
-    ),
-  );
+  bool notShowFps = (await bind.mainIsUsingPublicServer() && direct != true) ||
+      version_cmp(ffi.ffiModel.pi.version, '1.2.0') < 0;
 
-  final content = Column(
-    children: [qualitySlider, fpsSlider],
-  );
+  final content = customImageQualityWidget(
+      initQuality: qualityInitValue,
+      initFps: fpsInitValue,
+      setQuality: (v) => setCustomValues(quality: v),
+      setFps: (v) => setCustomValues(fps: v),
+      showFps: !notShowFps);
   msgBoxCommon(ffi.dialogManager, 'Custom Image Quality', content, [btnClose]);
 }
 

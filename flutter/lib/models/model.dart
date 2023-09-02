@@ -1815,7 +1815,7 @@ class FFI {
           } else {
             // Fetch the image buffer from rust codes.
             final sz = platformFFI.getRgbaSize(sessionId);
-            if (sz == null || sz == 0) {
+            if (sz == 0) {
               return;
             }
             final rgba = platformFFI.getRgba(sessionId, sz);

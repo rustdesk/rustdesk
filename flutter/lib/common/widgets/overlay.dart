@@ -26,15 +26,31 @@ class DraggableChatWindow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Draggable(
+    return isIOS
+    ? IOSDraggable (
+      position: position,
+      chatModel: chatModel,
+      width: width,
+      height: height,
+      builder: (context) {
+    return Column(
+      children: [
+        _buildMobileAppBar(context),
+        Expanded(
+          child: ChatPage(chatModel: chatModel),
+              ),
+            ],
+          );
+        },
+      )
+    : Draggable(
         checkKeyboard: true,
         position: position,
         width: width,
         height: height,
         builder: (context, onPanUpdate) {
-          final child = isIOS
-              ? ChatPage(chatModel: chatModel)
-              : Scaffold(
+          final child = 
+              Scaffold(
                   resizeToAvoidBottomInset: false,
                   appBar: CustomAppBar(
                     onPanUpdate: onPanUpdate,
@@ -328,6 +344,69 @@ class _DraggableState extends State<Draggable> {
           height: widget.height,
           child: widget.builder(context, onPanUpdate))
     ]);
+  }
+}
+
+class IOSDraggable extends StatefulWidget {
+  const IOSDraggable({
+    Key? key,
+    this.position = Offset.zero,
+    required this.chatModel, 
+    required this.width,
+    required this.height,
+    required this.builder})
+    : super(key: key);
+
+  final Offset position;
+  final ChatModel chatModel;
+  final double width;
+  final double height;
+  final Widget Function(BuildContext) builder;
+
+  @override
+  _IOSDraggableState createState() => _IOSDraggableState();
+}
+
+class _IOSDraggableState extends State<IOSDraggable> {
+late Offset _position;
+late ChatModel _chatModel;
+late double _width;
+late double _height;
+
+@override
+void initState() {
+  super.initState();
+  _position = widget.position;
+  _chatModel = widget.chatModel;
+  _width = widget.width;
+  _height = widget.height;
+}
+
+@override
+  Widget build(BuildContext context) {
+    return Stack(
+      children: [
+        Positioned(
+          left: _position.dx,
+          top: _position.dy,
+          child: GestureDetector(
+            onPanUpdate: (details) {
+              setState(() {
+                _position += details.delta;
+              });
+            },
+            child: Material(
+              child:
+            Container(
+              width: _width,
+              height: _height,
+            child: widget.builder(context),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
   }
 }
 

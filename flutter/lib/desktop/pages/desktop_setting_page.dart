@@ -5,6 +5,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hbb/common.dart';
+import 'package:flutter_hbb/common/widgets/setting_widgets.dart';
 import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/desktop/pages/desktop_home_page.dart';
 import 'package:flutter_hbb/desktop/pages/desktop_tab_page.dart';
@@ -965,54 +966,27 @@ class _NetworkState extends State<_Network> with AutomaticKeepAliveClientMixin {
       var relayController = TextEditingController(text: old('relay-server'));
       var apiController = TextEditingController(text: old('api-server'));
       var keyController = TextEditingController(text: old('key'));
-
-      set(String idServer, String relayServer, String apiServer,
-          String key) async {
-        idServer = idServer.trim();
-        relayServer = relayServer.trim();
-        apiServer = apiServer.trim();
-        key = key.trim();
-        if (idServer.isNotEmpty) {
-          idErrMsg.value =
-              translate(await bind.mainTestIfValidServer(server: idServer));
-          if (idErrMsg.isNotEmpty) {
-            return false;
-          }
-        }
-        if (relayServer.isNotEmpty) {
-          relayErrMsg.value =
-              translate(await bind.mainTestIfValidServer(server: relayServer));
-          if (relayErrMsg.isNotEmpty) {
-            return false;
-          }
-        }
-        if (apiServer.isNotEmpty) {
-          if (!apiServer.startsWith('http://') &&
-              !apiServer.startsWith('https://')) {
-            apiErrMsg.value =
-                '${translate("API Server")}: ${translate("invalid_http")}';
-            return false;
-          }
-        }
-        final oldApiServer = await bind.mainGetApiServer();
-
-        // should set one by one
-        await bind.mainSetOption(
-            key: 'custom-rendezvous-server', value: idServer);
-        await bind.mainSetOption(key: 'relay-server', value: relayServer);
-        await bind.mainSetOption(key: 'api-server', value: apiServer);
-        await bind.mainSetOption(key: 'key', value: key);
-
-        final newApiServer = await bind.mainGetApiServer();
-        if (oldApiServer.isNotEmpty && oldApiServer != newApiServer) {
-          await gFFI.userModel.logOut(apiServer: oldApiServer);
-        }
-        return true;
-      }
+      final controllers = [
+        idController,
+        relayController,
+        apiController,
+        keyController,
+      ];
+      final errMsgs = [
+        idErrMsg,
+        relayErrMsg,
+        apiErrMsg,
+      ];
 
       submit() async {
-        bool result = await set(idController.text, relayController.text,
-            apiController.text, keyController.text);
+        bool result = await setServerConfig(
+            controllers,
+            errMsgs,
+            ServerConfig(
+                idServer: idController.text,
+                relayServer: relayController.text,
+                apiServer: apiController.text,
+                key: keyController.text));
         if (result) {
           setState(() {});
           showToast(translate('Successful'));
@@ -1021,83 +995,28 @@ class _NetworkState extends State<_Network> with AutomaticKeepAliveClientMixin {
         }
       }
 
-      import() {
-        Clipboard.getData(Clipboard.kTextPlain).then((value) {
-          final text = value?.text;
-          if (text != null && text.isNotEmpty) {
-            try {
-              final sc = ServerConfig.decode(text);
-              if (sc.idServer.isNotEmpty) {
-                idController.text = sc.idServer;
-                relayController.text = sc.relayServer;
-                apiController.text = sc.apiServer;
-                keyController.text = sc.key;
-                Future<bool> success =
-                    set(sc.idServer, sc.relayServer, sc.apiServer, sc.key);
-                success.then((value) {
-                  if (value) {
-                    showToast(
-                        translate('Import server configuration successfully'));
-                  } else {
-                    showToast(translate('Invalid server configuration'));
-                  }
-                });
-              } else {
-                showToast(translate('Invalid server configuration'));
-              }
-            } catch (e) {
-              showToast(translate('Invalid server configuration'));
-            }
-          } else {
-            showToast(translate('Clipboard is empty'));
-          }
-        });
-      }
-
-      export() {
-        final text = ServerConfig(
-                idServer: idController.text,
-                relayServer: relayController.text,
-                apiServer: apiController.text,
-                key: keyController.text)
-            .encode();
-        debugPrint("ServerConfig export: $text");
-
-        Clipboard.setData(ClipboardData(text: text));
-        showToast(translate('Export server configuration successfully'));
-      }
-
       bool secure = !enabled;
-      return _Card(title: 'ID/Relay Server', title_suffix: [
-        Tooltip(
-          message: translate('Import Server Config'),
-          child: IconButton(
-              icon: Icon(Icons.paste, color: Colors.grey),
-              onPressed: enabled ? import : null),
-        ),
-        Tooltip(
-            message: translate('Export Server Config'),
-            child: IconButton(
-                icon: Icon(Icons.copy, color: Colors.grey),
-                onPressed: enabled ? export : null)),
-      ], children: [
-        Column(
+      return _Card(
+          title: 'ID/Relay Server',
+          title_suffix: ServerConfigImportExportWidgets(controllers, errMsgs),
           children: [
-            Obx(() => _LabeledTextField(context, 'ID Server', idController,
-                idErrMsg.value, enabled, secure)),
-            Obx(() => _LabeledTextField(context, 'Relay Server',
-                relayController, relayErrMsg.value, enabled, secure)),
-            Obx(() => _LabeledTextField(context, 'API Server', apiController,
-                apiErrMsg.value, enabled, secure)),
-            _LabeledTextField(
-                context, 'Key', keyController, '', enabled, secure),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [_Button('Apply', submit, enabled: enabled)],
-            ).marginOnly(top: 10),
-          ],
-        )
-      ]);
+            Column(
+              children: [
+                Obx(() => _LabeledTextField(context, 'ID Server', idController,
+                    idErrMsg.value, enabled, secure)),
+                Obx(() => _LabeledTextField(context, 'Relay Server',
+                    relayController, relayErrMsg.value, enabled, secure)),
+                Obx(() => _LabeledTextField(context, 'API Server',
+                    apiController, apiErrMsg.value, enabled, secure)),
+                _LabeledTextField(
+                    context, 'Key', keyController, '', enabled, secure),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [_Button('Apply', submit, enabled: enabled)],
+                ).marginOnly(top: 10),
+              ],
+            )
+          ]);
     }
 
     return tmpWrapper();
@@ -1181,15 +1100,6 @@ class _DisplayState extends State<_Display> {
     }
 
     final groupValue = bind.mainGetUserDefaultOption(key: key);
-    final qualityKey = 'custom_image_quality';
-    final qualityValue =
-        (double.tryParse(bind.mainGetUserDefaultOption(key: qualityKey)) ??
-                50.0)
-            .obs;
-    final fpsKey = 'custom-fps';
-    final fpsValue =
-        (double.tryParse(bind.mainGetUserDefaultOption(key: fpsKey)) ?? 30.0)
-            .obs;
     return _Card(title: 'Default Image Quality', children: [
       _Radio(context,
           value: kRemoteImageQualityBest,
@@ -1213,64 +1123,7 @@ class _DisplayState extends State<_Display> {
           onChanged: onChanged),
       Offstage(
         offstage: groupValue != kRemoteImageQualityCustom,
-        child: Column(
-          children: [
-            Obx(() => Row(
-                  children: [
-                    Slider(
-                      value: qualityValue.value,
-                      min: 10.0,
-                      max: 100.0,
-                      divisions: 18,
-                      onChanged: (double value) async {
-                        qualityValue.value = value;
-                        await bind.mainSetUserDefaultOption(
-                            key: qualityKey, value: value.toString());
-                      },
-                    ),
-                    SizedBox(
-                        width: 40,
-                        child: Text(
-                          '${qualityValue.value.round()}%',
-                          style: const TextStyle(fontSize: 15),
-                        )),
-                    SizedBox(
-                        width: 50,
-                        child: Text(
-                          translate('Bitrate'),
-                          style: const TextStyle(fontSize: 15),
-                        ))
-                  ],
-                )),
-            Obx(() => Row(
-                  children: [
-                    Slider(
-                      value: fpsValue.value,
-                      min: 5.0,
-                      max: 120.0,
-                      divisions: 23,
-                      onChanged: (double value) async {
-                        fpsValue.value = value;
-                        await bind.mainSetUserDefaultOption(
-                            key: fpsKey, value: value.toString());
-                      },
-                    ),
-                    SizedBox(
-                        width: 40,
-                        child: Text(
-                          '${fpsValue.value.round()}',
-                          style: const TextStyle(fontSize: 15),
-                        )),
-                    SizedBox(
-                        width: 50,
-                        child: Text(
-                          translate('FPS'),
-                          style: const TextStyle(fontSize: 15),
-                        ))
-                  ],
-                )),
-          ],
-        ),
+        child: customImageQualitySetting(),
       )
     ]);
   }

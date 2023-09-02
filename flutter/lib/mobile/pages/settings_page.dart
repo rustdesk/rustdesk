@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+import 'package:flutter_hbb/common/widgets/setting_widgets.dart';
 import 'package:get/get.dart';
 import 'package:provider/provider.dart';
 import 'package:settings_ui/settings_ui.dart';
@@ -383,7 +383,7 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
         SettingsSection(
           title: Text(translate('Account')),
           tiles: [
-            SettingsTile.navigation(
+            SettingsTile(
               title: Obx(() => Text(gFFI.userModel.userName.value.isEmpty
                   ? translate('Login')
                   : '${translate('Logout')} (${gFFI.userModel.userName.value})')),
@@ -399,19 +399,19 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
           ],
         ),
         SettingsSection(title: Text(translate("Settings")), tiles: [
-          SettingsTile.navigation(
+          SettingsTile(
               title: Text(translate('ID/Relay Server')),
               leading: Icon(Icons.cloud),
               onPressed: (context) {
                 showServerSettings(gFFI.dialogManager);
               }),
-          SettingsTile.navigation(
+          SettingsTile(
               title: Text(translate('Language')),
               leading: Icon(Icons.translate),
               onPressed: (context) {
                 showLanguageSettings(gFFI.dialogManager);
               }),
-          SettingsTile.navigation(
+          SettingsTile(
             title: Text(translate(
                 Theme.of(context).brightness == Brightness.light
                     ? 'Dark Theme'
@@ -424,45 +424,50 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
             },
           )
         ]),
-        SettingsSection(
-          title: Text(translate("Recording")),
-          tiles: [
-            SettingsTile.switchTile(
-              title: Text(translate('Automatically record incoming sessions')),
-              leading: Icon(Icons.videocam),
-              description: FutureBuilder(
-                  builder: (ctx, data) => Offstage(
-                      offstage: !data.hasData,
-                      child: Text("${translate("Directory")}: ${data.data}")),
-                  future: bind.mainDefaultVideoSaveDirectory()),
-              initialValue: _autoRecordIncomingSession,
-              onToggle: (v) async {
-                await bind.mainSetOption(
-                    key: "allow-auto-record-incoming",
-                    value: bool2option("allow-auto-record-incoming", v));
-                final newValue = option2bool(
-                    'allow-auto-record-incoming',
-                    await bind.mainGetOption(
-                        key: 'allow-auto-record-incoming'));
-                setState(() {
-                  _autoRecordIncomingSession = newValue;
-                });
-              },
-            ),
-          ],
-        ),
-        SettingsSection(
-          title: Text(translate("Share Screen")),
-          tiles: shareScreenTiles,
-        ),
-        SettingsSection(
-          title: Text(translate("Enhancements")),
-          tiles: enhancementsTiles,
-        ),
+        if (isAndroid)
+          SettingsSection(
+            title: Text(translate("Recording")),
+            tiles: [
+              SettingsTile.switchTile(
+                title:
+                    Text(translate('Automatically record incoming sessions')),
+                leading: Icon(Icons.videocam),
+                description: FutureBuilder(
+                    builder: (ctx, data) => Offstage(
+                        offstage: !data.hasData,
+                        child: Text("${translate("Directory")}: ${data.data}")),
+                    future: bind.mainDefaultVideoSaveDirectory()),
+                initialValue: _autoRecordIncomingSession,
+                onToggle: (v) async {
+                  await bind.mainSetOption(
+                      key: "allow-auto-record-incoming",
+                      value: bool2option("allow-auto-record-incoming", v));
+                  final newValue = option2bool(
+                      'allow-auto-record-incoming',
+                      await bind.mainGetOption(
+                          key: 'allow-auto-record-incoming'));
+                  setState(() {
+                    _autoRecordIncomingSession = newValue;
+                  });
+                },
+              ),
+            ],
+          ),
+        if (isAndroid)
+          SettingsSection(
+            title: Text(translate("Share Screen")),
+            tiles: shareScreenTiles,
+          ),
+        defaultDisplaySection(),
+        if (isAndroid)
+          SettingsSection(
+            title: Text(translate("Enhancements")),
+            tiles: enhancementsTiles,
+          ),
         SettingsSection(
           title: Text(translate("About")),
           tiles: [
-            SettingsTile.navigation(
+            SettingsTile(
                 onPressed: (context) async {
                   if (await canLaunchUrl(Uri.parse(url))) {
                     await launchUrl(Uri.parse(url));
@@ -477,21 +482,22 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
                       )),
                 ),
                 leading: Icon(Icons.info)),
-            SettingsTile.navigation(
+            SettingsTile(
                 title: Text(translate("Build Date")),
                 value: Padding(
                   padding: EdgeInsets.symmetric(vertical: 8),
                   child: Text(_buildDate),
                 ),
                 leading: Icon(Icons.query_builder)),
-            SettingsTile.navigation(
-                onPressed: (context) => onCopyFingerprint(_fingerprint),
-                title: Text(translate("Fingerprint")),
-                value: Padding(
-                  padding: EdgeInsets.symmetric(vertical: 8),
-                  child: Text(_fingerprint),
-                ),
-                leading: Icon(Icons.fingerprint)),
+            if (isAndroid)
+              SettingsTile(
+                  onPressed: (context) => onCopyFingerprint(_fingerprint),
+                  title: Text(translate("Fingerprint")),
+                  value: Padding(
+                    padding: EdgeInsets.symmetric(vertical: 8),
+                    child: Text(_fingerprint),
+                  ),
+                  leading: Icon(Icons.fingerprint)),
           ],
         ),
       ],
@@ -507,6 +513,23 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
       return false;
     }
     return true;
+  }
+
+  defaultDisplaySection() {
+    return SettingsSection(
+      title: Text(translate("Display Settings")),
+      tiles: [
+        SettingsTile(
+            title: Text(translate('Display Settings')),
+            leading: Icon(Icons.desktop_windows_outlined),
+            trailing: Icon(Icons.arrow_forward_ios),
+            onPressed: (context) {
+              Navigator.push(context, MaterialPageRoute(builder: (context) {
+                return _DisplayPage();
+              }));
+            })
+      ],
+    );
   }
 }
 
@@ -617,4 +640,182 @@ class ScanButton extends StatelessWidget {
       },
     );
   }
+}
+
+class _DisplayPage extends StatefulWidget {
+  const _DisplayPage({super.key});
+
+  @override
+  State<_DisplayPage> createState() => __DisplayPageState();
+}
+
+class __DisplayPageState extends State<_DisplayPage> {
+  @override
+  Widget build(BuildContext context) {
+    final Map codecsJson = jsonDecode(bind.mainSupportedHwdecodings());
+    final h264 = codecsJson['h264'] ?? false;
+    final h265 = codecsJson['h265'] ?? false;
+    var codecList = [
+      _RadioEntry('Auto', 'auto'),
+      _RadioEntry('VP8', 'vp8'),
+      _RadioEntry('VP9', 'vp9'),
+      _RadioEntry('AV1', 'av1'),
+      if (h264) _RadioEntry('H264', 'h264'),
+      if (h265) _RadioEntry('H265', 'h265')
+    ];
+    RxBool showCustomImageQuality = false.obs;
+    return Scaffold(
+      appBar: AppBar(
+        leading: IconButton(
+            onPressed: () => Navigator.pop(context),
+            icon: Icon(Icons.arrow_back_ios)),
+        title: Text(translate('Display Settings')),
+        centerTitle: true,
+      ),
+      body: SettingsList(sections: [
+        SettingsSection(
+          tiles: [
+            _getPopupDialogRadioEntry(
+              title: 'Default View Style',
+              list: [
+                _RadioEntry('Scale original', kRemoteViewStyleOriginal),
+                _RadioEntry('Scale adaptive', kRemoteViewStyleAdaptive)
+              ],
+              getter: () => bind.mainGetUserDefaultOption(key: 'view_style'),
+              asyncSetter: (value) async {
+                await bind.mainSetUserDefaultOption(
+                    key: 'view_style', value: value);
+              },
+            ),
+            _getPopupDialogRadioEntry(
+              title: 'Default Image Quality',
+              list: [
+                _RadioEntry('Good image quality', kRemoteImageQualityBest),
+                _RadioEntry('Balanced', kRemoteImageQualityBalanced),
+                _RadioEntry('Optimize reaction time', kRemoteImageQualityLow),
+                _RadioEntry('Custom', kRemoteImageQualityCustom),
+              ],
+              getter: () {
+                final v = bind.mainGetUserDefaultOption(key: 'image_quality');
+                showCustomImageQuality.value = v == kRemoteImageQualityCustom;
+                return v;
+              },
+              asyncSetter: (value) async {
+                await bind.mainSetUserDefaultOption(
+                    key: 'image_quality', value: value);
+                showCustomImageQuality.value =
+                    value == kRemoteImageQualityCustom;
+              },
+              tail: customImageQualitySetting(),
+              showTail: showCustomImageQuality,
+              notCloseValue: kRemoteImageQualityCustom,
+            ),
+            _getPopupDialogRadioEntry(
+              title: 'Default Codec',
+              list: codecList,
+              getter: () =>
+                  bind.mainGetUserDefaultOption(key: 'codec-preference'),
+              asyncSetter: (value) async {
+                await bind.mainSetUserDefaultOption(
+                    key: 'codec-preference', value: value);
+              },
+            ),
+          ],
+        ),
+        SettingsSection(
+          title: Text(translate('Other Default Options')),
+          tiles: [
+            otherRow('Show remote cursor', 'show_remote_cursor'),
+            otherRow('Show quality monitor', 'show_quality_monitor'),
+            otherRow('Mute', 'disable_audio'),
+            otherRow('Disable clipboard', 'disable_clipboard'),
+            otherRow('Lock after session end', 'lock_after_session_end'),
+            otherRow('Privacy mode', 'privacy_mode'),
+            otherRow('Touch mode', 'touch-mode'),
+          ],
+        ),
+      ]),
+    );
+  }
+
+  otherRow(String label, String key) {
+    final value = bind.mainGetUserDefaultOption(key: key) == 'Y';
+    return SettingsTile.switchTile(
+      initialValue: value,
+      title: Text(translate(label)),
+      onToggle: (b) async {
+        await bind.mainSetUserDefaultOption(key: key, value: b ? 'Y' : '');
+        setState(() {});
+      },
+    );
+  }
+}
+
+class _RadioEntry {
+  final String label;
+  final String value;
+  _RadioEntry(this.label, this.value);
+}
+
+typedef _RadioEntryGetter = String Function();
+typedef _RadioEntrySetter = Future<void> Function(String);
+
+_getPopupDialogRadioEntry({
+  required String title,
+  required List<_RadioEntry> list,
+  required _RadioEntryGetter getter,
+  required _RadioEntrySetter asyncSetter,
+  Widget? tail,
+  RxBool? showTail,
+  String? notCloseValue,
+}) {
+  RxString groupValue = ''.obs;
+  RxString valueText = ''.obs;
+
+  init() {
+    groupValue.value = getter();
+    final e = list.firstWhereOrNull((e) => e.value == groupValue.value);
+    if (e != null) {
+      valueText.value = e.label;
+    }
+  }
+
+  init();
+
+  void showDialog() async {
+    gFFI.dialogManager.show((setState, close, context) {
+      onChanged(String? value) async {
+        if (value == null) return;
+        await asyncSetter(value);
+        init();
+        if (value != notCloseValue) {
+          close();
+        }
+      }
+
+      return CustomAlertDialog(
+          content: Obx(
+        () => Column(children: [
+          ...list
+              .map((e) => getRadio(Text(translate(e.label)), e.value,
+                  groupValue.value, (String? value) => onChanged(value)))
+              .toList(),
+          Offstage(
+            offstage:
+                !(tail != null && showTail != null && showTail.value == true),
+            child: tail,
+          ),
+        ]),
+      ));
+    }, backDismiss: true, clickMaskDismiss: true);
+  }
+
+  return SettingsTile(
+    title: Text(translate(title)),
+    onPressed: (context) => showDialog(),
+    value: Padding(
+      padding: EdgeInsets.symmetric(vertical: 8),
+      child: Obx(() => Text(translate(valueText.value))),
+    ),
+  );
 }
