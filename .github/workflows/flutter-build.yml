@@ -103,11 +103,13 @@ jobs:
         shell: bash
         run: |
           runner_res=$(find . -name "Runner.res")
-          if [ $runner_res == '' ]; then
+          if [ "$runner_res" == "" ]; then
             echo "Runner.res: not found"
           else
             echo "Runner.res: $runner_res"
             cp $runner_res ./Runner.res
+            echo "list ./Runner.res"
+            ls -l ./Runner.res
           fi
 
       - name: Sign rustdesk files
@@ -219,11 +221,13 @@ jobs:
         shell: bash
         run: |
           runner_res=$(find . -name "Runner.res")
-          if [ $runner_res == '' ]; then
+          if [ "$runner_res" == "" ]; then
             echo "Runner.res: not found"
           else
             echo "Runner.res: $runner_res"
             cp $runner_res ./Runner.res
+            echo "list ./Runner.res"
+            ls -l ./Runner.res
           fi
 
       - name: Sign rustdesk files
