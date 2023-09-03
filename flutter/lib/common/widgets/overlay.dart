@@ -16,7 +16,8 @@ class DraggableChatWindow extends StatelessWidget {
       this.position = Offset.zero,
       required this.width,
       required this.height,
-      required this.chatModel})
+      required this.chatModel
+      })
       : super(key: key);
 
   final Offset position;
@@ -48,6 +49,7 @@ class DraggableChatWindow extends StatelessWidget {
         position: position,
         width: width,
         height: height,
+        chatModel: chatModel,
         builder: (context, onPanUpdate) {
           final child = 
               Scaffold(
@@ -242,6 +244,7 @@ class Draggable extends StatefulWidget {
       this.position = Offset.zero,
       required this.width,
       required this.height,
+      this.chatModel,
       required this.builder})
       : super(key: key);
 
@@ -250,6 +253,7 @@ class Draggable extends StatefulWidget {
   final Offset position;
   final double width;
   final double height;
+  final ChatModel? chatModel;
   final Widget Function(BuildContext, GestureDragUpdateCallback) builder;
 
   @override
@@ -258,6 +262,7 @@ class Draggable extends StatefulWidget {
 
 class _DraggableState extends State<Draggable> {
   late Offset _position;
+  late ChatModel? _chatModel;
   bool _keyboardVisible = false;
   double _saveHeight = 0;
   double _lastBottomHeight = 0;
@@ -266,6 +271,7 @@ class _DraggableState extends State<Draggable> {
   void initState() {
     super.initState();
     _position = widget.position;
+    _chatModel = widget.chatModel??null;
   }
 
   void onPanUpdate(DragUpdateDetails d) {
@@ -292,6 +298,7 @@ class _DraggableState extends State<Draggable> {
     setState(() {
       _position = Offset(x, y);
     });
+      _chatModel?.setChatWindowPosition(_position);
   }
 
   checkScreenSize() {}
@@ -351,14 +358,14 @@ class IOSDraggable extends StatefulWidget {
   const IOSDraggable({
     Key? key,
     this.position = Offset.zero,
-    required this.chatModel, 
+    this.chatModel,
     required this.width,
     required this.height,
     required this.builder})
     : super(key: key);
 
   final Offset position;
-  final ChatModel chatModel;
+  final ChatModel? chatModel;
   final double width;
   final double height;
   final Widget Function(BuildContext) builder;
@@ -369,7 +376,7 @@ class IOSDraggable extends StatefulWidget {
 
 class _IOSDraggableState extends State<IOSDraggable> {
 late Offset _position;
-late ChatModel _chatModel;
+late ChatModel? _chatModel;
 late double _width;
 late double _height;
 
@@ -377,7 +384,7 @@ late double _height;
 void initState() {
   super.initState();
   _position = widget.position;
-  _chatModel = widget.chatModel;
+  _chatModel = widget.chatModel??null;
   _width = widget.width;
   _height = widget.height;
 }
@@ -394,6 +401,7 @@ void initState() {
               setState(() {
                 _position += details.delta;
               });
+              _chatModel?.setChatWindowPosition(_position);
             },
             child: Material(
               child:
