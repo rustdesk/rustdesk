@@ -1699,7 +1699,10 @@ Future<bool> restoreWindowPosition(WindowType type,
       }
       if (lpos.isMaximized == true) {
         await restoreFrame();
-        await wc.maximize();
+        // An duration is needed to avoid the window being restored after maximized.
+        Future.delayed(Duration(milliseconds: 300), () async {
+          await wc.maximize();
+        });
       } else {
         await restoreFrame();
       }
