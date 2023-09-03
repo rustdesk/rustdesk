@@ -396,7 +396,7 @@ class ChatModel with ChangeNotifier {
           parent.target?.serverModel.jumpTo(id);
         }
       } else {
-        if (HomePage.homeKey.currentState?.selectedIndex != 1 ||
+        if (HomePage.homeKey.currentState?.isChatPageCurrentTab != true ||
             _currentKey != messagekey) {
           client.unreadChatMessageCount.value += 1;
           mobileUpdateUnreadSum();
