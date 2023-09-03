@@ -400,7 +400,8 @@ void initState() {
             Container(
               width: _width,
               height: _height,
-            child: widget.builder(context),
+              decoration: BoxDecoration(border: Border.all(color: MyTheme.border)),
+              child: widget.builder(context),
               ),
             ),
           ),
