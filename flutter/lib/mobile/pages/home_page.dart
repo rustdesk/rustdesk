@@ -25,7 +25,6 @@ class _HomePageState extends State<HomePage> {
   var _selectedIndex = 0;
   int get selectedIndex => _selectedIndex;
   final List<PageShape> _pages = [];
-  final _blockableOverlayState = BlockableOverlayState();
   bool get isChatPageCurrentTab => isAndroid
       ? _selectedIndex == 1
       : false; // change this when ios have chat page
