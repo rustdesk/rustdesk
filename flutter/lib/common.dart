@@ -614,6 +614,7 @@ class OverlayDialogManager {
   int _tagCount = 0;
 
   OverlayEntry? _mobileActionsOverlayEntry;
+  RxBool mobileActionsOverlayVisible = false.obs;
 
   void setOverlayState(OverlayKeyState overlayKeyState) {
     _overlayKeyState = overlayKeyState;
@@ -780,12 +781,14 @@ class OverlayDialogManager {
     });
     overlayState.insert(overlay);
     _mobileActionsOverlayEntry = overlay;
+    mobileActionsOverlayVisible.value = true;
   }
 
   void hideMobileActionsOverlay() {
     if (_mobileActionsOverlayEntry != null) {
       _mobileActionsOverlayEntry!.remove();
       _mobileActionsOverlayEntry = null;
+      mobileActionsOverlayVisible.value = false;
       return;
     }
   }
