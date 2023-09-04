@@ -240,6 +240,11 @@ pub fn uninstall_service(show_new_window: bool) -> bool {
                     uninstalled
                 );
                 if uninstalled {
+                    if !show_new_window {
+                        let _ = crate::ipc::close_all_instances();
+                        // leave ipc a little time
+                        std::thread::sleep(std::time::Duration::from_millis(300));
+                    }
                     crate::ipc::set_option("stop-service", "Y");
                     std::process::Command::new("launchctl")
                         .args(&["remove", &format!("{}_server", crate::get_full_name())])
@@ -255,13 +260,6 @@ pub fn uninstall_service(show_new_window: bool) -> bool {
                             .spawn()
                             .ok();
                     }
-                    std::process::Command::new("pkill")
-                        .arg(crate::get_app_name())
-                        .status()
-                        .ok();
-                    let _ = crate::ipc::close_all_instances();
-                    // leave ipc a little time
-                    std::thread::sleep(std::time::Duration::from_millis(300));
                     quit_gui();
                 }
             }
