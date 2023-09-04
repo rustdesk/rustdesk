@@ -44,11 +44,9 @@ impl ContextSend {
                     }
                 }
             }
-        } else {
-            if let Some(_clp) = lock.take() {
-                *lock = None;
-                log::info!("clipboard context for file transfer destroyed.");
-            }
+        } else if let Some(_clp) = lock.take() {
+            *lock = None;
+            log::info!("clipboard context for file transfer destroyed.");
         }
     }
 

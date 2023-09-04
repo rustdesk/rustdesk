@@ -49,8 +49,14 @@ pub enum CliprdrError {
     CliprdrOutOfMemory,
     #[error("cliprdr internal error")]
     ClipboardInternalError,
+    #[error("cliprdr occupied")]
+    ClipboardOccupied,
+    #[error("content not available")]
+    ContentNotAvailable,
+    #[error("conversion failure")]
+    ConversionFailure,
     #[error("unknown cliprdr error")]
-    Unknown(u32),
+    Unknown { description: String },
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

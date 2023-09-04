@@ -15,3 +15,14 @@ lazy_static = "1.4"
 serde = "1.0"
 serde_derive = "1.0"
 hbb_common = { path = "../hbb_common" }
+parking_lot = {version = "0.12"}
+
+[target.'cfg(any(target_os = "linux", target_os = "macos"))'.dependencies]
+rand = {version = "0.8"}
+fuser = {version = "0.13"}
+libc = {version = "0.2"}
+rayon = {version = "1.7"}
+dashmap = "5.5"
+percent-encoding = "2.3"
+utf16string = "0.2"
+x11-clipboard = "0.8"

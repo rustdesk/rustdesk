@@ -1,3 +1,5 @@
+use parking_lot::{Condvar, Mutex};
+
 #[cfg(target_os = "windows")]
 pub mod windows;
 #[cfg(target_os = "windows")]
@@ -7,4 +9,18 @@ pub fn create_cliprdr_context(
     response_wait_timeout_secs: u32,
 ) -> crate::ResultType<Box<dyn crate::CliprdrServiceContext>> {
     windows::create_cliprdr_context(enable_files, enable_others, response_wait_timeout_secs)
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+/// use FUSE for file pasting on these platforms
+pub mod fuse;
+#[cfg(target_os = "linux")]
+pub mod linux;
+#[cfg(target_os = "linux")]
+pub fn create_cliprdr_context(
+    enable_files: bool,
+    enable_others: bool,
+    response_wait_timeout_secs: u32,
+) -> crate::ResultType<Box<dyn crate::CliprdrServiceContext>> {
+    unimplemented!()
 }
