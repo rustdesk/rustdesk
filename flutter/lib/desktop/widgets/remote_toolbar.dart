@@ -101,6 +101,9 @@ class ToolbarState {
 class _ToolbarTheme {
   static const Color blueColor = MyTheme.button;
   static const Color hoverBlueColor = MyTheme.accent;
+  static Color inactiveColor =  Colors.grey[800]!;
+  static Color hoverInactiveColor = Colors.grey[850]!;
+
   static const Color redColor = Colors.redAccent;
   static const Color hoverRedColor = Colors.red;
   // kMinInteractiveDimension
@@ -543,9 +546,9 @@ class _PinMenu extends StatelessWidget {
         assetName: state.pin ? "assets/pinned.svg" : "assets/unpinned.svg",
         tooltip: state.pin ? 'Unpin Toolbar' : 'Pin Toolbar',
         onPressed: state.switchPin,
-        color: state.pin ? _ToolbarTheme.blueColor : Colors.grey[800]!,
+        color: state.pin ? _ToolbarTheme.blueColor : _ToolbarTheme.inactiveColor,
         hoverColor:
-            state.pin ? _ToolbarTheme.hoverBlueColor : Colors.grey[850]!,
+            state.pin ? _ToolbarTheme.hoverBlueColor : _ToolbarTheme.hoverInactiveColor,
       ),
     );
   }
@@ -558,13 +561,15 @@ class _MobileActionMenu extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (!ffi.ffiModel.isPeerAndroid) return Offstage();
-    return _IconMenuButton(
+    return Obx(()=>_IconMenuButton(
       assetName: 'assets/actions_mobile.svg',
       tooltip: 'Mobile Actions',
       onPressed: () => ffi.dialogManager.toggleMobileActionsOverlay(ffi: ffi),
-      color: _ToolbarTheme.blueColor,
-      hoverColor: _ToolbarTheme.hoverBlueColor,
-    );
+      color: ffi.dialogManager.mobileActionsOverlayVisible.isTrue
+          ? _ToolbarTheme.blueColor : _ToolbarTheme.inactiveColor,
+      hoverColor: ffi.dialogManager.mobileActionsOverlayVisible.isTrue
+          ? _ToolbarTheme.hoverBlueColor : _ToolbarTheme.hoverInactiveColor,
+    ));
   }
 }
 

@@ -266,7 +266,10 @@ class _RemotePageState extends State<RemotePage> {
                   gFFI.ffiModel.pi.isSet.isTrue &&
                           gFFI.ffiModel.waitForFirstImage.isTrue
                       ? emptyOverlay()
-                      : Offstage(),
+                      : () {
+                          gFFI.ffiModel.tryShowAndroidActionsOverlay();
+                          return Offstage();
+                        }(),
                   _bottomWidget(),
                   gFFI.ffiModel.pi.isSet.isFalse ? emptyOverlay() : Offstage(),
                 ],
