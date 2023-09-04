@@ -222,6 +222,8 @@ pub fn core_main() -> Option<Vec<String>> {
             log::info!("start --uninstall-service");
             crate::platform::uninstall_service(false);
         } else if args[0] == "--service" {
+            #[cfg(target_os = "macos")]
+            crate::platform::macos::hide_dock();
             log::info!("start --service");
             crate::start_os_service();
             return None;
