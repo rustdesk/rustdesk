@@ -16,8 +16,7 @@ class DraggableChatWindow extends StatelessWidget {
       this.position = Offset.zero,
       required this.width,
       required this.height,
-      required this.chatModel
-      })
+      required this.chatModel})
       : super(key: key);
 
   final Offset position;
@@ -271,7 +270,7 @@ class _DraggableState extends State<Draggable> {
   void initState() {
     super.initState();
     _position = widget.position;
-    _chatModel = widget.chatModel??null;
+    _chatModel = widget.chatModel;
   }
 
   void onPanUpdate(DragUpdateDetails d) {
@@ -298,7 +297,7 @@ class _DraggableState extends State<Draggable> {
     setState(() {
       _position = Offset(x, y);
     });
-      _chatModel?.setChatWindowPosition(_position);
+    _chatModel?.setChatWindowPosition(_position);
   }
 
   checkScreenSize() {}
@@ -374,20 +373,56 @@ class IOSDraggable extends StatefulWidget {
   _IOSDraggableState createState() => _IOSDraggableState();
 }
 
-class _IOSDraggableState extends State<IOSDraggable> {
-late Offset _position;
-late ChatModel? _chatModel;
-late double _width;
-late double _height;
+class _IOSDraggableState extends State<IOSDraggable> with WidgetsBindingObserver {
+  late Offset _position;
+  late ChatModel? _chatModel;
+  late double _width;
+  late double _height;
+  bool _keyboardVisible = false;
+  double _saveHeight = 0;
+  double _lastBottomHeight = 0;
 
-@override
-void initState() {
-  super.initState();
-  _position = widget.position;
-  _chatModel = widget.chatModel??null;
-  _width = widget.width;
-  _height = widget.height;
-}
+  @override
+  void initState() {
+    super.initState();
+    _position = widget.position;
+    _chatModel = widget.chatModel;
+    _width = widget.width;
+    _height = widget.height;
+
+    WidgetsBinding.instance?.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance?.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeMetrics() {
+    final currentVisible = MediaQuery.of(context).viewInsets.bottom != 0;
+
+    if (!_keyboardVisible && currentVisible) {
+      _saveHeight = _position.dy;
+    } else if (_lastBottomHeight > 0 && !currentVisible) {
+      setState(() {
+        _position = Offset(_position.dx, _saveHeight);
+      });
+    } else if (_keyboardVisible && currentVisible) {
+      final sumHeight = MediaQuery.of(context).viewInsets.bottom + _height;
+      final contextHeight = MediaQuery.of(context).size.height;
+      if (sumHeight + _position.dy > contextHeight) {
+        final y = contextHeight - sumHeight;
+        setState(() {
+          _position = Offset(_position.dx, y);
+        });
+      }
+    }
+
+    _keyboardVisible = currentVisible;
+    _lastBottomHeight = MediaQuery.of(context).viewInsets.bottom;
+  }
 
 @override
   Widget build(BuildContext context) {
