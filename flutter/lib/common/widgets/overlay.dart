@@ -389,28 +389,27 @@ class _IOSDraggableState extends State<IOSDraggable> with WidgetsBindingObserver
     _chatModel = widget.chatModel;
     _width = widget.width;
     _height = widget.height;
-
-    WidgetsBinding.instance?.addObserver(this);
   }
 
-  @override
-  void dispose() {
-    WidgetsBinding.instance?.removeObserver(this);
-    super.dispose();
-  }
+  checkKeyboard() {
+    final bottomHeight = MediaQuery.of(context).viewInsets.bottom;
+    final currentVisible = bottomHeight != 0;
 
-  @override
-  void didChangeMetrics() {
-    final currentVisible = MediaQuery.of(context).viewInsets.bottom != 0;
-
+    // save
     if (!_keyboardVisible && currentVisible) {
       _saveHeight = _position.dy;
-    } else if (_lastBottomHeight > 0 && !currentVisible) {
+    }
+
+    // reset
+    if (_lastBottomHeight > 0 && bottomHeight == 0) {
       setState(() {
         _position = Offset(_position.dx, _saveHeight);
       });
-    } else if (_keyboardVisible && currentVisible) {
-      final sumHeight = MediaQuery.of(context).viewInsets.bottom + _height;
+    }
+
+    // onKeyboardVisible
+    if (_keyboardVisible && currentVisible) {
+      final sumHeight = bottomHeight + _height;
       final contextHeight = MediaQuery.of(context).size.height;
       if (sumHeight + _position.dy > contextHeight) {
         final y = contextHeight - sumHeight;
@@ -421,11 +420,12 @@ class _IOSDraggableState extends State<IOSDraggable> with WidgetsBindingObserver
     }
 
     _keyboardVisible = currentVisible;
-    _lastBottomHeight = MediaQuery.of(context).viewInsets.bottom;
+    _lastBottomHeight = bottomHeight;
   }
 
 @override
   Widget build(BuildContext context) {
+    checkKeyboard();
     return Stack(
       children: [
         Positioned(
