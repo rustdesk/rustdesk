@@ -300,11 +300,12 @@ packages:
   dash_chat_2:
     dependency: "direct main"
     description:
-      name: dash_chat_2
-      sha256: e9e08b2a030d340d60f7adbeb977d3d6481db1f172b51440bfa02488b92fa19c
-      url: "https://pub.dev"
-    source: hosted
-    version: "0.0.17"
+      path: "."
+      ref: HEAD
+      resolved-ref: bd6b5b41254e57c5bcece202ebfb234de63e6487
+      url: "https://github.com/rustdesk-org/Dash-Chat-2"
+    source: git
+    version: "0.0.18"
   debounce_throttle:
     dependency: "direct main"
     description:
@@ -1398,10 +1399,10 @@ packages:
     dependency: transitive
     description:
       name: video_player
-      sha256: "59f7f31c919c59cbedd37c617317045f5f650dc0eeb568b0b0de9a36472bdb28"
+      sha256: d3910a8cefc0de8a432a4411dcf85030e885d8fef3ddea291f162253a05dbf01
       url: "https://pub.dev"
     source: hosted
-    version: "2.5.1"
+    version: "2.7.1"
   video_player_android:
     dependency: transitive
     description:
@@ -1422,10 +1423,10 @@ packages:
     dependency: transitive
     description:
       name: video_player_platform_interface
-      sha256: "42bb75de5e9b79e1f20f1d95f688fac0f95beac4d89c6eb2cd421724d4432dae"
+      sha256: be72301bf2c0150ab35a8c34d66e5a99de525f6de1e8d27c0672b836fe48f73a
       url: "https://pub.dev"
     source: hosted
-    version: "6.0.1"
+    version: "6.2.1"
   video_player_web:
     dependency: transitive
     description:
