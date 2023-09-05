@@ -373,7 +373,7 @@ class IOSDraggable extends StatefulWidget {
   _IOSDraggableState createState() => _IOSDraggableState();
 }
 
-class _IOSDraggableState extends State<IOSDraggable> with WidgetsBindingObserver {
+class _IOSDraggableState extends State<IOSDraggable> {
   late Offset _position;
   late ChatModel? _chatModel;
   late double _width;
