@@ -279,7 +279,10 @@ class _RemotePageState extends State<RemotePage>
                   _ffi.ffiModel.pi.isSet.isTrue &&
                           _ffi.ffiModel.waitForFirstImage.isTrue
                       ? emptyOverlay()
-                      : Offstage(),
+                      : () {
+                          _ffi.ffiModel.tryShowAndroidActionsOverlay();
+                          return Offstage();
+                        }(),
                   // Use Overlay to enable rebuild every time on menu button click.
                   _ffi.ffiModel.pi.isSet.isTrue
                       ? Overlay(initialEntries: [

@@ -779,12 +779,18 @@ pub fn get_sysinfo() -> serde_json::Value {
         os = format!("{os} - {}", system.os_version().unwrap_or_default());
     }
     let hostname = hostname(); // sys.hostname() return localhost on android in my test
-    serde_json::json!({
+    use serde_json::json;
+    let mut out = json!({
         "cpu": format!("{cpu}{num_cpus}/{num_pcpus} cores"),
         "memory": format!("{memory}GB"),
         "os": os,
         "hostname": hostname,
-    })
+    });
+    #[cfg(not(any(target_os = "android", target_os = "ios")))] 
+    {
+        out["username"] = json!(crate::platform::get_active_username());
+    }
+    out
 }
 
 #[inline]

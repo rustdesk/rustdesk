@@ -92,12 +92,16 @@ class _RemotePageState extends State<RemotePage> {
     removeSharedStates(widget.id);
   }
 
-  Widget emptyOverlay() => BlockableOverlay(
+  // to-do: It should be better to use transparent color instead of the bgColor.
+  // But for now, the transparent color will cause the canvas to be white.
+  // I'm sure that the white color is caused by the Overlay widget in BlockableOverlay.
+  // But I don't know why and how to fix it.
+  Widget emptyOverlay(Color bgColor) => BlockableOverlay(
         /// the Overlay key will be set with _blockableOverlayState in BlockableOverlay
         /// see override build() in [BlockableOverlay]
         state: _blockableOverlayState,
         underlying: Container(
-          color: Colors.transparent,
+          color: bgColor,
         ),
       );
 
@@ -265,10 +269,13 @@ class _RemotePageState extends State<RemotePage> {
                 children: [
                   gFFI.ffiModel.pi.isSet.isTrue &&
                           gFFI.ffiModel.waitForFirstImage.isTrue
-                      ? emptyOverlay()
-                      : Offstage(),
+                      ? emptyOverlay(MyTheme.canvasColor)
+                      : () {
+                          gFFI.ffiModel.tryShowAndroidActionsOverlay();
+                          return Offstage();
+                        }(),
                   _bottomWidget(),
-                  gFFI.ffiModel.pi.isSet.isFalse ? emptyOverlay() : Offstage(),
+                  gFFI.ffiModel.pi.isSet.isFalse ? emptyOverlay(MyTheme.canvasColor) : Offstage(),
                 ],
               )),
           body: Overlay(

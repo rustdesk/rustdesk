@@ -40,6 +40,8 @@ class ServerModel with ChangeNotifier {
 
   late String _emptyIdShow;
   late final IDTextEditingController _serverId;
+  final _serverPasswd =
+      TextEditingController(text: translate("Generating ..."));
 
   final tabController = DesktopTabController(tabType: DesktopTabType.cm);
 
@@ -60,9 +62,6 @@ class ServerModel with ChangeNotifier {
   bool get showElevation => _showElevation;
 
   int get connectStatus => _connectStatus;
-
-  TextEditingController get _serverPasswd =>
-      TextEditingController(text: translate("Generating ..."));
 
   String get verificationMethod {
     final index = [
