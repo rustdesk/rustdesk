@@ -72,6 +72,13 @@ class ChatModel with ChangeNotifier {
   RxInt mobileUnreadSum = 0.obs;
   MessageKey? latestReceivedKey;
 
+  Offset chatWindowPosition = Offset(20, 80);
+
+   void setChatWindowPosition(Offset position) {
+    chatWindowPosition = position;
+    notifyListeners();
+  }
+
   @override
   void dispose() {
     textController.dispose();
@@ -210,7 +217,7 @@ class ChatModel with ChangeNotifier {
             }
           },
           child: DraggableChatWindow(
-              position: chatInitPos ?? Offset(20, 80),
+              position: chatInitPos ?? chatWindowPosition,
               width: 250,
               height: 350,
               chatModel: this));
