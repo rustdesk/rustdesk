@@ -188,6 +188,7 @@ pub struct Connection {
     lr: LoginRequest,
     last_recv_time: Arc<Mutex<Instant>>,
     chat_unanswered: bool,
+    file_transferred: bool,
     #[cfg(windows)]
     portable: PortableState,
     from_switch: bool,
@@ -320,6 +321,7 @@ impl Connection {
             lr: Default::default(),
             last_recv_time: Arc::new(Mutex::new(Instant::now())),
             chat_unanswered: false,
+            file_transferred: false,
             #[cfg(windows)]
             portable: Default::default(),
             from_switch: false,
@@ -399,6 +401,7 @@ impl Connection {
                         }
                         ipc::Data::Close => {
                             conn.chat_unanswered = false; // seen
+                            conn.file_transferred = false; //seen
                             conn.send_close_reason_no_retry("").await;
                             conn.on_close("connection manager", true).await;
                             break;
@@ -536,9 +539,17 @@ impl Connection {
                 },
                 _ = conn.file_timer.tick() => {
                     if !conn.read_jobs.is_empty() {
-                        if let Err(err) = fs::handle_read_jobs(&mut conn.read_jobs, &mut conn.stream).await {
-                            conn.on_close(&err.to_string(), false).await;
-                            break;
+                        conn.send_to_cm(ipc::Data::FileTransferLog(fs::serialize_transfer_jobs(&conn.read_jobs)));
+                        match fs::handle_read_jobs(&mut conn.read_jobs, &mut conn.stream).await {
+                            Ok(log) => {
+                                if !log.is_empty() {
+                                    conn.send_to_cm(ipc::Data::FileTransferLog(log));
+                                }
+                            }
+                            Err(err) =>  {
+                                conn.on_close(&err.to_string(), false).await;
+                                break;
+                            }
                         }
                     } else {
                         conn.file_timer = time::interval_at(Instant::now() + SEC30, SEC30);
@@ -1717,6 +1728,7 @@ impl Connection {
                                 }
                             }
                             Some(file_action::Union::Send(s)) => {
+                                // server to client
                                 let id = s.id;
                                 let od = can_enable_overwrite_detection(get_version_number(
                                     &self.lr.version,
@@ -1734,10 +1746,12 @@ impl Connection {
                                     Err(err) => {
                                         self.send(fs::new_error(id, err, 0)).await;
                                     }
-                                    Ok(job) => {
+                                    Ok(mut job) => {
                                         self.send(fs::new_dir(id, path, job.files().to_vec()))
                                             .await;
                                         let mut files = job.files().to_owned();
+                                        job.is_remote = true;
+                                        job.conn_id = self.inner.id();
                                         self.read_jobs.push(job);
                                         self.file_timer = time::interval(MILLI1);
                                         self.post_file_audit(
@@ -1751,8 +1765,10 @@ impl Connection {
                                         );
                                     }
                                 }
+                                self.file_transferred = true;
                             }
                             Some(file_action::Union::Receive(r)) => {
+                                // client to server
                                 // note: 1.1.10 introduced identical file detection, which breaks original logic of send/recv files
                                 // whenever got send/recv request, check peer version to ensure old version of rustdesk
                                 let od = can_enable_overwrite_detection(get_version_number(
@@ -1769,6 +1785,8 @@ impl Connection {
                                         .map(|f| (f.name, f.modified_time))
                                         .collect(),
                                     overwrite_detection: od,
+                                    total_size: r.total_size,
+                                    conn_id: self.inner.id(),
                                 });
                                 self.post_file_audit(
                                     FileAuditType::RemoteReceive,
@@ -1780,6 +1798,7 @@ impl Connection {
                                         .collect(),
                                     json!({}),
                                 );
+                                self.file_transferred = true;
                             }
                             Some(file_action::Union::RemoveDir(d)) => {
                                 self.send_fs(ipc::FS::RemoveDir {
@@ -1803,6 +1822,11 @@ impl Connection {
                             }
                             Some(file_action::Union::Cancel(c)) => {
                                 self.send_fs(ipc::FS::CancelWrite { id: c.id });
+                                if let Some(job) = fs::get_job_immutable(c.id, &self.read_jobs) {
+                                    self.send_to_cm(ipc::Data::FileTransferLog(
+                                        fs::serialize_transfer_job(job, false, true, ""),
+                                    ));
+                                }
                                 fs::remove_job(c.id, &mut self.read_jobs);
                             }
                             Some(file_action::Union::SendConfirm(r)) => {
@@ -2254,7 +2278,7 @@ impl Connection {
             lock_screen().await;
         }
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
-        let data = if self.chat_unanswered {
+        let data = if self.chat_unanswered || self.file_transferred {
             ipc::Data::Disconnected
         } else {
             ipc::Data::Close

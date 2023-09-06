@@ -483,9 +483,13 @@ impl<T: InvokeUiSession> Remote<T> {
                                 // peer is not windows, need transform \ to /
                                 fs::transform_windows_path(&mut files);
                             }
+                            let total_size = job.total_size();
                             self.read_jobs.push(job);
                             self.timer = time::interval(MILLI1);
-                            allow_err!(peer.send(&fs::new_receive(id, to, file_num, files)).await);
+                            allow_err!(
+                                peer.send(&fs::new_receive(id, to, file_num, files, total_size))
+                                    .await
+                            );
                         }
                     }
                 }
@@ -568,7 +572,8 @@ impl<T: InvokeUiSession> Remote<T> {
                                 id,
                                 job.path.to_string_lossy().to_string(),
                                 job.file_num,
-                                job.files.clone()
+                                job.files.clone(),
+                                job.total_size(),
                             ))
                             .await
                         );
