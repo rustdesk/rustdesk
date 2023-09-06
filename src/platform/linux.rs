@@ -1073,13 +1073,11 @@ mod desktop {
         }
 
         pub fn refresh(&mut self) {
-            let seat0_values = get_values_of_seat0(&[0, 1, 2]);
-            if !self.sid.is_empty() && is_active(&self.sid) {
-                if self.sid == seat0_values[0] {
+            if !self.sid.is_empty() && is_active_and_seat0(&self.sid) {
                      return;
-                 }
             }
 
+            let seat0_values = get_values_of_seat0(&[0, 1, 2]);
             if seat0_values[0].is_empty() {
                 *self = Self::default();
                 self.is_rustdesk_subprocess = false;

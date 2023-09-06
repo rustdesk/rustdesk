@@ -183,6 +183,15 @@ pub fn is_active(sid: &str) -> bool {
     }
 }
 
+pub fn is_active_and_seat0(sid: &str) -> bool {
+    if let Ok(output) = run_loginctl(Some(vec!["show-session", sid])) {
+        String::from_utf8_lossy(&output.stdout).contains("State=active")
+            && String::from_utf8_lossy(&output.stdout).contains("Seat=seat0")
+    } else {
+        false
+    }
+}
+
 pub fn run_cmds(cmds: &str) -> ResultType<String> {
     let output = std::process::Command::new("sh")
         .args(vec!["-c", cmds])
