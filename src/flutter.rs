@@ -1037,24 +1037,24 @@ fn serialize_resolutions(resolutions: &Vec<Resolution>) -> String {
 }
 
 fn char_to_session_id(c: *const char) -> ResultType<SessionID> {
+    if c.is_null() {
+        bail!("Session id ptr is null");
+    }
     let cstr = unsafe { std::ffi::CStr::from_ptr(c as _) };
     let str = cstr.to_str()?;
     SessionID::from_str(str).map_err(|e| anyhow!("{:?}", e))
 }
 
-#[no_mangle]
-pub fn session_get_rgba_size(_session_uuid_str: *const char) -> usize {
+pub fn session_get_rgba_size(_session_id: SessionID) -> usize {
     #[cfg(not(feature = "flutter_texture_render"))]
-    if let Ok(session_id) = char_to_session_id(_session_uuid_str) {
-        if let Some(session) = SESSIONS.read().unwrap().get(&session_id) {
-            return session.rgba.read().unwrap().len();
-        }
+    if let Some(session) = SESSIONS.read().unwrap().get(&_session_id) {
+        return session.rgba.read().unwrap().len();
     }
     0
 }
 
 #[no_mangle]
-pub fn session_get_rgba(session_uuid_str: *const char) -> *const u8 {
+pub extern "C" fn session_get_rgba(session_uuid_str: *const char) -> *const u8 {
     if let Ok(session_id) = char_to_session_id(session_uuid_str) {
         if let Some(session) = SESSIONS.read().unwrap().get(&session_id) {
             return session.get_rgba();
@@ -1064,23 +1064,17 @@ pub fn session_get_rgba(session_uuid_str: *const char) -> *const u8 {
     std::ptr::null()
 }
 
-#[no_mangle]
-pub fn session_next_rgba(session_uuid_str: *const char) {
-    if let Ok(session_id) = char_to_session_id(session_uuid_str) {
-        if let Some(session) = SESSIONS.read().unwrap().get(&session_id) {
-            return session.next_rgba();
-        }
+pub fn session_next_rgba(session_id: SessionID) {
+    if let Some(session) = SESSIONS.read().unwrap().get(&session_id) {
+        return session.next_rgba();
     }
 }
 
 #[inline]
-#[no_mangle]
-pub fn session_register_texture(_session_uuid_str: *const char, _ptr: usize) {
+pub fn session_register_texture(_session_id: SessionID, _ptr: usize) {
     #[cfg(feature = "flutter_texture_render")]
-    if let Ok(session_id) = char_to_session_id(_session_uuid_str) {
-        if let Some(session) = SESSIONS.write().unwrap().get_mut(&session_id) {
-            return session.register_texture(_ptr);
-        }
+    if let Some(session) = SESSIONS.write().unwrap().get_mut(&_session_id) {
+        return session.register_texture(_ptr);
     }
 }
 
@@ -1210,9 +1204,6 @@ pub fn session_send_pointer(session_id: SessionID, msg: String) {
         }
     }
 }
-
-#[no_mangle]
-unsafe extern "C" fn get_rgba() {}
 
 /// Hooks for session.
 #[derive(Clone)]

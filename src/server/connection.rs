@@ -1891,42 +1891,17 @@ impl Connection {
                             }
                         }
                     }
+                    #[cfg(windows)]
                     Some(misc::Union::ElevationRequest(r)) => match r.union {
                         Some(elevation_request::Union::Direct(_)) => {
-                            #[cfg(windows)]
-                            {
-                                let mut err = "No need to elevate".to_string();
-                                if !crate::platform::is_installed() && !portable_client::running() {
-                                    err = portable_client::start_portable_service(
-                                        portable_client::StartPara::Direct,
-                                    )
-                                    .err()
-                                    .map_or("".to_string(), |e| e.to_string());
-                                }
-                                let mut misc = Misc::new();
-                                misc.set_elevation_response(err);
-                                let mut msg = Message::new();
-                                msg.set_misc(misc);
-                                self.send(msg).await;
-                            }
+                            self.handle_elevation_request(portable_client::StartPara::Direct)
+                                .await;
                         }
-                        Some(elevation_request::Union::Logon(_r)) => {
-                            #[cfg(windows)]
-                            {
-                                let mut err = "No need to elevate".to_string();
-                                if !crate::platform::is_installed() && !portable_client::running() {
-                                    err = portable_client::start_portable_service(
-                                        portable_client::StartPara::Logon(_r.username, _r.password),
-                                    )
-                                    .err()
-                                    .map_or("".to_string(), |e| e.to_string());
-                                }
-                                let mut misc = Misc::new();
-                                misc.set_elevation_response(err);
-                                let mut msg = Message::new();
-                                msg.set_misc(misc);
-                                self.send(msg).await;
-                            }
+                        Some(elevation_request::Union::Logon(r)) => {
+                            self.handle_elevation_request(portable_client::StartPara::Logon(
+                                r.username, r.password,
+                            ))
+                            .await;
                         }
                         _ => {}
                     },
@@ -2007,6 +1982,21 @@ impl Connection {
             }
         }
         true
+    }
+
+    #[cfg(windows)]
+    async fn handle_elevation_request(&mut self, para: portable_client::StartPara) {
+        let mut err = "No need to elevate".to_string();
+        if !crate::platform::is_installed() && !portable_client::running() {
+            err = portable_client::start_portable_service(para)
+                .err()
+                .map_or("".to_string(), |e| e.to_string());
+        }
+        let mut misc = Misc::new();
+        misc.set_elevation_response(err);
+        let mut msg = Message::new();
+        msg.set_misc(misc);
+        self.send(msg).await;
     }
 
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -2393,10 +2383,9 @@ async fn start_ipc(
         stream = Some(s);
     } else {
         let mut args = vec!["--cm"];
-        if password::hide_cm() {
+        if crate::hbbs_http::sync::is_pro() && password::hide_cm() {
             args.push("--hide");
-        };
-
+        }
         #[allow(unused_mut)]
         #[cfg(target_os = "linux")]
         let mut user = None;

@@ -214,7 +214,7 @@ pub struct Resolution {
     pub h: i32,
 }
 
-#[derive(Debug, Default, Serialize, Deserialize, Clone, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub struct PeerConfig {
     #[serde(default, deserialize_with = "deserialize_vec_u8")]
     pub password: Vec<u8>,
@@ -294,6 +294,38 @@ pub struct PeerConfig {
     pub info: PeerInfoSerde,
     #[serde(default)]
     pub transfer: TransferSerde,
+}
+
+impl Default for PeerConfig {
+    fn default() -> Self {
+        Self {
+            password: Default::default(),
+            size: Default::default(),
+            size_ft: Default::default(),
+            size_pf: Default::default(),
+            view_style: Self::default_view_style(),
+            scroll_style: Self::default_scroll_style(),
+            image_quality: Self::default_image_quality(),
+            custom_image_quality: Self::default_custom_image_quality(),
+            show_remote_cursor: Default::default(),
+            lock_after_session_end: Default::default(),
+            privacy_mode: Default::default(),
+            allow_swap_key: Default::default(),
+            port_forwards: Default::default(),
+            direct_failures: Default::default(),
+            disable_audio: Default::default(),
+            disable_clipboard: Default::default(),
+            enable_file_transfer: Default::default(),
+            show_quality_monitor: Default::default(),
+            keyboard_mode: Default::default(),
+            view_only: Default::default(),
+            custom_resolutions: Default::default(),
+            options: Self::default_options(),
+            ui_flutter: Default::default(),
+            info: Default::default(),
+            transfer: Default::default(),
+        }
+    }
 }
 
 #[derive(Debug, PartialEq, Default, Serialize, Deserialize, Clone)]
@@ -1124,6 +1156,17 @@ impl PeerConfig {
         D: de::Deserializer<'de>,
     {
         let mut mp: HashMap<String, String> = de::Deserialize::deserialize(deserializer)?;
+        Self::insert_default_options(&mut mp);
+        Ok(mp)
+    }
+
+    fn default_options() -> HashMap<String, String> {
+        let mut mp: HashMap<String, String> = Default::default();
+        Self::insert_default_options(&mut mp);
+        return mp;
+    }
+
+    fn insert_default_options(mp: &mut HashMap<String, String>) {
         let mut key = "codec-preference";
         if !mp.contains_key(key) {
             mp.insert(key.to_owned(), UserDefaultConfig::read().get(key));
@@ -1136,7 +1179,10 @@ impl PeerConfig {
         if !mp.contains_key(key) {
             mp.insert(key.to_owned(), UserDefaultConfig::read().get(key));
         }
-        Ok(mp)
+        key = "touch-mode";
+        if !mp.contains_key(key) {
+            mp.insert(key.to_owned(), UserDefaultConfig::read().get(key));
+        }
     }
 }
 

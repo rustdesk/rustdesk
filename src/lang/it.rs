@@ -538,8 +538,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("pull_ab_failed_tip", "Impossibile aggiornare la rubrica"),
         ("push_ab_failed_tip", "Impossibile sincronizzare la rubrica con il server"),
         ("synced_peer_readded_tip", "I dispositivi presenti nelle sessioni recenti saranno sincronizzati di nuovo nella rubrica."),
-        ("Change Color", ""),
-        ("Primary Color", ""),
-        ("HSV Color", ""),
+        ("Change Color", "Modifica colore"),
+        ("Primary Color", "Colore primario"),
+        ("HSV Color", "Colore HSV"),
     ].iter().cloned().collect();
 }

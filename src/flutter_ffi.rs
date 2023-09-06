@@ -1388,18 +1388,6 @@ pub fn main_get_build_date() -> String {
     crate::BUILD_DATE.to_string()
 }
 
-#[no_mangle]
-unsafe extern "C" fn translate(name: *const c_char, locale: *const c_char) -> *const c_char {
-    let name = CStr::from_ptr(name);
-    let locale = CStr::from_ptr(locale);
-    let res = if let (Ok(name), Ok(locale)) = (name.to_str(), locale.to_str()) {
-        crate::client::translate_locale(name.to_owned(), locale)
-    } else {
-        String::new()
-    };
-    CString::from_vec_unchecked(res.into_bytes()).into_raw()
-}
-
 fn handle_query_onlines(onlines: Vec<String>, offlines: Vec<String>) {
     let data = HashMap::from([
         ("name", "callback_query_onlines".to_owned()),
@@ -1410,6 +1398,22 @@ fn handle_query_onlines(onlines: Vec<String>, offlines: Vec<String>) {
         flutter::APP_TYPE_MAIN,
         serde_json::ser::to_string(&data).unwrap_or("".to_owned()),
     );
+}
+
+pub fn translate(name: String, locale: String) -> SyncReturn<String> {
+    SyncReturn(crate::client::translate_locale(name, &locale))
+}
+
+pub fn session_get_rgba_size(session_id: SessionID) -> SyncReturn<usize> {
+    SyncReturn(super::flutter::session_get_rgba_size(session_id))
+}
+
+pub fn session_next_rgba(session_id: SessionID) -> SyncReturn<()> {
+    SyncReturn(super::flutter::session_next_rgba(session_id))
+}
+
+pub fn session_register_texture(session_id: SessionID, ptr: usize) -> SyncReturn<()> {
+    SyncReturn(super::flutter::session_register_texture(session_id, ptr))
 }
 
 pub fn query_onlines(ids: Vec<String>) {
