@@ -410,6 +410,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
   void onRemoveId(String id) async {
     if (tabController.state.value.tabs.isEmpty) {
       await WindowController.fromWindowId(windowId()).close();
+      stateGlobal.setFullscreen(false, procWnd: false);
     }
     ConnectionTypeState.delete(id);
     _update_remote_count();
