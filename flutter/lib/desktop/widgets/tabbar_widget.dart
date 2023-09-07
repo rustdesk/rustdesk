@@ -482,6 +482,8 @@ class WindowActionPanel extends StatefulWidget {
 class WindowActionPanelState extends State<WindowActionPanel>
     with MultiWindowListener, WindowListener {
   final _saveFrameDebounce = Debouncer(delay: Duration(seconds: 1));
+  Timer? _macOSCheckRestoreTimer;
+  int _macOSCheckRestoreCounter = 0;
 
   @override
   void initState() {
@@ -514,6 +516,7 @@ class WindowActionPanelState extends State<WindowActionPanel>
   void dispose() {
     DesktopMultiWindow.removeListener(this);
     windowManager.removeListener(this);
+    _macOSCheckRestoreTimer?.cancel();
     super.dispose();
   }
 
@@ -566,6 +569,33 @@ class WindowActionPanelState extends State<WindowActionPanel>
 
   @override
   void onWindowClose() async {
+    mainWindowClose() async => await windowManager.hide();
+    notMainWindowClose(WindowController controller) async {
+      await controller.hide();
+      await Future.wait([
+        rustDeskWinManager
+            .call(WindowType.Main, kWindowEventHide, {"id": kWindowId!}),
+        widget.onClose?.call() ?? Future.microtask(() => null)
+      ]);
+    }
+
+    macOSWindowClose(
+        Future<void> Function() restoreFunc,
+        Future<bool> Function() checkFullscreen,
+        Future<void> Function() closeFunc) async {
+      await restoreFunc();
+      _macOSCheckRestoreCounter = 0;
+      _macOSCheckRestoreTimer =
+          Timer.periodic(Duration(milliseconds: 30), (timer) async {
+        _macOSCheckRestoreCounter++;
+        if (!await checkFullscreen() || _macOSCheckRestoreCounter >= 30) {
+          _macOSCheckRestoreTimer?.cancel();
+          _macOSCheckRestoreTimer = null;
+          Timer(Duration(milliseconds: 700), () async => await closeFunc());
+        }
+      });
+    }
+
     // hide window on close
     if (widget.isMainWindow) {
       if (rustDeskWinManager.getActiveWindows().contains(kMainWindowId)) {
@@ -573,23 +603,28 @@ class WindowActionPanelState extends State<WindowActionPanel>
       }
       // macOS specific workaround, the window is not hiding when in fullscreen.
       if (Platform.isMacOS && await windowManager.isFullScreen()) {
-        await windowManager.setFullScreen(false);
-        await Future.delayed(Duration(seconds: 1));
+        stateGlobal.closeOnFullscreen = true;
+        await macOSWindowClose(
+            () async => await windowManager.setFullScreen(false),
+            () async => await windowManager.isFullScreen(),
+            mainWindowClose);
+      } else {
+        stateGlobal.closeOnFullscreen = false;
+        await mainWindowClose();
       }
-      await windowManager.hide();
     } else {
       // it's safe to hide the subwindow
       final controller = WindowController.fromWindowId(kWindowId!);
       if (Platform.isMacOS && await controller.isFullScreen()) {
-        await controller.setFullscreen(false);
-        await Future.delayed(Duration(seconds: 1));
+        stateGlobal.closeOnFullscreen = true;
+        await macOSWindowClose(
+            () async => await controller.setFullscreen(false),
+            () async => await controller.isFullScreen(),
+            () async => await notMainWindowClose(controller));
+      } else {
+        stateGlobal.closeOnFullscreen = false;
+        await notMainWindowClose(controller);
       }
-      await controller.hide();
-      await Future.wait([
-        rustDeskWinManager
-            .call(WindowType.Main, kWindowEventHide, {"id": kWindowId!}),
-        widget.onClose?.call() ?? Future.microtask(() => null)
-      ]);
     }
     super.onWindowClose();
   }

@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:async';
 import 'dart:io';
 import 'dart:ui' as ui;
 
@@ -109,6 +110,11 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
         final sessionId = args['session_id'];
         final tabWindowId = args['tab_window_id'];
         windowOnTop(windowId());
+        if (tabController.length == 0) {
+          if (Platform.isMacOS && stateGlobal.closeOnFullscreen) {
+            stateGlobal.setFullscreen(true);
+          }
+        }
         ConnectionTypeState.init(id);
         _toolbarState.setShow(
             bind.mainGetUserDefaultOption(key: 'collapse_toolbar') != 'Y');
@@ -410,6 +416,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
   void onRemoveId(String id) async {
     if (tabController.state.value.tabs.isEmpty) {
       await WindowController.fromWindowId(windowId()).close();
+      stateGlobal.setFullscreen(false, procWnd: false);
     }
     ConnectionTypeState.delete(id);
     _update_remote_count();

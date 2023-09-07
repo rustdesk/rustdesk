@@ -1392,9 +1392,10 @@ class LastWindowPosition {
   double? offsetWidth;
   double? offsetHeight;
   bool? isMaximized;
+  bool? isFullscreen;
 
   LastWindowPosition(this.width, this.height, this.offsetWidth,
-      this.offsetHeight, this.isMaximized);
+      this.offsetHeight, this.isMaximized, this.isFullscreen);
 
   Map<String, dynamic> toJson() {
     return <String, dynamic>{
@@ -1403,6 +1404,7 @@ class LastWindowPosition {
       "offsetWidth": offsetWidth,
       "offsetHeight": offsetHeight,
       "isMaximized": isMaximized,
+      "isFullscreen": isFullscreen,
     };
   }
 
@@ -1418,7 +1420,7 @@ class LastWindowPosition {
     try {
       final m = jsonDecode(content);
       return LastWindowPosition(m["width"], m["height"], m["offsetWidth"],
-          m["offsetHeight"], m["isMaximized"]);
+          m["offsetHeight"], m["isMaximized"], m["isFullscreen"]);
     } catch (e) {
       debugPrintStack(
           label:
@@ -1439,6 +1441,8 @@ Future<void> saveWindowPosition(WindowType type, {int? windowId}) async {
   late Offset position;
   late Size sz;
   late bool isMaximized;
+  bool isFullscreen = stateGlobal.fullscreen ||
+      (Platform.isMacOS && stateGlobal.closeOnFullscreen);
   setFrameIfMaximized() {
     if (isMaximized) {
       final pos = bind.getLocalFlutterOption(k: kWindowPrefix + type.name);
@@ -1484,20 +1488,21 @@ Future<void> saveWindowPosition(WindowType type, {int? windowId}) async {
   }
 
   final pos = LastWindowPosition(
-      sz.width, sz.height, position.dx, position.dy, isMaximized);
+      sz.width, sz.height, position.dx, position.dy, isMaximized, isFullscreen);
   debugPrint(
-      "Saving frame: $windowId: ${pos.width}/${pos.height}, offset:${pos.offsetWidth}/${pos.offsetHeight}, isMaximized:${pos.isMaximized}");
+      "Saving frame: $windowId: ${pos.width}/${pos.height}, offset:${pos.offsetWidth}/${pos.offsetHeight}, isMaximized:${pos.isMaximized}, isFullscreen:${pos.isFullscreen}");
 
   await bind.setLocalFlutterOption(
       k: kWindowPrefix + type.name, v: pos.toString());
 
   if (type == WindowType.RemoteDesktop && windowId != null) {
-    await _saveSessionWindowPosition(type, windowId, isMaximized, pos);
+    await _saveSessionWindowPosition(
+        type, windowId, isMaximized, isFullscreen, pos);
   }
 }
 
 Future _saveSessionWindowPosition(WindowType windowType, int windowId,
-    bool isMaximized, LastWindowPosition pos) async {
+    bool isMaximized, bool isFullscreen, LastWindowPosition pos) async {
   final remoteList = await DesktopMultiWindow.invokeMethod(
       windowId, kWindowEventGetRemoteList, null);
   getPeerPos(String peerId) {
@@ -1510,7 +1515,8 @@ Future _saveSessionWindowPosition(WindowType windowType, int windowId,
               lpos?.height ?? pos.offsetHeight,
               lpos?.offsetWidth ?? pos.offsetWidth,
               lpos?.offsetHeight ?? pos.offsetHeight,
-              isMaximized)
+              isMaximized,
+              isFullscreen)
           .toString();
     } else {
       return pos.toString();
@@ -1700,7 +1706,13 @@ Future<bool> restoreWindowPosition(WindowType type,
           await wc.setFrame(frame);
         }
       }
-      if (lpos.isMaximized == true) {
+      if (lpos.isFullscreen == true) {
+        await restoreFrame();
+        // An duration is needed to avoid the window being restored after fullscreen.
+        Future.delayed(Duration(milliseconds: 300), () async {
+          stateGlobal.setFullscreen(true);
+        });
+      } else if (lpos.isMaximized == true) {
         await restoreFrame();
         // An duration is needed to avoid the window being restored after maximized.
         Future.delayed(Duration(milliseconds: 300), () async {
