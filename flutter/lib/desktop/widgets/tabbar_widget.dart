@@ -591,7 +591,7 @@ class WindowActionPanelState extends State<WindowActionPanel>
         if (!await checkFullscreen() || _macOSCheckRestoreCounter >= 30) {
           _macOSCheckRestoreTimer?.cancel();
           _macOSCheckRestoreTimer = null;
-          Timer(Duration(milliseconds: 500), () async => await closeFunc());
+          Timer(Duration(milliseconds: 700), () async => await closeFunc());
         }
       });
     }

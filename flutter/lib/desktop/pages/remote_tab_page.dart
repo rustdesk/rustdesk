@@ -112,10 +112,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
         windowOnTop(windowId());
         if (tabController.length == 0) {
           if (Platform.isMacOS && stateGlobal.closeOnFullscreen) {
-            Timer(
-                Duration(milliseconds: 300),
-                () async => await WindowController.fromWindowId(windowId())
-                    .setFullscreen(true));
+            stateGlobal.setFullscreen(true);
           }
         }
         ConnectionTypeState.init(id);
