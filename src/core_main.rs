@@ -1,3 +1,5 @@
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+use crate::client::translate;
 #[cfg(not(debug_assertions))]
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use crate::platform::breakdown_callback;
@@ -5,6 +7,8 @@ use hbb_common::log;
 #[cfg(not(debug_assertions))]
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use hbb_common::platform::register_breakdown_handler;
+#[cfg(windows)]
+use tauri_winrt_notification::{Duration, Sound, Toast};
 
 #[macro_export]
 macro_rules! my_println{
@@ -178,12 +182,23 @@ pub fn core_main() -> Option<Vec<String>> {
                 }
                 return None;
             } else if args[0] == "--silent-install" {
-                hbb_common::allow_err!(platform::install_me(
+                let res = platform::install_me(
                     "desktopicon startmenu driverCert",
                     "".to_owned(),
                     true,
                     args.len() > 1,
-                ));
+                );
+                let text = match res {
+                    Ok(_) => translate("Installation Successful!".to_string()),
+                    Err(_) => translate("Installation failed!".to_string()),
+                };
+                Toast::new(Toast::POWERSHELL_APP_ID)
+                    .title(&hbb_common::config::APP_NAME.read().unwrap())
+                    .text1(&text)
+                    .sound(Some(Sound::Default))
+                    .duration(Duration::Short)
+                    .show()
+                    .ok();
                 return None;
             } else if args[0] == "--install-cert" {
                 #[cfg(windows)]

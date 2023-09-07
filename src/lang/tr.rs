@@ -408,7 +408,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("One-time password length", "Tek seferlik şifre uzunluğu"),
         ("Request access to your device", "Cihazınıza erişim talep edin"),
         ("Hide connection management window", "Bağlantı yönetimi penceresini gizle"),
-      ("hide_cm_tip", "Oturumları yalnızca parola ile kabul edebilir ve kalıcı parola kullanıyorsanız gizlemeye izin verin"),
+        ("hide_cm_tip", "Oturumları yalnızca parola ile kabul edebilir ve kalıcı parola kullanıyorsanız gizlemeye izin verin"),
         ("wayland_experiment_tip", "Wayland desteği deneysel aşamada olduğundan, gerektiğinde X11'i kullanmanız önerilir"),
         ("Right click to select tabs", "Sekmeleri seçmek için sağ tıklayın"),
         ("Skipped", "Atlandı"),
@@ -541,5 +541,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Change Color", "Rengi Değiştir"),
         ("Primary Color", "Birincil Renk"),
         ("HSV Color", "HSV Rengi"),
+        ("Installation Successful!", ""),
+        ("Installation failed!", ""),
     ].iter().cloned().collect();
 }
