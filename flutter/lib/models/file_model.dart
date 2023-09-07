@@ -1029,6 +1029,7 @@ class JobProgress {
   var to = "";
   var showHidden = false;
   var err = "";
+  int lastTransferredSize = 0;
 
   clear() {
     state = JobState.none;

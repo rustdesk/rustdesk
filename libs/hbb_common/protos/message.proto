@@ -397,6 +397,7 @@ message FileTransferReceiveRequest {
   string path = 2; // path written to
   repeated FileEntry files = 3;
   int32 file_num = 4;
+  uint64 total_size = 5;
 }
 
 message FileRemoveDir {

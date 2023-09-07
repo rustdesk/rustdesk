@@ -93,13 +93,13 @@ class ChatModel with ChangeNotifier {
   late final Map<MessageKey, MessageBody> _messages = {};
 
   MessageKey _currentKey = MessageKey('', -2); // -2 is invalid value
-  late bool _isShowCMChatPage = false;
+  late bool _isShowCMSidePage = false;
 
   Map<MessageKey, MessageBody> get messages => _messages;
 
   MessageKey get currentKey => _currentKey;
 
-  bool get isShowCMChatPage => _isShowCMChatPage;
+  bool get isShowCMSidePage => _isShowCMSidePage;
 
   void setOverlayState(BlockableOverlayState blockableOverlayState) {
     _blockableOverlayState = blockableOverlayState;
@@ -262,7 +262,7 @@ class ChatModel with ChangeNotifier {
   showChatPage(MessageKey key) async {
     if (isDesktop) {
       if (isConnManager) {
-        if (!_isShowCMChatPage) {
+        if (!_isShowCMSidePage) {
           await toggleCMChatPage(key);
         }
       } else {
@@ -279,12 +279,26 @@ class ChatModel with ChangeNotifier {
     }
   }
 
+  showSidePage() async {
+    if (isDesktop) {
+      if (isConnManager) {
+        if (!_isShowCMSidePage) {
+          await toggleCMSidePage();
+        }
+      }
+    }
+  }
+
   toggleCMChatPage(MessageKey key) async {
     if (gFFI.chatModel.currentKey != key) {
       gFFI.chatModel.changeCurrentKey(key);
     }
-    if (_isShowCMChatPage) {
-      _isShowCMChatPage = !_isShowCMChatPage;
+    await toggleCMSidePage();
+  }
+
+  toggleCMSidePage() async {
+    if (_isShowCMSidePage) {
+      _isShowCMSidePage = !_isShowCMSidePage;
       notifyListeners();
       await windowManager.show();
       await windowManager.setSizeAlignment(
@@ -294,7 +308,7 @@ class ChatModel with ChangeNotifier {
       await windowManager.show();
       await windowManager.setSizeAlignment(
           kConnectionManagerWindowSizeOpenChat, Alignment.topRight);
-      _isShowCMChatPage = !_isShowCMChatPage;
+      _isShowCMSidePage = !_isShowCMSidePage;
       notifyListeners();
     }
   }

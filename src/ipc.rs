@@ -70,6 +70,8 @@ pub enum FS {
         file_num: i32,
         files: Vec<(String, u64)>,
         overwrite_detection: bool,
+        total_size: u64,
+        conn_id: i32,
     },
     CancelWrite {
         id: i32,
@@ -231,6 +233,7 @@ pub enum Data {
     Plugin(Plugin),
     #[cfg(windows)]
     SyncWinCpuUsage(Option<f64>),
+    FileTransferLog(String),
 }
 
 #[tokio::main(flavor = "current_thread")]
