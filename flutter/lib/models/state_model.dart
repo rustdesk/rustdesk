@@ -20,6 +20,8 @@ class StateGlobal {
   final RxBool showRemoteToolBar = false.obs;
   final RxInt displaysCount = 0.obs;
   final svcStatus = SvcStatus.notReady.obs;
+  // Only used for macOS
+  bool closeOnFullscreen = false;
 
   // Use for desktop -> remote toolbar -> resolution
   final Map<String, Map<int, String?>> _lastResolutionGroupValues = {};

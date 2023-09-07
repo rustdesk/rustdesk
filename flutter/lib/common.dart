@@ -1441,6 +1441,8 @@ Future<void> saveWindowPosition(WindowType type, {int? windowId}) async {
   late Offset position;
   late Size sz;
   late bool isMaximized;
+  bool isFullscreen = stateGlobal.fullscreen ||
+      (Platform.isMacOS && stateGlobal.closeOnFullscreen);
   setFrameIfMaximized() {
     if (isMaximized) {
       final pos = bind.getLocalFlutterOption(k: kWindowPrefix + type.name);
@@ -1486,7 +1488,7 @@ Future<void> saveWindowPosition(WindowType type, {int? windowId}) async {
   }
 
   final pos = LastWindowPosition(
-      sz.width, sz.height, position.dx, position.dy, isMaximized, stateGlobal.fullscreen);
+      sz.width, sz.height, position.dx, position.dy, isMaximized, isFullscreen);
   debugPrint(
       "Saving frame: $windowId: ${pos.width}/${pos.height}, offset:${pos.offsetWidth}/${pos.offsetHeight}, isMaximized:${pos.isMaximized}, isFullscreen:${pos.isFullscreen}");
 
@@ -1495,7 +1497,7 @@ Future<void> saveWindowPosition(WindowType type, {int? windowId}) async {
 
   if (type == WindowType.RemoteDesktop && windowId != null) {
     await _saveSessionWindowPosition(
-        type, windowId, isMaximized, stateGlobal.fullscreen, pos);
+        type, windowId, isMaximized, isFullscreen, pos);
   }
 }
 
