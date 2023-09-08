@@ -34,11 +34,7 @@ RustDesk heißt jegliche Mitarbeit willkommen. Schauen Sie sich [CONTRIBUTING-DE
 Nachfolgend sind die Server gelistet, die Sie kostenlos nutzen können. Es kann sein, dass sich diese Liste immer mal wieder ändert. Falls Sie nicht in der Nähe einer dieser Server sind, kann es sein, dass Ihre Verbindung langsam sein wird.
 | Standort | Anbieter | Spezifikation |
 | --------- | ------------- | ------------------ |
-| Südkorea (Seoul) | [AWS lightsail](https://aws.amazon.com/de/) | 1 vCPU / 0,5 GB RAM |
 | Deutschland | [Hetzner](https://www.hetzner.com/de/) | 2 vCPU / 4 GB RAM |
-| Deutschland | [Codext](https://codext.de/) | 4 vCPU / 8 GB RAM |
-| Finnland (Helsinki) | [Netlock](https://netlockendpoint.com/de/index.html) | 4 vCPU / 8 GB RAM |
-| USA (Ashburn) | [Netlock](https://netlockendpoint.com/de/index.html) | 4 vCPU / 8 GB RAM |
 | Ukraine (Kiew) | [dc.volia](https://dc.volia.com) | 2 vCPU / 4 GB RAM |
 
 ## Dev-Container

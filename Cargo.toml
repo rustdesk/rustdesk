@@ -1,6 +1,6 @@
 [package]
 name = "rustdesk"
-version = "1.2.0"
+version = "1.2.3"
 authors = ["rustdesk <info@rustdesk.com>"]
 edition = "2021"
 build= "build.rs"
@@ -48,7 +48,7 @@ lazy_static = "1.4"
 sha2 = "0.10"
 repng = "0.2"
 parity-tokio-ipc = { git = "https://github.com/open-trade/parity-tokio-ipc" }
-runas = "1.0"
+runas = "=1.0" # https://github.com/mitsuhiko/rust-runas/issues/13
 magnum-opus = { git = "https://github.com/rustdesk/magnum-opus" }
 dasp = { version = "0.11", features = ["signal", "interpolate-linear", "interpolate"], optional = true }
 rubato = { version = "0.12", optional = true }
@@ -80,7 +80,6 @@ cpal = "0.15"
 ringbuf = "0.3"
 
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
-machine-uid = "0.3"
 mac_address = "1.1"
 sciter-rs = { git = "https://github.com/open-trade/rust-sciter", branch = "dyn" }
 sys-locale = "0.3"
@@ -98,6 +97,7 @@ virtual_display = { path = "libs/virtual_display", optional = true }
 impersonate_system = { git = "https://github.com/21pages/impersonate-system" }
 shared_memory = "0.12"
 shutdown_hooks = "0.1"
+tauri-winrt-notification = "0.1.2"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc = "0.2"
@@ -112,7 +112,7 @@ objc_id = "0.1"
 
 [target.'cfg(any(target_os = "macos", target_os = "linux", target_os = "windows"))'.dependencies]
 tray-icon = { git = "https://github.com/rustdesk-org/tray-icon" }
-tao = { git = "https://github.com/rustdesk-org/tao", branch = "muda" }
+tao = { git = "https://github.com/rustdesk-org/tao", branch = "dev" }
 image = "0.24"
 
 [target.'cfg(any(target_os = "macos", target_os = "linux"))'.dependencies]

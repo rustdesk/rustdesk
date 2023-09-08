@@ -48,7 +48,7 @@ pub fn breakdown_callback() {
 pub fn change_resolution(name: &str, width: usize, height: usize) -> ResultType<()> {
     let cur_resolution = current_resolution(name)?;
     // For MacOS
-    // to-do: Make sure the following comparison works. 
+    // to-do: Make sure the following comparison works.
     // For Linux
     // Just run "xrandr", dpi may not be taken into consideration.
     // For Windows

@@ -97,7 +97,6 @@ message PeerInfo {
   int32 current_display = 5;
   bool sas_enabled = 6;
   string version = 7;
-  int32 conn_id = 8;
   Features features = 9;
   SupportedEncoding encoding = 10;
   SupportedResolutions resolutions = 11;
@@ -110,6 +109,46 @@ message LoginResponse {
     string error = 1;
     PeerInfo peer_info = 2;
   }
+}
+
+message TouchScaleUpdate {
+  // The delta scale factor relative to the previous scale.
+  // delta * 1000
+  // 0 means scale end
+  int32 scale = 1;
+}
+
+message TouchPanStart {
+  int32 x = 1;
+  int32 y = 2;
+}
+
+message TouchPanUpdate {
+  // The delta x position relative to the previous position.
+  int32 x = 1;
+  // The delta y position relative to the previous position.
+  int32 y = 2;
+}
+
+message TouchPanEnd {
+  int32 x = 1;
+  int32 y = 2;
+}
+
+message TouchEvent {
+  oneof union {
+    TouchScaleUpdate scale_update = 1;
+    TouchPanStart pan_start = 2;
+    TouchPanUpdate pan_update = 3;
+    TouchPanEnd pan_end = 4;
+  }
+}
+
+message PointerDeviceEvent {
+  oneof union {
+    TouchEvent touch_event = 1;
+  }
+  repeated ControlKey modifiers = 2;
 }
 
 message MouseEvent {
@@ -358,6 +397,7 @@ message FileTransferReceiveRequest {
   string path = 2; // path written to
   repeated FileEntry files = 3;
   int32 file_num = 4;
+  uint64 total_size = 5;
 }
 
 message FileRemoveDir {
@@ -643,6 +683,9 @@ message Misc {
     Resolution change_resolution = 24;
     PluginRequest plugin_request = 25;
     PluginFailure plugin_failure = 26;
+    uint32 full_speed_fps = 27;
+    uint32 auto_adjust_fps = 28;
+    bool client_record_status = 29;
   }
 }
 
@@ -683,5 +726,6 @@ message Message {
     VoiceCallRequest voice_call_request = 23;
     VoiceCallResponse voice_call_response = 24;
     PeerInfo peer_info = 25;
+    PointerDeviceEvent pointer_device_event = 26;
   }
 }

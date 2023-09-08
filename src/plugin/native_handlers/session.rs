@@ -131,6 +131,8 @@ impl PluginNativeSessionHandler {
             let mut m = HashMap::new();
             m.insert("name", MSG_TO_UI_TYPE_SESSION_CREATED);
             m.insert("session_id", &session_id);
+            // todo: APP_TYPE_DESKTOP_REMOTE is not used anymore.
+            // crate::flutter::APP_TYPE_DESKTOP_REMOTE + window id, is used for multi-window support.
             crate::flutter::push_global_event(
                 crate::flutter::APP_TYPE_DESKTOP_REMOTE,
                 serde_json::to_string(&m).unwrap_or("".to_string()),

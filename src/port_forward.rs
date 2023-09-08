@@ -81,7 +81,7 @@ pub async fn listen(
                        });
                     }
                     Err(err) => {
-                        interface.msgbox("error", "Error", &err.to_string(), "");
+                        interface.on_establish_connection_error(err.to_string());
                     }
                     _ => {}
                 }
@@ -113,43 +113,6 @@ async fn connect_and_login(
     token: &str,
     is_rdp: bool,
 ) -> ResultType<Option<Stream>> {
-    let mut res = connect_and_login_2(
-        id,
-        password,
-        ui_receiver,
-        interface.clone(),
-        forward,
-        key,
-        token,
-        is_rdp,
-    )
-    .await;
-    if res.is_err() && interface.is_force_relay() {
-        res = connect_and_login_2(
-            id,
-            password,
-            ui_receiver,
-            interface,
-            forward,
-            key,
-            token,
-            is_rdp,
-        )
-        .await;
-    }
-    res
-}
-
-async fn connect_and_login_2(
-    id: &str,
-    password: &str,
-    ui_receiver: &mut mpsc::UnboundedReceiver<Data>,
-    interface: impl Interface,
-    forward: &mut Framed<TcpStream, BytesCodec>,
-    key: &str,
-    token: &str,
-    is_rdp: bool,
-) -> ResultType<Option<Stream>> {
     let conn_type = if is_rdp {
         ConnType::RDP
     } else {
@@ -157,6 +120,7 @@ async fn connect_and_login_2(
     };
     let (mut stream, direct, _pk) =
         Client::start(id, key, token, conn_type, interface.clone()).await?;
+    interface.update_direct(Some(direct));
     let mut interface = interface;
     let mut buffer = Vec::new();
     let mut received = false;
@@ -167,7 +131,10 @@ async fn connect_and_login_2(
                     bail!("Timeout");
                 }
                 Ok(Some(Ok(bytes))) => {
-                    received = true;
+                    if !received {
+                        received = true;
+                        interface.update_received(true);
+                    }
                     let msg_in = Message::parse_from_bytes(&bytes)?;
                     match msg_in.union {
                         Some(message::Union::Hash(hash)) => {
@@ -191,8 +158,6 @@ async fn connect_and_login_2(
                     }
                 }
                 Ok(Some(Err(err))) => {
-                    log::error!("Connection closed: {}", err);
-                    interface.set_force_relay(direct, received);
                     bail!("Connection closed: {}", err);
                 }
                 _ => {

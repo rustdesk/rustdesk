@@ -70,6 +70,8 @@ pub enum FS {
         file_num: i32,
         files: Vec<(String, u64)>,
         overwrite_detection: bool,
+        total_size: u64,
+        conn_id: i32,
     },
     CancelWrite {
         id: i32,
@@ -152,6 +154,7 @@ pub enum DataPortableService {
     Pong,
     ConnCount(Option<usize>),
     Mouse((Vec<u8>, i32)),
+    Pointer((Vec<u8>, i32)),
     Key(Vec<u8>),
     RequestStart,
     WillClose,
@@ -228,6 +231,9 @@ pub enum Data {
     #[cfg(all(feature = "flutter", feature = "plugin_framework"))]
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     Plugin(Plugin),
+    #[cfg(windows)]
+    SyncWinCpuUsage(Option<f64>),
+    FileTransferLog(String),
 }
 
 #[tokio::main(flavor = "current_thread")]
@@ -347,7 +353,7 @@ async fn handle(data: Data, stream: &mut Connection) {
             }
         }
         Data::OnlineStatus(_) => {
-            let x = config::get_online_statue();
+            let x = config::get_online_state();
             let confirmed = Config::get_key_confirmed();
             allow_err!(stream.send(&Data::OnlineStatus(Some((x, confirmed)))).await);
         }
@@ -448,6 +454,16 @@ async fn handle(data: Data, stream: &mut Connection) {
                     .send(&Data::SyncConfig(Some(
                         (Config::get(), Config2::get()).into()
                     )))
+                    .await
+            );
+        }
+        #[cfg(windows)]
+        Data::SyncWinCpuUsage(None) => {
+            allow_err!(
+                stream
+                    .send(&Data::SyncWinCpuUsage(
+                        hbb_common::platform::windows::cpu_uage_one_minute()
+                    ))
                     .await
             );
         }

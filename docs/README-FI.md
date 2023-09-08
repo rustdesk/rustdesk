@@ -24,11 +24,7 @@ RustDesk toivottaa avustukset tervetulleiksi kaikilta. Katso lisätietoja [`docs
 Alla on palvelimia, joita voit käyttää ilmaiseksi, ne saattavat muuttua ajan mittaan. Jos et ole lähellä yhtä näistä, verkkosi voi olla hidas.
 | Sijainti | Myyjä | Määrittely |
 | --------- | ------------- | ------------------ |
-| Seoul | AWS lightsail | 1 vCPU / 0.5GB RAM |
 | Germany | Hetzner | 2 vCPU / 4GB RAM |
-| Germany | Codext | 4 vCPU / 8GB RAM |
-| Finland (Helsinki) | [Netlock](https://netlockendpoint.com) | 4 vCPU / 8GB RAM |
-| USA (Ashburn) | [Netlock](https://netlockendpoint.com) | 4 vCPU / 8GB RAM |
 | Ukraine (Kyiv) | [dc.volia](https://dc.volia.com) | 2 vCPU / 4GB RAM |
 
 ## Riippuvuudet

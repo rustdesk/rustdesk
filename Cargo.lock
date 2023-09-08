@@ -1064,7 +1064,7 @@ dependencies = [
 [[package]]
 name = "confy"
 version = "0.4.0-2"
-source = "git+https://github.com/open-trade/confy#9f231b2039cf8a8f8cdf6b829c5ac0016e146077"
+source = "git+https://github.com/open-trade/confy#7855cd3c32b1a60b44e5076ee8f6b4131da10350"
 dependencies = [
  "directories-next",
  "serde 1.0.163",
@@ -1207,7 +1207,7 @@ dependencies = [
  "js-sys",
  "libc",
  "mach2",
- "ndk 0.7.0",
+ "ndk",
  "ndk-context",
  "oboe",
  "once_cell",
@@ -3041,8 +3041,8 @@ checksum = "9a3a5bfb195931eeb336b2a7b4d761daec841b97f947d34394601737a7bba5e4"
 
 [[package]]
 name = "hwcodec"
-version = "0.1.0"
-source = "git+https://github.com/21pages/hwcodec?branch=stable#3ea79865a10387b7e1b7630c2ae068bd2081f680"
+version = "0.1.1"
+source = "git+https://github.com/21pages/hwcodec?branch=stable#82cdc15457e42feaf14e1b38622506b2d54baf76"
 dependencies = [
  "bindgen 0.59.2",
  "cc",
@@ -3652,9 +3652,10 @@ dependencies = [
 [[package]]
 name = "machine-uid"
 version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "26141aceb9f046065617266f41a4a652e4583da643472a10a89b4b3664d99eb6"
+source = "git+https://github.com/21pages/machine-uid#381ff579c1dc3a6c54db9dfec47c44bcb0246542"
 dependencies = [
+ "bindgen 0.59.2",
+ "cc",
  "winreg 0.11.0",
 ]
 
@@ -3819,26 +3820,13 @@ dependencies = [
 
 [[package]]
 name = "ndk"
-version = "0.6.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2032c77e030ddee34a6787a64166008da93f6a352b629261d0fee232b8742dd4"
-dependencies = [
- "bitflags",
- "jni-sys",
- "ndk-sys 0.3.0",
- "num_enum",
- "thiserror",
-]
-
-[[package]]
-name = "ndk"
 version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "451422b7e4718271c8b5b3aadf5adedba43dc76312454b387e98fae0fc951aa0"
 dependencies = [
  "bitflags",
  "jni-sys",
- "ndk-sys 0.4.1+23.1.7779620",
+ "ndk-sys",
  "num_enum",
  "raw-window-handle",
  "thiserror",
@@ -3849,15 +3837,6 @@ name = "ndk-context"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "27b02d87554356db9e9a873add8782d4ea6e3e58ea071a9adb9a2e8ddb884a8b"
-
-[[package]]
-name = "ndk-sys"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6e5a6ae77c8ee183dcbbba6150e2e6b9f3f4196a7666c02a715a95692ec1fa97"
-dependencies = [
- "jni-sys",
-]
 
 [[package]]
 name = "ndk-sys"
@@ -4169,7 +4148,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8868cc237ee02e2d9618539a23a8d228b9bb3fc2e7a5b11eed3831de77c395d0"
 dependencies = [
  "jni 0.20.0",
- "ndk 0.7.0",
+ "ndk",
  "ndk-context",
  "num-derive",
  "num-traits 0.2.15",
@@ -4507,7 +4486,7 @@ dependencies = [
  "base64",
  "indexmap",
  "line-wrap",
- "quick-xml",
+ "quick-xml 0.28.2",
  "serde 1.0.163",
  "time 0.3.21",
 ]
@@ -4705,6 +4684,15 @@ dependencies = [
  "tempfile",
  "termios",
  "winapi 0.3.9",
+]
+
+[[package]]
+name = "quick-xml"
+version = "0.23.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "11bafc859c6815fbaffbbbf4229ecb767ac913fecb27f9ad4343662e9ef099ea"
+dependencies = [
+ "memchr",
 ]
 
 [[package]]
@@ -4957,7 +4945,7 @@ dependencies = [
 [[package]]
 name = "rdev"
 version = "0.5.0-2"
-source = "git+https://github.com/fufesou/rdev#ab48d5798c86303b9398727684509b1b43ecfdab"
+source = "git+https://github.com/fufesou/rdev#ee3057bd97c91529e8b9daf2ca133a5c49f0c0eb"
 dependencies = [
  "cocoa",
  "core-foundation",
@@ -5209,7 +5197,7 @@ dependencies = [
 
 [[package]]
 name = "rustdesk"
-version = "1.2.0"
+version = "1.2.3"
 dependencies = [
  "android_logger",
  "arboard",
@@ -5255,7 +5243,6 @@ dependencies = [
  "libpulse-binding",
  "libpulse-simple-binding",
  "mac_address",
- "machine-uid",
  "magnum-opus",
  "mouce",
  "num_cpus",
@@ -5285,6 +5272,7 @@ dependencies = [
  "sys-locale",
  "system_shutdown",
  "tao",
+ "tauri-winrt-notification",
  "tray-icon",
  "url",
  "users 0.11.0",
@@ -5473,7 +5461,7 @@ dependencies = [
  "jni 0.21.1",
  "lazy_static",
  "log",
- "ndk 0.7.0",
+ "ndk",
  "num_cpus",
  "pkg-config",
  "quest",
@@ -5905,9 +5893,9 @@ dependencies = [
 
 [[package]]
 name = "sysinfo"
-version = "0.29.0"
+version = "0.29.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "02f1dc6930a439cc5d154221b5387d153f8183529b07c19aca24ea31e0a167e1"
+checksum = "c7cb97a5a85a136d84e75d5c3cf89655090602efb1be0d8d5337b7e386af2908"
 dependencies = [
  "cfg-if 1.0.0",
  "core-foundation-sys 0.8.4",
@@ -5979,8 +5967,8 @@ dependencies = [
 
 [[package]]
 name = "tao"
-version = "0.19.1"
-source = "git+https://github.com/rustdesk-org/tao?branch=muda#173f128608d282dc4036f213c1c42137464ff096"
+version = "0.22.2"
+source = "git+https://github.com/rustdesk-org/tao?branch=dev#1e5b97258cf42a30f80f85a6aa0b1a4aece1977e"
 dependencies = [
  "bitflags",
  "cairo-rs",
@@ -6001,13 +5989,13 @@ dependencies = [
  "gtk",
  "image",
  "instant",
- "jni 0.20.0",
+ "jni 0.21.1",
  "lazy_static",
  "libc",
  "log",
- "ndk 0.6.0",
+ "ndk",
  "ndk-context",
- "ndk-sys 0.3.0",
+ "ndk-sys",
  "objc",
  "once_cell",
  "parking_lot",
@@ -6016,16 +6004,18 @@ dependencies = [
  "scopeguard",
  "tao-macros",
  "unicode-segmentation",
+ "url",
  "uuid",
- "windows 0.44.0",
+ "windows 0.48.0",
  "windows-implement",
  "x11-dl",
+ "zbus",
 ]
 
 [[package]]
 name = "tao-macros"
-version = "0.1.1"
-source = "git+https://github.com/rustdesk-org/tao?branch=muda#173f128608d282dc4036f213c1c42137464ff096"
+version = "0.1.2"
+source = "git+https://github.com/rustdesk-org/tao?branch=dev#1e5b97258cf42a30f80f85a6aa0b1a4aece1977e"
 dependencies = [
  "proc-macro2 1.0.63",
  "quote 1.0.27",
@@ -6053,6 +6043,16 @@ dependencies = [
  "phf",
  "phf_codegen",
  "serde_json 0.9.10",
+]
+
+[[package]]
+name = "tauri-winrt-notification"
+version = "0.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4f5bff1d532fead7c43324a0fa33643b8621a47ce2944a633be4cb6c0240898f"
+dependencies = [
+ "quick-xml 0.23.1",
+ "windows 0.39.0",
 ]
 
 [[package]]
@@ -6919,12 +6919,23 @@ dependencies = [
 
 [[package]]
 name = "windows"
+version = "0.39.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f1c4bd0a50ac6020f65184721f758dba47bb9fbc2133df715ec74a237b26794a"
+dependencies = [
+ "windows_aarch64_msvc 0.39.0",
+ "windows_i686_gnu 0.39.0",
+ "windows_i686_msvc 0.39.0",
+ "windows_x86_64_gnu 0.39.0",
+ "windows_x86_64_msvc 0.39.0",
+]
+
+[[package]]
+name = "windows"
 version = "0.44.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9e745dab35a0c4c77aa3ce42d595e13d2003d6902d6b08c9ef5fc326d08da12b"
 dependencies = [
- "windows-implement",
- "windows-interface",
  "windows-targets 0.42.2",
 ]
 
@@ -6943,14 +6954,16 @@ version = "0.48.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e686886bc078bc1b0b600cac0147aadb815089b6e4da64016cbd754b6342700f"
 dependencies = [
+ "windows-implement",
+ "windows-interface",
  "windows-targets 0.48.0",
 ]
 
 [[package]]
 name = "windows-implement"
-version = "0.44.0"
+version = "0.48.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6ce87ca8e3417b02dc2a8a22769306658670ec92d78f1bd420d6310a67c245c6"
+checksum = "5e2ee588991b9e7e6c8338edf3333fbe4da35dc72092643958ebb43f0ab2c49c"
 dependencies = [
  "proc-macro2 1.0.63",
  "quote 1.0.27",
@@ -6959,9 +6972,9 @@ dependencies = [
 
 [[package]]
 name = "windows-interface"
-version = "0.44.0"
+version = "0.48.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "853f69a591ecd4f810d29f17e902d40e349fb05b0b11fff63b08b826bfe39c7f"
+checksum = "e6fb8df20c9bcaa8ad6ab513f7b40104840c8867d5751126e4df3b08388d0cc7"
 dependencies = [
  "proc-macro2 1.0.63",
  "quote 1.0.27",
@@ -7068,6 +7081,12 @@ checksum = "17cffbe740121affb56fad0fc0e421804adf0ae00891205213b5cecd30db881d"
 
 [[package]]
 name = "windows_aarch64_msvc"
+version = "0.39.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ec7711666096bd4096ffa835238905bb33fb87267910e154b18b44eaabb340f2"
+
+[[package]]
+name = "windows_aarch64_msvc"
 version = "0.42.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e08e8864a60f06ef0d0ff4ba04124db8b0fb3be5776a5cd47641e942e58c4d43"
@@ -7089,6 +7108,12 @@ name = "windows_i686_gnu"
 version = "0.34.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2564fde759adb79129d9b4f54be42b32c89970c18ebf93124ca8870a498688ed"
+
+[[package]]
+name = "windows_i686_gnu"
+version = "0.39.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "763fc57100a5f7042e3057e7e8d9bdd7860d330070251a73d003563a3bb49e1b"
 
 [[package]]
 name = "windows_i686_gnu"
@@ -7116,6 +7141,12 @@ checksum = "9cd9d32ba70453522332c14d38814bceeb747d80b3958676007acadd7e166956"
 
 [[package]]
 name = "windows_i686_msvc"
+version = "0.39.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7bc7cbfe58828921e10a9f446fcaaf649204dcfe6c1ddd712c5eebae6bda1106"
+
+[[package]]
+name = "windows_i686_msvc"
 version = "0.42.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "44d840b6ec649f480a41c8d80f9c65108b92d89345dd94027bfe06ac444d1060"
@@ -7137,6 +7168,12 @@ name = "windows_x86_64_gnu"
 version = "0.34.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cfce6deae227ee8d356d19effc141a509cc503dfd1f850622ec4b0f84428e1f4"
+
+[[package]]
+name = "windows_x86_64_gnu"
+version = "0.39.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6868c165637d653ae1e8dc4d82c25d4f97dd6605eaa8d784b5c6e0ab2a252b65"
 
 [[package]]
 name = "windows_x86_64_gnu"
@@ -7173,6 +7210,12 @@ name = "windows_x86_64_msvc"
 version = "0.34.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d19538ccc21819d01deaf88d6a17eae6596a12e9aafdbb97916fb49896d89de9"
+
+[[package]]
+name = "windows_x86_64_msvc"
+version = "0.39.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5e4d40883ae9cae962787ca76ba76390ffa29214667a111db9e0a1ad8377e809"
 
 [[package]]
 name = "windows_x86_64_msvc"

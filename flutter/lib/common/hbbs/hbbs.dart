@@ -1,4 +1,5 @@
-import 'dart:io';
+import 'dart:convert';
+import 'package:flutter/material.dart';
 
 import 'package:flutter_hbb/models/peer_model.dart';
 
@@ -70,16 +71,6 @@ class PeerPayload {
   }
 }
 
-class DeviceInfo {
-  static Map<String, dynamic> toJson() {
-    final Map<String, dynamic> data = <String, dynamic>{};
-    data['os'] = Platform.operatingSystem;
-    data['type'] = "client";
-    data['name'] = bind.mainGetHostname();
-    return data;
-  }
-}
-
 class LoginRequest {
   String? username;
   String? password;
@@ -88,7 +79,6 @@ class LoginRequest {
   bool? autoLogin;
   String? type;
   String? verificationCode;
-  Map<String, dynamic> deviceInfo = DeviceInfo.toJson();
 
   LoginRequest(
       {this.username,
@@ -109,6 +99,13 @@ class LoginRequest {
     if (type != null) data['type'] = type;
     if (verificationCode != null) {
       data['verificationCode'] = verificationCode;
+    }
+
+    Map<String, dynamic> deviceInfo = {};
+    try {
+      deviceInfo = jsonDecode(bind.mainGetLoginDeviceInfo());
+    } catch (e) {
+      debugPrint('Failed to decode get device info: $e');
     }
     data['deviceInfo'] = deviceInfo;
     return data;

@@ -2,10 +2,7 @@ use std::{collections::HashMap, ffi::c_void, os::raw::c_int};
 
 use serde_json::json;
 
-use crate::{
-    define_method_prefix,
-    flutter::{APP_TYPE_MAIN},
-};
+use crate::{define_method_prefix, flutter::APP_TYPE_MAIN};
 
 use super::PluginNativeHandler;
 
@@ -26,7 +23,8 @@ pub struct PluginNativeUIHandler;
 /// ```
 /// [Safety]
 /// Please make sure the callback u provided is VALID, or memory or calling issues may occur to cause the program crash!
-pub type OnUIReturnCallback = extern "C" fn(return_code: c_int, data: *const c_void, data_len: u64, user_data: *const c_void);
+pub type OnUIReturnCallback =
+    extern "C" fn(return_code: c_int, data: *const c_void, data_len: u64, user_data: *const c_void);
 
 impl PluginNativeHandler for PluginNativeUIHandler {
     define_method_prefix!("ui_");
@@ -41,9 +39,7 @@ impl PluginNativeHandler for PluginNativeUIHandler {
                 if let Some(cb) = data.get("cb") {
                     if let Some(cb) = cb.as_u64() {
                         let user_data = match data.get("user_data") {
-                            Some(user_data) => {
-                                user_data.as_u64().unwrap_or(0)
-                            },
+                            Some(user_data) => user_data.as_u64().unwrap_or(0),
                             None => 0,
                         };
                         self.select_peers_async(cb, user_data);
@@ -68,9 +64,7 @@ impl PluginNativeHandler for PluginNativeUIHandler {
                 if let Some(on_tap_cb) = data.get("on_tap_cb") {
                     if let Some(on_tap_cb) = on_tap_cb.as_u64() {
                         let user_data = match data.get("user_data") {
-                            Some(user_data) => {
-                                user_data.as_u64().unwrap_or(0)
-                            },
+                            Some(user_data) => user_data.as_u64().unwrap_or(0),
                             None => 0,
                         };
                         self.register_ui_entry(title, on_tap_cb, user_data);
@@ -109,10 +103,10 @@ impl PluginNativeUIHandler {
     ///     "user_data": 0 // An opaque pointer value passed to the callback.
     /// }
     /// ```
-    /// 
-    /// [Arguments] 
+    ///
+    /// [Arguments]
     /// @param cb: the function address with type [OnUIReturnCallback].
-    /// @param user_data: the function will be called with this value. 
+    /// @param user_data: the function will be called with this value.
     fn select_peers_async(&self, cb: u64, user_data: u64) {
         let mut param = HashMap::new();
         param.insert("name", json!("native_ui"));

@@ -32,11 +32,7 @@ A RustDesk szívesen fogad minden contributiont, támogatást mindenkitől. Lás
 Ezalatt az üzenet alatt találhatóak azok a publikus szerverek, amelyeket ingyen használhatsz. Ezek a szerverek változhatnak a jövőben, illetve a hálózatuk lehet hogy lassú lehet.
 | Hely | Host | Specifikáció |
 | --------- | ------------- | ------------------ |
-| Seoul | AWS lightsail | 1 vCPU / 0.5GB RAM |
 | Germany | Hetzner | 2 vCPU / 4GB RAM |
-| Germany | Codext | 4 vCPU / 8GB RAM |
-| Finland (Helsinki) | [Netlock](https://netlockendpoint.com) | 4 vCPU / 8GB RAM |
-| USA (Ashburn) | [Netlock](https://netlockendpoint.com) | 4 vCPU / 8GB RAM |
 | Ukraine (Kyiv) | [dc.volia](https://dc.volia.com) | 2 vCPU / 4GB RAM |
 
 ## Dependencies

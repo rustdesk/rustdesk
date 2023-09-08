@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -8,7 +7,6 @@ import 'package:flutter_hbb/desktop/widgets/tabbar_widget.dart';
 import 'package:flutter_hbb/models/model.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:get/get.dart';
-import 'package:wakelock/wakelock.dart';
 
 const double _kColumn1Width = 30;
 const double _kColumn4Width = 100;
@@ -30,11 +28,13 @@ class PortForwardPage extends StatefulWidget {
   const PortForwardPage(
       {Key? key,
       required this.id,
+      required this.password,
       required this.tabController,
       required this.isRDP,
       this.forceRelay})
       : super(key: key);
   final String id;
+  final String? password;
   final DesktopTabController tabController;
   final bool isRDP;
   final bool? forceRelay;
@@ -54,15 +54,13 @@ class _PortForwardPageState extends State<PortForwardPage>
   @override
   void initState() {
     super.initState();
-    _ffi = FFI();
+    _ffi = FFI(null);
     _ffi.start(widget.id,
         isPortForward: true,
+        password: widget.password,
         forceRelay: widget.forceRelay,
         isRdp: widget.isRDP);
     Get.put(_ffi, tag: 'pf_${widget.id}');
-    if (!Platform.isLinux) {
-      Wakelock.enable();
-    }
     debugPrint("Port forward page init success with id ${widget.id}");
     widget.tabController.onSelected?.call(widget.id);
   }
@@ -71,9 +69,6 @@ class _PortForwardPageState extends State<PortForwardPage>
   void dispose() {
     _ffi.close();
     _ffi.dialogManager.dismissAll();
-    if (!Platform.isLinux) {
-      Wakelock.disable();
-    }
     Get.delete<FFI>(tag: 'pf_${widget.id}');
     super.dispose();
   }

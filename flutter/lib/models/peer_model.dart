@@ -1,12 +1,15 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'platform_model.dart';
+// ignore: depend_on_referenced_packages
+import 'package:collection/collection.dart';
 
 class Peer {
   final String id;
-  final String username;
-  final String hostname;
-  final String platform;
+  String hash;
+  String username;
+  String hostname;
+  String platform;
   String alias;
   List<dynamic> tags;
   bool forceAlwaysRelay = false;
@@ -23,6 +26,7 @@ class Peer {
 
   Peer.fromJson(Map<String, dynamic> json)
       : id = json['id'] ?? '',
+        hash = json['hash'] ?? '',
         username = json['username'] ?? '',
         hostname = json['hostname'] ?? '',
         platform = json['platform'] ?? '',
@@ -35,6 +39,7 @@ class Peer {
   Map<String, dynamic> toJson() {
     return <String, dynamic>{
       "id": id,
+      "hash": hash,
       "username": username,
       "hostname": hostname,
       "platform": platform,
@@ -46,8 +51,21 @@ class Peer {
     };
   }
 
+  Map<String, dynamic> toAbUploadJson() {
+    return <String, dynamic>{
+      "id": id,
+      "hash": hash,
+      "username": username,
+      "hostname": hostname,
+      "platform": platform,
+      "alias": alias,
+      "tags": tags,
+    };
+  }
+
   Peer({
     required this.id,
+    required this.hash,
     required this.username,
     required this.hostname,
     required this.platform,
@@ -61,6 +79,7 @@ class Peer {
   Peer.loading()
       : this(
           id: '...',
+          hash: '',
           username: '...',
           hostname: '...',
           platform: '...',
@@ -70,6 +89,31 @@ class Peer {
           rdpPort: '',
           rdpUsername: '',
         );
+  bool equal(Peer other) {
+    return id == other.id &&
+        hash == other.hash &&
+        username == other.username &&
+        hostname == other.hostname &&
+        platform == other.platform &&
+        alias == other.alias &&
+        tags.equals(other.tags) &&
+        forceAlwaysRelay == other.forceAlwaysRelay &&
+        rdpPort == other.rdpPort &&
+        rdpUsername == other.rdpUsername;
+  }
+
+  Peer.copy(Peer other)
+      : this(
+            id: other.id,
+            hash: other.hash,
+            username: other.username,
+            hostname: other.hostname,
+            platform: other.platform,
+            alias: other.alias,
+            tags: other.tags.toList(),
+            forceAlwaysRelay: other.forceAlwaysRelay,
+            rdpPort: other.rdpPort,
+            rdpUsername: other.rdpUsername);
 }
 
 enum UpdateEvent { online, load }

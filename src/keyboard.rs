@@ -52,6 +52,9 @@ lazy_static::lazy_static! {
 
 pub mod client {
     use super::*;
+    lazy_static::lazy_static! {
+        static ref IS_GRAB_STARTED: Arc<Mutex<bool>> = Arc::new(Mutex::new(false));
+    }
 
     pub fn get_keyboard_mode() -> String {
         #[cfg(not(any(feature = "flutter", feature = "cli")))]
@@ -70,7 +73,12 @@ pub mod client {
     }
 
     pub fn start_grab_loop() {
+        let mut lock = IS_GRAB_STARTED.lock().unwrap();
+        if *lock {
+            return;
+        }
         super::start_grab_loop();
+        *lock = true;
     }
 
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -708,7 +716,7 @@ pub fn legacy_keyboard_mode(event: &Event, mut key_event: KeyEvent) -> Vec<KeyEv
         Key::Final => Some(ControlKey::Final),
         Key::Hanja => Some(ControlKey::Hanja),
         Key::Hanji => Some(ControlKey::Hanja),
-        Key::Convert => Some(ControlKey::Convert),
+        Key::Lang2 => Some(ControlKey::Convert),
         Key::Print => Some(ControlKey::Print),
         Key::Select => Some(ControlKey::Select),
         Key::Execute => Some(ControlKey::Execute),

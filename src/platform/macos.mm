@@ -4,6 +4,27 @@
 #include <Security/Authorization.h>
 #include <Security/AuthorizationTags.h>
 
+extern "C" bool CanUseNewApiForScreenCaptureCheck() {
+    #ifdef NO_InputMonitoringAuthStatus
+    return false;
+    #else
+    NSOperatingSystemVersion version = [[NSProcessInfo processInfo] operatingSystemVersion];
+    return version.majorVersion >= 11;
+    #endif
+}
+
+extern "C" bool IsCanScreenRecording(bool prompt) {
+    #ifdef NO_InputMonitoringAuthStatus
+    return false;
+    #else
+    bool res = CGPreflightScreenCaptureAccess();
+    if (!res && prompt) {
+        CGRequestScreenCaptureAccess();
+    }
+    return res;
+    #endif
+}
+
 
 // https://github.com/codebytere/node-mac-permissions/blob/main/permissions.mm
 

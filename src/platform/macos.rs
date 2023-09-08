@@ -34,6 +34,8 @@ extern "C" {
     static kAXTrustedCheckOptionPrompt: CFStringRef;
     fn AXIsProcessTrustedWithOptions(options: CFDictionaryRef) -> BOOL;
     fn InputMonitoringAuthStatus(_: BOOL) -> BOOL;
+    fn IsCanScreenRecording(_: BOOL) -> BOOL;
+    fn CanUseNewApiForScreenCaptureCheck() -> BOOL;
     fn MacCheckAdminAuthorization() -> BOOL;
     fn MacGetModeNum(display: u32, numModes: *mut u32) -> BOOL;
     fn MacGetModes(
@@ -71,6 +73,14 @@ pub fn is_can_input_monitoring(prompt: bool) -> bool {
 // https://stackoverflow.com/questions/56597221/detecting-screen-recording-settings-on-macos-catalina/
 // remove just one app from all the permissions: tccutil reset All com.carriez.rustdesk
 pub fn is_can_screen_recording(prompt: bool) -> bool {
+    // we got some report that we show no permission even after set it, so we try to use new api for screen recording check
+    // the new api is only available on macOS >= 10.15, but on stackoverflow, some people said it works on >= 10.16 (crash on 10.15),
+    // but also some said it has bug on 10.16, so we just use it on 11.0.
+    unsafe {
+        if CanUseNewApiForScreenCaptureCheck() == YES {
+            return IsCanScreenRecording(if prompt { YES } else { NO }) == YES;
+        }
+    }
     let mut can_record_screen: bool = false;
     unsafe {
         let our_pid: i32 = std::process::id() as _;
@@ -122,6 +132,10 @@ pub fn is_can_screen_recording(prompt: bool) -> bool {
     can_record_screen
 }
 
+pub fn install_service() -> bool {
+    is_installed_daemon(false)
+}
+
 pub fn is_installed_daemon(prompt: bool) -> bool {
     let daemon = format!("{}_service.plist", crate::get_full_name());
     let agent = format!("{}_server.plist", crate::get_full_name());
@@ -136,14 +150,26 @@ pub fn is_installed_daemon(prompt: bool) -> bool {
         return true;
     }
 
-    let install_script = PRIVILEGES_SCRIPTS_DIR.get_file("install.scpt").unwrap();
-    let install_script_body = install_script.contents_utf8().unwrap();
+    let Some(install_script) = PRIVILEGES_SCRIPTS_DIR.get_file("install.scpt") else {
+        return false;
+    };
+    let Some(install_script_body) = install_script.contents_utf8() else {
+        return false;
+    };
 
-    let daemon_plist = PRIVILEGES_SCRIPTS_DIR.get_file(&daemon).unwrap();
-    let daemon_plist_body = daemon_plist.contents_utf8().unwrap();
+    let Some(daemon_plist) = PRIVILEGES_SCRIPTS_DIR.get_file(&daemon) else {
+        return false;
+    };
+    let Some(daemon_plist_body) = daemon_plist.contents_utf8() else {
+        return false;
+    };
 
-    let agent_plist = PRIVILEGES_SCRIPTS_DIR.get_file(&agent).unwrap();
-    let agent_plist_body = agent_plist.contents_utf8().unwrap();
+    let Some(agent_plist) = PRIVILEGES_SCRIPTS_DIR.get_file(&agent) else {
+        return false;
+    };
+    let Some(agent_plist_body) = agent_plist.contents_utf8() else {
+        return false;
+    };
 
     std::thread::spawn(move || {
         match std::process::Command::new("osascript")
@@ -188,8 +214,12 @@ pub fn uninstall_service(show_new_window: bool) -> bool {
         return false;
     }
 
-    let script_file = PRIVILEGES_SCRIPTS_DIR.get_file("uninstall.scpt").unwrap();
-    let script_body = script_file.contents_utf8().unwrap();
+    let Some(script_file) = PRIVILEGES_SCRIPTS_DIR.get_file("uninstall.scpt") else {
+        return false;
+    };
+    let Some(script_body) = script_file.contents_utf8() else {
+        return false;
+    };
 
     std::thread::spawn(move || {
         match std::process::Command::new("osascript")
@@ -210,10 +240,12 @@ pub fn uninstall_service(show_new_window: bool) -> bool {
                     uninstalled
                 );
                 if uninstalled {
+                    if !show_new_window {
+                        let _ = crate::ipc::close_all_instances();
+                        // leave ipc a little time
+                        std::thread::sleep(std::time::Duration::from_millis(300));
+                    }
                     crate::ipc::set_option("stop-service", "Y");
-                    let _ = crate::ipc::close_all_instances();
-                    // leave ipc a little time
-                    std::thread::sleep(std::time::Duration::from_millis(300));
                     std::process::Command::new("launchctl")
                         .args(&["remove", &format!("{}_server", crate::get_full_name())])
                         .status()
@@ -226,11 +258,6 @@ pub fn uninstall_service(show_new_window: bool) -> bool {
                                 crate::get_app_name(),
                             ))
                             .spawn()
-                            .ok();
-                    } else {
-                        std::process::Command::new("pkill")
-                            .arg(crate::get_app_name())
-                            .status()
                             .ok();
                     }
                     quit_gui();

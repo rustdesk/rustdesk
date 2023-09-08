@@ -215,7 +215,7 @@ class Enhancements: Reactor.Component {
         return <li>{translate('Enhancements')}
             <menu #enhancements-menu>
                 {has_hwcodec ? <li #enable-hwcodec><span>{svg_checkmark}</span>{translate("Hardware Codec")} (beta)</li> : ""}
-                <li #enable-abr><span>{svg_checkmark}</span>{translate("Adaptive Bitrate")} (beta)</li>
+                <li #enable-abr><span>{svg_checkmark}</span>{translate("Adaptive bitrate")} (beta)</li>
                 <li #screen-recording>{translate("Recording")}</li>
             </menu>
         </li>;
@@ -365,7 +365,7 @@ class MyIdMenu: Reactor.Component {
         msgbox("custom-nocancel-nook-hasclose", translate("About") + " " + name, "<div style='line-height: 2em'> \
             <div>Version: " + handler.get_version() + " \
             <div>Fingerprint: " + handler.get_fingerprint() + " \
-            <div .link .custom-event url='https://rustdesk.com/privacy'>" + translate("Privacy Statement") + "</div> \
+            <div .link .custom-event url='https://rustdesk.com/privacy.html'>" + translate("Privacy Statement") + "</div> \
             <div .link .custom-event url='https://rustdesk.com'>" + translate("Website") + "</div> \
 	    <div style='background: #2c8cff; color: white; padding: 1em; margin-top: 1em;'>Copyright &copy; 2023 Purslane Ltd.\
             <br />" + handler.get_license() + " \
@@ -659,7 +659,7 @@ class UpdateMe: Reactor.Component {
     }
 
     event click $(#install-me) {
-        handler.open_url("https://rustdesk.com");
+        handler.open_url("https://rustdesk.com/download");
         return;
         if (!is_win) {
             handler.open_url("https://rustdesk.com");
@@ -1323,18 +1323,5 @@ function getHttpHeaders() {
 }
 
 function getDeviceInfo() {
-    var os;
-    if (is_win) {
-        os = 'windows';
-    } else if (is_linux) {
-        os = 'linux';
-    } else if (is_osx) {
-        os = 'macos';
-    }
-
-    return {
-        os: os,
-        type: 'client',
-        name: handler.get_hostname()
-    };
+    return JSON.parse(handler.get_login_device_info());
 }

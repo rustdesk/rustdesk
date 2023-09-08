@@ -27,11 +27,8 @@ Projekt RustDesk vítá přiložení ruky k dílu od každého. Jak začít se d
 Níže jsou uvedeny servery zdarma k vašemu použití (údaje se mohou v čase měnit). Pokud se nenacházíte v oblastech světa poblíž nich, spojení může být pomalé.
 | umístění | dodavatel | parametry |
 | --------- | ------------- | ------------------ |
-| Seoul | AWS lightsail | 1 vCPU / 0.5GB RAM |
 | Germany | Hetzner | 2 vCPU / 4GB RAM |
-| Germany | Codext | 4 vCPU / 8GB RAM |
-| Finland (Helsinki) | 0x101 Cyber Security | 4 vCPU / 8GB RAM |
-| USA (Ashburn) | 0x101 Cyber Security | 4 vCPU / 8GB RAM |
+| Ukraine (Kyiv) | [dc.volia](https://dc.volia.com) | 2 vCPU / 4 GB RAM |
 
 ## Softwarové součásti, na kterých závisí
 

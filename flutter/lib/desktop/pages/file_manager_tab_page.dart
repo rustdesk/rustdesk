@@ -44,6 +44,7 @@ class _FileManagerTabPageState extends State<FileManagerTabPage> {
         page: FileManagerPage(
           key: ValueKey(params['id']),
           id: params['id'],
+          password: params['password'],
           tabController: tabController,
           forceRelay: params['forceRelay'],
         )));
@@ -59,10 +60,10 @@ class _FileManagerTabPageState extends State<FileManagerTabPage> {
       print(
           "[FileTransfer] call ${call.method} with args ${call.arguments} from window $fromWindowId to ${windowId()}");
       // for simplify, just replace connectionId
-      if (call.method == "new_file_transfer") {
+      if (call.method == kWindowEventNewFileTransfer) {
         final args = jsonDecode(call.arguments);
         final id = args['id'];
-        window_on_top(windowId());
+        windowOnTop(windowId());
         tabController.add(TabInfo(
             key: id,
             label: id,
@@ -72,6 +73,7 @@ class _FileManagerTabPageState extends State<FileManagerTabPage> {
             page: FileManagerPage(
               key: ValueKey(id),
               id: id,
+              password: args['password'],
               tabController: tabController,
               forceRelay: args['forceRelay'],
             )));
@@ -127,7 +129,7 @@ class _FileManagerTabPageState extends State<FileManagerTabPage> {
     } else {
       final opt = "enable-confirm-closing-tabs";
       final bool res;
-      if (!option2bool(opt, await bind.mainGetOption(key: opt))) {
+      if (!option2bool(opt, bind.mainGetLocalOption(key: opt))) {
         res = true;
       } else {
         res = await closeConfirmDialog();

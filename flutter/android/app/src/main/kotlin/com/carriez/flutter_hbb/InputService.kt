@@ -26,6 +26,13 @@ const val WHEEL_BUTTON_UP = 34
 const val WHEEL_DOWN = 523331
 const val WHEEL_UP = 963
 
+const val TOUCH_SCALE_START = 1
+const val TOUCH_SCALE = 2
+const val TOUCH_SCALE_END = 3
+const val TOUCH_PAN_START = 4
+const val TOUCH_PAN_UPDATE = 5
+const val TOUCH_PAN_END = 6
+
 const val WHEEL_STEP = 120
 const val WHEEL_DURATION = 50L
 const val LONG_TAP_DELAY = 200L
@@ -164,6 +171,30 @@ class InputService : AccessibilityService() {
             builder.addStroke(stroke)
             wheelActionsQueue.offer(builder.build())
             consumeWheelActions()
+        }
+    }
+
+    @RequiresApi(Build.VERSION_CODES.N)
+    fun onTouchInput(mask: Int, _x: Int, _y: Int) {
+        when (mask) {
+            TOUCH_PAN_UPDATE -> {
+                mouseX -= _x * SCREEN_INFO.scale
+                mouseY -= _y * SCREEN_INFO.scale
+                mouseX = max(0, mouseX);
+                mouseY = max(0, mouseY);
+                continueGesture(mouseX, mouseY)
+            }
+            TOUCH_PAN_START -> {
+                mouseX = max(0, _x) * SCREEN_INFO.scale
+                mouseY = max(0, _y) * SCREEN_INFO.scale
+                startGesture(mouseX, mouseY)
+            }
+            TOUCH_PAN_END -> {
+                endGesture(mouseX, mouseY)
+                mouseX = max(0, _x) * SCREEN_INFO.scale
+                mouseY = max(0, _y) * SCREEN_INFO.scale
+            }
+            else -> {}
         }
     }
 

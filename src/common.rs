@@ -25,7 +25,7 @@ use hbb_common::{
     protobuf::Enum,
     protobuf::Message as _,
     rendezvous_proto::*,
-    sleep, socket_client,
+    socket_client,
     tcp::FramedStream,
     tokio, ResultType,
 };
@@ -39,8 +39,6 @@ pub type NotifyMessageBox = fn(String, String, String, String) -> dyn Future<Out
 pub const CLIPBOARD_NAME: &'static str = "clipboard";
 pub const CLIPBOARD_INTERVAL: u64 = 333;
 
-pub const SYNC_PEER_INFO_DISPLAYS: i32 = 1;
-
 #[cfg(all(target_os = "macos", feature = "flutter_texture_render"))]
 // https://developer.apple.com/forums/thread/712709
 // Memory alignment should be multiple of 64.
@@ -50,6 +48,11 @@ pub const DST_STRIDE_RGBA: usize = 1;
 
 // the executable name of the portable version
 pub const PORTABLE_APPNAME_RUNTIME_ENV_KEY: &str = "RUSTDESK_APPNAME";
+
+pub const PLATFORM_WINDOWS: &str = "Windows";
+pub const PLATFORM_LINUX: &str = "Linux";
+pub const PLATFORM_MACOS: &str = "Mac OS";
+pub const PLATFORM_ANDROID: &str = "Android";
 
 pub mod input {
     pub const MOUSE_TYPE_MOVE: i32 = 0;
@@ -627,6 +630,12 @@ pub async fn get_rendezvous_server(ms_timeout: u64) -> (String, Vec<String>, boo
     let (mut a, mut b) = get_rendezvous_server_(ms_timeout);
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     let (mut a, mut b) = get_rendezvous_server_(ms_timeout).await;
+    #[cfg(windows)]
+    if let Ok(lic) = crate::platform::get_license_from_exe_name() {
+        if !lic.host.is_empty() {
+            a = lic.host;
+        }
+    }
     let mut b: Vec<String> = b
         .drain(..)
         .map(|x| socket_client::check_port(x, config::RENDEZVOUS_PORT))
@@ -721,7 +730,7 @@ pub fn run_me<T: AsRef<std::ffi::OsStr>>(args: Vec<T>) -> std::io::Result<std::p
     }
     #[cfg(feature = "appimage")]
     {
-        let appdir = std::env::var("APPDIR").unwrap();
+        let appdir = std::env::var("APPDIR").map_err(|_| std::io::ErrorKind::Other)?;
         let appimage_cmd = std::path::Path::new(&appdir).join("AppRun");
         log::info!("path: {:?}", appimage_cmd);
         return std::process::Command::new(appimage_cmd).args(&args).spawn();
@@ -743,6 +752,45 @@ pub fn hostname() -> String {
     return whoami::hostname();
     #[cfg(any(target_os = "android", target_os = "ios"))]
     return DEVICE_NAME.lock().unwrap().clone();
+}
+
+#[inline]
+pub fn get_sysinfo() -> serde_json::Value {
+    use hbb_common::sysinfo::{CpuExt, System, SystemExt};
+    let system = System::new_all();
+    let memory = system.total_memory();
+    let memory = (memory as f64 / 1024. / 1024. / 1024. * 100.).round() / 100.;
+    let cpus = system.cpus();
+    let cpu_name = cpus.first().map(|x| x.brand()).unwrap_or_default();
+    let cpu_name = cpu_name.trim_end();
+    let cpu_freq = cpus.first().map(|x| x.frequency()).unwrap_or_default();
+    let cpu_freq = (cpu_freq as f64 / 1024. * 100.).round() / 100.;
+    let cpu = if cpu_freq > 0. {
+        format!("{}, {}GHz, ", cpu_name, cpu_freq)
+    } else {
+        "".to_owned() // android
+    };
+    let num_cpus = num_cpus::get();
+    let num_pcpus = num_cpus::get_physical();
+    let mut os = system.distribution_id();
+    os = format!("{} / {}", os, system.long_os_version().unwrap_or_default());
+    #[cfg(windows)]
+    {
+        os = format!("{os} - {}", system.os_version().unwrap_or_default());
+    }
+    let hostname = hostname(); // sys.hostname() return localhost on android in my test
+    use serde_json::json;
+    let mut out = json!({
+        "cpu": format!("{cpu}{num_cpus}/{num_pcpus} cores"),
+        "memory": format!("{memory}GB"),
+        "os": os,
+        "hostname": hostname,
+    });
+    #[cfg(not(any(target_os = "android", target_os = "ios")))] 
+    {
+        out["username"] = json!(crate::platform::get_active_username());
+    }
+    out
 }
 
 #[inline]
@@ -789,30 +837,19 @@ pub fn check_software_update() {
 
 #[tokio::main(flavor = "current_thread")]
 async fn check_software_update_() -> hbb_common::ResultType<()> {
-    sleep(3.).await;
+    let url = "https://github.com/rustdesk/rustdesk/releases/latest";
+    let latest_release_response = reqwest::get(url).await?;
+    let latest_release_version = latest_release_response
+        .url()
+        .path()
+        .rsplit('/')
+        .next()
+        .unwrap();
 
-    let rendezvous_server = format!("rs-sg.rustdesk.com:{}", config::RENDEZVOUS_PORT);
-    let (mut socket, rendezvous_server) =
-        socket_client::new_udp_for(&rendezvous_server, CONNECT_TIMEOUT).await?;
+    let response_url = latest_release_response.url().to_string();
 
-    let mut msg_out = RendezvousMessage::new();
-    msg_out.set_software_update(SoftwareUpdate {
-        url: crate::VERSION.to_owned(),
-        ..Default::default()
-    });
-    socket.send(&msg_out, rendezvous_server).await?;
-    use hbb_common::protobuf::Message;
-    for _ in 0..2 {
-        if let Some(Ok((bytes, _))) = socket.next_timeout(READ_TIMEOUT).await {
-            if let Ok(msg_in) = RendezvousMessage::parse_from_bytes(&bytes) {
-                if let Some(rendezvous_message::Union::SoftwareUpdate(su)) = msg_in.union {
-                    let version = hbb_common::get_version_from_url(&su.url);
-                    if get_version_number(&version) > get_version_number(crate::VERSION) {
-                        *SOFTWARE_UPDATE_URL.lock().unwrap() = su.url;
-                    }
-                }
-            }
-        }
+    if get_version_number(&latest_release_version) > get_version_number(crate::VERSION) {
+        *SOFTWARE_UPDATE_URL.lock().unwrap() = response_url;
     }
     Ok(())
 }
@@ -835,14 +872,14 @@ pub fn is_setup(name: &str) -> bool {
 }
 
 pub fn get_custom_rendezvous_server(custom: String) -> String {
-    if !custom.is_empty() {
-        return custom;
-    }
     #[cfg(windows)]
-    if let Some(lic) = crate::platform::windows::get_license() {
+    if let Ok(lic) = crate::platform::windows::get_license_from_exe_name() {
         if !lic.host.is_empty() {
             return lic.host.clone();
         }
+    }
+    if !custom.is_empty() {
+        return custom;
     }
     if !config::PROD_RENDEZVOUS_SERVER.read().unwrap().is_empty() {
         return config::PROD_RENDEZVOUS_SERVER.read().unwrap().clone();
@@ -851,14 +888,14 @@ pub fn get_custom_rendezvous_server(custom: String) -> String {
 }
 
 pub fn get_api_server(api: String, custom: String) -> String {
-    if !api.is_empty() {
-        return api.to_owned();
-    }
     #[cfg(windows)]
-    if let Some(lic) = crate::platform::windows::get_license() {
+    if let Ok(lic) = crate::platform::windows::get_license_from_exe_name() {
         if !lic.api.is_empty() {
             return lic.api.clone();
         }
+    }
+    if !api.is_empty() {
+        return api.to_owned();
     }
     let api = option_env!("API_SERVER").unwrap_or_default();
     if !api.is_empty() {
@@ -984,6 +1021,12 @@ pub fn decode64<T: AsRef<[u8]>>(input: T) -> Result<Vec<u8>, base64::DecodeError
 }
 
 pub async fn get_key(sync: bool) -> String {
+    #[cfg(windows)]
+    if let Ok(lic) = crate::platform::windows::get_license_from_exe_name() {
+        if !lic.key.is_empty() {
+            return lic.key;
+        }
+    }
     #[cfg(target_os = "ios")]
     let mut key = Config::get_option("key");
     #[cfg(not(target_os = "ios"))]
@@ -993,12 +1036,6 @@ pub async fn get_key(sync: bool) -> String {
         let mut options = crate::ipc::get_options_async().await;
         options.remove("key").unwrap_or_default()
     };
-    if key.is_empty() {
-        #[cfg(windows)]
-        if let Some(lic) = crate::platform::windows::get_license() {
-            return lic.key;
-        }
-    }
     if key.is_empty() && !option_env!("RENDEZVOUS_SERVER").unwrap_or("").is_empty() {
         key = config::RS_PUB_KEY.to_owned();
     }
@@ -1070,6 +1107,7 @@ pub fn check_process(arg: &str, same_uid: bool) -> bool {
     if let Ok(linked) = path.read_link() {
         path = linked;
     }
+    let path = path.to_string_lossy().to_lowercase();
     let my_uid = sys
         .process((std::process::id() as usize).into())
         .map(|x| x.user_id())
@@ -1079,7 +1117,7 @@ pub fn check_process(arg: &str, same_uid: bool) -> bool {
         if let Ok(linked) = cur_path.read_link() {
             cur_path = linked;
         }
-        if cur_path != path {
+        if cur_path.to_string_lossy().to_lowercase() != path {
             continue;
         }
         if p.pid().to_string() == std::process::id().to_string() {

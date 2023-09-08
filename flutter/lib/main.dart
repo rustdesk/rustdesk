@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:bot_toast/bot_toast.dart';
 import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_hbb/desktop/pages/desktop_tab_page.dart';
 import 'package:flutter_hbb/desktop/pages/install_page.dart';
 import 'package:flutter_hbb/desktop/pages/server_page.dart';
@@ -124,6 +125,7 @@ void runMainApp(bool startService) async {
     bind.pluginSyncUi(syncTo: kAppTypeMain);
     bind.pluginListReload();
   }
+  gFFI.abModel.loadCache();
   gFFI.userModel.refreshCurrentUser();
   runApp(App());
   // Set window option.
@@ -134,7 +136,7 @@ void runMainApp(bool startService) async {
     // Check the startup argument, if we successfully handle the argument, we keep the main window hidden.
     final handledByUniLinks = await initUniLinks();
     debugPrint("handled by uni links: $handledByUniLinks");
-    if (handledByUniLinks || checkArguments()) {
+    if (handledByUniLinks || handleUriLink(cmdArgs: kBootArgs)) {
       windowManager.hide();
     } else {
       windowManager.show();
@@ -151,6 +153,7 @@ void runMobileApp() async {
   await initEnv(kAppTypeMain);
   if (isAndroid) androidChannelInit();
   platformFFI.syncAndroidServiceAppDirConfigPath();
+  gFFI.abModel.loadCache();
   gFFI.userModel.refreshCurrentUser();
   runApp(App());
 }
@@ -196,7 +199,7 @@ void runMultiWindow(
   switch (appType) {
     case kAppTypeDesktopRemote:
       await restoreWindowPosition(WindowType.RemoteDesktop,
-          windowId: kWindowId!);
+          windowId: kWindowId!, peerId: argument['id'] as String?);
       break;
     case kAppTypeDesktopFileTransfer:
       await restoreWindowPosition(WindowType.FileTransfer,
@@ -220,11 +223,13 @@ void runConnectionManagerScreen(bool hide) async {
     const DesktopServerPage(),
     MyTheme.currentThemeMode(),
   );
+  gFFI.serverModel.hideCm = hide;
   if (hide) {
     await hideCmWindow(isStartup: true);
   } else {
     await showCmWindow(isStartup: true);
   }
+  windowManager.setResizable(false);
   // Start the uni links handler and redirect links to Native, not for Flutter.
   listenUniLinks(handleByFlutter: false);
 }
@@ -248,7 +253,7 @@ showCmWindow({bool isStartup = false}) async {
       await windowManager.minimize(); //needed
       await windowManager.setSizeAlignment(
           kConnectionManagerWindowSizeClosedChat, Alignment.topRight);
-      window_on_top(null);
+      windowOnTop(null);
     }
   }
 }
@@ -264,10 +269,12 @@ hideCmWindow({bool isStartup = false}) async {
       await windowManager.hide();
     });
   } else {
-    await windowManager.setOpacity(0);
-    bind.mainHideDocker();
-    await windowManager.minimize();
-    await windowManager.hide();
+    if (await windowManager.getOpacity() != 0) {
+      await windowManager.setOpacity(0);
+      bind.mainHideDocker();
+      await windowManager.minimize();
+      await windowManager.hide();
+    }
   }
 }
 
@@ -391,7 +398,7 @@ class _AppState extends State<App> {
           themeMode: MyTheme.currentThemeMode(),
           home: isDesktop
               ? const DesktopTabPage()
-              : !isAndroid
+              : isWeb
                   ? WebHomePage()
                   : HomePage(),
           localizationsDelegates: const [
@@ -416,6 +423,9 @@ class _AppState extends State<App> {
               : (context, child) {
                   child = _keepScaleBuilder(context, child);
                   child = botToastBuilder(context, child);
+                  if (isDesktop && desktopType == DesktopType.main) {
+                    child = keyListenerBuilder(context, child);
+                  }
                   return child;
                 },
         ),
@@ -451,4 +461,20 @@ _registerEventHandler() {
       NativeUiHandler.instance.onEvent(evt);
     });
   }
+}
+
+Widget keyListenerBuilder(BuildContext context, Widget? child) {
+  return RawKeyboardListener(
+    focusNode: FocusNode(),
+    child: child ?? Container(),
+    onKey: (RawKeyEvent event) {
+      if (event.logicalKey == LogicalKeyboardKey.shiftLeft) {
+        if (event is RawKeyDownEvent) {
+          gFFI.peerTabModel.setShiftDown(true);
+        } else if (event is RawKeyUpEvent) {
+          gFFI.peerTabModel.setShiftDown(false);
+        }
+      }
+    },
+  );
 }

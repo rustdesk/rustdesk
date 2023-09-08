@@ -610,12 +610,15 @@ fn ret_to_result(ret: u32) -> Result<(), CliprdrError> {
         e => Err(CliprdrError::Unknown(e)),
     }
 }
-
-fn empty_clipboard(context: &mut CliprdrClientContext, conn_id: i32) -> bool {
-    unsafe { TRUE == empty_cliprdr(context, conn_id as u32) }
+pub fn empty_clipboard(context: &mut CliprdrClientContext, conn_id: i32) -> bool {
+    unsafe { TRUE == cliprdr::empty_cliprdr(context, conn_id as u32) }
 }
 
-fn server_clip_file(context: &mut CliprdrClientContext, conn_id: i32, msg: ClipboardFile) -> u32 {
+pub fn server_clip_file(
+    context: &mut CliprdrClientContext,
+    conn_id: i32,
+    msg: ClipboardFile,
+) -> u32 {
     let mut ret = 0;
     match msg {
         ClipboardFile::NotifyCallback { .. } => {
@@ -737,7 +740,7 @@ fn server_clip_file(context: &mut CliprdrClientContext, conn_id: i32, msg: Clipb
     ret
 }
 
-fn server_monitor_ready(context: &mut CliprdrClientContext, conn_id: i32) -> u32 {
+pub fn server_monitor_ready(context: &mut CliprdrClientContext, conn_id: i32) -> u32 {
     unsafe {
         let monitor_ready = CLIPRDR_MONITOR_READY {
             connID: conn_id as UINT32,
@@ -754,7 +757,7 @@ fn server_monitor_ready(context: &mut CliprdrClientContext, conn_id: i32) -> u32
     }
 }
 
-fn server_format_list(
+pub fn server_format_list(
     context: &mut CliprdrClientContext,
     conn_id: i32,
     format_list: Vec<(i32, String)>,
@@ -808,7 +811,7 @@ fn server_format_list(
     }
 }
 
-fn server_format_list_response(
+pub fn server_format_list_response(
     context: &mut CliprdrClientContext,
     conn_id: i32,
     msg_flags: i32,
@@ -829,7 +832,7 @@ fn server_format_list_response(
     }
 }
 
-fn server_format_data_request(
+pub fn server_format_data_request(
     context: &mut CliprdrClientContext,
     conn_id: i32,
     requested_format_id: i32,
@@ -850,7 +853,7 @@ fn server_format_data_request(
     }
 }
 
-fn server_format_data_response(
+pub fn server_format_data_response(
     context: &mut CliprdrClientContext,
     conn_id: i32,
     msg_flags: i32,
@@ -872,7 +875,7 @@ fn server_format_data_response(
     }
 }
 
-fn server_file_contents_request(
+pub fn server_file_contents_request(
     context: &mut CliprdrClientContext,
     conn_id: i32,
     stream_id: i32,
@@ -907,7 +910,7 @@ fn server_file_contents_request(
     }
 }
 
-fn server_file_contents_response(
+pub fn server_file_contents_response(
     context: &mut CliprdrClientContext,
     conn_id: i32,
     msg_flags: i32,
@@ -932,12 +935,12 @@ fn server_file_contents_response(
     }
 }
 
-pub(super) fn create_cliprdr_context(
+pub fn create_cliprdr_context(
     enable_files: bool,
     enable_others: bool,
     response_wait_timeout_secs: u32,
-) -> ResultType<Box<dyn CliprdrServiceContext>> {
-    let boxed = CliprdrClientContext::create(
+) -> ResultType<Box<CliprdrClientContext>> {
+    Ok(CliprdrClientContext::create(
         enable_files,
         enable_others,
         response_wait_timeout_secs,
@@ -948,9 +951,7 @@ pub(super) fn create_cliprdr_context(
         Some(client_format_data_response),
         Some(client_file_contents_request),
         Some(client_file_contents_response),
-    )? as Box<dyn CliprdrServiceContext>;
-
-    Ok(boxed)
+    )?)
 }
 
 extern "C" fn notify_callback(conn_id: UINT32, msg: *const NOTIFICATION_MESSAGE) -> UINT {

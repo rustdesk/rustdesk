@@ -4,12 +4,14 @@ import 'dart:io';
 import 'dart:math';
 import 'dart:ui' as ui;
 
+import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/generated_bridge.dart';
 import 'package:flutter_hbb/models/ab_model.dart';
 import 'package:flutter_hbb/models/chat_model.dart';
+import 'package:flutter_hbb/models/cm_file_model.dart';
 import 'package:flutter_hbb/models/file_model.dart';
 import 'package:flutter_hbb/models/group_model.dart';
 import 'package:flutter_hbb/models/peer_tab_model.dart';
@@ -37,10 +39,52 @@ import 'platform_model.dart';
 
 typedef HandleMsgBox = Function(Map<String, dynamic> evt, String id);
 typedef ReconnectHandle = Function(OverlayDialogManager, SessionID, bool);
-final _waitForImage = <UuidValue, bool>{};
 final _constSessionId = Uuid().v4obj();
 
+class CachedPeerData {
+  Map<String, dynamic> updatePrivacyMode = {};
+  Map<String, dynamic> peerInfo = {};
+  List<Map<String, dynamic>> cursorDataList = [];
+  Map<String, dynamic> lastCursorId = {};
+  bool secure = false;
+  bool direct = false;
+
+  CachedPeerData();
+
+  @override
+  String toString() {
+    return jsonEncode({
+      'updatePrivacyMode': updatePrivacyMode,
+      'peerInfo': peerInfo,
+      'cursorDataList': cursorDataList,
+      'lastCursorId': lastCursorId,
+      'secure': secure,
+      'direct': direct,
+    });
+  }
+
+  static CachedPeerData? fromString(String s) {
+    try {
+      final map = jsonDecode(s);
+      final data = CachedPeerData();
+      data.updatePrivacyMode = map['updatePrivacyMode'];
+      data.peerInfo = map['peerInfo'];
+      for (final cursorData in map['cursorDataList']) {
+        data.cursorDataList.add(cursorData);
+      }
+      data.lastCursorId = map['lastCursorId'];
+      data.secure = map['secure'];
+      data.direct = map['direct'];
+      return data;
+    } catch (e) {
+      debugPrint('Failed to parse CachedPeerData: $e');
+      return null;
+    }
+  }
+}
+
 class FfiModel with ChangeNotifier {
+  CachedPeerData cachedPeerData = CachedPeerData();
   PeerInfo _pi = PeerInfo();
   Display _display = Display();
 
@@ -54,6 +98,10 @@ class FfiModel with ChangeNotifier {
   bool _viewOnly = false;
   WeakReference<FFI> parent;
   late final SessionID sessionId;
+
+  RxBool waitForImageDialogShow = true.obs;
+  Timer? waitForImageTimer;
+  RxBool waitForFirstImage = true.obs;
 
   Map<String, bool> get permissions => _permissions;
 
@@ -113,9 +161,12 @@ class FfiModel with ChangeNotifier {
     _timer?.cancel();
     _timer = null;
     clearPermissions();
+    waitForImageTimer?.cancel();
   }
 
   setConnectionType(String peerId, bool secure, bool direct) {
+    cachedPeerData.secure = secure;
+    cachedPeerData.direct = direct;
     _secure = secure;
     _direct = direct;
     try {
@@ -142,6 +193,22 @@ class FfiModel with ChangeNotifier {
     _permissions.clear();
   }
 
+  handleCachedPeerData(CachedPeerData data, String peerId) async {
+    handleMsgBox({
+      'type': 'success',
+      'title': 'Successful',
+      'text': 'Connected, waiting for image...',
+      'link': '',
+    }, sessionId, peerId);
+    updatePrivacyMode(data.updatePrivacyMode, sessionId, peerId);
+    setConnectionType(peerId, data.secure, data.direct);
+    handlePeerInfo(data.peerInfo, peerId);
+    for (var element in data.cursorDataList) {
+      handleCursorData(element);
+    }
+    handleCursorId(data.lastCursorId);
+  }
+
   // todo: why called by two position
   StreamEventHandler startEventListener(SessionID sessionId, String peerId) {
     return (evt) async {
@@ -158,9 +225,9 @@ class FfiModel with ChangeNotifier {
       } else if (name == 'switch_display') {
         handleSwitchDisplay(evt, sessionId, peerId);
       } else if (name == 'cursor_data') {
-        await parent.target?.cursorModel.updateCursorData(evt);
+        await handleCursorData(evt);
       } else if (name == 'cursor_id') {
-        await parent.target?.cursorModel.updateCursorId(evt);
+        await handleCursorId(evt);
       } else if (name == 'cursor_position') {
         await parent.target?.cursorModel.updateCursorPosition(evt, peerId);
       } else if (name == 'clipboard') {
@@ -240,6 +307,21 @@ class FfiModel with ChangeNotifier {
         handleReloading(evt);
       } else if (name == 'plugin_option') {
         handleOption(evt);
+      } else if (name == "sync_peer_password_to_ab") {
+        if (desktopType == DesktopType.main) {
+          final id = evt['id'];
+          final password = evt['password'];
+          if (id != null && password != null) {
+            if (gFFI.abModel
+                .changePassword(id.toString(), password.toString())) {
+              gFFI.abModel.pushAb(toastIfFail: false, toastIfSucc: false);
+            }
+          }
+        }
+      } else if (name == "cm_file_transfer_log") {
+        if (isDesktop) {
+          gFFI.cmFileModel.onFileTransferLog(evt['log']);
+        }
       } else {
         debugPrint('Unknown event name: $name');
       }
@@ -248,7 +330,7 @@ class FfiModel with ChangeNotifier {
 
   onUrlSchemeReceived(Map<String, dynamic> evt) {
     final url = evt['url'].toString().trim();
-    if (url.startsWith(kUniLinksPrefix) && parseRustdeskUri(url)) {
+    if (url.startsWith(kUniLinksPrefix) && handleUriLink(uriString: url)) {
       return;
     }
     switch (url) {
@@ -260,7 +342,7 @@ class FfiModel with ChangeNotifier {
         });
         break;
       default:
-        window_on_top(null);
+        windowOnTop(null);
         break;
     }
   }
@@ -350,7 +432,9 @@ class FfiModel with ChangeNotifier {
     } else if (type == 'elevation-error') {
       showElevationError(sessionId, type, title, text, dialogManager);
     } else if (type == 'relay-hint') {
-      showRelayHintDialog(sessionId, type, title, text, dialogManager);
+      showRelayHintDialog(sessionId, type, title, text, dialogManager, peerId);
+    } else if (text == 'Connected, waiting for image...') {
+      showConnectedWaitingForImage(dialogManager, sessionId, type, title, text);
     } else {
       var hasRetry = evt['hasRetry'] == 'true';
       showMsgBox(sessionId, type, title, text, link, hasRetry, dialogManager);
@@ -383,7 +467,7 @@ class FfiModel with ChangeNotifier {
   }
 
   void showRelayHintDialog(SessionID sessionId, String type, String title,
-      String text, OverlayDialogManager dialogManager) {
+      String text, OverlayDialogManager dialogManager, String peerId) {
     dialogManager.show(tag: '$sessionId-$type', (setState, close, context) {
       onClose() {
         closeConnection();
@@ -392,29 +476,54 @@ class FfiModel with ChangeNotifier {
 
       final style =
           ElevatedButton.styleFrom(backgroundColor: Colors.green[700]);
+      var hint = "\n\n${translate('relay_hint_tip')}";
+      if (text.contains("10054") || text.contains("104")) {
+        hint = "";
+      }
+      final alreadyForceAlwaysRelay = bind
+          .mainGetPeerOptionSync(id: peerId, key: 'force-always-relay')
+          .isNotEmpty;
       return CustomAlertDialog(
         title: null,
-        content: msgboxContent(type, title,
-            "${translate(text)}\n\n${translate('relay_hint_tip')}"),
+        content: msgboxContent(type, title, "${translate(text)}$hint"),
         actions: [
           dialogButton('Close', onPressed: onClose, isOutline: true),
           dialogButton('Retry',
               onPressed: () => reconnect(dialogManager, sessionId, false)),
-          dialogButton('Connect via relay',
-              onPressed: () => reconnect(dialogManager, sessionId, true),
-              buttonStyle: style),
-          dialogButton('Always connect via relay', onPressed: () {
-            const option = 'force-always-relay';
-            bind.sessionPeerOption(
-                sessionId: sessionId,
-                name: option,
-                value: bool2option(option, true));
-            reconnect(dialogManager, sessionId, true);
-          }, buttonStyle: style),
+          if (!alreadyForceAlwaysRelay)
+            dialogButton('Connect via relay',
+                onPressed: () => reconnect(dialogManager, sessionId, true),
+                buttonStyle: style),
         ],
         onCancel: onClose,
       );
     });
+  }
+
+  void showConnectedWaitingForImage(OverlayDialogManager dialogManager,
+      SessionID sessionId, String type, String title, String text) {
+    onClose() {
+      closeConnection();
+    }
+
+    if (waitForFirstImage.isFalse) return;
+    dialogManager.show(
+      (setState, close, context) => CustomAlertDialog(
+          title: null,
+          content: SelectionArea(child: msgboxContent(type, title, text)),
+          actions: [
+            dialogButton("Cancel", onPressed: onClose, isOutline: true)
+          ],
+          onCancel: onClose),
+      tag: '$sessionId-waiting-for-image',
+    );
+    waitForImageDialogShow.value = true;
+    waitForImageTimer = Timer(Duration(milliseconds: 1500), () {
+      if (waitForFirstImage.isTrue) {
+        bind.sessionInputOsPassword(sessionId: sessionId, value: '');
+      }
+    });
+    bind.sessionOnWaitingForImageDialogShow(sessionId: sessionId);
   }
 
   _updateSessionWidthHeight(SessionID sessionId) {
@@ -430,6 +539,8 @@ class FfiModel with ChangeNotifier {
 
   /// Handle the peer info event based on [evt].
   handlePeerInfo(Map<String, dynamic> evt, String peerId) async {
+    cachedPeerData.peerInfo = evt;
+
     // recent peer updated by handle_peer_info(ui_session_interface.rs) --> handle_peer_info(client.rs) --> save_config(client.rs)
     bind.mainLoadRecentPeers();
 
@@ -448,23 +559,13 @@ class FfiModel with ChangeNotifier {
     }
 
     final connType = parent.target?.connType;
-
     if (isPeerAndroid) {
       _touchMode = true;
-      if (connType == ConnType.defaultConn &&
-          parent.target != null &&
-          parent.target!.ffiModel.permissions['keyboard'] != false) {
-        Timer(
-            const Duration(milliseconds: 100),
-            () => parent.target!.dialogManager
-                .showMobileActionsOverlay(ffi: parent.target!));
-      }
     } else {
       _touchMode = await bind.sessionGetOption(
               sessionId: sessionId, arg: 'touch-mode') !=
           '';
     }
-
     if (connType == ConnType.fileTransfer) {
       parent.target?.fileModel.onReady();
     } else if (connType == ConnType.defaultConn) {
@@ -479,11 +580,8 @@ class FfiModel with ChangeNotifier {
         _updateSessionWidthHeight(sessionId);
       }
       if (displays.isNotEmpty) {
-        parent.target?.dialogManager.showLoading(
-            translate('Connected, waiting for image...'),
-            onCancel: closeConnection);
-        _waitForImage[sessionId] = true;
         _reconnects = 1;
+        waitForFirstImage.value = true;
       }
       Map<String, dynamic> features = json.decode(evt['features']);
       _pi.features.privacyMode = features['privacy_mode'] == 1;
@@ -507,9 +605,23 @@ class FfiModel with ChangeNotifier {
       }
     }
 
+    _pi.isSet.value = true;
     stateGlobal.resetLastResolutionGroupValues(peerId);
 
     notifyListeners();
+  }
+
+  tryShowAndroidActionsOverlay({int delayMSecs = 10}) {
+    if (isPeerAndroid) {
+      if (parent.target?.connType == ConnType.defaultConn &&
+          parent.target != null &&
+          parent.target!.ffiModel.permissions['keyboard'] != false) {
+        Timer(
+            Duration(milliseconds: delayMSecs),
+            () => parent.target!.dialogManager
+                .showMobileActionsOverlay(ffi: parent.target!));
+      }
+    }
   }
 
   handleResolutions(String id, dynamic resolutions) {
@@ -548,9 +660,20 @@ class FfiModel with ChangeNotifier {
     return d;
   }
 
+  handleCursorId(Map<String, dynamic> evt) async {
+    cachedPeerData.lastCursorId = evt;
+    await parent.target?.cursorModel.updateCursorId(evt);
+  }
+
+  handleCursorData(Map<String, dynamic> evt) async {
+    cachedPeerData.cursorDataList.add(evt);
+    await parent.target?.cursorModel.updateCursorData(evt);
+  }
+
   /// Handle the peer info synchronization event based on [evt].
   handleSyncPeerInfo(Map<String, dynamic> evt, SessionID sessionId) async {
     if (evt['displays'] != null) {
+      cachedPeerData.peerInfo['displays'] = evt['displays'];
       List<dynamic> displays = json.decode(evt['displays']);
       List<Display> newDisplays = [];
       for (int i = 0; i < displays.length; ++i) {
@@ -628,22 +751,6 @@ class ImageModel with ChangeNotifier {
   addCallbackOnFirstImage(Function(String) cb) => callbacksOnFirstImage.add(cb);
 
   onRgba(Uint8List rgba) {
-    final waitforImage = _waitForImage[sessionId];
-    if (waitforImage == null) {
-      debugPrint('Exception, peer $id not found for waiting image');
-      return;
-    }
-
-    if (waitforImage == true) {
-      _waitForImage[sessionId] = false;
-      parent.target?.dialogManager.dismissAll();
-      if (isDesktop) {
-        for (final cb in callbacksOnFirstImage) {
-          cb(id);
-        }
-      }
-    }
-
     final pid = parent.target?.id;
     img.decodeImageFromPixels(
         rgba,
@@ -1266,7 +1373,6 @@ class CursorModel with ChangeNotifier {
   }
 
   updatePan(double dx, double dy, bool touchMode) {
-    if (parent.target?.imageModel.image == null) return;
     if (touchMode) {
       final scale = parent.target?.canvasModel.scale ?? 1.0;
       _x += dx / scale;
@@ -1275,6 +1381,7 @@ class CursorModel with ChangeNotifier {
       notifyListeners();
       return;
     }
+    if (parent.target?.imageModel.image == null) return;
     final scale = parent.target?.canvasModel.scale ?? 1.0;
     dx /= scale;
     dy /= scale;
@@ -1528,12 +1635,13 @@ class RecordingModel with ChangeNotifier {
         sessionId: sessionId, start: true, width: width, height: height);
   }
 
-  toggle() {
+  toggle() async {
     if (isIOS) return;
     final sessionId = parent.target?.sessionId;
     if (sessionId == null) return;
     _start = !_start;
     notifyListeners();
+    await bind.sessionRecordStatus(sessionId: sessionId, status: _start);
     if (_start) {
       bind.sessionRefresh(sessionId: sessionId);
     } else {
@@ -1596,9 +1704,10 @@ class FFI {
   late final RecordingModel recordingModel; // session
   late final InputModel inputModel; // session
   late final ElevationModel elevationModel; // session
+  late final CmFileModel cmFileModel; // cm
 
-  FFI() {
-    sessionId = isDesktop ? Uuid().v4obj() : _constSessionId;
+  FFI(SessionID? sId) {
+    sessionId = sId ?? (isDesktop ? Uuid().v4obj() : _constSessionId);
     imageModel = ImageModel(WeakReference(this));
     ffiModel = FfiModel(WeakReference(this));
     cursorModel = CursorModel(WeakReference(this));
@@ -1614,6 +1723,15 @@ class FFI {
     recordingModel = RecordingModel(WeakReference(this));
     inputModel = InputModel(WeakReference(this));
     elevationModel = ElevationModel(WeakReference(this));
+    cmFileModel = CmFileModel(WeakReference(this));
+  }
+
+  /// Mobile reuse FFI
+  void mobileReset() {
+    ffiModel.waitForFirstImage.value = true;
+    ffiModel.waitForImageDialogShow.value = true;
+    ffiModel.waitForImageTimer?.cancel();
+    ffiModel.waitForImageTimer = null;
   }
 
   /// Start with the given [id]. Only transfer file if [isFileTransfer], only port forward if [isPortForward].
@@ -1623,9 +1741,11 @@ class FFI {
       bool isRdp = false,
       String? switchUuid,
       String? password,
-      bool? forceRelay}) {
+      bool? forceRelay,
+      int? tabWindowId}) {
     closed = false;
     auditNote = '';
+    if (isMobile) mobileReset();
     assert(!(isFileTransfer && isPortForward), 'more than one connect type');
     if (isFileTransfer) {
       connType = ConnType.fileTransfer;
@@ -1638,23 +1758,50 @@ class FFI {
       imageModel.id = id;
       cursorModel.id = id;
     }
-    // ignore: unused_local_variable
-    final addRes = bind.sessionAddSync(
-      sessionId: sessionId,
-      id: id,
-      isFileTransfer: isFileTransfer,
-      isPortForward: isPortForward,
-      isRdp: isRdp,
-      switchUuid: switchUuid ?? "",
-      forceRelay: forceRelay ?? false,
-      password: password ?? "",
-    );
+    // If tabWindowId != null, this session is a "tab -> window" one.
+    // Else this session is a new one.
+    if (tabWindowId == null) {
+      // ignore: unused_local_variable
+      final addRes = bind.sessionAddSync(
+        sessionId: sessionId,
+        id: id,
+        isFileTransfer: isFileTransfer,
+        isPortForward: isPortForward,
+        isRdp: isRdp,
+        switchUuid: switchUuid ?? '',
+        forceRelay: forceRelay ?? false,
+        password: password ?? '',
+      );
+    }
     final stream = bind.sessionStart(sessionId: sessionId, id: id);
     final cb = ffiModel.startEventListener(sessionId, id);
     final useTextureRender = bind.mainUseTextureRender();
+
+    final SimpleWrapper<bool> isToNewWindowNotified = SimpleWrapper(false);
     // Preserved for the rgba data.
     stream.listen((message) {
       if (closed) return;
+      if (tabWindowId != null && !isToNewWindowNotified.value) {
+        // Session is read to be moved to a new window.
+        // Get the cached data and handle the cached data.
+        Future.delayed(Duration.zero, () async {
+          final cachedData = await DesktopMultiWindow.invokeMethod(
+              tabWindowId, kWindowEventGetCachedSessionData, id);
+          if (cachedData == null) {
+            // unreachable
+            debugPrint('Unreachable, the cached data is empty.');
+            return;
+          }
+          final data = CachedPeerData.fromString(cachedData);
+          if (data == null) {
+            debugPrint('Unreachable, the cached data cannot be decoded.');
+            return;
+          }
+          ffiModel.handleCachedPeerData(data, id);
+          await bind.sessionRefresh(sessionId: sessionId);
+        });
+        isToNewWindowNotified.value = true;
+      }
       () async {
         if (message is EventToUI_Event) {
           if (message.field0 == "close") {
@@ -1674,23 +1821,16 @@ class FFI {
           }
         } else if (message is EventToUI_Rgba) {
           if (useTextureRender) {
-            if (_waitForImage[sessionId]!) {
-              _waitForImage[sessionId] = false;
-              dialogManager.dismissAll();
-              for (final cb in imageModel.callbacksOnFirstImage) {
-                cb(id);
-              }
-              await canvasModel.updateViewStyle();
-              await canvasModel.updateScrollStyle();
-            }
+            onEvent2UIRgba();
           } else {
             // Fetch the image buffer from rust codes.
             final sz = platformFFI.getRgbaSize(sessionId);
-            if (sz == null || sz == 0) {
+            if (sz == 0) {
               return;
             }
             final rgba = platformFFI.getRgba(sessionId, sz);
             if (rgba != null) {
+              onEvent2UIRgba();
               imageModel.onRgba(rgba);
             }
           }
@@ -1699,6 +1839,23 @@ class FFI {
     });
     // every instance will bind a stream
     this.id = id;
+  }
+
+  void onEvent2UIRgba() async {
+    if (ffiModel.waitForImageDialogShow.isTrue) {
+      ffiModel.waitForImageDialogShow.value = false;
+      ffiModel.waitForImageTimer?.cancel();
+      clearWaitingForImage(dialogManager, sessionId);
+    }
+    if (ffiModel.waitForFirstImage.value == true) {
+      ffiModel.waitForFirstImage.value = false;
+      dialogManager.dismissAll();
+      await canvasModel.updateViewStyle();
+      await canvasModel.updateScrollStyle();
+      for (final cb in imageModel.callbacksOnFirstImage) {
+        cb(id);
+      }
+    }
   }
 
   /// Login with [password], choose if the client should [remember] it.
@@ -1713,7 +1870,7 @@ class FFI {
   }
 
   /// Close the remote session.
-  Future<void> close() async {
+  Future<void> close({bool closeSession = true}) async {
     closed = true;
     chatModel.close();
     if (imageModel.image != null && !isWebDesktop) {
@@ -1731,7 +1888,9 @@ class FFI {
     ffiModel.clear();
     canvasModel.clear();
     inputModel.resetModifiers();
-    await bind.sessionClose(sessionId: sessionId);
+    if (closeSession) {
+      await bind.sessionClose(sessionId: sessionId);
+    }
     debugPrint('model $id closed');
     id = '';
   }
@@ -1804,7 +1963,7 @@ class Features {
   bool privacyMode = false;
 }
 
-class PeerInfo {
+class PeerInfo with ChangeNotifier {
   String version = '';
   String username = '';
   String hostname = '';
@@ -1815,6 +1974,8 @@ class PeerInfo {
   Features features = Features();
   List<Resolution> resolutions = [];
   Map<String, dynamic> platform_additions = {};
+
+  RxBool isSet = false.obs;
 
   bool get is_wayland => platform_additions['is_wayland'] == true;
   bool get is_headless => platform_additions['headless'] == true;
@@ -1837,14 +1998,14 @@ Future<void> setCanvasConfig(
   p['yCanvas'] = yCanvas;
   p['scale'] = scale;
   p['currentDisplay'] = currentDisplay;
-  await bind.sessionSetFlutterConfig(
+  await bind.sessionSetFlutterOption(
       sessionId: sessionId, k: canvasKey, v: jsonEncode(p));
 }
 
 Future<Map<String, dynamic>?> getCanvasConfig(SessionID sessionId) async {
   if (!isWebDesktop) return null;
   var p =
-      await bind.sessionGetFlutterConfig(sessionId: sessionId, k: canvasKey);
+      await bind.sessionGetFlutterOption(sessionId: sessionId, k: canvasKey);
   if (p == null || p.isEmpty) return null;
   try {
     Map<String, dynamic> m = json.decode(p);
@@ -1873,4 +2034,8 @@ Future<void> initializeCursorAndCanvas(FFI ffi) async {
   ffi.cursorModel.updateDisplayOriginWithCursor(
       ffi.ffiModel.display.x, ffi.ffiModel.display.y, xCursor, yCursor);
   ffi.canvasModel.update(xCanvas, yCanvas, scale);
+}
+
+clearWaitingForImage(OverlayDialogManager? dialogManager, SessionID sessionId) {
+  dialogManager?.dismissByTag('$sessionId-waiting-for-image');
 }

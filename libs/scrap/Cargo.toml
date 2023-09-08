@@ -15,7 +15,6 @@ mediacodec = ["ndk"]
 linux-pkg-config = ["dep:pkg-config"]
 
 [dependencies]
-block = "0.1"
 cfg-if = "1.0"
 num_cpus = "1.15"
 lazy_static = "1.4"
@@ -26,6 +25,9 @@ webm = "1.0"
 version = "0.3"
 default-features = true
 features = ["dxgi", "dxgi1_2", "dxgi1_5", "d3d11", "winuser", "winerror", "errhandlingapi", "libloaderapi"]
+
+[target.'cfg(target_os = "macos")'.dependencies]
+block = "0.1"
 
 [target.'cfg(target_os = "android")'.dependencies]
 android_logger = "0.13"

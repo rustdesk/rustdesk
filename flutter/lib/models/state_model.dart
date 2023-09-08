@@ -10,22 +10,25 @@ enum SvcStatus { notReady, connecting, ready }
 
 class StateGlobal {
   int _windowId = -1;
-  bool _fullscreen = false;
-  bool _maximize = false;
   bool grabKeyboard = false;
+  bool _fullscreen = false;
+  bool _isMinimized = false;
+  final RxBool isMaximized = false.obs;
   final RxBool _showTabBar = true.obs;
   final RxDouble _resizeEdgeSize = RxDouble(kWindowEdgeSize);
   final RxDouble _windowBorderWidth = RxDouble(kWindowBorderWidth);
   final RxBool showRemoteToolBar = false.obs;
   final RxInt displaysCount = 0.obs;
   final svcStatus = SvcStatus.notReady.obs;
+  // Only used for macOS
+  bool closeOnFullscreen = false;
 
   // Use for desktop -> remote toolbar -> resolution
   final Map<String, Map<int, String?>> _lastResolutionGroupValues = {};
 
   int get windowId => _windowId;
   bool get fullscreen => _fullscreen;
-  bool get maximize => _maximize;
+  bool get isMinimized => _isMinimized;
   double get tabBarHeight => fullscreen ? 0 : kDesktopRemoteTabBarHeight;
   RxBool get showTabBar => _showTabBar;
   RxDouble get resizeEdgeSize => _resizeEdgeSize;
@@ -48,39 +51,49 @@ class StateGlobal {
   }
 
   setWindowId(int id) => _windowId = id;
-  setMaximize(bool v) {
-    if (_maximize != v && !_fullscreen) {
-      _maximize = v;
-      _resizeEdgeSize.value = _maximize ? kMaximizeEdgeSize : kWindowEdgeSize;
+  setMaximized(bool v) {
+    if (!_fullscreen) {
+      if (isMaximized.value != v) {
+        isMaximized.value = v;
+        _resizeEdgeSize.value =
+            isMaximized.isTrue ? kMaximizeEdgeSize : kWindowEdgeSize;
+      }
+      if (!Platform.isMacOS) {
+        _windowBorderWidth.value = v ? 0 : kWindowBorderWidth;
+      }
     }
   }
 
-  setFullscreen(bool v) {
+  setMinimized(bool v) => _isMinimized = v;
+
+  setFullscreen(bool v, {bool procWnd = true}) {
     if (_fullscreen != v) {
       _fullscreen = v;
       _showTabBar.value = !_fullscreen;
       _resizeEdgeSize.value = fullscreen
           ? kFullScreenEdgeSize
-          : _maximize
+          : isMaximized.isTrue
               ? kMaximizeEdgeSize
               : kWindowEdgeSize;
       print(
-          "fullscreen: ${fullscreen}, resizeEdgeSize: ${_resizeEdgeSize.value}");
+          "fullscreen: $fullscreen, resizeEdgeSize: ${_resizeEdgeSize.value}");
       _windowBorderWidth.value = fullscreen ? 0 : kWindowBorderWidth;
-      WindowController.fromWindowId(windowId)
-          .setFullscreen(_fullscreen)
-          .then((_) {
-        // https://github.com/leanflutter/window_manager/issues/131#issuecomment-1111587982
-        if (Platform.isWindows && !v) {
-          Future.delayed(Duration.zero, () async {
-            final frame =
-                await WindowController.fromWindowId(windowId).getFrame();
-            final newRect = Rect.fromLTWH(
-                frame.left, frame.top, frame.width + 1, frame.height + 1);
-            await WindowController.fromWindowId(windowId).setFrame(newRect);
-          });
-        }
-      });
+      if (procWnd) {
+        WindowController.fromWindowId(windowId)
+            .setFullscreen(_fullscreen)
+            .then((_) {
+          // https://github.com/leanflutter/window_manager/issues/131#issuecomment-1111587982
+          if (Platform.isWindows && !v) {
+            Future.delayed(Duration.zero, () async {
+              final frame =
+                  await WindowController.fromWindowId(windowId).getFrame();
+              final newRect = Rect.fromLTWH(
+                  frame.left, frame.top, frame.width + 1, frame.height + 1);
+              await WindowController.fromWindowId(windowId).setFrame(newRect);
+            });
+          }
+        });
+      }
     }
   }
 

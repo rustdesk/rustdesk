@@ -32,11 +32,8 @@
 فيما يلي الخوادم التي تستخدمها مجانًا، وقد تتغير طوال الوقت. إذا لم تكن قريبًا من أحد هؤلاء، فقد تكون شبكتك بطيئة.
 | الموقع | المورد | المواصفات |
 | --------- | ------------- | ------------------ |
-| Seoul | AWS lightsail | 1 vCPU / 0.5GB RAM |
 | Germany | Hetzner | 2 vCPU / 4GB RAM |
-| Germany | Codext | 4 vCPU / 8GB RAM |
-| Finland (Helsinki) | 0x101 Cyber Security | 4 vCPU / 8GB RAM |
-| USA (Ashburn) | 0x101 Cyber Security | 4 vCPU / 8GB RAM |
+| Ukraine (Kyiv) | [dc.volia](https://dc.volia.com) | 2 vCPU / 4 GB RAM |
 
 ## التبعيات
 

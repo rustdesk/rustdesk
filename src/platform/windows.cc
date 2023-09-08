@@ -628,4 +628,8 @@ extern "C"
         return bSystem;
     }
 
+    void alloc_console_and_redirect() {
+        AllocConsole();
+        freopen("CONOUT$", "w", stdout);
+    }
 } // end of extern "C"

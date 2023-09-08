@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:auto_size_text_field/auto_size_text_field.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common/formatter/id_formatter.dart';
 import 'package:get/get.dart';
@@ -27,7 +28,7 @@ class ConnectionPage extends StatefulWidget implements PageShape {
   final title = translate("Connection");
 
   @override
-  final appBarActions = !isAndroid ? <Widget>[const WebMenu()] : <Widget>[];
+  final appBarActions = isWeb ? <Widget>[const WebMenu()] : <Widget>[];
 
   @override
   State<ConnectionPage> createState() => _ConnectionPageState();
@@ -37,6 +38,7 @@ class ConnectionPage extends StatefulWidget implements PageShape {
 class _ConnectionPageState extends State<ConnectionPage> {
   /// Controller for the id input bar.
   final _idController = IDTextEditingController();
+  final RxBool _idEmpty = true.obs;
 
   /// Update url. If it's not null, means an update is available.
   var _updateUrl = '';
@@ -60,6 +62,11 @@ class _ConnectionPageState extends State<ConnectionPage> {
         if (_updateUrl.isNotEmpty) setState(() {});
       });
     }
+
+    _idController.addListener(() {
+      _idEmpty.value = _idController.text.isEmpty;
+    });
+    Get.put<IDTextEditingController>(_idController);
   }
 
   @override
@@ -94,7 +101,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
         ? const SizedBox(height: 0)
         : InkWell(
             onTap: () async {
-              final url = '$_updateUrl.apk';
+              final url = 'https://rustdesk.com/download';
               if (await canLaunchUrl(Uri.parse(url))) {
                 await launchUrl(Uri.parse(url));
               }
@@ -126,7 +133,8 @@ class _ConnectionPageState extends State<ConnectionPage> {
               Expanded(
                 child: Container(
                   padding: const EdgeInsets.only(left: 16, right: 16),
-                  child: TextField(
+                  child: AutoSizeTextField(
+                    minFontSize: 18,
                     autocorrect: false,
                     enableSuggestions: false,
                     keyboardType: TextInputType.visiblePassword,
@@ -158,6 +166,14 @@ class _ConnectionPageState extends State<ConnectionPage> {
                   ),
                 ),
               ),
+              Obx(() => Offstage(
+                    offstage: _idEmpty.value,
+                    child: IconButton(
+                        onPressed: () {
+                          _idController.clear();
+                        },
+                        icon: Icon(Icons.clear, color: MyTheme.darkGray)),
+                  )),
               SizedBox(
                 width: 60,
                 height: 60,
@@ -180,6 +196,9 @@ class _ConnectionPageState extends State<ConnectionPage> {
   @override
   void dispose() {
     _idController.dispose();
+    if (Get.isRegistered<IDTextEditingController>()) {
+      Get.delete<IDTextEditingController>();
+    }
     super.dispose();
   }
 }
@@ -192,25 +211,6 @@ class WebMenu extends StatefulWidget {
 }
 
 class _WebMenuState extends State<WebMenu> {
-  String url = "";
-
-  @override
-  void initState() {
-    super.initState();
-    () async {
-      final urlRes = await bind.mainGetApiServer();
-      var update = false;
-      if (urlRes != url) {
-        url = urlRes;
-        update = true;
-      }
-
-      if (update) {
-        setState(() {});
-      }
-    }();
-  }
-
   @override
   Widget build(BuildContext context) {
     Provider.of<FfiModel>(context);
@@ -232,16 +232,14 @@ class _WebMenuState extends State<WebMenu> {
                   child: Text(translate('ID/Relay Server')),
                 )
               ] +
-              (url.contains('admin.rustdesk.com')
-                  ? <PopupMenuItem<String>>[]
-                  : [
-                      PopupMenuItem(
-                        value: "login",
-                        child: Text(gFFI.userModel.userName.value.isEmpty
-                            ? translate("Login")
-                            : '${translate("Logout")} (${gFFI.userModel.userName.value})'),
-                      )
-                    ]) +
+              [
+                PopupMenuItem(
+                  value: "login",
+                  child: Text(gFFI.userModel.userName.value.isEmpty
+                      ? translate("Login")
+                      : '${translate("Logout")} (${gFFI.userModel.userName.value})'),
+                )
+              ] +
               [
                 PopupMenuItem(
                   value: "about",
@@ -260,7 +258,7 @@ class _WebMenuState extends State<WebMenu> {
             if (gFFI.userModel.userName.value.isEmpty) {
               loginDialog();
             } else {
-              gFFI.userModel.logOut();
+              logOutConfirmDialog();
             }
           }
           if (value == 'scan') {

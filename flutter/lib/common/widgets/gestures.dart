@@ -113,13 +113,14 @@ class CustomTouchGestureRecognizer extends ScaleGestureRecognizer {
   }
 
   void onOneFingerStartDebounce(ScaleUpdateDetails d) {
-    final start = (ScaleUpdateDetails d) {
+    start(ScaleUpdateDetails d) {
       _currentState = GestureState.oneFingerPan;
       if (onOneFingerPanStart != null) {
         onOneFingerPanStart!(DragStartDetails(
             localPosition: d.localFocalPoint, globalPosition: d.focalPoint));
       }
-    };
+    }
+
     if (_currentState != GestureState.none) {
       _debounceTimer = Timer(Duration(milliseconds: 200), () {
         start(d);
@@ -132,13 +133,14 @@ class CustomTouchGestureRecognizer extends ScaleGestureRecognizer {
   }
 
   void onTwoFingerStartDebounce(ScaleUpdateDetails d) {
-    final start = (ScaleUpdateDetails d) {
+    start(ScaleUpdateDetails d) {
       _currentState = GestureState.twoFingerScale;
       if (onTwoFingerScaleStart != null) {
         onTwoFingerScaleStart!(ScaleStartDetails(
             localFocalPoint: d.localFocalPoint, focalPoint: d.focalPoint));
       }
-    };
+    }
+
     if (_currentState == GestureState.threeFingerVerticalDrag) {
       _debounceTimer = Timer(Duration(milliseconds: 200), () {
         start(d);
@@ -181,6 +183,8 @@ class HoldTapMoveGestureRecognizer extends GestureRecognizer {
   Timer? _secondTapDownTimer;
   _TapTracker? _firstTap;
   _TapTracker? _secondTap;
+
+  PointerDownEvent? _lastPointerDownEvent;
 
   final Map<int, _TapTracker> _trackers = <int, _TapTracker>{};
 
@@ -236,6 +240,7 @@ class HoldTapMoveGestureRecognizer extends GestureRecognizer {
       gestureSettings: gestureSettings,
     );
     _trackers[event.pointer] = tracker;
+    _lastPointerDownEvent = event;
     tracker.startTrackingPointer(_handleEvent, event.transform);
   }
 
@@ -246,7 +251,11 @@ class HoldTapMoveGestureRecognizer extends GestureRecognizer {
         _registerFirstTap(tracker);
       } else if (_secondTap != null) {
         if (event.pointer == _secondTap!.pointer) {
-          if (onHoldDragEnd != null) onHoldDragEnd!(DragEndDetails());
+          if (onHoldDragEnd != null) {
+            onHoldDragEnd!(DragEndDetails());
+            _secondTap = null;
+            _isStart = false;
+          }
         }
       } else {
         _reject(tracker);
@@ -266,11 +275,12 @@ class HoldTapMoveGestureRecognizer extends GestureRecognizer {
           if (!_isStart) {
             _resolve();
           }
-          if (onHoldDragUpdate != null)
+          if (onHoldDragUpdate != null) {
             onHoldDragUpdate!(DragUpdateDetails(
                 globalPosition: event.position,
                 localPosition: event.localPosition,
                 delta: event.delta));
+          }
         }
       }
     } else if (event is PointerCancelEvent) {
@@ -300,7 +310,11 @@ class HoldTapMoveGestureRecognizer extends GestureRecognizer {
     _secondTap?.entry.resolve(GestureDisposition.accepted);
     _isStart = true;
     // TODO start details
-    if (onHoldDragStart != null) onHoldDragStart!(DragStartDetails());
+    if (onHoldDragStart != null) {
+      onHoldDragStart!(DragStartDetails(
+        kind: _lastPointerDownEvent?.kind,
+      ));
+    }
   }
 
   void _reject(_TapTracker tracker) {
@@ -432,6 +446,8 @@ class DoubleFinerTapGestureRecognizer extends GestureRecognizer {
   Timer? _firstTapTimer;
   _TapTracker? _firstTap;
 
+  PointerDownEvent? _lastPointerDownEvent;
+
   var _isStart = false;
 
   final Set<int> _upTap = {};
@@ -473,6 +489,7 @@ class DoubleFinerTapGestureRecognizer extends GestureRecognizer {
     } else {
       // first tap
       _isStart = true;
+      _lastPointerDownEvent = event;
       _startFirstTapDownTimer();
     }
     _trackTap(event);
@@ -498,8 +515,9 @@ class DoubleFinerTapGestureRecognizer extends GestureRecognizer {
       debugPrint("PointerUpEvent");
       _upTap.add(tracker.pointer);
     } else if (event is PointerMoveEvent) {
-      if (!tracker.isWithinGlobalTolerance(event, kDoubleTapTouchSlop))
+      if (!tracker.isWithinGlobalTolerance(event, kDoubleTapTouchSlop)) {
         _reject(tracker);
+      }
     } else if (event is PointerCancelEvent) {
       _reject(tracker);
     }
@@ -587,7 +605,11 @@ class DoubleFinerTapGestureRecognizer extends GestureRecognizer {
 
   void _resolve() {
     // TODO tap down details
-    if (onDoubleFinerTap != null) onDoubleFinerTap!(TapDownDetails());
+    if (onDoubleFinerTap != null) {
+      onDoubleFinerTap!(TapDownDetails(
+        kind: _lastPointerDownEvent?.kind,
+      ));
+    }
     _trackers.forEach((key, value) {
       value.entry.resolve(GestureDisposition.accepted);
     });

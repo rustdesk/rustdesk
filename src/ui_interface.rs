@@ -44,6 +44,13 @@ pub struct UiStatus {
     pub id: String,
 }
 
+#[derive(Debug, Clone, Serialize)]
+pub struct LoginDeviceInfo {
+    pub os: String,
+    pub r#type: String,
+    pub name: String,
+}
+
 lazy_static::lazy_static! {
     static ref UI_STATUS : Arc<Mutex<UiStatus>> = Arc::new(Mutex::new(UiStatus{
         status_num: 0,
@@ -63,6 +70,7 @@ lazy_static::lazy_static! {
     static ref OPTION_SYNCED: Arc<Mutex<bool>> = Default::default();
     static ref OPTIONS : Arc<Mutex<HashMap<String, String>>> = Arc::new(Mutex::new(Config::get_options()));
     pub static ref SENDER : Mutex<mpsc::UnboundedSender<ipc::Data>> = Mutex::new(check_connect_status(true));
+    static ref CHILDREN : Children = Default::default();
 }
 
 const INIT_ASYNC_JOB_STATUS: &str = " ";
@@ -118,7 +126,7 @@ pub fn show_run_without_install() -> bool {
 #[inline]
 pub fn get_license() -> String {
     #[cfg(windows)]
-    if let Some(lic) = crate::platform::windows::get_license() {
+    if let Ok(lic) = crate::platform::windows::get_license_from_exe_name() {
         #[cfg(feature = "flutter")]
         return format!("Key: {}\nHost: {}\nApi: {}", lic.key, lic.host, lic.api);
         // default license format is html formed (sciter)
@@ -160,14 +168,14 @@ pub fn set_local_option(key: String, value: String) {
 
 #[cfg(any(target_os = "android", target_os = "ios", feature = "flutter"))]
 #[inline]
-pub fn get_local_flutter_config(key: String) -> String {
-    LocalConfig::get_flutter_config(&key)
+pub fn get_local_flutter_option(key: String) -> String {
+    LocalConfig::get_flutter_option(&key)
 }
 
 #[cfg(any(target_os = "android", target_os = "ios", feature = "flutter"))]
 #[inline]
-pub fn set_local_flutter_config(key: String, value: String) {
-    LocalConfig::set_flutter_config(key, value);
+pub fn set_local_flutter_option(key: String, value: String) {
+    LocalConfig::set_flutter_option(key, value);
 }
 
 #[cfg(feature = "flutter")]
@@ -198,6 +206,25 @@ pub fn forget_password(id: String) {
 pub fn get_peer_option(id: String, name: String) -> String {
     let c = PeerConfig::load(&id);
     c.options.get(&name).unwrap_or(&"".to_owned()).to_owned()
+}
+
+#[inline]
+#[cfg(feature = "flutter")]
+pub fn get_peer_flutter_option(id: String, name: String) -> String {
+    let c = PeerConfig::load(&id);
+    c.ui_flutter.get(&name).unwrap_or(&"".to_owned()).to_owned()
+}
+
+#[inline]
+#[cfg(feature = "flutter")]
+pub fn set_peer_flutter_option(id: String, name: String, value: String) {
+    let mut c = PeerConfig::load(&id);
+    if value.is_empty() {
+        c.ui_flutter.remove(&name);
+    } else {
+        c.ui_flutter.insert(name, value);
+    }
+    c.store(&id);
 }
 
 #[inline]
@@ -233,7 +260,7 @@ pub fn get_options() -> String {
     for (k, v) in options.iter() {
         m.insert(k.into(), v.to_owned().into());
     }
-    serde_json::to_string(&m).unwrap()
+    serde_json::to_string(&m).unwrap_or_default()
 }
 
 #[inline]
@@ -567,7 +594,7 @@ pub fn current_is_wayland() -> bool {
 
 #[inline]
 pub fn get_new_version() -> String {
-    hbb_common::get_version_from_url(&*SOFTWARE_UPDATE_URL.lock().unwrap())
+    (*SOFTWARE_UPDATE_URL.lock().unwrap().rsplit('/').next().unwrap_or("")).to_string()
 }
 
 #[inline]
@@ -598,6 +625,7 @@ pub fn discover() {
 
 #[cfg(feature = "flutter")]
 pub fn peer_to_map(id: String, p: PeerConfig) -> HashMap<&'static str, String> {
+    use hbb_common::sodiumoxide::base64;
     HashMap::<&str, String>::from_iter([
         ("id", id),
         ("username", p.info.username.clone()),
@@ -607,7 +635,16 @@ pub fn peer_to_map(id: String, p: PeerConfig) -> HashMap<&'static str, String> {
             "alias",
             p.options.get("alias").unwrap_or(&"".to_owned()).to_owned(),
         ),
+        (
+            "hash",
+            base64::encode(p.password, base64::Variant::Original),
+        ),
     ])
+}
+
+#[cfg(feature = "flutter")]
+pub fn peer_exists(id: &str) -> bool {
+    PeerConfig::exists(id)
 }
 
 #[inline]
@@ -815,11 +852,11 @@ pub fn check_super_user_permission() -> bool {
     return true;
 }
 
-#[allow(dead_code)]
-pub fn check_zombie(children: Children) {
+#[cfg(not(any(target_os = "android", target_os = "ios", feature = "flutter")))]
+pub fn check_zombie() {
     let mut deads = Vec::new();
     loop {
-        let mut lock = children.lock().unwrap();
+        let mut lock = CHILDREN.lock().unwrap();
         let mut n = 0;
         for (id, c) in lock.1.iter_mut() {
             if let Ok(Some(_)) = c.try_wait() {
@@ -835,6 +872,51 @@ pub fn check_zombie(children: Children) {
         }
         drop(lock);
         std::thread::sleep(std::time::Duration::from_millis(100));
+    }
+}
+
+#[inline]
+#[cfg(not(any(target_os = "android", target_os = "ios", feature = "flutter")))]
+pub fn recent_sessions_updated() -> bool {
+    let mut children = CHILDREN.lock().unwrap();
+    if children.0 {
+        children.0 = false;
+        true
+    } else {
+        false
+    }
+}
+
+#[cfg(not(any(target_os = "android", target_os = "ios", feature = "flutter")))]
+pub fn new_remote(id: String, remote_type: String, force_relay: bool) {
+    let mut lock = CHILDREN.lock().unwrap();
+    let mut args = vec![format!("--{}", remote_type), id.clone()];
+    if force_relay {
+        args.push("".to_string()); // password
+        args.push("--relay".to_string());
+    }
+    let key = (id.clone(), remote_type.clone());
+    if let Some(c) = lock.1.get_mut(&key) {
+        if let Ok(Some(_)) = c.try_wait() {
+            lock.1.remove(&key);
+        } else {
+            if remote_type == "rdp" {
+                allow_err!(c.kill());
+                std::thread::sleep(std::time::Duration::from_millis(30));
+                c.try_wait().ok();
+                lock.1.remove(&key);
+            } else {
+                return;
+            }
+        }
+    }
+    match crate::run_me(args) {
+        Ok(child) => {
+            lock.1.insert(key, child);
+        }
+        Err(err) => {
+            log::error!("Failed to spawn remote: {}", err);
+        }
     }
 }
 
@@ -855,7 +937,7 @@ fn check_connect_status(reconnect: bool) -> mpsc::UnboundedSender<ipc::Data> {
 
 #[cfg(feature = "flutter")]
 pub fn account_auth(op: String, id: String, uuid: String, remember_me: bool) {
-    account::OidcSession::account_auth(op, id, uuid, remember_me);
+    account::OidcSession::account_auth(get_api_server(), op, id, uuid, remember_me);
 }
 
 #[cfg(feature = "flutter")]
@@ -891,8 +973,19 @@ pub fn get_fingerprint() -> String {
     return ipc::get_fingerprint();
 }
 
-pub fn get_hostname() -> String {
-    crate::common::hostname()
+#[inline]
+pub fn get_login_device_info() -> LoginDeviceInfo {
+    LoginDeviceInfo {
+        // std::env::consts::OS is better than whoami::platform() here.
+        os: std::env::consts::OS.to_owned(),
+        r#type: "client".to_owned(),
+        name: crate::common::hostname(),
+    }
+}
+
+#[inline]
+pub fn get_login_device_info_json() -> String {
+    serde_json::to_string(&get_login_device_info()).unwrap_or("{}".to_string())
 }
 
 // notice: avoiding create ipc connection repeatedly,
@@ -1027,8 +1120,10 @@ const UNKNOWN_ERROR: &'static str = "Unknown error";
 
 #[inline]
 #[tokio::main(flavor = "current_thread")]
-pub async fn change_id_shared(id: String, old_id: String) {
-    *ASYNC_JOB_STATUS.lock().unwrap() = change_id_shared_(id, old_id).await.to_owned();
+pub async fn change_id_shared(id: String, old_id: String) -> String {
+    let res = change_id_shared_(id, old_id).await.to_owned();
+    *ASYNC_JOB_STATUS.lock().unwrap() = res.clone();
+    res
 }
 
 pub async fn change_id_shared_(id: String, old_id: String) -> &'static str {
@@ -1037,7 +1132,12 @@ pub async fn change_id_shared_(id: String, old_id: String) -> &'static str {
     }
 
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    let uuid = Bytes::from(machine_uid::get().unwrap_or("".to_owned()).as_bytes().to_vec());
+    let uuid = Bytes::from(
+        hbb_common::machine_uid::get()
+            .unwrap_or("".to_owned())
+            .as_bytes()
+            .to_vec(),
+    );
     #[cfg(any(target_os = "android", target_os = "ios"))]
     let uuid = Bytes::from(hbb_common::get_uuid());
 
@@ -1105,23 +1205,23 @@ async fn check_id(
             {
                 match msg_in.union {
                     Some(rendezvous_message::Union::RegisterPkResponse(rpr)) => {
-                        match rpr.result.enum_value_or_default() {
-                            register_pk_response::Result::OK => {
+                        match rpr.result.enum_value() {
+                            Ok(register_pk_response::Result::OK) => {
                                 ok = true;
                             }
-                            register_pk_response::Result::ID_EXISTS => {
+                            Ok(register_pk_response::Result::ID_EXISTS) => {
                                 return "Not available";
                             }
-                            register_pk_response::Result::TOO_FREQUENT => {
+                            Ok(register_pk_response::Result::TOO_FREQUENT) => {
                                 return "Too frequent";
                             }
-                            register_pk_response::Result::NOT_SUPPORT => {
+                            Ok(register_pk_response::Result::NOT_SUPPORT) => {
                                 return "server_not_support";
                             }
-                            register_pk_response::Result::SERVER_ERROR => {
+                            Ok(register_pk_response::Result::SERVER_ERROR) => {
                                 return "Server error";
                             }
-                            register_pk_response::Result::INVALID_ID_FORMAT => {
+                            Ok(register_pk_response::Result::INVALID_ID_FORMAT) => {
                                 return INVALID_FORMAT;
                             }
                             _ => {}

@@ -61,7 +61,7 @@ pub fn make_tray() -> hbb_common::ResultType<()> {
     let mut docker_hiden = false;
 
     let open_func = move || {
-        #[cfg(not(feature = "flutter"))]
+        if cfg!(not(feature = "flutter"))
         {
             crate::run_me::<&str>(vec![]).ok();
             return;
@@ -101,11 +101,15 @@ pub fn make_tray() -> hbb_common::ResultType<()> {
 
         if let Ok(event) = menu_channel.try_recv() {
             if event.id == quit_i.id() {
+                /* failed in windows, seems no permission to check system process
                 if !crate::check_process("--server", false) {
                     *control_flow = ControlFlow::Exit;
                     return;
                 }
-                crate::platform::uninstall_service(false);
+                */
+                if !crate::platform::uninstall_service(false) {
+                    *control_flow = ControlFlow::Exit;
+                }
             } else if event.id == open_i.id() {
                 open_func();
             }

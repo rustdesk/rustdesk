@@ -34,11 +34,7 @@
 Παρακάτω είναι οι διακομιστές που χρησιμοποιούνται δωρεάν, ενδέχεται να αλλάξουν με την πάροδο του χρόνου. Εάν δεν είστε κοντά σε ένα από αυτούς, το δίκτυό σας ίσως να είναι αργό.
 | Περιοχή | Πάροχος | Προδιαγραφές |
 | --------- | ------------- | ------------------ |
-| Σεούλ | AWS lightsail | 1 vCPU / 0.5GB RAM |
 | Γερμανία | Hetzner | 2 vCPU / 4GB RAM |
-| Γερμανία | Codext | 4 vCPU / 8GB RAM |
-| Φινλανδία (Ελσίνκι) | [Netlock](https://netlockendpoint.com) | 4 vCPU / 8GB RAM |
-| ΗΠΑ (Άσμπερν) | [Netlock](https://netlockendpoint.com) | 4 vCPU / 8GB RAM |
 | Ουκρανία (Κίεβο) | [dc.volia](https://dc.volia.com) | 2 vCPU / 4GB RAM |
 
 ## Dev Container

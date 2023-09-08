@@ -160,7 +160,7 @@ class _InstallPageBodyState extends State<_InstallPageBody>
               Option(desktopicon, label: 'Create desktop icon'),
               Offstage(
                 offstage: !Platform.isWindows,
-                child: Option(driverCert, label: 'idd_driver_tip'),
+                child: Option(driverCert, label: 'install_cert_tip'),
               ).marginOnly(top: 7),
               Container(
                   padding: EdgeInsets.all(12),
@@ -182,10 +182,10 @@ class _InstallPageBodyState extends State<_InstallPageBody>
                               .marginOnly(bottom: em),
                           InkWell(
                             hoverColor: Colors.transparent,
-                            onTap: () =>
-                                launchUrlString('https://rustdesk.com/privacy'),
+                            onTap: () => launchUrlString(
+                                'https://rustdesk.com/privacy.html'),
                             child: Tooltip(
-                              message: 'https://rustdesk.com/privacy',
+                              message: 'https://rustdesk.com/privacy.html',
                               child: Row(children: [
                                 Icon(Icons.launch_outlined, size: 16)
                                     .marginOnly(right: 5),
@@ -204,11 +204,10 @@ class _InstallPageBodyState extends State<_InstallPageBody>
               Row(
                 children: [
                   Expanded(
-                    child: Obx(() => Offstage(
-                          offstage: !showProgress.value,
-                          child:
-                              LinearProgressIndicator().marginOnly(right: 10),
-                        )),
+                    // NOT use Offstage to wrap LinearProgressIndicator
+                    child: Obx(() => showProgress.value
+                        ? LinearProgressIndicator().marginOnly(right: 10)
+                        : Offstage()),
                   ),
                   Obx(
                     () => OutlinedButton.icon(
@@ -282,7 +281,7 @@ class _InstallPageBodyState extends State<_InstallPageBody>
           title: null,
           content: SelectionArea(
               child:
-                  msgboxContent('info', 'Warning', 'confirm_idd_driver_tip')),
+                  msgboxContent('info', 'Warning', 'confirm_install_cert_tip')),
           actions: btns,
           onCancel: close,
         ),

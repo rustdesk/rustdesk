@@ -36,7 +36,7 @@ use hbb_common::{
 use scrap::Capturer;
 use scrap::{
     aom::AomEncoderConfig,
-    codec::{Encoder, EncoderCfg, HwEncoderConfig},
+    codec::{Encoder, EncoderCfg, HwEncoderConfig, Quality},
     record::{Recorder, RecorderContext},
     vpxcodec::{VpxEncoderConfig, VpxVideoCodecId},
     CodecName, Display, TraitCapturer,
@@ -52,6 +52,11 @@ use std::{
 
 pub const NAME: &'static str = "video";
 
+struct ChangedResolution {
+    original: (i32, i32),
+    changed: (i32, i32),
+}
+
 lazy_static::lazy_static! {
     pub static ref CURRENT_DISPLAY: Arc<Mutex<usize>> = Arc::new(Mutex::new(usize::MAX));
     static ref LAST_ACTIVE: Arc<Mutex<Instant>> = Arc::new(Mutex::new(Instant::now()));
@@ -66,58 +71,29 @@ lazy_static::lazy_static! {
     pub static ref IS_UAC_RUNNING: Arc<Mutex<bool>> = Default::default();
     pub static ref IS_FOREGROUND_WINDOW_ELEVATED: Arc<Mutex<bool>> = Default::default();
     pub static ref LAST_SYNC_DISPLAYS: Arc<RwLock<Vec<DisplayInfo>>> = Default::default();
-    static ref ORIGINAL_RESOLUTIONS: Arc<RwLock<HashMap<String, (i32, i32)>>> = Default::default();
+    static ref CHANGED_RESOLUTIONS: Arc<RwLock<HashMap<String, ChangedResolution>>> = Default::default();
 }
 
-// Not virtual display
 #[inline]
-fn set_original_resolution_(display_name: &str, wh: (i32, i32)) -> (i32, i32) {
-    let mut original_resolutions = ORIGINAL_RESOLUTIONS.write().unwrap();
-    match original_resolutions.get(display_name) {
-        Some(r) => r.clone(),
+pub fn set_last_changed_resolution(display_name: &str, original: (i32, i32), changed: (i32, i32)) {
+    let mut lock = CHANGED_RESOLUTIONS.write().unwrap();
+    match lock.get_mut(display_name) {
+        Some(res) => res.changed = changed,
         None => {
-            original_resolutions.insert(display_name.to_owned(), wh.clone());
-            wh
+            lock.insert(
+                display_name.to_owned(),
+                ChangedResolution { original, changed },
+            );
         }
-    }
-}
-
-// Not virtual display
-#[inline]
-fn get_original_resolution_(display_name: &str) -> Option<(i32, i32)> {
-    ORIGINAL_RESOLUTIONS
-        .read()
-        .unwrap()
-        .get(display_name)
-        .map(|r| r.clone())
-}
-
-// Not virtual display
-#[inline]
-fn get_or_set_original_resolution_(display_name: &str, wh: (i32, i32)) -> (i32, i32) {
-    let r = get_original_resolution_(display_name);
-    if let Some(r) = r {
-        return r;
-    }
-    set_original_resolution_(display_name, wh)
-}
-
-// Not virtual display
-#[inline]
-fn update_get_original_resolution_(display_name: &str, w: usize, h: usize) -> Resolution {
-    let wh = get_or_set_original_resolution_(display_name, (w as _, h as _));
-    Resolution {
-        width: wh.0,
-        height: wh.1,
-        ..Default::default()
     }
 }
 
 #[inline]
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub fn reset_resolutions() {
-    for (name, (w, h)) in ORIGINAL_RESOLUTIONS.read().unwrap().iter() {
-        if let Err(e) = crate::platform::change_resolution(name, *w as _, *h as _) {
+    for (name, res) in CHANGED_RESOLUTIONS.read().unwrap().iter() {
+        let (w, h) = res.original;
+        if let Err(e) = crate::platform::change_resolution(name, w as _, h as _) {
             log::error!(
                 "Failed to reset resolution of display '{}' to ({},{}): {}",
                 name,
@@ -144,7 +120,7 @@ pub fn capture_cursor_embedded() -> bool {
 
 #[inline]
 pub fn notify_video_frame_fetched(conn_id: i32, frame_tm: Option<Instant>) {
-    FRAME_FETCHED_NOTIFIER.0.send((conn_id, frame_tm)).unwrap()
+    FRAME_FETCHED_NOTIFIER.0.send((conn_id, frame_tm)).ok();
 }
 
 #[inline]
@@ -461,30 +437,19 @@ fn get_capturer(use_yuv: bool, portable_service_running: bool) -> ResultType<Cap
 fn check_displays_new() -> Option<Vec<Display>> {
     let displays = try_get_displays().ok()?;
     let last_sync_displays = &*LAST_SYNC_DISPLAYS.read().unwrap();
-
     if displays.len() != last_sync_displays.len() {
+        // No need to check if the resolutions are changed by third process.
         Some(displays)
     } else {
-        for i in 0..displays.len() {
-            if displays[i].height() != (last_sync_displays[i].height as usize) {
-                return Some(displays);
-            }
-            if displays[i].width() != (last_sync_displays[i].width as usize) {
-                return Some(displays);
-            }
-            if displays[i].origin() != (last_sync_displays[i].x, last_sync_displays[i].y) {
-                return Some(displays);
-            }
-        }
         None
     }
 }
 
 fn check_get_displays_changed_msg() -> Option<Message> {
     let displays = check_displays_new()?;
+    // Display to DisplayInfo
     let (current, displays) = get_displays_2(&displays);
     let mut pi = PeerInfo {
-        conn_id: crate::SYNC_PEER_INFO_DISPLAYS,
         ..Default::default()
     };
     pi.displays = displays.clone();
@@ -504,7 +469,7 @@ fn run(sp: GenericService) -> ResultType<()> {
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     let _wake_lock = get_wake_lock();
 
-    // ensure_inited() is needed because release_resource() may be called.
+    // ensure_inited() is needed because clear() may be called.
     #[cfg(target_os = "linux")]
     super::wayland::ensure_inited()?;
     #[cfg(windows)]
@@ -515,40 +480,17 @@ fn run(sp: GenericService) -> ResultType<()> {
     let mut c = get_capturer(true, last_portable_service_running)?;
 
     let mut video_qos = VIDEO_QOS.lock().unwrap();
-    video_qos.set_size(c.width as _, c.height as _);
-    let mut spf = video_qos.spf();
-    let bitrate = video_qos.generate_bitrate()?;
-    let abr = video_qos.check_abr_config();
+    video_qos.refresh(None);
+    let mut spf;
+    let mut quality = video_qos.quality();
+    let abr = VideoQoS::abr_enabled();
+    log::info!("init quality={:?}, abr enabled:{}", quality, abr);
+    let codec_name = Encoder::negotiated_codec();
+    let recorder = get_recorder(c.width, c.height, &codec_name);
+    let last_recording =
+        (recorder.lock().unwrap().is_some() || video_qos.record()) && codec_name != CodecName::AV1;
     drop(video_qos);
-    log::info!("init bitrate={}, abr enabled:{}", bitrate, abr);
-
-    let encoder_cfg = match Encoder::negotiated_codec() {
-        scrap::CodecName::H264(name) | scrap::CodecName::H265(name) => {
-            EncoderCfg::HW(HwEncoderConfig {
-                name,
-                width: c.width,
-                height: c.height,
-                bitrate: bitrate as _,
-            })
-        }
-        name @ (scrap::CodecName::VP8 | scrap::CodecName::VP9) => {
-            EncoderCfg::VPX(VpxEncoderConfig {
-                width: c.width as _,
-                height: c.height as _,
-                bitrate,
-                codec: if name == scrap::CodecName::VP8 {
-                    VpxVideoCodecId::VP8
-                } else {
-                    VpxVideoCodecId::VP9
-                },
-            })
-        }
-        scrap::CodecName::AV1 => EncoderCfg::AOM(AomEncoderConfig {
-            width: c.width as _,
-            height: c.height as _,
-            bitrate: bitrate as _,
-        }),
-    };
+    let encoder_cfg = get_encoder_config(&c, quality, last_recording);
 
     let mut encoder;
     match Encoder::new(encoder_cfg) {
@@ -556,11 +498,14 @@ fn run(sp: GenericService) -> ResultType<()> {
         Err(err) => bail!("Failed to create encoder: {}", err),
     }
     c.set_use_yuv(encoder.use_yuv());
+    VIDEO_QOS.lock().unwrap().store_bitrate(encoder.bitrate());
 
     if *SWITCH.lock().unwrap() {
         log::debug!("Broadcasting display switch");
         let mut misc = Misc::new();
-        let display_name = get_current_display_name().unwrap_or_default();
+        let display_name = get_current_display()
+            .map(|(_, _, d)| d.name())
+            .unwrap_or_default();
         let original_resolution = get_original_resolution(&display_name, c.width, c.height);
         misc.set_switch_display(SwitchDisplay {
             display: c.current as _,
@@ -596,8 +541,6 @@ fn run(sp: GenericService) -> ResultType<()> {
     let mut try_gdi = 1;
     #[cfg(windows)]
     log::info!("gdi: {}", c.is_gdi());
-    let codec_name = Encoder::negotiated_codec();
-    let recorder = get_recorder(c.width, c.height, &codec_name);
     #[cfg(windows)]
     start_uac_elevation_check();
 
@@ -609,14 +552,17 @@ fn run(sp: GenericService) -> ResultType<()> {
         check_uac_switch(c.privacy_mode_id, c._capturer_privacy_mode_id)?;
 
         let mut video_qos = VIDEO_QOS.lock().unwrap();
-        if video_qos.check_if_updated() && video_qos.target_bitrate > 0 {
-            log::debug!(
-                "qos is updated, target_bitrate:{}, fps:{}",
-                video_qos.target_bitrate,
-                video_qos.fps
-            );
-            allow_err!(encoder.set_bitrate(video_qos.target_bitrate));
-            spf = video_qos.spf();
+        spf = video_qos.spf();
+        if quality != video_qos.quality() {
+            log::debug!("quality: {:?} -> {:?}", quality, video_qos.quality());
+            quality = video_qos.quality();
+            allow_err!(encoder.set_quality(quality));
+            video_qos.store_bitrate(encoder.bitrate());
+        }
+        let recording = (recorder.lock().unwrap().is_some() || video_qos.record())
+            && codec_name != CodecName::AV1;
+        if recording != last_recording {
+            bail!("SWITCH");
         }
         drop(video_qos);
 
@@ -624,6 +570,8 @@ fn run(sp: GenericService) -> ResultType<()> {
             bail!("SWITCH");
         }
         if c.current != *CURRENT_DISPLAY.lock().unwrap() {
+            #[cfg(target_os = "linux")]
+            super::wayland::clear();
             *SWITCH.lock().unwrap() = true;
             bail!("SWITCH");
         }
@@ -658,6 +606,8 @@ fn run(sp: GenericService) -> ResultType<()> {
             if let Some(msg_out) = check_get_displays_changed_msg() {
                 sp.send(msg_out);
                 log::info!("Displays changed");
+                #[cfg(target_os = "linux")]
+                super::wayland::clear();
                 *SWITCH.lock().unwrap() = true;
                 bail!("SWITCH");
             }
@@ -726,7 +676,7 @@ fn run(sp: GenericService) -> ResultType<()> {
                             // Do not reset the capturer for now, as it will cause the prompt to show every few minutes.
                             // https://github.com/rustdesk/rustdesk/issues/4276
                             //
-                            // super::wayland::release_resource();
+                            // super::wayland::clear();
                             // bail!("Wayland capturer none 100 times, try restart capture");
                         }
                     }
@@ -735,6 +685,8 @@ fn run(sp: GenericService) -> ResultType<()> {
             Err(err) => {
                 if check_display_changed(c.ndisplay, c.current, c.width, c.height) {
                     log::info!("Displays changed");
+                    #[cfg(target_os = "linux")]
+                    super::wayland::clear();
                     *SWITCH.lock().unwrap() = true;
                     bail!("SWITCH");
                 }
@@ -779,11 +731,44 @@ fn run(sp: GenericService) -> ResultType<()> {
     }
 
     #[cfg(target_os = "linux")]
-    if !scrap::is_x11() {
-        super::wayland::release_resource();
-    }
+    super::wayland::clear();
 
     Ok(())
+}
+
+fn get_encoder_config(c: &CapturerInfo, quality: Quality, recording: bool) -> EncoderCfg {
+    // https://www.wowza.com/community/t/the-correct-keyframe-interval-in-obs-studio/95162
+    let keyframe_interval = if recording { Some(240) } else { None };
+    match Encoder::negotiated_codec() {
+        scrap::CodecName::H264(name) | scrap::CodecName::H265(name) => {
+            EncoderCfg::HW(HwEncoderConfig {
+                name,
+                width: c.width,
+                height: c.height,
+                quality,
+                keyframe_interval,
+            })
+        }
+        name @ (scrap::CodecName::VP8 | scrap::CodecName::VP9) => {
+            EncoderCfg::VPX(VpxEncoderConfig {
+                width: c.width as _,
+                height: c.height as _,
+                quality,
+                codec: if name == scrap::CodecName::VP8 {
+                    VpxVideoCodecId::VP8
+                } else {
+                    VpxVideoCodecId::VP9
+                },
+                keyframe_interval,
+            })
+        }
+        scrap::CodecName::AV1 => EncoderCfg::AOM(AomEncoderConfig {
+            width: c.width as _,
+            height: c.height as _,
+            quality,
+            keyframe_interval,
+        }),
+    }
 }
 
 fn get_recorder(
@@ -878,7 +863,24 @@ fn get_original_resolution(display_name: &str, w: usize, h: usize) -> MessageFie
             ..Default::default()
         }
     } else {
-        update_get_original_resolution_(&display_name, w, h)
+        let mut changed_resolutions = CHANGED_RESOLUTIONS.write().unwrap();
+        let (width, height) = match changed_resolutions.get(display_name) {
+            Some(res) => {
+                if res.changed.0 != w as i32 || res.changed.1 != h as i32 {
+                    // If the resolution is changed by third process, remove the record in changed_resolutions.
+                    changed_resolutions.remove(display_name);
+                    (w as _, h as _)
+                } else {
+                    res.original
+                }
+            }
+            None => (w as _, h as _),
+        };
+        Resolution {
+            width,
+            height,
+            ..Default::default()
+        }
     })
     .into()
 }
@@ -995,8 +997,18 @@ fn no_displays(displays: &Vec<Display>) -> bool {
     } else if display_len == 1 {
         let display = &displays[0];
         let dummy_display_side_max_size = 800;
-        display.width() <= dummy_display_side_max_size
-            && display.height() <= dummy_display_side_max_size
+        if display.width() > dummy_display_side_max_size
+            || display.height() > dummy_display_side_max_size
+        {
+            return false;
+        }
+        let any_real = crate::platform::resolutions(&display.name())
+            .iter()
+            .any(|r| {
+                (r.height as usize) > dummy_display_side_max_size
+                    || (r.width as usize) > dummy_display_side_max_size
+            });
+        !any_real
     } else {
         false
     }
@@ -1004,16 +1016,16 @@ fn no_displays(displays: &Vec<Display>) -> bool {
 
 #[cfg(all(windows, feature = "virtual_display_driver"))]
 fn try_get_displays() -> ResultType<Vec<Display>> {
-    let mut displays = Display::all()?;
-    if no_displays(&displays) {
-        log::debug!("no displays, create virtual display");
-        if let Err(e) = virtual_display_manager::plug_in_headless() {
-            log::error!("plug in headless failed {}", e);
-        } else {
-            displays = Display::all()?;
-        }
-    }
-    Ok(displays)
+    // let mut displays = Display::all()?;
+    // if no_displays(&displays) {
+    //     log::debug!("no displays, create virtual display");
+    //     if let Err(e) = virtual_display_manager::plug_in_headless() {
+    //         log::error!("plug in headless failed {}", e);
+    //     } else {
+    //         displays = Display::all()?;
+    //     }
+    // }
+    Ok( Display::all()?)
 }
 
 pub(super) fn get_current_display_2(mut all: Vec<Display>) -> ResultType<(usize, usize, Display)> {
@@ -1038,13 +1050,6 @@ pub(super) fn get_current_display_2(mut all: Vec<Display>) -> ResultType<(usize,
 #[inline]
 pub fn get_current_display() -> ResultType<(usize, usize, Display)> {
     get_current_display_2(try_get_displays()?)
-}
-
-// `try_reset_current_display` is needed because `get_displays` may change the current display,
-// which may cause the mismatch of current display and the current display name.
-#[inline]
-pub fn get_current_display_name() -> ResultType<String> {
-    Ok(get_current_display_2(try_get_displays()?)?.2.name())
 }
 
 #[cfg(windows)]
