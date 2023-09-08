@@ -541,5 +541,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Change Color", "Kleur Aanpassen"),
         ("Primary Color", "Hoofdkleur"),
         ("HSV Color", "HSV Kleur"),
+        ("Installation Successful!", ""),
+        ("Installation failed!", ""),
     ].iter().cloned().collect();
 }

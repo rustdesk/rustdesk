@@ -14,8 +14,6 @@ class CmFileModel {
   final _jobTables = HashMap<int, RxList<JobProgress>>.fromEntries([]);
   Stopwatch stopwatch = Stopwatch();
   int _lastElapsed = 0;
-  bool _jobAdded = false;
-  bool _showing = false;
 
   CmFileModel(this.parent);
 
@@ -44,16 +42,6 @@ class CmFileModel {
         _dealOneJob(d, calcSpeed);
       }
       currentJobTable.refresh();
-      Future.delayed(Duration.zero, () async {
-        if (_jobAdded) {
-          _jobAdded = false;
-          if (!_showing) {
-            _showing = true;
-            await gFFI.chatModel.showSidePage();
-            _showing = false;
-          }
-        }
-      });
     } catch (e) {
       debugPrint("onFileTransferLog:$e");
     }
@@ -72,10 +60,10 @@ class CmFileModel {
     if (job == null) {
       job = JobProgress();
       jobTable.add(job);
-      _jobAdded = true;
       final currentSelectedTab =
           gFFI.serverModel.tabController.state.value.selectedTabInfo;
-      if (currentSelectedTab.key != data.connId.toString()) {
+      if (!(gFFI.chatModel.isShowCMSidePage &&
+          currentSelectedTab.key == data.connId.toString())) {
         client?.unreadChatMessageCount.value += 1;
       }
     }

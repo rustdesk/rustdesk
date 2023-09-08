@@ -97,6 +97,7 @@ virtual_display = { path = "libs/virtual_display", optional = true }
 impersonate_system = { git = "https://github.com/21pages/impersonate-system" }
 shared_memory = "0.12"
 shutdown_hooks = "0.1"
+tauri-winrt-notification = "0.1.2"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc = "0.2"
