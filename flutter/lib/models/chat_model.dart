@@ -73,7 +73,7 @@ class ChatModel with ChangeNotifier {
 
   Offset chatWindowPosition = Offset(20, 80);
 
-   void setChatWindowPosition(Offset position) {
+  void setChatWindowPosition(Offset position) {
     chatWindowPosition = position;
     notifyListeners();
   }
@@ -273,16 +273,6 @@ class ChatModel with ChangeNotifier {
       if (key.connId == clientModeID) {
         if (_isChatOverlayHide()) {
           await toggleChatOverlay();
-        }
-      }
-    }
-  }
-
-  showSidePage() async {
-    if (isDesktop) {
-      if (isConnManager) {
-        if (!_isShowCMSidePage) {
-          await toggleCMSidePage();
         }
       }
     }
