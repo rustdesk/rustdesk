@@ -41,6 +41,7 @@ use utf16string::WStr;
 
 use crate::{ClipboardFile, CliprdrError};
 
+#[cfg(target_os = "linux")]
 use super::LDAP_EPOCH_DELTA;
 
 /// block size for fuse, align to our asynchronic request size over FileContentsRequest.

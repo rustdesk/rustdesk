@@ -5,11 +5,15 @@
 #![allow(non_snake_case)]
 #![allow(deref_nullptr)]
 
-use std::{boxed::Box, result::Result};
+use std::{
+    boxed::Box,
+    ffi::{CStr, CString},
+    result::Result,
+};
 
 use crate::{
-    allow_err, log, send_data, CStr, CString, ClipboardFile, CliprdrError, CliprdrServiceContext,
-    ResultType, ERR_CODE_INVALID_PARAMETER, ERR_CODE_SERVER_FUNCTION_NONE, VEC_MSG_CHANNEL,
+    allow_err, log, send_data, ClipboardFile, CliprdrError, CliprdrServiceContext, ResultType,
+    ERR_CODE_INVALID_PARAMETER, ERR_CODE_SERVER_FUNCTION_NONE, VEC_MSG_CHANNEL,
 };
 
 // only used error code will be recorded here
@@ -590,8 +594,8 @@ impl CliprdrServiceContext for CliprdrClientContext {
         Ok(())
     }
 
-    fn empty_clipboard(&mut self, conn_id: i32) -> bool {
-        empty_clipboard(self, conn_id)
+    fn empty_clipboard(&mut self, conn_id: i32) -> Result<bool, CliprdrError> {
+        Ok(empty_clipboard(self, conn_id))
     }
 
     fn server_clip_file(&mut self, conn_id: i32, msg: ClipboardFile) -> Result<(), CliprdrError> {
@@ -611,7 +615,7 @@ fn ret_to_result(ret: u32) -> Result<(), CliprdrError> {
     }
 }
 pub fn empty_clipboard(context: &mut CliprdrClientContext, conn_id: i32) -> bool {
-    unsafe { TRUE == cliprdr::empty_cliprdr(context, conn_id as u32) }
+    unsafe { TRUE == empty_cliprdr(context, conn_id as u32) }
 }
 
 pub fn server_clip_file(

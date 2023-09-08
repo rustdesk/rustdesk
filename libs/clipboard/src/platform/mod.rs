@@ -8,7 +8,10 @@ pub fn create_cliprdr_context(
     enable_others: bool,
     response_wait_timeout_secs: u32,
 ) -> crate::ResultType<Box<dyn crate::CliprdrServiceContext>> {
-    windows::create_cliprdr_context(enable_files, enable_others, response_wait_timeout_secs)
+    let boxed =
+        windows::create_cliprdr_context(enable_files, enable_others, response_wait_timeout_secs)?
+            as Box<_>;
+    Ok(boxed)
 }
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
@@ -63,4 +66,5 @@ impl CliprdrServiceContext for DummyCliprdrContext {
 
 // begin of epoch used by microsoft
 // 1601-01-01 00:00:00 + LDAP_EPOCH_DELTA*(100 ns) = 1970-01-01 00:00:00
+#[cfg(target_os = "linux")]
 const LDAP_EPOCH_DELTA: u64 = 116444772610000000;
