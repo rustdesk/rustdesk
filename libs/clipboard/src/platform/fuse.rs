@@ -21,11 +21,9 @@
 use std::{
     collections::{BTreeMap, HashMap},
     ffi::OsString,
-    ops::DerefMut,
     path::{Path, PathBuf},
     sync::{
         atomic::{AtomicBool, AtomicU64, Ordering},
-        mpsc::{Receiver, Sender},
         Arc,
     },
     time::{Duration, SystemTime},
@@ -41,18 +39,14 @@ use parking_lot::{Condvar, Mutex, RwLock};
 use rayon::prelude::*;
 use utf16string::WStr;
 
-use crate::ClipboardFile;
+use crate::{ClipboardFile, CliprdrError};
+
+use super::LDAP_EPOCH_DELTA;
 
 /// block size for fuse, align to our asynchronic request size over FileContentsRequest.
 ///
 /// Question: will this hint users to read data in this size?
 const BLOCK_SIZE: u32 = 128 * 1024;
-/// format ID for file descriptor
-///
-/// # Note
-/// this is a custom format ID, not a standard one
-/// still should be pinned to this value in our custom implementation
-const FILEDESCRIPTOR_FORMAT_ID: i32 = 49334;
 
 /// read only permission
 const PERM_READ: u16 = 0o444;
@@ -108,7 +102,7 @@ impl PendingRequest {
 
     pub fn set(&self, content: ClipboardFile) {
         let mut guard = self.content.lock();
-        guard.insert(content);
+        let _ = guard.insert(content);
         self.cvar.notify_all();
     }
 }
@@ -149,6 +143,115 @@ impl CliprdrTxnDispatcher {
     }
 }
 
+/// this is a proxy type
+/// to avoid occupy FuseServer with &mut self
+#[derive(Debug)]
+pub(crate) struct FuseClient {
+    server: Arc<FuseServer>,
+}
+
+impl FuseClient {
+    pub fn new(server: Arc<FuseServer>) -> Self {
+        Self { server }
+    }
+}
+
+impl fuser::Filesystem for FuseClient {
+    fn init(
+        &mut self,
+        _req: &fuser::Request<'_>,
+        _config: &mut fuser::KernelConfig,
+    ) -> Result<(), libc::c_int> {
+        log::debug!("init fuse server");
+
+        self.server.init();
+        Ok(())
+    }
+
+    fn lookup(
+        &mut self,
+        _req: &Request,
+        parent: u64,
+        name: &std::ffi::OsStr,
+        reply: fuser::ReplyEntry,
+    ) {
+        log::debug!("lookup: parent={}, name={:?}", parent, name);
+        self.server.look_up(parent, name, reply)
+    }
+
+    fn opendir(&mut self, _req: &Request<'_>, ino: u64, flags: i32, reply: fuser::ReplyOpen) {
+        log::debug!("opendir: ino={}, flags={}", ino, flags);
+        self.server.opendir(ino, flags, reply)
+    }
+
+    fn readdir(
+        &mut self,
+        _req: &Request<'_>,
+        ino: u64,
+        fh: u64,
+        offset: i64,
+        reply: ReplyDirectory,
+    ) {
+        log::debug!("readdir: ino={}, fh={}, offset={}", ino, fh, offset);
+        self.server.readdir(ino, fh, offset, reply)
+    }
+
+    fn releasedir(
+        &mut self,
+        _req: &Request<'_>,
+        ino: u64,
+        fh: u64,
+        flags: i32,
+        reply: fuser::ReplyEmpty,
+    ) {
+        log::debug!("releasedir: ino={}, fh={}, flags={}", ino, fh, flags);
+        self.server.releasedir(ino, fh, flags, reply)
+    }
+
+    fn open(&mut self, _req: &Request<'_>, ino: u64, flags: i32, reply: fuser::ReplyOpen) {
+        log::debug!("open: ino={}, flags={}", ino, flags);
+        self.server.open(ino, flags, reply)
+    }
+
+    fn read(
+        &mut self,
+        _req: &Request<'_>,
+        ino: u64,
+        fh: u64,
+        offset: i64,
+        size: u32,
+        flags: i32,
+        lock_owner: Option<u64>,
+        reply: fuser::ReplyData,
+    ) {
+        log::debug!(
+            "read: ino={}, fh={}, offset={}, size={}, flags={}",
+            ino,
+            fh,
+            offset,
+            size,
+            flags
+        );
+        self.server
+            .read(ino, fh, offset, size, flags, lock_owner, reply)
+    }
+
+    fn release(
+        &mut self,
+        _req: &Request<'_>,
+        ino: u64,
+        fh: u64,
+        flags: i32,
+        lock_owner: Option<u64>,
+        flush: bool,
+        reply: fuser::ReplyEmpty,
+    ) {
+        log::debug!("release: ino={}, fh={}, flush={}", ino, fh, flush);
+        self.server
+            .release(ino, fh, flags, lock_owner, flush, reply)
+    }
+}
+
 /// fuse server
 /// provides a read-only file system
 #[derive(Debug)]
@@ -173,9 +276,7 @@ pub(crate) struct FuseServer {
 
 impl FuseServer {
     /// create a new fuse server
-    pub fn new(timeout_secs: u64) -> Self {
-        let timeout = Duration::from_secs(timeout_secs as u64);
-
+    pub fn new(timeout: Duration) -> Self {
         Self {
             status: RwLock::new(Status::Active),
             dispatcher: CliprdrTxnDispatcher::default(),
@@ -184,6 +285,273 @@ impl FuseServer {
             generation: AtomicU64::new(0),
             timeout,
         }
+    }
+
+    pub fn client(self: &Arc<Self>) -> FuseClient {
+        FuseClient::new(self.clone())
+    }
+
+    pub fn init(&self) {
+        let mut w_guard = self.files.write();
+        if w_guard.is_empty() {
+            // create a root file
+            let root = FuseNode::new_root();
+            w_guard.push(root);
+        }
+    }
+
+    pub fn look_up(&self, parent: u64, name: &std::ffi::OsStr, reply: fuser::ReplyEntry) {
+        if name.len() > MAX_NAME_LEN {
+            log::debug!("fuse: name too long");
+            reply.error(libc::ENAMETOOLONG);
+            return;
+        }
+
+        let entries = self.files.read();
+
+        let generation = self.generation.load(Ordering::Relaxed);
+
+        let parent_entry = match entries.get(parent as usize - 1) {
+            Some(f) => f,
+            None => {
+                log::error!("fuse: parent not found");
+                reply.error(libc::ENOENT);
+                return;
+            }
+        };
+
+        if parent_entry.attributes.kind != FileType::Directory {
+            log::error!("fuse: parent is not a directory");
+
+            reply.error(libc::ENOTDIR);
+            return;
+        }
+
+        let children_inodes = &parent_entry.children;
+
+        for inode in children_inodes.iter().copied() {
+            let child = &entries[inode as usize - 1];
+            let entry_name = OsString::from(&child.name);
+
+            if &entry_name.as_os_str() == &name {
+                let ttl = std::time::Duration::new(0, 0);
+                reply.entry(&ttl, &(&child.attributes).into(), generation);
+                log::debug!("fuse: found child");
+                return;
+            }
+        }
+        // error
+        reply.error(libc::ENOENT);
+        log::debug!("fuse: child not found");
+        return;
+    }
+
+    pub fn opendir(&self, ino: u64, flags: i32, reply: fuser::ReplyOpen) {
+        let files = self.files.read();
+        let Some(entry) = files.get(ino as usize - 1) else {
+            reply.error(libc::ENOENT);
+            log::error!("fuse: opendir: entry not found");
+            return;
+        };
+        if entry.attributes.kind != FileType::Directory {
+            reply.error(libc::ENOTDIR);
+            log::error!("fuse: opendir: entry is not a directory");
+            return;
+        }
+        // in gc, deny open
+        if entry.marked() {
+            log::error!("fuse: opendir: entry is in gc");
+            reply.error(libc::EBUSY);
+            return;
+        }
+        if flags & libc::O_RDONLY == 0 {
+            log::error!("fuse: entry is read only");
+            reply.error(libc::EACCES);
+            return;
+        }
+
+        let fh = self.alloc_fd();
+        entry.add_handler(fh);
+        reply.opened(fh, 0);
+        return;
+    }
+
+    pub fn readdir(&self, ino: u64, fh: u64, offset: i64, mut reply: ReplyDirectory) {
+        let files = self.files.read();
+        let Some(entry) = files.get(ino as usize - 1) else {
+            reply.error(libc::ENOENT);
+            log::error!("fuse: readdir: entry not found");
+            return;
+        };
+        if !entry.have_handler(fh) {
+            reply.error(libc::EBADF);
+            log::error!("fuse: readdir: entry has no such handler");
+            return;
+        }
+        if entry.attributes.kind != FileType::Directory {
+            reply.error(libc::ENOTDIR);
+            log::error!("fuse: readdir: entry is not a directory");
+            return;
+        }
+
+        let offset = offset as usize;
+        let mut entries = Vec::new();
+
+        let self_entry = (ino, FileType::Directory, OsString::from("."));
+        entries.push(self_entry);
+
+        if let Some(parent_inode) = entry.parent {
+            entries.push((parent_inode, FileType::Directory, OsString::from("..")));
+        }
+
+        for inode in entry.children.iter().copied() {
+            let child = &files[inode as usize - 1];
+            let kind = child.attributes.kind;
+            let name = OsString::from(&child.name);
+            let child_entry = (inode, kind, name.to_owned());
+            entries.push(child_entry);
+        }
+
+        for (i, entry) in entries.into_iter().enumerate().skip(offset) {
+            if reply.add(entry.0, i as i64 + 1, entry.1.into(), entry.2) {
+                break;
+            }
+        }
+
+        reply.ok();
+        return;
+    }
+
+    pub fn releasedir(&self, ino: u64, fh: u64, _flags: i32, reply: fuser::ReplyEmpty) {
+        let files = self.files.read();
+        let Some(entry) = files.get(ino as usize - 1) else {
+            reply.error(libc::ENOENT);
+            log::error!("fuse: releasedir: entry not found");
+            return;
+        };
+        if entry.attributes.kind != FileType::Directory {
+            reply.error(libc::ENOTDIR);
+            log::error!("fuse: releasedir: entry is not a directory");
+            return;
+        }
+        if !entry.have_handler(fh) {
+            reply.error(libc::EBADF);
+            log::error!("fuse: releasedir: entry has no such handler");
+            return;
+        }
+
+        let _ = entry.unregister_handler(fh);
+        reply.ok();
+        return;
+    }
+
+    pub fn open(&self, ino: u64, flags: i32, reply: fuser::ReplyOpen) {
+        let files = self.files.read();
+        let Some(entry) = files.get(ino as usize - 1) else {
+            reply.error(libc::ENOENT);
+            log::error!("fuse: open: entry not found");
+            return;
+        };
+
+        // todo: support link file
+        if entry.attributes.kind != FileType::File {
+            reply.error(libc::ENFILE);
+            log::error!("fuse: open: entry is not a file");
+            return;
+        }
+        // check flags
+        if flags & libc::O_RDONLY == 0 {
+            reply.error(libc::EACCES);
+            log::error!("fuse: open: entry is read only");
+            return;
+        }
+        // check gc
+        if entry.marked() {
+            reply.error(libc::EBUSY);
+            log::error!("fuse: open: entry is in gc");
+            return;
+        }
+
+        let fh = self.alloc_fd();
+        entry.add_handler(fh);
+        reply.opened(fh, 0);
+        return;
+    }
+
+    pub fn read(
+        &self,
+        ino: u64,
+        fh: u64,
+        offset: i64,
+        size: u32,
+        flags: i32,
+        _lock_owner: Option<u64>,
+        reply: fuser::ReplyData,
+    ) {
+        let files = self.files.read();
+        let Some(entry) = files.get(ino as usize - 1) else {
+            reply.error(libc::ENOENT);
+            log::error!("fuse: read: entry not found");
+            return;
+        };
+        if !entry.have_handler(fh) {
+            reply.error(libc::EBADF);
+            log::error!("fuse: read: entry has no such handler");
+            return;
+        }
+        if entry.attributes.kind != FileType::File {
+            reply.error(libc::ENFILE);
+            log::error!("fuse: read: entry is not a file");
+            return;
+        }
+        // check flags
+        if flags & libc::O_RDONLY == 0 {
+            reply.error(libc::EACCES);
+            log::error!("fuse: read: entry is read only");
+            return;
+        }
+
+        if entry.marked() {
+            reply.error(libc::EBUSY);
+            log::error!("fuse: read: entry is in gc");
+            return;
+        }
+
+        let bytes = match self.read_node(entry, offset, size) {
+            Ok(b) => b,
+            Err(e) => {
+                log::error!("failed to read entry: {:?}", e);
+                reply.error(libc::EIO);
+                return;
+            }
+        };
+
+        reply.data(bytes.as_slice());
+    }
+
+    pub fn release(
+        &self,
+        ino: u64,
+        fh: u64,
+        _flags: i32,
+        _lock_owner: Option<u64>,
+        _flush: bool,
+        reply: fuser::ReplyEmpty,
+    ) {
+        let files = self.files.read();
+        let Some(entry) = files.get(ino as usize - 1) else {
+            reply.error(libc::ENOENT);
+            log::error!("fuse: release: entry not found");
+            return;
+        };
+
+        if let Err(_) = entry.unregister_handler(fh) {
+            reply.error(libc::EBADF);
+            log::error!("fuse: release: entry has no such handler");
+            return;
+        }
+        reply.ok();
+        return;
     }
 
     /// gc filesystem
@@ -198,21 +566,26 @@ impl FuseServer {
             // received update after fetching complete
             // should fetch again
             if *status == Status::Building {
-                *status == Status::GcComplete;
+                *status = Status::GcComplete;
                 return;
             }
             *status = Status::Gc;
         }
 
         let mut old = self.files.write();
-        old.par_iter_mut().fold(|| (), |_, f| f.gc());
+        let _ = old.par_iter_mut().fold(|| (), |_, f| f.gc());
 
         let mut status = self.status.write();
         *status = Status::GcComplete;
     }
 
     /// fetch file list from remote
-    fn sync_file_system(&self, conn_id: i32) -> Result<bool, std::io::Error> {
+    fn sync_file_system(
+        &self,
+        conn_id: i32,
+        file_group_format_id: i32,
+        _file_contents_format_id: i32,
+    ) -> Result<bool, CliprdrError> {
         {
             let mut status = self.status.write();
             if *status != Status::GcComplete {
@@ -223,7 +596,7 @@ impl FuseServer {
 
         // request file list
         let request = ClipboardFile::FormatDataRequest {
-            requested_format_id: FILEDESCRIPTOR_FORMAT_ID,
+            requested_format_id: file_group_format_id,
         };
         let rx = self.dispatcher.send(conn_id, request);
         let resp = rx.recv_timeout(self.timeout);
@@ -232,38 +605,29 @@ impl FuseServer {
                 msg_flags,
                 format_data,
             }) => {
-                if msg_flags != 0 {
-                    return Err(std::io::Error::new(
-                        std::io::ErrorKind::Other,
-                        "clipboard FUSE server: failed to fetch file list",
-                    ));
+                if msg_flags != 0x1 {
+                    log::error!("clipboard FUSE server: received unexpected response flags");
+                    return Err(CliprdrError::ClipboardInternalError);
                 }
                 let descs = FileDescription::parse_file_descriptors(format_data, conn_id)?;
 
                 descs
             }
             Ok(_) => {
+                log::error!("clipboard FUSE server: received unexpected response type");
                 // rollback status
                 let mut status = self.status.write();
                 *status = Status::GcComplete;
 
-                return Err(std::io::Error::new(
-                    std::io::ErrorKind::InvalidData,
-                    "clipboard FUSE server: invalid response to format data request",
-                ));
+                return Err(CliprdrError::ClipboardInternalError);
             }
             Err(e) => {
+                log::error!("clipboard FUSE server: failed to fetch file list, {:?}", e);
                 // rollback status
                 let mut status = self.status.write();
                 *status = Status::GcComplete;
 
-                return Err(std::io::Error::new(
-                    std::io::ErrorKind::TimedOut,
-                    format!(
-                        "clipboard FUSE server: timeout when waiting for format data response, {}",
-                        e
-                    ),
-                ));
+                return Err(CliprdrError::ClipboardInternalError);
             }
         };
 
@@ -287,10 +651,9 @@ impl FuseServer {
                 *status = Status::GcComplete;
             }
 
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                "clipboard FUSE server: failed to fetch file size".to_string(),
-            ));
+            log::error!("clipboard FUSE server: failed to fetch file size");
+
+            return Err(CliprdrError::ClipboardInternalError);
         }
 
         // replace current file system
@@ -385,9 +748,14 @@ impl FuseServer {
     ///
     /// movements: Building -> Active, Building -> GcComplete
     ///
-    pub fn update_files(&self, conn_id: i32) -> Result<bool, std::io::Error> {
+    pub fn update_files(
+        &self,
+        conn_id: i32,
+        file_group_format_id: i32,
+        file_contents_format_id: i32,
+    ) -> Result<bool, CliprdrError> {
         self.gc_files();
-        self.sync_file_system(conn_id)
+        self.sync_file_system(conn_id, file_group_format_id, file_contents_format_id)
     }
 
     pub fn recv(&self, conn_id: i32, clip_file: ClipboardFile) {
@@ -397,18 +765,6 @@ impl FuseServer {
     /// allocate a new file descriptor
     fn alloc_fd(&self) -> u64 {
         self.file_handle_counter.fetch_add(1, Ordering::Relaxed)
-    }
-
-    /// find a file by name
-    fn find_inode_by_name(&self, name: &str) -> Option<Inode> {
-        if name == "/" {
-            return Some(1);
-        }
-        let read = self.files.read();
-        return read
-            .iter()
-            .position(|f| f.name == name)
-            .map(|i| i as Inode + 1);
     }
 
     // synchronize metadata with remote
@@ -487,7 +843,7 @@ impl FuseServer {
         Ok(())
     }
 
-    pub fn read_node(
+    fn read_node(
         &self,
         node: &FuseNode,
         offset: i64,
@@ -561,303 +917,6 @@ impl FuseServer {
     }
 }
 
-impl fuser::Filesystem for FuseServer {
-    fn init(
-        &mut self,
-        _req: &fuser::Request<'_>,
-        _config: &mut fuser::KernelConfig,
-    ) -> Result<(), libc::c_int> {
-        log::debug!("init fuse server");
-
-        let mut w_guard = self.files.write();
-        if w_guard.is_empty() {
-            // create a root file
-            let root = FuseNode::new_root();
-            w_guard.push(root);
-        }
-        Ok(())
-    }
-
-    fn lookup(
-        &mut self,
-        req: &Request,
-        parent: u64,
-        name: &std::ffi::OsStr,
-        reply: fuser::ReplyEntry,
-    ) {
-        log::debug!("lookup: parent={}, name={:?}", parent, name);
-        if name.len() > MAX_NAME_LEN {
-            log::debug!("fuse: name too long");
-            reply.error(libc::ENAMETOOLONG);
-            return;
-        }
-
-        let entries = self.files.read();
-
-        let generation = self.generation.load(Ordering::Relaxed);
-
-        let parent_entry = match entries.get(parent as usize - 1) {
-            Some(f) => f,
-            None => {
-                log::error!("fuse: parent not found");
-                reply.error(libc::ENOENT);
-                return;
-            }
-        };
-
-        if parent_entry.attributes.kind != FileType::Directory {
-            log::error!("fuse: parent is not a directory");
-
-            reply.error(libc::ENOTDIR);
-            return;
-        }
-
-        let children_inodes = &parent_entry.children;
-
-        for inode in children_inodes.iter().copied() {
-            let child = &entries[inode as usize - 1];
-            if &child.name == &name.to_string_lossy() {
-                let ttl = std::time::Duration::new(0, 0);
-                reply.entry(&ttl, &(&child.attributes).into(), generation);
-                log::debug!("fuse: found child");
-                return;
-            }
-        }
-        // error
-        reply.error(libc::ENOENT);
-        log::debug!("fuse: child not found");
-        return;
-    }
-
-    fn opendir(&mut self, _req: &Request<'_>, ino: u64, flags: i32, reply: fuser::ReplyOpen) {
-        log::debug!("opendir: ino={}, flags={}", ino, flags);
-
-        let files = self.files.read();
-        let Some(entry) = files.get(ino as usize - 1) else {
-            reply.error(libc::ENOENT);
-            log::error!("fuse: opendir: entry not found");
-            return;
-        };
-        if entry.attributes.kind != FileType::Directory {
-            reply.error(libc::ENOTDIR);
-            log::error!("fuse: opendir: entry is not a directory");
-            return;
-        }
-        // in gc, deny open
-        if entry.marked() {
-            log::error!("fuse: opendir: entry is in gc");
-            reply.error(libc::EBUSY);
-            return;
-        }
-        if flags & libc::O_RDONLY == 0 {
-            log::error!("fuse: entry is read only");
-            reply.error(libc::EACCES);
-            return;
-        }
-
-        let fh = self.alloc_fd();
-        entry.add_handler(fh);
-        reply.opened(fh, 0);
-        return;
-    }
-
-    fn readdir(
-        &mut self,
-        _req: &Request<'_>,
-        ino: u64,
-        fh: u64,
-        offset: i64,
-        mut reply: ReplyDirectory,
-    ) {
-        log::debug!("readdir: ino={}, fh={}, offset={}", ino, fh, offset);
-
-        let files = self.files.read();
-        let Some(entry) = files.get(ino as usize - 1) else {
-            reply.error(libc::ENOENT);
-            log::error!("fuse: readdir: entry not found");
-            return;
-        };
-        if !entry.have_handler(fh) {
-            reply.error(libc::EBADF);
-            log::error!("fuse: readdir: entry has no such handler");
-            return;
-        }
-        if entry.attributes.kind != FileType::Directory {
-            reply.error(libc::ENOTDIR);
-            log::error!("fuse: readdir: entry is not a directory");
-            return;
-        }
-
-        let mut offset = offset as usize;
-        let mut entries = Vec::new();
-
-        let self_entry = (ino, FileType::Directory, OsString::from("."));
-        entries.push(self_entry);
-
-        if let Some(parent_inode) = entry.parent {
-            entries.push((parent_inode, FileType::Directory, OsString::from("..")));
-        }
-
-        for inode in entry.children.iter().copied() {
-            let child = &files[inode as usize - 1];
-            let kind = child.attributes.kind;
-            let name = OsString::from(&child.name);
-            let child_entry = (inode, kind, name.to_owned());
-            entries.push(child_entry);
-        }
-
-        for (i, entry) in entries.into_iter().enumerate().skip(offset) {
-            if reply.add(entry.0, i as i64 + 1, entry.1.into(), entry.2) {
-                break;
-            }
-        }
-
-        reply.ok();
-        return;
-    }
-
-    fn releasedir(
-        &mut self,
-        _req: &Request<'_>,
-        ino: u64,
-        fh: u64,
-        flags: i32,
-        reply: fuser::ReplyEmpty,
-    ) {
-        let files = self.files.read();
-        let Some(entry) = files.get(ino as usize - 1) else {
-            reply.error(libc::ENOENT);
-            log::error!("fuse: releasedir: entry not found");
-            return;
-        };
-        if entry.attributes.kind != FileType::Directory {
-            reply.error(libc::ENOTDIR);
-            log::error!("fuse: releasedir: entry is not a directory");
-            return;
-        }
-        if !entry.have_handler(fh) {
-            reply.error(libc::EBADF);
-            log::error!("fuse: releasedir: entry has no such handler");
-            return;
-        }
-
-        entry.unregister_handler(fh);
-        reply.ok();
-        return;
-    }
-
-    fn open(&mut self, _req: &Request<'_>, ino: u64, flags: i32, reply: fuser::ReplyOpen) {
-        let files = self.files.read();
-        let Some(entry) = files.get(ino as usize - 1) else {
-            reply.error(libc::ENOENT);
-            log::error!("fuse: open: entry not found");
-            return;
-        };
-
-        // todo: support link file
-        if entry.attributes.kind != FileType::File {
-            reply.error(libc::ENFILE);
-            log::error!("fuse: open: entry is not a file");
-            return;
-        }
-        // check flags
-        if flags & libc::O_RDONLY == 0 {
-            reply.error(libc::EACCES);
-            log::error!("fuse: open: entry is read only");
-            return;
-        }
-        // check gc
-        if entry.marked() {
-            reply.error(libc::EBUSY);
-            log::error!("fuse: open: entry is in gc");
-            return;
-        }
-
-        let fh = self.alloc_fd();
-        entry.add_handler(fh);
-        reply.opened(fh, 0);
-        return;
-    }
-
-    fn read(
-        &mut self,
-        _req: &Request<'_>,
-        ino: u64,
-        fh: u64,
-        offset: i64,
-        size: u32,
-        flags: i32,
-        lock_owner: Option<u64>,
-        reply: fuser::ReplyData,
-    ) {
-        let files = self.files.read();
-        let Some(entry) = files.get(ino as usize - 1) else {
-            reply.error(libc::ENOENT);
-            log::error!("fuse: read: entry not found");
-            return;
-        };
-        if !entry.have_handler(fh) {
-            reply.error(libc::EBADF);
-            log::error!("fuse: read: entry has no such handler");
-            return;
-        }
-        if entry.attributes.kind != FileType::File {
-            reply.error(libc::ENFILE);
-            log::error!("fuse: read: entry is not a file");
-            return;
-        }
-        // check flags
-        if flags & libc::O_RDONLY == 0 {
-            reply.error(libc::EACCES);
-            log::error!("fuse: read: entry is read only");
-            return;
-        }
-
-        if entry.marked() {
-            reply.error(libc::EBUSY);
-            log::error!("fuse: read: entry is in gc");
-            return;
-        }
-
-        let bytes = match self.read_node(entry, offset, size) {
-            Ok(b) => b,
-            Err(e) => {
-                log::error!("failed to read entry: {:?}", e);
-                reply.error(libc::EIO);
-                return;
-            }
-        };
-
-        reply.data(bytes.as_slice());
-    }
-
-    fn release(
-        &mut self,
-        _req: &Request<'_>,
-        ino: u64,
-        fh: u64,
-        _flags: i32,
-        _lock_owner: Option<u64>,
-        _flush: bool,
-        reply: fuser::ReplyEmpty,
-    ) {
-        let files = self.files.read();
-        let Some(entry) = files.get(ino as usize - 1) else {
-            reply.error(libc::ENOENT);
-            log::error!("fuse: release: entry not found");
-            return;
-        };
-
-        if let Err(_) = entry.unregister_handler(fh) {
-            reply.error(libc::EBADF);
-            log::error!("fuse: release: entry has no such handler");
-            return;
-        }
-        reply.ok();
-        return;
-    }
-}
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FileDescription {
     pub conn_id: i32,
@@ -874,26 +933,10 @@ pub struct FileDescription {
 }
 
 impl FileDescription {
-    pub fn new(name: &str, kind: FileType, size: u64, conn_id: i32) -> Self {
-        Self {
-            conn_id,
-            size,
-            name: PathBuf::from(name),
-            kind,
-            atime: SystemTime::now(),
-            last_modified: SystemTime::now(),
-            last_metadata_changed: SystemTime::now(),
-            creation_time: SystemTime::now(),
-            perm: PERM_READ,
-        }
-    }
     fn parse_file_descriptor(
         bytes: &mut Bytes,
         conn_id: i32,
-    ) -> Result<FileDescription, std::io::Error> {
-        // begin of epoch used by microsoft
-        // 1601-01-01 00:00:00 + LDAP_EPOCH_DELTA*(100 ns) = 1970-01-01 00:00:00
-        const LDAP_EPOCH_DELTA: u64 = 116444772610000000;
+    ) -> Result<FileDescription, CliprdrError> {
         let flags = bytes.get_u32_le();
         // skip reserved 32 bytes
         bytes.advance(32);
@@ -911,15 +954,16 @@ impl FileDescription {
         bytes.advance(520);
 
         let block = &block[..520];
-        let wstr = WStr::from_utf16le(block)
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
+        let wstr = WStr::from_utf16le(block).map_err(|e| {
+            log::error!("cannot convert file descriptor path: {:?}", e);
+            CliprdrError::ConversionFailure
+        })?;
 
         let valid_attributes = flags & 0x01 != 0;
         if !valid_attributes {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                "only valid attributes are supported",
-            ));
+            return Err(CliprdrError::InvalidRequest {
+                description: "file description must have valid attributes".to_string(),
+            });
         }
 
         // todo: check normal, hidden, system, readonly, archive...
@@ -971,13 +1015,12 @@ impl FileDescription {
     pub fn parse_file_descriptors(
         file_descriptor_pdu: Vec<u8>,
         conn_id: i32,
-    ) -> Result<Vec<Self>, std::io::Error> {
+    ) -> Result<Vec<Self>, CliprdrError> {
         let mut data = Bytes::from(file_descriptor_pdu);
         if data.remaining() < 4 {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                "invalid file descriptor pdu",
-            ));
+            return Err(CliprdrError::InvalidRequest {
+                description: "file descriptor request with infficient length".to_string(),
+            });
         }
 
         let count = data.get_u32_le() as usize;
@@ -986,10 +1029,9 @@ impl FileDescription {
         }
 
         if data.remaining() != 592 * count {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                "invalid file descriptor pdu",
-            ));
+            return Err(CliprdrError::InvalidRequest {
+                description: "file descriptor request with invalid length".to_string(),
+            });
         }
 
         let mut files = Vec::with_capacity(count);
@@ -1073,10 +1115,6 @@ impl FuseNode {
         self.attributes.kind == FileType::File
     }
 
-    pub fn is_dir(&self) -> bool {
-        self.attributes.kind == FileType::Directory
-    }
-
     pub fn marked(&self) -> bool {
         self.file_handlers.marked()
     }
@@ -1107,7 +1145,7 @@ impl FuseNode {
     /// ## implement detail:
     /// - a new root entry will be prepended to the list
     /// - all file names will be trimed to the last component
-    pub fn build_tree(files: Vec<FileDescription>) -> Result<Vec<Self>, std::io::Error> {
+    pub fn build_tree(files: Vec<FileDescription>) -> Result<Vec<Self>, CliprdrError> {
         let mut tree_list = Vec::with_capacity(files.len() + 1);
         let root = Self::new_root();
         tree_list.push(root);
@@ -1125,12 +1163,7 @@ impl FuseNode {
             let FileDescription { name, .. } = file.clone();
 
             let parent_inode = match name.parent() {
-                Some(parent) => sub_root_map.get(parent).cloned().ok_or_else(|| {
-                    std::io::Error::new(
-                        std::io::ErrorKind::InvalidData,
-                        format!("parent path {} not found", parent.display()),
-                    )
-                })?,
+                Some(parent) => sub_root_map[parent],
                 None => {
                     // parent should be root
                     FUSE_ROOT_ID
@@ -1143,11 +1176,13 @@ impl FuseNode {
                 sub_root_map.insert(name.clone(), inode);
             }
 
-            let base_name = name.file_name().ok_or_else(|| {
-                std::io::Error::new(
+            let f_name = name.clone();
+            let base_name = f_name.file_name().ok_or_else(|| {
+                let err = std::io::Error::new(
                     std::io::ErrorKind::InvalidData,
                     format!("invalid file name {}", name.display()),
-                )
+                );
+                CliprdrError::FileError { path: name, err }
             })?;
             file.name = Path::new(base_name).to_path_buf();
 
@@ -1193,7 +1228,7 @@ pub struct InodeAttributes {
     kind: FileType,
 
     // not implemented
-    xattrs: BTreeMap<Vec<u8>, Vec<u8>>,
+    _xattrs: BTreeMap<Vec<u8>, Vec<u8>>,
 }
 
 impl InodeAttributes {
@@ -1206,7 +1241,7 @@ impl InodeAttributes {
             last_metadata_changed: std::time::SystemTime::now(),
             creation_time: std::time::SystemTime::now(),
             kind,
-            xattrs: BTreeMap::new(),
+            _xattrs: BTreeMap::new(),
         }
     }
 
@@ -1220,7 +1255,7 @@ impl InodeAttributes {
             last_accessed: SystemTime::now(),
             kind: desc.kind,
 
-            xattrs: BTreeMap::new(),
+            _xattrs: BTreeMap::new(),
         }
     }
 

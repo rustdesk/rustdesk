@@ -946,6 +946,7 @@ dependencies = [
  "thiserror",
  "utf16string",
  "x11-clipboard",
+ "x11rb 0.12.0",
 ]
 
 [[package]]
@@ -7269,8 +7270,7 @@ dependencies = [
 [[package]]
 name = "x11-clipboard"
 version = "0.8.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b41aca1115b1f195f21c541c5efb423470848d48143127d0f07f8b90c27440df"
+source = "git+https://github.com/clslaid/x11-clipboard?branch=feat/store-batch#5fc2e73bc01ada3681159b34cf3ea8f0d14cd904"
 dependencies = [
  "x11rb 0.12.0",
 ]

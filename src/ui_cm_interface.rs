@@ -1,6 +1,6 @@
 #[cfg(any(target_os = "android", target_os = "ios", feature = "flutter"))]
 use std::iter::FromIterator;
-#[cfg(windows)]
+#[cfg(any(target_os = "windows", target_os = "linux"))]
 use std::sync::Arc;
 use std::{
     collections::HashMap,
@@ -15,11 +15,11 @@ use std::{
 use crate::ipc::Connection;
 #[cfg(not(any(target_os = "ios")))]
 use crate::ipc::{self, Data};
-#[cfg(windows)]
+#[cfg(any(target_os = "windows", target_os = "linux"))]
 use clipboard::ContextSend;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use hbb_common::tokio::sync::mpsc::unbounded_channel;
-#[cfg(windows)]
+#[cfg(any(target_os = "windows", target_os = "linux"))]
 use hbb_common::tokio::sync::Mutex as TokioMutex;
 use hbb_common::{
     allow_err,
@@ -71,9 +71,9 @@ struct IpcTaskRunner<T: InvokeUiCM> {
     running: bool,
     authorized: bool,
     conn_id: i32,
-    #[cfg(windows)]
+    #[cfg(any(target_os = "windows", target_os = "linux"))]
     file_transfer_enabled: bool,
-    #[cfg(windows)]
+    #[cfg(any(target_os = "windows", target_os = "linux"))]
     file_transfer_enabled_peer: bool,
 }
 
@@ -174,10 +174,10 @@ impl<T: InvokeUiCM> ConnectionManager<T> {
                 .map(|c| c.disconnected = true);
         }
 
-        #[cfg(windows)]
+        #[cfg(any(target_os = "windows", target_os = "linux"))]
         {
             let _ = ContextSend::proc(|context| -> ResultType<()> {
-                context.empty_clipboard(id);
+                context.empty_clipboard(id)?;
                 Ok(())
             });
         }
@@ -318,11 +318,11 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
         // for tmp use, without real conn id
         let mut write_jobs: Vec<fs::TransferJob> = Vec::new();
 
-        #[cfg(windows)]
+        #[cfg(any(target_os = "windows", target_os = "linux"))]
         let rx_clip1;
         let mut rx_clip;
         let _tx_clip;
-        #[cfg(windows)]
+        #[cfg(any(target_os = "windows", target_os = "linux"))]
         if self.conn_id > 0 && self.authorized {
             rx_clip1 = clipboard::get_rx_cliprdr_server(self.conn_id);
             rx_clip = rx_clip1.lock().await;
@@ -332,12 +332,12 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
             rx_clip1 = Arc::new(TokioMutex::new(rx_clip2));
             rx_clip = rx_clip1.lock().await;
         }
-        #[cfg(not(windows))]
+        #[cfg(not(any(target_os = "windows", target_os = "linux")))]
         {
             (_tx_clip, rx_clip) = unbounded_channel::<i32>();
         }
 
-        #[cfg(windows)]
+        #[cfg(any(target_os = "windows", target_os = "linux"))]
         {
             if ContextSend::is_enabled() {
                 allow_err!(
@@ -402,7 +402,7 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
                                 }
                                 #[cfg(not(any(target_os = "android", target_os = "ios")))]
                                 Data::ClipboardFile(_clip) => {
-                                    #[cfg(windows)]
+                                    #[cfg(any(windows, linux))]
                                     {
                                         let is_stopping_allowed = _clip.is_stopping_allowed_from_peer();
                                         let is_clipboard_enabled = ContextSend::is_enabled();
@@ -423,7 +423,7 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
                                     }
                                 }
                                 Data::ClipboardFileEnabled(_enabled) => {
-                                    #[cfg(windows)]
+                                    #[cfg(any(target_os= "windows",target_os ="linux"))]
                                     {
                                         self.file_transfer_enabled_peer = _enabled;
                                     }
@@ -468,7 +468,7 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
                 }
                 clip_file = rx_clip.recv() => match clip_file {
                     Some(_clip) => {
-                        #[cfg(windows)]
+                        #[cfg(any(target_os = "windows", target_os ="linux"))]
                         {
                             let is_stopping_allowed = _clip.is_stopping_allowed();
                             let is_clipboard_enabled = ContextSend::is_enabled();
@@ -505,9 +505,9 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
             running: true,
             authorized: false,
             conn_id: 0,
-            #[cfg(windows)]
+            #[cfg(any(target_os = "windows", target_os = "linux"))]
             file_transfer_enabled: false,
-            #[cfg(windows)]
+            #[cfg(any(target_os = "windows", target_os = "linux"))]
             file_transfer_enabled_peer: false,
         };
 

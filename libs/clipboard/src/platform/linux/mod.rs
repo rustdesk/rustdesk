@@ -1,21 +1,54 @@
 use std::{
+    collections::HashSet,
+    fs::File,
+    os::unix::prelude::FileExt,
     path::{Path, PathBuf},
-    time::Duration,
+    sync::{atomic::AtomicBool, Arc},
+    time::{Duration, SystemTime},
 };
 
-use crate::CliprdrError;
+use dashmap::DashMap;
+use fuser::MountOption;
+use hbb_common::{
+    bytes::{BufMut, BytesMut},
+    log,
+};
+use lazy_static::lazy_static;
+use parking_lot::RwLock;
+use utf16string::WString;
 
-use super::fuse::{self, FuseServer};
+use crate::{send_data, ClipboardFile, CliprdrError, CliprdrServiceContext};
+
+use super::{fuse::FuseServer, LDAP_EPOCH_DELTA};
 
 #[cfg(not(feature = "wayland"))]
 pub mod x11;
 
-trait SysClipboard {
+// not actual format id, just a placeholder
+const FILEDESCRIPTOR_FORMAT_ID: i32 = 49334;
+const FILEDESCRIPTORW_FORMAT_NAME: &str = "FileGroupDescriptorW";
+// not actual format id, just a placeholder
+const FILECONTENTS_FORMAT_ID: i32 = 49267;
+const FILECONTENTS_FORMAT_NAME: &str = "FileContents";
+
+lazy_static! {
+    static ref REMOTE_FORMAT_MAP: DashMap<i32, String> = DashMap::new();
+}
+
+fn get_local_format(remote_id: i32) -> Option<String> {
+    REMOTE_FORMAT_MAP.get(&remote_id).map(|s| s.clone())
+}
+
+fn add_remote_format(local_name: &str, remote_id: i32) {
+    REMOTE_FORMAT_MAP.insert(remote_id, local_name.to_string());
+}
+
+trait SysClipboard: Send + Sync {
     fn wait_file_list(&self) -> Result<Vec<PathBuf>, CliprdrError>;
     fn set_file_list(&self, paths: &[PathBuf]) -> Result<(), CliprdrError>;
 }
 
-fn get_sys_clipboard() -> Box<dyn SysClipboard> {
+fn get_sys_clipboard() -> Result<Box<dyn SysClipboard>, CliprdrError> {
     #[cfg(feature = "wayland")]
     {
         unimplemented!()
@@ -23,7 +56,8 @@ fn get_sys_clipboard() -> Box<dyn SysClipboard> {
     #[cfg(not(feature = "wayland"))]
     {
         pub use x11::*;
-        X11Clipboard::new()
+        let x11_clip = X11Clipboard::new()?;
+        Ok(Box::new(x11_clip) as Box<_>)
     }
 }
 
@@ -73,18 +107,6 @@ fn parse_plain_uri_list(v: Vec<u8>) -> Result<Vec<PathBuf>, CliprdrError> {
 }
 
 // helper parse function
-// convert "x-special/gnome-copied-files", "x-special/x-kde-cutselection" and "x-special/nautilus-clipboard" data to a list of valid Paths
-// # Note
-// - none utf8 data will lead to error
-fn parse_de_uri_list(v: Vec<u8>) -> Result<Vec<PathBuf>, CliprdrError> {
-    let text = String::from_utf8(v).map_err(|_| CliprdrError::ConversionFailure)?;
-    let plain_list = text
-        .trim_start_matches("copy\n")
-        .trim_start_matches("cut\n");
-    parse_uri_list(plain_list)
-}
-
-// helper parse function
 // convert 'text/uri-list' data to a list of valid Paths
 // # Note
 // - none utf8 data will lead to error
@@ -92,6 +114,9 @@ fn parse_uri_list(text: &str) -> Result<Vec<PathBuf>, CliprdrError> {
     let mut list = Vec::new();
 
     for line in text.lines() {
+        if !line.starts_with("file://") {
+            continue;
+        }
         let decoded = parse_uri_to_path(line)?;
         list.push(decoded)
     }
@@ -99,37 +124,590 @@ fn parse_uri_list(text: &str) -> Result<Vec<PathBuf>, CliprdrError> {
 }
 
 #[derive(Debug)]
-pub struct ClipboardContext {
-    pub stop: bool,
-    pub fuse_mount_point: PathBuf,
-    pub fuse_server: FuseServer,
-    pub file_list: HashSet<PathBuf>,
-    pub clipboard: Clipboard,
+struct LocalFile {
+    pub path: PathBuf,
+    pub handle: Option<File>,
 
-    pub bkg_session: fuser::BackgroundSession,
+    pub name: String,
+    pub size: u64,
+    pub last_write_time: SystemTime,
+    pub is_dir: bool,
+    pub read_only: bool,
+    pub hidden: bool,
+    pub system: bool,
+    pub archive: bool,
+    pub normal: bool,
+}
+
+impl LocalFile {
+    pub fn try_open(path: &PathBuf) -> Result<Self, CliprdrError> {
+        let mt = std::fs::metadata(path).map_err(|e| CliprdrError::FileError {
+            path: path.clone(),
+            err: e,
+        })?;
+        let size = mt.len() as u64;
+        let is_dir = mt.is_dir();
+        let read_only = mt.permissions().readonly();
+        let system = false;
+        let hidden = false;
+        let archive = false;
+        let normal = !is_dir;
+        let last_write_time = mt.modified().unwrap_or(SystemTime::UNIX_EPOCH);
+
+        let name = path
+            .display()
+            .to_string()
+            .trim_start_matches('/')
+            .replace('/', "\\");
+
+        let handle = if is_dir {
+            None
+        } else {
+            let file = std::fs::File::open(path).map_err(|e| CliprdrError::FileError {
+                path: path.clone(),
+                err: e,
+            })?;
+            let reader = file;
+            Some(reader)
+        };
+
+        Ok(Self {
+            name,
+            path: path.clone(),
+            handle,
+            size,
+            last_write_time,
+            is_dir,
+            read_only,
+            system,
+            hidden,
+            archive,
+            normal,
+        })
+    }
+    pub fn as_bin(&self) -> Vec<u8> {
+        let mut buf = BytesMut::with_capacity(592);
+
+        let read_only_flag = if self.read_only { 0x1 } else { 0 };
+        let hidden_flag = if self.hidden { 0x2 } else { 0 };
+        let system_flag = if self.system { 0x4 } else { 0 };
+        let directory_flag = if self.is_dir { 0x10 } else { 0 };
+        let archive_flag = if self.archive { 0x20 } else { 0 };
+        let normal_flag = if self.normal { 0x80 } else { 0 };
+
+        let file_attributes: u32 = read_only_flag
+            | hidden_flag
+            | system_flag
+            | directory_flag
+            | archive_flag
+            | normal_flag;
+
+        let win32_time = self
+            .last_write_time
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos() as u64
+            / 100
+            + LDAP_EPOCH_DELTA;
+
+        let size_high = (self.size >> 32) as u32;
+        let size_low = (self.size & (u32::MAX as u64)) as u32;
+
+        let wstr: WString<utf16string::LE> = WString::from(&self.name);
+        let name = wstr.as_bytes();
+
+        let flags = 0x4064;
+
+        // flags, 4 bytes
+        buf.put_u32_le(flags);
+        // 32 bytes reserved
+        buf.put(&[0u8; 32][..]);
+        // file attributes, 4 bytes
+        buf.put_u32_le(file_attributes);
+        // 16 bytes reserved
+        buf.put(&[0u8; 16][..]);
+        // last write time, 8 bytes
+        buf.put_u64_le(win32_time);
+        // file size (high)
+        buf.put_u32_le(size_high);
+        // file size (low)
+        buf.put_u32_le(size_low);
+        // put name and padding to 520 bytes
+        let name_len = name.len();
+        buf.put(name);
+        buf.put(&vec![0u8; 520 - name_len][..]);
+
+        buf.to_vec()
+    }
+}
+
+fn construct_file_list(paths: &[PathBuf]) -> Result<Vec<LocalFile>, CliprdrError> {
+    fn constr_file_lst(
+        path: &PathBuf,
+        file_list: &mut Vec<LocalFile>,
+        visited: &mut HashSet<PathBuf>,
+    ) -> Result<(), CliprdrError> {
+        // prevent fs loop
+        if visited.contains(path) {
+            return Ok(());
+        }
+        visited.insert(path.clone());
+
+        let local_file = LocalFile::try_open(path)?;
+        file_list.push(local_file);
+
+        let mt = std::fs::metadata(path).map_err(|e| CliprdrError::FileError {
+            path: path.clone(),
+            err: e,
+        })?;
+        if mt.is_dir() {
+            let dir = std::fs::read_dir(path).unwrap();
+            for entry in dir {
+                let entry = entry.unwrap();
+                let path = entry.path();
+                constr_file_lst(&path, file_list, visited)?;
+            }
+        }
+        Ok(())
+    }
+
+    let mut file_list = Vec::new();
+    let mut visited = HashSet::new();
+
+    for path in paths {
+        constr_file_lst(path, &mut file_list, &mut visited)?;
+    }
+    Ok(file_list)
+}
+
+#[derive(Debug)]
+enum FileContentsRequest {
+    Size {
+        stream_id: i32,
+        file_idx: usize,
+    },
+
+    Range {
+        stream_id: i32,
+        file_idx: usize,
+        offset: u64,
+        length: u64,
+    },
+}
+
+/// this is a proxy type for the clipboard context
+pub struct CliprdrClient {
+    pub context: Arc<ClipboardContext>,
+}
+
+impl CliprdrServiceContext for CliprdrClient {
+    fn set_is_stopped(&mut self) -> Result<(), CliprdrError> {
+        self.context.set_is_stopped()
+    }
+
+    fn empty_clipboard(&mut self, conn_id: i32) -> Result<bool, CliprdrError> {
+        self.context.empty_clipboard(conn_id)
+    }
+
+    fn server_clip_file(&mut self, conn_id: i32, msg: ClipboardFile) -> Result<(), CliprdrError> {
+        self.context.serve(conn_id, msg)
+    }
+}
+
+pub struct ClipboardContext {
+    pub stop: AtomicBool,
+    pub fuse_mount_point: PathBuf,
+    fuse_server: Arc<FuseServer>,
+    file_list: RwLock<Vec<LocalFile>>,
+    clipboard: Arc<dyn SysClipboard>,
 }
 
 impl ClipboardContext {
-    fn new(timeout: Duration, mount_path: PathBuf) -> Result<Self, CliprdrError> {
+    pub fn new(timeout: Duration, mount_path: PathBuf) -> Result<Self, CliprdrError> {
         // assert mount path exists
-        let mountpoint = mount_path
-            .canonicalize()
-            .map_err(|e| CliprdrError::Unknown {
-                description: format!("invalid mount point: {:?}", e),
-            })?;
-        let fuse_server = FuseServer::new(timeout);
-        let mnt_opts = [
-            fuser::MountOption::FSName("clipboard".to_string()),
-            fuser::MountOption::NoAtime,
-            fuser::MountOption::RO,
-            fuser::MountOption::NoExec,
-        ];
-        let bkg_session = fuser::spawn_mount2(fuse_server, mountpoint, &mnt_opts).map_err(|e| {
-            CliprdrError::Unknown {
-                description: format!("failed to mount fuse: {:?}", e),
-            }
+        let fuse_mount_point = mount_path.canonicalize().map_err(|e| {
+            log::error!("failed to canonicalize mount path: {:?}", e);
+            CliprdrError::CliprdrInit
         })?;
 
-        log::debug!("mounting clipboard fuse to {}", mount_path.display());
+        let fuse_server = Arc::new(FuseServer::new(timeout));
+        let clipboard = get_sys_clipboard()?;
+        let clipboard = Arc::from(clipboard);
+        let file_list = RwLock::new(vec![]);
+
+        Ok(Self {
+            stop: AtomicBool::new(false),
+            fuse_mount_point,
+            fuse_server,
+            file_list,
+            clipboard,
+        })
     }
+
+    pub fn client(self: Arc<Self>) -> CliprdrClient {
+        CliprdrClient { context: self }
+    }
+
+    // mount and run fuse server, blocking
+    pub fn mount(&self) -> Result<(), CliprdrError> {
+        let mount_opts = [
+            MountOption::FSName("rustdesk-cliprdr-fs".to_string()),
+            MountOption::RO,
+            MountOption::NoAtime,
+        ];
+        let fuse_client = self.fuse_server.client();
+        fuser::mount2(fuse_client, self.fuse_mount_point.clone(), &mount_opts).map_err(|e| {
+            log::error!("failed to mount fuse: {:?}", e);
+            CliprdrError::CliprdrInit
+        })
+    }
+
+    pub fn listen_clipboard(&self) -> Result<(), CliprdrError> {
+        while let Ok(v) = self.clipboard.wait_file_list() {
+            let filtered: Vec<_> = v
+                .into_iter()
+                .filter(|pb| !pb.starts_with(&self.fuse_mount_point))
+                .collect();
+            if filtered.is_empty() {
+                continue;
+            }
+
+            // construct format list update and send
+            let data = ClipboardFile::FormatList {
+                format_list: vec![
+                    (
+                        FILEDESCRIPTOR_FORMAT_ID,
+                        FILEDESCRIPTORW_FORMAT_NAME.to_string(),
+                    ),
+                    (FILECONTENTS_FORMAT_ID, FILECONTENTS_FORMAT_NAME.to_string()),
+                ],
+            };
+
+            send_data(0, data)
+        }
+        Ok(())
+    }
+
+    fn send_format_list(&self, conn_id: i32) -> Result<(), CliprdrError> {
+        let data = self.clipboard.wait_file_list()?;
+        let filtered: Vec<_> = data
+            .into_iter()
+            .filter(|pb| !pb.starts_with(&self.fuse_mount_point))
+            .collect();
+        if filtered.is_empty() {
+            return Ok(());
+        }
+
+        let format_list = ClipboardFile::FormatList {
+            format_list: vec![
+                (
+                    FILEDESCRIPTOR_FORMAT_ID,
+                    FILEDESCRIPTORW_FORMAT_NAME.to_string(),
+                ),
+                (FILECONTENTS_FORMAT_ID, FILECONTENTS_FORMAT_NAME.to_string()),
+            ],
+        };
+
+        send_data(conn_id, format_list);
+        Ok(())
+    }
+
+    fn send_file_list(&self, conn_id: i32) -> Result<(), CliprdrError> {
+        let data = self.clipboard.wait_file_list()?;
+        let filtered: Vec<_> = data
+            .into_iter()
+            .filter(|pb| !pb.starts_with(&self.fuse_mount_point))
+            .collect();
+
+        let files = construct_file_list(filtered.as_slice())?;
+
+        let mut data = BytesMut::with_capacity(4 + 592 * files.len());
+        data.put_u32_le(filtered.len() as u32);
+        for file in files.iter() {
+            data.put(file.as_bin().as_slice());
+        }
+
+        {
+            let mut w_list = self.file_list.write();
+            *w_list = files;
+        }
+
+        let format_data = data.to_vec();
+
+        send_data(
+            conn_id,
+            ClipboardFile::FormatDataResponse {
+                msg_flags: 1,
+                format_data,
+            },
+        );
+        Ok(())
+    }
+
+    fn serve_file_contents(
+        &self,
+        conn_id: i32,
+        request: FileContentsRequest,
+    ) -> Result<(), CliprdrError> {
+        log::debug!("file contents (range) requested from conn: {}", conn_id);
+        let file_contents_req = match request {
+            FileContentsRequest::Size {
+                stream_id,
+                file_idx,
+            } => {
+                let file_list = self.file_list.read();
+                let Some(file) = file_list.get(file_idx) else {
+                    log::error!(
+                        "invalid file index {} requested from conn: {}",
+                        file_idx,
+                        conn_id
+                    );
+                    resp_file_contents_fail(conn_id, stream_id);
+
+                    return Err(CliprdrError::InvalidRequest {
+                        description: format!(
+                            "invalid file index {} requested from conn: {}",
+                            file_idx, conn_id
+                        ),
+                    });
+                };
+
+                log::debug!("conn {} requested file {}", conn_id, file.name);
+
+                let size = file.size;
+                ClipboardFile::FileContentsResponse {
+                    msg_flags: 0x1,
+                    stream_id,
+                    requested_data: size.to_le_bytes().to_vec(),
+                }
+            }
+            FileContentsRequest::Range {
+                stream_id,
+                file_idx,
+                offset,
+                length,
+            } => {
+                let file_list = self.file_list.read();
+                let Some(file) = file_list.get(file_idx) else {
+                    log::error!(
+                        "invalid file index {} requested from conn: {}",
+                        file_idx,
+                        conn_id
+                    );
+                    resp_file_contents_fail(conn_id, stream_id);
+                    return Err(CliprdrError::InvalidRequest {
+                        description: format!(
+                            "invalid file index {} requested from conn: {}",
+                            file_idx, conn_id
+                        ),
+                    });
+                };
+                log::debug!("conn {} requested file {}", conn_id, file.name);
+
+                let Some(handle) = &file.handle else {
+                    log::error!(
+                        "invalid file index {} requested from conn: {}",
+                        file_idx,
+                        conn_id
+                    );
+                    resp_file_contents_fail(conn_id, stream_id);
+
+                    return Err(CliprdrError::InvalidRequest {
+                        description: format!(
+                            "request to read directory on index {} as file from conn: {}",
+                            file_idx, conn_id
+                        ),
+                    });
+                };
+
+                if offset > file.size {
+                    log::error!("invalid reading offset requested from conn: {}", conn_id);
+                    resp_file_contents_fail(conn_id, stream_id);
+
+                    return Err(CliprdrError::InvalidRequest {
+                        description: format!(
+                            "invalid reading offset requested from conn: {}",
+                            conn_id
+                        ),
+                    });
+                }
+                let read_size = if offset + length > file.size {
+                    file.size - offset
+                } else {
+                    length
+                };
+
+                let mut buf = vec![0u8; read_size as usize];
+
+                handle
+                    .read_exact_at(&mut buf, offset)
+                    .map_err(|e| CliprdrError::FileError {
+                        path: file.path.clone(),
+                        err: e,
+                    })?;
+
+                ClipboardFile::FileContentsResponse {
+                    msg_flags: 0x1,
+                    stream_id,
+                    requested_data: buf,
+                }
+            }
+        };
+
+        send_data(conn_id, file_contents_req);
+        log::debug!("file contents sent to conn: {}", conn_id);
+        Ok(())
+    }
+}
+
+fn resp_file_contents_fail(conn_id: i32, stream_id: i32) {
+    let resp = ClipboardFile::FileContentsResponse {
+        msg_flags: 0x2,
+        stream_id,
+        requested_data: vec![],
+    };
+    send_data(conn_id, resp)
+}
+
+impl ClipboardContext {
+    pub fn set_is_stopped(&self) -> Result<(), CliprdrError> {
+        // do nothing
+        Ok(())
+    }
+
+    pub fn empty_clipboard(&self, conn_id: i32) -> Result<bool, CliprdrError> {
+        // gc all files, the clipboard is going to shutdown
+        self.fuse_server
+            .update_files(conn_id, FILEDESCRIPTOR_FORMAT_ID, FILECONTENTS_FORMAT_ID)
+    }
+
+    pub fn serve(&self, conn_id: i32, msg: ClipboardFile) -> Result<(), CliprdrError> {
+        match msg {
+            ClipboardFile::NotifyCallback { .. } => {
+                unreachable!()
+            }
+            ClipboardFile::MonitorReady => {
+                log::debug!("server_monitor_ready called");
+
+                // ignore capabilities for now
+
+                self.send_file_list(0)?;
+                Ok(())
+            }
+
+            ClipboardFile::FormatList { format_list } => {
+                // filter out "FileGroupDescriptorW" and "FileContents"
+                let fmt_lst: Vec<(i32, String)> = format_list
+                    .into_iter()
+                    .filter(|(_, name)| {
+                        name == FILEDESCRIPTORW_FORMAT_NAME || name == FILECONTENTS_FORMAT_NAME
+                    })
+                    .collect();
+                if fmt_lst.len() != 2 {
+                    log::debug!("no supported formats");
+                    return Ok(());
+                }
+                log::debug!("supported formats: {:?}", fmt_lst);
+                let file_contents_id = fmt_lst
+                    .iter()
+                    .find(|(_, name)| name == FILECONTENTS_FORMAT_NAME)
+                    .map(|(id, _)| *id)
+                    .unwrap();
+                let file_descriptor_id = fmt_lst
+                    .iter()
+                    .find(|(_, name)| name == FILEDESCRIPTORW_FORMAT_NAME)
+                    .map(|(id, _)| *id)
+                    .unwrap();
+
+                add_remote_format(FILECONTENTS_FORMAT_NAME, file_contents_id);
+                add_remote_format(FILEDESCRIPTORW_FORMAT_NAME, file_descriptor_id);
+                self.fuse_server
+                    .update_files(conn_id, file_descriptor_id, file_contents_id)?;
+                Ok(())
+            }
+            ClipboardFile::FormatListResponse { msg_flags } => {
+                if msg_flags != 0x1 {
+                    self.send_format_list(conn_id)
+                } else {
+                    Ok(())
+                }
+            }
+            ClipboardFile::FormatDataRequest {
+                requested_format_id,
+            } => {
+                let Some(format) = get_local_format(requested_format_id) else {
+                    log::error!(
+                        "got unsupported format data request: id={} from conn={}",
+                        requested_format_id,
+                        conn_id
+                    );
+                    resp_format_data_failure(conn_id);
+                    return Ok(());
+                };
+
+                if format == FILEDESCRIPTORW_FORMAT_NAME {
+                    self.send_file_list(requested_format_id)?;
+                } else if format == FILECONTENTS_FORMAT_NAME {
+                    log::error!(
+                        "try to read file contents with FormatDataRequest from conn={}",
+                        conn_id
+                    );
+                    resp_format_data_failure(conn_id);
+                } else {
+                    log::error!(
+                        "got unsupported format data request: id={} from conn={}",
+                        requested_format_id,
+                        conn_id
+                    );
+                    resp_format_data_failure(conn_id);
+                }
+                Ok(())
+            }
+            ClipboardFile::FormatDataResponse { .. }
+            | ClipboardFile::FileContentsResponse { .. } => {
+                self.fuse_server.recv(conn_id, msg);
+                Ok(())
+            }
+            ClipboardFile::FileContentsRequest {
+                stream_id,
+                list_index,
+                dw_flags,
+                n_position_low,
+                n_position_high,
+                cb_requested,
+                ..
+            } => {
+                let fcr = if dw_flags == 0x1 {
+                    FileContentsRequest::Size {
+                        stream_id,
+                        file_idx: list_index as usize,
+                    }
+                } else if dw_flags == 0x2 {
+                    let offset = (n_position_high as u64) << 32 | n_position_low as u64;
+                    let length = cb_requested as u64;
+
+                    FileContentsRequest::Range {
+                        stream_id,
+                        file_idx: list_index as usize,
+                        offset,
+                        length,
+                    }
+                } else {
+                    log::error!("got invalid FileContentsRequest from conn={}", conn_id);
+                    resp_file_contents_fail(conn_id, stream_id);
+                    return Ok(());
+                };
+
+                self.serve_file_contents(conn_id, fcr)
+            }
+        }
+    }
+}
+
+fn resp_format_data_failure(conn_id: i32) {
+    let data = ClipboardFile::FormatDataResponse {
+        msg_flags: 0x2,
+        format_data: vec![],
+    };
+    send_data(conn_id, data)
 }

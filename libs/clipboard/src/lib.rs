@@ -1,5 +1,6 @@
+#[allow(dead_code)]
 use std::{
-    ffi::{CStr, CString},
+    path::PathBuf,
     sync::{Arc, Mutex, RwLock},
 };
 
@@ -18,7 +19,9 @@ pub mod context_send;
 pub mod platform;
 pub use context_send::*;
 
+#[cfg(target_os = "windows")]
 const ERR_CODE_SERVER_FUNCTION_NONE: u32 = 0x00000001;
+#[cfg(target_os = "windows")]
 const ERR_CODE_INVALID_PARAMETER: u32 = 0x00000002;
 
 pub(crate) use platform::create_cliprdr_context;
@@ -33,7 +36,7 @@ pub trait CliprdrServiceContext: Send + Sync {
     /// set to be stopped
     fn set_is_stopped(&mut self) -> Result<(), CliprdrError>;
     /// clear the content on clipboard
-    fn empty_clipboard(&mut self, conn_id: i32) -> bool;
+    fn empty_clipboard(&mut self, conn_id: i32) -> Result<bool, CliprdrError>;
 
     /// run as a server for clipboard RPC
     fn server_clip_file(&mut self, conn_id: i32, msg: ClipboardFile) -> Result<(), CliprdrError>;
@@ -51,12 +54,16 @@ pub enum CliprdrError {
     ClipboardInternalError,
     #[error("cliprdr occupied")]
     ClipboardOccupied,
-    #[error("content not available")]
-    ContentNotAvailable,
     #[error("conversion failure")]
     ConversionFailure,
+    #[error("failure to read clipboard")]
+    OpenClipboard,
+    #[error("failure to read file metadata or content")]
+    FileError { path: PathBuf, err: std::io::Error },
+    #[error("invalid request")]
+    InvalidRequest { description: String },
     #[error("unknown cliprdr error")]
-    Unknown { description: String },
+    Unknown(u32),
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

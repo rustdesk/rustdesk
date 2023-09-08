@@ -59,7 +59,7 @@ mod ui_session_interface;
 
 mod hbbs_http;
 
-#[cfg(windows)]
+#[cfg(any(target_os = "windows", target_os = "linux"))]
 pub mod clipboard_file;
 
 #[cfg(windows)]
