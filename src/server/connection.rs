@@ -39,7 +39,7 @@ use hbb_common::{
     tokio_util::codec::{BytesCodec, Framed},
 };
 #[cfg(any(target_os = "android", target_os = "ios"))]
-use scrap::android::call_main_service_mouse_input;
+use scrap::android::call_main_service_pointer_input;
 use serde_json::{json, value::Value};
 use sha2::{Digest, Sha256};
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -135,6 +135,14 @@ struct Session {
     random_password: String,
 }
 
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+struct StartCmIpcPara {
+    rx_to_cm: mpsc::UnboundedReceiver<ipc::Data>,
+    tx_from_cm: mpsc::UnboundedSender<ipc::Data>,
+    rx_desktop_ready: mpsc::Receiver<()>,
+    tx_cm_stream_ready: mpsc::Sender<()>,
+}
+
 pub struct Connection {
     inner: ConnInner,
     stream: super::Stream,
@@ -180,6 +188,7 @@ pub struct Connection {
     lr: LoginRequest,
     last_recv_time: Arc<Mutex<Instant>>,
     chat_unanswered: bool,
+    file_transferred: bool,
     #[cfg(windows)]
     portable: PortableState,
     from_switch: bool,
@@ -193,6 +202,8 @@ pub struct Connection {
     linux_headless_handle: LinuxHeadlessHandle,
     closed: bool,
     delay_response_instant: Instant,
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    start_cm_ipc_para: Option<StartCmIpcPara>,
 }
 
 impl ConnInner {
@@ -310,6 +321,7 @@ impl Connection {
             lr: Default::default(),
             last_recv_time: Arc::new(Mutex::new(Instant::now())),
             chat_unanswered: false,
+            file_transferred: false,
             #[cfg(windows)]
             portable: Default::default(),
             from_switch: false,
@@ -324,6 +336,13 @@ impl Connection {
             linux_headless_handle,
             closed: false,
             delay_response_instant: Instant::now(),
+            #[cfg(not(any(target_os = "android", target_os = "ios")))]
+            start_cm_ipc_para: Some(StartCmIpcPara {
+                rx_to_cm,
+                tx_from_cm,
+                rx_desktop_ready,
+                tx_cm_stream_ready,
+            }),
         };
         let addr = hbb_common::try_into_v4(addr);
         if !conn.on_open(addr).await {
@@ -332,14 +351,6 @@ impl Connection {
             sleep(1.).await;
             return;
         }
-        #[cfg(not(any(target_os = "android", target_os = "ios")))]
-        tokio::spawn(async move {
-            if let Err(err) =
-                start_ipc(rx_to_cm, tx_from_cm, rx_desktop_ready, tx_cm_stream_ready).await
-            {
-                log::error!("ipc to connection manager exit: {}", err);
-            }
-        });
         #[cfg(target_os = "android")]
         start_channel(rx_to_cm, tx_from_cm);
         if !conn.keyboard {
@@ -390,6 +401,7 @@ impl Connection {
                         }
                         ipc::Data::Close => {
                             conn.chat_unanswered = false; // seen
+                            conn.file_transferred = false; //seen
                             conn.send_close_reason_no_retry("").await;
                             conn.on_close("connection manager", true).await;
                             break;
@@ -527,9 +539,17 @@ impl Connection {
                 },
                 _ = conn.file_timer.tick() => {
                     if !conn.read_jobs.is_empty() {
-                        if let Err(err) = fs::handle_read_jobs(&mut conn.read_jobs, &mut conn.stream).await {
-                            conn.on_close(&err.to_string(), false).await;
-                            break;
+                        conn.send_to_cm(ipc::Data::FileTransferLog(fs::serialize_transfer_jobs(&conn.read_jobs)));
+                        match fs::handle_read_jobs(&mut conn.read_jobs, &mut conn.stream).await {
+                            Ok(log) => {
+                                if !log.is_empty() {
+                                    conn.send_to_cm(ipc::Data::FileTransferLog(log));
+                                }
+                            }
+                            Err(err) =>  {
+                                conn.on_close(&err.to_string(), false).await;
+                                break;
+                            }
                         }
                     } else {
                         conn.file_timer = time::interval_at(Instant::now() + SEC30, SEC30);
@@ -1316,6 +1336,24 @@ impl Connection {
         self.video_ack_required = lr.video_ack_required;
     }
 
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    fn try_start_cm_ipc(&mut self) {
+        if let Some(p) = self.start_cm_ipc_para.take() {
+            tokio::spawn(async move {
+                if let Err(err) = start_ipc(
+                    p.rx_to_cm,
+                    p.tx_from_cm,
+                    p.rx_desktop_ready,
+                    p.tx_cm_stream_ready,
+                )
+                .await
+                {
+                    log::error!("ipc to connection manager exit: {}", err);
+                }
+            });
+        }
+    }
+
     async fn on_message(&mut self, msg: Message) -> bool {
         if let Some(message::Union::LoginRequest(lr)) = msg.union {
             self.handle_login_request_without_validation(&lr).await;
@@ -1378,6 +1416,9 @@ impl Connection {
                     }
                 }
             }
+
+            #[cfg(not(any(target_os = "android", target_os = "ios")))]
+            self.try_start_cm_ipc();
 
             #[cfg(any(
                 feature = "flatpak",
@@ -1455,17 +1496,21 @@ impl Connection {
                     self.send_login_error("Too many wrong password attempts")
                         .await;
                     Self::post_alarm_audit(
-                        AlarmAuditType::ManyWrongPassword,
+                        AlarmAuditType::ExceedThirtyAttempts,
                         json!({
                                     "ip":self.ip,
+                                    "id":lr.my_id.clone(),
+                                    "name": lr.my_name.clone(),
                         }),
                     );
                 } else if time == failure.0 && failure.1 > 6 {
                     self.send_login_error("Please try 1 minute later").await;
                     Self::post_alarm_audit(
-                        AlarmAuditType::FrequentAttempt,
+                        AlarmAuditType::SixAttemptsWithinOneMinute,
                         json!({
                                     "ip":self.ip,
+                                    "id":lr.my_id.clone(),
+                                    "name": lr.my_name.clone(),
                         }),
                     );
                 } else if !self.validate_password() {
@@ -1539,6 +1584,8 @@ impl Connection {
                             self.from_switch = true;
                             self.try_start_cm(lr.my_id.clone(), lr.my_name.clone(), true);
                             self.send_logon_response().await;
+                            #[cfg(not(any(target_os = "android", target_os = "ios")))]
+                            self.try_start_cm_ipc();
                         }
                     }
                 }
@@ -1547,8 +1594,8 @@ impl Connection {
             match msg.union {
                 Some(message::Union::MouseEvent(me)) => {
                     #[cfg(any(target_os = "android", target_os = "ios"))]
-                    if let Err(e) = call_main_service_mouse_input(me.mask, me.x, me.y) {
-                        log::debug!("call_main_service_mouse_input fail:{}", e);
+                    if let Err(e) = call_main_service_pointer_input("mouse", me.mask, me.x, me.y) {
+                        log::debug!("call_main_service_pointer_input fail:{}", e);
                     }
                     #[cfg(not(any(target_os = "android", target_os = "ios")))]
                     if self.peer_keyboard_enabled() {
@@ -1560,8 +1607,35 @@ impl Connection {
                         self.input_mouse(me, self.inner.id());
                     }
                 }
-                Some(message::Union::PointerDeviceEvent(pde)) =>
-                {
+                Some(message::Union::PointerDeviceEvent(pde)) => {
+                    #[cfg(any(target_os = "android", target_os = "ios"))]
+                    if let Err(e) = match pde.union {
+                        Some(pointer_device_event::Union::TouchEvent(touch)) => match touch.union {
+                            Some(touch_event::Union::PanStart(pan_start)) => {
+                                call_main_service_pointer_input(
+                                    "touch",
+                                    4,
+                                    pan_start.x,
+                                    pan_start.y,
+                                )
+                            }
+                            Some(touch_event::Union::PanUpdate(pan_update)) => {
+                                call_main_service_pointer_input(
+                                    "touch",
+                                    5,
+                                    pan_update.x,
+                                    pan_update.y,
+                                )
+                            }
+                            Some(touch_event::Union::PanEnd(pan_end)) => {
+                                call_main_service_pointer_input("touch", 6, pan_end.x, pan_end.y)
+                            }
+                            _ => Ok(()),
+                        },
+                        _ => Ok(()),
+                    } {
+                        log::debug!("call_main_service_pointer_input fail:{}", e);
+                    }
                     #[cfg(not(any(target_os = "android", target_os = "ios")))]
                     if self.peer_keyboard_enabled() {
                         MOUSE_MOVE_TIME.store(get_time(), Ordering::SeqCst);
@@ -1654,6 +1728,7 @@ impl Connection {
                                 }
                             }
                             Some(file_action::Union::Send(s)) => {
+                                // server to client
                                 let id = s.id;
                                 let od = can_enable_overwrite_detection(get_version_number(
                                     &self.lr.version,
@@ -1671,10 +1746,12 @@ impl Connection {
                                     Err(err) => {
                                         self.send(fs::new_error(id, err, 0)).await;
                                     }
-                                    Ok(job) => {
+                                    Ok(mut job) => {
                                         self.send(fs::new_dir(id, path, job.files().to_vec()))
                                             .await;
                                         let mut files = job.files().to_owned();
+                                        job.is_remote = true;
+                                        job.conn_id = self.inner.id();
                                         self.read_jobs.push(job);
                                         self.file_timer = time::interval(MILLI1);
                                         self.post_file_audit(
@@ -1688,8 +1765,10 @@ impl Connection {
                                         );
                                     }
                                 }
+                                self.file_transferred = true;
                             }
                             Some(file_action::Union::Receive(r)) => {
+                                // client to server
                                 // note: 1.1.10 introduced identical file detection, which breaks original logic of send/recv files
                                 // whenever got send/recv request, check peer version to ensure old version of rustdesk
                                 let od = can_enable_overwrite_detection(get_version_number(
@@ -1706,6 +1785,8 @@ impl Connection {
                                         .map(|f| (f.name, f.modified_time))
                                         .collect(),
                                     overwrite_detection: od,
+                                    total_size: r.total_size,
+                                    conn_id: self.inner.id(),
                                 });
                                 self.post_file_audit(
                                     FileAuditType::RemoteReceive,
@@ -1717,6 +1798,7 @@ impl Connection {
                                         .collect(),
                                     json!({}),
                                 );
+                                self.file_transferred = true;
                             }
                             Some(file_action::Union::RemoveDir(d)) => {
                                 self.send_fs(ipc::FS::RemoveDir {
@@ -1740,6 +1822,11 @@ impl Connection {
                             }
                             Some(file_action::Union::Cancel(c)) => {
                                 self.send_fs(ipc::FS::CancelWrite { id: c.id });
+                                if let Some(job) = fs::get_job_immutable(c.id, &self.read_jobs) {
+                                    self.send_to_cm(ipc::Data::FileTransferLog(
+                                        fs::serialize_transfer_job(job, false, true, ""),
+                                    ));
+                                }
                                 fs::remove_job(c.id, &mut self.read_jobs);
                             }
                             Some(file_action::Union::SendConfirm(r)) => {
@@ -1828,42 +1915,17 @@ impl Connection {
                             }
                         }
                     }
+                    #[cfg(windows)]
                     Some(misc::Union::ElevationRequest(r)) => match r.union {
                         Some(elevation_request::Union::Direct(_)) => {
-                            #[cfg(windows)]
-                            {
-                                let mut err = "No need to elevate".to_string();
-                                if !crate::platform::is_installed() && !portable_client::running() {
-                                    err = portable_client::start_portable_service(
-                                        portable_client::StartPara::Direct,
-                                    )
-                                    .err()
-                                    .map_or("".to_string(), |e| e.to_string());
-                                }
-                                let mut misc = Misc::new();
-                                misc.set_elevation_response(err);
-                                let mut msg = Message::new();
-                                msg.set_misc(misc);
-                                self.send(msg).await;
-                            }
+                            self.handle_elevation_request(portable_client::StartPara::Direct)
+                                .await;
                         }
-                        Some(elevation_request::Union::Logon(_r)) => {
-                            #[cfg(windows)]
-                            {
-                                let mut err = "No need to elevate".to_string();
-                                if !crate::platform::is_installed() && !portable_client::running() {
-                                    err = portable_client::start_portable_service(
-                                        portable_client::StartPara::Logon(_r.username, _r.password),
-                                    )
-                                    .err()
-                                    .map_or("".to_string(), |e| e.to_string());
-                                }
-                                let mut misc = Misc::new();
-                                misc.set_elevation_response(err);
-                                let mut msg = Message::new();
-                                msg.set_misc(misc);
-                                self.send(msg).await;
-                            }
+                        Some(elevation_request::Union::Logon(r)) => {
+                            self.handle_elevation_request(portable_client::StartPara::Logon(
+                                r.username, r.password,
+                            ))
+                            .await;
                         }
                         _ => {}
                     },
@@ -1944,6 +2006,21 @@ impl Connection {
             }
         }
         true
+    }
+
+    #[cfg(windows)]
+    async fn handle_elevation_request(&mut self, para: portable_client::StartPara) {
+        let mut err = "No need to elevate".to_string();
+        if !crate::platform::is_installed() && !portable_client::running() {
+            err = portable_client::start_portable_service(para)
+                .err()
+                .map_or("".to_string(), |e| e.to_string());
+        }
+        let mut misc = Misc::new();
+        misc.set_elevation_response(err);
+        let mut msg = Message::new();
+        msg.set_misc(misc);
+        self.send(msg).await;
     }
 
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -2201,7 +2278,7 @@ impl Connection {
             lock_screen().await;
         }
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
-        let data = if self.chat_unanswered {
+        let data = if self.chat_unanswered || self.file_transferred {
             ipc::Data::Disconnected
         } else {
             ipc::Data::Close
@@ -2330,10 +2407,9 @@ async fn start_ipc(
         stream = Some(s);
     } else {
         let mut args = vec!["--cm"];
-        if password::hide_cm() {
+        if crate::hbbs_http::sync::is_pro() && password::hide_cm() {
             args.push("--hide");
-        };
-
+        }
         #[allow(unused_mut)]
         #[cfg(target_os = "linux")]
         let mut user = None;
@@ -2504,8 +2580,8 @@ mod privacy_mode {
 
 pub enum AlarmAuditType {
     IpWhitelist = 0,
-    ManyWrongPassword = 1,
-    FrequentAttempt = 2,
+    ExceedThirtyAttempts = 1,
+    SixAttemptsWithinOneMinute = 2,
 }
 
 pub enum FileAuditType {

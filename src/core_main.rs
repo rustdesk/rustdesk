@@ -1,3 +1,5 @@
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+use crate::client::translate;
 #[cfg(not(debug_assertions))]
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use crate::platform::breakdown_callback;
@@ -5,6 +7,8 @@ use hbb_common::log;
 #[cfg(not(debug_assertions))]
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use hbb_common::platform::register_breakdown_handler;
+#[cfg(windows)]
+use tauri_winrt_notification::{Duration, Sound, Toast};
 
 #[macro_export]
 macro_rules! my_println{
@@ -116,7 +120,7 @@ pub fn core_main() -> Option<Vec<String>> {
     {
         _is_quick_support |= !crate::platform::is_installed()
             && args.is_empty()
-            && (arg_exe.to_lowercase().ends_with("qs.exe")
+            && (arg_exe.to_lowercase().contains("-qs-")
                 || (!click_setup && crate::platform::is_elevated(None).unwrap_or(false)));
         crate::portable_service::client::set_quick_support(_is_quick_support);
     }
@@ -178,12 +182,23 @@ pub fn core_main() -> Option<Vec<String>> {
                 }
                 return None;
             } else if args[0] == "--silent-install" {
-                hbb_common::allow_err!(platform::install_me(
+                let res = platform::install_me(
                     "desktopicon startmenu driverCert",
                     "".to_owned(),
                     true,
                     args.len() > 1,
-                ));
+                );
+                let text = match res {
+                    Ok(_) => translate("Installation Successful!".to_string()),
+                    Err(_) => translate("Installation failed!".to_string()),
+                };
+                Toast::new(Toast::POWERSHELL_APP_ID)
+                    .title(&hbb_common::config::APP_NAME.read().unwrap())
+                    .text1(&text)
+                    .sound(Some(Sound::Default))
+                    .duration(Duration::Short)
+                    .show()
+                    .ok();
                 return None;
             } else if args[0] == "--install-cert" {
                 #[cfg(windows)]
@@ -222,6 +237,8 @@ pub fn core_main() -> Option<Vec<String>> {
             log::info!("start --uninstall-service");
             crate::platform::uninstall_service(false);
         } else if args[0] == "--service" {
+            #[cfg(target_os = "macos")]
+            crate::platform::macos::hide_dock();
             log::info!("start --service");
             crate::start_os_service();
             return None;

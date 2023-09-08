@@ -57,7 +57,10 @@ use scrap::{
     ImageFormat, ImageRgb,
 };
 
-use crate::is_keyboard_mode_supported;
+use crate::{
+    common::input::{MOUSE_BUTTON_LEFT, MOUSE_BUTTON_RIGHT, MOUSE_TYPE_DOWN, MOUSE_TYPE_UP},
+    is_keyboard_mode_supported,
+};
 
 #[cfg(not(feature = "flutter"))]
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -2057,13 +2060,25 @@ pub fn send_pointer_device_event(
 /// # Arguments
 ///
 /// * `interface` - The interface for sending data.
-fn activate_os(interface: &impl Interface) {
+/// * `send_left_click` - Whether to send a click event.
+fn activate_os(interface: &impl Interface, send_left_click: bool) {
+    let left_down = MOUSE_BUTTON_LEFT << 3 | MOUSE_TYPE_DOWN;
+    let left_up = MOUSE_BUTTON_LEFT << 3 | MOUSE_TYPE_UP;
+    let right_down = MOUSE_BUTTON_RIGHT << 3 | MOUSE_TYPE_DOWN;
+    let right_up = MOUSE_BUTTON_RIGHT << 3 | MOUSE_TYPE_UP;
+    send_mouse(left_up, 0, 0, false, false, false, false, interface);
+    std::thread::sleep(Duration::from_millis(50));
     send_mouse(0, 0, 0, false, false, false, false, interface);
     std::thread::sleep(Duration::from_millis(50));
     send_mouse(0, 3, 3, false, false, false, false, interface);
+    let (click_down, click_up) = if send_left_click {
+        (left_down, left_up)
+    } else {
+        (right_down, right_up)
+    };
     std::thread::sleep(Duration::from_millis(50));
-    send_mouse(1 | 1 << 3, 0, 0, false, false, false, false, interface);
-    send_mouse(2 | 1 << 3, 0, 0, false, false, false, false, interface);
+    send_mouse(click_down, 0, 0, false, false, false, false, interface);
+    send_mouse(click_up, 0, 0, false, false, false, false, interface);
     /*
     let mut key_event = KeyEvent::new();
     // do not use Esc, which has problem with Linux
@@ -2096,9 +2111,14 @@ pub fn input_os_password(p: String, activate: bool, interface: impl Interface) {
 /// * `activate` - Whether to activate OS.
 /// * `interface` - The interface for sending data.
 fn _input_os_password(p: String, activate: bool, interface: impl Interface) {
+    let input_password = !p.is_empty();
     if activate {
-        activate_os(&interface);
+        // Click event is used to bring up the password input box.
+        activate_os(&interface, input_password);
         std::thread::sleep(Duration::from_millis(1200));
+    }
+    if !input_password {
+        return;
     }
     let mut key_event = KeyEvent::new();
     key_event.press = true;
@@ -2387,7 +2407,7 @@ pub trait Interface: Send + Clone + 'static + Sized {
     fn send(&self, data: Data);
     fn msgbox(&self, msgtype: &str, title: &str, text: &str, link: &str);
     fn handle_login_error(&mut self, err: &str) -> bool;
-    fn handle_peer_info(&mut self, pi: PeerInfo, is_cached_pi: bool);
+    fn handle_peer_info(&mut self, pi: PeerInfo);
     fn on_error(&self, err: &str) {
         self.msgbox("error", "Error", err, "");
     }

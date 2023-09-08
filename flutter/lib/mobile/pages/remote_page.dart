@@ -39,6 +39,8 @@ class _RemotePageState extends State<RemotePage> {
   String _value = '';
   Orientation? _currentOrientation;
 
+  final _blockableOverlayState = BlockableOverlayState();
+
   final keyboardVisibilityController = KeyboardVisibilityController();
   late final StreamSubscription<bool> keyboardSubscription;
   final FocusNode _mobileFocusNode = FocusNode();
@@ -67,6 +69,8 @@ class _RemotePageState extends State<RemotePage> {
     initSharedStates(widget.id);
     gFFI.chatModel
         .changeCurrentKey(MessageKey(widget.id, ChatModel.clientModeID));
+
+    _blockableOverlayState.applyFfi(gFFI);
   }
 
   @override
@@ -87,6 +91,19 @@ class _RemotePageState extends State<RemotePage> {
     await keyboardSubscription.cancel();
     removeSharedStates(widget.id);
   }
+
+  // to-do: It should be better to use transparent color instead of the bgColor.
+  // But for now, the transparent color will cause the canvas to be white.
+  // I'm sure that the white color is caused by the Overlay widget in BlockableOverlay.
+  // But I don't know why and how to fix it.
+  Widget emptyOverlay(Color bgColor) => BlockableOverlay(
+        /// the Overlay key will be set with _blockableOverlayState in BlockableOverlay
+        /// see override build() in [BlockableOverlay]
+        state: _blockableOverlayState,
+        underlying: Container(
+          color: bgColor,
+        ),
+      );
 
   void onSoftKeyboardChanged(bool visible) {
     if (!visible) {
@@ -198,13 +215,19 @@ class _RemotePageState extends State<RemotePage> {
     });
   }
 
+  bool get keyboard => gFFI.ffiModel.permissions['keyboard'] != false;
+
+  Widget _bottomWidget() => _showGestureHelp
+      ? getGestureHelp()
+      : (_showBar && gFFI.ffiModel.pi.displays.isNotEmpty
+          ? getBottomAppBar(keyboard)
+          : Offstage());
+
   @override
   Widget build(BuildContext context) {
-    final pi = Provider.of<FfiModel>(context).pi;
     final keyboardIsVisible =
         keyboardVisibilityController.isVisible && _showEdit;
     final showActionButton = !_showBar || keyboardIsVisible || _showGestureHelp;
-    final keyboard = gFFI.ffiModel.permissions['keyboard'] != false;
 
     return WillPopScope(
       onWillPop: () async {
@@ -241,11 +264,20 @@ class _RemotePageState extends State<RemotePage> {
                       }
                     });
                   }),
-          bottomNavigationBar: _showGestureHelp
-              ? getGestureHelp()
-              : (_showBar && pi.displays.isNotEmpty
-                  ? getBottomAppBar(keyboard)
-                  : null),
+          bottomNavigationBar: Obx(() => Stack(
+                alignment: Alignment.bottomCenter,
+                children: [
+                  gFFI.ffiModel.pi.isSet.isTrue &&
+                          gFFI.ffiModel.waitForFirstImage.isTrue
+                      ? emptyOverlay(MyTheme.canvasColor)
+                      : () {
+                          gFFI.ffiModel.tryShowAndroidActionsOverlay();
+                          return Offstage();
+                        }(),
+                  _bottomWidget(),
+                  gFFI.ffiModel.pi.isSet.isFalse ? emptyOverlay(MyTheme.canvasColor) : Offstage(),
+                ],
+              )),
           body: Overlay(
             initialEntries: [
               OverlayEntry(builder: (context) {
@@ -368,12 +400,15 @@ class _RemotePageState extends State<RemotePage> {
                       },
                     ),
                   ]),
-          IconButton(
-              color: Colors.white,
-              icon: Icon(Icons.expand_more),
-              onPressed: () {
-                setState(() => _showBar = !_showBar);
-              }),
+          Obx(() => IconButton(
+                color: Colors.white,
+                icon: Icon(Icons.expand_more),
+                onPressed: gFFI.ffiModel.waitForFirstImage.isTrue
+                    ? null
+                    : () {
+                        setState(() => _showBar = !_showBar);
+                      },
+              )),
         ],
       ),
     );
@@ -466,7 +501,7 @@ class _RemotePageState extends State<RemotePage> {
                   gFFI.ffiModel.toggleTouchMode();
                   final v = gFFI.ffiModel.touchMode ? 'Y' : '';
                   bind.sessionPeerOption(
-                      sessionId: sessionId, name: "touch", value: v);
+                      sessionId: sessionId, name: "touch-mode", value: v);
                 })));
   }
 

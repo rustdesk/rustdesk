@@ -2,6 +2,7 @@
 
 import 'dart:async';
 import 'dart:io';
+import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/consts.dart';
@@ -9,12 +10,14 @@ import 'package:flutter_hbb/desktop/widgets/tabbar_widget.dart';
 import 'package:flutter_hbb/models/chat_model.dart';
 import 'package:flutter_hbb/utils/platform_channel.dart';
 import 'package:get/get.dart';
+import 'package:percent_indicator/linear_percent_indicator.dart';
 import 'package:provider/provider.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
 import '../../common.dart';
 import '../../common/widgets/chat_page.dart';
+import '../../models/file_model.dart';
 import '../../models/platform_model.dart';
 import '../../models/server_model.dart';
 
@@ -32,6 +35,7 @@ class _DesktopServerPageState extends State<DesktopServerPage>
   void initState() {
     gFFI.ffiModel.updateEventListener(gFFI.sessionId, "");
     windowManager.addListener(this);
+    Get.put(tabController);
     tabController.onRemoved = (_, id) {
       onRemoveId(id);
     };
@@ -111,6 +115,7 @@ class ConnectionManagerState extends State<ConnectionManager> {
             });
           }
           windowManager.setTitle(getWindowNameWithId(client.peerId));
+          gFFI.cmFileModel.updateCurrentClientId(client.id);
         }
       }
     };
@@ -173,7 +178,7 @@ class ConnectionManagerState extends State<ConnectionManager> {
               pageViewBuilder: (pageView) => Row(
                 children: [
                   Consumer<ChatModel>(
-                    builder: (_, model, child) => model.isShowCMChatPage
+                    builder: (_, model, child) => model.isShowCMSidePage
                         ? Expanded(
                             child: buildRemoteBlock(
                               child: Container(
@@ -182,8 +187,7 @@ class ConnectionManagerState extends State<ConnectionManager> {
                                           right: BorderSide(
                                               color: Theme.of(context)
                                                   .dividerColor))),
-                                  child:
-                                      ChatPage(type: ChatPageType.desktopCM)),
+                                  child: buildSidePage()),
                             ),
                             flex: (kConnectionManagerWindowSizeOpenChat.width -
                                     kConnectionManagerWindowSizeClosedChat
@@ -202,6 +206,19 @@ class ConnectionManagerState extends State<ConnectionManager> {
               ),
             ),
           );
+  }
+
+  Widget buildSidePage() {
+    final selected = gFFI.serverModel.tabController.state.value.selected;
+    if (selected < 0 || selected >= gFFI.serverModel.clients.length) {
+      return Offstage();
+    }
+    final clientType = gFFI.serverModel.clients[selected].type_();
+    if (clientType == ClientType.file) {
+      return _FileTransferLogPage();
+    } else {
+      return ChatPage(type: ChatPageType.desktopCM);
+    }
   }
 
   Widget buildTitleBar() {
@@ -447,14 +464,21 @@ class _CmHeaderState extends State<_CmHeader>
             ),
           ),
           Offstage(
-            offstage: !client.authorized || client.type_() != ClientType.remote,
+            offstage: !client.authorized ||
+                (client.type_() != ClientType.remote &&
+                    client.type_() != ClientType.file),
             child: IconButton(
-              onPressed: () => checkClickTime(
-                client.id,
-                () => gFFI.chatModel
-                    .toggleCMChatPage(MessageKey(client.peerId, client.id)),
-              ),
-              icon: SvgPicture.asset('assets/chat2.svg'),
+              onPressed: () => checkClickTime(client.id, () {
+                if (client.type_() != ClientType.file) {
+                  gFFI.chatModel.toggleCMSidePage();
+                } else {
+                  gFFI.chatModel
+                      .toggleCMChatPage(MessageKey(client.peerId, client.id));
+                }
+              }),
+              icon: SvgPicture.asset(client.type_() == ClientType.file
+                  ? 'assets/file_transfer.svg'
+                  : 'assets/chat2.svg'),
               splashRadius: kDesktopIconButtonSplashRadius,
             ),
           )
@@ -911,4 +935,183 @@ void checkClickTime(int id, Function() callback) async {
     var d = clickCallbackTime - await bind.cmGetClickTime();
     if (d > 120) callback();
   });
+}
+
+class _FileTransferLogPage extends StatefulWidget {
+  _FileTransferLogPage({Key? key}) : super(key: key);
+
+  @override
+  State<_FileTransferLogPage> createState() => __FileTransferLogPageState();
+}
+
+class __FileTransferLogPageState extends State<_FileTransferLogPage> {
+  @override
+  Widget build(BuildContext context) {
+    return statusList();
+  }
+
+  Widget generateCard(Widget child) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Theme.of(context).cardColor,
+        borderRadius: BorderRadius.all(
+          Radius.circular(15.0),
+        ),
+      ),
+      child: child,
+    );
+  }
+
+  Widget statusList() {
+    return PreferredSize(
+      preferredSize: const Size(200, double.infinity),
+      child: Container(
+          margin: const EdgeInsets.only(top: 16.0, bottom: 16.0, right: 16.0),
+          padding: const EdgeInsets.all(8.0),
+          child: Obx(
+            () {
+              final jobTable = gFFI.cmFileModel.currentJobTable;
+              statusListView(List<JobProgress> jobs) => ListView.builder(
+                    controller: ScrollController(),
+                    itemBuilder: (BuildContext context, int index) {
+                      final item = jobs[index];
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 5),
+                        child: generateCard(
+                          Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Row(
+                                crossAxisAlignment: CrossAxisAlignment.center,
+                                children: [
+                                  SizedBox(
+                                    width: 50,
+                                    child: Column(
+                                      children: [
+                                        Transform.rotate(
+                                          angle: item.isRemoteToLocal ? 0 : pi,
+                                          child: SvgPicture.asset(
+                                            "assets/arrow.svg",
+                                            color: Theme.of(context)
+                                                .tabBarTheme
+                                                .labelColor,
+                                          ),
+                                        ),
+                                        Text(item.isRemoteToLocal
+                                            ? translate('Send')
+                                            : translate('Receive'))
+                                      ],
+                                    ),
+                                  ).paddingOnly(left: 15),
+                                  const SizedBox(
+                                    width: 16.0,
+                                  ),
+                                  Expanded(
+                                    child: Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          item.fileName,
+                                        ).paddingSymmetric(vertical: 10),
+                                        if (item.totalSize > 0)
+                                          Text(
+                                            '${translate("Total")} ${readableFileSize(item.totalSize.toDouble())}',
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              color: MyTheme.darkGray,
+                                            ),
+                                          ),
+                                        if (item.totalSize > 0)
+                                          Offstage(
+                                            offstage: item.state !=
+                                                JobState.inProgress,
+                                            child: Text(
+                                              '${translate("Speed")} ${readableFileSize(item.speed)}/s',
+                                              style: TextStyle(
+                                                fontSize: 12,
+                                                color: MyTheme.darkGray,
+                                              ),
+                                            ),
+                                          ),
+                                        Offstage(
+                                          offstage:
+                                              item.state == JobState.inProgress,
+                                          child: Text(
+                                            translate(
+                                              item.display(),
+                                            ),
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              color: MyTheme.darkGray,
+                                            ),
+                                          ),
+                                        ),
+                                        if (item.totalSize > 0)
+                                          Offstage(
+                                            offstage: item.state !=
+                                                JobState.inProgress,
+                                            child: LinearPercentIndicator(
+                                              padding:
+                                                  EdgeInsets.only(right: 15),
+                                              animateFromLastPercent: true,
+                                              center: Text(
+                                                '${(item.finishedSize / item.totalSize * 100).toStringAsFixed(0)}%',
+                                              ),
+                                              barRadius: Radius.circular(15),
+                                              percent: item.finishedSize /
+                                                  item.totalSize,
+                                              progressColor: MyTheme.accent,
+                                              backgroundColor:
+                                                  Theme.of(context).hoverColor,
+                                              lineHeight:
+                                                  kDesktopFileTransferRowHeight,
+                                            ).paddingSymmetric(vertical: 15),
+                                          ),
+                                      ],
+                                    ),
+                                  ),
+                                  Row(
+                                    mainAxisAlignment: MainAxisAlignment.end,
+                                    children: [],
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ).paddingSymmetric(vertical: 10),
+                        ),
+                      );
+                    },
+                    itemCount: jobTable.length,
+                  );
+
+              return jobTable.isEmpty
+                  ? generateCard(
+                      Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            SvgPicture.asset(
+                              "assets/transfer.svg",
+                              color: Theme.of(context).tabBarTheme.labelColor,
+                              height: 40,
+                            ).paddingOnly(bottom: 10),
+                            Text(
+                              translate("No transfers in progress"),
+                              textAlign: TextAlign.center,
+                              textScaleFactor: 1.20,
+                              style: TextStyle(
+                                  color:
+                                      Theme.of(context).tabBarTheme.labelColor),
+                            ),
+                          ],
+                        ),
+                      ),
+                    )
+                  : statusListView(jobTable);
+            },
+          )),
+    );
+  }
 }

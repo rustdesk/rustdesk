@@ -614,6 +614,7 @@ class OverlayDialogManager {
   int _tagCount = 0;
 
   OverlayEntry? _mobileActionsOverlayEntry;
+  RxBool mobileActionsOverlayVisible = false.obs;
 
   void setOverlayState(OverlayKeyState overlayKeyState) {
     _overlayKeyState = overlayKeyState;
@@ -780,12 +781,14 @@ class OverlayDialogManager {
     });
     overlayState.insert(overlay);
     _mobileActionsOverlayEntry = overlay;
+    mobileActionsOverlayVisible.value = true;
   }
 
   void hideMobileActionsOverlay() {
     if (_mobileActionsOverlayEntry != null) {
       _mobileActionsOverlayEntry!.remove();
       _mobileActionsOverlayEntry = null;
+      mobileActionsOverlayVisible.value = false;
       return;
     }
   }
@@ -1077,7 +1080,7 @@ Color str2color(String str, [alpha = 0xFF]) {
   return Color((hash & 0xFF7FFF) | (alpha << 24));
 }
 
-Color str2color2(String str, [alpha = 0xFF]) {
+Color str2color2(String str, {List<int> existing = const []}) {
   Map<String, Color> colorMap = {
     "red": Colors.red,
     "green": Colors.green,
@@ -1094,10 +1097,10 @@ Color str2color2(String str, [alpha = 0xFF]) {
   };
   final color = colorMap[str.toLowerCase()];
   if (color != null) {
-    return color.withAlpha(alpha);
+    return color.withAlpha(0xFF);
   }
   if (str.toLowerCase() == 'yellow') {
-    return Colors.yellow.withAlpha(alpha);
+    return Colors.yellow.withAlpha(0xFF);
   }
   var hash = 0;
   for (var i = 0; i < str.length; i++) {
@@ -1105,7 +1108,15 @@ Color str2color2(String str, [alpha = 0xFF]) {
   }
   List<Color> colorList = colorMap.values.toList();
   hash = hash % colorList.length;
-  return colorList[hash].withAlpha(alpha);
+  var result = colorList[hash].withAlpha(0xFF);
+  if (existing.contains(result.value)) {
+    Color? notUsed =
+        colorList.firstWhereOrNull((e) => !existing.contains(e.value));
+    if (notUsed != null) {
+      result = notUsed;
+    }
+  }
+  return result;
 }
 
 const K = 1024;
@@ -1381,9 +1392,10 @@ class LastWindowPosition {
   double? offsetWidth;
   double? offsetHeight;
   bool? isMaximized;
+  bool? isFullscreen;
 
   LastWindowPosition(this.width, this.height, this.offsetWidth,
-      this.offsetHeight, this.isMaximized);
+      this.offsetHeight, this.isMaximized, this.isFullscreen);
 
   Map<String, dynamic> toJson() {
     return <String, dynamic>{
@@ -1392,6 +1404,7 @@ class LastWindowPosition {
       "offsetWidth": offsetWidth,
       "offsetHeight": offsetHeight,
       "isMaximized": isMaximized,
+      "isFullscreen": isFullscreen,
     };
   }
 
@@ -1407,7 +1420,7 @@ class LastWindowPosition {
     try {
       final m = jsonDecode(content);
       return LastWindowPosition(m["width"], m["height"], m["offsetWidth"],
-          m["offsetHeight"], m["isMaximized"]);
+          m["offsetHeight"], m["isMaximized"], m["isFullscreen"]);
     } catch (e) {
       debugPrintStack(
           label:
@@ -1428,6 +1441,8 @@ Future<void> saveWindowPosition(WindowType type, {int? windowId}) async {
   late Offset position;
   late Size sz;
   late bool isMaximized;
+  bool isFullscreen = stateGlobal.fullscreen ||
+      (Platform.isMacOS && stateGlobal.closeOnFullscreen);
   setFrameIfMaximized() {
     if (isMaximized) {
       final pos = bind.getLocalFlutterOption(k: kWindowPrefix + type.name);
@@ -1473,20 +1488,21 @@ Future<void> saveWindowPosition(WindowType type, {int? windowId}) async {
   }
 
   final pos = LastWindowPosition(
-      sz.width, sz.height, position.dx, position.dy, isMaximized);
+      sz.width, sz.height, position.dx, position.dy, isMaximized, isFullscreen);
   debugPrint(
-      "Saving frame: $windowId: ${pos.width}/${pos.height}, offset:${pos.offsetWidth}/${pos.offsetHeight}, isMaximized:${pos.isMaximized}");
+      "Saving frame: $windowId: ${pos.width}/${pos.height}, offset:${pos.offsetWidth}/${pos.offsetHeight}, isMaximized:${pos.isMaximized}, isFullscreen:${pos.isFullscreen}");
 
   await bind.setLocalFlutterOption(
       k: kWindowPrefix + type.name, v: pos.toString());
 
   if (type == WindowType.RemoteDesktop && windowId != null) {
-    await _saveSessionWindowPosition(type, windowId, isMaximized, pos);
+    await _saveSessionWindowPosition(
+        type, windowId, isMaximized, isFullscreen, pos);
   }
 }
 
 Future _saveSessionWindowPosition(WindowType windowType, int windowId,
-    bool isMaximized, LastWindowPosition pos) async {
+    bool isMaximized, bool isFullscreen, LastWindowPosition pos) async {
   final remoteList = await DesktopMultiWindow.invokeMethod(
       windowId, kWindowEventGetRemoteList, null);
   getPeerPos(String peerId) {
@@ -1499,7 +1515,8 @@ Future _saveSessionWindowPosition(WindowType windowType, int windowId,
               lpos?.height ?? pos.offsetHeight,
               lpos?.offsetWidth ?? pos.offsetWidth,
               lpos?.offsetHeight ?? pos.offsetHeight,
-              isMaximized)
+              isMaximized,
+              isFullscreen)
           .toString();
     } else {
       return pos.toString();
@@ -1689,9 +1706,18 @@ Future<bool> restoreWindowPosition(WindowType type,
           await wc.setFrame(frame);
         }
       }
-      if (lpos.isMaximized == true) {
+      if (lpos.isFullscreen == true) {
         await restoreFrame();
-        await wc.maximize();
+        // An duration is needed to avoid the window being restored after fullscreen.
+        Future.delayed(Duration(milliseconds: 300), () async {
+          stateGlobal.setFullscreen(true);
+        });
+      } else if (lpos.isMaximized == true) {
+        await restoreFrame();
+        // An duration is needed to avoid the window being restored after maximized.
+        Future.delayed(Duration(milliseconds: 300), () async {
+          await wc.maximize();
+        });
       } else {
         await restoreFrame();
       }

@@ -597,14 +597,6 @@ pub fn session_change_resolution(session_id: SessionID, display: i32, width: i32
     }
 }
 
-pub fn session_ready_to_new_window(session_id: SessionID) {
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    if let Some(session) = SESSIONS.write().unwrap().get_mut(&session_id) {
-        session.restore_flutter_cache();
-        session.refresh_video();
-    }
-}
-
 pub fn session_set_size(_session_id: SessionID, _width: usize, _height: usize) {
     #[cfg(feature = "flutter_texture_render")]
     if let Some(session) = SESSIONS.write().unwrap().get_mut(&_session_id) {
@@ -1179,21 +1171,7 @@ pub fn main_load_ab() -> String {
 }
 
 pub fn session_send_pointer(session_id: SessionID, msg: String) {
-    if let Ok(m) = serde_json::from_str::<HashMap<String, serde_json::Value>>(&msg) {
-        let alt = m.get("alt").is_some();
-        let ctrl = m.get("ctrl").is_some();
-        let shift = m.get("shift").is_some();
-        let command = m.get("command").is_some();
-        if let Some(touch_event) = m.get("touch") {
-            if let Some(scale) = touch_event.get("scale") {
-                if let Some(session) = SESSIONS.read().unwrap().get(&session_id) {
-                    if let Some(scale) = scale.as_i64() {
-                        session.send_touch_scale(scale as _, alt, ctrl, shift, command);
-                    }
-                }
-            }
-        }
-    }
+    super::flutter::session_send_pointer(session_id, msg);
 }
 
 pub fn session_send_mouse(session_id: SessionID, msg: String) {
@@ -1410,18 +1388,6 @@ pub fn main_get_build_date() -> String {
     crate::BUILD_DATE.to_string()
 }
 
-#[no_mangle]
-unsafe extern "C" fn translate(name: *const c_char, locale: *const c_char) -> *const c_char {
-    let name = CStr::from_ptr(name);
-    let locale = CStr::from_ptr(locale);
-    let res = if let (Ok(name), Ok(locale)) = (name.to_str(), locale.to_str()) {
-        crate::client::translate_locale(name.to_owned(), locale)
-    } else {
-        String::new()
-    };
-    CString::from_vec_unchecked(res.into_bytes()).into_raw()
-}
-
 fn handle_query_onlines(onlines: Vec<String>, offlines: Vec<String>) {
     let data = HashMap::from([
         ("name", "callback_query_onlines".to_owned()),
@@ -1432,6 +1398,22 @@ fn handle_query_onlines(onlines: Vec<String>, offlines: Vec<String>) {
         flutter::APP_TYPE_MAIN,
         serde_json::ser::to_string(&data).unwrap_or("".to_owned()),
     );
+}
+
+pub fn translate(name: String, locale: String) -> SyncReturn<String> {
+    SyncReturn(crate::client::translate_locale(name, &locale))
+}
+
+pub fn session_get_rgba_size(session_id: SessionID) -> SyncReturn<usize> {
+    SyncReturn(super::flutter::session_get_rgba_size(session_id))
+}
+
+pub fn session_next_rgba(session_id: SessionID) -> SyncReturn<()> {
+    SyncReturn(super::flutter::session_next_rgba(session_id))
+}
+
+pub fn session_register_texture(session_id: SessionID, ptr: usize) -> SyncReturn<()> {
+    SyncReturn(super::flutter::session_register_texture(session_id, ptr))
 }
 
 pub fn query_onlines(ids: Vec<String>) {

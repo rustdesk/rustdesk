@@ -5,6 +5,7 @@ import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/models/state_model.dart';
 
 const double kDesktopRemoteTabBarHeight = 28.0;
+const int kInvalidWindowId = -1;
 const int kMainWindowId = 0;
 
 const String kPeerPlatformWindows = "Windows";
@@ -38,7 +39,7 @@ const String kWindowEventGetRemoteList = "get_remote_list";
 const String kWindowEventGetSessionIdList = "get_session_id_list";
 
 const String kWindowEventMoveTabToNewWindow = "move_tab_to_new_window";
-const String kWindowEventCloseForSeparateWindow = "close_for_separate_window";
+const String kWindowEventGetCachedSessionData = "get_cached_session_data";
 
 const String kOptionOpenNewConnInTabs = "enable-open-new-connections-in-tabs";
 const String kOptionOpenInTabs = "allow-open-in-tabs";
@@ -53,6 +54,9 @@ const String kTabLabelSettingPage = "Settings";
 
 const String kWindowPrefix = "wm_";
 const int kWindowMainId = 0;
+
+const String kPointerEventKindTouch = "touch";
+const String kPointerEventKindMouse = "mouse";
 
 // the executable name of the portable version
 const String kEnvPortableExecutable = "RUSTDESK_APPNAME";

@@ -223,6 +223,7 @@ void runConnectionManagerScreen(bool hide) async {
     const DesktopServerPage(),
     MyTheme.currentThemeMode(),
   );
+  gFFI.serverModel.hideCm = hide;
   if (hide) {
     await hideCmWindow(isStartup: true);
   } else {
@@ -268,10 +269,12 @@ hideCmWindow({bool isStartup = false}) async {
       await windowManager.hide();
     });
   } else {
-    await windowManager.setOpacity(0);
-    bind.mainHideDocker();
-    await windowManager.minimize();
-    await windowManager.hide();
+    if (await windowManager.getOpacity() != 0) {
+      await windowManager.setOpacity(0);
+      bind.mainHideDocker();
+      await windowManager.minimize();
+      await windowManager.hide();
+    }
   }
 }
 
@@ -395,7 +398,7 @@ class _AppState extends State<App> {
           themeMode: MyTheme.currentThemeMode(),
           home: isDesktop
               ? const DesktopTabPage()
-              : !isAndroid
+              : isWeb
                   ? WebHomePage()
                   : HomePage(),
           localizationsDelegates: const [

@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_hbb/common/widgets/overlay.dart';
 import 'package:flutter_hbb/mobile/pages/server_page.dart';
 import 'package:flutter_hbb/mobile/pages/settings_page.dart';
 import 'package:get/get.dart';
@@ -26,7 +25,9 @@ class _HomePageState extends State<HomePage> {
   var _selectedIndex = 0;
   int get selectedIndex => _selectedIndex;
   final List<PageShape> _pages = [];
-  final _blockableOverlayState = BlockableOverlayState();
+  bool get isChatPageCurrentTab => isAndroid
+      ? _selectedIndex == 1
+      : false; // change this when ios have chat page
 
   void refreshPages() {
     setState(() {
@@ -38,7 +39,6 @@ class _HomePageState extends State<HomePage> {
   void initState() {
     super.initState();
     initPages();
-    _blockableOverlayState.applyFfi(gFFI);
   }
 
   void initPages() {
@@ -82,13 +82,15 @@ class _HomePageState extends State<HomePage> {
             unselectedItemColor: MyTheme.darkGray,
             onTap: (index) => setState(() {
               // close chat overlay when go chat page
-              if (index == 1 && _selectedIndex != index) {
-                gFFI.chatModel.hideChatIconOverlay();
-                gFFI.chatModel.hideChatWindowOverlay();
-                gFFI.chatModel
-                    .mobileClearClientUnread(gFFI.chatModel.currentKey.connId);
+              if (_selectedIndex != index) {
+                _selectedIndex = index;
+                if (isChatPageCurrentTab) {
+                  gFFI.chatModel.hideChatIconOverlay();
+                  gFFI.chatModel.hideChatWindowOverlay();
+                  gFFI.chatModel.mobileClearClientUnread(
+                      gFFI.chatModel.currentKey.connId);
+                }
               }
-              _selectedIndex = index;
             }),
           ),
           body: _pages.elementAt(_selectedIndex),
@@ -98,7 +100,7 @@ class _HomePageState extends State<HomePage> {
   Widget appTitle() {
     final currentUser = gFFI.chatModel.currentUser;
     final currentKey = gFFI.chatModel.currentKey;
-    if (_selectedIndex == 1 &&
+    if (isChatPageCurrentTab &&
         currentUser != null &&
         currentKey.peerId.isNotEmpty) {
       final connected =
