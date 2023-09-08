@@ -193,7 +193,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Logging in...", "Anmelden …"),
         ("Enable RDP session sharing", "RDP-Sitzungsfreigabe aktivieren"),
         ("Auto Login", "Automatisch anmelden (nur gültig, wenn Sie \"Nach Sitzungsende sperren\" aktiviert haben)"),
-        ("Enable Direct IP Access", "Direkten IP-Zugang aktivieren"),
+        ("Enable Direct IP Access", "Direkten IP-Zugriff aktivieren"),
         ("Rename", "Umbenennen"),
         ("Space", "Speicherplatz"),
         ("Create Desktop Shortcut", "Desktop-Verknüpfung erstellen"),
@@ -427,7 +427,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Elevation Error", "Berechtigungsfehler"),
         ("Ask the remote user for authentication", "Den entfernten Benutzer zur Authentifizierung auffordern"),
         ("Choose this if the remote account is administrator", "Wählen Sie dies, wenn das entfernte Konto Administrator ist."),
-        ("Transmit the username and password of administrator", "Übermitteln Sie den Benutzernamen und das Passwort des Administrators"),
+        ("Transmit the username and password of administrator", "Benutzernamen und Passwort des Administrators übertragen"),
         ("still_click_uac_tip", "Der entfernte Benutzer muss immer noch im UAC-Fenster von RustDesk auf \"Ja\" klicken."),
         ("Request Elevation", "Erhöhte Rechte anfordern"),
         ("wait_accept_uac_tip", "Bitte warten Sie, bis der entfernte Benutzer den UAC-Dialog akzeptiert hat."),
@@ -541,7 +541,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Change Color", "Farbe ändern"),
         ("Primary Color", "Primärfarbe"),
         ("HSV Color", "HSV-Farbe"),
-        ("Installation Successful!", ""),
-        ("Installation failed!", ""),
+        ("Installation Successful!", "Installation erfolgreich!"),
+        ("Installation failed!", "Installation fehlgeschlagen!"),
     ].iter().cloned().collect();
 }
