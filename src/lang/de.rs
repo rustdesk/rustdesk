@@ -544,5 +544,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Installation Successful!", "Installation erfolgreich!"),
         ("Installation failed!", "Installation fehlgeschlagen!"),
         ("Reverse mouse wheel", "Mausrad rückwärts drehen"),
+        ("{} sessions", ""),
     ].iter().cloned().collect();
 }
