@@ -27,6 +27,8 @@ pub fn create_cliprdr_context(
 ) -> crate::ResultType<Box<dyn crate::CliprdrServiceContext>> {
     use std::sync::Arc;
 
+    use hbb_common::{anyhow, log};
+
     if !enable_files {
         return Ok(Box::new(DummyCliprdrContext {}) as Box<_>);
     }
@@ -34,16 +36,26 @@ pub fn create_cliprdr_context(
     let timeout = std::time::Duration::from_secs(response_wait_timeout_secs as u64);
     let mut tmp_path = std::env::temp_dir();
     tmp_path.push("rustdesk-cliprdr");
-    let rd_mnt = tmp_path;
-    std::fs::create_dir(rd_mnt.clone())?;
+
+    log::info!("check mount point existence");
+    let rd_mnt = if !tmp_path.exists() {
+        log::info!("create mount point: {}", tmp_path.display());
+        std::fs::create_dir_all(tmp_path.clone())?;
+        tmp_path
+    } else if !tmp_path.is_dir() {
+        log::error!("{} is occupied and is not a directory", tmp_path.display());
+        return Err(CliprdrError::CliprdrInit.into());
+    } else {
+        tmp_path
+    };
+
     let linux_ctx = Arc::new(linux::ClipboardContext::new(timeout, rd_mnt)?);
+    let client = linux_ctx.client().map_err(|e| {
+        log::error!("create clipboard client: {:?}", e);
+        anyhow::anyhow!("create clipboard client: {:?}", e)
+    })?;
 
-    let fuse_ctx = linux_ctx.clone();
-    std::thread::spawn(move || fuse_ctx.mount());
-    let clipboard_listen_ctx = linux_ctx.clone();
-    std::thread::spawn(move || clipboard_listen_ctx.listen_clipboard());
-
-    Ok(Box::new(linux_ctx.client()) as Box<_>)
+    Ok(Box::new(client) as Box<_>)
 }
 
 struct DummyCliprdrContext {}

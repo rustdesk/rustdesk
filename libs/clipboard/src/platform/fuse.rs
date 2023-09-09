@@ -558,9 +558,10 @@ impl FuseServer {
     // get files and directory path right in root of FUSE fs
     pub fn list_root(&self) -> Vec<PathBuf> {
         let files = self.files.read();
-        let mut paths = Vec::new();
-        for file in files.iter().filter(|f| f.parent == Some(FUSE_ROOT_ID)) {
-            paths.push(PathBuf::from(&file.name));
+        let children = &files[0].children;
+        let mut paths = Vec::with_capacity(children.len());
+        for idx in children.iter().copied() {
+            paths.push(PathBuf::from(&files[idx as usize].name));
         }
         paths
     }
@@ -1083,19 +1084,6 @@ struct FuseNode {
 }
 
 impl FuseNode {
-    pub fn new(name: &str, inode: Inode, attributes: InodeAttributes, conn_id: i32) -> Self {
-        Self {
-            conn_id,
-            stream_id: rand::random(),
-            inode,
-            name: name.to_owned(),
-            parent: None,
-            attributes,
-            children: Vec::new(),
-            file_handlers: FileHandles::new(),
-        }
-    }
-
     pub fn from_description(inode: Inode, desc: FileDescription) -> Self {
         Self {
             conn_id: desc.conn_id,
@@ -1281,10 +1269,15 @@ impl InodeAttributes {
 
 impl From<&InodeAttributes> for fuser::FileAttr {
     fn from(value: &InodeAttributes) -> Self {
+        let blocks = if value.size % BLOCK_SIZE as u64 == 0 {
+            value.size / BLOCK_SIZE as u64
+        } else {
+            value.size / BLOCK_SIZE as u64 + 1
+        };
         Self {
             ino: value.inode,
             size: value.size,
-            blocks: value.size.div_ceil(BLOCK_SIZE as u64),
+            blocks,
             atime: value.last_accessed,
             mtime: value.last_modified,
             ctime: value.last_metadata_changed,

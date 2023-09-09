@@ -937,6 +937,7 @@ dependencies = [
  "hbb_common",
  "lazy_static",
  "libc",
+ "once_cell",
  "parking_lot",
  "percent-encoding",
  "rand 0.8.5",

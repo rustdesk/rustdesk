@@ -3,7 +3,10 @@ use std::{
     fs::File,
     os::unix::prelude::FileExt,
     path::{Path, PathBuf},
-    sync::{atomic::AtomicBool, Arc},
+    sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    },
     time::{Duration, SystemTime},
 };
 
@@ -14,7 +17,7 @@ use hbb_common::{
     log,
 };
 use lazy_static::lazy_static;
-use parking_lot::RwLock;
+use parking_lot::{Mutex, RwLock};
 use utf16string::WString;
 
 use crate::{send_data, ClipboardFile, CliprdrError, CliprdrServiceContext};
@@ -44,8 +47,10 @@ fn add_remote_format(local_name: &str, remote_id: i32) {
 }
 
 trait SysClipboard: Send + Sync {
-    fn wait_file_list(&self) -> Result<Vec<PathBuf>, CliprdrError>;
+    fn wait_file_list(&self) -> Result<Option<Vec<PathBuf>>, CliprdrError>;
     fn set_file_list(&self, paths: &[PathBuf]) -> Result<(), CliprdrError>;
+    fn stop(&self);
+    fn start(&self);
 }
 
 fn get_sys_clipboard() -> Result<Box<dyn SysClipboard>, CliprdrError> {
@@ -300,6 +305,12 @@ pub struct CliprdrClient {
     pub context: Arc<ClipboardContext>,
 }
 
+impl Drop for CliprdrClient {
+    fn drop(&mut self) {
+        self.context.ref_decrease();
+    }
+}
+
 impl CliprdrServiceContext for CliprdrClient {
     fn set_is_stopped(&mut self) -> Result<(), CliprdrError> {
         self.context.set_is_stopped()
@@ -315,11 +326,12 @@ impl CliprdrServiceContext for CliprdrClient {
 }
 
 pub struct ClipboardContext {
-    pub stop: AtomicBool,
+    pub client_count: AtomicUsize,
     pub fuse_mount_point: PathBuf,
     fuse_server: Arc<FuseServer>,
     file_list: RwLock<Vec<LocalFile>>,
     clipboard: Arc<dyn SysClipboard>,
+    fuse_handle: Mutex<Option<fuser::BackgroundSession>>,
 }
 
 impl ClipboardContext {
@@ -331,53 +343,97 @@ impl ClipboardContext {
         })?;
 
         let fuse_server = Arc::new(FuseServer::new(timeout));
+
         let clipboard = get_sys_clipboard()?;
         let clipboard = Arc::from(clipboard);
         let file_list = RwLock::new(vec![]);
 
         Ok(Self {
-            stop: AtomicBool::new(false),
+            client_count: AtomicUsize::new(0),
             fuse_mount_point,
             fuse_server,
+            fuse_handle: Mutex::new(None),
             file_list,
             clipboard,
         })
     }
 
-    pub fn client(self: Arc<Self>) -> CliprdrClient {
-        CliprdrClient { context: self }
+    pub fn client(self: Arc<Self>) -> Result<CliprdrClient, CliprdrError> {
+        if self.client_count.fetch_add(1, Ordering::Relaxed) == 0 {
+            let mut fuse_handle = self.fuse_handle.lock();
+
+            if fuse_handle.is_none() {
+                let mount_path = &self.fuse_mount_point;
+                create_if_not_exists(mount_path);
+
+                let mnt_opts = [
+                    MountOption::FSName("rustdesk-cliprdr-fs".to_string()),
+                    MountOption::RO,
+                    MountOption::NoAtime,
+                ];
+                log::info!(
+                    "mounting clipboard FUSE to {}",
+                    self.fuse_mount_point.display()
+                );
+
+                let new_handle =
+                    fuser::spawn_mount2(self.fuse_server.client(), mount_path, &mnt_opts).map_err(
+                        |e| {
+                            log::error!("failed to mount cliprdr fuse: {:?}", e);
+                            CliprdrError::CliprdrInit
+                        },
+                    )?;
+                *fuse_handle = Some(new_handle);
+            }
+
+            self.clipboard.start();
+            let clip = self.clone();
+            std::thread::spawn(move || {
+                let res = clip.listen_clipboard();
+                if let Err(e) = res {
+                    log::error!("failed to listen clipboard: {:?}", e);
+                }
+                log::info!("stopped listening clipboard");
+            });
+        }
+
+        Ok(CliprdrClient { context: self })
     }
 
-    // mount and run fuse server, blocking
-    pub fn mount(&self) -> Result<(), CliprdrError> {
-        let mount_opts = [
-            MountOption::FSName("rustdesk-cliprdr-fs".to_string()),
-            MountOption::RO,
-            MountOption::NoAtime,
-        ];
-        let fuse_client = self.fuse_server.client();
-        fuser::mount2(fuse_client, self.fuse_mount_point.clone(), &mount_opts).map_err(|e| {
-            log::error!("failed to mount fuse: {:?}", e);
-            CliprdrError::CliprdrInit
-        })
+    /// set context to be inactive
+    pub fn ref_decrease(&self) {
+        if self.client_count.fetch_sub(1, Ordering::Relaxed) > 1 {
+            return;
+        }
+
+        let mut fuse_handle = self.fuse_handle.lock();
+        if let Some(fuse_handle) = fuse_handle.take() {
+            fuse_handle.join();
+        }
+        self.clipboard.stop();
+        std::fs::remove_dir(&self.fuse_mount_point).unwrap();
     }
 
     /// set clipboard data from file list
     pub fn set_clipboard(&self, paths: &[PathBuf]) -> Result<(), CliprdrError> {
         let prefix = self.fuse_mount_point.clone();
         let paths: Vec<PathBuf> = paths.iter().cloned().map(|p| prefix.join(p)).collect();
+        log::debug!("setting clipboard with paths: {:?}", paths);
         self.clipboard.set_file_list(&paths)
     }
 
     pub fn listen_clipboard(&self) -> Result<(), CliprdrError> {
-        while let Ok(v) = self.clipboard.wait_file_list() {
+        log::debug!("start listening clipboard");
+        while let Some(v) = self.clipboard.wait_file_list()? {
             let filtered: Vec<_> = v
                 .into_iter()
                 .filter(|pb| !pb.starts_with(&self.fuse_mount_point))
                 .collect();
+            log::debug!("clipboard file list update (filtered): {:?}", filtered);
             if filtered.is_empty() {
                 continue;
             }
+            log::debug!("send file list update to remote");
 
             // construct format list update and send
             let data = ClipboardFile::FormatList {
@@ -390,18 +446,27 @@ impl ClipboardContext {
                 ],
             };
 
-            send_data(0, data)
+            send_data(0, data);
+            log::debug!("format list update sent");
         }
         Ok(())
     }
 
     fn send_format_list(&self, conn_id: i32) -> Result<(), CliprdrError> {
+        log::debug!("send format list to remote, conn={}", conn_id);
         let data = self.clipboard.wait_file_list()?;
+        if data.is_none() {
+            log::debug!("clipboard disabled, skip sending");
+            return Ok(());
+        }
+        let data = data.unwrap();
+
         let filtered: Vec<_> = data
             .into_iter()
             .filter(|pb| !pb.starts_with(&self.fuse_mount_point))
             .collect();
         if filtered.is_empty() {
+            log::debug!("no files in format list, skip sending");
             return Ok(());
         }
 
@@ -416,11 +481,19 @@ impl ClipboardContext {
         };
 
         send_data(conn_id, format_list);
+        log::debug!("format list to remote dispatched, conn={}", conn_id);
         Ok(())
     }
 
     fn send_file_list(&self, conn_id: i32) -> Result<(), CliprdrError> {
+        log::debug!("send file list to remote, conn={}", conn_id);
         let data = self.clipboard.wait_file_list()?;
+        if data.is_none() {
+            log::debug!("clipboard disabled, skip sending");
+            return Ok(());
+        }
+
+        let data = data.unwrap();
         let filtered: Vec<_> = data
             .into_iter()
             .filter(|pb| !pb.starts_with(&self.fuse_mount_point))
@@ -574,6 +647,13 @@ fn resp_file_contents_fail(conn_id: i32, stream_id: i32) {
         requested_data: vec![],
     };
     send_data(conn_id, resp)
+}
+
+fn create_if_not_exists(path: &PathBuf) {
+    if std::fs::metadata(path).is_ok() {
+        return;
+    }
+    std::fs::create_dir(path).unwrap();
 }
 
 impl ClipboardContext {

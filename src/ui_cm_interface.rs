@@ -570,7 +570,7 @@ pub async fn start_ipc<T: InvokeUiCM>(cm: ConnectionManager<T>) {
         }
     });
 
-    #[cfg(target_os = "windows")]
+    #[cfg(any(target_os = "windows", target_os = "linux"))]
     ContextSend::enable(Config::get_option("enable-file-transfer").is_empty());
 
     match ipc::new_listener("_cm").await {

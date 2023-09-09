@@ -1254,7 +1254,7 @@ impl<T: InvokeUiSession> Session<T> {
 #[tokio::main(flavor = "current_thread")]
 pub async fn io_loop<T: InvokeUiSession>(handler: Session<T>) {
     // It is ok to call this function multiple times.
-    #[cfg(target_os = "windows")]
+    #[cfg(any(target_os = "windows", target_os = "linux"))]
     if !handler.is_file_transfer() && !handler.is_port_forward() {
         clipboard::ContextSend::enable(true);
     }
