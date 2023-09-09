@@ -2412,7 +2412,10 @@ async fn start_ipc(
     if let Ok(s) = crate::ipc::connect(1000, "_cm").await {
         stream = Some(s);
     } else {
+        #[allow(unused_mut)]
+        #[allow(unused_assignments)]
         let mut args = vec!["--cm"];
+        #[cfg(not(windows))]
         if crate::hbbs_http::sync::is_pro() && password::hide_cm() {
             args.push("--hide");
         }
