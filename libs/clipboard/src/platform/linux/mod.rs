@@ -362,6 +362,13 @@ impl ClipboardContext {
         })
     }
 
+    /// set clipboard data from file list
+    pub fn set_clipboard(&self, paths: &[PathBuf]) -> Result<(), CliprdrError> {
+        let prefix = self.fuse_mount_point.clone();
+        let paths: Vec<PathBuf> = paths.iter().cloned().map(|p| prefix.join(p)).collect();
+        self.clipboard.set_file_list(&paths)
+    }
+
     pub fn listen_clipboard(&self) -> Result<(), CliprdrError> {
         while let Ok(v) = self.clipboard.wait_file_list() {
             let filtered: Vec<_> = v
@@ -663,8 +670,16 @@ impl ClipboardContext {
                 }
                 Ok(())
             }
-            ClipboardFile::FormatDataResponse { .. }
-            | ClipboardFile::FileContentsResponse { .. } => {
+            ClipboardFile::FormatDataResponse { .. } => {
+                // we don't know its corresponding request, no resend can be performed
+
+                self.fuse_server.recv(conn_id, msg);
+                let paths = self.fuse_server.list_root();
+                self.set_clipboard(&paths)?;
+                Ok(())
+            }
+            ClipboardFile::FileContentsResponse { .. } => {
+                // we don't know its corresponding request, no resend can be performed
                 self.fuse_server.recv(conn_id, msg);
                 Ok(())
             }

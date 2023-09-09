@@ -555,6 +555,16 @@ impl FuseServer {
         return;
     }
 
+    // get files and directory path right in root of FUSE fs
+    pub fn list_root(&self) -> Vec<PathBuf> {
+        let files = self.files.read();
+        let mut paths = Vec::new();
+        for file in files.iter().filter(|f| f.parent == Some(FUSE_ROOT_ID)) {
+            paths.push(PathBuf::from(&file.name));
+        }
+        paths
+    }
+
     /// gc filesystem
     fn gc_files(&self) {
         {
