@@ -18,5 +18,6 @@ jobs:
   run-ci:
     uses: ./.github/workflows/flutter-build.yml
     with:
-      upload-artifact: false
+      upload-artifact: true
+      upload-tag: "full-ci" 
   
