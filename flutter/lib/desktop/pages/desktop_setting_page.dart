@@ -1255,12 +1255,12 @@ class _InputState extends State<_Input> {
       _Radio(context,
           value: kScrollModeDefault,
           groupValue: groupValue,
-          label: 'Default scroll',
+          label: 'Default mode',
           onChanged: onChanged),
       _Radio(context,
           value: kScrollModeReverse,
           groupValue: groupValue,
-          label: 'Reverse scroll',
+          label: 'Reverse mode',
           onChanged: onChanged),
     ]);
   }
