@@ -780,8 +780,8 @@ impl<T: InvokeUiSession> Session<T> {
     pub fn send_mouse(
         &self,
         mask: i32,
-        mut x: i32,
-        mut y: i32,
+        x: i32,
+        y: i32,
         alt: bool,
         ctrl: bool,
         shift: bool,
