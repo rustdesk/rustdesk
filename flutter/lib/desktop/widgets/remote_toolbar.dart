@@ -546,9 +546,11 @@ class _PinMenu extends StatelessWidget {
         assetName: state.pin ? "assets/pinned.svg" : "assets/unpinned.svg",
         tooltip: state.pin ? 'Unpin Toolbar' : 'Pin Toolbar',
         onPressed: state.switchPin,
-        color: state.pin ? _ToolbarTheme.blueColor : _ToolbarTheme.inactiveColor,
-        hoverColor:
-            state.pin ? _ToolbarTheme.hoverBlueColor : _ToolbarTheme.hoverInactiveColor,
+        color:
+            state.pin ? _ToolbarTheme.blueColor : _ToolbarTheme.inactiveColor,
+        hoverColor: state.pin
+            ? _ToolbarTheme.hoverBlueColor
+            : _ToolbarTheme.hoverInactiveColor,
       ),
     );
   }
@@ -561,15 +563,18 @@ class _MobileActionMenu extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (!ffi.ffiModel.isPeerAndroid) return Offstage();
-    return Obx(()=>_IconMenuButton(
-      assetName: 'assets/actions_mobile.svg',
-      tooltip: 'Mobile Actions',
-      onPressed: () => ffi.dialogManager.toggleMobileActionsOverlay(ffi: ffi),
-      color: ffi.dialogManager.mobileActionsOverlayVisible.isTrue
-          ? _ToolbarTheme.blueColor : _ToolbarTheme.inactiveColor,
-      hoverColor: ffi.dialogManager.mobileActionsOverlayVisible.isTrue
-          ? _ToolbarTheme.hoverBlueColor : _ToolbarTheme.hoverInactiveColor,
-    ));
+    return Obx(() => _IconMenuButton(
+          assetName: 'assets/actions_mobile.svg',
+          tooltip: 'Mobile Actions',
+          onPressed: () =>
+              ffi.dialogManager.toggleMobileActionsOverlay(ffi: ffi),
+          color: ffi.dialogManager.mobileActionsOverlayVisible.isTrue
+              ? _ToolbarTheme.blueColor
+              : _ToolbarTheme.inactiveColor,
+          hoverColor: ffi.dialogManager.mobileActionsOverlayVisible.isTrue
+              ? _ToolbarTheme.hoverBlueColor
+              : _ToolbarTheme.hoverInactiveColor,
+        ));
   }
 }
 
@@ -1309,7 +1314,7 @@ class _KeyboardMenu extends StatelessWidget {
           Divider(),
           viewMode(),
           Divider(),
-          scrollMode(),
+          reverseMouseWheel(),
         ]);
   }
 
@@ -1398,37 +1403,29 @@ class _KeyboardMenu extends StatelessWidget {
         child: Text(translate('View Mode')));
   }
 
-  scrollMode() {
+  reverseMouseWheel() {
     return futureBuilder(future: () async {
-      final mode = await bind.sessionGetScrollMode(sessionId: ffi.sessionId);
-      if (mode != null) {
-        return mode;
+      final v =
+          await bind.sessionGetReverseMouseWheel(sessionId: ffi.sessionId);
+          debugPrint('REMOVE ME ======================== $v');
+      if (v != null && v != '') {
+        return v;
       }
-      return bind.mainGetUserDefaultOption(key: 'scroll_mode');
+      return bind.mainGetUserDefaultOption(key: 'reverse_mouse_wheel');
     }(), hasData: (data) {
-      final groupValue = data as String;
-      List<InputModeMenu> modes = [
-        InputModeMenu(key: kScrollModeDefault, menu: 'Default mode'),
-        InputModeMenu(key: kScrollModeReverse, menu: 'Reverse mode'),
-      ];
-      List<RdoMenuButton> list = [];
+      debugPrint('REMOVE ME ======================== data $data');
       final enabled = !ffi.ffiModel.viewOnly;
-      onChanged(String? value) async {
+      onChanged(bool? value) async {
         if (value == null) return;
-        await bind.sessionSetScrollMode(sessionId: ffi.sessionId, value: value);
+        await bind.sessionSetReverseMouseWheel(
+            sessionId: ffi.sessionId, value: value ? 'Y' : 'N');
       }
 
-      for (InputModeMenu mode in modes) {
-        var text = translate(mode.menu);
-        list.add(RdoMenuButton<String>(
-          child: Text(text),
-          value: mode.key,
-          groupValue: groupValue,
+      return CkbMenuButton(
+          value: data == 'Y',
           onChanged: enabled ? onChanged : null,
-          ffi: ffi,
-        ));
-      }
-      return Column(children: list);
+          child: Text(translate('Reverse mouse wheel')),
+          ffi: ffi);
     });
   }
 }
@@ -1628,26 +1625,26 @@ class _IconMenuButtonState extends State<_IconMenuButton> {
       width: _ToolbarTheme.buttonSize,
       height: _ToolbarTheme.buttonSize,
       child: MenuItemButton(
-        style: ButtonStyle(
-            backgroundColor: MaterialStatePropertyAll(Colors.transparent),
-            padding: MaterialStatePropertyAll(EdgeInsets.zero),
-            overlayColor: MaterialStatePropertyAll(Colors.transparent)),
-        onHover: (value) => setState(() {
-          hover = value;
-        }),
-        onPressed: widget.onPressed,
-        child: Tooltip(
-          message: translate(widget.tooltip),
-          child: Material(
-              type: MaterialType.transparency,
-              child: Ink(
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(_ToolbarTheme.iconRadius),
-                    color: hover ? widget.hoverColor : widget.color,
-                  ),
-                  child: icon)),
-        )
-      ),
+          style: ButtonStyle(
+              backgroundColor: MaterialStatePropertyAll(Colors.transparent),
+              padding: MaterialStatePropertyAll(EdgeInsets.zero),
+              overlayColor: MaterialStatePropertyAll(Colors.transparent)),
+          onHover: (value) => setState(() {
+                hover = value;
+              }),
+          onPressed: widget.onPressed,
+          child: Tooltip(
+            message: translate(widget.tooltip),
+            child: Material(
+                type: MaterialType.transparency,
+                child: Ink(
+                    decoration: BoxDecoration(
+                      borderRadius:
+                          BorderRadius.circular(_ToolbarTheme.iconRadius),
+                      color: hover ? widget.hoverColor : widget.color,
+                    ),
+                    child: icon)),
+          )),
     ).marginSymmetric(
         horizontal: widget.hMargin ?? _ToolbarTheme.buttonHMargin,
         vertical: widget.vMargin ?? _ToolbarTheme.buttonVMargin);

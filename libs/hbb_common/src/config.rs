@@ -277,13 +277,13 @@ pub struct PeerConfig {
     pub keyboard_mode: String,
     #[serde(flatten)]
     pub view_only: ViewOnly,
-    // Mouse wheel or touchpad scroll mode, default or reverse
+    // Mouse wheel or touchpad scroll mode
     #[serde(
-        default = "PeerConfig::default_scroll_mode",
-        deserialize_with = "PeerConfig::deserialize_scroll_mode",
+        default = "PeerConfig::default_reverse_mouse_wheel",
+        deserialize_with = "PeerConfig::deserialize_reverse_mouse_wheel",
         skip_serializing_if = "String::is_empty"
     )]
-    pub scroll_mode: String,
+    pub reverse_mouse_wheel: String,
 
     #[serde(
         default,
@@ -327,7 +327,7 @@ impl Default for PeerConfig {
             show_quality_monitor: Default::default(),
             keyboard_mode: Default::default(),
             view_only: Default::default(),
-            scroll_mode: Self::default_scroll_mode(),
+            reverse_mouse_wheel: Self::default_reverse_mouse_wheel(),
             custom_resolutions: Default::default(),
             options: Self::default_options(),
             ui_flutter: Default::default(),
@@ -1140,9 +1140,9 @@ impl PeerConfig {
         UserDefaultConfig::read().get("image_quality")
     );
     serde_field_string!(
-        default_scroll_mode,
-        deserialize_scroll_mode,
-        UserDefaultConfig::read().get("scroll_mode")
+        default_reverse_mouse_wheel,
+        deserialize_reverse_mouse_wheel,
+        UserDefaultConfig::read().get("reverse_mouse_wheel")
     );
 
     fn default_custom_image_quality() -> Vec<i32> {
@@ -1488,7 +1488,6 @@ impl UserDefaultConfig {
             }
             "custom_image_quality" => self.get_double_string(key, 50.0, 10.0, 0xFFF as f64),
             "custom-fps" => self.get_double_string(key, 30.0, 5.0, 120.0),
-            "scroll_mode" => self.get_string(key, "default", vec!["reverse"]),
             _ => self
                 .options
                 .get(key)
@@ -1498,7 +1497,11 @@ impl UserDefaultConfig {
     }
 
     pub fn set(&mut self, key: String, value: String) {
-        self.options.insert(key, value);
+        if value.is_empty() {
+            self.options.remove(&key);
+        } else {
+            self.options.insert(key, value);
+        }
         self.store();
     }
 

@@ -175,12 +175,12 @@ impl<T: InvokeUiSession> Session<T> {
         self.lc.write().unwrap().save_keyboard_mode(value);
     }
 
-    pub fn get_scroll_mode(&self) -> String {
-        self.lc.read().unwrap().scroll_mode.clone()
+    pub fn get_reverse_mouse_wheel(&self) -> String {
+        self.lc.read().unwrap().reverse_mouse_wheel.clone()
     }
 
-    pub fn save_scroll_mode(&mut self, value: String) {
-        self.lc.write().unwrap().save_scroll_mode(value);
+    pub fn save_reverse_mouse_wheel(&mut self, value: String) {
+        self.lc.write().unwrap().save_reverse_mouse_wheel(value);
     }
 
     pub fn save_view_style(&mut self, value: String) {
@@ -765,7 +765,7 @@ impl<T: InvokeUiSession> Session<T> {
     #[inline]
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     fn is_scroll_reverse_mode(&self) -> bool {
-        self.lc.read().unwrap().scroll_mode.eq("reverse")
+        self.lc.read().unwrap().reverse_mouse_wheel.eq("Y")
     }
 
     #[inline]

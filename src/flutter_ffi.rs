@@ -300,17 +300,17 @@ pub fn session_set_keyboard_mode(session_id: SessionID, value: String) {
     }
 }
 
-pub fn session_get_scroll_mode(session_id: SessionID) -> Option<String> {
+pub fn session_get_reverse_mouse_wheel(session_id: SessionID) -> Option<String> {
     if let Some(session) = SESSIONS.read().unwrap().get(&session_id) {
-        Some(session.get_scroll_mode())
+        Some(session.get_reverse_mouse_wheel())
     } else {
         None
     }
 }
 
-pub fn session_set_scroll_mode(session_id: SessionID, value: String) {
+pub fn session_set_reverse_mouse_wheel(session_id: SessionID, value: String) {
     if let Some(session) = SESSIONS.write().unwrap().get_mut(&session_id) {
-        session.save_scroll_mode(value);
+        session.save_reverse_mouse_wheel(value);
     }
 }
 

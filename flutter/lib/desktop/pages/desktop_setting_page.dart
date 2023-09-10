@@ -105,7 +105,6 @@ class _DesktopSettingPageState extends State<DesktopSettingPage>
       _TabInfo('Network', Icons.link_outlined, Icons.link),
       _TabInfo(
           'Display', Icons.desktop_windows_outlined, Icons.desktop_windows),
-      _TabInfo('Input', Icons.keyboard_outlined, Icons.keyboard),
       _TabInfo('Account', Icons.person_outline, Icons.person),
       _TabInfo('About', Icons.info_outline, Icons.info)
     ];
@@ -122,7 +121,6 @@ class _DesktopSettingPageState extends State<DesktopSettingPage>
       _Safety(),
       _Network(),
       _Display(),
-      _Input(),
       _Account(),
       _About(),
     ];
@@ -1218,50 +1216,7 @@ class _DisplayState extends State<_Display> {
       otherRow('Disable clipboard', 'disable_clipboard'),
       otherRow('Lock after session end', 'lock_after_session_end'),
       otherRow('Privacy mode', 'privacy_mode'),
-    ]);
-  }
-}
-
-class _Input extends StatefulWidget {
-  const _Input({Key? key}) : super(key: key);
-
-  @override
-  State<_Input> createState() => _InputState();
-}
-
-class _InputState extends State<_Input> {
-  @override
-  Widget build(BuildContext context) {
-    final scrollController = ScrollController();
-    return DesktopScrollWrapper(
-        scrollController: scrollController,
-        child: ListView(
-            controller: scrollController,
-            physics: DraggableNeverScrollableScrollPhysics(),
-            children: [
-              scrollMode(context),
-            ]).marginOnly(bottom: _kListViewBottomMargin));
-  }
-
-  Widget scrollMode(BuildContext context) {
-    final key = 'scroll_mode';
-    onChanged(String value) async {
-      await bind.mainSetUserDefaultOption(key: key, value: value);
-      setState(() {});
-    }
-
-    final groupValue = bind.mainGetUserDefaultOption(key: key);
-    return _Card(title: 'Default Scroll Mode', children: [
-      _Radio(context,
-          value: kScrollModeDefault,
-          groupValue: groupValue,
-          label: 'Default mode',
-          onChanged: onChanged),
-      _Radio(context,
-          value: kScrollModeReverse,
-          groupValue: groupValue,
-          label: 'Reverse mode',
-          onChanged: onChanged),
+      otherRow('Reverse mouse wheel', 'reverse_mouse_wheel'),
     ]);
   }
 }
