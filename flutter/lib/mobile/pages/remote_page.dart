@@ -320,6 +320,8 @@ class _RemotePageState extends State<RemotePage> {
     return RawPointerMouseRegion(
       cursor: keyboard ? SystemMouseCursors.none : MouseCursor.defer,
       inputModel: inputModel,
+      // Disable RawKeyFocusScope before the connecting is established.
+      // The "Delete" key on the soft keyboard may be grabbed when inputting the password dialog.
       child: gFFI.ffiModel.pi.isSet.isTrue
           ? RawKeyFocusScope(
               focusNode: _physicalFocusNode,
