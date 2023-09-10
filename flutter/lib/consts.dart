@@ -138,6 +138,11 @@ const kRemoteScrollStyleAuto = 'scrollauto';
 /// [kRemoteScrollStyleBar] Scroll image with scroll bar.
 const kRemoteScrollStyleBar = 'scrollbar';
 
+/// [kScrollModeDefault] Mouse or touchpad, the default scroll mode.
+const kScrollModeDefault = 'default';
+/// [kScrollModeReverse] Mouse or touchpad, the reverse scroll mode.
+const kScrollModeReverse = 'reverse';
+
 /// [kRemoteImageQualityBest] Best image quality.
 const kRemoteImageQualityBest = 'best';
 

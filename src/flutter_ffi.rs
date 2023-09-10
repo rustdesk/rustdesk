@@ -21,8 +21,6 @@ use hbb_common::{
 };
 use std::{
     collections::HashMap,
-    ffi::{CStr, CString},
-    os::raw::c_char,
     str::FromStr,
     sync::{
         atomic::{AtomicI32, Ordering},
@@ -299,6 +297,20 @@ pub fn session_set_keyboard_mode(session_id: SessionID, value: String) {
     #[cfg(windows)]
     if _mode_updated {
         crate::keyboard::update_grab_get_key_name();
+    }
+}
+
+pub fn session_get_reverse_mouse_wheel(session_id: SessionID) -> Option<String> {
+    if let Some(session) = SESSIONS.read().unwrap().get(&session_id) {
+        Some(session.get_reverse_mouse_wheel())
+    } else {
+        None
+    }
+}
+
+pub fn session_set_reverse_mouse_wheel(session_id: SessionID, value: String) {
+    if let Some(session) = SESSIONS.write().unwrap().get_mut(&session_id) {
+        session.save_reverse_mouse_wheel(value);
     }
 }
 

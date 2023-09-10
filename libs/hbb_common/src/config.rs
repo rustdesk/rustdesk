@@ -230,6 +230,7 @@ pub struct PeerConfig {
         skip_serializing_if = "String::is_empty"
     )]
     pub view_style: String,
+    // Image scroll style, scrollbar or scroll auto
     #[serde(
         default = "PeerConfig::default_scroll_style",
         deserialize_with = "PeerConfig::deserialize_scroll_style",
@@ -276,6 +277,13 @@ pub struct PeerConfig {
     pub keyboard_mode: String,
     #[serde(flatten)]
     pub view_only: ViewOnly,
+    // Mouse wheel or touchpad scroll mode
+    #[serde(
+        default = "PeerConfig::default_reverse_mouse_wheel",
+        deserialize_with = "PeerConfig::deserialize_reverse_mouse_wheel",
+        skip_serializing_if = "String::is_empty"
+    )]
+    pub reverse_mouse_wheel: String,
 
     #[serde(
         default,
@@ -319,6 +327,7 @@ impl Default for PeerConfig {
             show_quality_monitor: Default::default(),
             keyboard_mode: Default::default(),
             view_only: Default::default(),
+            reverse_mouse_wheel: Self::default_reverse_mouse_wheel(),
             custom_resolutions: Default::default(),
             options: Self::default_options(),
             ui_flutter: Default::default(),
@@ -1130,6 +1139,11 @@ impl PeerConfig {
         deserialize_image_quality,
         UserDefaultConfig::read().get("image_quality")
     );
+    serde_field_string!(
+        default_reverse_mouse_wheel,
+        deserialize_reverse_mouse_wheel,
+        UserDefaultConfig::read().get("reverse_mouse_wheel")
+    );
 
     fn default_custom_image_quality() -> Vec<i32> {
         let f: f64 = UserDefaultConfig::read()
@@ -1483,7 +1497,11 @@ impl UserDefaultConfig {
     }
 
     pub fn set(&mut self, key: String, value: String) {
-        self.options.insert(key, value);
+        if value.is_empty() {
+            self.options.remove(&key);
+        } else {
+            self.options.insert(key, value);
+        }
         self.store();
     }
 

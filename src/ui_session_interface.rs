@@ -1,4 +1,4 @@
-use crate::input::{MOUSE_BUTTON_LEFT, MOUSE_TYPE_DOWN, MOUSE_TYPE_UP};
+use crate::input::{MOUSE_BUTTON_LEFT, MOUSE_TYPE_DOWN, MOUSE_TYPE_UP, MOUSE_TYPE_WHEEL};
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use std::{collections::HashMap, sync::atomic::AtomicBool};
 use std::{
@@ -173,6 +173,14 @@ impl<T: InvokeUiSession> Session<T> {
 
     pub fn save_keyboard_mode(&mut self, value: String) {
         self.lc.write().unwrap().save_keyboard_mode(value);
+    }
+
+    pub fn get_reverse_mouse_wheel(&self) -> String {
+        self.lc.read().unwrap().reverse_mouse_wheel.clone()
+    }
+
+    pub fn save_reverse_mouse_wheel(&mut self, value: String) {
+        self.lc.write().unwrap().save_reverse_mouse_wheel(value);
     }
 
     pub fn save_view_style(&mut self, value: String) {
@@ -730,6 +738,7 @@ impl<T: InvokeUiSession> Session<T> {
                 });
             }
             "pan_update" => {
+                let (x, y) = self.get_scroll_xy((x, y));
                 touch_evt.set_pan_update(TouchPanUpdate {
                     x,
                     y,
@@ -753,6 +762,21 @@ impl<T: InvokeUiSession> Session<T> {
         send_pointer_device_event(evt, alt, ctrl, shift, command, self);
     }
 
+    #[inline]
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    fn is_scroll_reverse_mode(&self) -> bool {
+        self.lc.read().unwrap().reverse_mouse_wheel.eq("Y")
+    }
+
+    #[inline]
+    fn get_scroll_xy(&self, xy: (i32, i32)) -> (i32, i32) {
+        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+        if self.is_scroll_reverse_mode() {
+            return (-xy.0, -xy.1);
+        }
+        xy
+    }
+
     pub fn send_mouse(
         &self,
         mask: i32,
@@ -771,6 +795,12 @@ impl<T: InvokeUiSession> Session<T> {
                 command = true;
             }
         }
+
+        let (x, y) = if mask == MOUSE_TYPE_WHEEL {
+            self.get_scroll_xy((x, y))
+        } else {
+            (x, y)
+        };
 
         // #[cfg(not(any(target_os = "android", target_os = "ios")))]
         let (alt, ctrl, shift, command) =

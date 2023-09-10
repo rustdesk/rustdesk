@@ -1216,6 +1216,7 @@ class _DisplayState extends State<_Display> {
       otherRow('Disable clipboard', 'disable_clipboard'),
       otherRow('Lock after session end', 'lock_after_session_end'),
       otherRow('Privacy mode', 'privacy_mode'),
+      otherRow('Reverse mouse wheel', 'reverse_mouse_wheel'),
     ]);
   }
 }
