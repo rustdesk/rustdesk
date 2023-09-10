@@ -1407,13 +1407,11 @@ class _KeyboardMenu extends StatelessWidget {
     return futureBuilder(future: () async {
       final v =
           await bind.sessionGetReverseMouseWheel(sessionId: ffi.sessionId);
-          debugPrint('REMOVE ME ======================== $v');
       if (v != null && v != '') {
         return v;
       }
       return bind.mainGetUserDefaultOption(key: 'reverse_mouse_wheel');
     }(), hasData: (data) {
-      debugPrint('REMOVE ME ======================== data $data');
       final enabled = !ffi.ffiModel.viewOnly;
       onChanged(bool? value) async {
         if (value == null) return;

@@ -78,5 +78,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("push_ab_failed_tip", "Failed to sync address book to server"),
         ("synced_peer_readded_tip", "The devices that were present in the recent sessions will be synchronized back to the address book."),
         ("View Mode", "View mode"),
+        ("Block user input", "Block User Input"),
+        ("Start session recording", "Start Session Recording"),
+        ("Stop session recording", "Stop Session Recording"),
+        ("Enable remote configuration modification", "Enable Remote Configuration Modification"),
         ].iter().cloned().collect();
 }
