@@ -1195,6 +1195,17 @@ impl LoginConfigHandler {
         self.save_config(config);
     }
 
+    /// Save mouse scroll mode("default", "reverse") to the current config.
+    ///
+    /// # Arguments
+    ///
+    /// * `value` - The view style to be saved.
+    pub fn save_scroll_mode(&mut self, value: String) {
+        let mut config = self.load_config();
+        config.scroll_mode = value;
+        self.save_config(config);
+    }
+
     /// Save scroll style to the current config.
     ///
     /// # Arguments
