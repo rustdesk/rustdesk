@@ -546,11 +546,9 @@ class _PinMenu extends StatelessWidget {
         assetName: state.pin ? "assets/pinned.svg" : "assets/unpinned.svg",
         tooltip: state.pin ? 'Unpin Toolbar' : 'Pin Toolbar',
         onPressed: state.switchPin,
-        color:
-            state.pin ? _ToolbarTheme.blueColor : _ToolbarTheme.inactiveColor,
-        hoverColor: state.pin
-            ? _ToolbarTheme.hoverBlueColor
-            : _ToolbarTheme.hoverInactiveColor,
+        color: state.pin ? _ToolbarTheme.blueColor : _ToolbarTheme.inactiveColor,
+        hoverColor:
+            state.pin ? _ToolbarTheme.hoverBlueColor : _ToolbarTheme.hoverInactiveColor,
       ),
     );
   }
@@ -563,18 +561,15 @@ class _MobileActionMenu extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (!ffi.ffiModel.isPeerAndroid) return Offstage();
-    return Obx(() => _IconMenuButton(
-          assetName: 'assets/actions_mobile.svg',
-          tooltip: 'Mobile Actions',
-          onPressed: () =>
-              ffi.dialogManager.toggleMobileActionsOverlay(ffi: ffi),
-          color: ffi.dialogManager.mobileActionsOverlayVisible.isTrue
-              ? _ToolbarTheme.blueColor
-              : _ToolbarTheme.inactiveColor,
-          hoverColor: ffi.dialogManager.mobileActionsOverlayVisible.isTrue
-              ? _ToolbarTheme.hoverBlueColor
-              : _ToolbarTheme.hoverInactiveColor,
-        ));
+    return Obx(()=>_IconMenuButton(
+      assetName: 'assets/actions_mobile.svg',
+      tooltip: 'Mobile Actions',
+      onPressed: () => ffi.dialogManager.toggleMobileActionsOverlay(ffi: ffi),
+      color: ffi.dialogManager.mobileActionsOverlayVisible.isTrue
+          ? _ToolbarTheme.blueColor : _ToolbarTheme.inactiveColor,
+      hoverColor: ffi.dialogManager.mobileActionsOverlayVisible.isTrue
+          ? _ToolbarTheme.hoverBlueColor : _ToolbarTheme.hoverInactiveColor,
+    ));
   }
 }
 
@@ -1633,26 +1628,26 @@ class _IconMenuButtonState extends State<_IconMenuButton> {
       width: _ToolbarTheme.buttonSize,
       height: _ToolbarTheme.buttonSize,
       child: MenuItemButton(
-          style: ButtonStyle(
-              backgroundColor: MaterialStatePropertyAll(Colors.transparent),
-              padding: MaterialStatePropertyAll(EdgeInsets.zero),
-              overlayColor: MaterialStatePropertyAll(Colors.transparent)),
-          onHover: (value) => setState(() {
-                hover = value;
-              }),
-          onPressed: widget.onPressed,
-          child: Tooltip(
-            message: translate(widget.tooltip),
-            child: Material(
-                type: MaterialType.transparency,
-                child: Ink(
-                    decoration: BoxDecoration(
-                      borderRadius:
-                          BorderRadius.circular(_ToolbarTheme.iconRadius),
-                      color: hover ? widget.hoverColor : widget.color,
-                    ),
-                    child: icon)),
-          )),
+        style: ButtonStyle(
+            backgroundColor: MaterialStatePropertyAll(Colors.transparent),
+            padding: MaterialStatePropertyAll(EdgeInsets.zero),
+            overlayColor: MaterialStatePropertyAll(Colors.transparent)),
+        onHover: (value) => setState(() {
+          hover = value;
+        }),
+        onPressed: widget.onPressed,
+        child: Tooltip(
+          message: translate(widget.tooltip),
+          child: Material(
+              type: MaterialType.transparency,
+              child: Ink(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(_ToolbarTheme.iconRadius),
+                    color: hover ? widget.hoverColor : widget.color,
+                  ),
+                  child: icon)),
+        )
+      ),
     ).marginSymmetric(
         horizontal: widget.hMargin ?? _ToolbarTheme.buttonHMargin,
         vertical: widget.vMargin ?? _ToolbarTheme.buttonVMargin);
