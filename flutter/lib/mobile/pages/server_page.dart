@@ -230,7 +230,6 @@ class ServiceNotRunningNotification extends StatelessWidget {
       },
     );
   }
-
 }
 
 class ScamWarningDialog extends StatefulWidget {
