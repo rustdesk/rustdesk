@@ -1351,6 +1351,12 @@ impl Connection {
                     log::error!("ipc to connection manager exit: {}", err);
                 }
             });
+            #[cfg(all(windows, feature = "flutter"))]
+            std::thread::spawn(|| {
+                if crate::is_server() && !crate::check_process("--tray", false) {
+                    crate::platform::run_as_user(vec!["--tray"]).ok();
+                }
+            });
         }
     }
 
