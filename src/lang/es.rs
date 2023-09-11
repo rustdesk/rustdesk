@@ -544,5 +544,11 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Installation Successful!", "Instalación exitosa"),
         ("Installation failed!", "La instalación ha fallado"),
         ("Reverse mouse wheel", "Invertir rueda del ratón"),
+        ("You May Be Being SCAMMED!", ""),
+        ("If you are on the phone with someone you DON'T know AND TRUST who has asked you to use RustDesk and start the service, do not proceed and hang up immediately.", ""),
+        ("They are likely a scammer trying to steal your money or other private information.", ""),
+        ("Don't show again", ""),
+        ("I Agree", ""),
+        ("Decline", ""),
     ].iter().cloned().collect();
 }
