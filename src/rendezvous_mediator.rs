@@ -79,7 +79,9 @@ impl RendezvousMediator {
         crate::platform::linux_desktop_manager::start_xdesktop();
         loop {
             Config::reset_online();
-            if Config::get_option("stop-service").is_empty() {
+            if Config::get_option("stop-service").is_empty()
+                && !crate::platform::installing_service()
+            {
                 if !nat_tested {
                     crate::test_nat_type();
                     nat_tested = true;
