@@ -188,7 +188,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Relayed and encrypted connection", "加密中继连接"),
         ("Direct and unencrypted connection", "非加密直连"),
         ("Relayed and unencrypted connection", "非加密中继连接"),
-        ("Enter Remote ID", "输入对方 ID"),
+        ("Enter Remote ID", "输入对方 ID 或 IP"),
         ("Enter your password", "输入密码"),
         ("Logging in...", "正在登录..."),
         ("Enable RDP session sharing", "允许 RDP 会话共享"),
