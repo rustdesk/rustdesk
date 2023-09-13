@@ -728,6 +728,7 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
           reverse: true, enabled: enabled),
       ...directIp(context),
       whitelist(),
+      ...autoDisconnect(context),
     ]);
   }
 
@@ -905,6 +906,63 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
                 ),
               ));
         }));
+  }
+
+  List<Widget> autoDisconnect(BuildContext context) {
+    TextEditingController controller = TextEditingController();
+    update() => setState(() {});
+    RxBool applyEnabled = false.obs;
+    final optionKey = 'allow-auto-disconnect';
+    final timeoutKey = 'auto-disconnect-timeout';
+    return [
+      _OptionCheckBox(context, 'auto_disconnect_option_tip', optionKey,
+          update: update, enabled: !locked),
+      () {
+        bool enabled =
+            option2bool(optionKey, bind.mainGetOptionSync(key: optionKey));
+        if (!enabled) applyEnabled.value = false;
+        controller.text = bind.mainGetOptionSync(key: timeoutKey);
+        return Offstage(
+          offstage: !enabled,
+          child: _SubLabeledWidget(
+            context,
+            'Timeout in minutes',
+            Row(children: [
+              SizedBox(
+                width: 95,
+                child: TextField(
+                  controller: controller,
+                  enabled: enabled && !locked,
+                  onChanged: (_) => applyEnabled.value = true,
+                  inputFormatters: [
+                    FilteringTextInputFormatter.allow(RegExp(
+                        r'^([0-9]|[1-9]\d|[1-9]\d{2}|[1-9]\d{3}|[1-5]\d{4}|6[0-4]\d{3}|65[0-4]\d{2}|655[0-2]\d|6553[0-5])$')),
+                  ],
+                  decoration: const InputDecoration(
+                    hintText: '10',
+                    contentPadding:
+                        EdgeInsets.symmetric(vertical: 12, horizontal: 12),
+                  ),
+                ).marginOnly(right: 15),
+              ),
+              Obx(() => ElevatedButton(
+                    onPressed: applyEnabled.value && enabled && !locked
+                        ? () async {
+                            applyEnabled.value = false;
+                            await bind.mainSetOption(
+                                key: timeoutKey, value: controller.text);
+                          }
+                        : null,
+                    child: Text(
+                      translate('Apply'),
+                    ),
+                  ))
+            ]),
+            enabled: enabled && !locked,
+          ),
+        );
+      }(),
+    ];
   }
 }
 

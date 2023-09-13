@@ -88,5 +88,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Don't show again", "Don't show again"),
         ("I Agree", "I Agree"),
         ("Decline", "Decline"),
+        ("auto_disconnect_option_tip", "Automatically close incoming sessions on user inactivity"),
+        ("Connection failed due to inactivity", "Automatically disconnected due to inactivity"),
         ].iter().cloned().collect();
 }
