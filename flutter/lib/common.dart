@@ -265,6 +265,14 @@ class MyTheme {
       ? EdgeInsets.only(left: dialogPadding)
       : EdgeInsets.only(left: dialogPadding / 3);
 
+  static ScrollbarThemeData scrollbarTheme = ScrollbarThemeData(
+    thickness: MaterialStateProperty.all(kScrollbarThickness),
+  );
+
+  static ScrollbarThemeData scrollbarThemeDark = scrollbarTheme.copyWith(
+    thumbColor: MaterialStateProperty.all(Colors.grey[500]),
+  );
+
   static ThemeData lightTheme = ThemeData(
     brightness: Brightness.light,
     hoverColor: Color.fromARGB(255, 224, 224, 224),
@@ -280,6 +288,7 @@ class MyTheme {
         ),
       ),
     ),
+    scrollbarTheme: scrollbarTheme,
     inputDecorationTheme: isDesktop
         ? InputDecorationTheme(
             fillColor: grayBg,
@@ -364,6 +373,7 @@ class MyTheme {
         ),
       ),
     ),
+    scrollbarTheme: scrollbarThemeDark,
     inputDecorationTheme: isDesktop
         ? InputDecorationTheme(
             fillColor: Color(0xFF24252B),
@@ -389,9 +399,6 @@ class MyTheme {
     visualDensity: VisualDensity.adaptivePlatformDensity,
     tabBarTheme: const TabBarTheme(
       labelColor: Colors.white70,
-    ),
-    scrollbarTheme: ScrollbarThemeData(
-      thumbColor: MaterialStateProperty.all(Colors.grey[500]),
     ),
     tooltipTheme: tooltipTheme(),
     splashColor: isDesktop ? Colors.transparent : null,
