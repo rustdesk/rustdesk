@@ -234,6 +234,8 @@ pub enum Data {
     #[cfg(windows)]
     SyncWinCpuUsage(Option<f64>),
     FileTransferLog(String),
+    #[cfg(any(windows, target_os = "macos"))]
+    ControlledSessionCount(usize),
 }
 
 #[tokio::main(flavor = "current_thread")]
@@ -482,6 +484,16 @@ async fn handle(data: Data, stream: &mut Connection) {
         #[cfg(all(feature = "flutter", feature = "plugin_framework"))]
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
         Data::Plugin(plugin) => crate::plugin::ipc::handle_plugin(plugin, stream).await,
+        #[cfg(any(windows, target_os = "macos"))]
+        Data::ControlledSessionCount(_) => {
+            allow_err!(
+                stream
+                    .send(&Data::ControlledSessionCount(
+                        crate::Connection::alive_conns().len()
+                    ))
+                    .await
+            );
+        }
         _ => {}
     }
 }

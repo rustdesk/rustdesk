@@ -1351,6 +1351,12 @@ impl Connection {
                     log::error!("ipc to connection manager exit: {}", err);
                 }
             });
+            #[cfg(all(windows, feature = "flutter"))]
+            std::thread::spawn(|| {
+                if crate::is_server() && !crate::check_process("--tray", false) {
+                    crate::platform::run_as_user(vec!["--tray"]).ok();
+                }
+            });
         }
     }
 
@@ -2406,7 +2412,10 @@ async fn start_ipc(
     if let Ok(s) = crate::ipc::connect(1000, "_cm").await {
         stream = Some(s);
     } else {
+        #[allow(unused_mut)]
+        #[allow(unused_assignments)]
         let mut args = vec!["--cm"];
+        #[cfg(not(windows))]
         if crate::hbbs_http::sync::is_pro() && password::hide_cm() {
             args.push("--hide");
         }
