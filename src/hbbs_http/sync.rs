@@ -157,6 +157,7 @@ fn handle_config_options(config_options: HashMap<String, String>) {
     Config::set_options(options);
 }
 
+#[allow(unused)]
 #[cfg(not(any(target_os = "ios")))]
 pub fn is_pro() -> bool {
     PRO.lock().unwrap().clone()
