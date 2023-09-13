@@ -242,7 +242,7 @@ class ScamWarningDialog extends StatefulWidget {
 }
 
 class _ScamWarningDialogState extends State<ScamWarningDialog> {
-  int _countdown = 6;
+  int _countdown = 12;
   bool show_warning = false;
   late Timer _timer;
   late ServerModel _serverModel;
