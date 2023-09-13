@@ -543,6 +543,16 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("HSV Color", "HSV-Farbe"),
         ("Installation Successful!", "Installation erfolgreich!"),
         ("Installation failed!", "Installation fehlgeschlagen!"),
-        ("Reverse mouse wheel", ""),
+        ("Reverse mouse wheel", "Mausrad rückwärts drehen"),
+        ("{} sessions", ""),
+        ("scam_title", ""),
+        ("scam_text1", ""),
+        ("scam_text2", ""),
+        ("Don't show again", ""),
+        ("I Agree", ""),
+        ("Decline", ""),
+        ("Timeout in minutes", ""),
+        ("auto_disconnect_option_tip", ""),
+        ("Connection failed due to inactivity", ""),
     ].iter().cloned().collect();
 }
