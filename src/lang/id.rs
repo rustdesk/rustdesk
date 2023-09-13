@@ -541,8 +541,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Change Color", "Ganti warna"),
         ("Primary Color", "Warna utama"),
         ("HSV Color", "Warna HSV"),
-        ("Installation Successful!", ""),
-        ("Installation failed!", ""),
-        ("Reverse mouse wheel", ""),
+        ("Installation Successful!", "Instalasi berhasil!"),
+        ("Installation failed!", "Instalasi gagal!"),
+        ("Reverse mouse wheel", "Balikkan arah scroll mouse!"),
     ].iter().cloned().collect();
 }
