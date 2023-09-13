@@ -1537,9 +1537,14 @@ Widget _OptionCheckBox(BuildContext context, String label, String key,
       isServer
           ? await mainSetBoolOption(key, option)
           : await mainSetLocalBoolOption(key, option);
-      ref.value = isServer
+      final readOption = isServer
           ? mainGetBoolOptionSync(key)
           : mainGetLocalBoolOptionSync(key);
+      if (reverse) {
+        ref.value = !readOption;
+      } else {
+        ref.value = readOption;
+      }
       update?.call();
     }
   }

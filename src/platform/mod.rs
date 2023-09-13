@@ -23,8 +23,17 @@ pub mod linux_desktop_manager;
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use hbb_common::{message_proto::CursorData, ResultType};
+use std::sync::{Arc, Mutex};
 #[cfg(not(any(target_os = "macos", target_os = "android", target_os = "ios")))]
 const SERVICE_INTERVAL: u64 = 300;
+
+lazy_static::lazy_static! {
+    static ref INSTALLING_SERVICE: Arc<Mutex<bool>>= Default::default();
+}
+
+pub fn installing_service() -> bool {
+    INSTALLING_SERVICE.lock().unwrap().clone()
+}
 
 pub fn is_xfce() -> bool {
     #[cfg(target_os = "linux")]
@@ -70,6 +79,21 @@ pub fn get_active_username() -> String {
 
 #[cfg(target_os = "android")]
 pub const PA_SAMPLE_RATE: u32 = 48000;
+
+pub(crate) struct InstallingService; // please use new
+
+impl InstallingService {
+    pub fn new() -> Self {
+        *INSTALLING_SERVICE.lock().unwrap() = true;
+        Self
+    }
+}
+
+impl Drop for InstallingService {
+    fn drop(&mut self) {
+        *INSTALLING_SERVICE.lock().unwrap() = false;
+    }
+}
 
 #[cfg(test)]
 mod tests {

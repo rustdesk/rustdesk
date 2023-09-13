@@ -101,6 +101,7 @@ class ColorThemeExtension extends ThemeExtension<ColorThemeExtension> {
     required this.highlight,
     required this.drag_indicator,
     required this.shadow,
+    required this.errorBannerBg,
   });
 
   final Color? border;
@@ -108,6 +109,7 @@ class ColorThemeExtension extends ThemeExtension<ColorThemeExtension> {
   final Color? highlight;
   final Color? drag_indicator;
   final Color? shadow;
+  final Color? errorBannerBg;
 
   static final light = ColorThemeExtension(
     border: Color(0xFFCCCCCC),
@@ -115,6 +117,7 @@ class ColorThemeExtension extends ThemeExtension<ColorThemeExtension> {
     highlight: Color(0xFFE5E5E5),
     drag_indicator: Colors.grey[800],
     shadow: Colors.black,
+    errorBannerBg: Color(0xFFFDEEEB),
   );
 
   static final dark = ColorThemeExtension(
@@ -123,6 +126,7 @@ class ColorThemeExtension extends ThemeExtension<ColorThemeExtension> {
     highlight: Color(0xFF3F3F3F),
     drag_indicator: Colors.grey,
     shadow: Colors.grey,
+    errorBannerBg: Color(0xFF470F2D),
   );
 
   @override
@@ -132,6 +136,7 @@ class ColorThemeExtension extends ThemeExtension<ColorThemeExtension> {
     Color? highlight,
     Color? drag_indicator,
     Color? shadow,
+    Color? errorBannerBg,
   }) {
     return ColorThemeExtension(
       border: border ?? this.border,
@@ -139,6 +144,7 @@ class ColorThemeExtension extends ThemeExtension<ColorThemeExtension> {
       highlight: highlight ?? this.highlight,
       drag_indicator: drag_indicator ?? this.drag_indicator,
       shadow: shadow ?? this.shadow,
+      errorBannerBg: errorBannerBg ?? this.errorBannerBg,
     );
   }
 
@@ -154,6 +160,7 @@ class ColorThemeExtension extends ThemeExtension<ColorThemeExtension> {
       highlight: Color.lerp(highlight, other.highlight, t),
       drag_indicator: Color.lerp(drag_indicator, other.drag_indicator, t),
       shadow: Color.lerp(shadow, other.shadow, t),
+      errorBannerBg: Color.lerp(shadow, other.errorBannerBg, t),
     );
   }
 }
