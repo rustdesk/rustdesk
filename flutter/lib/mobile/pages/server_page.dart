@@ -319,7 +319,7 @@ class _ScamWarningDialogState extends State<ScamWarningDialog> {
             ),
             SizedBox(height: 18),
             Text(
-              translate("You May Be Being SCAMMED!"),
+              translate("scam_title"),
               textAlign: TextAlign.center,
               style: TextStyle(
                 color: Colors.white,
@@ -329,8 +329,8 @@ class _ScamWarningDialogState extends State<ScamWarningDialog> {
             ),
             SizedBox(height: 18),
             Text(
-              translate("If you are on the phone with someone you DON'T know AND TRUST who has asked you to use RustDesk and start the service, do not proceed and hang up immediately.")+"\n\n"
-              +translate("They are likely a scammer trying to steal your money or other private information.")+"\n",
+              translate("scam_text1")+"\n\n"
+              +translate("scam_text2")+"\n",
               style: TextStyle(
                 color: Colors.white,
                 fontWeight: FontWeight.bold,
