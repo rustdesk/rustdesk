@@ -76,7 +76,7 @@ class _AddressBookState extends State<AddressBook> {
           child: Center(
               child: Container(
             height: height,
-            color: Color.fromARGB(255, 253, 238, 235),
+            color: MyTheme.color(context).errorBannerBg,
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.center,

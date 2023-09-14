@@ -204,6 +204,7 @@ pub struct Connection {
     delay_response_instant: Instant,
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     start_cm_ipc_para: Option<StartCmIpcPara>,
+    auto_disconnect_timer: Option<(Instant, u64)>,
 }
 
 impl ConnInner {
@@ -343,6 +344,7 @@ impl Connection {
                 rx_desktop_ready,
                 tx_cm_stream_ready,
             }),
+            auto_disconnect_timer: None,
         };
         let addr = hbb_common::try_into_v4(addr);
         if !conn.on_open(addr).await {
@@ -605,6 +607,13 @@ impl Connection {
                 _ = second_timer.tick() => {
                     #[cfg(windows)]
                     conn.portable_check();
+                    if let Some((instant, minute)) = conn.auto_disconnect_timer.as_ref() {
+                        if instant.elapsed().as_secs() > minute * 60 {
+                            conn.send_close_reason_no_retry("Connection failed due to inactivity").await;
+                            conn.on_close("auto disconnect", true).await;
+                            break;
+                        }
+                    }
                 }
                 _ = test_delay_timer.tick() => {
                     if last_recv_time.elapsed() >= SEC30 {
@@ -1139,6 +1148,7 @@ impl Connection {
                 let mut s = s.write().unwrap();
                 #[cfg(not(any(target_os = "android", target_os = "ios")))]
                 let _h = try_start_record_cursor_pos();
+                self.auto_disconnect_timer = Self::get_auto_disconenct_timer();
                 s.add_connection(self.inner.clone(), &noperms);
             }
         }
@@ -1349,6 +1359,12 @@ impl Connection {
                 .await
                 {
                     log::error!("ipc to connection manager exit: {}", err);
+                }
+            });
+            #[cfg(all(windows, feature = "flutter"))]
+            std::thread::spawn(|| {
+                if crate::is_server() && !crate::check_process("--tray", false) {
+                    crate::platform::run_as_user(vec!["--tray"]).ok();
                 }
             });
         }
@@ -1606,6 +1622,7 @@ impl Connection {
                         }
                         self.input_mouse(me, self.inner.id());
                     }
+                    self.update_auto_disconnect_timer();
                 }
                 Some(message::Union::PointerDeviceEvent(pde)) => {
                     #[cfg(any(target_os = "android", target_os = "ios"))]
@@ -1641,6 +1658,7 @@ impl Connection {
                         MOUSE_MOVE_TIME.store(get_time(), Ordering::SeqCst);
                         self.input_pointer(pde, self.inner.id());
                     }
+                    self.update_auto_disconnect_timer();
                 }
                 #[cfg(any(target_os = "android", target_os = "ios"))]
                 Some(message::Union::KeyEvent(..)) => {}
@@ -1696,6 +1714,7 @@ impl Connection {
                             self.input_key(me, false);
                         }
                     }
+                    self.update_auto_disconnect_timer();
                 }
                 Some(message::Union::Clipboard(_cb)) =>
                 {
@@ -1884,6 +1903,7 @@ impl Connection {
                     Some(misc::Union::ChatMessage(c)) => {
                         self.send_to_cm(ipc::Data::ChatMessage { text: c.text });
                         self.chat_unanswered = true;
+                        self.update_auto_disconnect_timer();
                     }
                     Some(misc::Union::Option(o)) => {
                         self.update_options(&o).await;
@@ -1892,6 +1912,7 @@ impl Connection {
                         if r {
                             super::video_service::refresh();
                         }
+                        self.update_auto_disconnect_timer();
                     }
                     Some(misc::Union::VideoReceived(_)) => {
                         video_service::notify_video_frame_fetched(
@@ -2021,6 +2042,7 @@ impl Connection {
         let mut msg = Message::new();
         msg.set_misc(misc);
         self.send(msg).await;
+        self.update_auto_disconnect_timer();
     }
 
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -2278,7 +2300,7 @@ impl Connection {
             lock_screen().await;
         }
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
-        let data = if self.chat_unanswered || self.file_transferred {
+        let data = if self.chat_unanswered || self.file_transferred && cfg!(feature = "flutter") {
             ipc::Data::Disconnected
         } else {
             ipc::Data::Close
@@ -2378,6 +2400,26 @@ impl Connection {
         }
         self.pressed_modifiers.clear();
     }
+
+    fn get_auto_disconenct_timer() -> Option<(Instant, u64)> {
+        if Config::get_option("allow-auto-disconnect") == "Y" {
+            let mut minute: u64 = Config::get_option("auto-disconnect-timeout")
+                .parse()
+                .unwrap_or(10);
+            if minute == 0 {
+                minute = 10;
+            }
+            Some((Instant::now(), minute))
+        } else {
+            None
+        }
+    }
+
+    fn update_auto_disconnect_timer(&mut self) {
+        self.auto_disconnect_timer
+            .as_mut()
+            .map(|t| t.0 = Instant::now());
+    }
 }
 
 pub fn insert_switch_sides_uuid(id: String, uuid: uuid::Uuid) {
@@ -2406,6 +2448,8 @@ async fn start_ipc(
     if let Ok(s) = crate::ipc::connect(1000, "_cm").await {
         stream = Some(s);
     } else {
+        #[allow(unused_mut)]
+        #[allow(unused_assignments)]
         let mut args = vec!["--cm"];
         if crate::hbbs_http::sync::is_pro() && password::hide_cm() {
             args.push("--hide");

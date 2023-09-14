@@ -694,6 +694,7 @@ class _ImagePaintState extends State<ImagePaint> {
         enableCustomMouseWheelScrolling: cursorOverImage.isFalse,
         customMouseWheelScrollConfig: scrollConfig,
         child: RawScrollbar(
+          thickness: kScrollbarThickness,
           thumbColor: Colors.grey,
           controller: _horizontal,
           thumbVisibility: false,
@@ -711,6 +712,7 @@ class _ImagePaintState extends State<ImagePaint> {
         enableCustomMouseWheelScrolling: cursorOverImage.isFalse,
         customMouseWheelScrollConfig: scrollConfig,
         child: RawScrollbar(
+          thickness: kScrollbarThickness,
           thumbColor: Colors.grey,
           controller: _vertical,
           thumbVisibility: false,

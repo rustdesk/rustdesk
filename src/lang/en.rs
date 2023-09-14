@@ -82,5 +82,13 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Start session recording", "Start Session Recording"),
         ("Stop session recording", "Stop Session Recording"),
         ("Enable remote configuration modification", "Enable Remote Configuration Modification"),
+        ("scam_title", "You May Be Being SCAMMED!"),
+        ("scam_text1", "If you are on the phone with someone you DON'T know AND TRUST who has asked you to use RustDesk and start the service, do not proceed and hang up immediately."),
+        ("scam_text2", "They are likely a scammer trying to steal your money or other private information."),
+        ("Don't show again", "Don't show again"),
+        ("I Agree", "I Agree"),
+        ("Decline", "Decline"),
+        ("auto_disconnect_option_tip", "Automatically close incoming sessions on user inactivity"),
+        ("Connection failed due to inactivity", "Automatically disconnected due to inactivity"),
         ].iter().cloned().collect();
 }
