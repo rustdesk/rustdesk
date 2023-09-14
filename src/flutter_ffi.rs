@@ -1074,6 +1074,7 @@ pub fn main_get_last_remote_id() -> String {
 }
 
 pub fn main_get_software_update_url() -> String {
+    crate::common::check_software_update();
     crate::common::SOFTWARE_UPDATE_URL.lock().unwrap().clone()
 }
 
