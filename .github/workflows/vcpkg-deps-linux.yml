@@ -24,7 +24,7 @@ jobs:
           path: /opt/artifacts
           key: vcpkg-${{ matrix.job.arch }}
 
-      - uses: Kingtous/run-on-arch-action@amd64-support
+      - uses: rustdesk-org/run-on-arch-action@amd64-support
         name: Run vcpkg install on ${{ matrix.job.arch }}
         id: vcpkg
         with:
