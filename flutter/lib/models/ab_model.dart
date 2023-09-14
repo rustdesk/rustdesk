@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_hbb/common/widgets/peers_view.dart';
 import 'package:flutter_hbb/models/model.dart';
 import 'package:flutter_hbb/models/peer_model.dart';
 import 'package:flutter_hbb/models/peer_tab_model.dart';
@@ -115,9 +116,10 @@ class AbModel {
       _timerCounter = 0;
       if (pullError.isNotEmpty) {
         if (statusCode == 401) {
-          gFFI.userModel.reset(clearAbCache: true);
+          gFFI.userModel.reset(resetOther: true);
         }
       }
+      platformFFI.tryHandle({'name': LoadEvent.addressBook});
     }
   }
 
@@ -241,7 +243,8 @@ class AbModel {
         ret = true;
         _saveCache();
       } else {
-        Map<String, dynamic> json = _jsonDecodeResp(resp.body, resp.statusCode);
+        Map<String, dynamic> json =
+            _jsonDecodeResp(utf8.decode(resp.bodyBytes), resp.statusCode);
         if (json.containsKey('error')) {
           throw json['error'];
         } else if (resp.statusCode == 200) {
@@ -479,11 +482,12 @@ class AbModel {
 
   loadCache() async {
     try {
-      if (_cacheLoadOnceFlag || abLoading.value) return;
+      if (_cacheLoadOnceFlag || abLoading.value || initialized) return;
       _cacheLoadOnceFlag = true;
       final access_token = bind.mainGetLocalOption(key: 'access_token');
       if (access_token.isEmpty) return;
       final cache = await bind.mainLoadAb();
+      if (abLoading.value) return;
       final data = jsonDecode(cache);
       if (data == null || data['access_token'] != access_token) return;
       _deserialize(data);
@@ -560,5 +564,13 @@ class AbModel {
             text: translate('synced_peer_readded_tip'));
       }
     });
+  }
+
+  reset() async {
+    pullError.value = '';
+    pushError.value = '';
+    tags.clear();
+    peers.clear();
+    await bind.mainClearAb();
   }
 }

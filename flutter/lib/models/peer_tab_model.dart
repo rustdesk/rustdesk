@@ -17,8 +17,6 @@ enum PeerTabIndex {
   group,
 }
 
-const String defaultGroupTabname = 'Group';
-
 class PeerTabModel with ChangeNotifier {
   WeakReference<FFI> parent;
   int get currentTab => _currentTab;
@@ -28,7 +26,7 @@ class PeerTabModel with ChangeNotifier {
     'Favorites',
     'Discovered',
     'Address Book',
-    //defaultGroupTabname,
+    'Group',
   ];
   final List<IconData> icons = [
     Icons.access_time_filled,
@@ -37,7 +35,7 @@ class PeerTabModel with ChangeNotifier {
     IconFont.addressBook,
     Icons.group,
   ];
-  final List<bool> _isVisible = List.filled(4, true, growable: false);
+  final List<bool> _isVisible = List.filled(5, true, growable: false);
   List<bool> get isVisible => _isVisible;
   List<int> get indexs => List.generate(tabNames.length, (index) => index);
   List<int> get visibleIndexs => indexs.where((e) => _isVisible[e]).toList();
@@ -85,17 +83,9 @@ class PeerTabModel with ChangeNotifier {
     }
   }
 
-  String tabTooltip(int index, String groupName) {
+  String tabTooltip(int index) {
     if (index >= 0 && index < tabNames.length) {
-      if (index == PeerTabIndex.group.index) {
-        if (gFFI.userModel.isAdmin.value || groupName.isEmpty) {
-          return translate(defaultGroupTabname);
-        } else {
-          return '${translate('Group')}: $groupName';
-        }
-      } else {
-        return translate(tabNames[index]);
-      }
+      return translate(tabNames[index]);
     }
     assert(false);
     return index.toString();
