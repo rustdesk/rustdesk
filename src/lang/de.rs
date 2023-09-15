@@ -554,5 +554,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Timeout in minutes", "Zeitüberschreitung in Minuten"),
         ("auto_disconnect_option_tip", "Automatisches Schließen eingehender Sitzungen bei Inaktivität des Benutzers"),
         ("Connection failed due to inactivity", "Automatische Trennung der Verbindung aufgrund von Inaktivität"),
+        ("Check for software update on startup", ""),
     ].iter().cloned().collect();
 }
