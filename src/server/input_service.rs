@@ -380,6 +380,9 @@ pub fn try_stop_record_cursor_pos() {
         return;
     }
     RECORD_CURSOR_POS_RUNNING.store(false, Ordering::SeqCst);
+
+    #[cfg(any(target_os = "windows", target_os = "macos"))]
+    let _r = rdev::exit_grab();
 }
 
 // mac key input must be run in main thread, otherwise crash on >= osx 10.15

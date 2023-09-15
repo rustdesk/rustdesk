@@ -583,6 +583,8 @@ pub fn event_type_to_event(event_type: EventType) -> Event {
         unicode: None,
         platform_code: 0,
         position_code: 0,
+        #[cfg(any(target_os = "windows", target_os = "macos"))]
+        extra_data: 0,
     }
 }
 

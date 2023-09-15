@@ -70,6 +70,8 @@ pub use win::ENIGO_INPUT_EXTRA_VALUE;
 mod macos;
 #[cfg(target_os = "macos")]
 pub use macos::Enigo;
+#[cfg(target_os = "macos")]
+pub use macos::ENIGO_INPUT_EXTRA_VALUE;
 
 #[cfg(target_os = "linux")]
 mod linux;
