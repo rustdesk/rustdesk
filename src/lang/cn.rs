@@ -554,5 +554,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Timeout in minutes", "超时（分钟）"),
         ("auto_disconnect_option_tip", "自动关闭不活跃的会话"),
         ("Connection failed due to inactivity", "由于长时间无操作, 连接被自动断开"),
+        ("Check for software update on startup", ""),
     ].iter().cloned().collect();
 }

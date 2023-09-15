@@ -48,6 +48,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
   var watchIsInputMonitoring = false;
   var watchIsCanRecordAudio = false;
   Timer? _updateTimer;
+  bool isCardClosed = false;
 
   @override
   Widget build(BuildContext context) {
@@ -321,14 +322,15 @@ class _DesktopHomePageState extends State<DesktopHomePage>
   }
 
   Future<Widget> buildHelpCards() async {
-    if (updateUrl.isNotEmpty) {
+    if (updateUrl.isNotEmpty && !isCardClosed) {
       return buildInstallCard(
           "Status",
           "There is a newer version of ${bind.mainGetAppNameSync()} ${bind.mainGetNewVersion()} available.",
           "Click to download", () async {
         final Uri url = Uri.parse('https://rustdesk.com/download');
         await launchUrl(url);
-      });
+      },
+      closeButton: true);
     }
     if (systemError.isNotEmpty) {
       return buildInstallCard("", systemError, "", () {});
@@ -394,11 +396,20 @@ class _DesktopHomePageState extends State<DesktopHomePage>
 
   Widget buildInstallCard(String title, String content, String btnText,
       GestureTapCallback onPressed,
-      {String? help, String? link}) {
-    return Container(
-      margin: EdgeInsets.only(top: 20),
-      child: Container(
-          decoration: BoxDecoration(
+      {String? help, String? link, bool? closeButton}) {
+
+    void closeCard() {
+      setState(() {
+        isCardClosed = true;
+      });
+    }
+
+    return Stack(
+      children: [
+        Container(
+          margin: EdgeInsets.only(top: 20),
+          child: Container(
+            decoration: BoxDecoration(
               gradient: LinearGradient(
             begin: Alignment.centerLeft,
             end: Alignment.centerRight,
@@ -467,6 +478,21 @@ class _DesktopHomePageState extends State<DesktopHomePage>
                                   )).marginOnly(top: 6)),
                         ]
                       : <Widget>[]))),
+        ),
+        if (closeButton != null && closeButton == true)
+        Positioned(
+          top: 18,
+          right: 0,
+          child: IconButton(
+            icon: Icon(
+              Icons.close,
+              color: Colors.white,
+              size: 20,
+            ),
+            onPressed: closeCard,
+          ),
+        ),
+      ],
     );
   }
 
