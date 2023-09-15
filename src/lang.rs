@@ -20,6 +20,7 @@ mod ja;
 mod ko;
 mod kz;
 mod lt;
+mod lv;
 mod nl;
 mod pl;
 mod ptbr;
@@ -70,6 +71,7 @@ pub const LANGS: &[(&str, &str)] = &[
     ("sl", "Slovenščina"),
     ("ro", "Română"),
     ("lt", "Lietuvių"),
+    ("lv", "Latviešu"),
     ("ar", "العربية"),
 ];
 
@@ -135,6 +137,7 @@ pub fn translate_locale(name: String, locale: &str) -> String {
         "sl" => sl::T.deref(),
         "ro" => ro::T.deref(),
         "lt" => lt::T.deref(),
+        "lv" => lv::T.deref(),
         "ar" => ar::T.deref(),
         _ => en::T.deref(),
     };
