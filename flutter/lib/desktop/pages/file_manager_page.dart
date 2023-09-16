@@ -403,6 +403,7 @@ class _FileManagerViewState extends State<FileManagerView> {
 
   @override
   Widget build(BuildContext context) {
+    _handleColumnPorportions();
     return Container(
       margin: const EdgeInsets.all(16.0),
       padding: const EdgeInsets.all(8.0),
@@ -432,6 +433,27 @@ class _FileManagerViewState extends State<FileManagerView> {
         ],
       ),
     );
+  }
+
+  void _handleColumnPorportions() {
+    final windowWidthNow = MediaQuery.of(context).size.width;
+    if (_windowWidthPrev == null) {
+      _windowWidthPrev = windowWidthNow;
+      final defaultColumnWidth = windowWidthNow * 0.115;
+      _fileTransferMinimumWidth = defaultColumnWidth / 3;
+      _nameColWidth.value = defaultColumnWidth;
+      _modifiedColWidth.value = defaultColumnWidth;
+      _sizeColWidth.value = defaultColumnWidth;
+    }
+
+    if (_windowWidthPrev != windowWidthNow) {
+      final difference = windowWidthNow / _windowWidthPrev!;
+      _windowWidthPrev = windowWidthNow;
+      _fileTransferMinimumWidth *= difference;
+      _nameColWidth.value *= difference;
+      _modifiedColWidth.value *= difference;
+      _sizeColWidth.value *= difference;
+    }
   }
 
   void onLocationFocusChanged() {
@@ -1148,27 +1170,19 @@ class _FileManagerViewState extends State<FileManagerView> {
     return false;
   }
 
+  void _onDrag(double dx, RxDouble column1, RxDouble column2) {
+    if (column1.value + dx <= _fileTransferMinimumWidth ||
+        column2.value - dx <= _fileTransferMinimumWidth) {
+      return;
+    }
+    column1.value += dx;
+    column2.value -= dx;
+    column1.value = max(_fileTransferMinimumWidth, column1.value);
+    column2.value = max(_fileTransferMinimumWidth, column2.value);
+  }
+
   Widget _buildFileBrowserHeader(BuildContext context) {
     final padding = EdgeInsets.all(1.0);
-    final windowWidthNow = MediaQuery.of(context).size.width;
-    if (_windowWidthPrev == null) {
-      _windowWidthPrev = windowWidthNow;
-      final defaultColumnWidth = windowWidthNow * 0.34 / 3;
-      _fileTransferMinimumWidth = defaultColumnWidth / 3;
-      _nameColWidth.value = defaultColumnWidth;
-      _modifiedColWidth.value = defaultColumnWidth;
-      _sizeColWidth.value = defaultColumnWidth;
-    }
-
-    if (_windowWidthPrev != windowWidthNow) {
-      final difference = windowWidthNow / _windowWidthPrev!;
-      _windowWidthPrev = windowWidthNow;
-      _fileTransferMinimumWidth *= difference;
-      _nameColWidth.value *= difference;
-      _modifiedColWidth.value *= difference;
-      _sizeColWidth.value *= difference;
-    }
-
     return SizedBox(
       key: _globalHeaderKey,
       height: kDesktopFileTransferHeaderHeight,
@@ -1180,22 +1194,8 @@ class _FileManagerViewState extends State<FileManagerView> {
           ),
           DraggableDivider(
             axis: Axis.vertical,
-            onPointerMove: (dx) {
-              if (_nameColWidth.value + dx <= _fileTransferMinimumWidth) {
-                return;
-              }
-
-              if (_modifiedColWidth.value - dx <= _fileTransferMinimumWidth) {
-                return;
-              }
-
-              _nameColWidth.value += dx;
-              _nameColWidth.value =
-                  max(_fileTransferMinimumWidth, _nameColWidth.value);
-              _modifiedColWidth.value -= dx;
-              _modifiedColWidth.value =
-                  max(_fileTransferMinimumWidth, _modifiedColWidth.value);
-            },
+            onPointerMove: (dx) =>
+                _onDrag(dx, _nameColWidth, _modifiedColWidth),
             padding: padding,
           ),
           Obx(
@@ -1204,22 +1204,8 @@ class _FileManagerViewState extends State<FileManagerView> {
           ),
           DraggableDivider(
               axis: Axis.vertical,
-              onPointerMove: (dx) {
-                if (_modifiedColWidth.value + dx <= _fileTransferMinimumWidth) {
-                  return;
-                }
-
-                if (_sizeColWidth.value - dx <= _fileTransferMinimumWidth) {
-                  return;
-                }
-
-                _modifiedColWidth.value += dx;
-                _modifiedColWidth.value =
-                    max(_fileTransferMinimumWidth, _modifiedColWidth.value);
-                _sizeColWidth.value -= dx;
-                _sizeColWidth.value =
-                    max(_fileTransferMinimumWidth, _sizeColWidth.value);
-              },
+              onPointerMove: (dx) =>
+                  _onDrag(dx, _modifiedColWidth, _sizeColWidth),
               padding: padding),
           Expanded(
               child: headerItemFunc(
