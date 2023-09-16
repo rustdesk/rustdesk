@@ -364,14 +364,19 @@ class _FileManagerViewState extends State<FileManagerView> {
   final _breadCrumbScroller = ScrollController();
   final _keyboardNode = FocusNode();
   final _listSearchBuffer = TimeoutStringBuffer();
-  final _nameColWidth = kDesktopFileTransferNameColWidth.obs;
-  final _modifiedColWidth = kDesktopFileTransferModifiedColWidth.obs;
+  final _nameColWidth = 0.0.obs;
+  final _modifiedColWidth = 0.0.obs;
+  final _sizeColWidth = 0.0.obs;
   final _fileListScrollController = ScrollController();
+  final _globalHeaderKey = GlobalKey();
 
   /// [_lastClickTime], [_lastClickEntry] help to handle double click
   var _lastClickTime =
       DateTime.now().millisecondsSinceEpoch - bind.getDoubleClickTime() - 1000;
   Entry? _lastClickEntry;
+
+  double? _windowWidthPrev;
+  double _fileTransferMinimumWidth = 0.0;
 
   FileController get controller => widget.controller;
   bool get isLocal => widget.controller.isLocal;
@@ -1145,7 +1150,27 @@ class _FileManagerViewState extends State<FileManagerView> {
 
   Widget _buildFileBrowserHeader(BuildContext context) {
     final padding = EdgeInsets.all(1.0);
+    final windowWidthNow = MediaQuery.of(context).size.width;
+    if (_windowWidthPrev == null) {
+      _windowWidthPrev = windowWidthNow;
+      final defaultColumnWidth = windowWidthNow * 0.34 / 3;
+      _fileTransferMinimumWidth = defaultColumnWidth / 3;
+      _nameColWidth.value = defaultColumnWidth;
+      _modifiedColWidth.value = defaultColumnWidth;
+      _sizeColWidth.value = defaultColumnWidth;
+    }
+
+    if (_windowWidthPrev != windowWidthNow) {
+      final difference = windowWidthNow / _windowWidthPrev!;
+      _windowWidthPrev = windowWidthNow;
+      _fileTransferMinimumWidth *= difference;
+      _nameColWidth.value *= difference;
+      _modifiedColWidth.value *= difference;
+      _sizeColWidth.value *= difference;
+    }
+
     return SizedBox(
+      key: _globalHeaderKey,
       height: kDesktopFileTransferHeaderHeight,
       child: Row(
         children: [
@@ -1156,9 +1181,20 @@ class _FileManagerViewState extends State<FileManagerView> {
           DraggableDivider(
             axis: Axis.vertical,
             onPointerMove: (dx) {
+              if (_nameColWidth.value + dx <= _fileTransferMinimumWidth) {
+                return;
+              }
+
+              if (_modifiedColWidth.value - dx <= _fileTransferMinimumWidth) {
+                return;
+              }
+
               _nameColWidth.value += dx;
-              _nameColWidth.value = min(kDesktopFileTransferMaximumWidth,
-                  max(kDesktopFileTransferMinimumWidth, _nameColWidth.value));
+              _nameColWidth.value =
+                  max(_fileTransferMinimumWidth, _nameColWidth.value);
+              _modifiedColWidth.value -= dx;
+              _modifiedColWidth.value =
+                  max(_fileTransferMinimumWidth, _modifiedColWidth.value);
             },
             padding: padding,
           ),
@@ -1169,14 +1205,25 @@ class _FileManagerViewState extends State<FileManagerView> {
           DraggableDivider(
               axis: Axis.vertical,
               onPointerMove: (dx) {
+                if (_modifiedColWidth.value + dx <= _fileTransferMinimumWidth) {
+                  return;
+                }
+
+                if (_sizeColWidth.value - dx <= _fileTransferMinimumWidth) {
+                  return;
+                }
+
                 _modifiedColWidth.value += dx;
-                _modifiedColWidth.value = min(
-                    kDesktopFileTransferMaximumWidth,
-                    max(kDesktopFileTransferMinimumWidth,
-                        _modifiedColWidth.value));
+                _modifiedColWidth.value =
+                    max(_fileTransferMinimumWidth, _modifiedColWidth.value);
+                _sizeColWidth.value -= dx;
+                _sizeColWidth.value =
+                    max(_fileTransferMinimumWidth, _sizeColWidth.value);
               },
               padding: padding),
-          Expanded(child: headerItemFunc(null, SortBy.size, translate("Size")))
+          Expanded(
+              child: headerItemFunc(
+                  _sizeColWidth.value, SortBy.size, translate("Size")))
         ],
       ),
     );
@@ -1201,23 +1248,20 @@ class _FileManagerViewState extends State<FileManagerView> {
                 height: kDesktopFileTransferHeaderHeight,
                 child: Row(
                   children: [
-                    Flexible(
-                      flex: 2,
+                    Expanded(
                       child: Text(
                         name,
                         style: headerTextStyle,
                         overflow: TextOverflow.ellipsis,
-                      ).marginSymmetric(horizontal: 4),
+                      ).marginOnly(left: 4),
                     ),
-                    Flexible(
-                        flex: 1,
-                        child: ascending.value != null
-                            ? Icon(
-                                ascending.value!
-                                    ? Icons.keyboard_arrow_up_rounded
-                                    : Icons.keyboard_arrow_down_rounded,
-                              )
-                            : const Offstage())
+                    ascending.value != null
+                        ? Icon(
+                            ascending.value!
+                                ? Icons.keyboard_arrow_up_rounded
+                                : Icons.keyboard_arrow_down_rounded,
+                          )
+                        : SizedBox()
                   ],
                 ),
               ),
