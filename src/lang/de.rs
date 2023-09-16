@@ -146,9 +146,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Set Password", "Passwort festlegen"),
         ("OS Password", "Betriebssystem-Passwort"),
         ("install_tip", "Aufgrund der Benutzerkontensteuerung (UAC) kann RustDesk in manchen Fällen nicht ordnungsgemäß funktionieren. Um die Benutzerkontensteuerung zu umgehen, klicken Sie bitte auf die Schaltfläche unten und installieren RustDesk auf dem System."),
-        ("Click to upgrade", "Upgrade"),
+        ("Click to upgrade", "Zum Upgraden klicken"),
         ("Click to download", "Zum Herunterladen klicken"),
-        ("Click to update", "Update"),
+        ("Click to update", "Zum Aktualisieren klicken"),
         ("Configure", "Konfigurieren"),
         ("config_acc", "Um Ihren PC aus der Ferne zu steuern, müssen Sie RustDesk Zugriffsrechte erteilen."),
         ("config_screen", "Um aus der Ferne auf Ihren PC zugreifen zu können, müssen Sie RustDesk die Berechtigung \"Bildschirmaufnahme\" erteilen."),
@@ -554,6 +554,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Timeout in minutes", "Zeitüberschreitung in Minuten"),
         ("auto_disconnect_option_tip", "Automatisches Schließen eingehender Sitzungen bei Inaktivität des Benutzers"),
         ("Connection failed due to inactivity", "Automatische Trennung der Verbindung aufgrund von Inaktivität"),
-        ("Check for software update on startup", ""),
+        ("Check for software update on startup", "Beim Start auf Softwareaktualisierung prüfen"),
     ].iter().cloned().collect();
 }
