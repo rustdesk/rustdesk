@@ -74,10 +74,6 @@ const int kDesktopDefaultDisplayHeight = 720;
 const int kMobileMaxDisplaySize = 1280;
 const int kDesktopMaxDisplaySize = 3840;
 
-const double kDesktopFileTransferNameColWidth = 200;
-const double kDesktopFileTransferModifiedColWidth = 120;
-const double kDesktopFileTransferMinimumWidth = 100;
-const double kDesktopFileTransferMaximumWidth = 300;
 const double kDesktopFileTransferRowHeight = 30.0;
 const double kDesktopFileTransferHeaderHeight = 25.0;
 
@@ -142,6 +138,7 @@ const kRemoteScrollStyleBar = 'scrollbar';
 
 /// [kScrollModeDefault] Mouse or touchpad, the default scroll mode.
 const kScrollModeDefault = 'default';
+
 /// [kScrollModeReverse] Mouse or touchpad, the reverse scroll mode.
 const kScrollModeReverse = 'reverse';
 
