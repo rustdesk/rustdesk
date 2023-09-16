@@ -42,10 +42,10 @@ jobs:
               x86_64)
                 apt update -y
                 apt install -y curl zip unzip tar git g++ gcc build-essential pkg-config wget nasm yasm ninja-build libjpeg8-dev libssl-dev
-                wget https://github.com/Kitware/CMake/releases/download/v3.20.2/cmake-3.20.2.tar.gz
+                wget https://github.com/Kitware/CMake/releases/download/v3.27.5/cmake-3.27.5.tar.gz
                 apt remove -y --purge cmake
-                tar -zxvf cmake-3.20.2.tar.gz
-                cd cmake-3.20.2
+                tar -zxvf cmake-3.27.5.tar.gz
+                cd cmake-3.27.5
                 ./bootstrap
                 make 
                 make install 
