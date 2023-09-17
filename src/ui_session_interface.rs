@@ -572,15 +572,15 @@ impl<T: InvokeUiSession> Session<T> {
     }
 
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    pub fn enter(&self, keyboard_mode: &str) {
+    pub fn enter(&self, keyboard_mode: String) {
         IS_IN.store(true, Ordering::SeqCst);
-        keyboard::client::change_grab_status(GrabState::Run, keyboard_mode);
+        keyboard::client::change_grab_status(GrabState::Run, &keyboard_mode);
     }
 
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    pub fn leave(&self, keyboard_mode: &str) {
+    pub fn leave(&self, keyboard_mode: String) {
         IS_IN.store(false, Ordering::SeqCst);
-        keyboard::client::change_grab_status(GrabState::Wait, keyboard_mode);
+        keyboard::client::change_grab_status(GrabState::Wait, &keyboard_mode);
     }
 
     // flutter only TODO new input

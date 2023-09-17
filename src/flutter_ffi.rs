@@ -400,9 +400,9 @@ pub fn session_enter_or_leave(_session_id: SessionID, _enter: bool) -> SyncRetur
         let keyboard_mode = session.get_keyboard_mode();
         if _enter {
             set_cur_session_id_(_session_id, &keyboard_mode);
-            session.enter(&keyboard_mode);
+            session.enter(keyboard_mode);
         } else {
-            session.leave(&keyboard_mode);
+            session.leave(keyboard_mode);
         }
     }
     SyncReturn(())
