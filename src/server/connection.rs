@@ -471,11 +471,6 @@ impl Connection {
                                         back_notification::PrivacyModeState::PrvOffSucceeded,
                                     )
                                 }
-                                ipc::PrivacyModeState::OffFailed => {
-                                    crate::common::make_privacy_mode_msg(
-                                        back_notification::PrivacyModeState::PrvOffFailed,
-                                    )
-                                }
                                 ipc::PrivacyModeState::OffByPeer => {
                                     video_service::set_privacy_mode_conn_id(0);
                                     crate::common::make_privacy_mode_msg(
@@ -704,29 +699,34 @@ impl Connection {
                         handle_pointer(&msg, id);
                     }
                     MessageInput::BlockOn => {
-                        if crate::platform::block_input(true) {
+                        let (ok, msg) = crate::platform::block_input(true);
+                        if ok {
                             block_input_mode = true;
                         } else {
                             Self::send_block_input_error(
                                 &tx,
                                 back_notification::BlockInputState::BlkOnFailed,
+                                msg,
                             );
                         }
                     }
                     MessageInput::BlockOff => {
-                        if crate::platform::block_input(false) {
+                        let (ok, msg) = crate::platform::block_input(false);
+                        if ok {
                             block_input_mode = false;
                         } else {
                             Self::send_block_input_error(
                                 &tx,
                                 back_notification::BlockInputState::BlkOffFailed,
+                                msg,
                             );
                         }
                     }
                     #[cfg(all(feature = "flutter", feature = "plugin_framework"))]
                     #[cfg(not(any(target_os = "android", target_os = "ios")))]
                     MessageInput::BlockOnPlugin(_peer) => {
-                        if crate::platform::block_input(true) {
+                        let (ok, _msg) = crate::platform::block_input(true);
+                        if ok {
                             block_input_mode = true;
                         }
                         let _r = PLUGIN_BLOCK_INPUT_TX_RX
@@ -738,7 +738,8 @@ impl Connection {
                     #[cfg(all(feature = "flutter", feature = "plugin_framework"))]
                     #[cfg(not(any(target_os = "android", target_os = "ios")))]
                     MessageInput::BlockOffPlugin(_peer) => {
-                        if crate::platform::block_input(false) {
+                        let (ok, _msg) = crate::platform::block_input(false);
+                        if ok {
                             block_input_mode = false;
                         }
                         let _r = PLUGIN_BLOCK_INPUT_TX_RX
@@ -1209,9 +1210,16 @@ impl Connection {
     }
 
     #[inline]
-    pub fn send_block_input_error(s: &Sender, state: back_notification::BlockInputState) {
+    pub fn send_block_input_error(
+        s: &Sender,
+        state: back_notification::BlockInputState,
+        details: String,
+    ) {
         let mut misc = Misc::new();
-        let mut back_notification = BackNotification::new();
+        let mut back_notification = BackNotification {
+            details,
+            ..Default::default()
+        };
         back_notification.set_block_input_state(state);
         misc.set_back_notification(back_notification);
         let mut msg_out = Message::new();
@@ -2221,13 +2229,16 @@ impl Connection {
                 match q {
                     BoolOption::Yes => {
                         let msg_out = if !video_service::is_privacy_mode_supported() {
-                            crate::common::make_privacy_mode_msg(
+                            crate::common::make_privacy_mode_msg_with_details(
                                 back_notification::PrivacyModeState::PrvNotSupported,
+                                "Unsupported. 1 Multi-screen is not supported. 2 Please confirm the license is activated.".to_string(),
                             )
                         } else {
                             match privacy_mode::turn_on_privacy(self.inner.id) {
                                 Ok(true) => {
-                                    if video_service::test_create_capturer(self.inner.id, 5_000) {
+                                    let err_msg =
+                                        video_service::test_create_capturer(self.inner.id, 5_000);
+                                    if err_msg.is_empty() {
                                         video_service::set_privacy_mode_conn_id(self.inner.id);
                                         crate::common::make_privacy_mode_msg(
                                             back_notification::PrivacyModeState::PrvOnSucceeded,
@@ -2238,8 +2249,9 @@ impl Connection {
                                         );
                                         video_service::set_privacy_mode_conn_id(0);
                                         let _ = privacy_mode::turn_off_privacy(self.inner.id);
-                                        crate::common::make_privacy_mode_msg(
+                                        crate::common::make_privacy_mode_msg_with_details(
                                             back_notification::PrivacyModeState::PrvOnFailed,
+                                            err_msg,
                                         )
                                     }
                                 }
@@ -2261,8 +2273,9 @@ impl Connection {
                     }
                     BoolOption::No => {
                         let msg_out = if !video_service::is_privacy_mode_supported() {
-                            crate::common::make_privacy_mode_msg(
+                            crate::common::make_privacy_mode_msg_with_details(
                                 back_notification::PrivacyModeState::PrvNotSupported,
+                                "Unsupported. 1 Multi-screen is not supported. 2 Please confirm the license is activated.".to_string(),
                             )
                         } else {
                             video_service::set_privacy_mode_conn_id(0);
@@ -2597,8 +2610,9 @@ mod privacy_mode {
                 ),
                 Err(e) => {
                     log::error!("Failed to turn off privacy mode {}", e);
-                    crate::common::make_privacy_mode_msg(
+                    crate::common::make_privacy_mode_msg_with_details(
                         back_notification::PrivacyModeState::PrvOffFailed,
+                        e.to_string(),
                     )
                 }
             }

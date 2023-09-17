@@ -31,11 +31,10 @@ use hbb_common::{
 use crate::rendezvous_mediator::RendezvousMediator;
 
 // State with timestamp, because std::time::Instant cannot be serialized
-#[derive(Debug, Serialize, Deserialize, Copy, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(tag = "t", content = "c")]
 pub enum PrivacyModeState {
     OffSucceeded,
-    OffFailed,
     OffByPeer,
     OffUnknown,
 }

@@ -317,17 +317,23 @@ fn create_capturer(
 }
 
 // This function works on privacy mode. Windows only for now.
-pub fn test_create_capturer(privacy_mode_id: i32, timeout_millis: u64) -> bool {
+pub fn test_create_capturer(privacy_mode_id: i32, timeout_millis: u64) -> String {
     let test_begin = Instant::now();
-    while test_begin.elapsed().as_millis() < timeout_millis as _ {
-        if let Ok((_, current, display)) = get_current_display() {
-            if let Ok(_) = create_capturer(privacy_mode_id, display, true, current, false) {
-                return true;
+    loop {
+        let err = match get_current_display() {
+            Ok((_, current, display)) => {
+                match create_capturer(privacy_mode_id, display, true, current, false) {
+                    Ok(_) => return "".to_owned(),
+                    Err(e) => e,
+                }
             }
+            Err(e) => e,
+        };
+        if test_begin.elapsed().as_millis() >= timeout_millis as _ {
+            return err.to_string();
         }
         std::thread::sleep(Duration::from_millis(300));
     }
-    false
 }
 
 #[cfg(windows)]
@@ -1025,7 +1031,7 @@ fn try_get_displays() -> ResultType<Vec<Display>> {
     //         displays = Display::all()?;
     //     }
     // }
-    Ok( Display::all()?)
+    Ok(Display::all()?)
 }
 
 pub(super) fn get_current_display_2(mut all: Vec<Display>) -> ResultType<(usize, usize, Display)> {

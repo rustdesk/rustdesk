@@ -940,14 +940,22 @@ pub async fn post_request_sync(url: String, body: String, header: &str) -> Resul
 }
 
 #[inline]
-pub fn make_privacy_mode_msg(state: back_notification::PrivacyModeState) -> Message {
+pub fn make_privacy_mode_msg_with_details(state: back_notification::PrivacyModeState, details: String) -> Message {
     let mut misc = Misc::new();
-    let mut back_notification = BackNotification::new();
+    let mut back_notification = BackNotification {
+        details,
+        ..Default::default()
+    };
     back_notification.set_privacy_mode_state(state);
     misc.set_back_notification(back_notification);
     let mut msg_out = Message::new();
     msg_out.set_misc(misc);
     msg_out
+}
+
+#[inline]
+pub fn make_privacy_mode_msg(state: back_notification::PrivacyModeState) -> Message {
+    make_privacy_mode_msg_with_details(state, "".to_owned())
 }
 
 pub fn is_keyboard_mode_supported(keyboard_mode: &KeyboardMode, version_number: i64) -> bool {
