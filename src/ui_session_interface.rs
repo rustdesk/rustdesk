@@ -617,11 +617,12 @@ impl<T: InvokeUiSession> Session<T> {
     #[cfg(any(target_os = "ios"))]
     pub fn handle_flutter_key_event(
         &self,
+        _keyboard_mode: &str,
         _name: &str,
-        platform_code: i32,
-        position_code: i32,
-        lock_modes: i32,
-        down_or_up: bool,
+        _platform_code: i32,
+        _position_code: i32,
+        _lock_modes: i32,
+        _down_or_up: bool,
     ) {
     }
 
