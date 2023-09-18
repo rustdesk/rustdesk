@@ -76,7 +76,7 @@ pub fn make_tray() -> hbb_common::ResultType<()> {
 
     let menu_channel = MenuEvent::receiver();
     let tray_channel = TrayEvent::receiver();
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(windows)]
     let (ipc_sender, ipc_receiver) = std::sync::mpsc::channel::<Data>();
     let mut docker_hiden = false;
 
@@ -108,8 +108,7 @@ pub fn make_tray() -> hbb_common::ResultType<()> {
         }
     };
 
-    // ubuntu 22.04 can't see tooltip
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(windows)]
     std::thread::spawn(move || {
         start_query_session_count(ipc_sender.clone());
     });
@@ -146,7 +145,7 @@ pub fn make_tray() -> hbb_common::ResultType<()> {
             }
         }
 
-        #[cfg(not(target_os = "linux"))]
+        #[cfg(windows)]
         if let Ok(data) = ipc_receiver.try_recv() {
             match data {
                 Data::ControlledSessionCount(count) => {
@@ -162,7 +161,7 @@ pub fn make_tray() -> hbb_common::ResultType<()> {
     });
 }
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(windows)]
 #[tokio::main(flavor = "current_thread")]
 async fn start_query_session_count(sender: std::sync::mpsc::Sender<Data>) {
     let mut last_count = 0;
