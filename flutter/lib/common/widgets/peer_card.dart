@@ -727,7 +727,7 @@ abstract class BasePeerCard extends StatelessWidget {
   MenuEntryBase<String> _unrememberPasswordAction(String id) {
     return MenuEntryButton<String>(
       childBuilder: (TextStyle? style) => Text(
-        translate('Unremember Password'),
+        translate('Forget Password'),
         style: style,
       ),
       proc: () async {

@@ -235,7 +235,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Wrong credentials", "Nesprávné přihlašovací údaje"),
         ("The verification code is incorrect or has expired", "Ověřovací kód je nesprávný, nebo jeho platnost vypršela"),
         ("Edit Tag", "Upravit štítek"),
-        ("Unremember Password", "Přestat si pamatovat heslo"),
+        ("Forget Password", "Přestat si pamatovat heslo"),
         ("Favorites", "Oblíbené"),
         ("Add to Favorites", "Přidat do oblíbených"),
         ("Remove from Favorites", "Odebrat z oblíbených"),
