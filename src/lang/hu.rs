@@ -235,7 +235,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Wrong credentials", "Hibás felhasználónév vagy jelszó"),
         ("The verification code is incorrect or has expired", ""),
         ("Edit Tag", "Címke szerkesztése"),
-        ("Unremember Password", "A jelszó megjegyzésének törlése"),
+        ("Forget Password", "A jelszó megjegyzésének törlése"),
         ("Favorites", "Kedvencek"),
         ("Add to Favorites", "Hozzáadás a kedvencekhez"),
         ("Remove from Favorites", "Eltávolítás a kedvencekből"),

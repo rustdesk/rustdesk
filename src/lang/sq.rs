@@ -235,7 +235,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Wrong credentials", "Kredinciale të gabuara"),
         ("The verification code is incorrect or has expired", ""),
         ("Edit Tag", "Edito tagun"),
-        ("Unremember Password", "Fjalëkalim jo i kujtueshëm"),
+        ("Forget Password", "Fjalëkalim jo i kujtueshëm"),
         ("Favorites", "Te preferuarat"),
         ("Add to Favorites", "Shto te të preferuarat"),
         ("Remove from Favorites", "Hiq nga të preferuarat"),
