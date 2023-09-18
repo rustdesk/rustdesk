@@ -100,7 +100,10 @@ class GroupModel {
         Map<String, dynamic> json =
             _jsonDecodeResp(utf8.decode(resp.bodyBytes), resp.statusCode);
         if (json.containsKey('error')) {
-          if (json['error'] == 'Admin required!') {
+          if (json['error'] == 'Admin required!' ||
+              json['error']
+                  .toString()
+                  .contains('ambiguous column name: status')) {
             throw translate('upgrade_rustdesk_server_pro_to_{1.1.10}_tip');
           } else {
             throw json['error'];
