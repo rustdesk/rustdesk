@@ -2263,8 +2263,9 @@ impl Connection {
                                     if video_service::get_privacy_mode_conn_id() == 0 {
                                         let _ = privacy_mode::turn_off_privacy(0);
                                     }
-                                    crate::common::make_privacy_mode_msg(
+                                    crate::common::make_privacy_mode_msg_with_details(
                                         back_notification::PrivacyModeState::PrvOnFailed,
+                                        e.to_string(),
                                     )
                                 }
                             }
