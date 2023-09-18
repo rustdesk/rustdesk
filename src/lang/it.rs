@@ -554,7 +554,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Timeout in minutes", "Timeout in minuti"),
         ("auto_disconnect_option_tip", ""),
         ("Connection failed due to inactivity", "Connessione non riuscita a causa di inattività"),
-        ("Check for software update on startup", "All'avvio programma verifica presenza di aggiornamenti"),
-        ("upgrade_rustdesk_server_pro_to_{}_tip", ""),
+        ("Check for software update on startup", "All'avvio verifica presenza aggiornamenti programma"),
+        ("upgrade_rustdesk_server_pro_to_{}_tip", "Aggiorna RustDesk Server Pro alla versione {} o successiva!"),
     ].iter().cloned().collect();
 }
