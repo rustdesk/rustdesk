@@ -57,6 +57,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("ID Server", "ID serveris"),
         ("Relay Server", "Releja serveris"),
         ("API Server", "API serveris"),
+        ("Key", "Atslēga"),
         ("invalid_http", "jāsākas ar http:// vai https://"),
         ("Invalid IP", "Nederīga IP"),
         ("Invalid format", "Nederīgs formāts"),
@@ -296,6 +297,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("This file exists, skip or overwrite this file?", "Šis fails pastāv, izlaist vai pārrakstīt šo failu?"),
         ("Quit", "Iziet"),
         ("doc_mac_permission", "https://rustdesk.com/docs/en/manual/mac/#enable-permissions"),
+        ("doc_fix_wayland", "https://rustdesk.com/docs/en/manual/linux/#x11-required"),
         ("Help", "Palīdzība"),
         ("Failed", "Neizdevās"),
         ("Succeeded", "Izdevās"),
@@ -479,6 +481,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Me", "Es"),
         ("identical_file_tip", "Šis fails ir identisks sesijas failam."),
         ("show_monitors_tip", "Rādīt monitorus rīkjoslā"),
+        ("enter_rustdesk_passwd_tip", "Ievadiet RustDesk paroli"),
         ("View Mode", "Skatīšanas režīms"),
         ("login_linux_tip", "Jums ir jāpiesakās attālajā Linux kontā, lai iespējotu X darbvirsmas sesiju"),
         ("verify_rustdesk_password_tip", "Pārbaudīt RustDesk paroli"),
@@ -555,6 +558,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("auto_disconnect_option_tip", "Automātiski aizvērt ienākošās sesijas lietotāja neaktivitātes gadījumā"),
         ("Connection failed due to inactivity", "Automātiski atvienots neaktivitātes dēļ"),
         ("Check for software update on startup", "Startējot pārbaudīt, vai nav programmatūras atjauninājumu"),
-        ("upgrade_rustdesk_server_pro_to_{}_tip", ""),
+        ("upgrade_rustdesk_server_pro_to_{}_tip", "Lūdzu, jauniniet RustDesk Server Pro uz versiju {} vai jaunāku!"),
     ].iter().cloned().collect();
 }
