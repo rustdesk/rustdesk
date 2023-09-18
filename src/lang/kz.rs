@@ -235,7 +235,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Wrong credentials", "Бұрыс тіркелгі деректер"),
         ("The verification code is incorrect or has expired", ""),
         ("Edit Tag", "Тақты Өндеу"),
-        ("Unremember Password", "Құпия сөзді Ұмыту"),
+        ("Forget Password", "Құпия сөзді Ұмыту"),
         ("Favorites", "Таңдаулылар"),
         ("Add to Favorites", "Таңдаулыларға Қосу"),
         ("Remove from Favorites", "Таңдаулылардан алып тастау"),
@@ -554,5 +554,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Timeout in minutes", ""),
         ("auto_disconnect_option_tip", ""),
         ("Connection failed due to inactivity", ""),
+        ("Check for software update on startup", ""),
+        ("upgrade_rustdesk_server_pro_to_{}_tip", ""),
     ].iter().cloned().collect();
 }

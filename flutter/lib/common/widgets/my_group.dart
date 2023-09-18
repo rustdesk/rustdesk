@@ -29,47 +29,26 @@ class _MyGroupState extends State<MyGroup> {
   @override
   Widget build(BuildContext context) {
     return Obx(() {
-      // use username to be same with ab
-      if (gFFI.userModel.userName.value.isEmpty) {
+      if (!gFFI.userModel.isLogin) {
         return Center(
             child: ElevatedButton(
                 onPressed: loginDialog, child: Text(translate("Login"))));
-      }
-      return buildBody(context);
-    });
-  }
-
-  Widget buildBody(BuildContext context) {
-    return Obx(() {
-      if (gFFI.groupModel.groupLoading.value) {
+      } else if (gFFI.groupModel.groupLoading.value && gFFI.groupModel.emtpy) {
         return const Center(
           child: CircularProgressIndicator(),
         );
       }
-      if (gFFI.groupModel.groupLoadError.isNotEmpty) {
-        return _buildShowError(gFFI.groupModel.groupLoadError.value);
-      }
-      if (isDesktop) {
-        return _buildDesktop();
-      } else {
-        return _buildMobile();
-      }
+      return Column(
+        children: [
+          buildErrorBanner(context,
+              loading: gFFI.groupModel.groupLoading,
+              err: gFFI.groupModel.groupLoadError,
+              retry: null,
+              close: () => gFFI.groupModel.groupLoadError.value = ''),
+          Expanded(child: isDesktop ? _buildDesktop() : _buildMobile())
+        ],
+      );
     });
-  }
-
-  Widget _buildShowError(String error) {
-    return Center(
-        child: Column(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        Text(translate(error)),
-        TextButton(
-            onPressed: () {
-              gFFI.groupModel.pull();
-            },
-            child: Text(translate("Retry")))
-      ],
-    ));
   }
 
   Widget _buildDesktop() {
@@ -100,10 +79,9 @@ class _MyGroupState extends State<MyGroup> {
         Expanded(
           child: Align(
               alignment: Alignment.topLeft,
-              child: Obx(() => MyGroupPeerView(
+              child: MyGroupPeerView(
                   menuPadding: widget.menuPadding,
-                  // ignore: invalid_use_of_protected_member
-                  initPeers: gFFI.groupModel.peersShow.value))),
+                  initPeers: gFFI.groupModel.peers)),
         )
       ],
     );
@@ -133,10 +111,9 @@ class _MyGroupState extends State<MyGroup> {
         Expanded(
           child: Align(
               alignment: Alignment.topLeft,
-              child: Obx(() => MyGroupPeerView(
+              child: MyGroupPeerView(
                   menuPadding: widget.menuPadding,
-                  // ignore: invalid_use_of_protected_member
-                  initPeers: gFFI.groupModel.peersShow.value))),
+                  initPeers: gFFI.groupModel.peers)),
         )
       ],
     );
@@ -195,6 +172,7 @@ class _MyGroupState extends State<MyGroup> {
     }, child: Obx(
       () {
         bool selected = selectedUser.value == username;
+        final isMe = username == gFFI.userModel.userName.value;
         return Container(
           decoration: BoxDecoration(
             color: selected ? MyTheme.color(context).highlight : null,
@@ -208,7 +186,7 @@ class _MyGroupState extends State<MyGroup> {
               children: [
                 Icon(Icons.person_rounded, color: Colors.grey, size: 16)
                     .marginOnly(right: 4),
-                Expanded(child: Text(username)),
+                Expanded(child: Text(isMe ? translate('Me') : username)),
               ],
             ).paddingSymmetric(vertical: 4),
           ),

@@ -409,8 +409,8 @@ impl sciter::EventHandler for SciterSession {
         fn login(String, String, String, bool);
         fn new_rdp();
         fn send_mouse(i32, i32, i32, bool, bool, bool, bool);
-        fn enter();
-        fn leave();
+        fn enter(String);
+        fn leave(String);
         fn ctrl_alt_del();
         fn transfer_file();
         fn tunnel();

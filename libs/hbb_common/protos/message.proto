@@ -624,6 +624,8 @@ message BackNotification {
     PrivacyModeState privacy_mode_state = 1;
     BlockInputState block_input_state = 2;
   }
+  // Supplementary message, for "PrvOnFailed" and "PrvOffFailed"
+  string details = 3;
 }
 
 message ElevationRequestWithLogon {

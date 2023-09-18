@@ -291,12 +291,12 @@ pub fn session_get_keyboard_mode(session_id: SessionID) -> Option<String> {
 pub fn session_set_keyboard_mode(session_id: SessionID, value: String) {
     let mut _mode_updated = false;
     if let Some(session) = SESSIONS.write().unwrap().get_mut(&session_id) {
-        session.save_keyboard_mode(value);
+        session.save_keyboard_mode(value.clone());
         _mode_updated = true;
     }
     #[cfg(windows)]
     if _mode_updated {
-        crate::keyboard::update_grab_get_key_name();
+        crate::keyboard::update_grab_get_key_name(&value);
     }
 }
 
@@ -376,7 +376,9 @@ pub fn session_handle_flutter_key_event(
     down_or_up: bool,
 ) {
     if let Some(session) = SESSIONS.read().unwrap().get(&session_id) {
+        let keyboard_mode = session.get_keyboard_mode();
         session.handle_flutter_key_event(
+            &keyboard_mode,
             &name,
             platform_code,
             position_code,
@@ -395,11 +397,12 @@ pub fn session_handle_flutter_key_event(
 pub fn session_enter_or_leave(_session_id: SessionID, _enter: bool) -> SyncReturn<()> {
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     if let Some(session) = SESSIONS.read().unwrap().get(&_session_id) {
+        let keyboard_mode = session.get_keyboard_mode();
         if _enter {
-            set_cur_session_id(_session_id);
-            session.enter();
+            set_cur_session_id_(_session_id, &keyboard_mode);
+            session.enter(keyboard_mode);
         } else {
-            session.leave();
+            session.leave(keyboard_mode);
         }
     }
     SyncReturn(())
@@ -1074,6 +1077,9 @@ pub fn main_get_last_remote_id() -> String {
 }
 
 pub fn main_get_software_update_url() -> String {
+    if get_local_option("enable-check-update".to_string()) != "N" {
+        crate::common::check_software_update();
+    }
     crate::common::SOFTWARE_UPDATE_URL.lock().unwrap().clone()
 }
 
@@ -1180,6 +1186,24 @@ pub fn main_clear_ab() {
 
 pub fn main_load_ab() -> String {
     serde_json::to_string(&config::Ab::load()).unwrap_or_default()
+}
+
+pub fn main_save_group(json: String) {
+    if json.len() > 1024 {
+        std::thread::spawn(|| {
+            config::Group::store(json);
+        });
+    } else {
+        config::Group::store(json);
+    }
+}
+
+pub fn main_clear_group() {
+    config::Group::remove();
+}
+
+pub fn main_load_group() -> String {
+    serde_json::to_string(&config::Group::load()).unwrap_or_default()
 }
 
 pub fn session_send_pointer(session_id: SessionID, msg: String) {
@@ -1504,9 +1528,15 @@ pub fn main_update_me() -> SyncReturn<bool> {
 }
 
 pub fn set_cur_session_id(session_id: SessionID) {
+    if let Some(session) = SESSIONS.read().unwrap().get(&session_id) {
+        set_cur_session_id_(session_id, &session.get_keyboard_mode())
+    }
+}
+
+fn set_cur_session_id_(session_id: SessionID, keyboard_mode: &str) {
     super::flutter::set_cur_session_id(session_id);
     #[cfg(windows)]
-    crate::keyboard::update_grab_get_key_name();
+    crate::keyboard::update_grab_get_key_name(keyboard_mode);
 }
 
 pub fn install_show_run_without_install() -> SyncReturn<bool> {

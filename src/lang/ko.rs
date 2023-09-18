@@ -235,7 +235,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Wrong credentials", "틀린 인증 정보"),
         ("The verification code is incorrect or has expired", ""),
         ("Edit Tag", "태그 수정"),
-        ("Unremember Password", "패스워드 기억하지 않기"),
+        ("Forget Password", "패스워드 기억하지 않기"),
         ("Favorites", "즐겨찾기"),
         ("Add to Favorites", "즐겨찾기에 추가"),
         ("Remove from Favorites", "즐겨찾기에서 삭제"),
@@ -554,5 +554,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Timeout in minutes", ""),
         ("auto_disconnect_option_tip", ""),
         ("Connection failed due to inactivity", ""),
+        ("Check for software update on startup", ""),
+        ("upgrade_rustdesk_server_pro_to_{}_tip", ""),
     ].iter().cloned().collect();
 }
