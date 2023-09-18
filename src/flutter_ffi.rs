@@ -1188,6 +1188,24 @@ pub fn main_load_ab() -> String {
     serde_json::to_string(&config::Ab::load()).unwrap_or_default()
 }
 
+pub fn main_save_group(json: String) {
+    if json.len() > 1024 {
+        std::thread::spawn(|| {
+            config::Group::store(json);
+        });
+    } else {
+        config::Group::store(json);
+    }
+}
+
+pub fn main_clear_group() {
+    config::Group::remove();
+}
+
+pub fn main_load_group() -> String {
+    serde_json::to_string(&config::Group::load()).unwrap_or_default()
+}
+
 pub fn session_send_pointer(session_id: SessionID, msg: String) {
     super::flutter::session_send_pointer(session_id, msg);
 }

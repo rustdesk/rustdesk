@@ -555,5 +555,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("auto_disconnect_option_tip", "Automatycznie rozłącz sesje przychodzące przy braku aktywności użytkownika"),
         ("Connection failed due to inactivity", "Automatycznie rozłącz przy bezczynności"),
         ("Check for software update on startup", ""),
+        ("upgrade_rustdesk_server_pro_to_{}_tip", ""),
     ].iter().cloned().collect();
 }

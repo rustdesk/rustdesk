@@ -98,7 +98,8 @@ class PlatformFFI {
 
   int getRgbaSize(SessionID sessionId) =>
       _ffiBind.sessionGetRgbaSize(sessionId: sessionId);
-  void nextRgba(SessionID sessionId) => _ffiBind.sessionNextRgba(sessionId: sessionId);
+  void nextRgba(SessionID sessionId) =>
+      _ffiBind.sessionNextRgba(sessionId: sessionId);
   void registerTexture(SessionID sessionId, int ptr) =>
       _ffiBind.sessionRegisterTexture(sessionId: sessionId, ptr: ptr);
 
@@ -198,7 +199,7 @@ class PlatformFFI {
     version = await getVersion();
   }
 
-  Future<bool> _tryHandle(Map<String, dynamic> evt) async {
+  Future<bool> tryHandle(Map<String, dynamic> evt) async {
     final name = evt['name'];
     if (name != null) {
       final handlers = _eventHandlers[name];
@@ -216,14 +217,15 @@ class PlatformFFI {
 
   /// Start listening to the Rust core's events and frames.
   void _startListenEvent(RustdeskImpl rustdeskImpl) {
-    final appType = _appType == kAppTypeDesktopRemote ? '$_appType,$kWindowId' : _appType;
+    final appType =
+        _appType == kAppTypeDesktopRemote ? '$_appType,$kWindowId' : _appType;
     var sink = rustdeskImpl.startGlobalEventStream(appType: appType);
     sink.listen((message) {
       () async {
         try {
           Map<String, dynamic> event = json.decode(message);
           // _tryHandle here may be more flexible than _eventCallback
-          if (!await _tryHandle(event)) {
+          if (!await tryHandle(event)) {
             if (_eventCallback != null) {
               await _eventCallback!(event);
             }

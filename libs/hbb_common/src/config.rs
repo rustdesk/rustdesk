@@ -1650,6 +1650,106 @@ macro_rules! deserialize_default {
     };
 }
 
+#[derive(Debug, Default, Serialize, Deserialize, Clone)]
+pub struct GroupPeer {
+    #[serde(
+        default,
+        deserialize_with = "deserialize_string",
+        skip_serializing_if = "String::is_empty"
+    )]
+    pub id: String,
+    #[serde(
+        default,
+        deserialize_with = "deserialize_string",
+        skip_serializing_if = "String::is_empty"
+    )]
+    pub username: String,
+    #[serde(
+        default,
+        deserialize_with = "deserialize_string",
+        skip_serializing_if = "String::is_empty"
+    )]
+    pub hostname: String,
+    #[serde(
+        default,
+        deserialize_with = "deserialize_string",
+        skip_serializing_if = "String::is_empty"
+    )]
+    pub platform: String,
+    #[serde(
+        default,
+        deserialize_with = "deserialize_string",
+        skip_serializing_if = "String::is_empty"
+    )]
+    pub login_name: String,
+}
+
+#[derive(Debug, Default, Serialize, Deserialize, Clone)]
+pub struct GroupUser {
+    #[serde(
+        default,
+        deserialize_with = "deserialize_string",
+        skip_serializing_if = "String::is_empty"
+    )]
+    pub name: String,
+}
+
+#[derive(Debug, Default, Serialize, Deserialize, Clone)]
+pub struct Group {
+    #[serde(
+        default,
+        deserialize_with = "deserialize_string",
+        skip_serializing_if = "String::is_empty"
+    )]
+    pub access_token: String,
+    #[serde(default, deserialize_with = "deserialize_vec_groupuser")]
+    pub users: Vec<GroupUser>,
+    #[serde(default, deserialize_with = "deserialize_vec_grouppeer")]
+    pub peers: Vec<GroupPeer>,
+}
+
+impl Group {
+    fn path() -> PathBuf {
+        let filename = format!("{}_group", APP_NAME.read().unwrap().clone());
+        Config::path(filename)
+    }
+
+    pub fn store(json: String) {
+        if let Ok(mut file) = std::fs::File::create(Self::path()) {
+            let data = compress(json.as_bytes());
+            let max_len = 64 * 1024 * 1024;
+            if data.len() > max_len {
+                // maxlen of function decompress
+                return;
+            }
+            if let Ok(data) = symmetric_crypt(&data, true) {
+                file.write_all(&data).ok();
+            }
+        };
+    }
+
+    pub fn load() -> Self {
+        if let Ok(mut file) = std::fs::File::open(Self::path()) {
+            let mut data = vec![];
+            if file.read_to_end(&mut data).is_ok() {
+                if let Ok(data) = symmetric_crypt(&data, false) {
+                    let data = decompress(&data);
+                    if let Ok(group) = serde_json::from_str::<Self>(&String::from_utf8_lossy(&data))
+                    {
+                        return group;
+                    }
+                }
+            }
+        };
+        Self::remove();
+        Self::default()
+    }
+
+    pub fn remove() {
+        std::fs::remove_file(Self::path()).ok();
+    }
+}
+
 deserialize_default!(deserialize_string, String);
 deserialize_default!(deserialize_bool, bool);
 deserialize_default!(deserialize_i32, i32);
@@ -1658,6 +1758,8 @@ deserialize_default!(deserialize_vec_string, Vec<String>);
 deserialize_default!(deserialize_vec_i32_string_i32, Vec<(i32, String, i32)>);
 deserialize_default!(deserialize_vec_discoverypeer, Vec<DiscoveryPeer>);
 deserialize_default!(deserialize_vec_abpeer, Vec<AbPeer>);
+deserialize_default!(deserialize_vec_groupuser, Vec<GroupUser>);
+deserialize_default!(deserialize_vec_grouppeer, Vec<GroupPeer>);
 deserialize_default!(deserialize_keypair, KeyPair);
 deserialize_default!(deserialize_size, Size);
 deserialize_default!(deserialize_hashmap_string_string, HashMap<String, String>);

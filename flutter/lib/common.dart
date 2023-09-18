@@ -2480,3 +2480,59 @@ String toCapitalized(String s) {
   }
   return s.substring(0, 1).toUpperCase() + s.substring(1);
 }
+
+Widget buildErrorBanner(BuildContext context,
+    {required RxBool loading,
+    required RxString err,
+    required Function? retry,
+    required Function close}) {
+  const double height = 25;
+  return Obx(() => Offstage(
+        offstage: !(!loading.value && err.value.isNotEmpty),
+        child: Center(
+            child: Container(
+          height: height,
+          color: MyTheme.color(context).errorBannerBg,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              FittedBox(
+                child: Icon(
+                  Icons.info,
+                  color: Color.fromARGB(255, 249, 81, 81),
+                ),
+              ).marginAll(4),
+              Flexible(
+                child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: Tooltip(
+                      message: translate(err.value),
+                      child: Text(
+                        translate(err.value),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    )).marginSymmetric(vertical: 2),
+              ),
+              if (retry != null)
+                InkWell(
+                    onTap: () {
+                      retry.call();
+                    },
+                    child: Text(
+                      translate("Retry"),
+                      style: TextStyle(color: MyTheme.accent),
+                    )).marginSymmetric(horizontal: 5),
+              FittedBox(
+                child: InkWell(
+                  onTap: () {
+                    close.call();
+                  },
+                  child: Icon(Icons.close).marginSymmetric(horizontal: 5),
+                ),
+              ).marginAll(4)
+            ],
+          ),
+        )).marginOnly(bottom: 14),
+      ));
+}
