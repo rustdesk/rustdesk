@@ -554,7 +554,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Timeout in minutes", "Czas bezczynności w minutach"),
         ("auto_disconnect_option_tip", "Automatycznie rozłącz sesje przychodzące przy braku aktywności użytkownika"),
         ("Connection failed due to inactivity", "Automatycznie rozłącz przy bezczynności"),
-        ("Check for software update on startup", ""),
-        ("upgrade_rustdesk_server_pro_to_{}_tip", ""),
+        ("Check for software update on startup", "Sprawdź aktualizacje przy starcie programu"),
+        ("upgrade_rustdesk_server_pro_to_{}_tip", "Proszę zaktualizować RustDesk Server Pro do wersji {} lub nowszej!"),
     ].iter().cloned().collect();
 }
