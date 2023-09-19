@@ -8,7 +8,7 @@ class RenderTexture {
   final RxInt textureId = RxInt(-1);
   int _textureKey = -1;
   SessionID? _sessionId;
-  final useTextureRender = bind.mainUseTextureRender();
+  static final useTextureRender = bind.mainUseTextureRender();
 
   final textureRenderer = TextureRgbaRenderer();
 
