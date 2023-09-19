@@ -68,7 +68,7 @@ class PeerPayload {
 
   PeerPayload.fromJson(Map<String, dynamic> json)
       : id = json['id'] ?? '',
-        info = json['info'] ?? '',
+        info = (json['info'] is Map<String, dynamic>) ? json['info'] : {},
         status = json['status'],
         user = json['user'] ?? '',
         user_name = json['user_name'] ?? '',
