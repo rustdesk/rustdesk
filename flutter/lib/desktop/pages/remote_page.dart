@@ -576,11 +576,13 @@ class _ImagePaintState extends State<ImagePaint> {
       late final Widget imageWidget;
       if (c.size.width > 0 && c.size.height > 0) {
         if (widget.useTextureRender) {
+          final x = Platform.isLinux ? c.x.toInt().toDouble() : c.x;
+          final y = Platform.isLinux ? c.y.toInt().toDouble() : c.y;
           imageWidget = Stack(
             children: [
               Positioned(
-                left: c.x,
-                top: c.y,
+                left: x,
+                top: y,
                 width: c.getDisplayWidth() * s,
                 height: c.getDisplayHeight() * s,
                 child: Texture(
