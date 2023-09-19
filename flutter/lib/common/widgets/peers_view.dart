@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:collection';
 
+import 'package:dynamic_layouts/dynamic_layouts.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
@@ -177,26 +178,29 @@ class _PeersViewState extends State<_PeersView> with WindowListener {
           if (snapshot.hasData) {
             final peers = snapshot.data!;
             gFFI.peerTabModel.setCurrentTabCachedPeers(peers);
-            final cards = <Widget>[];
-            for (final peer in peers) {
-              final visibilityChild = VisibilityDetector(
-                key: ValueKey(_cardId(peer.id)),
-                onVisibilityChanged: onVisibilityChanged,
-                child: widget.peerCardBuilder(peer),
-              );
-              cards.add(isDesktop
-                  ? Obx(
-                      () => SizedBox(
-                        width: 220,
-                        height:
-                            peerCardUiType.value == PeerUiType.grid ? 140 : 42,
-                        child: visibilityChild,
-                      ),
-                    )
-                  : SizedBox(width: mobileWidth, child: visibilityChild));
-            }
-            final child =
-                Wrap(spacing: space, runSpacing: space, children: cards);
+            final child = DynamicGridView.builder(
+              gridDelegate: SliverGridDelegateWithWrapping(
+                  mainAxisSpacing: space / 2, crossAxisSpacing: space),
+              itemCount: peers.length,
+              itemBuilder: (BuildContext context, int index) {
+                final visibilityChild = VisibilityDetector(
+                  key: ValueKey(_cardId(peers[index].id)),
+                  onVisibilityChanged: onVisibilityChanged,
+                  child: widget.peerCardBuilder(peers[index]),
+                );
+                return isDesktop
+                    ? Obx(
+                        () => SizedBox(
+                          width: 220,
+                          height: peerCardUiType.value == PeerUiType.grid
+                              ? 140
+                              : 42,
+                          child: visibilityChild,
+                        ),
+                      )
+                    : SizedBox(width: mobileWidth, child: visibilityChild);
+              },
+            );
             if (updateEvent == UpdateEvent.load) {
               _curPeers.clear();
               _curPeers.addAll(peers.map((e) => e.id));
