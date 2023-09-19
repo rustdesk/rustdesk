@@ -138,7 +138,7 @@ class _ConnectionPageState extends State<ConnectionPage>
                   Divider().paddingOnly(right: 12),
                 ])),
                 SliverFillRemaining(
-                  hasScrollBody: false,
+                  hasScrollBody: true,
                   child: PeerTabPage().paddingOnly(right: 12.0),
                 )
               ],

@@ -145,15 +145,14 @@ class GroupModel {
       final pageSize = 100;
       var total = 0;
       int current = 0;
-      var queryParameters = {
-        'current': current.toString(),
-        'pageSize': pageSize.toString(),
-        'accessible': '',
-        'status': '1',
-        'user_status': '1',
-      };
       do {
         current += 1;
+        var queryParameters = {
+          'current': current.toString(),
+          'pageSize': pageSize.toString(),
+          'accessible': '',
+          'status': '1',
+        };
         var uri = Uri(
             scheme: uri0.scheme,
             host: uri0.host,

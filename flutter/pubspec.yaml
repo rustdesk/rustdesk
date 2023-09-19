@@ -100,6 +100,11 @@ dependencies:
   uuid: ^3.0.7
   auto_size_text_field: ^2.2.1
   flex_color_picker: ^3.3.0
+  dynamic_layouts:
+    git:
+      url: https://github.com/flutter/packages.git
+      path: packages/dynamic_layouts
+      ref: 0023d01996576e494094793a6552463f01c5627a
 
 dev_dependencies:
   icons_launcher: ^2.0.4
