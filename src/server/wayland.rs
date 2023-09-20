@@ -2,6 +2,7 @@ use super::*;
 use hbb_common::{allow_err, platform::linux::DISTRO};
 use scrap::{is_cursor_embedded, set_map_err, Capturer, Display, Frame, TraitCapturer};
 use std::io;
+use std::process::{Command, Output};
 
 use crate::client::{
     SCRAP_OTHER_VERSION_OR_X11_REQUIRED, SCRAP_UBUNTU_HIGHER_REQUIRED, SCRAP_X11_REQUIRED,
@@ -115,6 +116,22 @@ pub(super) fn is_inited() -> Option<Message> {
     }
 }
 
+fn get_max_desktop_resolution() -> Option<String> {
+    // works with Xwayland
+    let output: Output = Command::new("sh")
+        .arg("-c")
+        .arg("xrandr | awk '/current/ { print $8,$9,$10 }'")
+        .output()
+        .ok()?;
+
+    if output.status.success() {
+        let result = String::from_utf8_lossy(&output.stdout);
+        Some(result.trim().to_string())
+    } else {
+        None
+    }
+}
+
 pub(super) async fn check_init() -> ResultType<()> {
     if !scrap::is_x11() {
         let mut minx = 0;
@@ -151,10 +168,20 @@ pub(super) async fn check_init() -> ResultType<()> {
                     num_cpus::get(),
                 );
 
-                minx = origin.0;
-                maxx = origin.0 + width as i32;
-                miny = origin.1;
-                maxy = origin.1 + height as i32;
+                let (max_width, max_height) = match get_max_desktop_resolution() {
+                    Some(result) if !result.is_empty() => {
+                        let resolution: Vec<&str> = result.split(" ").collect();
+                        let w: i32 = resolution[0].parse().unwrap_or(origin.0 + width as i32);
+                        let h: i32 = resolution[2].trim_end_matches(",").parse().unwrap_or(origin.1 + height as i32);
+                        (w, h)
+                    }
+                    _ => (origin.0 + width as i32, origin.1 + height as i32)
+                };
+            
+                minx = 0;
+                maxx = max_width;
+                miny = 0;
+                maxy = max_height;
 
                 let capturer = Box::into_raw(Box::new(
                     Capturer::new(display, true).with_context(|| "Failed to create capturer")?,
