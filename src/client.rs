@@ -1195,6 +1195,17 @@ impl LoginConfigHandler {
         self.save_config(config);
     }
 
+    /// Save reverse mouse wheel ("", "Y") to the current config.
+    ///
+    /// # Arguments
+    ///
+    /// * `value` - The reverse mouse wheel ("", "Y").
+    pub fn save_reverse_mouse_wheel(&mut self, value: String) {
+        let mut config = self.load_config();
+        config.reverse_mouse_wheel = value;
+        self.save_config(config);
+    }
+
     /// Save scroll style to the current config.
     ///
     /// # Arguments

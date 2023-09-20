@@ -204,6 +204,7 @@ pub struct Connection {
     delay_response_instant: Instant,
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     start_cm_ipc_para: Option<StartCmIpcPara>,
+    auto_disconnect_timer: Option<(Instant, u64)>,
 }
 
 impl ConnInner {
@@ -343,6 +344,7 @@ impl Connection {
                 rx_desktop_ready,
                 tx_cm_stream_ready,
             }),
+            auto_disconnect_timer: None,
         };
         let addr = hbb_common::try_into_v4(addr);
         if !conn.on_open(addr).await {
@@ -467,11 +469,6 @@ impl Connection {
                                     video_service::set_privacy_mode_conn_id(0);
                                     crate::common::make_privacy_mode_msg(
                                         back_notification::PrivacyModeState::PrvOffSucceeded,
-                                    )
-                                }
-                                ipc::PrivacyModeState::OffFailed => {
-                                    crate::common::make_privacy_mode_msg(
-                                        back_notification::PrivacyModeState::PrvOffFailed,
                                     )
                                 }
                                 ipc::PrivacyModeState::OffByPeer => {
@@ -605,6 +602,13 @@ impl Connection {
                 _ = second_timer.tick() => {
                     #[cfg(windows)]
                     conn.portable_check();
+                    if let Some((instant, minute)) = conn.auto_disconnect_timer.as_ref() {
+                        if instant.elapsed().as_secs() > minute * 60 {
+                            conn.send_close_reason_no_retry("Connection failed due to inactivity").await;
+                            conn.on_close("auto disconnect", true).await;
+                            break;
+                        }
+                    }
                 }
                 _ = test_delay_timer.tick() => {
                     if last_recv_time.elapsed() >= SEC30 {
@@ -667,10 +671,10 @@ impl Connection {
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     fn handle_input(receiver: std_mpsc::Receiver<MessageInput>, tx: Sender) {
         let mut block_input_mode = false;
-        #[cfg(target_os = "windows")]
+        #[cfg(any(target_os = "windows", target_os = "macos"))]
         {
-            rdev::set_dw_mouse_extra_info(enigo::ENIGO_INPUT_EXTRA_VALUE);
-            rdev::set_dw_keyboard_extra_info(enigo::ENIGO_INPUT_EXTRA_VALUE);
+            rdev::set_mouse_extra_info(enigo::ENIGO_INPUT_EXTRA_VALUE);
+            rdev::set_keyboard_extra_info(enigo::ENIGO_INPUT_EXTRA_VALUE);
         }
         #[cfg(target_os = "macos")]
         reset_input_ondisconn();
@@ -695,29 +699,34 @@ impl Connection {
                         handle_pointer(&msg, id);
                     }
                     MessageInput::BlockOn => {
-                        if crate::platform::block_input(true) {
+                        let (ok, msg) = crate::platform::block_input(true);
+                        if ok {
                             block_input_mode = true;
                         } else {
                             Self::send_block_input_error(
                                 &tx,
                                 back_notification::BlockInputState::BlkOnFailed,
+                                msg,
                             );
                         }
                     }
                     MessageInput::BlockOff => {
-                        if crate::platform::block_input(false) {
+                        let (ok, msg) = crate::platform::block_input(false);
+                        if ok {
                             block_input_mode = false;
                         } else {
                             Self::send_block_input_error(
                                 &tx,
                                 back_notification::BlockInputState::BlkOffFailed,
+                                msg,
                             );
                         }
                     }
                     #[cfg(all(feature = "flutter", feature = "plugin_framework"))]
                     #[cfg(not(any(target_os = "android", target_os = "ios")))]
                     MessageInput::BlockOnPlugin(_peer) => {
-                        if crate::platform::block_input(true) {
+                        let (ok, _msg) = crate::platform::block_input(true);
+                        if ok {
                             block_input_mode = true;
                         }
                         let _r = PLUGIN_BLOCK_INPUT_TX_RX
@@ -729,7 +738,8 @@ impl Connection {
                     #[cfg(all(feature = "flutter", feature = "plugin_framework"))]
                     #[cfg(not(any(target_os = "android", target_os = "ios")))]
                     MessageInput::BlockOffPlugin(_peer) => {
-                        if crate::platform::block_input(false) {
+                        let (ok, _msg) = crate::platform::block_input(false);
+                        if ok {
                             block_input_mode = false;
                         }
                         let _r = PLUGIN_BLOCK_INPUT_TX_RX
@@ -1139,6 +1149,7 @@ impl Connection {
                 let mut s = s.write().unwrap();
                 #[cfg(not(any(target_os = "android", target_os = "ios")))]
                 let _h = try_start_record_cursor_pos();
+                self.auto_disconnect_timer = Self::get_auto_disconenct_timer();
                 s.add_connection(self.inner.clone(), &noperms);
             }
         }
@@ -1199,9 +1210,16 @@ impl Connection {
     }
 
     #[inline]
-    pub fn send_block_input_error(s: &Sender, state: back_notification::BlockInputState) {
+    pub fn send_block_input_error(
+        s: &Sender,
+        state: back_notification::BlockInputState,
+        details: String,
+    ) {
         let mut misc = Misc::new();
-        let mut back_notification = BackNotification::new();
+        let mut back_notification = BackNotification {
+            details,
+            ..Default::default()
+        };
         back_notification.set_block_input_state(state);
         misc.set_back_notification(back_notification);
         let mut msg_out = Message::new();
@@ -1349,6 +1367,12 @@ impl Connection {
                 .await
                 {
                     log::error!("ipc to connection manager exit: {}", err);
+                }
+            });
+            #[cfg(all(windows, feature = "flutter"))]
+            std::thread::spawn(|| {
+                if crate::is_server() && !crate::check_process("--tray", false) {
+                    crate::platform::run_as_user(vec!["--tray"]).ok();
                 }
             });
         }
@@ -1606,6 +1630,7 @@ impl Connection {
                         }
                         self.input_mouse(me, self.inner.id());
                     }
+                    self.update_auto_disconnect_timer();
                 }
                 Some(message::Union::PointerDeviceEvent(pde)) => {
                     #[cfg(any(target_os = "android", target_os = "ios"))]
@@ -1641,6 +1666,7 @@ impl Connection {
                         MOUSE_MOVE_TIME.store(get_time(), Ordering::SeqCst);
                         self.input_pointer(pde, self.inner.id());
                     }
+                    self.update_auto_disconnect_timer();
                 }
                 #[cfg(any(target_os = "android", target_os = "ios"))]
                 Some(message::Union::KeyEvent(..)) => {}
@@ -1696,6 +1722,7 @@ impl Connection {
                             self.input_key(me, false);
                         }
                     }
+                    self.update_auto_disconnect_timer();
                 }
                 Some(message::Union::Clipboard(_cb)) =>
                 {
@@ -1884,6 +1911,7 @@ impl Connection {
                     Some(misc::Union::ChatMessage(c)) => {
                         self.send_to_cm(ipc::Data::ChatMessage { text: c.text });
                         self.chat_unanswered = true;
+                        self.update_auto_disconnect_timer();
                     }
                     Some(misc::Union::Option(o)) => {
                         self.update_options(&o).await;
@@ -1892,6 +1920,7 @@ impl Connection {
                         if r {
                             super::video_service::refresh();
                         }
+                        self.update_auto_disconnect_timer();
                     }
                     Some(misc::Union::VideoReceived(_)) => {
                         video_service::notify_video_frame_fetched(
@@ -2021,6 +2050,7 @@ impl Connection {
         let mut msg = Message::new();
         msg.set_misc(misc);
         self.send(msg).await;
+        self.update_auto_disconnect_timer();
     }
 
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -2199,13 +2229,16 @@ impl Connection {
                 match q {
                     BoolOption::Yes => {
                         let msg_out = if !video_service::is_privacy_mode_supported() {
-                            crate::common::make_privacy_mode_msg(
+                            crate::common::make_privacy_mode_msg_with_details(
                                 back_notification::PrivacyModeState::PrvNotSupported,
+                                "Unsupported. 1 Multi-screen is not supported. 2 Please confirm the license is activated.".to_string(),
                             )
                         } else {
                             match privacy_mode::turn_on_privacy(self.inner.id) {
                                 Ok(true) => {
-                                    if video_service::test_create_capturer(self.inner.id, 5_000) {
+                                    let err_msg =
+                                        video_service::test_create_capturer(self.inner.id, 5_000);
+                                    if err_msg.is_empty() {
                                         video_service::set_privacy_mode_conn_id(self.inner.id);
                                         crate::common::make_privacy_mode_msg(
                                             back_notification::PrivacyModeState::PrvOnSucceeded,
@@ -2216,8 +2249,9 @@ impl Connection {
                                         );
                                         video_service::set_privacy_mode_conn_id(0);
                                         let _ = privacy_mode::turn_off_privacy(self.inner.id);
-                                        crate::common::make_privacy_mode_msg(
+                                        crate::common::make_privacy_mode_msg_with_details(
                                             back_notification::PrivacyModeState::PrvOnFailed,
+                                            err_msg,
                                         )
                                     }
                                 }
@@ -2229,8 +2263,9 @@ impl Connection {
                                     if video_service::get_privacy_mode_conn_id() == 0 {
                                         let _ = privacy_mode::turn_off_privacy(0);
                                     }
-                                    crate::common::make_privacy_mode_msg(
+                                    crate::common::make_privacy_mode_msg_with_details(
                                         back_notification::PrivacyModeState::PrvOnFailed,
+                                        e.to_string(),
                                     )
                                 }
                             }
@@ -2239,8 +2274,9 @@ impl Connection {
                     }
                     BoolOption::No => {
                         let msg_out = if !video_service::is_privacy_mode_supported() {
-                            crate::common::make_privacy_mode_msg(
+                            crate::common::make_privacy_mode_msg_with_details(
                                 back_notification::PrivacyModeState::PrvNotSupported,
+                                "Unsupported. 1 Multi-screen is not supported. 2 Please confirm the license is activated.".to_string(),
                             )
                         } else {
                             video_service::set_privacy_mode_conn_id(0);
@@ -2278,7 +2314,7 @@ impl Connection {
             lock_screen().await;
         }
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
-        let data = if self.chat_unanswered || self.file_transferred {
+        let data = if self.chat_unanswered || self.file_transferred && cfg!(feature = "flutter") {
             ipc::Data::Disconnected
         } else {
             ipc::Data::Close
@@ -2378,6 +2414,26 @@ impl Connection {
         }
         self.pressed_modifiers.clear();
     }
+
+    fn get_auto_disconenct_timer() -> Option<(Instant, u64)> {
+        if Config::get_option("allow-auto-disconnect") == "Y" {
+            let mut minute: u64 = Config::get_option("auto-disconnect-timeout")
+                .parse()
+                .unwrap_or(10);
+            if minute == 0 {
+                minute = 10;
+            }
+            Some((Instant::now(), minute))
+        } else {
+            None
+        }
+    }
+
+    fn update_auto_disconnect_timer(&mut self) {
+        self.auto_disconnect_timer
+            .as_mut()
+            .map(|t| t.0 = Instant::now());
+    }
 }
 
 pub fn insert_switch_sides_uuid(id: String, uuid: uuid::Uuid) {
@@ -2406,6 +2462,8 @@ async fn start_ipc(
     if let Ok(s) = crate::ipc::connect(1000, "_cm").await {
         stream = Some(s);
     } else {
+        #[allow(unused_mut)]
+        #[allow(unused_assignments)]
         let mut args = vec!["--cm"];
         if crate::hbbs_http::sync::is_pro() && password::hide_cm() {
             args.push("--hide");
@@ -2553,8 +2611,9 @@ mod privacy_mode {
                 ),
                 Err(e) => {
                     log::error!("Failed to turn off privacy mode {}", e);
-                    crate::common::make_privacy_mode_msg(
+                    crate::common::make_privacy_mode_msg_with_details(
                         back_notification::PrivacyModeState::PrvOffFailed,
+                        e.to_string(),
                     )
                 }
             }

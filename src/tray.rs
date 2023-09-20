@@ -1,5 +1,11 @@
+use crate::{client::translate, ipc::Data};
+use hbb_common::{allow_err, log, tokio};
+use std::{
+    sync::{Arc, Mutex},
+    time::Duration,
+};
+
 pub fn start_tray() {
-    use hbb_common::{allow_err, log};
     allow_err!(make_tray());
 }
 
@@ -40,29 +46,42 @@ pub fn make_tray() -> hbb_common::ResultType<()> {
     let event_loop = EventLoopBuilder::new().build();
 
     let tray_menu = Menu::new();
-    let quit_i = MenuItem::new(crate::client::translate("Exit".to_owned()), true, None);
-    let open_i = MenuItem::new(crate::client::translate("Open".to_owned()), true, None);
+    let quit_i = MenuItem::new(translate("Exit".to_owned()), true, None);
+    let open_i = MenuItem::new(translate("Open".to_owned()), true, None);
     tray_menu.append_items(&[&open_i, &quit_i]);
-
-    let _tray_icon = Some(
-        TrayIconBuilder::new()
-            .with_menu(Box::new(tray_menu))
-            .with_tooltip(format!(
+    let tooltip = |count: usize| {
+        if count == 0 {
+            format!(
                 "{} {}",
                 crate::get_app_name(),
-                crate::lang::translate("Service is running".to_owned())
-            ))
+                translate("Service is running".to_owned()),
+            )
+        } else {
+            format!(
+                "{} - {}\n{}",
+                crate::get_app_name(),
+                translate("Ready".to_owned()),
+                translate("{".to_string() + &format!("{count}") + "} sessions"),
+            )
+        }
+    };
+    let tray_icon = Some(
+        TrayIconBuilder::new()
+            .with_menu(Box::new(tray_menu))
+            .with_tooltip(tooltip(0))
             .with_icon(icon)
             .build()?,
     );
+    let tray_icon = Arc::new(Mutex::new(tray_icon));
 
     let menu_channel = MenuEvent::receiver();
     let tray_channel = TrayEvent::receiver();
+    #[cfg(windows)]
+    let (ipc_sender, ipc_receiver) = std::sync::mpsc::channel::<Data>();
     let mut docker_hiden = false;
 
     let open_func = move || {
-        if cfg!(not(feature = "flutter"))
-        {
+        if cfg!(not(feature = "flutter")) {
             crate::run_me::<&str>(vec![]).ok();
             return;
         }
@@ -89,6 +108,10 @@ pub fn make_tray() -> hbb_common::ResultType<()> {
         }
     };
 
+    #[cfg(windows)]
+    std::thread::spawn(move || {
+        start_query_session_count(ipc_sender.clone());
+    });
     event_loop.run(move |_event, _, control_flow| {
         if !docker_hiden {
             #[cfg(target_os = "macos")]
@@ -121,5 +144,55 @@ pub fn make_tray() -> hbb_common::ResultType<()> {
                 open_func();
             }
         }
+
+        #[cfg(windows)]
+        if let Ok(data) = ipc_receiver.try_recv() {
+            match data {
+                Data::ControlledSessionCount(count) => {
+                    tray_icon
+                        .lock()
+                        .unwrap()
+                        .as_mut()
+                        .map(|t| t.set_tooltip(Some(tooltip(count))));
+                }
+                _ => {}
+            }
+        }
     });
+}
+
+#[cfg(windows)]
+#[tokio::main(flavor = "current_thread")]
+async fn start_query_session_count(sender: std::sync::mpsc::Sender<Data>) {
+    let mut last_count = 0;
+    loop {
+        if let Ok(mut c) = crate::ipc::connect(1000, "").await {
+            let mut timer = tokio::time::interval(Duration::from_secs(1));
+            loop {
+                tokio::select! {
+                    res = c.next() => {
+                        match res {
+                            Err(err) => {
+                                log::error!("ipc connection closed: {}", err);
+                                break;
+                            }
+
+                            Ok(Some(Data::ControlledSessionCount(count))) => {
+                                if count != last_count {
+                                    last_count = count;
+                                    sender.send(Data::ControlledSessionCount(count)).ok();
+                                }
+                            }
+                            _ => {}
+                        }
+                    }
+
+                    _ = timer.tick() => {
+                        c.send(&Data::ControlledSessionCount(0)).await.ok();
+                    }
+                }
+            }
+        }
+        hbb_common::sleep(1.).await;
+    }
 }

@@ -77,5 +77,19 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("pull_ab_failed_tip", "Failed to refresh address book"),
         ("push_ab_failed_tip", "Failed to sync address book to server"),
         ("synced_peer_readded_tip", "The devices that were present in the recent sessions will be synchronized back to the address book."),
+        ("View Mode", "View mode"),
+        ("Block user input", "Block User Input"),
+        ("Start session recording", "Start Session Recording"),
+        ("Stop session recording", "Stop Session Recording"),
+        ("Enable remote configuration modification", "Enable Remote Configuration Modification"),
+        ("scam_title", "You May Be Being SCAMMED!"),
+        ("scam_text1", "If you are on the phone with someone you DON'T know AND TRUST who has asked you to use RustDesk and start the service, do not proceed and hang up immediately."),
+        ("scam_text2", "They are likely a scammer trying to steal your money or other private information."),
+        ("Don't show again", "Don't show again"),
+        ("I Agree", "I Agree"),
+        ("Decline", "Decline"),
+        ("auto_disconnect_option_tip", "Automatically close incoming sessions on user inactivity"),
+        ("Connection failed due to inactivity", "Automatically disconnected due to inactivity"),
+        ("upgrade_rustdesk_server_pro_to_{}_tip", "Please upgrade RustDesk Server Pro to version {} or newer!")
         ].iter().cloned().collect();
 }

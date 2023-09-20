@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:collection';
 
+import 'package:dynamic_layouts/dynamic_layouts.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
@@ -35,6 +36,7 @@ class LoadEvent {
   static const String favorite = 'load_fav_peers';
   static const String lan = 'load_lan_peers';
   static const String addressBook = 'load_address_book_peers';
+  static const String group = 'load_group_peers';
 }
 
 /// for peer search text, global obs value
@@ -176,26 +178,29 @@ class _PeersViewState extends State<_PeersView> with WindowListener {
           if (snapshot.hasData) {
             final peers = snapshot.data!;
             gFFI.peerTabModel.setCurrentTabCachedPeers(peers);
-            final cards = <Widget>[];
-            for (final peer in peers) {
-              final visibilityChild = VisibilityDetector(
-                key: ValueKey(_cardId(peer.id)),
-                onVisibilityChanged: onVisibilityChanged,
-                child: widget.peerCardBuilder(peer),
-              );
-              cards.add(isDesktop
-                  ? Obx(
-                      () => SizedBox(
-                        width: 220,
-                        height:
-                            peerCardUiType.value == PeerUiType.grid ? 140 : 42,
-                        child: visibilityChild,
-                      ),
-                    )
-                  : SizedBox(width: mobileWidth, child: visibilityChild));
-            }
-            final child =
-                Wrap(spacing: space, runSpacing: space, children: cards);
+            final child = DynamicGridView.builder(
+              gridDelegate: SliverGridDelegateWithWrapping(
+                  mainAxisSpacing: space / 2, crossAxisSpacing: space),
+              itemCount: peers.length,
+              itemBuilder: (BuildContext context, int index) {
+                final visibilityChild = VisibilityDetector(
+                  key: ValueKey(_cardId(peers[index].id)),
+                  onVisibilityChanged: onVisibilityChanged,
+                  child: widget.peerCardBuilder(peers[index]),
+                );
+                return isDesktop
+                    ? Obx(
+                        () => SizedBox(
+                          width: 220,
+                          height: peerCardUiType.value == PeerUiType.grid
+                              ? 140
+                              : 42,
+                          child: visibilityChild,
+                        ),
+                      )
+                    : SizedBox(width: mobileWidth, child: visibilityChild);
+              },
+            );
             if (updateEvent == UpdateEvent.load) {
               _curPeers.clear();
               _curPeers.addAll(peers.map((e) => e.id));
@@ -312,7 +317,7 @@ abstract class BasePeersView extends StatelessWidget {
   final String loadEvent;
   final PeerFilter? peerFilter;
   final PeerCardBuilder peerCardBuilder;
-  final List<Peer> initPeers;
+  final RxList<Peer>? initPeers;
 
   const BasePeersView({
     Key? key,
@@ -326,7 +331,7 @@ abstract class BasePeersView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return _PeersView(
-        peers: Peers(name: name, loadEvent: loadEvent, peers: initPeers),
+        peers: Peers(name: name, loadEvent: loadEvent, initPeers: initPeers),
         peerFilter: peerFilter,
         peerCardBuilder: peerCardBuilder);
   }
@@ -343,7 +348,7 @@ class RecentPeersView extends BasePeersView {
             peer: peer,
             menuPadding: menuPadding,
           ),
-          initPeers: [],
+          initPeers: null,
         );
 
   @override
@@ -365,7 +370,7 @@ class FavoritePeersView extends BasePeersView {
             peer: peer,
             menuPadding: menuPadding,
           ),
-          initPeers: [],
+          initPeers: null,
         );
 
   @override
@@ -387,7 +392,7 @@ class DiscoveredPeersView extends BasePeersView {
             peer: peer,
             menuPadding: menuPadding,
           ),
-          initPeers: [],
+          initPeers: null,
         );
 
   @override
@@ -403,7 +408,7 @@ class AddressBookPeersView extends BasePeersView {
       {Key? key,
       EdgeInsets? menuPadding,
       ScrollController? scrollController,
-      required List<Peer> initPeers})
+      required RxList<Peer> initPeers})
       : super(
           key: key,
           name: 'address book peer',
@@ -435,11 +440,11 @@ class MyGroupPeerView extends BasePeersView {
       {Key? key,
       EdgeInsets? menuPadding,
       ScrollController? scrollController,
-      required List<Peer> initPeers})
+      required RxList<Peer> initPeers})
       : super(
           key: key,
-          name: 'my group peer',
-          loadEvent: 'load_my_group_peers',
+          name: 'group peer',
+          loadEvent: LoadEvent.group,
           peerFilter: filter,
           peerCardBuilder: (Peer peer) => MyGroupPeerCard(
             peer: peer,
@@ -450,12 +455,12 @@ class MyGroupPeerView extends BasePeersView {
 
   static bool filter(Peer peer) {
     if (gFFI.groupModel.searchUserText.isNotEmpty) {
-      if (!peer.username.contains(gFFI.groupModel.searchUserText)) {
+      if (!peer.loginName.contains(gFFI.groupModel.searchUserText)) {
         return false;
       }
     }
     if (gFFI.groupModel.selectedUser.isNotEmpty) {
-      if (gFFI.groupModel.selectedUser.value != peer.username) {
+      if (gFFI.groupModel.selectedUser.value != peer.loginName) {
         return false;
       }
     }

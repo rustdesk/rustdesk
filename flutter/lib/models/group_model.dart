@@ -1,6 +1,7 @@
 import 'package:flutter/widgets.dart';
 import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/common/hbbs/hbbs.dart';
+import 'package:flutter_hbb/common/widgets/peers_view.dart';
 import 'package:flutter_hbb/models/model.dart';
 import 'package:flutter_hbb/models/peer_model.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
@@ -11,57 +12,74 @@ import 'package:http/http.dart' as http;
 class GroupModel {
   final RxBool groupLoading = false.obs;
   final RxString groupLoadError = "".obs;
-  final RxString groupId = ''.obs;
-  RxString groupName = ''.obs;
   final RxList<UserPayload> users = RxList.empty(growable: true);
-  final RxList<Peer> peersShow = RxList.empty(growable: true);
+  final RxList<Peer> peers = RxList.empty(growable: true);
   final RxString selectedUser = ''.obs;
   final RxString searchUserText = ''.obs;
   WeakReference<FFI> parent;
   var initialized = false;
+  var _cacheLoadOnceFlag = false;
+  var _statusCode = 200;
+
+  bool get emtpy => users.isEmpty && peers.isEmpty;
 
   GroupModel(this.parent);
 
-  reset() {
-    groupName.value = '';
-    groupId.value = '';
-    users.clear();
-    peersShow.clear();
-    initialized = false;
-  }
-
   Future<void> pull({force = true, quiet = false}) async {
-    /*
+    if (!gFFI.userModel.isLogin || groupLoading.value) return;
     if (!force && initialized) return;
     if (!quiet) {
       groupLoading.value = true;
       groupLoadError.value = "";
     }
-    await _pull();
+    try {
+      await _pull();
+    } catch (_) {}
     groupLoading.value = false;
     initialized = true;
-    */
+    platformFFI.tryHandle({'name': LoadEvent.group});
+    if (_statusCode == 401) {
+      gFFI.userModel.reset(resetOther: true);
+    } else {
+      _saveCache();
+    }
   }
 
   Future<void> _pull() async {
-    reset();
-    if (bind.mainGetLocalOption(key: 'access_token') == '') {
+    List<UserPayload> tmpUsers = List.empty(growable: true);
+    if (!await _getUsers(tmpUsers)) {
       return;
     }
-    try {
-      if (!await _getGroup()) {
-        reset();
-        return;
-      }
-    } catch (e) {
-      debugPrint('$e');
-      reset();
+    List<Peer> tmpPeers = List.empty(growable: true);
+    if (!await _getPeers(tmpPeers)) {
       return;
     }
+    // me first
+    var index = tmpUsers
+        .indexWhere((user) => user.name == gFFI.userModel.userName.value);
+    if (index != -1) {
+      var user = tmpUsers.removeAt(index);
+      tmpUsers.insert(0, user);
+    }
+    users.value = tmpUsers;
+    if (!users.any((u) => u.name == selectedUser.value)) {
+      selectedUser.value = '';
+    }
+    // recover online
+    final oldOnlineIDs = peers.where((e) => e.online).map((e) => e.id).toList();
+    peers.value = tmpPeers;
+    peers
+        .where((e) => oldOnlineIDs.contains(e.id))
+        .map((e) => e.online = true)
+        .toList();
+    groupLoadError.value = '';
+  }
+
+  Future<bool> _getUsers(List<UserPayload> tmpUsers) async {
     final api = "${await bind.mainGetApiServer()}/api/users";
     try {
       var uri0 = Uri.parse(api);
-      final pageSize = 20;
+      final pageSize = 100;
       var total = 0;
       int current = 0;
       do {
@@ -74,86 +92,67 @@ class GroupModel {
             queryParameters: {
               'current': current.toString(),
               'pageSize': pageSize.toString(),
-              if (gFFI.userModel.isAdmin.isFalse) 'grp': groupId.value,
+              'accessible': '',
+              'status': '1',
             });
         final resp = await http.get(uri, headers: getHttpHeaders());
-        if (resp.body.isNotEmpty && resp.body.toLowerCase() != "null") {
-          Map<String, dynamic> json = jsonDecode(utf8.decode(resp.bodyBytes));
-          if (json.containsKey('error')) {
-            throw json['error'];
+        _statusCode = resp.statusCode;
+        Map<String, dynamic> json =
+            _jsonDecodeResp(utf8.decode(resp.bodyBytes), resp.statusCode);
+        if (json.containsKey('error')) {
+          if (json['error'] == 'Admin required!' ||
+              json['error']
+                  .toString()
+                  .contains('ambiguous column name: status')) {
+            throw translate('upgrade_rustdesk_server_pro_to_{1.1.10}_tip');
           } else {
-            if (json.containsKey('total')) {
-              if (total == 0) total = json['total'];
-              if (json.containsKey('data')) {
-                final data = json['data'];
-                if (data is List) {
-                  for (final user in data) {
-                    final u = UserPayload.fromJson(user);
-                    if (!users.any((e) => e.name == u.name)) {
-                      users.add(u);
-                    }
-                  }
+            throw json['error'];
+          }
+        }
+        if (resp.statusCode != 200) {
+          throw 'HTTP ${resp.statusCode}';
+        }
+        if (json.containsKey('total')) {
+          if (total == 0) total = json['total'];
+          if (json.containsKey('data')) {
+            final data = json['data'];
+            if (data is List) {
+              for (final user in data) {
+                final u = UserPayload.fromJson(user);
+                int index = tmpUsers.indexWhere((e) => e.name == u.name);
+                if (index < 0) {
+                  tmpUsers.add(u);
+                } else {
+                  tmpUsers[index] = u;
                 }
               }
             }
           }
         }
       } while (current * pageSize < total);
+      return true;
     } catch (err) {
-      debugPrint('$err');
+      debugPrint('get accessible users: $err');
       groupLoadError.value = err.toString();
-    } finally {
-      _pullUserPeers();
     }
-  }
-
-  Future<bool> _getGroup() async {
-    final url = await bind.mainGetApiServer();
-    final body = {
-      'id': await bind.mainGetMyId(),
-      'uuid': await bind.mainGetUuid()
-    };
-    try {
-      final response = await http.post(Uri.parse('$url/api/currentGroup'),
-          headers: getHttpHeaders(), body: json.encode(body));
-      final status = response.statusCode;
-      if (status == 401 || status == 400) {
-        return false;
-      }
-      final data = json.decode(utf8.decode(response.bodyBytes));
-      final error = data['error'];
-      if (error != null) {
-        throw error;
-      }
-      groupName.value = data['name'] ?? '';
-      groupId.value = data['guid'] ?? '';
-      return groupId.value.isNotEmpty && groupName.isNotEmpty;
-    } catch (e) {
-      debugPrint('$e');
-      groupLoadError.value = e.toString();
-    } finally {}
-
     return false;
   }
 
-  Future<void> _pullUserPeers() async {
-    peersShow.clear();
-    final api = "${await bind.mainGetApiServer()}/api/peers";
+  Future<bool> _getPeers(List<Peer> tmpPeers) async {
     try {
+      final api = "${await bind.mainGetApiServer()}/api/peers";
       var uri0 = Uri.parse(api);
-      final pageSize =
-          20; // ????????????????????????????????????????????????????? stupid stupis, how about >20 peers
+      final pageSize = 100;
       var total = 0;
       int current = 0;
-      var queryParameters = {
-        'current': current.toString(),
-        'pageSize': pageSize.toString(),
-      };
-      if (!gFFI.userModel.isAdmin.value) {
-        queryParameters.addAll({'grp': groupId.value});
-      }
       do {
         current += 1;
+        var queryParameters = {
+          'current': current.toString(),
+          'pageSize': pageSize.toString(),
+          'accessible': '',
+          'status': '1',
+        };
         var uri = Uri(
             scheme: uri0.scheme,
             host: uri0.host,
@@ -161,32 +160,107 @@ class GroupModel {
             port: uri0.port,
             queryParameters: queryParameters);
         final resp = await http.get(uri, headers: getHttpHeaders());
-        if (resp.body.isNotEmpty && resp.body.toLowerCase() != "null") {
-          Map<String, dynamic> json = jsonDecode(utf8.decode(resp.bodyBytes));
-          if (json.containsKey('error')) {
-            throw json['error'];
-          } else {
-            if (json.containsKey('total')) {
-              if (total == 0) total = json['total'];
-              if (json.containsKey('data')) {
-                final data = json['data'];
-                if (data is List) {
-                  for (final p in data) {
-                    final peerPayload = PeerPayload.fromJson(p);
-                    final peer = PeerPayload.toPeer(peerPayload);
-                    if (!peersShow.any((e) => e.id == peer.id)) {
-                      peersShow.add(peer);
-                    }
-                  }
+        _statusCode = resp.statusCode;
+
+        Map<String, dynamic> json =
+            _jsonDecodeResp(utf8.decode(resp.bodyBytes), resp.statusCode);
+        if (json.containsKey('error')) {
+          throw json['error'];
+        }
+        if (resp.statusCode != 200) {
+          throw 'HTTP ${resp.statusCode}';
+        }
+        if (json.containsKey('total')) {
+          if (total == 0) total = json['total'];
+          if (total > 1000) {
+            total = 1000;
+          }
+          if (json.containsKey('data')) {
+            final data = json['data'];
+            if (data is List) {
+              for (final p in data) {
+                final peerPayload = PeerPayload.fromJson(p);
+                final peer = PeerPayload.toPeer(peerPayload);
+                int index = tmpPeers.indexWhere((e) => e.id == peer.id);
+                if (index < 0) {
+                  tmpPeers.add(peer);
+                } else {
+                  tmpPeers[index] = peer;
+                }
+                if (tmpPeers.length >= 1000) {
+                  break;
                 }
               }
             }
           }
         }
       } while (current * pageSize < total);
+      return true;
     } catch (err) {
-      debugPrint('$err');
+      debugPrint('get accessible peers: $err');
       groupLoadError.value = err.toString();
-    } finally {}
+    }
+    return false;
+  }
+
+  Map<String, dynamic> _jsonDecodeResp(String body, int statusCode) {
+    try {
+      Map<String, dynamic> json = jsonDecode(body);
+      return json;
+    } catch (e) {
+      final err = body.isNotEmpty && body.length < 128 ? body : e.toString();
+      if (statusCode != 200) {
+        throw 'HTTP $statusCode, $err';
+      }
+      throw err;
+    }
+  }
+
+  void _saveCache() {
+    try {
+      final map = (<String, dynamic>{
+        "access_token": bind.mainGetLocalOption(key: 'access_token'),
+        "users": users.map((e) => e.toGroupCacheJson()).toList(),
+        'peers': peers.map((e) => e.toGroupCacheJson()).toList()
+      });
+      bind.mainSaveGroup(json: jsonEncode(map));
+    } catch (e) {
+      debugPrint('group save:$e');
+    }
+  }
+
+  loadCache() async {
+    try {
+      if (_cacheLoadOnceFlag || groupLoading.value || initialized) return;
+      _cacheLoadOnceFlag = true;
+      final access_token = bind.mainGetLocalOption(key: 'access_token');
+      if (access_token.isEmpty) return;
+      final cache = await bind.mainLoadGroup();
+      if (groupLoading.value) return;
+      final data = jsonDecode(cache);
+      if (data == null || data['access_token'] != access_token) return;
+      users.clear();
+      peers.clear();
+      if (data['users'] is List) {
+        for (var u in data['users']) {
+          users.add(UserPayload.fromJson(u));
+        }
+      }
+      if (data['peers'] is List) {
+        for (final peer in data['peers']) {
+          peers.add(Peer.fromJson(peer));
+        }
+      }
+    } catch (e) {
+      debugPrint("load group cache: $e");
+    }
+  }
+
+  reset() async {
+    groupLoadError.value = '';
+    users.clear();
+    peers.clear();
+    selectedUser.value = '';
+    await bind.mainClearGroup();
   }
 }

@@ -24,7 +24,7 @@ jobs:
           path: /opt/artifacts
           key: vcpkg-${{ matrix.job.arch }}
 
-      - uses: Kingtous/run-on-arch-action@amd64-support
+      - uses: rustdesk-org/run-on-arch-action@amd64-support
         name: Run vcpkg install on ${{ matrix.job.arch }}
         id: vcpkg
         with:
@@ -40,12 +40,16 @@ jobs:
             apt update -y
             case "${{ matrix.job.arch }}" in
               x86_64)
-                # CMake 3.15+
-                apt install -y gpg wget ca-certificates
-                echo 'deb [signed-by=/usr/share/keyrings/kitware-archive-keyring.gpg] https://apt.kitware.com/ubuntu/ bionic main' | tee /etc/apt/sources.list.d/kitware.list >/dev/null
-                wget -O - https://apt.kitware.com/keys/kitware-archive-latest.asc 2>/dev/null | gpg --dearmor - | tee /usr/share/keyrings/kitware-archive-keyring.gpg >/dev/null
                 apt update -y
-                apt install -y curl zip unzip tar git cmake g++ gcc build-essential pkg-config wget nasm yasm ninja-build libjpeg8-dev
+                apt install -y curl zip unzip tar git g++ gcc build-essential pkg-config wget nasm yasm ninja-build libjpeg8-dev libssl-dev
+                wget https://github.com/Kitware/CMake/releases/download/v3.27.5/cmake-3.27.5.tar.gz
+                apt remove -y --purge cmake
+                tar -zxvf cmake-3.27.5.tar.gz
+                cd cmake-3.27.5
+                ./bootstrap
+                make 
+                make install 
+                cd -
                 cmake --version
                 gcc -v
                 ;;

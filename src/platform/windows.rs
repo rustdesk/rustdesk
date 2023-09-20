@@ -1269,9 +1269,15 @@ pub fn toggle_blank_screen(v: bool) {
     }
 }
 
-pub fn block_input(v: bool) -> bool {
+pub fn block_input(v: bool) -> (bool, String) {
     let v = if v { TRUE } else { FALSE };
-    unsafe { BlockInput(v) == TRUE }
+    unsafe {
+        if BlockInput(v) == TRUE {
+            (true, "".to_owned())
+        } else {
+            (false, format!("Error code: {}", GetLastError()))
+        }
+    }
 }
 
 pub fn add_recent_document(path: &str) {
@@ -2167,6 +2173,7 @@ pub fn uninstall_service(show_new_window: bool) -> bool {
 
 pub fn install_service() -> bool {
     log::info!("Installing service...");
+    let _installing = crate::platform::InstallingService::new();
     let (_, _, _, exe) = get_install_info();
     let tmp_path = std::env::temp_dir().to_string_lossy().to_string();
     let tray_shortcut = get_tray_shortcut(&exe, &tmp_path).unwrap_or_default();

@@ -1485,6 +1485,7 @@ impl<T: InvokeUiSession> Remote<T> {
             Some(back_notification::Union::BlockInputState(state)) => {
                 self.handle_back_msg_block_input(
                     state.enum_value_or(back_notification::BlockInputState::BlkStateUnknown),
+                    notification.details,
                 )
                 .await;
             }
@@ -1492,6 +1493,7 @@ impl<T: InvokeUiSession> Remote<T> {
                 if !self
                     .handle_back_msg_privacy_mode(
                         state.enum_value_or(back_notification::PrivacyModeState::PrvStateUnknown),
+                        notification.details,
                     )
                     .await
                 {
@@ -1508,22 +1510,42 @@ impl<T: InvokeUiSession> Remote<T> {
         self.handler.update_block_input_state(on);
     }
 
-    async fn handle_back_msg_block_input(&mut self, state: back_notification::BlockInputState) {
+    async fn handle_back_msg_block_input(
+        &mut self,
+        state: back_notification::BlockInputState,
+        details: String,
+    ) {
         match state {
             back_notification::BlockInputState::BlkOnSucceeded => {
                 self.update_block_input_state(true);
             }
             back_notification::BlockInputState::BlkOnFailed => {
-                self.handler
-                    .msgbox("custom-error", "Block user input", "Failed", "");
+                self.handler.msgbox(
+                    "custom-error",
+                    "Block user input",
+                    if details.is_empty() {
+                        "Failed"
+                    } else {
+                        &details
+                    },
+                    "",
+                );
                 self.update_block_input_state(false);
             }
             back_notification::BlockInputState::BlkOffSucceeded => {
                 self.update_block_input_state(false);
             }
             back_notification::BlockInputState::BlkOffFailed => {
-                self.handler
-                    .msgbox("custom-error", "Unblock user input", "Failed", "");
+                self.handler.msgbox(
+                    "custom-error",
+                    "Unblock user input",
+                    if details.is_empty() {
+                        "Failed"
+                    } else {
+                        &details
+                    },
+                    "",
+                );
             }
             _ => {}
         }
@@ -1541,6 +1563,7 @@ impl<T: InvokeUiSession> Remote<T> {
     async fn handle_back_msg_privacy_mode(
         &mut self,
         state: back_notification::PrivacyModeState,
+        details: String,
     ) -> bool {
         match state {
             back_notification::PrivacyModeState::PrvOnByOther => {
@@ -1573,8 +1596,16 @@ impl<T: InvokeUiSession> Remote<T> {
                 self.update_privacy_mode(false);
             }
             back_notification::PrivacyModeState::PrvOnFailed => {
-                self.handler
-                    .msgbox("custom-error", "Privacy mode", "Failed", "");
+                self.handler.msgbox(
+                    "custom-error",
+                    "Privacy mode",
+                    if details.is_empty() {
+                        "Failed"
+                    } else {
+                        &details
+                    },
+                    "",
+                );
                 self.update_privacy_mode(false);
             }
             back_notification::PrivacyModeState::PrvOffSucceeded => {
@@ -1588,8 +1619,16 @@ impl<T: InvokeUiSession> Remote<T> {
                 self.update_privacy_mode(false);
             }
             back_notification::PrivacyModeState::PrvOffFailed => {
-                self.handler
-                    .msgbox("custom-error", "Privacy mode", "Failed to turn off", "");
+                self.handler.msgbox(
+                    "custom-error",
+                    "Privacy mode",
+                    if details.is_empty() {
+                        "Failed to turn off"
+                    } else {
+                        &details
+                    },
+                    "",
+                );
             }
             back_notification::PrivacyModeState::PrvOffUnknown => {
                 self.handler

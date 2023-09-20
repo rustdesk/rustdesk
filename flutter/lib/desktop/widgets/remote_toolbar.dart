@@ -101,7 +101,7 @@ class ToolbarState {
 class _ToolbarTheme {
   static const Color blueColor = MyTheme.button;
   static const Color hoverBlueColor = MyTheme.accent;
-  static Color inactiveColor =  Colors.grey[800]!;
+  static Color inactiveColor = Colors.grey[800]!;
   static Color hoverInactiveColor = Colors.grey[850]!;
 
   static const Color redColor = Colors.redAccent;
@@ -546,9 +546,11 @@ class _PinMenu extends StatelessWidget {
         assetName: state.pin ? "assets/pinned.svg" : "assets/unpinned.svg",
         tooltip: state.pin ? 'Unpin Toolbar' : 'Pin Toolbar',
         onPressed: state.switchPin,
-        color: state.pin ? _ToolbarTheme.blueColor : _ToolbarTheme.inactiveColor,
-        hoverColor:
-            state.pin ? _ToolbarTheme.hoverBlueColor : _ToolbarTheme.hoverInactiveColor,
+        color:
+            state.pin ? _ToolbarTheme.blueColor : _ToolbarTheme.inactiveColor,
+        hoverColor: state.pin
+            ? _ToolbarTheme.hoverBlueColor
+            : _ToolbarTheme.hoverInactiveColor,
       ),
     );
   }
@@ -561,15 +563,18 @@ class _MobileActionMenu extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (!ffi.ffiModel.isPeerAndroid) return Offstage();
-    return Obx(()=>_IconMenuButton(
-      assetName: 'assets/actions_mobile.svg',
-      tooltip: 'Mobile Actions',
-      onPressed: () => ffi.dialogManager.toggleMobileActionsOverlay(ffi: ffi),
-      color: ffi.dialogManager.mobileActionsOverlayVisible.isTrue
-          ? _ToolbarTheme.blueColor : _ToolbarTheme.inactiveColor,
-      hoverColor: ffi.dialogManager.mobileActionsOverlayVisible.isTrue
-          ? _ToolbarTheme.hoverBlueColor : _ToolbarTheme.hoverInactiveColor,
-    ));
+    return Obx(() => _IconMenuButton(
+          assetName: 'assets/actions_mobile.svg',
+          tooltip: 'Mobile Actions',
+          onPressed: () =>
+              ffi.dialogManager.toggleMobileActionsOverlay(ffi: ffi),
+          color: ffi.dialogManager.mobileActionsOverlayVisible.isTrue
+              ? _ToolbarTheme.blueColor
+              : _ToolbarTheme.inactiveColor,
+          hoverColor: ffi.dialogManager.mobileActionsOverlayVisible.isTrue
+              ? _ToolbarTheme.hoverBlueColor
+              : _ToolbarTheme.hoverInactiveColor,
+        ));
   }
 }
 
@@ -770,6 +775,7 @@ class ScreenAdjustor {
       }
       await WindowController.fromWindowId(windowId)
           .setFrame(Rect.fromLTWH(left, top, width, height));
+      stateGlobal.setMaximized(false);
     }
   }
 
@@ -1304,23 +1310,25 @@ class _KeyboardMenu extends StatelessWidget {
         color: _ToolbarTheme.blueColor,
         hoverColor: _ToolbarTheme.hoverBlueColor,
         menuChildren: [
-          mode(modeOnly),
+          keyboardMode(modeOnly),
           localKeyboardType(),
           Divider(),
-          view_mode(),
+          viewMode(),
+          Divider(),
+          reverseMouseWheel(),
         ]);
   }
 
-  mode(String? modeOnly) {
+  keyboardMode(String? modeOnly) {
     return futureBuilder(future: () async {
       return await bind.sessionGetKeyboardMode(sessionId: ffi.sessionId) ??
           _kKeyLegacyMode;
     }(), hasData: (data) {
       final groupValue = data as String;
-      List<KeyboardModeMenu> modes = [
-        KeyboardModeMenu(key: _kKeyLegacyMode, menu: 'Legacy mode'),
-        KeyboardModeMenu(key: _kKeyMapMode, menu: 'Map mode'),
-        KeyboardModeMenu(key: _kKeyTranslateMode, menu: 'Translate mode'),
+      List<InputModeMenu> modes = [
+        InputModeMenu(key: _kKeyLegacyMode, menu: 'Legacy mode'),
+        InputModeMenu(key: _kKeyMapMode, menu: 'Map mode'),
+        InputModeMenu(key: _kKeyTranslateMode, menu: 'Translate mode'),
       ];
       List<RdoMenuButton> list = [];
       final enabled = !ffi.ffiModel.viewOnly;
@@ -1330,7 +1338,7 @@ class _KeyboardMenu extends StatelessWidget {
             sessionId: ffi.sessionId, value: value);
       }
 
-      for (KeyboardModeMenu mode in modes) {
+      for (InputModeMenu mode in modes) {
         if (modeOnly != null && mode.key != modeOnly) {
           continue;
         } else if (!bind.sessionIsKeyboardModeSupported(
@@ -1379,7 +1387,7 @@ class _KeyboardMenu extends StatelessWidget {
     );
   }
 
-  view_mode() {
+  viewMode() {
     final ffiModel = ffi.ffiModel;
     final enabled = version_cmp(pi.version, '1.2.0') >= 0 && ffiModel.keyboard;
     return CkbMenuButton(
@@ -1394,6 +1402,30 @@ class _KeyboardMenu extends StatelessWidget {
             : null,
         ffi: ffi,
         child: Text(translate('View Mode')));
+  }
+
+  reverseMouseWheel() {
+    return futureBuilder(future: () async {
+      final v =
+          await bind.sessionGetReverseMouseWheel(sessionId: ffi.sessionId);
+      if (v != null && v != '') {
+        return v;
+      }
+      return bind.mainGetUserDefaultOption(key: 'reverse_mouse_wheel');
+    }(), hasData: (data) {
+      final enabled = !ffi.ffiModel.viewOnly;
+      onChanged(bool? value) async {
+        if (value == null) return;
+        await bind.sessionSetReverseMouseWheel(
+            sessionId: ffi.sessionId, value: value ? 'Y' : 'N');
+      }
+
+      return CkbMenuButton(
+          value: data == 'Y',
+          onChanged: enabled ? onChanged : null,
+          child: Text(translate('Reverse mouse wheel')),
+          ffi: ffi);
+    });
   }
 }
 
@@ -1592,26 +1624,26 @@ class _IconMenuButtonState extends State<_IconMenuButton> {
       width: _ToolbarTheme.buttonSize,
       height: _ToolbarTheme.buttonSize,
       child: MenuItemButton(
-        style: ButtonStyle(
-            backgroundColor: MaterialStatePropertyAll(Colors.transparent),
-            padding: MaterialStatePropertyAll(EdgeInsets.zero),
-            overlayColor: MaterialStatePropertyAll(Colors.transparent)),
-        onHover: (value) => setState(() {
-          hover = value;
-        }),
-        onPressed: widget.onPressed,
-        child: Tooltip(
-          message: translate(widget.tooltip),
-          child: Material(
-              type: MaterialType.transparency,
-              child: Ink(
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(_ToolbarTheme.iconRadius),
-                    color: hover ? widget.hoverColor : widget.color,
-                  ),
-                  child: icon)),
-        )
-      ),
+          style: ButtonStyle(
+              backgroundColor: MaterialStatePropertyAll(Colors.transparent),
+              padding: MaterialStatePropertyAll(EdgeInsets.zero),
+              overlayColor: MaterialStatePropertyAll(Colors.transparent)),
+          onHover: (value) => setState(() {
+                hover = value;
+              }),
+          onPressed: widget.onPressed,
+          child: Tooltip(
+            message: translate(widget.tooltip),
+            child: Material(
+                type: MaterialType.transparency,
+                child: Ink(
+                    decoration: BoxDecoration(
+                      borderRadius:
+                          BorderRadius.circular(_ToolbarTheme.iconRadius),
+                      color: hover ? widget.hoverColor : widget.color,
+                    ),
+                    child: icon)),
+          )),
     ).marginSymmetric(
         horizontal: widget.hMargin ?? _ToolbarTheme.buttonHMargin,
         vertical: widget.vMargin ?? _ToolbarTheme.buttonVMargin);
@@ -1675,18 +1707,17 @@ class _IconSubmenuButtonState extends State<_IconSubmenuButton> {
             onHover: (value) => setState(() {
                   hover = value;
                 }),
-                child: Tooltip(
-                  message: translate(widget.tooltip),
-                  child: Material(
+            child: Tooltip(
+                message: translate(widget.tooltip),
+                child: Material(
                     type: MaterialType.transparency,
                     child: Ink(
-                      decoration: BoxDecoration(
-                        borderRadius:
-                          BorderRadius.circular(_ToolbarTheme.iconRadius),
+                        decoration: BoxDecoration(
+                          borderRadius:
+                              BorderRadius.circular(_ToolbarTheme.iconRadius),
                           color: hover ? widget.hoverColor : widget.color,
-                      ),
-                      child: icon))
-                    ),
+                        ),
+                        child: icon))),
             menuChildren: widget.menuChildren
                 .map((e) => _buildPointerTrackWidget(e, widget.ffi))
                 .toList()));
@@ -1973,11 +2004,11 @@ class _DraggableShowHideState extends State<_DraggableShowHide> {
   }
 }
 
-class KeyboardModeMenu {
+class InputModeMenu {
   final String key;
   final String menu;
 
-  KeyboardModeMenu({required this.key, required this.menu});
+  InputModeMenu({required this.key, required this.menu});
 }
 
 _menuDismissCallback(FFI ffi) => ffi.inputModel.refreshMousePos();

@@ -101,6 +101,7 @@ class ColorThemeExtension extends ThemeExtension<ColorThemeExtension> {
     required this.highlight,
     required this.drag_indicator,
     required this.shadow,
+    required this.errorBannerBg,
   });
 
   final Color? border;
@@ -108,6 +109,7 @@ class ColorThemeExtension extends ThemeExtension<ColorThemeExtension> {
   final Color? highlight;
   final Color? drag_indicator;
   final Color? shadow;
+  final Color? errorBannerBg;
 
   static final light = ColorThemeExtension(
     border: Color(0xFFCCCCCC),
@@ -115,6 +117,7 @@ class ColorThemeExtension extends ThemeExtension<ColorThemeExtension> {
     highlight: Color(0xFFE5E5E5),
     drag_indicator: Colors.grey[800],
     shadow: Colors.black,
+    errorBannerBg: Color(0xFFFDEEEB),
   );
 
   static final dark = ColorThemeExtension(
@@ -123,6 +126,7 @@ class ColorThemeExtension extends ThemeExtension<ColorThemeExtension> {
     highlight: Color(0xFF3F3F3F),
     drag_indicator: Colors.grey,
     shadow: Colors.grey,
+    errorBannerBg: Color(0xFF470F2D),
   );
 
   @override
@@ -132,6 +136,7 @@ class ColorThemeExtension extends ThemeExtension<ColorThemeExtension> {
     Color? highlight,
     Color? drag_indicator,
     Color? shadow,
+    Color? errorBannerBg,
   }) {
     return ColorThemeExtension(
       border: border ?? this.border,
@@ -139,6 +144,7 @@ class ColorThemeExtension extends ThemeExtension<ColorThemeExtension> {
       highlight: highlight ?? this.highlight,
       drag_indicator: drag_indicator ?? this.drag_indicator,
       shadow: shadow ?? this.shadow,
+      errorBannerBg: errorBannerBg ?? this.errorBannerBg,
     );
   }
 
@@ -154,6 +160,7 @@ class ColorThemeExtension extends ThemeExtension<ColorThemeExtension> {
       highlight: Color.lerp(highlight, other.highlight, t),
       drag_indicator: Color.lerp(drag_indicator, other.drag_indicator, t),
       shadow: Color.lerp(shadow, other.shadow, t),
+      errorBannerBg: Color.lerp(shadow, other.errorBannerBg, t),
     );
   }
 }
@@ -258,6 +265,14 @@ class MyTheme {
       ? EdgeInsets.only(left: dialogPadding)
       : EdgeInsets.only(left: dialogPadding / 3);
 
+  static ScrollbarThemeData scrollbarTheme = ScrollbarThemeData(
+    thickness: MaterialStateProperty.all(kScrollbarThickness),
+  );
+
+  static ScrollbarThemeData scrollbarThemeDark = scrollbarTheme.copyWith(
+    thumbColor: MaterialStateProperty.all(Colors.grey[500]),
+  );
+
   static ThemeData lightTheme = ThemeData(
     brightness: Brightness.light,
     hoverColor: Color.fromARGB(255, 224, 224, 224),
@@ -273,6 +288,7 @@ class MyTheme {
         ),
       ),
     ),
+    scrollbarTheme: scrollbarTheme,
     inputDecorationTheme: isDesktop
         ? InputDecorationTheme(
             fillColor: grayBg,
@@ -357,6 +373,7 @@ class MyTheme {
         ),
       ),
     ),
+    scrollbarTheme: scrollbarThemeDark,
     inputDecorationTheme: isDesktop
         ? InputDecorationTheme(
             fillColor: Color(0xFF24252B),
@@ -382,9 +399,6 @@ class MyTheme {
     visualDensity: VisualDensity.adaptivePlatformDensity,
     tabBarTheme: const TabBarTheme(
       labelColor: Colors.white70,
-    ),
-    scrollbarTheme: ScrollbarThemeData(
-      thumbColor: MaterialStateProperty.all(Colors.grey[500]),
     ),
     tooltipTheme: tooltipTheme(),
     splashColor: isDesktop ? Colors.transparent : null,
@@ -2465,4 +2479,60 @@ String toCapitalized(String s) {
     return s;
   }
   return s.substring(0, 1).toUpperCase() + s.substring(1);
+}
+
+Widget buildErrorBanner(BuildContext context,
+    {required RxBool loading,
+    required RxString err,
+    required Function? retry,
+    required Function close}) {
+  const double height = 25;
+  return Obx(() => Offstage(
+        offstage: !(!loading.value && err.value.isNotEmpty),
+        child: Center(
+            child: Container(
+          height: height,
+          color: MyTheme.color(context).errorBannerBg,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              FittedBox(
+                child: Icon(
+                  Icons.info,
+                  color: Color.fromARGB(255, 249, 81, 81),
+                ),
+              ).marginAll(4),
+              Flexible(
+                child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: Tooltip(
+                      message: translate(err.value),
+                      child: Text(
+                        translate(err.value),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    )).marginSymmetric(vertical: 2),
+              ),
+              if (retry != null)
+                InkWell(
+                    onTap: () {
+                      retry.call();
+                    },
+                    child: Text(
+                      translate("Retry"),
+                      style: TextStyle(color: MyTheme.accent),
+                    )).marginSymmetric(horizontal: 5),
+              FittedBox(
+                child: InkWell(
+                  onTap: () {
+                    close.call();
+                  },
+                  child: Icon(Icons.close).marginSymmetric(horizontal: 5),
+                ),
+              ).marginAll(4)
+            ],
+          ),
+        )).marginOnly(bottom: 14),
+      ));
 }

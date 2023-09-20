@@ -1,4 +1,4 @@
-use crate::input::{MOUSE_BUTTON_LEFT, MOUSE_TYPE_DOWN, MOUSE_TYPE_UP};
+use crate::input::{MOUSE_BUTTON_LEFT, MOUSE_TYPE_DOWN, MOUSE_TYPE_UP, MOUSE_TYPE_WHEEL};
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use std::{collections::HashMap, sync::atomic::AtomicBool};
 use std::{
@@ -168,11 +168,29 @@ impl<T: InvokeUiSession> Session<T> {
     }
 
     pub fn get_keyboard_mode(&self) -> String {
-        self.lc.read().unwrap().keyboard_mode.clone()
+        let mode = self.lc.read().unwrap().keyboard_mode.clone();
+        if ["map", "translate", "legacy"].contains(&(&mode as &str)) {
+            mode
+        } else {
+            if self.get_peer_version() > hbb_common::get_version_number("1.2.0") {
+                "map"
+            } else {
+                "legacy"
+            }
+            .to_string()
+        }
     }
 
     pub fn save_keyboard_mode(&mut self, value: String) {
         self.lc.write().unwrap().save_keyboard_mode(value);
+    }
+
+    pub fn get_reverse_mouse_wheel(&self) -> String {
+        self.lc.read().unwrap().reverse_mouse_wheel.clone()
+    }
+
+    pub fn save_reverse_mouse_wheel(&mut self, value: String) {
+        self.lc.write().unwrap().save_reverse_mouse_wheel(value);
     }
 
     pub fn save_view_style(&mut self, value: String) {
@@ -554,28 +572,15 @@ impl<T: InvokeUiSession> Session<T> {
     }
 
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    pub fn enter(&self) {
-        #[cfg(target_os = "windows")]
-        {
-            match &self.lc.read().unwrap().keyboard_mode as _ {
-                "legacy" => rdev::set_get_key_unicode(true),
-                "translate" => rdev::set_get_key_unicode(true),
-                _ => {}
-            }
-        }
-
+    pub fn enter(&self, keyboard_mode: String) {
         IS_IN.store(true, Ordering::SeqCst);
-        keyboard::client::change_grab_status(GrabState::Run);
+        keyboard::client::change_grab_status(GrabState::Run, &keyboard_mode);
     }
 
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    pub fn leave(&self) {
-        #[cfg(target_os = "windows")]
-        {
-            rdev::set_get_key_unicode(false);
-        }
+    pub fn leave(&self, keyboard_mode: String) {
         IS_IN.store(false, Ordering::SeqCst);
-        keyboard::client::change_grab_status(GrabState::Wait);
+        keyboard::client::change_grab_status(GrabState::Wait, &keyboard_mode);
     }
 
     // flutter only TODO new input
@@ -612,17 +617,19 @@ impl<T: InvokeUiSession> Session<T> {
     #[cfg(any(target_os = "ios"))]
     pub fn handle_flutter_key_event(
         &self,
+        _keyboard_mode: &str,
         _name: &str,
-        platform_code: i32,
-        position_code: i32,
-        lock_modes: i32,
-        down_or_up: bool,
+        _platform_code: i32,
+        _position_code: i32,
+        _lock_modes: i32,
+        _down_or_up: bool,
     ) {
     }
 
     #[cfg(not(any(target_os = "ios")))]
     pub fn handle_flutter_key_event(
         &self,
+        keyboard_mode: &str,
         _name: &str,
         platform_code: i32,
         position_code: i32,
@@ -652,8 +659,10 @@ impl<T: InvokeUiSession> Session<T> {
             platform_code,
             position_code: position_code as _,
             event_type,
+            #[cfg(any(target_os = "windows", target_os = "macos"))]
+            extra_data: 0,
         };
-        keyboard::client::process_event(&event, Some(lock_modes));
+        keyboard::client::process_event(keyboard_mode, &event, Some(lock_modes));
     }
 
     // flutter only TODO new input
@@ -730,6 +739,7 @@ impl<T: InvokeUiSession> Session<T> {
                 });
             }
             "pan_update" => {
+                let (x, y) = self.get_scroll_xy((x, y));
                 touch_evt.set_pan_update(TouchPanUpdate {
                     x,
                     y,
@@ -753,6 +763,21 @@ impl<T: InvokeUiSession> Session<T> {
         send_pointer_device_event(evt, alt, ctrl, shift, command, self);
     }
 
+    #[inline]
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    fn is_scroll_reverse_mode(&self) -> bool {
+        self.lc.read().unwrap().reverse_mouse_wheel.eq("Y")
+    }
+
+    #[inline]
+    fn get_scroll_xy(&self, xy: (i32, i32)) -> (i32, i32) {
+        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+        if self.is_scroll_reverse_mode() {
+            return (-xy.0, -xy.1);
+        }
+        xy
+    }
+
     pub fn send_mouse(
         &self,
         mask: i32,
@@ -771,6 +796,12 @@ impl<T: InvokeUiSession> Session<T> {
                 command = true;
             }
         }
+
+        let (x, y) = if mask == MOUSE_TYPE_WHEEL {
+            self.get_scroll_xy((x, y))
+        } else {
+            (x, y)
+        };
 
         // #[cfg(not(any(target_os = "android", target_os = "ios")))]
         let (alt, ctrl, shift, command) =
