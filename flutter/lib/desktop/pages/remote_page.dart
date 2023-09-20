@@ -485,21 +485,20 @@ class _ImagePaintState extends State<ImagePaint> {
     var c = Provider.of<CanvasModel>(context);
     final s = c.scale;
 
+    bool isViewAdaptive() => c.viewStyle.style == kRemoteViewStyleAdaptive;
+    bool isViewOriginal() => c.viewStyle.style == kRemoteViewStyleOriginal;
+
     mouseRegion({child}) => Obx(() {
           double getCursorScale() {
             var c = Provider.of<CanvasModel>(context);
             var cursorScale = 1.0;
             if (Platform.isWindows) {
               // debug win10
-              final isViewAdaptive =
-                  c.viewStyle.style == kRemoteViewStyleAdaptive;
-              if (zoomCursor.value && isViewAdaptive) {
+              if (zoomCursor.value && isViewAdaptive()) {
                 cursorScale = s * c.devicePixelRatio;
               }
             } else {
-              final isViewOriginal =
-                  c.viewStyle.style == kRemoteViewStyleOriginal;
-              if (zoomCursor.value || isViewOriginal) {
+              if (zoomCursor.value || isViewOriginal()) {
                 cursorScale = s;
               }
             }
@@ -541,7 +540,8 @@ class _ImagePaintState extends State<ImagePaint> {
           height: imageHeight,
           child: Obx(() => Texture(
                 textureId: widget.textureId.value,
-                filterQuality: FilterQuality.none,
+                filterQuality:
+                    isViewOriginal() ? FilterQuality.none : FilterQuality.low,
               )),
         );
       } else {
@@ -587,7 +587,8 @@ class _ImagePaintState extends State<ImagePaint> {
                 height: c.getDisplayHeight() * s,
                 child: Texture(
                   textureId: widget.textureId.value,
-                  filterQuality: FilterQuality.none,
+                  filterQuality:
+                      isViewOriginal() ? FilterQuality.none : FilterQuality.low,
                 ),
               )
             ],
