@@ -148,16 +148,15 @@ class _MyGroupState extends State<MyGroup> {
 
   Widget _buildUserContacts() {
     return Obx(() {
-      return Column(
-          children: gFFI.groupModel.users
-              .where((p0) {
-                if (searchUserText.isNotEmpty) {
-                  return p0.name.contains(searchUserText.value);
-                }
-                return true;
-              })
-              .map((e) => _buildUserItem(e))
-              .toList());
+      final items = gFFI.groupModel.users.where((p0) {
+        if (searchUserText.isNotEmpty) {
+          return p0.name.contains(searchUserText.value);
+        }
+        return true;
+      }).toList();
+      return ListView.builder(
+          itemCount: items.length,
+          itemBuilder: (context, index) => _buildUserItem(items[index]));
     });
   }
 

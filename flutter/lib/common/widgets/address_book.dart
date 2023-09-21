@@ -1,3 +1,4 @@
+import 'package:dynamic_layouts/dynamic_layouts.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common/formatter/id_formatter.dart';
 import 'package:flutter_hbb/common/widgets/peer_card.dart';
@@ -156,9 +157,13 @@ class _AddressBookState extends State<AddressBook> {
       } else {
         tags = gFFI.abModel.tags;
       }
-      return Wrap(
-        children: tags
-            .map((e) => AddressBookTag(
+      return DynamicGridView.builder(
+          gridDelegate: SliverGridDelegateWithWrapping(
+              mainAxisSpacing: 0, crossAxisSpacing: 0),
+          itemCount: tags.length,
+          itemBuilder: (BuildContext context, int index) {
+            final e = tags[index];
+            return AddressBookTag(
                 name: e,
                 tags: gFFI.abModel.selectedTags,
                 onTap: () {
@@ -167,9 +172,8 @@ class _AddressBookState extends State<AddressBook> {
                   } else {
                     gFFI.abModel.selectedTags.add(e);
                   }
-                }))
-            .toList(),
-      );
+                });
+          });
     });
   }
 
