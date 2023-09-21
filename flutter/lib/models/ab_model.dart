@@ -132,6 +132,7 @@ class AbModel {
       'alias': alias,
       'tags': tags,
     });
+    _mergePeerFromGroup(peer);
     peers.add(peer);
   }
 
@@ -572,5 +573,19 @@ class AbModel {
     tags.clear();
     peers.clear();
     await bind.mainClearAb();
+  }
+
+  _mergePeerFromGroup(Peer p) {
+    final g = gFFI.groupModel.peers.firstWhereOrNull((e) => p.id == e.id);
+    if (g == null) return;
+    if (p.username.isEmpty) {
+      p.username = g.username;
+    }
+    if (p.hostname.isEmpty) {
+      p.hostname = g.hostname;
+    }
+    if (p.platform.isEmpty) {
+      p.platform = g.platform;
+    }
   }
 }
