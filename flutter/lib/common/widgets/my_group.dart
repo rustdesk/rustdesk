@@ -120,6 +120,7 @@ class _MyGroupState extends State<MyGroup> {
   }
 
   Widget _buildLeftHeader() {
+    final fontSize = 14.0;
     return Row(
       children: [
         Expanded(
@@ -128,16 +129,16 @@ class _MyGroupState extends State<MyGroup> {
           onChanged: (value) {
             searchUserText.value = value;
           },
+          textAlignVertical: TextAlignVertical.center,
+          style: TextStyle(fontSize: fontSize),
           decoration: InputDecoration(
             filled: false,
             prefixIcon: Icon(
               Icons.search_rounded,
               color: Theme.of(context).hintColor,
-            ),
-            contentPadding: const EdgeInsets.symmetric(vertical: 10),
+            ).paddingOnly(top: 2),
             hintText: translate("Search"),
-            hintStyle:
-                TextStyle(fontSize: 14, color: Theme.of(context).hintColor),
+            hintStyle: TextStyle(fontSize: fontSize),
             border: InputBorder.none,
             isDense: true,
           ),
@@ -150,7 +151,9 @@ class _MyGroupState extends State<MyGroup> {
     return Obx(() {
       final items = gFFI.groupModel.users.where((p0) {
         if (searchUserText.isNotEmpty) {
-          return p0.name.contains(searchUserText.value);
+          return p0.name
+              .toLowerCase()
+              .contains(searchUserText.value.toLowerCase());
         }
         return true;
       }).toList();
