@@ -1330,10 +1330,8 @@ impl Connection {
         return Config::get_option(enable_prefix_option).is_empty();
     }
 
-    async fn handle_login_request_without_validation(&mut self, lr: &LoginRequest) {
-        self.lr = lr.clone();
+    fn update_codec_on_login(&self, lr: &LoginRequest) {
         if let Some(o) = lr.option.as_ref() {
-            self.options_in_login = Some(o.clone());
             if let Some(q) = o.supported_decoding.clone().take() {
                 scrap::codec::Encoder::update(
                     self.inner.id(),
@@ -1350,6 +1348,16 @@ impl Connection {
                 self.inner.id(),
                 scrap::codec::EncodingUpdate::NewOnlyVP9,
             );
+        }
+    }
+
+    async fn handle_login_request_without_validation(&mut self, lr: &LoginRequest) {
+        self.lr = lr.clone();
+        if let Some(o) = lr.option.as_ref() {
+            self.options_in_login = Some(o.clone());
+        }
+        if lr.union.is_none() {
+            self.update_codec_on_login(&lr);
         }
         self.video_ack_required = lr.video_ack_required;
     }
