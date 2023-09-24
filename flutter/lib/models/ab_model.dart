@@ -478,7 +478,7 @@ class AbModel {
     }
   }
 
-  loadCache() async {
+  Future<void> loadCache() async {
     try {
       if (_cacheLoadOnceFlag || abLoading.value || initialized) return;
       _cacheLoadOnceFlag = true;

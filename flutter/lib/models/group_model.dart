@@ -231,7 +231,7 @@ class GroupModel {
     }
   }
 
-  loadCache() async {
+  Future<void> loadCache() async {
     try {
       if (_cacheLoadOnceFlag || groupLoading.value || initialized) return;
       _cacheLoadOnceFlag = true;
