@@ -209,7 +209,7 @@ class _RemotePageState extends State<RemotePage>
     debugPrint("REMOTE PAGE dispose session $sessionId ${widget.id}");
     await _renderTexture.destroy(closeSession);
     // ensure we leave this session, this is a double check
-    bind.sessionEnterOrLeave(sessionId: sessionId, enter: false);
+    _ffi.inputModel.enterOrLeave(false);
     DesktopMultiWindow.removeListener(this);
     _ffi.dialogManager.hideMobileActionsOverlay();
     _ffi.recordingModel.onClose();
@@ -329,7 +329,7 @@ class _RemotePageState extends State<RemotePage>
       if (!_rawKeyFocusNode.hasFocus) {
         _rawKeyFocusNode.requestFocus();
       }
-      bind.sessionEnterOrLeave(sessionId: sessionId, enter: true);
+      _ffi.inputModel.enterOrLeave(true);
     }
   }
 
@@ -349,7 +349,7 @@ class _RemotePageState extends State<RemotePage>
     }
     // See [onWindowBlur].
     if (!Platform.isWindows) {
-      bind.sessionEnterOrLeave(sessionId: sessionId, enter: false);
+      _ffi.inputModel.enterOrLeave(false);
     }
   }
 
