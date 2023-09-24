@@ -13,7 +13,7 @@ use crate::{
         new_voice_call_request, new_voice_call_response, start_audio_thread, MediaData, MediaSender,
     },
     common::{get_default_sound_input, set_sound_input},
-    video_service,
+    display_service, video_service,
 };
 #[cfg(any(target_os = "android", target_os = "ios"))]
 use crate::{common::DEVICE_NAME, flutter::connection_manager::start_channel};
@@ -145,6 +145,7 @@ struct StartCmIpcPara {
 
 pub struct Connection {
     inner: ConnInner,
+    display_idx: usize,
     stream: super::Stream,
     server: super::ServerPtrWeak,
     hash: Hash,
@@ -287,6 +288,7 @@ impl Connection {
                 tx: Some(tx),
                 tx_video: Some(tx_video),
             },
+            display_idx: *display_service::PRIMARY_DISPLAY_IDX,
             stream,
             server,
             hash,
@@ -1077,19 +1079,20 @@ impl Connection {
         pi.username = username;
         pi.sas_enabled = sas_enabled;
         pi.features = Some(Features {
-            privacy_mode: video_service::is_privacy_mode_supported(),
+            privacy_mode: display_service::is_privacy_mode_supported(),
             ..Default::default()
         })
         .into();
-        // `try_reset_current_display` is needed because `get_displays` may change the current display,
-        // which may cause the mismatch of current display and the current display name.
-        #[cfg(not(any(target_os = "android", target_os = "ios")))]
-        video_service::try_reset_current_display();
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
         {
             pi.resolutions = Some(SupportedResolutions {
-                resolutions: video_service::get_current_display()
-                    .map(|(_, _, d)| crate::platform::resolutions(&d.name()))
+                resolutions: display_service::try_get_displays()
+                    .map(|displays| {
+                        displays
+                            .get(self.display_idx)
+                            .map(|d| crate::platform::resolutions(&d.name()))
+                            .unwrap_or(vec![])
+                    })
                     .unwrap_or(vec![]),
                 ..Default::default()
             })
@@ -1105,16 +1108,15 @@ impl Connection {
                 self.send(msg_out).await;
             }
 
-            match super::video_service::get_displays().await {
+            match super::display_service::get_displays().await {
                 Err(err) => {
                     res.set_error(format!("{}", err));
                 }
-                Ok((current, displays)) => {
+                Ok(displays) => {
                     pi.displays = displays.clone();
-                    pi.current_display = current as _;
+                    pi.current_display = self.display_idx as _;
                     res.set_peer_info(pi);
                     sub_service = true;
-                    *super::video_service::LAST_SYNC_DISPLAYS.write().unwrap() = displays;
                 }
             }
         }
@@ -1244,6 +1246,8 @@ impl Connection {
     #[inline]
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     fn input_key(&self, msg: KeyEvent, press: bool) {
+        // to-do: if is the legacy mode, and the key is function key "LockScreen".
+        // Switch to the primary display.
         self.tx_input.send(MessageInput::Key((msg, press))).ok();
     }
 
@@ -1906,15 +1910,13 @@ impl Connection {
                 },
                 Some(message::Union::Misc(misc)) => match misc.union {
                     Some(misc::Union::SwitchDisplay(s)) => {
-                        video_service::switch_display(s.display).await;
-                        #[cfg(not(any(target_os = "android", target_os = "ios")))]
-                        if s.width != 0 && s.height != 0 {
-                            self.change_resolution(&Resolution {
-                                width: s.width,
-                                height: s.height,
-                                ..Default::default()
-                            });
-                        }
+                        self.handle_switch_display(s).await;
+                    }
+                    Some(misc::Union::CaptureDisplays(displays)) => {
+                        let add = displays.add.iter().map(|d| *d as usize).collect::<Vec<_>>();
+                        let sub = displays.sub.iter().map(|d| *d as usize).collect::<Vec<_>>();
+                        let set = displays.set.iter().map(|d| *d as usize).collect::<Vec<_>>();
+                        self.capture_displays(&add, &sub, &set).await;
                     }
                     Some(misc::Union::ChatMessage(c)) => {
                         self.send_to_cm(ipc::Data::ChatMessage { text: c.text });
@@ -1926,8 +1928,26 @@ impl Connection {
                     }
                     Some(misc::Union::RefreshVideo(r)) => {
                         if r {
-                            super::video_service::refresh();
+                            video_service::refresh();
+                            self.server.upgrade().map(|s| {
+                                s.read().unwrap().set_video_service_opt(
+                                    None,
+                                    video_service::OPTION_DISPLAY_CHANGED,
+                                    super::service::SERVICE_OPTION_VALUE_TRUE,
+                                )
+                            });
                         }
+                        self.update_auto_disconnect_timer();
+                    }
+                    Some(misc::Union::RefreshVideoDisplay(display)) => {
+                        video_service::refresh();
+                        self.server.upgrade().map(|s| {
+                            s.read().unwrap().set_video_service_opt(
+                                Some(display as usize),
+                                video_service::OPTION_DISPLAY_CHANGED,
+                                super::service::SERVICE_OPTION_VALUE_TRUE,
+                            )
+                        });
                         self.update_auto_disconnect_timer();
                     }
                     Some(misc::Union::VideoReceived(_)) => {
@@ -2045,6 +2065,64 @@ impl Connection {
         true
     }
 
+    async fn handle_switch_display(&mut self, s: SwitchDisplay) {
+        #[cfg(windows)]
+        if portable_client::running()
+            && *CONN_COUNT.lock().unwrap() > 1
+            && s.display != (*display_service::PRIMARY_DISPLAY_IDX as i32)
+        {
+            log::info!("Switch to non-primary display is not supported in the elevated mode when there are multiple connections.");
+            let mut msg_out = Message::new();
+            let res = MessageBox {
+                msgtype: "nook-nocancel-hasclose".to_owned(),
+                title: "Prompt".to_owned(),
+                text: "switch_display_elevated_connections_tip".to_owned(),
+                link: "".to_owned(),
+                ..Default::default()
+            };
+            msg_out.set_message_box(res);
+            self.send(msg_out).await;
+            return;
+        }
+
+        let display_idx = s.display as usize;
+        if self.display_idx != display_idx {
+            if let Some(server) = self.server.upgrade() {
+                self.switch_display_to(display_idx, server.clone());
+
+                #[cfg(not(any(target_os = "android", target_os = "ios")))]
+                if s.width != 0 && s.height != 0 {
+                    self.change_resolution(&Resolution {
+                        width: s.width,
+                        height: s.height,
+                        ..Default::default()
+                    });
+                }
+
+                // send display changed message
+                if let Some(msg_out) =
+                    video_service::make_display_changed_msg(self.display_idx, None)
+                {
+                    self.send(msg_out).await;
+                }
+            }
+        }
+    }
+
+    fn switch_display_to(&mut self, display_idx: usize, server: Arc<RwLock<Server>>) {
+        let new_service_name = video_service::get_service_name(display_idx);
+        let old_service_name = video_service::get_service_name(self.display_idx);
+        let mut lock = server.write().unwrap();
+        if display_idx != *display_service::PRIMARY_DISPLAY_IDX {
+            if !lock.contains(&new_service_name) {
+                lock.add_service(Box::new(video_service::new(display_idx)));
+            }
+        }
+        lock.subscribe(&old_service_name, self.inner.clone(), false);
+        lock.subscribe(&new_service_name, self.inner.clone(), true);
+        self.display_idx = display_idx;
+    }
+
     #[cfg(windows)]
     async fn handle_elevation_request(&mut self, para: portable_client::StartPara) {
         let mut err = "No need to elevate".to_string();
@@ -2061,36 +2139,64 @@ impl Connection {
         self.update_auto_disconnect_timer();
     }
 
+    async fn capture_displays(&mut self, add: &[usize], sub: &[usize], set: &[usize]) {
+        if let Some(sever) = self.server.upgrade() {
+            let mut lock = sever.write().unwrap();
+            for display in add.iter() {
+                let service_name = video_service::get_service_name(*display);
+                if !lock.contains(&service_name) {
+                    lock.add_service(Box::new(video_service::new(*display)));
+                }
+            }
+            for display in set.iter() {
+                let service_name = video_service::get_service_name(*display);
+                if !lock.contains(&service_name) {
+                    lock.add_service(Box::new(video_service::new(*display)));
+                }
+            }
+            if !add.is_empty() {
+                lock.capture_displays(self.inner.clone(), add, true, false);
+            } else if !sub.is_empty() {
+                lock.capture_displays(self.inner.clone(), sub, false, true);
+            } else {
+                lock.capture_displays(self.inner.clone(), set, true, true);
+            }
+            drop(lock);
+        }
+    }
+
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     fn change_resolution(&mut self, r: &Resolution) {
         if self.keyboard {
-            if let Ok((_, _, display)) = video_service::get_current_display() {
-                let name = display.name();
-                #[cfg(all(windows, feature = "virtual_display_driver"))]
-                if let Some(_ok) =
-                    crate::virtual_display_manager::change_resolution_if_is_virtual_display(
+            if let Ok(displays) = display_service::try_get_displays() {
+                if let Some(display) = displays.get(self.display_idx) {
+                    let name = display.name();
+                    #[cfg(all(windows, feature = "virtual_display_driver"))]
+                    if let Some(_ok) =
+                        crate::virtual_display_manager::change_resolution_if_is_virtual_display(
+                            &name,
+                            r.width as _,
+                            r.height as _,
+                        )
+                    {
+                        return;
+                    }
+                    display_service::set_last_changed_resolution(
                         &name,
-                        r.width as _,
-                        r.height as _,
-                    )
-                {
-                    return;
-                }
-                video_service::set_last_changed_resolution(
-                    &name,
-                    (display.width() as _, display.height() as _),
-                    (r.width, r.height),
-                );
-                if let Err(e) =
-                    crate::platform::change_resolution(&name, r.width as _, r.height as _)
-                {
-                    log::error!(
-                        "Failed to change resolution '{}' to ({},{}):{:?}",
-                        &name,
-                        r.width,
-                        r.height,
-                        e
+                        (display.width() as _, display.height() as _),
+                        (r.width, r.height),
                     );
+                    if let Err(e) =
+                        crate::platform::change_resolution(&name, r.width as _, r.height as _)
+                    {
+                        log::error!(
+                            "Failed to change resolution '{}' to ({},{}):{:?}",
+                            &name,
+                            r.width,
+                            r.height,
+                            e
+                        );
+                    }
                 }
             }
         }
@@ -2236,7 +2342,7 @@ impl Connection {
             if self.keyboard {
                 match q {
                     BoolOption::Yes => {
-                        let msg_out = if !video_service::is_privacy_mode_supported() {
+                        let msg_out = if !display_service::is_privacy_mode_supported() {
                             crate::common::make_privacy_mode_msg_with_details(
                                 back_notification::PrivacyModeState::PrvNotSupported,
                                 "Unsupported. 1 Multi-screen is not supported. 2 Please confirm the license is activated.".to_string(),
@@ -2244,8 +2350,11 @@ impl Connection {
                         } else {
                             match privacy_mode::turn_on_privacy(self.inner.id) {
                                 Ok(true) => {
-                                    let err_msg =
-                                        video_service::test_create_capturer(self.inner.id, 5_000);
+                                    let err_msg = video_service::test_create_capturer(
+                                        self.inner.id,
+                                        self.display_idx,
+                                        5_000,
+                                    );
                                     if err_msg.is_empty() {
                                         video_service::set_privacy_mode_conn_id(self.inner.id);
                                         crate::common::make_privacy_mode_msg(
@@ -2281,7 +2390,7 @@ impl Connection {
                         self.send(msg_out).await;
                     }
                     BoolOption::No => {
-                        let msg_out = if !video_service::is_privacy_mode_supported() {
+                        let msg_out = if !display_service::is_privacy_mode_supported() {
                             crate::common::make_privacy_mode_msg_with_details(
                                 back_notification::PrivacyModeState::PrvNotSupported,
                                 "Unsupported. 1 Multi-screen is not supported. 2 Please confirm the license is activated.".to_string(),
@@ -2746,11 +2855,11 @@ mod raii {
             active_conns_lock.retain(|&c| c != self.0);
             #[cfg(not(any(target_os = "android", target_os = "ios")))]
             if active_conns_lock.is_empty() {
-                video_service::reset_resolutions();
+                display_service::reset_resolutions();
             }
             #[cfg(all(windows, feature = "virtual_display_driver"))]
             if active_conns_lock.is_empty() {
-                video_service::try_plug_out_virtual_display();
+                display_service::try_plug_out_virtual_display();
             }
             #[cfg(all(windows))]
             if active_conns_lock.is_empty() {

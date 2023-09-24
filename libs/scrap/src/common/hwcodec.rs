@@ -8,7 +8,7 @@ use hbb_common::{
     bytes::Bytes,
     config::HwCodecConfig,
     log,
-    message_proto::{EncodedVideoFrame, EncodedVideoFrames, Message, VideoFrame},
+    message_proto::{EncodedVideoFrame, EncodedVideoFrames, VideoFrame},
     ResultType,
 };
 use hwcodec::{
@@ -92,12 +92,7 @@ impl EncoderApi for HwEncoder {
         }
     }
 
-    fn encode_to_message(
-        &mut self,
-        frame: &[u8],
-        _ms: i64,
-    ) -> ResultType<hbb_common::message_proto::Message> {
-        let mut msg_out = Message::new();
+    fn encode_to_message(&mut self, frame: &[u8], _ms: i64) -> ResultType<VideoFrame> {
         let mut vf = VideoFrame::new();
         let mut frames = Vec::new();
         for frame in self.encode(frame).with_context(|| "Failed to encode")? {
@@ -117,8 +112,7 @@ impl EncoderApi for HwEncoder {
                 DataFormat::H264 => vf.set_h264s(frames),
                 DataFormat::H265 => vf.set_h265s(frames),
             }
-            msg_out.set_video_frame(vf);
-            Ok(msg_out)
+            Ok(vf)
         } else {
             Err(anyhow!("no valid frame"))
         }

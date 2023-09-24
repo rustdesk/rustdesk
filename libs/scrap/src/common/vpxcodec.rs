@@ -4,7 +4,7 @@
 
 use hbb_common::anyhow::{anyhow, Context};
 use hbb_common::log;
-use hbb_common::message_proto::{EncodedVideoFrame, EncodedVideoFrames, Message, VideoFrame};
+use hbb_common::message_proto::{EncodedVideoFrame, EncodedVideoFrames, VideoFrame};
 use hbb_common::ResultType;
 
 use crate::codec::{base_bitrate, codec_thread_num, EncoderApi, Quality};
@@ -172,7 +172,7 @@ impl EncoderApi for VpxEncoder {
         }
     }
 
-    fn encode_to_message(&mut self, frame: &[u8], ms: i64) -> ResultType<Message> {
+    fn encode_to_message(&mut self, frame: &[u8], ms: i64) -> ResultType<VideoFrame> {
         let mut frames = Vec::new();
         for ref frame in self
             .encode(ms, frame, STRIDE_ALIGN)
@@ -186,7 +186,7 @@ impl EncoderApi for VpxEncoder {
 
         // to-do: flush periodically, e.g. 1 second
         if frames.len() > 0 {
-            Ok(VpxEncoder::create_msg(self.id, frames))
+            Ok(VpxEncoder::create_video_frame(self.id, frames))
         } else {
             Err(anyhow!("no valid frame"))
         }
@@ -266,8 +266,10 @@ impl VpxEncoder {
     }
 
     #[inline]
-    pub fn create_msg(codec_id: VpxVideoCodecId, frames: Vec<EncodedVideoFrame>) -> Message {
-        let mut msg_out = Message::new();
+    pub fn create_video_frame(
+        codec_id: VpxVideoCodecId,
+        frames: Vec<EncodedVideoFrame>,
+    ) -> VideoFrame {
         let mut vf = VideoFrame::new();
         let vpxs = EncodedVideoFrames {
             frames: frames.into(),
@@ -277,8 +279,7 @@ impl VpxEncoder {
             VpxVideoCodecId::VP8 => vf.set_vp8s(vpxs),
             VpxVideoCodecId::VP9 => vf.set_vp9s(vpxs),
         }
-        msg_out.set_video_frame(vf);
-        msg_out
+        vf
     }
 
     #[inline]

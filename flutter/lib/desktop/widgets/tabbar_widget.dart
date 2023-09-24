@@ -10,6 +10,7 @@ import 'package:flutter/material.dart' hide TabBarTheme;
 import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/common/shared_state.dart';
 import 'package:flutter_hbb/consts.dart';
+import 'package:flutter_hbb/desktop/pages/remote_page.dart';
 import 'package:flutter_hbb/main.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:flutter_hbb/models/state_model.dart';
@@ -176,6 +177,19 @@ class DesktopTabController {
   bool jumpToByKey(String key, {bool callOnSelected = true}) =>
       jumpTo(state.value.tabs.indexWhere((tab) => tab.key == key),
           callOnSelected: callOnSelected);
+
+  bool jumpToByKeyAndDisplay(String key, int display) {
+    for (int i = 0; i < state.value.tabs.length; i++) {
+      final tab = state.value.tabs[i];
+      if (tab.key == key) {
+        final ffi = (tab.page as RemotePage).ffi;
+        if (ffi.ffiModel.pi.currentDisplay == display) {
+          return jumpTo(i, callOnSelected: true);
+        }
+      }
+    }
+    return false;
+  }
 
   void closeBy(String? key) {
     if (!isDesktop) return;

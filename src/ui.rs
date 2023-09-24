@@ -1,7 +1,6 @@
 use std::{
     collections::HashMap,
     iter::FromIterator,
-    process::Child,
     sync::{Arc, Mutex},
 };
 
@@ -22,7 +21,6 @@ mod cm;
 pub mod inline;
 pub mod remote;
 
-pub type Children = Arc<Mutex<(bool, HashMap<(String, String), Child>)>>;
 #[allow(dead_code)]
 type Status = (i32, bool, i64, String);
 
@@ -34,7 +32,6 @@ lazy_static::lazy_static! {
 #[cfg(not(any(feature = "flutter", feature = "cli")))]
 lazy_static::lazy_static! {
     pub static ref CUR_SESSION: Arc<Mutex<Option<Session<remote::SciterHandler>>>> = Default::default();
-    static ref CHILDREN : Children = Default::default();
 }
 
 struct UIHostHandler;

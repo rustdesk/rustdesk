@@ -301,7 +301,7 @@ class Header: Reactor.Component {
         if (recording)
             handler.refresh_video();
         else
-            handler.record_screen(false, display_width, display_height);
+            handler.record_screen(false, 0, display_width, display_height);
     }
 
     event click $(#screen) (_, me) {

@@ -225,7 +225,7 @@ fn get_keyboard_mode() -> String {
     if let Some(session) = SESSIONS
         .read()
         .unwrap()
-        .get(&*CUR_SESSION_ID.read().unwrap())
+        .get_session_by_session_id(&*CUR_SESSION_ID.read().unwrap())
     {
         return session.get_keyboard_mode();
     }
@@ -592,7 +592,7 @@ pub fn send_key_event(key_event: &KeyEvent) {
     if let Some(session) = SESSIONS
         .read()
         .unwrap()
-        .get(&*CUR_SESSION_ID.read().unwrap())
+        .get_session_by_session_id(&*CUR_SESSION_ID.read().unwrap())
     {
         session.send_key_event(key_event);
     }
@@ -607,7 +607,7 @@ pub fn get_peer_platform() -> String {
     if let Some(session) = SESSIONS
         .read()
         .unwrap()
-        .get(&*CUR_SESSION_ID.read().unwrap())
+        .get_session_by_session_id(&*CUR_SESSION_ID.read().unwrap())
     {
         return session.peer_platform();
     }

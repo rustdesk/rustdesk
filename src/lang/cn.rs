@@ -557,5 +557,12 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Check for software update on startup", "启动时检查软件更新"),
         ("upgrade_rustdesk_server_pro_to_{}_tip", "请升级专业版服务器到{}或更高版本！"),
         ("pull_group_failed_tip", "获取组信息失败"),
+        ("switch_display_elevated_connections_tip", "提权后，被控有多个连接，不能切换到非主显示器。若要控制多显示器，请安装后再试。"),
+        ("display_is_plugged_out_msg", "显示器被拔出，切换到第一个显示器。"),
+        ("No displays", "没有显示器。"),
+        ("elevated_switch_display_msg", "切换到主显示器，因为提权后，不支持多显示器画面。"),
+        ("Choose Display Behavior", "选择显示器的行为"),
+        ("Switch Display", "切换显示器"),
+        ("Open in New Window", "在新的窗口中打开"),
     ].iter().cloned().collect();
 }

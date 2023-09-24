@@ -23,7 +23,7 @@ handler.setDisplay = function(x, y, w, h, cursor_embedded) {
     display_origin_y = y;
     display_cursor_embedded = cursor_embedded;
     adaptDisplay();
-    if (recording) handler.record_screen(true, w, h);
+    if (recording) handler.record_screen(true, 0, w, h);
 }
 
 // in case toolbar not shown correctly
@@ -478,7 +478,7 @@ function self.closing() {
     var (x, y, w, h) = view.box(#rectw, #border, #screen);
     if (is_file_transfer) save_file_transfer_close_state();
     if (is_file_transfer || is_port_forward || size_adapted) handler.save_size(x, y, w, h);
-    if (recording) handler.record_screen(false, display_width, display_height);
+    if (recording) handler.record_screen(false, 0, display_width, display_height);
 }
 
 var qualityMonitor;

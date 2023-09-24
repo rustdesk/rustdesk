@@ -92,5 +92,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Connection failed due to inactivity", "Automatically disconnected due to inactivity"),
         ("upgrade_rustdesk_server_pro_to_{}_tip", "Please upgrade RustDesk Server Pro to version {} or newer!"),
         ("pull_group_failed_tip", "Failed to refresh group"),
+        ("switch_display_elevated_connections_tip", "Switching to non-primary display is not supported in the elevated mode when there are multiple connections. Please try again after installation if you want to control multiple displays."),
+        ("display_is_plugged_out_msg", "The diplay is plugged out, switch to the first display."),
+        ("elevated_switch_display_msg", "Switch to the primary display because multiple display is not supported in elevated mode."),
         ].iter().cloned().collect();
 }

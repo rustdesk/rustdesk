@@ -13,7 +13,7 @@ use hbb_common::{
     anyhow::{anyhow, Context},
     bytes::Bytes,
     log,
-    message_proto::{EncodedVideoFrame, EncodedVideoFrames, Message, VideoFrame},
+    message_proto::{EncodedVideoFrame, EncodedVideoFrames, VideoFrame},
     ResultType,
 };
 use std::{ptr, slice};
@@ -240,7 +240,7 @@ impl EncoderApi for AomEncoder {
         }
     }
 
-    fn encode_to_message(&mut self, frame: &[u8], ms: i64) -> ResultType<Message> {
+    fn encode_to_message(&mut self, frame: &[u8], ms: i64) -> ResultType<VideoFrame> {
         let mut frames = Vec::new();
         for ref frame in self
             .encode(ms, frame, STRIDE_ALIGN)
@@ -249,7 +249,7 @@ impl EncoderApi for AomEncoder {
             frames.push(Self::create_frame(frame));
         }
         if frames.len() > 0 {
-            Ok(Self::create_msg(frames))
+            Ok(Self::create_video_frame(frames))
         } else {
             Err(anyhow!("no valid frame"))
         }
@@ -311,16 +311,14 @@ impl AomEncoder {
     }
 
     #[inline]
-    pub fn create_msg(frames: Vec<EncodedVideoFrame>) -> Message {
-        let mut msg_out = Message::new();
+    pub fn create_video_frame(frames: Vec<EncodedVideoFrame>) -> VideoFrame {
         let mut vf = VideoFrame::new();
         let av1s = EncodedVideoFrames {
             frames: frames.into(),
             ..Default::default()
         };
         vf.set_av1s(av1s);
-        msg_out.set_video_frame(vf);
-        msg_out
+        vf
     }
 
     #[inline]
