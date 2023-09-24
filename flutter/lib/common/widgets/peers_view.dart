@@ -178,29 +178,41 @@ class _PeersViewState extends State<_PeersView> with WindowListener {
           if (snapshot.hasData) {
             final peers = snapshot.data!;
             gFFI.peerTabModel.setCurrentTabCachedPeers(peers);
-            final child = DynamicGridView.builder(
-              gridDelegate: SliverGridDelegateWithWrapping(
-                  mainAxisSpacing: space / 2, crossAxisSpacing: space),
-              itemCount: peers.length,
-              itemBuilder: (BuildContext context, int index) {
-                final visibilityChild = VisibilityDetector(
-                  key: ValueKey(_cardId(peers[index].id)),
-                  onVisibilityChanged: onVisibilityChanged,
-                  child: widget.peerCardBuilder(peers[index]),
-                );
-                return isDesktop
-                    ? Obx(
-                        () => SizedBox(
-                          width: 220,
-                          height: peerCardUiType.value == PeerUiType.grid
-                              ? 140
-                              : 42,
-                          child: visibilityChild,
-                        ),
-                      )
-                    : SizedBox(width: mobileWidth, child: visibilityChild);
-              },
-            );
+            buildOnePeer(Peer peer) {
+              final visibilityChild = VisibilityDetector(
+                key: ValueKey(_cardId(peer.id)),
+                onVisibilityChanged: onVisibilityChanged,
+                child: widget.peerCardBuilder(peer),
+              );
+              return isDesktop
+                  ? Obx(
+                      () => SizedBox(
+                        width: 220,
+                        height:
+                            peerCardUiType.value == PeerUiType.grid ? 140 : 42,
+                        child: visibilityChild,
+                      ),
+                    )
+                  : SizedBox(width: mobileWidth, child: visibilityChild);
+            }
+
+            final Widget child;
+            if (isDesktop) {
+              child = DynamicGridView.builder(
+                gridDelegate: SliverGridDelegateWithWrapping(
+                    mainAxisSpacing: space / 2, crossAxisSpacing: space),
+                itemCount: peers.length,
+                itemBuilder: (BuildContext context, int index) {
+                  return buildOnePeer(peers[index]);
+                },
+              );
+            } else {
+              child = Wrap(
+                  spacing: space,
+                  runSpacing: space,
+                  children: peers.map((e) => buildOnePeer(e)).toList());
+            }
+
             if (updateEvent == UpdateEvent.load) {
               _curPeers.clear();
               _curPeers.addAll(peers.map((e) => e.id));
