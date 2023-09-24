@@ -157,23 +157,29 @@ class _AddressBookState extends State<AddressBook> {
       } else {
         tags = gFFI.abModel.tags;
       }
-      return DynamicGridView.builder(
-          gridDelegate: SliverGridDelegateWithWrapping(
-              mainAxisSpacing: 0, crossAxisSpacing: 0),
-          itemCount: tags.length,
-          itemBuilder: (BuildContext context, int index) {
-            final e = tags[index];
-            return AddressBookTag(
-                name: e,
-                tags: gFFI.abModel.selectedTags,
-                onTap: () {
-                  if (gFFI.abModel.selectedTags.contains(e)) {
-                    gFFI.abModel.selectedTags.remove(e);
-                  } else {
-                    gFFI.abModel.selectedTags.add(e);
-                  }
-                });
-          });
+      tagBuilder(String e) {
+        return AddressBookTag(
+            name: e,
+            tags: gFFI.abModel.selectedTags,
+            onTap: () {
+              if (gFFI.abModel.selectedTags.contains(e)) {
+                gFFI.abModel.selectedTags.remove(e);
+              } else {
+                gFFI.abModel.selectedTags.add(e);
+              }
+            });
+      }
+
+      return isDesktop
+          ? DynamicGridView.builder(
+              gridDelegate: SliverGridDelegateWithWrapping(
+                  mainAxisSpacing: 0, crossAxisSpacing: 0),
+              itemCount: tags.length,
+              itemBuilder: (BuildContext context, int index) {
+                final e = tags[index];
+                return tagBuilder(e);
+              })
+          : Wrap(children: tags.map((e) => tagBuilder(e)).toList());
     });
   }
 

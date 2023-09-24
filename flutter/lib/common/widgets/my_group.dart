@@ -157,9 +157,11 @@ class _MyGroupState extends State<MyGroup> {
         }
         return true;
       }).toList();
-      return ListView.builder(
-          itemCount: items.length,
-          itemBuilder: (context, index) => _buildUserItem(items[index]));
+      return isDesktop
+          ? ListView.builder(
+              itemCount: items.length,
+              itemBuilder: (context, index) => _buildUserItem(items[index]))
+          : Column(children: items.map((e) => _buildUserItem(e)).toList());
     });
   }
 
