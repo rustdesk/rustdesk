@@ -559,6 +559,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Connection failed due to inactivity", "Automātiski atvienots neaktivitātes dēļ"),
         ("Check for software update on startup", "Startējot pārbaudīt, vai nav programmatūras atjauninājumu"),
         ("upgrade_rustdesk_server_pro_to_{}_tip", "Lūdzu, jauniniet RustDesk Server Pro uz versiju {} vai jaunāku!"),
-        ("pull_group_failed_tip", ""),
+        ("pull_group_failed_tip", "Neizdevās atsvaidzināt grupu"),
     ].iter().cloned().collect();
 }
