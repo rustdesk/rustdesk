@@ -133,7 +133,8 @@ class GroupModel {
       return true;
     } catch (err) {
       debugPrint('get accessible users: $err');
-      groupLoadError.value = err.toString();
+      groupLoadError.value =
+          '${translate('pull_group_failed_tip')}: ${translate(err.toString())}';
     }
     return false;
   }
@@ -198,7 +199,8 @@ class GroupModel {
       return true;
     } catch (err) {
       debugPrint('get accessible peers: $err');
-      groupLoadError.value = err.toString();
+      groupLoadError.value =
+          '${translate('pull_group_failed_tip')}: ${translate(err.toString())}';
     }
     return false;
   }

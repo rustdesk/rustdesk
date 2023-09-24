@@ -90,6 +90,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Decline", "Decline"),
         ("auto_disconnect_option_tip", "Automatically close incoming sessions on user inactivity"),
         ("Connection failed due to inactivity", "Automatically disconnected due to inactivity"),
-        ("upgrade_rustdesk_server_pro_to_{}_tip", "Please upgrade RustDesk Server Pro to version {} or newer!")
+        ("upgrade_rustdesk_server_pro_to_{}_tip", "Please upgrade RustDesk Server Pro to version {} or newer!"),
+        ("pull_group_failed_tip", "Failed to refresh group"),
         ].iter().cloned().collect();
 }

@@ -105,9 +105,6 @@ class AbModel {
       if (!quiet) {
         pullError.value =
             '${translate('pull_ab_failed_tip')}: ${translate(err.toString())}';
-        if (gFFI.peerTabModel.currentTab != PeerTabIndex.ab.index) {
-          BotToast.showText(contentColor: Colors.red, text: pullError.value);
-        }
       }
     } finally {
       abLoading.value = false;
