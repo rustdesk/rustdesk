@@ -1088,7 +1088,7 @@ mod desktop {
             self.uid = seat0_values[1].clone();
             self.username = seat0_values[2].clone();
             self.protocal = get_display_server_of_session(&self.sid).into();
-            if self.is_login_wayland() {
+            if self.is_wayland() {
                 self.display = "".to_owned();
                 self.xauth = "".to_owned();
                 self.is_rustdesk_subprocess = false;
