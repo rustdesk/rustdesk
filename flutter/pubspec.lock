@@ -400,11 +400,11 @@ packages:
     dependency: "direct main"
     description:
       path: "packages/dynamic_layouts"
-      ref: "0023d01996576e494094793a6552463f01c5627a"
-      resolved-ref: "0023d01996576e494094793a6552463f01c5627a"
-      url: "https://github.com/flutter/packages.git"
+      ref: "74cc4b495dcf3a4cb8df38d9ecc89f53f074a2c6"
+      resolved-ref: "74cc4b495dcf3a4cb8df38d9ecc89f53f074a2c6"
+      url: "https://github.com/21pages/packages.git"
     source: git
-    version: "0.0.1+1"
+    version: "0.0.1+2"
   event_bus:
     dependency: transitive
     description:

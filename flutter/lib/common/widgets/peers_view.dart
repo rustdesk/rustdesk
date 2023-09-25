@@ -176,7 +176,8 @@ class _PeersViewState extends State<_PeersView> with WindowListener {
       return FutureBuilder<List<Peer>>(
         builder: (context, snapshot) {
           if (snapshot.hasData) {
-            final peers = snapshot.data!;
+            var peers = snapshot.data!;
+            if (peers.length > 1000) peers = peers.sublist(0, 1000);
             gFFI.peerTabModel.setCurrentTabCachedPeers(peers);
             buildOnePeer(Peer peer) {
               final visibilityChild = VisibilityDetector(
@@ -196,23 +197,14 @@ class _PeersViewState extends State<_PeersView> with WindowListener {
                   : SizedBox(width: mobileWidth, child: visibilityChild);
             }
 
-            final Widget child;
-            if (isDesktop) {
-              child = DynamicGridView.builder(
-                gridDelegate: SliverGridDelegateWithWrapping(
-                    mainAxisSpacing: space / 2, crossAxisSpacing: space),
-                itemCount: peers.length,
-                itemBuilder: (BuildContext context, int index) {
-                  return buildOnePeer(peers[index]);
-                },
-              );
-            } else {
-              child = Wrap(
-                  spacing: space,
-                  runSpacing: space,
-                  children: peers.map((e) => buildOnePeer(e)).toList());
-            }
-
+            final child = DynamicGridView.builder(
+              gridDelegate: SliverGridDelegateWithWrapping(
+                  mainAxisSpacing: space / 2, crossAxisSpacing: space),
+              itemCount: peers.length,
+              itemBuilder: (BuildContext context, int index) {
+                return buildOnePeer(peers[index]);
+              },
+            );
             if (updateEvent == UpdateEvent.load) {
               _curPeers.clear();
               _curPeers.addAll(peers.map((e) => e.id));

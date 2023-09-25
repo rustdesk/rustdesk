@@ -102,9 +102,9 @@ dependencies:
   flex_color_picker: ^3.3.0
   dynamic_layouts:
     git:
-      url: https://github.com/flutter/packages.git
+      url: https://github.com/21pages/packages.git
       path: packages/dynamic_layouts
-      ref: 0023d01996576e494094793a6552463f01c5627a
+      ref: 74cc4b495dcf3a4cb8df38d9ecc89f53f074a2c6
 
 dev_dependencies:
   icons_launcher: ^2.0.4

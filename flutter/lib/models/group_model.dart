@@ -173,9 +173,6 @@ class GroupModel {
         }
         if (json.containsKey('total')) {
           if (total == 0) total = json['total'];
-          if (total > 1000) {
-            total = 1000;
-          }
           if (json.containsKey('data')) {
             final data = json['data'];
             if (data is List) {
@@ -187,9 +184,6 @@ class GroupModel {
                   tmpPeers.add(peer);
                 } else {
                   tmpPeers[index] = peer;
-                }
-                if (tmpPeers.length >= 1000) {
-                  break;
                 }
               }
             }
@@ -231,7 +225,7 @@ class GroupModel {
     }
   }
 
-  loadCache() async {
+  Future<void> loadCache() async {
     try {
       if (_cacheLoadOnceFlag || groupLoading.value || initialized) return;
       _cacheLoadOnceFlag = true;
