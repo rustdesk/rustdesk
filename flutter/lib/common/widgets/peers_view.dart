@@ -176,7 +176,8 @@ class _PeersViewState extends State<_PeersView> with WindowListener {
       return FutureBuilder<List<Peer>>(
         builder: (context, snapshot) {
           if (snapshot.hasData) {
-            final peers = snapshot.data!;
+            var peers = snapshot.data!;
+            if (peers.length > 1000) peers = peers.sublist(0, 1000);
             gFFI.peerTabModel.setCurrentTabCachedPeers(peers);
             buildOnePeer(Peer peer) {
               final visibilityChild = VisibilityDetector(
