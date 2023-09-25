@@ -33,9 +33,6 @@ class _ConnectionPageState extends State<ConnectionPage>
   /// Controller for the id input bar.
   final _idController = IDTextEditingController();
 
-  /// Nested scroll controller
-  final _scrollController = ScrollController();
-
   Timer? _updateTimer;
 
   final RxBool _idInputFocused = false.obs;
@@ -121,30 +118,18 @@ class _ConnectionPageState extends State<ConnectionPage>
     return Column(
       children: [
         Expanded(
-          child: DesktopScrollWrapper(
-            scrollController: _scrollController,
-            child: CustomScrollView(
-              controller: _scrollController,
-              physics: DraggableNeverScrollableScrollPhysics(),
-              slivers: [
-                SliverList(
-                    delegate: SliverChildListDelegate([
-                  Row(
-                    children: [
-                      Flexible(child: _buildRemoteIDTextField(context)),
-                    ],
-                  ).marginOnly(top: 22),
-                  SizedBox(height: 12),
-                  Divider().paddingOnly(right: 12),
-                ])),
-                SliverFillRemaining(
-                  hasScrollBody: true,
-                  child: PeerTabPage().paddingOnly(right: 12.0),
-                )
+            child: Column(
+          children: [
+            Row(
+              children: [
+                Flexible(child: _buildRemoteIDTextField(context)),
               ],
-            ).paddingOnly(left: 12.0),
-          ),
-        ),
+            ).marginOnly(top: 22),
+            SizedBox(height: 12),
+            Divider().paddingOnly(right: 12),
+            Expanded(child: PeerTabPage()),
+          ],
+        ).paddingOnly(left: 12.0)),
         const Divider(height: 1),
         buildStatus()
       ],
