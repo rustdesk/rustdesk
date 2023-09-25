@@ -197,23 +197,14 @@ class _PeersViewState extends State<_PeersView> with WindowListener {
                   : SizedBox(width: mobileWidth, child: visibilityChild);
             }
 
-            final Widget child;
-            if (isDesktop) {
-              child = DynamicGridView.builder(
-                gridDelegate: SliverGridDelegateWithWrapping(
-                    mainAxisSpacing: space / 2, crossAxisSpacing: space),
-                itemCount: peers.length,
-                itemBuilder: (BuildContext context, int index) {
-                  return buildOnePeer(peers[index]);
-                },
-              );
-            } else {
-              child = Wrap(
-                  spacing: space,
-                  runSpacing: space,
-                  children: peers.map((e) => buildOnePeer(e)).toList());
-            }
-
+            final child = DynamicGridView.builder(
+              gridDelegate: SliverGridDelegateWithWrapping(
+                  mainAxisSpacing: space / 2, crossAxisSpacing: space),
+              itemCount: peers.length,
+              itemBuilder: (BuildContext context, int index) {
+                return buildOnePeer(peers[index]);
+              },
+            );
             if (updateEvent == UpdateEvent.load) {
               _curPeers.clear();
               _curPeers.addAll(peers.map((e) => e.id));

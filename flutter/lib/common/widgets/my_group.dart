@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common/hbbs/hbbs.dart';
 import 'package:flutter_hbb/common/widgets/login.dart';
@@ -157,11 +159,14 @@ class _MyGroupState extends State<MyGroup> {
         }
         return true;
       }).toList();
+      final listView = ListView.builder(
+          shrinkWrap: isMobile,
+          itemCount: items.length,
+          itemBuilder: (context, index) => _buildUserItem(items[index]));
+      var maxHeight = max(MediaQuery.of(context).size.height / 6, 100.0);
       return isDesktop
-          ? ListView.builder(
-              itemCount: items.length,
-              itemBuilder: (context, index) => _buildUserItem(items[index]))
-          : Column(children: items.map((e) => _buildUserItem(e)).toList());
+          ? listView
+          : LimitedBox(maxHeight: maxHeight, child: listView);
     });
   }
 

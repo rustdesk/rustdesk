@@ -80,7 +80,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
           _buildRemoteIDTextField(),
         ])),
         SliverFillRemaining(
-          hasScrollBody: false,
+          hasScrollBody: true,
           child: PeerTabPage(),
         )
       ],
