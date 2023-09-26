@@ -4,6 +4,7 @@ import 'dart:collection';
 import 'package:dynamic_layouts/dynamic_layouts.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_hbb/desktop/widgets/scroll_wrapper.dart';
 import 'package:get/get.dart';
 import 'package:provider/provider.dart';
 import 'package:visibility_detector/visibility_detector.dart';
@@ -94,6 +95,8 @@ class _PeersViewState extends State<_PeersView> with WindowListener {
     }
     return width;
   }();
+
+  final _scrollController = ScrollController();
 
   _PeersViewState() {
     _startCheckOnlines();
@@ -197,14 +200,31 @@ class _PeersViewState extends State<_PeersView> with WindowListener {
                   : SizedBox(width: mobileWidth, child: visibilityChild);
             }
 
-            final child = DynamicGridView.builder(
-              gridDelegate: SliverGridDelegateWithWrapping(
-                  mainAxisSpacing: space / 2, crossAxisSpacing: space),
-              itemCount: peers.length,
-              itemBuilder: (BuildContext context, int index) {
-                return buildOnePeer(peers[index]);
-              },
-            );
+            final Widget child;
+            if (isMobile) {
+              child = DynamicGridView.builder(
+                gridDelegate: SliverGridDelegateWithWrapping(
+                    mainAxisSpacing: space / 2, crossAxisSpacing: space),
+                itemCount: peers.length,
+                itemBuilder: (BuildContext context, int index) {
+                  return buildOnePeer(peers[index]);
+                },
+              );
+            } else {
+              child = DesktopScrollWrapper(
+                scrollController: _scrollController,
+                child: DynamicGridView.builder(
+                    controller: _scrollController,
+                    physics: DraggableNeverScrollableScrollPhysics(),
+                    gridDelegate: SliverGridDelegateWithWrapping(
+                        mainAxisSpacing: space / 2, crossAxisSpacing: space),
+                    itemCount: peers.length,
+                    itemBuilder: (BuildContext context, int index) {
+                      return buildOnePeer(peers[index]);
+                    }),
+              );
+            }
+
             if (updateEvent == UpdateEvent.load) {
               _curPeers.clear();
               _curPeers.addAll(peers.map((e) => e.id));

@@ -102,9 +102,8 @@ dependencies:
   flex_color_picker: ^3.3.0
   dynamic_layouts:
     git:
-      url: https://github.com/21pages/packages.git
-      path: packages/dynamic_layouts
-      ref: 74cc4b495dcf3a4cb8df38d9ecc89f53f074a2c6
+      url: https://github.com/21pages/dynamic_layouts.git
+      ref: 24cb88413fa5181d949ddacbb30a65d5c459e7d9
 
 dev_dependencies:
   icons_launcher: ^2.0.4
