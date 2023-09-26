@@ -844,7 +844,7 @@ async fn check_software_update_() -> hbb_common::ResultType<()> {
         .path()
         .rsplit('/')
         .next()
-        .unwrap();
+        .unwrap_or_default();
 
     let response_url = latest_release_response.url().to_string();
 
