@@ -2303,7 +2303,7 @@ String getWindowName({WindowType? overrideType}) {
 }
 
 String getWindowNameWithId(String id, {WindowType? overrideType}) {
-  return "${DesktopTab.labelGetterAlias(id).value} - ${getWindowName(overrideType: overrideType)}";
+  return "${DesktopTab.tablabelGetter(id).value} - ${getWindowName(overrideType: overrideType)}";
 }
 
 Future<void> updateSystemWindowTheme() async {
@@ -2535,4 +2535,22 @@ Widget buildErrorBanner(BuildContext context,
           ),
         )).marginOnly(bottom: 14),
       ));
+}
+
+String getDesktopTabLabel(String peerId, String alias) {
+  String label = alias.isEmpty ? peerId : alias;
+  try {
+    String peer = bind.mainGetPeerSync(id: peerId);
+    Map<String, dynamic> config = jsonDecode(peer);
+    if (config['info']['hostname'] is String) {
+      String hostname = config['info']['hostname'];
+      if (hostname.isNotEmpty &&
+          !label.toLowerCase().contains(hostname.toLowerCase())) {
+        label += "@$hostname";
+      }
+    }
+  } catch (e) {
+    debugPrint("Failed to get hostname:$e");
+  }
+  return label;
 }

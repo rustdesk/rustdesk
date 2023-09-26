@@ -729,9 +729,9 @@ pub fn main_store_fav(favs: Vec<String>) {
     store_fav(favs)
 }
 
-pub fn main_get_peer(id: String) -> String {
+pub fn main_get_peer_sync(id: String) -> SyncReturn<String> {
     let conf = get_peer(id);
-    serde_json::to_string(&conf).unwrap_or("".to_string())
+    SyncReturn(serde_json::to_string(&conf).unwrap_or("".to_string()))
 }
 
 pub fn main_get_lan_peers() -> String {
