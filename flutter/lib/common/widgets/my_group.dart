@@ -182,6 +182,7 @@ class _MyGroupState extends State<MyGroup> {
       () {
         bool selected = selectedUser.value == username;
         final isMe = username == gFFI.userModel.userName.value;
+        final colorMe = MyTheme.color(context).me!;
         return Container(
           decoration: BoxDecoration(
             color: selected ? MyTheme.color(context).highlight : null,
@@ -193,9 +194,42 @@ class _MyGroupState extends State<MyGroup> {
           child: Container(
             child: Row(
               children: [
-                Icon(Icons.person_rounded, color: Colors.grey, size: 16)
-                    .marginOnly(right: 4),
-                Expanded(child: Text(isMe ? translate('Me') : username)),
+                Container(
+                  width: 20,
+                  height: 20,
+                  decoration: BoxDecoration(
+                    color: str2color(username, 0xAF),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Align(
+                    alignment: Alignment.center,
+                    child: Center(
+                      child: Text(
+                        username.characters.first.toUpperCase(),
+                        style: TextStyle(color: Colors.white),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                  ),
+                ).marginOnly(right: 4),
+                if (isMe) Flexible(child: Text(username)),
+                if (isMe)
+                  Flexible(
+                    child: Container(
+                      margin: EdgeInsets.only(left: 5),
+                      padding: EdgeInsets.symmetric(horizontal: 3, vertical: 1),
+                      decoration: BoxDecoration(
+                          color: colorMe.withAlpha(20),
+                          borderRadius: BorderRadius.all(Radius.circular(2)),
+                          border: Border.all(color: colorMe.withAlpha(100))),
+                      child: Text(
+                        translate('Me'),
+                        style: TextStyle(
+                            color: colorMe.withAlpha(200), fontSize: 12),
+                      ),
+                    ),
+                  ),
+                if (!isMe) Expanded(child: Text(username)),
               ],
             ).paddingSymmetric(vertical: 4),
           ),
