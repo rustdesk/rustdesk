@@ -1080,12 +1080,11 @@ packages:
   screen_retriever:
     dependency: transitive
     description:
-      path: "."
-      ref: "406b9b0"
-      resolved-ref: "406b9b038b2c1d779f1e7bf609c8c248be247372"
-      url: "https://github.com/Kingtous/rustdesk_screen_retriever.git"
-    source: git
-    version: "0.1.2"
+      name: screen_retriever
+      sha256: "6ee02c8a1158e6dae7ca430da79436e3b1c9563c8cf02f524af997c201ac2b90"
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.1.9"
   scroll_pos:
     dependency: "direct main"
     description:
