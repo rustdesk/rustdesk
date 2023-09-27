@@ -273,11 +273,29 @@ class MyTheme {
       : EdgeInsets.only(left: dialogPadding / 3);
 
   static ScrollbarThemeData scrollbarTheme = ScrollbarThemeData(
-    thickness: MaterialStateProperty.all(kScrollbarThickness),
+    thickness: MaterialStateProperty.all(6),
+    thumbColor: MaterialStateProperty.resolveWith<Color?>((states) {
+      if (states.contains(MaterialState.dragged)) {
+        return Colors.grey[900];
+      } else if (states.contains(MaterialState.hovered)) {
+        return Colors.grey[700];
+      } else {
+        return Colors.grey[500];
+      }
+    }),
+    crossAxisMargin: 4,
   );
 
   static ScrollbarThemeData scrollbarThemeDark = scrollbarTheme.copyWith(
-    thumbColor: MaterialStateProperty.all(Colors.grey[500]),
+    thumbColor: MaterialStateProperty.resolveWith<Color?>((states) {
+      if (states.contains(MaterialState.dragged)) {
+        return Colors.grey[100];
+      } else if (states.contains(MaterialState.hovered)) {
+        return Colors.grey[300];
+      } else {
+        return Colors.grey[500];
+      }
+    }),
   );
 
   static ThemeData lightTheme = ThemeData(

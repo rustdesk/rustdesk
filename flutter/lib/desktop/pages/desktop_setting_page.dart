@@ -88,6 +88,11 @@ class _DesktopSettingPageState extends State<DesktopSettingPage>
     Get.put<RxInt>(selectedIndex, tag: _kSettingPageIndexTag);
     controller = PageController(initialPage: widget.initialPage);
     Get.put<PageController>(controller, tag: _kSettingPageControllerTag);
+    controller.addListener(() {
+      if (controller.page != null) {
+        selectedIndex.value = controller.page!.toInt();
+      }
+    });
   }
 
   @override
@@ -154,7 +159,7 @@ class _DesktopSettingPageState extends State<DesktopSettingPage>
                   scrollController: controller,
                   child: PageView(
                     controller: controller,
-                    physics: DraggableNeverScrollableScrollPhysics(),
+                    physics: NeverScrollableScrollPhysics(),
                     children: _children(),
                   )),
             ),
@@ -330,9 +335,11 @@ class _GeneralState extends State<_General> {
       child: _OptionCheckBox(context, "Always use software rendering",
           'allow-always-software-render'),
     ));
-     children.add(
-        _OptionCheckBox(context, 'Check for software update on startup','enable-check-update',
-        isServer: false,
+    children.add(_OptionCheckBox(
+      context,
+      'Check for software update on startup',
+      'enable-check-update',
+      isServer: false,
     ));
     if (bind.mainShowOption(key: 'allow-linux-headless')) {
       children.add(_OptionCheckBox(
