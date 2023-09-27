@@ -234,19 +234,24 @@ void runConnectionManagerScreen(bool hide) async {
   listenUniLinks(handleByFlutter: false);
 }
 
+bool _isCmReadyToShow = false;
+
 showCmWindow({bool isStartup = false}) async {
   if (isStartup) {
     WindowOptions windowOptions = getHiddenTitleBarWindowOptions(
         size: kConnectionManagerWindowSizeClosedChat);
-    windowManager.waitUntilReadyToShow(windowOptions, () async {
-      bind.mainHideDocker();
-      await windowManager.show();
-      await Future.wait([windowManager.focus(), windowManager.setOpacity(1)]);
-      // ensure initial window size to be changed
-      await windowManager.setSizeAlignment(
-          kConnectionManagerWindowSizeClosedChat, Alignment.topRight);
-    });
-  } else {
+    await windowManager.waitUntilReadyToShow(windowOptions, null);
+    bind.mainHideDocker();
+    await Future.wait([
+      windowManager.show(),
+      windowManager.focus(),
+      windowManager.setOpacity(1)
+    ]);
+    // ensure initial window size to be changed
+    await windowManager.setSizeAlignment(
+        kConnectionManagerWindowSizeClosedChat, Alignment.topRight);
+    _isCmReadyToShow = true;
+  } else if (_isCmReadyToShow) {
     if (await windowManager.getOpacity() != 1) {
       await windowManager.setOpacity(1);
       await windowManager.focus();
@@ -263,12 +268,12 @@ hideCmWindow({bool isStartup = false}) async {
     WindowOptions windowOptions = getHiddenTitleBarWindowOptions(
         size: kConnectionManagerWindowSizeClosedChat);
     windowManager.setOpacity(0);
-    windowManager.waitUntilReadyToShow(windowOptions, () async {
-      bind.mainHideDocker();
-      await windowManager.minimize();
-      await windowManager.hide();
-    });
-  } else {
+    await windowManager.waitUntilReadyToShow(windowOptions, null);
+    bind.mainHideDocker();
+    await windowManager.minimize();
+    await windowManager.hide();
+    _isCmReadyToShow = true;
+  } else if (_isCmReadyToShow) {
     if (await windowManager.getOpacity() != 0) {
       await windowManager.setOpacity(0);
       bind.mainHideDocker();
