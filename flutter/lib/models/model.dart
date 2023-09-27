@@ -203,11 +203,11 @@ class FfiModel with ChangeNotifier {
     }, sessionId, peerId);
     updatePrivacyMode(data.updatePrivacyMode, sessionId, peerId);
     setConnectionType(peerId, data.secure, data.direct);
-    handlePeerInfo(data.peerInfo, peerId);
+    await handlePeerInfo(data.peerInfo, peerId);
     for (var element in data.cursorDataList) {
-      handleCursorData(element);
+      await handleCursorData(element);
     }
-    handleCursorId(data.lastCursorId);
+    await handleCursorId(data.lastCursorId);
   }
 
   // todo: why called by two position
@@ -1802,7 +1802,7 @@ class FFI {
             debugPrint('Unreachable, the cached data cannot be decoded.');
             return;
           }
-          ffiModel.handleCachedPeerData(data, id);
+          await ffiModel.handleCachedPeerData(data, id);
           await bind.sessionRefresh(sessionId: sessionId);
         });
         isToNewWindowNotified.value = true;
