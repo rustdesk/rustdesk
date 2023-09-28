@@ -269,11 +269,8 @@ class DesktopTab extends StatelessWidget {
   }
 
   static RxString tablabelGetter(String peerId) {
-    PeerStringOption.init(peerId, 'tabLabel', () {
-      final alias = bind.mainGetPeerOptionSync(id: peerId, key: 'alias');
-      return getDesktopTabLabel(peerId, alias);
-    });
-    return PeerStringOption.find(peerId, 'tabLabel');
+    final alias = bind.mainGetPeerOptionSync(id: peerId, key: 'alias');
+    return RxString(getDesktopTabLabel(peerId, alias));
   }
 
   @override
