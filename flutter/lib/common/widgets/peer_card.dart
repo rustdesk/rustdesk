@@ -1100,7 +1100,7 @@ class MyGroupPeerCard extends BasePeerCard {
     if (Platform.isWindows) {
       menuItems.add(_createShortCutAction(peer.id));
     }
-    menuItems.add(MenuEntryDivider());
+    // menuItems.add(MenuEntryDivider());
     // menuItems.add(_renameAction(peer.id));
     // if (await bind.mainPeerHasPassword(id: peer.id)) {
     //   menuItems.add(_unrememberPasswordAction(peer.id));

@@ -266,8 +266,6 @@ class FfiModel with ChangeNotifier {
         updateBlockInputState(evt, peerId);
       } else if (name == 'update_privacy_mode') {
         updatePrivacyMode(evt, sessionId, peerId);
-      } else if (name == 'alias') {
-        handleAliasChanged(evt);
       } else if (name == 'show_elevation') {
         final show = evt['show'].toString() == 'true';
         parent.target?.serverModel.setShowElevation(show);
@@ -351,17 +349,6 @@ class FfiModel with ChangeNotifier {
   /// Bind the event listener to receive events from the Rust core.
   updateEventListener(SessionID sessionId, String peerId) {
     platformFFI.setEventCallback(startEventListener(sessionId, peerId));
-  }
-
-  handleAliasChanged(Map<String, dynamic> evt) {
-    if (!isDesktop) return;
-    final String peerId = evt['id'];
-    final String alias = evt['alias'];
-    String label = getDesktopTabLabel(peerId, alias);
-    final rxTabLabel = PeerStringOption.find(evt['id'], 'tabLabel');
-    if (rxTabLabel.value != label) {
-      rxTabLabel.value = label;
-    }
   }
 
   _updateCurDisplay(SessionID sessionId, Display newDisplay) {

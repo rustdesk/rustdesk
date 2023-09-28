@@ -823,11 +823,6 @@ pub fn main_set_peer_option_sync(id: String, key: String, value: String) -> Sync
 }
 
 pub fn main_set_peer_alias(id: String, alias: String) {
-    main_broadcast_message(&HashMap::from([
-        ("name", "alias"),
-        ("id", &id),
-        ("alias", &alias),
-    ]));
     set_peer_option(id, "alias".to_owned(), alias)
 }
 
