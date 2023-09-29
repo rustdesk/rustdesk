@@ -415,8 +415,24 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
 
   void onRemoveId(String id) async {
     if (tabController.state.value.tabs.isEmpty) {
-      await WindowController.fromWindowId(windowId()).close();
       stateGlobal.setFullscreen(false, procWnd: false);
+      // Keep calling until the window status is hidden.
+      //
+      // Workaround for Windows:
+      // If you click other buttons and close in msgbox within a very short period of time, the close may fail.
+      // `await WindowController.fromWindowId(windowId()).close();`.
+      Future<void> loopCloseWindow() async {
+        int c = 0;
+        final windowController = WindowController.fromWindowId(windowId());
+        while (c < 100 &&
+            tabController.state.value.tabs.isEmpty &&
+            (!await windowController.isHidden())) {
+          await windowController.close();
+          await Future.delayed(Duration(milliseconds: 50));
+          c++;
+        }
+      }
+      loopCloseWindow();
     }
     ConnectionTypeState.delete(id);
     _update_remote_count();
