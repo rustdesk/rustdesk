@@ -175,34 +175,47 @@ class ConnectionManagerState extends State<ConnectionManager> {
                   ],
                 );
               },
-              pageViewBuilder: (pageView) => Row(
-                children: [
-                  Consumer<ChatModel>(
-                    builder: (_, model, child) => model.isShowCMSidePage
-                        ? Expanded(
-                            child: buildRemoteBlock(
-                              child: Container(
-                                  decoration: BoxDecoration(
-                                      border: Border(
-                                          right: BorderSide(
-                                              color: Theme.of(context)
-                                                  .dividerColor))),
-                                  child: buildSidePage()),
-                            ),
-                            flex: (kConnectionManagerWindowSizeOpenChat.width -
-                                    kConnectionManagerWindowSizeClosedChat
-                                        .width)
-                                .toInt(),
-                          )
-                        : Offstage(),
-                  ),
-                  Expanded(
-                      child: pageView,
-                      flex: kConnectionManagerWindowSizeClosedChat.width
-                              .toInt() -
-                          4 // prevent stretch of the page view when chat is open,
-                      ),
-                ],
+              pageViewBuilder: (pageView) => LayoutBuilder(
+                builder: (context, constrains) {
+                  var borderWidth = 0.0;
+                  if (constrains.maxWidth >
+                      kConnectionManagerWindowSizeClosedChat.width) {
+                    borderWidth = kConnectionManagerWindowSizeOpenChat.width -
+                        constrains.maxWidth;
+                  } else {
+                    borderWidth = kConnectionManagerWindowSizeClosedChat.width -
+                        constrains.maxWidth;
+                  }
+                  if (borderWidth < 0 || borderWidth > 50) {
+                    borderWidth = 0;
+                  }
+                  final realClosedWidth =
+                      kConnectionManagerWindowSizeClosedChat.width -
+                          borderWidth;
+                  final realChatPageWidth =
+                      constrains.maxWidth - realClosedWidth;
+                  return Row(children: [
+                    if (constrains.maxWidth >
+                        kConnectionManagerWindowSizeClosedChat.width)
+                      Consumer<ChatModel>(
+                          builder: (_, model, child) => SizedBox(
+                                width: realChatPageWidth,
+                                child: buildRemoteBlock(
+                                  child: Container(
+                                      decoration: BoxDecoration(
+                                          border: Border(
+                                              right: BorderSide(
+                                                  color: Theme.of(context)
+                                                      .dividerColor))),
+                                      child: buildSidePage()),
+                                ),
+                              )),
+                    SizedBox(
+                        width: realClosedWidth,
+                        child:
+                            SizedBox(width: realClosedWidth, child: pageView)),
+                  ]);
+                },
               ),
             ),
           );
@@ -966,8 +979,7 @@ class __FileTransferLogPageState extends State<_FileTransferLogPage> {
     return PreferredSize(
       preferredSize: const Size(200, double.infinity),
       child: Container(
-          margin: const EdgeInsets.only(top: 16.0, bottom: 16.0, right: 16.0),
-          padding: const EdgeInsets.all(8.0),
+          padding: const EdgeInsets.all(12.0),
           child: Obx(
             () {
               final jobTable = gFFI.cmFileModel.currentJobTable;
