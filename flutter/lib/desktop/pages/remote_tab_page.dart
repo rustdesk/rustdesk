@@ -424,11 +424,11 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
       Future<void> loopCloseWindow() async {
         int c = 0;
         final windowController = WindowController.fromWindowId(windowId());
-        while (c < 100 &&
+        while (c < 20 &&
             tabController.state.value.tabs.isEmpty &&
             (!await windowController.isHidden())) {
           await windowController.close();
-          await Future.delayed(Duration(milliseconds: 50));
+          await Future.delayed(Duration(milliseconds: 100));
           c++;
         }
       }
