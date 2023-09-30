@@ -996,6 +996,7 @@ void msgBox(SessionID sessionId, String type, String title, String text,
         }));
   }
   if (reconnect != null && title == "Connection Error") {
+    // `enabled` is used to disable the dialog button once the button is clicked.
     final enabled = true.obs;
     final button = Obx(
       () => dialogButton(
@@ -1003,6 +1004,7 @@ void msgBox(SessionID sessionId, String type, String title, String text,
         isOutline: true,
         onPressed: enabled.isTrue
             ? () {
+                // Disable the button
                 enabled.value = false;
                 reconnect(dialogManager, sessionId, false);
               }
