@@ -62,6 +62,7 @@ pub struct Session<T: InvokeUiSession> {
     pub server_file_transfer_enabled: Arc<RwLock<bool>>,
     pub server_clipboard_enabled: Arc<RwLock<bool>>,
     pub last_change_display: Arc<Mutex<ChangeDisplayRecord>>,
+    pub connection_round_state: Arc<Mutex<ConnectionRoundState>>,
 }
 
 #[derive(Clone)]
@@ -77,6 +78,56 @@ pub struct ChangeDisplayRecord {
     display: i32,
     width: i32,
     height: i32,
+}
+
+enum ConnectionState {
+    Connecting,
+    Connected,
+    Disconnected,
+}
+
+/// ConnectionRoundState is used to control the reconnecting logic.
+pub struct ConnectionRoundState {
+    round: u32,
+    state: ConnectionState,
+}
+
+impl ConnectionRoundState {
+    pub fn new_round(&mut self) -> u32 {
+        self.round += 1;
+        self.state = ConnectionState::Connecting;
+        self.round
+    }
+
+    pub fn set_connected(&mut self) {
+        self.state = ConnectionState::Connected;
+    }
+
+    pub fn is_round_gt(&self, round: u32) -> bool {
+        if round == u32::MAX && self.round == 0 {
+            true
+        } else {
+            round < self.round
+        }
+    }
+
+    pub fn set_disconnected(&mut self, round: u32) -> bool {
+        if self.is_round_gt(round) {
+            false
+        } else {
+            self.state = ConnectionState::Disconnected;
+            true
+        }
+    }
+}
+
+impl Default for ConnectionRoundState {
+    fn default() -> Self {
+        Self {
+            round: 0,
+            state: ConnectionState::Connecting,
+        }
+    }
 }
 
 impl Default for ChangeDisplayRecord {
@@ -833,16 +884,28 @@ impl<T: InvokeUiSession> Session<T> {
     }
 
     pub fn reconnect(&self, force_relay: bool) {
-        self.send(Data::Close);
+        // 1. If current session is connecting, do not reconnect.
+        // 2. If the connection is established, send `Data::Close`.
+        // 3. If the connection is disconnected, do nothing.
+        let mut connection_round_state_lock = self.connection_round_state.lock().unwrap();
+        match connection_round_state_lock.state {
+            ConnectionState::Connecting => return,
+            ConnectionState::Connected => self.send(Data::Close),
+            ConnectionState::Disconnected => {}
+        }
+        let round = connection_round_state_lock.new_round();
+        drop(connection_round_state_lock);
+
         let cloned = self.clone();
         // override only if true
         if true == force_relay {
             cloned.lc.write().unwrap().force_relay = true;
         }
         let mut lock = self.thread.lock().unwrap();
-        lock.take().map(|t| t.join());
+        // No need to join the previous thread, because it will exit automatically.
+        // And the previous thread will not change important states.
         *lock = Some(std::thread::spawn(move || {
-            io_loop(cloned);
+            io_loop(cloned, round);
         }));
     }
 
@@ -1283,7 +1346,7 @@ impl<T: InvokeUiSession> Session<T> {
 }
 
 #[tokio::main(flavor = "current_thread")]
-pub async fn io_loop<T: InvokeUiSession>(handler: Session<T>) {
+pub async fn io_loop<T: InvokeUiSession>(handler: Session<T>, round: u32) {
     // It is ok to call this function multiple times.
     #[cfg(target_os = "windows")]
     if !handler.is_file_transfer() && !handler.is_port_forward() {
@@ -1402,7 +1465,7 @@ pub async fn io_loop<T: InvokeUiSession>(handler: Session<T>) {
         frame_count,
         decode_fps,
     );
-    remote.io_loop(&key, &token).await;
+    remote.io_loop(&key, &token, round).await;
     remote.sync_jobs_status_to_local().await;
 }
 
