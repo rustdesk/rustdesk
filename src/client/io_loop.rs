@@ -1303,9 +1303,10 @@ impl<T: InvokeUiSession> Remote<T> {
                         }
                     }
                     Some(misc::Union::Uac(uac)) => {
+                        let keyboard = self.handler.server_keyboard_enabled.read().unwrap().clone();
                         #[cfg(feature = "flutter")]
                         {
-                            if uac {
+                            if uac && keyboard {
                                 self.handler.msgbox(
                                     "on-uac",
                                     "Prompt",
@@ -1324,7 +1325,7 @@ impl<T: InvokeUiSession> Remote<T> {
                             let title = "Prompt";
                             let text = "Please wait for confirmation of UAC...";
                             let link = "";
-                            if uac {
+                            if uac && keyboard {
                                 self.handler.msgbox(msgtype, title, text, link);
                             } else {
                                 self.handler.cancel_msgbox(&format!(
@@ -1335,9 +1336,10 @@ impl<T: InvokeUiSession> Remote<T> {
                         }
                     }
                     Some(misc::Union::ForegroundWindowElevated(elevated)) => {
+                        let keyboard = self.handler.server_keyboard_enabled.read().unwrap().clone();
                         #[cfg(feature = "flutter")]
                         {
-                            if elevated {
+                            if elevated && keyboard {
                                 self.handler.msgbox(
                                     "on-foreground-elevated",
                                     "Prompt",
@@ -1356,7 +1358,7 @@ impl<T: InvokeUiSession> Remote<T> {
                             let title = "Prompt";
                             let text = "elevated_foreground_window_tip";
                             let link = "";
-                            if elevated {
+                            if elevated && keyboard {
                                 self.handler.msgbox(msgtype, title, text, link);
                             } else {
                                 self.handler.cancel_msgbox(&format!(
@@ -1370,6 +1372,7 @@ impl<T: InvokeUiSession> Remote<T> {
                         if err.is_empty() {
                             self.handler.msgbox("wait-uac", "", "", "");
                         } else {
+                            self.handler.cancel_msgbox("wait-uac");
                             self.handler
                                 .msgbox("elevation-error", "Elevation Error", &err, "");
                         }
