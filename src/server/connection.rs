@@ -2379,8 +2379,8 @@ impl Connection {
         ));
         if self.authorized {
             let p = &mut self.portable;
-            if running != p.last_running {
-                p.last_running = running;
+            if Some(running) != p.last_running {
+                p.last_running = Some(running);
                 let mut misc = Misc::new();
                 misc.set_portable_service_running(running);
                 let mut msg = Message::new();
@@ -2660,7 +2660,7 @@ pub enum FileAuditType {
 pub struct PortableState {
     pub last_uac: bool,
     pub last_foreground_window_elevated: bool,
-    pub last_running: bool,
+    pub last_running: Option<bool>,
     pub is_installed: bool,
 }
 

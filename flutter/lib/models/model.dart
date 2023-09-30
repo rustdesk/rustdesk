@@ -1660,6 +1660,7 @@ class ElevationModel with ChangeNotifier {
   bool get showRequestMenu => _canElevate && !_running;
   onPeerInfo(PeerInfo pi) {
     _canElevate = pi.platform == kPeerPlatformWindows && pi.sasEnabled == false;
+    _running = false;
   }
 
   onPortableServiceRunning(Map<String, dynamic> evt) {
