@@ -1078,7 +1078,8 @@ pub fn session_next_rgba(session_id: SessionID) {
 pub fn session_register_texture(_session_id: SessionID, _ptr: usize) {
     #[cfg(feature = "flutter_texture_render")]
     if let Some(session) = SESSIONS.write().unwrap().get_mut(&_session_id) {
-        return session.register_texture(_ptr);
+        session.register_texture(_ptr);
+        return;
     }
 }
 

@@ -996,11 +996,22 @@ void msgBox(SessionID sessionId, String type, String title, String text,
         }));
   }
   if (reconnect != null && title == "Connection Error") {
-    buttons.insert(
-        0,
-        dialogButton('Reconnect', isOutline: true, onPressed: () {
-          reconnect(dialogManager, sessionId, false);
-        }));
+    // `enabled` is used to disable the dialog button once the button is clicked.
+    final enabled = true.obs;
+    final button = Obx(
+      () => dialogButton(
+        'Reconnect',
+        isOutline: true,
+        onPressed: enabled.isTrue
+            ? () {
+                // Disable the button
+                enabled.value = false;
+                reconnect(dialogManager, sessionId, false);
+              }
+            : null,
+      ),
+    );
+    buttons.insert(0, button);
   }
   if (link.isNotEmpty) {
     buttons.insert(0, dialogButton('JumpLink', onPressed: jumplink));
