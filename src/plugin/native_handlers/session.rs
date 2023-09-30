@@ -8,8 +8,10 @@ use std::{
 use flutter_rust_bridge::StreamSink;
 
 use crate::{
-    define_method_prefix, flutter::FlutterHandler, flutter_ffi::EventToUI,
-    plugin::MSG_TO_UI_TYPE_PLUGIN_EVENT, ui_session_interface::Session,
+    define_method_prefix,
+    flutter::FlutterHandler,
+    flutter_ffi::EventToUI,
+    ui_session_interface::{ConnectionState, Session},
 };
 
 const MSG_TO_UI_TYPE_SESSION_CREATED: &str = "session_created";
@@ -61,7 +63,8 @@ impl PluginNativeHandler for PluginNativeSessionHandler {
                         let sessions = SESSION_HANDLER.sessions.read().unwrap();
                         for session in sessions.iter() {
                             if session.id == id {
-                                crate::ui_session_interface::io_loop(session.clone());
+                                let round = session.connection_round_state.lock().unwrap().new_round();
+                                crate::ui_session_interface::io_loop(session.clone(), round);
                             }
                         }
                     }

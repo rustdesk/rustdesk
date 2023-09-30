@@ -805,7 +805,8 @@ pub fn session_start_(
         if !is_pre_added {
             let session = session.clone();
             std::thread::spawn(move || {
-                io_loop(session);
+                let round = session.connection_round_state.lock().unwrap().new_round();
+                io_loop(session, round);
             });
         }
         Ok(())
