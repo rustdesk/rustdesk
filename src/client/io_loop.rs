@@ -251,7 +251,7 @@ impl<T: InvokeUiSession> Remote<T> {
             }
         }
         // set_disconnected_ok is used to check if new connection round is started.
-        let set_disconnected_ok = self
+        let _set_disconnected_ok = self
             .handler
             .connection_round_state
             .lock()
@@ -259,12 +259,12 @@ impl<T: InvokeUiSession> Remote<T> {
             .set_disconnected(round);
 
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
-        if set_disconnected_ok {
+        if _set_disconnected_ok {
             Client::try_stop_clipboard(&self.handler.session_id);
         }
 
         #[cfg(windows)]
-        if set_disconnected_ok {
+        if _set_disconnected_ok {
             let conn_id = self.client_conn_id;
             ContextSend::proc(|context: &mut CliprdrClientContext| -> u32 {
                 empty_clipboard(context, conn_id);
