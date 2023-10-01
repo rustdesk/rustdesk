@@ -421,6 +421,10 @@ class _RemotePageState extends State<RemotePage> {
     );
   }
 
+  // to-do: Check if peer is ios.
+  bool get isPeerMobile => kPeerPlatformAndroid == gFFI.ffiModel.pi.platform;
+  bool get showCursorPaint => !isPeerMobile && !gFFI.canvasModel.cursorEmbedded;
+
   Widget getBodyForMobile() {
     final keyboardIsVisible = keyboardVisibilityController.isVisible;
     return Container(
@@ -453,7 +457,7 @@ class _RemotePageState extends State<RemotePage> {
                     ),
             ),
           ];
-          if (!gFFI.canvasModel.cursorEmbedded) {
+          if (showCursorPaint) {
             paints.add(CursorPaint());
           }
           return paints;
@@ -462,7 +466,7 @@ class _RemotePageState extends State<RemotePage> {
 
   Widget getBodyForDesktopWithListener(bool keyboard) {
     var paints = <Widget>[ImagePaint()];
-    if (!gFFI.canvasModel.cursorEmbedded) {
+    if (showCursorPaint) {
       final cursor = bind.sessionGetToggleOptionSync(
           sessionId: sessionId, arg: 'show-remote-cursor');
       if (keyboard || cursor) {
