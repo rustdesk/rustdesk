@@ -1053,10 +1053,12 @@ class _ResolutionsMenuState extends State<_ResolutionsMenu> {
   FfiModel get ffiModel => widget.ffi.ffiModel;
   Display get display => ffiModel.display;
   List<Resolution> get resolutions => pi.resolutions;
+  bool get isWayland => bind.mainCurrentIsWayland();
 
   @override
   void initState() {
     super.initState();
+    _getLocalResolutionWayland();
   }
 
   @override
@@ -1065,7 +1067,6 @@ class _ResolutionsMenuState extends State<_ResolutionsMenu> {
     final visible =
         ffiModel.keyboard && (isVirtualDisplay || resolutions.length > 1);
     if (!visible) return Offstage();
-    _getLocalResolution();
     final showOriginalBtn =
         display.isOriginalResolutionSet && !display.isOriginalResolution;
     final showFitLocalBtn = !_isRemoteResolutionFitLocal();
@@ -1099,6 +1100,20 @@ class _ResolutionsMenuState extends State<_ResolutionsMenu> {
       offstage: !(showOriginalBtn || showFitLocalBtn || isVirtualDisplay),
       child: Divider(),
     );
+  }
+
+  Future<void> _getLocalResolutionWayland() async {
+    if (!isWayland) return _getLocalResolution();
+    final window = await window_size.getWindowInfo();
+    final screen = window.screen;
+    if (screen != null) {
+      setState(() {
+        _localResolution = Resolution(
+          screen.frame.width.toInt(),
+          screen.frame.height.toInt(),
+        );
+      });
+    }
   }
 
   _getLocalResolution() {
