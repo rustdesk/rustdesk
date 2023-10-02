@@ -421,9 +421,8 @@ class _RemotePageState extends State<RemotePage> {
     );
   }
 
-  // to-do: Check if peer is ios.
-  bool get isPeerMobile => kPeerPlatformAndroid == gFFI.ffiModel.pi.platform;
-  bool get showCursorPaint => !isPeerMobile && !gFFI.canvasModel.cursorEmbedded;
+  bool get showCursorPaint =>
+      !gFFI.ffiModel.isPeerAndroid && !gFFI.canvasModel.cursorEmbedded;
 
   Widget getBodyForMobile() {
     final keyboardIsVisible = keyboardVisibilityController.isVisible;
