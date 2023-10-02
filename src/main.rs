@@ -57,7 +57,7 @@ fn main() {
         .args_from_usage(&args)
         .get_matches();
     use hbb_common::{config::LocalConfig, env_logger::*};
-    init_from_env(Env::default().filter_or(DEFAULT_FILTER_ENV, "info"));
+    let _ = try_init_from_env(Env::default().filter_or(DEFAULT_FILTER_ENV, "info"));
     if let Some(p) = matches.value_of("port-forward") {
         let options: Vec<String> = p.split(":").map(|x| x.to_owned()).collect();
         if options.len() < 3 {

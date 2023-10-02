@@ -1,5 +1,5 @@
 use docopt::Docopt;
-use hbb_common::env_logger::{init_from_env, Env, DEFAULT_FILTER_ENV};
+use hbb_common::env_logger::{try_init_from_env, Env, DEFAULT_FILTER_ENV};
 use scrap::{
     aom::{AomDecoder, AomEncoder, AomEncoderConfig},
     codec::{EncoderApi, EncoderCfg, Quality as Q},
@@ -48,7 +48,7 @@ enum Quality {
 }
 
 fn main() {
-    init_from_env(Env::default().filter_or(DEFAULT_FILTER_ENV, "info"));
+    let _ = try_init_from_env(Env::default().filter_or(DEFAULT_FILTER_ENV, "info"));
     let args: Args = Docopt::new(USAGE)
         .and_then(|d| d.deserialize())
         .unwrap_or_else(|e| e.exit());
