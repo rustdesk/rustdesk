@@ -112,7 +112,9 @@ class _RawTouchGestureDetectorRegionState
     if (lastDeviceKind != PointerDeviceKind.touch) {
       return;
     }
-    inputModel.tap(MouseButtons.left);
+    if (!handleTouch) {
+      inputModel.tap(MouseButtons.left);
+    }
   }
 
   onDoubleTapDown(TapDownDetails d) {
