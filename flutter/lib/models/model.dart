@@ -1457,7 +1457,7 @@ class CursorModel with ChangeNotifier {
 
     // Update last cursor data.
     // Do not use the previous `image` and `id`, because `_id` may be changed.
-    _updateCursorIdData(_id);
+    _updateCurData();
   }
 
   Future<bool> _updateCache(
@@ -1497,9 +1497,9 @@ class CursorModel with ChangeNotifier {
     return true;
   }
 
-  bool _updateCursorIdData(int id) {
-    _cache = _cacheMap[id];
-    final tmp = _images[id];
+  bool _updateCurData() {
+    _cache = _cacheMap[_id];
+    final tmp = _images[_id];
     if (tmp != null) {
       _image = tmp.item1;
       _hotx = tmp.item2;
@@ -1509,7 +1509,7 @@ class CursorModel with ChangeNotifier {
         notifyListeners();
       } catch (e) {
         debugPrint(
-            'WARNING: updateCursorId $id, without notifyListeners(). $e');
+            'WARNING: updateCursorId $_id, without notifyListeners(). $e');
       }
       return true;
     } else {
@@ -1518,10 +1518,10 @@ class CursorModel with ChangeNotifier {
   }
 
   updateCursorId(Map<String, dynamic> evt) async {
-    final id = int.parse(evt['id']);
-    if (!_updateCursorIdData(id)) {
+    _id = int.parse(evt['id']);
+    if (!_updateCurData()) {
       debugPrint(
-          'WARNING: updateCursorId $id, cache is ${_cache == null ? "null" : "not null"}. without notifyListeners()');
+          'WARNING: updateCursorId $_id, cache is ${_cache == null ? "null" : "not null"}. without notifyListeners()');
     }
   }
 
