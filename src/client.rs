@@ -677,7 +677,7 @@ impl Client {
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     fn try_stop_clipboard(_self_uuid: &uuid::Uuid) {
         #[cfg(feature = "flutter")]
-        if crate::flutter::other_sessions_running(_self_uuid) {
+        if crate::flutter::sessions::other_sessions_running(_self_uuid) {
             return;
         }
         TEXT_CLIPBOARD_STATE.lock().unwrap().running = false;
@@ -2417,21 +2417,21 @@ pub trait Interface: Send + Clone + 'static + Sized {
     /// Send message data to remote peer.
     fn send(&self, data: Data);
     fn msgbox(&self, msgtype: &str, title: &str, text: &str, link: &str);
-    fn handle_login_error(&mut self, err: &str) -> bool;
-    fn handle_peer_info(&mut self, pi: PeerInfo);
+    fn handle_login_error(&self, err: &str) -> bool;
+    fn handle_peer_info(&self, pi: PeerInfo);
     fn on_error(&self, err: &str) {
         self.msgbox("error", "Error", err, "");
     }
-    async fn handle_hash(&mut self, pass: &str, hash: Hash, peer: &mut Stream);
+    async fn handle_hash(&self, pass: &str, hash: Hash, peer: &mut Stream);
     async fn handle_login_from_ui(
-        &mut self,
+        &self,
         os_username: String,
         os_password: String,
         password: String,
         remember: bool,
         peer: &mut Stream,
     );
-    async fn handle_test_delay(&mut self, t: TestDelay, peer: &mut Stream);
+    async fn handle_test_delay(&self, t: TestDelay, peer: &mut Stream);
 
     fn get_login_config_handler(&self) -> Arc<RwLock<LoginConfigHandler>>;
 

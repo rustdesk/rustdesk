@@ -75,7 +75,7 @@ pub async fn listen(
                         let interface = interface.clone();
                         tokio::spawn(async move {
                             if let Err(err) = run_forward(forward, stream).await {
-                               interface.msgbox("error", "Error", &err.to_string(), "");
+                                interface.msgbox("error", "Error", &err.to_string(), "");
                             }
                             log::info!("connection from {:?} closed", addr);
                        });
@@ -121,7 +121,6 @@ async fn connect_and_login(
     let (mut stream, direct, _pk) =
         Client::start(id, key, token, conn_type, interface.clone()).await?;
     interface.update_direct(Some(direct));
-    let mut interface = interface;
     let mut buffer = Vec::new();
     let mut received = false;
     loop {

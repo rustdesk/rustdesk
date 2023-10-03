@@ -1,5 +1,5 @@
 #[cfg(feature = "flutter")]
-use crate::flutter::{CUR_SESSION_ID, SESSIONS};
+use crate::flutter;
 #[cfg(target_os = "windows")]
 use crate::platform::windows::{get_char_from_vk, get_unicode_from_vk};
 #[cfg(not(any(feature = "flutter", feature = "cli")))]
@@ -220,11 +220,7 @@ fn get_keyboard_mode() -> String {
         return session.get_keyboard_mode();
     }
     #[cfg(feature = "flutter")]
-    if let Some(session) = SESSIONS
-        .read()
-        .unwrap()
-        .get(&*CUR_SESSION_ID.read().unwrap())
-    {
+    if let Some(session) = flutter::get_cur_session() {
         return session.get_keyboard_mode();
     }
     "legacy".to_string()
@@ -579,11 +575,7 @@ pub fn send_key_event(key_event: &KeyEvent) {
         session.send_key_event(key_event);
     }
     #[cfg(feature = "flutter")]
-    if let Some(session) = SESSIONS
-        .read()
-        .unwrap()
-        .get(&*CUR_SESSION_ID.read().unwrap())
-    {
+    if let Some(session) = flutter::get_cur_session() {
         session.send_key_event(key_event);
     }
 }
@@ -594,11 +586,7 @@ pub fn get_peer_platform() -> String {
         return session.peer_platform();
     }
     #[cfg(feature = "flutter")]
-    if let Some(session) = SESSIONS
-        .read()
-        .unwrap()
-        .get(&*CUR_SESSION_ID.read().unwrap())
-    {
+    if let Some(session) = flutter::get_cur_session() {
         return session.peer_platform();
     }
     "Windows".to_string()
