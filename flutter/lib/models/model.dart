@@ -203,10 +203,12 @@ class FfiModel with ChangeNotifier {
     updatePrivacyMode(data.updatePrivacyMode, sessionId, peerId);
     setConnectionType(peerId, data.secure, data.direct);
     await handlePeerInfo(data.peerInfo, peerId);
-    for (var element in data.cursorDataList) {
+    for (final element in data.cursorDataList) {
+      updateLastCursorId(element);
       await handleCursorData(element);
     }
-    await handleCursorId(data.lastCursorId);
+    updateLastCursorId(data.lastCursorId);
+    handleCursorId(data.lastCursorId);
   }
 
   // todo: why called by two position
@@ -225,9 +227,11 @@ class FfiModel with ChangeNotifier {
       } else if (name == 'switch_display') {
         handleSwitchDisplay(evt, sessionId, peerId);
       } else if (name == 'cursor_data') {
+        updateLastCursorId(evt);
         await handleCursorData(evt);
       } else if (name == 'cursor_id') {
-        await handleCursorId(evt);
+        updateLastCursorId(evt);
+        handleCursorId(evt);
       } else if (name == 'cursor_position') {
         await parent.target?.cursorModel.updateCursorPosition(evt, peerId);
       } else if (name == 'clipboard') {
@@ -651,9 +655,13 @@ class FfiModel with ChangeNotifier {
     return d;
   }
 
-  handleCursorId(Map<String, dynamic> evt) async {
+  updateLastCursorId(Map<String, dynamic> evt) {
+    parent.target?.cursorModel.id = int.parse(evt['id']);
+  }
+
+  handleCursorId(Map<String, dynamic> evt) {
     cachedPeerData.lastCursorId = evt;
-    await parent.target?.cursorModel.updateCursorId(evt);
+    parent.target?.cursorModel.updateCursorId(evt);
   }
 
   handleCursorData(Map<String, dynamic> evt) async {
@@ -1302,6 +1310,8 @@ class CursorModel with ChangeNotifier {
   double get hotx => _hotx;
   double get hoty => _hoty;
 
+  set id(int id) => _id = id;
+
   bool get isPeerControlProtected =>
       DateTime.now().difference(_lastPeerMouse).inMilliseconds <
       kMouseControlTimeoutMSec;
@@ -1441,8 +1451,6 @@ class CursorModel with ChangeNotifier {
 
   updateCursorData(Map<String, dynamic> evt) async {
     final id = int.parse(evt['id']);
-    // Update last cursor id.
-    _id = id;
     final hotx = double.parse(evt['hotx']);
     final hoty = double.parse(evt['hoty']);
     final width = int.parse(evt['width']);
@@ -1517,8 +1525,7 @@ class CursorModel with ChangeNotifier {
     }
   }
 
-  updateCursorId(Map<String, dynamic> evt) async {
-    _id = int.parse(evt['id']);
+  updateCursorId(Map<String, dynamic> evt) {
     if (!_updateCurData()) {
       debugPrint(
           'WARNING: updateCursorId $_id, cache is ${_cache == null ? "null" : "not null"}. without notifyListeners()');
