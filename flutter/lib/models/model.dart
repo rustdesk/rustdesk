@@ -203,10 +203,12 @@ class FfiModel with ChangeNotifier {
     updatePrivacyMode(data.updatePrivacyMode, sessionId, peerId);
     setConnectionType(peerId, data.secure, data.direct);
     await handlePeerInfo(data.peerInfo, peerId);
-    for (var element in data.cursorDataList) {
+    for (final element in data.cursorDataList) {
+      updateLastCursorId(element);
       await handleCursorData(element);
     }
-    await handleCursorId(data.lastCursorId);
+    updateLastCursorId(data.lastCursorId);
+    handleCursorId(data.lastCursorId);
   }
 
   // todo: why called by two position
@@ -225,9 +227,11 @@ class FfiModel with ChangeNotifier {
       } else if (name == 'switch_display') {
         handleSwitchDisplay(evt, sessionId, peerId);
       } else if (name == 'cursor_data') {
+        updateLastCursorId(evt);
         await handleCursorData(evt);
       } else if (name == 'cursor_id') {
-        await handleCursorId(evt);
+        updateLastCursorId(evt);
+        handleCursorId(evt);
       } else if (name == 'cursor_position') {
         await parent.target?.cursorModel.updateCursorPosition(evt, peerId);
       } else if (name == 'clipboard') {
@@ -651,9 +655,13 @@ class FfiModel with ChangeNotifier {
     return d;
   }
 
-  handleCursorId(Map<String, dynamic> evt) async {
+  updateLastCursorId(Map<String, dynamic> evt) {
+    parent.target?.cursorModel.id = int.parse(evt['id']);
+  }
+
+  handleCursorId(Map<String, dynamic> evt) {
     cachedPeerData.lastCursorId = evt;
-    await parent.target?.cursorModel.updateCursorId(evt);
+    parent.target?.cursorModel.updateCursorId(evt);
   }
 
   handleCursorData(Map<String, dynamic> evt) async {
@@ -1279,6 +1287,7 @@ class CursorModel with ChangeNotifier {
   final _cacheKeys = <String>{};
   double _x = -10000;
   double _y = -10000;
+  int _id = -1;
   double _hotx = 0;
   double _hoty = 0;
   double _displayOriginX = 0;
@@ -1287,7 +1296,7 @@ class CursorModel with ChangeNotifier {
   bool gotMouseControl = true;
   DateTime _lastPeerMouse = DateTime.now()
       .subtract(Duration(milliseconds: 3000 * kMouseControlTimeoutMSec));
-  String id = '';
+  String peerId = '';
   WeakReference<FFI> parent;
 
   ui.Image? get image => _image;
@@ -1300,6 +1309,8 @@ class CursorModel with ChangeNotifier {
 
   double get hotx => _hotx;
   double get hoty => _hoty;
+
+  set id(int id) => _id = id;
 
   bool get isPeerControlProtected =>
       DateTime.now().difference(_lastPeerMouse).inMilliseconds <
@@ -1439,32 +1450,33 @@ class CursorModel with ChangeNotifier {
   }
 
   updateCursorData(Map<String, dynamic> evt) async {
-    var id = int.parse(evt['id']);
-    _hotx = double.parse(evt['hotx']);
-    _hoty = double.parse(evt['hoty']);
-    var width = int.parse(evt['width']);
-    var height = int.parse(evt['height']);
+    final id = int.parse(evt['id']);
+    final hotx = double.parse(evt['hotx']);
+    final hoty = double.parse(evt['hoty']);
+    final width = int.parse(evt['width']);
+    final height = int.parse(evt['height']);
     List<dynamic> colors = json.decode(evt['colors']);
     final rgba = Uint8List.fromList(colors.map((s) => s as int).toList());
     final image = await img.decodeImageFromPixels(
         rgba, width, height, ui.PixelFormat.rgba8888);
-    _image = image;
-    if (await _updateCache(rgba, image, id, width, height)) {
-      _images[id] = Tuple3(image, _hotx, _hoty);
-    } else {
-      _hotx = 0;
-      _hoty = 0;
+    if (await _updateCache(rgba, image, id, hotx, hoty, width, height)) {
+      _images[id] = Tuple3(image, hotx, hoty);
     }
-    try {
-      // my throw exception, because the listener maybe already dispose
-      notifyListeners();
-    } catch (e) {
-      debugPrint('WARNING: updateCursorId $id, without notifyListeners(). $e');
-    }
+
+    // Update last cursor data.
+    // Do not use the previous `image` and `id`, because `_id` may be changed.
+    _updateCurData();
   }
 
   Future<bool> _updateCache(
-      Uint8List rgba, ui.Image image, int id, int w, int h) async {
+    Uint8List rgba,
+    ui.Image image,
+    int id,
+    double hotx,
+    double hoty,
+    int w,
+    int h,
+  ) async {
     Uint8List? data;
     img2.Image imgOrigin = img2.Image.fromBytes(
         width: w, height: h, bytes: rgba.buffer, order: img2.ChannelOrder.rgba);
@@ -1478,33 +1490,45 @@ class CursorModel with ChangeNotifier {
       }
       data = imgBytes.buffer.asUint8List();
     }
-    _cache = CursorData(
-      peerId: this.id,
+    final cache = CursorData(
+      peerId: peerId,
       id: id,
       image: imgOrigin,
       scale: 1.0,
       data: data,
-      hotxOrigin: _hotx,
-      hotyOrigin: _hoty,
+      hotxOrigin: hotx,
+      hotyOrigin: hoty,
       width: w,
       height: h,
     );
-    _cacheMap[id] = _cache!;
+    _cacheMap[id] = cache;
     return true;
   }
 
-  updateCursorId(Map<String, dynamic> evt) async {
-    final id = int.parse(evt['id']);
-    _cache = _cacheMap[id];
-    final tmp = _images[id];
+  bool _updateCurData() {
+    _cache = _cacheMap[_id];
+    final tmp = _images[_id];
     if (tmp != null) {
       _image = tmp.item1;
       _hotx = tmp.item2;
       _hoty = tmp.item3;
-      notifyListeners();
+      try {
+        // may throw exception, because the listener maybe already dispose
+        notifyListeners();
+      } catch (e) {
+        debugPrint(
+            'WARNING: updateCursorId $_id, without notifyListeners(). $e');
+      }
+      return true;
     } else {
+      return false;
+    }
+  }
+
+  updateCursorId(Map<String, dynamic> evt) {
+    if (!_updateCurData()) {
       debugPrint(
-          'WARNING: updateCursorId $id, cache is ${_cache == null ? "null" : "not null"}. without notifyListeners()');
+          'WARNING: updateCursorId $_id, cache is ${_cache == null ? "null" : "not null"}. without notifyListeners()');
     }
   }
 
@@ -1748,7 +1772,7 @@ class FFI {
       connType = ConnType.defaultConn;
       canvasModel.id = id;
       imageModel.id = id;
-      cursorModel.id = id;
+      cursorModel.peerId = id;
     }
     // If tabWindowId != null, this session is a "tab -> window" one.
     // Else this session is a new one.
