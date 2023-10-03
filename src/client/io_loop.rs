@@ -816,7 +816,7 @@ impl<T: InvokeUiSession> Remote<T> {
         job: &fs::TransferJob,
         elapsed: i32,
         last_update_jobs_status: &mut (Instant, HashMap<i32, u64>),
-        handler: &mut Session<T>,
+        handler: &Session<T>,
     ) {
         if elapsed <= 0 {
             return;
@@ -843,7 +843,7 @@ impl<T: InvokeUiSession> Remote<T> {
                     job,
                     elapsed,
                     &mut self.last_update_jobs_status,
-                    &mut self.handler,
+                    &self.handler,
                 );
             }
             for job in self.write_jobs.iter() {

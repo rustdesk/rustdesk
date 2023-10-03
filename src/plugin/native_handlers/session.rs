@@ -7,12 +7,7 @@ use std::{
 
 use flutter_rust_bridge::StreamSink;
 
-use crate::{
-    define_method_prefix,
-    flutter::FlutterHandler,
-    flutter_ffi::EventToUI,
-    ui_session_interface::{ConnectionState, Session},
-};
+use crate::{define_method_prefix, flutter_ffi::EventToUI};
 
 const MSG_TO_UI_TYPE_SESSION_CREATED: &str = "session_created";
 
@@ -30,7 +25,7 @@ pub type OnSessionRgbaCallback = unsafe extern "C" fn(
 #[derive(Default)]
 /// Session related handler for librustdesk core.
 pub struct PluginNativeSessionHandler {
-    sessions: Arc<RwLock<Vec<Session<FlutterHandler>>>>,
+    sessions: Arc<RwLock<Vec<crate::flutter::FlutterSession>>>,
     cbs: Arc<RwLock<HashMap<String, OnSessionRgbaCallback>>>,
 }
 
@@ -63,7 +58,8 @@ impl PluginNativeHandler for PluginNativeSessionHandler {
                         let sessions = SESSION_HANDLER.sessions.read().unwrap();
                         for session in sessions.iter() {
                             if session.id == id {
-                                let round = session.connection_round_state.lock().unwrap().new_round();
+                                let round =
+                                    session.connection_round_state.lock().unwrap().new_round();
                                 crate::ui_session_interface::io_loop(session.clone(), round);
                             }
                         }

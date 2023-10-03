@@ -1,4 +1,7 @@
 use crate::input::{MOUSE_BUTTON_LEFT, MOUSE_TYPE_DOWN, MOUSE_TYPE_UP, MOUSE_TYPE_WHEEL};
+use async_trait::async_trait;
+use bytes::Bytes;
+use rdev::{Event, EventType::*, KeyCode};
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use std::{collections::HashMap, sync::atomic::AtomicBool};
 use std::{
@@ -10,10 +13,6 @@ use std::{
     },
     time::SystemTime,
 };
-
-use async_trait::async_trait;
-use bytes::Bytes;
-use rdev::{Event, EventType::*, KeyCode};
 use uuid::Uuid;
 
 #[cfg(not(feature = "flutter"))]
@@ -232,7 +231,7 @@ impl<T: InvokeUiSession> Session<T> {
         }
     }
 
-    pub fn save_keyboard_mode(&mut self, value: String) {
+    pub fn save_keyboard_mode(&self, value: String) {
         self.lc.write().unwrap().save_keyboard_mode(value);
     }
 
@@ -240,19 +239,19 @@ impl<T: InvokeUiSession> Session<T> {
         self.lc.read().unwrap().reverse_mouse_wheel.clone()
     }
 
-    pub fn save_reverse_mouse_wheel(&mut self, value: String) {
+    pub fn save_reverse_mouse_wheel(&self, value: String) {
         self.lc.write().unwrap().save_reverse_mouse_wheel(value);
     }
 
-    pub fn save_view_style(&mut self, value: String) {
+    pub fn save_view_style(&self, value: String) {
         self.lc.write().unwrap().save_view_style(value);
     }
 
-    pub fn save_scroll_style(&mut self, value: String) {
+    pub fn save_scroll_style(&self, value: String) {
         self.lc.write().unwrap().save_scroll_style(value);
     }
 
-    pub fn save_flutter_option(&mut self, k: String, v: String) {
+    pub fn save_flutter_option(&self, k: String, v: String) {
         self.lc.write().unwrap().save_ui_flutter(k, v);
     }
 
@@ -260,7 +259,7 @@ impl<T: InvokeUiSession> Session<T> {
         self.lc.read().unwrap().get_ui_flutter(&k)
     }
 
-    pub fn toggle_option(&mut self, name: String) {
+    pub fn toggle_option(&self, name: String) {
         let msg = self.lc.write().unwrap().toggle_option(name.clone());
         #[cfg(not(feature = "flutter"))]
         if name == "enable-file-transfer" {
@@ -303,7 +302,7 @@ impl<T: InvokeUiSession> Session<T> {
         self.send(Data::Message(msg));
     }
 
-    pub fn save_custom_image_quality(&mut self, custom_image_quality: i32) {
+    pub fn save_custom_image_quality(&self, custom_image_quality: i32) {
         let msg = self
             .lc
             .write()
@@ -312,14 +311,14 @@ impl<T: InvokeUiSession> Session<T> {
         self.send(Data::Message(msg));
     }
 
-    pub fn save_image_quality(&mut self, value: String) {
+    pub fn save_image_quality(&self, value: String) {
         let msg = self.lc.write().unwrap().save_image_quality(value);
         if let Some(msg) = msg {
             self.send(Data::Message(msg));
         }
     }
 
-    pub fn set_custom_fps(&mut self, custom_fps: i32) {
+    pub fn set_custom_fps(&self, custom_fps: i32) {
         let msg = self.lc.write().unwrap().set_custom_fps(custom_fps);
         self.send(Data::Message(msg));
     }
@@ -423,7 +422,7 @@ impl<T: InvokeUiSession> Session<T> {
         self.send(Data::RemovePortForward(port));
     }
 
-    pub fn add_port_forward(&mut self, port: i32, remote_host: String, remote_port: i32) {
+    pub fn add_port_forward(&self, port: i32, remote_host: String, remote_port: i32) {
         let mut config = self.load_config();
         if config
             .port_forwards
@@ -901,7 +900,7 @@ impl<T: InvokeUiSession> Session<T> {
         let cloned = self.clone();
         // override only if true
         if true == force_relay {
-            cloned.lc.write().unwrap().force_relay = true;
+            self.lc.write().unwrap().force_relay = true;
         }
         let mut lock = self.thread.lock().unwrap();
         // No need to join the previous thread, because it will exit automatically.
@@ -1216,11 +1215,11 @@ impl<T: InvokeUiSession> Interface for Session<T> {
         self.ui_handler.msgbox(msgtype, title, text, link, retry);
     }
 
-    fn handle_login_error(&mut self, err: &str) -> bool {
+    fn handle_login_error(&self, err: &str) -> bool {
         handle_login_error(self.lc.clone(), err, self)
     }
 
-    fn handle_peer_info(&mut self, mut pi: PeerInfo) {
+    fn handle_peer_info(&self, mut pi: PeerInfo) {
         log::debug!("handle_peer_info :{:?}", pi);
         pi.username = self.lc.read().unwrap().get_username(&pi);
         if pi.current_display as usize >= pi.displays.len() {
@@ -1282,12 +1281,12 @@ impl<T: InvokeUiSession> Interface for Session<T> {
         }
     }
 
-    async fn handle_hash(&mut self, pass: &str, hash: Hash, peer: &mut Stream) {
+    async fn handle_hash(&self, pass: &str, hash: Hash, peer: &mut Stream) {
         handle_hash(self.lc.clone(), pass, hash, self, peer).await;
     }
 
     async fn handle_login_from_ui(
-        &mut self,
+        &self,
         os_username: String,
         os_password: String,
         password: String,
@@ -1305,7 +1304,7 @@ impl<T: InvokeUiSession> Interface for Session<T> {
         .await;
     }
 
-    async fn handle_test_delay(&mut self, t: TestDelay, peer: &mut Stream) {
+    async fn handle_test_delay(&self, t: TestDelay, peer: &mut Stream) {
         if !t.from_client {
             self.update_quality_status(QualityStatus {
                 delay: Some(t.last_delay as _),
