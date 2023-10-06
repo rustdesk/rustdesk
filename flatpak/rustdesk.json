@@ -1,7 +1,7 @@
 {
   "id": "com.rustdesk.RustDesk",
   "runtime": "org.freedesktop.Platform",
-  "runtime-version": "21.08",
+  "runtime-version": "23.08",
   "sdk": "org.freedesktop.Sdk",
   "command": "rustdesk",
   "icon": "share/icons/hicolor/scalable/apps/rustdesk.svg",
