@@ -1,5 +1,5 @@
 #[cfg(feature = "flutter")]
-use crate::flutter::{CUR_SESSION_ID, SESSIONS};
+use crate::flutter;
 #[cfg(target_os = "windows")]
 use crate::platform::windows::{get_char_from_vk, get_unicode_from_vk};
 #[cfg(not(any(feature = "flutter", feature = "cli")))]
@@ -14,10 +14,8 @@ use rdev::KeyCode;
 use rdev::{Event, EventType, Key};
 #[cfg(any(target_os = "windows", target_os = "macos"))]
 use std::sync::atomic::{AtomicBool, Ordering};
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
-use std::time::SystemTime;
 use std::{
-    collections::{HashMap, HashSet},
+    collections::HashMap,
     sync::{Arc, Mutex},
 };
 
@@ -35,7 +33,7 @@ const OS_LOWER_MACOS: &str = "macos";
 static KEYBOARD_HOOKED: AtomicBool = AtomicBool::new(false);
 
 lazy_static::lazy_static! {
-    static ref TO_RELEASE: Arc<Mutex<HashSet<Key>>> = Arc::new(Mutex::new(HashSet::<Key>::new()));
+    static ref TO_RELEASE: Arc<Mutex<HashMap<Key, Event>>> = Arc::new(Mutex::new(HashMap::new()));
     static ref MODIFIERS_STATE: Mutex<HashMap<Key, bool>> = {
         let mut m = HashMap::new();
         m.insert(Key::ShiftLeft, false);
@@ -222,11 +220,7 @@ fn get_keyboard_mode() -> String {
         return session.get_keyboard_mode();
     }
     #[cfg(feature = "flutter")]
-    if let Some(session) = SESSIONS
-        .read()
-        .unwrap()
-        .get(&*CUR_SESSION_ID.read().unwrap())
-    {
+    if let Some(session) = flutter::get_cur_session() {
         return session.get_keyboard_mode();
     }
     "legacy".to_string()
@@ -336,12 +330,17 @@ pub fn release_remote_keys(keyboard_mode: &str) {
     // todo!: client quit suddenly, how to release keys?
     let to_release = TO_RELEASE.lock().unwrap().clone();
     TO_RELEASE.lock().unwrap().clear();
-    for key in to_release {
-        let event_type = EventType::KeyRelease(key);
-        let event = event_type_to_event(event_type);
-        // to-do: BUG
-        // Release events should be sent to the corresponding sessions, instead of current session.
+    for (key, mut event) in to_release.into_iter() {
+        event.event_type = EventType::KeyRelease(key);
         client::process_event(keyboard_mode, &event, None);
+        // If Alt or AltGr is pressed, we need to send another key stoke to release it.
+        // Because the controlled side may hold the alt state, if local window is switched by [Alt + Tab].
+        if key == Key::Alt || key == Key::AltGr {
+            event.event_type = EventType::KeyPress(key);
+            client::process_event(keyboard_mode, &event, None);
+            event.event_type = EventType::KeyRelease(key);
+            client::process_event(keyboard_mode, &event, None);
+        }
     }
 }
 
@@ -519,7 +518,7 @@ pub fn event_to_key_events(
 
     match event.event_type {
         EventType::KeyPress(key) => {
-            TO_RELEASE.lock().unwrap().insert(key);
+            TO_RELEASE.lock().unwrap().insert(key, event.clone());
         }
         EventType::KeyRelease(key) => {
             TO_RELEASE.lock().unwrap().remove(&key);
@@ -570,30 +569,13 @@ pub fn event_to_key_events(
     key_events
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
-pub fn event_type_to_event(event_type: EventType) -> Event {
-    Event {
-        event_type,
-        time: SystemTime::now(),
-        unicode: None,
-        platform_code: 0,
-        position_code: 0,
-        #[cfg(any(target_os = "windows", target_os = "macos"))]
-        extra_data: 0,
-    }
-}
-
 pub fn send_key_event(key_event: &KeyEvent) {
     #[cfg(not(any(feature = "flutter", feature = "cli")))]
     if let Some(session) = CUR_SESSION.lock().unwrap().as_ref() {
         session.send_key_event(key_event);
     }
     #[cfg(feature = "flutter")]
-    if let Some(session) = SESSIONS
-        .read()
-        .unwrap()
-        .get(&*CUR_SESSION_ID.read().unwrap())
-    {
+    if let Some(session) = flutter::get_cur_session() {
         session.send_key_event(key_event);
     }
 }
@@ -604,11 +586,7 @@ pub fn get_peer_platform() -> String {
         return session.peer_platform();
     }
     #[cfg(feature = "flutter")]
-    if let Some(session) = SESSIONS
-        .read()
-        .unwrap()
-        .get(&*CUR_SESSION_ID.read().unwrap())
-    {
+    if let Some(session) = flutter::get_cur_session() {
         return session.peer_platform();
     }
     "Windows".to_string()

@@ -102,9 +102,9 @@ dependencies:
   flex_color_picker: ^3.3.0
   dynamic_layouts:
     git:
-      url: https://github.com/flutter/packages.git
-      path: packages/dynamic_layouts
-      ref: 0023d01996576e494094793a6552463f01c5627a
+      url: https://github.com/21pages/dynamic_layouts.git
+      ref: 24cb88413fa5181d949ddacbb30a65d5c459e7d9
+  pull_down_button: ^0.9.3
 
 dev_dependencies:
   icons_launcher: ^2.0.4
@@ -157,9 +157,6 @@ flutter:
     - family: AddressBook
       fonts:
         - asset: assets/address_book.ttf
-    - family: CheckBox
-      fonts:
-        - asset: assets/checkbox.ttf
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/assets-and-images/#resolution-aware.

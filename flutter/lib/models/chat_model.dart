@@ -285,7 +285,10 @@ class ChatModel with ChangeNotifier {
     await toggleCMSidePage();
   }
 
+  var _togglingCMSidePage = false; // protect order for await
   toggleCMSidePage() async {
+    if (_togglingCMSidePage) return false;
+    _togglingCMSidePage = true;
     if (_isShowCMSidePage) {
       _isShowCMSidePage = !_isShowCMSidePage;
       notifyListeners();
@@ -300,6 +303,7 @@ class ChatModel with ChangeNotifier {
       _isShowCMSidePage = !_isShowCMSidePage;
       notifyListeners();
     }
+    _togglingCMSidePage = false;
   }
 
   changeCurrentKey(MessageKey key) {

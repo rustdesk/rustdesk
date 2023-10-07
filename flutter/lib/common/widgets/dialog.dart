@@ -711,6 +711,13 @@ void showWaitUacDialog(
       (setState, close, context) => CustomAlertDialog(
             title: null,
             content: msgboxContent(type, 'Wait', 'wait_accept_uac_tip'),
+            actions: [
+              dialogButton(
+                'OK',
+                icon: Icon(Icons.done_rounded),
+                onPressed: close,
+              ),
+            ],
           ));
 }
 
@@ -931,7 +938,7 @@ void showElevationError(SessionID sessionId, String type, String title,
         dialogButton('Cancel', onPressed: () {
           close();
         }, isOutline: true),
-        dialogButton('Retry', onPressed: submit),
+        if (text != 'No permission') dialogButton('Retry', onPressed: submit),
       ],
       onSubmit: submit,
       onCancel: close,

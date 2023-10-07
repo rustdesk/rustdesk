@@ -15,8 +15,10 @@ import 'package:flutter_hbb/desktop/widgets/tabbar_widget.dart';
 import 'package:flutter_hbb/models/ab_model.dart';
 
 import 'package:flutter_hbb/models/peer_tab_model.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:get/get.dart';
 import 'package:provider/provider.dart';
+import 'package:pull_down_button/pull_down_button.dart';
 
 import '../../common.dart';
 import '../../models/platform_model.dart';
@@ -110,43 +112,14 @@ class _PeerTabPageState extends State<PeerTabPage>
                 Expanded(
                     child:
                         visibleContextMenuListener(_createSwitchBar(context))),
-                const PeerSearchBar().marginOnly(right: isMobile ? 0 : 13),
-                _createRefresh(
-                    index: PeerTabIndex.ab, loading: gFFI.abModel.abLoading),
-                _createRefresh(
-                    index: PeerTabIndex.group,
-                    loading: gFFI.groupModel.groupLoading),
-                _createMultiSelection(),
-                Offstage(
-                    offstage: !isDesktop,
-                    child: _createPeerViewTypeSwitch(context)),
-                Offstage(
-                  offstage: gFFI.peerTabModel.currentTab == 0,
-                  child: PeerSortDropdown(),
-                ),
-                Offstage(
-                  offstage: gFFI.peerTabModel.currentTab != 3,
-                  child: _hoverAction(
-                    context: context,
-                    hoverableWhenfalse: hideAbTagsPanel,
-                    child: Tooltip(
-                        message: translate('Toggle Tags'),
-                        child: Icon(
-                          Icons.tag_rounded,
-                          size: 18,
-                        )),
-                    onTap: () async {
-                      await bind.mainSetLocalOption(
-                          key: "hideAbTagsPanel",
-                          value: hideAbTagsPanel.value ? "" : "Y");
-                      hideAbTagsPanel.value = !hideAbTagsPanel.value;
-                    },
-                  ),
-                ),
+                if (isMobile)
+                  ..._mobileRightActions(context)
+                else
+                  ..._desktopRightActions(context)
               ],
             )),
           ),
-        ),
+        ).paddingOnly(right: isDesktop ? 12 : 0),
         _createPeersView(),
       ],
     );
@@ -270,17 +243,20 @@ class _PeerTabPageState extends State<PeerTabPage>
   Widget _createMultiSelection() {
     final textColor = Theme.of(context).textTheme.titleLarge?.color;
     final model = Provider.of<PeerTabModel>(context);
-    if (model.currentTabCachedPeers.isEmpty) return Offstage();
     return _hoverAction(
       context: context,
       onTap: () {
         model.setMultiSelectionMode(true);
+        if (isMobile && Navigator.canPop(context)) {
+          Navigator.pop(context);
+        }
       },
       child: Tooltip(
           message: translate('Select'),
-          child: Icon(
-            IconFont.checkbox,
-            size: 18,
+          child: SvgPicture.asset(
+            "assets/checkbox-outline.svg",
+            width: 18,
+            height: 18,
             color: textColor,
           )),
     );
@@ -564,6 +540,130 @@ class _PeerTabPageState extends State<PeerTabPage>
                 Tooltip(message: translate('Close'), child: Icon(Icons.clear)))
         .marginOnly(left: 6);
   }
+
+  Widget _toggleTags() {
+    return _hoverAction(
+        context: context,
+        hoverableWhenfalse: hideAbTagsPanel,
+        child: Tooltip(
+            message: translate('Toggle Tags'),
+            child: Icon(
+              Icons.tag_rounded,
+              size: 18,
+            )),
+        onTap: () async {
+          await bind.mainSetLocalOption(
+              key: "hideAbTagsPanel", value: hideAbTagsPanel.value ? "" : "Y");
+          hideAbTagsPanel.value = !hideAbTagsPanel.value;
+        });
+  }
+
+  List<Widget> _desktopRightActions(BuildContext context) {
+    final model = Provider.of<PeerTabModel>(context);
+    return [
+      const PeerSearchBar().marginOnly(right: isMobile ? 0 : 13),
+      _createRefresh(index: PeerTabIndex.ab, loading: gFFI.abModel.abLoading),
+      _createRefresh(
+          index: PeerTabIndex.group, loading: gFFI.groupModel.groupLoading),
+      Offstage(
+        offstage: model.currentTabCachedPeers.isEmpty,
+        child: _createMultiSelection(),
+      ),
+      _createPeerViewTypeSwitch(context),
+      Offstage(
+        offstage: model.currentTab == PeerTabIndex.recent.index,
+        child: PeerSortDropdown(),
+      ),
+      Offstage(
+        offstage: model.currentTab != PeerTabIndex.ab.index,
+        child: _toggleTags(),
+      ),
+    ];
+  }
+
+  List<Widget> _mobileRightActions(BuildContext context) {
+    final model = Provider.of<PeerTabModel>(context);
+    final screenWidth = MediaQuery.of(context).size.width;
+    final leftIconSize = Theme.of(context).iconTheme.size ?? 24;
+    final leftActionsSize =
+        (leftIconSize + (4 + 4) * 2) * model.visibleIndexs.length;
+    final availableWidth = screenWidth - 10 * 2 - leftActionsSize - 2 * 2;
+    final searchWidth = 120;
+    final otherActionWidth = 18 + 10;
+
+    dropDown(List<Widget> menus) {
+      final padding = 6.0;
+      final textColor = Theme.of(context).textTheme.titleLarge?.color;
+      return PullDownButton(
+        buttonBuilder:
+            (BuildContext context, Future<void> Function() showMenu) {
+          return _hoverAction(
+            context: context,
+            child: Tooltip(
+                message: translate('More'),
+                child: SvgPicture.asset(
+                  "assets/chevron_up_chevron_down.svg",
+                  width: 18,
+                  height: 18,
+                  color: textColor,
+                )),
+            onTap: showMenu,
+          );
+        },
+        routeTheme: PullDownMenuRouteTheme(
+            width: menus.length * (otherActionWidth + padding * 2) * 1.0),
+        itemBuilder: (context) => [
+          PullDownMenuEntryImpl(
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: menus
+                  .map((e) =>
+                      Material(child: e.paddingSymmetric(horizontal: padding)))
+                  .toList(),
+            ),
+          )
+        ],
+      );
+    }
+
+    // Always show search, refresh
+    List<Widget> actions = [
+      const PeerSearchBar(),
+      if (model.currentTab == PeerTabIndex.ab.index)
+        _createRefresh(index: PeerTabIndex.ab, loading: gFFI.abModel.abLoading),
+      if (model.currentTab == PeerTabIndex.group.index)
+        _createRefresh(
+            index: PeerTabIndex.group, loading: gFFI.groupModel.groupLoading),
+    ];
+    final List<Widget> dynamicActions = [
+      if (model.currentTabCachedPeers.isNotEmpty) _createMultiSelection(),
+      if (model.currentTab != PeerTabIndex.recent.index) PeerSortDropdown(),
+      if (model.currentTab == PeerTabIndex.ab.index) _toggleTags()
+    ];
+    final rightWidth = availableWidth -
+        searchWidth -
+        (actions.length == 2 ? otherActionWidth : 0);
+    final availablePositions = rightWidth ~/ otherActionWidth;
+    debugPrint(
+        "dynamic action count:${dynamicActions.length}, available positions: $availablePositions");
+
+    if (availablePositions < dynamicActions.length &&
+        dynamicActions.length > 1) {
+      if (availablePositions < 2) {
+        actions.addAll([
+          dropDown(dynamicActions),
+        ]);
+      } else {
+        actions.addAll([
+          ...dynamicActions.sublist(0, availablePositions - 1),
+          dropDown(dynamicActions.sublist(availablePositions - 1)),
+        ]);
+      }
+    } else {
+      actions.addAll(dynamicActions);
+    }
+    return actions;
+  }
 }
 
 class PeerSearchBar extends StatefulWidget {
@@ -838,4 +938,15 @@ Widget _hoverAction(
             onTapDown: onTapDown,
             child: Container(padding: padding, child: child))),
   );
+}
+
+class PullDownMenuEntryImpl extends StatelessWidget
+    implements PullDownMenuEntry {
+  final Widget child;
+  const PullDownMenuEntryImpl({super.key, required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    return child;
+  }
 }

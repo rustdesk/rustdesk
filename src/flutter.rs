@@ -42,9 +42,10 @@ pub(crate) const APP_TYPE_CM: &str = "main";
 // pub(crate) const APP_TYPE_DESKTOP_FILE_TRANSFER: &str = "file transfer";
 // pub(crate) const APP_TYPE_DESKTOP_PORT_FORWARD: &str = "port forward";
 
+pub type FlutterSession = Arc<Session<FlutterHandler>>;
+
 lazy_static::lazy_static! {
     pub(crate) static ref CUR_SESSION_ID: RwLock<SessionID> = Default::default();
-    pub(crate) static ref SESSIONS: RwLock<HashMap<SessionID, Session<FlutterHandler>>> = Default::default();
     static ref GLOBAL_EVENT_STREAM: RwLock<HashMap<String, StreamSink<String>>> = Default::default(); // rust to dart event channel
 }
 
@@ -287,7 +288,7 @@ impl FlutterHandler {
         )
     }
 
-    pub(crate) fn close_event_stream(&mut self) {
+    pub(crate) fn close_event_stream(&self) {
         let mut stream_lock = self.event_stream.write().unwrap();
         if let Some(stream) = &*stream_lock {
             stream.add(EventToUI::Event("close".to_owned()));
@@ -337,13 +338,13 @@ impl FlutterHandler {
 
     #[inline]
     #[cfg(feature = "flutter_texture_render")]
-    pub fn register_texture(&mut self, ptr: usize) {
+    pub fn register_texture(&self, ptr: usize) {
         *self.renderer.read().unwrap().ptr.write().unwrap() = ptr;
     }
 
     #[inline]
     #[cfg(feature = "flutter_texture_render")]
-    pub fn set_size(&mut self, width: usize, height: usize) {
+    pub fn set_size(&self, width: usize, height: usize) {
         *self.notify_rendered.write().unwrap() = false;
         self.renderer.write().unwrap().set_size(width, height);
     }
@@ -731,7 +732,7 @@ pub fn session_add(
     switch_uuid: &str,
     force_relay: bool,
     password: String,
-) -> ResultType<Session<FlutterHandler>> {
+) -> ResultType<FlutterSession> {
     LocalConfig::set_remote_id(&id);
 
     let session: Session<FlutterHandler> = Session {
@@ -768,11 +769,8 @@ pub fn session_add(
         .unwrap()
         .initialize(id.to_owned(), conn_type, switch_uuid, force_relay);
 
-    if let Some(same_id_session) = SESSIONS
-        .write()
-        .unwrap()
-        .insert(session_id.to_owned(), session.clone())
-    {
+    let session = Arc::new(session.clone());
+    if let Some(same_id_session) = sessions::add_session(session_id.to_owned(), session.clone()) {
         log::error!("Should not happen");
         same_id_session.close();
     }
@@ -791,7 +789,7 @@ pub fn session_start_(
     id: &str,
     event_stream: StreamSink<EventToUI>,
 ) -> ResultType<()> {
-    if let Some(session) = SESSIONS.write().unwrap().get_mut(session_id) {
+    if let Some(session) = sessions::get_session(session_id) {
         #[cfg(feature = "flutter_texture_render")]
         log::info!(
             "Session {} start, render by flutter texture rgba plugin",
@@ -803,9 +801,10 @@ pub fn session_start_(
         session.close_event_stream();
         *session.event_stream.write().unwrap() = Some(event_stream);
         if !is_pre_added {
-            let session = session.clone();
+            let session = (*session).clone();
             std::thread::spawn(move || {
-                io_loop(session);
+                let round = session.connection_round_state.lock().unwrap().new_round();
+                io_loop(session, round);
             });
         }
         Ok(())
@@ -816,29 +815,15 @@ pub fn session_start_(
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub fn update_text_clipboard_required() {
-    let is_required = SESSIONS
-        .read()
-        .unwrap()
+    let is_required = sessions::get_sessions()
         .iter()
-        .any(|(_id, session)| session.is_text_clipboard_required());
+        .any(|session| session.is_text_clipboard_required());
     Client::set_is_text_clipboard_required(is_required);
-}
-
-#[inline]
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
-pub fn other_sessions_running(session_id: &SessionID) -> bool {
-    SESSIONS
-        .read()
-        .unwrap()
-        .keys()
-        .filter(|k| *k != session_id)
-        .count()
-        != 0
 }
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub fn send_text_clipboard_msg(msg: Message) {
-    for (_id, session) in SESSIONS.read().unwrap().iter() {
+    for session in sessions::get_sessions() {
         if session.is_text_clipboard_required() {
             session.send(Data::Message(msg.clone()));
         }
@@ -1051,7 +1036,7 @@ fn char_to_session_id(c: *const char) -> ResultType<SessionID> {
 
 pub fn session_get_rgba_size(_session_id: SessionID) -> usize {
     #[cfg(not(feature = "flutter_texture_render"))]
-    if let Some(session) = SESSIONS.read().unwrap().get(&_session_id) {
+    if let Some(session) = sessions::get_session(&_session_id) {
         return session.rgba.read().unwrap().len();
     }
     0
@@ -1060,7 +1045,7 @@ pub fn session_get_rgba_size(_session_id: SessionID) -> usize {
 #[no_mangle]
 pub extern "C" fn session_get_rgba(session_uuid_str: *const char) -> *const u8 {
     if let Ok(session_id) = char_to_session_id(session_uuid_str) {
-        if let Some(session) = SESSIONS.read().unwrap().get(&session_id) {
+        if let Some(session) = sessions::get_session(&session_id) {
             return session.get_rgba();
         }
     }
@@ -1069,7 +1054,7 @@ pub extern "C" fn session_get_rgba(session_uuid_str: *const char) -> *const u8 {
 }
 
 pub fn session_next_rgba(session_id: SessionID) {
-    if let Some(session) = SESSIONS.read().unwrap().get(&session_id) {
+    if let Some(session) = sessions::get_session(&session_id) {
         return session.next_rgba();
     }
 }
@@ -1077,8 +1062,9 @@ pub fn session_next_rgba(session_id: SessionID) {
 #[inline]
 pub fn session_register_texture(_session_id: SessionID, _ptr: usize) {
     #[cfg(feature = "flutter_texture_render")]
-    if let Some(session) = SESSIONS.write().unwrap().get_mut(&_session_id) {
-        return session.register_texture(_ptr);
+    if let Some(session) = sessions::get_session(&_session_id) {
+        session.register_texture(_ptr);
+        return;
     }
 }
 
@@ -1088,11 +1074,7 @@ pub fn push_session_event(
     name: &str,
     event: Vec<(&str, &str)>,
 ) -> Option<bool> {
-    SESSIONS
-        .read()
-        .unwrap()
-        .get(session_id)?
-        .push_event(name, event)
+    sessions::get_session(session_id)?.push_event(name, event)
 }
 
 #[inline]
@@ -1141,7 +1123,7 @@ fn session_send_touch_scale(
 ) {
     match v.get("v").and_then(|s| s.as_i64()) {
         Some(scale) => {
-            if let Some(session) = SESSIONS.read().unwrap().get(&session_id) {
+            if let Some(session) = sessions::get_session(&session_id) {
                 session.send_touch_scale(scale as _, alt, ctrl, shift, command);
             }
         }
@@ -1165,7 +1147,7 @@ fn session_send_touch_pan(
             v.get("y").and_then(|y| y.as_i64()),
         ) {
             (Some(x), Some(y)) => {
-                if let Some(session) = SESSIONS.read().unwrap().get(&session_id) {
+                if let Some(session) = sessions::get_session(&session_id) {
                     session
                         .send_touch_pan_event(pan_event, x as _, y as _, alt, ctrl, shift, command);
                 }
@@ -1213,4 +1195,61 @@ pub fn session_send_pointer(session_id: SessionID, msg: String) {
 #[derive(Clone)]
 pub enum SessionHook {
     OnSessionRgba(fn(String, &mut scrap::ImageRgb)),
+}
+
+#[inline]
+pub fn get_cur_session() -> Option<FlutterSession> {
+    sessions::get_session(&*CUR_SESSION_ID.read().unwrap())
+}
+
+// sessions mod is used to avoid the big lock of sessions' map.
+pub mod sessions {
+    use super::*;
+
+    lazy_static::lazy_static! {
+        static ref SESSIONS: RwLock<HashMap<SessionID, FlutterSession>> = Default::default();
+    }
+
+    #[inline]
+    pub fn add_session(session_id: SessionID, session: FlutterSession) -> Option<FlutterSession> {
+        SESSIONS.write().unwrap().insert(session_id, session)
+    }
+
+    #[inline]
+    pub fn remove_session(session_id: &SessionID) -> Option<FlutterSession> {
+        SESSIONS.write().unwrap().remove(session_id)
+    }
+
+    #[inline]
+    pub fn get_session(session_id: &SessionID) -> Option<FlutterSession> {
+        SESSIONS.read().unwrap().get(session_id).cloned()
+    }
+
+    #[inline]
+    pub fn get_sessions() -> Vec<FlutterSession> {
+        SESSIONS.read().unwrap().values().cloned().collect()
+    }
+
+    #[inline]
+    pub fn get_session_by_peer_id(peer_id: &str) -> Option<FlutterSession> {
+        SESSIONS
+            .read()
+            .unwrap()
+            .values()
+            .find(|session| session.id == peer_id)
+            .map(|s| s.clone())
+            .clone()
+    }
+
+    #[inline]
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    pub fn other_sessions_running(session_id: &SessionID) -> bool {
+        SESSIONS
+            .read()
+            .unwrap()
+            .keys()
+            .filter(|k| *k != session_id)
+            .count()
+            != 0
+    }
 }

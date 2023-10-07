@@ -328,7 +328,7 @@ packages:
     description:
       path: "."
       ref: HEAD
-      resolved-ref: e51fddf7f3b46d4423b7aa79ba824a45a1ea1b7a
+      resolved-ref: ef03db52a20a7899da135d694c071fa3866c8fb1
       url: "https://github.com/rustdesk-org/rustdesk_desktop_multi_window"
     source: git
     version: "0.1.0"
@@ -399,10 +399,10 @@ packages:
   dynamic_layouts:
     dependency: "direct main"
     description:
-      path: "packages/dynamic_layouts"
-      ref: "0023d01996576e494094793a6552463f01c5627a"
-      resolved-ref: "0023d01996576e494094793a6552463f01c5627a"
-      url: "https://github.com/flutter/packages.git"
+      path: "."
+      ref: "24cb88413fa5181d949ddacbb30a65d5c459e7d9"
+      resolved-ref: "24cb88413fa5181d949ddacbb30a65d5c459e7d9"
+      url: "https://github.com/21pages/dynamic_layouts.git"
     source: git
     version: "0.0.1+1"
   event_bus:
@@ -1045,6 +1045,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.2.1"
+  pull_down_button:
+    dependency: "direct main"
+    description:
+      name: pull_down_button
+      sha256: "235b302701ce029fd9e9470975069376a6700935bb47a5f1b3ec8a5efba07e6f"
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.9.3"
   puppeteer:
     dependency: transitive
     description:
@@ -1080,12 +1088,11 @@ packages:
   screen_retriever:
     dependency: transitive
     description:
-      path: "."
-      ref: "406b9b0"
-      resolved-ref: "406b9b038b2c1d779f1e7bf609c8c248be247372"
-      url: "https://github.com/Kingtous/rustdesk_screen_retriever.git"
-    source: git
-    version: "0.1.2"
+      name: screen_retriever
+      sha256: "6ee02c8a1158e6dae7ca430da79436e3b1c9563c8cf02f524af997c201ac2b90"
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.1.9"
   scroll_pos:
     dependency: "direct main"
     description:
@@ -1529,10 +1536,10 @@ packages:
     description:
       path: "."
       ref: HEAD
-      resolved-ref: "2c4b242e668acf4e652b09b13f650bcfbbaa3871"
+      resolved-ref: f19acdb008645366339444a359a45c3257c8b32e
       url: "https://github.com/rustdesk-org/window_manager"
     source: git
-    version: "0.3.4"
+    version: "0.3.6"
   window_size:
     dependency: "direct main"
     description:

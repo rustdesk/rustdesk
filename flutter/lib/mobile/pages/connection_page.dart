@@ -57,7 +57,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
       }();
     }
     if (isAndroid) {
-      Timer(const Duration(seconds: 5), () async {
+      Timer(const Duration(seconds: 1), () async {
         _updateUrl = await bind.mainGetSoftwareUpdateUrl();
         if (_updateUrl.isNotEmpty) setState(() {});
       });
@@ -80,7 +80,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
           _buildRemoteIDTextField(),
         ])),
         SliverFillRemaining(
-          hasScrollBody: false,
+          hasScrollBody: true,
           child: PeerTabPage(),
         )
       ],

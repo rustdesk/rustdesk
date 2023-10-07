@@ -209,7 +209,7 @@ class _RemotePageState extends State<RemotePage>
     debugPrint("REMOTE PAGE dispose session $sessionId ${widget.id}");
     await _renderTexture.destroy(closeSession);
     // ensure we leave this session, this is a double check
-    bind.sessionEnterOrLeave(sessionId: sessionId, enter: false);
+    _ffi.inputModel.enterOrLeave(false);
     DesktopMultiWindow.removeListener(this);
     _ffi.dialogManager.hideMobileActionsOverlay();
     _ffi.recordingModel.onClose();
@@ -329,7 +329,7 @@ class _RemotePageState extends State<RemotePage>
       if (!_rawKeyFocusNode.hasFocus) {
         _rawKeyFocusNode.requestFocus();
       }
-      bind.sessionEnterOrLeave(sessionId: sessionId, enter: true);
+      _ffi.inputModel.enterOrLeave(true);
     }
   }
 
@@ -349,7 +349,7 @@ class _RemotePageState extends State<RemotePage>
     }
     // See [onWindowBlur].
     if (!Platform.isWindows) {
-      bind.sessionEnterOrLeave(sessionId: sessionId, enter: false);
+      _ffi.inputModel.enterOrLeave(false);
     }
   }
 
@@ -614,7 +614,7 @@ class _ImagePaintState extends State<ImagePaint> {
     } else {
       final key = cache.updateGetKey(scale);
       if (!cursor.cachedKeys.contains(key)) {
-        debugPrint("Register custom cursor with key $key");
+        debugPrint("Register custom cursor with key $key (${cache.hotx},${cache.hoty})");
         // [Safety]
         // It's ok to call async registerCursor in current synchronous context,
         // because activating the cursor is also an async call and will always

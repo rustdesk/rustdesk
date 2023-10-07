@@ -1330,10 +1330,8 @@ impl Connection {
         return Config::get_option(enable_prefix_option).is_empty();
     }
 
-    async fn handle_login_request_without_validation(&mut self, lr: &LoginRequest) {
-        self.lr = lr.clone();
+    fn update_codec_on_login(&self, lr: &LoginRequest) {
         if let Some(o) = lr.option.as_ref() {
-            self.options_in_login = Some(o.clone());
             if let Some(q) = o.supported_decoding.clone().take() {
                 scrap::codec::Encoder::update(
                     self.inner.id(),
@@ -1350,6 +1348,16 @@ impl Connection {
                 self.inner.id(),
                 scrap::codec::EncodingUpdate::NewOnlyVP9,
             );
+        }
+    }
+
+    async fn handle_login_request_without_validation(&mut self, lr: &LoginRequest) {
+        self.lr = lr.clone();
+        if let Some(o) = lr.option.as_ref() {
+            self.options_in_login = Some(o.clone());
+        }
+        if lr.union.is_none() {
+            self.update_codec_on_login(&lr);
         }
         self.video_ack_required = lr.video_ack_required;
     }
@@ -2039,12 +2047,18 @@ impl Connection {
 
     #[cfg(windows)]
     async fn handle_elevation_request(&mut self, para: portable_client::StartPara) {
-        let mut err = "No need to elevate".to_string();
-        if !crate::platform::is_installed() && !portable_client::running() {
-            err = portable_client::start_portable_service(para)
-                .err()
-                .map_or("".to_string(), |e| e.to_string());
+        let mut err;
+        if !self.keyboard {
+            err = "No permission".to_string();
+        } else {
+            err = "No need to elevate".to_string();
+            if !crate::platform::is_installed() && !portable_client::running() {
+                err = portable_client::start_portable_service(para)
+                    .err()
+                    .map_or("".to_string(), |e| e.to_string());
+            }
         }
+
         let mut misc = Misc::new();
         misc.set_elevation_response(err);
         let mut msg = Message::new();
@@ -2361,6 +2375,7 @@ impl Connection {
         if self.portable.is_installed
             || self.file_transfer.is_some()
             || self.port_forward_socket.is_some()
+            || !self.keyboard
         {
             return;
         }
@@ -2371,8 +2386,8 @@ impl Connection {
         ));
         if self.authorized {
             let p = &mut self.portable;
-            if running != p.last_running {
-                p.last_running = running;
+            if Some(running) != p.last_running {
+                p.last_running = Some(running);
                 let mut misc = Misc::new();
                 misc.set_portable_service_running(running);
                 let mut msg = Message::new();
@@ -2507,7 +2522,11 @@ async fn start_ipc(
                 #[cfg(target_os = "linux")]
                 {
                     log::debug!("Start cm");
-                    res = crate::platform::run_as_user(args.clone(), user.clone());
+                    res = crate::platform::run_as_user(
+                        args.clone(),
+                        user.clone(),
+                        None::<(&str, &str)>,
+                    );
                 }
                 if res.is_ok() {
                     break;
@@ -2652,7 +2671,7 @@ pub enum FileAuditType {
 pub struct PortableState {
     pub last_uac: bool,
     pub last_foreground_window_elevated: bool,
-    pub last_running: bool,
+    pub last_running: Option<bool>,
     pub is_installed: bool,
 }
 

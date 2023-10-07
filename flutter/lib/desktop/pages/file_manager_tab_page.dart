@@ -99,7 +99,7 @@ class _FileManagerTabPageState extends State<FileManagerTabPage> {
             controller: tabController,
             onWindowCloseButton: handleWindowCloseButton,
             tail: const AddButton().paddingOnly(left: 10),
-            labelGetter: DesktopTab.labelGetterAlias,
+            labelGetter: DesktopTab.tablabelGetter,
           )),
     );
     return Platform.isMacOS || kUseCompatibleUiMode

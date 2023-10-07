@@ -421,6 +421,9 @@ class _RemotePageState extends State<RemotePage> {
     );
   }
 
+  bool get showCursorPaint =>
+      !gFFI.ffiModel.isPeerAndroid && !gFFI.canvasModel.cursorEmbedded;
+
   Widget getBodyForMobile() {
     final keyboardIsVisible = keyboardVisibilityController.isVisible;
     return Container(
@@ -453,7 +456,7 @@ class _RemotePageState extends State<RemotePage> {
                     ),
             ),
           ];
-          if (!gFFI.canvasModel.cursorEmbedded) {
+          if (showCursorPaint) {
             paints.add(CursorPaint());
           }
           return paints;
@@ -462,7 +465,7 @@ class _RemotePageState extends State<RemotePage> {
 
   Widget getBodyForDesktopWithListener(bool keyboard) {
     var paints = <Widget>[ImagePaint()];
-    if (!gFFI.canvasModel.cursorEmbedded) {
+    if (showCursorPaint) {
       final cursor = bind.sessionGetToggleOptionSync(
           sessionId: sessionId, arg: 'show-remote-cursor');
       if (keyboard || cursor) {
@@ -737,8 +740,8 @@ class CursorPaint extends StatelessWidget {
     return CustomPaint(
       painter: ImagePainter(
           image: m.image ?? preDefaultCursor.image,
-          x: m.x * s - hotx * s + c.x,
-          y: m.y * s - hoty * s + c.y - adjust,
+          x: m.x * s - hotx + c.x,
+          y: m.y * s - hoty + c.y - adjust,
           scale: 1),
     );
   }

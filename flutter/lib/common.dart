@@ -91,7 +91,6 @@ class IconFont {
   static const IconData roundClose = IconData(0xe6ed, fontFamily: _family2);
   static const IconData addressBook =
       IconData(0xe602, fontFamily: "AddressBook");
-  static const IconData checkbox = IconData(0xe7d6, fontFamily: "CheckBox");
 }
 
 class ColorThemeExtension extends ThemeExtension<ColorThemeExtension> {
@@ -102,6 +101,7 @@ class ColorThemeExtension extends ThemeExtension<ColorThemeExtension> {
     required this.drag_indicator,
     required this.shadow,
     required this.errorBannerBg,
+    required this.me,
   });
 
   final Color? border;
@@ -110,6 +110,7 @@ class ColorThemeExtension extends ThemeExtension<ColorThemeExtension> {
   final Color? drag_indicator;
   final Color? shadow;
   final Color? errorBannerBg;
+  final Color? me;
 
   static final light = ColorThemeExtension(
     border: Color(0xFFCCCCCC),
@@ -118,6 +119,7 @@ class ColorThemeExtension extends ThemeExtension<ColorThemeExtension> {
     drag_indicator: Colors.grey[800],
     shadow: Colors.black,
     errorBannerBg: Color(0xFFFDEEEB),
+    me: Colors.green,
   );
 
   static final dark = ColorThemeExtension(
@@ -127,6 +129,7 @@ class ColorThemeExtension extends ThemeExtension<ColorThemeExtension> {
     drag_indicator: Colors.grey,
     shadow: Colors.grey,
     errorBannerBg: Color(0xFF470F2D),
+    me: Colors.greenAccent,
   );
 
   @override
@@ -137,6 +140,7 @@ class ColorThemeExtension extends ThemeExtension<ColorThemeExtension> {
     Color? drag_indicator,
     Color? shadow,
     Color? errorBannerBg,
+    Color? me,
   }) {
     return ColorThemeExtension(
       border: border ?? this.border,
@@ -145,6 +149,7 @@ class ColorThemeExtension extends ThemeExtension<ColorThemeExtension> {
       drag_indicator: drag_indicator ?? this.drag_indicator,
       shadow: shadow ?? this.shadow,
       errorBannerBg: errorBannerBg ?? this.errorBannerBg,
+      me: me ?? this.me,
     );
   }
 
@@ -161,6 +166,7 @@ class ColorThemeExtension extends ThemeExtension<ColorThemeExtension> {
       drag_indicator: Color.lerp(drag_indicator, other.drag_indicator, t),
       shadow: Color.lerp(shadow, other.shadow, t),
       errorBannerBg: Color.lerp(shadow, other.errorBannerBg, t),
+      me: Color.lerp(shadow, other.me, t),
     );
   }
 }
@@ -266,11 +272,29 @@ class MyTheme {
       : EdgeInsets.only(left: dialogPadding / 3);
 
   static ScrollbarThemeData scrollbarTheme = ScrollbarThemeData(
-    thickness: MaterialStateProperty.all(kScrollbarThickness),
+    thickness: MaterialStateProperty.all(6),
+    thumbColor: MaterialStateProperty.resolveWith<Color?>((states) {
+      if (states.contains(MaterialState.dragged)) {
+        return Colors.grey[900];
+      } else if (states.contains(MaterialState.hovered)) {
+        return Colors.grey[700];
+      } else {
+        return Colors.grey[500];
+      }
+    }),
+    crossAxisMargin: 4,
   );
 
   static ScrollbarThemeData scrollbarThemeDark = scrollbarTheme.copyWith(
-    thumbColor: MaterialStateProperty.all(Colors.grey[500]),
+    thumbColor: MaterialStateProperty.resolveWith<Color?>((states) {
+      if (states.contains(MaterialState.dragged)) {
+        return Colors.grey[100];
+      } else if (states.contains(MaterialState.hovered)) {
+        return Colors.grey[300];
+      } else {
+        return Colors.grey[500];
+      }
+    }),
   );
 
   static ThemeData lightTheme = ThemeData(
@@ -971,11 +995,22 @@ void msgBox(SessionID sessionId, String type, String title, String text,
         }));
   }
   if (reconnect != null && title == "Connection Error") {
-    buttons.insert(
-        0,
-        dialogButton('Reconnect', isOutline: true, onPressed: () {
-          reconnect(dialogManager, sessionId, false);
-        }));
+    // `enabled` is used to disable the dialog button once the button is clicked.
+    final enabled = true.obs;
+    final button = Obx(
+      () => dialogButton(
+        'Reconnect',
+        isOutline: true,
+        onPressed: enabled.isTrue
+            ? () {
+                // Disable the button
+                enabled.value = false;
+                reconnect(dialogManager, sessionId, false);
+              }
+            : null,
+      ),
+    );
+    buttons.insert(0, button);
   }
   if (link.isNotEmpty) {
     buttons.insert(0, dialogButton('JumpLink', onPressed: jumplink));
@@ -2303,7 +2338,7 @@ String getWindowName({WindowType? overrideType}) {
 }
 
 String getWindowNameWithId(String id, {WindowType? overrideType}) {
-  return "${DesktopTab.labelGetterAlias(id).value} - ${getWindowName(overrideType: overrideType)}";
+  return "${DesktopTab.tablabelGetter(id).value} - ${getWindowName(overrideType: overrideType)}";
 }
 
 Future<void> updateSystemWindowTheme() async {
@@ -2535,4 +2570,22 @@ Widget buildErrorBanner(BuildContext context,
           ),
         )).marginOnly(bottom: 14),
       ));
+}
+
+String getDesktopTabLabel(String peerId, String alias) {
+  String label = alias.isEmpty ? peerId : alias;
+  try {
+    String peer = bind.mainGetPeerSync(id: peerId);
+    Map<String, dynamic> config = jsonDecode(peer);
+    if (config['info']['hostname'] is String) {
+      String hostname = config['info']['hostname'];
+      if (hostname.isNotEmpty &&
+          !label.toLowerCase().contains(hostname.toLowerCase())) {
+        label += "@$hostname";
+      }
+    }
+  } catch (e) {
+    debugPrint("Failed to get hostname:$e");
+  }
+  return label;
 }

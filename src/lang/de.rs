@@ -556,5 +556,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Connection failed due to inactivity", "Automatische Trennung der Verbindung aufgrund von Inaktivität"),
         ("Check for software update on startup", "Beim Start auf Softwareaktualisierung prüfen"),
         ("upgrade_rustdesk_server_pro_to_{}_tip", "Bitte aktualisieren Sie RustDesk Server Pro auf die Version {} oder neuer!"),
+        ("pull_group_failed_tip", "Aktualisierung der Gruppe fehlgeschlagen"),
     ].iter().cloned().collect();
 }
