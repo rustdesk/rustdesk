@@ -900,12 +900,21 @@ pub fn change_resolution_directly(name: &str, width: usize, height: usize) -> Re
     Ok(())
 }
 
+#[inline]
+pub fn is_xwayland_running() -> bool {
+    if let Ok(output) = run_cmds("pgrep -a Xwayland") {
+        return !output.contains("Xwayland");
+    }
+    false
+}
+
 mod desktop {
     use super::*;
 
     pub const XFCE4_PANEL: &str = "xfce4-panel";
     pub const SDDM_GREETER: &str = "sddm-greeter";
 
+    const XWAYLAND: &str = "Xwayland";
     const IBUS_DAEMON: &str = "ibus-daemon";
     const PLASMA_KDED5: &str = "kded5";
     const GNOME_GOA_DAEMON: &str = "goa-daemon";
@@ -938,9 +947,15 @@ mod desktop {
             self.sid.is_empty() || self.is_rustdesk_subprocess
         }
 
-        fn get_display_xauth_wayland(&mut self) {
+        fn get_display_xauth_xwayland(&mut self) {
             for _ in 0..5 {
-                let display_proc = vec![IBUS_DAEMON, GNOME_GOA_DAEMON, PLASMA_KDED5, RUSTDESK_TRAY];
+                let display_proc = vec![
+                    XWAYLAND,
+                    IBUS_DAEMON,
+                    GNOME_GOA_DAEMON,
+                    PLASMA_KDED5,
+                    RUSTDESK_TRAY,
+                ];
                 for proc in display_proc {
                     self.display = get_env("DISPLAY", &self.uid, proc);
                     self.xauth = get_env("XAUTHORITY", &self.uid, proc);
@@ -955,6 +970,7 @@ mod desktop {
         fn get_display_x11(&mut self) {
             for _ in 0..10 {
                 let display_proc = vec![
+                    XWAYLAND,
                     IBUS_DAEMON,
                     GNOME_GOA_DAEMON,
                     PLASMA_KDED5,
@@ -1027,6 +1043,7 @@ mod desktop {
             // try by direct access to window manager process by name
             for _ in 0..10 {
                 let display_proc = vec![
+                    XWAYLAND,
                     IBUS_DAEMON,
                     GNOME_GOA_DAEMON,
                     PLASMA_KDED5,
@@ -1127,8 +1144,8 @@ mod desktop {
         pub fn refresh(&mut self) {
             if !self.sid.is_empty() && is_active_and_seat0(&self.sid) {
                 // Wayland display and xauth may not be available in a short time after login.
-                if self.is_wayland() && !self.is_login_wayland() {
-                    self.get_display_xauth_wayland();
+                if is_xwayland_running() && !self.is_login_wayland() {
+                    self.get_display_xauth_xwayland();
                     self.is_rustdesk_subprocess = false;
                 }
                 return;
@@ -1153,7 +1170,12 @@ mod desktop {
             }
 
             if self.is_wayland() {
-                self.get_display_xauth_wayland();
+                if is_xwayland_running() {
+                    self.get_display_xauth_xwayland();
+                } else {
+                    self.display = "".to_owned();
+                    self.xauth = "".to_owned();
+                }
                 self.is_rustdesk_subprocess = false;
             } else {
                 self.get_display_x11();
