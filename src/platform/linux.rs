@@ -903,7 +903,7 @@ pub fn change_resolution_directly(name: &str, width: usize, height: usize) -> Re
 #[inline]
 pub fn is_xwayland_running() -> bool {
     if let Ok(output) = run_cmds("pgrep -a Xwayland") {
-        return !output.contains("Xwayland");
+        return output.contains("Xwayland");
     }
     false
 }
@@ -1143,7 +1143,7 @@ mod desktop {
 
         pub fn refresh(&mut self) {
             if !self.sid.is_empty() && is_active_and_seat0(&self.sid) {
-                // Wayland display and xauth may not be available in a short time after login.
+                // Xwayland display and xauth may not be available in a short time after login.
                 if is_xwayland_running() && !self.is_login_wayland() {
                     self.get_display_xauth_xwayland();
                     self.is_rustdesk_subprocess = false;
