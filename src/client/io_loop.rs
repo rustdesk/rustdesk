@@ -146,6 +146,7 @@ impl<T: InvokeUiSession> Remote<T> {
                         || self.handler.is_port_forward()
                         || self.handler.is_rdp();
                     if !is_conn_not_default {
+                        log::debug!("get cliprdr client for conn_id {}", self.client_conn_id);
                         (self.client_conn_id, rx_clip_client_lock) =
                             clipboard::get_rx_cliprdr_client(&self.handler.session_id);
                     };
@@ -251,6 +252,7 @@ impl<T: InvokeUiSession> Remote<T> {
         #[cfg(any(target_os = "windows", target_os = "linux"))]
         {
             let conn_id = self.client_conn_id;
+            log::debug!("try empty cliprdr for conn_id {}", conn_id);
             let _ = ContextSend::proc(|context| -> ResultType<()> {
                 context.empty_clipboard(conn_id)?;
                 Ok(())

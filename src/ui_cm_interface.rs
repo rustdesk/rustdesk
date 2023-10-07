@@ -354,6 +354,7 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
         #[cfg(any(target_os = "windows", target_os = "linux"))]
         {
             if ContextSend::is_enabled() {
+                log::debug!("Clipboard is enabled");
                 allow_err!(
                     self.stream
                         .send(&Data::ClipboardFile(clipboard::ClipboardFile::MonitorReady))

@@ -198,6 +198,18 @@ pub fn get_rx_cliprdr_server(conn_id: i32) -> Arc<TokioMutex<UnboundedReceiver<C
 
 #[inline]
 fn send_data(conn_id: i32, data: ClipboardFile) {
+    #[cfg(target_os = "windows")]
+    return send_data_to_channel(conn_id, data);
+    #[cfg(not(target_os = "windows"))]
+    if conn_id == 0 {
+        send_data_to_all(data);
+    } else {
+        send_data_to_channel(conn_id, data);
+    }
+}
+
+#[inline]
+fn send_data_to_channel(conn_id: i32, data: ClipboardFile) {
     // no need to handle result here
     if let Some(msg_channel) = VEC_MSG_CHANNEL
         .read()
@@ -205,7 +217,17 @@ fn send_data(conn_id: i32, data: ClipboardFile) {
         .iter()
         .find(|x| x.conn_id == conn_id)
     {
+        log::debug!("send data to connection: {}", conn_id);
         allow_err!(msg_channel.sender.send(data));
+    }
+}
+
+#[inline]
+fn send_data_to_all(data: ClipboardFile) {
+    // no need to handle result here
+    for msg_channel in VEC_MSG_CHANNEL.read().unwrap().iter() {
+        log::debug!("send data to connection: {}", msg_channel.conn_id);
+        allow_err!(msg_channel.sender.send(data.clone()));
     }
 }
 

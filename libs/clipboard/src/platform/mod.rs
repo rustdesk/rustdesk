@@ -37,7 +37,11 @@ pub fn create_cliprdr_context(
     let mut tmp_path = std::env::temp_dir();
     tmp_path.push("rustdesk-cliprdr");
 
-    log::info!("check mount point existence");
+    log::info!("clear previously mounted cliprdr FUSE");
+    if let Err(e) = std::process::Command::new("umount").arg(&tmp_path).status() {
+        log::warn!("umount {:?} may fail: {:?}", tmp_path, e);
+    }
+
     let rd_mnt = if !tmp_path.exists() {
         log::info!("create mount point: {}", tmp_path.display());
         std::fs::create_dir_all(tmp_path.clone())?;

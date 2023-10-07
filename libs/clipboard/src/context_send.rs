@@ -38,7 +38,7 @@ impl ContextSend {
                     }
                     Err(err) => {
                         log::error!(
-                            "Create clipboard context for file transfer: {}",
+                            "create clipboard context for file transfer: {}",
                             err.to_string()
                         );
                     }

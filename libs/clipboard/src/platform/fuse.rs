@@ -126,6 +126,11 @@ impl CliprdrTxnDispatcher {
         self.txn_handler
             .insert((conn_id, stream_id.copied()), req.clone());
 
+        log::debug!(
+            "send request to conn_id={}, stream_id={:?}",
+            conn_id,
+            stream_id
+        );
         crate::send_data(conn_id, request);
         req
     }
@@ -137,6 +142,7 @@ impl CliprdrTxnDispatcher {
             _ => unreachable!(),
         };
         let key = (conn_id, stream_id.cloned());
+        log::debug!("recv response for {:?}", key);
         match self.txn_handler.remove(&key) {
             Some((_, tx)) => tx.set(response),
             None => log::warn!("no request found for {:?}", key),
@@ -570,15 +576,17 @@ impl FuseServer {
     fn gc_files(&self) {
         {
             let mut status = self.status.write();
-            // really update only when:
-            // running: Active
-            if *status != Status::Active {
-                return;
-            }
+
             // received update after fetching complete
             // should fetch again
             if *status == Status::Building {
                 *status = Status::GcComplete;
+                return;
+            }
+
+            // really update only when:
+            // running: Active
+            if *status != Status::Active {
                 return;
             }
             *status = Status::Gc;

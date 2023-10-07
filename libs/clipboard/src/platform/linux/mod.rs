@@ -20,7 +20,7 @@ use lazy_static::lazy_static;
 use parking_lot::{Mutex, RwLock};
 use utf16string::WString;
 
-use crate::{send_data, ClipboardFile, CliprdrError, CliprdrServiceContext};
+use crate::{send_data, send_data_to_all, ClipboardFile, CliprdrError, CliprdrServiceContext};
 
 use super::{fuse::FuseServer, LDAP_EPOCH_DELTA};
 
@@ -364,7 +364,6 @@ impl ClipboardContext {
 
             if fuse_handle.is_none() {
                 let mount_path = &self.fuse_mount_point;
-                create_if_not_exists(mount_path);
 
                 let mnt_opts = [
                     MountOption::FSName("rustdesk-cliprdr-fs".to_string()),
@@ -408,6 +407,7 @@ impl ClipboardContext {
 
         let mut fuse_handle = self.fuse_handle.lock();
         if let Some(fuse_handle) = fuse_handle.take() {
+            log::debug!("unmounting clipboard FUSE");
             fuse_handle.join();
         }
         self.clipboard.stop();
@@ -446,7 +446,7 @@ impl ClipboardContext {
                 ],
             };
 
-            send_data(0, data);
+            send_data_to_all(data);
             log::debug!("format list update sent");
         }
         Ok(())
@@ -649,26 +649,39 @@ fn resp_file_contents_fail(conn_id: i32, stream_id: i32) {
     send_data(conn_id, resp)
 }
 
-fn create_if_not_exists(path: &PathBuf) {
-    if std::fs::metadata(path).is_ok() {
-        return;
-    }
-    std::fs::create_dir(path).unwrap();
-}
-
 impl ClipboardContext {
+    pub fn is_stopped(&self) -> bool {
+        self.fuse_handle.lock().is_none()
+    }
+
     pub fn set_is_stopped(&self) -> Result<(), CliprdrError> {
-        // do nothing
+        if self.is_stopped() {
+            log::debug!("cliprdr already stopped");
+            return Ok(());
+        }
+        // unmount the fuse
+        if let Some(fuse_handle) = self.fuse_handle.lock().take() {
+            fuse_handle.join();
+        }
         Ok(())
     }
 
     pub fn empty_clipboard(&self, conn_id: i32) -> Result<bool, CliprdrError> {
         // gc all files, the clipboard is going to shutdown
+        if self.is_stopped() {
+            log::debug!("cliprdr stopped, skip emptying clipboard");
+            return Ok(true);
+        }
+
         self.fuse_server
             .update_files(conn_id, FILEDESCRIPTOR_FORMAT_ID, FILECONTENTS_FORMAT_ID)
     }
 
     pub fn serve(&self, conn_id: i32, msg: ClipboardFile) -> Result<(), CliprdrError> {
+        if self.is_stopped() {
+            log::debug!("cliprdr stopped, skip serving clipboard");
+            return Ok(());
+        }
         match msg {
             ClipboardFile::NotifyCallback { .. } => {
                 unreachable!()
@@ -683,6 +696,7 @@ impl ClipboardContext {
             }
 
             ClipboardFile::FormatList { format_list } => {
+                log::debug!("server_format_list called");
                 // filter out "FileGroupDescriptorW" and "FileContents"
                 let fmt_lst: Vec<(i32, String)> = format_list
                     .into_iter()
@@ -713,6 +727,7 @@ impl ClipboardContext {
                 Ok(())
             }
             ClipboardFile::FormatListResponse { msg_flags } => {
+                log::debug!("server_format_list_response called");
                 if msg_flags != 0x1 {
                     self.send_format_list(conn_id)
                 } else {
@@ -722,6 +737,7 @@ impl ClipboardContext {
             ClipboardFile::FormatDataRequest {
                 requested_format_id,
             } => {
+                log::debug!("server_format_data_request called");
                 let Some(format) = get_local_format(requested_format_id) else {
                     log::error!(
                         "got unsupported format data request: id={} from conn={}",
@@ -752,6 +768,7 @@ impl ClipboardContext {
             }
             ClipboardFile::FormatDataResponse { .. } => {
                 // we don't know its corresponding request, no resend can be performed
+                log::debug!("server_format_data_response called");
 
                 self.fuse_server.recv(conn_id, msg);
                 let paths = self.fuse_server.list_root();
@@ -759,6 +776,7 @@ impl ClipboardContext {
                 Ok(())
             }
             ClipboardFile::FileContentsResponse { .. } => {
+                log::debug!("server_file_contents_response called");
                 // we don't know its corresponding request, no resend can be performed
                 self.fuse_server.recv(conn_id, msg);
                 Ok(())
@@ -772,6 +790,7 @@ impl ClipboardContext {
                 cb_requested,
                 ..
             } => {
+                log::debug!("server_file_contents_request called");
                 let fcr = if dw_flags == 0x1 {
                     FileContentsRequest::Size {
                         stream_id,

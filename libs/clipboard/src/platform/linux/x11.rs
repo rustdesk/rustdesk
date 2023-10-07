@@ -3,6 +3,7 @@ use std::{
     sync::atomic::{AtomicBool, Ordering},
 };
 
+use hbb_common::log;
 use once_cell::sync::OnceCell;
 use x11_clipboard::Clipboard;
 use x11rb::protocol::xproto::Atom;
@@ -44,6 +45,7 @@ impl X11Clipboard {
     fn load(&self, target: Atom) -> Result<Vec<u8>, CliprdrError> {
         let clip = get_clip()?.setter.atoms.clipboard;
         let prop = get_clip()?.setter.atoms.property;
+        log::debug!("try to load clipboard content");
         get_clip()?
             .load_wait(clip, target, prop)
             .map_err(|_| CliprdrError::ConversionFailure)
@@ -51,6 +53,7 @@ impl X11Clipboard {
 
     fn store_batch(&self, batch: Vec<(Atom, Vec<u8>)>) -> Result<(), CliprdrError> {
         let clip = get_clip()?.setter.atoms.clipboard;
+        log::debug!("try to store clipboard content");
         get_clip()?
             .store_batch(clip, batch)
             .map_err(|_| CliprdrError::ClipboardInternalError)
