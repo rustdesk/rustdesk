@@ -557,6 +557,13 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("pull_group_failed_tip", "Aktualisierung der Gruppe fehlgeschlagen"),
         ("Remove wallpaper during incoming sessions", ""),
         ("Test", ""),
-        ("Filter by intersection", "Nach Schnittpunkt filtern")
+        ("Filter by intersection", "Nach Schnittpunkt filtern"),
+        ("switch_display_elevated_connections_tip", ""),
+        ("display_is_plugged_out_msg", ""),
+        ("No displays", ""),
+        ("elevated_switch_display_msg", ""),
+        ("Choose Display Behavior", ""),
+        ("Switch Display", ""),
+        ("Open in New Window", ""),
     ].iter().cloned().collect();
 }

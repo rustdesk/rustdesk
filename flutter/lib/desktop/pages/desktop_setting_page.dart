@@ -11,6 +11,7 @@ import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/desktop/pages/desktop_home_page.dart';
 import 'package:flutter_hbb/desktop/pages/desktop_tab_page.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
+import 'package:flutter_hbb/models/desktop_render_texture.dart';
 import 'package:flutter_hbb/models/server_model.dart';
 import 'package:flutter_hbb/plugin/manager.dart';
 import 'package:flutter_hbb/plugin/widgets/desktop_settings.dart';
@@ -268,6 +269,7 @@ class _GeneralState extends State<_General> {
             service(),
             theme(),
             hwcodec(),
+            chooseDisplay(),
             audio(context),
             record(context),
             _Card(title: 'Language', children: [language()]),
@@ -374,6 +376,29 @@ class _GeneralState extends State<_General> {
         _OptionCheckBox(context, 'Enable hardware codec', 'enable-hwcodec'),
       ]),
     );
+  }
+
+  Widget chooseDisplay() {
+    if (!useTextureRender) return const Offstage();
+
+    var current = getChooseDisplayBehavior();
+    onChanged(String value) {
+      bind.mainSetOption(key: kKeyChooseDisplayBehavior, value: value);
+      setState(() {});
+    }
+
+    return _Card(title: 'Choose Display Behavior', children: [
+      _Radio<String>(context,
+          value: kChooseDisplayBehaviorSwitch,
+          groupValue: current,
+          label: 'Switch Display',
+          onChanged: onChanged),
+      _Radio<String>(context,
+          value: kChooseDisplayBehaviorOpen,
+          groupValue: current,
+          label: 'Open in New Window',
+          onChanged: onChanged),
+    ]);
   }
 
   Widget audio(BuildContext context) {

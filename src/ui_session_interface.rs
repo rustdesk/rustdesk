@@ -7,10 +7,7 @@ use std::{collections::HashMap, sync::atomic::AtomicBool};
 use std::{
     ops::{Deref, DerefMut},
     str::FromStr,
-    sync::{
-        atomic::{AtomicUsize, Ordering},
-        Arc, Mutex, RwLock,
-    },
+    sync::{atomic::Ordering, Arc, Mutex, RwLock},
     time::SystemTime,
 };
 use uuid::Uuid;
@@ -28,7 +25,7 @@ use hbb_common::{
         sync::mpsc,
         time::{Duration as TokioDuration, Instant},
     },
-    SessionID, Stream,
+    Stream,
 };
 
 use crate::client::io_loop::Remote;
@@ -49,8 +46,7 @@ const CHANGE_RESOLUTION_VALID_TIMEOUT_SECS: u64 = 15;
 
 #[derive(Clone, Default)]
 pub struct Session<T: InvokeUiSession> {
-    pub session_id: SessionID, // different from the one in LoginConfigHandler, used for flutter UI message pass
-    pub id: String,            // peer id
+    pub id: String, // peer id
     pub password: String,
     pub args: Vec<String>,
     pub lc: Arc<RwLock<LoginConfigHandler>>,
@@ -286,12 +282,22 @@ impl<T: InvokeUiSession> Session<T> {
             && !self.lc.read().unwrap().disable_clipboard.v
     }
 
-    pub fn refresh_video(&self) {
-        self.send(Data::Message(LoginConfigHandler::refresh()));
+    pub fn refresh_video(&self, display: usize) {
+        if crate::common::is_support_multi_ui_session_num(self.lc.read().unwrap().version) {
+            self.send(Data::Message(LoginConfigHandler::refresh_display(display)));
+        } else {
+            self.send(Data::Message(LoginConfigHandler::refresh()));
+        }
     }
 
-    pub fn record_screen(&self, start: bool, w: i32, h: i32) {
-        self.send(Data::RecordScreen(start, w, h, self.id.clone()));
+    pub fn record_screen(&self, start: bool, display: i32, w: i32, h: i32) {
+        self.send(Data::RecordScreen(
+            start,
+            display as usize,
+            w,
+            h,
+            self.id.clone(),
+        ));
     }
 
     pub fn record_status(&self, status: bool) {
@@ -596,6 +602,19 @@ impl<T: InvokeUiSession> Session<T> {
         let mut misc = Misc::new();
         misc.set_chat_message(ChatMessage {
             text,
+            ..Default::default()
+        });
+        let mut msg_out = Message::new();
+        msg_out.set_misc(misc);
+        self.send(Data::Message(msg_out));
+    }
+
+    pub fn capture_displays(&self, add: Vec<i32>, sub: Vec<i32>, set: Vec<i32>) {
+        let mut misc = Misc::new();
+        misc.set_capture_displays(CaptureDisplays {
+            add,
+            sub,
+            set,
             ..Default::default()
         });
         let mut msg_out = Message::new();
@@ -1164,7 +1183,7 @@ pub trait InvokeUiSession: Send + Sync + Clone + 'static + Sized + Default {
     fn update_block_input_state(&self, on: bool);
     fn job_progress(&self, id: i32, file_num: i32, speed: f64, finished_size: f64);
     fn adapt_size(&self);
-    fn on_rgba(&self, rgba: &mut scrap::ImageRgb);
+    fn on_rgba(&self, display: usize, rgba: &mut scrap::ImageRgb);
     fn msgbox(&self, msgtype: &str, title: &str, text: &str, link: &str, retry: bool);
     #[cfg(any(target_os = "android", target_os = "ios"))]
     fn clipboard(&self, content: String);
@@ -1175,8 +1194,8 @@ pub trait InvokeUiSession: Send + Sync + Clone + 'static + Sized + Default {
     fn on_voice_call_closed(&self, reason: &str);
     fn on_voice_call_waiting(&self);
     fn on_voice_call_incoming(&self);
-    fn get_rgba(&self) -> *const u8;
-    fn next_rgba(&self);
+    fn get_rgba(&self, display: usize) -> *const u8;
+    fn next_rgba(&self, display: usize);
 }
 
 impl<T: InvokeUiSession> Deref for Session<T> {
@@ -1237,7 +1256,7 @@ impl<T: InvokeUiSession> Interface for Session<T> {
             if pi.displays.is_empty() {
                 self.lc.write().unwrap().handle_peer_info(&pi);
                 self.update_privacy_mode();
-                self.msgbox("error", "Remote Error", "No Display", "");
+                self.msgbox("error", "Remote Error", "No Displays", "");
                 return;
             }
             self.try_change_init_resolution(pi.current_display);
@@ -1447,24 +1466,29 @@ pub async fn io_loop<T: InvokeUiSession>(handler: Session<T>, round: u32) {
         }
         return;
     }
-    let frame_count = Arc::new(AtomicUsize::new(0));
-    let frame_count_cl = frame_count.clone();
+    let frame_count_map: Arc<RwLock<HashMap<usize, usize>>> = Default::default();
+    let frame_count_map_cl = frame_count_map.clone();
     let ui_handler = handler.ui_handler.clone();
-    let (video_sender, audio_sender, video_queue, decode_fps) =
-        start_video_audio_threads(move |data: &mut scrap::ImageRgb| {
-            frame_count_cl.fetch_add(1, Ordering::Relaxed);
-            ui_handler.on_rgba(data);
-        });
+    let (video_sender, audio_sender, video_queue_map, decode_fps_map) = start_video_audio_threads(
+        handler.clone(),
+        move |display: usize, data: &mut scrap::ImageRgb| {
+            let mut write_lock = frame_count_map_cl.write().unwrap();
+            let count = write_lock.get(&display).unwrap_or(&0) + 1;
+            write_lock.insert(display, count);
+            drop(write_lock);
+            ui_handler.on_rgba(display, data);
+        },
+    );
 
     let mut remote = Remote::new(
         handler,
-        video_queue,
+        video_queue_map,
         video_sender,
         audio_sender,
         receiver,
         sender,
-        frame_count,
-        decode_fps,
+        frame_count_map,
+        decode_fps_map,
     );
     remote.io_loop(&key, &token, round).await;
     remote.sync_jobs_status_to_local().await;

@@ -90,7 +90,7 @@ List<TTextMenu> toolbarControls(BuildContext context, String id, FFI ffi) {
   v.add(
     TTextMenu(
       child: Row(children: [
-        Text(translate(pi.is_headless ? 'OS Account' : 'OS Password')),
+        Text(translate(pi.isHeadless ? 'OS Account' : 'OS Password')),
         Offstage(
           offstage: isDesktop,
           child: Icon(Icons.edit, color: MyTheme.accent).marginOnly(left: 12),
@@ -99,13 +99,13 @@ List<TTextMenu> toolbarControls(BuildContext context, String id, FFI ffi) {
       trailingIcon: Transform.scale(
         scale: 0.8,
         child: InkWell(
-          onTap: () => pi.is_headless
+          onTap: () => pi.isHeadless
               ? showSetOSAccount(sessionId, ffi.dialogManager)
               : handleOsPasswordEditIcon(sessionId, ffi.dialogManager),
           child: Icon(Icons.edit),
         ),
       ),
-      onPressed: () => pi.is_headless
+      onPressed: () => pi.isHeadless
           ? showSetOSAccount(sessionId, ffi.dialogManager)
           : handleOsPasswordAction(sessionId, ffi.dialogManager),
     ),
@@ -208,7 +208,8 @@ List<TTextMenu> toolbarControls(BuildContext context, String id, FFI ffi) {
       ffiModel.keyboard &&
       pi.platform != kPeerPlatformAndroid &&
       pi.platform != kPeerPlatformMacOS &&
-      version_cmp(pi.version, '1.2.0') >= 0) {
+      versionCmp(pi.version, '1.2.0') >= 0 &&
+      bind.peerGetDefaultSessionsCount(id: id) == 1) {
     v.add(TTextMenu(
         child: Text(translate('Switch Sides')),
         onPressed: () =>
@@ -217,8 +218,9 @@ List<TTextMenu> toolbarControls(BuildContext context, String id, FFI ffi) {
   // refresh
   if (pi.version.isNotEmpty) {
     v.add(TTextMenu(
-        child: Text(translate('Refresh')),
-        onPressed: () => bind.sessionRefresh(sessionId: sessionId)));
+      child: Text(translate('Refresh')),
+      onPressed: () => sessionRefreshVideo(sessionId, pi),
+    ));
   }
   // record
   var codecFormat = ffi.qualityMonitorModel.data.codecFormat;
@@ -377,7 +379,7 @@ Future<List<TToggleMenu>> toolbarDisplayToggle(
   // show remote cursor
   if (pi.platform != kPeerPlatformAndroid &&
       !ffi.canvasModel.cursorEmbedded &&
-      !pi.is_wayland) {
+      !pi.isWayland) {
     final state = ShowRemoteCursorState.find(id);
     final enabled = !ffiModel.viewOnly;
     final option = 'show-remote-cursor';
@@ -488,7 +490,8 @@ Future<List<TToggleMenu>> toolbarDisplayToggle(
         value: rxValue.value,
         onChanged: (value) {
           if (value == null) return;
-          if (ffiModel.pi.currentDisplay != 0) {
+          if (ffiModel.pi.currentDisplay != 0 &&
+              ffiModel.pi.currentDisplay != kAllDisplayValue) {
             msgBox(sessionId, 'custom-nook-nocancel-hasclose', 'info',
                 'Please switch to Display 1 first', '', ffi.dialogManager);
             return;
