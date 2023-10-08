@@ -453,7 +453,7 @@ impl sciter::EventHandler for SciterSession {
         fn save_view_style(String);
         fn save_image_quality(String);
         fn save_custom_image_quality(i32);
-        fn refresh_video();
+        fn refresh_video(i32);
         fn record_screen(bool, i32, i32, i32);
         fn record_status(bool);
         fn get_toggle_option(String);

@@ -1970,6 +1970,8 @@ impl Connection {
                     }
                     Some(misc::Union::RefreshVideo(r)) => {
                         if r {
+                            // Refresh all videos.
+                            // Compatibility with old versions and sciter(remote).
                             self.refresh_video_display(None);
                         }
                         self.update_auto_disconnect_timer();

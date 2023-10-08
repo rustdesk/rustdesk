@@ -1926,7 +1926,7 @@ where
                                     //
                                     // to-do: fix the error
                                     log::error!("handle video frame error, {}", e);
-                                    session.refresh_video(display);
+                                    session.refresh_video(display as _);
                                 }
                                 _ => {}
                             }

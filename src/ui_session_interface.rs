@@ -282,12 +282,18 @@ impl<T: InvokeUiSession> Session<T> {
             && !self.lc.read().unwrap().disable_clipboard.v
     }
 
-    pub fn refresh_video(&self, display: usize) {
+    #[cfg(feature = "flutter")]
+    pub fn refresh_video(&self, display: i32) {
         if crate::common::is_support_multi_ui_session_num(self.lc.read().unwrap().version) {
-            self.send(Data::Message(LoginConfigHandler::refresh_display(display)));
+            self.send(Data::Message(LoginConfigHandler::refresh_display(display as _)));
         } else {
             self.send(Data::Message(LoginConfigHandler::refresh()));
         }
+    }
+
+    #[cfg(not(feature = "flutter"))]
+    pub fn refresh_video(&self, _display: i32) {
+        self.send(Data::Message(LoginConfigHandler::refresh()));
     }
 
     pub fn record_screen(&self, start: bool, display: i32, w: i32, h: i32) {

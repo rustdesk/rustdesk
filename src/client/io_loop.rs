@@ -1008,7 +1008,7 @@ impl<T: InvokeUiSession> Remote<T> {
             {
                 // Refresh causes client set_display, left frames cause flickering.
                 while let Some(_) = video_queue.pop() {}
-                self.handler.refresh_video(*display);
+                self.handler.refresh_video(*display as _);
                 ctl.refresh_times += 1;
                 ctl.last_refresh_instant = Instant::now();
             }

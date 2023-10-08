@@ -180,7 +180,7 @@ pub fn session_close(session_id: SessionID) {
 
 pub fn session_refresh(session_id: SessionID, display: usize) {
     if let Some(session) = sessions::get_session_by_session_id(&session_id) {
-        session.refresh_video(display);
+        session.refresh_video(display as _);
     }
 }
 
