@@ -1563,10 +1563,10 @@ pub fn set_cur_session_id(session_id: SessionID) {
     }
 }
 
-fn set_cur_session_id_(session_id: SessionID, keyboard_mode: &str) {
+fn set_cur_session_id_(session_id: SessionID, _keyboard_mode: &str) {
     super::flutter::set_cur_session_id(session_id);
     #[cfg(windows)]
-    crate::keyboard::update_grab_get_key_name(keyboard_mode);
+    crate::keyboard::update_grab_get_key_name(_keyboard_mode);
 }
 
 pub fn install_show_run_without_install() -> SyncReturn<bool> {

@@ -3,11 +3,12 @@ use async_trait::async_trait;
 use bytes::Bytes;
 use rdev::{Event, EventType::*, KeyCode};
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
-use std::{collections::HashMap, sync::atomic::AtomicBool};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::{
+    collections::HashMap,
     ops::{Deref, DerefMut},
     str::FromStr,
-    sync::{atomic::Ordering, Arc, Mutex, RwLock},
+    sync::{Arc, Mutex, RwLock},
     time::SystemTime,
 };
 use uuid::Uuid;
@@ -285,7 +286,9 @@ impl<T: InvokeUiSession> Session<T> {
     #[cfg(feature = "flutter")]
     pub fn refresh_video(&self, display: i32) {
         if crate::common::is_support_multi_ui_session_num(self.lc.read().unwrap().version) {
-            self.send(Data::Message(LoginConfigHandler::refresh_display(display as _)));
+            self.send(Data::Message(LoginConfigHandler::refresh_display(
+                display as _,
+            )));
         } else {
             self.send(Data::Message(LoginConfigHandler::refresh()));
         }

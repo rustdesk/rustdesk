@@ -83,6 +83,7 @@ pub const PA_SAMPLE_RATE: u32 = 48000;
 pub(crate) struct InstallingService; // please use new
 
 impl InstallingService {
+    #[cfg(any(target_os = "windows", target_os = "linux"))]
     pub fn new() -> Self {
         *INSTALLING_SERVICE.lock().unwrap() = true;
         Self
