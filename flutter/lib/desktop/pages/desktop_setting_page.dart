@@ -269,7 +269,6 @@ class _GeneralState extends State<_General> {
             service(),
             theme(),
             hwcodec(),
-            chooseDisplay(),
             audio(context),
             record(context),
             _Card(title: 'Language', children: [language()]),
@@ -376,29 +375,6 @@ class _GeneralState extends State<_General> {
         _OptionCheckBox(context, 'Enable hardware codec', 'enable-hwcodec'),
       ]),
     );
-  }
-
-  Widget chooseDisplay() {
-    if (!useTextureRender) return const Offstage();
-
-    var current = getChooseDisplayBehavior();
-    onChanged(String value) {
-      bind.mainSetOption(key: kKeyChooseDisplayBehavior, value: value);
-      setState(() {});
-    }
-
-    return _Card(title: 'Choose Display Behavior', children: [
-      _Radio<String>(context,
-          value: kChooseDisplayBehaviorSwitch,
-          groupValue: current,
-          label: 'Switch Display',
-          onChanged: onChanged),
-      _Radio<String>(context,
-          value: kChooseDisplayBehaviorOpen,
-          groupValue: current,
-          label: 'Open in New Window',
-          onChanged: onChanged),
-    ]);
   }
 
   Widget audio(BuildContext context) {
@@ -1148,12 +1124,36 @@ class _DisplayState extends State<_Display> {
             controller: scrollController,
             physics: DraggableNeverScrollableScrollPhysics(),
             children: [
+              chooseDisplay(context),
               viewStyle(context),
               scrollStyle(context),
               imageQuality(context),
               codec(context),
               other(context),
             ]).marginOnly(bottom: _kListViewBottomMargin));
+  }
+
+  Widget chooseDisplay(BuildContext context) {
+    if (!useTextureRender) return const Offstage();
+
+    var current = getChooseDisplayBehavior();
+    onChanged(String value) {
+      bind.mainSetOption(key: kKeyChooseDisplayBehavior, value: value);
+      setState(() {});
+    }
+
+    return _Card(title: 'Choose Display Behavior', children: [
+      _Radio<String>(context,
+          value: kChooseDisplayBehaviorSwitch,
+          groupValue: current,
+          label: 'Switch display',
+          onChanged: onChanged),
+      _Radio<String>(context,
+          value: kChooseDisplayBehaviorOpen,
+          groupValue: current,
+          label: 'Open in new window',
+          onChanged: onChanged),
+    ]);
   }
 
   Widget viewStyle(BuildContext context) {

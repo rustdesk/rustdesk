@@ -564,7 +564,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("No displays", ""),
         ("elevated_switch_display_msg", ""),
         ("Choose Display Behavior", ""),
-        ("Switch Display", ""),
-        ("Open in New Window", ""),
+        ("Switch display", ""),
+        ("Open in new window", ""),
     ].iter().cloned().collect();
 }
