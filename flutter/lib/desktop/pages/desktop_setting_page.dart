@@ -11,7 +11,6 @@ import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/desktop/pages/desktop_home_page.dart';
 import 'package:flutter_hbb/desktop/pages/desktop_tab_page.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
-import 'package:flutter_hbb/models/desktop_render_texture.dart';
 import 'package:flutter_hbb/models/server_model.dart';
 import 'package:flutter_hbb/plugin/manager.dart';
 import 'package:flutter_hbb/plugin/widgets/desktop_settings.dart';
@@ -1124,36 +1123,12 @@ class _DisplayState extends State<_Display> {
             controller: scrollController,
             physics: DraggableNeverScrollableScrollPhysics(),
             children: [
-              chooseDisplay(context),
               viewStyle(context),
               scrollStyle(context),
               imageQuality(context),
               codec(context),
               other(context),
             ]).marginOnly(bottom: _kListViewBottomMargin));
-  }
-
-  Widget chooseDisplay(BuildContext context) {
-    if (!useTextureRender) return const Offstage();
-
-    var current = getChooseDisplayBehavior();
-    onChanged(String value) {
-      bind.mainSetOption(key: kKeyChooseDisplayBehavior, value: value);
-      setState(() {});
-    }
-
-    return _Card(title: 'Choose display behavior', children: [
-      _Radio<String>(context,
-          value: kChooseDisplayBehaviorSwitch,
-          groupValue: current,
-          label: 'Switch display',
-          onChanged: onChanged),
-      _Radio<String>(context,
-          value: kChooseDisplayBehaviorOpen,
-          groupValue: current,
-          label: 'Open in new window',
-          onChanged: onChanged),
-    ]);
   }
 
   Widget viewStyle(BuildContext context) {
@@ -1314,7 +1289,7 @@ class _DisplayState extends State<_Display> {
   Widget other(BuildContext context) {
     return _Card(title: 'Other Default Options', children: [
       otherRow('View Mode', 'view_only'),
-      otherRow('show_monitors_tip', 'show_monitors_toolbar'),
+      otherRow('show_monitors_tip', kKeyShowMonitorsToolbar),
       otherRow('Collapse toolbar', 'collapse_toolbar'),
       otherRow('Show remote cursor', 'show_remote_cursor'),
       otherRow('Zoom cursor', 'zoom-cursor'),
@@ -1325,6 +1300,8 @@ class _DisplayState extends State<_Display> {
       otherRow('Lock after session end', 'lock_after_session_end'),
       otherRow('Privacy mode', 'privacy_mode'),
       otherRow('Reverse mouse wheel', 'reverse_mouse_wheel'),
+      otherRow('Show displays as individual windows',
+          kKeyShowDisplaysAsIndividualWindows),
     ]);
   }
 }

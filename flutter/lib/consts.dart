@@ -66,9 +66,8 @@ const int kWindowMainId = 0;
 const String kPointerEventKindTouch = "touch";
 const String kPointerEventKindMouse = "mouse";
 
-const String kKeyChooseDisplayBehavior = 'choose-display-behavior';
-const String kChooseDisplayBehaviorSwitch = 'switch';
-const String kChooseDisplayBehaviorOpen = 'open';
+const String kKeyShowDisplaysAsIndividualWindows = 'displays_as_individual_windows';
+const String kKeyShowMonitorsToolbar = 'show_monitors_toolbar';
 
 // the executable name of the portable version
 const String kEnvPortableExecutable = "RUSTDESK_APPNAME";

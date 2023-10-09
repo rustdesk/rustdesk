@@ -430,7 +430,7 @@ class FfiModel with ChangeNotifier {
     final curDisplay = int.parse(evt['display']);
 
     // The message should be handled by the another UI session.
-    if (_pi.isSupportMultiDisplay) {
+    if (isChooseDisplayToOpenInNewWindow(_pi, sessionId)) {
       if (curDisplay != _pi.currentDisplay) {
         return;
       }
@@ -2211,8 +2211,7 @@ class PeerInfo with ChangeNotifier {
   bool get isWayland => platformDdditions['is_wayland'] == true;
   bool get isHeadless => platformDdditions['headless'] == true;
 
-  bool get isSupportMultiDisplay =>
-      isDesktop && isSupportMultiUiSession && isChooseDisplayToOpen;
+  bool get isSupportMultiDisplay => isDesktop && isSupportMultiUiSession;
 
   bool get cursorEmbedded => tryGetDisplay()?.cursorEmbedded ?? false;
 

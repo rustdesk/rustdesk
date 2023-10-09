@@ -339,6 +339,20 @@ pub fn session_set_reverse_mouse_wheel(session_id: SessionID, value: String) {
     }
 }
 
+pub fn session_get_displays_as_individual_windows(session_id: SessionID) -> SyncReturn<Option<String>> {
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
+        SyncReturn(Some(session.get_displays_as_individual_windows()))
+    } else {
+        SyncReturn(None)
+    }
+}
+
+pub fn session_set_displays_as_individual_windows(session_id: SessionID, value: String) {
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
+        session.save_displays_as_individual_windows(value);
+    }
+}
+
 pub fn session_get_custom_image_quality(session_id: SessionID) -> Option<Vec<i32>> {
     if let Some(session) = sessions::get_session_by_session_id(&session_id) {
         Some(session.get_custom_image_quality())

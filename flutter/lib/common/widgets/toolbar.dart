@@ -515,5 +515,23 @@ Future<List<TToggleMenu>> toolbarDisplayToggle(
         },
         child: Text(translate('Swap control-command key'))));
   }
+
+  if (pi.isSupportMultiDisplay &&
+      PrivacyModeState.find(id).isFalse &&
+      pi.displaysCount.value > 1 &&
+      bind.mainGetUserDefaultOption(key: kKeyShowMonitorsToolbar) == 'Y') {
+    final value =
+        bind.sessionGetDisplaysAsIndividualWindows(sessionId: ffi.sessionId) ==
+            'Y';
+    v.add(TToggleMenu(
+        value: value,
+        onChanged: (value) {
+          if (value == null) return;
+          bind.sessionSetDisplaysAsIndividualWindows(
+              sessionId: sessionId, value: value ? 'Y' : '');
+        },
+        child: Text(translate('Show displays as individual windows'))));
+  }
+
   return v;
 }

@@ -2590,15 +2590,6 @@ String getDesktopTabLabel(String peerId, String alias) {
   return label;
 }
 
-String getChooseDisplayBehavior() {
-  var current = bind.mainGetOptionSync(key: kKeyChooseDisplayBehavior);
-  if (![kChooseDisplayBehaviorSwitch, kChooseDisplayBehaviorOpen]
-      .contains(current)) {
-    current = kChooseDisplayBehaviorOpen;
-  }
-  return current;
-}
-
 sessionRefreshVideo(SessionID sessionId, PeerInfo pi) async {
   if (pi.currentDisplay == kAllDisplayValue) {
     for (int i = 0; i < pi.displays.length; i++) {
@@ -2609,5 +2600,7 @@ sessionRefreshVideo(SessionID sessionId, PeerInfo pi) async {
   }
 }
 
-bool get isChooseDisplayToOpen =>
-    getChooseDisplayBehavior() != kChooseDisplayBehaviorSwitch;
+bool isChooseDisplayToOpenInNewWindow(PeerInfo pi, SessionID sessionId) =>
+    pi.isSupportMultiDisplay &&
+    bind.sessionGetDisplaysAsIndividualWindows(sessionId: sessionId) == 'Y';
+

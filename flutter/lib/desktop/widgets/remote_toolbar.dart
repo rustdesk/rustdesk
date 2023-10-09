@@ -598,7 +598,7 @@ class _MonitorMenu extends StatelessWidget {
   }) : super(key: key);
 
   bool get showMonitorsToolbar =>
-      bind.mainGetUserDefaultOption(key: 'show_monitors_toolbar') == 'Y';
+      bind.mainGetUserDefaultOption(key: kKeyShowMonitorsToolbar) == 'Y';
 
   @override
   Widget build(BuildContext context) =>
@@ -614,11 +614,38 @@ class _MonitorMenu extends StatelessWidget {
         menuStyle: MenuStyle(
             padding:
                 MaterialStatePropertyAll(EdgeInsets.symmetric(horizontal: 6))),
-        menuChildren: [Row(children: buildMonitorList(false))]);
+        menuChildren: [buildMonitorSubmenuWidget()]);
   }
 
   Widget buildMultiMonitorMenu() {
     return Row(children: buildMonitorList(true));
+  }
+
+  Widget buildMonitorSubmenuWidget() {
+    final pi = ffi.ffiModel.pi;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Row(children: buildMonitorList(false)),
+        pi.isSupportMultiDisplay ? Divider() : Offstage(),
+        pi.isSupportMultiDisplay ? chooseDisplayBehavior() : Offstage(),
+      ],
+    );
+  }
+
+  Widget chooseDisplayBehavior() {
+    final value =
+        bind.sessionGetDisplaysAsIndividualWindows(sessionId: ffi.sessionId) ==
+            'Y';
+    return CkbMenuButton(
+        value: value,
+        onChanged: (value) async {
+          if (value == null) return;
+          await bind.sessionSetDisplaysAsIndividualWindows(
+              sessionId: ffi.sessionId, value: value ? 'Y' : '');
+        },
+        ffi: ffi,
+        child: Text(translate('Show displays as individual windows')));
   }
 
   List<Widget> buildMonitorList(bool isMulti) {
@@ -746,7 +773,7 @@ class _MonitorMenu extends StatelessWidget {
     _menuDismissCallback(ffi);
     RxInt display = CurrentDisplayState.find(id);
     if (display.value != i) {
-      if (pi.isSupportMultiDisplay) {
+      if (isChooseDisplayToOpenInNewWindow(pi, ffi.sessionId)) {
         openMonitorInNewTabOrWindow(i, pi);
       } else {
         openMonitorInTheSameTab(i, pi);
