@@ -1142,7 +1142,7 @@ class _DisplayState extends State<_Display> {
       setState(() {});
     }
 
-    return _Card(title: 'Choose Display Behavior', children: [
+    return _Card(title: 'Choose display behavior', children: [
       _Radio<String>(context,
           value: kChooseDisplayBehaviorSwitch,
           groupValue: current,
