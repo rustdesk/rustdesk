@@ -481,7 +481,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Me", "Es"),
         ("identical_file_tip", "Šis fails ir identisks sesijas failam."),
         ("show_monitors_tip", "Rādīt monitorus rīkjoslā"),
-        ("enter_rustdesk_passwd_tip", "Ievadiet RustDesk paroli"),
         ("View Mode", "Skatīšanas režīms"),
         ("login_linux_tip", "Jums ir jāpiesakās attālajā Linux kontā, lai iespējotu X darbvirsmas sesiju"),
         ("verify_rustdesk_password_tip", "Pārbaudīt RustDesk paroli"),
