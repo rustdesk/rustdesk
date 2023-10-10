@@ -295,7 +295,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Overwrite", "Үстінен қайта жазу"),
         ("This file exists, skip or overwrite this file?", "Бұл файыл бар, өткізіп жіберу әлде үстінен қайта жазу керек пе?"),
         ("Quit", "Шығу"),
-        ("doc_mac_permission", ""),
         ("Help", "Көмек"),
         ("Failed", "Сәтсіз"),
         ("Succeeded", "Сәтті"),

@@ -295,7 +295,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Overwrite", "استبدال"),
         ("This file exists, skip or overwrite this file?", "الملف موجود, هل تريد التجاوز او الاستبدال؟"),
         ("Quit", "خروج"),
-        ("doc_mac_permission", "https://rustdesk.com/docs/en/manual/mac/#enable-permissions"),
         ("Help", "مساعدة"),
         ("Failed", "فشل"),
         ("Succeeded", "نجاح"),

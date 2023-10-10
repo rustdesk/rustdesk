@@ -295,7 +295,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Overwrite", ""),
         ("This file exists, skip or overwrite this file?", ""),
         ("Quit", ""),
-        ("doc_mac_permission", ""),
         ("Help", ""),
         ("Failed", ""),
         ("Succeeded", ""),
