@@ -329,7 +329,7 @@ class _ScamWarningDialogState extends State<ScamWarningDialog> {
             ),
             SizedBox(height: 18),
             SizedBox(
-              height: 250,
+              height: 220,
               child: Scrollbar(
                 child: SingleChildScrollView(
                   child: Text(
