@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -322,6 +323,24 @@ class _GeneralState extends State<_General> {
           'enable-confirm-closing-tabs',
           isServer: false),
       _OptionCheckBox(context, 'Adaptive bitrate', 'enable-abr'),
+      if (Platform.isWindows || Platform.isLinux)
+        Row(
+          children: [
+            Flexible(
+              child: _OptionCheckBox(
+                  context,
+                  'Remove wallpaper during incoming sessions',
+                  'allow-remove-wallpaper'),
+            ),
+            _CountDownButton(
+              text: 'Test',
+              second: 5,
+              onPressed: () {
+                bind.mainTestWallpaper(second: 5);
+              },
+            )
+          ],
+        ),
       _OptionCheckBox(
         context,
         'Open connection in new tab',
@@ -1870,6 +1889,69 @@ class _ComboBox extends StatelessWidget {
             }).toList(),
           )),
     ).marginOnly(bottom: 5);
+  }
+}
+
+class _CountDownButton extends StatefulWidget {
+  _CountDownButton({
+    Key? key,
+    required this.text,
+    required this.second,
+    required this.onPressed,
+  }) : super(key: key);
+  final String text;
+  final VoidCallback? onPressed;
+  final int second;
+
+  @override
+  State<_CountDownButton> createState() => _CountDownButtonState();
+}
+
+class _CountDownButtonState extends State<_CountDownButton> {
+  bool _isButtonDisabled = false;
+
+  late int _countdownSeconds = widget.second;
+
+  Timer? _timer;
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  void _startCountdownTimer() {
+    _timer = Timer.periodic(Duration(seconds: 1), (timer) {
+      if (_countdownSeconds <= 0) {
+        setState(() {
+          _isButtonDisabled = false;
+        });
+        timer.cancel();
+      } else {
+        setState(() {
+          _countdownSeconds--;
+        });
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ElevatedButton(
+      onPressed: _isButtonDisabled
+          ? null
+          : () {
+              widget.onPressed?.call();
+              setState(() {
+                _isButtonDisabled = true;
+                _countdownSeconds = widget.second;
+              });
+              _startCountdownTimer();
+            },
+      child: Text(
+        _isButtonDisabled ? '$_countdownSeconds s' : translate(widget.text),
+      ),
+    );
   }
 }
 

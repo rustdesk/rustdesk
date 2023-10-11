@@ -1613,6 +1613,18 @@ pub fn main_start_ipc_url_server() {
     std::thread::spawn(move || crate::server::start_ipc_url_server());
 }
 
+pub fn main_test_wallpaper(_second: u64) {
+    #[cfg(any(target_os = "windows", target_os = "linux"))]
+    std::thread::spawn(move || match crate::platform::WallPaperRemover::new() {
+        Ok(_remover) => {
+            std::thread::sleep(std::time::Duration::from_secs(_second));
+        }
+        Err(e) => {
+            log::info!("create wallpaper remover failed:{:?}", e);
+        }
+    });
+}
+
 /// Send a url scheme throught the ipc.
 ///
 /// * macOS only
