@@ -23,6 +23,11 @@ bool shouldSortTags() {
   return bind.mainGetLocalOption(key: sortAbTagsOption).isNotEmpty;
 }
 
+final filterAbTagOption = 'filter-ab-by-intersection';
+bool filterAbTagByIntersection() {
+  return bind.mainGetLocalOption(key: filterAbTagOption).isNotEmpty;
+}
+
 class AbModel {
   final abLoading = false.obs;
   final pullError = "".obs;
@@ -31,6 +36,7 @@ class AbModel {
   final RxMap<String, int> tagColors = Map<String, int>.fromEntries([]).obs;
   final peers = List<Peer>.empty(growable: true).obs;
   final sortTags = shouldSortTags().obs;
+  final filterByIntersection = filterAbTagByIntersection().obs;
   final retrying = false.obs;
   bool get emtpy => peers.isEmpty && tags.isEmpty;
 

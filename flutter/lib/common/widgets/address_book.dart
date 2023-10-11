@@ -229,6 +229,22 @@ class _AddressBookState extends State<AddressBook> {
     );
   }
 
+  @protected
+  MenuEntryBase<String> filterMenuItem() {
+    return MenuEntrySwitch<String>(
+      switchType: SwitchType.scheckbox,
+      text: translate('Filter by intersection'),
+      getter: () async {
+        return filterAbTagByIntersection();
+      },
+      setter: (bool v) async {
+        bind.mainSetLocalOption(key: filterAbTagOption, value: v ? 'Y' : '');
+        gFFI.abModel.filterByIntersection.value = v;
+      },
+      dismissOnClicked: true,
+    );
+  }
+
   void _showMenu(RelativeRect pos) {
     final items = [
       getEntry(translate("Add ID"), abAddId),
@@ -236,6 +252,7 @@ class _AddressBookState extends State<AddressBook> {
       getEntry(translate("Unselect all tags"), gFFI.abModel.unsetSelectedTags),
       sortMenuItem(),
       syncMenuItem(),
+      filterMenuItem(),
     ];
 
     mod_menu.showMenu(
