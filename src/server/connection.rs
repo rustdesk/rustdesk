@@ -1403,22 +1403,16 @@ impl Connection {
                     self.file_transfer = Some((ft.dir, ft.show_hidden));
                 }
                 Some(login_request::Union::PortForward(mut pf)) => {
+                    if !Connection::permission("enable-tunnel") {
+                        self.send_login_error("No permission of IP tunneling").await;
+                        sleep(1.).await;
+                        return false;
+                    }
                     let mut is_rdp = false;
                     if pf.host == "RDP" && pf.port == 0 {
                         pf.host = "localhost".to_owned();
                         pf.port = 3389;
                         is_rdp = true;
-                    }
-                    if is_rdp && !Connection::permission("enable-rdp")
-                        || !is_rdp && !Connection::permission("enable-tunnel")
-                    {
-                        if is_rdp {
-                            self.send_login_error("No permission of RDP").await;
-                        } else {
-                            self.send_login_error("No permission of IP tunneling").await;
-                        }
-                        sleep(1.).await;
-                        return false;
                     }
                     if pf.host.is_empty() {
                         pf.host = "localhost".to_owned();

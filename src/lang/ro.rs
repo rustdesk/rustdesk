@@ -365,7 +365,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Audio Input Device", "Dispozitiv de intrare audio"),
         ("Use IP Whitelisting", "Folosește lista de IP-uri autorizate"),
         ("Network", "Rețea"),
-        ("Enable RDP", "Activează RDP"),
         ("Pin Toolbar", "Fixează bara de instrumente"),
         ("Unpin Toolbar", "Detașează bara de instrumente"),
         ("Recording", "Înregistrare"),
