@@ -57,6 +57,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("ID Server", "ID serveris"),
         ("Relay Server", "Releja serveris"),
         ("API Server", "API serveris"),
+        ("Key", "Atslēga"),
         ("invalid_http", "jāsākas ar http:// vai https://"),
         ("Invalid IP", "Nederīga IP"),
         ("Invalid format", "Nederīgs formāts"),
@@ -556,6 +557,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Check for software update on startup", "Startējot pārbaudīt, vai nav programmatūras atjauninājumu"),
         ("upgrade_rustdesk_server_pro_to_{}_tip", "Lūdzu, jauniniet RustDesk Server Pro uz versiju {} vai jaunāku!"),
         ("pull_group_failed_tip", "Neizdevās atsvaidzināt grupu"),
-        ("Filter by intersection", "")
+        ("Filter by intersection", "Filtrēt pēc krustpunkta")
     ].iter().cloned().collect();
 }
