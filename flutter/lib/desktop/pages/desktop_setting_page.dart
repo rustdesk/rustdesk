@@ -729,11 +729,6 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
   Widget more(BuildContext context) {
     bool enabled = !locked;
     return _Card(title: 'Security', children: [
-      Offstage(
-        offstage: !Platform.isWindows,
-        child: _OptionCheckBox(context, 'Enable RDP', 'enable-rdp',
-            enabled: enabled),
-      ),
       shareRdp(context, enabled),
       _OptionCheckBox(context, 'Deny LAN Discovery', 'enable-lan-discovery',
           reverse: true, enabled: enabled),
