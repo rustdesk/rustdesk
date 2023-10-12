@@ -57,6 +57,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("ID Server", "認証サーバー"),
         ("Relay Server", "中継サーバー"),
         ("API Server", "APIサーバー"),
+        ("Key", "鍵"),
         ("invalid_http", "http:// もしくは https:// から入力してください"),
         ("Invalid IP", "無効なIP"),
         ("Invalid format", "無効な形式"),

@@ -57,6 +57,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("ID Server", "ID Сербері"),
         ("Relay Server", "Relay Сербері"),
         ("API Server", "API Сербері"),
+        ("Key", "Кілт"),
         ("invalid_http", "http:// немесе https://'пен басталуы қажет"),
         ("Invalid IP", "Бұрыс IP-Мекенжай"),
         ("Invalid format", "Бұрыс формат"),

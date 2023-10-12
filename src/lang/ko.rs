@@ -57,6 +57,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("ID Server", "ID 서버"),
         ("Relay Server", "Relay 서버"),
         ("API Server", "API 서버"),
+        ("Key", "열쇠"),
         ("invalid_http", "다음과 같이 시작해야 합니다. http:// 또는 https://"),
         ("Invalid IP", "유효하지 않은 IP"),
         ("Invalid format", "유효하지 않은 형식"),

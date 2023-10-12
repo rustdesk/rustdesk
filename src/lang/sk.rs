@@ -57,6 +57,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("ID Server", "ID server"),
         ("Relay Server", "Prepojovací server"),
         ("API Server", "API server"),
+        ("Key", "Kľúč"),
         ("invalid_http", "Musí začínať http:// alebo https://"),
         ("Invalid IP", "Neplatná IP adresa"),
         ("Invalid format", "Neplatný formát"),

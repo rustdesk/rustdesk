@@ -57,6 +57,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("ID Server", "Διακομιστής ID"),
         ("Relay Server", "Διακομιστής αναμετάδοσης"),
         ("API Server", "Διακομιστής API"),
+        ("Key", "Κλειδί"),
         ("invalid_http", "Πρέπει να ξεκινά με http:// ή https://"),
         ("Invalid IP", "Μη έγκυρη διεύθυνση IP"),
         ("Invalid format", "Μη έγκυρη μορφή"),

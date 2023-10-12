@@ -57,6 +57,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("ID Server", "Szerver azonosító/domain"),
         ("Relay Server", "Kiszolgáló szerver"),
         ("API Server", "API szerver"),
+        ("Key", "Kulcs"),
         ("invalid_http", "A címnek mindenképpen http(s)://-el kell kezdődnie."),
         ("Invalid IP", "A megadott IP cím helytelen."),
         ("Invalid format", "Érvénytelen formátum"),

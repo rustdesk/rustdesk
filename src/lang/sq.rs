@@ -57,6 +57,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("ID Server", "ID e serverit"),
         ("Relay Server", "Serveri rele"),
         ("API Server", "Serveri API"),
+        ("Key", "Celës"),
         ("invalid_http", "Duhet të fillojë me http:// ose https://"),
         ("Invalid IP", "IP e pavlefshme"),
         ("Invalid format", "Format i pavlefshëm"),

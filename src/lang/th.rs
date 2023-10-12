@@ -57,6 +57,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("ID Server", "เซิร์ฟเวอร์ ID"),
         ("Relay Server", "เซิร์ฟเวอร์ Relay"),
         ("API Server", "เซิร์ฟเวอร์ API"),
+        ("Key", "สำคัญ"),
         ("invalid_http", "ต้องขึ้นต้นด้วย http:// หรือ https:// เท่านั้น"),
         ("Invalid IP", "IP ไม่ถูกต้อง"),
         ("Invalid format", "รูปแบบไม่ถูกต้อง"),

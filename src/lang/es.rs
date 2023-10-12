@@ -57,6 +57,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("ID Server", "Servidor de IDs"),
         ("Relay Server", "Servidor Relay"),
         ("API Server", "Servidor API"),
+        ("Key", "Llave"),
         ("invalid_http", "debe comenzar con http:// o https://"),
         ("Invalid IP", "IP incorrecta"),
         ("Invalid format", "Formato incorrecto"),

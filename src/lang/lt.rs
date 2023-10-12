@@ -57,6 +57,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("ID Server", "ID serveris"),
         ("Relay Server", "Perdavimo serveris"),
         ("API Server", "API serveris"),
+        ("Key", "Raktas"),
         ("invalid_http", "Turi prasidėti http:// arba https://"),
         ("Invalid IP", "Netinkamas IP"),
         ("Invalid format", "Neteisingas formatas"),
