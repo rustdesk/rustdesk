@@ -155,7 +155,6 @@ class _ConnectionPageState extends State<ConnectionPage>
   /// UI for the remote ID TextField.
   /// Search for a peer and connect to it if the id exists.
   Widget _buildRemoteIDTextField(BuildContext context) {
-    final TextEditingController fieldTextEditingController = TextEditingController.fromValue(_idController.value);
     var w = Container(
       width: 320 + 20 * 2,
       padding: const EdgeInsets.fromLTRB(20, 24, 20, 22),
@@ -348,7 +347,13 @@ class _ConnectionPageState extends State<ConnectionPage>
         final greyStyle = TextStyle(
           fontSize: 11,
           color: Theme.of(context).textTheme.titleLarge?.color?.withOpacity(0.6));
-        final child = Container(
+        final child = GestureDetector(
+          onTap: () {
+            _idController.id = peer.id;
+            onConnect();
+          },
+          child:
+        Container(
           height: 42,
           margin: EdgeInsets.only(bottom: 5),
           child: Row(
@@ -408,7 +413,7 @@ class _ConnectionPageState extends State<ConnectionPage>
             ),
         )
       ],
-    ));
+    )));
     final colors =
         _frontN(peer.tags, 25).map((e) => gFFI.abModel.getTagColor(e)).toList();
     return Tooltip(
