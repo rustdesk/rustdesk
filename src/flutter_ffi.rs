@@ -886,6 +886,72 @@ pub fn main_load_recent_peers_sync() -> SyncReturn<String> {
     SyncReturn("".to_string())
 }
 
+pub fn main_load_fav_peers_sync() -> SyncReturn<String> {
+    if !config::APP_DIR.read().unwrap().is_empty() {
+        let favs = get_fav();
+        let mut recent = PeerConfig::peers(None);
+        let mut lan = config::LanPeers::load()
+            .peers
+            .iter()
+            .filter(|d| recent.iter().all(|r| r.0 != d.id))
+            .map(|d| {
+                (
+                    d.id.clone(),
+                    SystemTime::UNIX_EPOCH,
+                    PeerConfig {
+                        info: PeerInfoSerde {
+                            username: d.username.clone(),
+                            hostname: d.hostname.clone(),
+                            platform: d.platform.clone(),
+                        },
+                        ..Default::default()
+                    },
+                )
+            })
+            .collect();
+        recent.append(&mut lan);
+        let peers: Vec<HashMap<&str, String>> = recent
+            .into_iter()
+            .filter_map(|(id, _, p)| {
+                if favs.contains(&id) {
+                    Some(peer_to_map(id, p))
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        let data = HashMap::from([
+            ("name", "load_fav_peers".to_owned()),
+            (
+                "peers",
+                serde_json::ser::to_string(&peers).unwrap_or("".to_owned()),
+            ),
+        ]);
+        return SyncReturn(serde_json::ser::to_string(&data).unwrap_or("".to_owned()));
+    }
+    SyncReturn("".to_string())
+}
+
+pub fn main_load_lan_peers_sync() -> SyncReturn<String> {
+    let data = HashMap::from([
+        ("name", "load_lan_peers".to_owned()),
+        (
+            "peers",
+            serde_json::to_string(&get_lan_peers()).unwrap_or_default(),
+        ),
+    ]);
+    return SyncReturn(serde_json::ser::to_string(&data).unwrap_or("".to_owned()));
+}
+
+pub fn main_load_ab_sync() -> SyncReturn<String> {
+    return SyncReturn(serde_json::to_string(&config::Ab::load()).unwrap_or_default());
+}
+
+pub fn main_load_group_sync() -> SyncReturn<String> {
+    return SyncReturn(serde_json::to_string(&config::Group::load()).unwrap_or_default());
+}
+
 pub fn main_load_recent_peers_for_ab(filter: String) -> String {
     let id_filters = serde_json::from_str::<Vec<String>>(&filter).unwrap_or_default();
     let id_filters = if id_filters.is_empty() {
