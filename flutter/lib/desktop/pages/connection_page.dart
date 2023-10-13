@@ -16,6 +16,7 @@ import 'package:flutter_hbb/models/peer_model.dart';
 import '../../common.dart';
 import '../../common/formatter/id_formatter.dart';
 import '../../common/widgets/peer_tab_page.dart';
+import '../../common/widgets/peer_card.dart';
 import '../../models/platform_model.dart';
 import '../widgets/button.dart';
 
@@ -43,6 +44,13 @@ class _ConnectionPageState extends State<ConnectionPage>
 
   bool isWindowMinimized = false;
   List<Peer> peers = [];
+  List _frontN<T>(List list, int n) {
+    if (list.length <= n) {
+      return list;
+    } else {
+      return list.sublist(0, n);
+    }
+  }
 
   @override
   void initState() {
@@ -280,37 +288,27 @@ class _ConnectionPageState extends State<ConnectionPage>
                       ));
                     },
                     optionsViewBuilder: (BuildContext context, AutocompleteOnSelected<Peer> onSelected, Iterable<Peer> options) {
-                    return Align(
-                      alignment: Alignment.topLeft,
-                      child: Material(
-                        elevation: 4.0,
-                        child: ConstrainedBox(
-                          constraints: BoxConstraints(
-                            maxHeight: 200.0,
+                      double maxHeight = 0;
+                      for (var peer in options) {
+                        if (maxHeight < 200)
+                        maxHeight += 47;
+                      }
+                      return Align(
+                        alignment: Alignment.topLeft,
+                        child: Material(
+                          elevation: 4,
+                          child: ConstrainedBox(
+                            constraints: BoxConstraints(
+                              maxHeight: maxHeight,
+                              maxWidth: 320,
+                            ),
+                            child: ListView(
+                              children: options
+                                  .map((peer) => _buildPeerTile(context, peer, null))
+                                  .toList()
+                            ),
                           ),
-                          child: SingleChildScrollView(
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: options.map((peer) {
-                                return ListTile(
-                                  // title: Text(peer.id),
-                                  title: Text(peer.id.length <= 6 ? peer.id : peer.id.substring(0, 6)),
-                                  subtitle: Row(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(peer.username),
-                                      Text(peer.hostname),
-                                      Text(peer.platform),
-                                    for (var tag in peer.tags)
-                                      Text(tag),
-                                    ],
-                                  ),
-                                  onTap: () {
-                                    onSelected(peer);
-                                  },
-                                );
-                              }).toList(),
-                            ))))
+                        ),
                       );
                     },
                   )
@@ -340,6 +338,104 @@ class _ConnectionPageState extends State<ConnectionPage>
     );
     return Container(
         constraints: const BoxConstraints(maxWidth: 600), child: w);
+  }
+
+  Widget _buildPeerTile(
+      BuildContext context, Peer peer, Rx<BoxDecoration?>? deco) {
+        final double _tileRadius = 5;
+        final name =
+          '${peer.username}${peer.username.isNotEmpty && peer.hostname.isNotEmpty ? '@' : ''}${peer.hostname}';
+        final greyStyle = TextStyle(
+          fontSize: 11,
+          color: Theme.of(context).textTheme.titleLarge?.color?.withOpacity(0.6));
+        final child = Container(
+          height: 42,
+          margin: EdgeInsets.only(bottom: 5),
+          child: Row(
+          mainAxisSize: MainAxisSize.max,
+          children: [
+            Container(
+              decoration: BoxDecoration(
+                color: str2color('${peer.id}${peer.platform}', 0x7f),
+                borderRadius: BorderRadius.only(
+                        topLeft: Radius.circular(_tileRadius),
+                        bottomLeft: Radius.circular(_tileRadius),
+                      ),
+              ),
+              alignment: Alignment.center,
+              width: 42,
+              height: null,
+              child: getPlatformImage(peer.platform, size: 30)
+                  .paddingAll(6),
+            ),
+            Expanded(
+              child: Container(
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.background,
+                  borderRadius: BorderRadius.only(
+                    topRight: Radius.circular(_tileRadius),
+                    bottomRight: Radius.circular(_tileRadius),
+                  ),
+                ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    children: [
+                      Row(children: [
+                        getOnline(8, peer.online),
+                        Expanded(
+                            child: Text(
+                          peer.alias.isEmpty ? formatID(peer.id) : peer.alias,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.titleSmall,
+                        )),
+                      ]).marginOnly(top: 2),
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          name,
+                          style: greyStyle,
+                          textAlign: TextAlign.start,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ).marginOnly(top: 2),
+                ),
+              ],
+            ).paddingOnly(left: 10.0, top: 3.0),
+            ),
+        )
+      ],
+    ));
+    final colors =
+        _frontN(peer.tags, 25).map((e) => gFFI.abModel.getTagColor(e)).toList();
+    return Tooltip(
+      message: isMobile
+          ? ''
+          : peer.tags.isNotEmpty
+              ? '${translate('Tags')}: ${peer.tags.join(', ')}'
+              : '',
+      child: Stack(children: [
+        deco == null
+            ? child
+            : Obx(
+                () => Container(
+                  foregroundDecoration: deco.value,
+                  child: child,
+                ),
+              ),
+        if (colors.isNotEmpty)
+          Positioned(
+            top: 5,
+            right: 10,
+            child: CustomPaint(
+              painter: TagPainter(radius: 3, colors: colors),
+            ),
+          )
+      ]),
+    );
   }
 
   Widget buildStatus() {
