@@ -226,6 +226,13 @@ class _ConnectionPageState extends State<ConnectionPage>
                         peers.add(Peer.fromJson(peer));
                       }
 
+                      if (textEditingValue.text.contains(" ")) {
+                        textEditingValue = TextEditingValue(
+                          text: textEditingValue.text.replaceAll(" ", ""),
+                          selection: textEditingValue.selection,
+                        );
+                      }
+
                       return peers.where((peer) =>
                       peer.id.toLowerCase().contains(textEditingValue.text.toLowerCase()) ||
                       peer.username.toLowerCase().contains(textEditingValue.text.toLowerCase()) ||
