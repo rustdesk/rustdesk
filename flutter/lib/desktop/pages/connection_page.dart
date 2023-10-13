@@ -11,6 +11,7 @@ import 'package:flutter_hbb/models/state_model.dart';
 import 'package:get/get.dart';
 import 'package:url_launcher/url_launcher_string.dart';
 import 'package:window_manager/window_manager.dart';
+import 'package:flutter_hbb/models/peer_model.dart';
 
 import '../../common.dart';
 import '../../common/formatter/id_formatter.dart';
@@ -41,6 +42,7 @@ class _ConnectionPageState extends State<ConnectionPage>
   var svcIsUsingPublicServer = true.obs;
 
   bool isWindowMinimized = false;
+  List<Peer> peers = [];
 
   @override
   void initState() {
@@ -145,6 +147,7 @@ class _ConnectionPageState extends State<ConnectionPage>
   /// UI for the remote ID TextField.
   /// Search for a peer and connect to it if the id exists.
   Widget _buildRemoteIDTextField(BuildContext context) {
+    final TextEditingController fieldTextEditingController = TextEditingController.fromValue(_idController.value);
     var w = Container(
       width: 320 + 20 * 2,
       padding: const EdgeInsets.fromLTRB(20, 24, 20, 22),
@@ -171,36 +174,139 @@ class _ConnectionPageState extends State<ConnectionPage>
             Row(
               children: [
                 Expanded(
-                  child: Obx(
-                    () => TextField(
-                      maxLength: 90,
-                      autocorrect: false,
-                      enableSuggestions: false,
-                      keyboardType: TextInputType.visiblePassword,
-                      focusNode: _idFocusNode,
-                      style: const TextStyle(
-                        fontFamily: 'WorkSans',
-                        fontSize: 22,
-                        height: 1.4,
-                      ),
-                      maxLines: 1,
-                      cursorColor:
-                          Theme.of(context).textTheme.titleLarge?.color,
-                      decoration: InputDecoration(
-                          filled: false,
-                          counterText: '',
-                          hintText: _idInputFocused.value
-                              ? null
-                              : translate('Enter Remote ID'),
-                          contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 15, vertical: 13)),
-                      controller: _idController,
-                      inputFormatters: [IDTextInputFormatter()],
-                      onSubmitted: (s) {
-                        onConnect();
-                      },
-                    ),
-                  ),
+                  child: 
+                   Autocomplete<Peer>(
+                    optionsBuilder: (TextEditingValue textEditingValue) {
+                      if (textEditingValue.text == '') {
+                        return const Iterable<Peer>.empty();
+                      }
+                      else {
+                      peers.clear();
+                      Map<String, dynamic> recentPeers = jsonDecode(bind.mainLoadRecentPeersSync());
+                      Map<String, dynamic> favPeers = jsonDecode(bind.mainLoadFavPeersSync());
+                      Map<String, dynamic> lanPeers = jsonDecode(bind.mainLoadLanPeersSync());
+                      Map<String, dynamic> abPeers = jsonDecode(bind.mainLoadAbSync());
+                      Map<String, dynamic> groupPeers = jsonDecode(bind.mainLoadGroupSync());
+
+                      Map<String, dynamic> combinedPeers = {};
+
+                      void mergePeers(Map<String, dynamic> peers) {
+                        if (peers.containsKey("peers")) {
+                          dynamic peerData = peers["peers"];
+
+                          if (peerData is String) {
+                            try {
+                              peerData = jsonDecode(peerData);
+                            } catch (e) {
+                              print("Error decoding peers: $e");
+                              return;
+                            }
+                          }
+
+                          if (peerData is List) {
+                            for (var peer in peerData) {
+                              if (peer is Map && peer.containsKey("id")) {
+                                String id = peer["id"];
+                                if (id != null && !combinedPeers.containsKey(id)) {
+                                  combinedPeers[id] = peer;
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+
+                      mergePeers(recentPeers);
+                      mergePeers(favPeers);
+                      mergePeers(lanPeers);
+                      mergePeers(abPeers);
+                      mergePeers(groupPeers);
+
+                      for (var peer in combinedPeers.values) {
+                        peers.add(Peer.fromJson(peer));
+                      }
+
+                      return peers.where((peer) =>
+                      peer.id.toLowerCase().contains(textEditingValue.text.toLowerCase()) ||
+                      peer.username.toLowerCase().contains(textEditingValue.text.toLowerCase()) ||
+                      peer.hostname.toLowerCase().contains(textEditingValue.text.toLowerCase()) ||
+                      peer.platform.toLowerCase().contains(textEditingValue.text.toLowerCase()))
+                          .toList();
+                      }
+                    },
+
+                    fieldViewBuilder: (BuildContext context,
+                        TextEditingController fieldTextEditingController,
+                        FocusNode fieldFocusNode ,
+                        VoidCallback onFieldSubmitted,
+
+                        ) {
+                      return Obx(() =>
+                      TextField(
+                        maxLength: 90,
+                        autocorrect: false,
+                        enableSuggestions: false,
+                        keyboardType: TextInputType.visiblePassword,
+                        // focusNode: _idFocusNode,
+                        focusNode: fieldFocusNode,
+                        style: const TextStyle(
+                          fontFamily: 'WorkSans',
+                          fontSize: 22,
+                          height: 1.4,
+                        ),
+                        maxLines: 1,
+                        cursorColor: Theme.of(context).textTheme.titleLarge?.color,
+                        decoration: InputDecoration(
+                            filled: false,
+                            counterText: '',
+                            hintText: _idInputFocused.value
+                                ? null
+                                : translate('Enter Remote ID'),
+                            contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 15, vertical: 13)),
+                        // controller: _idController,
+                        controller: fieldTextEditingController,
+                        inputFormatters: [IDTextInputFormatter()],
+                        onSubmitted: (s) {
+                          onConnect();
+                        },
+                      ));
+                    },
+                    optionsViewBuilder: (BuildContext context, AutocompleteOnSelected<Peer> onSelected, Iterable<Peer> options) {
+                    return Align(
+                      alignment: Alignment.topLeft,
+                      child: Material(
+                        elevation: 4.0,
+                        child: ConstrainedBox(
+                          constraints: BoxConstraints(
+                            maxHeight: 200.0,
+                          ),
+                          child: SingleChildScrollView(
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: options.map((peer) {
+                                return ListTile(
+                                  // title: Text(peer.id),
+                                  title: Text(peer.id.length <= 6 ? peer.id : peer.id.substring(0, 6)),
+                                  subtitle: Row(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(peer.username),
+                                      Text(peer.hostname),
+                                      Text(peer.platform),
+                                    for (var tag in peer.tags)
+                                      Text(tag),
+                                    ],
+                                  ),
+                                  onTap: () {
+                                    onSelected(peer);
+                                  },
+                                );
+                              }).toList(),
+                            ))))
+                      );
+                    },
+                  )
                 ),
               ],
             ),
