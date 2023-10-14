@@ -253,15 +253,20 @@ class _ConnectionPageState extends State<ConnectionPage>
                         TextEditingController fieldTextEditingController,
                         FocusNode fieldFocusNode ,
                         VoidCallback onFieldSubmitted,
-
                         ) {
+                      fieldTextEditingController.text = _idController.text;
+                      fieldFocusNode.addListener(() {
+                        _idInputFocused.value = fieldFocusNode.hasFocus;
+                        // select all to faciliate removing text, just following the behavior of address input of chrome
+                        _idController.selection = TextSelection(
+                            baseOffset: 0, extentOffset: _idController.value.text.length);
+                      });
                       return Obx(() =>
                       TextField(
                         maxLength: 90,
                         autocorrect: false,
                         enableSuggestions: false,
                         keyboardType: TextInputType.visiblePassword,
-                        // focusNode: _idFocusNode,
                         focusNode: fieldFocusNode,
                         style: const TextStyle(
                           fontFamily: 'WorkSans',
@@ -278,11 +283,22 @@ class _ConnectionPageState extends State<ConnectionPage>
                                 : translate('Enter Remote ID'),
                             contentPadding: const EdgeInsets.symmetric(
                                 horizontal: 15, vertical: 13)),
-                        // controller: _idController,
                         controller: fieldTextEditingController,
                         inputFormatters: [IDTextInputFormatter()],
+                        onChanged: (v) {
+                          _idController.id = v;
+                        },
                         onSubmitted: (s) {
-                          onConnect();
+                          if (s == '') {
+                            return;
+                          }
+                          try {
+                            final id = int.parse(s);
+                            _idController.id = s;
+                            onConnect();
+                          } catch (_) {
+                            return;
+                          }
                         },
                       ));
                     },
@@ -349,8 +365,10 @@ class _ConnectionPageState extends State<ConnectionPage>
           color: Theme.of(context).textTheme.titleLarge?.color?.withOpacity(0.6));
         final child = GestureDetector(
           onTap: () {
-            _idController.id = peer.id;
-            onConnect();
+            setState(() {
+              _idController.id = peer.id;
+              FocusScope.of(context).unfocus();
+            });
           },
           child:
         Container(
