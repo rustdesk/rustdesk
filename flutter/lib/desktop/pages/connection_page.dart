@@ -152,9 +152,57 @@ class _ConnectionPageState extends State<ConnectionPage>
     connect(context, id, isFileTransfer: isFileTransfer);
   }
 
+  void getAllPeers(){
+     peers.clear();
+    Map<String, dynamic> recentPeers = jsonDecode(bind.mainLoadRecentPeersSync());
+    Map<String, dynamic> favPeers = jsonDecode(bind.mainLoadFavPeersSync());
+    Map<String, dynamic> lanPeers = jsonDecode(bind.mainLoadLanPeersSync());
+    Map<String, dynamic> abPeers = jsonDecode(bind.mainLoadAbSync());
+    Map<String, dynamic> groupPeers = jsonDecode(bind.mainLoadGroupSync());
+
+    Map<String, dynamic> combinedPeers = {};
+
+    void mergePeers(Map<String, dynamic> peers) {
+      if (peers.containsKey("peers")) {
+        dynamic peerData = peers["peers"];
+
+        if (peerData is String) {
+          try {
+            peerData = jsonDecode(peerData);
+          } catch (e) {
+            print("Error decoding peers: $e");
+            return;
+          }
+        }
+
+        if (peerData is List) {
+          for (var peer in peerData) {
+            if (peer is Map && peer.containsKey("id")) {
+              String id = peer["id"];
+              if (id != null && !combinedPeers.containsKey(id)) {
+                combinedPeers[id] = peer;
+              }
+            }
+          }
+        }
+      }
+    }
+
+    mergePeers(recentPeers);
+    mergePeers(favPeers);
+    mergePeers(lanPeers);
+    mergePeers(abPeers);
+    mergePeers(groupPeers);
+
+    for (var peer in combinedPeers.values) {
+      peers.add(Peer.fromJson(peer));
+    }
+  }
+
   /// UI for the remote ID TextField.
-  /// Search for a peer and connect to it if the id exists.
+  /// Search for a peer.
   Widget _buildRemoteIDTextField(BuildContext context) {
+    getAllPeers();
     var w = Container(
       width: 320 + 20 * 2,
       padding: const EdgeInsets.fromLTRB(20, 24, 20, 22),
@@ -188,51 +236,6 @@ class _ConnectionPageState extends State<ConnectionPage>
                         return const Iterable<Peer>.empty();
                       }
                       else {
-                      peers.clear();
-                      Map<String, dynamic> recentPeers = jsonDecode(bind.mainLoadRecentPeersSync());
-                      Map<String, dynamic> favPeers = jsonDecode(bind.mainLoadFavPeersSync());
-                      Map<String, dynamic> lanPeers = jsonDecode(bind.mainLoadLanPeersSync());
-                      Map<String, dynamic> abPeers = jsonDecode(bind.mainLoadAbSync());
-                      Map<String, dynamic> groupPeers = jsonDecode(bind.mainLoadGroupSync());
-
-                      Map<String, dynamic> combinedPeers = {};
-
-                      void mergePeers(Map<String, dynamic> peers) {
-                        if (peers.containsKey("peers")) {
-                          dynamic peerData = peers["peers"];
-
-                          if (peerData is String) {
-                            try {
-                              peerData = jsonDecode(peerData);
-                            } catch (e) {
-                              print("Error decoding peers: $e");
-                              return;
-                            }
-                          }
-
-                          if (peerData is List) {
-                            for (var peer in peerData) {
-                              if (peer is Map && peer.containsKey("id")) {
-                                String id = peer["id"];
-                                if (id != null && !combinedPeers.containsKey(id)) {
-                                  combinedPeers[id] = peer;
-                                }
-                              }
-                            }
-                          }
-                        }
-                      }
-
-                      mergePeers(recentPeers);
-                      mergePeers(favPeers);
-                      mergePeers(lanPeers);
-                      mergePeers(abPeers);
-                      mergePeers(groupPeers);
-
-                      for (var peer in combinedPeers.values) {
-                        peers.add(Peer.fromJson(peer));
-                      }
-
                       if (textEditingValue.text.contains(" ")) {
                         textEditingValue = TextEditingValue(
                           text: textEditingValue.text.replaceAll(" ", ""),
