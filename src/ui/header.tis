@@ -298,10 +298,11 @@ class Header: Reactor.Component {
         recording = !recording;
         header.update();
         handler.record_status(recording);
+        // 0 is just a dummy value. It will be ignored by the handler.
         if (recording)
-            handler.refresh_video();
+            handler.refresh_video(0);
         else
-            handler.record_screen(false, display_width, display_height);
+            handler.record_screen(false, 0, display_width, display_height);
     }
 
     event click $(#screen) (_, me) {
@@ -370,7 +371,8 @@ class Header: Reactor.Component {
     }
     
     event click $(#refresh) {
-        handler.refresh_video();
+        // 0 is just a dummy value. It will be ignored by the handler.
+        handler.refresh_video(0);
     }
 
     event click $(#block-input) {

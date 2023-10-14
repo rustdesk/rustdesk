@@ -1341,6 +1341,14 @@ impl WallPaperRemover {
             old_path_dark,
         })
     }
+
+    pub fn support() -> bool {
+        let desktop = std::env::var("XDG_CURRENT_DESKTOP").unwrap_or_default();
+        if wallpaper::gnome::is_compliant(&desktop) || desktop.as_str() == "XFCE" {
+            return wallpaper::get().is_ok();
+        }
+        false
+    }
 }
 
 impl Drop for WallPaperRemover {

@@ -164,6 +164,7 @@ impl<T: InvokeUiCM> ConnectionManager<T> {
     }
 
     #[inline]
+    #[cfg(windows)]
     fn is_authorized(&self, id: i32) -> bool {
         CLIENTS
             .read()

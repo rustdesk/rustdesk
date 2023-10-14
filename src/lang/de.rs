@@ -555,8 +555,15 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Check for software update on startup", "Beim Start auf Softwareaktualisierung prüfen"),
         ("upgrade_rustdesk_server_pro_to_{}_tip", "Bitte aktualisieren Sie RustDesk Server Pro auf die Version {} oder neuer!"),
         ("pull_group_failed_tip", "Aktualisierung der Gruppe fehlgeschlagen"),
-        ("Remove wallpaper during incoming sessions", ""),
-        ("Test", ""),
-        ("Filter by intersection", "Nach Schnittpunkt filtern")
+        ("Filter by intersection", "Nach Schnittmenge filtern"),
+        ("Remove wallpaper during incoming sessions", "Hintergrundbild während eingehender Sitzungen entfernen"),
+        ("Test", "Test"),
+        ("Filter by intersection", "Nach Schnittpunkt filtern"),
+        ("switch_display_elevated_connections_tip", ""),
+        ("display_is_plugged_out_msg", ""),
+        ("No displays", ""),
+        ("elevated_switch_display_msg", ""),
+        ("Open in new window", ""),
+        ("Show displays as individual windows", ""),
     ].iter().cloned().collect();
 }

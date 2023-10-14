@@ -5,7 +5,7 @@ use hbb_common::{
         mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender},
         Mutex as TokioMutex,
     },
-    ResultType, SessionID,
+    ResultType,
 };
 use serde_derive::{Deserialize, Serialize};
 use std::{
@@ -61,7 +61,7 @@ pub enum ClipboardFile {
 }
 
 struct MsgChannel {
-    session_uuid: SessionID,
+    peer_id: String,
     conn_id: i32,
     sender: UnboundedSender<ClipboardFile>,
     receiver: Arc<TokioMutex<UnboundedReceiver<ClipboardFile>>>,
@@ -90,12 +90,12 @@ impl ClipboardFile {
     }
 }
 
-pub fn get_client_conn_id(session_uuid: &SessionID) -> Option<i32> {
+pub fn get_client_conn_id(peer_id: &str) -> Option<i32> {
     VEC_MSG_CHANNEL
         .read()
         .unwrap()
         .iter()
-        .find(|x| x.session_uuid == session_uuid.to_owned())
+        .find(|x| x.peer_id == peer_id)
         .map(|x| x.conn_id)
 }
 
@@ -106,13 +106,10 @@ fn get_conn_id() -> i32 {
 }
 
 pub fn get_rx_cliprdr_client(
-    session_uuid: &SessionID,
+    peer_id: &str,
 ) -> (i32, Arc<TokioMutex<UnboundedReceiver<ClipboardFile>>>) {
     let mut lock = VEC_MSG_CHANNEL.write().unwrap();
-    match lock
-        .iter()
-        .find(|x| x.session_uuid == session_uuid.to_owned())
-    {
+    match lock.iter().find(|x| x.peer_id == peer_id) {
         Some(msg_channel) => (msg_channel.conn_id, msg_channel.receiver.clone()),
         None => {
             let (sender, receiver) = unbounded_channel();
@@ -120,7 +117,7 @@ pub fn get_rx_cliprdr_client(
             let receiver2 = receiver.clone();
             let conn_id = get_conn_id();
             let msg_channel = MsgChannel {
-                session_uuid: session_uuid.to_owned(),
+                peer_id: peer_id.to_owned(),
                 conn_id,
                 sender,
                 receiver,
@@ -140,7 +137,7 @@ pub fn get_rx_cliprdr_server(conn_id: i32) -> Arc<TokioMutex<UnboundedReceiver<C
             let receiver = Arc::new(TokioMutex::new(receiver));
             let receiver2 = receiver.clone();
             let msg_channel = MsgChannel {
-                session_uuid: SessionID::nil(),
+                peer_id: "".to_string(),
                 conn_id,
                 sender,
                 receiver,

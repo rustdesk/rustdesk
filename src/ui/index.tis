@@ -210,6 +210,7 @@ class Enhancements: Reactor.Component {
 
     function render() {
         var has_hwcodec = handler.has_hwcodec();
+        var support_remove_wallpaper = handler.support_remove_wallpaper();
         var me = this;
         self.timer(1ms, function() { me.toggleMenuState() });
         return <li>{translate('Enhancements')}
@@ -217,7 +218,7 @@ class Enhancements: Reactor.Component {
                 {has_hwcodec ? <li #enable-hwcodec><span>{svg_checkmark}</span>{translate("Hardware Codec")} (beta)</li> : ""}
                 <li #enable-abr><span>{svg_checkmark}</span>{translate("Adaptive bitrate")} (beta)</li>
                 <li #screen-recording>{translate("Recording")}</li>
-                {is_osx ? "" : <li #allow-remove-wallpaper><span>{svg_checkmark}</span>{translate("Remove wallpaper during incoming sessions")}</li>}
+                {support_remove_wallpaper ? <li #allow-remove-wallpaper><span>{svg_checkmark}</span>{translate("Remove wallpaper during incoming sessions")}</li> : ""}
             </menu>
         </li>;
     }

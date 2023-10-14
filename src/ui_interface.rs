@@ -2,14 +2,14 @@
 use hbb_common::password_security;
 use hbb_common::{
     allow_err,
-    config::{self, Config, LocalConfig, PeerConfig},
-    directories_next, log, tokio,
-};
-use hbb_common::{
     bytes::Bytes,
+    config::{self, Config, LocalConfig, PeerConfig},
     config::{CONNECT_TIMEOUT, RENDEZVOUS_PORT},
+    directories_next,
     futures::future::join_all,
+    log,
     rendezvous_proto::*,
+    tokio,
 };
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use hbb_common::{
@@ -17,9 +17,10 @@ use hbb_common::{
     tokio::{sync::mpsc, time},
 };
 use serde_derive::Serialize;
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+use std::process::Child;
 use std::{
     collections::HashMap,
-    process::Child,
     sync::{Arc, Mutex},
 };
 
@@ -31,6 +32,7 @@ use crate::ipc;
 
 type Message = RendezvousMessage;
 
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub type Children = Arc<Mutex<(bool, HashMap<(String, String), Child>)>>;
 
 #[derive(Clone, Debug, Serialize)]
@@ -594,7 +596,13 @@ pub fn current_is_wayland() -> bool {
 
 #[inline]
 pub fn get_new_version() -> String {
-    (*SOFTWARE_UPDATE_URL.lock().unwrap().rsplit('/').next().unwrap_or("")).to_string()
+    (*SOFTWARE_UPDATE_URL
+        .lock()
+        .unwrap()
+        .rsplit('/')
+        .next()
+        .unwrap_or(""))
+    .to_string()
 }
 
 #[inline]
@@ -1247,4 +1255,11 @@ pub fn handle_relay_id(id: String) -> String {
     } else {
         id
     }
+}
+
+pub fn support_remove_wallpaper() -> bool {
+    #[cfg(any(target_os = "windows", target_os = "linux"))]
+    return crate::platform::WallPaperRemover::support();
+    #[cfg(not(any(target_os = "windows", target_os = "linux")))]
+    return false;
 }
