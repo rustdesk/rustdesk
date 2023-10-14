@@ -323,24 +323,7 @@ class _GeneralState extends State<_General> {
           'enable-confirm-closing-tabs',
           isServer: false),
       _OptionCheckBox(context, 'Adaptive bitrate', 'enable-abr'),
-      if (Platform.isWindows || Platform.isLinux)
-        Row(
-          children: [
-            Flexible(
-              child: _OptionCheckBox(
-                  context,
-                  'Remove wallpaper during incoming sessions',
-                  'allow-remove-wallpaper'),
-            ),
-            _CountDownButton(
-              text: 'Test',
-              second: 5,
-              onPressed: () {
-                bind.mainTestWallpaper(second: 5);
-              },
-            )
-          ],
-        ),
+      wallpaper(),
       _OptionCheckBox(
         context,
         'Open connection in new tab',
@@ -365,6 +348,42 @@ class _GeneralState extends State<_General> {
           context, 'Allow linux headless', 'allow-linux-headless'));
     }
     return _Card(title: 'Other', children: children);
+  }
+
+  Widget wallpaper() {
+    return futureBuilder(future: () async {
+      final support = await bind.mainSupportRemoveWallpaper();
+      return support;
+    }(), hasData: (data) {
+      if (data is bool && data == true) {
+        final option = 'allow-remove-wallpaper';
+        bool value = mainGetBoolOptionSync(option);
+        return Row(
+          children: [
+            Flexible(
+              child: _OptionCheckBox(
+                context,
+                'Remove wallpaper during incoming sessions',
+                option,
+                update: () {
+                  setState(() {});
+                },
+              ),
+            ),
+            if (value)
+              _CountDownButton(
+                text: 'Test',
+                second: 5,
+                onPressed: () {
+                  bind.mainTestWallpaper(second: 5);
+                },
+              )
+          ],
+        );
+      }
+
+      return Offstage();
+    });
   }
 
   Widget hwcodec() {

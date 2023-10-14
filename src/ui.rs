@@ -598,6 +598,10 @@ impl UI {
     fn get_login_device_info(&self) -> String {
         get_login_device_info_json()
     }
+
+    fn support_remove_wallpaper(&self) -> bool {
+        support_remove_wallpaper()
+    }
 }
 
 impl sciter::EventHandler for UI {
@@ -683,6 +687,7 @@ impl sciter::EventHandler for UI {
         fn default_video_save_directory();
         fn handle_relay_id(String);
         fn get_login_device_info();
+        fn support_remove_wallpaper();
     }
 }
 
