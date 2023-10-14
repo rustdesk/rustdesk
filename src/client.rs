@@ -3,10 +3,7 @@ use std::{
     net::SocketAddr,
     ops::Deref,
     str::FromStr,
-    sync::{
-        atomic::{AtomicUsize, Ordering},
-        mpsc, Arc, Mutex, RwLock,
-    },
+    sync::{mpsc, Arc, Mutex, RwLock},
 };
 
 pub use async_trait::async_trait;
@@ -60,6 +57,7 @@ use scrap::{
 use crate::{
     common::input::{MOUSE_BUTTON_LEFT, MOUSE_BUTTON_RIGHT, MOUSE_TYPE_DOWN, MOUSE_TYPE_UP},
     is_keyboard_mode_supported,
+    ui_session_interface::{InvokeUiSession, Session},
 };
 
 #[cfg(not(feature = "flutter"))]
@@ -675,9 +673,12 @@ impl Client {
     }
 
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    fn try_stop_clipboard(_self_uuid: &uuid::Uuid) {
+    fn try_stop_clipboard(_self_id: &str) {
         #[cfg(feature = "flutter")]
-        if crate::flutter::sessions::other_sessions_running(_self_uuid) {
+        if crate::flutter::sessions::other_sessions_running(
+            _self_id.to_string(),
+            ConnType::DEFAULT_CONN,
+        ) {
             return;
         }
         TEXT_CLIPBOARD_STATE.lock().unwrap().running = false;
@@ -1206,6 +1207,17 @@ impl LoginConfigHandler {
         self.save_config(config);
     }
 
+    /// Save reverse mouse wheel ("", "Y") to the current config.
+    ///
+    /// # Arguments
+    ///
+    /// * `value` - The "displays_as_individual_windows" value ("", "Y").
+    pub fn save_displays_as_individual_windows(&mut self, value: String) {
+        let mut config = self.load_config();
+        config.displays_as_individual_windows = value;
+        self.save_config(config);
+    }
+
     /// Save scroll style to the current config.
     ///
     /// # Arguments
@@ -1523,6 +1535,15 @@ impl LoginConfigHandler {
         msg_out
     }
 
+    /// Create a [`Message`] for refreshing video.
+    pub fn refresh_display(display: usize) -> Message {
+        let mut misc = Misc::new();
+        misc.set_refresh_video_display(display as _);
+        let mut msg_out = Message::new();
+        msg_out.set_misc(misc);
+        msg_out
+    }
+
     /// Create a [`Message`] for saving custom image quality.
     ///
     /// # Arguments
@@ -1789,15 +1810,22 @@ impl LoginConfigHandler {
 
 /// Media data.
 pub enum MediaData {
-    VideoQueue,
+    VideoQueue(usize),
     VideoFrame(Box<VideoFrame>),
     AudioFrame(Box<AudioFrame>),
     AudioFormat(AudioFormat),
-    Reset,
-    RecordScreen(bool, i32, i32, String),
+    Reset(usize),
+    RecordScreen(bool, usize, i32, i32, String),
 }
 
 pub type MediaSender = mpsc::Sender<MediaData>;
+
+struct VideoHandlerController {
+    handler: VideoHandler,
+    count: u128,
+    duration: std::time::Duration,
+    skip_beginning: u32,
+}
 
 /// Start video and audio thread.
 /// Return two [`MediaSender`], they should be given to the media producer.
@@ -1805,73 +1833,135 @@ pub type MediaSender = mpsc::Sender<MediaData>;
 /// # Arguments
 ///
 /// * `video_callback` - The callback for video frame. Being called when a video frame is ready.
-pub fn start_video_audio_threads<F>(
+pub fn start_video_audio_threads<F, T>(
+    session: Session<T>,
     video_callback: F,
 ) -> (
     MediaSender,
     MediaSender,
-    Arc<ArrayQueue<VideoFrame>>,
-    Arc<AtomicUsize>,
+    Arc<RwLock<HashMap<usize, ArrayQueue<VideoFrame>>>>,
+    Arc<RwLock<HashMap<usize, usize>>>,
 )
 where
-    F: 'static + FnMut(&mut scrap::ImageRgb) + Send,
+    F: 'static + FnMut(usize, &mut scrap::ImageRgb) + Send,
+    T: InvokeUiSession,
 {
     let (video_sender, video_receiver) = mpsc::channel::<MediaData>();
-    let video_queue = Arc::new(ArrayQueue::<VideoFrame>::new(VIDEO_QUEUE_SIZE));
-    let video_queue_cloned = video_queue.clone();
+    let video_queue_map: Arc<RwLock<HashMap<usize, ArrayQueue<VideoFrame>>>> = Default::default();
+    let video_queue_map_cloned = video_queue_map.clone();
     let mut video_callback = video_callback;
-    let mut duration = std::time::Duration::ZERO;
-    let mut count = 0;
-    let fps = Arc::new(AtomicUsize::new(0));
-    let decode_fps = fps.clone();
-    let mut skip_beginning = 0;
+    let fps_map = Arc::new(RwLock::new(HashMap::new()));
+    let decode_fps_map = fps_map.clone();
 
     std::thread::spawn(move || {
         #[cfg(windows)]
         sync_cpu_usage();
-        let mut video_handler = VideoHandler::new();
+        let mut handler_controller_map = Vec::new();
+        // let mut count = Vec::new();
+        // let mut duration = std::time::Duration::ZERO;
+        // let mut skip_beginning = Vec::new();
         loop {
             if let Ok(data) = video_receiver.recv() {
                 match data {
-                    MediaData::VideoFrame(_) | MediaData::VideoQueue => {
-                        let vf = if let MediaData::VideoFrame(vf) = data {
-                            *vf
-                        } else {
-                            if let Some(vf) = video_queue.pop() {
-                                vf
-                            } else {
+                    MediaData::VideoFrame(_) | MediaData::VideoQueue(_) => {
+                        let vf = match data {
+                            MediaData::VideoFrame(vf) => *vf,
+                            MediaData::VideoQueue(display) => {
+                                if let Some(video_queue) =
+                                    video_queue_map.read().unwrap().get(&display)
+                                {
+                                    if let Some(vf) = video_queue.pop() {
+                                        vf
+                                    } else {
+                                        continue;
+                                    }
+                                } else {
+                                    continue;
+                                }
+                            }
+                            _ => {
+                                // unreachable!();
                                 continue;
                             }
                         };
+                        let display = vf.display as usize;
                         let start = std::time::Instant::now();
-                        if let Ok(true) = video_handler.handle_frame(vf) {
-                            video_callback(&mut video_handler.rgb);
-                            // fps calculation
-                            // The first frame will be very slow
-                            if skip_beginning < 5 {
-                                skip_beginning += 1;
-                                continue;
+                        if handler_controller_map.len() <= display {
+                            for _i in handler_controller_map.len()..=display {
+                                handler_controller_map.push(VideoHandlerController {
+                                    handler: VideoHandler::new(),
+                                    count: 0,
+                                    duration: std::time::Duration::ZERO,
+                                    skip_beginning: 0,
+                                });
                             }
-                            duration += start.elapsed();
-                            count += 1;
-                            if count % 10 == 0 {
-                                fps.store(
-                                    (count * 1000 / duration.as_millis()) as usize,
-                                    Ordering::Relaxed,
-                                );
-                            }
-                            // Clear to get real-time fps
-                            if count > 150 {
-                                count = 0;
-                                duration = Duration::ZERO;
+                        }
+                        if let Some(handler_controller) = handler_controller_map.get_mut(display) {
+                            match handler_controller.handler.handle_frame(vf) {
+                                Ok(true) => {
+                                    video_callback(display, &mut handler_controller.handler.rgb);
+
+                                    // fps calculation
+                                    // The first frame will be very slow
+                                    if handler_controller.skip_beginning < 5 {
+                                        handler_controller.skip_beginning += 1;
+                                        continue;
+                                    }
+
+                                    handler_controller.duration += start.elapsed();
+                                    handler_controller.count += 1;
+                                    if handler_controller.count % 10 == 0 {
+                                        fps_map.write().unwrap().insert(
+                                            display,
+                                            (handler_controller.count * 1000
+                                                / handler_controller.duration.as_millis())
+                                                as usize,
+                                        );
+                                    }
+                                    // Clear to get real-time fps
+                                    if handler_controller.count > 150 {
+                                        handler_controller.count = 0;
+                                        handler_controller.duration = Duration::ZERO;
+                                    }
+                                }
+                                Err(e) => {
+                                    // This is a simple workaround.
+                                    //
+                                    // I only see the following error:
+                                    // FailedCall("errcode=1 scrap::common::vpxcodec:libs\\scrap\\src\\common\\vpxcodec.rs:433:9")
+                                    // When switching from all displays to one display, the error occurs.
+                                    // eg:
+                                    // 1. Connect to a device with two displays (A and B).
+                                    // 2. Switch to display A. The error occurs.
+                                    // 3. If the error does not occur. Switch from A to display B. The error occurs.
+                                    //
+                                    // to-do: fix the error
+                                    log::error!("handle video frame error, {}", e);
+                                    session.refresh_video(display as _);
+                                }
+                                _ => {}
                             }
                         }
                     }
-                    MediaData::Reset => {
-                        video_handler.reset();
+                    MediaData::Reset(display) => {
+                        if let Some(handler_controler) = handler_controller_map.get_mut(display) {
+                            handler_controler.handler.reset();
+                        }
                     }
-                    MediaData::RecordScreen(start, w, h, id) => {
-                        video_handler.record_screen(start, w, h, id)
+                    MediaData::RecordScreen(start, display, w, h, id) => {
+                        if handler_controller_map.len() == 1 {
+                            // Compatible with the sciter version(single ui session).
+                            // For the sciter version, there're no multi-ui-sessions for one connection.
+                            // The display is always 0, video_handler_controllers.len() is always 1. So we use the first video handler.
+                            handler_controller_map[0]
+                                .handler
+                                .record_screen(start, w, h, id);
+                        } else {
+                            if let Some(handler_controler) = handler_controller_map.get_mut(display)
+                            {
+                                handler_controler.handler.record_screen(start, w, h, id);
+                            }
+                        }
                     }
                     _ => {}
                 }
@@ -1882,7 +1972,12 @@ where
         log::info!("Video decoder loop exits");
     });
     let audio_sender = start_audio_thread();
-    return (video_sender, audio_sender, video_queue_cloned, decode_fps);
+    return (
+        video_sender,
+        audio_sender,
+        video_queue_map_cloned,
+        decode_fps_map,
+    );
 }
 
 /// Start an audio thread
@@ -2500,7 +2595,7 @@ pub enum Data {
     SetConfirmOverrideFile((i32, i32, bool, bool, bool)),
     AddJob((i32, String, String, i32, bool, bool)),
     ResumeJob((i32, bool)),
-    RecordScreen(bool, i32, i32, String),
+    RecordScreen(bool, usize, i32, i32, String),
     ElevateDirect,
     ElevateWithLogon(String, String),
     NewVoiceCall,

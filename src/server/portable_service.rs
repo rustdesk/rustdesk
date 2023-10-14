@@ -25,7 +25,6 @@ use winapi::{
 use crate::{
     ipc::{self, new_listener, Connection, Data, DataPortableService},
     platform::set_path_permission,
-    video_service::get_current_display,
 };
 
 use super::video_qos;
@@ -224,6 +223,8 @@ mod utils {
 pub mod server {
     use hbb_common::message_proto::PointerDeviceEvent;
 
+    use crate::display_service;
+
     use super::*;
 
     lazy_static::lazy_static! {
@@ -324,12 +325,17 @@ pub mod server {
                     continue;
                 }
                 if c.is_none() {
-                    *crate::video_service::CURRENT_DISPLAY.lock().unwrap() = current_display;
-                    let Ok((_, _current, display)) = get_current_display() else {
-                        log::error!("Failed to get current display");
+                    let Ok(mut displays) = display_service::try_get_displays() else {
+                        log::error!("Failed to get displays");
                         *EXIT.lock().unwrap() = true;
                         return;
                     };
+                    if displays.len() <= current_display {
+                        log::error!("Invalid display index:{}", current_display);
+                        *EXIT.lock().unwrap() = true;
+                        return;
+                    }
+                    let display = displays.remove(current_display);
                     display_width = display.width();
                     display_height = display.height();
                     match Capturer::new(display, use_yuv) {
@@ -522,6 +528,8 @@ pub mod server {
 pub mod client {
     use hbb_common::{anyhow::Context, message_proto::PointerDeviceEvent};
 
+    use crate::display_service;
+
     use super::*;
 
     lazy_static::lazy_static! {
@@ -665,8 +673,8 @@ pub mod client {
                 shmem.write(ADDR_CAPTURE_WOULDBLOCK, &utils::i32_to_vec(TRUE));
             }
             let (mut width, mut height) = (0, 0);
-            if let Ok((_, current, display)) = get_current_display() {
-                if current_display == current {
+            if let Ok(displays) = display_service::try_get_displays() {
+                if let Some(display) = displays.get(current_display) {
                     width = display.width();
                     height = display.height();
                 }
@@ -910,7 +918,15 @@ pub mod client {
         }
         if portable_service_running {
             log::info!("Create shared memory capturer");
-            return Ok(Box::new(CapturerPortable::new(current_display, use_yuv)));
+            if current_display == *display_service::PRIMARY_DISPLAY_IDX {
+                return Ok(Box::new(CapturerPortable::new(current_display, use_yuv)));
+            } else {
+                bail!(
+                    "Ignore capture display index: {}, the primary display index is: {}",
+                    current_display,
+                    *display_service::PRIMARY_DISPLAY_IDX
+                );
+            }
         } else {
             log::debug!("Create capturer dxgi|gdi");
             return Ok(Box::new(

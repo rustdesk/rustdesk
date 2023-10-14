@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:desktop_multi_window/desktop_multi_window.dart';
+import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -56,6 +57,44 @@ class RustDeskMultiWindowManager {
       'id': peerId,
       'tab_window_id': windowId,
       'session_id': sessionId,
+    };
+    await _newSession(
+      false,
+      WindowType.RemoteDesktop,
+      kWindowEventNewRemoteDesktop,
+      peerId,
+      _remoteDesktopWindows,
+      jsonEncode(params),
+    );
+  }
+
+  // This function must be called in the main window thread.
+  // Because the _remoteDesktopWindows is managed in that thread.
+  openMonitorSession(
+      int windowId, String peerId, int display, int displayCount) async {
+    if (_remoteDesktopWindows.length > 1) {
+      for (final windowId in _remoteDesktopWindows) {
+        if (await DesktopMultiWindow.invokeMethod(
+            windowId,
+            kWindowEventActiveDisplaySession,
+            jsonEncode({
+              'id': peerId,
+              'display': display,
+            }))) {
+          return;
+        }
+      }
+    }
+
+    final displays = display == kAllDisplayValue
+        ? List.generate(displayCount, (index) => index)
+        : [display];
+    var params = {
+      'type': WindowType.RemoteDesktop.index,
+      'id': peerId,
+      'tab_window_id': windowId,
+      'display': display,
+      'displays': displays,
     };
     await _newSession(
       false,
@@ -148,11 +187,21 @@ class RustDeskMultiWindowManager {
     bool openInTabs = type != WindowType.RemoteDesktop ||
         mainGetLocalBoolOptionSync(kOptionOpenNewConnInTabs);
 
-    if (windows.length > 1 || !openInTabs) {
-      for (final windowId in windows) {
-        if (await DesktopMultiWindow.invokeMethod(
-            windowId, kWindowEventActiveSession, remoteId)) {
-          return MultiWindowCallResult(windowId, null);
+    if (kOpenSamePeerInNewWindow) {
+      // Open in new window if the peer is already connected.
+      // No need to care about the previous session type.
+      if (type == WindowType.RemoteDesktop &&
+          await bind.sessionGetFlutterOptionByPeerId(id: remoteId, k: '') !=
+              null) {
+        openInTabs = false;
+      }
+    } else {
+      if (windows.length > 1 || !openInTabs) {
+        for (final windowId in windows) {
+          if (await DesktopMultiWindow.invokeMethod(
+              windowId, kWindowEventActiveSession, remoteId)) {
+            return MultiWindowCallResult(windowId, null);
+          }
         }
       }
     }

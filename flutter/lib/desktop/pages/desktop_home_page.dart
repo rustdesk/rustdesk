@@ -187,12 +187,12 @@ class _DesktopHomePageState extends State<DesktopHomePage>
               ? Theme.of(context).scaffoldBackgroundColor
               : Theme.of(context).colorScheme.background,
           child: Tooltip(
-            message: translate('Settings'),
-            child: Icon(
-              Icons.more_vert_outlined,
-              size: 20,
-              color: hover.value ? textColor : textColor?.withOpacity(0.5),
-            )),
+              message: translate('Settings'),
+              child: Icon(
+                Icons.more_vert_outlined,
+                size: 20,
+                color: hover.value ? textColor : textColor?.withOpacity(0.5),
+              )),
         ),
       ),
       onHover: (value) => hover.value = value,
@@ -256,27 +256,27 @@ class _DesktopHomePageState extends State<DesktopHomePage>
                         child: Obx(() => RotatedBox(
                             quarterTurns: 2,
                             child: Tooltip(
-                              message: translate('Refresh Password'),
-                              child: Icon(
-                                Icons.refresh,
-                                color: refreshHover.value
-                                    ? textColor
-                                    : Color(0xFFDDDDDD),
-                                size: 22,
-                              ))
-                            )),
+                                message: translate('Refresh Password'),
+                                child: Icon(
+                                  Icons.refresh,
+                                  color: refreshHover.value
+                                      ? textColor
+                                      : Color(0xFFDDDDDD),
+                                  size: 22,
+                                )))),
                         onHover: (value) => refreshHover.value = value,
                       ).marginOnly(right: 8, top: 4),
                       InkWell(
                         child: Obx(
                           () => Tooltip(
-                            message: translate('Change Password'),
-                            child: Icon(
-                              Icons.edit,
-                              color:
-                                  editHover.value ? textColor : Color(0xFFDDDDDD),
-                              size: 22,
-                            )).marginOnly(right: 8, top: 4),
+                              message: translate('Change Password'),
+                              child: Icon(
+                                Icons.edit,
+                                color: editHover.value
+                                    ? textColor
+                                    : Color(0xFFDDDDDD),
+                                size: 22,
+                              )).marginOnly(right: 8, top: 4),
                         ),
                         onTap: () => DesktopSettingPage.switch2page(1),
                         onHover: (value) => editHover.value = value,
@@ -604,8 +604,17 @@ class _DesktopHomePageState extends State<DesktopHomePage>
           debugPrint("Failed to parse window id '${call.arguments}': $e");
         }
         if (windowId != null) {
-          await rustDeskWinManager.moveTabToNewWindow(windowId, args[1], args[2]);
+          await rustDeskWinManager.moveTabToNewWindow(
+              windowId, args[1], args[2]);
         }
+      } else if (call.method == kWindowEventOpenMonitorSession) {
+        final args = jsonDecode(call.arguments);
+        final windowId = args['window_id'] as int;
+        final peerId = args['peer_id'] as String;
+        final display = args['display'] as int;
+        final displayCount = args['display_count'] as int;
+        await rustDeskWinManager.openMonitorSession(
+            windowId, peerId, display, displayCount);
       }
     });
     _uniLinksSubscription = listenUniLinks();
