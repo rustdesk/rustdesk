@@ -555,6 +555,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Check for software update on startup", "启动时检查软件更新"),
         ("upgrade_rustdesk_server_pro_to_{}_tip", "请升级专业版服务器到{}或更高版本！"),
         ("pull_group_failed_tip", "获取组信息失败"),
-        ("Filter by intersection", "按交集过滤")
+        ("Filter by intersection", "按交集过滤"),
+        ("Remove wallpaper during incoming sessions", "接受会话时移除桌面壁纸"),
+        ("Test", "测试"),
     ].iter().cloned().collect();
 }

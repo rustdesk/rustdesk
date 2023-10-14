@@ -555,6 +555,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Check for software update on startup", "Beim Start auf Softwareaktualisierung prüfen"),
         ("upgrade_rustdesk_server_pro_to_{}_tip", "Bitte aktualisieren Sie RustDesk Server Pro auf die Version {} oder neuer!"),
         ("pull_group_failed_tip", "Aktualisierung der Gruppe fehlgeschlagen"),
+        ("Remove wallpaper during incoming sessions", ""),
+        ("Test", ""),
         ("Filter by intersection", "Nach Schnittpunkt filtern")
     ].iter().cloned().collect();
 }

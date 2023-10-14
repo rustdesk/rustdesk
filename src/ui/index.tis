@@ -217,6 +217,7 @@ class Enhancements: Reactor.Component {
                 {has_hwcodec ? <li #enable-hwcodec><span>{svg_checkmark}</span>{translate("Hardware Codec")} (beta)</li> : ""}
                 <li #enable-abr><span>{svg_checkmark}</span>{translate("Adaptive bitrate")} (beta)</li>
                 <li #screen-recording>{translate("Recording")}</li>
+                {is_osx ? "" : <li #allow-remove-wallpaper><span>{svg_checkmark}</span>{translate("Remove wallpaper during incoming sessions")}</li>}
             </menu>
         </li>;
     }
@@ -225,6 +226,9 @@ class Enhancements: Reactor.Component {
         for (var el in $$(menu#enhancements-menu>li)) {
             if (el.id && el.id.indexOf("enable-") == 0) {
                 var enabled = handler.get_option(el.id) != "N";
+                el.attributes.toggleClass("selected", enabled);
+            } else if (el.id && el.id.indexOf("allow-") == 0) {
+                var enabled = handler.get_option(el.id) == "Y";
                 el.attributes.toggleClass("selected", enabled);
             }
         }
@@ -235,6 +239,8 @@ class Enhancements: Reactor.Component {
         var v = me.id;
         if (v.indexOf("enable-") == 0) {
             handler.set_option(v, handler.get_option(v) != 'N' ? 'N' : '');
+        } else if (v.indexOf("allow-") == 0) {
+            handler.set_option(v, handler.get_option(v) == 'Y' ? '' : 'Y');
         } else if (v == 'screen-recording') {
             var dir = handler.get_option("video-save-directory");
             if (!dir) dir = handler.default_video_save_directory();
