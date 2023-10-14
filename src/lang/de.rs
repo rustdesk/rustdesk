@@ -558,12 +558,11 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Filter by intersection", "Nach Schnittmenge filtern"),
         ("Remove wallpaper during incoming sessions", "Hintergrundbild während eingehender Sitzungen entfernen"),
         ("Test", "Test"),
-        ("Filter by intersection", "Nach Schnittpunkt filtern"),
-        ("switch_display_elevated_connections_tip", ""),
-        ("display_is_plugged_out_msg", ""),
-        ("No displays", ""),
-        ("elevated_switch_display_msg", ""),
-        ("Open in new window", ""),
-        ("Show displays as individual windows", ""),
+        ("switch_display_elevated_connections_tip", "Das Umschalten auf eine nicht primäre Anzeige wird mit erhöhten Rechten nicht unterstützt, wenn mehrere Verbindungen bestehen. Bitte versuchen Sie es nach der Installation erneut, wenn Sie mehrere Anzeigen steuern möchten."),
+        ("display_is_plugged_out_msg", "Das Anzeigegerät ist nicht angeschlossen, schalten Sie auf das erste Anzeigegerät um."),
+        ("No displays", "Keine Anzeigegeräte"),
+        ("elevated_switch_display_msg", "Wechseln Sie zur primären Anzeige, da die Mehrfachanzeige im erweiterten Modus nicht unterstützt wird."),
+        ("Open in new window", "In einem neuen Fenster öffnen"),
+        ("Show displays as individual windows", "Anzeigen als einzelne Fenster darstellen"),
     ].iter().cloned().collect();
 }
