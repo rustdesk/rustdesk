@@ -322,7 +322,7 @@ class _ConnectionPageState extends State<ConnectionPage>
                             ),
                             child: ListView(
                               children: options
-                                  .map((peer) => _buildPeerTile(context, peer, null))
+                                  .map((peer) => _buildPeerTile(context, peer))
                                   .toList()
                             ),
                           ),
@@ -359,7 +359,7 @@ class _ConnectionPageState extends State<ConnectionPage>
   }
 
   Widget _buildPeerTile(
-      BuildContext context, Peer peer, Rx<BoxDecoration?>? deco) {
+      BuildContext context, Peer peer) {
         final double _tileRadius = 5;
         final name =
           '${peer.username}${peer.username.isNotEmpty && peer.hostname.isNotEmpty ? '@' : ''}${peer.hostname}';
@@ -444,14 +444,7 @@ class _ConnectionPageState extends State<ConnectionPage>
               ? '${translate('Tags')}: ${peer.tags.join(', ')}'
               : '',
       child: Stack(children: [
-        deco == null
-            ? child
-            : Obx(
-                () => Container(
-                  foregroundDecoration: deco.value,
-                  child: child,
-                ),
-              ),
+        child,
         if (colors.isNotEmpty)
           Positioned(
             top: 5,
