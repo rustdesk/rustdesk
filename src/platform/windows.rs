@@ -2392,6 +2392,10 @@ impl WallPaperRemover {
         Ok(Self { old_path })
     }
 
+    pub fn support() -> bool {
+        wallpaper::get().is_ok() || !Self::get_recent_wallpaper().unwrap_or_default().is_empty()
+    }
+
     fn get_recent_wallpaper() -> ResultType<String> {
         // SystemParametersInfoW may return %appdata%\Microsoft\Windows\Themes\TranscodedWallpaper, not real path and may not real cache
         // https://www.makeuseof.com/find-desktop-wallpapers-file-location-windows-11/
