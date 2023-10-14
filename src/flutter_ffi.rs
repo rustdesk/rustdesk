@@ -1675,6 +1675,10 @@ pub fn main_test_wallpaper(_second: u64) {
     });
 }
 
+pub fn main_support_remove_wallpaper() -> bool {
+    support_remove_wallpaper()
+}
+
 /// Send a url scheme throught the ipc.
 ///
 /// * macOS only

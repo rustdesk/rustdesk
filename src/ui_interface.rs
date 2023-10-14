@@ -1256,3 +1256,10 @@ pub fn handle_relay_id(id: String) -> String {
         id
     }
 }
+
+pub fn support_remove_wallpaper() -> bool {
+    #[cfg(any(target_os = "windows", target_os = "linux"))]
+    return crate::platform::WallPaperRemover::support();
+    #[cfg(not(any(target_os = "windows", target_os = "linux")))]
+    return false;
+}
