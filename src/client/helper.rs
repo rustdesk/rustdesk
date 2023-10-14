@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use hbb_common::{
     get_time,
     message_proto::{Message, VoiceCallRequest, VoiceCallResponse},
@@ -7,7 +8,7 @@ use scrap::CodecFormat;
 #[derive(Debug, Default)]
 pub struct QualityStatus {
     pub speed: Option<String>,
-    pub fps: Option<i32>,
+    pub fps: HashMap<usize, i32>,
     pub delay: Option<i32>,
     pub target_bitrate: Option<i32>,
     pub codec_format: Option<CodecFormat>,

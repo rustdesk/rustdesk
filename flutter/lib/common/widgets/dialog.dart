@@ -1295,7 +1295,7 @@ customImageQualityDialog(SessionID sessionId, String id, FFI ffi) async {
         ConnectionTypeState.find(id).direct.value == ConnectionType.strDirect;
   } catch (_) {}
   bool notShowFps = (await bind.mainIsUsingPublicServer() && direct != true) ||
-      version_cmp(ffi.ffiModel.pi.version, '1.2.0') < 0;
+      versionCmp(ffi.ffiModel.pi.version, '1.2.0') < 0;
 
   final content = customImageQualityWidget(
       initQuality: qualityInitValue,

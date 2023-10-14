@@ -28,6 +28,7 @@ import '../widgets/tabbar_widget.dart';
 
 final SimpleWrapper<bool> _firstEnterImage = SimpleWrapper(false);
 
+// Used to skip session close if "move to new window" is clicked.
 final Map<String, bool> closeSessionOnDispose = {};
 
 class RemotePage extends StatefulWidget {
@@ -36,6 +37,8 @@ class RemotePage extends StatefulWidget {
     required this.id,
     required this.sessionId,
     required this.tabWindowId,
+    required this.display,
+    required this.displays,
     required this.password,
     required this.toolbarState,
     required this.tabController,
@@ -46,6 +49,8 @@ class RemotePage extends StatefulWidget {
   final String id;
   final SessionID? sessionId;
   final int? tabWindowId;
+  final int? display;
+  final List<int>? displays;
   final String? password;
   final ToolbarState toolbarState;
   final String? switchUuid;
@@ -73,7 +78,7 @@ class _RemotePageState extends State<RemotePage>
   late RxBool _zoomCursor;
   late RxBool _remoteCursorMoved;
   late RxBool _keyboardEnabled;
-  late RenderTexture _renderTexture;
+  final Map<int, RenderTexture> _renderTextures = {};
 
   final _blockableOverlayState = BlockableOverlayState();
 
@@ -109,6 +114,8 @@ class _RemotePageState extends State<RemotePage>
       switchUuid: widget.switchUuid,
       forceRelay: widget.forceRelay,
       tabWindowId: widget.tabWindowId,
+      display: widget.display,
+      displays: widget.displays,
     );
     WidgetsBinding.instance.addPostFrameCallback((_) {
       SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual, overlays: []);
@@ -118,9 +125,6 @@ class _RemotePageState extends State<RemotePage>
     if (!Platform.isLinux) {
       Wakelock.enable();
     }
-    // Register texture.
-    _renderTexture = RenderTexture();
-    _renderTexture.create(sessionId);
 
     _ffi.ffiModel.updateEventListener(sessionId, widget.id);
     bind.pluginSyncUi(syncTo: kAppTypeDesktopRemote);
@@ -207,7 +211,9 @@ class _RemotePageState extends State<RemotePage>
     // https://github.com/flutter/flutter/issues/64935
     super.dispose();
     debugPrint("REMOTE PAGE dispose session $sessionId ${widget.id}");
-    await _renderTexture.destroy(closeSession);
+    for (final texture in _renderTextures.values) {
+      await texture.destroy(closeSession);
+    }
     // ensure we leave this session, this is a double check
     _ffi.inputModel.enterOrLeave(false);
     DesktopMultiWindow.removeListener(this);
@@ -245,6 +251,7 @@ class _RemotePageState extends State<RemotePage>
           onEnterOrLeaveImageSetter: (func) =>
               _onEnterOrLeaveImage4Toolbar = func,
           onEnterOrLeaveImageCleaner: () => _onEnterOrLeaveImage4Toolbar = null,
+          setRemoteState: setState,
         );
     return Scaffold(
       backgroundColor: Theme.of(context).colorScheme.background,
@@ -392,6 +399,38 @@ class _RemotePageState extends State<RemotePage>
     );
   }
 
+  Map<int, RenderTexture> _updateGetRenderTextures(int curDisplay) {
+    tryCreateTexture(int idx) {
+      if (!_renderTextures.containsKey(idx)) {
+        final renderTexture = RenderTexture();
+        _renderTextures[idx] = renderTexture;
+        renderTexture.create(idx, sessionId);
+      }
+    }
+
+    tryRemoveTexture(int idx) {
+      if (_renderTextures.containsKey(idx)) {
+        _renderTextures[idx]!.destroy(true);
+        _renderTextures.remove(idx);
+      }
+    }
+
+    if (curDisplay == kAllDisplayValue) {
+      final displays = _ffi.ffiModel.pi.getCurDisplays();
+      for (var i = 0; i < displays.length; i++) {
+        tryCreateTexture(i);
+      }
+    } else {
+      tryCreateTexture(curDisplay);
+      for (var i = 0; i < _ffi.ffiModel.pi.displays.length; i++) {
+        if (i != curDisplay) {
+          tryRemoveTexture(i);
+        }
+      }
+    }
+    return _renderTextures;
+  }
+
   Widget getBodyForDesktop(BuildContext context) {
     var paints = <Widget>[
       MouseRegion(onEnter: (evt) {
@@ -402,16 +441,20 @@ class _RemotePageState extends State<RemotePage>
         Future.delayed(Duration.zero, () {
           Provider.of<CanvasModel>(context, listen: false).updateViewStyle();
         });
-        return ImagePaint(
-          id: widget.id,
-          zoomCursor: _zoomCursor,
-          cursorOverImage: _cursorOverImage,
-          keyboardEnabled: _keyboardEnabled,
-          remoteCursorMoved: _remoteCursorMoved,
-          textureId: _renderTexture.textureId,
-          useTextureRender: RenderTexture.useTextureRender,
-          listenerBuilder: (child) =>
-              _buildRawTouchAndPointerRegion(child, enterView, leaveView),
+        final peerDisplay = CurrentDisplayState.find(widget.id);
+        return Obx(
+          () => _ffi.ffiModel.pi.isSet.isFalse
+              ? Container(color: Colors.transparent)
+              : Obx(() => ImagePaint(
+                    id: widget.id,
+                    zoomCursor: _zoomCursor,
+                    cursorOverImage: _cursorOverImage,
+                    keyboardEnabled: _keyboardEnabled,
+                    remoteCursorMoved: _remoteCursorMoved,
+                    renderTextures: _updateGetRenderTextures(peerDisplay.value),
+                    listenerBuilder: (child) => _buildRawTouchAndPointerRegion(
+                        child, enterView, leaveView),
+                  )),
         );
       }))
     ];
@@ -447,8 +490,7 @@ class ImagePaint extends StatefulWidget {
   final RxBool cursorOverImage;
   final RxBool keyboardEnabled;
   final RxBool remoteCursorMoved;
-  final RxInt textureId;
-  final bool useTextureRender;
+  final Map<int, RenderTexture> renderTextures;
   final Widget Function(Widget)? listenerBuilder;
 
   ImagePaint(
@@ -458,8 +500,7 @@ class ImagePaint extends StatefulWidget {
       required this.cursorOverImage,
       required this.keyboardEnabled,
       required this.remoteCursorMoved,
-      required this.textureId,
-      required this.useTextureRender,
+      required this.renderTextures,
       this.listenerBuilder})
       : super(key: key);
 
@@ -530,27 +571,13 @@ class _ImagePaintState extends State<ImagePaint> {
         });
 
     if (c.imageOverflow.isTrue && c.scrollStyle == ScrollStyle.scrollbar) {
-      final imageWidth = c.getDisplayWidth() * s;
-      final imageHeight = c.getDisplayHeight() * s;
-      final imageSize = Size(imageWidth, imageHeight);
-      late final Widget imageWidget;
-      if (widget.useTextureRender) {
-        imageWidget = SizedBox(
-          width: imageWidth,
-          height: imageHeight,
-          child: Obx(() => Texture(
-                textureId: widget.textureId.value,
-                filterQuality:
-                    isViewOriginal() ? FilterQuality.none : FilterQuality.low,
-              )),
-        );
-      } else {
-        imageWidget = CustomPaint(
-          size: imageSize,
-          painter: ImagePainter(image: m.image, x: 0, y: 0, scale: s),
-        );
-      }
-
+      final paintWidth = c.getDisplayWidth() * s;
+      final paintHeight = c.getDisplayHeight() * s;
+      final paintSize = Size(paintWidth, paintHeight);
+      final paintWidget = useTextureRender
+          ? _BuildPaintTextureRender(
+              c, s, Offset.zero, paintSize, isViewOriginal())
+          : _buildScrollbarNonTextureRender(m, paintSize, s);
       return NotificationListener<ScrollNotification>(
           onNotification: (notification) {
             final percentX = _horizontal.hasClients
@@ -570,41 +597,77 @@ class _ImagePaintState extends State<ImagePaint> {
           },
           child: mouseRegion(
             child: Obx(() => _buildCrossScrollbarFromLayout(
-                context, _buildListener(imageWidget), c.size, imageSize)),
+                context, _buildListener(paintWidget), c.size, paintSize)),
           ));
     } else {
-      late final Widget imageWidget;
       if (c.size.width > 0 && c.size.height > 0) {
-        if (widget.useTextureRender) {
-          final x = Platform.isLinux ? c.x.toInt().toDouble() : c.x;
-          final y = Platform.isLinux ? c.y.toInt().toDouble() : c.y;
-          imageWidget = Stack(
-            children: [
-              Positioned(
-                left: x,
-                top: y,
-                width: c.getDisplayWidth() * s,
-                height: c.getDisplayHeight() * s,
-                child: Texture(
-                  textureId: widget.textureId.value,
-                  filterQuality:
-                      isViewOriginal() ? FilterQuality.none : FilterQuality.low,
+        final paintWidget = useTextureRender
+            ? _BuildPaintTextureRender(
+                c,
+                s,
+                Offset(
+                  Platform.isLinux ? c.x.toInt().toDouble() : c.x,
+                  Platform.isLinux ? c.y.toInt().toDouble() : c.y,
                 ),
-              )
-            ],
-          );
-        } else {
-          imageWidget = CustomPaint(
-            size: Size(c.size.width, c.size.height),
-            painter:
-                ImagePainter(image: m.image, x: c.x / s, y: c.y / s, scale: s),
-          );
-        }
-        return mouseRegion(child: _buildListener(imageWidget));
+                c.size,
+                isViewOriginal())
+            : _buildScrollAuthNonTextureRender(m, c, s);
+        return mouseRegion(child: _buildListener(paintWidget));
       } else {
         return Container();
       }
     }
+  }
+
+  Widget _buildScrollbarNonTextureRender(
+      ImageModel m, Size imageSize, double s) {
+    return CustomPaint(
+      size: imageSize,
+      painter: ImagePainter(image: m.image, x: 0, y: 0, scale: s),
+    );
+  }
+
+  Widget _buildScrollAuthNonTextureRender(
+      ImageModel m, CanvasModel c, double s) {
+    return CustomPaint(
+      size: Size(c.size.width, c.size.height),
+      painter: ImagePainter(image: m.image, x: c.x / s, y: c.y / s, scale: s),
+    );
+  }
+
+  Widget _BuildPaintTextureRender(
+      CanvasModel c, double s, Offset offset, Size size, bool isViewOriginal) {
+    final ffiModel = c.parent.target!.ffiModel;
+    final displays = ffiModel.pi.getCurDisplays();
+    final children = <Widget>[];
+    final rect = ffiModel.rect;
+    if (rect == null) {
+      return Container();
+    }
+    final curDisplay = ffiModel.pi.currentDisplay;
+    for (var i = 0; i < displays.length; i++) {
+      final textureId = widget
+          .renderTextures[curDisplay == kAllDisplayValue ? i : curDisplay]
+          ?.textureId;
+      if (textureId != null) {
+        children.add(Positioned(
+          left: (displays[i].x - rect.left) * s + offset.dx,
+          top: (displays[i].y - rect.top) * s + offset.dy,
+          width: displays[i].width * s,
+          height: displays[i].height * s,
+          child: Obx(() => Texture(
+                textureId: textureId.value,
+                filterQuality:
+                    isViewOriginal ? FilterQuality.none : FilterQuality.low,
+              )),
+        ));
+      }
+    }
+    return SizedBox(
+      width: size.width,
+      height: size.height,
+      child: Stack(children: children),
+    );
   }
 
   MouseCursor _buildCursorOfCache(
@@ -731,7 +794,11 @@ class _ImagePaintState extends State<ImagePaint> {
       );
     }
 
-    return widget;
+    return Container(
+      child: widget,
+      width: layoutSize.width,
+      height: layoutSize.height,
+    );
   }
 
   Widget _buildListener(Widget child) {
@@ -770,9 +837,14 @@ class CursorPaint extends StatelessWidget {
     double cy = c.y;
     if (c.viewStyle.style == kRemoteViewStyleOriginal &&
         c.scrollStyle == ScrollStyle.scrollbar) {
-      final d = c.parent.target!.ffiModel.display;
-      final imageWidth = d.width * c.scale;
-      final imageHeight = d.height * c.scale;
+      final rect = c.parent.target!.ffiModel.rect;
+      if (rect == null) {
+        // unreachable!
+        debugPrint('unreachable! The displays rect is null.');
+        return Container();
+      }
+      final imageWidth = rect.width * c.scale;
+      final imageHeight = rect.height * c.scale;
       cx = -imageWidth * c.scrollX;
       cy = -imageHeight * c.scrollY;
     }

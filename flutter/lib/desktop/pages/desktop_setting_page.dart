@@ -1289,7 +1289,7 @@ class _DisplayState extends State<_Display> {
   Widget other(BuildContext context) {
     return _Card(title: 'Other Default Options', children: [
       otherRow('View Mode', 'view_only'),
-      otherRow('show_monitors_tip', 'show_monitors_toolbar'),
+      otherRow('show_monitors_tip', kKeyShowMonitorsToolbar),
       otherRow('Collapse toolbar', 'collapse_toolbar'),
       otherRow('Show remote cursor', 'show_remote_cursor'),
       otherRow('Zoom cursor', 'zoom-cursor'),
@@ -1300,6 +1300,8 @@ class _DisplayState extends State<_Display> {
       otherRow('Lock after session end', 'lock_after_session_end'),
       otherRow('Privacy mode', 'privacy_mode'),
       otherRow('Reverse mouse wheel', 'reverse_mouse_wheel'),
+      otherRow('Show displays as individual windows',
+          kKeyShowDisplaysAsIndividualWindows),
     ]);
   }
 }

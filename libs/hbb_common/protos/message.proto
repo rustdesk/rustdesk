@@ -27,6 +27,7 @@ message VideoFrame {
     EncodedVideoFrames vp8s = 12;
     EncodedVideoFrames av1s = 13;
   }
+  int32 display = 14;
 }
 
 message IdPk {
@@ -491,6 +492,12 @@ message SwitchDisplay {
   Resolution original_resolution = 8;
 }
 
+message CaptureDisplays {
+  repeated int32 add = 1;
+  repeated int32 sub = 2;
+  repeated int32 set = 3;
+}
+
 message PermissionInfo {
   enum Permission {
     Keyboard = 0;
@@ -688,6 +695,8 @@ message Misc {
     uint32 full_speed_fps = 27;
     uint32 auto_adjust_fps = 28;
     bool client_record_status = 29;
+    CaptureDisplays capture_displays = 30;
+    int32 refresh_video_display = 31;
   }
 }
 

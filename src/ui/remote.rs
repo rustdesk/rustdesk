@@ -122,7 +122,11 @@ impl InvokeUiSession for SciterHandler {
             "updateQualityStatus",
             &make_args!(
                 status.speed.map_or(Value::null(), |it| it.into()),
-                status.fps.map_or(Value::null(), |it| it.into()),
+                status
+                    .fps
+                    .iter()
+                    .next()
+                    .map_or(Value::null(), |(_, v)| (*v).into()),
                 status.delay.map_or(Value::null(), |it| it.into()),
                 status.target_bitrate.map_or(Value::null(), |it| it.into()),
                 status
@@ -223,7 +227,7 @@ impl InvokeUiSession for SciterHandler {
         self.call("adaptSize", &make_args!());
     }
 
-    fn on_rgba(&self, rgba: &mut scrap::ImageRgb) {
+    fn on_rgba(&self, _display: usize, rgba: &mut scrap::ImageRgb) {
         VIDEO
             .lock()
             .unwrap()
@@ -304,11 +308,11 @@ impl InvokeUiSession for SciterHandler {
     }
 
     /// RGBA is directly rendered by [on_rgba]. No need to store the rgba for the sciter ui.
-    fn get_rgba(&self) -> *const u8 {
+    fn get_rgba(&self, _display: usize) -> *const u8 {
         std::ptr::null()
     }
 
-    fn next_rgba(&self) {}
+    fn next_rgba(&self, _display: usize) {}
 }
 
 pub struct SciterSession(Session<SciterHandler>);
@@ -449,8 +453,8 @@ impl sciter::EventHandler for SciterSession {
         fn save_view_style(String);
         fn save_image_quality(String);
         fn save_custom_image_quality(i32);
-        fn refresh_video();
-        fn record_screen(bool, i32, i32);
+        fn refresh_video(i32);
+        fn record_screen(bool, i32, i32, i32);
         fn record_status(bool);
         fn get_toggle_option(String);
         fn is_privacy_mode_supported();
