@@ -557,6 +557,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("pull_group_failed_tip", "Aktualisierung der Gruppe fehlgeschlagen"),
         ("Remove wallpaper during incoming sessions", ""),
         ("Test", ""),
-        ("Filter by intersection", "Nach Schnittpunkt filtern")
+        ("Filter by intersection", "Nach Schnittmenge filtern")
     ].iter().cloned().collect();
 }
