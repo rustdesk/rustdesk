@@ -941,7 +941,6 @@ dependencies = [
  "parking_lot",
  "percent-encoding",
  "rand 0.8.5",
- "rayon",
  "serde 1.0.163",
  "serde_derive",
  "thiserror",

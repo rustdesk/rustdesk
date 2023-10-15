@@ -25,9 +25,7 @@ pub fn create_cliprdr_context(
     _enable_others: bool,
     response_wait_timeout_secs: u32,
 ) -> crate::ResultType<Box<dyn crate::CliprdrServiceContext>> {
-    use std::sync::Arc;
-
-    use hbb_common::{anyhow, log};
+    use hbb_common::log;
 
     if !enable_files {
         return Ok(Box::new(DummyCliprdrContext {}) as Box<_>);
@@ -53,13 +51,9 @@ pub fn create_cliprdr_context(
         tmp_path
     };
 
-    let linux_ctx = Arc::new(linux::ClipboardContext::new(timeout, rd_mnt)?);
-    let client = linux_ctx.client().map_err(|e| {
-        log::error!("create clipboard client: {:?}", e);
-        anyhow::anyhow!("create clipboard client: {:?}", e)
-    })?;
+    let linux_ctx = linux::ClipboardContext::new(timeout, rd_mnt)?;
 
-    Ok(Box::new(client) as Box<_>)
+    Ok(Box::new(linux_ctx) as Box<_>)
 }
 
 struct DummyCliprdrContext {}

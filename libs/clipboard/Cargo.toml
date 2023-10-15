@@ -23,7 +23,6 @@ x11rb =  {version = "0.12", features = ["all-extensions"]}
 rand = {version = "0.8"}
 fuser = {version = "0.13"}
 libc = {version = "0.2"}
-rayon = {version = "1.7"}
 dashmap = "5.5"
 percent-encoding = "2.3"
 utf16string = "0.2"
