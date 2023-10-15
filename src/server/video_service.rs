@@ -61,6 +61,10 @@ lazy_static::lazy_static! {
     pub static ref IS_FOREGROUND_WINDOW_ELEVATED: Arc<Mutex<bool>> = Default::default();
 }
 
+// https://github.com/rustdesk/rustdesk/discussions/6042, avoiding dbus call
+#[cfg(target_os = "linux")]
+static IS_X11: AtomicBool = AtomicBool::new(false);
+
 #[inline]
 pub fn notify_video_frame_fetched(conn_id: i32, frame_tm: Option<Instant>) {
     FRAME_FETCHED_NOTIFIER.0.send((conn_id, frame_tm)).ok();
@@ -168,7 +172,7 @@ fn check_display_changed(
     #[cfg(target_os = "linux")]
     {
         // wayland do not support changing display for now
-        if !scrap::is_x11() {
+        if !IS_X11.load(Ordering::SeqCst)() {
             return false;
         }
     }
@@ -349,7 +353,7 @@ fn get_capturer(
 ) -> ResultType<CapturerInfo> {
     #[cfg(target_os = "linux")]
     {
-        if !scrap::is_x11() {
+        if !IS_X11.load(Ordering::SeqCst)() {
             return super::wayland::get_capturer();
         }
     }
@@ -424,6 +428,11 @@ fn get_capturer(
 fn run(vs: VideoService) -> ResultType<()> {
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     let _wake_lock = get_wake_lock();
+
+    #[cfg(target_os = "linux")]
+    {
+        IS_X11.store(scrap::is_x11(), Ordering::SeqCst);
+    }
 
     // ensure_inited() is needed because clear() may be called.
     // to-do: wayland ensure_inited should pass current display index.
@@ -598,7 +607,7 @@ fn run(vs: VideoService) -> ResultType<()> {
                 #[cfg(target_os = "linux")]
                 {
                     would_block_count += 1;
-                    if !scrap::is_x11() {
+                    if !IS_X11.load(Ordering::SeqCst)() {
                         if would_block_count >= 100 {
                             // to-do: Unknown reason for WouldBlock 100 times (seconds = 100 * 1 / fps)
                             // https://github.com/rustdesk/rustdesk/blob/63e6b2f8ab51743e77a151e2b7ff18816f5fa2fb/libs/scrap/src/common/wayland.rs#L81
@@ -786,7 +795,7 @@ fn handle_one_frame(
 
 pub fn is_inited_msg() -> Option<Message> {
     #[cfg(target_os = "linux")]
-    if !scrap::is_x11() {
+    if !IS_X11.load(Ordering::SeqCst)() {
         return super::wayland::is_inited();
     }
     None
