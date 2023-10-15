@@ -174,7 +174,7 @@ fn check_display_changed(
     #[cfg(target_os = "linux")]
     {
         // wayland do not support changing display for now
-        if !IS_X11.load(Ordering::SeqCst)() {
+        if !IS_X11.load(Ordering::SeqCst) {
             return false;
         }
     }
@@ -355,7 +355,7 @@ fn get_capturer(
 ) -> ResultType<CapturerInfo> {
     #[cfg(target_os = "linux")]
     {
-        if !IS_X11.load(Ordering::SeqCst)() {
+        if !IS_X11.load(Ordering::SeqCst) {
             return super::wayland::get_capturer();
         }
     }
@@ -609,7 +609,7 @@ fn run(vs: VideoService) -> ResultType<()> {
                 #[cfg(target_os = "linux")]
                 {
                     would_block_count += 1;
-                    if !IS_X11.load(Ordering::SeqCst)() {
+                    if !IS_X11.load(Ordering::SeqCst) {
                         if would_block_count >= 100 {
                             // to-do: Unknown reason for WouldBlock 100 times (seconds = 100 * 1 / fps)
                             // https://github.com/rustdesk/rustdesk/blob/63e6b2f8ab51743e77a151e2b7ff18816f5fa2fb/libs/scrap/src/common/wayland.rs#L81
@@ -797,7 +797,7 @@ fn handle_one_frame(
 
 pub fn is_inited_msg() -> Option<Message> {
     #[cfg(target_os = "linux")]
-    if !IS_X11.load(Ordering::SeqCst)() {
+    if !IS_X11.load(Ordering::SeqCst) {
         return super::wayland::is_inited();
     }
     None
