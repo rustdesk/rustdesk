@@ -560,9 +560,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Test", "Тест"),
         ("switch_display_elevated_connections_tip", ""),
         ("display_is_plugged_out_msg", ""),
-        ("No displays", ""),
+        ("No displays", "Нет дисплеев"),
         ("elevated_switch_display_msg", ""),
-        ("Open in new window", ""),
-        ("Show displays as individual windows", ""),
+        ("Open in new window", "Открыть в новом окне"),
+        ("Show displays as individual windows", "Показывать дисплеи в отдельных окнах"),
     ].iter().cloned().collect();
 }
