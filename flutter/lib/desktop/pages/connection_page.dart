@@ -152,13 +152,13 @@ class _ConnectionPageState extends State<ConnectionPage>
     connect(context, id, isFileTransfer: isFileTransfer);
   }
 
-  void getAllPeers(){
-     peers.clear();
-    Map<String, dynamic> recentPeers = jsonDecode(bind.mainLoadRecentPeersSync());
-    Map<String, dynamic> favPeers = jsonDecode(bind.mainLoadFavPeersSync());
-    Map<String, dynamic> lanPeers = jsonDecode(bind.mainLoadLanPeersSync());
-    Map<String, dynamic> abPeers = jsonDecode(bind.mainLoadAbSync());
-    Map<String, dynamic> groupPeers = jsonDecode(bind.mainLoadGroupSync());
+    Future<void> getAllPeers() async {
+    peers.clear();
+    Map<String, dynamic> recentPeers = jsonDecode(await bind.mainLoadRecentPeersSync());
+    Map<String, dynamic> favPeers = jsonDecode(await bind.mainLoadFavPeersSync());
+    Map<String, dynamic> lanPeers = jsonDecode(await bind.mainLoadLanPeersSync());
+    Map<String, dynamic> abPeers = jsonDecode(await bind.mainLoadAbSync());
+    Map<String, dynamic> groupPeers = jsonDecode(await bind.mainLoadGroupSync());
 
     Map<String, dynamic> combinedPeers = {};
 
@@ -170,7 +170,7 @@ class _ConnectionPageState extends State<ConnectionPage>
           try {
             peerData = jsonDecode(peerData);
           } catch (e) {
-            print("Error decoding peers: $e");
+            debugPrint("Error decoding peers: $e");
             return;
           }
         }
