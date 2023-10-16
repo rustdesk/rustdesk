@@ -1675,7 +1675,6 @@ Future<Offset?> _adjustRestoreMainWindowOffset(
 /// Note that windowId must be provided if it's subwindow
 Future<bool> restoreWindowPosition(WindowType type,
     {int? windowId, String? peerId}) async {
-      debugPrintStack(label: "restoreWindowPosition");
   if (bind
       .mainGetEnv(key: "DISABLE_RUSTDESK_RESTORE_WINDOW_POSITION")
       .isNotEmpty) {
@@ -2707,9 +2706,18 @@ tryMoveToScreenAndSetFullscreen(Rect? screenRect) async {
   if (screenRect == null) {
     return;
   }
+  final wc = WindowController.fromWindowId(stateGlobal.windowId);
+  final curFrame = await wc.getFrame();
   final frame =
       Rect.fromLTWH(screenRect.left + 30, screenRect.top + 30, 600, 400);
-  await WindowController.fromWindowId(stateGlobal.windowId).setFrame(frame);
+  if (stateGlobal.fullscreen &&
+      curFrame.left <= frame.left &&
+      curFrame.top <= frame.top &&
+      curFrame.width >= frame.width &&
+      curFrame.height >= frame.height) {
+    return;
+  }
+  await wc.setFrame(frame);
   // An duration is needed to avoid the window being restored after fullscreen.
   Future.delayed(Duration(milliseconds: 300), () async {
     stateGlobal.setFullscreen(true);
