@@ -198,8 +198,11 @@ void runMultiWindow(
   }
   switch (appType) {
     case kAppTypeDesktopRemote:
-      await restoreWindowPosition(WindowType.RemoteDesktop,
-          windowId: kWindowId!, peerId: argument['id'] as String?);
+      // If screen rect is set, the window will be moved to the target screen and then set fullscreen.
+      if (argument['screen_rect'] == null) {
+        await restoreWindowPosition(WindowType.RemoteDesktop,
+            windowId: kWindowId!, peerId: argument['id'] as String?);
+      }
       break;
     case kAppTypeDesktopFileTransfer:
       await restoreWindowPosition(WindowType.FileTransfer,

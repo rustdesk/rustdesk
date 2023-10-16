@@ -64,13 +64,14 @@ class RustDeskMultiWindowManager {
       peerId,
       _remoteDesktopWindows,
       jsonEncode(params),
+      false,
     );
   }
 
   // This function must be called in the main window thread.
   // Because the _remoteDesktopWindows is managed in that thread.
-  openMonitorSession(
-      int windowId, String peerId, int display, int displayCount) async {
+  openMonitorSession(int windowId, String peerId, int display, int displayCount,
+      dynamic screenRect) async {
     if (_remoteDesktopWindows.length > 1) {
       for (final windowId in _remoteDesktopWindows) {
         if (await DesktopMultiWindow.invokeMethod(
@@ -94,6 +95,7 @@ class RustDeskMultiWindowManager {
       'tab_window_id': windowId,
       'display': display,
       'displays': displays,
+      'screen_rect': screenRect,
     };
     await _newSession(
       false,
@@ -102,21 +104,34 @@ class RustDeskMultiWindowManager {
       peerId,
       _remoteDesktopWindows,
       jsonEncode(params),
+      screenRect != null,
     );
   }
 
   Future<int> newSessionWindow(
-      WindowType type, String remoteId, String msg, List<int> windows) async {
+    WindowType type,
+    String remoteId,
+    String msg,
+    List<int> windows,
+    bool withScreenRect,
+  ) async {
     final windowController = await DesktopMultiWindow.createWindow(msg);
     final windowId = windowController.windowId;
-    windowController
-      ..setFrame(
-          const Offset(0, 0) & Size(1280 + windowId * 20, 720 + windowId * 20))
-      ..center()
-      ..setTitle(getWindowNameWithId(
+    if (!withScreenRect) {
+      windowController
+        ..setFrame(const Offset(0, 0) &
+            Size(1280 + windowId * 20, 720 + windowId * 20))
+        ..center()
+        ..setTitle(getWindowNameWithId(
+          remoteId,
+          overrideType: type,
+        ));
+    } else {
+      windowController.setTitle(getWindowNameWithId(
         remoteId,
         overrideType: type,
       ));
+    }
     if (Platform.isMacOS) {
       Future.microtask(() => windowController.show());
     }
@@ -132,10 +147,12 @@ class RustDeskMultiWindowManager {
     String remoteId,
     List<int> windows,
     String msg,
+    bool withScreenRect,
   ) async {
     if (openInTabs) {
       if (windows.isEmpty) {
-        final windowId = await newSessionWindow(type, remoteId, msg, windows);
+        final windowId = await newSessionWindow(
+            type, remoteId, msg, windows, withScreenRect);
         return MultiWindowCallResult(windowId, null);
       } else {
         return call(type, methodName, msg);
@@ -153,7 +170,8 @@ class RustDeskMultiWindowManager {
           }
         }
       }
-      final windowId = await newSessionWindow(type, remoteId, msg, windows);
+      final windowId =
+          await newSessionWindow(type, remoteId, msg, windows, withScreenRect);
       return MultiWindowCallResult(windowId, null);
     }
   }
@@ -195,7 +213,8 @@ class RustDeskMultiWindowManager {
       }
     }
 
-    return _newSession(openInTabs, type, methodName, remoteId, windows, msg);
+    return _newSession(
+        openInTabs, type, methodName, remoteId, windows, msg, false);
   }
 
   Future<MultiWindowCallResult> newRemoteDesktop(

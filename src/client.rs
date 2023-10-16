@@ -1207,7 +1207,7 @@ impl LoginConfigHandler {
         self.save_config(config);
     }
 
-    /// Save reverse mouse wheel ("", "Y") to the current config.
+    /// Save "displays_as_individual_windows" ("", "Y") to the current config.
     ///
     /// # Arguments
     ///
@@ -1215,6 +1215,17 @@ impl LoginConfigHandler {
     pub fn save_displays_as_individual_windows(&mut self, value: String) {
         let mut config = self.load_config();
         config.displays_as_individual_windows = value;
+        self.save_config(config);
+    }
+
+    /// Save "use_all_my_monitors_when_connecting" ("", "Y") to the current config.
+    ///
+    /// # Arguments
+    ///
+    /// * `value` - The "use_all_my_monitors_when_connecting" value ("", "Y").
+    pub fn save_use_all_my_monitors_when_connecting(&mut self, value: String) {
+        let mut config = self.load_config();
+        config.use_all_my_monitors_when_connecting = value;
         self.save_config(config);
     }
 

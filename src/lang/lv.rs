@@ -564,5 +564,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("elevated_switch_display_msg", "Pārslēdzieties uz primāro displeju, jo paaugstinātajā režīmā netiek atbalstīti vairāki displeji."),
         ("Open in new window", "Atvērt jaunā logā"),
         ("Show displays as individual windows", "Rādīt displejus kā atsevišķus logus"),
+        ("Use all my displays when connecting", ""),
     ].iter().cloned().collect();
 }

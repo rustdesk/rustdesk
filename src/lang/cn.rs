@@ -564,5 +564,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("elevated_switch_display_msg", "切换到主显示器，因为提权后，不支持多显示器画面。"),
         ("Open in new window", "在新的窗口中打开"),
         ("Show displays as individual windows", "在单个窗口中打开显示器"),
+        ("Use all my displays when connecting", "建立连接时使用我的所有显示器"),
     ].iter().cloned().collect();
 }

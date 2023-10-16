@@ -14,8 +14,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_hbb/common/formatter/id_formatter.dart';
 import 'package:flutter_hbb/desktop/widgets/refresh_wrapper.dart';
 import 'package:flutter_hbb/desktop/widgets/tabbar_widget.dart';
-import 'package:flutter_hbb/models/desktop_render_texture.dart';
 import 'package:flutter_hbb/main.dart';
+import 'package:flutter_hbb/models/desktop_render_texture.dart';
 import 'package:flutter_hbb/models/peer_model.dart';
 import 'package:flutter_hbb/models/state_model.dart';
 import 'package:flutter_hbb/utils/multi_window_manager.dart';
@@ -52,6 +52,9 @@ int androidVersion = 0;
 /// only available for Windows target
 int windowsBuildNumber = 0;
 DesktopType? desktopType;
+
+bool get isMainDesktopWindow =>
+    desktopType == DesktopType.main || desktopType == DesktopType.cm;
 
 /// Check if the app is running with single view mode.
 bool isSingleViewApp() {
@@ -1672,6 +1675,7 @@ Future<Offset?> _adjustRestoreMainWindowOffset(
 /// Note that windowId must be provided if it's subwindow
 Future<bool> restoreWindowPosition(WindowType type,
     {int? windowId, String? peerId}) async {
+      debugPrintStack(label: "restoreWindowPosition");
   if (bind
       .mainGetEnv(key: "DISABLE_RUSTDESK_RESTORE_WINDOW_POSITION")
       .isNotEmpty) {
@@ -2605,3 +2609,109 @@ bool isChooseDisplayToOpenInNewWindow(PeerInfo pi, SessionID sessionId) =>
     pi.isSupportMultiDisplay &&
     useTextureRender &&
     bind.sessionGetDisplaysAsIndividualWindows(sessionId: sessionId) == 'Y';
+
+Future<List<Rect>> getScreenListWayland() async {
+  final screenRectList = <Rect>[];
+  if (isMainDesktopWindow) {
+    for (var screen in await window_size.getScreenList()) {
+      final scale = kIgnoreDpi ? 1.0 : screen.scaleFactor;
+      double l = screen.frame.left;
+      double t = screen.frame.top;
+      double r = screen.frame.right;
+      double b = screen.frame.bottom;
+      final rect = Rect.fromLTRB(l / scale, t / scale, r / scale, b / scale);
+      screenRectList.add(rect);
+    }
+  } else {
+    final screenList = await rustDeskWinManager.call(
+        WindowType.Main, kWindowGetScreenList, '');
+    try {
+      for (var screen in jsonDecode(screenList.result) as List<dynamic>) {
+        final scale = kIgnoreDpi ? 1.0 : screen['scaleFactor'];
+        double l = screen['frame']['l'];
+        double t = screen['frame']['t'];
+        double r = screen['frame']['r'];
+        double b = screen['frame']['b'];
+        final rect = Rect.fromLTRB(l / scale, t / scale, r / scale, b / scale);
+        screenRectList.add(rect);
+      }
+    } catch (e) {
+      debugPrint('Failed to parse screenList: $e');
+    }
+  }
+  return screenRectList;
+}
+
+Future<List<Rect>> getScreenListNotWayland() async {
+  final screenRectList = <Rect>[];
+  final displays = bind.mainGetDisplays();
+  if (displays.isEmpty) {
+    return screenRectList;
+  }
+  try {
+    for (var display in jsonDecode(displays) as List<dynamic>) {
+      // to-do: scale factor ?
+      // final scale = kIgnoreDpi ? 1.0 : screen.scaleFactor;
+      double l = display['x'].toDouble();
+      double t = display['y'].toDouble();
+      double r = (display['x'] + display['w']).toDouble();
+      double b = (display['y'] + display['h']).toDouble();
+      screenRectList.add(Rect.fromLTRB(l, t, r, b));
+    }
+  } catch (e) {
+    debugPrint('Failed to parse displays: $e');
+  }
+  return screenRectList;
+}
+
+Future<List<Rect>> getScreenRectList() async {
+  return bind.mainCurrentIsWayland()
+      ? await getScreenListWayland()
+      : await getScreenListNotWayland();
+}
+
+openMonitorInTheSameTab(int i, FFI ffi, PeerInfo pi) {
+  final displays = i == kAllDisplayValue
+      ? List.generate(pi.displays.length, (index) => index)
+      : [i];
+  bind.sessionSwitchDisplay(
+      sessionId: ffi.sessionId, value: Int32List.fromList(displays));
+  ffi.ffiModel.switchToNewDisplay(i, ffi.sessionId, ffi.id);
+}
+
+// Open new tab or window to show this monitor.
+// For now just open new window.
+//
+// screenRect is used to move the new window to the specified screen and set fullscreen.
+openMonitorInNewTabOrWindow(int i, String peerId, PeerInfo pi,
+    {Rect? screenRect}) {
+  final args = {
+    'window_id': stateGlobal.windowId,
+    'peer_id': peerId,
+    'display': i,
+    'display_count': pi.displays.length,
+  };
+  if (screenRect != null) {
+    args['screen_rect'] = {
+      'l': screenRect.left,
+      't': screenRect.top,
+      'r': screenRect.right,
+      'b': screenRect.bottom,
+    };
+  }
+  DesktopMultiWindow.invokeMethod(
+      kMainWindowId, kWindowEventOpenMonitorSession, jsonEncode(args));
+}
+
+tryMoveToScreenAndSetFullscreen(Rect? screenRect) async {
+  if (screenRect == null) {
+    return;
+  }
+  final frame =
+      Rect.fromLTWH(screenRect.left + 30, screenRect.top + 30, 600, 400);
+  await WindowController.fromWindowId(stateGlobal.windowId).setFrame(frame);
+  // An duration is needed to avoid the window being restored after fullscreen.
+  Future.delayed(Duration(milliseconds: 300), () async {
+    stateGlobal.setFullscreen(true);
+  });
+}

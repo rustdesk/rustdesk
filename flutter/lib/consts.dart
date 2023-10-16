@@ -29,6 +29,7 @@ const String kAppTypeDesktopPortForward = "port forward";
 
 const String kWindowMainWindowOnTop = "main_window_on_top";
 const String kWindowGetWindowInfo = "get_window_info";
+const String kWindowGetScreenList = "get_screen_list";
 const String kWindowDisableGrabKeyboard = "disable_grab_keyboard";
 const String kWindowActionRebuild = "rebuild";
 const String kWindowEventHide = "hide";
@@ -65,6 +66,7 @@ const String kPointerEventKindTouch = "touch";
 const String kPointerEventKindMouse = "mouse";
 
 const String kKeyShowDisplaysAsIndividualWindows = 'displays_as_individual_windows';
+const String kKeyUseAllMyMonitorsWhenConnecting = 'use_all_my_monitors_when_connecting';
 const String kKeyShowMonitorsToolbar = 'show_monitors_toolbar';
 
 // the executable name of the portable version

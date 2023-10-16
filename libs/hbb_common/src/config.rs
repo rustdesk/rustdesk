@@ -290,6 +290,12 @@ pub struct PeerConfig {
         skip_serializing_if = "String::is_empty"
     )]
     pub displays_as_individual_windows: String,
+    #[serde(
+        default = "PeerConfig::default_use_all_my_monitors_when_connecting",
+        deserialize_with = "PeerConfig::deserialize_use_all_my_monitors_when_connecting",
+        skip_serializing_if = "String::is_empty"
+    )]
+    pub use_all_my_monitors_when_connecting: String,
 
     #[serde(
         default,
@@ -335,6 +341,8 @@ impl Default for PeerConfig {
             view_only: Default::default(),
             reverse_mouse_wheel: Self::default_reverse_mouse_wheel(),
             displays_as_individual_windows: Self::default_displays_as_individual_windows(),
+            use_all_my_monitors_when_connecting: Self::default_use_all_my_monitors_when_connecting(
+            ),
             custom_resolutions: Default::default(),
             options: Self::default_options(),
             ui_flutter: Default::default(),
@@ -1155,6 +1163,11 @@ impl PeerConfig {
         default_displays_as_individual_windows,
         deserialize_displays_as_individual_windows,
         UserDefaultConfig::read().get("displays_as_individual_windows")
+    );
+    serde_field_string!(
+        default_use_all_my_monitors_when_connecting,
+        deserialize_use_all_my_monitors_when_connecting,
+        UserDefaultConfig::read().get("use_all_my_monitors_when_connecting")
     );
 
     fn default_custom_image_quality() -> Vec<i32> {
