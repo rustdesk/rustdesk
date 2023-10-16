@@ -19,6 +19,7 @@ import 'package:flutter_hbb/models/peer_tab_model.dart';
 import 'package:flutter_hbb/models/server_model.dart';
 import 'package:flutter_hbb/models/user_model.dart';
 import 'package:flutter_hbb/models/state_model.dart';
+import 'package:flutter_hbb/models/desktop_render_texture.dart';
 import 'package:flutter_hbb/plugin/event.dart';
 import 'package:flutter_hbb/plugin/manager.dart';
 import 'package:flutter_hbb/plugin/widgets/desc_ui.dart';
@@ -415,11 +416,11 @@ class FfiModel with ChangeNotifier {
       return;
     }
     if (newRect != _rect) {
-      _rect = newRect;
       if (newRect.left != _rect?.left || newRect.top != _rect?.top) {
         parent.target?.cursorModel
             .updateDisplayOrigin(newRect.left, newRect.top);
       }
+      _rect = newRect;
       parent.target?.canvasModel.updateViewStyle();
       _updateSessionWidthHeight(sessionId);
     }
@@ -1991,7 +1992,6 @@ class FFI {
     }
     final stream = bind.sessionStart(sessionId: sessionId, id: id);
     final cb = ffiModel.startEventListener(sessionId, id);
-    final useTextureRender = bind.mainUseTextureRender();
 
     // Force refresh displays.
     // The controlled side may not refresh the image when the (peer,display) is already subscribed.

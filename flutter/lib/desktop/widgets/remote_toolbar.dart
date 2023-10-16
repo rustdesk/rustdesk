@@ -9,6 +9,7 @@ import 'package:flutter_hbb/common/widgets/toolbar.dart';
 import 'package:flutter_hbb/main.dart';
 import 'package:flutter_hbb/models/chat_model.dart';
 import 'package:flutter_hbb/models/state_model.dart';
+import 'package:flutter_hbb/models/desktop_render_texture.dart';
 import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/utils/multi_window_manager.dart';
 import 'package:flutter_hbb/plugin/widgets/desc_ui.dart';
@@ -600,6 +601,9 @@ class _MonitorMenu extends StatelessWidget {
   bool get showMonitorsToolbar =>
       bind.mainGetUserDefaultOption(key: kKeyShowMonitorsToolbar) == 'Y';
 
+  bool get supportIndividualWindows =>
+      useTextureRender && ffi.ffiModel.pi.isSupportMultiDisplay;
+
   @override
   Widget build(BuildContext context) =>
       showMonitorsToolbar ? buildMultiMonitorMenu() : buildMonitorMenu();
@@ -622,13 +626,12 @@ class _MonitorMenu extends StatelessWidget {
   }
 
   Widget buildMonitorSubmenuWidget() {
-    final pi = ffi.ffiModel.pi;
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
         Row(children: buildMonitorList(false)),
-        pi.isSupportMultiDisplay ? Divider() : Offstage(),
-        pi.isSupportMultiDisplay ? chooseDisplayBehavior() : Offstage(),
+        supportIndividualWindows ? Divider() : Offstage(),
+        supportIndividualWindows ? chooseDisplayBehavior() : Offstage(),
       ],
     );
   }
@@ -711,7 +714,7 @@ class _MonitorMenu extends StatelessWidget {
     for (int i = 0; i < pi.displays.length; i++) {
       monitorList.add(buildMonitorButton(i));
     }
-    if (pi.isSupportMultiUiSession && pi.displays.length > 1) {
+    if (supportIndividualWindows && pi.displays.length > 1) {
       monitorList.add(buildMonitorButton(kAllDisplayValue));
     }
     return monitorList;

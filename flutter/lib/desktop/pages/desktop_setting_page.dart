@@ -10,6 +10,7 @@ import 'package:flutter_hbb/common/widgets/setting_widgets.dart';
 import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/desktop/pages/desktop_home_page.dart';
 import 'package:flutter_hbb/desktop/pages/desktop_tab_page.dart';
+import 'package:flutter_hbb/models/desktop_render_texture.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:flutter_hbb/models/server_model.dart';
 import 'package:flutter_hbb/plugin/manager.dart';
@@ -1306,7 +1307,7 @@ class _DisplayState extends State<_Display> {
   }
 
   Widget other(BuildContext context) {
-    return _Card(title: 'Other Default Options', children: [
+    final children = [
       otherRow('View Mode', 'view_only'),
       otherRow('show_monitors_tip', kKeyShowMonitorsToolbar),
       otherRow('Collapse toolbar', 'collapse_toolbar'),
@@ -1319,9 +1320,12 @@ class _DisplayState extends State<_Display> {
       otherRow('Lock after session end', 'lock_after_session_end'),
       otherRow('Privacy mode', 'privacy_mode'),
       otherRow('Reverse mouse wheel', 'reverse_mouse_wheel'),
-      otherRow('Show displays as individual windows',
-          kKeyShowDisplaysAsIndividualWindows),
-    ]);
+    ];
+    if (useTextureRender) {
+      children.add(otherRow('Show displays as individual windows',
+          kKeyShowDisplaysAsIndividualWindows));
+    }
+    return _Card(title: 'Other Default Options', children: children);
   }
 }
 

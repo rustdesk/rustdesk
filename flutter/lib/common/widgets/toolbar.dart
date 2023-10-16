@@ -9,6 +9,7 @@ import 'package:flutter_hbb/common/widgets/dialog.dart';
 import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/models/model.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
+import 'package:flutter_hbb/models/desktop_render_texture.dart';
 import 'package:get/get.dart';
 
 bool isEditOsPassword = false;
@@ -516,7 +517,8 @@ Future<List<TToggleMenu>> toolbarDisplayToggle(
         child: Text(translate('Swap control-command key'))));
   }
 
-  if (pi.isSupportMultiDisplay &&
+  if (useTextureRender &&
+      pi.isSupportMultiDisplay &&
       PrivacyModeState.find(id).isFalse &&
       pi.displaysCount.value > 1 &&
       bind.mainGetUserDefaultOption(key: kKeyShowMonitorsToolbar) == 'Y') {

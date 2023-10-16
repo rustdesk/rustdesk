@@ -803,7 +803,7 @@ impl InvokeUiSession for FlutterHandler {
     fn next_rgba(&self, _display: usize) {
         #[cfg(not(feature = "flutter_texture_render"))]
         if let Some(rgba_data) = self.display_rgbas.write().unwrap().get_mut(&_display) {
-            rgba_data.valid = true;
+            rgba_data.valid = false;
         }
     }
 }
