@@ -10,7 +10,7 @@ env:
   # vcpkg version: 2022.05.10
   # for multiarch gcc compatibility
   VCPKG_COMMIT_ID: "501db0f17ef6df184fcdbfbe0f87cde2313b6ab1"
-  VERSION: "1.2.3"
+  VERSION: "1.2.4"
 
 jobs:
   build-for-history-windows:

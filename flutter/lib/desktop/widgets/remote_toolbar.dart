@@ -1,12 +1,15 @@
 import 'dart:convert';
 import 'dart:async';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hbb/common/widgets/toolbar.dart';
+import 'package:flutter_hbb/main.dart';
 import 'package:flutter_hbb/models/chat_model.dart';
 import 'package:flutter_hbb/models/state_model.dart';
+import 'package:flutter_hbb/models/desktop_render_texture.dart';
 import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/utils/multi_window_manager.dart';
 import 'package:flutter_hbb/plugin/widgets/desc_ui.dart';
@@ -325,7 +328,8 @@ class RemoteToolbar extends StatefulWidget {
   final FFI ffi;
   final ToolbarState state;
   final Function(Function(bool)) onEnterOrLeaveImageSetter;
-  final Function() onEnterOrLeaveImageCleaner;
+  final VoidCallback onEnterOrLeaveImageCleaner;
+  final Function(VoidCallback) setRemoteState;
 
   RemoteToolbar({
     Key? key,
@@ -334,6 +338,7 @@ class RemoteToolbar extends StatefulWidget {
     required this.state,
     required this.onEnterOrLeaveImageSetter,
     required this.onEnterOrLeaveImageCleaner,
+    required this.setRemoteState,
   }) : super(key: key);
 
   @override
@@ -450,13 +455,17 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
       toolbarItems.add(_MobileActionMenu(ffi: widget.ffi));
     }
 
-    if (PrivacyModeState.find(widget.id).isFalse && pi.displays.length > 1) {
-      toolbarItems.add(
-        bind.mainGetUserDefaultOption(key: 'show_monitors_toolbar') == 'Y'
-            ? _MultiMonitorMenu(id: widget.id, ffi: widget.ffi)
-            : _MonitorMenu(id: widget.id, ffi: widget.ffi),
-      );
-    }
+    toolbarItems.add(Obx(() {
+      if (PrivacyModeState.find(widget.id).isFalse &&
+          pi.displaysCount.value > 1) {
+        return _MonitorMenu(
+            id: widget.id,
+            ffi: widget.ffi,
+            setRemoteState: widget.setRemoteState);
+      } else {
+        return Offstage();
+      }
+    }));
 
     toolbarItems
         .add(_ControlMenu(id: widget.id, ffi: widget.ffi, state: widget.state));
@@ -581,11 +590,25 @@ class _MobileActionMenu extends StatelessWidget {
 class _MonitorMenu extends StatelessWidget {
   final String id;
   final FFI ffi;
-  const _MonitorMenu({Key? key, required this.id, required this.ffi})
-      : super(key: key);
+  final Function(VoidCallback) setRemoteState;
+  const _MonitorMenu({
+    Key? key,
+    required this.id,
+    required this.ffi,
+    required this.setRemoteState,
+  }) : super(key: key);
+
+  bool get showMonitorsToolbar =>
+      bind.mainGetUserDefaultOption(key: kKeyShowMonitorsToolbar) == 'Y';
+
+  bool get supportIndividualWindows =>
+      useTextureRender && ffi.ffiModel.pi.isSupportMultiDisplay;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) =>
+      showMonitorsToolbar ? buildMultiMonitorMenu() : buildMonitorMenu();
+
+  Widget buildMonitorMenu() {
     return _IconSubmenuButton(
         tooltip: 'Select Monitor',
         icon: icon(),
@@ -595,7 +618,106 @@ class _MonitorMenu extends StatelessWidget {
         menuStyle: MenuStyle(
             padding:
                 MaterialStatePropertyAll(EdgeInsets.symmetric(horizontal: 6))),
-        menuChildren: [Row(children: displays(context))]);
+        menuChildren: [buildMonitorSubmenuWidget()]);
+  }
+
+  Widget buildMultiMonitorMenu() {
+    return Row(children: buildMonitorList(true));
+  }
+
+  Widget buildMonitorSubmenuWidget() {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Row(children: buildMonitorList(false)),
+        supportIndividualWindows ? Divider() : Offstage(),
+        supportIndividualWindows ? chooseDisplayBehavior() : Offstage(),
+      ],
+    );
+  }
+
+  Widget chooseDisplayBehavior() {
+    final value =
+        bind.sessionGetDisplaysAsIndividualWindows(sessionId: ffi.sessionId) ==
+            'Y';
+    return CkbMenuButton(
+        value: value,
+        onChanged: (value) async {
+          if (value == null) return;
+          await bind.sessionSetDisplaysAsIndividualWindows(
+              sessionId: ffi.sessionId, value: value ? 'Y' : '');
+        },
+        ffi: ffi,
+        child: Text(translate('Show displays as individual windows')));
+  }
+
+  List<Widget> buildMonitorList(bool isMulti) {
+    final List<Widget> monitorList = [];
+    final pi = ffi.ffiModel.pi;
+
+    getMonitorText(int i) {
+      if (i == kAllDisplayValue) {
+        if (pi.displays.length == 2) {
+          return '1|2';
+        } else {
+          return 'ALL';
+        }
+      } else {
+        return (i + 1).toString();
+      }
+    }
+
+    buildMonitorButton(int i) => Obx(() {
+          RxInt display = CurrentDisplayState.find(id);
+          return _IconMenuButton(
+            tooltip: isMulti ? '' : '#${i + 1} monitor',
+            hMargin: isMulti ? null : 6,
+            vMargin: isMulti ? null : 12,
+            topLevel: false,
+            color: i == display.value
+                ? _ToolbarTheme.blueColor
+                : _ToolbarTheme.inactiveColor,
+            hoverColor: i == display.value
+                ? _ToolbarTheme.hoverBlueColor
+                : _ToolbarTheme.hoverInactiveColor,
+            icon: Container(
+              alignment: AlignmentDirectional.center,
+              constraints:
+                  const BoxConstraints(minHeight: _ToolbarTheme.height),
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  SvgPicture.asset(
+                    "assets/screen.svg",
+                    colorFilter:
+                        ColorFilter.mode(Colors.white, BlendMode.srcIn),
+                  ),
+                  Obx(
+                    () => Text(
+                      getMonitorText(i),
+                      style: TextStyle(
+                        color: i == display.value
+                            ? _ToolbarTheme.blueColor
+                            : _ToolbarTheme.inactiveColor,
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            onPressed: () => onPressed(i, pi),
+          );
+        });
+
+    for (int i = 0; i < pi.displays.length; i++) {
+      monitorList.add(buildMonitorButton(i));
+    }
+    if (supportIndividualWindows && pi.displays.length > 1) {
+      monitorList.add(buildMonitorButton(kAllDisplayValue));
+    }
+    return monitorList;
   }
 
   icon() {
@@ -610,7 +732,7 @@ class _MonitorMenu extends StatelessWidget {
         Obx(() {
           RxInt display = CurrentDisplayState.find(id);
           return Text(
-            '${display.value + 1}/${pi.displays.length}',
+            '${display.value == kAllDisplayValue ? 'A' : '${display.value + 1}'}/${pi.displays.length}',
             style: const TextStyle(
               color: _ToolbarTheme.blueColor,
               fontSize: 8,
@@ -622,48 +744,44 @@ class _MonitorMenu extends StatelessWidget {
     );
   }
 
-  List<Widget> displays(BuildContext context) {
-    final List<Widget> rowChildren = [];
-    final pi = ffi.ffiModel.pi;
-    for (int i = 0; i < pi.displays.length; i++) {
-      rowChildren.add(_IconMenuButton(
-        topLevel: false,
-        color: _ToolbarTheme.blueColor,
-        hoverColor: _ToolbarTheme.hoverBlueColor,
-        tooltip: "#${i + 1} monitor",
-        hMargin: 6,
-        vMargin: 12,
-        icon: Container(
-          alignment: AlignmentDirectional.center,
-          constraints: const BoxConstraints(minHeight: _ToolbarTheme.height),
-          child: Stack(
-            alignment: Alignment.center,
-            children: [
-              SvgPicture.asset(
-                "assets/screen.svg",
-                colorFilter: ColorFilter.mode(Colors.white, BlendMode.srcIn),
-              ),
-              Text(
-                (i + 1).toString(),
-                style: TextStyle(
-                  color: _ToolbarTheme.blueColor,
-                  fontSize: 12,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ],
-          ),
-        ),
-        onPressed: () {
-          _menuDismissCallback(ffi);
-          RxInt display = CurrentDisplayState.find(id);
-          if (display.value != i) {
-            bind.sessionSwitchDisplay(sessionId: ffi.sessionId, value: i);
-          }
-        },
-      ));
+  // Open new tab or window to show this monitor.
+  // For now just open new window.
+  openMonitorInNewTabOrWindow(int i, PeerInfo pi) {
+    if (kWindowId == null) {
+      // unreachable
+      debugPrint('openMonitorInNewTabOrWindow, unreachable! kWindowId is null');
+      return;
     }
-    return rowChildren;
+    DesktopMultiWindow.invokeMethod(
+        kMainWindowId,
+        kWindowEventOpenMonitorSession,
+        jsonEncode({
+          'window_id': kWindowId!,
+          'peer_id': ffi.id,
+          'display': i,
+          'display_count': pi.displays.length,
+        }));
+  }
+
+  openMonitorInTheSameTab(int i, PeerInfo pi) {
+    final displays = i == kAllDisplayValue
+        ? List.generate(pi.displays.length, (index) => index)
+        : [i];
+    bind.sessionSwitchDisplay(
+        sessionId: ffi.sessionId, value: Int32List.fromList(displays));
+    ffi.ffiModel.switchToNewDisplay(i, ffi.sessionId, id);
+  }
+
+  onPressed(int i, PeerInfo pi) {
+    _menuDismissCallback(ffi);
+    RxInt display = CurrentDisplayState.find(id);
+    if (display.value != i) {
+      if (isChooseDisplayToOpenInNewWindow(pi, ffi.sessionId)) {
+        openMonitorInNewTabOrWindow(i, pi);
+      } else {
+        openMonitorInTheSameTab(i, pi);
+      }
+    }
   }
 }
 
@@ -1044,14 +1162,14 @@ class _ResolutionsMenuState extends State<_ResolutionsMenu> {
   Resolution? _localResolution;
 
   late final TextEditingController _customWidth =
-      TextEditingController(text: display.width.toString());
+      TextEditingController(text: rect?.width.toInt().toString() ?? '');
   late final TextEditingController _customHeight =
-      TextEditingController(text: display.height.toString());
+      TextEditingController(text: rect?.height.toInt().toString() ?? '');
 
   FFI get ffi => widget.ffi;
   PeerInfo get pi => widget.ffi.ffiModel.pi;
   FfiModel get ffiModel => widget.ffi.ffiModel;
-  Display get display => ffiModel.display;
+  Rect? get rect => ffiModel.rect;
   List<Resolution> get resolutions => pi.resolutions;
   bool get isWayland => bind.mainCurrentIsWayland();
 
@@ -1063,12 +1181,12 @@ class _ResolutionsMenuState extends State<_ResolutionsMenu> {
 
   @override
   Widget build(BuildContext context) {
-    final isVirtualDisplay = display.isVirtualDisplayResolution;
+    final isVirtualDisplay = ffiModel.isVirtualDisplayResolution;
     final visible =
         ffiModel.keyboard && (isVirtualDisplay || resolutions.length > 1);
     if (!visible) return Offstage();
     final showOriginalBtn =
-        display.isOriginalResolutionSet && !display.isOriginalResolution;
+        ffiModel.isOriginalResolutionSet && !ffiModel.isOriginalResolution;
     final showFitLocalBtn = !_isRemoteResolutionFitLocal();
     _setGroupValue();
     return _SubmenuButton(
@@ -1085,12 +1203,15 @@ class _ResolutionsMenuState extends State<_ResolutionsMenu> {
   }
 
   _setGroupValue() {
+    if (pi.currentDisplay == kAllDisplayValue) {
+      return;
+    }
     final lastGroupValue =
         stateGlobal.getLastResolutionGroupValue(widget.id, pi.currentDisplay);
     if (lastGroupValue == _kCustomResolutionValue) {
       _groupValue = _kCustomResolutionValue;
     } else {
-      _groupValue = '${display.width}x${display.height}';
+      _groupValue = '${rect?.width.toInt()}x${rect?.height.toInt()}';
     }
   }
 
@@ -1118,20 +1239,23 @@ class _ResolutionsMenuState extends State<_ResolutionsMenu> {
 
   _getLocalResolution() {
     _localResolution = null;
-    final String currentDisplay = bind.mainGetCurrentDisplay();
-    if (currentDisplay.isNotEmpty) {
+    final String mainDisplay = bind.mainGetMainDisplay();
+    if (mainDisplay.isNotEmpty) {
       try {
-        final display = json.decode(currentDisplay);
+        final display = json.decode(mainDisplay);
         if (display['w'] != null && display['h'] != null) {
           _localResolution = Resolution(display['w'], display['h']);
         }
       } catch (e) {
-        debugPrint('Failed to decode $currentDisplay, $e');
+        debugPrint('Failed to decode $mainDisplay, $e');
       }
     }
   }
 
   _onChanged(BuildContext context, String? value) async {
+    if (pi.currentDisplay == kAllDisplayValue) {
+      return;
+    }
     stateGlobal.setLastResolutionGroupValue(
         widget.id, pi.currentDisplay, value);
     if (value == null) return;
@@ -1150,13 +1274,16 @@ class _ResolutionsMenuState extends State<_ResolutionsMenu> {
     }
 
     if (w != null && h != null) {
-      if (w != display.width || h != display.height) {
+      if (w != rect?.width.toInt() || h != rect?.height.toInt()) {
         await _changeResolution(context, w, h);
       }
     }
   }
 
   _changeResolution(BuildContext context, int w, int h) async {
+    if (pi.currentDisplay == kAllDisplayValue) {
+      return;
+    }
     await bind.sessionChangeResolution(
       sessionId: ffi.sessionId,
       display: pi.currentDisplay,
@@ -1164,8 +1291,11 @@ class _ResolutionsMenuState extends State<_ResolutionsMenu> {
       height: h,
     );
     Future.delayed(Duration(seconds: 3), () async {
-      final display = ffiModel.display;
-      if (w == display.width && h == display.height) {
+      final rect = ffiModel.rect;
+      if (rect == null) {
+        return;
+      }
+      if (w == rect.width.toInt() && h == rect.height.toInt()) {
         if (await widget.screenAdjustor.isWindowCanBeAdjusted()) {
           widget.screenAdjustor.doAdjustWindow(context);
         }
@@ -1175,6 +1305,10 @@ class _ResolutionsMenuState extends State<_ResolutionsMenu> {
 
   Widget _OriginalResolutionMenuButton(
       BuildContext context, bool showOriginalBtn) {
+    final display = pi.tryGetDisplayIfNotAllDisplay();
+    if (display == null) {
+      return Offstage();
+    }
     return Offstage(
       offstage: !showOriginalBtn,
       child: MenuButton(
@@ -1262,7 +1396,7 @@ class _ResolutionsMenuState extends State<_ResolutionsMenu> {
       return null;
     }
 
-    if (display.isVirtualDisplayResolution) {
+    if (ffiModel.isVirtualDisplayResolution) {
       return _localResolution!;
     }
 
@@ -1284,8 +1418,8 @@ class _ResolutionsMenuState extends State<_ResolutionsMenu> {
     if (bestFitResolution == null) {
       return true;
     }
-    return bestFitResolution.width == display.width &&
-        bestFitResolution.height == display.height;
+    return bestFitResolution.width == rect?.width.toInt() &&
+        bestFitResolution.height == rect?.height.toInt();
   }
 }
 
@@ -1361,7 +1495,7 @@ class _KeyboardMenu extends StatelessWidget {
           continue;
         }
 
-        if (pi.is_wayland && mode.key != _kKeyMapMode) {
+        if (pi.isWayland && mode.key != _kKeyMapMode) {
           continue;
         }
 
@@ -1404,7 +1538,7 @@ class _KeyboardMenu extends StatelessWidget {
 
   viewMode() {
     final ffiModel = ffi.ffiModel;
-    final enabled = version_cmp(pi.version, '1.2.0') >= 0 && ffiModel.keyboard;
+    final enabled = versionCmp(pi.version, '1.2.0') >= 0 && ffiModel.keyboard;
     return CkbMenuButton(
         value: ffiModel.viewOnly,
         onChanged: enabled
@@ -2036,72 +2170,4 @@ Widget _buildPointerTrackWidget(Widget child, FFI ffi) {
       child: child,
     ),
   );
-}
-
-class _MultiMonitorMenu extends StatelessWidget {
-  final String id;
-  final FFI ffi;
-
-  const _MultiMonitorMenu({
-    Key? key,
-    required this.id,
-    required this.ffi,
-  }) : super(key: key);
-
-  @override
-  Widget build(BuildContext context) {
-    final List<Widget> rowChildren = [];
-    final pi = ffi.ffiModel.pi;
-
-    for (int i = 0; i < pi.displays.length; i++) {
-      rowChildren.add(
-        Obx(() {
-          RxInt display = CurrentDisplayState.find(id);
-          return _IconMenuButton(
-            tooltip: "",
-            topLevel: false,
-            color: i == display.value
-                ? _ToolbarTheme.blueColor
-                : Colors.grey[800]!,
-            hoverColor: i == display.value
-                ? _ToolbarTheme.hoverBlueColor
-                : Colors.grey[850]!,
-            icon: Container(
-              alignment: AlignmentDirectional.center,
-              constraints:
-                  const BoxConstraints(minHeight: _ToolbarTheme.height),
-              child: Stack(
-                alignment: Alignment.center,
-                children: [
-                  SvgPicture.asset(
-                    "assets/screen.svg",
-                    colorFilter:
-                        ColorFilter.mode(Colors.white, BlendMode.srcIn),
-                  ),
-                  Obx(
-                    () => Text(
-                      (i + 1).toString(),
-                      style: TextStyle(
-                        color: i == display.value
-                            ? _ToolbarTheme.blueColor
-                            : Colors.grey[800]!,
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            onPressed: () {
-              if (display.value != i) {
-                bind.sessionSwitchDisplay(sessionId: ffi.sessionId, value: i);
-              }
-            },
-          );
-        }),
-      );
-    }
-    return Row(children: rowChildren);
-  }
 }

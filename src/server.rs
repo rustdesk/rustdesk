@@ -26,7 +26,7 @@ use hbb_common::{
 };
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use service::ServiceTmpl;
-use service::{GenericService, Service, Subscriber};
+use service::{EmptyExtraFieldService, GenericService, Service, Subscriber};
 
 use crate::ipc::Data;
 
@@ -53,6 +53,7 @@ pub const NAME_POS: &'static str = "";
 }
 
 mod connection;
+pub mod display_service;
 #[cfg(windows)]
 pub mod portable_service;
 mod service;
@@ -80,7 +81,7 @@ lazy_static::lazy_static! {
 
 pub struct Server {
     connections: ConnMap,
-    services: HashMap<&'static str, Box<dyn Service>>,
+    services: HashMap<String, Box<dyn Service>>,
     id_count: i32,
 }
 
@@ -94,11 +95,15 @@ pub fn new() -> ServerPtr {
         id_count: hbb_common::rand::random::<i32>() % 1000 + 1000, // ensure positive
     };
     server.add_service(Box::new(audio_service::new()));
-    server.add_service(Box::new(video_service::new()));
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    server.add_service(Box::new(display_service::new()));
+    server.add_service(Box::new(video_service::new(
+        *display_service::PRIMARY_DISPLAY_IDX,
+    )));
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     {
         server.add_service(Box::new(clipboard_service::new()));
-        if !video_service::capture_cursor_embedded() {
+        if !display_service::capture_cursor_embedded() {
             server.add_service(Box::new(input_service::new_cursor()));
             server.add_service(Box::new(input_service::new_pos()));
         }
@@ -253,9 +258,19 @@ async fn create_relay_connection_(
 }
 
 impl Server {
+    fn is_video_service_name(name: &str) -> bool {
+        name.starts_with(video_service::NAME)
+    }
+
     pub fn add_connection(&mut self, conn: ConnInner, noperms: &Vec<&'static str>) {
+        let primary_video_service_name =
+            video_service::get_service_name(*display_service::PRIMARY_DISPLAY_IDX);
         for s in self.services.values() {
-            if !noperms.contains(&s.name()) {
+            let name = s.name();
+            if Self::is_video_service_name(&name) && name != primary_video_service_name {
+                continue;
+            }
+            if !noperms.contains(&(&name as _)) {
                 s.on_subscribe(conn.clone());
             }
         }
@@ -287,8 +302,12 @@ impl Server {
         self.services.insert(name, service);
     }
 
+    pub fn contains(&self, name: &str) -> bool {
+        self.services.contains_key(name)
+    }
+
     pub fn subscribe(&mut self, name: &str, conn: ConnInner, sub: bool) {
-        if let Some(s) = self.services.get(&name) {
+        if let Some(s) = self.services.get(name) {
             if s.is_subed(conn.id()) == sub {
                 return;
             }
@@ -304,6 +323,47 @@ impl Server {
     pub fn get_new_id(&mut self) -> i32 {
         self.id_count += 1;
         self.id_count
+    }
+
+    pub fn set_video_service_opt(&self, display: Option<usize>, opt: &str, value: &str) {
+        for (k, v) in self.services.iter() {
+            if let Some(display) = display {
+                if k != &video_service::get_service_name(display) {
+                    continue;
+                }
+            }
+
+            if Self::is_video_service_name(k) {
+                v.set_option(opt, value);
+            }
+        }
+    }
+
+    fn capture_displays(
+        &mut self,
+        conn: ConnInner,
+        displays: &[usize],
+        include: bool,
+        exclude: bool,
+    ) {
+        let displays = displays
+            .iter()
+            .map(|d| video_service::get_service_name(*d))
+            .collect::<Vec<_>>();
+        let keys = self.services.keys().cloned().collect::<Vec<_>>();
+        for name in keys.iter() {
+            if Self::is_video_service_name(&name) {
+                if displays.contains(&name) {
+                    if include {
+                        self.subscribe(&name, conn.clone(), true);
+                    }
+                } else {
+                    if exclude {
+                        self.subscribe(&name, conn.clone(), false);
+                    }
+                }
+            }
+        }
     }
 }
 

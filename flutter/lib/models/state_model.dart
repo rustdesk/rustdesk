@@ -18,7 +18,6 @@ class StateGlobal {
   final RxDouble _resizeEdgeSize = RxDouble(kWindowEdgeSize);
   final RxDouble _windowBorderWidth = RxDouble(kWindowBorderWidth);
   final RxBool showRemoteToolBar = false.obs;
-  final RxInt displaysCount = 0.obs;
   final svcStatus = SvcStatus.notReady.obs;
   // Only used for macOS
   bool closeOnFullscreen = false;

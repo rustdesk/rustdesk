@@ -14,6 +14,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_hbb/common/formatter/id_formatter.dart';
 import 'package:flutter_hbb/desktop/widgets/refresh_wrapper.dart';
 import 'package:flutter_hbb/desktop/widgets/tabbar_widget.dart';
+import 'package:flutter_hbb/models/desktop_render_texture.dart';
 import 'package:flutter_hbb/main.dart';
 import 'package:flutter_hbb/models/peer_model.dart';
 import 'package:flutter_hbb/models/state_model.dart';
@@ -593,7 +594,7 @@ closeConnection({String? id}) {
   }
 }
 
-void windowOnTop(int? id) async {
+Future<void> windowOnTop(int? id) async {
   if (!isDesktop) {
     return;
   }
@@ -1054,7 +1055,7 @@ Widget msgboxIcon(String type) {
   if (type == 'on-uac' || type == 'on-foreground-elevated') {
     iconData = Icons.admin_panel_settings;
   }
-  if (type == "info") {
+  if (type.contains('info')) {
     iconData = Icons.info;
   }
   if (iconData != null) {
@@ -1834,10 +1835,10 @@ enum UriLinkType {
 // uri link handler
 bool handleUriLink({List<String>? cmdArgs, Uri? uri, String? uriString}) {
   List<String>? args;
-  if (cmdArgs != null) {
+  if (cmdArgs != null && cmdArgs.isNotEmpty) {
     args = cmdArgs;
     // rustdesk <uri link>
-    if (args.isNotEmpty && args[0].startsWith(kUniLinksPrefix)) {
+    if (args[0].startsWith(kUniLinksPrefix)) {
       final uri = Uri.tryParse(args[0]);
       if (uri != null) {
         args = urlLinkToCmdArgs(uri);
@@ -2317,7 +2318,7 @@ Widget dialogButton(String text,
   }
 }
 
-int version_cmp(String v1, String v2) {
+int versionCmp(String v1, String v2) {
   return bind.versionToNumber(v: v1) - bind.versionToNumber(v: v2);
 }
 
@@ -2589,3 +2590,18 @@ String getDesktopTabLabel(String peerId, String alias) {
   }
   return label;
 }
+
+sessionRefreshVideo(SessionID sessionId, PeerInfo pi) async {
+  if (pi.currentDisplay == kAllDisplayValue) {
+    for (int i = 0; i < pi.displays.length; i++) {
+      await bind.sessionRefresh(sessionId: sessionId, display: i);
+    }
+  } else {
+    await bind.sessionRefresh(sessionId: sessionId, display: pi.currentDisplay);
+  }
+}
+
+bool isChooseDisplayToOpenInNewWindow(PeerInfo pi, SessionID sessionId) =>
+    pi.isSupportMultiDisplay &&
+    useTextureRender &&
+    bind.sessionGetDisplaysAsIndividualWindows(sessionId: sessionId) == 'Y';

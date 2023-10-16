@@ -54,6 +54,8 @@ pub const PLATFORM_LINUX: &str = "Linux";
 pub const PLATFORM_MACOS: &str = "Mac OS";
 pub const PLATFORM_ANDROID: &str = "Android";
 
+const MIN_VER_MULTI_UI_SESSION: &str = "1.2.4";
+
 pub mod input {
     pub const MOUSE_TYPE_MOVE: i32 = 0;
     pub const MOUSE_TYPE_DOWN: i32 = 1;
@@ -118,6 +120,16 @@ pub fn global_clean() {}
 #[inline]
 pub fn set_server_running(b: bool) {
     *SERVER_RUNNING.write().unwrap() = b;
+}
+
+#[inline]
+pub fn is_support_multi_ui_session(ver: &str) -> bool {
+    is_support_multi_ui_session_num(hbb_common::get_version_number(ver))
+}
+
+#[inline]
+pub fn is_support_multi_ui_session_num(ver: i64) -> bool {
+    ver >= hbb_common::get_version_number(MIN_VER_MULTI_UI_SESSION)
 }
 
 // is server process, with "--server" args
@@ -780,13 +792,17 @@ pub fn get_sysinfo() -> serde_json::Value {
     }
     let hostname = hostname(); // sys.hostname() return localhost on android in my test
     use serde_json::json;
-    let mut out = json!({
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    let out;
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    let mut out;
+    out = json!({
         "cpu": format!("{cpu}{num_cpus}/{num_pcpus} cores"),
         "memory": format!("{memory}GB"),
         "os": os,
         "hostname": hostname,
     });
-    #[cfg(not(any(target_os = "android", target_os = "ios")))] 
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     {
         out["username"] = json!(crate::platform::get_active_username());
     }

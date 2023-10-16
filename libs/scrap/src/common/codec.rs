@@ -23,8 +23,8 @@ use hbb_common::{
     config::PeerConfig,
     log,
     message_proto::{
-        supported_decoding::PreferCodec, video_frame, EncodedVideoFrames, Message,
-        SupportedDecoding, SupportedEncoding,
+        supported_decoding::PreferCodec, video_frame, EncodedVideoFrames,
+        SupportedDecoding, SupportedEncoding, VideoFrame,
     },
     sysinfo::{System, SystemExt},
     tokio::time::Instant,
@@ -60,7 +60,7 @@ pub trait EncoderApi {
     where
         Self: Sized;
 
-    fn encode_to_message(&mut self, frame: &[u8], ms: i64) -> ResultType<Message>;
+    fn encode_to_message(&mut self, frame: &[u8], ms: i64) -> ResultType<VideoFrame>;
 
     fn use_yuv(&self) -> bool;
 

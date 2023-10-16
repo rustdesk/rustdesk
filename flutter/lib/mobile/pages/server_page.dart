@@ -328,13 +328,20 @@ class _ScamWarningDialogState extends State<ScamWarningDialog> {
               ),
             ),
             SizedBox(height: 18),
-            Text(
-              translate("scam_text1")+"\n\n"
-              +translate("scam_text2")+"\n",
-              style: TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.bold,
-                    fontSize: 16.0,
+            SizedBox(
+              height: 220,
+              child: Scrollbar(
+                child: SingleChildScrollView(
+                  child: Text(
+                      translate("scam_text1")+"\n\n"
+                      +translate("scam_text2")+"\n",
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16.0,
+                      ),
+                  ),
+                ),
               ),
             ),
             Row(
@@ -361,7 +368,9 @@ class _ScamWarningDialogState extends State<ScamWarningDialog> {
             Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
-                ElevatedButton(
+                Container(
+                  constraints: BoxConstraints(maxWidth: 150),
+                  child: ElevatedButton(
                   onPressed: isButtonLocked
                       ? null
                       : () {
@@ -380,10 +389,15 @@ class _ScamWarningDialogState extends State<ScamWarningDialog> {
                         fontWeight: FontWeight.bold,
                         fontSize: 13.0,
                     ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
+                ),
                 SizedBox(width: 15),
-                ElevatedButton(
+                Container(
+                  constraints: BoxConstraints(maxWidth: 150),
+                  child: ElevatedButton(
                   onPressed: () {
                     Navigator.of(context).pop(); 
                   },
@@ -396,7 +410,10 @@ class _ScamWarningDialogState extends State<ScamWarningDialog> {
                         fontWeight: FontWeight.bold,
                         fontSize: 13.0,
                     ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
                   ),
+                ),
                 ),
               ],
     )])),

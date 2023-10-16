@@ -1,6 +1,6 @@
 [package]
 name = "rustdesk"
-version = "1.2.3"
+version = "1.2.4"
 authors = ["rustdesk <info@rustdesk.com>"]
 edition = "2021"
 build= "build.rs"
@@ -88,6 +88,7 @@ clipboard = { path = "libs/clipboard" }
 ctrlc = "3.2"
 arboard = "3.2"
 system_shutdown = "4.0"
+shutdown_hooks = "0.1"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 winapi = { version = "0.3", features = ["winuser", "wincrypt", "shellscalingapi"] }
@@ -96,7 +97,6 @@ windows-service = "0.6"
 virtual_display = { path = "libs/virtual_display", optional = true }
 impersonate_system = { git = "https://github.com/21pages/impersonate-system" }
 shared_memory = "0.12"
-shutdown_hooks = "0.1"
 tauri-winrt-notification = "0.1.2"
 
 [target.'cfg(target_os = "macos")'.dependencies]
@@ -117,6 +117,9 @@ image = "0.24"
 
 [target.'cfg(any(target_os = "macos", target_os = "linux"))'.dependencies]
 keepawake = { git = "https://github.com/rustdesk-org/keepawake-rs" }
+
+[target.'cfg(any(target_os = "windows", target_os = "linux"))'.dependencies]
+wallpaper = { git = "https://github.com/21pages/wallpaper.rs" }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 psimple = { package = "libpulse-simple-binding", version = "2.27" }

@@ -1,7 +1,6 @@
 use std::{
     collections::HashMap,
     iter::FromIterator,
-    process::Child,
     sync::{Arc, Mutex},
 };
 
@@ -22,7 +21,6 @@ mod cm;
 pub mod inline;
 pub mod remote;
 
-pub type Children = Arc<Mutex<(bool, HashMap<(String, String), Child>)>>;
 #[allow(dead_code)]
 type Status = (i32, bool, i64, String);
 
@@ -34,7 +32,6 @@ lazy_static::lazy_static! {
 #[cfg(not(any(feature = "flutter", feature = "cli")))]
 lazy_static::lazy_static! {
     pub static ref CUR_SESSION: Arc<Mutex<Option<Session<remote::SciterHandler>>>> = Default::default();
-    static ref CHILDREN : Children = Default::default();
 }
 
 struct UIHostHandler;
@@ -598,6 +595,10 @@ impl UI {
     fn get_login_device_info(&self) -> String {
         get_login_device_info_json()
     }
+
+    fn support_remove_wallpaper(&self) -> bool {
+        support_remove_wallpaper()
+    }
 }
 
 impl sciter::EventHandler for UI {
@@ -683,6 +684,7 @@ impl sciter::EventHandler for UI {
         fn default_video_save_directory();
         fn handle_relay_id(String);
         fn get_login_device_info();
+        fn support_remove_wallpaper();
     }
 }
 

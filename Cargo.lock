@@ -1843,6 +1843,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "enquote"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "06c36cb11dbde389f4096111698d8b567c0720e3452fd5ac3e6b4e47e1939932"
+dependencies = [
+ "thiserror",
+]
+
+[[package]]
 name = "enum-iterator"
 version = "1.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5197,7 +5206,7 @@ dependencies = [
 
 [[package]]
 name = "rustdesk"
-version = "1.2.3"
+version = "1.2.4"
 dependencies = [
  "android_logger",
  "arboard",
@@ -5278,6 +5287,7 @@ dependencies = [
  "users 0.11.0",
  "uuid",
  "virtual_display",
+ "wallpaper",
  "whoami",
  "winapi 0.3.9",
  "windows-service",
@@ -6660,6 +6670,19 @@ checksum = "36df944cda56c7d8d8b7496af378e6b16de9284591917d307c9b4d313c44e698"
 dependencies = [
  "same-file",
  "winapi-util",
+]
+
+[[package]]
+name = "wallpaper"
+version = "3.2.0"
+source = "git+https://github.com/21pages/wallpaper.rs#ce4a0cd3f58327c7cc44d15a63706fb0c022bacf"
+dependencies = [
+ "dirs 5.0.1",
+ "enquote",
+ "rust-ini",
+ "thiserror",
+ "winapi 0.3.9",
+ "winreg 0.11.0",
 ]
 
 [[package]]
