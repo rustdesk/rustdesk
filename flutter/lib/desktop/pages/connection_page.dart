@@ -247,6 +247,7 @@ class _ConnectionPageState extends State<ConnectionPage>
                       peer.id.toLowerCase().contains(textEditingValue.text.toLowerCase()) ||
                       peer.username.toLowerCase().contains(textEditingValue.text.toLowerCase()) ||
                       peer.hostname.toLowerCase().contains(textEditingValue.text.toLowerCase()) ||
+                      peer.alias.toLowerCase().contains(textEditingValue.text.toLowerCase()) ||
                       peer.platform.toLowerCase().contains(textEditingValue.text.toLowerCase()))
                           .toList();
                       }
