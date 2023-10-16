@@ -309,7 +309,7 @@ class _ConnectionPageState extends State<ConnectionPage>
                       double maxHeight = 0;
                       for (var peer in options) {
                         if (maxHeight < 200)
-                        maxHeight += 47;
+                        maxHeight += 52;
                       }
                       return Align(
                         alignment: Alignment.topLeft,
@@ -320,10 +320,13 @@ class _ConnectionPageState extends State<ConnectionPage>
                               maxHeight: maxHeight,
                               maxWidth: 320,
                             ),
-                            child: ListView(
-                              children: options
-                                  .map((peer) => _buildPeerTile(context, peer))
-                                  .toList()
+                            child: Padding(
+                              padding: const EdgeInsets.only(top: 5),
+                              child: ListView(
+                                children: options
+                                    .map((peer) => _buildPeerTile(context, peer))
+                                    .toList()
+                              ),
                             ),
                           ),
                         ),
