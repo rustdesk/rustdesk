@@ -689,12 +689,12 @@ class FfiModel with ChangeNotifier {
               sessionId: sessionId, arg: 'view-only'));
     }
     if (connType == ConnType.defaultConn) {
-      final platformDdditions = evt['platform_additions'];
-      if (platformDdditions != null && platformDdditions != '') {
+      final platformAdditions = evt['platform_additions'];
+      if (platformAdditions != null && platformAdditions != '') {
         try {
-          _pi.platformDdditions = json.decode(platformDdditions);
+          _pi.platformAdditions = json.decode(platformAdditions);
         } catch (e) {
-          debugPrint('Failed to decode platformDdditions $e');
+          debugPrint('Failed to decode platformAdditions $e');
         }
       }
     }
@@ -2203,13 +2203,13 @@ class PeerInfo with ChangeNotifier {
   List<Display> displays = [];
   Features features = Features();
   List<Resolution> resolutions = [];
-  Map<String, dynamic> platformDdditions = {};
+  Map<String, dynamic> platformAdditions = {};
 
   RxInt displaysCount = 0.obs;
   RxBool isSet = false.obs;
 
-  bool get isWayland => platformDdditions['is_wayland'] == true;
-  bool get isHeadless => platformDdditions['headless'] == true;
+  bool get isWayland => platformAdditions['is_wayland'] == true;
+  bool get isHeadless => platformAdditions['headless'] == true;
 
   bool get isSupportMultiDisplay => isDesktop && isSupportMultiUiSession;
 
