@@ -2,7 +2,6 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:desktop_multi_window/desktop_multi_window.dart';
-import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -187,21 +186,11 @@ class RustDeskMultiWindowManager {
     bool openInTabs = type != WindowType.RemoteDesktop ||
         mainGetLocalBoolOptionSync(kOptionOpenNewConnInTabs);
 
-    if (kOpenSamePeerInNewWindow) {
-      // Open in new window if the peer is already connected.
-      // No need to care about the previous session type.
-      if (type == WindowType.RemoteDesktop &&
-          await bind.sessionGetFlutterOptionByPeerId(id: remoteId, k: '') !=
-              null) {
-        openInTabs = false;
-      }
-    } else {
-      if (windows.length > 1 || !openInTabs) {
-        for (final windowId in windows) {
-          if (await DesktopMultiWindow.invokeMethod(
-              windowId, kWindowEventActiveSession, remoteId)) {
-            return MultiWindowCallResult(windowId, null);
-          }
+    if (windows.length > 1 || !openInTabs) {
+      for (final windowId in windows) {
+        if (await DesktopMultiWindow.invokeMethod(
+            windowId, kWindowEventActiveSession, remoteId)) {
+          return MultiWindowCallResult(windowId, null);
         }
       }
     }
