@@ -338,9 +338,11 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
         let _tx_clip;
         #[cfg(any(target_os = "windows", target_os = "linux"))]
         if self.conn_id > 0 && is_authorized {
+            log::debug!("Clipboard is enabled from client peer: type 1");
             rx_clip1 = clipboard::get_rx_cliprdr_server(self.conn_id);
             rx_clip = rx_clip1.lock().await;
         } else {
+            log::debug!("Clipboard is enabled from client peer, actually useless: type 2");
             let rx_clip2;
             (_tx_clip, rx_clip2) = unbounded_channel::<clipboard::ClipboardFile>();
             rx_clip1 = Arc::new(TokioMutex::new(rx_clip2));
@@ -480,7 +482,8 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
                     }
                 }
                 Some(data) = self.rx.recv() => {
-                    if self.stream.send(&data).await.is_err() {
+                    if let Err(e) = self.stream.send(&data).await {
+                        log::error!("error encountered in IPC task, quitting: {}", e);
                         break;
                     }
                     match &data {

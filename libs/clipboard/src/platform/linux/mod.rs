@@ -221,6 +221,12 @@ impl LocalFile {
         let wstr: WString<utf16string::LE> = WString::from(&self.name);
         let name = wstr.as_bytes();
 
+        log::debug!(
+            "put file to list: name_len {}, name {}",
+            name.len(),
+            &self.name
+        );
+
         let flags = 0x4064;
 
         // flags, 4 bytes
@@ -382,7 +388,9 @@ impl ClipboardContext {
         let prefix = self.fuse_mount_point.clone();
         let paths: Vec<PathBuf> = paths.iter().cloned().map(|p| prefix.join(p)).collect();
         log::debug!("setting clipboard with paths: {:?}", paths);
-        self.clipboard.set_file_list(&paths)
+        self.clipboard.set_file_list(&paths)?;
+        log::debug!("clipboard set, paths: {:?}", paths);
+        Ok(())
     }
 
     fn serve_file_contents(
@@ -544,8 +552,8 @@ impl ClipboardContext {
 
     pub fn serve(&self, conn_id: i32, msg: ClipboardFile) -> Result<(), CliprdrError> {
         if self.is_stopped() {
-            log::debug!("cliprdr stopped, skip serving clipboard");
-            return Ok(());
+            log::debug!("cliprdr stopped, restart it");
+            self.run()?;
         }
         match msg {
             ClipboardFile::NotifyCallback { .. } => {

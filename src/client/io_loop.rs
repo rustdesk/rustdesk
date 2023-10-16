@@ -303,7 +303,8 @@ impl<T: InvokeUiSession> Remote<T> {
                     if stop {
                         ContextSend::set_is_stopped();
                     } else {
-                        allow_err!(peer.send(&crate::clipboard_file::clip_2_msg(clip)).await);
+                        let msg = crate::clipboard_file::clip_2_msg(clip);
+                        allow_err!(peer.send(&msg).await);
                     }
                 }
             },

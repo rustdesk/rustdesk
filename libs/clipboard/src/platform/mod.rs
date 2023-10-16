@@ -52,6 +52,8 @@ pub fn create_cliprdr_context(
     };
 
     let linux_ctx = linux::ClipboardContext::new(timeout, rd_mnt)?;
+    log::debug!("start cliprdr FUSE");
+    linux_ctx.run().expect("failed to start cliprdr FUSE");
 
     Ok(Box::new(linux_ctx) as Box<_>)
 }
