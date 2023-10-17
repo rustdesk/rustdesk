@@ -346,12 +346,14 @@ class _ConnectionPageState extends State<ConnectionPage>
                         maxHeight += 50; };
                       return Align(
                         alignment: Alignment.topLeft,
-                        child: Material(
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(5),
+                          child: Material(
                           elevation: 4,
                           child: ConstrainedBox(
                             constraints: BoxConstraints(
                               maxHeight: maxHeight,
-                              maxWidth: 320,
+                              maxWidth: 319,
                             ),
                               child: peers.isEmpty && isPeersLoading
                               ? Container(
@@ -371,7 +373,7 @@ class _ConnectionPageState extends State<ConnectionPage>
                               ),
                             ),
                           ),
-                        ),
+                        )),
                       );
                     },
                   )
