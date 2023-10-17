@@ -341,8 +341,8 @@ impl Default for PeerConfig {
             view_only: Default::default(),
             reverse_mouse_wheel: Self::default_reverse_mouse_wheel(),
             displays_as_individual_windows: Self::default_displays_as_individual_windows(),
-            use_all_my_displays_for_the_remote_session: Self::default_use_all_my_displays_for_the_remote_session(
-            ),
+            use_all_my_displays_for_the_remote_session:
+                Self::default_use_all_my_displays_for_the_remote_session(),
             custom_resolutions: Default::default(),
             options: Self::default_options(),
             ui_flutter: Default::default(),
@@ -620,6 +620,13 @@ impl Config {
         {
             let mut path = Self::get_home();
             path.push(format!(".local/share/logs/{}", *APP_NAME.read().unwrap()));
+            std::fs::create_dir_all(&path).ok();
+            return path;
+        }
+        #[cfg(target_os = "android")]
+        {
+            let mut path = Self::get_home();
+            path.push(format!("{}/Logs", *APP_NAME.read().unwrap()));
             std::fs::create_dir_all(&path).ok();
             return path;
         }
