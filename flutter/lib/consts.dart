@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/models/state_model.dart';
+import 'package:get/get.dart';
 
 const double kDesktopRemoteTabBarHeight = 28.0;
 const int kInvalidWindowId = -1;
@@ -88,7 +89,7 @@ const double kDesktopFileTransferHeaderHeight = 25.0;
 
 EdgeInsets get kDragToResizeAreaPadding =>
     !kUseCompatibleUiMode && Platform.isLinux
-        ? stateGlobal.fullscreen || stateGlobal.isMaximized.value
+        ? stateGlobal.fullscreen.isTrue || stateGlobal.isMaximized.value
             ? EdgeInsets.zero
             : EdgeInsets.all(5.0)
         : EdgeInsets.zero;

@@ -1494,7 +1494,7 @@ Future<void> saveWindowPosition(WindowType type, {int? windowId}) async {
   late Offset position;
   late Size sz;
   late bool isMaximized;
-  bool isFullscreen = stateGlobal.fullscreen ||
+  bool isFullscreen = stateGlobal.fullscreen.isTrue ||
       (Platform.isMacOS && stateGlobal.closeOnFullscreen);
   setFrameIfMaximized() {
     if (isMaximized) {
@@ -2710,7 +2710,7 @@ tryMoveToScreenAndSetFullscreen(Rect? screenRect) async {
   final curFrame = await wc.getFrame();
   final frame =
       Rect.fromLTWH(screenRect.left + 30, screenRect.top + 30, 600, 400);
-  if (stateGlobal.fullscreen &&
+  if (stateGlobal.fullscreen.isTrue &&
       curFrame.left <= frame.left &&
       curFrame.top <= frame.top &&
       curFrame.width >= frame.width &&

@@ -351,7 +351,6 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
 
   int get windowId => stateGlobal.windowId;
 
-  bool get isFullscreen => stateGlobal.fullscreen;
   void _setFullscreen(bool v) {
     stateGlobal.setFullscreen(v);
     setState(() {});
@@ -797,7 +796,7 @@ class ScreenAdjustor {
     required this.cbExitFullscreen,
   });
 
-  bool get isFullscreen => stateGlobal.fullscreen;
+  bool get isFullscreen => stateGlobal.fullscreen.isTrue;
   int get windowId => stateGlobal.windowId;
 
   adjustWindow(BuildContext context) {
@@ -951,7 +950,6 @@ class _DisplayMenuState extends State<_DisplayMenu> {
     cbExitFullscreen: () => widget.setFullscreen(false),
   );
 
-  bool get isFullscreen => stateGlobal.fullscreen;
   int get windowId => stateGlobal.windowId;
   Map<String, bool> get perms => widget.ffi.ffiModel.permissions;
   PeerInfo get pi => widget.ffi.ffiModel.pi;
@@ -2060,21 +2058,21 @@ class _DraggableShowHideState extends State<_DraggableShowHide> {
       mainAxisSize: MainAxisSize.min,
       children: [
         _buildDraggable(context),
-        TextButton(
+        Obx(()=>TextButton(
           onPressed: () {
-            widget.setFullscreen(!isFullscreen);
+            widget.setFullscreen(!isFullscreen.value);
             setState(() {});
           },
           child: Tooltip(
-            message: translate(isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'),
+            message: translate(isFullscreen.isTrue ? 'Exit Fullscreen' : 'Fullscreen'),
             child: Icon(
-              isFullscreen ? Icons.fullscreen_exit : Icons.fullscreen,
+              isFullscreen.isTrue ? Icons.fullscreen_exit : Icons.fullscreen,
               size: iconSize,
             ),
           ),
-        ),
+        )),
         Offstage(
-          offstage: !isFullscreen,
+          offstage: !isFullscreen.value,
           child: TextButton(
             onPressed: () => widget.setMinimize(),
             child: Tooltip(
