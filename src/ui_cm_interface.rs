@@ -425,7 +425,7 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
                                 }
                                 #[cfg(not(any(target_os = "android", target_os = "ios")))]
                                 Data::ClipboardFile(_clip) => {
-                                    #[cfg(any(windows, linux))]
+                                    #[cfg(any(target_os = "windows", target_os="linux"))]
                                     {
                                         let is_stopping_allowed = _clip.is_stopping_allowed_from_peer();
                                         let is_clipboard_enabled = ContextSend::is_enabled();

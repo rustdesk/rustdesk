@@ -181,11 +181,20 @@ impl FuseServer {
 }
 
 impl FuseServer {
-    pub fn serve(&mut self, reply: ClipboardFile) -> Result<(), CliprdrError> {
+    pub fn serve(&self, reply: ClipboardFile) -> Result<(), CliprdrError> {
         self.tx.send(reply).map_err(|e| {
             log::error!("failed to serve cliprdr reply from endpoint: {:?}", e);
             CliprdrError::ClipboardInternalError
         })?;
+        Ok(())
+    }
+}
+
+impl FuseServer {
+    pub fn load_file_list(&mut self, files: Vec<FileDescription>) -> Result<(), CliprdrError> {
+        let tree = FuseNode::build_tree(files)?;
+        self.files = tree;
+        self.generation.fetch_add(1, Ordering::Relaxed);
         Ok(())
     }
 }
@@ -499,163 +508,9 @@ impl FuseServer {
         paths
     }
 
-    /// fetch file list from remote
-    fn sync_file_system(
-        &mut self,
-        conn_id: i32,
-        file_group_format_id: i32,
-        _file_contents_format_id: i32,
-    ) -> Result<bool, CliprdrError> {
-        let resp = self.send_sync_fs_request(conn_id, file_group_format_id, self.timeout)?;
-        let descs = match resp {
-            ClipboardFile::FormatDataResponse {
-                msg_flags,
-                format_data,
-            } => {
-                if msg_flags != 0x1 {
-                    log::error!("clipboard FUSE server: received unexpected response flags");
-                    return Err(CliprdrError::ClipboardInternalError);
-                }
-                let descs = FileDescription::parse_file_descriptors(format_data, conn_id)?;
-
-                descs
-            }
-            _ => {
-                log::error!("clipboard FUSE server: received unexpected response type");
-
-                return Err(CliprdrError::ClipboardInternalError);
-            }
-        };
-
-        let mut new_tree = FuseNode::build_tree(descs)?;
-        let res = new_tree
-            .iter_mut()
-            .filter(|f_node| f_node.is_file() && f_node.attributes.size == 0)
-            .try_for_each(|f_node| self.sync_node_size(f_node));
-
-        if let Err(err) = res {
-            log::error!(
-                "clipboard FUSE server: failed to fetch file size: {:?}",
-                err
-            );
-
-            return Err(CliprdrError::ClipboardInternalError);
-        }
-
-        // replace current file system
-        self.files = new_tree;
-        self.generation.fetch_add(1, Ordering::Relaxed);
-
-        Ok(true)
-    }
-
-    fn send_sync_fs_request(
-        &self,
-        conn_id: i32,
-        file_group_format_id: i32,
-        timeout: std::time::Duration,
-    ) -> Result<ClipboardFile, CliprdrError> {
-        // request file list
-        let data = ClipboardFile::FormatDataRequest {
-            requested_format_id: file_group_format_id,
-        };
-        send_data(conn_id, data);
-        self.rx.recv_timeout(timeout).map_err(|e| {
-            log::error!("failed to receive file list from channel: {:?}", e);
-            CliprdrError::ClipboardInternalError
-        })
-    }
-
-    pub fn update_files(
-        &mut self,
-        conn_id: i32,
-        file_group_format_id: i32,
-        file_contents_format_id: i32,
-    ) -> Result<bool, CliprdrError> {
-        self.sync_file_system(conn_id, file_group_format_id, file_contents_format_id)
-    }
-
     /// allocate a new file descriptor
     fn alloc_fd(&self) -> u64 {
         self.file_handle_counter.fetch_add(1, Ordering::Relaxed)
-    }
-
-    // synchronize metadata with remote
-    fn sync_node_size(&self, node: &mut FuseNode) -> Result<(), std::io::Error> {
-        log::debug!(
-            "syncing metadata for {:?} on stream: {}",
-            node.name,
-            node.stream_id
-        );
-
-        let request = ClipboardFile::FileContentsRequest {
-            stream_id: node.stream_id,
-            list_index: node.inode as i32 - 2, // list index at least 2
-            dw_flags: 1,
-
-            n_position_low: 0,
-            n_position_high: 0,
-            cb_requested: 8,
-            have_clip_data_id: false,
-            clip_data_id: 0,
-        };
-
-        send_data(node.conn_id, request);
-
-        log::debug!(
-            "waiting for metadata sync reply for {:?} on channel {}",
-            node.name,
-            node.conn_id
-        );
-
-        let reply = self
-            .rx
-            .recv_timeout(self.timeout)
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::TimedOut, e))?;
-        log::debug!(
-            "got metadata sync reply for {:?} on channel {}",
-            node.name,
-            node.conn_id
-        );
-
-        let size = match reply {
-            ClipboardFile::FileContentsResponse {
-                msg_flags,
-                stream_id,
-                requested_data,
-            } => {
-                if stream_id != node.stream_id {
-                    return Err(std::io::Error::new(
-                        std::io::ErrorKind::Other,
-                        "stream id mismatch",
-                    ));
-                }
-                if msg_flags & 1 == 0 {
-                    return Err(std::io::Error::new(
-                        std::io::ErrorKind::Other,
-                        "failure request",
-                    ));
-                }
-                if requested_data.len() != 8 {
-                    return Err(std::io::Error::new(
-                        std::io::ErrorKind::Other,
-                        "invalid data length",
-                    ));
-                }
-                let little_endian_value = u64::from_le_bytes(requested_data.try_into().unwrap());
-                little_endian_value
-            }
-            _ => {
-                return Err(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    "invalid reply",
-                ));
-            }
-        };
-        log::debug!("got metadata sync reply for {:?}: size {}", node.name, size);
-
-        node.attributes.size = size;
-        Ok(())
     }
 
     fn read_node(
@@ -916,6 +771,7 @@ impl FuseNode {
         }
     }
 
+    #[allow(unused)]
     pub fn is_file(&self) -> bool {
         self.attributes.kind == FileType::File
     }

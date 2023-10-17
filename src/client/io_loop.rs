@@ -317,6 +317,7 @@ impl<T: InvokeUiSession> Remote<T> {
                     if stop {
                         ContextSend::set_is_stopped();
                     } else {
+                        log::debug!("Send system clipboard message to remote");
                         let msg = crate::clipboard_file::clip_2_msg(clip);
                         allow_err!(peer.send(&msg).await);
                     }
@@ -1714,6 +1715,7 @@ impl<T: InvokeUiSession> Remote<T> {
 
     #[cfg(any(target_os = "windows", target_os = "linux"))]
     fn handle_cliprdr_msg(&self, clip: hbb_common::message_proto::Cliprdr) {
+        log::debug!("handling cliprdr msg from server peer");
         #[cfg(feature = "flutter")]
         if let Some(hbb_common::message_proto::cliprdr::Union::FormatList(_)) = &clip.union {
             if self.client_conn_id
@@ -1723,20 +1725,23 @@ impl<T: InvokeUiSession> Remote<T> {
             }
         }
 
-        if let Some(clip) = crate::clipboard_file::msg_2_clip(clip) {
-            let is_stopping_allowed = clip.is_stopping_allowed_from_peer();
-            let file_transfer_enabled = self.handler.lc.read().unwrap().enable_file_transfer.v;
-            let stop = is_stopping_allowed && !file_transfer_enabled;
-            log::debug!(
+        let Some(clip) = crate::clipboard_file::msg_2_clip(clip) else {
+            log::warn!("failed to decode cliprdr msg from server peer");
+            return;
+        };
+
+        let is_stopping_allowed = clip.is_stopping_allowed_from_peer();
+        let file_transfer_enabled = self.handler.lc.read().unwrap().enable_file_transfer.v;
+        let stop = is_stopping_allowed && !file_transfer_enabled;
+        log::debug!(
                 "Process clipboard message from server peer, stop: {}, is_stopping_allowed: {}, file_transfer_enabled: {}",
                 stop, is_stopping_allowed, file_transfer_enabled);
-            if !stop {
-                let _ = ContextSend::proc(|context| -> ResultType<()> {
-                    context
-                        .server_clip_file(self.client_conn_id, clip)
-                        .map_err(|e| e.into())
-                });
-            }
+        if !stop {
+            let _ = ContextSend::proc(|context| -> ResultType<()> {
+                context
+                    .server_clip_file(self.client_conn_id, clip)
+                    .map_err(|e| e.into())
+            });
         }
     }
 }

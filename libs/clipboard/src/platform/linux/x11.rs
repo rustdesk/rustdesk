@@ -4,21 +4,15 @@ use std::{
     sync::atomic::{AtomicBool, Ordering},
 };
 
-use hbb_common::{
-    bytes::{BufMut, BytesMut},
-    log,
-};
+use hbb_common::log;
 use once_cell::sync::OnceCell;
 use parking_lot::Mutex;
 use x11_clipboard::Clipboard;
 use x11rb::protocol::xproto::Atom;
 
 use crate::{
-    platform::linux::{
-        construct_file_list, FILECONTENTS_FORMAT_ID, FILECONTENTS_FORMAT_NAME,
-        FILEDESCRIPTORW_FORMAT_NAME, FILEDESCRIPTOR_FORMAT_ID,
-    },
-    send_data, ClipboardFile, CliprdrError,
+    platform::linux::{construct_file_list, send_format_list},
+    CliprdrError,
 };
 
 use super::{encode_path_to_uri, parse_plain_uri_list, SysClipboard};
@@ -175,89 +169,8 @@ impl SysClipboard for X11Clipboard {
         log::debug!("stop listening file related atoms on clipboard");
     }
 
-    fn send_format_list(&self, conn_id: i32) -> Result<(), CliprdrError> {
-        if self.is_stopped() {
-            log::debug!("clipboard stopped, skip sending");
-            return Ok(());
-        }
-
-        let Some(paths) = self.wait_file_list()? else {
-            log::debug!("no files in format list, skip sending");
-            return Ok(());
-        };
-
-        let filtered: Vec<_> = paths
-            .into_iter()
-            .filter(|pb| !pb.starts_with(&self.ignore_path))
-            .collect();
-
-        if filtered.is_empty() {
-            log::debug!("no files in format list, skip sending");
-            return Ok(());
-        }
-
-        send_format_list(conn_id)
+    fn get_file_list(&self) -> Result<Vec<super::LocalFile>, CliprdrError> {
+        let paths = { self.former_file_list.lock().clone() };
+        construct_file_list(&paths)
     }
-
-    fn send_file_list(&self, conn_id: i32) -> Result<(), CliprdrError> {
-        if self.is_stopped() {
-            log::debug!("clipboard stopped, skip sending");
-            return Ok(());
-        }
-        let Some(paths) = self.wait_file_list()? else {
-            log::debug!("no files in format list, skip sending");
-            return Ok(());
-        };
-
-        let filtered: Vec<_> = paths
-            .into_iter()
-            .filter(|pb| !pb.starts_with(&self.ignore_path))
-            .collect();
-
-        if filtered.is_empty() {
-            log::debug!("no files in format list, skip sending");
-            return Ok(());
-        }
-
-        send_file_list(filtered, conn_id)
-    }
-}
-
-fn send_format_list(conn_id: i32) -> Result<(), CliprdrError> {
-    log::debug!("send format list to remote, conn={}", conn_id);
-    let format_list = ClipboardFile::FormatList {
-        format_list: vec![
-            (
-                FILEDESCRIPTOR_FORMAT_ID,
-                FILEDESCRIPTORW_FORMAT_NAME.to_string(),
-            ),
-            (FILECONTENTS_FORMAT_ID, FILECONTENTS_FORMAT_NAME.to_string()),
-        ],
-    };
-
-    send_data(conn_id, format_list);
-    log::debug!("format list to remote dispatched, conn={}", conn_id);
-    Ok(())
-}
-
-fn send_file_list(paths: Vec<PathBuf>, conn_id: i32) -> Result<(), CliprdrError> {
-    log::debug!("send file list to remote, conn={}", conn_id);
-    let files = construct_file_list(paths.as_slice())?;
-
-    let mut data = BytesMut::with_capacity(4 + 592 * files.len());
-    data.put_u32_le(paths.len() as u32);
-    for file in files.iter() {
-        data.put(file.as_bin().as_slice());
-    }
-
-    let format_data = data.to_vec();
-
-    send_data(
-        conn_id,
-        ClipboardFile::FormatDataResponse {
-            msg_flags: 1,
-            format_data,
-        },
-    );
-    Ok(())
 }
