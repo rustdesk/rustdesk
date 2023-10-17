@@ -95,6 +95,12 @@ class MainService : Service() {
     }
 
     @Keep
+    @RequiresApi(Build.VERSION_CODES.N)
+    fun rustInputString(input: String) {
+        InputService.ctx?.onTextInput(input)
+    }
+
+    @Keep
     fun rustGetByName(name: String): String {
         return when (name) {
             "screen_size" -> {

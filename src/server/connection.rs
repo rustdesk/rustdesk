@@ -41,7 +41,7 @@ use hbb_common::{
     tokio_util::codec::{BytesCodec, Framed},
 };
 #[cfg(any(target_os = "android", target_os = "ios"))]
-use scrap::android::call_main_service_pointer_input;
+use scrap::android::{call_main_service_pointer_input, call_main_service_input_string};
 use serde_json::{json, value::Value};
 use sha2::{Digest, Sha256};
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -1722,8 +1722,17 @@ impl Connection {
                     }
                     self.update_auto_disconnect_timer();
                 }
-                #[cfg(any(target_os = "android", target_os = "ios"))]
+                #[cfg(any(target_os = "ios"))]
                 Some(message::Union::KeyEvent(..)) => {}
+                #[cfg(any(target_os = "android"))]
+                Some(message::Union::KeyEvent(me)) => {
+                    // We can only use seq of key event, android device doesn't support abritrary key stroke.
+                    let seq = me.seq();
+                    let result = call_main_service_input_string(seq);
+                    if let Err(e) = result {
+                        log::debug!("call_main_service_input_string fail:{}", e);
+                    }
+                }
                 #[cfg(not(any(target_os = "android", target_os = "ios")))]
                 Some(message::Union::KeyEvent(me)) => {
                     if self.peer_keyboard_enabled() {

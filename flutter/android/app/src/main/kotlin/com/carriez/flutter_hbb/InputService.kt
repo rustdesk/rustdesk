@@ -10,8 +10,10 @@ import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.GestureDescription
 import android.graphics.Path
 import android.os.Build
+import android.os.Bundle
 import android.util.Log
 import android.view.accessibility.AccessibilityEvent
+import android.view.accessibility.AccessibilityNodeInfo
 import androidx.annotation.RequiresApi
 import java.util.*
 import kotlin.math.abs
@@ -249,6 +251,18 @@ class InputService : AccessibilityService() {
             dispatchGesture(builder.build(), null, null)
         } catch (e: Exception) {
             Log.e(logTag, "endGesture error:$e")
+        }
+    }
+
+    @RequiresApi(Build.VERSION_CODES.N)
+    fun onTextInput(str: String) {
+        findFocus(AccessibilityNodeInfo.FOCUS_INPUT)?.let {
+            val arguments = Bundle()
+            arguments.putCharSequence(
+                AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE,
+                str
+            )
+            it.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, arguments)
         }
     }
 

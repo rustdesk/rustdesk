@@ -173,6 +173,25 @@ pub fn call_main_service_pointer_input(kind: &str, mask: i32, x: i32, y: i32) ->
     }
 }
 
+pub fn call_main_service_input_string(str: &str) -> JniResult<()> {
+    if let (Some(jvm), Some(ctx)) = (
+        JVM.read().unwrap().as_ref(),
+        MAIN_SERVICE_CTX.read().unwrap().as_ref(),
+    ) {
+        let mut env = jvm.attach_current_thread_as_daemon()?;
+        let input_string = env.new_string(str)?;
+        env.call_method(
+            ctx,
+            "rustInputString",
+            "(Ljava/lang/String;)V",
+            &[JValue::Object(&JObject::from(input_string))],
+        )?;
+        return Ok(());
+    } else {
+        return Err(JniError::ThrowFailed(-1));
+    }
+}
+
 pub fn call_main_service_get_by_name(name: &str) -> JniResult<String> {
     if let (Some(jvm), Some(ctx)) = (
         JVM.read().unwrap().as_ref(),
