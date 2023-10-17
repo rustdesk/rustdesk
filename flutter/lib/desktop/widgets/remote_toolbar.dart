@@ -353,7 +353,8 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
 
   void _setFullscreen(bool v) {
     stateGlobal.setFullscreen(v);
-    setState(() {});
+    // stateGlobal.fullscreen is RxBool now, no need to call setState.
+    // setState(() {});
   }
 
   RxBool get show => widget.state.show;
@@ -2058,32 +2059,34 @@ class _DraggableShowHideState extends State<_DraggableShowHide> {
       mainAxisSize: MainAxisSize.min,
       children: [
         _buildDraggable(context),
-        Obx(()=>TextButton(
-          onPressed: () {
-            widget.setFullscreen(!isFullscreen.value);
-            setState(() {});
-          },
-          child: Tooltip(
-            message: translate(isFullscreen.isTrue ? 'Exit Fullscreen' : 'Fullscreen'),
-            child: Icon(
-              isFullscreen.isTrue ? Icons.fullscreen_exit : Icons.fullscreen,
-              size: iconSize,
-            ),
-          ),
-        )),
-        Offstage(
-          offstage: !isFullscreen.value,
-          child: TextButton(
-            onPressed: () => widget.setMinimize(),
-            child: Tooltip(
-              message: translate('Minimize'),
-              child: Icon(
-                Icons.remove,
-                size: iconSize,
+        Obx(() => TextButton(
+              onPressed: () {
+                widget.setFullscreen(!isFullscreen.value);
+              },
+              child: Tooltip(
+                message: translate(
+                    isFullscreen.isTrue ? 'Exit Fullscreen' : 'Fullscreen'),
+                child: Icon(
+                  isFullscreen.isTrue
+                      ? Icons.fullscreen_exit
+                      : Icons.fullscreen,
+                  size: iconSize,
+                ),
               ),
-            ),
-          ),
-        ),
+            )),
+        Obx(() => Offstage(
+              offstage: isFullscreen.isFalse,
+              child: TextButton(
+                onPressed: () => widget.setMinimize(),
+                child: Tooltip(
+                  message: translate('Minimize'),
+                  child: Icon(
+                    Icons.remove,
+                    size: iconSize,
+                  ),
+                ),
+              ),
+            )),
         TextButton(
           onPressed: () => setState(() {
             widget.show.value = !widget.show.value;
