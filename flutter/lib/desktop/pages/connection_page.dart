@@ -69,12 +69,6 @@ class _ConnectionPageState extends State<ConnectionPage>
     _updateTimer = periodic_immediate(Duration(seconds: 1), () async {
       updateStatus();
     });
-    _idFocusNode.addListener(() {
-      _idInputFocused.value = _idFocusNode.hasFocus;
-      // select all to faciliate removing text, just following the behavior of address input of chrome
-      _idController.selection = TextSelection(
-          baseOffset: 0, extentOffset: _idController.value.text.length);
-    });
     Get.put<IDTextEditingController>(_idController);
     windowManager.addListener(this);
   }
@@ -289,14 +283,16 @@ class _ConnectionPageState extends State<ConnectionPage>
                         VoidCallback onFieldSubmitted,
                         ) {
                       fieldTextEditingController.text = _idController.text;
-                      fieldFocusNode.addListener(() {
+                      fieldFocusNode.addListener(() async {
                         _idInputFocused.value = fieldFocusNode.hasFocus;
                         if (fieldFocusNode.hasFocus && !isPeersLoading){
                           _fetchPeers();
                         }
-                        // select all to faciliate removing text, just following the behavior of address input of chrome
-                        _idController.selection = TextSelection(
-                            baseOffset: 0, extentOffset: _idController.value.text.length);
+                        // select all to facilitate removing text, just following the behavior of address input of chrome
+                        final textLength = fieldTextEditingController.value.text.length;
+                        await Future.delayed(Duration(milliseconds: 200));
+                        fieldTextEditingController.selection = TextSelection.collapsed(offset: textLength);
+                        fieldTextEditingController.selection = TextSelection(baseOffset: 0, extentOffset: textLength);
                       });
                       return Obx(() =>
                       TextField(
