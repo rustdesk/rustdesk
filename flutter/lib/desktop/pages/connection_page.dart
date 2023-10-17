@@ -157,11 +157,11 @@ class _ConnectionPageState extends State<ConnectionPage>
     setState(() {
       isPeersLoading = true;
     });
-  await Future.delayed(Duration(milliseconds: 100));
-  await _getAllPeers();
-  setState(() {
-      isPeersLoading = false;
-    });
+    await Future.delayed(Duration(milliseconds: 100));
+    await _getAllPeers();
+    setState(() {
+        isPeersLoading = false;
+      });
   }
 
   Future<void> _getAllPeers() async {
