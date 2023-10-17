@@ -2282,7 +2282,7 @@ class PeerInfo with ChangeNotifier {
     if (currentDisplay == kAllDisplayValue) {
       return null;
     }
-    if (currentDisplay > 0 && currentDisplay < displays.length) {
+    if (currentDisplay >= 0 && currentDisplay < displays.length) {
       return displays[currentDisplay];
     } else {
       return null;
