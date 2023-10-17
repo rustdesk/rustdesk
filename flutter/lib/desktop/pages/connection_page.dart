@@ -265,20 +265,21 @@ class _ConnectionPageState extends State<ConnectionPage>
                         return [emptyPeer];
                       }
                       else {
-                      if (textEditingValue.text.contains(" ")) {
-                        textEditingValue = TextEditingValue(
-                          text: textEditingValue.text.replaceAll(" ", ""),
-                          selection: textEditingValue.selection,
-                        );
-                      }
+                        String textWithoutSpaces = textEditingValue.text.replaceAll(" ", "");
+                        if (int.tryParse(textWithoutSpaces) != null) {
+                          textEditingValue = TextEditingValue(
+                            text: textWithoutSpaces,
+                            selection: textEditingValue.selection,
+                          );
+                        }
 
-                      return peers.where((peer) =>
-                      peer.id.toLowerCase().contains(textEditingValue.text.toLowerCase()) ||
-                      peer.username.toLowerCase().contains(textEditingValue.text.toLowerCase()) ||
-                      peer.hostname.toLowerCase().contains(textEditingValue.text.toLowerCase()) ||
-                      peer.alias.toLowerCase().contains(textEditingValue.text.toLowerCase()) ||
-                      peer.platform.toLowerCase().contains(textEditingValue.text.toLowerCase()))
-                          .toList();
+                        return peers.where((peer) =>
+                        peer.id.toLowerCase().contains(textEditingValue.text.toLowerCase()) ||
+                        peer.username.toLowerCase().contains(textEditingValue.text.toLowerCase()) ||
+                        peer.hostname.toLowerCase().contains(textEditingValue.text.toLowerCase()) ||
+                        peer.alias.toLowerCase().contains(textEditingValue.text.toLowerCase()) ||
+                        peer.platform.toLowerCase().contains(textEditingValue.text.toLowerCase()))
+                            .toList();
                       }
                     },
 
