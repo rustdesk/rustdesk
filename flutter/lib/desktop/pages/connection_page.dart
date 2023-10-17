@@ -51,6 +51,7 @@ class _ConnectionPageState extends State<ConnectionPage>
       return list.sublist(0, n);
     }
   }
+  bool isPeersLoading = false;
 
   @override
   void initState() {
@@ -152,8 +153,18 @@ class _ConnectionPageState extends State<ConnectionPage>
     connect(context, id, isFileTransfer: isFileTransfer);
   }
 
-    Future<void> getAllPeers() async {
-    peers.clear();
+  Future<void> _fetchPeers() async {
+    setState(() {
+      isPeersLoading = true;
+    });
+  await Future.delayed(Duration(milliseconds: 100));
+  await _getAllPeers();
+  setState(() {
+      isPeersLoading = false;
+    });
+  }
+
+  Future<void> _getAllPeers() async {
     Map<String, dynamic> recentPeers = jsonDecode(await bind.mainLoadRecentPeersSync());
     Map<String, dynamic> favPeers = jsonDecode(await bind.mainLoadFavPeersSync());
     Map<String, dynamic> lanPeers = jsonDecode(await bind.mainLoadLanPeersSync());
@@ -194,15 +205,17 @@ class _ConnectionPageState extends State<ConnectionPage>
     mergePeers(abPeers);
     mergePeers(groupPeers);
 
+      List<Peer> parsedPeers = [];
+
     for (var peer in combinedPeers.values) {
-      peers.add(Peer.fromJson(peer));
+      parsedPeers.add(Peer.fromJson(peer));
     }
+      peers = parsedPeers;
   }
 
   /// UI for the remote ID TextField.
   /// Search for a peer.
   Widget _buildRemoteIDTextField(BuildContext context) {
-    getAllPeers();
     var w = Container(
       width: 320 + 20 * 2,
       padding: const EdgeInsets.fromLTRB(20, 24, 20, 22),
@@ -235,6 +248,22 @@ class _ConnectionPageState extends State<ConnectionPage>
                       if (textEditingValue.text == '') {
                         return const Iterable<Peer>.empty();
                       }
+                      else if (peers.isEmpty) {
+                         Peer emptyPeer = Peer(
+                          id: '',
+                          username: '',
+                          hostname: '',
+                          alias: '',
+                          platform: '',
+                          tags: [],
+                          hash: '',
+                          forceAlwaysRelay: false,
+                          rdpPort: '',
+                          rdpUsername: '',
+                          loginName: '',
+                        );
+                        return [emptyPeer];
+                      }
                       else {
                       if (textEditingValue.text.contains(" ")) {
                         textEditingValue = TextEditingValue(
@@ -261,6 +290,9 @@ class _ConnectionPageState extends State<ConnectionPage>
                       fieldTextEditingController.text = _idController.text;
                       fieldFocusNode.addListener(() {
                         _idInputFocused.value = fieldFocusNode.hasFocus;
+                        if (fieldFocusNode.hasFocus && !isPeersLoading){
+                          _fetchPeers();
+                        }
                         // select all to faciliate removing text, just following the behavior of address input of chrome
                         _idController.selection = TextSelection(
                             baseOffset: 0, extentOffset: _idController.value.text.length);
@@ -310,8 +342,7 @@ class _ConnectionPageState extends State<ConnectionPage>
                       double maxHeight = 0;
                       for (var peer in options) {
                         if (maxHeight < 200)
-                        maxHeight += 52;
-                      }
+                        maxHeight += 50; };
                       return Align(
                         alignment: Alignment.topLeft,
                         child: Material(
@@ -321,7 +352,16 @@ class _ConnectionPageState extends State<ConnectionPage>
                               maxHeight: maxHeight,
                               maxWidth: 320,
                             ),
-                            child: Padding(
+                              child: peers.isEmpty && isPeersLoading
+                              ? Container(
+                                    height: 80,
+                                     child: Center( 
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                      ),
+                                    )
+                                  )
+                              : Padding(
                               padding: const EdgeInsets.only(top: 5),
                               child: ListView(
                                 children: options
