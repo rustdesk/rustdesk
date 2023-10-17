@@ -355,19 +355,19 @@ pub fn session_set_displays_as_individual_windows(session_id: SessionID, value: 
     }
 }
 
-pub fn session_get_use_all_my_monitors_when_connecting(
+pub fn session_get_use_all_my_displays_for_the_remote_session(
     session_id: SessionID,
 ) -> SyncReturn<Option<String>> {
     if let Some(session) = sessions::get_session_by_session_id(&session_id) {
-        SyncReturn(Some(session.get_use_all_my_monitors_when_connecting()))
+        SyncReturn(Some(session.get_use_all_my_displays_for_the_remote_session()))
     } else {
         SyncReturn(None)
     }
 }
 
-pub fn session_set_use_all_my_monitors_when_connecting(session_id: SessionID, value: String) {
+pub fn session_set_use_all_my_displays_for_the_remote_session(session_id: SessionID, value: String) {
     if let Some(session) = sessions::get_session_by_session_id(&session_id) {
-        session.save_use_all_my_monitors_when_connecting(value);
+        session.save_use_all_my_displays_for_the_remote_session(value);
     }
 }
 

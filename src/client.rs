@@ -1218,14 +1218,14 @@ impl LoginConfigHandler {
         self.save_config(config);
     }
 
-    /// Save "use_all_my_monitors_when_connecting" ("", "Y") to the current config.
+    /// Save "use_all_my_displays_for_the_remote_session" ("", "Y") to the current config.
     ///
     /// # Arguments
     ///
-    /// * `value` - The "use_all_my_monitors_when_connecting" value ("", "Y").
-    pub fn save_use_all_my_monitors_when_connecting(&mut self, value: String) {
+    /// * `value` - The "use_all_my_displays_for_the_remote_session" value ("", "Y").
+    pub fn save_use_all_my_displays_for_the_remote_session(&mut self, value: String) {
         let mut config = self.load_config();
-        config.use_all_my_monitors_when_connecting = value;
+        config.use_all_my_displays_for_the_remote_session = value;
         self.save_config(config);
     }
 

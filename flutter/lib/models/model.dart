@@ -705,13 +705,13 @@ class FfiModel with ChangeNotifier {
     notifyListeners();
 
     if (!isCache) {
-      tryUseAllMyDisplaysWhenConnecting(peerId);
+      tryUseAllMyDisplaysForTheRemoteSession(peerId);
     }
   }
 
-  tryUseAllMyDisplaysWhenConnecting(String peerId) async {
-    if (bind.mainGetUserDefaultOption(
-            key: kKeyUseAllMyMonitorsWhenConnecting) !=
+  tryUseAllMyDisplaysForTheRemoteSession(String peerId) async {
+    if (bind.sessionGetUseAllMyDisplaysForTheRemoteSession(
+            sessionId: sessionId) !=
         'Y') {
       return;
     }

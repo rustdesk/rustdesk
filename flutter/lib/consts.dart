@@ -66,7 +66,7 @@ const String kPointerEventKindTouch = "touch";
 const String kPointerEventKindMouse = "mouse";
 
 const String kKeyShowDisplaysAsIndividualWindows = 'displays_as_individual_windows';
-const String kKeyUseAllMyMonitorsWhenConnecting = 'use_all_my_monitors_when_connecting';
+const String kKeyUseAllMyDisplaysForTheRemoteSession = 'use_all_my_displays_for_the_remote_session';
 const String kKeyShowMonitorsToolbar = 'show_monitors_toolbar';
 
 // the executable name of the portable version
