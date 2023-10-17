@@ -616,7 +616,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
         final peerId = args['peer_id'] as String;
         final display = args['display'] as int;
         final displayCount = args['display_count'] as int;
-        final screenRect = args['screen_rect'];
+        final screenRect = parseParamScreenRect(args);
         await rustDeskWinManager.openMonitorSession(
             windowId, peerId, display, displayCount, screenRect);
       }

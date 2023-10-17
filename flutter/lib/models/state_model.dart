@@ -78,17 +78,15 @@ class StateGlobal {
           "fullscreen: $fullscreen, resizeEdgeSize: ${_resizeEdgeSize.value}");
       _windowBorderWidth.value = fullscreen ? 0 : kWindowBorderWidth;
       if (procWnd) {
-        WindowController.fromWindowId(windowId)
-            .setFullscreen(_fullscreen)
-            .then((_) {
+        final wc = WindowController.fromWindowId(windowId);
+        wc.setFullscreen(_fullscreen).then((_) {
           // https://github.com/leanflutter/window_manager/issues/131#issuecomment-1111587982
           if (Platform.isWindows && !v) {
             Future.delayed(Duration.zero, () async {
-              final frame =
-                  await WindowController.fromWindowId(windowId).getFrame();
+              final frame = await wc.getFrame();
               final newRect = Rect.fromLTWH(
                   frame.left, frame.top, frame.width + 1, frame.height + 1);
-              await WindowController.fromWindowId(windowId).setFrame(newRect);
+              await wc.setFrame(newRect);
             });
           }
         });

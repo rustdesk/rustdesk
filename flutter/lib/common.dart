@@ -2723,3 +2723,15 @@ tryMoveToScreenAndSetFullscreen(Rect? screenRect) async {
     stateGlobal.setFullscreen(true);
   });
 }
+
+parseParamScreenRect(Map<String, dynamic> params) {
+  Rect? screenRect;
+  if (params['screen_rect'] != null) {
+    double l = params['screen_rect']['l'];
+    double t = params['screen_rect']['t'];
+    double r = params['screen_rect']['r'];
+    double b = params['screen_rect']['b'];
+    screenRect = Rect.fromLTRB(l, t, r, b);
+  }
+  return screenRect;
+}
