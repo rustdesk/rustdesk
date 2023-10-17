@@ -535,5 +535,20 @@ Future<List<TToggleMenu>> toolbarDisplayToggle(
         child: Text(translate('Show displays as individual windows'))));
   }
 
+  final screenList = await getScreenRectList();
+  if (useTextureRender && pi.isSupportMultiDisplay && screenList.length > 1) {
+    final value = bind.sessionGetUseAllMyDisplaysForTheRemoteSession(
+            sessionId: ffi.sessionId) ==
+        'Y';
+    v.add(TToggleMenu(
+        value: value,
+        onChanged: (value) {
+          if (value == null) return;
+          bind.sessionSetUseAllMyDisplaysForTheRemoteSession(
+              sessionId: sessionId, value: value ? 'Y' : '');
+        },
+        child: Text(translate('Use all my displays for the remote session'))));
+  }
+
   return v;
 }

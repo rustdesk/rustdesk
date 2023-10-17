@@ -564,5 +564,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("elevated_switch_display_msg", ""),
         ("Open in new window", ""),
         ("Show displays as individual windows", ""),
+        ("Use all my displays for the remote session", ""),
     ].iter().cloned().collect();
 }

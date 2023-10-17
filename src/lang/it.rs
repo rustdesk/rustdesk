@@ -565,5 +565,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("elevated_switch_display_msg", "Passo allo schermo principale perché in modalità elevata non sono supportati più schermi."),
         ("Open in new window", "Apri in una nuova finestra"),
         ("Show displays as individual windows", "Visualizza schermi come finestre individuali"),
+        ("Use all my displays for the remote session", ""),
     ].iter().cloned().collect();
 }

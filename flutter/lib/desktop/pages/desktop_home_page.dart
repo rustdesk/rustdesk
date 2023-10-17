@@ -329,8 +329,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
           "Click to download", () async {
         final Uri url = Uri.parse('https://rustdesk.com/download');
         await launchUrl(url);
-      },
-      closeButton: true);
+      }, closeButton: true);
     }
     if (systemError.isNotEmpty) {
       return buildInstallCard("", systemError, "", () {});
@@ -397,7 +396,6 @@ class _DesktopHomePageState extends State<DesktopHomePage>
   Widget buildInstallCard(String title, String content, String btnText,
       GestureTapCallback onPressed,
       {String? help, String? link, bool? closeButton}) {
-
     void closeCard() {
       setState(() {
         isCardClosed = true;
@@ -555,6 +553,22 @@ class _DesktopHomePageState extends State<DesktopHomePage>
     Get.put<RxBool>(svcStopped, tag: 'stop-service');
     rustDeskWinManager.registerActiveWindowListener(onActiveWindowChanged);
 
+    screenToMap(window_size.Screen screen) => {
+          'frame': {
+            'l': screen.frame.left,
+            't': screen.frame.top,
+            'r': screen.frame.right,
+            'b': screen.frame.bottom,
+          },
+          'visibleFrame': {
+            'l': screen.visibleFrame.left,
+            't': screen.visibleFrame.top,
+            'r': screen.visibleFrame.right,
+            'b': screen.visibleFrame.bottom,
+          },
+          'scaleFactor': screen.scaleFactor,
+        };
+
     rustDeskWinManager.setMethodHandler((call, fromWindowId) async {
       debugPrint(
           "[Main] call ${call.method} with args ${call.arguments} from window $fromWindowId");
@@ -563,24 +577,13 @@ class _DesktopHomePageState extends State<DesktopHomePage>
       } else if (call.method == kWindowGetWindowInfo) {
         final screen = (await window_size.getWindowInfo()).screen;
         if (screen == null) {
-          return "";
+          return '';
         } else {
-          return jsonEncode({
-            'frame': {
-              'l': screen.frame.left,
-              't': screen.frame.top,
-              'r': screen.frame.right,
-              'b': screen.frame.bottom,
-            },
-            'visibleFrame': {
-              'l': screen.visibleFrame.left,
-              't': screen.visibleFrame.top,
-              'r': screen.visibleFrame.right,
-              'b': screen.visibleFrame.bottom,
-            },
-            'scaleFactor': screen.scaleFactor,
-          });
+          return jsonEncode(screenToMap(screen));
         }
+      } else if (call.method == kWindowGetScreenList) {
+        return jsonEncode(
+            (await window_size.getScreenList()).map(screenToMap).toList());
       } else if (call.method == kWindowActionRebuild) {
         reloadCurrentWindow();
       } else if (call.method == kWindowEventShow) {
@@ -613,8 +616,9 @@ class _DesktopHomePageState extends State<DesktopHomePage>
         final peerId = args['peer_id'] as String;
         final display = args['display'] as int;
         final displayCount = args['display_count'] as int;
+        final screenRect = parseParamScreenRect(args);
         await rustDeskWinManager.openMonitorSession(
-            windowId, peerId, display, displayCount);
+            windowId, peerId, display, displayCount, screenRect);
       }
     });
     _uniLinksSubscription = listenUniLinks();
