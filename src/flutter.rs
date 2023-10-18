@@ -1377,6 +1377,9 @@ pub fn get_cur_session() -> Option<FlutterSession> {
 
 // sessions mod is used to avoid the big lock of sessions' map.
 pub mod sessions {
+    #[cfg(feature = "flutter_texture_render")]
+    use std::collections::HashSet;
+
     use super::*;
 
     lazy_static::lazy_static! {
@@ -1441,11 +1444,43 @@ pub mod sessions {
         let mut remove_peer_key = None;
         for (peer_key, s) in SESSIONS.write().unwrap().iter_mut() {
             let mut write_lock = s.ui_handler.session_handlers.write().unwrap();
-            if write_lock.remove(id).is_some() {
+            let remove_ret = write_lock.remove(id);
+            #[cfg(not(feature = "flutter_texture_render"))]
+            if remove_ret.is_some() {
                 if write_lock.is_empty() {
                     remove_peer_key = Some(peer_key.clone());
                 }
                 break;
+            }
+            #[cfg(feature = "flutter_texture_render")]
+            match remove_ret {
+                Some(_) => {
+                    if write_lock.is_empty() {
+                        remove_peer_key = Some(peer_key.clone());
+                    } else {
+                        // Set capture displays if some are not used any more.
+                        let mut remains_displays = HashSet::new();
+                        for (_, h) in write_lock.iter() {
+                            remains_displays.extend(
+                                h.renderer
+                                    .map_display_sessions
+                                    .read()
+                                    .unwrap()
+                                    .keys()
+                                    .cloned(),
+                            );
+                        }
+                        if !remains_displays.is_empty() {
+                            s.capture_displays(
+                                vec![],
+                                vec![],
+                                remains_displays.iter().map(|d| *d as i32).collect(),
+                            );
+                        }
+                    }
+                    break;
+                }
+                None => {}
             }
         }
         SESSIONS.write().unwrap().remove(&remove_peer_key?)
