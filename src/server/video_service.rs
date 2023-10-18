@@ -509,6 +509,8 @@ fn run(vs: VideoService) -> ResultType<()> {
         let now = time::Instant::now();
         if last_check_displays.elapsed().as_millis() > 1000 {
             last_check_displays = now;
+            // This check may be redundant, but it is better to be safe.
+            // The previous check in `sp.is_option_true(OPTION_REFRESH)` block may be enough.
             try_broadcast_display_changed(&sp, display_idx, &c)?;
         }
 
@@ -586,6 +588,8 @@ fn run(vs: VideoService) -> ResultType<()> {
                 }
             }
             Err(err) => {
+                // This check may be redundant, but it is better to be safe.
+                // The previous check in `sp.is_option_true(OPTION_REFRESH)` block may be enough.
                 try_broadcast_display_changed(&sp, display_idx, &c)?;
 
                 #[cfg(windows)]
