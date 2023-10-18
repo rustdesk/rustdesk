@@ -60,7 +60,9 @@ impl SyncDisplaysInfo {
 }
 
 // This function is really useful, though a duplicate check if display changed.
-// Because the video server will send the supported resolutions of the {idx} display to the subscribers.
+// The video server will then send the following messages to the client:
+//  1. the supported resolutions of the {idx} display
+//  2. the switch resolution message, so that the client can record the custom resolution.
 pub(super) fn check_display_changed(
     ndisplay: usize,
     idx: usize,

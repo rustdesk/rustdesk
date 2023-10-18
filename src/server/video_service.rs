@@ -298,7 +298,6 @@ fn check_uac_switch(privacy_mode_id: i32, capturer_privacy_mode_id: i32) -> Resu
 }
 
 pub(super) struct CapturerInfo {
-    pub name: String,
     pub origin: (i32, i32),
     pub width: usize,
     pub height: usize,
@@ -390,7 +389,6 @@ fn get_capturer(
         portable_service_running,
     )?;
     Ok(CapturerInfo {
-        name,
         origin,
         width,
         height,
@@ -489,6 +487,7 @@ fn run(vs: VideoService) -> ResultType<()> {
         drop(video_qos);
 
         if sp.is_option_true(OPTION_REFRESH) {
+            let _ = try_broadcast_display_changed(&sp, display_idx, &c);
             bail!("SWITCH");
         }
         if codec_name != Encoder::negotiated_codec() {
@@ -510,15 +509,7 @@ fn run(vs: VideoService) -> ResultType<()> {
         let now = time::Instant::now();
         if last_check_displays.elapsed().as_millis() > 1000 {
             last_check_displays = now;
-            if let Some(display) = check_display_changed(
-                c.ndisplay,
-                c.current,
-                (c.origin.0, c.origin.1, c.width, c.height),
-            ) {
-                log::info!("Display {} changed", display);
-                broadcast_display_changed(display_idx, &sp, display);
-                bail!("SWITCH");
-            }
+            try_broadcast_display_changed(&sp, display_idx, &c)?;
         }
 
         frame_controller.reset();
@@ -595,15 +586,7 @@ fn run(vs: VideoService) -> ResultType<()> {
                 }
             }
             Err(err) => {
-                if let Some(display) = check_display_changed(
-                    c.ndisplay,
-                    c.current,
-                    (c.origin.0, c.origin.1, c.width, c.height),
-                ) {
-                    log::info!("Display {} changed", display);
-                    broadcast_display_changed(display_idx, &sp, display);
-                    bail!("SWITCH");
-                }
+                try_broadcast_display_changed(&sp, display_idx, &c)?;
 
                 #[cfg(windows)]
                 if !c.is_gdi() {
@@ -858,10 +841,23 @@ fn get_wake_lock() -> crate::platform::WakeLock {
 }
 
 #[inline]
-fn broadcast_display_changed(display_idx: usize, sp: &GenericService, display: DisplayInfo) {
-    if let Some(msg_out) = make_display_changed_msg(display_idx, Some(display)) {
-        sp.send(msg_out);
+fn try_broadcast_display_changed(
+    sp: &GenericService,
+    display_idx: usize,
+    cap: &CapturerInfo,
+) -> ResultType<()> {
+    if let Some(display) = check_display_changed(
+        cap.ndisplay,
+        cap.current,
+        (cap.origin.0, cap.origin.1, cap.width, cap.height),
+    ) {
+        log::info!("Display {} changed", display);
+        if let Some(msg_out) = make_display_changed_msg(display_idx, Some(display)) {
+            sp.send(msg_out);
+            bail!("SWITCH");
+        }
     }
+    Ok(())
 }
 
 pub fn make_display_changed_msg(
