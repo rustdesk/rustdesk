@@ -430,14 +430,12 @@ class FfiModel with ChangeNotifier {
       Map<String, dynamic> evt, SessionID sessionId, String peerId) {
     final curDisplay = int.parse(evt['display']);
 
-    // The message should be handled by the another UI session.
-    if (isChooseDisplayToOpenInNewWindow(_pi, sessionId)) {
-      if (curDisplay != _pi.currentDisplay) {
-        return;
-      }
-    }
-
     if (_pi.currentDisplay != kAllDisplayValue) {
+      if (bind.peerGetDefaultSessionsCount(id: peerId) > 1) {
+        if (curDisplay != _pi.currentDisplay) {
+          return;
+        }
+      }
       _pi.currentDisplay = curDisplay;
     }
 
@@ -825,6 +823,7 @@ class FfiModel with ChangeNotifier {
       }
       _pi.displays = newDisplays;
       _pi.displaysCount.value = _pi.displays.length;
+
       if (_pi.currentDisplay == kAllDisplayValue) {
         updateCurDisplay(sessionId);
         // to-do: What if the displays are changed?
@@ -2282,7 +2281,7 @@ class PeerInfo with ChangeNotifier {
     if (currentDisplay == kAllDisplayValue) {
       return null;
     }
-    if (currentDisplay > 0 && currentDisplay < displays.length) {
+    if (currentDisplay >= 0 && currentDisplay < displays.length) {
       return displays[currentDisplay];
     } else {
       return null;

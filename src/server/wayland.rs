@@ -146,7 +146,8 @@ pub(super) async fn check_init() -> ResultType<()> {
                 let num = all.len();
                 let primary = super::display_service::get_primary_2(&all);
                 let current = primary;
-                let mut displays = super::display_service::to_display_info(&all);
+                super::display_service::check_update_displays(&all);
+                let mut displays = super::display_service::get_sync_displays();
                 for display in displays.iter_mut() {
                     display.cursor_embedded = is_cursor_embedded();
                 }
@@ -173,12 +174,15 @@ pub(super) async fn check_init() -> ResultType<()> {
                     Some(result) if !result.is_empty() => {
                         let resolution: Vec<&str> = result.split(" ").collect();
                         let w: i32 = resolution[0].parse().unwrap_or(origin.0 + width as i32);
-                        let h: i32 = resolution[2].trim_end_matches(",").parse().unwrap_or(origin.1 + height as i32);
+                        let h: i32 = resolution[2]
+                            .trim_end_matches(",")
+                            .parse()
+                            .unwrap_or(origin.1 + height as i32);
                         (w, h)
                     }
-                    _ => (origin.0 + width as i32, origin.1 + height as i32)
+                    _ => (origin.0 + width as i32, origin.1 + height as i32),
                 };
-            
+
                 minx = 0;
                 maxx = max_width;
                 miny = 0;
@@ -267,9 +271,6 @@ pub(super) fn get_capturer() -> ResultType<super::video_service::CapturerInfo> {
             let cap_display_info = &*cap_display_info;
             let rect = cap_display_info.rects[cap_display_info.current];
             Ok(super::video_service::CapturerInfo {
-                name: cap_display_info.displays[cap_display_info.current]
-                    .name
-                    .clone(),
                 origin: rect.0,
                 width: rect.1,
                 height: rect.2,
