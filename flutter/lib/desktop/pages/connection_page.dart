@@ -160,7 +160,6 @@ class _ConnectionPageState extends State<ConnectionPage>
 
   Future<void> _getAllPeers() async {
     Map<String, dynamic> recentPeers = jsonDecode(await bind.mainLoadRecentPeersSync());
-    Map<String, dynamic> favPeers = jsonDecode(await bind.mainLoadFavPeersSync());
     Map<String, dynamic> lanPeers = jsonDecode(await bind.mainLoadLanPeersSync());
     Map<String, dynamic> abPeers = jsonDecode(await bind.mainLoadAbSync());
     Map<String, dynamic> groupPeers = jsonDecode(await bind.mainLoadGroupSync());
@@ -194,7 +193,6 @@ class _ConnectionPageState extends State<ConnectionPage>
     }
 
     mergePeers(recentPeers);
-    mergePeers(favPeers);
     mergePeers(lanPeers);
     mergePeers(abPeers);
     mergePeers(groupPeers);
