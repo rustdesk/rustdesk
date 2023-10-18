@@ -41,7 +41,7 @@ use hbb_common::{
     tokio_util::codec::{BytesCodec, Framed},
 };
 #[cfg(any(target_os = "android", target_os = "ios"))]
-use scrap::android::{call_main_service_pointer_input, call_main_service_input_string};
+use scrap::android::{call_main_service_pointer_input, call_main_service_key_event};
 use serde_json::{json, value::Value};
 use sha2::{Digest, Sha256};
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -1725,12 +1725,29 @@ impl Connection {
                 #[cfg(any(target_os = "ios"))]
                 Some(message::Union::KeyEvent(..)) => {}
                 #[cfg(any(target_os = "android"))]
-                Some(message::Union::KeyEvent(me)) => {
-                    // We can only use seq of key event, android device doesn't support abritrary key stroke.
-                    let seq = me.seq();
-                    let result = call_main_service_input_string(seq);
-                    if let Err(e) = result {
-                        log::debug!("call_main_service_input_string fail:{}", e);
+                Some(message::Union::KeyEvent(mut me)) => {
+                    let key = match me.mode.enum_value() {
+                        Ok(KeyboardMode::Map) => {
+                            Some(crate::keyboard::keycode_to_rdev_key(me.chr()))
+                        }
+                        Ok(KeyboardMode::Translate) => {
+                            if let Some(key_event::Union::Chr(code)) = me.union {
+                                Some(crate::keyboard::keycode_to_rdev_key(code & 0x0000FFFF))
+                            } else {
+                                None
+                            }
+                        }
+                        _ => None,
+                    };
+                    let encode_result = me.write_to_bytes();
+
+                    if let Ok(data) = encode_result {
+                        let result = call_main_service_key_event(&data);
+                        if let Err(e) = result {
+                            log::debug!("call_main_service_key_event fail:{}", e);
+                        }
+                    } else {
+                        log::debug!("encode key event fail:{}", encode_result.err().unwrap());
                     }
                 }
                 #[cfg(not(any(target_os = "android", target_os = "ios")))]

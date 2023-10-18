@@ -11,13 +11,18 @@ import android.accessibilityservice.GestureDescription
 import android.graphics.Path
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
+import android.widget.EditText
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import androidx.annotation.RequiresApi
 import java.util.*
 import kotlin.math.abs
 import kotlin.math.max
+import hbb.MessageOuterClass.KeyEvent;
+import hbb.KeyEventConverter;
 
 const val LIFT_DOWN = 9
 const val LIFT_MOVE = 8
@@ -59,6 +64,8 @@ class InputService : AccessibilityService() {
     private val wheelActionsQueue = LinkedList<GestureDescription>()
     private var isWheelActionsPolling = false
     private var isWaitingLongPress = false
+
+    private var fakeEditTextForTextStateCalculation: EditText? = null
 
     @RequiresApi(Build.VERSION_CODES.N)
     fun onMouseInput(mask: Int, _x: Int, _y: Int) {
@@ -255,20 +262,87 @@ class InputService : AccessibilityService() {
     }
 
     @RequiresApi(Build.VERSION_CODES.N)
-    fun onTextInput(str: String) {
-        findFocus(AccessibilityNodeInfo.FOCUS_INPUT)?.let {
-            val arguments = Bundle()
-            arguments.putCharSequence(
-                AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE,
-                str
-            )
-            it.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, arguments)
+    fun onKeyEvent(data: ByteArray) {
+        val keyEvent = KeyEvent.parseFrom(data);
+        val handler = Handler(Looper.getMainLooper())
+        handler.post {
+            findFocus(AccessibilityNodeInfo.FOCUS_INPUT)?.let { node ->
+                val text = node.getText()
+                val isShowingHint = node.isShowingHintText()
+
+                var textSelectionStart = node.getTextSelectionStart()
+                var textSelectionEnd = node.getTextSelectionEnd()
+
+                if (text != null) {
+                    if (textSelectionStart > text.length) {
+                        textSelectionStart = text.length
+                    }
+                    if (textSelectionEnd > text.length) {
+                        textSelectionEnd = text.length
+                    }
+                    if (textSelectionStart > textSelectionEnd) {
+                        textSelectionStart = textSelectionEnd
+                    }
+                }
+
+                if (keyEvent.hasSeq()) {
+                    val seq = keyEvent.getSeq()
+
+                    var newText = ""
+
+                    if ((textSelectionStart == -1) || (textSelectionEnd == -1)) {
+                        newText = seq
+                    } else {
+                        newText = text.let {
+                            it.substring(0, textSelectionStart) + seq + it.substring(textSelectionStart)
+                        }
+                    }
+
+                    val arguments = Bundle()
+                    arguments.putCharSequence(
+                        AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE,
+                        newText
+                    )
+                    node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, arguments)
+
+                } else {
+                    KeyEventConverter.toAndroidKeyEvent(keyEvent).let { event ->
+                        Log.d(logTag, "event $event text $text start $textSelectionStar end $textSelectionEnd")
+                        if (isShowingHint) {
+                            this.fakeEditTextForTextStateCalculation?.setText(null)
+                        } else {
+                            this.fakeEditTextForTextStateCalculation?.setText(text)
+                        }
+                        if (textSelectionStart != -1 && textSelectionEnd != -1) {
+                            this.fakeEditTextForTextStateCalculation?.setSelection(
+                                textSelectionStart,
+                                textSelectionEnd
+                            )
+                        }
+                        this.fakeEditTextForTextStateCalculation?.dispatchKeyEvent(event)
+
+                        this.fakeEditTextForTextStateCalculation?.getText()?.let { newText ->
+                            val arguments = Bundle()
+                            arguments.putCharSequence(
+                                AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE,
+                                newText.toString()
+                            )
+                            node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, arguments)
+                        }
+                    }
+                }
+            }
         }
+    }
+
+
+    override fun onAccessibilityEvent(event: AccessibilityEvent) {
     }
 
     override fun onServiceConnected() {
         super.onServiceConnected()
         ctx = this
+        fakeEditTextForTextStateCalculation = EditText(this)
         Log.d(logTag, "onServiceConnected!")
     }
 
@@ -276,8 +350,6 @@ class InputService : AccessibilityService() {
         ctx = null
         super.onDestroy()
     }
-
-    override fun onAccessibilityEvent(event: AccessibilityEvent?) {}
 
     override fun onInterrupt() {}
 }

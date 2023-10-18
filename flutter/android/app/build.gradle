@@ -1,3 +1,8 @@
+import com.google.protobuf.gradle.*
+plugins {
+    id "com.google.protobuf" version "0.9.4"
+}
+
 def keystoreProperties = new Properties()
 def keystorePropertiesFile = rootProject.file('key.properties')
 if (keystorePropertiesFile.exists()) {
@@ -31,10 +36,33 @@ apply plugin: 'com.android.application'
 apply plugin: 'kotlin-android'
 apply from: "$flutterRoot/packages/flutter_tools/gradle/flutter.gradle"
 
+dependencies {
+    implementation 'com.google.protobuf:protobuf-javalite:3.20.1'
+}
+
+protobuf {
+    protoc {
+        artifact = 'com.google.protobuf:protoc:3.20.1'
+    }
+
+    generateProtoTasks {
+        all().configureEach { task ->
+            task.builtins {
+                java {
+                    option "lite"
+                }
+            }
+        }
+    }
+}
+
 android {
     compileSdkVersion 33
     sourceSets {
         main.java.srcDirs += 'src/main/kotlin'
+
+        main.proto.srcDirs += '../../../libs/hbb_common/protos'
+        main.proto.includes += "message.proto"
     }
 
     compileOptions {

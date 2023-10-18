@@ -173,18 +173,19 @@ pub fn call_main_service_pointer_input(kind: &str, mask: i32, x: i32, y: i32) ->
     }
 }
 
-pub fn call_main_service_input_string(str: &str) -> JniResult<()> {
+pub fn call_main_service_key_event(data: &[u8]) -> JniResult<()> {
     if let (Some(jvm), Some(ctx)) = (
         JVM.read().unwrap().as_ref(),
         MAIN_SERVICE_CTX.read().unwrap().as_ref(),
     ) {
         let mut env = jvm.attach_current_thread_as_daemon()?;
-        let input_string = env.new_string(str)?;
+        let data = env.byte_array_from_slice(data)?;
+
         env.call_method(
             ctx,
-            "rustInputString",
-            "(Ljava/lang/String;)V",
-            &[JValue::Object(&JObject::from(input_string))],
+            "rustKeyEventInput",
+            "([B)V",
+            &[JValue::Object(&JObject::from(data))],
         )?;
         return Ok(());
     } else {
