@@ -2104,7 +2104,7 @@ impl Connection {
                 display,
                 video_service::OPTION_REFRESH,
                 super::service::SERVICE_OPTION_VALUE_TRUE,
-            )
+            );
         });
     }
 
@@ -2145,6 +2145,7 @@ impl Connection {
 
             // Send display changed message.
             // For compatibility with old versions ( < 1.2.4 ).
+            // sciter need it in new version
             if let Some(msg_out) = video_service::make_display_changed_msg(self.display_idx, None) {
                 self.send(msg_out).await;
             }

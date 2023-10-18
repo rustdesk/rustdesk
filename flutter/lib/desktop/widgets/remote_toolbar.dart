@@ -1370,11 +1370,12 @@ class _ResolutionsMenuState extends State<_ResolutionsMenu> {
     }
 
     for (final r in resolutions) {
-      if (r.width == _localResolution!.width && r.height == _localResolution!.height) {
+      if (r.width == _localResolution!.width &&
+          r.height == _localResolution!.height) {
         return r;
       }
     }
-  
+
     return null;
   }
 
@@ -1652,7 +1653,8 @@ class _RecordMenu extends StatelessWidget {
     var ffi = Provider.of<FfiModel>(context);
     var recordingModel = Provider.of<RecordingModel>(context);
     final visible =
-        recordingModel.start || ffi.permissions['recording'] != false;
+        (recordingModel.start || ffi.permissions['recording'] != false) &&
+            ffi.pi.currentDisplay != kAllDisplayValue;
     if (!visible) return Offstage();
     return _IconMenuButton(
       assetName: 'assets/rec.svg',
