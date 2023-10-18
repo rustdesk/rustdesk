@@ -20,7 +20,12 @@
 
 #[cfg(target_os = "linux")]
 use super::display_service::IS_X11;
-use super::{display_service::check_display_changed, service::ServiceTmpl, video_qos::VideoQoS, *};
+use super::{
+    display_service::{check_display_changed, get_display_info},
+    service::ServiceTmpl,
+    video_qos::VideoQoS,
+    *,
+};
 #[cfg(target_os = "linux")]
 use crate::common::SimpleCallOnReturn;
 #[cfg(windows)]
@@ -511,7 +516,7 @@ fn run(vs: VideoService) -> ResultType<()> {
                 (c.origin.0, c.origin.1, c.width, c.height),
             ) {
                 log::info!("Display {} changed", display);
-                broadcast_display_changed(display_idx, &sp, &c.name, display);
+                broadcast_display_changed(display_idx, &sp, display);
                 bail!("SWITCH");
             }
         }
@@ -596,7 +601,7 @@ fn run(vs: VideoService) -> ResultType<()> {
                     (c.origin.0, c.origin.1, c.width, c.height),
                 ) {
                     log::info!("Display {} changed", display);
-                    broadcast_display_changed(display_idx, &sp, &c.name, display);
+                    broadcast_display_changed(display_idx, &sp, display);
                     bail!("SWITCH");
                 }
 
@@ -853,22 +858,20 @@ fn get_wake_lock() -> crate::platform::WakeLock {
 }
 
 #[inline]
-fn broadcast_display_changed(
-    display_idx: usize,
-    sp: &GenericService,
-    name: &str,
-    display: DisplayInfo,
-) {
-    if let Some(msg_out) = make_display_changed_msg(display_idx, name, display) {
+fn broadcast_display_changed(display_idx: usize, sp: &GenericService, display: DisplayInfo) {
+    if let Some(msg_out) = make_display_changed_msg(display_idx, Some(display)) {
         sp.send(msg_out);
     }
 }
 
-fn make_display_changed_msg(
+pub fn make_display_changed_msg(
     display_idx: usize,
-    name: &str,
-    display: DisplayInfo,
+    opt_display: Option<DisplayInfo>,
 ) -> Option<Message> {
+    let display = match opt_display {
+        Some(d) => d,
+        None => get_display_info(display_idx)?,
+    };
     let mut misc = Misc::new();
     misc.set_switch_display(SwitchDisplay {
         display: display_idx as _,
@@ -879,10 +882,10 @@ fn make_display_changed_msg(
         cursor_embedded: display_service::capture_cursor_embedded(),
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
         resolutions: Some(SupportedResolutions {
-            resolutions: if name.is_empty() {
+            resolutions: if display.name.is_empty() {
                 vec![]
             } else {
-                crate::platform::resolutions(name)
+                crate::platform::resolutions(&display.name)
             },
             ..SupportedResolutions::default()
         })

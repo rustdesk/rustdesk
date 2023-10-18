@@ -242,6 +242,10 @@ pub(super) fn get_sync_displays() -> Vec<DisplayInfo> {
     SYNC_DISPLAYS.lock().unwrap().displays.clone()
 }
 
+pub(super) fn get_display_info(idx: usize) -> Option<DisplayInfo> {
+    SYNC_DISPLAYS.lock().unwrap().displays.get(idx).cloned()
+}
+
 // Display to DisplayInfo
 // The DisplayInfo is be sent to the peer.
 pub(super) fn check_update_displays(all: &Vec<Display>) {
