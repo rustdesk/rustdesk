@@ -271,9 +271,6 @@ pub(super) fn get_capturer() -> ResultType<super::video_service::CapturerInfo> {
             let cap_display_info = &*cap_display_info;
             let rect = cap_display_info.rects[cap_display_info.current];
             Ok(super::video_service::CapturerInfo {
-                name: cap_display_info.displays[cap_display_info.current]
-                    .name
-                    .clone(),
                 origin: rect.0,
                 width: rect.1,
                 height: rect.2,
