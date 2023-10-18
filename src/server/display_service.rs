@@ -151,7 +151,7 @@ fn displays_to_msg(displays: Vec<DisplayInfo>) -> Message {
 }
 
 fn check_get_displays_changed_msg() -> Option<Message> {
-    check_update_displays(try_get_displays().ok()?);
+    check_update_displays(&try_get_displays().ok()?);
     let displays = SYNC_DISPLAYS.lock().unwrap().get_update_sync_displays()?;
     Some(displays_to_msg(displays))
 }
@@ -225,9 +225,14 @@ pub(super) fn get_original_resolution(
     .into()
 }
 
+#[cfg(target_os = "linux")]
+pub(super) fn get_sync_displays() -> Vec<DisplayInfo> {
+    SYNC_DISPLAYS.lock().unwrap().displays.clone()
+}
+
 // Display to DisplayInfo
 // The DisplayInfo is be sent to the peer.
-fn check_update_displays(all: Vec<Display>) {
+pub(super) fn check_update_displays(all: &Vec<Display>) {
     let displays = all
         .iter()
         .map(|d| {
@@ -264,7 +269,7 @@ pub async fn update_get_sync_displays() -> ResultType<Vec<DisplayInfo>> {
             return super::wayland::get_displays().await;
         }
     }
-    check_update_displays(try_get_displays()?);
+    check_update_displays(&try_get_displays()?);
     Ok(SYNC_DISPLAYS.lock().unwrap().displays.clone())
 }
 

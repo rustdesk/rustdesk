@@ -407,7 +407,7 @@ fn run(vs: VideoService) -> ResultType<()> {
     #[cfg(target_os = "linux")]
     super::wayland::ensure_inited()?;
     #[cfg(target_os = "linux")]
-    let wayland_call_on_ret = SimpleCallOnReturn {
+    let _wayland_call_on_ret = SimpleCallOnReturn {
         b: true,
         f: Box::new(|| {
             super::wayland::clear();
