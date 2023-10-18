@@ -59,7 +59,10 @@ impl SyncDisplaysInfo {
     }
 }
 
+// This function is really useful, though a duplicate check if display changed.
+// Because the video server will send the supported resolutions of the {idx} display to the subscribers.
 pub(super) fn check_display_changed(
+    ndisplay: usize,
     idx: usize,
     (x, y, w, h): (i32, i32, usize, usize),
 ) -> Option<DisplayInfo> {
@@ -72,7 +75,14 @@ pub(super) fn check_display_changed(
     }
 
     let lock = SYNC_DISPLAYS.lock().unwrap();
+    // If plugging out a monitor && lock.displays.get(idx) is None.
+    //  1. The client version < 1.2.4. The client side has to reconnect.
+    //  2. The client version > 1.2.4, The client side can handle the case becuase sync peer info message will be sent.
+    // But it is acceptable to for the user to reconnect manually, becuase the monitor is unplugged.
     let d = lock.displays.get(idx)?;
+    if ndisplay != lock.displays.len() {
+        return Some(d.clone());
+    }
     if !(d.x == x && d.y == y && d.width == w as i32 && d.height == h as i32) {
         Some(d.clone())
     } else {
@@ -144,6 +154,8 @@ fn displays_to_msg(displays: Vec<DisplayInfo>) -> Message {
         ..Default::default()
     };
     pi.displays = displays.clone();
+    // current_display should not be used in server.
+    // It is set to 0 for compatibility with old clients.
     pi.current_display = 0;
     let mut msg_out = Message::new();
     msg_out.set_peer_info(pi);

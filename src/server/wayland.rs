@@ -84,6 +84,7 @@ impl TraitCapturer for CapturerPtr {
 struct CapDisplayInfo {
     rects: Vec<((i32, i32), usize, usize)>,
     displays: Vec<DisplayInfo>,
+    num: usize,
     primary: usize,
     current: usize,
     capturer: CapturerPtr,
@@ -194,6 +195,7 @@ pub(super) async fn check_init() -> ResultType<()> {
                 let cap_display_info = Box::into_raw(Box::new(CapDisplayInfo {
                     rects,
                     displays,
+                    num,
                     primary,
                     current,
                     capturer,
@@ -275,6 +277,7 @@ pub(super) fn get_capturer() -> ResultType<super::video_service::CapturerInfo> {
                 origin: rect.0,
                 width: rect.1,
                 height: rect.2,
+                ndisplay: cap_display_info.num,
                 current: cap_display_info.current,
                 privacy_mode_id: 0,
                 _capturer_privacy_mode_id: 0,

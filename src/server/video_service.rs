@@ -297,6 +297,7 @@ pub(super) struct CapturerInfo {
     pub origin: (i32, i32),
     pub width: usize,
     pub height: usize,
+    pub ndisplay: usize,
     pub current: usize,
     pub privacy_mode_id: i32,
     pub _capturer_privacy_mode_id: i32,
@@ -388,6 +389,7 @@ fn get_capturer(
         origin,
         width,
         height,
+        ndisplay,
         current,
         privacy_mode_id,
         _capturer_privacy_mode_id: capturer_privacy_mode_id,
@@ -503,9 +505,11 @@ fn run(vs: VideoService) -> ResultType<()> {
         let now = time::Instant::now();
         if last_check_displays.elapsed().as_millis() > 1000 {
             last_check_displays = now;
-            if let Some(display) =
-                check_display_changed(c.current, (c.origin.0, c.origin.1, c.width, c.height))
-            {
+            if let Some(display) = check_display_changed(
+                c.ndisplay,
+                c.current,
+                (c.origin.0, c.origin.1, c.width, c.height),
+            ) {
                 log::info!("Display {} changed", display);
                 broadcast_display_changed(display_idx, &sp, &c.name, display);
                 bail!("SWITCH");
@@ -586,6 +590,16 @@ fn run(vs: VideoService) -> ResultType<()> {
                 }
             }
             Err(err) => {
+                if let Some(display) = check_display_changed(
+                    c.ndisplay,
+                    c.current,
+                    (c.origin.0, c.origin.1, c.width, c.height),
+                ) {
+                    log::info!("Display {} changed", display);
+                    broadcast_display_changed(display_idx, &sp, &c.name, display);
+                    bail!("SWITCH");
+                }
+
                 #[cfg(windows)]
                 if !c.is_gdi() {
                     c.set_gdi();
@@ -847,20 +861,6 @@ fn broadcast_display_changed(
 ) {
     if let Some(msg_out) = make_display_changed_msg(display_idx, name, display) {
         sp.send(msg_out);
-    }
-}
-
-fn get_display_info_simple_meta(display_idx: usize) -> Option<(String, (i32, i32), usize, usize)> {
-    let displays = display_service::try_get_displays().ok()?;
-    if let Some(display) = displays.get(display_idx) {
-        Some((
-            display.name(),
-            display.origin(),
-            display.width(),
-            display.height(),
-        ))
-    } else {
-        None
     }
 }
 
