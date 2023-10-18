@@ -48,7 +48,8 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
 
   late ToolbarState _toolbarState;
   String? peerId;
-  bool isScreenRectSet = false;
+  bool _isScreenRectSet = false;
+  int? _display;
 
   var connectionMap = RxList<Widget>.empty(growable: true);
 
@@ -61,7 +62,8 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
     final display = params['display'];
     final displays = params['displays'];
     final screenRect = parseParamScreenRect(params);
-    isScreenRectSet = screenRect != null;
+    _isScreenRectSet = screenRect != null;
+    _display = display as int?;
     tryMoveToScreenAndSetFullscreen(screenRect);
     if (peerId != null) {
       ConnectionTypeState.init(peerId!);
@@ -202,7 +204,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
       _update_remote_count();
       return returnValue;
     });
-    if (!isScreenRectSet) {
+    if (!_isScreenRectSet) {
       Future.delayed(Duration.zero, () {
         restoreWindowPosition(
           WindowType.RemoteDesktop,
@@ -210,6 +212,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
           peerId: tabController.state.value.tabs.isEmpty
               ? null
               : tabController.state.value.tabs[0].key,
+          display: _display,
         );
       });
     }
