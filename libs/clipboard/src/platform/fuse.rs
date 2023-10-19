@@ -50,6 +50,12 @@ const BLOCK_SIZE: u32 = 128 * 1024;
 
 /// read only permission
 const PERM_READ: u16 = 0o444;
+/// read and write permission
+const PERM_RW: u16 = 0o644;
+/// only self can read and readonly
+const PERM_SELF_RO: u16 = 0o400;
+/// rwx
+const PERM_RWX: u16 = 0o755;
 /// max length of file name
 const MAX_NAME_LEN: usize = 255;
 
@@ -142,6 +148,11 @@ impl fuser::Filesystem for FuseClient {
     ) {
         let mut server = self.server.lock();
         server.release(req, ino, fh, _flags, _lock_owner, _flush, reply)
+    }
+
+    fn getattr(&mut self, req: &fuser::Request<'_>, ino: u64, reply: fuser::ReplyAttr) {
+        let mut server = self.server.lock();
+        server.getattr(req, ino, reply)
     }
 }
 
@@ -494,6 +505,18 @@ impl fuser::Filesystem for FuseServer {
         reply.ok();
         return;
     }
+
+    fn getattr(&mut self, _req: &fuser::Request<'_>, ino: u64, reply: fuser::ReplyAttr) {
+        let files = &self.files;
+        let Some(entry) = files.get(ino as usize - 1) else {
+            reply.error(libc::ENOENT);
+            log::error!("fuse: getattr: entry not found");
+            return;
+        };
+
+        let attr = (&entry.attributes).into();
+        reply.attr(&std::time::Duration::default(), &attr)
+    }
 }
 
 impl FuseServer {
@@ -614,8 +637,13 @@ impl FileDescription {
         // skip reserved 32 bytes
         bytes.advance(32);
         let attributes = bytes.get_u32_le();
-        // skip reserved 16 bytes
-        bytes.advance(16);
+
+        // in original specification, this is 16 bytes reserved
+        // we use the last 4 bytes to store the file mode
+        // skip reserved 12 bytes
+        bytes.advance(12);
+        let perm = bytes.get_u32_le() as u16;
+
         // last write time from 1601-01-01 00:00:00, in 100ns
         let last_write_time = bytes.get_u64_le();
         // file size
@@ -632,6 +660,8 @@ impl FileDescription {
             CliprdrError::ConversionFailure
         })?;
 
+        let from_unix = flags & 0x08 != 0;
+
         let valid_attributes = flags & 0x04 != 0;
         if !valid_attributes {
             return Err(CliprdrError::InvalidRequest {
@@ -641,6 +671,25 @@ impl FileDescription {
 
         // todo: check normal, hidden, system, readonly, archive...
         let directory = attributes & 0x10 != 0;
+        let normal = attributes == 0x80;
+        let hidden = attributes & 0x02 != 0;
+        let readonly = attributes & 0x01 != 0;
+
+        let perm = if from_unix {
+            // as is
+            perm
+            // cannot set as is...
+        } else if normal {
+            PERM_RWX
+        } else if readonly {
+            PERM_READ
+        } else if hidden {
+            PERM_SELF_RO
+        } else if directory {
+            PERM_RWX
+        } else {
+            PERM_RW
+        };
 
         let kind = if directory {
             FileType::Directory
@@ -677,7 +726,7 @@ impl FileDescription {
 
             creation_time: last_modified,
             size,
-            perm: PERM_READ,
+            perm,
         };
 
         Ok(desc)
@@ -859,7 +908,7 @@ impl FuseNode {
                         last_metadata_changed: SystemTime::UNIX_EPOCH,
                         creation_time: SystemTime::UNIX_EPOCH,
                         size: 0,
-                        perm: PERM_READ,
+                        perm: PERM_RWX,
                     }
                 } else {
                     file.clone()
@@ -910,13 +959,14 @@ pub struct InodeAttributes {
     last_metadata_changed: std::time::SystemTime,
     creation_time: std::time::SystemTime,
     kind: FileType,
+    perm: u16,
 
     // not implemented
     _xattrs: BTreeMap<Vec<u8>, Vec<u8>>,
 }
 
 impl InodeAttributes {
-    pub fn new(inode: u64, size: u64, kind: FileType) -> Self {
+    pub fn new(inode: u64, size: u64, perm: u16, kind: FileType) -> Self {
         Self {
             inode,
             size,
@@ -925,6 +975,7 @@ impl InodeAttributes {
             last_metadata_changed: std::time::SystemTime::now(),
             creation_time: std::time::SystemTime::now(),
             kind,
+            perm,
             _xattrs: BTreeMap::new(),
         }
     }
@@ -938,13 +989,14 @@ impl InodeAttributes {
             creation_time: desc.creation_time,
             last_accessed: SystemTime::now(),
             kind: desc.kind,
+            perm: desc.perm,
 
             _xattrs: BTreeMap::new(),
         }
     }
 
     pub fn new_root() -> Self {
-        Self::new(FUSE_ROOT_ID, 0, FileType::Directory)
+        Self::new(FUSE_ROOT_ID, 0, PERM_RWX, FileType::Directory)
     }
 
     pub fn access(&mut self) {
@@ -970,7 +1022,7 @@ impl From<&InodeAttributes> for fuser::FileAttr {
             kind: value.kind.into(),
 
             // read only
-            perm: PERM_READ,
+            perm: value.perm,
 
             nlink: 1,
             // set to current user

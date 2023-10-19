@@ -1,4 +1,7 @@
-use std::{collections::HashSet, fs::File, path::PathBuf, time::SystemTime};
+use std::{
+    collections::HashSet, fs::File, os::unix::prelude::PermissionsExt, path::PathBuf,
+    time::SystemTime,
+};
 
 use hbb_common::{
     bytes::{BufMut, BytesMut},
@@ -7,6 +10,18 @@ use hbb_common::{
 use utf16string::WString;
 
 use crate::{platform::LDAP_EPOCH_DELTA, CliprdrError};
+
+/// has valid file attributes
+const FLAGS_FD_ATTRIBUTES: u32 = 0x04;
+/// has valid file size
+const FLAGS_FD_SIZE: u32 = 0x40;
+/// has valid last write time
+const FLAGS_FD_LAST_WRITE: u32 = 0x20;
+/// show progress
+const FLAGS_FD_PROGRESSUI: u32 = 0x4000;
+/// transferred from unix, contains file mode
+/// P.S. this flag is not used in windows
+const FLAGS_FD_UNIX_MODE: u32 = 0x08;
 
 #[derive(Debug)]
 pub(super) struct LocalFile {
@@ -17,6 +32,7 @@ pub(super) struct LocalFile {
     pub size: u64,
     pub last_write_time: SystemTime,
     pub is_dir: bool,
+    pub perm: u32,
     pub read_only: bool,
     pub hidden: bool,
     pub system: bool,
@@ -34,10 +50,16 @@ impl LocalFile {
         let is_dir = mt.is_dir();
         let read_only = mt.permissions().readonly();
         let system = false;
-        let hidden = false;
+        let hidden = if path.to_string_lossy().starts_with('.') {
+            true
+        } else {
+            false
+        };
         let archive = false;
-        let normal = !is_dir;
+        let normal = !(is_dir || read_only || system || hidden || archive);
         let last_write_time = mt.modified().unwrap_or(SystemTime::UNIX_EPOCH);
+
+        let perm = mt.permissions().mode();
 
         let name = path
             .display()
@@ -66,6 +88,7 @@ impl LocalFile {
             read_only,
             system,
             hidden,
+            perm,
             archive,
             normal,
         })
@@ -109,7 +132,11 @@ impl LocalFile {
             &self.name
         );
 
-        let flags = 0x4064;
+        let flags = FLAGS_FD_SIZE
+            | FLAGS_FD_LAST_WRITE
+            | FLAGS_FD_ATTRIBUTES
+            | FLAGS_FD_PROGRESSUI
+            | FLAGS_FD_UNIX_MODE;
 
         // flags, 4 bytes
         buf.put_u32_le(flags);
@@ -117,8 +144,16 @@ impl LocalFile {
         buf.put(&[0u8; 32][..]);
         // file attributes, 4 bytes
         buf.put_u32_le(file_attributes);
-        // 16 bytes reserved
-        buf.put(&[0u8; 16][..]);
+
+        // NOTE: this is not used in windows
+        // in the specification, this is 16 bytes reserved
+        // lets use the last 4 bytes to store the file mode
+        //
+        // 12 bytes reserved
+        buf.put(&[0u8; 12][..]);
+        // file permissions, 4 bytes
+        buf.put_u32_le(self.perm);
+
         // last write time, 8 bytes
         buf.put_u64_le(win32_time);
         // file size (high)
@@ -201,6 +236,7 @@ mod file_list_test {
                 last_write_time: std::time::SystemTime::UNIX_EPOCH,
                 read_only: false,
                 is_dir,
+                perm: 0o754,
                 hidden: false,
                 system: false,
                 archive: false,
@@ -262,6 +298,11 @@ mod file_list_test {
             assert_eq!(parsed[2].name.to_str().unwrap(), "b");
             assert_eq!(parsed[3].name.to_str().unwrap(), "b/c.txt");
         }
+
+        assert!(parsed[0].perm & 0o777 == 0o754);
+        assert!(parsed[1].perm & 0o777 == 0o754);
+        assert!(parsed[2].perm & 0o777 == 0o754);
+        assert!(parsed[3].perm & 0o777 == 0o754);
 
         Ok(())
     }
