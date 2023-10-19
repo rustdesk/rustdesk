@@ -1,11 +1,4 @@
-use std::{
-    collections::HashSet,
-    fs::File,
-    os::unix::prelude::FileExt,
-    path::{Path, PathBuf},
-    sync::Arc,
-    time::{Duration, SystemTime},
-};
+use std::{os::unix::prelude::FileExt, path::PathBuf, sync::Arc, time::Duration};
 
 use dashmap::DashMap;
 use fuser::MountOption;
@@ -15,16 +8,22 @@ use hbb_common::{
 };
 use lazy_static::lazy_static;
 use parking_lot::Mutex;
-use utf16string::WString;
 
 use crate::{
-    platform::fuse::FileDescription, send_data, ClipboardFile, CliprdrError, CliprdrServiceContext,
+    platform::{fuse::FileDescription, linux::local_file::construct_file_list},
+    send_data, ClipboardFile, CliprdrError, CliprdrServiceContext,
 };
 
-use super::{fuse::FuseServer, LDAP_EPOCH_DELTA};
+use self::local_file::LocalFile;
+use self::url::{encode_path_to_uri, parse_plain_uri_list};
+
+use super::fuse::FuseServer;
 
 #[cfg(not(feature = "wayland"))]
 pub mod x11;
+
+pub mod local_file;
+pub mod url;
 
 // not actual format id, just a placeholder
 const FILEDESCRIPTOR_FORMAT_ID: i32 = 49334;
@@ -74,231 +73,6 @@ fn get_sys_clipboard(ignore_path: &PathBuf) -> Result<Box<dyn SysClipboard>, Cli
         let x11_clip = X11Clipboard::new(ignore_path)?;
         Ok(Box::new(x11_clip) as Box<_>)
     }
-}
-
-// on x11, path will be encode as
-// "/home/rustdesk/pictures/🖼️.png" -> "file:///home/rustdesk/pictures/%F0%9F%96%BC%EF%B8%8F.png"
-// url encode and decode is needed
-const ENCODE_SET: percent_encoding::AsciiSet = percent_encoding::CONTROLS.add(b' ').remove(b'/');
-
-fn encode_path_to_uri(path: &PathBuf) -> String {
-    let encoded = percent_encoding::percent_encode(path.to_str().unwrap().as_bytes(), &ENCODE_SET)
-        .to_string();
-    format!("file://{}", encoded)
-}
-
-fn parse_uri_to_path(encoded_uri: &str) -> Result<PathBuf, CliprdrError> {
-    let encoded_path = encoded_uri.trim_start_matches("file://");
-    let path_str = percent_encoding::percent_decode_str(encoded_path)
-        .decode_utf8()
-        .map_err(|_| CliprdrError::ConversionFailure)?;
-    let path_str = path_str.to_string();
-
-    Ok(Path::new(&path_str).to_path_buf())
-}
-
-#[cfg(test)]
-mod uri_test {
-    #[test]
-    fn test_conversion() {
-        let path = std::path::PathBuf::from("/home/rustdesk/pictures/🖼️.png");
-        let uri = super::encode_path_to_uri(&path);
-        assert_eq!(
-            uri,
-            "file:///home/rustdesk/pictures/%F0%9F%96%BC%EF%B8%8F.png"
-        );
-        let convert_back = super::parse_uri_to_path(&uri).unwrap();
-        assert_eq!(path, convert_back);
-    }
-}
-
-// helper parse function
-// convert 'text/uri-list' data to a list of valid Paths
-// # Note
-// - none utf8 data will lead to error
-fn parse_plain_uri_list(v: Vec<u8>) -> Result<Vec<PathBuf>, CliprdrError> {
-    let text = String::from_utf8(v).map_err(|_| CliprdrError::ConversionFailure)?;
-    parse_uri_list(&text)
-}
-
-// helper parse function
-// convert 'text/uri-list' data to a list of valid Paths
-// # Note
-// - none utf8 data will lead to error
-fn parse_uri_list(text: &str) -> Result<Vec<PathBuf>, CliprdrError> {
-    let mut list = Vec::new();
-
-    for line in text.lines() {
-        if !line.starts_with("file://") {
-            continue;
-        }
-        let decoded = parse_uri_to_path(line)?;
-        list.push(decoded)
-    }
-    Ok(list)
-}
-
-#[derive(Debug)]
-struct LocalFile {
-    pub path: PathBuf,
-    pub handle: Option<File>,
-
-    pub name: String,
-    pub size: u64,
-    pub last_write_time: SystemTime,
-    pub is_dir: bool,
-    pub read_only: bool,
-    pub hidden: bool,
-    pub system: bool,
-    pub archive: bool,
-    pub normal: bool,
-}
-
-impl LocalFile {
-    pub fn try_open(path: &PathBuf) -> Result<Self, CliprdrError> {
-        let mt = std::fs::metadata(path).map_err(|e| CliprdrError::FileError {
-            path: path.clone(),
-            err: e,
-        })?;
-        let size = mt.len() as u64;
-        let is_dir = mt.is_dir();
-        let read_only = mt.permissions().readonly();
-        let system = false;
-        let hidden = false;
-        let archive = false;
-        let normal = !is_dir;
-        let last_write_time = mt.modified().unwrap_or(SystemTime::UNIX_EPOCH);
-
-        let name = path
-            .display()
-            .to_string()
-            .trim_start_matches('/')
-            .replace('/', "\\");
-
-        let handle = if is_dir {
-            None
-        } else {
-            let file = std::fs::File::open(path).map_err(|e| CliprdrError::FileError {
-                path: path.clone(),
-                err: e,
-            })?;
-            let reader = file;
-            Some(reader)
-        };
-
-        Ok(Self {
-            name,
-            path: path.clone(),
-            handle,
-            size,
-            last_write_time,
-            is_dir,
-            read_only,
-            system,
-            hidden,
-            archive,
-            normal,
-        })
-    }
-    pub fn as_bin(&self) -> Vec<u8> {
-        let mut buf = BytesMut::with_capacity(592);
-
-        let read_only_flag = if self.read_only { 0x1 } else { 0 };
-        let hidden_flag = if self.hidden { 0x2 } else { 0 };
-        let system_flag = if self.system { 0x4 } else { 0 };
-        let directory_flag = if self.is_dir { 0x10 } else { 0 };
-        let archive_flag = if self.archive { 0x20 } else { 0 };
-        let normal_flag = if self.normal { 0x80 } else { 0 };
-
-        let file_attributes: u32 = read_only_flag
-            | hidden_flag
-            | system_flag
-            | directory_flag
-            | archive_flag
-            | normal_flag;
-
-        let win32_time = self
-            .last_write_time
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos() as u64
-            / 100
-            + LDAP_EPOCH_DELTA;
-
-        let size_high = (self.size >> 32) as u32;
-        let size_low = (self.size & (u32::MAX as u64)) as u32;
-
-        let wstr: WString<utf16string::LE> = WString::from(&self.name);
-        let name = wstr.as_bytes();
-
-        log::debug!(
-            "put file to list: name_len {}, name {}",
-            name.len(),
-            &self.name
-        );
-
-        let flags = 0x4064;
-
-        // flags, 4 bytes
-        buf.put_u32_le(flags);
-        // 32 bytes reserved
-        buf.put(&[0u8; 32][..]);
-        // file attributes, 4 bytes
-        buf.put_u32_le(file_attributes);
-        // 16 bytes reserved
-        buf.put(&[0u8; 16][..]);
-        // last write time, 8 bytes
-        buf.put_u64_le(win32_time);
-        // file size (high)
-        buf.put_u32_le(size_high);
-        // file size (low)
-        buf.put_u32_le(size_low);
-        // put name and padding to 520 bytes
-        let name_len = name.len();
-        buf.put(name);
-        buf.put(&vec![0u8; 520 - name_len][..]);
-
-        buf.to_vec()
-    }
-}
-
-fn construct_file_list(paths: &[PathBuf]) -> Result<Vec<LocalFile>, CliprdrError> {
-    fn constr_file_lst(
-        path: &PathBuf,
-        file_list: &mut Vec<LocalFile>,
-        visited: &mut HashSet<PathBuf>,
-    ) -> Result<(), CliprdrError> {
-        // prevent fs loop
-        if visited.contains(path) {
-            return Ok(());
-        }
-        visited.insert(path.clone());
-
-        let local_file = LocalFile::try_open(path)?;
-        file_list.push(local_file);
-
-        let mt = std::fs::metadata(path).map_err(|e| CliprdrError::FileError {
-            path: path.clone(),
-            err: e,
-        })?;
-        if mt.is_dir() {
-            let dir = std::fs::read_dir(path).unwrap();
-            for entry in dir {
-                let entry = entry.unwrap();
-                let path = entry.path();
-                constr_file_lst(&path, file_list, visited)?;
-            }
-        }
-        Ok(())
-    }
-
-    let mut file_list = Vec::new();
-    let mut visited = HashSet::new();
-
-    for path in paths {
-        constr_file_lst(path, &mut file_list, &mut visited)?;
-    }
-    Ok(file_list)
 }
 
 #[derive(Debug)]
@@ -623,13 +397,17 @@ impl ClipboardContext {
                 msg_flags,
                 format_data,
             } => {
-                log::debug!("server_format_data_response called");
+                log::debug!(
+                    "server_format_data_response called, msg_flags={}",
+                    msg_flags
+                );
 
                 if msg_flags != 0x1 {
                     resp_format_data_failure(conn_id);
                     return Ok(());
                 }
 
+                log::debug!("parsing file descriptors");
                 // this must be a file descriptor format data
                 let files = FileDescription::parse_file_descriptors(format_data.into(), conn_id)?;
 
@@ -640,6 +418,7 @@ impl ClipboardContext {
                     fuse_guard.list_root()
                 };
 
+                log::debug!("load file list: {:?}", paths);
                 self.set_clipboard(&paths)?;
                 Ok(())
             }

@@ -632,7 +632,7 @@ impl FileDescription {
             CliprdrError::ConversionFailure
         })?;
 
-        let valid_attributes = flags & 0x01 != 0;
+        let valid_attributes = flags & 0x04 != 0;
         if !valid_attributes {
             return Err(CliprdrError::InvalidRequest {
                 description: "file description must have valid attributes".to_string(),
@@ -648,14 +648,14 @@ impl FileDescription {
             FileType::File
         };
 
-        let valid_size = flags & 0x80 != 0;
+        let valid_size = flags & 0x40 != 0;
         let size = if valid_size {
             ((file_size_high as u64) << 32) + file_size_low as u64
         } else {
             0
         };
 
-        let valid_write_time = flags & 0x100 != 0;
+        let valid_write_time = flags & 0x20 != 0;
         let last_modified = if valid_write_time && last_write_time >= LDAP_EPOCH_DELTA {
             let last_write_time = (last_write_time - LDAP_EPOCH_DELTA) * 100;
             let last_write_time = Duration::from_nanos(last_write_time);
@@ -665,7 +665,7 @@ impl FileDescription {
         };
 
         let name = wstr.to_utf8().replace('\\', "/");
-        let name = PathBuf::from(name);
+        let name = PathBuf::from(name.trim_end_matches('\0'));
 
         let desc = FileDescription {
             conn_id,
@@ -1015,11 +1015,25 @@ mod fuse_test {
     // todo: more tests needed!
 
     fn generate_descriptions() -> Vec<FileDescription> {
-        let folder0 = FileDescription::new("folder0", FileType::Directory, 0, 0);
-        let file0 = FileDescription::new("folder0/file0", FileType::File, 1, 0);
-        let file1 = FileDescription::new("folder0/file1", FileType::File, 1, 0);
-        let folder1 = FileDescription::new("folder1", FileType::Directory, 0, 0);
-        let file2 = FileDescription::new("folder1/file2", FileType::File, 4, 0);
+        fn desc_gen(name: &str, kind: FileType) -> FileDescription {
+            FileDescription {
+                conn_id: 0,
+                name: PathBuf::from(name),
+                kind,
+                atime: SystemTime::UNIX_EPOCH,
+                last_modified: SystemTime::UNIX_EPOCH,
+                last_metadata_changed: SystemTime::UNIX_EPOCH,
+                creation_time: SystemTime::UNIX_EPOCH,
+
+                size: 0,
+                perm: 0,
+            }
+        }
+        let folder0 = desc_gen("folder0", FileType::Directory);
+        let file0 = desc_gen("folder0/file0", FileType::File);
+        let file1 = desc_gen("folder0/file1", FileType::File);
+        let folder1 = desc_gen("folder1", FileType::Directory);
+        let file2 = desc_gen("folder1/file2", FileType::File);
 
         vec![folder0, file0, file1, folder1, file2]
     }
@@ -1053,15 +1067,15 @@ mod fuse_test {
         assert_eq!(tree_list[1].children, vec![3, 4]);
 
         assert_eq!(tree_list[2].name, "file0"); // inode 3
-        assert_eq!(tree_list[2].children, vec![]);
+        assert!(tree_list[2].children.is_empty());
 
         assert_eq!(tree_list[3].name, "file1"); // inode 4
-        assert_eq!(tree_list[3].children, vec![]);
+        assert!(tree_list[3].children.is_empty());
 
         assert_eq!(tree_list[4].name, "folder1"); // inode 5
         assert_eq!(tree_list[4].children, vec![6]);
 
         assert_eq!(tree_list[5].name, "file2"); // inode 6
-        assert_eq!(tree_list[5].children, vec![]);
+        assert!(tree_list[5].children.is_empty());
     }
 }
