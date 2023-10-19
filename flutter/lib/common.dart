@@ -1673,8 +1673,10 @@ Future<Offset?> _adjustRestoreMainWindowOffset(
 
 /// Restore window position and size on start
 /// Note that windowId must be provided if it's subwindow
+//
+// display is used to set the offset of the window in individual display mode.
 Future<bool> restoreWindowPosition(WindowType type,
-    {int? windowId, String? peerId}) async {
+    {int? windowId, String? peerId, int? display}) async {
   if (bind
       .mainGetEnv(key: "DISABLE_RUSTDESK_RESTORE_WINDOW_POSITION")
       .isNotEmpty) {
@@ -1710,14 +1712,22 @@ Future<bool> restoreWindowPosition(WindowType type,
     debugPrint("no window position saved, ignoring position restoration");
     return false;
   }
-  if (type == WindowType.RemoteDesktop &&
-      !isRemotePeerPos &&
-      windowId != null) {
-    if (lpos.offsetWidth != null) {
-      lpos.offsetWidth = lpos.offsetWidth! + windowId * 20;
+  if (type == WindowType.RemoteDesktop) {
+    if (!isRemotePeerPos && windowId != null) {
+      if (lpos.offsetWidth != null) {
+        lpos.offsetWidth = lpos.offsetWidth! + windowId * kNewWindowOffset;
+      }
+      if (lpos.offsetHeight != null) {
+        lpos.offsetHeight = lpos.offsetHeight! + windowId * kNewWindowOffset;
+      }
     }
-    if (lpos.offsetHeight != null) {
-      lpos.offsetHeight = lpos.offsetHeight! + windowId * 20;
+    if (display != null) {
+      if (lpos.offsetWidth != null) {
+        lpos.offsetWidth = lpos.offsetWidth! + display * kNewWindowOffset;
+      }
+      if (lpos.offsetHeight != null) {
+        lpos.offsetHeight = lpos.offsetHeight! + display * kNewWindowOffset;
+      }
     }
   }
 
