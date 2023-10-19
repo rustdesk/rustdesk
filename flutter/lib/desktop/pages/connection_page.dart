@@ -258,6 +258,7 @@ class _ConnectionPageState extends State<ConnectionPage>
                       }
                       else {
                         String textWithoutSpaces = textEditingValue.text.replaceAll(" ", "");
+                        String textToFind = textWithoutSpaces.toLowerCase();
                         if (int.tryParse(textWithoutSpaces) != null) {
                           textEditingValue = TextEditingValue(
                             text: textWithoutSpaces,
@@ -266,10 +267,10 @@ class _ConnectionPageState extends State<ConnectionPage>
                         }
 
                         return peers.where((peer) =>
-                        peer.id.toLowerCase().contains(textEditingValue.text.toLowerCase()) ||
-                        peer.username.toLowerCase().contains(textEditingValue.text.toLowerCase()) ||
-                        peer.hostname.toLowerCase().contains(textEditingValue.text.toLowerCase()) ||
-                        peer.alias.toLowerCase().contains(textEditingValue.text.toLowerCase()))
+                        peer.id.toLowerCase().contains(textToFind) ||
+                        peer.username.toLowerCase().contains(textToFind) ||
+                        peer.hostname.toLowerCase().contains(textToFind) ||
+                        peer.alias.toLowerCase().contains(textToFind))
                             .toList();
                       }
                     },
