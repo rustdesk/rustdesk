@@ -34,7 +34,17 @@ const FILECONTENTS_FORMAT_ID: i32 = 49267;
 const FILECONTENTS_FORMAT_NAME: &str = "FileContents";
 
 lazy_static! {
-    static ref REMOTE_FORMAT_MAP: DashMap<i32, String> = DashMap::new();
+    static ref REMOTE_FORMAT_MAP: DashMap<i32, String> = DashMap::from_iter(
+        [
+            (
+                FILEDESCRIPTOR_FORMAT_ID,
+                FILEDESCRIPTORW_FORMAT_NAME.to_string()
+            ),
+            (FILECONTENTS_FORMAT_ID, FILECONTENTS_FORMAT_NAME.to_string())
+        ]
+        .iter()
+        .cloned()
+    );
 }
 
 fn get_local_format(remote_id: i32) -> Option<String> {
