@@ -259,13 +259,13 @@ class _ConnectionPageState extends State<ConnectionPage>
                       }
                       else {
                         String textWithoutSpaces = textEditingValue.text.replaceAll(" ", "");
-                        String textToFind = textWithoutSpaces.toLowerCase();
                         if (int.tryParse(textWithoutSpaces) != null) {
                           textEditingValue = TextEditingValue(
                             text: textWithoutSpaces,
                             selection: textEditingValue.selection,
                           );
                         }
+                        String textToFind = textEditingValue.text.toLowerCase();
 
                         return peers.where((peer) =>
                         peer.id.toLowerCase().contains(textToFind) ||
