@@ -375,14 +375,8 @@ class FileController {
     history.add(directory.value.path);
   }
 
-  void goToHomeDirectory() async {
-    if (isLocal) {
-      openDirectory(homePath);
-      return;
-    }
-    final homeDir = (await bind.sessionGetPeerOption(
-        sessionId: sessionId, name: "remote_home_dir"));
-        openDirectory(homeDir);
+  void goToHomeDirectory() {
+    openDirectory(homePath);
   }
 
   void goBack() {
@@ -409,7 +403,7 @@ class FileController {
   }
 
   // TODO deprecated this
-  void initDirAndHome(Map<String, dynamic> evt) async {
+  void initDirAndHome(Map<String, dynamic> evt) {
     try {
       final fd = FileDirectory.fromJson(jsonDecode(evt['value']));
       fd.format(options.value.isWindows, sort: sortBy.value);
@@ -429,14 +423,6 @@ class FileController {
         }
       } else if (options.value.home.isEmpty) {
         options.value.home = fd.path;
-
-        final homeDir = ( await bind.sessionGetPeerOption(
-          sessionId: sessionId, name: "remote_home_dir"));
-
-        if (homeDir.isEmpty){
-          bind.sessionPeerOption(
-            sessionId: sessionId, name: "remote_home_dir", value: fd.path);
-        }
         debugPrint("init remote home: ${fd.path}");
         directory.value = fd;
       }
