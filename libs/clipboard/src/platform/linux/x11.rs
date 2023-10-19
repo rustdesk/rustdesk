@@ -126,7 +126,8 @@ impl SysClipboard for X11Clipboard {
             };
 
             if self.is_stopped() {
-                break;
+                std::thread::sleep(std::time::Duration::from_millis(100));
+                continue;
             }
 
             let Some(paths) = sth else {
@@ -162,6 +163,7 @@ impl SysClipboard for X11Clipboard {
 
             if let Err(e) = send_format_list(0) {
                 log::warn!("failed to send format list: {}", e);
+                break;
             }
 
             std::thread::sleep(std::time::Duration::from_millis(100));

@@ -382,7 +382,7 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
                                     log::debug!("conn_id: {}", id);
                                     self.cm.add_connection(id, is_file_transfer, port_forward, peer_id, name, authorized, keyboard, clipboard, audio, file, restart, recording, from_switch,self.tx.clone());
                                     self.conn_id = id;
-                                    #[cfg(windows)]
+                                    #[cfg(any(target_os = "linux", target_os = "windows"))]
                                     {
                                         self.file_transfer_enabled = _file_transfer_enabled;
                                     }
@@ -489,7 +489,7 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
                     }
                     match &data {
                         Data::SwitchPermission{name: _name, enabled: _enabled} => {
-                            #[cfg(windows)]
+                            #[cfg(any(target_os="linux", target_os="windows"))]
                             if _name == "file" {
                                 self.file_transfer_enabled = *_enabled;
                             }

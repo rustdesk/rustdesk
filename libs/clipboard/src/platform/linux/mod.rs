@@ -730,7 +730,11 @@ fn send_format_list(conn_id: i32) -> Result<(), CliprdrError> {
 }
 
 fn send_file_list(paths: Vec<PathBuf>, conn_id: i32) -> Result<(), CliprdrError> {
-    log::debug!("send file list to remote, conn={}", conn_id);
+    log::debug!(
+        "send file list to remote, conn={}, list={:?}",
+        conn_id,
+        paths
+    );
     let files = construct_file_list(paths.as_slice())?;
 
     let mut data = BytesMut::with_capacity(4 + 592 * files.len());

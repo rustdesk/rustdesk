@@ -214,7 +214,7 @@ fn send_data_to_channel(conn_id: i32, data: ClipboardFile) {
         .iter()
         .find(|x| x.conn_id == conn_id)
     {
-        log::debug!("send data to connection: {}", conn_id);
+        log::debug!("send data to connection: {}, data = {:?}", conn_id, data);
         allow_err!(msg_channel.sender.send(data));
     }
 }
