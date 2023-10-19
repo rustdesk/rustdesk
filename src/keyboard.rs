@@ -163,6 +163,21 @@ pub mod client {
         }
     }
 
+    pub fn map_key_to_control_key(key: &rdev::Key) -> Option<ControlKey> {
+        match key {
+            Key::Alt => Some(ControlKey::Alt),
+            Key::ShiftLeft => Some(ControlKey::Shift),
+            Key::ControlLeft => Some(ControlKey::Control),
+            Key::MetaLeft => Some(ControlKey::Meta),
+            Key::AltGr => Some(ControlKey::RAlt),
+            Key::ShiftRight => Some(ControlKey::RShift),
+            Key::ControlRight => Some(ControlKey::RControl),
+            Key::MetaRight => Some(ControlKey::RWin),
+            _ => None,
+        }
+
+    }
+
     pub fn event_lock_screen() -> KeyEvent {
         let mut key_event = KeyEvent::new();
         key_event.set_control_key(ControlKey::LockScreen);
@@ -355,7 +370,7 @@ pub fn get_keyboard_mode_enum(keyboard_mode: &str) -> KeyboardMode {
 }
 
 #[inline]
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(any(target_os = "ios")))]
 pub fn is_modifier(key: &rdev::Key) -> bool {
     matches!(
         key,
@@ -1050,7 +1065,7 @@ pub fn translate_keyboard_mode(peer: &str, event: &Event, key_event: KeyEvent) -
 pub fn keycode_to_rdev_key(keycode: u32) -> Key {
     #[cfg(target_os = "windows")]
     return rdev::win_key_from_scancode(keycode);
-    #[cfg(any(target_os = "linux", target_os = "android"))]
+    #[cfg(any(target_os = "linux"))]
     return rdev::linux_key_from_code(keycode);
     #[cfg(target_os = "macos")]
     return rdev::macos_key_from_code(keycode.try_into().unwrap_or_default());

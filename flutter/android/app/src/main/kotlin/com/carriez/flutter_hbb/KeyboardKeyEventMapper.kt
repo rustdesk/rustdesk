@@ -1,6 +1,7 @@
 package hbb;
 import android.view.KeyEvent
 import android.view.KeyCharacterMap
+import hbb.MessageOuterClass.KeyboardMode
 import hbb.MessageOuterClass.ControlKey
 
 object KeyEventConverter {
@@ -10,12 +11,14 @@ object KeyEventConverter {
 
         android.util.Log.d(tag, "proto: $keyEventProto")
 
-        if (keyEventProto.hasUnicode()) {
-            chrValue = 
-        }
+        val keyboardMode = keyEventProto.getMode()
 
         if (keyEventProto.hasChr()) {
-            chrValue = convertUnicodeToKeyCode(keyEventProto.getChr() as Int)
+            if (keyboardMode == KeyboardMode.Map || keyboardMode == KeyboardMode.Translate) {
+                chrValue = keyEventProto.getChr()
+            } else {
+                chrValue = convertUnicodeToKeyCode(keyEventProto.getChr() as Int)
+            }
         } else if (keyEventProto.hasControlKey()) {
             chrValue = convertControlKeyToKeyCode(keyEventProto.getControlKey())
         }
@@ -28,6 +31,8 @@ object KeyEventConverter {
                 modifiers = modifiers and modifierValue
             }
         }
+
+        android.util.Log.d(tag, "modifiers: $modifiersList")
 
         var action = 0
         if (keyEventProto.getDown()) {

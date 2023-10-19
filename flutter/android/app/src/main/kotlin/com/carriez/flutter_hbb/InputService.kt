@@ -307,7 +307,7 @@ class InputService : AccessibilityService() {
 
                 } else {
                     KeyEventConverter.toAndroidKeyEvent(keyEvent).let { event ->
-                        Log.d(logTag, "event $event text $text start $textSelectionStar end $textSelectionEnd")
+                        Log.d(logTag, "event $event text $text start $textSelectionStart end $textSelectionEnd")
                         if (isShowingHint) {
                             this.fakeEditTextForTextStateCalculation?.setText(null)
                         } else {

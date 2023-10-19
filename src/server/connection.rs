@@ -38,10 +38,12 @@ use hbb_common::{
         sync::mpsc,
         time::{self, Duration, Instant, Interval},
     },
-    tokio_util::codec::{BytesCodec, Framed},
+    tokio_util::codec::{BytesCodec, Framed}, protobuf::EnumOrUnknown,
 };
 #[cfg(any(target_os = "android", target_os = "ios"))]
 use scrap::android::{call_main_service_pointer_input, call_main_service_key_event};
+#[cfg(target_os = "android")]
+use crate::keyboard::client::map_key_to_control_key;
 use serde_json::{json, value::Value};
 use sha2::{Digest, Sha256};
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -53,7 +55,7 @@ use std::{
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use system_shutdown;
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(any(target_os = "ios")))]
 use std::collections::HashSet;
 
 pub type Sender = mpsc::UnboundedSender<(Instant, Arc<Message>)>;
@@ -211,7 +213,7 @@ pub struct Connection {
     voice_call_request_timestamp: Option<NonZeroI64>,
     audio_input_device_before_voice_call: Option<String>,
     options_in_login: Option<OptionMessage>,
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(not(any(target_os = "ios")))]
     pressed_modifiers: HashSet<rdev::Key>,
     #[cfg(all(target_os = "linux", feature = "linux_headless"))]
     #[cfg(not(any(feature = "flatpak", feature = "appimage")))]
@@ -348,7 +350,7 @@ impl Connection {
             voice_call_request_timestamp: None,
             audio_input_device_before_voice_call: None,
             options_in_login: None,
-            #[cfg(not(any(target_os = "android", target_os = "ios")))]
+            #[cfg(not(any(target_os = "ios")))]
             pressed_modifiers: Default::default(),
             #[cfg(all(target_os = "linux", feature = "linux_headless"))]
             #[cfg(not(any(feature = "flatpak", feature = "appimage")))]
@@ -1726,6 +1728,12 @@ impl Connection {
                 Some(message::Union::KeyEvent(..)) => {}
                 #[cfg(any(target_os = "android"))]
                 Some(message::Union::KeyEvent(mut me)) => {
+                    let is_press = if cfg!(target_os = "linux") {
+                        (me.press || me.down) && !crate::is_modifier(&me)
+                    } else {
+                        me.press
+                    };
+
                     let key = match me.mode.enum_value() {
                         Ok(KeyboardMode::Map) => {
                             Some(crate::keyboard::keycode_to_rdev_key(me.chr()))
@@ -1738,7 +1746,28 @@ impl Connection {
                             }
                         }
                         _ => None,
-                    };
+                    }
+                    .filter(crate::keyboard::is_modifier);
+                    log::debug!("key:{:?}", key);
+
+                    if let Some(key) = key {
+                        if is_press {
+                            self.pressed_modifiers.insert(key);
+                        } else {
+                            self.pressed_modifiers.remove(&key);
+                        }
+                    }
+
+                    let mut modifiers = vec![];
+
+                    for key in self.pressed_modifiers.iter() {
+                        if let Some(control_key) = map_key_to_control_key(key) {
+                            modifiers.push(EnumOrUnknown::new(control_key));
+                        }
+                    }
+
+                    me.modifiers = modifiers;
+
                     let encode_result = me.write_to_bytes();
 
                     if let Ok(data) = encode_result {
