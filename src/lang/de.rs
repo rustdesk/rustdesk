@@ -564,5 +564,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("elevated_switch_display_msg", "Wechseln Sie zur primären Anzeige, da die Mehrfachanzeige im erweiterten Modus nicht unterstützt wird."),
         ("Open in new window", "In einem neuen Fenster öffnen"),
         ("Show displays as individual windows", "Anzeigen als einzelne Fenster darstellen"),
+        ("Use all my displays for the remote session", "Alle meine Anzeigen für die Fernsitzung verwenden"),
     ].iter().cloned().collect();
 }
