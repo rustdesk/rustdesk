@@ -457,6 +457,16 @@ class _ConnectionPageState extends State<ConnectionPage>
                           overflow: TextOverflow.ellipsis,
                           style: Theme.of(context).textTheme.titleSmall,
                         )),
+                        !peer.alias.isEmpty?
+                        Padding(
+                          padding: const EdgeInsets.only(left: 5, right: 5),
+                          child: Text(
+                            "(${peer.id})",
+                            style: greyStyle,
+                            overflow: TextOverflow.ellipsis,
+                          )
+                        )
+                        : Container(),
                       ]).marginOnly(top: 2),
                       Align(
                         alignment: Alignment.centerLeft,
