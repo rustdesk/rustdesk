@@ -564,5 +564,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("elevated_switch_display_msg", "Переключитесь на основной дисплей, поскольку в режиме повышенных прав несколько дисплеев не поддерживаются."),
         ("Open in new window", "Открыть в новом окне"),
         ("Show displays as individual windows", "Показывать дисплеи в отдельных окнах"),
+        ("Use all my displays for the remote session", "Использовать все мои дисплеи для удалённого сеанса"),
     ].iter().cloned().collect();
 }
