@@ -12,6 +12,7 @@ import 'package:get/get.dart';
 import 'package:url_launcher/url_launcher_string.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:flutter_hbb/models/peer_model.dart';
+import 'package:flutter/scheduler.dart';
 
 import '../../common.dart';
 import '../../common/formatter/id_formatter.dart';
@@ -287,10 +288,13 @@ class _ConnectionPageState extends State<ConnectionPage>
                           _fetchPeers();
                         }
                         // select all to facilitate removing text, just following the behavior of address input of chrome
-                        final textLength = fieldTextEditingController.value.text.length;
-                        await Future.delayed(Duration(milliseconds: 200));
-                        fieldTextEditingController.selection = TextSelection.collapsed(offset: textLength);
-                        fieldTextEditingController.selection = TextSelection(baseOffset: 0, extentOffset: textLength);
+                        SchedulerBinding.instance.addPostFrameCallback((_) {
+                          final textLength = fieldTextEditingController.value.text.length;
+                          Future.delayed(Duration(milliseconds: 150) , () {
+                            fieldTextEditingController.selection = TextSelection.collapsed(offset: textLength);
+                            fieldTextEditingController.selection = TextSelection(baseOffset: 0, extentOffset: textLength);
+                          });
+                        });
                       });
                       return Obx(() =>
                       TextField(
