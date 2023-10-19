@@ -28,6 +28,8 @@ const OS_LOWER_WINDOWS: &str = "windows";
 const OS_LOWER_LINUX: &str = "linux";
 #[allow(dead_code)]
 const OS_LOWER_MACOS: &str = "macos";
+#[allow(dead_code)]
+const OS_LOWER_ANDROID: &str = "android";
 
 #[cfg(any(target_os = "windows", target_os = "macos"))]
 static KEYBOARD_HOOKED: AtomicBool = AtomicBool::new(false);
@@ -865,12 +867,14 @@ pub fn map_keyboard_mode(_peer: &str, event: &Event, mut key_event: KeyEvent) ->
                 rdev::win_scancode_to_macos_code(event.position_code)?
             }
         }
+        OS_LOWER_ANDROID => rdev::win_scancode_to_android_key_code(event.position_code)?,
         _ => rdev::win_scancode_to_linux_code(event.position_code)?,
     };
     #[cfg(target_os = "macos")]
     let keycode = match _peer {
         OS_LOWER_WINDOWS => rdev::macos_code_to_win_scancode(event.platform_code as _)?,
         OS_LOWER_MACOS => event.platform_code as _,
+        OS_LOWER_ANDROID => rdev::macos_code_to_android_key_code(event.platform_code as _)?,
         _ => rdev::macos_code_to_linux_code(event.platform_code as _)?,
     };
     #[cfg(target_os = "linux")]
@@ -883,6 +887,7 @@ pub fn map_keyboard_mode(_peer: &str, event: &Event, mut key_event: KeyEvent) ->
                 rdev::linux_code_to_macos_code(event.position_code as _)?
             }
         }
+        OS_LOWER_ANDROID => rdev::linux_code_to_android_key_code(event.position_code as _)?,
         _ => event.position_code as _,
     };
     #[cfg(any(target_os = "android", target_os = "ios"))]
