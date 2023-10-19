@@ -19,7 +19,7 @@
 //! - any write operations, hard links, and symbolic links on the FS should be denied
 
 use std::{
-    collections::{BTreeMap, HashMap},
+    collections::{BTreeMap, HashMap, VecDeque},
     ffi::OsString,
     path::{Path, PathBuf},
     sync::{
@@ -811,41 +811,69 @@ impl FuseNode {
         sub_root_map.insert(Path::new("/").to_path_buf(), FUSE_ROOT_ID);
         sub_root_map.insert(Path::new("").to_path_buf(), FUSE_ROOT_ID);
 
-        for (inode, mut file) in files
-            .into_iter()
-            .enumerate()
-            .map(|(i, f)| (i as u64 + 2, f))
-        {
-            let FileDescription { name, .. } = file.clone();
+        for file in files.into_iter() {
+            let name = file.name.clone();
+            let ancestors = name
+                .ancestors()
+                .collect::<VecDeque<_>>()
+                .into_iter()
+                .rev()
+                .chain([name.as_path()].into_iter());
 
-            let parent_inode = match name.parent() {
-                Some(parent) => sub_root_map[parent],
-                None => {
-                    // parent should be root
-                    FUSE_ROOT_ID
+            // build tree iteratively
+            // from root to self
+            for ancestor in ancestors {
+                if sub_root_map.contains_key(ancestor) {
+                    continue;
                 }
-            };
 
-            tree_list[parent_inode as usize - 1].add_child(inode);
+                let inode = tree_list.len() as u64 + FUSE_ROOT_ID;
+                sub_root_map.insert(ancestor.to_path_buf(), inode);
+                let parent_inode = match ancestor.parent() {
+                    Some(parent) => sub_root_map[parent],
+                    None => {
+                        // parent should be root
+                        FUSE_ROOT_ID
+                    }
+                };
+                tree_list[parent_inode as usize - 1].add_child(inode);
 
-            if file.kind == FileType::Directory {
-                sub_root_map.insert(name.clone(), inode);
+                let base_name = name.file_name().ok_or_else(|| {
+                    let err = std::io::Error::new(
+                        std::io::ErrorKind::InvalidData,
+                        format!("invalid file name {}", file.name.display()),
+                    );
+                    CliprdrError::FileError {
+                        path: file.name.clone(),
+                        err,
+                    }
+                })?;
+
+                let mut desc = if ancestor != &file.name {
+                    FileDescription {
+                        conn_id: 0,
+                        name: ancestor.to_path_buf(),
+                        kind: FileType::Directory,
+                        atime: SystemTime::UNIX_EPOCH,
+                        last_modified: SystemTime::UNIX_EPOCH,
+                        last_metadata_changed: SystemTime::UNIX_EPOCH,
+                        creation_time: SystemTime::UNIX_EPOCH,
+                        size: 0,
+                        perm: PERM_READ,
+                    }
+                } else {
+                    file.clone()
+                };
+
+                desc.name = Path::new(base_name).to_path_buf();
+
+                if desc.kind == FileType::Directory {
+                    sub_root_map.insert(desc.name.clone(), inode);
+                }
+                let mut fuse_node = FuseNode::from_description(inode, desc);
+                fuse_node.parent = Some(parent_inode);
+                tree_list.push(fuse_node);
             }
-
-            let f_name = name.clone();
-            let base_name = f_name.file_name().ok_or_else(|| {
-                let err = std::io::Error::new(
-                    std::io::ErrorKind::InvalidData,
-                    format!("invalid file name {}", name.display()),
-                );
-                CliprdrError::FileError { path: name, err }
-            })?;
-            file.name = Path::new(base_name).to_path_buf();
-
-            let mut fuse_node = FuseNode::from_description(inode, file);
-            fuse_node.parent = Some(parent_inode);
-
-            tree_list.push(fuse_node)
         }
         Ok(tree_list)
     }
@@ -1010,11 +1038,13 @@ impl FileHandles {
 
 #[cfg(test)]
 mod fuse_test {
+    use std::str::FromStr;
+
     use super::*;
 
     // todo: more tests needed!
 
-    fn generate_descriptions() -> Vec<FileDescription> {
+    fn generate_descriptions(prefix: &str) -> Vec<FileDescription> {
         fn desc_gen(name: &str, kind: FileType) -> FileDescription {
             FileDescription {
                 conn_id: 0,
@@ -1029,53 +1059,68 @@ mod fuse_test {
                 perm: 0,
             }
         }
-        let folder0 = desc_gen("folder0", FileType::Directory);
-        let file0 = desc_gen("folder0/file0", FileType::File);
-        let file1 = desc_gen("folder0/file1", FileType::File);
-        let folder1 = desc_gen("folder1", FileType::Directory);
-        let file2 = desc_gen("folder1/file2", FileType::File);
+        let (d0_path, f0_path, f1_path, d1_path, f2_path) = if prefix == "" {
+            (
+                "folder0".to_string(),
+                "folder0/file0".to_string(),
+                "folder0/file1".to_string(),
+                "folder1".to_string(),
+                "folder1/file2".to_string(),
+            )
+        } else {
+            (
+                format!("{}/folder0", prefix),
+                format!("{}/folder0/file0", prefix),
+                format!("{}/folder0/file1", prefix),
+                format!("{}/folder1", prefix),
+                format!("{}/folder1/file2", prefix),
+            )
+        };
+        let folder0 = desc_gen(&d0_path, FileType::Directory);
+        let file0 = desc_gen(&f0_path, FileType::File);
+        let file1 = desc_gen(&f1_path, FileType::File);
+        let folder1 = desc_gen(&d1_path, FileType::Directory);
+        let file2 = desc_gen(&f2_path, FileType::File);
 
         vec![folder0, file0, file1, folder1, file2]
     }
 
-    #[test]
-    fn build_tree() {
-        // Tree:
-        //  - folder0
-        //      - file0
-        //      - file1
-        //  - folder1
-        //      - file2
-        let source_list = generate_descriptions();
+    fn build_tree(prefix: &str) {
+        let source_list = generate_descriptions(prefix);
 
         let build_res = FuseNode::build_tree(source_list);
         assert!(build_res.is_ok());
-        // expected tree:
-        // - /
-        //  - folder0
-        //      - file0
-        //      - file1
-        //  - folder1
-        //      - file2
         let tree_list = build_res.unwrap();
-        assert_eq!(tree_list.len(), 6);
 
-        assert_eq!(tree_list[0].name, "/"); // inode 1
-        assert_eq!(tree_list[0].children, vec![2, 5]);
+        let extra_wrap = PathBuf::from_str(prefix.trim_matches('/')).unwrap();
+        let e = extra_wrap.components().count(); // extra component count
 
-        assert_eq!(tree_list[1].name, "folder0"); // inode 2
-        assert_eq!(tree_list[1].children, vec![3, 4]);
+        assert_eq!(tree_list.len(), 6 + e);
 
-        assert_eq!(tree_list[2].name, "file0"); // inode 3
-        assert!(tree_list[2].children.is_empty());
+        assert_eq!(tree_list[0].name, "/");
+        let strip_list = &tree_list[e..];
+        assert_eq!(strip_list[1].name, "folder0");
+        assert_eq!(strip_list[2].name, "file0");
+        assert_eq!(strip_list[3].name, "file1");
+        assert_eq!(strip_list[4].name, "folder1");
+        assert_eq!(strip_list[5].name, "file2");
 
-        assert_eq!(tree_list[3].name, "file1"); // inode 4
-        assert!(tree_list[3].children.is_empty());
+        let e = e as u64;
 
-        assert_eq!(tree_list[4].name, "folder1"); // inode 5
-        assert_eq!(tree_list[4].children, vec![6]);
+        assert_eq!(strip_list[0].children, vec![e + 2, e + 5]);
+        assert_eq!(strip_list[1].children, vec![e + 3, e + 4]);
+        assert!(strip_list[2].children.is_empty());
+        assert!(strip_list[3].children.is_empty());
+        assert_eq!(strip_list[4].children, vec![e + 6]);
+        assert!(strip_list[5].children.is_empty());
+    }
 
-        assert_eq!(tree_list[5].name, "file2"); // inode 6
-        assert!(tree_list[5].children.is_empty());
+    #[test]
+    fn test_parse_tree() {
+        build_tree("");
+        build_tree("/");
+        build_tree("test");
+        build_tree("/test");
+        build_tree("/test/test");
     }
 }
