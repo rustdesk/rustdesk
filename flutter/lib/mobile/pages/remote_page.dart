@@ -763,7 +763,9 @@ void showOptions(
       children.add(InkWell(
           onTap: () {
             if (i == cur) return;
-            bind.sessionSwitchDisplay(sessionId: gFFI.sessionId, value: Int32List.fromList([i]));
+            gFFI.recordingModel.onClose();
+            bind.sessionSwitchDisplay(
+                sessionId: gFFI.sessionId, value: Int32List.fromList([i]));
             gFFI.dialogManager.dismissAll();
           },
           child: Ink(

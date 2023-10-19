@@ -999,16 +999,19 @@ pub struct VideoHandler {
     pub rgb: ImageRgb,
     recorder: Arc<Mutex<Option<Recorder>>>,
     record: bool,
+    _display: usize, // useful for debug
 }
 
 impl VideoHandler {
     /// Create a new video handler.
-    pub fn new() -> Self {
+    pub fn new(_display: usize) -> Self {
+        log::info!("new video handler for display #{_display}");
         VideoHandler {
             decoder: Decoder::new(),
             rgb: ImageRgb::new(ImageFormat::ARGB, crate::DST_STRIDE_RGBA),
             recorder: Default::default(),
             record: false,
+            _display,
         }
     }
 
@@ -1900,7 +1903,7 @@ where
                         if handler_controller_map.len() <= display {
                             for _i in handler_controller_map.len()..=display {
                                 handler_controller_map.push(VideoHandlerController {
-                                    handler: VideoHandler::new(),
+                                    handler: VideoHandler::new(_i),
                                     count: 0,
                                     duration: std::time::Duration::ZERO,
                                     skip_beginning: 0,
@@ -1960,6 +1963,7 @@ where
                         }
                     }
                     MediaData::RecordScreen(start, display, w, h, id) => {
+                        log::info!("record screen command: start:{start}, display:{display}");
                         if handler_controller_map.len() == 1 {
                             // Compatible with the sciter version(single ui session).
                             // For the sciter version, there're no multi-ui-sessions for one connection.

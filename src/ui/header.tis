@@ -144,7 +144,7 @@ class Header: Reactor.Component {
             <span #action>{svg_action}</span>
             <span #display>{svg_display}</span>
             <span #keyboard>{svg_keyboard}</span>
-            {recording_enabled && qualityMonitorData[4] != "AV1" ? <span #recording>{recording ? svg_recording_on : svg_recording_off}</span> : ""}
+            {recording_enabled ? <span #recording>{recording ? svg_recording_on : svg_recording_off}</span> : ""}
             {this.renderKeyboardPop()}
             {this.renderDisplayPop()}
             {this.renderActionPop()}
@@ -299,14 +299,22 @@ class Header: Reactor.Component {
         header.update();
         handler.record_status(recording);
         // 0 is just a dummy value. It will be ignored by the handler.
-        if (recording)
+        if (recording) {
             handler.refresh_video(0);
-        else
-            handler.record_screen(false, 0, display_width, display_height);
+            if (handler.version_cmp(pi.version, '1.2.4') >= 0) handler.record_screen(recording, pi.current_display, display_width, display_height);
+        }
+        else {
+            handler.record_screen(recording, pi.current_display, display_width, display_height);
+        }
     }
 
     event click $(#screen) (_, me) {
         if (pi.current_display == me.index) return;
+        if (recording) {
+            recording = false;
+            handler.record_screen(false, pi.current_display, display_width, display_height);
+            handler.record_status(false);
+        }
         handler.switch_display(me.index);
     }
     

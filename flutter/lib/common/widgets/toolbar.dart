@@ -224,11 +224,8 @@ List<TTextMenu> toolbarControls(BuildContext context, String id, FFI ffi) {
     ));
   }
   // record
-  var codecFormat = ffi.qualityMonitorModel.data.codecFormat;
   if (!isDesktop &&
-      (ffi.recordingModel.start ||
-          (perms["recording"] != false &&
-              (codecFormat == "VP8" || codecFormat == "VP9")))) {
+      (ffi.recordingModel.start || (perms["recording"] != false))) {
     v.add(TTextMenu(
         child: Row(
           children: [
