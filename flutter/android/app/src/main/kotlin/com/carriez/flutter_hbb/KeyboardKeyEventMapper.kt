@@ -9,8 +9,6 @@ object KeyEventConverter {
         var chrValue = 0
         var modifiers = 0
 
-        android.util.Log.d(tag, "proto: $keyEventProto")
-
         val keyboardMode = keyEventProto.getMode()
 
         if (keyEventProto.hasChr()) {
@@ -28,11 +26,9 @@ object KeyEventConverter {
         if (modifiersList != null) {
             for (modifier in keyEventProto.getModifiersList()) {
                 val modifierValue = convertModifier(modifier)
-                modifiers = modifiers and modifierValue
+                modifiers = modifiers or modifierValue
             }
         }
-
-        android.util.Log.d(tag, "modifiers: $modifiersList")
 
         var action = 0
         if (keyEventProto.getDown()) {

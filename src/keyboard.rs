@@ -1072,6 +1072,8 @@ pub fn keycode_to_rdev_key(keycode: u32) -> Key {
     return rdev::win_key_from_scancode(keycode);
     #[cfg(any(target_os = "linux"))]
     return rdev::linux_key_from_code(keycode);
+    #[cfg(any(target_os = "android"))]
+    return rdev::android_key_from_code(keycode);
     #[cfg(target_os = "macos")]
     return rdev::macos_key_from_code(keycode.try_into().unwrap_or_default());
 }
