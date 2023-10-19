@@ -287,15 +287,10 @@ class _ConnectionPageState extends State<ConnectionPage>
                         if (fieldFocusNode.hasFocus && !isPeersLoading){
                           _fetchPeers();
                         }
-                        // select all to facilitate removing text, just following the behavior of address input of chrome
-                        SchedulerBinding.instance.addPostFrameCallback((_) {
-                          final textLength = fieldTextEditingController.value.text.length;
-                          Future.delayed(Duration(milliseconds: 150) , () {
-                            fieldTextEditingController.selection = TextSelection.collapsed(offset: textLength);
-                            fieldTextEditingController.selection = TextSelection(baseOffset: 0, extentOffset: textLength);
-                          });
-                        });
                       });
+                      final textLength = fieldTextEditingController.value.text.length;
+                      // select all to facilitate removing text, just following the behavior of address input of chrome
+                      fieldTextEditingController.selection = TextSelection(baseOffset: 0, extentOffset: textLength);
                       return Obx(() =>
                       TextField(
                         maxLength: 90,
