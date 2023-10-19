@@ -1715,18 +1715,18 @@ Future<bool> restoreWindowPosition(WindowType type,
   if (type == WindowType.RemoteDesktop) {
     if (!isRemotePeerPos && windowId != null) {
       if (lpos.offsetWidth != null) {
-        lpos.offsetWidth = lpos.offsetWidth! + windowId * 20;
+        lpos.offsetWidth = lpos.offsetWidth! + windowId * kNewWindowOffset;
       }
       if (lpos.offsetHeight != null) {
-        lpos.offsetHeight = lpos.offsetHeight! + windowId * 20;
+        lpos.offsetHeight = lpos.offsetHeight! + windowId * kNewWindowOffset;
       }
     }
     if (display != null) {
       if (lpos.offsetWidth != null) {
-        lpos.offsetWidth = lpos.offsetWidth! + display * 30;
+        lpos.offsetWidth = lpos.offsetWidth! + display * kNewWindowOffset;
       }
       if (lpos.offsetHeight != null) {
-        lpos.offsetHeight = lpos.offsetHeight! + display * 30;
+        lpos.offsetHeight = lpos.offsetHeight! + display * kNewWindowOffset;
       }
     }
   }
