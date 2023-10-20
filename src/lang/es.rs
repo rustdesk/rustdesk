@@ -561,7 +561,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("switch_display_elevated_connections_tip", "Cambiar a una pantalla no principal no está soportado en el modo elevado cuando hay múltiples conexiones. Por favor, inténtalo de nuevo tras la instalación si quieres controlar múltiples pantallas."),
         ("display_is_plugged_out_msg", "La pantalla está desconectada, cambia a la principal."),
         ("No displays", "No hay pantallas"),
-        ("elevated_switch_display_msg", "Cambiar a la pantalla principal porque mútliples pantallas no están soportadas en modo elevado.""),
+        ("elevated_switch_display_msg", "Cambiar a la pantalla principal porque mútliples pantallas no están soportadas en modo elevado."),
         ("Open in new window", "Abrir en una nueva ventana"),
         ("Show displays as individual windows", "Mostrar pantallas como ventanas individuales"),
         ("Use all my displays for the remote session", "Usar todas mis pantallas para la sesión remota"),
