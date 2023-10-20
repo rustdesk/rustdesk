@@ -125,9 +125,12 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
         windowOnTop(windowId());
         tryMoveToScreenAndSetFullscreen(screenRect);
         if (tabController.length == 0) {
-          if (Platform.isMacOS && stateGlobal.closeOnFullscreen) {
+          // Show the hidden window.
+          if (Platform.isMacOS && stateGlobal.closeOnFullscreen == true) {
             stateGlobal.setFullscreen(true);
           }
+          // Reset the state
+          stateGlobal.closeOnFullscreen = null;
         }
         ConnectionTypeState.init(id);
         _toolbarState.setShow(
