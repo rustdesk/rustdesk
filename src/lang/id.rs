@@ -564,6 +564,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("elevated_switch_display_msg", "Pindah ke tampilan utama, pada mode elevasi, pengggunaan lebih dari satu layar tidak diizinkan"),
         ("Open in new window", "Buka di jendela baru"),
         ("Show displays as individual windows", "Tampilkan dengan jendela terpisah"),
-        ("Use all my displays for the remote session", ""),
+        ("Use all my displays for the remote session", "Gunakan semua layar untuk sesi remote"),
     ].iter().cloned().collect();
 }
