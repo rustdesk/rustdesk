@@ -20,7 +20,6 @@ import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:window_size/window_size.dart' as window_size;
 
 import '../../common.dart';
-import '../../common/widgets/dialog.dart';
 import '../../models/model.dart';
 import '../../models/platform_model.dart';
 import '../../common/shared_state.dart';
@@ -1683,7 +1682,7 @@ class _CloseMenu extends StatelessWidget {
     return _IconMenuButton(
       assetName: 'assets/close.svg',
       tooltip: 'Close',
-      onPressed: () => clientClose(ffi.sessionId, ffi.dialogManager),
+      onPressed: () => closeConnection(id: id),
       color: _ToolbarTheme.redColor,
       hoverColor: _ToolbarTheme.hoverRedColor,
     );
