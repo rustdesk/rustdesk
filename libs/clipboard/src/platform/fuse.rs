@@ -300,11 +300,6 @@ impl fuser::Filesystem for FuseServer {
             reply.error(libc::EBUSY);
             return;
         }
-        if flags & libc::O_RDONLY == 0 {
-            log::error!("fuse: entry is read only");
-            reply.error(libc::EACCES);
-            return;
-        }
 
         let fh = self.alloc_fd();
         entry.add_handler(fh);
@@ -409,12 +404,7 @@ impl fuser::Filesystem for FuseServer {
             log::error!("fuse: open: entry is not a file");
             return;
         }
-        // check flags
-        if flags & libc::O_RDONLY == 0 {
-            reply.error(libc::EACCES);
-            log::error!("fuse: open: entry is read only");
-            return;
-        }
+
         // check gc
         if entry.marked() {
             reply.error(libc::EBUSY);
@@ -435,7 +425,7 @@ impl fuser::Filesystem for FuseServer {
         fh: u64,
         offset: i64,
         size: u32,
-        flags: i32,
+        _flags: i32,
         _lock_owner: Option<u64>,
         reply: fuser::ReplyData,
     ) {
@@ -453,12 +443,6 @@ impl fuser::Filesystem for FuseServer {
         if entry.attributes.kind != FileType::File {
             reply.error(libc::ENFILE);
             log::error!("fuse: read: entry is not a file");
-            return;
-        }
-        // check flags
-        if flags & libc::O_RDONLY == 0 {
-            reply.error(libc::EACCES);
-            log::error!("fuse: read: entry is read only");
             return;
         }
 

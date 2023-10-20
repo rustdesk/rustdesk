@@ -132,6 +132,7 @@ impl ClipboardContext {
         let mnt_opts = [
             MountOption::FSName("rustdesk-cliprdr-fs".to_string()),
             MountOption::NoAtime,
+            MountOption::RO,
         ];
         log::info!(
             "mounting clipboard FUSE to {}",
