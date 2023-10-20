@@ -622,7 +622,7 @@ class WindowActionPanelState extends State<WindowActionPanel>
       // it's safe to hide the subwindow
       final controller = WindowController.fromWindowId(kWindowId!);
       if (Platform.isMacOS) {
-        // onWindowClose() maybe called multiple times as loopCloseWindow() in remote_tab_page.dart.
+        // onWindowClose() maybe called multiple times because of loopCloseWindow() in remote_tab_page.dart.
         // use ??=  to make sure the value is set on first call.
 
         if (await widget.onClose?.call() ?? true) {
