@@ -109,11 +109,6 @@ mv libsciter-gtk.so target/debug
 VCPKG_ROOT=$HOME/vcpkg cargo run
 ```
 
-### Cambiare Wayland in X11 (Xorg)
-
-RustDesk non supporta Wayland. 
-Controlla [qui](https://docs.fedoraproject.org/en-US/quick-docs/configuring-xorg-as-default-gnome-session/) per configurare Xorg come sessione predefinita di GNOME.
-
 ## Come compilare con Docker
 
 Clona il repository e compila i container docker:

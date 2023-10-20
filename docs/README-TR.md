@@ -138,34 +138,6 @@ mv libsciter-gtk.so target/debug
 VCPKG_ROOT=$HOME/vcpkg cargo run
 ```
 
-### Wayland'ı X11 (Xorg) Olarak Değiştirme
-
-RustDesk, Wayland'ı desteklemez. Xorg'u GNOME oturumu olarak varsayılan olarak ayarlamak için [burayı](https://docs.fedoraproject.org/en-US/quick-docs/configuring-xorg-as-default-gnome-session/) kontrol edin.
-
-## Wayland Desteği
-
-Wayland'ın diğer pencerelere tuş vuruşu göndermek için herhangi bir API sağlamadığı görünmektedir. Bu nedenle, RustDesk daha düşük bir seviyeden, yani Linux çekirdek seviyesindeki `/dev/uinput` cihazının API'sini kullanır.
-
-Wayland tarafı kontrol edildiğinde, aşağıdaki şekilde başlatmanız gerekir:
-```bash
-# uinput servisini başlatın
-$ sudo rustdesk --service
-$ rustdesk
-```
-**Uyarı**: Wayland ekran kaydı farklı arayüzler kullanır. RustDesk şu anda yalnızca org.freedesktop.portal.ScreenCast'ı destekler.
-```bash
-$ dbus-send --session --print-reply       \
-  --dest=org.freedesktop.portal.Desktop \
-  /org/freedesktop/portal/desktop       \
-  org.freedesktop.DBus.Properties.Get   \
-  string:org.freedesktop.portal.ScreenCast string:version
-# Desteklenmez
-Error org.freedesktop.DBus.Error.InvalidArgs: No such interface “org.freedesktop.portal.ScreenCast”
-# Desteklenir
-method return time=1662544486.931020 sender=:1.54 -> destination=:1.139 serial=257 reply_serial=2
-   variant       uint32 4
-```
-
 ## Docker ile Derleme Nasıl Yapılır
 
 Öncelikle deposunu klonlayın ve Docker konteynerini oluşturun:

@@ -135,34 +135,6 @@ mv libsciter-gtk.so target/debug
 VCPKG_ROOT=$HOME/vcpkg cargo run
 ```
 
-### Change Wayland to X11 (Xorg)
-
-RustDesk does not support Wayland. Check [this](https://docs.fedoraproject.org/en-US/quick-docs/configuring-xorg-as-default-gnome-session/) to configuring Xorg as the default GNOME session.
-
-## Wayland support
-
-Wayland does not seem to provide any API for sending keypresses to other windows. Therefore, the RustDesk uses an API from a lower level, namely the `/dev/uinput` device (Linux kernel level).
-
-When Wayland is the controlled side, you have to start in the following way:
-```bash
-# Start uinput service
-$ sudo rustdesk --service
-$ rustdesk
-```
-**Notice**: Wayland screen recording uses different interfaces. RustDesk currently only supports org.freedesktop.portal.ScreenCast.
-```bash
-$ dbus-send --session --print-reply       \
-  --dest=org.freedesktop.portal.Desktop \
-  /org/freedesktop/portal/desktop       \
-  org.freedesktop.DBus.Properties.Get   \
-  string:org.freedesktop.portal.ScreenCast string:version
-# Not support
-Error org.freedesktop.DBus.Error.InvalidArgs: No such interface “org.freedesktop.portal.ScreenCast”
-# Support
-method return time=1662544486.931020 sender=:1.54 -> destination=:1.139 serial=257 reply_serial=2
-   variant       uint32 4
-```
-
 ## How to build with Docker
 
 Begin by cloning the repository and building the Docker container:

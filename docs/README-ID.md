@@ -128,37 +128,6 @@ mv libsciter-gtk.so target/debug
 VCPKG_ROOT=$HOME/vcpkg cargo run
 ```
 
-### Mengubah Wayland ke X11 (Xorg)
-
-RustDesk tidak mendukung Wayland. Cek [ini](https://docs.fedoraproject.org/en-US/quick-docs/configuring-xorg-as-default-gnome-session/) untuk mengonfigurasi Xorg sebagai sesi standar di GNOME.
-
-## Kompatibilitas dengan Wayland
-
-Sepertinya Wayland tidak memiliki API untuk mengirimkan ketukan tombol ke jendela lain. Maka dari itu, RustDesk menggunakan API dari level yang lebih rendah, lebih tepatnya perangkat `/dev/uinput` (linux kernel level)
-
-Saat Wayland menjadi sisi yang dikendalikan atau sisi yang sedang diremote, kamu harus memulai dengan cara ini
-
-```bash
-# Start uinput service
-$ sudo rustdesk --service
-$ rustdesk
-```
-
-**Harap Diperhatikan**: Saat Perekaman layar menggunakan Wayland antarmuka (UI) yang ditampilkan akan berbeda. Untuk saat ini RustDesk hanya mendukung org.freedesktop.portal.ScreenCast.
-
-```bash
-$ dbus-send --session --print-reply       \
-  --dest=org.freedesktop.portal.Desktop \
-  /org/freedesktop/portal/desktop       \
-  org.freedesktop.DBus.Properties.Get   \
-  string:org.freedesktop.portal.ScreenCast string:version
-# Not support
-Error org.freedesktop.DBus.Error.InvalidArgs: No such interface “org.freedesktop.portal.ScreenCast”
-# Support
-method return time=1662544486.931020 sender=:1.54 -> destination=:1.139 serial=257 reply_serial=2
-   variant       uint32 4
-```
-
 ## Cara Build dengan Docker
 
 Mulailah dengan melakukan kloning (clone) repositori dan build dengan docker container:
