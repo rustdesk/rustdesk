@@ -1066,29 +1066,29 @@ mod fuse_test {
     use super::*;
 
     // todo: more tests needed!
+    fn desc_gen(name: &str, kind: FileType) -> FileDescription {
+        FileDescription {
+            conn_id: 0,
+            name: PathBuf::from(name),
+            kind,
+            atime: SystemTime::UNIX_EPOCH,
+            last_modified: SystemTime::UNIX_EPOCH,
+            last_metadata_changed: SystemTime::UNIX_EPOCH,
+            creation_time: SystemTime::UNIX_EPOCH,
 
-    fn generate_descriptions(prefix: &str) -> Vec<FileDescription> {
-        fn desc_gen(name: &str, kind: FileType) -> FileDescription {
-            FileDescription {
-                conn_id: 0,
-                name: PathBuf::from(name),
-                kind,
-                atime: SystemTime::UNIX_EPOCH,
-                last_modified: SystemTime::UNIX_EPOCH,
-                last_metadata_changed: SystemTime::UNIX_EPOCH,
-                creation_time: SystemTime::UNIX_EPOCH,
-
-                size: 0,
-                perm: 0,
-            }
+            size: 0,
+            perm: 0,
         }
-        let (d0_path, f0_path, f1_path, d1_path, f2_path) = if prefix.is_empty() {
+    }
+    fn generate_descriptions(prefix: &str) -> Vec<FileDescription> {
+        let (d0_path, f0_path, f1_path, d1_path, f2_path, f3_path) = if prefix.is_empty() {
             (
                 "folder0".to_string(),
                 "folder0/file0".to_string(),
                 "folder0/file1".to_string(),
                 "folder1".to_string(),
                 "folder1/file2".to_string(),
+                "folder1/📄3".to_string(),
             )
         } else {
             (
@@ -1097,6 +1097,7 @@ mod fuse_test {
                 format!("{}/folder0/file1", prefix),
                 format!("{}/folder1", prefix),
                 format!("{}/folder1/file2", prefix),
+                format!("{}/folder1/📄3", prefix),
             )
         };
         let folder0 = desc_gen(&d0_path, FileType::Directory);
@@ -1104,8 +1105,9 @@ mod fuse_test {
         let file1 = desc_gen(&f1_path, FileType::File);
         let folder1 = desc_gen(&d1_path, FileType::Directory);
         let file2 = desc_gen(&f2_path, FileType::File);
+        let file3 = desc_gen(&f3_path, FileType::File);
 
-        vec![folder0, file0, file1, folder1, file2]
+        vec![folder0, file0, file1, folder1, file2, file3]
     }
 
     fn build_tree(prefix: &str) {
@@ -1118,7 +1120,7 @@ mod fuse_test {
         let extra_wrap = PathBuf::from_str(prefix.trim_matches('/')).unwrap();
         let e = extra_wrap.components().count(); // extra component count
 
-        assert_eq!(tree_list.len(), 6 + e);
+        assert_eq!(tree_list.len(), 7 + e);
 
         assert_eq!(tree_list[0].name, "/");
         let strip_list = &tree_list[e..];
@@ -1127,6 +1129,7 @@ mod fuse_test {
         assert_eq!(strip_list[3].name, "file1");
         assert_eq!(strip_list[4].name, "folder1");
         assert_eq!(strip_list[5].name, "file2");
+        assert_eq!(strip_list[6].name, "📄3");
 
         let e = e as u64;
 
@@ -1134,12 +1137,51 @@ mod fuse_test {
         assert_eq!(strip_list[1].children, vec![e + 3, e + 4]);
         assert!(strip_list[2].children.is_empty());
         assert!(strip_list[3].children.is_empty());
-        assert_eq!(strip_list[4].children, vec![e + 6]);
+        assert_eq!(strip_list[4].children, vec![e + 6, e + 7]);
         assert!(strip_list[5].children.is_empty());
+        assert!(strip_list[6].children.is_empty());
 
         for (idx, node) in strip_list.iter().skip(1).enumerate() {
             assert_eq!(idx, node.index)
         }
+    }
+
+    fn build_single_file(prefix: &str) {
+        let raw_name = "衬衫的价格为 9 镑 15 便士.txt";
+        let f_name = if prefix == "" {
+            raw_name.to_string()
+        } else {
+            prefix.to_string() + "/" + raw_name
+        };
+        let desc = desc_gen(&f_name, FileType::File);
+        let tree = FuseNode::build_tree(vec![desc]).unwrap();
+
+        let extra_wrap = PathBuf::from_str(prefix.trim_matches('/')).unwrap();
+        let e = extra_wrap.components().count(); // extra component count
+
+        assert!(
+            e <= prefix.chars().filter(|ch| ch == &'/').count() + 1,
+            "wrap count: {}, slash count + 1: {}",
+            e,
+            prefix.chars().filter(|ch| ch == &'/').count() + 1
+        );
+
+        assert_eq!(tree.len(), 2 + e);
+        assert_eq!(tree[0].name, "/");
+
+        assert_eq!(tree[e + 1].name, raw_name);
+        assert_eq!(tree[e + 1].index, 0);
+        assert_eq!(tree[e + 1].attributes.kind, FileType::File);
+    }
+
+    #[test]
+    fn test_parse_single() {
+        build_single_file("");
+        build_single_file("/");
+        build_single_file("test");
+        build_single_file("/test");
+        build_single_file("🗂");
+        build_single_file("/🗂");
     }
 
     #[test]
@@ -1149,5 +1191,8 @@ mod fuse_test {
         build_tree("test");
         build_tree("/test");
         build_tree("/test/test");
+        build_tree("🗂");
+        build_tree("/🗂");
+        build_tree("🗂/test");
     }
 }

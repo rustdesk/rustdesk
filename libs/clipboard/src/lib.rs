@@ -214,7 +214,6 @@ fn send_data_to_channel(conn_id: i32, data: ClipboardFile) {
         .iter()
         .find(|x| x.conn_id == conn_id)
     {
-        log::debug!("send data to connection: {}, data = {:?}", conn_id, data);
         allow_err!(msg_channel.sender.send(data));
     }
 }
@@ -223,7 +222,6 @@ fn send_data_to_channel(conn_id: i32, data: ClipboardFile) {
 fn send_data_to_all(data: ClipboardFile) {
     // no need to handle result here
     for msg_channel in VEC_MSG_CHANNEL.read().unwrap().iter() {
-        log::debug!("send data to connection: {}", msg_channel.conn_id);
         allow_err!(msg_channel.sender.send(data.clone()));
     }
 }
