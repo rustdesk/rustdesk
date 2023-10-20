@@ -1,4 +1,9 @@
-use std::{os::unix::prelude::FileExt, path::PathBuf, sync::Arc, time::Duration};
+use std::{
+    os::unix::prelude::FileExt,
+    path::PathBuf,
+    sync::{mpsc::Sender, Arc},
+    time::Duration,
+};
 
 use dashmap::DashMap;
 use fuser::MountOption;
@@ -92,8 +97,11 @@ enum FileContentsRequest {
 
 pub struct ClipboardContext {
     pub fuse_mount_point: PathBuf,
+    /// stores fuse background session handle
     fuse_handle: Mutex<Option<fuser::BackgroundSession>>,
 
+    /// a sender of clipboard file contents pdu to fuse server
+    fuse_tx: Sender<ClipboardFile>,
     fuse_server: Arc<Mutex<FuseServer>>,
 
     clipboard: Arc<dyn SysClipboard>,
@@ -107,7 +115,9 @@ impl ClipboardContext {
             CliprdrError::CliprdrInit
         })?;
 
-        let fuse_server = Arc::new(Mutex::new(FuseServer::new(timeout)));
+        let (fuse_server, fuse_tx) = FuseServer::new(timeout);
+
+        let fuse_server = Arc::new(Mutex::new(fuse_server));
 
         let clipboard = get_sys_clipboard(&fuse_mount_point)?;
         let clipboard = Arc::from(clipboard) as Arc<_>;
@@ -115,6 +125,7 @@ impl ClipboardContext {
         Ok(Self {
             fuse_mount_point,
             fuse_server,
+            fuse_tx,
             fuse_handle: Mutex::new(None),
             clipboard,
         })
@@ -175,12 +186,12 @@ impl ClipboardContext {
         conn_id: i32,
         request: FileContentsRequest,
     ) -> Result<(), CliprdrError> {
-        log::debug!("file contents (range) requested from conn: {}", conn_id);
         let file_contents_req = match request {
             FileContentsRequest::Size {
                 stream_id,
                 file_idx,
             } => {
+                log::debug!("file contents (size) requested from conn: {}", conn_id);
                 let file_list = self.clipboard.get_file_list()?;
                 let Some(file) = file_list.get(file_idx) else {
                     log::error!(
@@ -198,7 +209,12 @@ impl ClipboardContext {
                     });
                 };
 
-                log::debug!("conn {} requested file {}", conn_id, file.name);
+                log::debug!(
+                    "conn {} requested file-{}: {}",
+                    conn_id,
+                    file_idx,
+                    file.name
+                );
 
                 let size = file.size;
                 ClipboardFile::FileContentsResponse {
@@ -213,6 +229,12 @@ impl ClipboardContext {
                 offset,
                 length,
             } => {
+                log::debug!(
+                    "file contents (range from {} length {}) request from conn: {}",
+                    offset,
+                    length,
+                    conn_id
+                );
                 let file_list = self.clipboard.get_file_list()?;
                 let Some(file) = file_list.get(file_idx) else {
                     log::error!(
@@ -228,7 +250,12 @@ impl ClipboardContext {
                         ),
                     });
                 };
-                log::debug!("conn {} requested file {}", conn_id, file.name);
+                log::debug!(
+                    "conn {} requested file-{}: {}",
+                    conn_id,
+                    file_idx,
+                    file.name
+                );
 
                 let Some(handle) = &file.handle else {
                     log::error!(
@@ -409,7 +436,7 @@ impl ClipboardContext {
 
                 log::debug!("parsing file descriptors");
                 // this must be a file descriptor format data
-                let files = FileDescription::parse_file_descriptors(format_data.into(), conn_id)?;
+                let files = FileDescription::parse_file_descriptors(format_data, conn_id)?;
 
                 let paths = {
                     let mut fuse_guard = self.fuse_server.lock();
@@ -425,7 +452,10 @@ impl ClipboardContext {
             ClipboardFile::FileContentsResponse { .. } => {
                 log::debug!("server_file_contents_response called");
                 // we don't know its corresponding request, no resend can be performed
-                self.fuse_server.lock().serve(msg)?;
+                self.fuse_tx.send(msg).map_err(|e| {
+                    log::error!("failed to send file contents response to fuse: {:?}", e);
+                    CliprdrError::ClipboardInternalError
+                })?;
                 Ok(())
             }
             ClipboardFile::FileContentsRequest {
@@ -466,9 +496,8 @@ impl ClipboardContext {
 
     fn send_file_list(&self, conn_id: i32) -> Result<(), CliprdrError> {
         let file_list = self.clipboard.get_file_list()?;
-        let paths = file_list.into_iter().map(|lf| lf.path).collect();
 
-        send_file_list(paths, conn_id)
+        send_file_list(&file_list, conn_id)
     }
 }
 
@@ -518,21 +547,24 @@ fn send_format_list(conn_id: i32) -> Result<(), CliprdrError> {
     Ok(())
 }
 
-fn send_file_list(paths: Vec<PathBuf>, conn_id: i32) -> Result<(), CliprdrError> {
-    log::debug!(
-        "send file list to remote, conn={}, list={:?}",
-        conn_id,
-        paths
-    );
-    let files = construct_file_list(paths.as_slice())?;
-
+fn build_file_list_pdu(files: &[LocalFile]) -> Vec<u8> {
     let mut data = BytesMut::with_capacity(4 + 592 * files.len());
-    data.put_u32_le(paths.len() as u32);
+    data.put_u32_le(files.len() as u32);
     for file in files.iter() {
         data.put(file.as_bin().as_slice());
     }
 
-    let format_data = data.to_vec();
+    data.to_vec()
+}
+
+fn send_file_list(files: &[LocalFile], conn_id: i32) -> Result<(), CliprdrError> {
+    log::debug!(
+        "send file list to remote, conn={}, list={:?}",
+        conn_id,
+        files.iter().map(|f| f.path.display()).collect::<Vec<_>>()
+    );
+
+    let format_data = build_file_list_pdu(files);
 
     send_data(
         conn_id,

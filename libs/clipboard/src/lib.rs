@@ -119,19 +119,19 @@ lazy_static::lazy_static! {
 
 impl ClipboardFile {
     pub fn is_stopping_allowed(&self) -> bool {
-        match self {
+        matches!(
+            self,
             ClipboardFile::MonitorReady
-            | ClipboardFile::FormatList { .. }
-            | ClipboardFile::FormatDataRequest { .. } => true,
-            _ => false,
-        }
+                | ClipboardFile::FormatList { .. }
+                | ClipboardFile::FormatDataRequest { .. }
+        )
     }
 
     pub fn is_stopping_allowed_from_peer(&self) -> bool {
-        match self {
-            ClipboardFile::MonitorReady | ClipboardFile::FormatList { .. } => true,
-            _ => false,
-        }
+        matches!(
+            self,
+            ClipboardFile::MonitorReady | ClipboardFile::FormatList { .. }
+        )
     }
 }
 

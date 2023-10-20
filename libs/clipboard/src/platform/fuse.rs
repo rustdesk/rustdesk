@@ -167,37 +167,27 @@ pub(crate) struct FuseServer {
     // timeout
     timeout: Duration,
     // file read reply channel
-    tx: Sender<ClipboardFile>,
-    // file read reply channel
     rx: Receiver<ClipboardFile>,
 }
 
 impl FuseServer {
     /// create a new fuse server
-    pub fn new(timeout: Duration) -> Self {
+    pub fn new(timeout: Duration) -> (Self, Sender<ClipboardFile>) {
         let (tx, rx) = std::sync::mpsc::channel();
-        Self {
-            generation: AtomicU64::new(0),
-            files: Vec::new(),
-            file_handle_counter: AtomicU64::new(0),
-            timeout,
-            rx,
+        (
+            Self {
+                generation: AtomicU64::new(0),
+                files: Vec::new(),
+                file_handle_counter: AtomicU64::new(0),
+                timeout,
+                rx,
+            },
             tx,
-        }
+        )
     }
 
     pub fn client(server: Arc<Mutex<Self>>) -> FuseClient {
         FuseClient { server }
-    }
-}
-
-impl FuseServer {
-    pub fn serve(&self, reply: ClipboardFile) -> Result<(), CliprdrError> {
-        self.tx.send(reply).map_err(|e| {
-            log::error!("failed to serve cliprdr reply from endpoint: {:?}", e);
-            CliprdrError::ClipboardInternalError
-        })?;
-        Ok(())
     }
 }
 
@@ -273,14 +263,13 @@ impl fuser::Filesystem for FuseServer {
         // error
         reply.error(libc::ENOENT);
         log::debug!("fuse: child not found");
-        return;
     }
 
     fn opendir(
         &mut self,
         _req: &fuser::Request<'_>,
         ino: u64,
-        flags: i32,
+        _flags: i32,
         reply: fuser::ReplyOpen,
     ) {
         let files = &self.files;
@@ -304,7 +293,6 @@ impl fuser::Filesystem for FuseServer {
         let fh = self.alloc_fd();
         entry.add_handler(fh);
         reply.opened(fh, 0);
-        return;
     }
 
     fn readdir(
@@ -357,7 +345,6 @@ impl fuser::Filesystem for FuseServer {
         }
 
         reply.ok();
-        return;
     }
 
     fn releasedir(
@@ -387,10 +374,9 @@ impl fuser::Filesystem for FuseServer {
 
         let _ = entry.unregister_handler(fh);
         reply.ok();
-        return;
     }
 
-    fn open(&mut self, _req: &fuser::Request<'_>, ino: u64, flags: i32, reply: fuser::ReplyOpen) {
+    fn open(&mut self, _req: &fuser::Request<'_>, ino: u64, _flags: i32, reply: fuser::ReplyOpen) {
         let files = &self.files;
         let Some(entry) = files.get(ino as usize - 1) else {
             reply.error(libc::ENOENT);
@@ -415,7 +401,6 @@ impl fuser::Filesystem for FuseServer {
         let fh = self.alloc_fd();
         entry.add_handler(fh);
         reply.opened(fh, 0);
-        return;
     }
 
     fn read(
@@ -481,13 +466,12 @@ impl fuser::Filesystem for FuseServer {
             return;
         };
 
-        if let Err(_) = entry.unregister_handler(fh) {
+        if entry.unregister_handler(fh).is_err() {
             reply.error(libc::EBADF);
             log::error!("fuse: release: entry has no such handler");
             return;
         }
         reply.ok();
-        return;
     }
 
     fn getattr(&mut self, _req: &fuser::Request<'_>, ino: u64, reply: fuser::ReplyAttr) {
@@ -545,7 +529,7 @@ impl FuseServer {
             ((offset >> 32) as i32, (offset & (u32::MAX as i64)) as i32);
         let request = ClipboardFile::FileContentsRequest {
             stream_id: node.stream_id,
-            list_index: node.inode as i32 - 2,
+            list_index: node.index as i32,
             dw_flags: 2,
             n_position_low,
             n_position_high,
@@ -562,36 +546,36 @@ impl FuseServer {
             node.stream_id
         );
 
-        let reply = self.rx.recv_timeout(self.timeout).map_err(|e| {
-            log::error!("failed to receive file list from channel: {:?}", e);
-            std::io::Error::new(std::io::ErrorKind::TimedOut, e)
-        })?;
+        loop {
+            let reply = self.rx.recv_timeout(self.timeout).map_err(|e| {
+                log::error!("failed to receive file list from channel: {:?}", e);
+                std::io::Error::new(std::io::ErrorKind::TimedOut, e)
+            })?;
 
-        match reply {
-            ClipboardFile::FileContentsResponse {
-                msg_flags,
-                stream_id,
-                requested_data,
-            } => {
-                if stream_id != node.stream_id {
+            match reply {
+                ClipboardFile::FileContentsResponse {
+                    msg_flags,
+                    stream_id,
+                    requested_data,
+                } => {
+                    if stream_id != node.stream_id {
+                        log::debug!("stream id mismatch, ignore");
+                        continue;
+                    }
+                    if msg_flags & 1 == 0 {
+                        return Err(std::io::Error::new(
+                            std::io::ErrorKind::Other,
+                            "failure request",
+                        ));
+                    }
+                    return Ok(requested_data);
+                }
+                _ => {
                     return Err(std::io::Error::new(
                         std::io::ErrorKind::Other,
-                        "stream id mismatch",
-                    ));
+                        "invalid reply",
+                    ))
                 }
-                if msg_flags & 1 == 0 {
-                    return Err(std::io::Error::new(
-                        std::io::ErrorKind::Other,
-                        "failure request",
-                    ));
-                }
-                Ok(requested_data)
-            }
-            _ => {
-                return Err(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    "invalid reply",
-                ));
             }
         }
     }
@@ -761,7 +745,10 @@ struct FuseNode {
     /// stream id
     pub stream_id: i32,
 
-    pub inode: u64,
+    /// file index in peer's file list
+    /// NOTE:
+    /// it is NOT the same as inode, this is the index in the file list
+    pub index: usize,
 
     /// parent inode
     pub parent: Option<u64>,
@@ -778,11 +765,11 @@ struct FuseNode {
 }
 
 impl FuseNode {
-    pub fn from_description(inode: Inode, desc: FileDescription) -> Self {
+    pub fn from_description(index: usize, inode: Inode, desc: FileDescription) -> Self {
         Self {
             conn_id: desc.conn_id,
             stream_id: rand::random(),
-            inode,
+            index,
             name: desc.name.to_str().unwrap().to_owned(),
             parent: None,
             attributes: InodeAttributes::from_description(inode, desc),
@@ -795,7 +782,7 @@ impl FuseNode {
         Self {
             conn_id: 0,
             stream_id: rand::random(),
-            inode: 1,
+            index: 0,
             name: String::from("/"),
             parent: None,
             attributes: InodeAttributes::new_root(),
@@ -844,7 +831,7 @@ impl FuseNode {
         sub_root_map.insert(Path::new("/").to_path_buf(), FUSE_ROOT_ID);
         sub_root_map.insert(Path::new("").to_path_buf(), FUSE_ROOT_ID);
 
-        for file in files.into_iter() {
+        for (index, file) in files.into_iter().enumerate() {
             let name = file.name.clone();
             let ancestors = name
                 .ancestors()
@@ -882,7 +869,7 @@ impl FuseNode {
                     }
                 })?;
 
-                let mut desc = if ancestor != &file.name {
+                let mut desc = if ancestor != file.name {
                     FileDescription {
                         conn_id: 0,
                         name: ancestor.to_path_buf(),
@@ -903,7 +890,7 @@ impl FuseNode {
                 if desc.kind == FileType::Directory {
                     sub_root_map.insert(desc.name.clone(), inode);
                 }
-                let mut fuse_node = FuseNode::from_description(inode, desc);
+                let mut fuse_node = FuseNode::from_description(index, inode, desc);
                 fuse_node.parent = Some(parent_inode);
                 tree_list.push(fuse_node);
             }
@@ -1095,7 +1082,7 @@ mod fuse_test {
                 perm: 0,
             }
         }
-        let (d0_path, f0_path, f1_path, d1_path, f2_path) = if prefix == "" {
+        let (d0_path, f0_path, f1_path, d1_path, f2_path) = if prefix.is_empty() {
             (
                 "folder0".to_string(),
                 "folder0/file0".to_string(),
@@ -1149,6 +1136,10 @@ mod fuse_test {
         assert!(strip_list[3].children.is_empty());
         assert_eq!(strip_list[4].children, vec![e + 6]);
         assert!(strip_list[5].children.is_empty());
+
+        for (idx, node) in strip_list.iter().skip(1).enumerate() {
+            assert_eq!(idx, node.index)
+        }
     }
 
     #[test]

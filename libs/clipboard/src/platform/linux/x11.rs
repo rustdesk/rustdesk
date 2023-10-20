@@ -96,10 +96,10 @@ impl SysClipboard for X11Clipboard {
     fn set_file_list(&self, paths: &[PathBuf]) -> Result<(), CliprdrError> {
         *self.former_file_list.lock() = paths.to_vec();
 
-        let uri_list: Vec<String> = paths.iter().map(|pb| encode_path_to_uri(pb)).collect();
+        let uri_list: Vec<String> = paths.iter().map(encode_path_to_uri).collect();
         let uri_list = uri_list.join("\n");
         let text_uri_list_data = uri_list.as_bytes().to_vec();
-        let gnome_copied_files_data = vec!["copy\n".as_bytes(), uri_list.as_bytes()].concat();
+        let gnome_copied_files_data = ["copy\n".as_bytes(), uri_list.as_bytes()].concat();
         let batch = vec![
             (self.text_uri_list, text_uri_list_data),
             (self.gnome_copied_files, gnome_copied_files_data),

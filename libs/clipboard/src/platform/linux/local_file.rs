@@ -50,11 +50,7 @@ impl LocalFile {
         let is_dir = mt.is_dir();
         let read_only = mt.permissions().readonly();
         let system = false;
-        let hidden = if path.to_string_lossy().starts_with('.') {
-            true
-        } else {
-            false
-        };
+        let hidden = path.to_string_lossy().starts_with('.');
         let archive = false;
         let normal = !(is_dir || read_only || system || hidden || archive);
         let last_write_time = mt.modified().unwrap_or(SystemTime::UNIX_EPOCH);
@@ -246,9 +242,9 @@ mod file_list_test {
 
         let p = prefix;
 
-        let (r_path, a_path, b_path, c_path) = if "" != prefix {
+        let (r_path, a_path, b_path, c_path) = if !prefix.is_empty() {
             (
-                format!("{}", p),
+                p.to_string(),
                 format!("{}/a.txt", p),
                 format!("{}/b", p),
                 format!("{}/b/c.txt", p),
@@ -281,7 +277,7 @@ mod file_list_test {
         let parsed = FileDescription::parse_file_descriptors(pdu.to_vec(), 0)?;
         assert_eq!(parsed.len(), 4);
 
-        if "" != prefix {
+        if !prefix.is_empty() {
             assert_eq!(parsed[0].name.to_str().unwrap(), format!("{}", prefix));
             assert_eq!(
                 parsed[1].name.to_str().unwrap(),
