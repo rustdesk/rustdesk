@@ -365,7 +365,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Audio Input Device", "Dispositivo ingresso audio"),
         ("Use IP Whitelisting", "Usa elenco IP autorizzati"),
         ("Network", "Rete"),
-        ("Enable RDP", "Abilita RDP"),
         ("Pin Toolbar", "Blocca barra strumenti"),
         ("Unpin Toolbar", "Sblocca barra strumenti"),
         ("Recording", "Registrazione"),
@@ -566,5 +565,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Open in new window", "Apri in una nuova finestra"),
         ("Show displays as individual windows", "Visualizza schermi come finestre individuali"),
         ("Use all my displays for the remote session", "Usa tutti gli schermi per la sessione remota"),
+        ("selinux_tip", ""),
     ].iter().cloned().collect();
 }

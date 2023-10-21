@@ -1369,3 +1369,11 @@ impl Drop for WallPaperRemover {
 pub fn is_x11() -> bool {
     *IS_X11
 }
+
+#[inline]
+pub fn is_selinux_enabled() -> bool {
+    match selinux::kernel_support() {
+        selinux::KernelSupport::Unsupported => false,
+        _ => selinux::current_mode() == selinux::SELinuxMode::Enforcing,
+    }
+}
