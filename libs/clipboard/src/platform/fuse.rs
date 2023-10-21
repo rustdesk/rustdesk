@@ -19,7 +19,7 @@
 //! - any write operations, hard links, and symbolic links on the FS should be denied
 
 use std::{
-    collections::{BTreeMap, HashMap, VecDeque},
+    collections::{BTreeMap, HashMap},
     ffi::OsString,
     path::{Path, PathBuf},
     sync::{
@@ -493,8 +493,9 @@ impl FuseServer {
         let files = &self.files;
         let children = &files[0].children;
         let mut paths = Vec::with_capacity(children.len());
-        for idx in children.iter().copied() {
-            paths.push(PathBuf::from(&files[idx as usize].name));
+        for inode in children.iter().copied() {
+            let idx = inode as usize - 1;
+            paths.push(PathBuf::from(&files[idx].name));
         }
         paths
     }
@@ -765,11 +766,11 @@ struct FuseNode {
 }
 
 impl FuseNode {
-    pub fn from_description(index: usize, inode: Inode, desc: FileDescription) -> Self {
+    pub fn from_description(inode: Inode, desc: FileDescription) -> Self {
         Self {
             conn_id: desc.conn_id,
             stream_id: rand::random(),
-            index,
+            index: inode as usize - 2,
             name: desc.name.to_str().unwrap().to_owned(),
             parent: None,
             attributes: InodeAttributes::from_description(inode, desc),
@@ -822,78 +823,52 @@ impl FuseNode {
     /// - a new root entry will be prepended to the list
     /// - all file names will be trimed to the last component
     pub fn build_tree(files: Vec<FileDescription>) -> Result<Vec<Self>, CliprdrError> {
+        // capacity set to file count + 1 (root)
         let mut tree_list = Vec::with_capacity(files.len() + 1);
         let root = Self::new_root();
         tree_list.push(root);
+
         // build the tree first
         // root map, name -> inode
         let mut sub_root_map = HashMap::new();
         sub_root_map.insert(Path::new("/").to_path_buf(), FUSE_ROOT_ID);
         sub_root_map.insert(Path::new("").to_path_buf(), FUSE_ROOT_ID);
 
-        for (index, file) in files.into_iter().enumerate() {
+        for file in files.into_iter() {
             let name = file.name.clone();
-            let ancestors = name
-                .ancestors()
-                .collect::<VecDeque<_>>()
-                .into_iter()
-                .rev()
-                .chain([name.as_path()].into_iter());
 
-            // build tree iteratively
-            // from root to self
-            for ancestor in ancestors {
-                if sub_root_map.contains_key(ancestor) {
-                    continue;
+            let inode = tree_list.len() as u64 + FUSE_ROOT_ID;
+            let parent_inode = match name.parent() {
+                Some(parent) => sub_root_map.get(parent).copied().unwrap_or(FUSE_ROOT_ID),
+                None => {
+                    // parent should be root
+                    FUSE_ROOT_ID
                 }
+            };
+            tree_list[parent_inode as usize - 1].add_child(inode);
 
-                let inode = tree_list.len() as u64 + FUSE_ROOT_ID;
-                sub_root_map.insert(ancestor.to_path_buf(), inode);
-                let parent_inode = match ancestor.parent() {
-                    Some(parent) => sub_root_map[parent],
-                    None => {
-                        // parent should be root
-                        FUSE_ROOT_ID
-                    }
-                };
-                tree_list[parent_inode as usize - 1].add_child(inode);
-
-                let base_name = name.file_name().ok_or_else(|| {
-                    let err = std::io::Error::new(
-                        std::io::ErrorKind::InvalidData,
-                        format!("invalid file name {}", file.name.display()),
-                    );
-                    CliprdrError::FileError {
-                        path: file.name.clone(),
-                        err,
-                    }
-                })?;
-
-                let mut desc = if ancestor != file.name {
-                    FileDescription {
-                        conn_id: 0,
-                        name: ancestor.to_path_buf(),
-                        kind: FileType::Directory,
-                        atime: SystemTime::UNIX_EPOCH,
-                        last_modified: SystemTime::UNIX_EPOCH,
-                        last_metadata_changed: SystemTime::UNIX_EPOCH,
-                        creation_time: SystemTime::UNIX_EPOCH,
-                        size: 0,
-                        perm: PERM_RWX,
-                    }
-                } else {
-                    file.clone()
-                };
-
-                desc.name = Path::new(base_name).to_path_buf();
-
-                if desc.kind == FileType::Directory {
-                    sub_root_map.insert(desc.name.clone(), inode);
+            let base_name = name.file_name().ok_or_else(|| {
+                let err = std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    format!("invalid file name {}", file.name.display()),
+                );
+                CliprdrError::FileError {
+                    path: file.name.clone(),
+                    err,
                 }
-                let mut fuse_node = FuseNode::from_description(index, inode, desc);
-                fuse_node.parent = Some(parent_inode);
-                tree_list.push(fuse_node);
+            })?;
+
+            let mut desc = file.clone();
+
+            if desc.kind == FileType::Directory {
+                sub_root_map.insert(desc.name.clone(), inode);
             }
+
+            desc.name = Path::new(base_name).to_path_buf();
+
+            let mut fuse_node = FuseNode::from_description(inode, desc);
+            fuse_node.parent = Some(parent_inode);
+            tree_list.push(fuse_node);
         }
         Ok(tree_list)
     }
@@ -1117,31 +1092,25 @@ mod fuse_test {
         assert!(build_res.is_ok());
         let tree_list = build_res.unwrap();
 
-        let extra_wrap = PathBuf::from_str(prefix.trim_matches('/')).unwrap();
-        let e = extra_wrap.components().count(); // extra component count
-
-        assert_eq!(tree_list.len(), 7 + e);
+        assert_eq!(tree_list.len(), 7);
 
         assert_eq!(tree_list[0].name, "/");
-        let strip_list = &tree_list[e..];
-        assert_eq!(strip_list[1].name, "folder0");
-        assert_eq!(strip_list[2].name, "file0");
-        assert_eq!(strip_list[3].name, "file1");
-        assert_eq!(strip_list[4].name, "folder1");
-        assert_eq!(strip_list[5].name, "file2");
-        assert_eq!(strip_list[6].name, "📄3");
+        assert_eq!(tree_list[1].name, "folder0");
+        assert_eq!(tree_list[2].name, "file0");
+        assert_eq!(tree_list[3].name, "file1");
+        assert_eq!(tree_list[4].name, "folder1");
+        assert_eq!(tree_list[5].name, "file2");
+        assert_eq!(tree_list[6].name, "📄3");
 
-        let e = e as u64;
+        assert_eq!(tree_list[0].children, vec![2, 5]);
+        assert_eq!(tree_list[1].children, vec![3, 4]);
+        assert!(tree_list[2].children.is_empty());
+        assert!(tree_list[3].children.is_empty());
+        assert_eq!(tree_list[4].children, vec![6, 7]);
+        assert!(tree_list[5].children.is_empty());
+        assert!(tree_list[6].children.is_empty());
 
-        assert_eq!(strip_list[0].children, vec![e + 2, e + 5]);
-        assert_eq!(strip_list[1].children, vec![e + 3, e + 4]);
-        assert!(strip_list[2].children.is_empty());
-        assert!(strip_list[3].children.is_empty());
-        assert_eq!(strip_list[4].children, vec![e + 6, e + 7]);
-        assert!(strip_list[5].children.is_empty());
-        assert!(strip_list[6].children.is_empty());
-
-        for (idx, node) in strip_list.iter().skip(1).enumerate() {
+        for (idx, node) in tree_list.iter().skip(1).enumerate() {
             assert_eq!(idx, node.index)
         }
     }
@@ -1156,22 +1125,13 @@ mod fuse_test {
         let desc = desc_gen(&f_name, FileType::File);
         let tree = FuseNode::build_tree(vec![desc]).unwrap();
 
-        let extra_wrap = PathBuf::from_str(prefix.trim_matches('/')).unwrap();
-        let e = extra_wrap.components().count(); // extra component count
-
-        assert!(
-            e <= prefix.chars().filter(|ch| ch == &'/').count() + 1,
-            "wrap count: {}, slash count + 1: {}",
-            e,
-            prefix.chars().filter(|ch| ch == &'/').count() + 1
-        );
-
-        assert_eq!(tree.len(), 2 + e);
+        assert_eq!(tree.len(), 2);
         assert_eq!(tree[0].name, "/");
+        assert_eq!(tree[0].children, vec![2]);
 
-        assert_eq!(tree[e + 1].name, raw_name);
-        assert_eq!(tree[e + 1].index, 0);
-        assert_eq!(tree[e + 1].attributes.kind, FileType::File);
+        assert_eq!(tree[1].name, raw_name);
+        assert_eq!(tree[1].index, 0);
+        assert_eq!(tree[1].attributes.kind, FileType::File);
     }
 
     #[test]
