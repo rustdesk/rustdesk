@@ -512,7 +512,9 @@ class FfiModel with ChangeNotifier {
       String link, bool hasRetry, OverlayDialogManager dialogManager,
       {bool? hasCancel}) {
     msgBox(sessionId, type, title, text, link, dialogManager,
-        hasCancel: hasCancel, reconnect: reconnect);
+        hasCancel: hasCancel,
+        reconnect: reconnect,
+        reconnectTimeout: hasRetry ? _reconnects : null);
     _timer?.cancel();
     if (hasRetry) {
       _timer = Timer(Duration(seconds: _reconnects), () {
@@ -528,6 +530,7 @@ class FfiModel with ChangeNotifier {
       bool forceRelay) {
     bind.sessionReconnect(sessionId: sessionId, forceRelay: forceRelay);
     clearPermissions();
+    dialogManager.dismissAll();
     dialogManager.showLoading(translate('Connecting...'),
         onCancel: closeConnection);
   }
