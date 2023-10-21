@@ -1,16 +1,14 @@
 use super::*;
+#[cfg(target_os = "linux")]
+use crate::platform::linux::is_x11;
 #[cfg(all(windows, feature = "virtual_display_driver"))]
 use crate::virtual_display_manager;
 #[cfg(windows)]
 use hbb_common::get_version_number;
 use hbb_common::protobuf::MessageField;
 use scrap::Display;
-#[cfg(target_os = "linux")]
-use std::sync::atomic::{AtomicBool, Ordering};
 
 // https://github.com/rustdesk/rustdesk/discussions/6042, avoiding dbus call
-#[cfg(target_os = "linux")]
-pub(super) static IS_X11: AtomicBool = AtomicBool::new(false);
 
 pub const NAME: &'static str = "display";
 
@@ -71,7 +69,7 @@ pub(super) fn check_display_changed(
     #[cfg(target_os = "linux")]
     {
         // wayland do not support changing display for now
-        if !IS_X11.load(Ordering::SeqCst) {
+        if !is_x11() {
             return None;
         }
     }
@@ -176,11 +174,6 @@ pub fn try_plug_out_virtual_display() {
 }
 
 fn run(sp: EmptyExtraFieldService) -> ResultType<()> {
-    #[cfg(target_os = "linux")]
-    {
-        IS_X11.store(scrap::is_x11(), Ordering::SeqCst);
-    }
-
     while sp.ok() {
         sp.snapshot(|sps| {
             if sps.has_subscribes() {
@@ -274,7 +267,7 @@ pub(super) fn check_update_displays(all: &Vec<Display>) {
 
 pub fn is_inited_msg() -> Option<Message> {
     #[cfg(target_os = "linux")]
-    if !IS_X11.load(Ordering::SeqCst) {
+    if !is_x11() {
         return super::wayland::is_inited();
     }
     None
@@ -283,7 +276,7 @@ pub fn is_inited_msg() -> Option<Message> {
 pub async fn update_get_sync_displays() -> ResultType<Vec<DisplayInfo>> {
     #[cfg(target_os = "linux")]
     {
-        if !IS_X11.load(Ordering::SeqCst) {
+        if !is_x11() {
             return super::wayland::get_displays().await;
         }
     }
@@ -295,7 +288,7 @@ pub async fn update_get_sync_displays() -> ResultType<Vec<DisplayInfo>> {
 pub fn get_primary() -> usize {
     #[cfg(target_os = "linux")]
     {
-        if !IS_X11.load(Ordering::SeqCst) {
+        if !is_x11() {
             return match super::wayland::get_primary() {
                 Ok(n) => n,
                 Err(_) => 0,
