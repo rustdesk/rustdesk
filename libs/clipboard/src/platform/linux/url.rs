@@ -62,4 +62,14 @@ mod uri_test {
         let convert_back = super::parse_uri_to_path(&uri).unwrap();
         assert_eq!(path, convert_back);
     }
+
+    #[test]
+    fn parse_list() {
+        let uri_list = r#"file:///home/rustdesk/pictures/%F0%9F%96%BC%EF%B8%8F.png
+file:///home/rustdesk/pictures/%F0%9F%96%BC%EF%B8%8F.png
+"#;
+        let list = super::parse_uri_list(uri_list.into()).unwrap();
+        assert!(list.len() == 2);
+        assert_eq!(list[0], list[1]);
+    }
 }
