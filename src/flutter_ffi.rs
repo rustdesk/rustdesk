@@ -1584,7 +1584,7 @@ pub fn main_is_installed() -> SyncReturn<bool> {
 
 pub fn main_start_grab_keyboard() -> SyncReturn<bool> {
     #[cfg(target_os = "linux")]
-    if !*crate::common::IS_X11 {
+    if !crate::platform::linux::is_x11() {
         return SyncReturn(false);
     }
     crate::keyboard::client::start_grab_loop();
