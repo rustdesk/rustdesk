@@ -54,6 +54,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
     }
   }
   bool isPeersLoading = false;
+  bool isPeersLoaded = false;
 
   @override
   void initState() {
@@ -136,6 +137,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
     await _getAllPeers();
     setState(() {
         isPeersLoading = false;
+        isPeersLoaded = true;
       });
   }
 
@@ -208,7 +210,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
                       if (textEditingValue.text == '') {
                         return const Iterable<Peer>.empty();
                       }
-                      else if (peers.isEmpty) {
+                      else if (peers.isEmpty && !isPeersLoaded) {
                          Peer emptyPeer = Peer(
                           id: '',
                           username: '',
