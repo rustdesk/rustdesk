@@ -379,17 +379,6 @@ class _DesktopHomePageState extends State<DesktopHomePage>
       // }
     } else if (Platform.isLinux) {
       final LinuxCards = <Widget>[];
-      if (bind.mainCurrentIsWayland()) {
-        LinuxCards.add(buildInstallCard(
-            "Warning", "wayland_experiment_tip", "", () async {},
-            help: 'Help',
-            link: 'https://rustdesk.com/docs/en/manual/linux/#x11-required'));
-      } else if (bind.mainIsLoginWayland()) {
-        LinuxCards.add(buildInstallCard("Warning",
-            "Login screen using Wayland is not supported", "", () async {},
-            help: 'Help',
-            link: 'https://rustdesk.com/docs/en/manual/linux/#login-screen'));
-      }
       if (bind.isSelinuxEnabled()) {
         final keyShowSelinuxHelpTip = "show-selinux-help-tip";
         if (bind.mainGetLocalOption(key: keyShowSelinuxHelpTip) != 'N') {
@@ -403,6 +392,19 @@ class _DesktopHomePageState extends State<DesktopHomePage>
               closeOption: keyShowSelinuxHelpTip,
           ));
         }
+      }
+      if (bind.mainCurrentIsWayland()) {
+        LinuxCards.add(buildInstallCard(
+            "Warning", "wayland_experiment_tip", "", () async {},
+            marginTop: LinuxCards.isEmpty ? 20.0 : 5.0,
+            help: 'Help',
+            link: 'https://rustdesk.com/docs/en/manual/linux/#x11-required'));
+      } else if (bind.mainIsLoginWayland()) {
+        LinuxCards.add(buildInstallCard("Warning",
+            "Login screen using Wayland is not supported", "", () async {},
+            marginTop: LinuxCards.isEmpty ? 20.0 : 5.0,
+            help: 'Help',
+            link: 'https://rustdesk.com/docs/en/manual/linux/#login-screen'));
       }
       if (LinuxCards.isNotEmpty) {
         return Column(
