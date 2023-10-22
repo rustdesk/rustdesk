@@ -116,10 +116,6 @@ mv libsciter-gtk.so target/debug
 VCPKG_ROOT=$HOME/vcpkg cargo run
 ```
 
-### Válts Wayland-ról X11-re (Xorg)
-
-A RustDesk nem támogatja a Waylendet. [Itt](https://docs.fedoraproject.org/en-US/quick-docs/configuring-xorg-as-default-gnome-session/) található egy tutorial amelynek segítségével beállíthatod a Xorg-ot mint alap GNOME session.
-
 ## Hogyan építs Dockerrel
 
 Kezdjünk a repo clónozásával, majd pedig a Docker container megépítésével:

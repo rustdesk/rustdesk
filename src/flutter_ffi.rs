@@ -1584,7 +1584,7 @@ pub fn main_is_installed() -> SyncReturn<bool> {
 
 pub fn main_start_grab_keyboard() -> SyncReturn<bool> {
     #[cfg(target_os = "linux")]
-    if !*crate::common::IS_X11 {
+    if !crate::platform::linux::is_x11() {
         return SyncReturn(false);
     }
     crate::keyboard::client::start_grab_loop();
@@ -1933,6 +1933,17 @@ pub fn plugin_install(_id: String, _b: bool) {
 
 pub fn is_support_multi_ui_session(version: String) -> SyncReturn<bool> {
     SyncReturn(crate::common::is_support_multi_ui_session(&version))
+}
+
+pub fn is_selinux_enforcing() -> SyncReturn<bool> {
+    #[cfg(target_os = "linux")]
+    {
+        SyncReturn(crate::platform::linux::is_selinux_enforcing())
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        SyncReturn(false)
+    }
 }
 
 #[cfg(target_os = "android")]

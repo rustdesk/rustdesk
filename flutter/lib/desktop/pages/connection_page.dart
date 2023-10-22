@@ -37,7 +37,6 @@ class _ConnectionPageState extends State<ConnectionPage>
   Timer? _updateTimer;
 
   final RxBool _idInputFocused = false.obs;
-  final FocusNode _idFocusNode = FocusNode();
 
   var svcStopped = Get.find<RxBool>(tag: 'stop-service');
   var svcIsUsingPublicServer = true.obs;
@@ -336,6 +335,7 @@ class _ConnectionPageState extends State<ConnectionPage>
                     optionsViewBuilder: (BuildContext context, AutocompleteOnSelected<Peer> onSelected, Iterable<Peer> options) {
                       double maxHeight = options.length * 50;
                       maxHeight = maxHeight > 200 ? 200 : maxHeight;
+
                       return Align(
                         alignment: Alignment.topLeft,
                         child: ClipRRect(

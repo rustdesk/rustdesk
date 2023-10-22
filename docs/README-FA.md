@@ -112,10 +112,6 @@ mv libsciter-gtk.so target/debug
 VCPKG_ROOT=$HOME/vcpkg cargo run
 ```
 
-### تغییر Wayland به (X11 (Xorg
-
-راست‌دسک از Wayland پشتیبانی نمی کند. برای جایگزنی Xorg به عنوان پیش‌فرض GNOM، [اینجا](https://docs.fedoraproject.org/en-US/quick-docs/configuring-xorg-as-default-gnome-session/) را کلیک کنید.
-
 ## نحوه ساخت با داکر
 
 این مخزن Git را دریافت کنید و کانتینر را به روش زیر بسازید

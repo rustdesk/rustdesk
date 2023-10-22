@@ -225,5 +225,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("switch_display_elevated_connections_tip", "Switching to non-primary display is not supported in the elevated mode when there are multiple connections. Please try again after installation if you want to control multiple displays."),
         ("display_is_plugged_out_msg", "The display is plugged out, switch to the first display."),
         ("elevated_switch_display_msg", "Switch to the primary display because multiple displays are not supported in elevated mode."),
+        ("selinux_tip", "SELinux is enabled on your device, which may prevent RustDesk from running properly as controlled side."),
     ].iter().cloned().collect();
 }
