@@ -332,10 +332,8 @@ class _ConnectionPageState extends State<ConnectionPage>
                       ));
                     },
                     optionsViewBuilder: (BuildContext context, AutocompleteOnSelected<Peer> onSelected, Iterable<Peer> options) {
-                      double maxHeight = 0;
-                      for (var peer in options) {
-                        if (maxHeight < 200)
-                        maxHeight += 50; };
+                      double maxHeight = options.length * 50;
+                      maxHeight = maxHeight > 200 ? 200 : maxHeight;
                       return Align(
                         alignment: Alignment.topLeft,
                         child: ClipRRect(
