@@ -1935,6 +1935,17 @@ pub fn is_support_multi_ui_session(version: String) -> SyncReturn<bool> {
     SyncReturn(crate::common::is_support_multi_ui_session(&version))
 }
 
+pub fn is_selinux_enforcing() -> SyncReturn<bool> {
+    #[cfg(target_os = "linux")]
+    {
+        SyncReturn(crate::platform::linux::is_selinux_enforcing())
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        SyncReturn(false)
+    }
+}
+
 #[cfg(target_os = "android")]
 pub mod server_side {
     use hbb_common::{config, log};
