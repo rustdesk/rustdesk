@@ -31,6 +31,7 @@ pub struct X11Clipboard {
     ignore_path: PathBuf,
     text_uri_list: Atom,
     gnome_copied_files: Atom,
+    nautilus_clipboard: Atom,
 
     former_file_list: Mutex<Vec<PathBuf>>,
 }
@@ -46,11 +47,16 @@ impl X11Clipboard {
             .setter
             .get_atom("x-special/gnome-copied-files")
             .map_err(|_| CliprdrError::CliprdrInit)?;
+        let nautilus_clipboard = clipboard
+            .setter
+            .get_atom("x-special/nautilus-clipboard")
+            .map_err(|_| CliprdrError::CliprdrInit)?;
         Ok(Self {
             ignore_path: ignore_path.to_owned(),
             stop: AtomicBool::new(false),
             text_uri_list,
             gnome_copied_files,
+            nautilus_clipboard,
             former_file_list: Mutex::new(vec![]),
         })
     }
@@ -102,7 +108,8 @@ impl SysClipboard for X11Clipboard {
         let gnome_copied_files_data = ["copy\n".as_bytes(), uri_list.as_bytes()].concat();
         let batch = vec![
             (self.text_uri_list, text_uri_list_data),
-            (self.gnome_copied_files, gnome_copied_files_data),
+            (self.gnome_copied_files, gnome_copied_files_data.clone()),
+            (self.nautilus_clipboard, gnome_copied_files_data),
         ];
         self.store_batch(batch)
             .map_err(|_| CliprdrError::ClipboardInternalError)
