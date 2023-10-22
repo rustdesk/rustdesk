@@ -265,6 +265,9 @@ class _ConnectionPageState extends State<ConnectionPage> {
                     enableSuggestions: false,
                     keyboardType: TextInputType.visiblePassword,
                     // keyboardType: TextInputType.number,
+                    onChanged: (String text) {
+                      _idController.id = text;
+                    },
                     style: const TextStyle(
                       fontFamily: 'WorkSans',
                       fontWeight: FontWeight.bold,
