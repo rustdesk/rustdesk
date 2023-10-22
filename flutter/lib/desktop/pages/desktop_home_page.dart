@@ -379,7 +379,8 @@ class _DesktopHomePageState extends State<DesktopHomePage>
       // }
     } else if (Platform.isLinux) {
       final LinuxCards = <Widget>[];
-      if (bind.isSelinuxEnabled()) {
+      if (bind.isSelinuxEnforcing()) {
+        // Check is SELinux enforcing, but show user a tip of is SELinux enabled for simple.
         final keyShowSelinuxHelpTip = "show-selinux-help-tip";
         if (bind.mainGetLocalOption(key: keyShowSelinuxHelpTip) != 'N') {
           LinuxCards.add(buildInstallCard(

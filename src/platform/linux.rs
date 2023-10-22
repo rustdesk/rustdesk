@@ -1371,9 +1371,19 @@ pub fn is_x11() -> bool {
 }
 
 #[inline]
-pub fn is_selinux_enabled() -> bool {
-    match selinux::kernel_support() {
-        selinux::KernelSupport::Unsupported => false,
-        _ => selinux::current_mode() == selinux::SELinuxMode::Enforcing,
+pub fn is_selinux_enforcing() -> bool {
+    match run_cmds("getenforce") {
+        Ok(output) => output.trim() == "Enforcing",
+        Err(_) => match run_cmds("sestatus") {
+            Ok(output) => {
+                for line in output.lines() {
+                    if line.contains("Current mode:") {
+                        return line.contains("enforcing");
+                    }
+                }
+                false
+            }
+            Err(_) => false,
+        },
     }
 }

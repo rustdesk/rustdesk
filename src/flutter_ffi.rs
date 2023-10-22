@@ -1935,10 +1935,10 @@ pub fn is_support_multi_ui_session(version: String) -> SyncReturn<bool> {
     SyncReturn(crate::common::is_support_multi_ui_session(&version))
 }
 
-pub fn is_selinux_enabled() -> SyncReturn<bool> {
+pub fn is_selinux_enforcing() -> SyncReturn<bool> {
     #[cfg(target_os = "linux")]
     {
-        SyncReturn(crate::platform::linux::is_selinux_enabled())
+        SyncReturn(crate::platform::linux::is_selinux_enforcing())
     }
     #[cfg(not(target_os = "linux"))]
     {
