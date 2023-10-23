@@ -1716,7 +1716,7 @@ impl<T: InvokeUiSession> Remote<T> {
     #[cfg(any(target_os = "windows", target_os = "linux"))]
     fn handle_cliprdr_msg(&self, clip: hbb_common::message_proto::Cliprdr) {
         log::debug!("handling cliprdr msg from server peer");
-        #[cfg(feature = "flutter")]
+        #[cfg(all(feature = "flutter", not(target_os = "linux")))]
         if let Some(hbb_common::message_proto::cliprdr::Union::FormatList(_)) = &clip.union {
             if self.client_conn_id
                 != clipboard::get_client_conn_id(&crate::flutter::get_cur_peer_id()).unwrap_or(0)

@@ -39,7 +39,7 @@ dependencies:
   package_info_plus: ^3.1.2
   url_launcher: ^6.0.9
   toggle_switch: ^2.1.0
-  dash_chat_2: 
+  dash_chat_2:
     git:
       url: https://github.com/rustdesk-org/Dash-Chat-2
   draggable_float_widget: ^0.0.2
@@ -68,7 +68,7 @@ dependencies:
   get: ^4.6.5
   visibility_detector: ^0.4.0+2
   contextmenu: ^3.0.0
-  desktop_drop: 
+  desktop_drop:
     git:
       url: https://github.com/rustdesk-org/flutter-plugins
       path: ./packages/desktop_drop
@@ -84,7 +84,7 @@ dependencies:
     git:
       url: https://github.com/rustdesk-org/flutter_improved_scrolling
   uni_links: ^0.5.1
-  uni_links_desktop: 
+  uni_links_desktop:
     git:
       url: https://github.com/rustdesk-org/uni_links_desktop
   path: ^1.8.1
