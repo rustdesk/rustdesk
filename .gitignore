@@ -1,7 +1,7 @@
 # customization
-.gitignore
+#.gitignore
 /flutter/windows/runner/resources/app_icon.ico
-/flutter/windows/runner/Runner.rc
+#/flutter/windows/runner/Runner.rc
 /res/tray-icon.ico
 /res/app-icon.ico
 /res/logo.svg
@@ -9,7 +9,7 @@
 /flutter/macos/Runner/Assets.xcassets/AppIcon.appiconset/app_icon_64.png
 /flutter/macos/Runner/Assets.xcassets/AppIcon.appiconset/app_icon_128.png
 /res/128x128@2x.png
-/cargo.toml
+#/cargo.toml
 # /.github/workflows/flutter-build.yml
 # start original
 /build
