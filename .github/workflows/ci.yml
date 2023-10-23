@@ -18,6 +18,7 @@ on:
       - "docs/**"
       - "README.md"
 
+
 jobs:
   # ensure_cargo_fmt:
   #   name: Ensure 'cargo fmt' has been run
@@ -58,6 +59,7 @@ jobs:
   #       args: --locked
 
   build:
+    if: contains(github.event.pull_request.labels.*.name, 'newrelease')
     name: ${{ matrix.job.target }} (${{ matrix.job.os }})
     runs-on: ${{ matrix.job.os }}
     strategy:
