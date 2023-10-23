@@ -362,13 +362,14 @@ pub fn check_config_process() {
     let f = || {
         // Clear to avoid checking process errors
         // But when the program is just started, the configuration file has not been updated, and the new connection will read an empty configuration
+        // TODO: --server start multi times on windows startup, which will clear the last config and cause concurrent file writing
         HwCodecConfig::clear();
         if let Ok(exe) = std::env::current_exe() {
             if let Some(_) = exe.file_name().to_owned() {
                 let arg = "--check-hwcodec-config";
                 if let Ok(mut child) = std::process::Command::new(exe).arg(arg).spawn() {
-                    // wait up to 10 seconds
-                    for _ in 0..10 {
+                    // wait up to 30 seconds, it maybe slow on windows startup for poorly performing machines
+                    for _ in 0..30 {
                         std::thread::sleep(std::time::Duration::from_secs(1));
                         if let Ok(Some(_)) = child.try_wait() {
                             break;
