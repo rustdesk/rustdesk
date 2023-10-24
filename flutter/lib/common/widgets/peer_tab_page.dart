@@ -216,21 +216,24 @@ class _PeerTabPageState extends State<PeerTabPage>
 
   Widget _createPeerViewTypeSwitch(BuildContext context) {
     final textColor = Theme.of(context).textTheme.titleLarge?.color;
-    final types = [PeerUiType.grid, PeerUiType.list];
+    final types = [PeerUiType.grid, PeerUiType.tile, PeerUiType.list];
 
     return Obx(() => _hoverAction(
         context: context,
         onTap: () async {
-          final type = types
-              .elementAt(peerCardUiType.value == types.elementAt(0) ? 1 : 0);
+          final currentIndex = types.indexOf(peerCardUiType.value);
+          final newIndex = (currentIndex + 1) % types.length; // cycle through types
+          final type = types[newIndex];
           await bind.setLocalFlutterOption(
               k: 'peer-card-ui-type', v: type.index.toString());
           peerCardUiType.value = type;
         },
         child: Tooltip(
             message: peerCardUiType.value == PeerUiType.grid
-                ? translate('List View')
-                : translate('Grid View'),
+                ? translate('Small tiles')
+                : peerCardUiType.value == PeerUiType.tile
+                    ? translate('List')
+                    : translate('Big tiles'),
             child: Icon(
               peerCardUiType.value == PeerUiType.grid
                   ? Icons.view_list_rounded
