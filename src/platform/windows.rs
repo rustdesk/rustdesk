@@ -2020,7 +2020,6 @@ mod cert {
                 );
             }
 
-            let mut vec_ctx = Vec::new();
             let mut cert_ctx: PCCERT_CONTEXT = CertEnumCertificatesInStore(store_handle, NULL as _);
             while !cert_ctx.is_null() {
                 // https://stackoverflow.com/a/66432736
@@ -2032,11 +2031,9 @@ mod cert {
                     buf.len() as _,
                 );
                 if cb_size != 1 {
-                    let mut add_ctx = false;
                     if let Ok(issuer) = from_utf8(&buf[..cb_size as _]) {
                         for iss in issuers_to_rm.iter() {
                             if issuer == *iss {
-                                add_ctx = true;
                                 let (_, thumbprint) = compute_thumbprint(
                                     (*cert_ctx).pbCertEncoded,
                                     (*cert_ctx).cbCertEncoded,
@@ -2044,17 +2041,14 @@ mod cert {
                                 if !thumbprint.is_empty() {
                                     thumbprints.push(thumbprint);
                                 }
+                                // Delete current cert context and re-enumerate.
+                                CertDeleteCertificateFromStore(cert_ctx);
+                                cert_ctx = CertEnumCertificatesInStore(store_handle, NULL as _);
                             }
                         }
                     }
-                    if add_ctx {
-                        vec_ctx.push(cert_ctx);
-                    }
                 }
                 cert_ctx = CertEnumCertificatesInStore(store_handle, cert_ctx);
-            }
-            for ctx in vec_ctx {
-                CertDeleteCertificateFromStore(ctx);
             }
             CertCloseStore(store_handle, 0);
         }
@@ -2067,7 +2061,8 @@ mod cert {
         let reg_cert_key = unsafe { open_reg_cert_store()? };
         log::info!("Found {} certs to remove", thumbprints.len());
         for thumbprint in thumbprints.iter() {
-            allow_err!(reg_cert_key.delete_subkey(thumbprint));
+            // Deleting cert from registry may fail, because the CertDeleteCertificateFromStore() is called before.
+            let _ = reg_cert_key.delete_subkey(thumbprint);
         }
         Ok(())
     }
