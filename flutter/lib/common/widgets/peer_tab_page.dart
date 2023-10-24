@@ -230,10 +230,10 @@ class _PeerTabPageState extends State<PeerTabPage>
         },
         child: Tooltip(
             message: peerCardUiType.value == PeerUiType.grid
-                ? translate('Small tiles')
+                ? translate('Small Tiles')
                 : peerCardUiType.value == PeerUiType.tile
                     ? translate('List')
-                    : translate('Big tiles'),
+                    : translate('Big Tiles'),
             child: Icon(
               peerCardUiType.value == PeerUiType.grid
                   ? Icons.view_list_rounded
