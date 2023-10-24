@@ -21,10 +21,12 @@ import android.accessibilityservice.AccessibilityServiceInfo
 import android.accessibilityservice.AccessibilityServiceInfo.FLAG_INPUT_METHOD_EDITOR
 import androidx.annotation.RequiresApi
 import java.util.*
+import java.lang.Character
 import kotlin.math.abs
 import kotlin.math.max
-import hbb.MessageOuterClass.KeyEvent;
-import hbb.KeyEventConverter;
+import hbb.MessageOuterClass.KeyEvent
+import hbb.MessageOuterClass.KeyboardMode
+import hbb.KeyEventConverter
 
 const val LIFT_DOWN = 9
 const val LIFT_MOVE = 8
@@ -265,12 +267,39 @@ class InputService : AccessibilityService() {
 
     @RequiresApi(Build.VERSION_CODES.N)
     fun onKeyEvent(data: ByteArray) {
-        val keyEvent = KeyEvent.parseFrom(data);
+        val keyEvent = KeyEvent.parseFrom(data)
+        val down = keyEvent.getDown()
+        val keyboardMode = keyEvent.getMode()
+
+        var textToCommit: String? = null
+
+        if (keyboardMode == KeyboardMode.Legacy) {
+            if (keyEvent.hasChr() && keyEvent.getDown()) {
+                val chr = keyEvent.getChr()
+                if (chr != null) {
+                    textToCommit = String(Character.toChars(chr))
+                }
+            }
+        } else if (keyboardMode == KeyboardMode.Translate) {
+            if (keyEvent.hasSeq() && keyEvent.getDown()) {
+                val seq = keyEvent.getSeq()
+                if (seq != null) {
+                    textToCommit = seq
+                }
+            }
+        }
+
         if (Build.VERSION.SDK_INT >= 33) {
             getInputMethod()?.let { inputMethod ->
                 inputMethod.getCurrentInputConnection()?.let { inputConnection ->
-                    KeyEventConverter.toAndroidKeyEvent(keyEvent).let { event ->
-                        inputConnection.sendKeyEvent(event)
+                    if (textToCommit != null) {
+                        textToCommit?.let { text ->
+                            inputConnection.commitText(text, 1, null)
+                        }
+                    } else {
+                        KeyEventConverter.toAndroidKeyEvent(keyEvent).let { event ->
+                            inputConnection.sendKeyEvent(event)
+                        }
                     }
                 }
             }
@@ -296,26 +325,24 @@ class InputService : AccessibilityService() {
                         }
                     }
 
-                    if (keyEvent.hasSeq()) {
-                        val seq = keyEvent.getSeq()
-
+                    if (textToCommit != null) {
                         var newText = ""
 
                         if ((textSelectionStart == -1) || (textSelectionEnd == -1)) {
-                            newText = seq
-                        } else {
+                            newText = textToCommit
+                        } else if (text != null) {
+                            Log.d(logTag, "text selection start $textSelectionStart $textSelectionEnd")
                             newText = text.let {
-                                it.substring(0, textSelectionStart) + seq + it.substring(textSelectionStart)
+                                it.substring(0, textSelectionStart) + textToCommit + it.substring(textSelectionStart)
                             }
                         }
 
                         val arguments = Bundle()
                         arguments.putCharSequence(
-                            AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE,
-                            newText
+                                AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE,
+                                newText
                         )
                         node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, arguments)
-
                     } else {
                         KeyEventConverter.toAndroidKeyEvent(keyEvent).let { event ->
                             if (isShowingHint) {
@@ -332,7 +359,6 @@ class InputService : AccessibilityService() {
                             this.fakeEditTextForTextStateCalculation?.dispatchKeyEvent(event)
 
                             this.fakeEditTextForTextStateCalculation?.getText()?.let { newText ->
-                                Log.d(logTag, "event $event text $text newText $newText")
                                 val arguments = Bundle()
                                 arguments.putCharSequence(
                                     AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE,
