@@ -2024,6 +2024,10 @@ connect(
         final idController = Get.find<IDTextEditingController>();
         idController.text = formatID(id);
       }
+      if (Get.isRegistered<TextEditingController>()){
+        final fieldTextEditingController = Get.find<TextEditingController>();
+        fieldTextEditingController.text = formatID(id);
+      }
     } catch (_) {}
   }
   id = id.replaceAll(' ', '');
