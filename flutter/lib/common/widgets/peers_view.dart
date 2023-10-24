@@ -191,9 +191,11 @@ class _PeersViewState extends State<_PeersView> with WindowListener {
               return isDesktop
                   ? Obx(
                       () => SizedBox(
-                        width: 220,
+                        width: peerCardUiType.value != PeerUiType.list
+                            ? 220
+                            : MediaQuery.of(context).size.width - 227,
                         height:
-                            peerCardUiType.value == PeerUiType.grid ? 140 : 42,
+                            peerCardUiType.value == PeerUiType.grid ? 140 : peerCardUiType.value != PeerUiType.list ? 42 : 45,
                         child: visibilityChild,
                       ),
                     )
