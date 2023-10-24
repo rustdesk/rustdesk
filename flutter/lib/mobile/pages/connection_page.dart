@@ -6,10 +6,12 @@ import 'package:flutter_hbb/common/formatter/id_formatter.dart';
 import 'package:get/get.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:flutter_hbb/models/peer_model.dart';
 
 import '../../common.dart';
 import '../../common/widgets/login.dart';
 import '../../common/widgets/peer_tab_page.dart';
+import '../../common/widgets/autocomplete.dart';
 import '../../consts.dart';
 import '../../models/model.dart';
 import '../../models/platform_model.dart';
@@ -42,6 +44,16 @@ class _ConnectionPageState extends State<ConnectionPage> {
 
   /// Update url. If it's not null, means an update is available.
   var _updateUrl = '';
+  List<Peer> peers = [];
+  List _frontN<T>(List list, int n) {
+    if (list.length <= n) {
+      return list;
+    } else {
+      return list.sublist(0, n);
+    }
+  }
+  bool isPeersLoading = false;
+  bool isPeersLoaded = false;
 
   @override
   void initState() {
@@ -116,6 +128,18 @@ class _ConnectionPageState extends State<ConnectionPage> {
                         color: Colors.white, fontWeight: FontWeight.bold))));
   }
 
+  Future<void> _fetchPeers() async {
+    setState(() {
+      isPeersLoading = true;
+    });
+    await Future.delayed(Duration(milliseconds: 100));
+    peers = await getAllPeers();
+    setState(() {
+        isPeersLoading = false;
+        isPeersLoaded = true;
+      });
+  }
+
   /// UI for the remote ID TextField.
   /// Search for a peer and connect to it if the id exists.
   Widget _buildRemoteIDTextField() {
@@ -133,12 +157,69 @@ class _ConnectionPageState extends State<ConnectionPage> {
               Expanded(
                 child: Container(
                   padding: const EdgeInsets.only(left: 16, right: 16),
-                  child: AutoSizeTextField(
+                  child: Autocomplete<Peer>(
+                    optionsBuilder: (TextEditingValue textEditingValue) {
+                      if (textEditingValue.text == '') {
+                        return const Iterable<Peer>.empty();
+                      }
+                      else if (peers.isEmpty && !isPeersLoaded) {
+                         Peer emptyPeer = Peer(
+                          id: '',
+                          username: '',
+                          hostname: '',
+                          alias: '',
+                          platform: '',
+                          tags: [],
+                          hash: '',
+                          forceAlwaysRelay: false,
+                          rdpPort: '',
+                          rdpUsername: '',
+                          loginName: '',
+                        );
+                        return [emptyPeer];
+                      }
+                      else {
+                        String textWithoutSpaces = textEditingValue.text.replaceAll(" ", "");
+                        if (int.tryParse(textWithoutSpaces) != null) {
+                          textEditingValue = TextEditingValue(
+                            text: textWithoutSpaces,
+                            selection: textEditingValue.selection,
+                          );
+                        }
+                        String textToFind = textEditingValue.text.toLowerCase();
+
+                        return peers.where((peer) =>
+                        peer.id.toLowerCase().contains(textToFind) ||
+                        peer.username.toLowerCase().contains(textToFind) ||
+                        peer.hostname.toLowerCase().contains(textToFind) ||
+                        peer.alias.toLowerCase().contains(textToFind))
+                        .toList();
+                      }
+                    },
+                    fieldViewBuilder: (BuildContext context,
+                      TextEditingController fieldTextEditingController,
+                      FocusNode fieldFocusNode, VoidCallback onFieldSubmitted) {
+                      fieldTextEditingController.text = _idController.text;
+                      fieldFocusNode.addListener(() async{
+                      _idEmpty.value = fieldTextEditingController.text.isEmpty;
+                        if (fieldFocusNode.hasFocus && !isPeersLoading){
+                          _fetchPeers();
+                        }
+                      });
+                      final textLength = fieldTextEditingController.value.text.length;
+                      // select all to facilitate removing text, just following the behavior of address input of chrome
+                      fieldTextEditingController.selection = TextSelection(baseOffset: 0, extentOffset: textLength);
+                    return AutoSizeTextField(
+                    controller: fieldTextEditingController,
+                    focusNode: fieldFocusNode,
                     minFontSize: 18,
                     autocorrect: false,
                     enableSuggestions: false,
                     keyboardType: TextInputType.visiblePassword,
                     // keyboardType: TextInputType.number,
+                    onChanged: (String text) {
+                      _idController.id = text;
+                    },
                     style: const TextStyle(
                       fontFamily: 'WorkSans',
                       fontWeight: FontWeight.bold,
@@ -161,8 +242,36 @@ class _ConnectionPageState extends State<ConnectionPage> {
                         color: MyTheme.darkGray,
                       ),
                     ),
-                    controller: _idController,
                     inputFormatters: [IDTextInputFormatter()],
+                     );
+                    },
+                    optionsViewBuilder: (BuildContext context, AutocompleteOnSelected<Peer> onSelected, Iterable<Peer> options) {
+                      double maxHeight = options.length * 50;
+                      maxHeight = maxHeight > 200 ? 200 : maxHeight;
+                      return Align(
+                        alignment: Alignment.topLeft,
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(5),
+                          child: Material(
+                          elevation: 4,
+                          child: ConstrainedBox(
+                            constraints: BoxConstraints(
+                              maxHeight: maxHeight,
+                              maxWidth: 320,
+                            ),
+                              child: peers.isEmpty && isPeersLoading
+                              ? Container(
+                                    height: 80,
+                                     child: Center( 
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                      )))
+                              : ListView(
+                              padding: EdgeInsets.only(top: 5),
+                              children: options.map((peer) => AutocompletePeerTile(idController: _idController, peer: peer)).toList(),
+                            ))))
+                      );
+                    },
                   ),
                 ),
               ),
@@ -170,7 +279,9 @@ class _ConnectionPageState extends State<ConnectionPage> {
                     offstage: _idEmpty.value,
                     child: IconButton(
                         onPressed: () {
-                          _idController.clear();
+                          setState(() {
+                            _idController.clear();
+                          });
                         },
                         icon: Icon(Icons.clear, color: MyTheme.darkGray)),
                   )),

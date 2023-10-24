@@ -16,7 +16,7 @@ import 'package:flutter_hbb/models/peer_model.dart';
 import '../../common.dart';
 import '../../common/formatter/id_formatter.dart';
 import '../../common/widgets/peer_tab_page.dart';
-import '../../common/widgets/peer_card.dart';
+import '../../common/widgets/autocomplete.dart';
 import '../../models/platform_model.dart';
 import '../widgets/button.dart';
 
@@ -51,6 +51,7 @@ class _ConnectionPageState extends State<ConnectionPage>
     }
   }
   bool isPeersLoading = false;
+  bool isPeersLoaded = false;
 
   @override
   void initState() {
@@ -151,57 +152,11 @@ class _ConnectionPageState extends State<ConnectionPage>
       isPeersLoading = true;
     });
     await Future.delayed(Duration(milliseconds: 100));
-    await _getAllPeers();
+    peers = await getAllPeers();
     setState(() {
         isPeersLoading = false;
+        isPeersLoaded = true;
       });
-  }
-
-  Future<void> _getAllPeers() async {
-    Map<String, dynamic> recentPeers = jsonDecode(await bind.mainLoadRecentPeersSync());
-    Map<String, dynamic> lanPeers = jsonDecode(await bind.mainLoadLanPeersSync());
-    Map<String, dynamic> abPeers = jsonDecode(await bind.mainLoadAbSync());
-    Map<String, dynamic> groupPeers = jsonDecode(await bind.mainLoadGroupSync());
-
-    Map<String, dynamic> combinedPeers = {};
-
-    void mergePeers(Map<String, dynamic> peers) {
-      if (peers.containsKey("peers")) {
-        dynamic peerData = peers["peers"];
-
-        if (peerData is String) {
-          try {
-            peerData = jsonDecode(peerData);
-          } catch (e) {
-            debugPrint("Error decoding peers: $e");
-            return;
-          }
-        }
-
-        if (peerData is List) {
-          for (var peer in peerData) {
-            if (peer is Map && peer.containsKey("id")) {
-              String id = peer["id"];
-              if (id != null && !combinedPeers.containsKey(id)) {
-                combinedPeers[id] = peer;
-              }
-            }
-          }
-        }
-      }
-    }
-
-    mergePeers(recentPeers);
-    mergePeers(lanPeers);
-    mergePeers(abPeers);
-    mergePeers(groupPeers);
-
-      List<Peer> parsedPeers = [];
-
-    for (var peer in combinedPeers.values) {
-      parsedPeers.add(Peer.fromJson(peer));
-    }
-      peers = parsedPeers;
   }
 
   /// UI for the remote ID TextField.
@@ -239,7 +194,7 @@ class _ConnectionPageState extends State<ConnectionPage>
                       if (textEditingValue.text == '') {
                         return const Iterable<Peer>.empty();
                       }
-                      else if (peers.isEmpty) {
+                      else if (peers.isEmpty && !isPeersLoaded) {
                          Peer emptyPeer = Peer(
                           id: '',
                           username: '',
@@ -331,12 +286,9 @@ class _ConnectionPageState extends State<ConnectionPage>
                       ));
                     },
                     optionsViewBuilder: (BuildContext context, AutocompleteOnSelected<Peer> onSelected, Iterable<Peer> options) {
-                      double maxHeight = 0;
-                      for (var peer in options) {
-                        if (maxHeight < 200) {
-                          maxHeight += 50;
-                        }
-                      }
+                      double maxHeight = options.length * 50;
+                      maxHeight = maxHeight > 200 ? 200 : maxHeight;
+
                       return Align(
                         alignment: Alignment.topLeft,
                         child: ClipRRect(
@@ -360,9 +312,7 @@ class _ConnectionPageState extends State<ConnectionPage>
                               : Padding(
                               padding: const EdgeInsets.only(top: 5),
                               child: ListView(
-                                children: options
-                                    .map((peer) => _buildPeerTile(context, peer))
-                                    .toList()
+                                children: options.map((peer) => AutocompletePeerTile(idController: _idController, peer: peer)).toList(),
                               ),
                             ),
                           ),
@@ -396,115 +346,6 @@ class _ConnectionPageState extends State<ConnectionPage>
     );
     return Container(
         constraints: const BoxConstraints(maxWidth: 600), child: w);
-  }
-
-  Widget _buildPeerTile(
-      BuildContext context, Peer peer) {
-        final double _tileRadius = 5;
-        final name =
-          '${peer.username}${peer.username.isNotEmpty && peer.hostname.isNotEmpty ? '@' : ''}${peer.hostname}';
-        final greyStyle = TextStyle(
-          fontSize: 11,
-          color: Theme.of(context).textTheme.titleLarge?.color?.withOpacity(0.6));
-        final child = GestureDetector(
-          onTap: () {
-            setState(() {
-              _idController.id = peer.id;
-              FocusScope.of(context).unfocus();
-            });
-          },
-          child:
-        Container(
-          height: 42,
-          margin: EdgeInsets.only(bottom: 5),
-          child: Row(
-          mainAxisSize: MainAxisSize.max,
-          children: [
-            Container(
-              decoration: BoxDecoration(
-                color: str2color('${peer.id}${peer.platform}', 0x7f),
-                borderRadius: BorderRadius.only(
-                        topLeft: Radius.circular(_tileRadius),
-                        bottomLeft: Radius.circular(_tileRadius),
-                      ),
-              ),
-              alignment: Alignment.center,
-              width: 42,
-              height: null,
-              child: getPlatformImage(peer.platform, size: 30)
-                  .paddingAll(6),
-            ),
-            Expanded(
-              child: Container(
-                decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.background,
-                  borderRadius: BorderRadius.only(
-                    topRight: Radius.circular(_tileRadius),
-                    bottomRight: Radius.circular(_tileRadius),
-                  ),
-                ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    children: [
-                      Row(children: [
-                        getOnline(8, peer.online),
-                        Expanded(
-                            child: Text(
-                          peer.alias.isEmpty ? formatID(peer.id) : peer.alias,
-                          overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context).textTheme.titleSmall,
-                        )),
-                        !peer.alias.isEmpty?
-                        Padding(
-                          padding: const EdgeInsets.only(left: 5, right: 5),
-                          child: Text(
-                            "(${peer.id})",
-                            style: greyStyle,
-                            overflow: TextOverflow.ellipsis,
-                          )
-                        )
-                        : Container(),
-                      ]).marginOnly(top: 2),
-                      Align(
-                        alignment: Alignment.centerLeft,
-                        child: Text(
-                          name,
-                          style: greyStyle,
-                          textAlign: TextAlign.start,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    ],
-                  ).marginOnly(top: 2),
-                ),
-              ],
-            ).paddingOnly(left: 10.0, top: 3.0),
-            ),
-        )
-      ],
-    )));
-    final colors =
-        _frontN(peer.tags, 25).map((e) => gFFI.abModel.getTagColor(e)).toList();
-    return Tooltip(
-      message: isMobile
-          ? ''
-          : peer.tags.isNotEmpty
-              ? '${translate('Tags')}: ${peer.tags.join(', ')}'
-              : '',
-      child: Stack(children: [
-        child,
-        if (colors.isNotEmpty)
-          Positioned(
-            top: 5,
-            right: 10,
-            child: CustomPaint(
-              painter: TagPainter(radius: 3, colors: colors),
-            ),
-          )
-      ]),
-    );
   }
 
   Widget buildStatus() {
