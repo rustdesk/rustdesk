@@ -271,18 +271,6 @@ class _ConnectionPageState extends State<ConnectionPage>
                         onChanged: (v) {
                           _idController.id = v;
                         },
-                        onSubmitted: (s) {
-                          if (s == '') {
-                            return;
-                          }
-                          try {
-                            final id = int.parse(s);
-                            _idController.id = s;
-                            onConnect();
-                          } catch (_) {
-                            return;
-                          }
-                        },
                       ));
                     },
                     optionsViewBuilder: (BuildContext context, AutocompleteOnSelected<Peer> onSelected, Iterable<Peer> options) {
