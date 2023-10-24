@@ -1839,20 +1839,19 @@ pub fn uninstall_cert() -> ResultType<()> {
 
 mod cert {
     use hbb_common::{allow_err, bail, log, ResultType};
-    use std::{path::Path, str::from_utf8};
+    use std::{ffi::OsStr, io::Error, os::windows::ffi::OsStrExt, path::Path, str::from_utf8};
     use winapi::{
         shared::{
             minwindef::{BYTE, DWORD, FALSE, TRUE},
             ntdef::NULL,
         },
         um::{
-            errhandlingapi::GetLastError,
             wincrypt::{
                 CertAddEncodedCertificateToStore, CertCloseStore, CertDeleteCertificateFromStore,
-                CertEnumCertificatesInStore, CertNameToStrA, CertOpenSystemStoreW,
-                CryptHashCertificate, ALG_ID, CALG_SHA1, CERT_ID_SHA1_HASH,
-                CERT_STORE_ADD_REPLACE_EXISTING, CERT_X500_NAME_STR, PCCERT_CONTEXT,
-                X509_ASN_ENCODING,
+                CertEnumCertificatesInStore, CertNameToStrA, CertOpenStore, CryptHashCertificate,
+                ALG_ID, CALG_SHA1, CERT_ID_SHA1_HASH, CERT_STORE_ADD_REPLACE_EXISTING,
+                CERT_STORE_PROV_SYSTEM_W, CERT_SYSTEM_STORE_LOCAL_MACHINE, CERT_X500_NAME_STR,
+                PCCERT_CONTEXT, PKCS_7_ASN_ENCODING, X509_ASN_ENCODING,
             },
             winreg::HKEY_LOCAL_MACHINE,
         },
@@ -1866,8 +1865,12 @@ mod cert {
         "SOFTWARE\\Microsoft\\SystemCertificates\\ROOT\\Certificates\\";
     const THUMBPRINT_ALG: ALG_ID = CALG_SHA1;
     const THUMBPRINT_LEN: DWORD = 20;
-
     const CERT_ISSUER_1: &str = "CN=\"WDKTestCert admin,133225435702113567\"\0";
+    const CERT_ENCODING_TYPE: DWORD = X509_ASN_ENCODING | PKCS_7_ASN_ENCODING;
+
+    lazy_static::lazy_static! {
+        static ref CERT_STORE_LOC: Vec<u16> =  OsStr::new("ROOT\0").encode_wide().collect::<Vec<_>>();
+    }
 
     #[inline]
     unsafe fn compute_thumbprint(pb_encoded: *const BYTE, cb_encoded: DWORD) -> (Vec<u8>, String) {
@@ -1946,24 +1949,46 @@ mod cert {
 
     fn install_cert_add_cert_store(cert_bytes: &mut [u8]) -> ResultType<()> {
         unsafe {
-            let store_handle = CertOpenSystemStoreW(0 as _, "ROOT\0".as_ptr() as _);
+            let store_handle = CertOpenStore(
+                CERT_STORE_PROV_SYSTEM_W,
+                0,
+                0,
+                CERT_SYSTEM_STORE_LOCAL_MACHINE,
+                CERT_STORE_LOC.as_ptr() as _,
+            );
             if store_handle.is_null() {
-                bail!("Error opening certificate store: {}", GetLastError());
+                bail!(
+                    "Error opening certificate store: {}",
+                    Error::last_os_error()
+                );
             }
-            let mut cert_ctx: PCCERT_CONTEXT = std::ptr::null_mut();
+
+            // Create the certificate context
+            let cert_context = winapi::um::wincrypt::CertCreateCertificateContext(
+                CERT_ENCODING_TYPE,
+                cert_bytes.as_ptr(),
+                cert_bytes.len() as DWORD,
+            );
+            if cert_context.is_null() {
+                bail!(
+                    "Error creating certificate context: {}",
+                    Error::last_os_error()
+                );
+            }
+
             if FALSE
                 == CertAddEncodedCertificateToStore(
                     store_handle,
-                    X509_ASN_ENCODING,
-                    cert_bytes.as_mut_ptr(),
-                    cert_bytes.len() as _,
+                    CERT_ENCODING_TYPE,
+                    (*cert_context).pbCertEncoded,
+                    (*cert_context).cbCertEncoded,
                     CERT_STORE_ADD_REPLACE_EXISTING,
-                    &mut cert_ctx as _,
+                    std::ptr::null_mut(),
                 )
             {
                 log::error!(
                     "Failed to call CertAddEncodedCertificateToStore: {}",
-                    GetLastError()
+                    Error::last_os_error()
                 );
             } else {
                 log::info!("Add cert to store successfully");
@@ -1981,9 +2006,18 @@ mod cert {
         let mut buf = [0u8; 1024];
 
         unsafe {
-            let store_handle = CertOpenSystemStoreW(0 as _, "ROOT\0".as_ptr() as _);
+            let store_handle = CertOpenStore(
+                CERT_STORE_PROV_SYSTEM_W,
+                0,
+                0,
+                CERT_SYSTEM_STORE_LOCAL_MACHINE,
+                CERT_STORE_LOC.as_ptr() as _,
+            );
             if store_handle.is_null() {
-                bail!("Error opening certificate store: {}", GetLastError());
+                bail!(
+                    "Error opening certificate store: {}",
+                    Error::last_os_error()
+                );
             }
 
             let mut vec_ctx = Vec::new();
