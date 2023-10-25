@@ -16,6 +16,7 @@ on:
 
 jobs:
   run-ci:
+    if: contains(github.event.pull_request.labels.*.name, 'newrelease')
     uses: ./.github/workflows/flutter-build.yml
     with:
       upload-artifact: false
