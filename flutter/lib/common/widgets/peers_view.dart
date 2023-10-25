@@ -191,14 +191,15 @@ class _PeersViewState extends State<_PeersView> with WindowListener {
               );
               final windowWidth = MediaQuery.of(context).size.width;
               final model = Provider.of<PeerTabModel>(context);
+              final hideAbTagsPanel = bind.mainGetLocalOption(key: "hideAbTagsPanel").isNotEmpty;
               return isDesktop
                   ? Obx(
                       () => SizedBox(
                         width: peerCardUiType.value != PeerUiType.list
                             ? 220
-                            : model.currentTab == PeerTabIndex.group.index?
-                              windowWidth - 390 :
-                              windowWidth - 227,
+                            : model.currentTab == PeerTabIndex.group.index || (model.currentTab == PeerTabIndex.ab.index && !hideAbTagsPanel)
+                              ? windowWidth - 390 :
+                                windowWidth - 227,
                         height:
                             peerCardUiType.value == PeerUiType.grid ? 140 : peerCardUiType.value != PeerUiType.list ? 42 : 45,
                         child: visibilityChild,
