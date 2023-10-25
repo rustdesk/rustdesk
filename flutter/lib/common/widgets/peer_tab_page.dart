@@ -763,6 +763,8 @@ class PeerViewDropdown extends StatefulWidget {
 }
 
 class _PeerViewDropdownState extends State<PeerViewDropdown> {
+  RelativeRect menuPos = RelativeRect.fromLTRB(0, 0, 0, 0);
+
   @override
   Widget build(BuildContext context) {
     final List<PeerUiType> types  = [PeerUiType.grid, PeerUiType.tile, PeerUiType.list];
@@ -802,7 +804,6 @@ class _PeerViewDropdownState extends State<PeerViewDropdown> {
               ))));
     }
 
-    var menuPos = RelativeRect.fromLTRB(0, 0, 0, 0);
     return _hoverAction(
       context: context,
       child: Tooltip(
@@ -818,7 +819,9 @@ class _PeerViewDropdownState extends State<PeerViewDropdown> {
       onTapDown: (details) {
         final x = details.globalPosition.dx;
         final y = details.globalPosition.dy;
-        menuPos = RelativeRect.fromLTRB(x, y, x, y);
+        setState(() {
+          menuPos = RelativeRect.fromLTRB(x, y, x, y);
+        });
       },
       onTap: () => showMenu(
         context: context,
