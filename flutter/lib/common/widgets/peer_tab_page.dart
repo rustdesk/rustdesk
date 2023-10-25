@@ -791,6 +791,7 @@ class _PeerViewDropdownState extends State<PeerViewDropdown> {
                       (PeerUiType? v) async {
                     if (v != null) {
                       peerCardUiType.value = v;
+                      setState(() {});
                       await bind.setLocalFlutterOption(
                         k: "peer-card-ui-type",
                         v: peerCardUiType.value.index.toString(),
