@@ -703,10 +703,44 @@ class FfiModel with ChangeNotifier {
     _pi.isSet.value = true;
     stateGlobal.resetLastResolutionGroupValues(peerId);
 
+    if (isDesktop) {
+      checkDesktopKeyboardMode();
+    }
+
     notifyListeners();
 
     if (!isCache) {
       tryUseAllMyDisplaysForTheRemoteSession(peerId);
+    }
+  }
+
+  checkDesktopKeyboardMode() async {
+    final curMode = await bind.sessionGetKeyboardMode(sessionId: sessionId);
+    if (curMode != null) {
+      if (bind.sessionIsKeyboardModeSupported(
+          sessionId: sessionId, mode: curMode)) {
+        return;
+      }
+    }
+
+    // If current keyboard mode is not supported, change to another one.
+
+    if (stateGlobal.grabKeyboard) {
+      for (final mode in [kKeyMapMode, kKeyLegacyMode]) {
+        if (bind.sessionIsKeyboardModeSupported(
+            sessionId: sessionId, mode: mode)) {
+          bind.sessionSetKeyboardMode(sessionId: sessionId, value: mode);
+          break;
+        }
+      }
+    } else {
+      for (final mode in [kKeyMapMode, kKeyTranslateMode, kKeyLegacyMode]) {
+        if (bind.sessionIsKeyboardModeSupported(
+            sessionId: sessionId, mode: mode)) {
+          bind.sessionSetKeyboardMode(sessionId: sessionId, value: mode);
+          break;
+        }
+      }
     }
   }
 
