@@ -564,5 +564,11 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("elevated_switch_display_msg", "Pārslēdzieties uz primāro displeju, jo paaugstinātajā režīmā netiek atbalstīti vairāki displeji."),
         ("Open in new window", "Atvērt jaunā logā"),
         ("Show displays as individual windows", "Rādīt displejus kā atsevišķus logus"),
+        ("Use all my displays for the remote session", "Izmantot visus manus displejus attālajai sesijai"),
+        ("selinux_tip", "Jūsu ierīcē ir iespējots SELinux, kas var neļaut RustDesk pareizi darboties kā kontrolētajai pusei."),
+        ("Change view", ""),
+        ("Big tiles", ""),
+        ("Small tiles", ""),
+        ("List", ""),
     ].iter().cloned().collect();
 }

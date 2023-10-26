@@ -48,6 +48,8 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
 
   late ToolbarState _toolbarState;
   String? peerId;
+  bool _isScreenRectSet = false;
+  int? _display;
 
   var connectionMap = RxList<Widget>.empty(growable: true);
 
@@ -59,6 +61,10 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
     final tabWindowId = params['tab_window_id'];
     final display = params['display'];
     final displays = params['displays'];
+    final screenRect = parseParamScreenRect(params);
+    _isScreenRectSet = screenRect != null;
+    _display = display as int?;
+    tryMoveToScreenAndSetFullscreen(screenRect);
     if (peerId != null) {
       ConnectionTypeState.init(peerId!);
       tabController.onSelected = (id) {
@@ -115,11 +121,16 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
         final tabWindowId = args['tab_window_id'];
         final display = args['display'];
         final displays = args['displays'];
+        final screenRect = parseParamScreenRect(args);
         windowOnTop(windowId());
+        tryMoveToScreenAndSetFullscreen(screenRect);
         if (tabController.length == 0) {
-          if (Platform.isMacOS && stateGlobal.closeOnFullscreen) {
+          // Show the hidden window.
+          if (Platform.isMacOS && stateGlobal.closeOnFullscreen == true) {
             stateGlobal.setFullscreen(true);
           }
+          // Reset the state
+          stateGlobal.closeOnFullscreen = null;
         }
         ConnectionTypeState.init(id);
         _toolbarState.setShow(
@@ -196,15 +207,18 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
       _update_remote_count();
       return returnValue;
     });
-    Future.delayed(Duration.zero, () {
-      restoreWindowPosition(
-        WindowType.RemoteDesktop,
-        windowId: windowId(),
-        peerId: tabController.state.value.tabs.isEmpty
-            ? null
-            : tabController.state.value.tabs[0].key,
-      );
-    });
+    if (!_isScreenRectSet) {
+      Future.delayed(Duration.zero, () {
+        restoreWindowPosition(
+          WindowType.RemoteDesktop,
+          windowId: windowId(),
+          peerId: tabController.state.value.tabs.isEmpty
+              ? null
+              : tabController.state.value.tabs[0].key,
+          display: _display,
+        );
+      });
+    }
   }
 
   @override
@@ -451,6 +465,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
           c++;
         }
       }
+
       loopCloseWindow();
     }
     ConnectionTypeState.delete(id);

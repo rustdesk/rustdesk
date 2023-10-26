@@ -18,7 +18,16 @@
 // to-do:
 // https://slhck.info/video/2017/03/01/rate-control.html
 
-use super::{service::ServiceTmpl, video_qos::VideoQoS, *};
+use super::{
+    display_service::{check_display_changed, get_display_info},
+    service::ServiceTmpl,
+    video_qos::VideoQoS,
+    *,
+};
+#[cfg(target_os = "linux")]
+use crate::common::SimpleCallOnReturn;
+#[cfg(target_os = "linux")]
+use crate::platform::linux::is_x11;
 #[cfg(windows)]
 use crate::{platform::windows::is_process_consent_running, privacy_win_mag};
 use hbb_common::{
@@ -37,8 +46,6 @@ use scrap::{
     vpxcodec::{VpxEncoderConfig, VpxVideoCodecId},
     CodecName, Display, TraitCapturer,
 };
-#[cfg(target_os = "linux")]
-use std::sync::atomic::{AtomicBool, Ordering};
 #[cfg(windows)]
 use std::sync::Once;
 use std::{
@@ -49,7 +56,6 @@ use std::{
 };
 
 pub const NAME: &'static str = "video";
-pub const OPTION_DISPLAY_CHANGED: &'static str = "changed";
 pub const OPTION_REFRESH: &'static str = "refresh";
 
 lazy_static::lazy_static! {
@@ -62,10 +68,6 @@ lazy_static::lazy_static! {
     pub static ref IS_UAC_RUNNING: Arc<Mutex<bool>> = Default::default();
     pub static ref IS_FOREGROUND_WINDOW_ELEVATED: Arc<Mutex<bool>> = Default::default();
 }
-
-// https://github.com/rustdesk/rustdesk/discussions/6042, avoiding dbus call
-#[cfg(target_os = "linux")]
-static IS_X11: AtomicBool = AtomicBool::new(false);
 
 #[inline]
 pub fn notify_video_frame_fetched(conn_id: i32, frame_tm: Option<Instant>) {
@@ -163,35 +165,6 @@ pub fn new(idx: usize) -> GenericService {
     };
     GenericService::run(&vs, run);
     vs.sp
-}
-
-fn check_display_changed(
-    last_n: usize,
-    last_current: usize,
-    last_width: usize,
-    last_height: usize,
-) -> bool {
-    #[cfg(target_os = "linux")]
-    {
-        // wayland do not support changing display for now
-        if !IS_X11.load(Ordering::SeqCst) {
-            return false;
-        }
-    }
-
-    let displays = match try_get_displays() {
-        Ok(d) => d,
-        _ => return false,
-    };
-
-    let n = displays.len();
-    if n != last_n {
-        return true;
-    };
-    match displays.get(last_current) {
-        Some(d) => d.width() != last_width || d.height() != last_height,
-        None => true,
-    }
 }
 
 // Capturer object is expensive, avoiding to create it frequently.
@@ -323,7 +296,6 @@ fn check_uac_switch(privacy_mode_id: i32, capturer_privacy_mode_id: i32) -> Resu
 }
 
 pub(super) struct CapturerInfo {
-    pub name: String,
     pub origin: (i32, i32),
     pub width: usize,
     pub height: usize,
@@ -355,7 +327,7 @@ fn get_capturer(
 ) -> ResultType<CapturerInfo> {
     #[cfg(target_os = "linux")]
     {
-        if !IS_X11.load(Ordering::SeqCst) {
+        if !is_x11() {
             return super::wayland::get_capturer();
         }
     }
@@ -415,7 +387,6 @@ fn get_capturer(
         portable_service_running,
     )?;
     Ok(CapturerInfo {
-        name,
         origin,
         width,
         height,
@@ -431,16 +402,21 @@ fn run(vs: VideoService) -> ResultType<()> {
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     let _wake_lock = get_wake_lock();
 
-    #[cfg(target_os = "linux")]
-    {
-        IS_X11.store(scrap::is_x11(), Ordering::SeqCst);
-    }
-
+    // Wayland only support one video capturer for now. It is ok to call ensure_inited() here.
+    //
     // ensure_inited() is needed because clear() may be called.
     // to-do: wayland ensure_inited should pass current display index.
     // But for now, we do not support multi-screen capture on wayland.
     #[cfg(target_os = "linux")]
     super::wayland::ensure_inited()?;
+    #[cfg(target_os = "linux")]
+    let _wayland_call_on_ret = SimpleCallOnReturn {
+        b: true,
+        f: Box::new(|| {
+            super::wayland::clear();
+        }),
+    };
+
     #[cfg(windows)]
     let last_portable_service_running = crate::portable_service::client::running();
     #[cfg(not(windows))]
@@ -458,8 +434,7 @@ fn run(vs: VideoService) -> ResultType<()> {
     log::info!("init quality={:?}, abr enabled:{}", quality, abr);
     let codec_name = Encoder::negotiated_codec();
     let recorder = get_recorder(c.width, c.height, &codec_name);
-    let last_recording =
-        (recorder.lock().unwrap().is_some() || video_qos.record()) && codec_name != CodecName::AV1;
+    let last_recording = recorder.lock().unwrap().is_some() || video_qos.record();
     drop(video_qos);
     let encoder_cfg = get_encoder_config(&c, quality, last_recording);
 
@@ -470,16 +445,6 @@ fn run(vs: VideoService) -> ResultType<()> {
     }
     c.set_use_yuv(encoder.use_yuv());
     VIDEO_QOS.lock().unwrap().store_bitrate(encoder.bitrate());
-
-    if sp.is_option_true(OPTION_DISPLAY_CHANGED) {
-        log::debug!("Broadcasting display changed");
-        broadcast_display_changed(
-            display_idx,
-            &sp,
-            Some((c.name.clone(), c.origin.clone(), c.width, c.height)),
-        );
-        sp.set_option_bool(OPTION_DISPLAY_CHANGED, false);
-    }
 
     if sp.is_option_true(OPTION_REFRESH) {
         sp.set_option_bool(OPTION_REFRESH, false);
@@ -511,14 +476,14 @@ fn run(vs: VideoService) -> ResultType<()> {
             allow_err!(encoder.set_quality(quality));
             video_qos.store_bitrate(encoder.bitrate());
         }
-        let recording = (recorder.lock().unwrap().is_some() || video_qos.record())
-            && codec_name != CodecName::AV1;
+        let recording = recorder.lock().unwrap().is_some() || video_qos.record();
         if recording != last_recording {
             bail!("SWITCH");
         }
         drop(video_qos);
 
-        if sp.is_option_true(OPTION_DISPLAY_CHANGED) || sp.is_option_true(OPTION_REFRESH) {
+        if sp.is_option_true(OPTION_REFRESH) {
+            let _ = try_broadcast_display_changed(&sp, display_idx, &c);
             bail!("SWITCH");
         }
         if codec_name != Encoder::negotiated_codec() {
@@ -540,14 +505,9 @@ fn run(vs: VideoService) -> ResultType<()> {
         let now = time::Instant::now();
         if last_check_displays.elapsed().as_millis() > 1000 {
             last_check_displays = now;
-
-            // Capturer on macos does not return Err event the solution is changed.
-            #[cfg(target_os = "macos")]
-            if check_display_changed(c.ndisplay, c.current, c.width, c.height) {
-                sp.set_option_bool(OPTION_DISPLAY_CHANGED, true);
-                log::info!("Displays changed");
-                bail!("SWITCH");
-            }
+            // This check may be redundant, but it is better to be safe.
+            // The previous check in `sp.is_option_true(OPTION_REFRESH)` block may be enough.
+            try_broadcast_display_changed(&sp, display_idx, &c)?;
         }
 
         frame_controller.reset();
@@ -609,7 +569,7 @@ fn run(vs: VideoService) -> ResultType<()> {
                 #[cfg(target_os = "linux")]
                 {
                     would_block_count += 1;
-                    if !IS_X11.load(Ordering::SeqCst) {
+                    if !is_x11() {
                         if would_block_count >= 100 {
                             // to-do: Unknown reason for WouldBlock 100 times (seconds = 100 * 1 / fps)
                             // https://github.com/rustdesk/rustdesk/blob/63e6b2f8ab51743e77a151e2b7ff18816f5fa2fb/libs/scrap/src/common/wayland.rs#L81
@@ -624,13 +584,9 @@ fn run(vs: VideoService) -> ResultType<()> {
                 }
             }
             Err(err) => {
-                if check_display_changed(c.ndisplay, c.current, c.width, c.height) {
-                    log::info!("Displays changed");
-                    #[cfg(target_os = "linux")]
-                    super::wayland::clear();
-                    sp.set_option_bool(OPTION_DISPLAY_CHANGED, true);
-                    bail!("SWITCH");
-                }
+                // This check may be redundant, but it is better to be safe.
+                // The previous check in `sp.is_option_true(OPTION_REFRESH)` block may be enough.
+                try_broadcast_display_changed(&sp, display_idx, &c)?;
 
                 #[cfg(windows)]
                 if !c.is_gdi() {
@@ -638,7 +594,6 @@ fn run(vs: VideoService) -> ResultType<()> {
                     log::info!("dxgi error, fall back to gdi: {:?}", err);
                     continue;
                 }
-
                 return Err(err.into());
             }
             _ => {
@@ -670,9 +625,6 @@ fn run(vs: VideoService) -> ResultType<()> {
             std::thread::sleep(spf - elapsed);
         }
     }
-
-    #[cfg(target_os = "linux")]
-    super::wayland::clear();
 
     Ok(())
 }
@@ -797,7 +749,7 @@ fn handle_one_frame(
 
 pub fn is_inited_msg() -> Option<Message> {
     #[cfg(target_os = "linux")]
-    if !IS_X11.load(Ordering::SeqCst) {
+    if !is_x11() {
         return super::wayland::is_inited();
     }
     None
@@ -889,58 +841,52 @@ fn get_wake_lock() -> crate::platform::WakeLock {
 }
 
 #[inline]
-fn broadcast_display_changed(
-    display_idx: usize,
+fn try_broadcast_display_changed(
     sp: &GenericService,
-    display_meta: Option<(String, (i32, i32), usize, usize)>,
-) {
-    if let Some(msg_out) = make_display_changed_msg(display_idx, display_meta) {
-        sp.send(msg_out);
+    display_idx: usize,
+    cap: &CapturerInfo,
+) -> ResultType<()> {
+    if let Some(display) = check_display_changed(
+        cap.ndisplay,
+        cap.current,
+        (cap.origin.0, cap.origin.1, cap.width, cap.height),
+    ) {
+        log::info!("Display {} changed", display);
+        if let Some(msg_out) = make_display_changed_msg(display_idx, Some(display)) {
+            sp.send(msg_out);
+            bail!("SWITCH");
+        }
     }
-}
-
-fn get_display_info_simple_meta(display_idx: usize) -> Option<(String, (i32, i32), usize, usize)> {
-    let displays = display_service::try_get_displays().ok()?;
-    if let Some(display) = displays.get(display_idx) {
-        Some((
-            display.name(),
-            display.origin(),
-            display.width(),
-            display.height(),
-        ))
-    } else {
-        None
-    }
+    Ok(())
 }
 
 pub fn make_display_changed_msg(
     display_idx: usize,
-    display_meta: Option<(String, (i32, i32), usize, usize)>,
+    opt_display: Option<DisplayInfo>,
 ) -> Option<Message> {
-    let mut misc = Misc::new();
-    let (name, origin, width, height) = match display_meta {
+    let display = match opt_display {
         Some(d) => d,
-        None => get_display_info_simple_meta(display_idx)?,
+        None => get_display_info(display_idx)?,
     };
-    let original_resolution = display_service::get_original_resolution(&name, width, height);
+    let mut misc = Misc::new();
     misc.set_switch_display(SwitchDisplay {
         display: display_idx as _,
-        x: origin.0,
-        y: origin.1,
-        width: width as _,
-        height: height as _,
+        x: display.x,
+        y: display.y,
+        width: display.width,
+        height: display.height,
         cursor_embedded: display_service::capture_cursor_embedded(),
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
         resolutions: Some(SupportedResolutions {
-            resolutions: if name.is_empty() {
+            resolutions: if display.name.is_empty() {
                 vec![]
             } else {
-                crate::platform::resolutions(&name)
+                crate::platform::resolutions(&display.name)
             },
             ..SupportedResolutions::default()
         })
         .into(),
-        original_resolution,
+        original_resolution: display.original_resolution,
         ..Default::default()
     });
     let mut msg_out = Message::new();

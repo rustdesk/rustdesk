@@ -11,10 +11,12 @@ import 'package:flutter_hbb/models/state_model.dart';
 import 'package:get/get.dart';
 import 'package:url_launcher/url_launcher_string.dart';
 import 'package:window_manager/window_manager.dart';
+import 'package:flutter_hbb/models/peer_model.dart';
 
 import '../../common.dart';
 import '../../common/formatter/id_formatter.dart';
 import '../../common/widgets/peer_tab_page.dart';
+import '../../common/widgets/autocomplete.dart';
 import '../../models/platform_model.dart';
 import '../widgets/button.dart';
 
@@ -35,12 +37,21 @@ class _ConnectionPageState extends State<ConnectionPage>
   Timer? _updateTimer;
 
   final RxBool _idInputFocused = false.obs;
-  final FocusNode _idFocusNode = FocusNode();
 
   var svcStopped = Get.find<RxBool>(tag: 'stop-service');
   var svcIsUsingPublicServer = true.obs;
 
   bool isWindowMinimized = false;
+  List<Peer> peers = [];
+  List _frontN<T>(List list, int n) {
+    if (list.length <= n) {
+      return list;
+    } else {
+      return list.sublist(0, n);
+    }
+  }
+  bool isPeersLoading = false;
+  bool isPeersLoaded = false;
 
   @override
   void initState() {
@@ -58,12 +69,6 @@ class _ConnectionPageState extends State<ConnectionPage>
     _updateTimer = periodic_immediate(Duration(seconds: 1), () async {
       updateStatus();
     });
-    _idFocusNode.addListener(() {
-      _idInputFocused.value = _idFocusNode.hasFocus;
-      // select all to faciliate removing text, just following the behavior of address input of chrome
-      _idController.selection = TextSelection(
-          baseOffset: 0, extentOffset: _idController.value.text.length);
-    });
     Get.put<IDTextEditingController>(_idController);
     windowManager.addListener(this);
   }
@@ -75,6 +80,9 @@ class _ConnectionPageState extends State<ConnectionPage>
     windowManager.removeListener(this);
     if (Get.isRegistered<IDTextEditingController>()) {
       Get.delete<IDTextEditingController>();
+    }
+    if (Get.isRegistered<TextEditingController>()){
+      Get.delete<TextEditingController>();
     }
     super.dispose();
   }
@@ -142,8 +150,20 @@ class _ConnectionPageState extends State<ConnectionPage>
     connect(context, id, isFileTransfer: isFileTransfer);
   }
 
+  Future<void> _fetchPeers() async {
+    setState(() {
+      isPeersLoading = true;
+    });
+    await Future.delayed(Duration(milliseconds: 100));
+    peers = await getAllPeers();
+    setState(() {
+        isPeersLoading = false;
+        isPeersLoaded = true;
+      });
+  }
+
   /// UI for the remote ID TextField.
-  /// Search for a peer and connect to it if the id exists.
+  /// Search for a peer.
   Widget _buildRemoteIDTextField(BuildContext context) {
     var w = Container(
       width: 320 + 20 * 2,
@@ -171,36 +191,127 @@ class _ConnectionPageState extends State<ConnectionPage>
             Row(
               children: [
                 Expanded(
-                  child: Obx(
-                    () => TextField(
-                      maxLength: 90,
-                      autocorrect: false,
-                      enableSuggestions: false,
-                      keyboardType: TextInputType.visiblePassword,
-                      focusNode: _idFocusNode,
-                      style: const TextStyle(
-                        fontFamily: 'WorkSans',
-                        fontSize: 22,
-                        height: 1.4,
-                      ),
-                      maxLines: 1,
-                      cursorColor:
-                          Theme.of(context).textTheme.titleLarge?.color,
-                      decoration: InputDecoration(
-                          filled: false,
-                          counterText: '',
-                          hintText: _idInputFocused.value
-                              ? null
-                              : translate('Enter Remote ID'),
-                          contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 15, vertical: 13)),
-                      controller: _idController,
-                      inputFormatters: [IDTextInputFormatter()],
-                      onSubmitted: (s) {
-                        onConnect();
-                      },
-                    ),
-                  ),
+                  child: 
+                   Autocomplete<Peer>(
+                    optionsBuilder: (TextEditingValue textEditingValue) {
+                      if (textEditingValue.text == '') {
+                        return const Iterable<Peer>.empty();
+                      }
+                      else if (peers.isEmpty && !isPeersLoaded) {
+                         Peer emptyPeer = Peer(
+                          id: '',
+                          username: '',
+                          hostname: '',
+                          alias: '',
+                          platform: '',
+                          tags: [],
+                          hash: '',
+                          forceAlwaysRelay: false,
+                          rdpPort: '',
+                          rdpUsername: '',
+                          loginName: '',
+                        );
+                        return [emptyPeer];
+                      }
+                      else {
+                        String textWithoutSpaces = textEditingValue.text.replaceAll(" ", "");
+                        if (int.tryParse(textWithoutSpaces) != null) {
+                          textEditingValue = TextEditingValue(
+                            text: textWithoutSpaces,
+                            selection: textEditingValue.selection,
+                          );
+                        }
+                        String textToFind = textEditingValue.text.toLowerCase();
+
+                        return peers.where((peer) =>
+                        peer.id.toLowerCase().contains(textToFind) ||
+                        peer.username.toLowerCase().contains(textToFind) ||
+                        peer.hostname.toLowerCase().contains(textToFind) ||
+                        peer.alias.toLowerCase().contains(textToFind))
+                            .toList();
+                      }
+                    },
+
+                    fieldViewBuilder: (BuildContext context,
+                        TextEditingController fieldTextEditingController,
+                        FocusNode fieldFocusNode ,
+                        VoidCallback onFieldSubmitted,
+                        ) {
+                      fieldTextEditingController.text = _idController.text;
+                      Get.put<TextEditingController>(fieldTextEditingController);
+                      fieldFocusNode.addListener(() async {
+                        _idInputFocused.value = fieldFocusNode.hasFocus;
+                        if (fieldFocusNode.hasFocus && !isPeersLoading){
+                          _fetchPeers();
+                        }
+                      });
+                      final textLength = fieldTextEditingController.value.text.length;
+                      // select all to facilitate removing text, just following the behavior of address input of chrome
+                      fieldTextEditingController.selection = TextSelection(baseOffset: 0, extentOffset: textLength);
+                      return Obx(() =>
+                      TextField(
+                        maxLength: 90,
+                        autocorrect: false,
+                        enableSuggestions: false,
+                        keyboardType: TextInputType.visiblePassword,
+                        focusNode: fieldFocusNode,
+                        style: const TextStyle(
+                          fontFamily: 'WorkSans',
+                          fontSize: 22,
+                          height: 1.4,
+                        ),
+                        maxLines: 1,
+                        cursorColor: Theme.of(context).textTheme.titleLarge?.color,
+                        decoration: InputDecoration(
+                            filled: false,
+                            counterText: '',
+                            hintText: _idInputFocused.value
+                                ? null
+                                : translate('Enter Remote ID'),
+                            contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 15, vertical: 13)),
+                        controller: fieldTextEditingController,
+                        inputFormatters: [IDTextInputFormatter()],
+                        onChanged: (v) {
+                          _idController.id = v;
+                        },
+                      ));
+                    },
+                    optionsViewBuilder: (BuildContext context, AutocompleteOnSelected<Peer> onSelected, Iterable<Peer> options) {
+                      double maxHeight = options.length * 50;
+                      maxHeight = maxHeight > 200 ? 200 : maxHeight;
+
+                      return Align(
+                        alignment: Alignment.topLeft,
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(5),
+                          child: Material(
+                          elevation: 4,
+                          child: ConstrainedBox(
+                            constraints: BoxConstraints(
+                              maxHeight: maxHeight,
+                              maxWidth: 319,
+                            ),
+                              child: peers.isEmpty && isPeersLoading
+                              ? Container(
+                                    height: 80,
+                                     child: Center( 
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                      ),
+                                    )
+                                  )
+                              : Padding(
+                              padding: const EdgeInsets.only(top: 5),
+                              child: ListView(
+                                children: options.map((peer) => AutocompletePeerTile(idController: _idController, peer: peer)).toList(),
+                              ),
+                            ),
+                          ),
+                        )),
+                      );
+                    },
+                  )
                 ),
               ],
             ),

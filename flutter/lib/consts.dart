@@ -3,12 +3,17 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/models/state_model.dart';
+import 'package:get/get.dart';
 
 const double kDesktopRemoteTabBarHeight = 28.0;
 const int kInvalidWindowId = -1;
 const int kMainWindowId = 0;
 
 const kAllDisplayValue = -1;
+
+const kKeyLegacyMode = 'legacy';
+const kKeyMapMode = 'map';
+const kKeyTranslateMode = 'translate';
 
 const String kPeerPlatformWindows = "Windows";
 const String kPeerPlatformLinux = "Linux";
@@ -29,6 +34,7 @@ const String kAppTypeDesktopPortForward = "port forward";
 
 const String kWindowMainWindowOnTop = "main_window_on_top";
 const String kWindowGetWindowInfo = "get_window_info";
+const String kWindowGetScreenList = "get_screen_list";
 const String kWindowDisableGrabKeyboard = "disable_grab_keyboard";
 const String kWindowActionRebuild = "rebuild";
 const String kWindowEventHide = "hide";
@@ -64,7 +70,10 @@ const int kWindowMainId = 0;
 const String kPointerEventKindTouch = "touch";
 const String kPointerEventKindMouse = "mouse";
 
-const String kKeyShowDisplaysAsIndividualWindows = 'displays_as_individual_windows';
+const String kKeyShowDisplaysAsIndividualWindows =
+    'displays_as_individual_windows';
+const String kKeyUseAllMyDisplaysForTheRemoteSession =
+    'use_all_my_displays_for_the_remote_session';
 const String kKeyShowMonitorsToolbar = 'show_monitors_toolbar';
 
 // the executable name of the portable version
@@ -84,9 +93,17 @@ const int kDesktopMaxDisplaySize = 3840;
 const double kDesktopFileTransferRowHeight = 30.0;
 const double kDesktopFileTransferHeaderHeight = 25.0;
 
+double kNewWindowOffset = Platform.isWindows
+    ? 56.0
+    : Platform.isLinux
+        ? 50.0
+        : Platform.isMacOS
+            ? 30.0
+            : 50.0;
+
 EdgeInsets get kDragToResizeAreaPadding =>
     !kUseCompatibleUiMode && Platform.isLinux
-        ? stateGlobal.fullscreen || stateGlobal.isMaximized.value
+        ? stateGlobal.fullscreen.isTrue || stateGlobal.isMaximized.value
             ? EdgeInsets.zero
             : EdgeInsets.all(5.0)
         : EdgeInsets.zero;

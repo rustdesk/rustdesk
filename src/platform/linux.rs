@@ -35,6 +35,10 @@ type Xdo = *const c_void;
 pub const PA_SAMPLE_RATE: u32 = 48000;
 static mut UNMODIFIED: bool = true;
 
+lazy_static::lazy_static! {
+    pub static ref IS_X11: bool = hbb_common::platform::linux::is_x11_or_headless();
+}
+
 thread_local! {
     static XDO: RefCell<Xdo> = RefCell::new(unsafe { xdo_new(std::ptr::null()) });
     static DISPLAY: RefCell<*mut c_void> = RefCell::new(unsafe { XOpenDisplay(std::ptr::null())});
@@ -1358,5 +1362,28 @@ impl Drop for WallPaperRemover {
             allow_err!(wallpaper::set_dark_from_path(old_path_dark.as_str())
                 .map_err(|e| anyhow!(e.to_string())));
         }
+    }
+}
+
+#[inline]
+pub fn is_x11() -> bool {
+    *IS_X11
+}
+
+#[inline]
+pub fn is_selinux_enforcing() -> bool {
+    match run_cmds("getenforce") {
+        Ok(output) => output.trim() == "Enforcing",
+        Err(_) => match run_cmds("sestatus") {
+            Ok(output) => {
+                for line in output.lines() {
+                    if line.contains("Current mode:") {
+                        return line.contains("enforcing");
+                    }
+                }
+                false
+            }
+            Err(_) => false,
+        },
     }
 }

@@ -103,10 +103,6 @@ mv libsciter-gtk.so target/debug
 VCPKG_ROOT=$HOME/vcpkg cargo run
 ```
 
-### വേലാൻഡ് X11 (Xorg) ആയി മാറ്റുക
-
-RustDesk Wayland-നെ പിന്തുണയ്ക്കുന്നില്ല. സ്ഥിരസ്ഥിതി ഗ്നോം സെഷനായി Xorg കോൺഫിഗർ ചെയ്യുന്നതിന് [ഇത്](https://docs.fedoraproject.org/en-US/quick-docs/configuring-xorg-as-default-gnome-session/) പരിശോധിക്കുക.
-
 ## ഡോക്കർ ഉപയോഗിച്ച് എങ്ങനെ നിർമ്മിക്കാം
 
  റെപ്പോസിറ്റോറി ക്ലോണുചെയ്‌ത് ഡോക്കർ കണ്ടെയ്‌നർ നിർമ്മിക്കുന്നതിലൂടെ ആരംഭിക്കുക:

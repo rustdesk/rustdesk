@@ -14,8 +14,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_hbb/common/formatter/id_formatter.dart';
 import 'package:flutter_hbb/desktop/widgets/refresh_wrapper.dart';
 import 'package:flutter_hbb/desktop/widgets/tabbar_widget.dart';
-import 'package:flutter_hbb/models/desktop_render_texture.dart';
 import 'package:flutter_hbb/main.dart';
+import 'package:flutter_hbb/models/desktop_render_texture.dart';
 import 'package:flutter_hbb/models/peer_model.dart';
 import 'package:flutter_hbb/models/state_model.dart';
 import 'package:flutter_hbb/utils/multi_window_manager.dart';
@@ -52,6 +52,9 @@ int androidVersion = 0;
 /// only available for Windows target
 int windowsBuildNumber = 0;
 DesktopType? desktopType;
+
+bool get isMainDesktopWindow =>
+    desktopType == DesktopType.main || desktopType == DesktopType.cm;
 
 /// Check if the app is running with single view mode.
 bool isSingleViewApp() {
@@ -955,7 +958,7 @@ class CustomAlertDialog extends StatelessWidget {
 
 void msgBox(SessionID sessionId, String type, String title, String text,
     String link, OverlayDialogManager dialogManager,
-    {bool? hasCancel, ReconnectHandle? reconnect}) {
+    {bool? hasCancel, ReconnectHandle? reconnect, int? reconnectTimeout}) {
   dialogManager.dismissAll();
   List<Widget> buttons = [];
   bool hasOk = false;
@@ -995,22 +998,21 @@ void msgBox(SessionID sessionId, String type, String title, String text,
           dialogManager.dismissAll();
         }));
   }
-  if (reconnect != null && title == "Connection Error") {
+  if (reconnect != null &&
+      title == "Connection Error" &&
+      reconnectTimeout != null) {
     // `enabled` is used to disable the dialog button once the button is clicked.
     final enabled = true.obs;
-    final button = Obx(
-      () => dialogButton(
-        'Reconnect',
-        isOutline: true,
-        onPressed: enabled.isTrue
-            ? () {
-                // Disable the button
-                enabled.value = false;
-                reconnect(dialogManager, sessionId, false);
-              }
-            : null,
-      ),
-    );
+    final button = Obx(() => _ReconnectCountDownButton(
+          second: reconnectTimeout,
+          onPressed: enabled.isTrue
+              ? () {
+                  // Disable the button
+                  enabled.value = false;
+                  reconnect(dialogManager, sessionId, false);
+                }
+              : null,
+        ));
     buttons.insert(0, button);
   }
   if (link.isNotEmpty) {
@@ -1491,8 +1493,8 @@ Future<void> saveWindowPosition(WindowType type, {int? windowId}) async {
   late Offset position;
   late Size sz;
   late bool isMaximized;
-  bool isFullscreen = stateGlobal.fullscreen ||
-      (Platform.isMacOS && stateGlobal.closeOnFullscreen);
+  bool isFullscreen = stateGlobal.fullscreen.isTrue ||
+      (Platform.isMacOS && stateGlobal.closeOnFullscreen == true);
   setFrameIfMaximized() {
     if (isMaximized) {
       final pos = bind.getLocalFlutterOption(k: kWindowPrefix + type.name);
@@ -1670,8 +1672,10 @@ Future<Offset?> _adjustRestoreMainWindowOffset(
 
 /// Restore window position and size on start
 /// Note that windowId must be provided if it's subwindow
+//
+// display is used to set the offset of the window in individual display mode.
 Future<bool> restoreWindowPosition(WindowType type,
-    {int? windowId, String? peerId}) async {
+    {int? windowId, String? peerId, int? display}) async {
   if (bind
       .mainGetEnv(key: "DISABLE_RUSTDESK_RESTORE_WINDOW_POSITION")
       .isNotEmpty) {
@@ -1707,14 +1711,22 @@ Future<bool> restoreWindowPosition(WindowType type,
     debugPrint("no window position saved, ignoring position restoration");
     return false;
   }
-  if (type == WindowType.RemoteDesktop &&
-      !isRemotePeerPos &&
-      windowId != null) {
-    if (lpos.offsetWidth != null) {
-      lpos.offsetWidth = lpos.offsetWidth! + windowId * 20;
+  if (type == WindowType.RemoteDesktop) {
+    if (!isRemotePeerPos && windowId != null) {
+      if (lpos.offsetWidth != null) {
+        lpos.offsetWidth = lpos.offsetWidth! + windowId * kNewWindowOffset;
+      }
+      if (lpos.offsetHeight != null) {
+        lpos.offsetHeight = lpos.offsetHeight! + windowId * kNewWindowOffset;
+      }
     }
-    if (lpos.offsetHeight != null) {
-      lpos.offsetHeight = lpos.offsetHeight! + windowId * 20;
+    if (display != null) {
+      if (lpos.offsetWidth != null) {
+        lpos.offsetWidth = lpos.offsetWidth! + display * kNewWindowOffset;
+      }
+      if (lpos.offsetHeight != null) {
+        lpos.offsetHeight = lpos.offsetHeight! + display * kNewWindowOffset;
+      }
     }
   }
 
@@ -2011,6 +2023,10 @@ connect(
       if (Get.isRegistered<IDTextEditingController>()) {
         final idController = Get.find<IDTextEditingController>();
         idController.text = formatID(id);
+      }
+      if (Get.isRegistered<TextEditingController>()){
+        final fieldTextEditingController = Get.find<TextEditingController>();
+        fieldTextEditingController.text = formatID(id);
       }
     } catch (_) {}
   }
@@ -2605,3 +2621,183 @@ bool isChooseDisplayToOpenInNewWindow(PeerInfo pi, SessionID sessionId) =>
     pi.isSupportMultiDisplay &&
     useTextureRender &&
     bind.sessionGetDisplaysAsIndividualWindows(sessionId: sessionId) == 'Y';
+
+Future<List<Rect>> getScreenListWayland() async {
+  final screenRectList = <Rect>[];
+  if (isMainDesktopWindow) {
+    for (var screen in await window_size.getScreenList()) {
+      final scale = kIgnoreDpi ? 1.0 : screen.scaleFactor;
+      double l = screen.frame.left;
+      double t = screen.frame.top;
+      double r = screen.frame.right;
+      double b = screen.frame.bottom;
+      final rect = Rect.fromLTRB(l / scale, t / scale, r / scale, b / scale);
+      screenRectList.add(rect);
+    }
+  } else {
+    final screenList = await rustDeskWinManager.call(
+        WindowType.Main, kWindowGetScreenList, '');
+    try {
+      for (var screen in jsonDecode(screenList.result) as List<dynamic>) {
+        final scale = kIgnoreDpi ? 1.0 : screen['scaleFactor'];
+        double l = screen['frame']['l'];
+        double t = screen['frame']['t'];
+        double r = screen['frame']['r'];
+        double b = screen['frame']['b'];
+        final rect = Rect.fromLTRB(l / scale, t / scale, r / scale, b / scale);
+        screenRectList.add(rect);
+      }
+    } catch (e) {
+      debugPrint('Failed to parse screenList: $e');
+    }
+  }
+  return screenRectList;
+}
+
+Future<List<Rect>> getScreenListNotWayland() async {
+  final screenRectList = <Rect>[];
+  final displays = bind.mainGetDisplays();
+  if (displays.isEmpty) {
+    return screenRectList;
+  }
+  try {
+    for (var display in jsonDecode(displays) as List<dynamic>) {
+      // to-do: scale factor ?
+      // final scale = kIgnoreDpi ? 1.0 : screen.scaleFactor;
+      double l = display['x'].toDouble();
+      double t = display['y'].toDouble();
+      double r = (display['x'] + display['w']).toDouble();
+      double b = (display['y'] + display['h']).toDouble();
+      screenRectList.add(Rect.fromLTRB(l, t, r, b));
+    }
+  } catch (e) {
+    debugPrint('Failed to parse displays: $e');
+  }
+  return screenRectList;
+}
+
+Future<List<Rect>> getScreenRectList() async {
+  return bind.mainCurrentIsWayland()
+      ? await getScreenListWayland()
+      : await getScreenListNotWayland();
+}
+
+openMonitorInTheSameTab(int i, FFI ffi, PeerInfo pi) {
+  final displays = i == kAllDisplayValue
+      ? List.generate(pi.displays.length, (index) => index)
+      : [i];
+  bind.sessionSwitchDisplay(
+      sessionId: ffi.sessionId, value: Int32List.fromList(displays));
+  ffi.ffiModel.switchToNewDisplay(i, ffi.sessionId, ffi.id);
+}
+
+// Open new tab or window to show this monitor.
+// For now just open new window.
+//
+// screenRect is used to move the new window to the specified screen and set fullscreen.
+openMonitorInNewTabOrWindow(int i, String peerId, PeerInfo pi,
+    {Rect? screenRect}) {
+  final args = {
+    'window_id': stateGlobal.windowId,
+    'peer_id': peerId,
+    'display': i,
+    'display_count': pi.displays.length,
+  };
+  if (screenRect != null) {
+    args['screen_rect'] = {
+      'l': screenRect.left,
+      't': screenRect.top,
+      'r': screenRect.right,
+      'b': screenRect.bottom,
+    };
+  }
+  DesktopMultiWindow.invokeMethod(
+      kMainWindowId, kWindowEventOpenMonitorSession, jsonEncode(args));
+}
+
+tryMoveToScreenAndSetFullscreen(Rect? screenRect) async {
+  if (screenRect == null) {
+    return;
+  }
+  final wc = WindowController.fromWindowId(stateGlobal.windowId);
+  final curFrame = await wc.getFrame();
+  final frame =
+      Rect.fromLTWH(screenRect.left + 30, screenRect.top + 30, 600, 400);
+  if (stateGlobal.fullscreen.isTrue &&
+      curFrame.left <= frame.left &&
+      curFrame.top <= frame.top &&
+      curFrame.width >= frame.width &&
+      curFrame.height >= frame.height) {
+    return;
+  }
+  await wc.setFrame(frame);
+  // An duration is needed to avoid the window being restored after fullscreen.
+  Future.delayed(Duration(milliseconds: 300), () async {
+    stateGlobal.setFullscreen(true);
+  });
+}
+
+parseParamScreenRect(Map<String, dynamic> params) {
+  Rect? screenRect;
+  if (params['screen_rect'] != null) {
+    double l = params['screen_rect']['l'];
+    double t = params['screen_rect']['t'];
+    double r = params['screen_rect']['r'];
+    double b = params['screen_rect']['b'];
+    screenRect = Rect.fromLTRB(l, t, r, b);
+  }
+  return screenRect;
+}
+
+class _ReconnectCountDownButton extends StatefulWidget {
+  _ReconnectCountDownButton({
+    Key? key,
+    required this.second,
+    required this.onPressed,
+  }) : super(key: key);
+  final VoidCallback? onPressed;
+  final int second;
+
+  @override
+  State<_ReconnectCountDownButton> createState() =>
+      _ReconnectCountDownButtonState();
+}
+
+class _ReconnectCountDownButtonState extends State<_ReconnectCountDownButton> {
+  late int _countdownSeconds = widget.second;
+
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _startCountdownTimer();
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  void _startCountdownTimer() {
+    _timer = Timer.periodic(Duration(seconds: 1), (timer) {
+      if (_countdownSeconds <= 0) {
+        timer.cancel();
+      } else {
+        setState(() {
+          _countdownSeconds--;
+        });
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return dialogButton(
+      '${translate('Reconnect')} (${_countdownSeconds}s)',
+      onPressed: widget.onPressed,
+      isOutline: true,
+    );
+  }
+}

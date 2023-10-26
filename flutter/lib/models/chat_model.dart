@@ -103,7 +103,7 @@ class ChatModel with ChangeNotifier {
   void setOverlayState(BlockableOverlayState blockableOverlayState) {
     _blockableOverlayState = blockableOverlayState;
 
-    _blockableOverlayState!.addMiddleBlockedListener((v) {
+    _blockableOverlayState.addMiddleBlockedListener((v) {
       if (!v) {
         isWindowFocus.value = false;
         if (isWindowFocus.value) {
@@ -197,9 +197,9 @@ class ChatModel with ChangeNotifier {
   showChatWindowOverlay({Offset? chatInitPos}) {
     if (chatWindowOverlayEntry != null) return;
     isWindowFocus.value = true;
-    _blockableOverlayState?.setMiddleBlocked(true);
+    _blockableOverlayState.setMiddleBlocked(true);
 
-    final overlayState = _blockableOverlayState?.state;
+    final overlayState = _blockableOverlayState.state;
     if (overlayState == null) return;
     if (isMobile &&
         !gFFI.chatModel.currentKey.isOut && // not in remote page
@@ -212,7 +212,7 @@ class ChatModel with ChangeNotifier {
           onPointerDown: (_) {
             if (!isWindowFocus.value) {
               isWindowFocus.value = true;
-              _blockableOverlayState?.setMiddleBlocked(true);
+              _blockableOverlayState.setMiddleBlocked(true);
             }
           },
           child: DraggableChatWindow(
@@ -228,7 +228,7 @@ class ChatModel with ChangeNotifier {
 
   hideChatWindowOverlay() {
     if (chatWindowOverlayEntry != null) {
-      _blockableOverlayState?.setMiddleBlocked(false);
+      _blockableOverlayState.setMiddleBlocked(false);
       chatWindowOverlayEntry!.remove();
       chatWindowOverlayEntry = null;
       return;

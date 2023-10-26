@@ -243,6 +243,7 @@ impl InvokeUiSession for SciterHandler {
         pi_sciter.set_item("sas_enabled", pi.sas_enabled);
         pi_sciter.set_item("displays", Self::make_displays_array(&pi.displays));
         pi_sciter.set_item("current_display", pi.current_display);
+        pi_sciter.set_item("version", pi.version.clone());
         self.call("updatePi", &make_args!(pi_sciter));
     }
 
@@ -469,6 +470,7 @@ impl sciter::EventHandler for SciterSession {
         fn restart_remote_device();
         fn request_voice_call();
         fn close_voice_call();
+        fn version_cmp(String, String);
     }
 }
 
@@ -756,6 +758,10 @@ impl SciterSession {
         if let Err(err) = crate::run_me(args) {
             log::error!("Failed to spawn IP tunneling: {}", err);
         }
+    }
+
+    fn version_cmp(&self, v1: String, v2: String) -> i32 {
+        (hbb_common::get_version_number(&v1) - hbb_common::get_version_number(&v2)) as i32
     }
 }
 

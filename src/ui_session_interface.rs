@@ -240,12 +240,20 @@ impl<T: InvokeUiSession> Session<T> {
         self.lc.read().unwrap().displays_as_individual_windows.clone()
     }
 
+    pub fn get_use_all_my_displays_for_the_remote_session(&self) -> String {
+        self.lc.read().unwrap().use_all_my_displays_for_the_remote_session.clone()
+    }
+
     pub fn save_reverse_mouse_wheel(&self, value: String) {
         self.lc.write().unwrap().save_reverse_mouse_wheel(value);
     }
 
     pub fn save_displays_as_individual_windows(&self, value: String) {
         self.lc.write().unwrap().save_displays_as_individual_windows(value);
+    }
+
+    pub fn save_use_all_my_displays_for_the_remote_session(&self, value: String) {
+        self.lc.write().unwrap().save_use_all_my_displays_for_the_remote_session(value);
     }
 
     pub fn save_view_style(&self, value: String) {

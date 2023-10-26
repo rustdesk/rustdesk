@@ -1,8 +1,6 @@
 use super::*;
 #[cfg(target_os = "macos")]
 use crate::common::is_server;
-#[cfg(target_os = "linux")]
-use crate::common::IS_X11;
 use crate::input::*;
 #[cfg(target_os = "macos")]
 use dispatch::Queue;
@@ -1152,7 +1150,7 @@ fn map_keyboard_mode(evt: &KeyEvent) {
 
     // Wayland
     #[cfg(target_os = "linux")]
-    if !*IS_X11 {
+    if !crate::platform::linux::is_x11() {
         let mut en = ENIGO.lock().unwrap();
         let code = evt.chr() as u16;
 

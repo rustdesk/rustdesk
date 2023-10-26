@@ -235,7 +235,7 @@ class _RemotePageState extends State<RemotePage> {
         clientClose(sessionId, gFFI.dialogManager);
         return false;
       },
-      child: getRawPointerAndKeyBody(Scaffold(
+      child: Scaffold(
           // workaround for https://github.com/rustdesk/rustdesk/issues/3131
           floatingActionButtonLocation: keyboardIsVisible
               ? FABLocation(FloatingActionButtonLocation.endFloat, 0, -35)
@@ -281,7 +281,7 @@ class _RemotePageState extends State<RemotePage> {
                       : Offstage(),
                 ],
               )),
-          body: Overlay(
+          body: getRawPointerAndKeyBody(Overlay(
             initialEntries: [
               OverlayEntry(builder: (context) {
                 return Container(
@@ -763,7 +763,9 @@ void showOptions(
       children.add(InkWell(
           onTap: () {
             if (i == cur) return;
-            bind.sessionSwitchDisplay(sessionId: gFFI.sessionId, value: Int32List.fromList([i]));
+            gFFI.recordingModel.onClose();
+            bind.sessionSwitchDisplay(
+                sessionId: gFFI.sessionId, value: Int32List.fromList([i]));
             gFFI.dialogManager.dismissAll();
           },
           child: Ink(

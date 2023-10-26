@@ -611,7 +611,7 @@ impl Connection {
                                 _ => {},
                             }
                         }
-                        Some(message::Union::PeerInfo(_)) => {
+                        Some(message::Union::PeerInfo(..)) => {
                             conn.refresh_video_display(None);
                         }
                         _ => {}
@@ -1132,11 +1132,13 @@ impl Connection {
                 self.send(msg_out).await;
             }
 
-            match super::display_service::get_displays().await {
+            match super::display_service::update_get_sync_displays().await {
                 Err(err) => {
                     res.set_error(format!("{}", err));
                 }
                 Ok(displays) => {
+                    // For compatibility with old versions, we need to send the displays to the peer.
+                    // But the displays may be updated later, before creating the video capturer.
                     pi.displays = displays.clone();
                     pi.current_display = self.display_idx as _;
                     res.set_peer_info(pi);
@@ -2102,7 +2104,7 @@ impl Connection {
                 display,
                 video_service::OPTION_REFRESH,
                 super::service::SERVICE_OPTION_VALUE_TRUE,
-            )
+            );
         });
     }
 
@@ -2139,13 +2141,13 @@ impl Connection {
                         ..Default::default()
                     });
                 }
+            }
 
-                // send display changed message
-                if let Some(msg_out) =
-                    video_service::make_display_changed_msg(self.display_idx, None)
-                {
-                    self.send(msg_out).await;
-                }
+            // Send display changed message.
+            // For compatibility with old versions ( < 1.2.4 ).
+            // sciter need it in new version
+            if let Some(msg_out) = video_service::make_display_changed_msg(self.display_idx, None) {
+                self.send(msg_out).await;
             }
         }
     }
