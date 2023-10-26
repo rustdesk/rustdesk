@@ -566,9 +566,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Show displays as individual windows", "Zobrazit obrazovky jako jednotlivá okna"),
         ("Use all my displays for the remote session", "Použít všechny mé obrazovky pro vzdálenou relaci"),
         ("selinux_tip", ""),
-        ("Change View", ""),
-        ("Big Tiles", ""),
-        ("Small Tiles", ""),
+        ("Change view", ""),
+        ("Big tiles", ""),
+        ("Small tiles", ""),
         ("List", ""),
     ].iter().cloned().collect();
 }

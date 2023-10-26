@@ -776,7 +776,7 @@ class _PeerViewDropdownState extends State<PeerViewDropdown> {
     items.add(PopupMenuItem(
         height: 36,
         enabled: false,
-        child: Text(translate("Change View"), style: style)));
+        child: Text(translate("Change view"), style: style)));
       for (var e in PeerUiType.values) {
       items.add(PopupMenuItem(
           height: 36,
@@ -785,7 +785,7 @@ class _PeerViewDropdownState extends State<PeerViewDropdown> {
                   height: 36,
                   child: getRadio<PeerUiType>(
                       Text(translate(
-                        types.indexOf(e) == 0 ? 'Big Tiles' : types.indexOf(e) == 1 ? 'Small Tiles' : 'List'
+                        types.indexOf(e) == 0 ? 'Big tiles' : types.indexOf(e) == 1 ? 'Small tiles' : 'List'
                       ), style: style),
                       e, 
                       peerCardUiType.value,
@@ -807,7 +807,7 @@ class _PeerViewDropdownState extends State<PeerViewDropdown> {
     return _hoverAction(
       context: context,
       child: Tooltip(
-          message: translate('Change View'),
+          message: translate('Change view'),
           child: Icon(
               peerCardUiType.value == PeerUiType.grid
                   ? Icons.grid_view_rounded
