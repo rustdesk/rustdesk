@@ -81,6 +81,9 @@ class _ConnectionPageState extends State<ConnectionPage>
     if (Get.isRegistered<IDTextEditingController>()) {
       Get.delete<IDTextEditingController>();
     }
+    if (Get.isRegistered<TextEditingController>()){
+      Get.delete<TextEditingController>();
+    }
     super.dispose();
   }
 
@@ -235,6 +238,7 @@ class _ConnectionPageState extends State<ConnectionPage>
                         VoidCallback onFieldSubmitted,
                         ) {
                       fieldTextEditingController.text = _idController.text;
+                      Get.put<TextEditingController>(fieldTextEditingController);
                       fieldFocusNode.addListener(() async {
                         _idInputFocused.value = fieldFocusNode.hasFocus;
                         if (fieldFocusNode.hasFocus && !isPeersLoading){
@@ -270,18 +274,6 @@ class _ConnectionPageState extends State<ConnectionPage>
                         inputFormatters: [IDTextInputFormatter()],
                         onChanged: (v) {
                           _idController.id = v;
-                        },
-                        onSubmitted: (s) {
-                          if (s == '') {
-                            return;
-                          }
-                          try {
-                            final id = int.parse(s);
-                            _idController.id = s;
-                            onConnect();
-                          } catch (_) {
-                            return;
-                          }
                         },
                       ));
                     },
