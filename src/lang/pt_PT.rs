@@ -566,5 +566,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Show displays as individual windows", ""),
         ("Use all my displays for the remote session", ""),
         ("selinux_tip", ""),
+        ("Change View", ""),
+        ("Big Tiles", ""),
+        ("Small Tiles", ""),
+        ("List", ""),
     ].iter().cloned().collect();
 }
