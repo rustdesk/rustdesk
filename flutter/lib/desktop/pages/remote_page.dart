@@ -309,20 +309,20 @@ class _RemotePageState extends State<RemotePage>
         final imageReady = _ffi.ffiModel.pi.isSet.isTrue &&
             _ffi.ffiModel.waitForFirstImage.isFalse;
         if (imageReady) {
-          // dismissAll() is ensure the state is clean.
+          // `dismissAll()` is to ensure that the state is clean.
           // It's ok to call dismissAll() here.
           _ffi.dialogManager.dismissAll();
           // Recreate the block state to refresh the state.
           _blockableOverlayState = BlockableOverlayState();
           _blockableOverlayState.applyFfi(_ffi);
-          // Block the whole bodyWidget() when dialog shows.
+          // Block the whole `bodyWidget()` when dialog shows.
           return BlockableOverlay(
             underlying: bodyWidget(),
             state: _blockableOverlayState,
           );
         } else {
-          // _blockableOverlayState is not recreated here.
-          // The block state for the toolbar will not work on reconnecting, but it's ok.
+          // `_blockableOverlayState` is not recreated here.
+          // The toolbar's block state won't work properly when reconnecting, but that's okay.
           return bodyWidget();
         }
       }),
