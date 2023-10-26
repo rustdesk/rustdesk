@@ -566,9 +566,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Show displays as individual windows", "Показывать дисплеи в отдельных окнах"),
         ("Use all my displays for the remote session", "Использовать все мои дисплеи для удалённого сеанса"),
         ("selinux_tip", "На вашем устройстве включён SELinux, что может помешать правильной работе RustDesk на контролируемой стороне."),
-        ("Change View", "Вид"),
-        ("Big Tiles", "Большие значки"),
-        ("Small Tiles", "Маленькие значки"),
+        ("Change view", "Вид"),
+        ("Big tiles", "Большие значки"),
+        ("Small tiles", "Маленькие значки"),
         ("List", "Список"),
     ].iter().cloned().collect();
 }
