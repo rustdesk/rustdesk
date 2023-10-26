@@ -9,6 +9,7 @@ import 'package:get/get.dart';
 import 'package:provider/provider.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 import 'package:window_manager/window_manager.dart';
+import 'package:flutter_hbb/models/peer_tab_model.dart';
 
 import '../../common.dart';
 import '../../models/peer_model.dart';
@@ -188,12 +189,19 @@ class _PeersViewState extends State<_PeersView> with WindowListener {
                 onVisibilityChanged: onVisibilityChanged,
                 child: widget.peerCardBuilder(peer),
               );
+              final windowWidth = MediaQuery.of(context).size.width;
+              final model = Provider.of<PeerTabModel>(context);
+              final hideAbTagsPanel = bind.mainGetLocalOption(key: "hideAbTagsPanel").isNotEmpty;
               return isDesktop
                   ? Obx(
                       () => SizedBox(
-                        width: 220,
+                        width: peerCardUiType.value != PeerUiType.list
+                            ? 220
+                            : model.currentTab == PeerTabIndex.group.index || (model.currentTab == PeerTabIndex.ab.index && !hideAbTagsPanel)
+                              ? windowWidth - 390 :
+                                windowWidth - 227,
                         height:
-                            peerCardUiType.value == PeerUiType.grid ? 140 : 42,
+                            peerCardUiType.value == PeerUiType.grid ? 140 : peerCardUiType.value != PeerUiType.list ? 42 : 45,
                         child: visibilityChild,
                       ),
                     )

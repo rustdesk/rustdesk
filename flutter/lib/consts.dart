@@ -11,6 +11,10 @@ const int kMainWindowId = 0;
 
 const kAllDisplayValue = -1;
 
+const kKeyLegacyMode = 'legacy';
+const kKeyMapMode = 'map';
+const kKeyTranslateMode = 'translate';
+
 const String kPeerPlatformWindows = "Windows";
 const String kPeerPlatformLinux = "Linux";
 const String kPeerPlatformMacOS = "Mac OS";

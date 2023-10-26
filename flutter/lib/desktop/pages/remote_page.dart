@@ -80,7 +80,7 @@ class _RemotePageState extends State<RemotePage>
   late RxBool _keyboardEnabled;
   final Map<int, RenderTexture> _renderTextures = {};
 
-  final _blockableOverlayState = BlockableOverlayState();
+  var _blockableOverlayState = BlockableOverlayState();
 
   final FocusNode _rawKeyFocusNode = FocusNode(debugLabel: "rawkeyFocusNode");
 
@@ -253,9 +253,9 @@ class _RemotePageState extends State<RemotePage>
           onEnterOrLeaveImageCleaner: () => _onEnterOrLeaveImage4Toolbar = null,
           setRemoteState: setState,
         );
-    return Scaffold(
-      backgroundColor: Theme.of(context).colorScheme.background,
-      body: Stack(
+
+    bodyWidget() {
+      return Stack(
         children: [
           Container(
               color: Colors.black,
@@ -281,7 +281,7 @@ class _RemotePageState extends State<RemotePage>
                   },
                   inputModel: _ffi.inputModel,
                   child: getBodyForDesktop(context))),
-          Obx(() => Stack(
+              Stack(
                 children: [
                   _ffi.ffiModel.pi.isSet.isTrue &&
                           _ffi.ffiModel.waitForFirstImage.isTrue
@@ -298,9 +298,34 @@ class _RemotePageState extends State<RemotePage>
                       : remoteToolbar(context),
                   _ffi.ffiModel.pi.isSet.isFalse ? emptyOverlay() : Offstage(),
                 ],
-              )),
+              ),
         ],
-      ),
+      );
+    }
+
+    return Scaffold(
+      backgroundColor: Theme.of(context).colorScheme.background,
+      body: Obx(() {
+        final imageReady = _ffi.ffiModel.pi.isSet.isTrue &&
+            _ffi.ffiModel.waitForFirstImage.isFalse;
+        if (imageReady) {
+          // `dismissAll()` is to ensure that the state is clean.
+          // It's ok to call dismissAll() here.
+          _ffi.dialogManager.dismissAll();
+          // Recreate the block state to refresh the state.
+          _blockableOverlayState = BlockableOverlayState();
+          _blockableOverlayState.applyFfi(_ffi);
+          // Block the whole `bodyWidget()` when dialog shows.
+          return BlockableOverlay(
+            underlying: bodyWidget(),
+            state: _blockableOverlayState,
+          );
+        } else {
+          // `_blockableOverlayState` is not recreated here.
+          // The toolbar's block state won't work properly when reconnecting, but that's okay.
+          return bodyWidget();
+        }
+      }),
     );
   }
 
