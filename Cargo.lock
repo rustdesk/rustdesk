@@ -4890,7 +4890,7 @@ dependencies = [
 [[package]]
 name = "rdev"
 version = "0.5.0-2"
-source = "git+https://github.com/fufesou/rdev#2e8221d653f4995c831ad52966e79a514516b1fa"
+source = "git+https://github.com/fufesou/rdev?branch=master#339b2a334ba273afebb7e27fb76984e620fc76e5"
 dependencies = [
  "cocoa",
  "core-foundation",
@@ -4914,7 +4914,7 @@ dependencies = [
 [[package]]
 name = "rdev"
 version = "0.5.0-2"
-source = "git+https://github.com/mcfans/rdev#97f63d5bc51bb2387d3f2664d3127640e492c9e5"
+source = "git+https://github.com/fufesou/rdev#2e8221d653f4995c831ad52966e79a514516b1fa"
 dependencies = [
  "cocoa",
  "core-foundation",
@@ -5220,7 +5220,7 @@ dependencies = [
  "os-version",
  "pam",
  "parity-tokio-ipc",
- "rdev 0.5.0-2 (git+https://github.com/mcfans/rdev)",
+ "rdev 0.5.0-2 (git+https://github.com/fufesou/rdev?branch=master)",
  "repng",
  "reqwest",
  "ringbuf",
