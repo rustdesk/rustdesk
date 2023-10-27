@@ -190,14 +190,14 @@ class _PeersViewState extends State<_PeersView> with WindowListener {
                 child: widget.peerCardBuilder(peer),
               );
               final windowWidth = MediaQuery.of(context).size.width;
-              final model = Provider.of<PeerTabModel>(context);
+              final currentTab = gFFI.peerTabModel.currentTab;
               final hideAbTagsPanel = bind.mainGetLocalOption(key: "hideAbTagsPanel").isNotEmpty;
               return isDesktop
                   ? Obx(
                       () => SizedBox(
                         width: peerCardUiType.value != PeerUiType.list
                             ? 220
-                            : model.currentTab == PeerTabIndex.group.index || (model.currentTab == PeerTabIndex.ab.index && !hideAbTagsPanel)
+                            : currentTab == PeerTabIndex.group.index || (currentTab == PeerTabIndex.ab.index && !hideAbTagsPanel)
                               ? windowWidth - 390 :
                                 windowWidth - 227,
                         height:
