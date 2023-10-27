@@ -53,9 +53,10 @@ use std::{
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use system_shutdown;
 
+#[cfg(all(windows, feature = "virtual_display_driver"))]
+use crate::virtual_display_manager;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use std::collections::HashSet;
-
 pub type Sender = mpsc::UnboundedSender<(Instant, Arc<Message>)>;
 
 lazy_static::lazy_static! {
@@ -1031,9 +1032,10 @@ impl Connection {
             pi.hostname = DEVICE_NAME.lock().unwrap().clone();
             pi.platform = "Android".into();
         }
+        #[cfg(any(target_os = "linux", target_os = "windows"))]
+        let mut platform_additions = serde_json::Map::new();
         #[cfg(target_os = "linux")]
         {
-            let mut platform_additions = serde_json::Map::new();
             if crate::platform::current_is_wayland() {
                 platform_additions.insert("is_wayland".into(), json!(true));
             }
@@ -1044,10 +1046,25 @@ impl Connection {
                     platform_additions.insert("headless".into(), json!(true));
                 }
             }
-            if !platform_additions.is_empty() {
-                pi.platform_additions =
-                    serde_json::to_string(&platform_additions).unwrap_or("".into());
+        }
+        #[cfg(target_os = "windows")]
+        {
+            platform_additions.insert(
+                "is_installed".into(),
+                json!(crate::platform::is_installed()),
+            );
+            #[cfg(feature = "virtual_display_driver")]
+            if crate::platform::is_installed() {
+                let virtual_displays = virtual_display_manager::get_virtual_displays();
+                if !virtual_displays.is_empty() {
+                    platform_additions.insert("virtual_displays".into(), json!(&virtual_displays));
+                }
             }
+        }
+
+        #[cfg(any(target_os = "linux", target_os = "windows"))]
+        if !platform_additions.is_empty() {
+            pi.platform_additions = serde_json::to_string(&platform_additions).unwrap_or("".into());
         }
 
         pi.encoding = Some(scrap::codec::Encoder::supported_encoding()).into();
@@ -1962,6 +1979,10 @@ impl Connection {
                         let set = displays.set.iter().map(|d| *d as usize).collect::<Vec<_>>();
                         self.capture_displays(&add, &sub, &set).await;
                     }
+                    #[cfg(all(windows, feature = "virtual_display_driver"))]
+                    Some(misc::Union::ToggleVirtualDisplay(t)) => {
+                        self.toggle_virtual_display(t).await;
+                    }
                     Some(misc::Union::ChatMessage(c)) => {
                         self.send_to_cm(ipc::Data::ChatMessage { text: c.text });
                         self.chat_unanswered = true;
@@ -2214,6 +2235,25 @@ impl Connection {
         }
     }
 
+    #[cfg(all(windows, feature = "virtual_display_driver"))]
+    async fn toggle_virtual_display(&mut self, t: ToggleVirtualDisplay) {
+        if t.on {
+            if let Err(e) = virtual_display_manager::plug_in_index_modes(t.display as _, Vec::new())
+            {
+                log::error!("Failed to plug in virtual display: {}", e);
+            }
+        } else {
+            let indices = if t.display == -1 {
+                virtual_display_manager::get_virtual_displays()
+            } else {
+                vec![t.display as _]
+            };
+            if let Err(e) = virtual_display_manager::plug_out_peer_request(&indices) {
+                log::error!("Failed to plug out virtual display {:?}: {}", &indices, e);
+            }
+        }
+    }
+
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     fn change_resolution(&mut self, r: &Resolution) {
         if self.keyboard {
@@ -2222,7 +2262,7 @@ impl Connection {
                     let name = display.name();
                     #[cfg(all(windows, feature = "virtual_display_driver"))]
                     if let Some(_ok) =
-                        crate::virtual_display_manager::change_resolution_if_is_virtual_display(
+                        virtual_display_manager::change_resolution_if_is_virtual_display(
                             &name,
                             r.width as _,
                             r.height as _,
@@ -2918,7 +2958,7 @@ mod raii {
             }
             #[cfg(all(windows, feature = "virtual_display_driver"))]
             if active_conns_lock.is_empty() {
-                display_service::try_plug_out_virtual_display();
+                let _ = virtual_display_manager::reset_all();
             }
             #[cfg(all(windows))]
             if active_conns_lock.is_empty() {

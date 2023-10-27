@@ -248,6 +248,8 @@ class FfiModel with ChangeNotifier {
         handlePeerInfo(evt, peerId, false);
       } else if (name == 'sync_peer_info') {
         handleSyncPeerInfo(evt, sessionId, peerId);
+      } else if (name == 'sync_platform_additions') {
+        handlePlatformAdditions(evt, sessionId, peerId);
       } else if (name == 'connection_ready') {
         setConnectionType(
             peerId, evt['secure'] == 'true', evt['direct'] == 'true');
@@ -893,6 +895,33 @@ class FfiModel with ChangeNotifier {
       }
     }
     notifyListeners();
+  }
+
+  handlePlatformAdditions(
+      Map<String, dynamic> evt, SessionID sessionId, String peerId) async {
+    final updateData = evt['platform_additions'] as String?;
+    if (updateData == null) {
+      return;
+    }
+
+    if (updateData.isEmpty) {
+      _pi.platformAdditions.remove(kPlatformAdditionsVirtualDisplays);
+    } else {
+      try {
+        final updateJson = json.decode(updateData);
+        for (final key in updateJson.keys) {
+          _pi.platformAdditions[key] = updateJson[key];
+        }
+        if (!updateJson.contains(kPlatformAdditionsVirtualDisplays)) {
+          _pi.platformAdditions.remove(kPlatformAdditionsVirtualDisplays);
+        }
+      } catch (e) {
+        debugPrint('Failed to decode platformAdditions $e');
+      }
+    }
+
+    cachedPeerData.peerInfo['platform_additions'] =
+        json.encode(_pi.platformAdditions);
   }
 
   // Directly switch to the new display without waiting for the response.
@@ -2300,8 +2329,13 @@ class PeerInfo with ChangeNotifier {
   RxInt displaysCount = 0.obs;
   RxBool isSet = false.obs;
 
-  bool get isWayland => platformAdditions['is_wayland'] == true;
-  bool get isHeadless => platformAdditions['headless'] == true;
+  bool get isWayland => platformAdditions[kPlatformAdditionsIsWayland] == true;
+  bool get isHeadless => platformAdditions[kPlatformAdditionsHeadless] == true;
+  bool get isInstalled =>
+      platform != kPeerPlatformWindows ||
+      platformAdditions[kPlatformAdditionsIsInstalled] == true;
+  List<int> get virtualDisplays => List<int>.from(
+      platformAdditions[kPlatformAdditionsVirtualDisplays] ?? []);
 
   bool get isSupportMultiDisplay => isDesktop && isSupportMultiUiSession;
 

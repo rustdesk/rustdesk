@@ -32,7 +32,7 @@ import 'package:flutter_hbb/common/widgets/peer_card.dart';
           for (var peer in peerData) {
             if (peer is Map && peer.containsKey("id")) {
               String id = peer["id"];
-              if (id != null && !combinedPeers.containsKey(id)) {
+              if (!combinedPeers.containsKey(id)) {
                 combinedPeers[id] = peer;
               }
             }
