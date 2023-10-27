@@ -216,6 +216,11 @@ impl<T: InvokeUiSession> Session<T> {
 
     pub fn get_keyboard_mode(&self) -> String {
         let mode = self.lc.read().unwrap().keyboard_mode.clone();
+        if self.peer_platform() == crate::PLATFORM_ANDROID {
+            if mode == "map" {
+                return "translate".to_string();
+            }
+        }
         if ["map", "translate", "legacy"].contains(&(&mode as &str)) {
             mode
         } else {
