@@ -190,7 +190,13 @@ class _PeersViewState extends State<_PeersView> with WindowListener {
                 child: widget.peerCardBuilder(peer),
               );
               final windowWidth = MediaQuery.of(context).size.width;
-              final currentTab = gFFI.peerTabModel.currentTab;
+              // `Provider.of<PeerTabModel>(context)` will causes infinete loop.
+              // Because `gFFI.peerTabModel.setCurrentTabCachedPeers(peers)` will trigger `notifyListeners()`.
+              //
+              // No need to listen the currentTab change event.
+              // Because the currentTab change event will trigger the peers change event,
+              // and the peers change event will trigger _buildPeersView().
+              final currentTab = Provider.of<PeerTabModel>(context, listen: false).currentTab;
               final hideAbTagsPanel = bind.mainGetLocalOption(key: "hideAbTagsPanel").isNotEmpty;
               return isDesktop
                   ? Obx(
