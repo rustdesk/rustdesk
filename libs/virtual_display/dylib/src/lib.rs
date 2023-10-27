@@ -1,8 +1,9 @@
 #[cfg(windows)]
 pub mod win10;
+use hbb_common::ResultType;
 #[cfg(windows)]
-use hbb_common::lazy_static;
-use hbb_common::{bail, ResultType};
+use hbb_common::{bail, lazy_static};
+#[cfg(windows)]
 use std::path::PathBuf;
 
 #[cfg(windows)]
@@ -33,12 +34,9 @@ pub fn download_driver() -> ResultType<()> {
     Ok(())
 }
 
+#[cfg(windows)]
 fn get_driver_install_abs_path() -> ResultType<PathBuf> {
-    #[cfg(windows)]
     let install_path = win10::DRIVER_INSTALL_PATH;
-    #[cfg(not(windows))]
-    bail!("Not implemented for non-windows");
-
     let exe_file = std::env::current_exe()?;
     let abs_path = match exe_file.parent() {
         Some(cur_dir) => cur_dir.join(install_path),
@@ -55,8 +53,6 @@ fn get_driver_install_abs_path() -> ResultType<PathBuf> {
 
 #[no_mangle]
 pub fn install_update_driver(_reboot_required: &mut bool) -> ResultType<()> {
-    let abs_path = get_driver_install_abs_path()?;
-
     #[cfg(windows)]
     unsafe {
         {
@@ -66,6 +62,7 @@ pub fn install_update_driver(_reboot_required: &mut bool) -> ResultType<()> {
                 bail!("{}", e);
             }
 
+            let abs_path = get_driver_install_abs_path()?;
             let full_install_path: Vec<u16> = abs_path
                 .to_string_lossy()
                 .as_ref()
@@ -88,11 +85,10 @@ pub fn install_update_driver(_reboot_required: &mut bool) -> ResultType<()> {
 
 #[no_mangle]
 pub fn uninstall_driver(_reboot_required: &mut bool) -> ResultType<()> {
-    let abs_path = get_driver_install_abs_path()?;
-
     #[cfg(windows)]
     unsafe {
         {
+            let abs_path = get_driver_install_abs_path()?;
             let full_install_path: Vec<u16> = abs_path
                 .to_string_lossy()
                 .as_ref()
