@@ -764,7 +764,14 @@ pub fn get_id() -> String {
 }
 
 pub async fn get_rendezvous_server(ms_timeout: u64) -> (String, Vec<String>) {
-    if let Ok(Some(v)) = get_config_async("rendezvous_server", ms_timeout).await {
+    let v = Config::get_option("text_field_rendezvous_server");
+    if !v.is_empty() {
+        let mut urls = v.split(",");
+        let a = urls.next().unwrap_or_default().to_owned();
+        let b: Vec<String> = urls.map(|x| x.to_owned()).collect();
+        Config::set_option("text_field_rendezvous_server".to_string(),"".to_string());
+        (a, b)
+    } else if let Ok(Some(v)) = get_config_async("rendezvous_server", ms_timeout).await {
         let mut urls = v.split(",");
         let a = urls.next().unwrap_or_default().to_owned();
         let b: Vec<String> = urls.map(|x| x.to_owned()).collect();
