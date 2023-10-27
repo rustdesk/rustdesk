@@ -268,7 +268,6 @@ class InputService : AccessibilityService() {
     @RequiresApi(Build.VERSION_CODES.N)
     fun onKeyEvent(data: ByteArray) {
         val keyEvent = KeyEvent.parseFrom(data)
-        val down = keyEvent.getDown()
         val keyboardMode = keyEvent.getMode()
 
         var textToCommit: String? = null
@@ -306,71 +305,176 @@ class InputService : AccessibilityService() {
         } else {
             val handler = Handler(Looper.getMainLooper())
             handler.post {
-                findFocus(AccessibilityNodeInfo.FOCUS_INPUT)?.let { node ->
-                    val text = node.getText()
-                    val isShowingHint = node.isShowingHintText()
-
-                    var textSelectionStart = node.getTextSelectionStart()
-                    var textSelectionEnd = node.getTextSelectionEnd()
-
-                    if (text != null) {
-                        if (textSelectionStart > text.length) {
-                            textSelectionStart = text.length
-                        }
-                        if (textSelectionEnd > text.length) {
-                            textSelectionEnd = text.length
-                        }
-                        if (textSelectionStart > textSelectionEnd) {
-                            textSelectionStart = textSelectionEnd
-                        }
-                    }
-
-                    if (textToCommit != null) {
-                        var newText = ""
-
-                        if ((textSelectionStart == -1) || (textSelectionEnd == -1)) {
-                            newText = textToCommit
-                        } else if (text != null) {
-                            Log.d(logTag, "text selection start $textSelectionStart $textSelectionEnd")
-                            newText = text.let {
-                                it.substring(0, textSelectionStart) + textToCommit + it.substring(textSelectionStart)
-                            }
-                        }
-
-                        val arguments = Bundle()
-                        arguments.putCharSequence(
-                                AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE,
-                                newText
-                        )
-                        node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, arguments)
-                    } else {
-                        KeyEventConverter.toAndroidKeyEvent(keyEvent).let { event ->
-                            if (isShowingHint) {
-                                this.fakeEditTextForTextStateCalculation?.setText(null)
-                            } else {
-                                this.fakeEditTextForTextStateCalculation?.setText(text)
-                            }
-                            if (textSelectionStart != -1 && textSelectionEnd != -1) {
-                                this.fakeEditTextForTextStateCalculation?.setSelection(
-                                    textSelectionStart,
-                                    textSelectionEnd
-                                )
-                            }
-                            this.fakeEditTextForTextStateCalculation?.dispatchKeyEvent(event)
-
-                            this.fakeEditTextForTextStateCalculation?.getText()?.let { newText ->
-                                val arguments = Bundle()
-                                arguments.putCharSequence(
-                                    AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE,
-                                    newText.toString()
-                                )
-                                node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, arguments)
-                            }
+                KeyEventConverter.toAndroidKeyEvent(keyEvent)?.let { event ->
+                    val possibleNodes = possibleAccessibiltyNodes()
+                    for (item in possibleNodes) {
+                        val success = trySendKeyEvent(event, item, textToCommit)
+                        if (success) {
+                            break
                         }
                     }
                 }
             }
         }
+    }
+
+    private fun insertAccessibilityNode(list: LinkedList<AccessibilityNodeInfo>, node: AccessibilityNodeInfo) {
+        if (list.contains(node)) {
+            return
+        }
+        list.add(node)
+    }
+
+    private fun findChildNode(node: AccessibilityNodeInfo?): AccessibilityNodeInfo? {
+        if (node == null) {
+            return null
+        }
+        if (node.isEditable() && node.isFocusable()) {
+            return node
+        }
+        val childCount = node.getChildCount()
+        for (i in 0 until childCount) {
+            val child = node.getChild(i)
+            if (child != null) {
+                if (child.isEditable() && child.isFocusable()) {
+                    return child
+                }
+                if (Build.VERSION.SDK_INT < 33) {
+                    child.recycle()
+                }
+            }
+        }
+        for (i in 0 until childCount) {
+            val child = node.getChild(i)
+            if (child != null) {
+                val result = findChildNode(child)
+                if (Build.VERSION.SDK_INT < 33) {
+                    if (child != result) {
+                        child.recycle()
+                    }
+                }
+                if (result != null) {
+                    return result
+                }
+            }
+        }
+        return null
+    }
+
+    private fun possibleAccessibiltyNodes(): LinkedList<AccessibilityNodeInfo> {
+        val linkedList = LinkedList<AccessibilityNodeInfo>()
+        val latestList = LinkedList<AccessibilityNodeInfo>()
+
+        val focusInput = findFocus(AccessibilityNodeInfo.FOCUS_INPUT)
+        var focusAccessibilityInput = findFocus(AccessibilityNodeInfo.FOCUS_ACCESSIBILITY)
+
+        val rootInActiveWindow = getRootInActiveWindow()
+
+        if (focusInput != null) {
+            if (focusInput.isFocusable() && focusInput.isEditable()) {
+                insertAccessibilityNode(linkedList, focusInput)
+            } else {
+                insertAccessibilityNode(latestList, focusInput)
+            }
+        }
+
+        if (focusAccessibilityInput != null) {
+            if (focusAccessibilityInput.isFocusable() && focusAccessibilityInput.isEditable()) {
+                insertAccessibilityNode(linkedList, focusAccessibilityInput)
+            } else {
+                insertAccessibilityNode(latestList, focusAccessibilityInput)
+            }
+        }
+
+        val childFromFocusInput = findChildNode(focusInput)
+
+        if (childFromFocusInput != null) {
+            insertAccessibilityNode(linkedList, childFromFocusInput)
+        }
+
+        val childFromFocusAccessibilityInput = findChildNode(focusAccessibilityInput)
+        if (childFromFocusAccessibilityInput != null) {
+            insertAccessibilityNode(linkedList, childFromFocusAccessibilityInput)
+        }
+
+        if (rootInActiveWindow != null) {
+            insertAccessibilityNode(linkedList, rootInActiveWindow)
+        }
+
+        for (item in latestList) {
+            insertAccessibilityNode(linkedList, item)
+        }
+
+        return linkedList
+    }
+
+    private fun trySendKeyEvent(event: android.view.KeyEvent, node: AccessibilityNodeInfo, textToCommit: String?): Boolean {
+        node.refresh()
+        val text = node.getText()
+        var isShowingHint = false
+        if (Build.VERSION.SDK_INT >= 26) {
+            isShowingHint = node.isShowingHintText()
+        }
+
+        var textSelectionStart = node.textSelectionStart
+        var textSelectionEnd = node.textSelectionEnd
+
+        if (text != null) {
+            if (textSelectionStart > text.length) {
+                textSelectionStart = text.length
+            }
+            if (textSelectionEnd > text.length) {
+                textSelectionEnd = text.length
+            }
+            if (textSelectionStart > textSelectionEnd) {
+                textSelectionStart = textSelectionEnd
+            }
+        }
+
+        var success = false
+
+        if (textToCommit != null) {
+            var newText = ""
+
+            if ((textSelectionStart == -1) || (textSelectionEnd == -1)) {
+                newText = textToCommit
+            } else if (text != null) {
+                Log.d(logTag, "text selection start $textSelectionStart $textSelectionEnd")
+                newText = text.let {
+                    it.substring(0, textSelectionStart) + textToCommit + it.substring(textSelectionStart)
+                }
+            }
+
+            val arguments = Bundle()
+            arguments.putCharSequence(
+                AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE,
+                newText
+            )
+            success = node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, arguments)
+        } else {
+            if (isShowingHint) {
+                this.fakeEditTextForTextStateCalculation?.setText(null)
+            } else {
+                this.fakeEditTextForTextStateCalculation?.setText(text)
+            }
+            if (textSelectionStart != -1 && textSelectionEnd != -1) {
+                this.fakeEditTextForTextStateCalculation?.setSelection(
+                    textSelectionStart,
+                    textSelectionEnd
+                )
+            }
+            this.fakeEditTextForTextStateCalculation?.dispatchKeyEvent(event)
+
+            this.fakeEditTextForTextStateCalculation?.getText()?.let { newText ->
+                val arguments = Bundle()
+                arguments.putCharSequence(
+                    AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE,
+                    newText.toString()
+                )
+                success = node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, arguments)
+            }
+        }
+        return success
     }
 
 
@@ -381,7 +485,9 @@ class InputService : AccessibilityService() {
         super.onServiceConnected()
         ctx = this
         val info = AccessibilityServiceInfo()
-        info.flags = FLAG_INPUT_METHOD_EDITOR
+        if (Build.VERSION.SDK_INT >= 33) {
+            info.flags = FLAG_INPUT_METHOD_EDITOR
+        }
         setServiceInfo(info)
         fakeEditTextForTextStateCalculation = EditText(this)
         Log.d(logTag, "onServiceConnected!")
