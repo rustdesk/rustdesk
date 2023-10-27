@@ -147,6 +147,31 @@ class _ConnectionPageState extends State<ConnectionPage>
   /// Connects to the selected peer.
   void onConnect({bool isFileTransfer = false}) {
     var id = _idController.id;
+    if (id.contains('@')) {
+      var input = id;
+      id = id.split('@')[0];
+
+      // Ex: 143242314@164.432.413?key=32432432Efdsf34 or 143242314@public
+      RegExp regex = RegExp(r'(\d+)@([^:]+)(?::(\d+))?(?:\?key=(\d+))?');
+      Match? match = regex.firstMatch(input);
+
+      if (match != null) {
+        // String id = match.group(1)!;
+        String host = match.group(2)!;
+        String? port = match.group(3);
+        String? key = match.group(4);
+
+        if (host == "public"){
+          host = "rs-ny.rustdesk.com";
+          port = "21116";
+        }
+        var sValue = host + ":" + port!;
+        debugPrint('text_field_rendezvous_server: $sValue key: $key');
+        bind.mainSetOption(key: "text_field_rendezvous_server", value: sValue);
+      } else {
+        debugPrint('regex match failed');
+      }
+    }
     connect(context, id, isFileTransfer: isFileTransfer);
   }
 
