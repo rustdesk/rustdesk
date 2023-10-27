@@ -26,22 +26,19 @@ impl ContextSend {
     pub fn enable(enabled: bool) {
         let mut lock = CONTEXT_SEND.addr.lock().unwrap();
         if enabled {
-            if lock.is_none() {
-                match crate::create_cliprdr_context(
-                    true,
-                    false,
-                    CLIPBOARD_RESPONSE_WAIT_TIMEOUT_SECS,
-                ) {
-                    Ok(context) => {
-                        log::info!("clipboard context for file transfer created.");
-                        *lock = Some(context)
-                    }
-                    Err(err) => {
-                        log::error!(
-                            "create clipboard context for file transfer: {}",
-                            err.to_string()
-                        );
-                    }
+            if lock.is_some() {
+                return;
+            }
+            match crate::create_cliprdr_context(true, false, CLIPBOARD_RESPONSE_WAIT_TIMEOUT_SECS) {
+                Ok(context) => {
+                    log::info!("clipboard context for file transfer created.");
+                    *lock = Some(context)
+                }
+                Err(err) => {
+                    log::error!(
+                        "create clipboard context for file transfer: {}",
+                        err.to_string()
+                    );
                 }
             }
         } else if let Some(_clp) = lock.take() {

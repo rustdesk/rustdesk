@@ -1073,7 +1073,6 @@ impl<T: InvokeUiSession> Remote<T> {
                     }
                     Some(login_response::Union::PeerInfo(pi)) => {
                         self.handler.handle_peer_info(pi);
-                        #[cfg(not(feature = "flutter"))]
                         self.check_clipboard_file_context();
                         if !(self.handler.is_file_transfer() || self.handler.is_port_forward()) {
                             #[cfg(feature = "flutter")]
@@ -1703,7 +1702,6 @@ impl<T: InvokeUiSession> Remote<T> {
         true
     }
 
-    #[cfg(not(feature = "flutter"))]
     fn check_clipboard_file_context(&self) {
         #[cfg(any(target_os = "windows", target_os = "linux"))]
         {
@@ -1716,7 +1714,7 @@ impl<T: InvokeUiSession> Remote<T> {
     #[cfg(any(target_os = "windows", target_os = "linux"))]
     fn handle_cliprdr_msg(&self, clip: hbb_common::message_proto::Cliprdr) {
         log::debug!("handling cliprdr msg from server peer");
-        #[cfg(all(feature = "flutter", not(target_os = "linux")))]
+        #[cfg(feature = "flutter")]
         if let Some(hbb_common::message_proto::cliprdr::Union::FormatList(_)) = &clip.union {
             if self.client_conn_id
                 != clipboard::get_client_conn_id(&crate::flutter::get_cur_peer_id()).unwrap_or(0)

@@ -1791,6 +1791,7 @@ impl Connection {
                 {
                     #[cfg(any(target_os = "windows", target_os = "linux"))]
                     if let Some(clip) = msg_2_clip(_clip) {
+                        log::debug!("got clipfile from client peer");
                         self.send_to_cm(ipc::Data::ClipboardFile(clip))
                     }
                 }

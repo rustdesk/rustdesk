@@ -575,6 +575,11 @@ pub async fn start_ipc<T: InvokeUiCM>(cm: ConnectionManager<T>) {
         }
     });
 
+    log::debug!(
+        "start_ipc enable context_send: {}",
+        Config::get_option("enable-file-transfer").is_empty()
+    );
+
     #[cfg(any(target_os = "windows", target_os = "linux"))]
     ContextSend::enable(Config::get_option("enable-file-transfer").is_empty());
 

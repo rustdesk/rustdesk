@@ -25,33 +25,30 @@ pub fn create_cliprdr_context(
     _enable_others: bool,
     response_wait_timeout_secs: u32,
 ) -> crate::ResultType<Box<dyn crate::CliprdrServiceContext>> {
-    use hbb_common::log;
+    use std::{fs::Permissions, os::unix::prelude::PermissionsExt};
+
+    use hbb_common::{config::APP_NAME, log};
 
     if !enable_files {
         return Ok(Box::new(DummyCliprdrContext {}) as Box<_>);
     }
 
     let timeout = std::time::Duration::from_secs(response_wait_timeout_secs as u64);
-    let mut tmp_path = std::env::temp_dir();
-    tmp_path.push("rustdesk-cliprdr");
+
+    let app_name = APP_NAME.read().unwrap().clone();
+
+    let mnt_path = format!("/tmp/{}/{}", app_name, "cliprdr");
+
+    // this function must be called after the main IPC is up
+    std::fs::create_dir(&mnt_path).ok();
+    std::fs::set_permissions(&mnt_path, Permissions::from_mode(0o777)).ok();
 
     log::info!("clear previously mounted cliprdr FUSE");
-    if let Err(e) = std::process::Command::new("umount").arg(&tmp_path).status() {
-        log::warn!("umount {:?} may fail: {:?}", tmp_path, e);
+    if let Err(e) = std::process::Command::new("umount").arg(&mnt_path).status() {
+        log::warn!("umount {:?} may fail: {:?}", mnt_path, e);
     }
 
-    let rd_mnt = if !tmp_path.exists() {
-        log::info!("create mount point: {}", tmp_path.display());
-        std::fs::create_dir_all(tmp_path.clone())?;
-        tmp_path
-    } else if !tmp_path.is_dir() {
-        log::error!("{} is occupied and is not a directory", tmp_path.display());
-        return Err(CliprdrError::CliprdrInit.into());
-    } else {
-        tmp_path
-    };
-
-    let linux_ctx = linux::ClipboardContext::new(timeout, rd_mnt)?;
+    let linux_ctx = linux::ClipboardContext::new(timeout, mnt_path.parse().unwrap())?;
     log::debug!("start cliprdr FUSE");
     linux_ctx.run().expect("failed to start cliprdr FUSE");
 
