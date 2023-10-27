@@ -55,12 +55,12 @@ import 'package:flutter_hbb/common/widgets/peer_card.dart';
   }
 
  class AutocompletePeerTile extends StatefulWidget {
-  final IDTextEditingController idController;
+  final VoidCallback onSelect;
   final Peer peer;
 
   const AutocompletePeerTile({
     Key? key,
-    required this.idController,
+    required this.onSelect,
     required this.peer,
   }) : super(key: key);
 
@@ -85,12 +85,7 @@ class _AutocompletePeerTileState extends State<AutocompletePeerTile>{
           fontSize: 11,
           color: Theme.of(context).textTheme.titleLarge?.color?.withOpacity(0.6));
         final child = GestureDetector(
-          onTap: () {
-            setState(() {
-              widget.idController.id = widget.peer.id;
-              FocusScope.of(context).unfocus();
-            });
-          },
+          onTap: () => widget.onSelect(),
           child:
         Container(
           height: 42,
