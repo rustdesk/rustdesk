@@ -471,6 +471,7 @@ impl InvokeUiSession for FlutterHandler {
                     "codec_format",
                     &status.codec_format.map_or(NULL, |it| it.to_string()),
                 ),
+                ("chroma", &status.chroma.map_or(NULL, |it| it.to_string())),
             ],
         );
     }

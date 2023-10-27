@@ -17,6 +17,11 @@ message YUV {
   int32 stride = 2;
 }
 
+enum Chroma {
+  I420 = 0;
+  I444 = 1;
+}
+
 message VideoFrame {
   oneof union {
     EncodedVideoFrames vp9s = 6;
@@ -83,11 +88,20 @@ message Features {
   bool privacy_mode = 1;
 }
 
+message CodecAbility {
+  bool vp8 = 1;
+  bool vp9 = 2;
+  bool av1 = 3;
+  bool h264 = 4;
+  bool h265 = 5;
+}
+
 message SupportedEncoding {
   bool h264 = 1;
   bool h265 = 2;
   bool vp8 = 3;
   bool av1 = 4;
+  CodecAbility i444 = 5;
 }
 
 message PeerInfo {
@@ -541,6 +555,8 @@ message SupportedDecoding {
   PreferCodec prefer = 4;
   int32 ability_vp8 = 5;
   int32 ability_av1 = 6;
+  CodecAbility i444 = 7;
+  Chroma prefer_chroma = 8;
 }
 
 message OptionMessage {

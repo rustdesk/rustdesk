@@ -27,45 +27,44 @@ class DraggableChatWindow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return isIOS
-    ? IOSDraggable (
-      position: position,
-      chatModel: chatModel,
-      width: width,
-      height: height,
-      builder: (context) {
-    return Column(
-      children: [
-        _buildMobileAppBar(context),
-        Expanded(
-          child: ChatPage(chatModel: chatModel),
-              ),
-            ],
-          );
-        },
-      )
-    : Draggable(
-        checkKeyboard: true,
-        position: position,
-        width: width,
-        height: height,
-        chatModel: chatModel,
-        builder: (context, onPanUpdate) {
-          final child = 
-              Scaffold(
-                  resizeToAvoidBottomInset: false,
-                  appBar: CustomAppBar(
-                    onPanUpdate: onPanUpdate,
-                    appBar: isDesktop
-                        ? _buildDesktopAppBar(context)
-                        : _buildMobileAppBar(context),
+        ? IOSDraggable(
+            position: position,
+            chatModel: chatModel,
+            width: width,
+            height: height,
+            builder: (context) {
+              return Column(
+                children: [
+                  _buildMobileAppBar(context),
+                  Expanded(
+                    child: ChatPage(chatModel: chatModel),
                   ),
-                  body: ChatPage(chatModel: chatModel),
-                );
-          return Container(
-              decoration:
-                  BoxDecoration(border: Border.all(color: MyTheme.border)),
-              child: child);
-        });
+                ],
+              );
+            },
+          )
+        : Draggable(
+            checkKeyboard: true,
+            position: position,
+            width: width,
+            height: height,
+            chatModel: chatModel,
+            builder: (context, onPanUpdate) {
+              final child = Scaffold(
+                resizeToAvoidBottomInset: false,
+                appBar: CustomAppBar(
+                  onPanUpdate: onPanUpdate,
+                  appBar: isDesktop
+                      ? _buildDesktopAppBar(context)
+                      : _buildMobileAppBar(context),
+                ),
+                body: ChatPage(chatModel: chatModel),
+              );
+              return Container(
+                  decoration:
+                      BoxDecoration(border: Border.all(color: MyTheme.border)),
+                  child: child);
+            });
   }
 
   Widget _buildMobileAppBar(BuildContext context) {
@@ -354,14 +353,14 @@ class _DraggableState extends State<Draggable> {
 }
 
 class IOSDraggable extends StatefulWidget {
-  const IOSDraggable({
-    Key? key,
-    this.position = Offset.zero,
-    this.chatModel,
-    required this.width,
-    required this.height,
-    required this.builder})
-    : super(key: key);
+  const IOSDraggable(
+      {Key? key,
+      this.position = Offset.zero,
+      this.chatModel,
+      required this.width,
+      required this.height,
+      required this.builder})
+      : super(key: key);
 
   final Offset position;
   final ChatModel? chatModel;
@@ -423,7 +422,7 @@ class _IOSDraggableState extends State<IOSDraggable> {
     _lastBottomHeight = bottomHeight;
   }
 
-@override
+  @override
   Widget build(BuildContext context) {
     checkKeyboard();
     return Stack(
@@ -439,12 +438,12 @@ class _IOSDraggableState extends State<IOSDraggable> {
               _chatModel?.setChatWindowPosition(_position);
             },
             child: Material(
-              child:
-            Container(
-              width: _width,
-              height: _height,
-              decoration: BoxDecoration(border: Border.all(color: MyTheme.border)),
-              child: widget.builder(context),
+              child: Container(
+                width: _width,
+                height: _height,
+                decoration:
+                    BoxDecoration(border: Border.all(color: MyTheme.border)),
+                child: widget.builder(context),
               ),
             ),
           ),
@@ -499,6 +498,7 @@ class QualityMonitor extends StatelessWidget {
                           "${qualityMonitorModel.data.targetBitrate ?? '-'}kb"),
                       _row(
                           "Codec", qualityMonitorModel.data.codecFormat ?? '-'),
+                      _row("Chroma", qualityMonitorModel.data.chroma ?? '-'),
                     ],
                   ),
                 )

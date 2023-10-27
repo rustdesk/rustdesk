@@ -1527,16 +1527,17 @@ pub async fn io_loop<T: InvokeUiSession>(handler: Session<T>, round: u32) {
     let frame_count_map: Arc<RwLock<HashMap<usize, usize>>> = Default::default();
     let frame_count_map_cl = frame_count_map.clone();
     let ui_handler = handler.ui_handler.clone();
-    let (video_sender, audio_sender, video_queue_map, decode_fps_map) = start_video_audio_threads(
-        handler.clone(),
-        move |display: usize, data: &mut scrap::ImageRgb| {
-            let mut write_lock = frame_count_map_cl.write().unwrap();
-            let count = write_lock.get(&display).unwrap_or(&0) + 1;
-            write_lock.insert(display, count);
-            drop(write_lock);
-            ui_handler.on_rgba(display, data);
-        },
-    );
+    let (video_sender, audio_sender, video_queue_map, decode_fps_map, chroma) =
+        start_video_audio_threads(
+            handler.clone(),
+            move |display: usize, data: &mut scrap::ImageRgb| {
+                let mut write_lock = frame_count_map_cl.write().unwrap();
+                let count = write_lock.get(&display).unwrap_or(&0) + 1;
+                write_lock.insert(display, count);
+                drop(write_lock);
+                ui_handler.on_rgba(display, data);
+            },
+        );
 
     let mut remote = Remote::new(
         handler,
@@ -1547,6 +1548,7 @@ pub async fn io_loop<T: InvokeUiSession>(handler: Session<T>, round: u32) {
         sender,
         frame_count_map,
         decode_fps_map,
+        chroma,
     );
     remote.io_loop(&key, &token, round).await;
     remote.sync_jobs_status_to_local().await;

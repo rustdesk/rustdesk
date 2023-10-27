@@ -572,5 +572,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("List", "列表"),
         ("Virtual display", "虚拟显示器"),
         ("Plug out all", "拔出所有"),
+        ("True color(4:4:4)", "真彩模式(4:4:4)"),
     ].iter().cloned().collect();
 }

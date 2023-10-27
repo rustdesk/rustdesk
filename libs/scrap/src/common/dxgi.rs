@@ -1,10 +1,9 @@
-use crate::{common::TraitCapturer, dxgi};
+use crate::{common::TraitCapturer, dxgi, Pixfmt};
 use std::{
     io::{
         self,
         ErrorKind::{NotFound, TimedOut, WouldBlock},
     },
-    ops,
     time::Duration,
 };
 
@@ -15,10 +14,10 @@ pub struct Capturer {
 }
 
 impl Capturer {
-    pub fn new(display: Display, yuv: bool) -> io::Result<Capturer> {
+    pub fn new(display: Display) -> io::Result<Capturer> {
         let width = display.width();
         let height = display.height();
-        let inner = dxgi::Capturer::new(display.0, yuv)?;
+        let inner = dxgi::Capturer::new(display.0)?;
         Ok(Capturer {
             inner,
             width,
@@ -40,13 +39,9 @@ impl Capturer {
 }
 
 impl TraitCapturer for Capturer {
-    fn set_use_yuv(&mut self, use_yuv: bool) {
-        self.inner.set_use_yuv(use_yuv);
-    }
-
     fn frame<'a>(&'a mut self, timeout: Duration) -> io::Result<Frame<'a>> {
         match self.inner.frame(timeout.as_millis() as _) {
-            Ok(frame) => Ok(Frame(frame)),
+            Ok(frame) => Ok(Frame::new(frame, self.height)),
             Err(ref error) if error.kind() == TimedOut => Err(WouldBlock.into()),
             Err(error) => Err(error),
         }
@@ -61,12 +56,31 @@ impl TraitCapturer for Capturer {
     }
 }
 
-pub struct Frame<'a>(pub &'a [u8]);
+pub struct Frame<'a> {
+    data: &'a [u8],
+    stride: Vec<usize>,
+}
 
-impl<'a> ops::Deref for Frame<'a> {
-    type Target = [u8];
-    fn deref(&self) -> &[u8] {
-        self.0
+impl<'a> Frame<'a> {
+    pub fn new(data: &'a [u8], h: usize) -> Self {
+        let stride = data.len() / h;
+        let mut v = Vec::new();
+        v.push(stride);
+        Frame { data, stride: v }
+    }
+}
+
+impl<'a> crate::TraitFrame for Frame<'a> {
+    fn data(&self) -> &[u8] {
+        self.data
+    }
+
+    fn stride(&self) -> Vec<usize> {
+        self.stride.clone()
+    }
+
+    fn pixfmt(&self) -> Pixfmt {
+        Pixfmt::BGRA
     }
 }
 
@@ -134,9 +148,9 @@ impl CapturerMag {
         dxgi::mag::CapturerMag::is_supported()
     }
 
-    pub fn new(origin: (i32, i32), width: usize, height: usize, use_yuv: bool) -> io::Result<Self> {
+    pub fn new(origin: (i32, i32), width: usize, height: usize) -> io::Result<Self> {
         Ok(CapturerMag {
-            inner: dxgi::mag::CapturerMag::new(origin, width, height, use_yuv)?,
+            inner: dxgi::mag::CapturerMag::new(origin, width, height)?,
             data: Vec::new(),
         })
     }
@@ -151,13 +165,9 @@ impl CapturerMag {
 }
 
 impl TraitCapturer for CapturerMag {
-    fn set_use_yuv(&mut self, use_yuv: bool) {
-        self.inner.set_use_yuv(use_yuv)
-    }
-
     fn frame<'a>(&'a mut self, _timeout_ms: Duration) -> io::Result<Frame<'a>> {
         self.inner.frame(&mut self.data)?;
-        Ok(Frame(&self.data))
+        Ok(Frame::new(&self.data, self.inner.get_rect().2))
     }
 
     fn is_gdi(&self) -> bool {

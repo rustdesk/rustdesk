@@ -74,6 +74,7 @@ pub struct Remote<T: InvokeUiSession> {
     elevation_requested: bool,
     fps_control_map: HashMap<usize, FpsControl>,
     decode_fps_map: Arc<RwLock<HashMap<usize, usize>>>,
+    chroma: Arc<RwLock<Option<Chroma>>>,
 }
 
 impl<T: InvokeUiSession> Remote<T> {
@@ -86,6 +87,7 @@ impl<T: InvokeUiSession> Remote<T> {
         sender: mpsc::UnboundedSender<Data>,
         frame_count_map: Arc<RwLock<HashMap<usize, usize>>>,
         decode_fps: Arc<RwLock<HashMap<usize, usize>>>,
+        chroma: Arc<RwLock<Option<Chroma>>>,
     ) -> Self {
         Self {
             handler,
@@ -111,6 +113,7 @@ impl<T: InvokeUiSession> Remote<T> {
             elevation_requested: false,
             fps_control_map: Default::default(),
             decode_fps_map: decode_fps,
+            chroma,
         }
     }
 
@@ -247,9 +250,17 @@ impl<T: InvokeUiSession> Remote<T> {
                                 // Correcting the inaccuracy of status_timer
                                 (k.clone(), (*v as i32) * 1000 / elapsed as i32)
                             }).collect::<HashMap<usize, i32>>();
+                            let chroma = self.chroma.read().unwrap().clone();
+                            let chroma = match chroma {
+                                Some(Chroma::I444) => "4:4:4",
+                                Some(Chroma::I420) => "4:2:0",
+                                None => "-",
+                            };
+                            let chroma = Some(chroma.to_string());
                             self.handler.update_quality_status(QualityStatus {
                                 speed: Some(speed),
                                 fps,
+                                chroma,
                                 ..Default::default()
                             });
                         }

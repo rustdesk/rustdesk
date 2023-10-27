@@ -1,13 +1,13 @@
-use crate::{common::TraitCapturer, x11};
-use std::{io, ops, time::Duration};
+use crate::{common::TraitCapturer, x11, TraitFrame, Pixfmt};
+use std::{io, time::Duration};
 
 pub struct Capturer(x11::Capturer);
 
 pub const IS_CURSOR_EMBEDDED: bool = false;
 
 impl Capturer {
-    pub fn new(display: Display, yuv: bool) -> io::Result<Capturer> {
-        x11::Capturer::new(display.0, yuv).map(Capturer)
+    pub fn new(display: Display) -> io::Result<Capturer> {
+        x11::Capturer::new(display.0).map(Capturer)
     }
 
     pub fn width(&self) -> usize {
@@ -20,21 +20,37 @@ impl Capturer {
 }
 
 impl TraitCapturer for Capturer {
-    fn set_use_yuv(&mut self, use_yuv: bool) {
-        self.0.set_use_yuv(use_yuv);
-    }
-
     fn frame<'a>(&'a mut self, _timeout: Duration) -> io::Result<Frame<'a>> {
-        Ok(Frame(self.0.frame()?))
+        Ok(self.0.frame()?)
     }
 }
 
-pub struct Frame<'a>(pub &'a [u8]);
+pub struct Frame<'a>{
+    pub data: &'a [u8],
+    pub pixfmt:Pixfmt,
+    pub stride:Vec<usize>,
+}
 
-impl<'a> ops::Deref for Frame<'a> {
-    type Target = [u8];
-    fn deref(&self) -> &[u8] {
-        self.0
+impl<'a>  Frame<'a>  {
+    pub fn new(data:&'a [u8], pixfmt:Pixfmt, h:usize) -> Self {
+        let stride = data.len() / h;
+        let mut v = Vec::new();
+        v.push(stride);
+        Self { data, pixfmt, stride: v }
+    }
+}
+
+impl<'a>  TraitFrame for Frame<'a>  {
+    fn data(&self) -> &[u8] {
+        self.data
+    }
+
+    fn stride(&self) -> Vec<usize> {
+        self.stride.clone()
+    }
+
+    fn pixfmt(&self) -> crate::Pixfmt {
+        self.pixfmt
     }
 }
 

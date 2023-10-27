@@ -6,7 +6,7 @@ use std::io::ErrorKind::WouldBlock;
 use std::thread;
 use std::time::Duration;
 
-use scrap::{i420_to_rgb, Capturer, Display, TraitCapturer};
+use scrap::{Capturer, Display, TraitCapturer, TraitFrame};
 
 fn main() {
     let n = Display::all().unwrap().len();
@@ -28,14 +28,14 @@ fn record(i: usize) {
     }
 
     let display = get_display(i);
-    let mut capturer = Capturer::new(display, false).expect("Couldn't begin capture.");
+    let mut capturer = Capturer::new(display).expect("Couldn't begin capture.");
     let (w, h) = (capturer.width(), capturer.height());
 
     loop {
         // Wait until there's a frame.
 
-        let buffer = match capturer.frame(Duration::from_millis(0)) {
-            Ok(buffer) => buffer,
+        let frame = match capturer.frame(Duration::from_millis(0)) {
+            Ok(frame) => frame,
             Err(error) => {
                 if error.kind() == WouldBlock {
                     // Keep spinning.
@@ -46,6 +46,7 @@ fn record(i: usize) {
                 }
             }
         };
+        let buffer = frame.data();
         println!("Captured data len: {}, Saving...", buffer.len());
 
         // Flip the BGRA image into a RGBA image.
@@ -77,14 +78,14 @@ fn record(i: usize) {
 
     drop(capturer);
     let display = get_display(i);
-    let mut capturer = Capturer::new(display, true).expect("Couldn't begin capture.");
+    let mut capturer = Capturer::new(display).expect("Couldn't begin capture.");
     let (w, h) = (capturer.width(), capturer.height());
 
     loop {
         // Wait until there's a frame.
 
-        let buffer = match capturer.frame(Duration::from_millis(0)) {
-            Ok(buffer) => buffer,
+        let frame = match capturer.frame(Duration::from_millis(0)) {
+            Ok(frame) => frame,
             Err(error) => {
                 if error.kind() == WouldBlock {
                     // Keep spinning.
@@ -95,18 +96,28 @@ fn record(i: usize) {
                 }
             }
         };
+        let buffer = frame.data();
         println!("Captured data len: {}, Saving...", buffer.len());
 
-        let mut frame = Default::default();
-        i420_to_rgb(w, h, &buffer, &mut frame);
+        let mut raw = Vec::new();
+        unsafe {
+            scrap::ARGBToRAW(
+                buffer.as_ptr(),
+                frame.stride()[0] as _,
+                (&mut raw).as_mut_ptr(),
+                (w * 3) as _,
+                w as _,
+                h as _,
+            )
+        };
 
         let mut bitflipped = Vec::with_capacity(w * h * 4);
-        let stride = frame.len() / h;
+        let stride = raw.len() / h;
 
         for y in 0..h {
             for x in 0..w {
                 let i = stride * y + 3 * x;
-                bitflipped.extend_from_slice(&[frame[i], frame[i + 1], frame[i + 2], 255]);
+                bitflipped.extend_from_slice(&[raw[i], raw[i + 1], raw[i + 2], 255]);
             }
         }
         let name = format!("screenshot{}_2.png", i);
