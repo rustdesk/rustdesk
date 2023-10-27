@@ -254,6 +254,10 @@ impl InvokeUiSession for SciterHandler {
         );
     }
 
+    fn set_platform_additions(&self, _data: &str) {
+        // Ignore for sciter version.
+    }
+
     fn on_connected(&self, conn_type: ConnType) {
         match conn_type {
             ConnType::RDP => {}

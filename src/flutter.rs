@@ -691,6 +691,13 @@ impl InvokeUiSession for FlutterHandler {
         );
     }
 
+    fn set_platform_additions(&self, data: &str) {
+        self.push_event(
+            "sync_platform_additions",
+            vec![("platform_additions", &data)],
+        )
+    }
+
     fn on_connected(&self, _conn_type: ConnType) {}
 
     fn msgbox(&self, msgtype: &str, title: &str, text: &str, link: &str, retry: bool) {
