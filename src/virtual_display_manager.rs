@@ -140,9 +140,9 @@ pub fn plug_in_index_modes(
 
 pub fn reset_all() -> ResultType<()> {
     let mut manager = VIRTUAL_DISPLAY_MANAGER.lock().unwrap();
-    manager.install_update_driver()?;
-    manager.peer_index_name.clear();
-    manager.headless_index_name = None;
+    if !manager.peer_index_name.is_empty() || manager.headless_index_name.is_some() {
+        manager.install_update_driver()?;
+    }
     Ok(())
 }
 
