@@ -330,7 +330,7 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
         // for tmp use, without real conn id
         let mut write_jobs: Vec<fs::TransferJob> = Vec::new();
 
-        #[cfg(any(target_os = "windows", target_os = "linux"), target_os = "macos")]
+        #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
         let is_authorized = self.cm.is_authorized(self.conn_id);
 
         #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
@@ -512,7 +512,7 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
                             let file_transfer_enabled_peer = self.file_transfer_enabled_peer;
                             let stop = is_stopping_allowed && !(is_clipboard_enabled && file_transfer_enabled && file_transfer_enabled_peer);
                             log::debug!(
-                                "Process clipboard message from cm, stop: {}, is_stopping_allowed: {}, is_clipboard_enabled: {}, file_transfer_enabled: {}, file_transfer_enabled_peer: {}",
+                                "Process clipboard message from clip, stop: {}, is_stopping_allowed: {}, is_clipboard_enabled: {}, file_transfer_enabled: {}, file_transfer_enabled_peer: {}",
                                 stop, is_stopping_allowed, is_clipboard_enabled, file_transfer_enabled, file_transfer_enabled_peer);
                             if stop {
                                 ContextSend::set_is_stopped();

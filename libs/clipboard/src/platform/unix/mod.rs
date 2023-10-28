@@ -19,6 +19,7 @@ use crate::{
 };
 
 use self::local_file::LocalFile;
+#[cfg(target_os = "linux")]
 use self::url::{encode_path_to_uri, parse_plain_uri_list};
 
 use super::fuse::FuseServer;
@@ -33,6 +34,7 @@ pub mod x11;
 pub mod ns_clipboard;
 
 pub mod local_file;
+#[cfg(target_os = "linux")]
 pub mod url;
 
 // not actual format id, just a placeholder

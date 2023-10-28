@@ -1712,7 +1712,7 @@ impl<T: InvokeUiSession> Remote<T> {
         }
     }
 
-    #[cfg(any(target_os = "windows", target_os = "linux"))]
+    #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
     fn handle_cliprdr_msg(&self, clip: hbb_common::message_proto::Cliprdr) {
         log::debug!("handling cliprdr msg from server peer");
         #[cfg(feature = "flutter")]

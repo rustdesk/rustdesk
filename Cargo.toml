@@ -62,7 +62,7 @@ num_cpus = "1.15"
 bytes = { version = "1.4", features = ["serde"] }
 default-net = "0.14"
 wol-rs = "1.0"
-flutter_rust_bridge = { version = "1.75", features = ["uuid"], optional = true}
+flutter_rust_bridge = { version = "=1.75", features = ["uuid"], optional = true}
 errno = "0.3"
 rdev = { git = "https://github.com/fufesou/rdev" }
 url = { version = "2.3", features = ["serde"] }
@@ -157,7 +157,7 @@ winapi = { version = "0.3", features = [ "winnt" ] }
 [build-dependencies]
 cc = "1.0"
 hbb_common = { path = "libs/hbb_common" }
-flutter_rust_bridge_codegen = "1.75"
+flutter_rust_bridge_codegen = "=1.75"
 os-version = "0.2"
 
 [dev-dependencies]

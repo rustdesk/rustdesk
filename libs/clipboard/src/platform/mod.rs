@@ -75,5 +75,5 @@ impl CliprdrServiceContext for DummyCliprdrContext {
 
 // begin of epoch used by microsoft
 // 1601-01-01 00:00:00 + LDAP_EPOCH_DELTA*(100 ns) = 1970-01-01 00:00:00
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 const LDAP_EPOCH_DELTA: u64 = 116444772610000000;
