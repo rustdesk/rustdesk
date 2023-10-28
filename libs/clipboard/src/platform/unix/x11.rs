@@ -122,6 +122,11 @@ impl SysClipboard for X11Clipboard {
         self.stop.store(false, Ordering::Relaxed);
 
         loop {
+            if self.is_stopped() {
+                std::thread::sleep(std::time::Duration::from_millis(100));
+                continue;
+            }
+
             let sth = match self.wait_file_list() {
                 Ok(sth) => sth,
                 Err(e) => {
@@ -130,11 +135,6 @@ impl SysClipboard for X11Clipboard {
                     continue;
                 }
             };
-
-            if self.is_stopped() {
-                std::thread::sleep(std::time::Duration::from_millis(100));
-                continue;
-            }
 
             let Some(paths) = sth else {
                 // just sleep

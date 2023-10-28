@@ -19,7 +19,7 @@ pub fn create_cliprdr_context(
 pub mod fuse;
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 pub mod unix;
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 pub fn create_cliprdr_context(
     enable_files: bool,
     _enable_others: bool,
@@ -48,11 +48,11 @@ pub fn create_cliprdr_context(
         log::warn!("umount {:?} may fail: {:?}", mnt_path, e);
     }
 
-    let linux_ctx = unix::ClipboardContext::new(timeout, mnt_path.parse().unwrap())?;
+    let unix_ctx = unix::ClipboardContext::new(timeout, mnt_path.parse().unwrap())?;
     log::debug!("start cliprdr FUSE");
-    linux_ctx.run().expect("failed to start cliprdr FUSE");
+    unix_ctx.run().expect("failed to start cliprdr FUSE");
 
-    Ok(Box::new(linux_ctx) as Box<_>)
+    Ok(Box::new(unix_ctx) as Box<_>)
 }
 
 struct DummyCliprdrContext {}

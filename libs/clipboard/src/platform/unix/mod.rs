@@ -24,7 +24,13 @@ use self::url::{encode_path_to_uri, parse_plain_uri_list};
 use super::fuse::FuseServer;
 
 #[cfg(not(feature = "wayland"))]
+#[cfg(target_os = "linux")]
+/// clipboard implementation of x11
 pub mod x11;
+
+#[cfg(target_os = "macos")]
+/// clipboard implementation of macos
+pub mod ns_clipboard;
 
 pub mod local_file;
 pub mod url;
@@ -66,6 +72,7 @@ trait SysClipboard: Send + Sync {
     fn get_file_list(&self) -> Vec<PathBuf>;
 }
 
+#[cfg(target_os = "linux")]
 fn get_sys_clipboard(ignore_path: &PathBuf) -> Result<Box<dyn SysClipboard>, CliprdrError> {
     #[cfg(feature = "wayland")]
     {
@@ -73,10 +80,17 @@ fn get_sys_clipboard(ignore_path: &PathBuf) -> Result<Box<dyn SysClipboard>, Cli
     }
     #[cfg(not(feature = "wayland"))]
     {
-        pub use x11::*;
+        use x11::*;
         let x11_clip = X11Clipboard::new(ignore_path)?;
         Ok(Box::new(x11_clip) as Box<_>)
     }
+}
+
+#[cfg(target_os = "macos")]
+fn get_sys_clipboard(ignore_path: &PathBuf) -> Result<Box<dyn SysClipboard>, CliprdrError> {
+    use ns_clipboard::*;
+    let ns_pb = NSPasteboard::new(ignore_path)?;
+    Ok(Box::new(ns_pb) as Box<_>)
 }
 
 #[derive(Debug)]

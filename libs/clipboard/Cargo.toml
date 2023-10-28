@@ -18,12 +18,17 @@ hbb_common = { path = "../hbb_common" }
 parking_lot = {version = "0.12"}
 
 [target.'cfg(any(target_os = "linux", target_os = "macos"))'.dependencies]
-once_cell = "1.18"
-x11rb =  {version = "0.12", features = ["all-extensions"]}
 rand = {version = "0.8"}
 fuser = {version = "0.13"}
 libc = {version = "0.2"}
 dashmap = "5.5"
 percent-encoding = "2.3"
 utf16string = "0.2"
+
+[target.'cfg(target_os = "linux")'.dependencies]
 x11-clipboard = {git="https://github.com/clslaid/x11-clipboard", branch = "feat/store-batch"}
+once_cell = "1.18"
+x11rb =  {version = "0.12", features = ["all-extensions"]}
+
+[target.'cfg(target_os = "macos")'.dependencies]
+cacao = {git="https://github.com/clslaid/cacao", branch = "feat/set-file-urls"}
