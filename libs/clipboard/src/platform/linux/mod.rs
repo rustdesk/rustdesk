@@ -328,6 +328,7 @@ impl ClipboardContext {
     }
 
     pub fn serve(&self, conn_id: i32, msg: ClipboardFile) -> Result<(), CliprdrError> {
+        log::debug!("serve clipboard file from conn: {}", conn_id);
         if self.is_stopped() {
             log::debug!("cliprdr stopped, restart it");
             self.run()?;

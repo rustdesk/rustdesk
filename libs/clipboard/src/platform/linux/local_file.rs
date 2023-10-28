@@ -122,7 +122,7 @@ impl LocalFile {
         let wstr: WString<utf16string::LE> = WString::from(&path);
         let name = wstr.as_bytes();
 
-        log::debug!(
+        log::trace!(
             "put file to list: name_len {}, name {}",
             name.len(),
             &self.name

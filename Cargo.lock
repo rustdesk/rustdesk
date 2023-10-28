@@ -5294,6 +5294,8 @@ dependencies = [
  "winreg 0.11.0",
  "winres",
  "wol-rs",
+ "x11-clipboard",
+ "x11rb 0.12.0",
  "zip",
 ]
 

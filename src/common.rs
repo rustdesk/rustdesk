@@ -11,8 +11,79 @@ pub enum GrabState {
     Exit,
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(any(
+    target_os = "android",
+    target_os = "ios",
+    all(target_os = "linux", not(feature = "wayland"))
+)))]
 pub use arboard::Clipboard as ClipboardContext;
+
+#[cfg(all(target_os = "linux", not(feature = "wayland")))]
+pub struct ClipboardContext {
+    string_setter: x11rb::protocol::xproto::Atom,
+    string_getter: x11rb::protocol::xproto::Atom,
+    text_uri_list: x11rb::protocol::xproto::Atom,
+    clip: x11_clipboard::Clipboard,
+}
+
+#[cfg(all(target_os = "linux", not(feature = "wayland")))]
+impl ClipboardContext {
+    pub fn new() -> Result<Self, String> {
+        log::debug!("create clipboard context");
+        let clip = x11_clipboard::Clipboard::new().map_err(|e| e.to_string())?;
+        let string_getter = clip
+            .getter
+            .get_atom("UTF8_STRING")
+            .map_err(|e| e.to_string())?;
+        let string_setter = clip
+            .setter
+            .get_atom("UTF8_STRING")
+            .map_err(|e| e.to_string())?;
+        let text_uri_list = clip
+            .getter
+            .get_atom("text/uri-list")
+            .map_err(|e| e.to_string())?;
+        log::debug!("clipboard context created");
+        Ok(Self {
+            clip,
+            text_uri_list,
+            string_setter,
+            string_getter,
+        })
+    }
+
+    pub fn get_text(&mut self) -> Result<String, String> {
+        let clip = self.clip.getter.atoms.clipboard;
+        let prop = self.clip.getter.atoms.property;
+        log::trace!("clipboard get text");
+
+        const TIMEOUT: std::time::Duration = std::time::Duration::from_millis(100);
+
+        let text_content = self
+            .clip
+            .load(clip, self.string_getter, prop, TIMEOUT)
+            .map_err(|e| e.to_string())?;
+
+        let file_urls = self.clip.load(clip, self.text_uri_list, prop, TIMEOUT);
+
+        if file_urls.is_err() || file_urls.as_ref().unwrap().is_empty() {
+            log::trace!("clipboard get text, no file urls");
+            String::from_utf8(text_content).map_err(|e| e.to_string())
+        } else {
+            log::trace!("clipboard get text, file urls found");
+            Err("clipboard polluted".to_owned())
+        }
+    }
+
+    pub fn set_text(&mut self, content: String) -> Result<(), String> {
+        let clip = self.clip.setter.atoms.clipboard;
+
+        let value = content.into_bytes();
+        self.clip
+            .store(clip, self.string_setter, value)
+            .map_err(|e| e.to_string())
+    }
+}
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use hbb_common::compress::decompress;
