@@ -24,17 +24,20 @@ else:
 flutter_build_dir_2 = f'flutter/{flutter_build_dir}'
 skip_cargo = False
 
+
 def get_arch() -> str:
     custom_arch = os.environ.get("ARCH")
     if custom_arch is None:
         return "amd64"
     return custom_arch
 
+
 def system2(cmd):
     err = os.system(cmd)
     if err != 0:
         print(f"Error occurred when executing: {cmd}. Exiting.")
         sys.exit(-1)
+
 
 def get_version():
     with open("Cargo.toml", encoding="utf-8") as fh:
@@ -196,9 +199,9 @@ def download_extract_features(features, res_dir):
 
     for (feat, feat_info) in features.items():
         includes = feat_info['include'] if 'include' in feat_info and feat_info['include'] else []
-        includes = [ re.compile(p) for p in includes ]
+        includes = [re.compile(p) for p in includes]
         excludes = feat_info['exclude'] if 'exclude' in feat_info and feat_info['exclude'] else []
-        excludes = [ re.compile(p) for p in excludes ]
+        excludes = [re.compile(p) for p in excludes]
 
         print(f'{feat} download begin')
         download_filename = feat_info['zip_url'].split('/')[-1]
@@ -350,6 +353,7 @@ def build_flutter_deb(version, features):
     os.rename('rustdesk.deb', '../rustdesk-%s.deb' % version)
     os.chdir("..")
 
+
 def build_deb_from_folder(version, binary_folder):
     os.chdir('flutter')
     system2('mkdir -p tmpdeb/usr/bin/')
@@ -387,6 +391,7 @@ def build_deb_from_folder(version, binary_folder):
     system2('/bin/rm -rf ../res/DEBIAN/control')
     os.rename('rustdesk.deb', '../rustdesk-%s.deb' % version)
     os.chdir("..")
+
 
 def build_flutter_dmg(version, features):
     if not skip_cargo:
@@ -577,7 +582,7 @@ def main():
                 else:
                     print('Not signed')
             else:
-                # buid deb package
+                # build deb package
                 system2(
                     'mv target/release/bundle/deb/rustdesk*.deb ./rustdesk.deb')
                 system2('dpkg-deb -R rustdesk.deb tmpdeb')

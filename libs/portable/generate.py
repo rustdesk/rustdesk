@@ -1,4 +1,3 @@
-from ast import parse
 import os
 import optparse
 from hashlib import md5
@@ -47,7 +46,7 @@ def write_metadata(md5_table: dict, output_folder: str, exe: str):
             f.write((len(path)).to_bytes(length=length_count, byteorder='big'))
             f.write(path)
             # data length & compressed data
-            f.write((data_length).to_bytes(
+            f.write(data_length.to_bytes(
                 length=length_count, byteorder='big'))
             f.write(compressed_data)
             # md5 code
@@ -65,6 +64,8 @@ def build_portable(output_folder: str):
 
 # Linux: python3 generate.py -f ../rustdesk-portable-packer/test -o . -e ./test/main.py
 # Windows: python3 .\generate.py -f ..\rustdesk\flutter\build\windows\runner\Debug\ -o . -e ..\rustdesk\flutter\build\windows\runner\Debug\rustdesk.exe
+
+
 if __name__ == '__main__':
     parser = optparse.OptionParser()
     parser.add_option("-f", "--folder", dest="folder",
