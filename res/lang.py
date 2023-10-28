@@ -20,7 +20,7 @@ def line_split(line):
     toks = line.split('", "')
     if len(toks) != 2:
         print(line)
-        assert (0)
+        assert 0
     # Replace fixed position.
     # Because toks[1] may be v") or v"),
     k = toks[0][toks[0].find('"') + 1:]
