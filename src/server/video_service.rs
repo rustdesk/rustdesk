@@ -255,7 +255,7 @@ pub fn test_create_capturer(
 ) -> String {
     let test_begin = Instant::now();
     loop {
-        let err = match try_get_displays() {
+        let err = match Display::all() {
             Ok(mut displays) => {
                 if displays.len() <= display_idx {
                     anyhow!(
@@ -271,7 +271,7 @@ pub fn test_create_capturer(
                     }
                 }
             }
-            Err(e) => e,
+            Err(e) => e.into(),
         };
         if test_begin.elapsed().as_millis() >= timeout_millis as _ {
             return err.to_string();
@@ -332,7 +332,7 @@ fn get_capturer(
         }
     }
 
-    let mut displays = try_get_displays()?;
+    let mut displays = Display::all()?;
     let ndisplay = displays.len();
     if ndisplay <= current {
         bail!(
@@ -759,52 +759,6 @@ pub fn is_inited_msg() -> Option<Message> {
 pub fn refresh() {
     #[cfg(target_os = "android")]
     Display::refresh_size();
-}
-
-#[inline]
-#[cfg(not(all(windows, feature = "virtual_display_driver")))]
-fn try_get_displays() -> ResultType<Vec<Display>> {
-    Ok(Display::all()?)
-}
-
-#[inline]
-#[cfg(all(windows, feature = "virtual_display_driver"))]
-fn no_displays(displays: &Vec<Display>) -> bool {
-    let display_len = displays.len();
-    if display_len == 0 {
-        true
-    } else if display_len == 1 {
-        let display = &displays[0];
-        let dummy_display_side_max_size = 800;
-        if display.width() > dummy_display_side_max_size
-            || display.height() > dummy_display_side_max_size
-        {
-            return false;
-        }
-        let any_real = crate::platform::resolutions(&display.name())
-            .iter()
-            .any(|r| {
-                (r.height as usize) > dummy_display_side_max_size
-                    || (r.width as usize) > dummy_display_side_max_size
-            });
-        !any_real
-    } else {
-        false
-    }
-}
-
-#[cfg(all(windows, feature = "virtual_display_driver"))]
-fn try_get_displays() -> ResultType<Vec<Display>> {
-    // let mut displays = Display::all()?;
-    // if no_displays(&displays) {
-    //     log::debug!("no displays, create virtual display");
-    //     if let Err(e) = virtual_display_manager::plug_in_headless() {
-    //         log::error!("plug in headless failed {}", e);
-    //     } else {
-    //         displays = Display::all()?;
-    //     }
-    // }
-    Ok(Display::all()?)
 }
 
 #[cfg(windows)]

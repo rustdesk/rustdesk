@@ -102,6 +102,7 @@ message PeerInfo {
   SupportedEncoding encoding = 10;
   SupportedResolutions resolutions = 11;
   // Use JSON's key-value format which is friendly for peer to handle.
+  // NOTE: Only support one-level dictionaries (for peer to update), and the key is of type string.
   string platform_additions = 12;
 }
 
@@ -498,6 +499,11 @@ message CaptureDisplays {
   repeated int32 set = 3;
 }
 
+message ToggleVirtualDisplay {
+  int32 display = 1;
+  bool on = 2;
+}
+
 message PermissionInfo {
   enum Permission {
     Keyboard = 0;
@@ -697,6 +703,7 @@ message Misc {
     bool client_record_status = 29;
     CaptureDisplays capture_displays = 30;
     int32 refresh_video_display = 31;
+    ToggleVirtualDisplay toggle_virtual_display = 32;
   }
 }
 
