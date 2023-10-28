@@ -1,7 +1,7 @@
 use std::{
     collections::HashSet,
     fs::File,
-    io::{BufReader, Read, Seek},
+    io::{BufRead, BufReader, Read, Seek},
     os::unix::prelude::PermissionsExt,
     path::PathBuf,
     sync::atomic::{AtomicU64, Ordering},
@@ -175,7 +175,11 @@ impl LocalFile {
                 path: self.path.clone(),
                 err: e,
             })?;
-            let reader = BufReader::with_capacity(BLOCK_SIZE as usize, handle);
+            let mut reader = BufReader::with_capacity(BLOCK_SIZE as usize * 2, handle);
+            reader.fill_buf().map_err(|e| CliprdrError::FileError {
+                path: self.path.clone(),
+                err: e,
+            })?;
             self.handle = Some(reader);
         };
         Ok(())
