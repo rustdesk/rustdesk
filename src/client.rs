@@ -221,7 +221,12 @@ impl Client {
     ) -> ResultType<(Stream, bool, Option<Vec<u8>>)> {
         interface.update_direct(None);
         interface.update_received(false);
-        match Self::_start(peer, key, token, conn_type, interface).await {
+        let mut _key = key;
+        let tf_key = Config::get_option("text_field_rendezvous_server_key");
+        if !tf_key.is_empty() {
+            _key = tf_key.as_str();
+        }
+        match Self::_start(peer, _key, token, conn_type, interface).await {
             Err(err) => {
                 let err_str = err.to_string();
                 if err_str.starts_with("Failed") {

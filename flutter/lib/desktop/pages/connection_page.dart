@@ -168,6 +168,9 @@ class _ConnectionPageState extends State<ConnectionPage>
         var sValue = host + ":" + port!;
         debugPrint('text_field_rendezvous_server: $sValue key: $key');
         bind.mainSetOption(key: "text_field_rendezvous_server", value: sValue);
+        if (key != null) {
+          bind.mainSetOption(key: "text_field_rendezvous_server_key", value: key);
+        }
       } else {
         debugPrint('regex match failed');
       }
