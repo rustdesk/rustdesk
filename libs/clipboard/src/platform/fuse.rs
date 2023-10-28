@@ -47,7 +47,7 @@ use super::LDAP_EPOCH_DELTA;
 const READ_RETRY: i32 = 3;
 
 /// block size for fuse, align to our asynchronic request size over FileContentsRequest.
-const BLOCK_SIZE: u32 = 4 * 1024 * 1024;
+pub const BLOCK_SIZE: u32 = 4 * 1024 * 1024;
 
 /// read only permission
 const PERM_READ: u16 = 0o444;

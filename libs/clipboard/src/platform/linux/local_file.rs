@@ -1,9 +1,10 @@
 use std::{
     collections::HashSet,
     fs::File,
-    io::{Read, Seek},
+    io::{BufReader, Read, Seek},
     os::unix::prelude::PermissionsExt,
     path::PathBuf,
+    sync::atomic::{AtomicU64, Ordering},
     time::SystemTime,
 };
 
@@ -13,7 +14,10 @@ use hbb_common::{
 };
 use utf16string::WString;
 
-use crate::{platform::LDAP_EPOCH_DELTA, CliprdrError};
+use crate::{
+    platform::{fuse::BLOCK_SIZE, LDAP_EPOCH_DELTA},
+    CliprdrError,
+};
 
 /// has valid file attributes
 const FLAGS_FD_ATTRIBUTES: u32 = 0x04;
@@ -30,7 +34,9 @@ const FLAGS_FD_UNIX_MODE: u32 = 0x08;
 #[derive(Debug)]
 pub(super) struct LocalFile {
     pub path: PathBuf,
-    pub handle: Option<File>,
+
+    pub handle: Option<BufReader<File>>,
+    pub offset: AtomicU64,
 
     pub name: String,
     pub size: u64,
@@ -69,11 +75,13 @@ impl LocalFile {
 
         // NOTE: open files lazily
         let handle = None;
+        let offset = AtomicU64::new(0);
 
         Ok(Self {
             name,
             path: path.clone(),
             handle,
+            offset,
             size,
             last_write_time,
             is_dir,
@@ -160,33 +168,47 @@ impl LocalFile {
         buf.to_vec()
     }
 
-    pub fn read_exact_at(&mut self, buf: &mut [u8], offset: u64) -> Result<(), CliprdrError> {
-        if self.handle.is_none() {
+    #[inline]
+    pub fn load_handle(&mut self) -> Result<(), CliprdrError> {
+        if !self.is_dir && self.handle.is_none() {
             let handle = std::fs::File::open(&self.path).map_err(|e| CliprdrError::FileError {
                 path: self.path.clone(),
                 err: e,
             })?;
-            self.handle = Some(handle);
+            let reader = BufReader::with_capacity(BLOCK_SIZE as usize, handle);
+            self.handle = Some(reader);
         };
+        Ok(())
+    }
+
+    pub fn read_exact_at(&mut self, buf: &mut [u8], offset: u64) -> Result<(), CliprdrError> {
+        self.load_handle()?;
 
         let handle = self.handle.as_mut().unwrap();
 
-        handle
-            .seek(std::io::SeekFrom::Start(offset))
-            .map_err(|e| CliprdrError::FileError {
-                path: self.path.clone(),
-                err: e,
-            })?;
+        if offset != self.offset.load(Ordering::Relaxed) {
+            handle
+                .seek(std::io::SeekFrom::Start(offset))
+                .map_err(|e| CliprdrError::FileError {
+                    path: self.path.clone(),
+                    err: e,
+                })?;
+        }
         handle
             .read_exact(buf)
             .map_err(|e| CliprdrError::FileError {
                 path: self.path.clone(),
                 err: e,
             })?;
-        // gc
-        if offset + (buf.len() as u64) >= self.size {
+        let new_offset = offset + (buf.len() as u64);
+        self.offset.store(new_offset, Ordering::Relaxed);
+
+        // gc file handle
+        if new_offset >= self.size {
+            self.offset.store(0, Ordering::Relaxed);
             self.handle = None;
         }
+
         Ok(())
     }
 }

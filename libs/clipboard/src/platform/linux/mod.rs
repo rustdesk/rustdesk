@@ -190,7 +190,7 @@ impl ClipboardContext {
     ) -> Result<(), CliprdrError> {
         let mut file_list = self.local_files.lock();
 
-        let file_contents_resp = match request {
+        let (file_idx, file_contents_resp) = match request {
             FileContentsRequest::Size {
                 stream_id,
                 file_idx,
@@ -220,11 +220,14 @@ impl ClipboardContext {
                 );
 
                 let size = file.size;
-                ClipboardFile::FileContentsResponse {
-                    msg_flags: 0x1,
-                    stream_id,
-                    requested_data: size.to_le_bytes().to_vec(),
-                }
+                (
+                    file_idx,
+                    ClipboardFile::FileContentsResponse {
+                        msg_flags: 0x1,
+                        stream_id,
+                        requested_data: size.to_le_bytes().to_vec(),
+                    },
+                )
             }
             FileContentsRequest::Range {
                 stream_id,
@@ -280,16 +283,26 @@ impl ClipboardContext {
 
                 file.read_exact_at(&mut buf, offset)?;
 
-                ClipboardFile::FileContentsResponse {
-                    msg_flags: 0x1,
-                    stream_id,
-                    requested_data: buf,
-                }
+                (
+                    file_idx,
+                    ClipboardFile::FileContentsResponse {
+                        msg_flags: 0x1,
+                        stream_id,
+                        requested_data: buf,
+                    },
+                )
             }
         };
 
         send_data(conn_id, file_contents_resp);
         log::debug!("file contents sent to conn: {}", conn_id);
+        // hot reload next file
+        for next_file in file_list.iter_mut().skip(file_idx + 1) {
+            if !next_file.is_dir {
+                next_file.load_handle()?;
+                break;
+            }
+        }
         Ok(())
     }
 }
