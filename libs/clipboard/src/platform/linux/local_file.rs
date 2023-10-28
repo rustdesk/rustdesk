@@ -1,5 +1,9 @@
 use std::{
-    collections::HashSet, fs::File, os::unix::prelude::PermissionsExt, path::PathBuf,
+    collections::HashSet,
+    fs::File,
+    io::{Read, Seek},
+    os::unix::prelude::PermissionsExt,
+    path::PathBuf,
     time::SystemTime,
 };
 
@@ -63,16 +67,8 @@ impl LocalFile {
             .trim_start_matches('/')
             .replace('/', "\\");
 
-        let handle = if is_dir {
-            None
-        } else {
-            let file = std::fs::File::open(path).map_err(|e| CliprdrError::FileError {
-                path: path.clone(),
-                err: e,
-            })?;
-            let reader = file;
-            Some(reader)
-        };
+        // NOTE: open files lazily
+        let handle = None;
 
         Ok(Self {
             name,
@@ -162,6 +158,36 @@ impl LocalFile {
         buf.put(&vec![0u8; 520 - name_len][..]);
 
         buf.to_vec()
+    }
+
+    pub fn read_exact_at(&mut self, buf: &mut [u8], offset: u64) -> Result<(), CliprdrError> {
+        if self.handle.is_none() {
+            let handle = std::fs::File::open(&self.path).map_err(|e| CliprdrError::FileError {
+                path: self.path.clone(),
+                err: e,
+            })?;
+            self.handle = Some(handle);
+        };
+
+        let handle = self.handle.as_mut().unwrap();
+
+        handle
+            .seek(std::io::SeekFrom::Start(offset))
+            .map_err(|e| CliprdrError::FileError {
+                path: self.path.clone(),
+                err: e,
+            })?;
+        handle
+            .read_exact(buf)
+            .map_err(|e| CliprdrError::FileError {
+                path: self.path.clone(),
+                err: e,
+            })?;
+        // gc
+        if offset + (buf.len() as u64) >= self.size {
+            self.handle = None;
+        }
+        Ok(())
     }
 }
 

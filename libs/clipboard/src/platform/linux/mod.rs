@@ -1,5 +1,4 @@
 use std::{
-    os::unix::prelude::FileExt,
     path::PathBuf,
     sync::{mpsc::Sender, Arc},
     time::Duration,
@@ -189,7 +188,7 @@ impl ClipboardContext {
         conn_id: i32,
         request: FileContentsRequest,
     ) -> Result<(), CliprdrError> {
-        let file_list = self.local_files.lock();
+        let mut file_list = self.local_files.lock();
 
         let file_contents_resp = match request {
             FileContentsRequest::Size {
@@ -239,7 +238,7 @@ impl ClipboardContext {
                     length,
                     conn_id
                 );
-                let Some(file) = file_list.get(file_idx) else {
+                let Some(file) = file_list.get_mut(file_idx) else {
                     log::error!(
                         "invalid file index {} requested from conn: {}",
                         file_idx,
@@ -260,22 +259,6 @@ impl ClipboardContext {
                     file.name
                 );
 
-                let Some(handle) = &file.handle else {
-                    log::error!(
-                        "invalid file index {} requested from conn: {}",
-                        file_idx,
-                        conn_id
-                    );
-                    resp_file_contents_fail(conn_id, stream_id);
-
-                    return Err(CliprdrError::InvalidRequest {
-                        description: format!(
-                            "request to read directory on index {} as file from conn: {}",
-                            file_idx, conn_id
-                        ),
-                    });
-                };
-
                 if offset > file.size {
                     log::error!("invalid reading offset requested from conn: {}", conn_id);
                     resp_file_contents_fail(conn_id, stream_id);
@@ -295,12 +278,7 @@ impl ClipboardContext {
 
                 let mut buf = vec![0u8; read_size as usize];
 
-                handle
-                    .read_exact_at(&mut buf, offset)
-                    .map_err(|e| CliprdrError::FileError {
-                        path: file.path.clone(),
-                        err: e,
-                    })?;
+                file.read_exact_at(&mut buf, offset)?;
 
                 ClipboardFile::FileContentsResponse {
                     msg_flags: 0x1,
