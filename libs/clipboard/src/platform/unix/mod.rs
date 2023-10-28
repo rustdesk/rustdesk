@@ -14,7 +14,7 @@ use lazy_static::lazy_static;
 use parking_lot::Mutex;
 
 use crate::{
-    platform::{fuse::FileDescription, linux::local_file::construct_file_list},
+    platform::{fuse::FileDescription, unix::local_file::construct_file_list},
     send_data, ClipboardFile, CliprdrError, CliprdrServiceContext,
 };
 

@@ -10,7 +10,7 @@ use parking_lot::Mutex;
 use x11_clipboard::Clipboard;
 use x11rb::protocol::xproto::Atom;
 
-use crate::{platform::linux::send_format_list, CliprdrError};
+use crate::{platform::unix::send_format_list, CliprdrError};
 
 use super::{encode_path_to_uri, parse_plain_uri_list, SysClipboard};
 

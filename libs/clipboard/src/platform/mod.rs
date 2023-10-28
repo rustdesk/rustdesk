@@ -17,8 +17,8 @@ pub fn create_cliprdr_context(
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 /// use FUSE for file pasting on these platforms
 pub mod fuse;
-#[cfg(target_os = "linux")]
-pub mod linux;
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+pub mod unix;
 #[cfg(target_os = "linux")]
 pub fn create_cliprdr_context(
     enable_files: bool,
@@ -48,7 +48,7 @@ pub fn create_cliprdr_context(
         log::warn!("umount {:?} may fail: {:?}", mnt_path, e);
     }
 
-    let linux_ctx = linux::ClipboardContext::new(timeout, mnt_path.parse().unwrap())?;
+    let linux_ctx = unix::ClipboardContext::new(timeout, mnt_path.parse().unwrap())?;
     log::debug!("start cliprdr FUSE");
     linux_ctx.run().expect("failed to start cliprdr FUSE");
 
