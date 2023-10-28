@@ -151,7 +151,7 @@ class _ConnectionPageState extends State<ConnectionPage>
       var input = id;
       id = id.split('@')[0];
 
-      // Ex: 143242314@164.432.413?key=32432432Efdsf34 or 143242314@public
+      // Ex: 143242314@164.432.413:21116?key=32432432Efdsf34 or 143242314@public
       RegExp regex = RegExp(r'(\d+)@([^:]+)(?::(\d+))?(?:\?key=(\d+))?');
       Match? match = regex.firstMatch(input);
 
