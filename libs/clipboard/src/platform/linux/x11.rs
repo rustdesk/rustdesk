@@ -10,10 +10,7 @@ use parking_lot::Mutex;
 use x11_clipboard::Clipboard;
 use x11rb::protocol::xproto::Atom;
 
-use crate::{
-    platform::linux::{construct_file_list, send_format_list},
-    CliprdrError,
-};
+use crate::{platform::linux::send_format_list, CliprdrError};
 
 use super::{encode_path_to_uri, parse_plain_uri_list, SysClipboard};
 
@@ -159,14 +156,12 @@ impl SysClipboard for X11Clipboard {
                 let mut former = self.former_file_list.lock();
 
                 let filtered_st: BTreeSet<_> = filtered.iter().collect();
-                let former_st = former.iter().collect();
+                let former_st = former.iter().collect::<BTreeSet<_>>();
                 if filtered_st == former_st {
                     std::thread::sleep(std::time::Duration::from_millis(100));
                     continue;
                 }
 
-                // send update to server
-                log::debug!("clipboard updated: {:?}", filtered);
                 *former = filtered;
             }
 
@@ -180,8 +175,7 @@ impl SysClipboard for X11Clipboard {
         log::debug!("stop listening file related atoms on clipboard");
     }
 
-    fn get_file_list(&self) -> Result<Vec<super::LocalFile>, CliprdrError> {
-        let paths = { self.former_file_list.lock().clone() };
-        construct_file_list(&paths)
+    fn get_file_list(&self) -> Vec<PathBuf> {
+        self.former_file_list.lock().clone()
     }
 }

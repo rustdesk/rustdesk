@@ -64,7 +64,7 @@ trait SysClipboard: Send + Sync {
     fn stop(&self);
 
     fn set_file_list(&self, paths: &[PathBuf]) -> Result<(), CliprdrError>;
-    fn get_file_list(&self) -> Result<Vec<LocalFile>, CliprdrError>;
+    fn get_file_list(&self) -> Vec<PathBuf>;
 }
 
 fn get_sys_clipboard(ignore_path: &PathBuf) -> Result<Box<dyn SysClipboard>, CliprdrError> {
@@ -105,6 +105,7 @@ pub struct ClipboardContext {
     fuse_server: Arc<Mutex<FuseServer>>,
 
     clipboard: Arc<dyn SysClipboard>,
+    local_files: Mutex<Vec<LocalFile>>,
 }
 
 impl ClipboardContext {
@@ -121,6 +122,7 @@ impl ClipboardContext {
 
         let clipboard = get_sys_clipboard(&fuse_mount_point)?;
         let clipboard = Arc::from(clipboard) as Arc<_>;
+        let local_files = Mutex::new(vec![]);
 
         Ok(Self {
             fuse_mount_point,
@@ -128,6 +130,7 @@ impl ClipboardContext {
             fuse_tx,
             fuse_handle: Mutex::new(None),
             clipboard,
+            local_files,
         })
     }
 
@@ -186,13 +189,14 @@ impl ClipboardContext {
         conn_id: i32,
         request: FileContentsRequest,
     ) -> Result<(), CliprdrError> {
-        let file_contents_req = match request {
+        let file_list = self.local_files.lock();
+
+        let file_contents_resp = match request {
             FileContentsRequest::Size {
                 stream_id,
                 file_idx,
             } => {
                 log::debug!("file contents (size) requested from conn: {}", conn_id);
-                let file_list = self.clipboard.get_file_list()?;
                 let Some(file) = file_list.get(file_idx) else {
                     log::error!(
                         "invalid file index {} requested from conn: {}",
@@ -235,7 +239,6 @@ impl ClipboardContext {
                     length,
                     conn_id
                 );
-                let file_list = self.clipboard.get_file_list()?;
                 let Some(file) = file_list.get(file_idx) else {
                     log::error!(
                         "invalid file index {} requested from conn: {}",
@@ -307,7 +310,7 @@ impl ClipboardContext {
             }
         };
 
-        send_data(conn_id, file_contents_req);
+        send_data(conn_id, file_contents_resp);
         log::debug!("file contents sent to conn: {}", conn_id);
         Ok(())
     }
@@ -325,6 +328,18 @@ fn resp_file_contents_fail(conn_id: i32, stream_id: i32) {
 impl ClipboardContext {
     pub fn is_stopped(&self) -> bool {
         self.fuse_handle.lock().is_none()
+    }
+
+    pub fn sync_local_files(&self) -> Result<(), CliprdrError> {
+        let mut local_files = self.local_files.lock();
+        let clipboard_files = self.clipboard.get_file_list();
+        let local_file_list: Vec<PathBuf> = local_files.iter().map(|f| f.path.clone()).collect();
+        if local_file_list == clipboard_files {
+            return Ok(());
+        }
+        let new_files = construct_file_list(&clipboard_files)?;
+        *local_files = new_files;
+        Ok(())
     }
 
     pub fn serve(&self, conn_id: i32, msg: ClipboardFile) -> Result<(), CliprdrError> {
@@ -496,9 +511,10 @@ impl ClipboardContext {
     }
 
     fn send_file_list(&self, conn_id: i32) -> Result<(), CliprdrError> {
-        let file_list = self.clipboard.get_file_list()?;
+        self.sync_local_files()?;
 
-        send_file_list(&file_list, conn_id)
+        let file_list = self.local_files.lock();
+        send_file_list(&*file_list, conn_id)
     }
 }
 
