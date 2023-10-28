@@ -96,7 +96,7 @@ impl ClipboardContext {
         let file_urls = get_clipboard()?.load(clip, self.text_uri_list, prop, TIMEOUT);
 
         if file_urls.is_err() || file_urls.as_ref().unwrap().is_empty() {
-            log::debug!("clipboard get text, no file urls");
+            log::trace!("clipboard get text, no file urls");
             return String::from_utf8(text_content).map_err(|e| e.to_string());
         }
 
@@ -105,7 +105,7 @@ impl ClipboardContext {
         let text_content = String::from_utf8(text_content).map_err(|e| e.to_string())?;
 
         if text_content.trim() == file_urls.trim() {
-            log::debug!("clipboard got text but polluted");
+            log::trace!("clipboard got text but polluted");
             return Err(String::from("polluted text"));
         }
 
