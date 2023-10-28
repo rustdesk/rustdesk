@@ -233,7 +233,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d6041616acea41d67c4a984709ddab1587fd0b10efe5cc563fee954d2f011854"
 dependencies = [
  "clipboard-win",
- "core-graphics",
+ "core-graphics 0.22.3",
  "image",
  "log",
  "objc",
@@ -561,6 +561,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bef38d45163c2f1dde094a7dfd33ccf595c92905c8f8f4fdc18d06fb1037718a"
 
 [[package]]
+name = "bitmask-enum"
+version = "2.2.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "49fb8528abca6895a5ada33d62aedd538a5c33e77068256483b44a3230270163"
+dependencies = [
+ "quote 1.0.27",
+ "syn 2.0.15",
+]
+
+[[package]]
 name = "bitvec"
 version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -585,6 +595,25 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3078c7629b62d3f0439517fa394996acacc5cbc91c5a20d8c658e77abd503a71"
 dependencies = [
  "generic-array",
+]
+
+[[package]]
+name = "block-sys"
+version = "0.1.0-beta.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0fa55741ee90902547802152aaf3f8e5248aab7e21468089560d4c8840561146"
+dependencies = [
+ "objc-sys",
+]
+
+[[package]]
+name = "block2"
+version = "0.2.0-alpha.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8dd9e63c1744f755c2f60332b88de39d341e5e86239014ad839bd71c106dec42"
+dependencies = [
+ "block-sys",
+ "objc2-encode",
 ]
 
 [[package]]
@@ -675,6 +704,23 @@ dependencies = [
  "cc",
  "libc",
  "pkg-config",
+]
+
+[[package]]
+name = "cacao"
+version = "0.4.0-beta2"
+source = "git+https://github.com/clslaid/cacao?branch=feat/set-file-urls#f4940678214705214be9e0e800d566651c32fd20"
+dependencies = [
+ "bitmask-enum",
+ "block2",
+ "core-foundation 0.9.3 (git+https://github.com/madsmtm/core-foundation-rs.git?rev=7d593d016175755e492a92ef89edca68ac3bd5cd)",
+ "core-graphics 0.23.1",
+ "dispatch",
+ "lazy_static",
+ "libc",
+ "objc2",
+ "os_info",
+ "url",
 ]
 
 [[package]]
@@ -931,6 +977,7 @@ checksum = "8a2dd5a6fe8c6e3502f568a6353e5273bbb15193ad9a89e457b9970798efbea1"
 name = "clipboard"
 version = "0.1.0"
 dependencies = [
+ "cacao",
  "cc",
  "dashmap",
  "fuser",
@@ -987,9 +1034,9 @@ dependencies = [
  "bitflags",
  "block",
  "cocoa-foundation",
- "core-foundation",
- "core-graphics",
- "foreign-types",
+ "core-foundation 0.9.3 (registry+https://github.com/rust-lang/crates.io-index)",
+ "core-graphics 0.22.3",
+ "foreign-types 0.3.2",
  "libc",
  "objc",
 ]
@@ -1002,9 +1049,9 @@ checksum = "931d3837c286f56e3c58423ce4eba12d08db2374461a785c86f672b08b5650d6"
 dependencies = [
  "bitflags",
  "block",
- "core-foundation",
- "core-graphics-types",
- "foreign-types",
+ "core-foundation 0.9.3 (registry+https://github.com/rust-lang/crates.io-index)",
+ "core-graphics-types 0.1.1",
+ "foreign-types 0.3.2",
  "libc",
  "objc",
 ]
@@ -1137,6 +1184,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "core-foundation"
+version = "0.9.3"
+source = "git+https://github.com/madsmtm/core-foundation-rs.git?rev=7d593d016175755e492a92ef89edca68ac3bd5cd#7d593d016175755e492a92ef89edca68ac3bd5cd"
+dependencies = [
+ "core-foundation-sys 0.8.6",
+ "libc",
+]
+
+[[package]]
 name = "core-foundation-sys"
 version = "0.6.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1149,16 +1205,37 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e496a50fda8aacccc86d7529e2c1e0892dbd0f898a6b5645b5561b89c3210efa"
 
 [[package]]
+name = "core-foundation-sys"
+version = "0.8.6"
+source = "git+https://github.com/madsmtm/core-foundation-rs.git?rev=7d593d016175755e492a92ef89edca68ac3bd5cd#7d593d016175755e492a92ef89edca68ac3bd5cd"
+dependencies = [
+ "objc2-encode",
+]
+
+[[package]]
 name = "core-graphics"
 version = "0.22.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2581bbab3b8ffc6fcbd550bf46c355135d16e9ff2a6ea032ad6b9bf1d7efe4fb"
 dependencies = [
  "bitflags",
- "core-foundation",
- "core-graphics-types",
- "foreign-types",
+ "core-foundation 0.9.3 (registry+https://github.com/rust-lang/crates.io-index)",
+ "core-graphics-types 0.1.1",
+ "foreign-types 0.3.2",
  "libc",
+]
+
+[[package]]
+name = "core-graphics"
+version = "0.23.1"
+source = "git+https://github.com/madsmtm/core-foundation-rs.git?rev=7d593d016175755e492a92ef89edca68ac3bd5cd#7d593d016175755e492a92ef89edca68ac3bd5cd"
+dependencies = [
+ "bitflags",
+ "core-foundation 0.9.3 (git+https://github.com/madsmtm/core-foundation-rs.git?rev=7d593d016175755e492a92ef89edca68ac3bd5cd)",
+ "core-graphics-types 0.1.2",
+ "foreign-types 0.5.0",
+ "libc",
+ "objc2-encode",
 ]
 
 [[package]]
@@ -1168,9 +1245,20 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3a68b68b3446082644c91ac778bf50cd4104bfb002b5a6a7c44cca5a2c70788b"
 dependencies = [
  "bitflags",
- "core-foundation",
- "foreign-types",
+ "core-foundation 0.9.3 (registry+https://github.com/rust-lang/crates.io-index)",
+ "foreign-types 0.3.2",
  "libc",
+]
+
+[[package]]
+name = "core-graphics-types"
+version = "0.1.2"
+source = "git+https://github.com/madsmtm/core-foundation-rs.git?rev=7d593d016175755e492a92ef89edca68ac3bd5cd#7d593d016175755e492a92ef89edca68ac3bd5cd"
+dependencies = [
+ "bitflags",
+ "core-foundation 0.9.3 (git+https://github.com/madsmtm/core-foundation-rs.git?rev=7d593d016175755e492a92ef89edca68ac3bd5cd)",
+ "libc",
+ "objc2-encode",
 ]
 
 [[package]]
@@ -1829,7 +1917,7 @@ dependencies = [
 name = "enigo"
 version = "0.0.14"
 dependencies = [
- "core-graphics",
+ "core-graphics 0.22.3",
  "hbb_common",
  "log",
  "objc",
@@ -2201,7 +2289,28 @@ version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f6f339eb8adc052cd2ca78910fda869aefa38d22d5cb648e6485e4d3fc06f3b1"
 dependencies = [
- "foreign-types-shared",
+ "foreign-types-shared 0.1.1",
+]
+
+[[package]]
+name = "foreign-types"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d737d9aa519fb7b749cbc3b962edcf310a8dd1f4b67c91c4f83975dbdd17d965"
+dependencies = [
+ "foreign-types-macros",
+ "foreign-types-shared 0.3.1",
+]
+
+[[package]]
+name = "foreign-types-macros"
+version = "0.2.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1a5c6c585bc94aaf2c7b51dd4c2ba22680844aba4c687be581871a6f518c5742"
+dependencies = [
+ "proc-macro2 1.0.63",
+ "quote 1.0.27",
+ "syn 2.0.15",
 ]
 
 [[package]]
@@ -2209,6 +2318,12 @@ name = "foreign-types-shared"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "00b0228411908ca8685dba7fc2cdd70ec9990a6e753e89b6ac91a84c40fbaf4b"
+
+[[package]]
+name = "foreign-types-shared"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "aa9a19cbb55df58761df49b23516a86d432839add4af60fc256da840f66ed35b"
 
 [[package]]
 name = "form_urlencoded"
@@ -3367,7 +3482,7 @@ dependencies = [
  "anyhow",
  "apple-sys",
  "cfg-if 1.0.0",
- "core-foundation",
+ "core-foundation 0.9.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "shadow-rs",
  "windows 0.48.0",
  "winres",
@@ -4124,6 +4239,32 @@ dependencies = [
 ]
 
 [[package]]
+name = "objc-sys"
+version = "0.2.0-beta.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "df3b9834c1e95694a05a828b59f55fa2afec6288359cda67146126b3f90a55d7"
+
+[[package]]
+name = "objc2"
+version = "0.3.0-beta.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a49f420f16c8814efdcd6b4258664de9d9920cbc26b6f95d034a1ca9850ccc2c"
+dependencies = [
+ "block2",
+ "objc-sys",
+ "objc2-encode",
+]
+
+[[package]]
+name = "objc2-encode"
+version = "2.0.0-pre.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "abfcac41015b00a120608fdaa6938c44cb983fee294351cc4bac7638b4e50512"
+dependencies = [
+ "objc-sys",
+]
+
+[[package]]
 name = "objc_exception"
 version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4226,6 +4367,17 @@ dependencies = [
  "anyhow",
  "plist",
  "uname",
+ "winapi 0.3.9",
+]
+
+[[package]]
+name = "os_info"
+version = "3.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "006e42d5b888366f1880eda20371fedde764ed2213dc8496f49622fa0c99cd5e"
+dependencies = [
+ "log",
+ "serde 1.0.163",
  "winapi 0.3.9",
 ]
 
@@ -4957,9 +5109,9 @@ version = "0.5.0-2"
 source = "git+https://github.com/fufesou/rdev#2e8221d653f4995c831ad52966e79a514516b1fa"
 dependencies = [
  "cocoa",
- "core-foundation",
+ "core-foundation 0.9.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "core-foundation-sys 0.8.4",
- "core-graphics",
+ "core-graphics 0.22.3",
  "dispatch",
  "enum-map",
  "epoll",
@@ -5221,8 +5373,8 @@ dependencies = [
  "clap 4.2.7",
  "clipboard",
  "cocoa",
- "core-foundation",
- "core-graphics",
+ "core-foundation 0.9.3 (registry+https://github.com/rust-lang/crates.io-index)",
+ "core-graphics 0.22.3",
  "cpal",
  "crossbeam-queue",
  "ctrlc",
@@ -5511,7 +5663,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a332be01508d814fed64bf28f798a146d73792121129962fdf335bb3c49a4254"
 dependencies = [
  "bitflags",
- "core-foundation",
+ "core-foundation 0.9.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "core-foundation-sys 0.8.4",
  "libc",
  "security-framework-sys",
@@ -5927,7 +6079,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d75182f12f490e953596550b65ee31bda7c8e043d9386174b353bda50838c3fd"
 dependencies = [
  "bitflags",
- "core-foundation",
+ "core-foundation 0.9.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "system-configuration-sys",
 ]
 
@@ -5988,8 +6140,8 @@ dependencies = [
  "cairo-rs",
  "cc",
  "cocoa",
- "core-foundation",
- "core-graphics",
+ "core-foundation 0.9.3 (registry+https://github.com/rust-lang/crates.io-index)",
+ "core-graphics 0.22.3",
  "crossbeam-channel",
  "dispatch",
  "gdk",
@@ -6121,7 +6273,7 @@ version = "0.6.1"
 source = "git+https://github.com/fufesou/The-Fat-Controller#9dd86151525fd010dc93f6bc9b6aedd1a75cc342"
 dependencies = [
  "anyhow",
- "core-graphics",
+ "core-graphics 0.22.3",
  "unicode-segmentation",
  "winapi 0.3.9",
  "x11 2.19.0",
@@ -6433,7 +6585,7 @@ version = "0.5.1"
 source = "git+https://github.com/rustdesk-org/tray-icon#ef98e7b98abed2e3da614277eced12a85bfb717c"
 dependencies = [
  "cocoa",
- "core-graphics",
+ "core-graphics 0.22.3",
  "crossbeam-channel",
  "dirs-next",
  "libappindicator",

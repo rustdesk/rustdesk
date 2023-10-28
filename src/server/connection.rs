@@ -1,5 +1,5 @@
 use super::{input_service::*, *};
-#[cfg(any(target_os = "windows", target_os = "linux"))]
+#[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
 use crate::clipboard_file::*;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use crate::common::update_clipboard;
@@ -192,7 +192,7 @@ pub struct Connection {
     // by peer
     disable_audio: bool,
     // by peer
-    #[cfg(any(target_os = "windows", target_os = "linux"))]
+    #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
     enable_file_transfer: bool,
     // by peer
     audio_sender: Option<MediaSender>,
@@ -330,7 +330,7 @@ impl Connection {
             show_remote_cursor: false,
             ip: "".to_owned(),
             disable_audio: false,
-            #[cfg(any(target_os = "windows", target_os = "linux"))]
+            #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
             enable_file_transfer: false,
             disable_clipboard: false,
             disable_keyboard: false,
@@ -1236,7 +1236,7 @@ impl Connection {
         self.audio && !self.disable_audio
     }
 
-    #[cfg(any(target_os = "windows", target_os = "linux"))]
+    #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
     fn file_transfer_enabled(&self) -> bool {
         self.file && self.enable_file_transfer
     }
@@ -1806,7 +1806,7 @@ impl Connection {
                 }
                 Some(message::Union::Cliprdr(_clip)) =>
                 {
-                    #[cfg(any(target_os = "windows", target_os = "linux"))]
+                    #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
                     if let Some(clip) = msg_2_clip(_clip) {
                         log::debug!("got clipfile from client peer");
                         self.send_to_cm(ipc::Data::ClipboardFile(clip))
@@ -2390,7 +2390,7 @@ impl Connection {
                 }
             }
         }
-        #[cfg(any(target_os = "windows", target_os = "linux"))]
+        #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
         if let Ok(q) = o.enable_file_transfer.enum_value() {
             if q != BoolOption::NotSet {
                 self.enable_file_transfer = q == BoolOption::Yes;

@@ -1007,7 +1007,7 @@ async fn check_connect_status_(reconnect: bool, rx: mpsc::UnboundedReceiver<ipc:
     let mut mouse_time = 0;
     #[cfg(not(feature = "flutter"))]
     let mut id = "".to_owned();
-    #[cfg(any(target_os = "windows", target_os = "linux"))]
+    #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
     let mut enable_file_transfer = "".to_owned();
 
     loop {
@@ -1030,7 +1030,7 @@ async fn check_connect_status_(reconnect: bool, rx: mpsc::UnboundedReceiver<ipc:
                                 *OPTIONS.lock().unwrap() = v;
                                 *OPTION_SYNCED.lock().unwrap() = true;
 
-                                #[cfg(any(target_os="windows", target_os="linux"))]
+                                #[cfg(any(target_os="windows", target_os="linux", target_os = "macos"))]
                                 {
                                     let b = OPTIONS.lock().unwrap().get("enable-file-transfer").map(|x| x.to_string()).unwrap_or_default();
                                     if b != enable_file_transfer {
