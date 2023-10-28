@@ -5,15 +5,24 @@ use std::{
 };
 
 use cacao::pasteboard::{Pasteboard, PasteboardName};
+use hbb_common::log;
+use once_cell::sync::Lazy;
 use parking_lot::Mutex;
 
 use crate::{platform::unix::send_format_list, CliprdrError};
 
 use super::SysClipboard;
 
+static NS_PASTEBOARD: Lazy<Pasteboard> = Lazy::new(|| Pasteboard::named(PasteboardName::General));
+
+#[inline]
+fn wait_file_list() -> Option<Vec<PathBuf>> {
+    NS_PASTEBOARD
+        .get_file_urls()
+        .ok()
+        .map(|v| v.into_iter().map(|nsurl| nsurl.to_path_buf()).collect())
+}
 pub struct NsPasteboard {
-    stopped: AtomicBool,
-    pasteboard: Pasteboard,
     ignore_path: PathBuf,
 
     former_file_list: Mutex<Vec<PathBuf>>,
@@ -21,20 +30,11 @@ pub struct NsPasteboard {
 
 impl NsPasteboard {
     pub fn new(ignore_path: &PathBuf) -> Result<Self, CliprdrError> {
-        let pasteboard = Pasteboard::named(PasteboardName::General);
         Ok(Self {
             stopped: AtomicBool::new(false),
             ignore_path: ignore_path.to_owned(),
-            pasteboard,
             former_file_list: Mutex::new(vec![]),
         })
-    }
-
-    fn wait_file_list(&self) -> Option<Vec<PathBuf>> {
-        self.pasteboard
-            .get_file_urls()
-            .ok()
-            .map(|v| v.into_iter().map(|nsurl| nsurl.to_path_buf()).collect())
     }
 
     #[inline]
@@ -46,11 +46,8 @@ impl NsPasteboard {
 impl SysClipboard for NsPasteboard {
     fn set_file_list(&self, paths: &[PathBuf]) -> Result<(), CliprdrError> {
         *self.former_file_list.lock() = paths.to_vec();
-        let uri_list: Vec<String> = paths.iter().map(encode_path_to_uri).collect();
-        let uri_list = uri_list.join("\n");
-        let uri_list = uri_list.as_bytes().to_vec();
-        self.pasteboard
-            .set_file_urls(uri_list)
+        NS_PASTEBOARD
+            .set_file_urls(paths)
             .map_err(|_| CliprdrError::ClipboardInternalError)
     }
 
@@ -62,7 +59,7 @@ impl SysClipboard for NsPasteboard {
                 std::thread::sleep(std::time::Duration::from_millis(100));
                 continue;
             }
-            let file_list = match self.wait_file_list() {
+            let file_list = match wait_file_list() {
                 Some(v) => v,
                 None => {
                     std::thread::sleep(std::time::Duration::from_millis(100));

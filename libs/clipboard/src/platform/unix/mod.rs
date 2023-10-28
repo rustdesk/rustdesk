@@ -89,7 +89,7 @@ fn get_sys_clipboard(ignore_path: &PathBuf) -> Result<Box<dyn SysClipboard>, Cli
 #[cfg(target_os = "macos")]
 fn get_sys_clipboard(ignore_path: &PathBuf) -> Result<Box<dyn SysClipboard>, CliprdrError> {
     use ns_clipboard::*;
-    let ns_pb = NSPasteboard::new(ignore_path)?;
+    let ns_pb = NsPasteboard::new(ignore_path)?;
     Ok(Box::new(ns_pb) as Box<_>)
 }
 

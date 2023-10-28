@@ -40,7 +40,6 @@ use utf16string::WStr;
 
 use crate::{send_data, ClipboardFile, CliprdrError};
 
-#[cfg(target_os = "linux")]
 use super::LDAP_EPOCH_DELTA;
 
 /// fuse server ready retry max times
