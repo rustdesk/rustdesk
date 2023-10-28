@@ -19,69 +19,107 @@ pub enum GrabState {
 pub use arboard::Clipboard as ClipboardContext;
 
 #[cfg(all(target_os = "linux", not(feature = "wayland")))]
+static X11_CLIPBOARD: once_cell::sync::OnceCell<x11_clipboard::Clipboard> =
+    once_cell::sync::OnceCell::new();
+
+#[cfg(all(target_os = "linux", not(feature = "wayland")))]
+fn get_clipboard() -> Result<&'static x11_clipboard::Clipboard, String> {
+    X11_CLIPBOARD
+        .get_or_try_init(|| x11_clipboard::Clipboard::new())
+        .map_err(|e| e.to_string())
+}
+
+#[cfg(all(target_os = "linux", not(feature = "wayland")))]
 pub struct ClipboardContext {
     string_setter: x11rb::protocol::xproto::Atom,
     string_getter: x11rb::protocol::xproto::Atom,
     text_uri_list: x11rb::protocol::xproto::Atom,
-    clip: x11_clipboard::Clipboard,
+
+    clip: x11rb::protocol::xproto::Atom,
+    prop: x11rb::protocol::xproto::Atom,
+}
+
+#[cfg(all(target_os = "linux", not(feature = "wayland")))]
+fn parse_plain_uri_list(v: Vec<u8>) -> Result<String, String> {
+    let text = String::from_utf8(v).map_err(|_| "ConversionFailure".to_owned())?;
+    let mut list = String::new();
+    for line in text.lines() {
+        if !line.starts_with("file://") {
+            continue;
+        }
+        let decoded = percent_encoding::percent_decode_str(line)
+            .decode_utf8()
+            .map_err(|_| "ConversionFailure".to_owned())?;
+        list = list + "\n" + decoded.trim_start_matches("file://");
+    }
+    list = list.trim().to_owned();
+    Ok(list)
 }
 
 #[cfg(all(target_os = "linux", not(feature = "wayland")))]
 impl ClipboardContext {
     pub fn new() -> Result<Self, String> {
-        log::debug!("create clipboard context");
-        let clip = x11_clipboard::Clipboard::new().map_err(|e| e.to_string())?;
-        let string_getter = clip
+        let clipboard = get_clipboard()?;
+        let string_getter = clipboard
             .getter
             .get_atom("UTF8_STRING")
             .map_err(|e| e.to_string())?;
-        let string_setter = clip
+        let string_setter = clipboard
             .setter
             .get_atom("UTF8_STRING")
             .map_err(|e| e.to_string())?;
-        let text_uri_list = clip
+        let text_uri_list = clipboard
             .getter
             .get_atom("text/uri-list")
             .map_err(|e| e.to_string())?;
-        log::debug!("clipboard context created");
+        let prop = clipboard.getter.atoms.property;
+        let clip = clipboard.getter.atoms.clipboard;
         Ok(Self {
-            clip,
             text_uri_list,
             string_setter,
             string_getter,
+            clip,
+            prop,
         })
     }
 
     pub fn get_text(&mut self) -> Result<String, String> {
-        let clip = self.clip.getter.atoms.clipboard;
-        let prop = self.clip.getter.atoms.property;
-        log::trace!("clipboard get text");
+        let clip = self.clip;
+        let prop = self.prop;
 
         const TIMEOUT: std::time::Duration = std::time::Duration::from_millis(100);
 
-        let text_content = self
-            .clip
+        let text_content = get_clipboard()?
             .load(clip, self.string_getter, prop, TIMEOUT)
             .map_err(|e| e.to_string())?;
 
-        let file_urls = self.clip.load(clip, self.text_uri_list, prop, TIMEOUT);
+        let file_urls = get_clipboard()?.load(clip, self.text_uri_list, prop, TIMEOUT);
 
         if file_urls.is_err() || file_urls.as_ref().unwrap().is_empty() {
-            log::trace!("clipboard get text, no file urls");
-            String::from_utf8(text_content).map_err(|e| e.to_string())
-        } else {
-            log::trace!("clipboard get text, file urls found");
-            Err("clipboard polluted".to_owned())
+            log::debug!("clipboard get text, no file urls");
+            return String::from_utf8(text_content).map_err(|e| e.to_string());
         }
+
+        let file_urls = parse_plain_uri_list(file_urls.unwrap())?;
+
+        let text_content = String::from_utf8(text_content).map_err(|e| e.to_string())?;
+
+        if text_content.trim() == file_urls.trim() {
+            log::debug!("clipboard got text but polluted");
+            return Err(String::from("polluted text"));
+        }
+
+        Ok(text_content)
     }
 
     pub fn set_text(&mut self, content: String) -> Result<(), String> {
-        let clip = self.clip.setter.atoms.clipboard;
+        let clip = self.clip;
 
-        let value = content.into_bytes();
-        self.clip
+        let value = content.clone().into_bytes();
+        get_clipboard()?
             .store(clip, self.string_setter, value)
-            .map_err(|e| e.to_string())
+            .map_err(|e| e.to_string())?;
+        Ok(())
     }
 }
 

@@ -134,6 +134,8 @@ pam = { git="https://github.com/fufesou/pam", optional = true }
 users = { version = "0.11" }
 x11-clipboard = {git="https://github.com/clslaid/x11-clipboard", branch = "feat/store-batch"}
 x11rb =  {version = "0.12", features = ["all-extensions"]}
+percent-encoding = "2.3"
+once_cell = "1.18"
 
 [target.'cfg(target_os = "android")'.dependencies]
 android_logger = "0.13"

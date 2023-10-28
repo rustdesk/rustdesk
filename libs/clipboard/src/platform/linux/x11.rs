@@ -67,9 +67,12 @@ impl X11Clipboard {
         // NOTE:
         // # why not use `load_wait`
         // load_wait is likely to wait forever, which is not what we want
-        get_clip()?
-            .load(clip, target, prop, X11_CLIPBOARD_TIMEOUT)
-            .map_err(|_| CliprdrError::ConversionFailure)
+        let res = get_clip()?.load(clip, target, prop, X11_CLIPBOARD_TIMEOUT);
+        match res {
+            Ok(res) => Ok(res),
+            Err(x11_clipboard::error::Error::UnexpectedType(_)) => Ok(vec![]),
+            Err(_) => Err(CliprdrError::ClipboardInternalError),
+        }
     }
 
     fn store_batch(&self, batch: Vec<(Atom, Vec<u8>)>) -> Result<(), CliprdrError> {
@@ -85,7 +88,6 @@ impl X11Clipboard {
             return Ok(None);
         }
         let v = self.load(self.text_uri_list)?;
-        // loading 'text/uri-list' should be enough?
         let p = parse_plain_uri_list(v)?;
         Ok(Some(p))
     }
