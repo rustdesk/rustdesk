@@ -6,23 +6,29 @@ use std::{
 
 use cacao::pasteboard::{Pasteboard, PasteboardName};
 use hbb_common::log;
-use once_cell::sync::Lazy;
 use parking_lot::Mutex;
 
 use crate::{platform::unix::send_format_list, CliprdrError};
 
 use super::SysClipboard;
 
-static NS_PASTEBOARD: Lazy<Pasteboard> = Lazy::new(|| Pasteboard::named(PasteboardName::General));
-
 #[inline]
 fn wait_file_list() -> Option<Vec<PathBuf>> {
-    NS_PASTEBOARD
-        .get_file_urls()
+    let pb = Pasteboard::named(PasteboardName::General);
+    pb.get_file_urls()
         .ok()
-        .map(|v| v.into_iter().map(|nsurl| nsurl.to_path_buf()).collect())
+        .map(|v| v.into_iter().map(|nsurl| nsurl.pathbuf()).collect())
 }
+
+#[inline]
+fn set_file_list(file_list: &[PathBuf]) -> Result<(), CliprdrError> {
+    let pb = Pasteboard::named(PasteboardName::General);
+    pb.set_files(file_list.to_vec())
+        .map_err(|_| CliprdrError::ClipboardInternalError)
+}
+
 pub struct NsPasteboard {
+    stopped: AtomicBool,
     ignore_path: PathBuf,
 
     former_file_list: Mutex<Vec<PathBuf>>,
@@ -46,9 +52,7 @@ impl NsPasteboard {
 impl SysClipboard for NsPasteboard {
     fn set_file_list(&self, paths: &[PathBuf]) -> Result<(), CliprdrError> {
         *self.former_file_list.lock() = paths.to_vec();
-        NS_PASTEBOARD
-            .set_file_urls(paths)
-            .map_err(|_| CliprdrError::ClipboardInternalError)
+        set_file_list(paths)
     }
 
     fn start(&self) {
@@ -67,7 +71,7 @@ impl SysClipboard for NsPasteboard {
                 }
             };
 
-            let filtered = paths
+            let filtered = file_list
                 .into_iter()
                 .filter(|pb| !pb.starts_with(&self.ignore_path))
                 .collect::<Vec<_>>();

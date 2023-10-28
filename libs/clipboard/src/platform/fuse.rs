@@ -154,6 +154,11 @@ impl fuser::Filesystem for FuseClient {
         let mut server = self.server.lock();
         server.getattr(req, ino, reply)
     }
+
+    fn statfs(&mut self, req: &fuser::Request<'_>, ino: u64, reply: fuser::ReplyStatfs) {
+        let mut server = self.server.lock();
+        server.statfs(req, ino, reply)
+    }
 }
 
 /// fuse server
@@ -485,6 +490,15 @@ impl fuser::Filesystem for FuseServer {
 
         let attr = (&entry.attributes).into();
         reply.attr(&std::time::Duration::default(), &attr)
+    }
+
+    fn statfs(&mut self, _req: &fuser::Request<'_>, _ino: u64, reply: fuser::ReplyStatfs) {
+        let mut blocks = 0;
+        for file in self.files.iter() {
+            blocks += file.attributes.size / (BLOCK_SIZE as u64)
+                + (file.attributes.size % (BLOCK_SIZE as u64) != 0) as u64;
+        }
+        reply.statfs(blocks, 0, 0, 0, 0, BLOCK_SIZE, 512, BLOCK_SIZE)
     }
 }
 
