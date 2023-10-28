@@ -43,10 +43,11 @@ use crate::{send_data, ClipboardFile, CliprdrError};
 #[cfg(target_os = "linux")]
 use super::LDAP_EPOCH_DELTA;
 
+/// fuse server ready retry max times
+const READ_RETRY: i32 = 3;
+
 /// block size for fuse, align to our asynchronic request size over FileContentsRequest.
-///
-/// Question: will this hint users to read data in this size?
-const BLOCK_SIZE: u32 = 128 * 1024;
+const BLOCK_SIZE: u32 = 4 * 1024 * 1024;
 
 /// read only permission
 const PERM_READ: u16 = 0o444;
@@ -403,6 +404,7 @@ impl fuser::Filesystem for FuseServer {
         reply.opened(fh, 0);
     }
 
+    // todo: implement retry
     fn read(
         &mut self,
         _req: &fuser::Request<'_>,
@@ -539,13 +541,15 @@ impl FuseServer {
             clip_data_id: 0,
         };
 
-        send_data(node.conn_id, request);
+        send_data(node.conn_id, request.clone());
 
         log::debug!(
             "waiting for read reply for {:?} on stream: {}",
             node.name,
             node.stream_id
         );
+
+        let mut retry_times = 0;
 
         loop {
             let reply = self.rx.recv_timeout(self.timeout).map_err(|e| {
@@ -563,11 +567,18 @@ impl FuseServer {
                         log::debug!("stream id mismatch, ignore");
                         continue;
                     }
+
                     if msg_flags & 1 == 0 {
-                        return Err(std::io::Error::new(
-                            std::io::ErrorKind::Other,
-                            "failure request",
-                        ));
+                        retry_times += 1;
+                        if retry_times > READ_RETRY {
+                            return Err(std::io::Error::new(
+                                std::io::ErrorKind::Other,
+                                "failure request",
+                            ));
+                        }
+
+                        send_data(node.conn_id, request.clone());
+                        continue;
                     }
                     return Ok(requested_data);
                 }
