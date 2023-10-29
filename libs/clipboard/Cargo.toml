@@ -9,6 +9,19 @@ build = "build.rs"
 [build-dependencies]
 cc = "1.0"
 
+[features]
+default = ["unix-file-copy-paste"]
+unix-file-copy-paste = [
+"dep:x11rb",
+"dep:x11-clipboard",
+"dep:rand",
+"dep:fuser",
+"dep:libc",
+"dep:dashmap",
+"dep:percent-encoding",
+"dep:utf16string"
+]
+
 [dependencies]
 thiserror = "1.0"
 lazy_static = "1.4"
@@ -18,12 +31,12 @@ hbb_common = { path = "../hbb_common" }
 parking_lot = {version = "0.12"}
 
 [target.'cfg(any(target_os = "linux", target_os = "macos"))'.dependencies]
-once_cell = "1.18"
-x11rb =  {version = "0.12", features = ["all-extensions"]}
-rand = {version = "0.8"}
-fuser = {version = "0.13"}
-libc = {version = "0.2"}
-dashmap = "5.5"
-percent-encoding = "2.3"
-utf16string = "0.2"
-x11-clipboard = {git="https://github.com/clslaid/x11-clipboard", branch = "feat/store-batch"}
+once_cell = {version = "1.18", optional = true}
+x11rb =  {version = "0.12", features = ["all-extensions"], optional = true}
+rand = {version = "0.8", optional = true}
+fuser = {version = "0.13", optional = true}
+libc = {version = "0.2", optional = true}
+dashmap = {version ="5.5", optional = true}
+percent-encoding = {version  ="2.3", optional = true}
+utf16string = {version = "0.2", optional = true}
+x11-clipboard = {git="https://github.com/clslaid/x11-clipboard", branch = "feat/store-batch", optional = true}
