@@ -570,7 +570,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Big tiles", "Icone grandi"),
         ("Small tiles", "Icone piccole"),
         ("List", "Elenco"),
-        ("Virtual display", ""),
-        ("Plug out all", ""),
+        ("Virtual display", "Scehrmo virtuale"),
+        ("Plug out all", "Scollega tutto"),
     ].iter().cloned().collect();
 }
