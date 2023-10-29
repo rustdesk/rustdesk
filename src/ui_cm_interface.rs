@@ -1,6 +1,6 @@
 #[cfg(any(target_os = "android", target_os = "ios", feature = "flutter"))]
 use std::iter::FromIterator;
-#[cfg(any(target_os = "windows", target_os = "linux"))]
+#[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
 use std::sync::Arc;
 use std::{
     collections::HashMap,
@@ -15,11 +15,11 @@ use std::{
 use crate::ipc::Connection;
 #[cfg(not(any(target_os = "ios")))]
 use crate::ipc::{self, Data};
-#[cfg(any(target_os = "windows", target_os = "linux"))]
+#[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
 use clipboard::ContextSend;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use hbb_common::tokio::sync::mpsc::unbounded_channel;
-#[cfg(any(target_os = "windows", target_os = "linux"))]
+#[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
 use hbb_common::tokio::sync::Mutex as TokioMutex;
 use hbb_common::{
     allow_err,
@@ -70,9 +70,9 @@ struct IpcTaskRunner<T: InvokeUiCM> {
     close: bool,
     running: bool,
     conn_id: i32,
-    #[cfg(any(target_os = "windows", target_os = "linux"))]
+    #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
     file_transfer_enabled: bool,
-    #[cfg(any(target_os = "windows", target_os = "linux"))]
+    #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
     file_transfer_enabled_peer: bool,
 }
 
@@ -165,7 +165,7 @@ impl<T: InvokeUiCM> ConnectionManager<T> {
     }
 
     #[inline]
-    #[cfg(any(target_os = "windows", target_os = "linux"))]
+    #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
     fn is_authorized(&self, id: i32) -> bool {
         CLIENTS
             .read()
@@ -186,7 +186,7 @@ impl<T: InvokeUiCM> ConnectionManager<T> {
                 .map(|c| c.disconnected = true);
         }
 
-        #[cfg(any(target_os = "windows", target_os = "linux"))]
+        #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
         {
             let _ = ContextSend::proc(|context| -> ResultType<()> {
                 context.empty_clipboard(id)?;
@@ -330,14 +330,14 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
         // for tmp use, without real conn id
         let mut write_jobs: Vec<fs::TransferJob> = Vec::new();
 
-        #[cfg(any(target_os = "windows", target_os = "linux"))]
+        #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
         let is_authorized = self.cm.is_authorized(self.conn_id);
 
-        #[cfg(any(target_os = "windows", target_os = "linux"))]
+        #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
         let rx_clip1;
         let mut rx_clip;
         let _tx_clip;
-        #[cfg(any(target_os = "windows", target_os = "linux"))]
+        #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
         if self.conn_id > 0 && is_authorized {
             log::debug!("Clipboard is enabled from client peer: type 1");
             rx_clip1 = clipboard::get_rx_cliprdr_server(self.conn_id);
@@ -349,12 +349,12 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
             rx_clip1 = Arc::new(TokioMutex::new(rx_clip2));
             rx_clip = rx_clip1.lock().await;
         }
-        #[cfg(not(any(target_os = "windows", target_os = "linux")))]
+        #[cfg(not(any(target_os = "windows", target_os = "linux", target_os = "macos")))]
         {
             (_tx_clip, rx_clip) = unbounded_channel::<i32>();
         }
 
-        #[cfg(any(target_os = "windows", target_os = "linux"))]
+        #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
         {
             if ContextSend::is_enabled() {
                 log::debug!("Clipboard is enabled");
@@ -382,7 +382,7 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
                                     log::debug!("conn_id: {}", id);
                                     self.cm.add_connection(id, is_file_transfer, port_forward, peer_id, name, authorized, keyboard, clipboard, audio, file, restart, recording, from_switch,self.tx.clone());
                                     self.conn_id = id;
-                                    #[cfg(any(target_os = "linux", target_os = "windows"))]
+                                    #[cfg(any(target_os = "linux", target_os = "windows", target_os = "macos"))]
                                     {
                                         self.file_transfer_enabled = _file_transfer_enabled;
                                     }
@@ -425,7 +425,7 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
                                 }
                                 #[cfg(not(any(target_os = "android", target_os = "ios")))]
                                 Data::ClipboardFile(_clip) => {
-                                    #[cfg(any(target_os = "windows", target_os="linux"))]
+                                    #[cfg(any(target_os = "windows", target_os="linux", target_os = "macos"))]
                                     {
                                         let is_stopping_allowed = _clip.is_stopping_allowed_from_peer();
                                         let is_clipboard_enabled = ContextSend::is_enabled();
@@ -504,7 +504,7 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
                 },
                 clip_file = rx_clip.recv() => match clip_file {
                     Some(_clip) => {
-                        #[cfg(any(target_os = "windows", target_os ="linux"))]
+                        #[cfg(any(target_os = "windows", target_os ="linux", target_os = "macos"))]
                         {
                             let is_stopping_allowed = _clip.is_stopping_allowed();
                             let is_clipboard_enabled = ContextSend::is_enabled();
@@ -543,9 +543,9 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
             close: true,
             running: true,
             conn_id: 0,
-            #[cfg(any(target_os = "windows", target_os = "linux"))]
+            #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
             file_transfer_enabled: false,
-            #[cfg(any(target_os = "windows", target_os = "linux"))]
+            #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
             file_transfer_enabled_peer: false,
         };
 

@@ -21,7 +21,7 @@ pub mod fuse;
 #[cfg(feature = "unix-file-copy-paste")]
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 pub mod unix;
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 pub fn create_cliprdr_context(
     _enable_files: bool,
     _enable_others: bool,
@@ -52,11 +52,11 @@ pub fn create_cliprdr_context(
             log::warn!("umount {:?} may fail: {:?}", mnt_path, e);
         }
 
-        let linux_ctx = unix::ClipboardContext::new(timeout, mnt_path.parse().unwrap())?;
+        let unix_ctx = unix::ClipboardContext::new(timeout, mnt_path.parse().unwrap())?;
         log::debug!("start cliprdr FUSE");
-        linux_ctx.run().expect("failed to start cliprdr FUSE");
+        unix_ctx.run().expect("failed to start cliprdr FUSE");
 
-        Ok(Box::new(linux_ctx) as Box<_>)
+        Ok(Box::new(unix_ctx) as Box<_>)
     }
     #[cfg(not(feature = "unix-file-copy-paste"))]
     return Ok(Box::new(DummyCliprdrContext {}) as Box<_>);
@@ -83,5 +83,4 @@ impl CliprdrServiceContext for DummyCliprdrContext {
 #[cfg(feature = "unix-file-copy-paste")]
 // begin of epoch used by microsoft
 // 1601-01-01 00:00:00 + LDAP_EPOCH_DELTA*(100 ns) = 1970-01-01 00:00:00
-#[cfg(target_os = "linux")]
 const LDAP_EPOCH_DELTA: u64 = 116444772610000000;

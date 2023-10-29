@@ -7,14 +7,14 @@ use std::{
     },
 };
 
-#[cfg(any(target_os = "windows", target_os = "linux"))]
+#[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
 use clipboard::ContextSend;
 use crossbeam_queue::ArrayQueue;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use hbb_common::sleep;
 #[cfg(not(target_os = "ios"))]
 use hbb_common::tokio::sync::mpsc::error::TryRecvError;
-#[cfg(any(target_os = "windows", target_os = "linux"))]
+#[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
 use hbb_common::tokio::sync::Mutex as TokioMutex;
 use hbb_common::{
     allow_err,
@@ -66,7 +66,7 @@ pub struct Remote<T: InvokeUiSession> {
     last_update_jobs_status: (Instant, HashMap<i32, u64>),
     is_connected: bool,
     first_frame: bool,
-    #[cfg(any(target_os = "windows", target_os = "linux"))]
+    #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
     client_conn_id: i32, // used for file clipboard
     data_count: Arc<AtomicUsize>,
     frame_count_map: Arc<RwLock<HashMap<usize, usize>>>,
@@ -101,7 +101,7 @@ impl<T: InvokeUiSession> Remote<T> {
             last_update_jobs_status: (Instant::now(), Default::default()),
             is_connected: false,
             first_frame: false,
-            #[cfg(any(target_os = "windows", target_os = "linux"))]
+            #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
             client_conn_id: 0,
             data_count: Arc::new(AtomicUsize::new(0)),
             frame_count_map,
@@ -146,14 +146,14 @@ impl<T: InvokeUiSession> Remote<T> {
                 }
 
                 // just build for now
-                #[cfg(not(any(target_os = "windows", target_os = "linux")))]
+                #[cfg(not(any(target_os = "windows", target_os = "linux", target_os = "macos")))]
                 let (_tx_holder, mut rx_clip_client) = mpsc::unbounded_channel::<i32>();
 
-                #[cfg(any(target_os = "windows", target_os = "linux"))]
+                #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
                 let (_tx_holder, rx) = mpsc::unbounded_channel();
-                #[cfg(any(target_os = "windows", target_os = "linux"))]
+                #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
                 let mut rx_clip_client_lock = Arc::new(TokioMutex::new(rx));
-                #[cfg(any(target_os = "windows", target_os = "linux"))]
+                #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
                 {
                     let is_conn_not_default = self.handler.is_file_transfer()
                         || self.handler.is_port_forward()
@@ -164,7 +164,7 @@ impl<T: InvokeUiSession> Remote<T> {
                             clipboard::get_rx_cliprdr_client(&self.handler.id);
                     };
                 }
-                #[cfg(any(target_os = "windows", target_os = "linux"))]
+                #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
                 let mut rx_clip_client = rx_clip_client_lock.lock().await;
 
                 let mut status_timer = time::interval(Duration::new(1, 0));
@@ -210,7 +210,7 @@ impl<T: InvokeUiSession> Remote<T> {
                             }
                         }
                         _msg = rx_clip_client.recv() => {
-                            #[cfg(any(target_os="windows", target_os="linux"))]
+                            #[cfg(any(target_os="windows", target_os="linux", target_os = "macos"))]
                            self.handle_local_clipboard_msg(&mut peer, _msg).await;
                         }
                         _ = self.timer.tick() => {
@@ -278,7 +278,7 @@ impl<T: InvokeUiSession> Remote<T> {
             Client::try_stop_clipboard(&self.handler.id);
         }
 
-        #[cfg(any(target_os = "windows", target_os = "linux"))]
+        #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
         if _set_disconnected_ok {
             let conn_id = self.client_conn_id;
             log::debug!("try empty cliprdr for conn_id {}", conn_id);
@@ -289,7 +289,7 @@ impl<T: InvokeUiSession> Remote<T> {
         }
     }
 
-    #[cfg(any(target_os = "windows", target_os = "linux"))]
+    #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
     async fn handle_local_clipboard_msg(
         &self,
         peer: &mut crate::client::FramedStream,
@@ -1143,7 +1143,7 @@ impl<T: InvokeUiSession> Remote<T> {
                         }
                     }
                 }
-                #[cfg(any(target_os = "windows", target_os = "linux"))]
+                #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
                 Some(message::Union::Cliprdr(clip)) => {
                     self.handle_cliprdr_msg(clip);
                 }
@@ -1718,7 +1718,7 @@ impl<T: InvokeUiSession> Remote<T> {
         }
     }
 
-    #[cfg(any(target_os = "windows", target_os = "linux"))]
+    #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
     fn handle_cliprdr_msg(&self, clip: hbb_common::message_proto::Cliprdr) {
         log::debug!("handling cliprdr msg from server peer");
         #[cfg(feature = "flutter")]

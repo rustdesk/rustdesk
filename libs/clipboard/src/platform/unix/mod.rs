@@ -19,14 +19,17 @@ use crate::{
 };
 
 use self::local_file::LocalFile;
+#[cfg(target_os = "linux")]
 use self::url::{encode_path_to_uri, parse_plain_uri_list};
 
 use super::fuse::FuseServer;
 
-#[cfg(not(feature = "wayland"))]
+#[cfg(target_os = "linux")]
 pub mod x11;
 
 pub mod local_file;
+
+#[cfg(target_os = "linux")]
 pub mod url;
 
 // not actual format id, just a placeholder
@@ -66,6 +69,7 @@ trait SysClipboard: Send + Sync {
     fn get_file_list(&self) -> Vec<PathBuf>;
 }
 
+#[cfg(target_os = "linux")]
 fn get_sys_clipboard(ignore_path: &PathBuf) -> Result<Box<dyn SysClipboard>, CliprdrError> {
     #[cfg(feature = "wayland")]
     {
@@ -77,6 +81,11 @@ fn get_sys_clipboard(ignore_path: &PathBuf) -> Result<Box<dyn SysClipboard>, Cli
         let x11_clip = X11Clipboard::new(ignore_path)?;
         Ok(Box::new(x11_clip) as Box<_>)
     }
+}
+
+#[cfg(target_os = "macos")]
+fn get_sys_clipboard(ignore_path: &PathBuf) -> Result<Box<dyn SysClipboard>, CliprdrError> {
+    unimplemented!()
 }
 
 #[derive(Debug)]
