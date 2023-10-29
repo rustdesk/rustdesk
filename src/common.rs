@@ -14,22 +14,22 @@ pub enum GrabState {
 #[cfg(not(any(
     target_os = "android",
     target_os = "ios",
-    all(target_os = "linux", not(feature = "wayland"))
+    all(target_os = "linux", feature = "unix-file-copy-paste")
 )))]
 pub use arboard::Clipboard as ClipboardContext;
 
-#[cfg(all(target_os = "linux", not(feature = "wayland")))]
+#[cfg(all(target_os = "linux", feature = "unix-file-copy-paste"))]
 static X11_CLIPBOARD: once_cell::sync::OnceCell<x11_clipboard::Clipboard> =
     once_cell::sync::OnceCell::new();
 
-#[cfg(all(target_os = "linux", not(feature = "wayland")))]
+#[cfg(all(target_os = "linux", feature = "unix-file-copy-paste"))]
 fn get_clipboard() -> Result<&'static x11_clipboard::Clipboard, String> {
     X11_CLIPBOARD
         .get_or_try_init(|| x11_clipboard::Clipboard::new())
         .map_err(|e| e.to_string())
 }
 
-#[cfg(all(target_os = "linux", not(feature = "wayland")))]
+#[cfg(all(target_os = "linux", feature = "unix-file-copy-paste"))]
 pub struct ClipboardContext {
     string_setter: x11rb::protocol::xproto::Atom,
     string_getter: x11rb::protocol::xproto::Atom,
@@ -39,7 +39,7 @@ pub struct ClipboardContext {
     prop: x11rb::protocol::xproto::Atom,
 }
 
-#[cfg(all(target_os = "linux", not(feature = "wayland")))]
+#[cfg(all(target_os = "linux", feature = "unix-file-copy-paste"))]
 fn parse_plain_uri_list(v: Vec<u8>) -> Result<String, String> {
     let text = String::from_utf8(v).map_err(|_| "ConversionFailure".to_owned())?;
     let mut list = String::new();
@@ -56,7 +56,7 @@ fn parse_plain_uri_list(v: Vec<u8>) -> Result<String, String> {
     Ok(list)
 }
 
-#[cfg(all(target_os = "linux", not(feature = "wayland")))]
+#[cfg(all(target_os = "linux", feature = "unix-file-copy-paste"))]
 impl ClipboardContext {
     pub fn new() -> Result<Self, String> {
         let clipboard = get_clipboard()?;

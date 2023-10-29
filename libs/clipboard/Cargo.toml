@@ -19,7 +19,8 @@ unix-file-copy-paste = [
 "dep:libc",
 "dep:dashmap",
 "dep:percent-encoding",
-"dep:utf16string"
+"dep:utf16string",
+"dep:once_cell"
 ]
 
 [dependencies]
