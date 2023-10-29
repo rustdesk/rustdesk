@@ -16,8 +16,7 @@ use super::{encode_path_to_uri, parse_plain_uri_list, SysClipboard};
 
 static X11_CLIPBOARD: OnceCell<Clipboard> = OnceCell::new();
 
-// this is tested on an Arch Linux with X11
-const X11_CLIPBOARD_TIMEOUT: std::time::Duration = std::time::Duration::from_millis(70);
+const X11_CLIPBOARD_TIMEOUT: std::time::Duration = std::time::Duration::from_millis(130);
 
 fn get_clip() -> Result<&'static Clipboard, CliprdrError> {
     X11_CLIPBOARD.get_or_try_init(|| Clipboard::new().map_err(|_| CliprdrError::CliprdrInit))
@@ -68,7 +67,14 @@ impl X11Clipboard {
         match res {
             Ok(res) => Ok(res),
             Err(x11_clipboard::error::Error::UnexpectedType(_)) => Ok(vec![]),
-            Err(_) => Err(CliprdrError::ClipboardInternalError),
+            Err(x11_clipboard::error::Error::Timeout) => {
+                log::debug!("x11 clipboard get content timeout.");
+                Err(CliprdrError::ClipboardInternalError)
+            }
+            Err(e) => {
+                log::debug!("x11 clipboard get content fail: {:?}", e);
+                Err(CliprdrError::ClipboardInternalError)
+            }
         }
     }
 
