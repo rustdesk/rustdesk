@@ -87,7 +87,7 @@ impl ClipboardContext {
         let clip = self.clip;
         let prop = self.prop;
 
-        const TIMEOUT: std::time::Duration = std::time::Duration::from_millis(100);
+        const TIMEOUT: std::time::Duration = std::time::Duration::from_millis(120);
 
         let text_content = get_clipboard()?
             .load(clip, self.string_getter, prop, TIMEOUT)

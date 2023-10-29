@@ -16,8 +16,6 @@ use super::{encode_path_to_uri, parse_plain_uri_list, SysClipboard};
 
 static X11_CLIPBOARD: OnceCell<Clipboard> = OnceCell::new();
 
-const X11_CLIPBOARD_TIMEOUT: std::time::Duration = std::time::Duration::from_millis(130);
-
 fn get_clip() -> Result<&'static Clipboard, CliprdrError> {
     X11_CLIPBOARD.get_or_try_init(|| Clipboard::new().map_err(|_| CliprdrError::CliprdrInit))
 }
@@ -63,7 +61,7 @@ impl X11Clipboard {
         // NOTE:
         // # why not use `load_wait`
         // load_wait is likely to wait forever, which is not what we want
-        let res = get_clip()?.load(clip, target, prop, X11_CLIPBOARD_TIMEOUT);
+        let res = get_clip()?.load_wait(clip, target, prop);
         match res {
             Ok(res) => Ok(res),
             Err(x11_clipboard::error::Error::UnexpectedType(_)) => Ok(vec![]),
