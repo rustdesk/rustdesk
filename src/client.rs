@@ -999,16 +999,19 @@ pub struct VideoHandler {
     pub rgb: ImageRgb,
     recorder: Arc<Mutex<Option<Recorder>>>,
     record: bool,
+    _display: usize, // useful for debug
 }
 
 impl VideoHandler {
     /// Create a new video handler.
-    pub fn new() -> Self {
+    pub fn new(_display: usize) -> Self {
+        log::info!("new video handler for display #{_display}");
         VideoHandler {
             decoder: Decoder::new(),
             rgb: ImageRgb::new(ImageFormat::ARGB, crate::DST_STRIDE_RGBA),
             recorder: Default::default(),
             record: false,
+            _display,
         }
     }
 
@@ -1207,7 +1210,7 @@ impl LoginConfigHandler {
         self.save_config(config);
     }
 
-    /// Save reverse mouse wheel ("", "Y") to the current config.
+    /// Save "displays_as_individual_windows" ("", "Y") to the current config.
     ///
     /// # Arguments
     ///
@@ -1215,6 +1218,17 @@ impl LoginConfigHandler {
     pub fn save_displays_as_individual_windows(&mut self, value: String) {
         let mut config = self.load_config();
         config.displays_as_individual_windows = value;
+        self.save_config(config);
+    }
+
+    /// Save "use_all_my_displays_for_the_remote_session" ("", "Y") to the current config.
+    ///
+    /// # Arguments
+    ///
+    /// * `value` - The "use_all_my_displays_for_the_remote_session" value ("", "Y").
+    pub fn save_use_all_my_displays_for_the_remote_session(&mut self, value: String) {
+        let mut config = self.load_config();
+        config.use_all_my_displays_for_the_remote_session = value;
         self.save_config(config);
     }
 
@@ -1889,7 +1903,7 @@ where
                         if handler_controller_map.len() <= display {
                             for _i in handler_controller_map.len()..=display {
                                 handler_controller_map.push(VideoHandlerController {
-                                    handler: VideoHandler::new(),
+                                    handler: VideoHandler::new(_i),
                                     count: 0,
                                     duration: std::time::Duration::ZERO,
                                     skip_beginning: 0,
@@ -1949,6 +1963,7 @@ where
                         }
                     }
                     MediaData::RecordScreen(start, display, w, h, id) => {
+                        log::info!("record screen command: start:{start}, display:{display}");
                         if handler_controller_map.len() == 1 {
                             // Compatible with the sciter version(single ui session).
                             // For the sciter version, there're no multi-ui-sessions for one connection.

@@ -134,39 +134,6 @@ mv libsciter-gtk.so target/debug
 VCPKG_ROOT=$HOME/vcpkg cargo run
 ```
 
-### 把 Wayland 修改成 X11 (Xorg)
-
-RustDesk 暂时不支持 Wayland，不过正在积极开发中。
-> [点我](https://docs.fedoraproject.org/en-US/quick-docs/configuring-xorg-as-default-gnome-session/)
-查看如何将 Xorg 设置成默认的 GNOME session.
-
-## Wayland 支持
-
-Wayland 似乎没有提供任何将按键发送到其他窗口的 API. 因此, RustDesk 使用较低级别的 API, 即 `/dev/uinput` devices (Linux kernal level).
-
-当 Wayland 是受控方时，您必须以下列方式开始操作:
-
-```bash
-# Start uinput service
-$ sudo rustdesk --service
-$ rustdesk
-```
-
-**Notice**: Wayland 屏幕录制使用不同的接口. RustDesk 目前只支持 org.freedesktop.portal.ScreenCast.
-
-```bash
-$ dbus-send --session --print-reply       \
-  --dest=org.freedesktop.portal.Desktop \
-  /org/freedesktop/portal/desktop       \
-  org.freedesktop.DBus.Properties.Get   \
-  string:org.freedesktop.portal.ScreenCast string:version
-# Not support
-Error org.freedesktop.DBus.Error.InvalidArgs: No such interface “org.freedesktop.portal.ScreenCast”
-# Support
-method return time=1662544486.931020 sender=:1.54 -> destination=:1.139 serial=257 reply_serial=2
-   variant       uint32 4
-```
-
 ## 使用 Docker 编译
 
 克隆版本库并构建 Docker 容器:

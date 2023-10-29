@@ -564,5 +564,13 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("elevated_switch_display_msg", "Przełącz się na ekran główny, ponieważ wyświetlanie kilku ekranów nie jest obsługiwane przy podniesionych uprawnieniach."),
         ("Open in new window", "Otwórz w nowym oknie"),
         ("Show displays as individual windows", "Pokaż ekrany w osobnych oknach"),
+        ("Use all my displays for the remote session", ""),
+        ("selinux_tip", ""),
+        ("Change view", ""),
+        ("Big tiles", ""),
+        ("Small tiles", ""),
+        ("List", ""),
+        ("Virtual display", ""),
+        ("Plug out all", ""),
     ].iter().cloned().collect();
 }

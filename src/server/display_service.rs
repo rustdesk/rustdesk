@@ -1,4 +1,6 @@
 use super::*;
+#[cfg(target_os = "linux")]
+use crate::platform::linux::is_x11;
 #[cfg(all(windows, feature = "virtual_display_driver"))]
 use crate::virtual_display_manager;
 #[cfg(windows)]
@@ -6,7 +8,11 @@ use hbb_common::get_version_number;
 use hbb_common::protobuf::MessageField;
 use scrap::Display;
 
+// https://github.com/rustdesk/rustdesk/discussions/6042, avoiding dbus call
+
 pub const NAME: &'static str = "display";
+
+const DUMMY_DISPLAY_SIDE_MAX_SIZE: usize = 1024;
 
 struct ChangedResolution {
     original: (i32, i32),
@@ -19,6 +25,71 @@ lazy_static::lazy_static! {
     // Initial primary display index.
     // It should only be updated when the rustdesk server is started, and should not be updated when displays changed.
     pub static ref PRIMARY_DISPLAY_IDX: usize = get_primary();
+    static ref SYNC_DISPLAYS: Arc<Mutex<SyncDisplaysInfo>> = Default::default();
+}
+
+#[derive(Default)]
+struct SyncDisplaysInfo {
+    displays: Vec<DisplayInfo>,
+    is_synced: bool,
+}
+
+impl SyncDisplaysInfo {
+    fn check_changed(&mut self, displays: Vec<DisplayInfo>) {
+        if self.displays.len() != displays.len() {
+            self.displays = displays;
+            self.is_synced = false;
+            return;
+        }
+        for (i, d) in displays.iter().enumerate() {
+            if d != &self.displays[i] {
+                self.displays = displays;
+                self.is_synced = false;
+                return;
+            }
+        }
+    }
+
+    fn get_update_sync_displays(&mut self) -> Option<Vec<DisplayInfo>> {
+        if self.is_synced {
+            return None;
+        }
+        self.is_synced = true;
+        Some(self.displays.clone())
+    }
+}
+
+// This function is really useful, though a duplicate check if display changed.
+// The video server will then send the following messages to the client:
+//  1. the supported resolutions of the {idx} display
+//  2. the switch resolution message, so that the client can record the custom resolution.
+pub(super) fn check_display_changed(
+    ndisplay: usize,
+    idx: usize,
+    (x, y, w, h): (i32, i32, usize, usize),
+) -> Option<DisplayInfo> {
+    #[cfg(target_os = "linux")]
+    {
+        // wayland do not support changing display for now
+        if !is_x11() {
+            return None;
+        }
+    }
+
+    let lock = SYNC_DISPLAYS.lock().unwrap();
+    // If plugging out a monitor && lock.displays.get(idx) is None.
+    //  1. The client version < 1.2.4. The client side has to reconnect.
+    //  2. The client version > 1.2.4, The client side can handle the case becuase sync peer info message will be sent.
+    // But it is acceptable to for the user to reconnect manually, becuase the monitor is unplugged.
+    let d = lock.displays.get(idx)?;
+    if ndisplay != lock.displays.len() {
+        return Some(d.clone());
+    }
+    if !(d.x == x && d.y == y && d.width == w as i32 && d.height == h as i32) {
+        Some(d.clone())
+    } else {
+        None
+    }
 }
 
 #[inline]
@@ -74,57 +145,62 @@ pub fn is_privacy_mode_supported() -> bool {
     return false;
 }
 
-#[derive(Default)]
-struct StateDisplay {
-    synced_displays: Vec<DisplayInfo>,
-}
-
-impl super::service::Reset for StateDisplay {
-    fn reset(&mut self) {
-        self.synced_displays.clear();
-    }
-}
-
 pub fn new() -> GenericService {
-    let svc = EmptyExtraFieldService::new(NAME.to_owned(), false);
-    GenericService::repeat::<StateDisplay, _, _>(&svc.clone(), 300, run);
+    let svc = EmptyExtraFieldService::new(NAME.to_owned(), true);
+    GenericService::run(&svc.clone(), run);
     svc.sp
 }
 
-fn check_get_displays_changed_msg(last_synced_displays: &mut Vec<DisplayInfo>) -> Option<Message> {
-    let displays = try_get_displays().ok()?;
-    if displays.len() == last_synced_displays.len() {
-        return None;
+fn displays_to_msg(displays: Vec<DisplayInfo>) -> Message {
+    let mut pi = PeerInfo {
+        ..Default::default()
+    };
+    pi.displays = displays.clone();
+
+    #[cfg(all(windows, feature = "virtual_display_driver"))]
+    if crate::platform::is_installed() {
+        let virtual_displays = crate::virtual_display_manager::get_virtual_displays();
+        if !virtual_displays.is_empty() {
+            let mut platform_additions = serde_json::Map::new();
+            platform_additions.insert(
+                "virtual_displays".into(),
+                serde_json::json!(&virtual_displays),
+            );
+            pi.platform_additions = serde_json::to_string(&platform_additions).unwrap_or("".into());
+        }
     }
 
-    // Display to DisplayInfo
-    let displays = to_display_info(&displays);
-    if last_synced_displays.len() == 0 {
-        *last_synced_displays = displays;
-        None
-    } else {
-        let mut pi = PeerInfo {
-            ..Default::default()
-        };
-        pi.displays = displays.clone();
-        pi.current_display = 0;
-        let mut msg_out = Message::new();
-        msg_out.set_peer_info(pi);
-        *last_synced_displays = displays;
-        Some(msg_out)
-    }
+    // current_display should not be used in server.
+    // It is set to 0 for compatibility with old clients.
+    pi.current_display = 0;
+    let mut msg_out = Message::new();
+    msg_out.set_peer_info(pi);
+    msg_out
 }
 
-#[cfg(all(windows, feature = "virtual_display_driver"))]
-pub fn try_plug_out_virtual_display() {
-    let _res = virtual_display_manager::plug_out_headless();
+fn check_get_displays_changed_msg() -> Option<Message> {
+    check_update_displays(&try_get_displays().ok()?);
+    let displays = SYNC_DISPLAYS.lock().unwrap().get_update_sync_displays()?;
+    Some(displays_to_msg(displays))
 }
 
-fn run(sp: EmptyExtraFieldService, state: &mut StateDisplay) -> ResultType<()> {
-    if let Some(msg_out) = check_get_displays_changed_msg(&mut state.synced_displays) {
-        sp.send(msg_out);
-        log::info!("Displays changed");
+fn run(sp: EmptyExtraFieldService) -> ResultType<()> {
+    while sp.ok() {
+        sp.snapshot(|sps| {
+            if sps.has_subscribes() {
+                SYNC_DISPLAYS.lock().unwrap().is_synced = false;
+                bail!("new subscriber");
+            }
+            Ok(())
+        })?;
+
+        if let Some(msg_out) = check_get_displays_changed_msg() {
+            sp.send(msg_out);
+            log::info!("Displays changed");
+        }
+        std::thread::sleep(Duration::from_millis(300));
     }
+
     Ok(())
 }
 
@@ -167,8 +243,20 @@ pub(super) fn get_original_resolution(
     .into()
 }
 
-pub fn to_display_info(all: &Vec<Display>) -> Vec<DisplayInfo> {
-    all.iter()
+#[cfg(target_os = "linux")]
+pub(super) fn get_sync_displays() -> Vec<DisplayInfo> {
+    SYNC_DISPLAYS.lock().unwrap().displays.clone()
+}
+
+pub(super) fn get_display_info(idx: usize) -> Option<DisplayInfo> {
+    SYNC_DISPLAYS.lock().unwrap().displays.get(idx).cloned()
+}
+
+// Display to DisplayInfo
+// The DisplayInfo is be sent to the peer.
+pub(super) fn check_update_displays(all: &Vec<Display>) {
+    let displays = all
+        .iter()
         .map(|d| {
             let display_name = d.name();
             let original_resolution = get_original_resolution(&display_name, d.width(), d.height());
@@ -184,32 +272,34 @@ pub fn to_display_info(all: &Vec<Display>) -> Vec<DisplayInfo> {
                 ..Default::default()
             }
         })
-        .collect::<Vec<DisplayInfo>>()
+        .collect::<Vec<DisplayInfo>>();
+    SYNC_DISPLAYS.lock().unwrap().check_changed(displays);
 }
 
 pub fn is_inited_msg() -> Option<Message> {
     #[cfg(target_os = "linux")]
-    if !scrap::is_x11() {
+    if !is_x11() {
         return super::wayland::is_inited();
     }
     None
 }
 
-pub async fn get_displays() -> ResultType<Vec<DisplayInfo>> {
+pub async fn update_get_sync_displays() -> ResultType<Vec<DisplayInfo>> {
     #[cfg(target_os = "linux")]
     {
-        if !scrap::is_x11() {
+        if !is_x11() {
             return super::wayland::get_displays().await;
         }
     }
-    Ok(to_display_info(&try_get_displays()?))
+    check_update_displays(&try_get_displays()?);
+    Ok(SYNC_DISPLAYS.lock().unwrap().displays.clone())
 }
 
 #[inline]
 pub fn get_primary() -> usize {
     #[cfg(target_os = "linux")]
     {
-        if !scrap::is_x11() {
+        if !is_x11() {
             return match super::wayland::get_primary() {
                 Ok(n) => n,
                 Err(_) => 0,
@@ -233,9 +323,18 @@ fn no_displays(displays: &Vec<Display>) -> bool {
         true
     } else if display_len == 1 {
         let display = &displays[0];
-        let dummy_display_side_max_size = 800;
-        display.width() <= dummy_display_side_max_size
-            && display.height() <= dummy_display_side_max_size
+        if display.width() > DUMMY_DISPLAY_SIDE_MAX_SIZE
+            || display.height() > DUMMY_DISPLAY_SIDE_MAX_SIZE
+        {
+            return false;
+        }
+        let any_real = crate::platform::resolutions(&display.name())
+            .iter()
+            .any(|r| {
+                (r.height as usize) > DUMMY_DISPLAY_SIDE_MAX_SIZE
+                    || (r.width as usize) > DUMMY_DISPLAY_SIDE_MAX_SIZE
+            });
+        !any_real
     } else {
         false
     }

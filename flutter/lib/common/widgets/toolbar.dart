@@ -224,11 +224,8 @@ List<TTextMenu> toolbarControls(BuildContext context, String id, FFI ffi) {
     ));
   }
   // record
-  var codecFormat = ffi.qualityMonitorModel.data.codecFormat;
   if (!isDesktop &&
-      (ffi.recordingModel.start ||
-          (perms["recording"] != false &&
-              (codecFormat == "VP8" || codecFormat == "VP9")))) {
+      (ffi.recordingModel.start || (perms["recording"] != false))) {
     v.add(TTextMenu(
         child: Row(
           children: [
@@ -533,6 +530,21 @@ Future<List<TToggleMenu>> toolbarDisplayToggle(
               sessionId: sessionId, value: value ? 'Y' : '');
         },
         child: Text(translate('Show displays as individual windows'))));
+  }
+
+  final screenList = await getScreenRectList();
+  if (useTextureRender && pi.isSupportMultiDisplay && screenList.length > 1) {
+    final value = bind.sessionGetUseAllMyDisplaysForTheRemoteSession(
+            sessionId: ffi.sessionId) ==
+        'Y';
+    v.add(TToggleMenu(
+        value: value,
+        onChanged: (value) {
+          if (value == null) return;
+          bind.sessionSetUseAllMyDisplaysForTheRemoteSession(
+              sessionId: sessionId, value: value ? 'Y' : '');
+        },
+        child: Text(translate('Use all my displays for the remote session'))));
   }
 
   return v;
