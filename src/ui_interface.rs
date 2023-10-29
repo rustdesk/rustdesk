@@ -1030,8 +1030,12 @@ async fn check_connect_status_(reconnect: bool, rx: mpsc::UnboundedReceiver<ipc:
                                 *OPTIONS.lock().unwrap() = v;
                                 *OPTION_SYNCED.lock().unwrap() = true;
 
-                                #[cfg(any(target_os="windows",
-                                        all(target_os="linux", feature = "unix-file-copy-paste")
+                                #[cfg(any(
+                                        target_os="windows",
+                                        all(
+                                            any(target_os="linux", target_os = "macos"),
+                                            feature = "unix-file-copy-paste"
+                                            )
                                         ))]
                                 {
                                     let b = OPTIONS.lock().unwrap().get("enable-file-transfer").map(|x| x.to_string()).unwrap_or_default();

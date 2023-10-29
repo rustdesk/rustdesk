@@ -1706,7 +1706,10 @@ impl<T: InvokeUiSession> Remote<T> {
     fn check_clipboard_file_context(&self) {
         #[cfg(any(
             target_os = "windows",
-            all(feature = "unix-file-copy-paste", target_os = "linux")
+            all(
+                feature = "unix-file-copy-paste",
+                any(target_os = "linux", target_os = "macos")
+            )
         ))]
         {
             let enabled = *self.handler.server_file_transfer_enabled.read().unwrap()

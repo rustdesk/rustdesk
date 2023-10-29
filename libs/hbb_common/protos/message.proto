@@ -104,6 +104,7 @@ message PeerInfo {
   // Use JSON's key-value format which is friendly for peer to handle.
   // NOTE: Only support one-level dictionaries (for peer to update), and the key is of type string.
   string platform_additions = 12;
+  bool has_file_clipboard = 13;
 }
 
 message LoginResponse {

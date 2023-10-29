@@ -1019,6 +1019,13 @@ impl Connection {
         let mut pi = PeerInfo {
             username: username.clone(),
             version: VERSION.to_owned(),
+            has_file_clipboard: cfg!(any(
+                target_os = "windows",
+                all(
+                    feature = "unix-file-copy-paste",
+                    any(target_os = "linux", target_os = "macos")
+                )
+            )),
             ..Default::default()
         };
 

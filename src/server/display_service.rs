@@ -153,6 +153,13 @@ pub fn new() -> GenericService {
 
 fn displays_to_msg(displays: Vec<DisplayInfo>) -> Message {
     let mut pi = PeerInfo {
+        has_file_clipboard: cfg!(any(
+            target_os = "windows",
+            all(
+                feature = "unix-file-copy-paste",
+                any(target_os = "linux", target_os = "macos")
+            )
+        )),
         ..Default::default()
     };
     pi.displays = displays.clone();

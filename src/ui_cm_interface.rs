@@ -577,7 +577,10 @@ pub async fn start_ipc<T: InvokeUiCM>(cm: ConnectionManager<T>) {
 
     #[cfg(any(
         target_os = "windows",
-        all(target_os = "linux", feature = "unix-file-copy-paste"),
+        all(
+            any(target_os = "linux", target_os = "macos"),
+            feature = "unix-file-copy-paste"
+        ),
     ))]
     ContextSend::enable(Config::get_option("enable-file-transfer").is_empty());
 
