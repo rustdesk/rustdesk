@@ -19,6 +19,7 @@ import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import android.accessibilityservice.AccessibilityServiceInfo
 import android.accessibilityservice.AccessibilityServiceInfo.FLAG_INPUT_METHOD_EDITOR
+import android.view.inputmethod.EditorInfo
 import androidx.annotation.RequiresApi
 import java.util.*
 import java.lang.Character
@@ -319,6 +320,9 @@ class InputService : AccessibilityService() {
     }
 
     private fun insertAccessibilityNode(list: LinkedList<AccessibilityNodeInfo>, node: AccessibilityNodeInfo) {
+        if (node == null) {
+            return
+        }
         if (list.contains(node)) {
             return
         }
@@ -410,6 +414,8 @@ class InputService : AccessibilityService() {
 
     private fun trySendKeyEvent(event: android.view.KeyEvent, node: AccessibilityNodeInfo, textToCommit: String?): Boolean {
         node.refresh()
+        this.fakeEditTextForTextStateCalculation?.setSelection(0,0)
+        this.fakeEditTextForTextStateCalculation?.setText(null)
         val text = node.getText()
         var isShowingHint = false
         if (Build.VERSION.SDK_INT >= 26) {
@@ -463,7 +469,13 @@ class InputService : AccessibilityService() {
                     textSelectionEnd
                 )
             }
-            this.fakeEditTextForTextStateCalculation?.dispatchKeyEvent(event)
+
+            this.fakeEditTextForTextStateCalculation?.let {
+                val inputConnection = it.onCreateInputConnection(EditorInfo())
+                if (inputConnection != null) {
+                    success = inputConnection.sendKeyEvent(event)
+                }
+            }
 
             this.fakeEditTextForTextStateCalculation?.getText()?.let { newText ->
                 val arguments = Bundle()
@@ -472,6 +484,24 @@ class InputService : AccessibilityService() {
                     newText.toString()
                 )
                 success = node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, arguments)
+            }
+
+            if (success && this.fakeEditTextForTextStateCalculation != null) {
+                val selectionStart = this.fakeEditTextForTextStateCalculation?.selectionStart
+                val selectionEnd = this.fakeEditTextForTextStateCalculation?.selectionEnd
+
+                if (selectionStart != null && selectionEnd != null) {
+                    val arguments = Bundle()
+                    arguments.putInt(
+                        AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_START_INT,
+                        selectionStart
+                    )
+                    arguments.putInt(
+                        AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_END_INT,
+                        selectionEnd
+                    )
+                    success = node.performAction(AccessibilityNodeInfo.ACTION_SET_SELECTION, arguments)
+                }
             }
         }
         return success
