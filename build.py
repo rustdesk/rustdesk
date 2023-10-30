@@ -204,11 +204,9 @@ def download_extract_features(features, res_dir):
             return r
 
     for (feat, feat_info) in features.items():
-        includes = feat_info['include'] if 'include' in feat_info and feat_info['include'] else [
-        ]
+        includes = feat_info['include'] if 'include' in feat_info and feat_info['include'] else []
         includes = [re.compile(p) for p in includes]
-        excludes = feat_info['exclude'] if 'exclude' in feat_info and feat_info['exclude'] else [
-        ]
+        excludes = feat_info['exclude'] if 'exclude' in feat_info and feat_info['exclude'] else []
         excludes = [re.compile(p) for p in excludes]
 
         print(f'{feat} download begin')
@@ -594,7 +592,7 @@ def main():
                 else:
                     print('Not signed')
             else:
-                # buid deb package
+                # build deb package
                 system2(
                     'mv target/release/bundle/deb/rustdesk*.deb ./rustdesk.deb')
                 system2('dpkg-deb -R rustdesk.deb tmpdeb')
