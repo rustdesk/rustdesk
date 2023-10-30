@@ -15,7 +15,7 @@ import 'package:flutter_hbb/desktop/widgets/tabbar_widget.dart';
 import 'package:flutter_hbb/models/file_model.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:get/get.dart';
-import 'package:wakelock/wakelock.dart';
+import 'package:wakelock_plus/wakelock.dart';
 
 import '../../consts.dart';
 import '../../desktop/widgets/material_mod_popup_menu.dart' as mod_menu;
@@ -1129,7 +1129,8 @@ class _FileManagerViewState extends State<FileManagerView> {
     final isCtrlDown = RawKeyboard.instance.keysPressed
         .contains(LogicalKeyboardKey.controlLeft);
     final isShiftDown =
-        RawKeyboard.instance.keysPressed.contains(LogicalKeyboardKey.shiftLeft);
+        RawKeyboard.instance.keysPressed.contains(LogicalKeyboardKey.shiftLeft) ||
+        RawKeyboard.instance.keysPressed.contains(LogicalKeyboardKey.shiftRight);
     if (isCtrlDown) {
       if (selectedItems.items.contains(entry)) {
         selectedItems.remove(entry);
