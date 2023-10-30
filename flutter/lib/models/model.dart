@@ -667,11 +667,12 @@ class FfiModel with ChangeNotifier {
     if (connType == ConnType.fileTransfer) {
       parent.target?.fileModel.onReady();
     } else if (connType == ConnType.defaultConn) {
-      _pi.displays = [];
+      List<Display> newDisplays = [];
       List<dynamic> displays = json.decode(evt['displays']);
       for (int i = 0; i < displays.length; ++i) {
-        _pi.displays.add(evtToDisplay(displays[i]));
+        newDisplays.add(evtToDisplay(displays[i]));
       }
+      _pi.displays.value = newDisplays;
       _pi.displaysCount.value = _pi.displays.length;
       if (_pi.currentDisplay < _pi.displays.length) {
         // now replaced to _updateCurDisplay
@@ -861,7 +862,7 @@ class FfiModel with ChangeNotifier {
       for (int i = 0; i < displays.length; ++i) {
         newDisplays.add(evtToDisplay(displays[i]));
       }
-      _pi.displays = newDisplays;
+      _pi.displays.value = newDisplays;
       _pi.displaysCount.value = _pi.displays.length;
 
       if (_pi.currentDisplay == kAllDisplayValue) {
@@ -909,11 +910,11 @@ class FfiModel with ChangeNotifier {
       _pi.platformAdditions.remove(kPlatformAdditionsVirtualDisplays);
     } else {
       try {
-        final updateJson = json.decode(updateData);
+        final updateJson = json.decode(updateData) as Map<String, dynamic>;
         for (final key in updateJson.keys) {
           _pi.platformAdditions[key] = updateJson[key];
         }
-        if (!updateJson.contains(kPlatformAdditionsVirtualDisplays)) {
+        if (!updateJson.containsKey(kPlatformAdditionsVirtualDisplays)) {
           _pi.platformAdditions.remove(kPlatformAdditionsVirtualDisplays);
         }
       } catch (e) {
@@ -2322,7 +2323,7 @@ class PeerInfo with ChangeNotifier {
   bool isSupportMultiUiSession = false;
   int currentDisplay = 0;
   int primaryDisplay = kInvalidDisplayIndex;
-  List<Display> displays = [];
+  RxList<Display> displays = <Display>[].obs;
   Features features = Features();
   List<Resolution> resolutions = [];
   Map<String, dynamic> platformAdditions = {};
