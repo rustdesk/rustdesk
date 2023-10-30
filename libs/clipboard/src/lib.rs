@@ -108,6 +108,7 @@ pub enum ClipboardFile {
 struct MsgChannel {
     peer_id: String,
     conn_id: i32,
+    #[allow(dead_code)]
     sender: UnboundedSender<ClipboardFile>,
     receiver: Arc<TokioMutex<UnboundedReceiver<ClipboardFile>>>,
 }
@@ -193,6 +194,7 @@ pub fn get_rx_cliprdr_server(conn_id: i32) -> Arc<TokioMutex<UnboundedReceiver<C
     }
 }
 
+#[cfg(any(target_os = "windows", feature = "unix-file-copy-paste",))]
 #[inline]
 fn send_data(conn_id: i32, data: ClipboardFile) {
     #[cfg(target_os = "windows")]
@@ -204,7 +206,7 @@ fn send_data(conn_id: i32, data: ClipboardFile) {
         send_data_to_channel(conn_id, data);
     }
 }
-
+#[cfg(any(target_os = "windows", feature = "unix-file-copy-paste",))]
 #[inline]
 fn send_data_to_channel(conn_id: i32, data: ClipboardFile) {
     // no need to handle result here
@@ -218,6 +220,7 @@ fn send_data_to_channel(conn_id: i32, data: ClipboardFile) {
     }
 }
 
+#[cfg(feature = "unix-file-copy-paste")]
 #[inline]
 fn send_data_to_all(data: ClipboardFile) {
     // no need to handle result here

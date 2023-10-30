@@ -1032,7 +1032,7 @@ impl Connection {
             pi.hostname = DEVICE_NAME.lock().unwrap().clone();
             pi.platform = "Android".into();
         }
-        #[cfg(any(target_os = "linux", target_os = "windows"))]
+        #[cfg(any(target_os = "linux", target_os = "windows", target_os = "macos"))]
         let mut platform_additions = serde_json::Map::new();
         #[cfg(target_os = "linux")]
         {
@@ -1062,7 +1062,18 @@ impl Connection {
             }
         }
 
-        #[cfg(any(target_os = "linux", target_os = "windows"))]
+        #[cfg(any(
+            target_os = "windows",
+            all(
+                any(target_os = "linux", target_os = "macos"),
+                feature = "unix-file-copy-paste"
+            )
+        ))]
+        {
+            platform_additions.insert("has_file_clipboard".into(), json!(true));
+        }
+
+        #[cfg(any(target_os = "linux", target_os = "windows", target_os = "macos"))]
         if !platform_additions.is_empty() {
             pi.platform_additions = serde_json::to_string(&platform_additions).unwrap_or("".into());
         }

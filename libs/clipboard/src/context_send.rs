@@ -47,6 +47,19 @@ impl ContextSend {
         }
     }
 
+    /// make sure the clipboard context is enabled.
+    pub fn make_sure_enabled() -> ResultType<()> {
+        let mut lock = CONTEXT_SEND.addr.lock().unwrap();
+        if lock.is_some() {
+            return Ok(());
+        }
+
+        let ctx = crate::create_cliprdr_context(true, false, CLIPBOARD_RESPONSE_WAIT_TIMEOUT_SECS)?;
+        *lock = Some(ctx);
+        log::info!("clipboard context for file transfer recreated.");
+        Ok(())
+    }
+
     pub fn proc<F: FnOnce(&mut Box<dyn CliprdrServiceContext>) -> ResultType<()>>(
         f: F,
     ) -> ResultType<()> {

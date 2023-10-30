@@ -317,6 +317,9 @@ impl<T: InvokeUiSession> Remote<T> {
                     if stop {
                         ContextSend::set_is_stopped();
                     } else {
+                        if let Err(e) = ContextSend::make_sure_enabled() {
+                            log::error!("failed to restart clipboard context: {}", e);
+                        };
                         log::debug!("Send system clipboard message to remote");
                         let msg = crate::clipboard_file::clip_2_msg(clip);
                         allow_err!(peer.send(&msg).await);
@@ -1704,7 +1707,13 @@ impl<T: InvokeUiSession> Remote<T> {
     }
 
     fn check_clipboard_file_context(&self) {
-        #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
+        #[cfg(any(
+            target_os = "windows",
+            all(
+                feature = "unix-file-copy-paste",
+                any(target_os = "linux", target_os = "macos")
+            )
+        ))]
         {
             let enabled = *self.handler.server_file_transfer_enabled.read().unwrap()
                 && self.handler.lc.read().unwrap().enable_file_transfer.v;
@@ -1736,6 +1745,9 @@ impl<T: InvokeUiSession> Remote<T> {
                 "Process clipboard message from server peer, stop: {}, is_stopping_allowed: {}, file_transfer_enabled: {}",
                 stop, is_stopping_allowed, file_transfer_enabled);
         if !stop {
+            if let Err(e) = ContextSend::make_sure_enabled() {
+                log::error!("failed to restart clipboard context: {}", e);
+            };
             let _ = ContextSend::proc(|context| -> ResultType<()> {
                 context
                     .server_clip_file(self.client_conn_id, clip)

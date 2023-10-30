@@ -1725,6 +1725,17 @@ pub fn main_use_texture_render() -> SyncReturn<bool> {
     }
 }
 
+pub fn main_has_file_clipboard() -> SyncReturn<bool> {
+    let ret = cfg!(any(
+        target_os = "windows",
+        all(
+            feature = "unix-file-copy-paste",
+            any(target_os = "linux", target_os = "macos")
+        )
+    ));
+    SyncReturn(ret)
+}
+
 pub fn cm_init() {
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     crate::flutter::connection_manager::cm_init();

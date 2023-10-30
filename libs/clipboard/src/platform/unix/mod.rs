@@ -24,7 +24,6 @@ use self::url::{encode_path_to_uri, parse_plain_uri_list};
 
 use super::fuse::FuseServer;
 
-#[cfg(not(feature = "wayland"))]
 #[cfg(target_os = "linux")]
 /// clipboard implementation of x11
 pub mod x11;
@@ -34,6 +33,7 @@ pub mod x11;
 pub mod ns_clipboard;
 
 pub mod local_file;
+
 #[cfg(target_os = "linux")]
 pub mod url;
 
@@ -68,7 +68,6 @@ fn add_remote_format(local_name: &str, remote_id: i32) {
 
 trait SysClipboard: Send + Sync {
     fn start(&self);
-    fn stop(&self);
 
     fn set_file_list(&self, paths: &[PathBuf]) -> Result<(), CliprdrError>;
     fn get_file_list(&self) -> Vec<PathBuf>;
@@ -531,7 +530,7 @@ impl CliprdrServiceContext for ClipboardContext {
         if let Some(fuse_handle) = self.fuse_handle.lock().take() {
             fuse_handle.join();
         }
-        self.clipboard.stop();
+        // we don't stop the clipboard, keep listening in case of restart
         Ok(())
     }
 

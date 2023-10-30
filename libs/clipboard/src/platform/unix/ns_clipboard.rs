@@ -1,8 +1,4 @@
-use std::{
-    collections::BTreeSet,
-    path::PathBuf,
-    sync::atomic::{AtomicBool, Ordering},
-};
+use std::{collections::BTreeSet, path::PathBuf};
 
 use cacao::pasteboard::{Pasteboard, PasteboardName};
 use hbb_common::log;
@@ -28,7 +24,6 @@ fn set_file_list(file_list: &[PathBuf]) -> Result<(), CliprdrError> {
 }
 
 pub struct NsPasteboard {
-    stopped: AtomicBool,
     ignore_path: PathBuf,
 
     former_file_list: Mutex<Vec<PathBuf>>,
@@ -37,15 +32,9 @@ pub struct NsPasteboard {
 impl NsPasteboard {
     pub fn new(ignore_path: &PathBuf) -> Result<Self, CliprdrError> {
         Ok(Self {
-            stopped: AtomicBool::new(false),
             ignore_path: ignore_path.to_owned(),
             former_file_list: Mutex::new(vec![]),
         })
-    }
-
-    #[inline]
-    fn is_stopped(&self) -> bool {
-        self.stopped.load(Ordering::Relaxed)
     }
 }
 
@@ -56,13 +45,11 @@ impl SysClipboard for NsPasteboard {
     }
 
     fn start(&self) {
-        self.stopped.store(false, Ordering::Relaxed);
+        {
+            *self.former_file_list.lock() = vec![];
+        }
 
         loop {
-            if self.is_stopped() {
-                std::thread::sleep(std::time::Duration::from_millis(100));
-                continue;
-            }
             let file_list = match wait_file_list() {
                 Some(v) => v,
                 None => {
@@ -102,10 +89,6 @@ impl SysClipboard for NsPasteboard {
             std::thread::sleep(std::time::Duration::from_millis(100));
         }
         log::debug!("stop listening file related atoms on clipboard");
-    }
-
-    fn stop(&self) {
-        self.stopped.store(true, Ordering::Relaxed);
     }
 
     fn get_file_list(&self) -> Vec<PathBuf> {
