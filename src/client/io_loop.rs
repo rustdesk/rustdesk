@@ -317,6 +317,9 @@ impl<T: InvokeUiSession> Remote<T> {
                     if stop {
                         ContextSend::set_is_stopped();
                     } else {
+                        if let Err(e) = ContextSend::make_sure_enabled() {
+                            log::error!("failed to restart clipboard context: {}", e);
+                        };
                         log::debug!("Send system clipboard message to remote");
                         let msg = crate::clipboard_file::clip_2_msg(clip);
                         allow_err!(peer.send(&msg).await);
@@ -1742,6 +1745,9 @@ impl<T: InvokeUiSession> Remote<T> {
                 "Process clipboard message from server peer, stop: {}, is_stopping_allowed: {}, file_transfer_enabled: {}",
                 stop, is_stopping_allowed, file_transfer_enabled);
         if !stop {
+            if let Err(e) = ContextSend::make_sure_enabled() {
+                log::error!("failed to restart clipboard context: {}", e);
+            };
             let _ = ContextSend::proc(|context| -> ResultType<()> {
                 context
                     .server_clip_file(self.client_conn_id, clip)

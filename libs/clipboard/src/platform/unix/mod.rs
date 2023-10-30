@@ -63,7 +63,6 @@ fn add_remote_format(local_name: &str, remote_id: i32) {
 
 trait SysClipboard: Send + Sync {
     fn start(&self);
-    fn stop(&self);
 
     fn set_file_list(&self, paths: &[PathBuf]) -> Result<(), CliprdrError>;
     fn get_file_list(&self) -> Vec<PathBuf>;
@@ -524,7 +523,7 @@ impl CliprdrServiceContext for ClipboardContext {
         if let Some(fuse_handle) = self.fuse_handle.lock().take() {
             fuse_handle.join();
         }
-        self.clipboard.stop();
+        // we don't stop the clipboard, keep listening in case of restart
         Ok(())
     }
 

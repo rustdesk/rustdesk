@@ -1,8 +1,4 @@
-use std::{
-    collections::BTreeSet,
-    path::PathBuf,
-    sync::atomic::{AtomicBool, Ordering},
-};
+use std::{collections::BTreeSet, path::PathBuf};
 
 use hbb_common::log;
 use once_cell::sync::OnceCell;
@@ -21,7 +17,6 @@ fn get_clip() -> Result<&'static Clipboard, CliprdrError> {
 }
 
 pub struct X11Clipboard {
-    stop: AtomicBool,
     ignore_path: PathBuf,
     text_uri_list: Atom,
     gnome_copied_files: Atom,
@@ -47,7 +42,6 @@ impl X11Clipboard {
             .map_err(|_| CliprdrError::CliprdrInit)?;
         Ok(Self {
             ignore_path: ignore_path.to_owned(),
-            stop: AtomicBool::new(false),
             text_uri_list,
             gnome_copied_files,
             nautilus_clipboard,
@@ -85,19 +79,9 @@ impl X11Clipboard {
     }
 
     fn wait_file_list(&self) -> Result<Option<Vec<PathBuf>>, CliprdrError> {
-        if self.stop.load(Ordering::Relaxed) {
-            return Ok(None);
-        }
         let v = self.load(self.text_uri_list)?;
         let p = parse_plain_uri_list(v)?;
         Ok(Some(p))
-    }
-}
-
-impl X11Clipboard {
-    #[inline]
-    fn is_stopped(&self) -> bool {
-        self.stop.load(Ordering::Relaxed)
     }
 }
 
@@ -118,13 +102,11 @@ impl SysClipboard for X11Clipboard {
             .map_err(|_| CliprdrError::ClipboardInternalError)
     }
 
-    fn stop(&self) {
-        self.stop.store(true, Ordering::Relaxed);
-    }
-
     fn start(&self) {
-        self.stop.store(false, Ordering::Relaxed);
-
+        {
+            // clear cached file list
+            *self.former_file_list.lock() = vec![];
+        }
         loop {
             let sth = match self.wait_file_list() {
                 Ok(sth) => sth,
@@ -134,11 +116,6 @@ impl SysClipboard for X11Clipboard {
                     continue;
                 }
             };
-
-            if self.is_stopped() {
-                std::thread::sleep(std::time::Duration::from_millis(100));
-                continue;
-            }
 
             let Some(paths) = sth else {
                 // just sleep
