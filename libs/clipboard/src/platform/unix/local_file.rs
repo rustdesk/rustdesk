@@ -259,7 +259,7 @@ pub(super) fn construct_file_list(paths: &[PathBuf]) -> Result<Vec<LocalFile>, C
 
 #[cfg(test)]
 mod file_list_test {
-    use std::path::PathBuf;
+    use std::{path::PathBuf, sync::atomic::AtomicU64};
 
     use hbb_common::bytes::{BufMut, BytesMut};
 
@@ -281,6 +281,7 @@ mod file_list_test {
                 handle: None,
                 name: name.to_string(),
                 size: 0,
+                offset: AtomicU64::new(0),
                 last_write_time: std::time::SystemTime::UNIX_EPOCH,
                 read_only: false,
                 is_dir,
