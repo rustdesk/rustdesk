@@ -436,9 +436,9 @@ Future<List<TToggleMenu>> toolbarDisplayToggle(
         child: Text(translate('Mute'))));
   }
   // file copy and paste
-  if (Platform.isWindows &&
-      pi.platform == kPeerPlatformWindows &&
-      perms['file'] != false) {
+  if (perms['file'] != false &&
+      bind.mainHasFileClipboard() &&
+      pi.platformAdditions.containsKey(kPlatformAdditionsHasFileClipboard)) {
     final option = 'enable-file-transfer';
     final value =
         bind.sessionGetToggleOptionSync(sessionId: sessionId, arg: option);

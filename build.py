@@ -127,6 +127,11 @@ def make_parser():
         help='Build windows portable'
     )
     parser.add_argument(
+        '--unix-file-copy-paste',
+        action='store_true',
+        help='Build with unix file copy paste feature'
+    )
+    parser.add_argument(
         '--flatpak',
         action='store_true',
         help='Build rustdesk libs with the flatpak feature enabled'
@@ -188,6 +193,7 @@ def download_extract_features(features, res_dir):
     import re
 
     proxy = ''
+
     def req(url):
         if not proxy:
             return url
@@ -275,6 +281,8 @@ def get_features(args):
         features.append('flatpak')
     if args.appimage:
         features.append('appimage')
+    if args.unix_file_copy_paste:
+        features.append('unix-file-copy-paste')
     print("features:", features)
     return features
 
@@ -396,7 +404,8 @@ def build_deb_from_folder(version, binary_folder):
 def build_flutter_dmg(version, features):
     if not skip_cargo:
         # set minimum osx build target, now is 10.14, which is the same as the flutter xcode project
-        system2(f'MACOSX_DEPLOYMENT_TARGET=10.14 cargo build --features {features} --lib --release')
+        system2(
+            f'MACOSX_DEPLOYMENT_TARGET=10.14 cargo build --features {features} --lib --release')
     # copy dylib
     system2(
         "cp target/release/liblibrustdesk.dylib target/release/librustdesk.dylib")
@@ -562,7 +571,8 @@ def main():
     codesign -s "Developer ID Application: {0}" --force --options runtime  ./target/release/bundle/osx/RustDesk.app/Contents/MacOS/*
     codesign -s "Developer ID Application: {0}" --force --options runtime  ./target/release/bundle/osx/RustDesk.app
     '''.format(pa))
-                system2('create-dmg "RustDesk %s.dmg" "target/release/bundle/osx/RustDesk.app"' % version)
+                system2(
+                    'create-dmg "RustDesk %s.dmg" "target/release/bundle/osx/RustDesk.app"' % version)
                 os.rename('RustDesk %s.dmg' %
                           version, 'rustdesk-%s.dmg' % version)
                 if pa:

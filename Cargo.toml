@@ -32,6 +32,13 @@ linux_headless = ["pam" ]
 virtual_display_driver = ["virtual_display"]
 plugin_framework = []
 linux-pkg-config = ["magnum-opus/linux-pkg-config", "scrap/linux-pkg-config"]
+unix-file-copy-paste = [
+    "dep:x11-clipboard",
+    "dep:x11rb",
+    "dep:percent-encoding",
+    "dep:once_cell",
+    "clipboard/unix-file-copy-paste",
+]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -132,6 +139,10 @@ dbus = "0.9"
 dbus-crossroads = "0.5"
 pam = { git="https://github.com/fufesou/pam", optional = true }
 users = { version = "0.11" }
+x11-clipboard = {git="https://github.com/clslaid/x11-clipboard", branch = "feat/store-batch", optional = true}
+x11rb =  {version = "0.12", features = ["all-extensions"], optional = true}
+percent-encoding = {version = "2.3", optional = true}
+once_cell = {version = "1.18", optional = true}
 
 [target.'cfg(target_os = "android")'.dependencies]
 android_logger = "0.13"
