@@ -580,6 +580,8 @@ class _MobileActionMenu extends StatelessWidget {
   }
 }
 
+const _defaultButtonSize = Size(24.0, 18.0);
+
 class _MonitorMenu extends StatelessWidget {
   final String id;
   final FFI ffi;
@@ -604,7 +606,7 @@ class _MonitorMenu extends StatelessWidget {
   Widget buildMonitorMenu() {
     return _IconSubmenuButton(
         tooltip: 'Select Monitor',
-        icon: icon(),
+        icon: icon(_defaultButtonSize),
         ffi: ffi,
         color: _ToolbarTheme.blueColor,
         hoverColor: _ToolbarTheme.hoverBlueColor,
@@ -644,26 +646,29 @@ class _MonitorMenu extends StatelessWidget {
         child: Text(translate('Show displays as individual windows')));
   }
 
+  buildOneMonitorButton(i, curDisplay) => Text(
+        '${i + 1}',
+        style: TextStyle(
+          color: i == curDisplay
+              ? _ToolbarTheme.blueColor
+              : _ToolbarTheme.inactiveColor,
+          fontSize: 12,
+          fontWeight: FontWeight.bold,
+        ),
+      );
+
   List<Widget> buildMonitorList(bool isMulti) {
     final List<Widget> monitorList = [];
     final pi = ffi.ffiModel.pi;
 
-    getMonitorText(int i) {
-      if (i == kAllDisplayValue) {
-        if (pi.displays.length == 2) {
-          return '1|2';
-        } else {
-          return 'ALL';
-        }
-      } else {
-        return (i + 1).toString();
-      }
-    }
-
     buildMonitorButton(int i) => Obx(() {
           RxInt display = CurrentDisplayState.find(id);
           return _IconMenuButton(
-            tooltip: isMulti ? '' : '#${i + 1} monitor',
+            tooltip: isMulti
+                ? ''
+                : i == kAllDisplayValue
+                    ? 'all monitors'
+                    : '#${i + 1} monitor',
             hMargin: isMulti ? null : 6,
             vMargin: isMulti ? null : 12,
             topLevel: false,
@@ -685,18 +690,9 @@ class _MonitorMenu extends StatelessWidget {
                     colorFilter:
                         ColorFilter.mode(Colors.white, BlendMode.srcIn),
                   ),
-                  Obx(
-                    () => Text(
-                      getMonitorText(i),
-                      style: TextStyle(
-                        color: i == display.value
-                            ? _ToolbarTheme.blueColor
-                            : _ToolbarTheme.inactiveColor,
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
+                  i == kAllDisplayValue
+                      ? globalMonitorsWidget(_defaultButtonSize)
+                      : Obx(() => buildOneMonitorButton(i, display.value)),
                 ],
               ),
             ),
@@ -713,29 +709,72 @@ class _MonitorMenu extends StatelessWidget {
     return monitorList;
   }
 
-  icon() {
+  globalMonitorsWidget(Size size) {
     final pi = ffi.ffiModel.pi;
-    return Stack(
-      alignment: Alignment.center,
-      children: [
-        SvgPicture.asset(
-          "assets/screen.svg",
-          colorFilter: ColorFilter.mode(Colors.white, BlendMode.srcIn),
-        ),
-        Obx(() {
-          RxInt display = CurrentDisplayState.find(id);
-          return Text(
-            '${display.value == kAllDisplayValue ? 'A' : '${display.value + 1}'}/${pi.displays.length}',
-            style: const TextStyle(
-              color: _ToolbarTheme.blueColor,
-              fontSize: 8,
-              fontWeight: FontWeight.bold,
+    return Obx(() {
+      RxInt display = CurrentDisplayState.find(id);
+      final rect = ffi.ffiModel.globalDisplaysRect();
+      if (rect == null) {
+        return Offstage();
+      }
+      final scaleX = size.width / rect.width;
+      final scaleY = size.height / rect.height;
+      final children = <Widget>[];
+      for (var i = 0; i < pi.displays.length; i++) {
+        final d = pi.displays[i];
+        final fontSize = (d.width * scaleX < d.height * scaleY
+                ? d.width * scaleX
+                : d.height * scaleY) *
+            0.75;
+        children.add(Positioned(
+          left: (d.x - rect.left) * scaleX,
+          top: (d.y - rect.top) * scaleY,
+          child: SizedBox(
+            width: d.width * scaleX,
+            height: d.height * scaleY,
+            child: Container(
+              decoration: BoxDecoration(
+                border: Border.all(
+                  color: Colors.grey,
+                  width: 1.0,
+                ),
+                borderRadius: BorderRadius.circular(1.0),
+              ),
+              child: Center(
+                  child: Text(
+                '${i + 1}',
+                style: TextStyle(
+                  color: display.value == i
+                      ? _ToolbarTheme.blueColor
+                      : _ToolbarTheme.inactiveColor,
+                  fontSize: fontSize,
+                  fontWeight: FontWeight.bold,
+                ),
+              )),
             ),
-          );
-        }),
-      ],
-    );
+          ),
+        ));
+      }
+      return Container(
+        width: size.width,
+        height: size.height,
+        child: Stack(
+          children: children,
+        ),
+      );
+    });
   }
+
+  icon(Size size) => Stack(
+        alignment: Alignment.center,
+        children: [
+          SvgPicture.asset(
+            "assets/screen.svg",
+            colorFilter: ColorFilter.mode(Colors.white, BlendMode.srcIn),
+          ),
+          globalMonitorsWidget(size),
+        ],
+      );
 
   onPressed(int i, PeerInfo pi) {
     _menuDismissCallback(ffi);

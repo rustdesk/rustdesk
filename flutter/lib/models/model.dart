@@ -138,8 +138,9 @@ class FfiModel with ChangeNotifier {
     sessionId = parent.target!.sessionId;
   }
 
-  Rect? displaysRect() {
-    final displays = _pi.getCurDisplays();
+  Rect? globalDisplaysRect() => _getDisplaysRect(_pi.displays);
+  Rect? displaysRect() => _getDisplaysRect(_pi.getCurDisplays());
+  Rect? _getDisplaysRect(List<Display> displays) {
     if (displays.isEmpty) {
       return null;
     }
