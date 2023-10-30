@@ -33,7 +33,6 @@ hbb_common = { path = "../hbb_common" }
 parking_lot = {version = "0.12"}
 
 [target.'cfg(any(target_os = "linux", target_os = "macos"))'.dependencies]
-x11rb =  {version = "0.12", features = ["all-extensions"], optional = true}
 rand = {version = "0.8", optional = true}
 fuser = {version = "0.13", optional = true}
 libc = {version = "0.2", optional = true}
