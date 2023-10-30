@@ -10,7 +10,7 @@ build = "build.rs"
 cc = "1.0"
 
 [features]
-default = ["unix-file-copy-paste"]
+default = []
 unix-file-copy-paste = [
 "dep:x11rb",
 "dep:x11-clipboard",
