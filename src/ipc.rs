@@ -19,7 +19,7 @@ pub use clipboard::ClipboardFile;
 use hbb_common::{
     allow_err, bail, bytes,
     bytes_codec::BytesCodec,
-    config::{self, Config, Config2},
+    config::{self, Config, Config2, RENDEZVOUS_SERVERS, RENDEZVOUS_PORT},
     futures::StreamExt as _,
     futures_util::sink::SinkExt,
     log, password_security as password, timeout, tokio,
@@ -764,8 +764,11 @@ pub fn get_id() -> String {
 }
 
 pub async fn get_rendezvous_server(ms_timeout: u64) -> (String, Vec<String>) {
-    let v = Config::get_option("text_field_rendezvous_server");
+    let mut v = Config::get_option("text_field_rendezvous_server");
     if !v.is_empty() {
+        if v == "public"{
+            v = RENDEZVOUS_SERVERS[0].to_string() +":"+ RENDEZVOUS_PORT.to_string().as_str();
+        }
         let mut urls = v.split(",");
         let a = urls.next().unwrap_or_default().to_owned();
         let b: Vec<String> = urls.map(|x| x.to_owned()).collect();
