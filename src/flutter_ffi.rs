@@ -392,12 +392,10 @@ pub fn session_get_custom_image_quality(session_id: SessionID) -> Option<Vec<i32
 pub fn session_is_keyboard_mode_supported(session_id: SessionID, mode: String) -> SyncReturn<bool> {
     if let Some(session) = sessions::get_session_by_session_id(&session_id) {
         if let Ok(mode) = KeyboardMode::from_str(&mode[..]) {
-            if session.peer_platform() == "Android" && mode == KeyboardMode::Map {
-                return SyncReturn(false);
-            }
             SyncReturn(is_keyboard_mode_supported(
                 &mode,
                 session.get_peer_version(),
+                &session.peer_platform()
             ))
         } else {
             SyncReturn(false)

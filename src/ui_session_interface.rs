@@ -1,4 +1,4 @@
-use crate::input::{MOUSE_BUTTON_LEFT, MOUSE_TYPE_DOWN, MOUSE_TYPE_UP, MOUSE_TYPE_WHEEL};
+use crate::{input::{MOUSE_BUTTON_LEFT, MOUSE_TYPE_DOWN, MOUSE_TYPE_UP, MOUSE_TYPE_WHEEL}, common::{is_keyboard_mode_supported, get_supported_keyboard_modes}};
 use async_trait::async_trait;
 use bytes::Bytes;
 use rdev::{Event, EventType::*, KeyCode};
@@ -214,23 +214,36 @@ impl<T: InvokeUiSession> Session<T> {
         self.lc.read().unwrap().version.clone()
     }
 
+    pub fn fallback_keyboard_mode(&self) -> String { 
+        let peer_version = self.get_peer_version();
+        let platform = self.peer_platform();
+
+        let supported_modes = get_supported_keyboard_modes(peer_version, &platform);
+        if let Some(mode) = supported_modes.first() {
+            return mode.to_string();
+        } else {
+            if self.get_peer_version() >= get_version_number("1.2.0") {
+                return KeyboardMode::Map.to_string();
+            } else {
+                return KeyboardMode::Legacy.to_string();
+            }
+        }
+    }
+
     pub fn get_keyboard_mode(&self) -> String {
         let mode = self.lc.read().unwrap().keyboard_mode.clone();
-        if self.peer_platform() == crate::PLATFORM_ANDROID {
-            if mode == "map" {
-                return "translate".to_string();
+        let keyboard_mode = KeyboardMode::from_str(&mode);
+
+        let peer_version = self.get_peer_version();
+        let platform = self.peer_platform();
+
+        // Saved keyboard mode still exists in this version.
+        if let Ok(mode) = keyboard_mode {
+            if is_keyboard_mode_supported(&mode, peer_version, &platform) {
+                return mode.to_string();
             }
         }
-        if ["map", "translate", "legacy"].contains(&(&mode as &str)) {
-            mode
-        } else {
-            if self.get_peer_version() > hbb_common::get_version_number("1.2.0") {
-                "map"
-            } else {
-                "legacy"
-            }
-            .to_string()
-        }
+        self.fallback_keyboard_mode()
     }
 
     pub fn save_keyboard_mode(&self, value: String) {
