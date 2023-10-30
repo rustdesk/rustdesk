@@ -25,7 +25,12 @@ use self::url::{encode_path_to_uri, parse_plain_uri_list};
 use super::fuse::FuseServer;
 
 #[cfg(target_os = "linux")]
+/// clipboard implementation of x11
 pub mod x11;
+
+#[cfg(target_os = "macos")]
+/// clipboard implementation of macos
+pub mod ns_clipboard;
 
 pub mod local_file;
 
@@ -76,7 +81,7 @@ fn get_sys_clipboard(ignore_path: &PathBuf) -> Result<Box<dyn SysClipboard>, Cli
     }
     #[cfg(not(feature = "wayland"))]
     {
-        pub use x11::*;
+        use x11::*;
         let x11_clip = X11Clipboard::new(ignore_path)?;
         Ok(Box::new(x11_clip) as Box<_>)
     }
@@ -84,7 +89,9 @@ fn get_sys_clipboard(ignore_path: &PathBuf) -> Result<Box<dyn SysClipboard>, Cli
 
 #[cfg(target_os = "macos")]
 fn get_sys_clipboard(ignore_path: &PathBuf) -> Result<Box<dyn SysClipboard>, CliprdrError> {
-    unimplemented!()
+    use ns_clipboard::*;
+    let ns_pb = NsPasteboard::new(ignore_path)?;
+    Ok(Box::new(ns_pb) as Box<_>)
 }
 
 #[derive(Debug)]

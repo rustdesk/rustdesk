@@ -1,13 +1,9 @@
+#[cfg(target_os = "windows")]
 fn build_c_impl() {
-    #[cfg(not(target_os = "linux"))]
     let mut build = cc::Build::new();
 
-    #[cfg(target_os = "windows")]
     build.file("src/windows/wf_cliprdr.c");
-    #[cfg(target_os = "macos")]
-    build.file("src/OSX/Clipboard.m");
 
-    #[cfg(not(target_os = "linux"))]
     {
         build.flag_if_supported("-Wno-c++0x-extensions");
         build.flag_if_supported("-Wno-return-type-c-linkage");
@@ -30,12 +26,10 @@ fn build_c_impl() {
         build.compile("mycliprdr");
     }
 
-    #[cfg(target_os = "windows")]
     println!("cargo:rerun-if-changed=src/windows/wf_cliprdr.c");
-    #[cfg(target_os = "macos")]
-    println!("cargo:rerun-if-changed=src/OSX/Clipboard.m");
 }
 
 fn main() {
+    #[cfg(target_os = "windows")]
     build_c_impl();
 }

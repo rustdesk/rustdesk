@@ -58,6 +58,7 @@ pub fn create_cliprdr_context(
 
         Ok(Box::new(unix_ctx) as Box<_>)
     }
+
     #[cfg(not(feature = "unix-file-copy-paste"))]
     return Ok(Box::new(DummyCliprdrContext {}) as Box<_>);
 }
@@ -81,6 +82,7 @@ impl CliprdrServiceContext for DummyCliprdrContext {
 }
 
 #[cfg(feature = "unix-file-copy-paste")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 // begin of epoch used by microsoft
 // 1601-01-01 00:00:00 + LDAP_EPOCH_DELTA*(100 ns) = 1970-01-01 00:00:00
 const LDAP_EPOCH_DELTA: u64 = 116444772610000000;
