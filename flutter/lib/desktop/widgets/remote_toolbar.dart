@@ -125,7 +125,7 @@ class _ToolbarTheme {
       : EdgeInsets.fromLTRB(6, 14, 6, 14);
   static const double menuButtonBorderRadius = 3.0;
 
-  static final borderColor =
+  static get borderColor =>
       MyTheme.currentThemeMode() == ThemeMode.light ? bordLight : bordDark;
 
   static final defaultMenuStyle = MenuStyle(
