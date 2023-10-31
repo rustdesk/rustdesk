@@ -572,6 +572,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("List", "Elenco"),
         ("Virtual display", "Scehrmo virtuale"),
         ("Plug out all", "Scollega tutto"),
-        ("True color(4:4:4)", ""),
+        ("True color(4:4:4)", "Colore reale (4:4:4)"),
     ].iter().cloned().collect();
 }
