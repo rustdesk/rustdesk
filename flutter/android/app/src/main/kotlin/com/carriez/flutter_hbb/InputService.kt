@@ -439,6 +439,8 @@ class InputService : AccessibilityService() {
 
         var success = false
 
+        Log.d(logTag, "existing text:$text textToCommit:$textToCommit textSelectionStart:$textSelectionStart textSelectionEnd:$textSelectionEnd")
+
         if (textToCommit != null) {
             var newText = ""
 
@@ -451,6 +453,7 @@ class InputService : AccessibilityService() {
                 }
             }
 
+            Log.d(logTag, "inserting text new text:$newText")
             val arguments = Bundle()
             arguments.putCharSequence(
                 AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE,
@@ -464,6 +467,7 @@ class InputService : AccessibilityService() {
                 this.fakeEditTextForTextStateCalculation?.setText(text)
             }
             if (textSelectionStart != -1 && textSelectionEnd != -1) {
+                Log.d(logTag, "setting selection $textSelectionStart $textSelectionEnd")
                 this.fakeEditTextForTextStateCalculation?.setSelection(
                     textSelectionStart,
                     textSelectionEnd
@@ -473,6 +477,7 @@ class InputService : AccessibilityService() {
             this.fakeEditTextForTextStateCalculation?.let {
                 val inputConnection = it.onCreateInputConnection(EditorInfo())
                 if (inputConnection != null) {
+                    Log.d(logTag, "sending keyevent $event")
                     success = inputConnection.sendKeyEvent(event)
                 }
             }
@@ -484,6 +489,7 @@ class InputService : AccessibilityService() {
                     newText.toString()
                 )
                 success = node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, arguments)
+                Log.d(logTag, "Update text to $newText success:$success")
             }
 
             if (success && this.fakeEditTextForTextStateCalculation != null) {
@@ -501,6 +507,7 @@ class InputService : AccessibilityService() {
                         selectionEnd
                     )
                     success = node.performAction(AccessibilityNodeInfo.ACTION_SET_SELECTION, arguments)
+                    Log.d(logTag, "Update selection to $selectionStart $selectionEnd success:$success")
                 }
             }
         }
