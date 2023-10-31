@@ -125,12 +125,13 @@ class _ToolbarTheme {
       : EdgeInsets.fromLTRB(6, 14, 6, 14);
   static const double menuButtonBorderRadius = 3.0;
 
+  static get borderColor =>
+      MyTheme.currentThemeMode() == ThemeMode.light ? bordLight : bordDark;
+
   static final defaultMenuStyle = MenuStyle(
     side: MaterialStateProperty.all(BorderSide(
       width: 1,
-      color: MyTheme.currentThemeMode() == ThemeMode.light
-          ? _ToolbarTheme.bordLight
-          : _ToolbarTheme.bordDark,
+      color: borderColor,
     )),
     shape: MaterialStatePropertyAll(RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(_ToolbarTheme.menuBorderRadius))),
@@ -141,6 +142,18 @@ class _ToolbarTheme {
     padding: MaterialStatePropertyAll(EdgeInsets.zero),
     overlayColor: MaterialStatePropertyAll(Colors.transparent),
   );
+
+  static Widget borderWrapper(Widget child) {
+    return Container(
+      decoration: BoxDecoration(
+        border: Border.all(
+          color: borderColor,
+          width: 1,
+        ),
+      ),
+      child: child,
+    );
+  }
 }
 
 typedef DismissFunc = void Function();
@@ -427,14 +440,14 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
           child: Material(
             elevation: _ToolbarTheme.elevation,
             shadowColor: MyTheme.color(context).shadow,
-            child: _DraggableShowHide(
+            child: _ToolbarTheme.borderWrapper(_DraggableShowHide(
               sessionId: widget.ffi.sessionId,
               dragging: _dragging,
               fractionX: _fractionX,
               show: show,
               setFullscreen: _setFullscreen,
               setMinimize: _minimize,
-            ),
+            )),
           ),
         ),
       );
@@ -491,13 +504,13 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
             scrollDirection: Axis.horizontal,
             child: Theme(
               data: themeData(),
-              child: Row(
+              child: _ToolbarTheme.borderWrapper(Row(
                 children: [
                   SizedBox(width: _ToolbarTheme.buttonHMargin * 2),
                   ...toolbarItems,
                   SizedBox(width: _ToolbarTheme.buttonHMargin * 2)
                 ],
-              ),
+              )),
             ),
           ),
         ),
