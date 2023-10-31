@@ -8,7 +8,7 @@ import 'package:flutter_hbb/main.dart';
 import 'package:flutter_hbb/models/chat_model.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:get/get.dart';
-import 'package:wakelock/wakelock.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:window_manager/window_manager.dart';
 
 import '../common.dart';
@@ -380,7 +380,7 @@ class ServerModel with ChangeNotifier {
     await bind.mainStartService();
     updateClientState();
     if (Platform.isAndroid) {
-      Wakelock.enable();
+      WakelockPlus.enable();
     }
   }
 
@@ -393,7 +393,7 @@ class ServerModel with ChangeNotifier {
     notifyListeners();
     if (!Platform.isLinux) {
       // current linux is not supported
-      Wakelock.disable();
+      WakelockPlus.disable();
     }
   }
 
