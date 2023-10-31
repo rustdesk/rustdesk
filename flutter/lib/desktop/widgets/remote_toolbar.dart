@@ -143,13 +143,14 @@ class _ToolbarTheme {
     overlayColor: MaterialStatePropertyAll(Colors.transparent),
   );
 
-  static Widget borderWrapper(Widget child) {
+  static Widget borderWrapper(Widget child, BorderRadius borderRadius) {
     return Container(
       decoration: BoxDecoration(
         border: Border.all(
           color: borderColor,
           width: 1,
         ),
+        borderRadius: borderRadius,
       ),
       child: child,
     );
@@ -433,6 +434,9 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
       if (show.isTrue && _dragging.isFalse) {
         triggerAutoHide();
       }
+      final borderRadius = BorderRadius.vertical(
+        bottom: Radius.circular(5),
+      );
       return Align(
         alignment: FractionalOffset(_fractionX.value, 0),
         child: Offstage(
@@ -440,14 +444,16 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
           child: Material(
             elevation: _ToolbarTheme.elevation,
             shadowColor: MyTheme.color(context).shadow,
-            child: _ToolbarTheme.borderWrapper(_DraggableShowHide(
+            borderRadius: borderRadius,
+            child: _DraggableShowHide(
               sessionId: widget.ffi.sessionId,
               dragging: _dragging,
               fractionX: _fractionX,
               show: show,
               setFullscreen: _setFullscreen,
               setMinimize: _minimize,
-            )),
+              borderRadius: borderRadius,
+            ),
           ),
         ),
       );
@@ -488,13 +494,14 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
     }
     toolbarItems.add(_RecordMenu());
     toolbarItems.add(_CloseMenu(id: widget.id, ffi: widget.ffi));
+    final toolbarBorderRadius = BorderRadius.all(Radius.circular(4.0));
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
         Material(
           elevation: _ToolbarTheme.elevation,
           shadowColor: MyTheme.color(context).shadow,
-          borderRadius: BorderRadius.all(Radius.circular(4.0)),
+          borderRadius: toolbarBorderRadius,
           color: Theme.of(context)
               .menuBarTheme
               .style
@@ -504,13 +511,15 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
             scrollDirection: Axis.horizontal,
             child: Theme(
               data: themeData(),
-              child: _ToolbarTheme.borderWrapper(Row(
-                children: [
-                  SizedBox(width: _ToolbarTheme.buttonHMargin * 2),
-                  ...toolbarItems,
-                  SizedBox(width: _ToolbarTheme.buttonHMargin * 2)
-                ],
-              )),
+              child: _ToolbarTheme.borderWrapper(
+                  Row(
+                    children: [
+                      SizedBox(width: _ToolbarTheme.buttonHMargin * 2),
+                      ...toolbarItems,
+                      SizedBox(width: _ToolbarTheme.buttonHMargin * 2)
+                    ],
+                  ),
+                  toolbarBorderRadius),
             ),
           ),
         ),
@@ -2084,6 +2093,7 @@ class _DraggableShowHide extends StatefulWidget {
   final RxDouble fractionX;
   final RxBool dragging;
   final RxBool show;
+  final BorderRadius borderRadius;
 
   final Function(bool) setFullscreen;
   final Function() setMinimize;
@@ -2096,6 +2106,7 @@ class _DraggableShowHide extends StatefulWidget {
     required this.show,
     required this.setFullscreen,
     required this.setMinimize,
+    required this.borderRadius,
   }) : super(key: key);
 
   @override
@@ -2232,9 +2243,11 @@ class _DraggableShowHideState extends State<_DraggableShowHide> {
               .style
               ?.backgroundColor
               ?.resolve(MaterialState.values.toSet()),
-          borderRadius: BorderRadius.vertical(
-            bottom: Radius.circular(5),
+          border: Border.all(
+            color: _ToolbarTheme.borderColor,
+            width: 1,
           ),
+          borderRadius: widget.borderRadius,
         ),
         child: SizedBox(
           height: 20,
