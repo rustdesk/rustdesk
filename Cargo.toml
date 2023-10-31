@@ -164,7 +164,6 @@ winapi = { version = "0.3", features = [ "winnt" ] }
 [build-dependencies]
 cc = "1.0"
 hbb_common = { path = "libs/hbb_common" }
-flutter_rust_bridge_codegen = "=1.75"
 os-version = "0.2"
 
 [dev-dependencies]
