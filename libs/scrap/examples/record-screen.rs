@@ -17,7 +17,7 @@ use scrap::codec::{EncoderApi, EncoderCfg, Quality as Q};
 use webm::mux;
 use webm::mux::Track;
 
-use scrap::vpxcodec as vpx_encode;
+use scrap::{convert_to_yuv, vpxcodec as vpx_encode};
 use scrap::{Capturer, Display, TraitCapturer, STRIDE_ALIGN};
 
 const USAGE: &'static str = "
@@ -110,13 +110,16 @@ fn main() -> io::Result<()> {
         Quality::Balanced => Q::Balanced,
         Quality::Low => Q::Low,
     };
-    let mut vpx = vpx_encode::VpxEncoder::new(EncoderCfg::VPX(vpx_encode::VpxEncoderConfig {
-        width,
-        height,
-        quality,
-        codec: vpx_codec,
-        keyframe_interval: None,
-    }))
+    let mut vpx = vpx_encode::VpxEncoder::new(
+        EncoderCfg::VPX(vpx_encode::VpxEncoderConfig {
+            width,
+            height,
+            quality,
+            codec: vpx_codec,
+            keyframe_interval: None,
+        }),
+        false,
+    )
     .unwrap();
 
     // Start recording.
@@ -136,7 +139,9 @@ fn main() -> io::Result<()> {
     let spf = Duration::from_nanos(1_000_000_000 / args.flag_fps);
 
     // Capturer object is expensive, avoiding to create it frequently.
-    let mut c = Capturer::new(d, true).unwrap();
+    let mut c = Capturer::new(d).unwrap();
+    let mut yuv = Vec::new();
+    let mut mid_data = Vec::new();
     while !stop.load(Ordering::Acquire) {
         let now = Instant::now();
         let time = now - start;
@@ -147,8 +152,8 @@ fn main() -> io::Result<()> {
 
         if let Ok(frame) = c.frame(Duration::from_millis(0)) {
             let ms = time.as_secs() * 1000 + time.subsec_millis() as u64;
-
-            for frame in vpx.encode(ms as i64, &frame, STRIDE_ALIGN).unwrap() {
+            convert_to_yuv(&frame, vpx.yuvfmt(), &mut yuv, &mut mid_data);
+            for frame in vpx.encode(ms as i64, &yuv, STRIDE_ALIGN).unwrap() {
                 vt.add_frame(frame.data, frame.pts as u64 * 1_000_000, frame.key);
             }
         }

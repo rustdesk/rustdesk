@@ -3,7 +3,7 @@ extern crate scrap;
 
 use scrap::Display;
 #[cfg(windows)]
-use scrap::{i420_to_rgb, CapturerMag, TraitCapturer};
+use scrap::{CapturerMag, TraitCapturer};
 #[cfg(windows)]
 use std::fs::File;
 
@@ -24,6 +24,8 @@ fn get_display(i: usize) -> Display {
 fn record(i: usize) {
     use std::time::Duration;
 
+    use scrap::TraitFrame;
+
     for d in Display::all().unwrap() {
         println!("{:?} {} {}", d.origin(), d.width(), d.height());
     }
@@ -32,9 +34,8 @@ fn record(i: usize) {
     let (w, h) = (display.width(), display.height());
 
     {
-        let mut capture_mag =
-            CapturerMag::new(display.origin(), display.width(), display.height(), false)
-                .expect("Couldn't begin capture.");
+        let mut capture_mag = CapturerMag::new(display.origin(), display.width(), display.height())
+            .expect("Couldn't begin capture.");
         let wnd_cls = "";
         let wnd_name = "RustDeskPrivacyWindow";
         if false == capture_mag.exclude(wnd_cls, wnd_name).unwrap() {
@@ -43,7 +44,8 @@ fn record(i: usize) {
             println!("Filter window for cls {} name {}", wnd_cls, wnd_name);
         }
 
-        let frame = capture_mag.frame(Duration::from_millis(0)).unwrap();
+        let captured_frame = capture_mag.frame(Duration::from_millis(0)).unwrap();
+        let frame = captured_frame.data();
         println!("Capture data len: {}, Saving...", frame.len());
 
         let mut bitflipped = Vec::with_capacity(w * h * 4);
@@ -68,9 +70,8 @@ fn record(i: usize) {
     }
 
     {
-        let mut capture_mag =
-            CapturerMag::new(display.origin(), display.width(), display.height(), true)
-                .expect("Couldn't begin capture.");
+        let mut capture_mag = CapturerMag::new(display.origin(), display.width(), display.height())
+            .expect("Couldn't begin capture.");
         let wnd_cls = "";
         let wnd_title = "RustDeskPrivacyWindow";
         if false == capture_mag.exclude(wnd_cls, wnd_title).unwrap() {
@@ -79,19 +80,28 @@ fn record(i: usize) {
             println!("Filter window for cls {} title {}", wnd_cls, wnd_title);
         }
 
-        let buffer = capture_mag.frame(Duration::from_millis(0)).unwrap();
-        println!("Capture data len: {}, Saving...", buffer.len());
+        let frame = capture_mag.frame(Duration::from_millis(0)).unwrap();
+        println!("Capture data len: {}, Saving...", frame.data().len());
 
-        let mut frame = Default::default();
-        i420_to_rgb(w, h, &buffer, &mut frame);
+        let mut raw = Vec::new();
+        unsafe {
+            scrap::ARGBToRAW(
+                frame.data().as_ptr(),
+                frame.stride()[0] as _,
+                (&mut raw).as_mut_ptr(),
+                (w * 3) as _,
+                w as _,
+                h as _,
+            )
+        };
 
         let mut bitflipped = Vec::with_capacity(w * h * 4);
-        let stride = frame.len() / h;
+        let stride = raw.len() / h;
 
         for y in 0..h {
             for x in 0..w {
                 let i = stride * y + 3 * x;
-                bitflipped.extend_from_slice(&[frame[i], frame[i + 1], frame[i + 2], 255]);
+                bitflipped.extend_from_slice(&[raw[i], raw[i + 1], raw[i + 2], 255]);
             }
         }
         let name = format!("capture_mag_{}_2.png", i);

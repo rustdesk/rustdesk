@@ -1214,7 +1214,7 @@ impl Connection {
 
     fn on_remote_authorized() {
         use std::sync::Once;
-        static ONCE: Once = Once::new();
+        static _ONCE: Once = Once::new();
         #[cfg(any(target_os = "windows", target_os = "linux"))]
         if !Config::get_option("allow-remove-wallpaper").is_empty() {
             // multi connections set once
@@ -1223,7 +1223,7 @@ impl Connection {
                 match crate::platform::WallPaperRemover::new() {
                     Ok(remover) => {
                         *wallpaper = Some(remover);
-                        ONCE.call_once(|| {
+                        _ONCE.call_once(|| {
                             shutdown_hooks::add_shutdown_hook(shutdown_hook);
                         });
                     }

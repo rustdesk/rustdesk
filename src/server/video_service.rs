@@ -42,9 +42,10 @@ use scrap::Capturer;
 use scrap::{
     aom::AomEncoderConfig,
     codec::{Encoder, EncoderCfg, HwEncoderConfig, Quality},
+    convert_to_yuv,
     record::{Recorder, RecorderContext},
     vpxcodec::{VpxEncoderConfig, VpxVideoCodecId},
-    CodecName, Display, TraitCapturer,
+    CodecName, Display, Frame, TraitCapturer, TraitFrame,
 };
 #[cfg(windows)]
 use std::sync::Once;
@@ -171,7 +172,6 @@ pub fn new(idx: usize) -> GenericService {
 fn create_capturer(
     privacy_mode_id: i32,
     display: Display,
-    use_yuv: bool,
     _current: usize,
     _portable_service_running: bool,
 ) -> ResultType<Box<dyn TraitCapturer>> {
@@ -182,12 +182,7 @@ fn create_capturer(
     if privacy_mode_id > 0 {
         #[cfg(windows)]
         {
-            match scrap::CapturerMag::new(
-                display.origin(),
-                display.width(),
-                display.height(),
-                use_yuv,
-            ) {
+            match scrap::CapturerMag::new(display.origin(), display.width(), display.height()) {
                 Ok(mut c1) => {
                     let mut ok = false;
                     let check_begin = Instant::now();
@@ -236,12 +231,11 @@ fn create_capturer(
             return crate::portable_service::client::create_capturer(
                 _current,
                 display,
-                use_yuv,
                 _portable_service_running,
             );
             #[cfg(not(windows))]
             return Ok(Box::new(
-                Capturer::new(display, use_yuv).with_context(|| "Failed to create capturer")?,
+                Capturer::new(display).with_context(|| "Failed to create capturer")?,
             ));
         }
     };
@@ -265,7 +259,7 @@ pub fn test_create_capturer(
                     )
                 } else {
                     let display = displays.remove(display_idx);
-                    match create_capturer(privacy_mode_id, display, true, display_idx, false) {
+                    match create_capturer(privacy_mode_id, display, display_idx, false) {
                         Ok(_) => return "".to_owned(),
                         Err(e) => e,
                     }
@@ -320,11 +314,7 @@ impl DerefMut for CapturerInfo {
     }
 }
 
-fn get_capturer(
-    current: usize,
-    use_yuv: bool,
-    portable_service_running: bool,
-) -> ResultType<CapturerInfo> {
+fn get_capturer(current: usize, portable_service_running: bool) -> ResultType<CapturerInfo> {
     #[cfg(target_os = "linux")]
     {
         if !is_x11() {
@@ -382,7 +372,6 @@ fn get_capturer(
     let capturer = create_capturer(
         capturer_privacy_mode_id,
         display,
-        use_yuv,
         current,
         portable_service_running,
     )?;
@@ -424,7 +413,7 @@ fn run(vs: VideoService) -> ResultType<()> {
 
     let display_idx = vs.idx;
     let sp = vs.sp;
-    let mut c = get_capturer(display_idx, true, last_portable_service_running)?;
+    let mut c = get_capturer(display_idx, last_portable_service_running)?;
 
     let mut video_qos = VIDEO_QOS.lock().unwrap();
     video_qos.refresh(None);
@@ -439,11 +428,11 @@ fn run(vs: VideoService) -> ResultType<()> {
     let encoder_cfg = get_encoder_config(&c, quality, last_recording);
 
     let mut encoder;
-    match Encoder::new(encoder_cfg) {
+    let use_i444 = Encoder::use_i444(&encoder_cfg);
+    match Encoder::new(encoder_cfg.clone(), use_i444) {
         Ok(x) => encoder = x,
         Err(err) => bail!("Failed to create encoder: {}", err),
     }
-    c.set_use_yuv(encoder.use_yuv());
     VIDEO_QOS.lock().unwrap().store_bitrate(encoder.bitrate());
 
     if sp.is_option_true(OPTION_REFRESH) {
@@ -463,6 +452,8 @@ fn run(vs: VideoService) -> ResultType<()> {
 
     #[cfg(target_os = "linux")]
     let mut would_block_count = 0u32;
+    let mut yuv = Vec::new();
+    let mut mid_data = Vec::new();
 
     while sp.ok() {
         #[cfg(windows)]
@@ -493,6 +484,9 @@ fn run(vs: VideoService) -> ResultType<()> {
         if last_portable_service_running != crate::portable_service::client::running() {
             bail!("SWITCH");
         }
+        if Encoder::use_i444(&encoder_cfg) != use_i444 {
+            bail!("SWITCH");
+        }
         check_privacy_mode_changed(&sp, c.privacy_mode_id)?;
         #[cfg(windows)]
         {
@@ -512,40 +506,23 @@ fn run(vs: VideoService) -> ResultType<()> {
 
         frame_controller.reset();
 
-        #[cfg(any(target_os = "android", target_os = "ios"))]
         let res = match c.frame(spf) {
             Ok(frame) => {
                 let time = now - start;
                 let ms = (time.as_secs() * 1000 + time.subsec_millis() as u64) as i64;
-                match frame {
-                    scrap::Frame::RAW(data) => {
-                        if data.len() != 0 {
-                            let send_conn_ids = handle_one_frame(
-                                display_idx,
-                                &sp,
-                                data,
-                                ms,
-                                &mut encoder,
-                                recorder.clone(),
-                            )?;
-                            frame_controller.set_send(now, send_conn_ids);
-                        }
-                    }
-                    _ => {}
-                };
-                Ok(())
-            }
-            Err(err) => Err(err),
-        };
-
-        #[cfg(not(any(target_os = "android", target_os = "ios")))]
-        let res = match c.frame(spf) {
-            Ok(frame) => {
-                let time = now - start;
-                let ms = (time.as_secs() * 1000 + time.subsec_millis() as u64) as i64;
-                let send_conn_ids =
-                    handle_one_frame(display_idx, &sp, &frame, ms, &mut encoder, recorder.clone())?;
-                frame_controller.set_send(now, send_conn_ids);
+                if frame.data().len() != 0 {
+                    let send_conn_ids = handle_one_frame(
+                        display_idx,
+                        &sp,
+                        frame,
+                        &mut yuv,
+                        &mut mid_data,
+                        ms,
+                        &mut encoder,
+                        recorder.clone(),
+                    )?;
+                    frame_controller.set_send(now, send_conn_ids);
+                }
                 #[cfg(windows)]
                 {
                     try_gdi = 0;
@@ -718,7 +695,9 @@ fn check_privacy_mode_changed(sp: &GenericService, privacy_mode_id: i32) -> Resu
 fn handle_one_frame(
     display: usize,
     sp: &GenericService,
-    frame: &[u8],
+    frame: Frame,
+    yuv: &mut Vec<u8>,
+    mid_data: &mut Vec<u8>,
     ms: i64,
     encoder: &mut Encoder,
     recorder: Arc<Mutex<Option<Recorder>>>,
@@ -732,7 +711,8 @@ fn handle_one_frame(
     })?;
 
     let mut send_conn_ids: HashSet<i32> = Default::default();
-    if let Ok(mut vf) = encoder.encode_to_message(frame, ms) {
+    convert_to_yuv(&frame, encoder.yuvfmt(), yuv, mid_data)?;
+    if let Ok(mut vf) = encoder.encode_to_message(yuv, ms) {
         vf.display = display as _;
         let mut msg = Message::new();
         msg.set_video_frame(vf);

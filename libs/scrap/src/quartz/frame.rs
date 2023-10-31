@@ -5,8 +5,8 @@ use super::ffi::*;
 pub struct Frame {
     surface: IOSurfaceRef,
     inner: &'static [u8],
-    i420: *mut u8,
-    i420_len: usize,
+    bgra: Vec<u8>,
+    bgra_stride: usize,
 }
 
 impl Frame {
@@ -24,8 +24,8 @@ impl Frame {
         Frame {
             surface,
             inner,
-            i420: ptr::null_mut(),
-            i420_len: 0,
+            bgra: Vec::new(),
+            bgra_stride: 0,
         }
     }
 
@@ -34,23 +34,20 @@ impl Frame {
         self.inner
     }
 
-    pub fn nv12_to_i420<'a>(&'a mut self, w: usize, h: usize, i420: &'a mut Vec<u8>) {
+    pub fn stride(&self) -> usize {
+        self.bgra_stride
+    }
+
+    pub fn surface_to_bgra<'a>(&'a mut self, h: usize) {
         unsafe {
             let plane0 = IOSurfaceGetBaseAddressOfPlane(self.surface, 0);
-            let stride0 = IOSurfaceGetBytesPerRowOfPlane(self.surface, 0);
-            let plane1 = IOSurfaceGetBaseAddressOfPlane(self.surface, 1);
-            let stride1 = IOSurfaceGetBytesPerRowOfPlane(self.surface, 1);
-            crate::common::nv12_to_i420(
+            self.bgra_stride = IOSurfaceGetBytesPerRowOfPlane(self.surface, 0);
+            self.bgra.resize(self.bgra_stride * h, 0);
+            std::ptr::copy_nonoverlapping(
                 plane0 as _,
-                stride0 as _,
-                plane1 as _,
-                stride1 as _,
-                w,
-                h,
-                i420,
+                self.bgra.as_mut_ptr(),
+                self.bgra_stride * h,
             );
-            self.i420 = i420.as_mut_ptr() as _;
-            self.i420_len = i420.len();
         }
     }
 }
@@ -58,14 +55,7 @@ impl Frame {
 impl ops::Deref for Frame {
     type Target = [u8];
     fn deref<'a>(&'a self) -> &'a [u8] {
-        if self.i420.is_null() {
-            self.inner
-        } else {
-            unsafe {
-                let inner = slice::from_raw_parts(self.i420 as *const u8, self.i420_len);
-                inner
-            }
-        }
+        &self.bgra
     }
 }
 
