@@ -604,7 +604,8 @@ class _MonitorMenu extends StatelessWidget {
 
   Widget buildMonitorMenu() {
     final width = SimpleWrapper<double>(0);
-    final monitorsIcon = globalMonitorsWidget(width);
+    final monitorsIcon =
+        globalMonitorsWidget(width, Colors.white, Colors.black38);
     return _IconSubmenuButton(
         tooltip: 'Select Monitor',
         icon: monitorsIcon,
@@ -670,7 +671,8 @@ class _MonitorMenu extends StatelessWidget {
           final width = SimpleWrapper<double>(0);
           Widget? monitorsIcon;
           if (isAllMonitors) {
-            monitorsIcon = globalMonitorsWidget(width);
+            monitorsIcon = globalMonitorsWidget(
+                width, Colors.white, _ToolbarTheme.blueColor);
           }
           return _IconMenuButton(
             tooltip: isMulti
@@ -719,7 +721,8 @@ class _MonitorMenu extends StatelessWidget {
     return monitorList;
   }
 
-  globalMonitorsWidget(SimpleWrapper<double> width) {
+  globalMonitorsWidget(
+      SimpleWrapper<double> width, Color activeTextColor, Color activeBgColor) {
     getMonitors() {
       final pi = ffi.ffiModel.pi;
       RxInt display = CurrentDisplayState.find(id);
@@ -728,7 +731,7 @@ class _MonitorMenu extends StatelessWidget {
         return Offstage();
       }
 
-      final scale = _ToolbarTheme.buttonSize/ rect.height * 0.75;
+      final scale = _ToolbarTheme.buttonSize / rect.height * 0.75;
       final startY = (_ToolbarTheme.buttonSize - rect.height * scale) * 0.5;
       final startX = startY;
 
@@ -750,15 +753,14 @@ class _MonitorMenu extends StatelessWidget {
                 color: Colors.grey,
                 width: 1.0,
               ),
-              // to-do: theme
-              color: Colors.white,
+              color: display.value == i ? activeBgColor : Colors.white,
             ),
             child: Center(
                 child: Text(
               '${i + 1}',
               style: TextStyle(
                 color: display.value == i
-                    ? _ToolbarTheme.blueColor
+                    ? activeTextColor
                     : _ToolbarTheme.inactiveColor,
                 fontSize: fontSize,
                 fontWeight: FontWeight.bold,
