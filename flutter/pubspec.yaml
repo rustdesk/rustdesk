@@ -67,10 +67,7 @@ dependencies:
   get: ^4.6.5
   visibility_detector: ^0.4.0+2
   contextmenu: ^3.0.0
-  desktop_drop:
-    git:
-      url: https://github.com/rustdesk-org/flutter-plugins
-      path: ./packages/desktop_drop
+  desktop_drop: ^0.4.4
   scroll_pos: ^0.4.0
   debounce_throttle: ^2.0.0
   file_picker: ^5.1.0

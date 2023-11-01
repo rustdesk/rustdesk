@@ -325,12 +325,11 @@ packages:
   desktop_drop:
     dependency: "direct main"
     description:
-      path: "packages/desktop_drop"
-      ref: HEAD
-      resolved-ref: "21725af7fd5be4e928acfb84146ebd10d1364a97"
-      url: "https://github.com/rustdesk-org/flutter-plugins"
-    source: git
-    version: "0.4.1"
+      name: desktop_drop
+      sha256: d55a010fe46c8e8fcff4ea4b451a9ff84a162217bdb3b2a0aa1479776205e15d
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.4.4"
   desktop_multi_window:
     dependency: "direct main"
     description:
