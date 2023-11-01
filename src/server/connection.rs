@@ -2177,8 +2177,9 @@ impl Connection {
             }
 
             // Send display changed message.
-            // For compatibility with old versions ( < 1.2.4 ).
-            // sciter need it in new version
+            // 1. For compatibility with old versions ( < 1.2.4 ).
+            // 2. Sciter version.
+            // 3. Update `SupportedResolutions`.
             if let Some(msg_out) = video_service::make_display_changed_msg(self.display_idx, None) {
                 self.send(msg_out).await;
             }
@@ -2194,7 +2195,11 @@ impl Connection {
                 lock.add_service(Box::new(video_service::new(display_idx)));
             }
         }
-        lock.subscribe(&old_service_name, self.inner.clone(), false);
+        // For versions greater than 1.2.4, a `CaptureDisplays` message will be sent immediately.
+        // Unnecessary capturers will be removed then.
+        if !crate::common::is_support_multi_ui_session(&self.lr.version) {
+            lock.subscribe(&old_service_name, self.inner.clone(), false);
+        }
         lock.subscribe(&new_service_name, self.inner.clone(), true);
         self.display_idx = display_idx;
     }

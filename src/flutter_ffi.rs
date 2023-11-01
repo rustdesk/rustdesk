@@ -429,13 +429,7 @@ pub fn session_ctrl_alt_del(session_id: SessionID) {
 }
 
 pub fn session_switch_display(session_id: SessionID, value: Vec<i32>) {
-    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
-        if value.len() == 1 {
-            session.switch_display(value[0]);
-        } else {
-            session.capture_displays(vec![], vec![], value);
-        }
-    }
+    sessions::session_switch_display(session_id, value);
 }
 
 pub fn session_handle_flutter_key_event(
