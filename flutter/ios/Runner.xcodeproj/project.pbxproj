@@ -434,7 +434,7 @@
 					"-framework",
 					"\"video_player_avfoundation\"",
 					"-framework",
-					"\"wakelock\"",
+					"\"wakelock_plus\"",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.carriez.flutterHbb;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -632,7 +632,7 @@
 					"-framework",
 					"\"video_player_avfoundation\"",
 					"-framework",
-					"\"wakelock\"",
+					"\"wakelock_plus\"",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.carriez.flutterHbb;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -722,7 +722,7 @@
 					"-framework",
 					"\"video_player_avfoundation\"",
 					"-framework",
-					"\"wakelock\"",
+					"\"wakelock_plus\"",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.carriez.flutterHbb;
 				PRODUCT_NAME = "$(TARGET_NAME)";
