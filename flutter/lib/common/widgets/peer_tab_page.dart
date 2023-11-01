@@ -75,9 +75,11 @@ class _PeerTabPageState extends State<PeerTabPage>
   void initState() {
     final uiType = bind.getLocalFlutterOption(k: 'peer-card-ui-type');
     if (uiType != '') {
-      peerCardUiType.value = int.parse(uiType) == PeerUiType.list.index
-          ? PeerUiType.list
-          : PeerUiType.grid;
+      peerCardUiType.value = int.parse(uiType) == 0
+        ? PeerUiType.grid
+        : int.parse(uiType) == 1
+            ? PeerUiType.tile
+            : PeerUiType.list;
     }
     hideAbTagsPanel.value =
         bind.mainGetLocalOption(key: "hideAbTagsPanel").isNotEmpty;
