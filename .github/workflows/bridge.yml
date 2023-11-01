@@ -7,7 +7,7 @@ on:
 
 env:
   FLUTTER_VERSION: "3.13.9"
-  FLUTTER_RUST_BRIDGE_VERSION: "1.79.0"
+  FLUTTER_RUST_BRIDGE_VERSION: "1.80.1"
   
 jobs:
   generate_bridge:
