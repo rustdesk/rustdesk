@@ -41,7 +41,7 @@ fn build_manifest() {
     }
 }
 
-fn install_oboe() {
+fn install_android_deps() {
     let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap();
     if target_os != "android" {
         return;
@@ -49,6 +49,8 @@ fn install_oboe() {
     let mut target_arch = std::env::var("CARGO_CFG_TARGET_ARCH").unwrap();
     if target_arch == "x86_64" {
         target_arch = "x64".to_owned();
+    } else if target_arch == "x86" {
+        target_arch = "x86".to_owned();
     } else if target_arch == "aarch64" {
         target_arch = "arm64".to_owned();
     } else {
@@ -66,6 +68,7 @@ fn install_oboe() {
             path.join("lib").to_str().unwrap()
         )
     );
+    println!("cargo:rustc-link-lib=ndk_compat");
     println!("cargo:rustc-link-lib=oboe");
     println!("cargo:rustc-link-lib=c++");
     println!("cargo:rustc-link-lib=OpenSLES");
@@ -78,7 +81,7 @@ fn install_oboe() {
 
 fn main() {
     hbb_common::gen_version();
-    install_oboe();
+    install_android_deps();
     // there is problem with cfg(target_os) in build.rs, so use our workaround
     // let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap();
     // if target_os == "android" || target_os == "ios" {
