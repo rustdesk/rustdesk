@@ -349,17 +349,12 @@ class MainService : Service() {
                 ).apply {
                     setOnImageAvailableListener({ imageReader: ImageReader ->
                         try {
-                            // https://stackoverflow.com/questions/35136715/try-with-resources-use-extension-function-in-kotlin-does-not-always-work
-                            // https://stackoverflow.com/questions/72537045/kotlin-use-with-autocloseable-type-and-a-lambda-returning-boolean
-                            val image = imageReader.acquireLatestImage()
-                            if (image == null) return@setOnImageAvailableListener
-                            try {
+                            imageReader.acquireLatestImage().use { image ->
+                                if (image == null) return@setOnImageAvailableListener
                                 val planes = image.planes
                                 val buffer = planes[0].buffer
                                 buffer.rewind()
                                 onVideoFrameUpdate(buffer)
-                            } finally {
-                                image.close()
                             }
                         } catch (ignored: java.lang.Exception) {
                         }
