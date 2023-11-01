@@ -431,15 +431,19 @@ class FfiModel with ChangeNotifier {
 
   handleSwitchDisplay(
       Map<String, dynamic> evt, SessionID sessionId, String peerId) {
-    final curDisplay = int.parse(evt['display']);
+    final display = int.parse(evt['display']);
 
     if (_pi.currentDisplay != kAllDisplayValue) {
       if (bind.peerGetDefaultSessionsCount(id: peerId) > 1) {
-        if (curDisplay != _pi.currentDisplay) {
+        if (display != _pi.currentDisplay) {
           return;
         }
       }
-      _pi.currentDisplay = curDisplay;
+      if (!_pi.isSupportMultiUiSession) {
+        _pi.currentDisplay = display;
+      }
+      // If `isSupportMultiUiSession` is true, the switch display message should not be used to update current display.
+      // It is only used to update the display info.
     }
 
     var newDisplay = Display();
@@ -452,16 +456,24 @@ class FfiModel with ChangeNotifier {
         int.tryParse(evt['original_width']) ?? kInvalidResolutionValue;
     newDisplay.originalHeight =
         int.tryParse(evt['original_height']) ?? kInvalidResolutionValue;
-    _pi.displays[curDisplay] = newDisplay;
+    _pi.displays[display] = newDisplay;
 
-    updateCurDisplay(sessionId);
-    try {
-      CurrentDisplayState.find(peerId).value = curDisplay;
-    } catch (e) {
-      //
+    if (!_pi.isSupportMultiUiSession || _pi.currentDisplay == display) {
+      updateCurDisplay(sessionId);
     }
+
+    if (!_pi.isSupportMultiUiSession) {
+      try {
+        CurrentDisplayState.find(peerId).value = display;
+      } catch (e) {
+        //
+      }
+    }
+
     parent.target?.recordingModel.onSwitchDisplay();
-    handleResolutions(peerId, evt['resolutions']);
+    if (!_pi.isSupportMultiUiSession || _pi.currentDisplay == display) {
+      handleResolutions(peerId, evt['resolutions']);
+    }
     notifyListeners();
   }
 
