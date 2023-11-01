@@ -1,5 +1,7 @@
 #!/bin/bash
 
+ANDROID_ABI=$1
+
 # Build libyuv / opus / libvpx / oboe for Android
 # Required:
 #   1. set VCPKG_ROOT / ANDROID_NDK path environment variables
@@ -24,9 +26,25 @@ TOOLCHAIN=$ANDROID_NDK/toolchains/llvm/prebuilt/$HOST_TAG
 
 function build {
   ANDROID_ABI=$1
-  VCPKG_TARGET=$2
-  NDK_LLVM_TARGET=$3
-  LIBVPX_TARGET=$4
+
+  case "$ANDROID_ABI" in
+  arm64-v8a)
+     ABI=aarch64-linux-android$API_LEVEL
+     VCPKG_TARGET=arm64-android
+     ;;
+  armeabi-v7a)
+     ABI=armv7a-linux-androideabi$API_LEVEL
+     VCPKG_TARGET=arm-neon-android
+     ;;
+  x86_64)
+     ABI=x86_64-linux-android$API_LEVEL
+     VCPKG_TARGET=x64-android
+     ;;
+  x86)
+     ABI=i686-linux-android$API_LEVEL
+     VCPKG_TARGET=x86-android
+     ;;
+  esac
 
   PREFIX=$VCPKG_ROOT/installed/$VCPKG_TARGET/
 
@@ -36,29 +54,45 @@ function build {
   pushd $VCPKG_ROOT
   $VCPKG_ROOT/vcpkg install opus --triplet $VCPKG_TARGET
   $VCPKG_ROOT/vcpkg install libyuv --triplet $VCPKG_TARGET
+  $VCPKG_ROOT/vcpkg install aom --triplet $VCPKG_TARGET
+  $VCPKG_ROOT/vcpkg install cpu-features --triplet $VCPKG_TARGET
   popd
   echo "*** [$ANDROID_ABI][Finished] Build opus / libyuv from vcpkg"
 
   # 2
   echo "*** [$ANDROID_ABI][Start] Build libvpx"
   pushd build/libvpx
-  export AR=$TOOLCHAIN/bin/${NDK_LLVM_TARGET}-ar
-  export AS=$TOOLCHAIN/bin/${NDK_LLVM_TARGET}-as
-  export LD=$TOOLCHAIN/bin/${NDK_LLVM_TARGET}-ld.gold  # if ndk < 22, use aarch64-linux-android-ld
-  export RANLIB=$TOOLCHAIN/bin/${NDK_LLVM_TARGET}-ranlib
-  export STRIP=$TOOLCHAIN/bin/${NDK_LLVM_TARGET}-strip
 
-  if [ $NDK_LLVM_TARGET == "arm-linux-androideabi" ]
-  then
-    export CC=$TOOLCHAIN/bin/armv7a-linux-androideabi${API_LEVEL}-clang
-    export CXX=$TOOLCHAIN/bin/armv7a-linux-androideabi${API_LEVEL}-clang++
-  else
-    export CC=$TOOLCHAIN/bin/${NDK_LLVM_TARGET}${API_LEVEL}-clang
-    export CXX=$TOOLCHAIN/bin/${NDK_LLVM_TARGET}${API_LEVEL}-clang++
-  fi
+  export AR=$TOOLCHAIN/bin/llvm-ar
+  export CC=$TOOLCHAIN/bin/"$ABI"-clang
+  export CXX=$TOOLCHAIN/bin/"$ABI"-clang++
+  export LD=$TOOLCHAIN/bin/"$ABI"-clang
+  export RANLIB=$TOOLCHAIN/bin/llvm-ranlib
+  export STRIP=$TOOLCHAIN/bin/llvm-strip
+
+  case "$ANDROID_ABI" in
+  arm64-v8a)
+    export AS=$TOOLCHAIN/bin/llvm-as
+    LIBVPX_EXTRA_BUILD_FLAGS="--target=arm64-android-gcc --enable-thumb --disable-runtime-cpu-detect"
+    ;;
+  armeabi-v7a)
+    export AS=$TOOLCHAIN/bin/llvm-as
+    LIBVPX_EXTRA_BUILD_FLAGS="--target=armv7-android-gcc --enable-thumb --disable-neon --disable-runtime-cpu-detect"
+    ;;
+  x86_64)
+    export AS=$TOOLCHAIN/bin/yasm
+    LIBVPX_EXTRA_BUILD_FLAGS="--target=x86_64-android-gcc --disable-avx --disable-avx2 --disable-avx512"
+    ;;
+  x86)
+    export AS=$TOOLCHAIN/bin/yasm
+    LIBVPX_EXTRA_BUILD_FLAGS="--target=x86-android-gcc --disable-sse4_1 --disable-avx --disable-avx2 --disable-avx512"
+    ;;
+  esac
+
   make clean
-  ./configure --target=$LIBVPX_TARGET \
-              --enable-pic
+
+  ./configure \
+              --enable-pic \
               --disable-webm-io \
               --disable-unit-tests \
               --disable-examples \
@@ -66,9 +100,12 @@ function build {
               --disable-postproc \
               --disable-tools \
               --disable-docs \
-              --prefix=$PREFIX
-  make -j5
+              --prefix=$PREFIX \
+              $LIBVPX_EXTRA_BUILD_FLAGS
+  make -j
   make install
+
+  unset AR CC CXX LD RANLIB STRIP
 
   popd
   echo "*** [$ANDROID_ABI][Finished] Build libvpx"
@@ -85,7 +122,7 @@ function build {
           -DCMAKE_INSTALL_PREFIX=$PREFIX \
           -DANDROID_ABI=$ANDROID_ABI \
           -DANDROID_PLATFORM=android-$API_LEVEL
-  make -j5
+  make -j
   make install
   mv $PREFIX/lib/$ANDROID_ABI/liboboe.a $PREFIX/lib/
   popd
@@ -94,31 +131,20 @@ function build {
   echo "*** [$ANDROID_ABI][All Finished]"
 }
 
-git clone -b v1.11.0 --depth=1 https://github.com/webmproject/libvpx.git build/libvpx
+# Bump libvpx to 1.13.1 to fix CVE-2023-5217
+git clone -b v1.13.1 --depth=1 https://github.com/webmproject/libvpx.git build/libvpx
 git clone -b 1.6.1 --depth=1 https://github.com/google/oboe build/oboe
 patch -N -d build/oboe -p1 < ../src/oboe.patch
 
-# VCPKG_TARGET	        ANDROID_ABI
-#   arm64-android	        arm64-v8a
-#   arm-android	          armeabi-v7a
-#   x64-android	          x86_64
-#   x86-android	          x86
+if [ ! -z "$ANDROID_ABI" ]; then
+  build "$ANDROID_ABI"
+else
+  build arm64-v8a
+  build armeabi-v7a
+  build x86_64
+  build x86
+fi
 
-# NDK_LLVM_TARGET
-#   aarch64-linux-android
-#   arm-linux-androideabi
-#   x86_64-linux-android
-#   i686-linux-android
+[ -d "$VCPKG_ROOT/installed/arm-neon-android" ] && mv "$VCPKG_ROOT/installed/arm-neon-android" "$VCPKG_ROOT/installed/arm-android"
 
-# LIBVPX_TARGET :
-#   arm64-android-gcc
-#   armv7-android-gcc
-#   x86_64-android-gcc
-#   x86-android-gcc
-
-# args: ANDROID_ABI  VCPKG_TARGET  NDK_LLVM_TARGET  LIBVPX_TARGET
-build arm64-v8a arm64-android aarch64-linux-android arm64-android-gcc
-build armeabi-v7a arm-android arm-linux-androideabi armv7-android-gcc
-
-# rm -rf build/libvpx
-# rm -rf build/oboe
+rm -rf build
