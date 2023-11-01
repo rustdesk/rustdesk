@@ -424,6 +424,9 @@ class InputService : AccessibilityService() {
         node.refresh()
         this.fakeEditTextForTextStateCalculation?.setSelection(0,0)
         this.fakeEditTextForTextStateCalculation?.setText(null)
+
+        this.fakeEditTextForTextStateCalculation?.setFocusable(true)
+        this.fakeEditTextForTextStateCalculation?.setFocusableInTouchMode(true)
         val text = node.getText()
         var isShowingHint = false
         if (Build.VERSION.SDK_INT >= 26) {
@@ -447,12 +450,14 @@ class InputService : AccessibilityService() {
 
         var success = false
 
-        val focused = this.fakeEditTextForTextStateCalculation?.isFocused
+        val previousFocusedState = this.fakeEditTextForTextStateCalculation?.isFocused
         this.fakeEditTextForTextStateCalculation?.let {
             it.requestFocus()
         }
 
-        Log.d(logTag, "existing text:$text textToCommit:$textToCommit textSelectionStart:$textSelectionStart textSelectionEnd:$textSelectionEnd $focused")
+        val nowFocusedState = this.fakeEditTextForTextStateCalculation?.isFocused
+
+        Log.d(logTag, "existing text:$text textToCommit:$textToCommit textSelectionStart:$textSelectionStart textSelectionEnd:$textSelectionEnd previous focus: $previousFocusedState now focus: $nowFocusedState")
 
         if (textToCommit != null) {
             var newText = ""
