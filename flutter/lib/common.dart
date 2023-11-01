@@ -1803,6 +1803,10 @@ Future<bool> initUniLinks() async {
     if (initialLink == null) {
       return false;
     }
+    if (isMobile){
+      handleUriLinkMobile(initialLink);
+      return true;
+    }
     return handleUriLink(uriString: initialLink);
   } catch (err) {
     debugPrintStack(label: "$err");
