@@ -201,7 +201,7 @@ class Header: Reactor.Component {
                 {keyboard_enabled ? <li #lock-after-session-end .toggle-option><span>{svg_checkmark}</span>{translate('Lock after session end')}</li> : ""} 
                 {keyboard_enabled && pi.platform == "Windows" ? <li #privacy-mode><span>{svg_checkmark}</span>{translate('Privacy mode')}</li> : ""}
                 {keyboard_enabled && ((is_osx && pi.platform != "Mac OS") || (!is_osx && pi.platform == "Mac OS")) ? <li #allow_swap_key  .toggle-option><span>{svg_checkmark}</span>{translate('Swap control-command key')}</li> : ""}
-                {handler.version_cmp(pi.version, '1.2.4') >= 0 ? <li #i444><span>{svg_checkmark}</span>{translate('True color(4:4:4)')}</li> : ""}
+                {handler.version_cmp(pi.version, '1.2.4') >= 0 ? <li #i444><span>{svg_checkmark}</span>{translate('True color (4:4:4)')}</li> : ""}
             </menu>
         </popup>;
     }

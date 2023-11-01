@@ -561,7 +561,7 @@ Future<List<TToggleMenu>> toolbarDisplayToggle(
           await bind.sessionToggleOption(sessionId: sessionId, value: option);
           bind.sessionChangePreferCodec(sessionId: sessionId);
         },
-        child: Text(translate('True color(4:4:4)'))));
+        child: Text(translate('True color (4:4:4)'))));
   }
 
   return v;
