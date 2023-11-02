@@ -1521,6 +1521,7 @@ pub mod sessions {
                     s.switch_display(value[0]);
 
                     // Check if other displays are needed.
+                    #[cfg(feature = "flutter_texture_render")]
                     if value.len() == 1 {
                         check_remove_unused_displays(
                             Some(value[0] as _),
