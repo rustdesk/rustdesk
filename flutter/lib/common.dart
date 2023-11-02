@@ -1828,8 +1828,7 @@ StreamSubscription? listenUniLinks({handleByFlutter = true}) {
       } else {
         bind.sendUrlScheme(url: uri.toString());
       }
-    }
-    else {
+    } else {
       print("uni listen error: uri is empty.");
     }
   }, onError: (err) {
