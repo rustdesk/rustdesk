@@ -16,6 +16,7 @@ import android.os.Looper
 import android.util.Log
 import android.widget.EditText
 import android.view.accessibility.AccessibilityEvent
+import android.view.ViewGroup.LayoutParams
 import android.view.accessibility.AccessibilityNodeInfo
 import android.accessibilityservice.AccessibilityServiceInfo
 import android.accessibilityservice.AccessibilityServiceInfo.FLAG_INPUT_METHOD_EDITOR
@@ -425,8 +426,6 @@ class InputService : AccessibilityService() {
         this.fakeEditTextForTextStateCalculation?.setSelection(0,0)
         this.fakeEditTextForTextStateCalculation?.setText(null)
 
-        this.fakeEditTextForTextStateCalculation?.setFocusable(true)
-        this.fakeEditTextForTextStateCalculation?.setFocusableInTouchMode(true)
         val text = node.getText()
         var isShowingHint = false
         if (Build.VERSION.SDK_INT >= 26) {
@@ -450,34 +449,18 @@ class InputService : AccessibilityService() {
 
         var success = false
 
-        val previousFocusedState = this.fakeEditTextForTextStateCalculation?.isFocused
-        this.fakeEditTextForTextStateCalculation?.let {
-            it.requestFocus()
-        }
-
-        val nowFocusedState = this.fakeEditTextForTextStateCalculation?.isFocused
-
-        Log.d(logTag, "existing text:$text textToCommit:$textToCommit textSelectionStart:$textSelectionStart textSelectionEnd:$textSelectionEnd previous focus: $previousFocusedState now focus: $nowFocusedState")
+        Log.d(logTag, "existing text:$text textToCommit:$textToCommit textSelectionStart:$textSelectionStart textSelectionEnd:$textSelectionEnd")
 
         if (textToCommit != null) {
             var newText = ""
 
             if ((textSelectionStart == -1) || (textSelectionEnd == -1)) {
                 newText = textToCommit
+                success = updateTextForAccessibilityNode(node)
             } else if (text != null) {
-                Log.d(logTag, "text selection start $textSelectionStart $textSelectionEnd")
-                newText = text.let {
-                    it.substring(0, textSelectionStart) + textToCommit + it.substring(textSelectionStart)
-                }
+                this.fakeEditTextForTextStateCalculation?.text?.insert(textSelectionStart, textToCommit)
+                success = updateTextAndSelectionForAccessibiltyNode(node)
             }
-
-            Log.d(logTag, "inserting text new text:$newText")
-            val arguments = Bundle()
-            arguments.putCharSequence(
-                AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE,
-                newText
-            )
-            success = node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, arguments)
         } else {
             if (isShowingHint) {
                 this.fakeEditTextForTextStateCalculation?.setText(null)
@@ -493,44 +476,57 @@ class InputService : AccessibilityService() {
             }
 
             this.fakeEditTextForTextStateCalculation?.let {
-                val inputConnection = it.onCreateInputConnection(EditorInfo())
-                if (inputConnection != null) {
-                    Log.d(logTag, "sending keyevent $event")
-                    success = inputConnection.sendKeyEvent(event)
-                }
+                // This is essiential to make sure layout object is created. OnKeyDown may not work if layout is not created.
+                it.onPreDraw()
+                if (event.action == android.view.KeyEvent.ACTION_DOWN) {
+                    val succ = it.onKeyDown(event.getKeyCode(), event)
+                    Log.d(logTag, "onKeyDown $succ")
+                } else if (event.action == android.view.KeyEvent.ACTION_UP) {
+                    val success = it.onKeyUp(event.getKeyCode(), event)
+                    Log.d(logTag, "keyup $success")
+                } else {}
             }
 
-            this.fakeEditTextForTextStateCalculation?.getText()?.let { newText ->
+            success = updateTextAndSelectionForAccessibiltyNode(node)
+        }
+        return success
+    }
+
+    fun updateTextForAccessibilityNode(node: AccessibilityNodeInfo): Boolean {
+        var success = false
+        this.fakeEditTextForTextStateCalculation?.text?.let {
+            val arguments = Bundle()
+            arguments.putCharSequence(
+                AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE,
+                it.toString()
+            )
+            success = node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, arguments)
+        }
+        return success
+    }
+
+    fun updateTextAndSelectionForAccessibiltyNode(node: AccessibilityNodeInfo): Boolean {
+        var success = updateTextForAccessibilityNode(node)
+
+        if (success) {
+            val selectionStart = this.fakeEditTextForTextStateCalculation?.selectionStart
+            val selectionEnd = this.fakeEditTextForTextStateCalculation?.selectionEnd
+
+            if (selectionStart != null && selectionEnd != null) {
                 val arguments = Bundle()
-                arguments.putCharSequence(
-                    AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE,
-                    newText.toString()
+                arguments.putInt(
+                    AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_START_INT,
+                    selectionStart
                 )
-                success = node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, arguments)
-                Log.d(logTag, "Update text to $newText success:$success")
-            }
-
-            if (success && this.fakeEditTextForTextStateCalculation != null) {
-                val selectionStart = this.fakeEditTextForTextStateCalculation?.selectionStart
-                val selectionEnd = this.fakeEditTextForTextStateCalculation?.selectionEnd
-
-                if (selectionStart != null && selectionEnd != null) {
-                    val arguments = Bundle()
-                    arguments.putInt(
-                        AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_START_INT,
-                        selectionStart
-                    )
-                    arguments.putInt(
-                        AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_END_INT,
-                        selectionEnd
-                    )
-                    success = node.performAction(AccessibilityNodeInfo.ACTION_SET_SELECTION, arguments)
-                    Log.d(logTag, "Update selection to $selectionStart $selectionEnd success:$success")
-                }
+                arguments.putInt(
+                    AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_END_INT,
+                    selectionEnd
+                )
+                success = node.performAction(AccessibilityNodeInfo.ACTION_SET_SELECTION, arguments)
+                Log.d(logTag, "Update selection to $selectionStart $selectionEnd success:$success")
             }
         }
-        fakeEditTextForTextStateCalculation?.setFocusableInTouchMode(false);
-        fakeEditTextForTextStateCalculation?.setFocusable(false);
+
         return success
     }
 
@@ -548,8 +544,11 @@ class InputService : AccessibilityService() {
         info.flags = FLAG_RETRIEVE_INTERACTIVE_WINDOWS
         setServiceInfo(info)
         fakeEditTextForTextStateCalculation = EditText(this)
-        fakeEditTextForTextStateCalculation?.setFocusable(false)
-        fakeEditTextForTextStateCalculation?.setFocusableInTouchMode(false)
+        // Size here doesn't matter, we won't show this view.
+        fakeEditTextForTextStateCalculation?.layoutParams = LayoutParams(100, 100)
+        fakeEditTextForTextStateCalculation?.onPreDraw()
+        val layout = fakeEditTextForTextStateCalculation?.getLayout()
+        Log.d(logTag, "fakeEditTextForTextStateCalculation layout:$layout")
         Log.d(logTag, "onServiceConnected!")
     }
 
