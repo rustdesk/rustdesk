@@ -1803,10 +1803,6 @@ Future<bool> initUniLinks() async {
     if (initialLink == null) {
       return false;
     }
-    if (isMobile){
-      handleUriLinkMobile(initialLink);
-      return true;
-    }
     return handleUriLink(uriString: initialLink);
   } catch (err) {
     debugPrintStack(label: "$err");
@@ -1827,17 +1823,13 @@ StreamSubscription? listenUniLinks({handleByFlutter = true}) {
   final sub = uriLinkStream.listen((Uri? uri) {
     debugPrint("A uri was received: $uri. handleByFlutter $handleByFlutter");
     if (uri != null) {
-      if (!isMobile){
-        if (handleByFlutter) {
-          handleUriLink(uri: uri);
-        } else {
-          bind.sendUrlScheme(url: uri.toString());
-        }
+      if (handleByFlutter) {
+        handleUriLink(uri: uri);
+      } else {
+        bind.sendUrlScheme(url: uri.toString());
       }
-      else {
-        handleUriLinkMobile(uri.toString());
-      }
-    } else {
+    }
+    else {
       print("uni listen error: uri is empty.");
     }
   }, onError: (err) {
@@ -1851,14 +1843,6 @@ enum UriLinkType {
   fileTransfer,
   portForward,
   rdp,
-}
-
-void handleUriLinkMobile(String uri) {
-  var context = Get.context;
-  var uri_id = uri.split("//").last;
-  if (context != null && uri_id.isNotEmpty){
-    connect(context, uri_id);
-  }
 }
 
 // uri link handler
@@ -1980,7 +1964,7 @@ List<String>? urlLinkToCmdArgs(Uri uri) {
     command = '--connect';
     id = uri.path.substring("/new/".length);
   } else if (['connect', "play", 'file-transfer', 'port-forward', 'rdp']
-      .contains(uri.authority)) {
+      .contains(uri.authority) && !isMobile) {
     command = '--${uri.authority}';
     if (uri.path.length > 1) {
       id = uri.path.substring(1);
@@ -1989,6 +1973,13 @@ List<String>? urlLinkToCmdArgs(Uri uri) {
     // rustdesk://<connect-id>
     command = '--connect';
     id = uri.authority;
+  }
+
+  if (isMobile){
+    if (id != null){
+      connect(Get.context!, id);
+      return null;
+    }
   }
 
   List<String> args = List.empty(growable: true);
