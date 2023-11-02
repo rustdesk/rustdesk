@@ -43,7 +43,7 @@ impl crate::TraitCapturer for Capturer {
             unsafe {
                 std::ptr::copy_nonoverlapping(buf.as_ptr(), self.rgba.as_mut_ptr(), buf.len())
             };
-            Ok(Frame::new(&self.rgba, self.height()))
+            Ok(Frame::new(&self.rgba, self.width(), self.height()))
         } else {
             return Err(io::ErrorKind::WouldBlock.into());
         }
@@ -51,22 +51,37 @@ impl crate::TraitCapturer for Capturer {
 }
 
 pub struct Frame<'a> {
-    pub data: &'a [u8],
-    pub stride: Vec<usize>,
+    data: &'a [u8],
+    width: usize,
+    height: usize,
+    stride: Vec<usize>,
 }
 
 impl<'a> Frame<'a> {
-    pub fn new(data: &'a [u8], h: usize) -> Self {
-        let stride = data.len() / h;
-        let mut v = Vec::new();
-        v.push(stride);
-        Frame { data, stride: v }
+    pub fn new(data: &'a [u8], width: usize, height: usize) -> Self {
+        let stride0 = data.len() / height;
+        let mut stride = Vec::new();
+        stride.push(stride0);
+        Frame {
+            data,
+            width,
+            height,
+            stride,
+        }
     }
 }
 
 impl<'a> crate::TraitFrame for Frame<'a> {
     fn data(&self) -> &[u8] {
         self.data
+    }
+
+    fn width(&self) -> usize {
+        self.width
+    }
+
+    fn height(&self) -> usize {
+        self.height
     }
 
     fn stride(&self) -> Vec<usize> {

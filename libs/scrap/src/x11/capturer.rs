@@ -102,7 +102,7 @@ impl Capturer {
         let result = unsafe { slice::from_raw_parts(self.buffer, self.size) };
         crate::would_block_if_equal(&mut self.saved_raw_data, result)?;
         Ok(
-            Frame::new(result, crate::Pixfmt::BGRA, self.display.h())
+            Frame::new(result, crate::Pixfmt::BGRA, self.display.w(), self.display.h())
        )
     }
 }

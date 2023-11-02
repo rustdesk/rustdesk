@@ -41,7 +41,7 @@ impl Capturer {
 impl TraitCapturer for Capturer {
     fn frame<'a>(&'a mut self, timeout: Duration) -> io::Result<Frame<'a>> {
         match self.inner.frame(timeout.as_millis() as _) {
-            Ok(frame) => Ok(Frame::new(frame, self.height)),
+            Ok(frame) => Ok(Frame::new(frame, self.width, self.height)),
             Err(ref error) if error.kind() == TimedOut => Err(WouldBlock.into()),
             Err(error) => Err(error),
         }
@@ -58,21 +58,36 @@ impl TraitCapturer for Capturer {
 
 pub struct Frame<'a> {
     data: &'a [u8],
+    width: usize,
+    height: usize,
     stride: Vec<usize>,
 }
 
 impl<'a> Frame<'a> {
-    pub fn new(data: &'a [u8], h: usize) -> Self {
-        let stride = data.len() / h;
-        let mut v = Vec::new();
-        v.push(stride);
-        Frame { data, stride: v }
+    pub fn new(data: &'a [u8], width: usize, height: usize) -> Self {
+        let stride0 = data.len() / height;
+        let mut stride = Vec::new();
+        stride.push(stride0);
+        Frame {
+            data,
+            width,
+            height,
+            stride,
+        }
     }
 }
 
 impl<'a> crate::TraitFrame for Frame<'a> {
     fn data(&self) -> &[u8] {
         self.data
+    }
+
+    fn width(&self) -> usize {
+        self.width
+    }
+
+    fn height(&self) -> usize {
+        self.height
     }
 
     fn stride(&self) -> Vec<usize> {
@@ -167,7 +182,11 @@ impl CapturerMag {
 impl TraitCapturer for CapturerMag {
     fn frame<'a>(&'a mut self, _timeout_ms: Duration) -> io::Result<Frame<'a>> {
         self.inner.frame(&mut self.data)?;
-        Ok(Frame::new(&self.data, self.inner.get_rect().2))
+        Ok(Frame::new(
+            &self.data,
+            self.inner.get_rect().1,
+            self.inner.get_rect().2,
+        ))
     }
 
     fn is_gdi(&self) -> bool {

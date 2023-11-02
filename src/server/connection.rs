@@ -670,7 +670,6 @@ impl Connection {
             conn.lr.my_id.clone(),
         );
         video_service::notify_video_frame_fetched(id, None);
-        scrap::codec::Encoder::update(id, scrap::codec::EncodingUpdate::Remove);
         if conn.authorized {
             password::update_temporary_password();
         }
@@ -1173,7 +1172,7 @@ impl Connection {
                     sub_service = true;
                 }
             }
-            Self::on_remote_authorized();
+            self.on_remote_authorized();
         }
         let mut msg_out = Message::new();
         msg_out.set_login_response(res);
@@ -1212,9 +1211,10 @@ impl Connection {
         }
     }
 
-    fn on_remote_authorized() {
+    fn on_remote_authorized(&self) {
         use std::sync::Once;
         static _ONCE: Once = Once::new();
+        self.update_codec_on_login();
         #[cfg(any(target_os = "windows", target_os = "linux"))]
         if !Config::get_option("allow-remove-wallpaper").is_empty() {
             // multi connections set once
@@ -1412,8 +1412,8 @@ impl Connection {
         return Config::get_option(enable_prefix_option).is_empty();
     }
 
-    fn update_codec_on_login(&self, lr: &LoginRequest) {
-        if let Some(o) = lr.option.as_ref() {
+    fn update_codec_on_login(&self) {
+        if let Some(o) = self.lr.clone().option.as_ref() {
             if let Some(q) = o.supported_decoding.clone().take() {
                 scrap::codec::Encoder::update(
                     self.inner.id(),
@@ -1437,9 +1437,6 @@ impl Connection {
         self.lr = lr.clone();
         if let Some(o) = lr.option.as_ref() {
             self.options_in_login = Some(o.clone());
-        }
-        if lr.union.is_none() {
-            self.update_codec_on_login(&lr);
         }
         self.video_ack_required = lr.video_ack_required;
     }
@@ -2969,18 +2966,6 @@ mod raii {
         fn drop(&mut self) {
             let mut active_conns_lock = ALIVE_CONNS.lock().unwrap();
             active_conns_lock.retain(|&c| c != self.0);
-            #[cfg(not(any(target_os = "android", target_os = "ios")))]
-            if active_conns_lock.is_empty() {
-                display_service::reset_resolutions();
-            }
-            #[cfg(all(windows, feature = "virtual_display_driver"))]
-            if active_conns_lock.is_empty() {
-                let _ = virtual_display_manager::reset_all();
-            }
-            #[cfg(all(windows))]
-            if active_conns_lock.is_empty() {
-                crate::privacy_win_mag::stop();
-            }
             video_service::VIDEO_QOS
                 .lock()
                 .unwrap()
@@ -2988,17 +2973,20 @@ mod raii {
         }
     }
 
-    pub struct AuthedConnID(i32);
+    pub struct AuthedConnID(i32, AuthConnType);
 
     impl AuthedConnID {
         pub fn new(id: i32, conn_type: AuthConnType) -> Self {
             AUTHED_CONNS.lock().unwrap().push((id, conn_type));
-            Self(id)
+            Self(id, conn_type)
         }
     }
 
     impl Drop for AuthedConnID {
         fn drop(&mut self) {
+            if self.1 == AuthConnType::Remote {
+                scrap::codec::Encoder::update(self.0, scrap::codec::EncodingUpdate::Remove);
+            }
             let mut lock = AUTHED_CONNS.lock().unwrap();
             lock.retain(|&c| c.0 != self.0);
             if lock.iter().filter(|c| c.1 == AuthConnType::Remote).count() == 0 {
@@ -3006,6 +2994,12 @@ mod raii {
                 {
                     *WALLPAPER_REMOVER.lock().unwrap() = None;
                 }
+                #[cfg(not(any(target_os = "android", target_os = "ios")))]
+                display_service::reset_resolutions();
+                #[cfg(all(windows, feature = "virtual_display_driver"))]
+                let _ = virtual_display_manager::reset_all();
+                #[cfg(all(windows))]
+                crate::privacy_win_mag::stop();
             }
         }
     }

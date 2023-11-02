@@ -7,9 +7,9 @@
 include!(concat!(env!("OUT_DIR"), "/aom_ffi.rs"));
 
 use crate::codec::{base_bitrate, codec_thread_num, Quality};
-use crate::Pixfmt;
 use crate::{codec::EncoderApi, EncodeFrame, STRIDE_ALIGN};
 use crate::{common::GoogleImage, generate_call_macro, generate_call_ptr_macro, Error, Result};
+use crate::{EncodeYuvFormat, Pixfmt};
 use hbb_common::{
     anyhow::{anyhow, Context},
     bytes::Bytes,
@@ -54,6 +54,7 @@ pub struct AomEncoder {
     width: usize,
     height: usize,
     i444: bool,
+    yuvfmt: EncodeYuvFormat,
 }
 
 // https://webrtc.googlesource.com/src/+/refs/heads/main/modules/video_coding/codecs/av1/libaom_av1_encoder.cc
@@ -241,6 +242,7 @@ impl EncoderApi for AomEncoder {
                     width: config.width as _,
                     height: config.height as _,
                     i444,
+                    yuvfmt: Self::get_yuvfmt(config.width, config.height, i444),
                 })
             }
             _ => Err(anyhow!("encoder type mismatch")),
@@ -263,35 +265,7 @@ impl EncoderApi for AomEncoder {
     }
 
     fn yuvfmt(&self) -> crate::EncodeYuvFormat {
-        let mut img = Default::default();
-        let fmt = if self.i444 {
-            aom_img_fmt::AOM_IMG_FMT_I444
-        } else {
-            aom_img_fmt::AOM_IMG_FMT_I420
-        };
-        unsafe {
-            aom_img_wrap(
-                &mut img,
-                fmt,
-                self.width as _,
-                self.height as _,
-                crate::STRIDE_ALIGN as _,
-                0x1 as _,
-            );
-        }
-        let pixfmt = if self.i444 {
-            Pixfmt::I444
-        } else {
-            Pixfmt::I420
-        };
-        crate::EncodeYuvFormat {
-            pixfmt,
-            w: img.w as _,
-            h: img.h as _,
-            stride: img.stride.map(|s| s as usize).to_vec(),
-            u: img.planes[1] as usize - img.planes[0] as usize,
-            v: img.planes[2] as usize - img.planes[0] as usize,
-        }
+        self.yuvfmt.clone()
     }
 
     fn set_quality(&mut self, quality: Quality) -> ResultType<()> {
@@ -399,6 +373,34 @@ impl AomEncoder {
         let q_max = ((1.0 - t) * q_max1 as f32 + t * q_max2 as f32).round() as u32;
 
         (q_min, q_max)
+    }
+
+    fn get_yuvfmt(width: u32, height: u32, i444: bool) -> EncodeYuvFormat {
+        let mut img = Default::default();
+        let fmt = if i444 {
+            aom_img_fmt::AOM_IMG_FMT_I444
+        } else {
+            aom_img_fmt::AOM_IMG_FMT_I420
+        };
+        unsafe {
+            aom_img_wrap(
+                &mut img,
+                fmt,
+                width as _,
+                height as _,
+                crate::STRIDE_ALIGN as _,
+                0x1 as _,
+            );
+        }
+        let pixfmt = if i444 { Pixfmt::I444 } else { Pixfmt::I420 };
+        EncodeYuvFormat {
+            pixfmt,
+            w: img.w as _,
+            h: img.h as _,
+            stride: img.stride.map(|s| s as usize).to_vec(),
+            u: img.planes[1] as usize - img.planes[0] as usize,
+            v: img.planes[2] as usize - img.planes[0] as usize,
+        }
     }
 }
 
