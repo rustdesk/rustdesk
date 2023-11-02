@@ -34,7 +34,7 @@
 			<key>CFBundleURLName</key>
 			<string>com.carriez.rustdesk</string>
 			<key>CFBundleURLSchemes</key>
-		<array>
+			<array>
 				<string>rustdesk</string>
 			</array>
 		</dict>
