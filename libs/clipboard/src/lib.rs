@@ -5,7 +5,7 @@ use std::{
 };
 
 #[cfg(any(target_os = "windows", feature = "unix-file-copy-paste",))]
-use hbb_common::allow_err;
+use hbb_common::{allow_err, log};
 use hbb_common::{
     lazy_static,
     tokio::sync::{
