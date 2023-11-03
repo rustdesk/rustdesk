@@ -452,12 +452,12 @@ class InputService : AccessibilityService() {
         Log.d(logTag, "existing text:$text textToCommit:$textToCommit textSelectionStart:$textSelectionStart textSelectionEnd:$textSelectionEnd")
 
         if (textToCommit != null) {
-            var newText = ""
-
             if ((textSelectionStart == -1) || (textSelectionEnd == -1)) {
-                newText = textToCommit
+                val newText = textToCommit
+                this.fakeEditTextForTextStateCalculation?.setText(newText)
                 success = updateTextForAccessibilityNode(node)
             } else if (text != null) {
+                this.fakeEditTextForTextStateCalculation?.setText(text)
                 this.fakeEditTextForTextStateCalculation?.text?.insert(textSelectionStart, textToCommit)
                 success = updateTextAndSelectionForAccessibiltyNode(node)
             }
