@@ -4,8 +4,10 @@ use std::{
     sync::{Arc, Mutex, RwLock},
 };
 
+#[cfg(any(target_os = "windows", feature = "unix-file-copy-paste",))]
+use hbb_common::{allow_err, log};
 use hbb_common::{
-    allow_err, lazy_static, log,
+    lazy_static,
     tokio::sync::{
         mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender},
         Mutex as TokioMutex,

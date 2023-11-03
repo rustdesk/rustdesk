@@ -12,6 +12,7 @@ use scrap::Display;
 
 pub const NAME: &'static str = "display";
 
+#[cfg(all(windows, feature = "virtual_display_driver"))]
 const DUMMY_DISPLAY_SIDE_MAX_SIZE: usize = 1024;
 
 struct ChangedResolution {
