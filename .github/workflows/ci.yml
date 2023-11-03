@@ -1,8 +1,12 @@
 name: CI
 
-# env:
+env:
 #   MIN_SUPPORTED_RUST_VERSION: "1.46.0"
 #   CICD_INTERMEDIATES_DIR: "_cicd-intermediates"
+  VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
+  # vcpkg version: 2023.10.19
+  # for multiarch gcc compatibility
+  VCPKG_COMMIT_ID: "8eb57355a4ffb410a2e94c07b4dca2dffbee8e50"
 
 on:
   workflow_dispatch:
@@ -76,6 +80,13 @@ jobs:
           - { target: x86_64-unknown-linux-gnu    , os: ubuntu-20.04                  }
           # - { target: x86_64-unknown-linux-musl   , os: ubuntu-20.04, use-cross: true }
     steps:
+    - name: Export GitHub Actions cache environment variables
+      uses: actions/github-script@v6
+      with:
+        script: |
+          core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
+          core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
+
     - name: Checkout source code
       uses: actions/checkout@v3
 
@@ -83,21 +94,43 @@ jobs:
       shell: bash
       run: |
         case ${{ matrix.job.target }} in
-          x86_64-unknown-linux-gnu) sudo apt-get -y update ; sudo apt install -y g++ gcc git curl wget nasm yasm libgtk-3-dev clang libxcb-randr0-dev libxdo-dev libxfixes-dev libxcb-shape0-dev libxcb-xfixes0-dev libasound2-dev libpulse-dev cmake libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev;;
+          x86_64-unknown-linux-gnu)
+            sudo apt-get -y update
+            sudo apt-get install -y \
+               clang \
+               cmake \
+               curl \
+               gcc \
+               git \
+               g++ \
+               libasound2-dev \
+               libgstreamer1.0-dev \
+               libgstreamer-plugins-base1.0-dev \
+               libgtk-3-dev \
+               libpulse-dev \
+               libxcb-randr0-dev \
+               libxcb-shape0-dev \
+               libxcb-xfixes0-dev \
+               libxdo-dev \
+               libxfixes-dev \
+               nasm \
+               wget \
+               yasm
+            ;;
           # arm-unknown-linux-*) sudo apt-get -y update ; sudo apt-get -y install gcc-arm-linux-gnueabihf ;;
           # aarch64-unknown-linux-gnu) sudo apt-get -y update ; sudo apt-get -y install gcc-aarch64-linux-gnu ;;
         esac
 
-    - name: Restore from cache and install vcpkg
-      uses: lukka/run-vcpkg@v7
+    - name: Setup vcpkg with Github Actions binary cache
+      uses: lukka/run-vcpkg@v11
       with:
-        setupOnly: true
-        vcpkgGitCommitId: '501db0f17ef6df184fcdbfbe0f87cde2313b6ab1' #2023.04.15
-    
+        vcpkgDirectory: /opt/artifacts/vcpkg
+        vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
+
     - name: Install vcpkg dependencies
       run: |
-        $VCPKG_ROOT/vcpkg install libvpx libyuv opus aom
-      shell: bash        
+        $VCPKG_ROOT/vcpkg install --x-install-root="$VCPKG_ROOT/installed"
+      shell: bash
 
     - name: Install Rust toolchain
       uses: actions-rs/toolchain@v1
@@ -118,7 +151,7 @@ jobs:
         rustc -V
 
     - uses: Swatinem/rust-cache@v1
-  
+
     - name: Build
       uses: actions-rs/cargo@v1
       with:
@@ -183,7 +216,7 @@ jobs:
             ;;
         esac;
 
-        echo ::set-output name=CARGO_TEST_OPTIONS::${CARGO_TEST_OPTIONS}  
+        echo ::set-output name=CARGO_TEST_OPTIONS::${CARGO_TEST_OPTIONS}
 
     - name: Run tests
       uses: actions-rs/cargo@v1
