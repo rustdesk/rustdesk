@@ -1955,6 +1955,7 @@ bool handleUriLink({List<String>? cmdArgs, Uri? uri, String? uriString}) {
 List<String>? urlLinkToCmdArgs(Uri uri) {
   String? command;
   String? id;
+  final options = ["connect", "play", "file-transfer", "port-forward", "rdp"];
   if (uri.authority.isEmpty &&
       uri.path.split('').every((char) => char == '/')) {
     return [];
@@ -1962,11 +1963,19 @@ List<String>? urlLinkToCmdArgs(Uri uri) {
     // For compatibility
     command = '--connect';
     id = uri.path.substring("/new/".length);
-  } else if (['connect', "play", 'file-transfer', 'port-forward', 'rdp']
-      .contains(uri.authority) && !isMobile) {
+  } else if (options.contains(uri.authority)) {
+    final optionIndex = options.indexOf(uri.authority);
     command = '--${uri.authority}';
     if (uri.path.length > 1) {
       id = uri.path.substring(1);
+    }
+    if (isMobile && id != null) {
+      if (optionIndex == 0 || optionIndex == 1) {
+        connect(Get.context!, id);
+      } else if (optionIndex == 2) {
+        connect(Get.context!, id, isFileTransfer: true);
+      }
+      return null;
     }
   } else if (uri.authority.length > 2 && uri.path.length <= 1) {
     // rustdesk://<connect-id>
