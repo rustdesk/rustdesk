@@ -112,6 +112,10 @@ pub trait TraitCapturer {
 pub trait TraitFrame {
     fn data(&self) -> &[u8];
 
+    fn width(&self) -> usize;
+
+    fn height(&self) -> usize;
+
     fn stride(&self) -> Vec<usize>;
 
     fn pixfmt(&self) -> Pixfmt;
@@ -125,6 +129,7 @@ pub enum Pixfmt {
     I444,
 }
 
+#[derive(Debug, Clone)]
 pub struct EncodeYuvFormat {
     pub pixfmt: Pixfmt,
     pub w: usize,

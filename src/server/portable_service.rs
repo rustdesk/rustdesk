@@ -704,7 +704,7 @@ pub mod client {
                     }
                     let frame_ptr = base.add(ADDR_CAPTURE_FRAME);
                     let data = slice::from_raw_parts(frame_ptr, (*frame_info).length);
-                    Ok(Frame::new(data, self.height))
+                    Ok(Frame::new(data, self.width, self.height))
                 } else {
                     let ptr = base.add(ADDR_CAPTURE_WOULDBLOCK);
                     let wouldblock = utils::ptr_to_i32(ptr);

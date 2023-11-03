@@ -8,7 +8,7 @@ use hbb_common::message_proto::{Chroma, EncodedVideoFrame, EncodedVideoFrames, V
 use hbb_common::ResultType;
 
 use crate::codec::{base_bitrate, codec_thread_num, EncoderApi, Quality};
-use crate::{GoogleImage, Pixfmt, STRIDE_ALIGN};
+use crate::{EncodeYuvFormat, GoogleImage, Pixfmt, STRIDE_ALIGN};
 
 use super::vpx::{vp8e_enc_control_id::*, vpx_codec_err_t::*, *};
 use crate::{generate_call_macro, generate_call_ptr_macro, Error, Result};
@@ -40,6 +40,7 @@ pub struct VpxEncoder {
     height: usize,
     id: VpxVideoCodecId,
     i444: bool,
+    yuvfmt: EncodeYuvFormat,
 }
 
 pub struct VpxDecoder {
@@ -175,6 +176,7 @@ impl EncoderApi for VpxEncoder {
                     height: config.height as _,
                     id: config.codec,
                     i444,
+                    yuvfmt: Self::get_yuvfmt(config.width, config.height, i444),
                 })
             }
             _ => Err(anyhow!("encoder type mismatch")),
@@ -202,35 +204,7 @@ impl EncoderApi for VpxEncoder {
     }
 
     fn yuvfmt(&self) -> crate::EncodeYuvFormat {
-        let mut img = Default::default();
-        let fmt = if self.i444 {
-            vpx_img_fmt::VPX_IMG_FMT_I444
-        } else {
-            vpx_img_fmt::VPX_IMG_FMT_I420
-        };
-        unsafe {
-            vpx_img_wrap(
-                &mut img,
-                fmt,
-                self.width as _,
-                self.height as _,
-                crate::STRIDE_ALIGN as _,
-                0x1 as _,
-            );
-        }
-        let pixfmt = if self.i444 {
-            Pixfmt::I444
-        } else {
-            Pixfmt::I420
-        };
-        crate::EncodeYuvFormat {
-            pixfmt,
-            w: img.w as _,
-            h: img.h as _,
-            stride: img.stride.map(|s| s as usize).to_vec(),
-            u: img.planes[1] as usize - img.planes[0] as usize,
-            v: img.planes[2] as usize - img.planes[0] as usize,
-        }
+        self.yuvfmt.clone()
     }
 
     fn set_quality(&mut self, quality: Quality) -> ResultType<()> {
@@ -361,6 +335,34 @@ impl VpxEncoder {
         let q_max = ((1.0 - t) * q_max1 as f32 + t * q_max2 as f32).round() as u32;
 
         (q_min, q_max)
+    }
+
+    fn get_yuvfmt(width: u32, height: u32, i444: bool) -> EncodeYuvFormat {
+        let mut img = Default::default();
+        let fmt = if i444 {
+            vpx_img_fmt::VPX_IMG_FMT_I444
+        } else {
+            vpx_img_fmt::VPX_IMG_FMT_I420
+        };
+        unsafe {
+            vpx_img_wrap(
+                &mut img,
+                fmt,
+                width as _,
+                height as _,
+                crate::STRIDE_ALIGN as _,
+                0x1 as _,
+            );
+        }
+        let pixfmt = if i444 { Pixfmt::I444 } else { Pixfmt::I420 };
+        EncodeYuvFormat {
+            pixfmt,
+            w: img.w as _,
+            h: img.h as _,
+            stride: img.stride.map(|s| s as usize).to_vec(),
+            u: img.planes[1] as usize - img.planes[0] as usize,
+            v: img.planes[2] as usize - img.planes[0] as usize,
+        }
     }
 }
 
