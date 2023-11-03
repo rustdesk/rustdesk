@@ -824,13 +824,14 @@ class _PeerViewDropdownState extends State<PeerViewDropdown> {
         setState(() {
           menuPos = RelativeRect.fromLTRB(x, y, x, y);
         });
+        showMenu(
+          context: context,
+          position: menuPos,
+          items: items,
+          elevation: 8,
+        );
       },
-      onTap: () => showMenu(
-        context: context,
-        position: menuPos,
-        items: items,
-        elevation: 8,
-      ),
+      onTap: () => {}
     );
   }
 }
