@@ -90,6 +90,8 @@ object KeyEventConverter {
             ControlKey.UpArrow -> KeyEvent.KEYCODE_DPAD_UP
             ControlKey.End -> KeyEvent.KEYCODE_MOVE_END
             ControlKey.Home -> KeyEvent.KEYCODE_MOVE_HOME
+            ControlKey.PageUp -> KeyEvent.KEYCODE_PAGE_UP
+            ControlKey.PageDown -> KeyEvent.KEYCODE_PAGE_DOWN
             ControlKey.Insert -> KeyEvent.KEYCODE_INSERT
             ControlKey.Escape -> KeyEvent.KEYCODE_ESCAPE
             ControlKey.F1 -> KeyEvent.KEYCODE_F1
