@@ -18,6 +18,7 @@ import android.widget.EditText
 import android.view.accessibility.AccessibilityEvent
 import android.view.ViewGroup.LayoutParams
 import android.view.accessibility.AccessibilityNodeInfo
+import android.graphics.Rect
 import android.accessibilityservice.AccessibilityServiceInfo
 import android.accessibilityservice.AccessibilityServiceInfo.FLAG_INPUT_METHOD_EDITOR
 import android.accessibilityservice.AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS
@@ -458,6 +459,10 @@ class InputService : AccessibilityService() {
                 success = updateTextForAccessibilityNode(node)
             } else if (text != null) {
                 this.fakeEditTextForTextStateCalculation?.setText(text)
+                this.fakeEditTextForTextStateCalculation?.setSelection(
+                    textSelectionStart,
+                    textSelectionEnd
+                )
                 this.fakeEditTextForTextStateCalculation?.text?.insert(textSelectionStart, textToCommit)
                 success = updateTextAndSelectionForAccessibiltyNode(node)
             }
@@ -477,6 +482,10 @@ class InputService : AccessibilityService() {
 
             this.fakeEditTextForTextStateCalculation?.let {
                 // This is essiential to make sure layout object is created. OnKeyDown may not work if layout is not created.
+                val rect = Rect()
+                node.getBoundsInScreen(rect)
+
+                it.layout(rect.left, rect.top, rect.right, rect.bottom)
                 it.onPreDraw()
                 if (event.action == android.view.KeyEvent.ACTION_DOWN) {
                     val succ = it.onKeyDown(event.getKeyCode(), event)
