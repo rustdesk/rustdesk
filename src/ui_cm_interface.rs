@@ -101,7 +101,7 @@ pub trait InvokeUiCM: Send + Clone + 'static + Sized {
 
     fn update_voice_call_state(&self, client: &Client);
 
-    fn file_transfer_log(&self, log: String);
+    fn file_transfer_log(&self, action: &str, log: &str);
 }
 
 impl<T: InvokeUiCM> Deref for ConnectionManager<T> {
@@ -418,10 +418,10 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
                                         handle_fs(fs, &mut write_jobs, &self.tx, Some(&tx_log)).await;
                                     }
                                     let log = fs::serialize_transfer_jobs(&write_jobs);
-                                    self.cm.ui_handler.file_transfer_log(log);
+                                    self.cm.ui_handler.file_transfer_log("transfer", &log);
                                 }
-                                Data::FileTransferLog(log) => {
-                                    self.cm.ui_handler.file_transfer_log(log);
+                                Data::FileTransferLog((action, log)) => {
+                                    self.cm.ui_handler.file_transfer_log(&action, &log);
                                 }
                                 #[cfg(not(any(target_os = "android", target_os = "ios")))]
                                 Data::ClipboardFile(_clip) => {
@@ -526,7 +526,7 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
                     }
                 },
                 Some(job_log) = rx_log.recv() => {
-                    self.cm.ui_handler.file_transfer_log(job_log);
+                    self.cm.ui_handler.file_transfer_log("transfer", &job_log);
                 }
             }
         }

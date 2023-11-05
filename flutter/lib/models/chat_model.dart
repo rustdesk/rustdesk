@@ -285,6 +285,10 @@ class ChatModel with ChangeNotifier {
     await toggleCMSidePage();
   }
 
+  toggleCMFilePage() async {
+    await toggleCMSidePage();
+  }
+
   var _togglingCMSidePage = false; // protect order for await
   toggleCMSidePage() async {
     if (_togglingCMSidePage) return false;
@@ -296,6 +300,13 @@ class ChatModel with ChangeNotifier {
       await windowManager.setSizeAlignment(
           kConnectionManagerWindowSizeClosedChat, Alignment.topRight);
     } else {
+      final currentSelectedTab =
+          gFFI.serverModel.tabController.state.value.selectedTabInfo;
+      final client = parent.target?.serverModel.clients.firstWhereOrNull(
+          (client) => client.id.toString() == currentSelectedTab.key);
+      if (client != null) {
+        client.unreadChatMessageCount.value = 0;
+      }
       requestChatInputFocus();
       await windowManager.show();
       await windowManager.setSizeAlignment(

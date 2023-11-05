@@ -42,6 +42,7 @@ use hbb_common::{
 };
 #[cfg(any(target_os = "android", target_os = "ios"))]
 use scrap::android::call_main_service_pointer_input;
+use serde_derive::Serialize;
 use serde_json::{json, value::Value};
 use sha2::{Digest, Sha256};
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -223,6 +224,7 @@ pub struct Connection {
     start_cm_ipc_para: Option<StartCmIpcPara>,
     auto_disconnect_timer: Option<(Instant, u64)>,
     authed_conn_id: Option<self::raii::AuthedConnID>,
+    file_remove_log_control: FileRemoveLogControl,
 }
 
 impl ConnInner {
@@ -365,6 +367,7 @@ impl Connection {
             }),
             auto_disconnect_timer: None,
             authed_conn_id: None,
+            file_remove_log_control: FileRemoveLogControl::new(id),
         };
         let addr = hbb_common::try_into_v4(addr);
         if !conn.on_open(addr).await {
@@ -556,11 +559,11 @@ impl Connection {
                 },
                 _ = conn.file_timer.tick() => {
                     if !conn.read_jobs.is_empty() {
-                        conn.send_to_cm(ipc::Data::FileTransferLog(fs::serialize_transfer_jobs(&conn.read_jobs)));
+                        conn.send_to_cm(ipc::Data::FileTransferLog(("transfer".to_string(), fs::serialize_transfer_jobs(&conn.read_jobs))));
                         match fs::handle_read_jobs(&mut conn.read_jobs, &mut conn.stream).await {
                             Ok(log) => {
                                 if !log.is_empty() {
-                                    conn.send_to_cm(ipc::Data::FileTransferLog(log));
+                                    conn.send_to_cm(ipc::Data::FileTransferLog(("transfer".to_string(), log)));
                                 }
                             }
                             Err(err) =>  {
@@ -632,6 +635,7 @@ impl Connection {
                             break;
                         }
                     }
+                    conn.file_remove_log_control.on_timer().drain(..).map(|x| conn.send_to_cm(x)).count();
                 }
                 _ = test_delay_timer.tick() => {
                     if last_recv_time.elapsed() >= SEC30 {
@@ -1911,30 +1915,43 @@ impl Connection {
                             }
                             Some(file_action::Union::RemoveDir(d)) => {
                                 self.send_fs(ipc::FS::RemoveDir {
-                                    path: d.path,
+                                    path: d.path.clone(),
                                     id: d.id,
                                     recursive: d.recursive,
                                 });
+                                self.file_remove_log_control.on_remove_dir(d);
                             }
                             Some(file_action::Union::RemoveFile(f)) => {
                                 self.send_fs(ipc::FS::RemoveFile {
-                                    path: f.path,
+                                    path: f.path.clone(),
                                     id: f.id,
                                     file_num: f.file_num,
                                 });
+                                self.file_remove_log_control.on_remove_file(f);
                             }
                             Some(file_action::Union::Create(c)) => {
                                 self.send_fs(ipc::FS::CreateDir {
-                                    path: c.path,
+                                    path: c.path.clone(),
                                     id: c.id,
                                 });
+                                self.send_to_cm(ipc::Data::FileTransferLog((
+                                    "create_dir".to_string(),
+                                    serde_json::to_string(&FileActionLog {
+                                        id: c.id,
+                                        conn_id: self.inner.id(),
+                                        path: c.path,
+                                        dir: true,
+                                    })
+                                    .unwrap_or_default(),
+                                )));
                             }
                             Some(file_action::Union::Cancel(c)) => {
                                 self.send_fs(ipc::FS::CancelWrite { id: c.id });
                                 if let Some(job) = fs::get_job_immutable(c.id, &self.read_jobs) {
-                                    self.send_to_cm(ipc::Data::FileTransferLog(
+                                    self.send_to_cm(ipc::Data::FileTransferLog((
+                                        "transfer".to_string(),
                                         fs::serialize_transfer_job(job, false, true, ""),
-                                    ));
+                                    )));
                                 }
                                 fs::remove_job(c.id, &mut self.read_jobs);
                             }
@@ -2871,6 +2888,109 @@ pub enum AlarmAuditType {
 pub enum FileAuditType {
     RemoteSend = 0,
     RemoteReceive = 1,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct FileActionLog {
+    id: i32,
+    conn_id: i32,
+    path: String,
+    dir: bool,
+}
+
+struct FileRemoveLogControl {
+    conn_id: i32,
+    instant: Instant,
+    removed_files: Vec<FileRemoveFile>,
+    removed_dirs: Vec<FileRemoveDir>,
+}
+
+impl FileRemoveLogControl {
+    fn new(conn_id: i32) -> Self {
+        FileRemoveLogControl {
+            conn_id,
+            instant: Instant::now(),
+            removed_files: vec![],
+            removed_dirs: vec![],
+        }
+    }
+
+    fn on_remove_file(&mut self, f: FileRemoveFile) -> Option<ipc::Data> {
+        self.instant = Instant::now();
+        self.removed_files.push(f.clone());
+        Some(ipc::Data::FileTransferLog((
+            "remove".to_string(),
+            serde_json::to_string(&FileActionLog {
+                id: f.id,
+                conn_id: self.conn_id,
+                path: f.path,
+                dir: false,
+            })
+            .unwrap_or_default(),
+        )))
+    }
+
+    fn on_remove_dir(&mut self, d: FileRemoveDir) -> Option<ipc::Data> {
+        self.instant = Instant::now();
+        self.removed_files.retain(|f| !f.path.starts_with(&d.path));
+        self.removed_dirs.retain(|x| !x.path.starts_with(&d.path));
+        if !self
+            .removed_dirs
+            .iter()
+            .any(|x| d.path.starts_with(&x.path))
+        {
+            self.removed_dirs.push(d.clone());
+        }
+        Some(ipc::Data::FileTransferLog((
+            "remove".to_string(),
+            serde_json::to_string(&FileActionLog {
+                id: d.id,
+                conn_id: self.conn_id,
+                path: d.path,
+                dir: true,
+            })
+            .unwrap_or_default(),
+        )))
+    }
+
+    fn on_timer(&mut self) -> Vec<ipc::Data> {
+        if self.instant.elapsed().as_secs() < 1 {
+            return vec![];
+        }
+        let mut v: Vec<ipc::Data> = vec![];
+        self.removed_files
+            .drain(..)
+            .map(|f| {
+                v.push(ipc::Data::FileTransferLog((
+                    "remove".to_string(),
+                    serde_json::to_string(&FileActionLog {
+                        id: f.id,
+                        conn_id: self.conn_id,
+                        path: f.path,
+                        dir: false,
+                    })
+                    .unwrap_or_default(),
+                )));
+            })
+            .count();
+        self.removed_dirs
+            .drain(..)
+            .map(|d| {
+                v.push(ipc::Data::FileTransferLog((
+                    "remove".to_string(),
+                    serde_json::to_string(&FileActionLog {
+                        id: d.id,
+                        conn_id: self.conn_id,
+                        path: d.path,
+                        dir: true,
+                    })
+                    .unwrap_or_default(),
+                )));
+            })
+            .count();
+        v
+    }
 }
 
 #[cfg(windows)]

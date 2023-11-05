@@ -1031,8 +1031,8 @@ pub mod connection_manager {
             self.push_event("update_voice_call_state", vec![("client", &client_json)]);
         }
 
-        fn file_transfer_log(&self, log: String) {
-            self.push_event("cm_file_transfer_log", vec![("log", &log.to_string())]);
+        fn file_transfer_log(&self, action: &str, log: &str) {
+            self.push_event("cm_file_transfer_log", vec![(action, log)]);
         }
     }
 

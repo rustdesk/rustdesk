@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/desktop/widgets/tabbar_widget.dart';
 import 'package:flutter_hbb/models/chat_model.dart';
+import 'package:flutter_hbb/models/cm_file_model.dart';
 import 'package:flutter_hbb/utils/platform_channel.dart';
 import 'package:get/get.dart';
 import 'package:percent_indicator/linear_percent_indicator.dart';
@@ -482,8 +483,8 @@ class _CmHeaderState extends State<_CmHeader>
                     client.type_() != ClientType.file),
             child: IconButton(
               onPressed: () => checkClickTime(client.id, () {
-                if (client.type_() != ClientType.file) {
-                  gFFI.chatModel.toggleCMSidePage();
+                if (client.type_() == ClientType.file) {
+                  gFFI.chatModel.toggleCMFilePage();
                 } else {
                   gFFI.chatModel
                       .toggleCMChatPage(MessageKey(client.peerId, client.id));
@@ -975,6 +976,49 @@ class __FileTransferLogPageState extends State<_FileTransferLogPage> {
     );
   }
 
+  iconLabel(CmFileLog item) {
+    switch (item.action) {
+      case CmFileAction.none:
+        return Container();
+      case CmFileAction.localToRemote:
+      case CmFileAction.remoteToLocal:
+        return Column(
+          children: [
+            Transform.rotate(
+              angle: item.action == CmFileAction.remoteToLocal ? 0 : pi,
+              child: SvgPicture.asset(
+                "assets/arrow.svg",
+                color: Theme.of(context).tabBarTheme.labelColor,
+              ),
+            ),
+            Text(item.action == CmFileAction.remoteToLocal
+                ? translate('Send')
+                : translate('Receive'))
+          ],
+        );
+      case CmFileAction.remove:
+        return Column(
+          children: [
+            Icon(
+              Icons.delete,
+              color: Theme.of(context).tabBarTheme.labelColor,
+            ),
+            Text(translate('Delete'))
+          ],
+        );
+      case CmFileAction.createDir:
+        return Column(
+          children: [
+            Icon(
+              Icons.create_new_folder,
+              color: Theme.of(context).tabBarTheme.labelColor,
+            ),
+            Text(translate('Create Folder'))
+          ],
+        );
+    }
+  }
+
   Widget statusList() {
     return PreferredSize(
       preferredSize: const Size(200, double.infinity),
@@ -983,7 +1027,7 @@ class __FileTransferLogPageState extends State<_FileTransferLogPage> {
           child: Obx(
             () {
               final jobTable = gFFI.cmFileModel.currentJobTable;
-              statusListView(List<JobProgress> jobs) => ListView.builder(
+              statusListView(List<CmFileLog> jobs) => ListView.builder(
                     controller: ScrollController(),
                     itemBuilder: (BuildContext context, int index) {
                       final item = jobs[index];
@@ -998,22 +1042,7 @@ class __FileTransferLogPageState extends State<_FileTransferLogPage> {
                                 children: [
                                   SizedBox(
                                     width: 50,
-                                    child: Column(
-                                      children: [
-                                        Transform.rotate(
-                                          angle: item.isRemoteToLocal ? 0 : pi,
-                                          child: SvgPicture.asset(
-                                            "assets/arrow.svg",
-                                            color: Theme.of(context)
-                                                .tabBarTheme
-                                                .labelColor,
-                                          ),
-                                        ),
-                                        Text(item.isRemoteToLocal
-                                            ? translate('Send')
-                                            : translate('Receive'))
-                                      ],
-                                    ),
+                                    child: iconLabel(item),
                                   ).paddingOnly(left: 15),
                                   const SizedBox(
                                     width: 16.0,
@@ -1048,8 +1077,9 @@ class __FileTransferLogPageState extends State<_FileTransferLogPage> {
                                             ),
                                           ),
                                         Offstage(
-                                          offstage:
-                                              item.state == JobState.inProgress,
+                                          offstage: !(item.isTransfer() &&
+                                              item.state !=
+                                                  JobState.inProgress),
                                           child: Text(
                                             translate(
                                               item.display(),

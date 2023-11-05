@@ -232,7 +232,7 @@ pub enum Data {
     Plugin(Plugin),
     #[cfg(windows)]
     SyncWinCpuUsage(Option<f64>),
-    FileTransferLog(String),
+    FileTransferLog((String, String)),
     #[cfg(windows)]
     ControlledSessionCount(usize),
 }
