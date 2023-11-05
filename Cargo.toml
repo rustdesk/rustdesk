@@ -5,7 +5,7 @@ authors = ["informatique@paysdesherbiers.fr"]
 edition = "2021"
 build= "build.rs"
 description = "Assistance CCPH"
-default-run = "rustdesk"
+default-run = "Assistance_CCPH"
 
 [lib]
 name = "librustdesk"
