@@ -18,10 +18,18 @@ lazy_static::lazy_static! {
 struct VirtualDisplayManager {
     headless_index_name: Option<(u32, String)>,
     peer_index_name: HashMap<u32, String>,
+    is_driver_installed: bool,
 }
 
 impl VirtualDisplayManager {
-    fn prepare_driver() -> ResultType<()> {
+    fn prepare_driver(&mut self) -> ResultType<()> {
+        if !self.is_driver_installed {
+            self.install_update_driver()?;
+        }
+        Ok(())
+    }
+
+    fn install_update_driver(&mut self) -> ResultType<()> {
         if let Err(e) = virtual_display::create_device() {
             if !e.to_string().contains("Device is already created") {
                 bail!("Create device failed {}", e);
@@ -29,9 +37,8 @@ impl VirtualDisplayManager {
         }
         // Reboot is not required for this case.
         let mut _reboot_required = false;
-        allow_err!(virtual_display::install_update_driver(
-            &mut _reboot_required
-        ));
+        virtual_display::install_update_driver(&mut _reboot_required)?;
+        self.is_driver_installed = true;
         Ok(())
     }
 
@@ -48,7 +55,7 @@ impl VirtualDisplayManager {
 
 pub fn plug_in_headless() -> ResultType<()> {
     let mut manager = VIRTUAL_DISPLAY_MANAGER.lock().unwrap();
-    VirtualDisplayManager::prepare_driver()?;
+    manager.prepare_driver()?;
     let modes = [virtual_display::MonitorMode {
         width: 1920,
         height: 1080,
@@ -93,9 +100,55 @@ fn get_new_device_name(device_names: &HashSet<String>) -> String {
     "".to_string()
 }
 
+pub fn get_virtual_displays() -> Vec<u32> {
+    VIRTUAL_DISPLAY_MANAGER
+        .lock()
+        .unwrap()
+        .peer_index_name
+        .keys()
+        .cloned()
+        .collect()
+}
+
+pub fn plug_in_index_modes(
+    idx: u32,
+    mut modes: Vec<virtual_display::MonitorMode>,
+) -> ResultType<()> {
+    let mut manager = VIRTUAL_DISPLAY_MANAGER.lock().unwrap();
+    manager.prepare_driver()?;
+    if !manager.peer_index_name.contains_key(&idx) {
+        let device_names = windows::get_device_names();
+        if modes.is_empty() {
+            modes.push(virtual_display::MonitorMode {
+                width: 1920,
+                height: 1080,
+                sync: 60,
+            });
+        }
+        match VirtualDisplayManager::plug_in_monitor(idx, modes.as_slice()) {
+            Ok(_) => {
+                let device_name = get_new_device_name(&device_names);
+                manager.peer_index_name.insert(idx, device_name);
+            }
+            Err(e) => {
+                log::error!("Plug in monitor failed {}", e);
+            }
+        }
+    }
+    Ok(())
+}
+
+pub fn reset_all() -> ResultType<()> {
+    if let Err(e) = plug_out_peer_request(&get_virtual_displays()) {
+        log::error!("Failed to plug out virtual displays: {}", e);
+    }
+    let _ = plug_out_headless();
+    Ok(())
+}
+
 pub fn plug_in_peer_request(modes: Vec<Vec<virtual_display::MonitorMode>>) -> ResultType<Vec<u32>> {
     let mut manager = VIRTUAL_DISPLAY_MANAGER.lock().unwrap();
-    VirtualDisplayManager::prepare_driver()?;
+    manager.prepare_driver()?;
 
     let mut indices: Vec<u32> = Vec::new();
     for m in modes.iter() {
@@ -119,9 +172,9 @@ pub fn plug_in_peer_request(modes: Vec<Vec<virtual_display::MonitorMode>>) -> Re
     Ok(indices)
 }
 
-pub fn plug_out_peer_request(modes: &[u32]) -> ResultType<()> {
+pub fn plug_out_peer_request(indices: &[u32]) -> ResultType<()> {
     let mut manager = VIRTUAL_DISPLAY_MANAGER.lock().unwrap();
-    for idx in modes.iter() {
+    for idx in indices.iter() {
         if manager.peer_index_name.contains_key(idx) {
             allow_err!(virtual_display::plug_out_monitor(*idx));
             manager.peer_index_name.remove(idx);

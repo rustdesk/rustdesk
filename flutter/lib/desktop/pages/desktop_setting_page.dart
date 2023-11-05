@@ -1320,6 +1320,7 @@ class _DisplayState extends State<_Display> {
       otherRow('Lock after session end', 'lock_after_session_end'),
       otherRow('Privacy mode', 'privacy_mode'),
       otherRow('Reverse mouse wheel', 'reverse_mouse_wheel'),
+      otherRow('True color (4:4:4)', 'i444'),
     ];
     if (useTextureRender) {
       children.add(otherRow('Show displays as individual windows',

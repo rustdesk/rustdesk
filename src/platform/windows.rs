@@ -1838,7 +1838,7 @@ pub fn uninstall_cert() -> ResultType<()> {
 }
 
 mod cert {
-    use hbb_common::{allow_err, bail, log, ResultType};
+    use hbb_common::{bail, log, ResultType};
     use std::{ffi::OsStr, io::Error, os::windows::ffi::OsStrExt, path::Path, str::from_utf8};
     use winapi::{
         shared::{

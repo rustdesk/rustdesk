@@ -15,7 +15,7 @@ import 'package:flutter_hbb/desktop/widgets/tabbar_widget.dart';
 import 'package:flutter_hbb/models/file_model.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:get/get.dart';
-import 'package:wakelock/wakelock.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 
 import '../../consts.dart';
 import '../../desktop/widgets/material_mod_popup_menu.dart' as mod_menu;
@@ -91,7 +91,7 @@ class _FileManagerPageState extends State<FileManagerPage>
     });
     Get.put(_ffi, tag: 'ft_${widget.id}');
     if (!Platform.isLinux) {
-      Wakelock.enable();
+      WakelockPlus.enable();
     }
     debugPrint("File manager page init success with id ${widget.id}");
     _ffi.dialogManager.setOverlayState(_overlayKeyState);
@@ -104,7 +104,7 @@ class _FileManagerPageState extends State<FileManagerPage>
       _ffi.close();
       _ffi.dialogManager.dismissAll();
       if (!Platform.isLinux) {
-        Wakelock.disable();
+        WakelockPlus.disable();
       }
       Get.delete<FFI>(tag: 'ft_${widget.id}');
     });
@@ -1126,10 +1126,11 @@ class _FileManagerViewState extends State<FileManagerView> {
 
   void _onSelectedChanged(SelectedItems selectedItems, List<Entry> entries,
       Entry entry, bool isLocal) {
-    final isCtrlDown = RawKeyboard.instance.keysPressed
-        .contains(LogicalKeyboardKey.controlLeft);
+    final isCtrlDown = RawKeyboard.instance.keysPressed.contains(LogicalKeyboardKey.controlLeft) ||
+        RawKeyboard.instance.keysPressed.contains(LogicalKeyboardKey.controlRight);
     final isShiftDown =
-        RawKeyboard.instance.keysPressed.contains(LogicalKeyboardKey.shiftLeft);
+        RawKeyboard.instance.keysPressed.contains(LogicalKeyboardKey.shiftLeft) ||
+        RawKeyboard.instance.keysPressed.contains(LogicalKeyboardKey.shiftRight);
     if (isCtrlDown) {
       if (selectedItems.items.contains(entry)) {
         selectedItems.remove(entry);

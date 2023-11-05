@@ -436,9 +436,9 @@ Future<List<TToggleMenu>> toolbarDisplayToggle(
         child: Text(translate('Mute'))));
   }
   // file copy and paste
-  if (Platform.isWindows &&
-      pi.platform == kPeerPlatformWindows &&
-      perms['file'] != false) {
+  if (perms['file'] != false &&
+      bind.mainHasFileClipboard() &&
+      pi.platformAdditions.containsKey(kPlatformAdditionsHasFileClipboard)) {
     final option = 'enable-file-transfer';
     final value =
         bind.sessionGetToggleOptionSync(sessionId: sessionId, arg: option);
@@ -545,6 +545,23 @@ Future<List<TToggleMenu>> toolbarDisplayToggle(
               sessionId: sessionId, value: value ? 'Y' : '');
         },
         child: Text(translate('Use all my displays for the remote session'))));
+  }
+
+  // 444
+  final codec_format = ffi.qualityMonitorModel.data.codecFormat;
+  if (versionCmp(pi.version, "1.2.4") >= 0 &&
+      (codec_format == "AV1" || codec_format == "VP9")) {
+    final option = 'i444';
+    final value =
+        bind.sessionGetToggleOptionSync(sessionId: sessionId, arg: option);
+    v.add(TToggleMenu(
+        value: value,
+        onChanged: (value) async {
+          if (value == null) return;
+          await bind.sessionToggleOption(sessionId: sessionId, value: option);
+          bind.sessionChangePreferCodec(sessionId: sessionId);
+        },
+        child: Text(translate('True color (4:4:4)'))));
   }
 
   return v;

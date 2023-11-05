@@ -237,11 +237,19 @@ impl<T: InvokeUiSession> Session<T> {
     }
 
     pub fn get_displays_as_individual_windows(&self) -> String {
-        self.lc.read().unwrap().displays_as_individual_windows.clone()
+        self.lc
+            .read()
+            .unwrap()
+            .displays_as_individual_windows
+            .clone()
     }
 
     pub fn get_use_all_my_displays_for_the_remote_session(&self) -> String {
-        self.lc.read().unwrap().use_all_my_displays_for_the_remote_session.clone()
+        self.lc
+            .read()
+            .unwrap()
+            .use_all_my_displays_for_the_remote_session
+            .clone()
     }
 
     pub fn save_reverse_mouse_wheel(&self, value: String) {
@@ -249,11 +257,17 @@ impl<T: InvokeUiSession> Session<T> {
     }
 
     pub fn save_displays_as_individual_windows(&self, value: String) {
-        self.lc.write().unwrap().save_displays_as_individual_windows(value);
+        self.lc
+            .write()
+            .unwrap()
+            .save_displays_as_individual_windows(value);
     }
 
     pub fn save_use_all_my_displays_for_the_remote_session(&self, value: String) {
-        self.lc.write().unwrap().save_use_all_my_displays_for_the_remote_session(value);
+        self.lc
+            .write()
+            .unwrap()
+            .save_use_all_my_displays_for_the_remote_session(value);
     }
 
     pub fn save_view_style(&self, value: String) {
@@ -308,6 +322,18 @@ impl<T: InvokeUiSession> Session<T> {
         } else {
             self.send(Data::Message(LoginConfigHandler::refresh()));
         }
+    }
+
+    pub fn toggle_virtual_display(&self, index: i32, on: bool) {
+        let mut misc = Misc::new();
+        misc.set_toggle_virtual_display(ToggleVirtualDisplay {
+            display: index,
+            on,
+            ..Default::default()
+        });
+        let mut msg_out = Message::new();
+        msg_out.set_misc(misc);
+        self.send(Data::Message(msg_out));
     }
 
     #[cfg(not(feature = "flutter"))]
@@ -1175,6 +1201,7 @@ pub trait InvokeUiSession: Send + Sync + Clone + 'static + Sized + Default {
     fn switch_display(&self, display: &SwitchDisplay);
     fn set_peer_info(&self, peer_info: &PeerInfo); // flutter
     fn set_displays(&self, displays: &Vec<DisplayInfo>);
+    fn set_platform_additions(&self, data: &str);
     fn on_connected(&self, conn_type: ConnType);
     fn update_privacy_mode(&self);
     fn set_permission(&self, name: &str, value: bool);
@@ -1393,7 +1420,13 @@ impl<T: InvokeUiSession> Session<T> {
 #[tokio::main(flavor = "current_thread")]
 pub async fn io_loop<T: InvokeUiSession>(handler: Session<T>, round: u32) {
     // It is ok to call this function multiple times.
-    #[cfg(target_os = "windows")]
+    #[cfg(any(
+        target_os = "windows",
+        all(
+            any(target_os = "linux", target_os = "macos"),
+            feature = "unix-file-copy-paste"
+        )
+    ))]
     if !handler.is_file_transfer() && !handler.is_port_forward() {
         clipboard::ContextSend::enable(true);
     }
@@ -1494,16 +1527,17 @@ pub async fn io_loop<T: InvokeUiSession>(handler: Session<T>, round: u32) {
     let frame_count_map: Arc<RwLock<HashMap<usize, usize>>> = Default::default();
     let frame_count_map_cl = frame_count_map.clone();
     let ui_handler = handler.ui_handler.clone();
-    let (video_sender, audio_sender, video_queue_map, decode_fps_map) = start_video_audio_threads(
-        handler.clone(),
-        move |display: usize, data: &mut scrap::ImageRgb| {
-            let mut write_lock = frame_count_map_cl.write().unwrap();
-            let count = write_lock.get(&display).unwrap_or(&0) + 1;
-            write_lock.insert(display, count);
-            drop(write_lock);
-            ui_handler.on_rgba(display, data);
-        },
-    );
+    let (video_sender, audio_sender, video_queue_map, decode_fps_map, chroma) =
+        start_video_audio_threads(
+            handler.clone(),
+            move |display: usize, data: &mut scrap::ImageRgb| {
+                let mut write_lock = frame_count_map_cl.write().unwrap();
+                let count = write_lock.get(&display).unwrap_or(&0) + 1;
+                write_lock.insert(display, count);
+                drop(write_lock);
+                ui_handler.on_rgba(display, data);
+            },
+        );
 
     let mut remote = Remote::new(
         handler,
@@ -1514,6 +1548,7 @@ pub async fn io_loop<T: InvokeUiSession>(handler: Session<T>, round: u32) {
         sender,
         frame_count_map,
         decode_fps_map,
+        chroma,
     );
     remote.io_loop(&key, &token, round).await;
     remote.sync_jobs_status_to_local().await;
