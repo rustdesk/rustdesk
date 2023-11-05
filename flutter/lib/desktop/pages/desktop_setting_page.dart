@@ -649,6 +649,10 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
             _OptionCheckBox(
                 context, 'Enable Recording Session', 'enable-record-session',
                 enabled: enabled, fakeValue: fakeValue),
+            if (Platform.isWindows)
+              _OptionCheckBox(
+                  context, 'Enable Block User Input', 'enable-block-input',
+                  enabled: enabled, fakeValue: fakeValue),
             _OptionCheckBox(context, 'Enable remote configuration modification',
                 'allow-remote-config-modification',
                 enabled: enabled, fakeValue: fakeValue),

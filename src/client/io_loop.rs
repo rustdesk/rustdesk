@@ -1347,6 +1347,9 @@ impl<T: InvokeUiSession> Remote<T> {
                             Ok(Permission::Recording) => {
                                 self.handler.set_permission("recording", p.enabled);
                             }
+                            Ok(Permission::BlockInput) => {
+                                self.handler.set_permission("block_input", p.enabled);
+                            }
                             _ => {}
                         }
                     }

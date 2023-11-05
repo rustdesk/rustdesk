@@ -573,5 +573,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Virtual display", "Віртуальний дисплей"),
         ("Plug out all", "Відключити все"),
         ("True color (4:4:4)", "Спражній колір (4:4:4)"),
+        ("Enable Block User Input", ""),
+        ("Allow block user input", ""),
     ].iter().cloned().collect();
 }

@@ -536,7 +536,6 @@ class _PrivilegeBoardState extends State<_PrivilegeBoard> {
                 child: Icon(
                   iconData,
                   color: Colors.white,
-                  size: 32,
                 ),
               ),
             ],
@@ -548,9 +547,11 @@ class _PrivilegeBoardState extends State<_PrivilegeBoard> {
 
   @override
   Widget build(BuildContext context) {
+    final crossAxisCount = 4;
+    final spacing = 10.0;
     return Container(
       width: double.infinity,
-      height: 200.0,
+      height: 160.0,
       margin: EdgeInsets.all(5.0),
       padding: EdgeInsets.all(5.0),
       decoration: BoxDecoration(
@@ -575,10 +576,10 @@ class _PrivilegeBoardState extends State<_PrivilegeBoard> {
           ).marginOnly(left: 4.0, bottom: 8.0),
           Expanded(
             child: GridView.count(
-              crossAxisCount: 3,
-              padding: EdgeInsets.symmetric(horizontal: 20.0),
-              mainAxisSpacing: 20.0,
-              crossAxisSpacing: 20.0,
+              crossAxisCount: crossAxisCount,
+              padding: EdgeInsets.symmetric(horizontal: spacing),
+              mainAxisSpacing: spacing,
+              crossAxisSpacing: spacing,
               children: [
                 buildPermissionIcon(
                   client.keyboard,
@@ -651,7 +652,23 @@ class _PrivilegeBoardState extends State<_PrivilegeBoard> {
                     });
                   },
                   translate('Allow recording session'),
-                )
+                ),
+                // only windows support block input
+                if (Platform.isWindows)
+                  buildPermissionIcon(
+                    client.blockInput,
+                    Icons.block,
+                    (enabled) {
+                      bind.cmSwitchPermission(
+                          connId: client.id,
+                          name: "block_input",
+                          enabled: enabled);
+                      setState(() {
+                        client.blockInput = enabled;
+                      });
+                    },
+                    translate('Allow block user input'),
+                  )
               ],
             ),
           ),

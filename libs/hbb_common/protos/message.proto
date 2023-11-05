@@ -526,6 +526,7 @@ message PermissionInfo {
     File = 4;
     Restart = 5;
     Recording = 6;
+    BlockInput = 7;
   }
 
   Permission permission = 1;

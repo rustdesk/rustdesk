@@ -180,6 +180,7 @@ pub struct Connection {
     file: bool,
     restart: bool,
     recording: bool,
+    block_input: bool,
     last_test_delay: i64,
     network_delay: Option<u32>,
     lock_after_session_end: bool,
@@ -326,6 +327,7 @@ impl Connection {
             file: Connection::permission("enable-file-transfer"),
             restart: Connection::permission("enable-remote-restart"),
             recording: Connection::permission("enable-record-session"),
+            block_input: Connection::permission("enable-block-input"),
             last_test_delay: 0,
             network_delay: None,
             lock_after_session_end: false,
@@ -395,6 +397,9 @@ impl Connection {
         }
         if !conn.recording {
             conn.send_permission(Permission::Recording, false).await;
+        }
+        if !conn.block_input {
+            conn.send_permission(Permission::BlockInput, false).await;
         }
         let mut test_delay_timer =
             time::interval_at(Instant::now() + TEST_DELAY_TIMEOUT, TEST_DELAY_TIMEOUT);
@@ -477,6 +482,9 @@ impl Connection {
                             } else if &name == "recording" {
                                 conn.recording = enabled;
                                 conn.send_permission(Permission::Recording, enabled).await;
+                            } else if &name == "block_input" {
+                                conn.block_input = enabled;
+                                conn.send_permission(Permission::BlockInput, enabled).await;
                             }
                         }
                         ipc::Data::RawMessage(bytes) => {
@@ -1271,6 +1279,7 @@ impl Connection {
             file_transfer_enabled: self.file,
             restart: self.restart,
             recording: self.recording,
+            block_input: self.block_input,
             from_switch: self.from_switch,
         });
     }
@@ -2525,8 +2534,8 @@ impl Connection {
                 }
             }
         }
-        if self.keyboard {
-            if let Ok(q) = o.block_input.enum_value() {
+        if let Ok(q) = o.block_input.enum_value() {
+            if self.keyboard && self.block_input {
                 match q {
                     BoolOption::Yes => {
                         self.tx_input.send(MessageInput::BlockOn).ok();
@@ -2535,6 +2544,17 @@ impl Connection {
                         self.tx_input.send(MessageInput::BlockOff).ok();
                     }
                     _ => {}
+                }
+            } else {
+                if q != BoolOption::NotSet {
+                    let state = if q == BoolOption::Yes {
+                        back_notification::BlockInputState::BlkOnFailed
+                    } else {
+                        back_notification::BlockInputState::BlkOffFailed
+                    };
+                    if let Some(tx) = &self.inner.tx {
+                        Self::send_block_input_error(tx, state, "No permission".to_string());
+                    }
                 }
             }
         }

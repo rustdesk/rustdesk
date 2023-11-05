@@ -177,6 +177,7 @@ pub enum Data {
         file_transfer_enabled: bool,
         restart: bool,
         recording: bool,
+        block_input: bool,
         from_switch: bool,
     },
     ChatMessage {

@@ -690,6 +690,7 @@ class Client {
   bool file = false;
   bool restart = false;
   bool recording = false;
+  bool blockInput = false;
   bool disconnected = false;
   bool fromSwitch = false;
   bool inVoiceCall = false;
@@ -713,6 +714,7 @@ class Client {
     file = json['file'];
     restart = json['restart'];
     recording = json['recording'];
+    blockInput = json['block_input'];
     disconnected = json['disconnected'];
     fromSwitch = json['from_switch'];
     inVoiceCall = json['in_voice_call'];
@@ -733,6 +735,7 @@ class Client {
     data['file'] = file;
     data['restart'] = restart;
     data['recording'] = recording;
+    data['block_input'] = blockInput;
     data['disconnected'] = disconnected;
     data['from_switch'] = fromSwitch;
     return data;
