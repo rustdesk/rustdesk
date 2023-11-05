@@ -95,7 +95,7 @@ pub fn new() -> ServerPtr {
         id_count: hbb_common::rand::random::<i32>() % 1000 + 1000, // ensure positive
     };
     server.add_service(Box::new(audio_service::new()));
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(not(target_os = "ios"))]
     server.add_service(Box::new(display_service::new()));
     server.add_service(Box::new(video_service::new(
         *display_service::PRIMARY_DISPLAY_IDX,

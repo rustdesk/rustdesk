@@ -1,6 +1,6 @@
 use crate::{
     codec::{base_bitrate, codec_thread_num, EncoderApi, EncoderCfg},
-    hw, ImageFormat, ImageRgb, HW_STRIDE_ALIGN,
+    hw, ImageFormat, ImageRgb, Pixfmt, HW_STRIDE_ALIGN,
 };
 use hbb_common::{
     allow_err,
@@ -31,7 +31,6 @@ const DEFAULT_RC: RateControl = RC_DEFAULT;
 
 pub struct HwEncoder {
     encoder: Encoder,
-    yuv: Vec<u8>,
     pub format: DataFormat,
     pub pixfmt: AVPixelFormat,
     width: u32,
@@ -40,7 +39,7 @@ pub struct HwEncoder {
 }
 
 impl EncoderApi for HwEncoder {
-    fn new(cfg: EncoderCfg) -> ResultType<Self>
+    fn new(cfg: EncoderCfg, _i444: bool) -> ResultType<Self>
     where
         Self: Sized,
     {
@@ -78,7 +77,6 @@ impl EncoderApi for HwEncoder {
                 match Encoder::new(ctx.clone()) {
                     Ok(encoder) => Ok(HwEncoder {
                         encoder,
-                        yuv: vec![],
                         format,
                         pixfmt: ctx.pixfmt,
                         width: ctx.width as _,
@@ -118,8 +116,31 @@ impl EncoderApi for HwEncoder {
         }
     }
 
-    fn use_yuv(&self) -> bool {
-        false
+    fn yuvfmt(&self) -> crate::EncodeYuvFormat {
+        let pixfmt = if self.pixfmt == AVPixelFormat::AV_PIX_FMT_NV12 {
+            Pixfmt::NV12
+        } else {
+            Pixfmt::I420
+        };
+        let stride = self
+            .encoder
+            .linesize
+            .clone()
+            .drain(..)
+            .map(|i| i as usize)
+            .collect();
+        crate::EncodeYuvFormat {
+            pixfmt,
+            w: self.encoder.ctx.width as _,
+            h: self.encoder.ctx.height as _,
+            stride,
+            u: self.encoder.offset[0] as _,
+            v: if pixfmt == Pixfmt::NV12 {
+                0
+            } else {
+                self.encoder.offset[1] as _
+            },
+        }
     }
 
     fn set_quality(&mut self, quality: crate::codec::Quality) -> ResultType<()> {
@@ -145,29 +166,8 @@ impl HwEncoder {
         })
     }
 
-    pub fn encode(&mut self, bgra: &[u8]) -> ResultType<Vec<EncodeFrame>> {
-        match self.pixfmt {
-            AVPixelFormat::AV_PIX_FMT_YUV420P => hw::hw_bgra_to_i420(
-                self.encoder.ctx.width as _,
-                self.encoder.ctx.height as _,
-                &self.encoder.linesize,
-                &self.encoder.offset,
-                self.encoder.length,
-                bgra,
-                &mut self.yuv,
-            ),
-            AVPixelFormat::AV_PIX_FMT_NV12 => hw::hw_bgra_to_nv12(
-                self.encoder.ctx.width as _,
-                self.encoder.ctx.height as _,
-                &self.encoder.linesize,
-                &self.encoder.offset,
-                self.encoder.length,
-                bgra,
-                &mut self.yuv,
-            ),
-        }
-
-        match self.encoder.encode(&self.yuv) {
+    pub fn encode(&mut self, yuv: &[u8]) -> ResultType<Vec<EncodeFrame>> {
+        match self.encoder.encode(yuv) {
             Ok(v) => {
                 let mut data = Vec::<EncodeFrame>::new();
                 data.append(v);
@@ -245,7 +245,7 @@ impl HwDecoder {
     pub fn decode(&mut self, data: &[u8]) -> ResultType<Vec<HwDecoderImage>> {
         match self.decoder.decode(data) {
             Ok(v) => Ok(v.iter().map(|f| HwDecoderImage { frame: f }).collect()),
-            Err(_) => Ok(vec![]),
+            Err(e) => Err(anyhow!(e)),
         }
     }
 }
@@ -274,7 +274,7 @@ impl HwDecoderImage<'_> {
                 &mut rgb.raw as _,
                 i420,
                 HW_STRIDE_ALIGN,
-            ),
+            )?,
             AVPixelFormat::AV_PIX_FMT_YUV420P => {
                 hw::hw_i420_to(
                     rgb.fmt(),
@@ -287,10 +287,10 @@ impl HwDecoderImage<'_> {
                     frame.linesize[1] as _,
                     frame.linesize[2] as _,
                     &mut rgb.raw as _,
-                );
-                return Ok(());
+                )?;
             }
         }
+        Ok(())
     }
 
     pub fn bgra(&self, bgra: &mut Vec<u8>, i420: &mut Vec<u8>) -> ResultType<()> {

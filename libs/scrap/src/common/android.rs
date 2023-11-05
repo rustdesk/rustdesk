@@ -1,5 +1,5 @@
 use crate::android::ffi::*;
-use crate::rgba_to_i420;
+use crate::Pixfmt;
 use lazy_static::lazy_static;
 use serde_json::Value;
 use std::collections::HashMap;
@@ -12,15 +12,15 @@ lazy_static! {
 
 pub struct Capturer {
     display: Display,
-    bgra: Vec<u8>,
+    rgba: Vec<u8>,
     saved_raw_data: Vec<u8>, // for faster compare and copy
 }
 
 impl Capturer {
-    pub fn new(display: Display, _yuv: bool) -> io::Result<Capturer> {
+    pub fn new(display: Display) -> io::Result<Capturer> {
         Ok(Capturer {
             display,
-            bgra: Vec::new(),
+            rgba: Vec::new(),
             saved_raw_data: Vec::new(),
         })
     }
@@ -35,22 +35,62 @@ impl Capturer {
 }
 
 impl crate::TraitCapturer for Capturer {
-    fn set_use_yuv(&mut self, _use_yuv: bool) {}
-
     fn frame<'a>(&'a mut self, _timeout: Duration) -> io::Result<Frame<'a>> {
         if let Some(buf) = get_video_raw() {
             crate::would_block_if_equal(&mut self.saved_raw_data, buf)?;
-            rgba_to_i420(self.width(), self.height(), buf, &mut self.bgra);
-            Ok(Frame::RAW(&self.bgra))
+            // Is it safe to directly return buf without copy?
+            self.rgba.resize(buf.len(), 0);
+            unsafe {
+                std::ptr::copy_nonoverlapping(buf.as_ptr(), self.rgba.as_mut_ptr(), buf.len())
+            };
+            Ok(Frame::new(&self.rgba, self.width(), self.height()))
         } else {
             return Err(io::ErrorKind::WouldBlock.into());
         }
     }
 }
 
-pub enum Frame<'a> {
-    RAW(&'a [u8]),
-    Empty,
+pub struct Frame<'a> {
+    data: &'a [u8],
+    width: usize,
+    height: usize,
+    stride: Vec<usize>,
+}
+
+impl<'a> Frame<'a> {
+    pub fn new(data: &'a [u8], width: usize, height: usize) -> Self {
+        let stride0 = data.len() / height;
+        let mut stride = Vec::new();
+        stride.push(stride0);
+        Frame {
+            data,
+            width,
+            height,
+            stride,
+        }
+    }
+}
+
+impl<'a> crate::TraitFrame for Frame<'a> {
+    fn data(&self) -> &[u8] {
+        self.data
+    }
+
+    fn width(&self) -> usize {
+        self.width
+    }
+
+    fn height(&self) -> usize {
+        self.height
+    }
+
+    fn stride(&self) -> Vec<usize> {
+        self.stride.clone()
+    }
+
+    fn pixfmt(&self) -> Pixfmt {
+        Pixfmt::RGBA
+    }
 }
 
 pub struct Display {

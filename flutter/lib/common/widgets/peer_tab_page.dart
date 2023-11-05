@@ -75,9 +75,11 @@ class _PeerTabPageState extends State<PeerTabPage>
   void initState() {
     final uiType = bind.getLocalFlutterOption(k: 'peer-card-ui-type');
     if (uiType != '') {
-      peerCardUiType.value = int.parse(uiType) == PeerUiType.list.index
-          ? PeerUiType.list
-          : PeerUiType.grid;
+      peerCardUiType.value = int.parse(uiType) == 0
+        ? PeerUiType.grid
+        : int.parse(uiType) == 1
+            ? PeerUiType.tile
+            : PeerUiType.list;
     }
     hideAbTagsPanel.value =
         bind.mainGetLocalOption(key: "hideAbTagsPanel").isNotEmpty;
@@ -215,29 +217,7 @@ class _PeerTabPageState extends State<PeerTabPage>
   }
 
   Widget _createPeerViewTypeSwitch(BuildContext context) {
-    final textColor = Theme.of(context).textTheme.titleLarge?.color;
-    final types = [PeerUiType.grid, PeerUiType.list];
-
-    return Obx(() => _hoverAction(
-        context: context,
-        onTap: () async {
-          final type = types
-              .elementAt(peerCardUiType.value == types.elementAt(0) ? 1 : 0);
-          await bind.setLocalFlutterOption(
-              k: 'peer-card-ui-type', v: type.index.toString());
-          peerCardUiType.value = type;
-        },
-        child: Tooltip(
-            message: peerCardUiType.value == PeerUiType.grid
-                ? translate('List View')
-                : translate('Grid View'),
-            child: Icon(
-              peerCardUiType.value == PeerUiType.grid
-                  ? Icons.view_list_rounded
-                  : Icons.grid_view_rounded,
-              size: 18,
-              color: textColor,
-            ))));
+    return PeerViewDropdown();
   }
 
   Widget _createMultiSelection() {
@@ -776,6 +756,82 @@ class _PeerSearchBarState extends State<PeerSearchBar> {
     );
   }
 }
+
+class PeerViewDropdown extends StatefulWidget {
+  const PeerViewDropdown({super.key});
+
+  @override
+  State<PeerViewDropdown> createState() => _PeerViewDropdownState();
+}
+
+class _PeerViewDropdownState extends State<PeerViewDropdown> {
+  @override
+  Widget build(BuildContext context) {
+    final List<PeerUiType> types  = [PeerUiType.grid, PeerUiType.tile, PeerUiType.list];
+    final style = TextStyle(
+        color: Theme.of(context).textTheme.titleLarge?.color,
+        fontSize: MenuConfig.fontSize,
+        fontWeight: FontWeight.normal);
+    List<PopupMenuEntry> items = List.empty(growable: true);
+    items.add(PopupMenuItem(
+        height: 36,
+        enabled: false,
+        child: Text(translate("Change view"), style: style)));
+      for (var e in PeerUiType.values) {
+      items.add(PopupMenuItem(
+          height: 36,
+          child: Obx(() => Center(
+                child: SizedBox(
+                  height: 36,
+                  child: getRadio<PeerUiType>(
+                      Text(translate(
+                        types.indexOf(e) == 0 ? 'Big tiles' : types.indexOf(e) == 1 ? 'Small tiles' : 'List'
+                      ), style: style),
+                      e, 
+                      peerCardUiType.value,
+                      dense: true, 
+                      (PeerUiType? v) async {
+                    if (v != null) {
+                      peerCardUiType.value = v;
+                      setState(() {});
+                      await bind.setLocalFlutterOption(
+                        k: "peer-card-ui-type",
+                        v: peerCardUiType.value.index.toString(),
+                      );
+                    }}
+                  ),
+                ),
+              ))));
+    }
+
+    var menuPos = RelativeRect.fromLTRB(0, 0, 0, 0);
+    return _hoverAction(
+      context: context,
+      child: Tooltip(
+          message: translate('Change view'),
+          child: Icon(
+              peerCardUiType.value == PeerUiType.grid
+                  ? Icons.grid_view_rounded
+                  : peerCardUiType.value == PeerUiType.tile
+                      ? Icons.view_list_rounded
+                      : Icons.view_agenda_rounded,
+              size: 18,
+            )),
+      onTapDown: (details) {
+        final x = details.globalPosition.dx;
+        final y = details.globalPosition.dy;
+        menuPos = RelativeRect.fromLTRB(x, y, x, y);
+      },
+      onTap: () => showMenu(
+        context: context,
+        position: menuPos,
+        items: items,
+        elevation: 8,
+      )
+    );
+  }
+}
+
 
 class PeerSortDropdown extends StatefulWidget {
   const PeerSortDropdown({super.key});

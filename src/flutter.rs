@@ -471,6 +471,7 @@ impl InvokeUiSession for FlutterHandler {
                     "codec_format",
                     &status.codec_format.map_or(NULL, |it| it.to_string()),
                 ),
+                ("chroma", &status.chroma.map_or(NULL, |it| it.to_string())),
             ],
         );
     }
@@ -689,6 +690,13 @@ impl InvokeUiSession for FlutterHandler {
             "sync_peer_info",
             vec![("displays", &Self::make_displays_msg(displays))],
         );
+    }
+
+    fn set_platform_additions(&self, data: &str) {
+        self.push_event(
+            "sync_platform_additions",
+            vec![("platform_additions", &data)],
+        )
     }
 
     fn on_connected(&self, _conn_type: ConnType) {}
@@ -1458,25 +1466,7 @@ pub mod sessions {
                     if write_lock.is_empty() {
                         remove_peer_key = Some(peer_key.clone());
                     } else {
-                        // Set capture displays if some are not used any more.
-                        let mut remains_displays = HashSet::new();
-                        for (_, h) in write_lock.iter() {
-                            remains_displays.extend(
-                                h.renderer
-                                    .map_display_sessions
-                                    .read()
-                                    .unwrap()
-                                    .keys()
-                                    .cloned(),
-                            );
-                        }
-                        if !remains_displays.is_empty() {
-                            s.capture_displays(
-                                vec![],
-                                vec![],
-                                remains_displays.iter().map(|d| *d as i32).collect(),
-                            );
-                        }
+                        check_remove_unused_displays(None, id, s, &write_lock);
                     }
                     break;
                 }
@@ -1484,6 +1474,69 @@ pub mod sessions {
             }
         }
         SESSIONS.write().unwrap().remove(&remove_peer_key?)
+    }
+
+    #[cfg(feature = "flutter_texture_render")]
+    fn check_remove_unused_displays(
+        current: Option<usize>,
+        session_id: &SessionID,
+        session: &FlutterSession,
+        handlers: &HashMap<SessionID, SessionHandler>,
+    ) {
+        // Set capture displays if some are not used any more.
+        let mut remains_displays = HashSet::new();
+        if let Some(current) = current {
+            remains_displays.insert(current);
+        }
+        for (k, h) in handlers.iter() {
+            if k == session_id {
+                continue;
+            }
+            remains_displays.extend(
+                h.renderer
+                    .map_display_sessions
+                    .read()
+                    .unwrap()
+                    .keys()
+                    .cloned(),
+            );
+        }
+        if !remains_displays.is_empty() {
+            session.capture_displays(
+                vec![],
+                vec![],
+                remains_displays.iter().map(|d| *d as i32).collect(),
+            );
+        }
+    }
+
+    pub fn session_switch_display(session_id: SessionID, value: Vec<i32>) {
+        for s in SESSIONS.read().unwrap().values() {
+            let read_lock = s.ui_handler.session_handlers.read().unwrap();
+            if read_lock.contains_key(&session_id) {
+                if value.len() == 1 {
+                    // Switch display.
+                    // This operation will also cause the peer to send a switch display message.
+                    // The switch display message will contain `SupportedResolutions`, which is useful when changing resolutions.
+                    s.switch_display(value[0]);
+
+                    // Check if other displays are needed.
+                    #[cfg(feature = "flutter_texture_render")]
+                    if value.len() == 1 {
+                        check_remove_unused_displays(
+                            Some(value[0] as _),
+                            &session_id,
+                            &s,
+                            &read_lock,
+                        );
+                    }
+                } else {
+                    // Try capture all displays.
+                    s.capture_displays(vec![], vec![], value);
+                }
+                break;
+            }
+        }
     }
 
     #[inline]

@@ -510,17 +510,21 @@ class QualityMonitor: Reactor.Component
             <div>
                 Codec: {qualityMonitorData[4]}
             </div>
+            <div>
+                Chroma: {qualityMonitorData[5]}
+            </div>
         </div>;
     }
 }
 
 $(#quality-monitor).content(<QualityMonitor />);
-handler.updateQualityStatus = function(speed, fps, delay, bitrate, codec_format) {
+handler.updateQualityStatus = function(speed, fps, delay, bitrate, codec_format, chroma) {
     speed ? qualityMonitorData[0] = speed:null;
     fps ? qualityMonitorData[1] = fps:null;
     delay ? qualityMonitorData[2] = delay:null;
     bitrate ? qualityMonitorData[3] = bitrate:null;
     codec_format ? qualityMonitorData[4] = codec_format:null;
+    chroma ? qualityMonitorData[5] = chroma:null;
     qualityMonitor.update();
 }
 

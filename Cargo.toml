@@ -32,6 +32,13 @@ linux_headless = ["pam" ]
 virtual_display_driver = ["virtual_display"]
 plugin_framework = []
 linux-pkg-config = ["magnum-opus/linux-pkg-config", "scrap/linux-pkg-config"]
+unix-file-copy-paste = [
+    "dep:x11-clipboard",
+    "dep:x11rb",
+    "dep:percent-encoding",
+    "dep:once_cell",
+    "clipboard/unix-file-copy-paste",
+]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -62,7 +69,7 @@ num_cpus = "1.15"
 bytes = { version = "1.4", features = ["serde"] }
 default-net = "0.14"
 wol-rs = "1.0"
-flutter_rust_bridge = { version = "1.75", features = ["uuid"], optional = true}
+flutter_rust_bridge = { version = "=1.80", features = ["uuid"], optional = true}
 errno = "0.3"
 rdev = { git = "https://github.com/fufesou/rdev" }
 url = { version = "2.3", features = ["serde"] }
@@ -132,6 +139,10 @@ dbus = "0.9"
 dbus-crossroads = "0.5"
 pam = { git="https://github.com/fufesou/pam", optional = true }
 users = { version = "0.11" }
+x11-clipboard = {git="https://github.com/clslaid/x11-clipboard", branch = "feat/store-batch", optional = true}
+x11rb =  {version = "0.12", features = ["all-extensions"], optional = true}
+percent-encoding = {version = "2.3", optional = true}
+once_cell = {version = "1.18", optional = true}
 
 [target.'cfg(target_os = "android")'.dependencies]
 android_logger = "0.13"
@@ -153,7 +164,6 @@ winapi = { version = "0.3", features = [ "winnt" ] }
 [build-dependencies]
 cc = "1.0"
 hbb_common = { path = "libs/hbb_common" }
-flutter_rust_bridge_codegen = "1.75"
 os-version = "0.2"
 
 [dev-dependencies]

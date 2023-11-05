@@ -565,6 +565,13 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Open in new window", "Відкрити в новому вікні"),
         ("Show displays as individual windows", "Відображати дисплеї в якості окремих вікон"),
         ("Use all my displays for the remote session", "Використовувати всі мої дисплеї для віддаленого сеансу"),
-        ("selinux_tip", ""),
+        ("selinux_tip", "SELinux увімкнено на вашому пристрої, що може ускладнити для іншої сторони віддалене керування за допомогою RustDesk."),
+        ("Change view", "Режим перегляду"),
+        ("Big tiles", "Великі плитки"),
+        ("Small tiles", "Маленькі плитки"),
+        ("List", "Список"),
+        ("Virtual display", "Віртуальний дисплей"),
+        ("Plug out all", "Відключити все"),
+        ("True color (4:4:4)", "Спражній колір (4:4:4)"),
     ].iter().cloned().collect();
 }

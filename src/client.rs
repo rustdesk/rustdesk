@@ -1017,10 +1017,16 @@ impl VideoHandler {
 
     /// Handle a new video frame.
     #[inline]
-    pub fn handle_frame(&mut self, vf: VideoFrame) -> ResultType<bool> {
+    pub fn handle_frame(
+        &mut self,
+        vf: VideoFrame,
+        chroma: &mut Option<Chroma>,
+    ) -> ResultType<bool> {
         match &vf.union {
             Some(frame) => {
-                let res = self.decoder.handle_video_frame(frame, &mut self.rgb);
+                let res = self
+                    .decoder
+                    .handle_video_frame(frame, &mut self.rgb, chroma);
                 if self.record {
                     self.recorder
                         .lock()
@@ -1855,6 +1861,7 @@ pub fn start_video_audio_threads<F, T>(
     MediaSender,
     Arc<RwLock<HashMap<usize, ArrayQueue<VideoFrame>>>>,
     Arc<RwLock<HashMap<usize, usize>>>,
+    Arc<RwLock<Option<Chroma>>>,
 )
 where
     F: 'static + FnMut(usize, &mut scrap::ImageRgb) + Send,
@@ -1866,6 +1873,9 @@ where
     let mut video_callback = video_callback;
     let fps_map = Arc::new(RwLock::new(HashMap::new()));
     let decode_fps_map = fps_map.clone();
+    let chroma = Arc::new(RwLock::new(None));
+    let chroma_cloned = chroma.clone();
+    let mut last_chroma = None;
 
     std::thread::spawn(move || {
         #[cfg(windows)]
@@ -1911,9 +1921,16 @@ where
                             }
                         }
                         if let Some(handler_controller) = handler_controller_map.get_mut(display) {
-                            match handler_controller.handler.handle_frame(vf) {
+                            let mut tmp_chroma = None;
+                            match handler_controller.handler.handle_frame(vf, &mut tmp_chroma) {
                                 Ok(true) => {
                                     video_callback(display, &mut handler_controller.handler.rgb);
+
+                                    // chroma
+                                    if tmp_chroma.is_some() && last_chroma != tmp_chroma {
+                                        last_chroma = tmp_chroma;
+                                        *chroma.write().unwrap() = tmp_chroma;
+                                    }
 
                                     // fps calculation
                                     // The first frame will be very slow
@@ -1992,6 +2009,7 @@ where
         audio_sender,
         video_queue_map_cloned,
         decode_fps_map,
+        chroma_cloned,
     );
 }
 
