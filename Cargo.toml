@@ -1,5 +1,5 @@
 [package]
-name = "Assistance CCPH"
+name = "Assistance_CCPH"
 version = "1.2.4"
 authors = ["informatique@paysdesherbiers.fr"]
 edition = "2021"
