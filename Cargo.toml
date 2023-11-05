@@ -170,7 +170,7 @@ os-version = "0.2"
 hound = "3.5"
 
 [package.metadata.bundle]
-name = "Assistance CCPH"
+name = "Assistance_CCPH"
 identifier = "com.carriez.rustdesk"
 icon = ["res/32x32.png", "res/128x128.png", "res/128x128@2x.png"]
 osx_minimum_system_version = "10.14"
