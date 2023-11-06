@@ -50,14 +50,14 @@ class Body: Reactor.Component
                 <div />
                 {c.is_file_transfer || c.port_forward || disconnected ? "" : <div>{translate('Permissions')}</div>}
                 {c.is_file_transfer || c.port_forward || disconnected ? "" : <div> <div .permissions>
-                    <div class={!c.keyboard ? "disabled" : ""} title={translate('Allow using keyboard and mouse')}><icon .keyboard /></div>
-                    <div class={!c.clipboard ? "disabled" : ""} title={translate('Allow using clipboard')}><icon .clipboard /></div>
-                    <div class={!c.audio ? "disabled" : ""} title={translate('Allow hearing sound')}><icon .audio /></div>
-                    <div class={!c.file ? "disabled" : ""} title={translate('Allow file copy and paste')}><icon .file /></div>
-                    <div class={!c.restart ? "disabled" : ""} title={translate('Allow remote restart')}><icon .restart /></div>
+                    <div class={!c.keyboard ? "disabled" : ""} title={translate('Enable Keyboard/Mouse')}><icon .keyboard /></div>
+                    <div class={!c.clipboard ? "disabled" : ""} title={translate('Enable Clipboard')}><icon .clipboard /></div>
+                    <div class={!c.audio ? "disabled" : ""} title={translate('Enable Audio')}><icon .audio /></div>
+                    <div class={!c.file ? "disabled" : ""} title={translate('Enable file copy and paste')}><icon .file /></div>
+                    <div class={!c.restart ? "disabled" : ""} title={translate('Enable Remote Restart')}><icon .restart /></div>
                 </div> <div .permissions style="margin-top:8px;" >
-                    <div class={!c.recording ? "disabled" : ""} title={translate('Allow recording session')}><icon .recording /></div>
-                    <div class={!c.block_input ? "disabled" : ""} title={translate('Allow block input')} style={is_win ? "" : "display:none;"}><icon .block_input /></div>
+                    <div class={!c.recording ? "disabled" : ""} title={translate('Enable Recording Session')}><icon .recording /></div>
+                    <div class={!c.block_input ? "disabled" : ""} title={translate('Enable blocking user input')} style={is_win ? "" : "display:none;"}><icon .block_input /></div>
                 </div></div>
                 }
                 {c.port_forward ? <div>Port Forwarding: {c.port_forward}</div> : ""}

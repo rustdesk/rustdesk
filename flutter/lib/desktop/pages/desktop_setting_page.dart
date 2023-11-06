@@ -651,7 +651,7 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
                 enabled: enabled, fakeValue: fakeValue),
             if (Platform.isWindows)
               _OptionCheckBox(
-                  context, 'Enable Block User Input', 'enable-block-input',
+                  context, 'Enable blocking user input', 'enable-block-input',
                   enabled: enabled, fakeValue: fakeValue),
             _OptionCheckBox(context, 'Enable remote configuration modification',
                 'allow-remote-config-modification',

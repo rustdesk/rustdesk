@@ -520,6 +520,7 @@ class _PrivilegeBoardState extends State<_PrivilegeBoard> {
       Function(bool)? onTap, String tooltipText) {
     return Tooltip(
       message: "$tooltipText: ${enabled ? "ON" : "OFF"}",
+      waitDuration: Duration.zero,
       child: Container(
         decoration: BoxDecoration(
           color: enabled ? MyTheme.accent : Colors.grey[700],
@@ -591,7 +592,7 @@ class _PrivilegeBoardState extends State<_PrivilegeBoard> {
                       client.keyboard = enabled;
                     });
                   },
-                  translate('Allow using keyboard and mouse'),
+                  translate('Enable Keyboard/Mouse'),
                 ),
                 buildPermissionIcon(
                   client.clipboard,
@@ -603,7 +604,7 @@ class _PrivilegeBoardState extends State<_PrivilegeBoard> {
                       client.clipboard = enabled;
                     });
                   },
-                  translate('Allow using clipboard'),
+                  translate('Enable Clipboard'),
                 ),
                 buildPermissionIcon(
                   client.audio,
@@ -615,7 +616,7 @@ class _PrivilegeBoardState extends State<_PrivilegeBoard> {
                       client.audio = enabled;
                     });
                   },
-                  translate('Allow hearing sound'),
+                  translate('Enable Audio'),
                 ),
                 buildPermissionIcon(
                   client.file,
@@ -627,7 +628,7 @@ class _PrivilegeBoardState extends State<_PrivilegeBoard> {
                       client.file = enabled;
                     });
                   },
-                  translate('Allow file copy and paste'),
+                  translate('Enable file copy and paste'),
                 ),
                 buildPermissionIcon(
                   client.restart,
@@ -639,7 +640,7 @@ class _PrivilegeBoardState extends State<_PrivilegeBoard> {
                       client.restart = enabled;
                     });
                   },
-                  translate('Allow remote restart'),
+                  translate('Enable Remote Restart'),
                 ),
                 buildPermissionIcon(
                   client.recording,
@@ -651,7 +652,7 @@ class _PrivilegeBoardState extends State<_PrivilegeBoard> {
                       client.recording = enabled;
                     });
                   },
-                  translate('Allow recording session'),
+                  translate('Enable Recording Session'),
                 ),
                 // only windows support block input
                 if (Platform.isWindows)
@@ -667,7 +668,7 @@ class _PrivilegeBoardState extends State<_PrivilegeBoard> {
                         client.blockInput = enabled;
                       });
                     },
-                    translate('Allow block user input'),
+                    translate('Enable blocking user input'),
                   )
               ],
             ),

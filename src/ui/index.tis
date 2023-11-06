@@ -306,7 +306,7 @@ class MyIdMenu: Reactor.Component {
                 <li #enable-file-transfer><span>{svg_checkmark}</span>{translate('Enable File Transfer')}</li> 
                 <li #enable-remote-restart><span>{svg_checkmark}</span>{translate('Enable Remote Restart')}</li> 
                 <li #enable-tunnel><span>{svg_checkmark}</span>{translate('Enable TCP Tunneling')}</li>
-                {is_win ? <li #enable-block-input><span>{svg_checkmark}</span>{translate('Enable Block User Input')}</li> : ""}
+                {is_win ? <li #enable-block-input><span>{svg_checkmark}</span>{translate('Enable blocking user input')}</li> : ""}
                 <li #enable-lan-discovery><span>{svg_checkmark}</span>{translate('Enable LAN Discovery')}</li>
                 <AudioInputs />
                 <Enhancements />
