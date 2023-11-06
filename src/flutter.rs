@@ -863,7 +863,6 @@ pub fn session_add(
     LocalConfig::set_remote_id(&id);
 
     let session: Session<FlutterHandler> = Session {
-        id: id.to_owned(),
         password,
         server_keyboard_enabled: Arc::new(RwLock::new(true)),
         server_file_transfer_enabled: Arc::new(RwLock::new(true)),
@@ -1544,7 +1543,7 @@ pub mod sessions {
         SESSIONS
             .write()
             .unwrap()
-            .entry((session.id.clone(), conn_type))
+            .entry((session.get_id(), conn_type))
             .or_insert(session)
             .ui_handler
             .session_handlers

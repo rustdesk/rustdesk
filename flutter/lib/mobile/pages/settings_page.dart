@@ -221,7 +221,7 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
     final List<AbstractSettingsTile> enhancementsTiles = [];
     final List<AbstractSettingsTile> shareScreenTiles = [
       SettingsTile.switchTile(
-        title: Text(translate('Deny LAN Discovery')),
+        title: Text(translate('Deny LAN discovery')),
         initialValue: _denyLANDiscovery,
         onToggle: (v) async {
           await bind.mainSetOption(
@@ -270,7 +270,7 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
         },
       ),
       SettingsTile.switchTile(
-        title: Text(translate('Enable Recording Session')),
+        title: Text(translate('Enable recording session')),
         initialValue: _enableRecordSession,
         onToggle: (v) async {
           await bind.mainSetOption(
@@ -407,7 +407,7 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
     enhancementsTiles.add(SettingsTile.switchTile(
         initialValue: _enableStartOnBoot,
         title: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text("${translate('Start on Boot')} (beta)"),
+          Text("${translate('Start on boot')} (beta)"),
           Text(
               '* ${translate('Start the screen sharing service on boot, requires special permissions')}',
               style: Theme.of(context).textTheme.bodySmall),

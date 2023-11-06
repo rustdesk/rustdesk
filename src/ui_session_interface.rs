@@ -32,8 +32,8 @@ use hbb_common::{
 use crate::client::io_loop::Remote;
 use crate::client::{
     check_if_retry, handle_hash, handle_login_error, handle_login_from_ui, handle_test_delay,
-    input_os_password, load_config, send_mouse, send_pointer_device_event,
-    start_video_audio_threads, FileManager, Key, LoginConfigHandler, QualityStatus, KEY_MAP,
+    input_os_password, send_mouse, send_pointer_device_event, start_video_audio_threads,
+    FileManager, Key, LoginConfigHandler, QualityStatus, KEY_MAP,
 };
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use crate::common::GrabState;
@@ -47,7 +47,6 @@ const CHANGE_RESOLUTION_VALID_TIMEOUT_SECS: u64 = 15;
 
 #[derive(Clone, Default)]
 pub struct Session<T: InvokeUiSession> {
-    pub id: String, // peer id
     pub password: String,
     pub args: Vec<String>,
     pub lc: Arc<RwLock<LoginConfigHandler>>,
@@ -347,7 +346,7 @@ impl<T: InvokeUiSession> Session<T> {
             display as usize,
             w,
             h,
-            self.id.clone(),
+            self.get_id(),
         ));
     }
 
@@ -452,7 +451,7 @@ impl<T: InvokeUiSession> Session<T> {
 
     pub fn send_note(&self, note: String) {
         let url = self.get_audit_server("conn".to_string());
-        let id = self.id.clone();
+        let id = self.get_id();
         let session_id = self.lc.read().unwrap().session_id;
         std::thread::spawn(move || {
             send_note(url, id, session_id, note);
@@ -496,11 +495,6 @@ impl<T: InvokeUiSession> Session<T> {
         self.send(Data::AddPortForward(pf));
     }
 
-    #[cfg(not(feature = "flutter"))]
-    pub fn get_id(&self) -> String {
-        self.id.clone()
-    }
-
     pub fn get_option(&self, k: String) -> String {
         if k.eq("remote_dir") {
             return self.lc.read().unwrap().get_remote_dir();
@@ -518,7 +512,7 @@ impl<T: InvokeUiSession> Session<T> {
 
     #[inline]
     pub fn load_config(&self) -> PeerConfig {
-        load_config(&self.id)
+        self.lc.read().unwrap().load_config()
     }
 
     #[inline]
@@ -1092,7 +1086,7 @@ impl<T: InvokeUiSession> Session<T> {
         match crate::ipc::connect(1000, "").await {
             Ok(mut conn) => {
                 if conn
-                    .send(&crate::ipc::Data::SwitchSidesRequest(self.id.to_string()))
+                    .send(&crate::ipc::Data::SwitchSidesRequest(self.get_id()))
                     .await
                     .is_ok()
                 {
@@ -1268,7 +1262,7 @@ impl<T: InvokeUiSession> FileManager for Session<T> {}
 
 #[async_trait]
 impl<T: InvokeUiSession> Interface for Session<T> {
-    fn get_login_config_handler(&self) -> Arc<RwLock<LoginConfigHandler>> {
+    fn get_lch(&self) -> Arc<RwLock<LoginConfigHandler>> {
         return self.lc.clone();
     }
 
@@ -1565,7 +1559,7 @@ async fn start_one_port_forward<T: InvokeUiSession>(
     token: &str,
 ) {
     if let Err(err) = crate::port_forward::listen(
-        handler.id.clone(),
+        handler.get_id(),
         handler.password.clone(),
         port,
         handler.clone(),

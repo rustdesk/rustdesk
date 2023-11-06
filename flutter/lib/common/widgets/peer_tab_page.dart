@@ -456,7 +456,7 @@ class _PeerTabPageState extends State<PeerTabPage>
           });
         },
         child: Tooltip(
-            message: translate('Add to Address Book'),
+            message: translate('Add to address book'),
             child: Icon(model.icons[PeerTabIndex.ab.index])),
       ).marginOnly(left: isMobile ? 11 : 6),
     );

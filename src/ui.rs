@@ -589,7 +589,7 @@ impl UI {
     }
 
     fn handle_relay_id(&self, id: String) -> String {
-        handle_relay_id(id)
+        handle_relay_id(&id).to_owned()
     }
 
     fn get_login_device_info(&self) -> String {

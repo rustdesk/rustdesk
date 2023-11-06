@@ -31,8 +31,8 @@ use hbb_common::{
     anyhow::{anyhow, Context},
     bail,
     config::{
-        Config, LocalConfig, PeerConfig, PeerInfoSerde, Resolution, CONNECT_TIMEOUT, READ_TIMEOUT,
-        RELAY_PORT,
+        Config, LocalConfig, PeerConfig, PeerInfoSerde, Resolution, CONNECT_TIMEOUT,
+        PUBLIC_RS_PUB_KEY, READ_TIMEOUT, RELAY_PORT, RENDEZVOUS_PORT, RENDEZVOUS_SERVERS,
     },
     get_version_number, log,
     message_proto::{option_message::BoolOption, *},
@@ -55,6 +55,7 @@ use scrap::{
 };
 
 use crate::{
+    check_port,
     common::input::{MOUSE_BUTTON_LEFT, MOUSE_BUTTON_RIGHT, MOUSE_TYPE_DOWN, MOUSE_TYPE_UP},
     is_keyboard_mode_supported,
     ui_session_interface::{InvokeUiSession, Session},
@@ -133,6 +134,8 @@ lazy_static::lazy_static! {
     static ref OLD_CLIPBOARD_TEXT: Arc<Mutex<String>> = Default::default();
     static ref TEXT_CLIPBOARD_STATE: Arc<Mutex<TextClipboardState>> = Arc::new(Mutex::new(TextClipboardState::new()));
 }
+
+const PUBLIC_SERVER: &str = "public";
 
 #[inline]
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -219,6 +222,7 @@ impl Client {
         conn_type: ConnType,
         interface: impl Interface,
     ) -> ResultType<(Stream, bool, Option<Vec<u8>>)> {
+        debug_assert!(peer == interface.get_id());
         interface.update_direct(None);
         interface.update_received(false);
         match Self::_start(peer, key, token, conn_type, interface).await {
@@ -245,11 +249,8 @@ impl Client {
         // to-do: remember the port for each peer, so that we can retry easier
         if hbb_common::is_ip_str(peer) {
             return Ok((
-                socket_client::connect_tcp(
-                    crate::check_port(peer, RELAY_PORT + 1),
-                    CONNECT_TIMEOUT,
-                )
-                .await?,
+                socket_client::connect_tcp(check_port(peer, RELAY_PORT + 1), CONNECT_TIMEOUT)
+                    .await?,
                 true,
                 None,
             ));
@@ -262,12 +263,36 @@ impl Client {
                 None,
             ));
         }
-        let (mut rendezvous_server, servers, contained) = crate::get_rendezvous_server(1_000).await;
+
+        let other_server = interface.get_lch().read().unwrap().other_server.clone();
+        let (peer, other_server, key, token) = if let Some((a, b, c)) = other_server.as_ref() {
+            (a.as_ref(), b.as_ref(), c.as_ref(), "")
+        } else {
+            (peer, "", key, token)
+        };
+        let (mut rendezvous_server, servers, contained) = if other_server.is_empty() {
+            crate::get_rendezvous_server(1_000).await
+        } else {
+            if other_server == PUBLIC_SERVER {
+                (
+                    check_port(RENDEZVOUS_SERVERS[0], RENDEZVOUS_PORT),
+                    RENDEZVOUS_SERVERS[1..]
+                        .iter()
+                        .map(|x| x.to_string())
+                        .collect(),
+                    true,
+                )
+            } else {
+                (check_port(other_server, RENDEZVOUS_PORT), Vec::new(), true)
+            }
+        };
+
         let mut socket = socket_client::connect_tcp(&*rendezvous_server, CONNECT_TIMEOUT).await;
         debug_assert!(!servers.contains(&rendezvous_server));
         if socket.is_err() && !servers.is_empty() {
             log::info!("try the other servers: {:?}", servers);
             for server in servers {
+                let server = check_port(server, RENDEZVOUS_PORT);
                 socket = socket_client::connect_tcp(&*server, CONNECT_TIMEOUT).await;
                 if socket.is_ok() {
                     rendezvous_server = server;
@@ -423,7 +448,7 @@ impl Client {
         conn_type: ConnType,
         interface: impl Interface,
     ) -> ResultType<(Stream, bool, Option<Vec<u8>>)> {
-        let direct_failures = PeerConfig::load(peer_id).direct_failures;
+        let direct_failures = interface.get_lch().read().unwrap().direct_failures;
         let mut connect_timeout = 0;
         const MIN: u64 = 1000;
         if is_local || peer_nat_type == NatType::SYMMETRIC {
@@ -484,10 +509,9 @@ impl Client {
             }
         }
         if !relay_server.is_empty() && (direct_failures == 0) != direct {
-            let mut config = PeerConfig::load(peer_id);
-            config.direct_failures = if direct { 0 } else { 1 };
-            log::info!("direct_failures updated to {}", config.direct_failures);
-            config.store(peer_id);
+            let n = if direct { 0 } else { 1 };
+            log::info!("direct_failures updated to {}", n);
+            interface.get_lch().write().unwrap().set_direct_failure(n);
         }
         let mut conn = conn?;
         log::info!("{:?} used to establish connection", start.elapsed());
@@ -648,7 +672,7 @@ impl Client {
         ipv4: bool,
     ) -> ResultType<Stream> {
         let mut conn = socket_client::connect_tcp(
-            socket_client::ipv4_to_ipv6(crate::check_port(relay_server, RELAY_PORT), ipv4),
+            socket_client::ipv4_to_ipv6(check_port(relay_server, RELAY_PORT), ipv4),
             CONNECT_TIMEOUT,
         )
         .await
@@ -1088,6 +1112,7 @@ pub struct LoginConfigHandler {
     pub received: bool,
     switch_uuid: Option<String>,
     pub save_ab_password_to_recent: bool, // true: connected with ab password
+    pub other_server: Option<(String, String, String)>,
 }
 
 impl Deref for LoginConfigHandler {
@@ -1096,16 +1121,6 @@ impl Deref for LoginConfigHandler {
     fn deref(&self) -> &Self::Target {
         &self.config
     }
-}
-
-/// Load [`PeerConfig`] from id.
-///
-/// # Arguments
-///
-/// * `id` - id of peer
-#[inline]
-pub fn load_config(id: &str) -> PeerConfig {
-    PeerConfig::load(id)
 }
 
 impl LoginConfigHandler {
@@ -1120,8 +1135,39 @@ impl LoginConfigHandler {
         id: String,
         conn_type: ConnType,
         switch_uuid: Option<String>,
-        force_relay: bool,
+        mut force_relay: bool,
     ) {
+        let mut id = id;
+        if id.contains("@") {
+            let mut v = id.split("@");
+            let raw_id: &str = v.next().unwrap_or_default();
+            let mut server_key = v.next().unwrap_or_default().split('?');
+            let server = server_key.next().unwrap_or_default();
+            let args = server_key.next().unwrap_or_default();
+            let key = if server == PUBLIC_SERVER {
+                PUBLIC_RS_PUB_KEY
+            } else {
+                let mut args_map: HashMap<&str, &str> = HashMap::new();
+                for arg in args.split('&') {
+                    if let Some(kv) = arg.find('=') {
+                        let k = &arg[0..kv];
+                        let v = &arg[kv + 1..];
+                        args_map.insert(k, v);
+                    }
+                }
+                let key = args_map.remove("key").unwrap_or_default();
+                key
+            };
+
+            // here we can check <id>/r@server
+            let real_id = crate::ui_interface::handle_relay_id(raw_id).to_string();
+            if real_id != raw_id {
+                force_relay = true;
+            }
+            self.other_server = Some((real_id.clone(), server.to_owned(), key.to_owned()));
+            id = format!("{real_id}@{server}");
+        }
+
         self.id = id;
         self.conn_type = conn_type;
         let config = self.load_config();
@@ -1136,6 +1182,12 @@ impl LoginConfigHandler {
         self.supported_encoding = Default::default();
         self.restarting_remote_device = false;
         self.force_relay = !self.get_option("force-always-relay").is_empty() || force_relay;
+        if let Some((real_id, server, key)) = &self.other_server {
+            let other_server_key = self.get_option("other-server-key");
+            if !other_server_key.is_empty() && key.is_empty() {
+                self.other_server = Some((real_id.to_owned(), server.to_owned(), other_server_key));
+            }
+        }
         self.direct = None;
         self.received = false;
         self.switch_uuid = switch_uuid;
@@ -1155,8 +1207,9 @@ impl LoginConfigHandler {
     }
 
     /// Load [`PeerConfig`].
-    fn load_config(&self) -> PeerConfig {
-        load_config(&self.id)
+    pub fn load_config(&self) -> PeerConfig {
+        debug_assert!(self.id.len() > 0);
+        PeerConfig::load(&self.id)
     }
 
     /// Save a [`PeerConfig`] into the handler.
@@ -1262,6 +1315,12 @@ impl LoginConfigHandler {
         } else {
             config.ui_flutter.insert(k, v);
         }
+        self.save_config(config);
+    }
+
+    pub fn set_direct_failure(&mut self, value: i32) {
+        let mut config = self.load_config();
+        config.direct_failures = value;
         self.save_config(config);
     }
 
@@ -1417,7 +1476,7 @@ impl LoginConfigHandler {
             msg.image_quality = q.into();
             n += 1;
         } else if q == "custom" {
-            let config = PeerConfig::load(&self.id);
+            let config = self.load_config();
             let quality = if config.custom_image_quality.is_empty() {
                 50
             } else {
@@ -1711,6 +1770,18 @@ impl LoginConfigHandler {
                 log::debug!("remove password of {}", self.id);
             }
         }
+        if let Some((_, b, c)) = self.other_server.as_ref() {
+            if b != PUBLIC_SERVER {
+                config
+                    .options
+                    .insert("other-server-key".to_owned(), c.clone());
+            }
+        }
+        if self.force_relay {
+            config
+                .options
+                .insert("force-always-relay".to_owned(), "Y".to_owned());
+        }
         #[cfg(feature = "flutter")]
         {
             // sync ab password with PeerConfig password
@@ -1772,8 +1843,14 @@ impl LoginConfigHandler {
         let my_id = Config::get_id_or(crate::DEVICE_ID.lock().unwrap().clone());
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
         let my_id = Config::get_id();
+        let (my_id, pure_id) = if let Some((id, _, _)) = self.other_server.as_ref() {
+            let server = Config::get_rendezvous_server();
+            (format!("{my_id}@{server}"), id.clone())
+        } else {
+            (my_id, self.id.clone())
+        };
         let mut lr = LoginRequest {
-            username: self.id.clone(),
+            username: pure_id,
             password: password.into(),
             my_id,
             my_name: crate::username(),
@@ -2561,40 +2638,42 @@ pub trait Interface: Send + Clone + 'static + Sized {
     );
     async fn handle_test_delay(&self, t: TestDelay, peer: &mut Stream);
 
-    fn get_login_config_handler(&self) -> Arc<RwLock<LoginConfigHandler>>;
+    fn get_lch(&self) -> Arc<RwLock<LoginConfigHandler>>;
+
+    fn get_id(&self) -> String {
+        self.get_lch().read().unwrap().id.clone()
+    }
 
     fn is_force_relay(&self) -> bool {
-        self.get_login_config_handler().read().unwrap().force_relay
+        self.get_lch().read().unwrap().force_relay
     }
+
     fn swap_modifier_mouse(&self, _msg: &mut hbb_common::protos::message::MouseEvent) {}
 
     fn update_direct(&self, direct: Option<bool>) {
-        self.get_login_config_handler().write().unwrap().direct = direct;
+        self.get_lch().write().unwrap().direct = direct;
     }
 
     fn update_received(&self, received: bool) {
-        self.get_login_config_handler().write().unwrap().received = received;
+        self.get_lch().write().unwrap().received = received;
     }
 
     fn on_establish_connection_error(&self, err: String) {
-        log::error!("Connection closed: {}", err);
         let title = "Connection Error";
         let text = err.to_string();
-        let lc = self.get_login_config_handler();
+        let lc = self.get_lch();
         let direct = lc.read().unwrap().direct;
         let received = lc.read().unwrap().received;
         let relay_condition = direct == Some(true) && !received;
 
         // force relay
         let errno = errno::errno().0;
+        log::error!("Connection closed: {err}({errno})");
         if relay_condition
             && (cfg!(windows) && (errno == 10054 || err.contains("10054"))
                 || !cfg!(windows) && (errno == 104 || err.contains("104")))
         {
             lc.write().unwrap().force_relay = true;
-            lc.write()
-                .unwrap()
-                .set_option("force-always-relay".to_owned(), "Y".to_owned());
         }
 
         // relay-hint

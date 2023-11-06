@@ -972,7 +972,7 @@ void showRestartRemoteDevice(PeerInfo pi, String id, SessionID sessionId,
             title: Row(children: [
               Icon(Icons.warning_rounded, color: Colors.redAccent, size: 28),
               Flexible(
-                  child: Text(translate("Restart Remote Device"))
+                  child: Text(translate("Restart remote device"))
                       .paddingOnly(left: 10)),
             ]),
             content: Text(

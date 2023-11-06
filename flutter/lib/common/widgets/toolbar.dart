@@ -133,7 +133,7 @@ List<TTextMenu> toolbarControls(BuildContext context, String id, FFI ffi) {
   if (isDesktop) {
     v.add(
       TTextMenu(
-          child: Text(translate('Transfer File')),
+          child: Text(translate('Transfer file')),
           onPressed: () => connect(context, id, isFileTransfer: true)),
     );
   }
@@ -141,7 +141,7 @@ List<TTextMenu> toolbarControls(BuildContext context, String id, FFI ffi) {
   if (isDesktop) {
     v.add(
       TTextMenu(
-          child: Text(translate('TCP Tunneling')),
+          child: Text(translate('TCP tunneling')),
           onPressed: () => connect(context, id, isTcpTunneling: true)),
     );
   }
@@ -176,7 +176,7 @@ List<TTextMenu> toolbarControls(BuildContext context, String id, FFI ffi) {
           pi.platform == kPeerPlatformMacOS)) {
     v.add(
       TTextMenu(
-          child: Text(translate('Restart Remote Device')),
+          child: Text(translate('Restart remote device')),
           onPressed: () =>
               showRestartRemoteDevice(pi, id, sessionId, ffi.dialogManager)),
     );

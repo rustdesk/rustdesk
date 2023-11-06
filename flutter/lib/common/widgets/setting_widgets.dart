@@ -270,7 +270,7 @@ List<Widget> ServerConfigImportExportWidgets(
 
   return [
     Tooltip(
-      message: translate('Import Server Config'),
+      message: translate('Import server config'),
       child: IconButton(
           icon: Icon(Icons.paste, color: Colors.grey), onPressed: import),
     ),

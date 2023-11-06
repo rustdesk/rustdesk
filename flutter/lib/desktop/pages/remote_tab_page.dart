@@ -386,7 +386,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
             pi.platform == kPeerPlatformMacOS)) {
       menu.add(MenuEntryButton<String>(
         childBuilder: (TextStyle? style) => Text(
-          translate('Restart Remote Device'),
+          translate('Restart remote device'),
           style: style,
         ),
         proc: () => showRestartRemoteDevice(

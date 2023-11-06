@@ -1088,7 +1088,7 @@ pub fn main_get_user_default_option(key: String) -> SyncReturn<String> {
 }
 
 pub fn main_handle_relay_id(id: String) -> String {
-    handle_relay_id(id)
+    handle_relay_id(&id).to_owned()
 }
 
 pub fn main_get_main_display() -> SyncReturn<String> {

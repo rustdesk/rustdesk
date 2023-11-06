@@ -592,7 +592,7 @@ class _PrivilegeBoardState extends State<_PrivilegeBoard> {
                       client.keyboard = enabled;
                     });
                   },
-                  translate('Enable Keyboard/Mouse'),
+                  translate('Enable keyboard/mouse'),
                 ),
                 buildPermissionIcon(
                   client.clipboard,
@@ -604,7 +604,7 @@ class _PrivilegeBoardState extends State<_PrivilegeBoard> {
                       client.clipboard = enabled;
                     });
                   },
-                  translate('Enable Clipboard'),
+                  translate('Enable clipboard'),
                 ),
                 buildPermissionIcon(
                   client.audio,
@@ -616,7 +616,7 @@ class _PrivilegeBoardState extends State<_PrivilegeBoard> {
                       client.audio = enabled;
                     });
                   },
-                  translate('Enable Audio'),
+                  translate('Enable audio'),
                 ),
                 buildPermissionIcon(
                   client.file,
@@ -640,7 +640,7 @@ class _PrivilegeBoardState extends State<_PrivilegeBoard> {
                       client.restart = enabled;
                     });
                   },
-                  translate('Enable Remote Restart'),
+                  translate('Enable remote restart'),
                 ),
                 buildPermissionIcon(
                   client.recording,
@@ -652,7 +652,7 @@ class _PrivilegeBoardState extends State<_PrivilegeBoard> {
                       client.recording = enabled;
                     });
                   },
-                  translate('Enable Recording Session'),
+                  translate('Enable recording session'),
                 ),
                 // only windows support block input
                 if (Platform.isWindows)

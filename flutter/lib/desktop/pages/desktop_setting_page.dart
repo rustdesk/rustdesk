@@ -632,22 +632,22 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
             }).marginOnly(left: _kContentHMargin),
         Column(
           children: [
-            _OptionCheckBox(context, 'Enable Keyboard/Mouse', 'enable-keyboard',
+            _OptionCheckBox(context, 'Enable keyboard/mouse', 'enable-keyboard',
                 enabled: enabled, fakeValue: fakeValue),
-            _OptionCheckBox(context, 'Enable Clipboard', 'enable-clipboard',
-                enabled: enabled, fakeValue: fakeValue),
-            _OptionCheckBox(
-                context, 'Enable File Transfer', 'enable-file-transfer',
-                enabled: enabled, fakeValue: fakeValue),
-            _OptionCheckBox(context, 'Enable Audio', 'enable-audio',
-                enabled: enabled, fakeValue: fakeValue),
-            _OptionCheckBox(context, 'Enable TCP Tunneling', 'enable-tunnel',
+            _OptionCheckBox(context, 'Enable clipboard', 'enable-clipboard',
                 enabled: enabled, fakeValue: fakeValue),
             _OptionCheckBox(
-                context, 'Enable Remote Restart', 'enable-remote-restart',
+                context, 'Enable file transfer', 'enable-file-transfer',
+                enabled: enabled, fakeValue: fakeValue),
+            _OptionCheckBox(context, 'Enable audio', 'enable-audio',
+                enabled: enabled, fakeValue: fakeValue),
+            _OptionCheckBox(context, 'Enable TCP tunneling', 'enable-tunnel',
                 enabled: enabled, fakeValue: fakeValue),
             _OptionCheckBox(
-                context, 'Enable Recording Session', 'enable-record-session',
+                context, 'Enable remote restart', 'enable-remote-restart',
+                enabled: enabled, fakeValue: fakeValue),
+            _OptionCheckBox(
+                context, 'Enable recording session', 'enable-record-session',
                 enabled: enabled, fakeValue: fakeValue),
             if (Platform.isWindows)
               _OptionCheckBox(
@@ -773,7 +773,7 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
     bool enabled = !locked;
     return _Card(title: 'Security', children: [
       shareRdp(context, enabled),
-      _OptionCheckBox(context, 'Deny LAN Discovery', 'enable-lan-discovery',
+      _OptionCheckBox(context, 'Deny LAN discovery', 'enable-lan-discovery',
           reverse: true, enabled: enabled),
       ...directIp(context),
       whitelist(),
@@ -813,7 +813,7 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
     update() => setState(() {});
     RxBool applyEnabled = false.obs;
     return [
-      _OptionCheckBox(context, 'Enable Direct IP Access', 'direct-server',
+      _OptionCheckBox(context, 'Enable direct IP access', 'direct-server',
           update: update, enabled: !locked),
       () {
         // Simple temp wrapper for PR check
