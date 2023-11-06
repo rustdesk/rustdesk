@@ -1337,7 +1337,7 @@ impl<T: InvokeUiSession> Interface for Session<T> {
         #[cfg(windows)]
         {
             let mut path = std::env::temp_dir();
-            path.push(&self.id);
+            path.push(self.get_id());
             let path = path.with_extension(crate::get_app_name().to_lowercase());
             std::fs::File::create(&path).ok();
             if let Some(path) = path.to_str() {
