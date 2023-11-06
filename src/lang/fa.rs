@@ -172,7 +172,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Local Port", "پورت محلی"),
         ("Local Address", "آدرس محلی"),
         ("Change Local Port", "تغییر پورت محلی"),
-        ("setup_server_tip", "برای اتصال سریعتر، سرور اتصال ضخصی خود را راه اندازی کنید"),
+        ("setup_server_tip", "برای اتصال سریعتر، سرور اتصال شخصی خود را راه اندازی کنید"),
         ("Too short, at least 6 characters.", "بسیار کوتاه حداقل 6 کاراکتر مورد نیاز است"),
         ("The confirmation is not identical.", "تأیید ناموفق بود."),
         ("Permissions", "دسترسی ها"),
