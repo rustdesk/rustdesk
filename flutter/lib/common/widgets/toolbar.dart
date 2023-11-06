@@ -191,6 +191,7 @@ List<TTextMenu> toolbarControls(BuildContext context, String id, FFI ffi) {
   }
   // blockUserInput
   if (ffi.ffiModel.keyboard &&
+      ffi.ffiModel.permissions['block_input'] != false &&
       pi.platform == kPeerPlatformWindows) // privacy-mode != true ??
   {
     v.add(TTextMenu(

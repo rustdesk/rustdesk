@@ -353,7 +353,7 @@ class FfiModel with ChangeNotifier {
         }
       } else if (name == "cm_file_transfer_log") {
         if (isDesktop) {
-          gFFI.cmFileModel.onFileTransferLog(evt['log']);
+          gFFI.cmFileModel.onFileTransferLog(evt);
         }
       } else {
         debugPrint('Unknown event name: $name');
