@@ -560,7 +560,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Open in new window", "Open in een nieuw venster"),
         ("Show displays as individual windows", "Beeldschermen weergeven als afzonderlijke vensters"),
         ("Use all my displays for the remote session", "Gebruik al mijn beeldschermen voor de externe sessie"),
-        ("selinux_tip", ""),
+        ("selinux_tip", "SELinux is ingeschakeld op dit apparaat, waardoor RustDesk mogelijk niet goed functioneert als een gecontroleerde kant."),
         ("Change view", "Weergave wijzigen"),
         ("Big tiles", "Grote tegels"),
         ("Small tiles", "Kleine tegels"),
@@ -569,6 +569,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Plug out all", "Sluit alle"),
         ("True color (4:4:4)", "Ware kleur (4:4:4)"),
         ("Enable blocking user input", "Blokkeren van gebruikersinvoer inschakelen"),
-        ("id_input_tip", ""),
+        ("id_input_tip", "Je kunt een ID, een direct IP of een domein met een poort (<domein>:<poort>) invoeren. Als je toegang wilt als apparaat op een andere server, voeg dan het serveradres toe (<id>@<server_adres>?key=<key_value>), bijvoorbeeld \n9123456234@192.168.16.1:21117?key=5Qbwsde3unUcJBtrx9ZkvUmwFNoExHzpryHuPUdqlWM=.Als je toegang wilt als apparaat op een openbare server, voer dan "<id>@public" in, voor de openbare server is de sleutel niet nodig."),
     ].iter().cloned().collect();
 }
