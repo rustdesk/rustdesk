@@ -973,9 +973,14 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y \
                crossbuild-essential-arm64 \
+               curl \
                nasm \
                pkg-config \
-               yasm
+               unzip \
+               xz-utils \
+               wget \
+               yasm \
+               zip
 
       #- name: Maximize build space
       #  run: |
@@ -1159,9 +1164,13 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y \
                crossbuild-essential-armhf \
+               curl \
                nasm \
                pkg-config \
-               yasm
+               unzip \
+               xz-utils \
+               yasm \
+               zip
 
       #- name: Maximize build space
       #  run: |
