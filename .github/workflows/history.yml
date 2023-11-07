@@ -4,9 +4,9 @@ on: [workflow_dispatch]
 
 env:
   LLVM_VERSION: "10.0"
-  FLUTTER_VERSION: "3.10.6"
+  FLUTTER_VERSION: "3.13.9"
   TAG_NAME: "tmp"
-  FLUTTER_RUST_BRIDGE_VERSION: "1.75.3"
+  FLUTTER_RUST_BRIDGE_VERSION: "1.80.1"
   # vcpkg version: 2022.05.10
   # for multiarch gcc compatibility
   VCPKG_COMMIT_ID: "501db0f17ef6df184fcdbfbe0f87cde2313b6ab1"

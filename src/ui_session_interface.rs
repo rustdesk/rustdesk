@@ -32,8 +32,8 @@ use hbb_common::{
 use crate::client::io_loop::Remote;
 use crate::client::{
     check_if_retry, handle_hash, handle_login_error, handle_login_from_ui, handle_test_delay,
-    input_os_password, load_config, send_mouse, send_pointer_device_event,
-    start_video_audio_threads, FileManager, Key, LoginConfigHandler, QualityStatus, KEY_MAP,
+    input_os_password, send_mouse, send_pointer_device_event, start_video_audio_threads,
+    FileManager, Key, LoginConfigHandler, QualityStatus, KEY_MAP,
 };
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use crate::common::GrabState;
@@ -47,7 +47,6 @@ const CHANGE_RESOLUTION_VALID_TIMEOUT_SECS: u64 = 15;
 
 #[derive(Clone, Default)]
 pub struct Session<T: InvokeUiSession> {
-    pub id: String, // peer id
     pub password: String,
     pub args: Vec<String>,
     pub lc: Arc<RwLock<LoginConfigHandler>>,
@@ -365,7 +364,7 @@ impl<T: InvokeUiSession> Session<T> {
             display as usize,
             w,
             h,
-            self.id.clone(),
+            self.get_id(),
         ));
     }
 
@@ -470,7 +469,7 @@ impl<T: InvokeUiSession> Session<T> {
 
     pub fn send_note(&self, note: String) {
         let url = self.get_audit_server("conn".to_string());
-        let id = self.id.clone();
+        let id = self.get_id();
         let session_id = self.lc.read().unwrap().session_id;
         std::thread::spawn(move || {
             send_note(url, id, session_id, note);
@@ -514,11 +513,6 @@ impl<T: InvokeUiSession> Session<T> {
         self.send(Data::AddPortForward(pf));
     }
 
-    #[cfg(not(feature = "flutter"))]
-    pub fn get_id(&self) -> String {
-        self.id.clone()
-    }
-
     pub fn get_option(&self, k: String) -> String {
         if k.eq("remote_dir") {
             return self.lc.read().unwrap().get_remote_dir();
@@ -536,7 +530,7 @@ impl<T: InvokeUiSession> Session<T> {
 
     #[inline]
     pub fn load_config(&self) -> PeerConfig {
-        load_config(&self.id)
+        self.lc.read().unwrap().load_config()
     }
 
     #[inline]
@@ -1110,7 +1104,7 @@ impl<T: InvokeUiSession> Session<T> {
         match crate::ipc::connect(1000, "").await {
             Ok(mut conn) => {
                 if conn
-                    .send(&crate::ipc::Data::SwitchSidesRequest(self.id.to_string()))
+                    .send(&crate::ipc::Data::SwitchSidesRequest(self.get_id()))
                     .await
                     .is_ok()
                 {
@@ -1286,7 +1280,7 @@ impl<T: InvokeUiSession> FileManager for Session<T> {}
 
 #[async_trait]
 impl<T: InvokeUiSession> Interface for Session<T> {
-    fn get_login_config_handler(&self) -> Arc<RwLock<LoginConfigHandler>> {
+    fn get_lch(&self) -> Arc<RwLock<LoginConfigHandler>> {
         return self.lc.clone();
     }
 
@@ -1361,7 +1355,7 @@ impl<T: InvokeUiSession> Interface for Session<T> {
         #[cfg(windows)]
         {
             let mut path = std::env::temp_dir();
-            path.push(&self.id);
+            path.push(self.get_id());
             let path = path.with_extension(crate::get_app_name().to_lowercase());
             std::fs::File::create(&path).ok();
             if let Some(path) = path.to_str() {
@@ -1438,7 +1432,13 @@ impl<T: InvokeUiSession> Session<T> {
 #[tokio::main(flavor = "current_thread")]
 pub async fn io_loop<T: InvokeUiSession>(handler: Session<T>, round: u32) {
     // It is ok to call this function multiple times.
-    #[cfg(target_os = "windows")]
+    #[cfg(any(
+        target_os = "windows",
+        all(
+            any(target_os = "linux", target_os = "macos"),
+            feature = "unix-file-copy-paste"
+        )
+    ))]
     if !handler.is_file_transfer() && !handler.is_port_forward() {
         clipboard::ContextSend::enable(true);
     }
@@ -1539,16 +1539,17 @@ pub async fn io_loop<T: InvokeUiSession>(handler: Session<T>, round: u32) {
     let frame_count_map: Arc<RwLock<HashMap<usize, usize>>> = Default::default();
     let frame_count_map_cl = frame_count_map.clone();
     let ui_handler = handler.ui_handler.clone();
-    let (video_sender, audio_sender, video_queue_map, decode_fps_map) = start_video_audio_threads(
-        handler.clone(),
-        move |display: usize, data: &mut scrap::ImageRgb| {
-            let mut write_lock = frame_count_map_cl.write().unwrap();
-            let count = write_lock.get(&display).unwrap_or(&0) + 1;
-            write_lock.insert(display, count);
-            drop(write_lock);
-            ui_handler.on_rgba(display, data);
-        },
-    );
+    let (video_sender, audio_sender, video_queue_map, decode_fps_map, chroma) =
+        start_video_audio_threads(
+            handler.clone(),
+            move |display: usize, data: &mut scrap::ImageRgb| {
+                let mut write_lock = frame_count_map_cl.write().unwrap();
+                let count = write_lock.get(&display).unwrap_or(&0) + 1;
+                write_lock.insert(display, count);
+                drop(write_lock);
+                ui_handler.on_rgba(display, data);
+            },
+        );
 
     let mut remote = Remote::new(
         handler,
@@ -1559,6 +1560,7 @@ pub async fn io_loop<T: InvokeUiSession>(handler: Session<T>, round: u32) {
         sender,
         frame_count_map,
         decode_fps_map,
+        chroma,
     );
     remote.io_loop(&key, &token, round).await;
     remote.sync_jobs_status_to_local().await;
@@ -1575,7 +1577,7 @@ async fn start_one_port_forward<T: InvokeUiSession>(
     token: &str,
 ) {
     if let Err(err) = crate::port_forward::listen(
-        handler.id.clone(),
+        handler.get_id(),
         handler.password.clone(),
         port,
         handler.clone(),

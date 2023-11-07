@@ -12,6 +12,7 @@ use scrap::Display;
 
 pub const NAME: &'static str = "display";
 
+#[cfg(all(windows, feature = "virtual_display_driver"))]
 const DUMMY_DISPLAY_SIDE_MAX_SIZE: usize = 1024;
 
 struct ChangedResolution {
@@ -349,7 +350,7 @@ pub fn try_get_displays() -> ResultType<Vec<Display>> {
 #[cfg(all(windows, feature = "virtual_display_driver"))]
 pub fn try_get_displays() -> ResultType<Vec<Display>> {
     let mut displays = Display::all()?;
-    if no_displays(&displays) {
+    if crate::platform::is_installed() && no_displays(&displays) {
         log::debug!("no displays, create virtual display");
         if let Err(e) = virtual_display_manager::plug_in_headless() {
             log::error!("plug in headless failed {}", e);

@@ -91,10 +91,11 @@ const CHARS: &[char] = &[
 ];
 
 pub const RENDEZVOUS_SERVERS: &[&str] = &["rs-ny.rustdesk.com"];
+pub const PUBLIC_RS_PUB_KEY: &str = "OeVuKk5nlHiXp+APNn0Y3pC1Iwpwn44JGqrQCsWqmBw=";
 
 pub const RS_PUB_KEY: &str = match option_env!("RS_PUB_KEY") {
     Some(key) if !key.is_empty() => key,
-    _ => "OeVuKk5nlHiXp+APNn0Y3pC1Iwpwn44JGqrQCsWqmBw=",
+    _ => PUBLIC_RS_PUB_KEY,
 };
 
 pub const RENDEZVOUS_PORT: i32 = 21116;
@@ -1226,6 +1227,10 @@ impl PeerConfig {
             mp.insert(key.to_owned(), UserDefaultConfig::read().get(key));
         }
         key = "touch-mode";
+        if !mp.contains_key(key) {
+            mp.insert(key.to_owned(), UserDefaultConfig::read().get(key));
+        }
+        key = "i444";
         if !mp.contains_key(key) {
             mp.insert(key.to_owned(), UserDefaultConfig::read().get(key));
         }

@@ -54,10 +54,12 @@ class _ConnectionPageState extends State<ConnectionPage> {
   }
   bool isPeersLoading = false;
   bool isPeersLoaded = false;
+  StreamSubscription? _uniLinksSubscription;
 
   @override
   void initState() {
     super.initState();
+    _uniLinksSubscription = listenUniLinks();
     if (_idController.text.isEmpty) {
       () async {
         final lastRemoteId = await bind.mainGetLastRemoteId();
@@ -312,6 +314,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
 
   @override
   void dispose() {
+    _uniLinksSubscription?.cancel();
     _idController.dispose();
     if (Get.isRegistered<IDTextEditingController>()) {
       Get.delete<IDTextEditingController>();

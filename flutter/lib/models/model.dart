@@ -138,8 +138,9 @@ class FfiModel with ChangeNotifier {
     sessionId = parent.target!.sessionId;
   }
 
-  Rect? displaysRect() {
-    final displays = _pi.getCurDisplays();
+  Rect? globalDisplaysRect() => _getDisplaysRect(_pi.displays);
+  Rect? displaysRect() => _getDisplaysRect(_pi.getCurDisplays());
+  Rect? _getDisplaysRect(List<Display> displays) {
     if (displays.isEmpty) {
       return null;
     }
@@ -352,7 +353,7 @@ class FfiModel with ChangeNotifier {
         }
       } else if (name == "cm_file_transfer_log") {
         if (isDesktop) {
-          gFFI.cmFileModel.onFileTransferLog(evt['log']);
+          gFFI.cmFileModel.onFileTransferLog(evt);
         }
       } else {
         debugPrint('Unknown event name: $name');
@@ -430,15 +431,19 @@ class FfiModel with ChangeNotifier {
 
   handleSwitchDisplay(
       Map<String, dynamic> evt, SessionID sessionId, String peerId) {
-    final curDisplay = int.parse(evt['display']);
+    final display = int.parse(evt['display']);
 
     if (_pi.currentDisplay != kAllDisplayValue) {
       if (bind.peerGetDefaultSessionsCount(id: peerId) > 1) {
-        if (curDisplay != _pi.currentDisplay) {
+        if (display != _pi.currentDisplay) {
           return;
         }
       }
-      _pi.currentDisplay = curDisplay;
+      if (!_pi.isSupportMultiUiSession) {
+        _pi.currentDisplay = display;
+      }
+      // If `isSupportMultiUiSession` is true, the switch display message should not be used to update current display.
+      // It is only used to update the display info.
     }
 
     var newDisplay = Display();
@@ -451,16 +456,24 @@ class FfiModel with ChangeNotifier {
         int.tryParse(evt['original_width']) ?? kInvalidResolutionValue;
     newDisplay.originalHeight =
         int.tryParse(evt['original_height']) ?? kInvalidResolutionValue;
-    _pi.displays[curDisplay] = newDisplay;
+    _pi.displays[display] = newDisplay;
 
-    updateCurDisplay(sessionId);
-    try {
-      CurrentDisplayState.find(peerId).value = curDisplay;
-    } catch (e) {
-      //
+    if (!_pi.isSupportMultiUiSession || _pi.currentDisplay == display) {
+      updateCurDisplay(sessionId);
     }
+
+    if (!_pi.isSupportMultiUiSession) {
+      try {
+        CurrentDisplayState.find(peerId).value = display;
+      } catch (e) {
+        //
+      }
+    }
+
     parent.target?.recordingModel.onSwitchDisplay();
-    handleResolutions(peerId, evt['resolutions']);
+    if (!_pi.isSupportMultiUiSession || _pi.currentDisplay == display) {
+      handleResolutions(peerId, evt['resolutions']);
+    }
     notifyListeners();
   }
 
@@ -627,7 +640,9 @@ class FfiModel with ChangeNotifier {
 
   /// Handle the peer info event based on [evt].
   handlePeerInfo(Map<String, dynamic> evt, String peerId, bool isCache) async {
-    cachedPeerData.peerInfo = evt;
+    // Map clone is required here, otherwise "evt" may be changed by other threads through the reference.
+    // Because this function is asynchronous, there's an "await" in this function.
+    cachedPeerData.peerInfo = {...evt};
 
     // recent peer updated by handle_peer_info(ui_session_interface.rs) --> handle_peer_info(client.rs) --> save_config(client.rs)
     bind.mainLoadRecentPeers();
@@ -666,11 +681,12 @@ class FfiModel with ChangeNotifier {
     if (connType == ConnType.fileTransfer) {
       parent.target?.fileModel.onReady();
     } else if (connType == ConnType.defaultConn) {
-      _pi.displays = [];
+      List<Display> newDisplays = [];
       List<dynamic> displays = json.decode(evt['displays']);
       for (int i = 0; i < displays.length; ++i) {
-        _pi.displays.add(evtToDisplay(displays[i]));
+        newDisplays.add(evtToDisplay(displays[i]));
       }
+      _pi.displays.value = newDisplays;
       _pi.displaysCount.value = _pi.displays.length;
       if (_pi.currentDisplay < _pi.displays.length) {
         // now replaced to _updateCurDisplay
@@ -860,7 +876,7 @@ class FfiModel with ChangeNotifier {
       for (int i = 0; i < displays.length; ++i) {
         newDisplays.add(evtToDisplay(displays[i]));
       }
-      _pi.displays = newDisplays;
+      _pi.displays.value = newDisplays;
       _pi.displaysCount.value = _pi.displays.length;
 
       if (_pi.currentDisplay == kAllDisplayValue) {
@@ -908,11 +924,11 @@ class FfiModel with ChangeNotifier {
       _pi.platformAdditions.remove(kPlatformAdditionsVirtualDisplays);
     } else {
       try {
-        final updateJson = json.decode(updateData);
+        final updateJson = json.decode(updateData) as Map<String, dynamic>;
         for (final key in updateJson.keys) {
           _pi.platformAdditions[key] = updateJson[key];
         }
-        if (!updateJson.contains(kPlatformAdditionsVirtualDisplays)) {
+        if (!updateJson.containsKey(kPlatformAdditionsVirtualDisplays)) {
           _pi.platformAdditions.remove(kPlatformAdditionsVirtualDisplays);
         }
       } catch (e) {
@@ -1845,6 +1861,7 @@ class QualityMonitorData {
   String? delay;
   String? targetBitrate;
   String? codecFormat;
+  String? chroma;
 }
 
 class QualityMonitorModel with ChangeNotifier {
@@ -1897,6 +1914,9 @@ class QualityMonitorModel with ChangeNotifier {
       }
       if ((evt['codec_format'] as String).isNotEmpty) {
         _data.codecFormat = evt['codec_format'];
+      }
+      if ((evt['chroma'] as String).isNotEmpty) {
+        _data.chroma = evt['chroma'];
       }
       notifyListeners();
     } catch (e) {
@@ -2321,7 +2341,7 @@ class PeerInfo with ChangeNotifier {
   bool isSupportMultiUiSession = false;
   int currentDisplay = 0;
   int primaryDisplay = kInvalidDisplayIndex;
-  List<Display> displays = [];
+  RxList<Display> displays = <Display>[].obs;
   Features features = Features();
   List<Resolution> resolutions = [];
   Map<String, dynamic> platformAdditions = {};

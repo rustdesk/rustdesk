@@ -126,7 +126,7 @@ pub fn is_can_screen_recording(prompt: bool) -> bool {
     if !can_record_screen && prompt {
         use scrap::{Capturer, Display};
         if let Ok(d) = Display::primary() {
-            Capturer::new(d, true).ok();
+            Capturer::new(d).ok();
         }
     }
     can_record_screen

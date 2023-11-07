@@ -430,13 +430,7 @@ pub fn session_ctrl_alt_del(session_id: SessionID) {
 }
 
 pub fn session_switch_display(session_id: SessionID, value: Vec<i32>) {
-    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
-        if value.len() == 1 {
-            session.switch_display(value[0]);
-        } else {
-            session.capture_displays(vec![], vec![], value);
-        }
-    }
+    sessions::session_switch_display(session_id, value);
 }
 
 pub fn session_handle_flutter_key_event(
@@ -1095,7 +1089,7 @@ pub fn main_get_user_default_option(key: String) -> SyncReturn<String> {
 }
 
 pub fn main_handle_relay_id(id: String) -> String {
-    handle_relay_id(id)
+    handle_relay_id(&id).to_owned()
 }
 
 pub fn main_get_main_display() -> SyncReturn<String> {
@@ -1724,6 +1718,17 @@ pub fn main_use_texture_render() -> SyncReturn<bool> {
     {
         SyncReturn(true)
     }
+}
+
+pub fn main_has_file_clipboard() -> SyncReturn<bool> {
+    let ret = cfg!(any(
+        target_os = "windows",
+        all(
+            feature = "unix-file-copy-paste",
+            any(target_os = "linux", target_os = "macos")
+        )
+    ));
+    SyncReturn(ret)
 }
 
 pub fn cm_init() {

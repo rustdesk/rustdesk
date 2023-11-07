@@ -139,10 +139,10 @@ pub fn plug_in_index_modes(
 }
 
 pub fn reset_all() -> ResultType<()> {
-    let mut manager = VIRTUAL_DISPLAY_MANAGER.lock().unwrap();
-    if !manager.peer_index_name.is_empty() || manager.headless_index_name.is_some() {
-        manager.install_update_driver()?;
+    if let Err(e) = plug_out_peer_request(&get_virtual_displays()) {
+        log::error!("Failed to plug out virtual displays: {}", e);
     }
+    let _ = plug_out_headless();
     Ok(())
 }
 

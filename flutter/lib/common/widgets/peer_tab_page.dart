@@ -75,9 +75,11 @@ class _PeerTabPageState extends State<PeerTabPage>
   void initState() {
     final uiType = bind.getLocalFlutterOption(k: 'peer-card-ui-type');
     if (uiType != '') {
-      peerCardUiType.value = int.parse(uiType) == PeerUiType.list.index
-          ? PeerUiType.list
-          : PeerUiType.grid;
+      peerCardUiType.value = int.parse(uiType) == 0
+        ? PeerUiType.grid
+        : int.parse(uiType) == 1
+            ? PeerUiType.tile
+            : PeerUiType.list;
     }
     hideAbTagsPanel.value =
         bind.mainGetLocalOption(key: "hideAbTagsPanel").isNotEmpty;
@@ -454,7 +456,7 @@ class _PeerTabPageState extends State<PeerTabPage>
           });
         },
         child: Tooltip(
-            message: translate('Add to Address Book'),
+            message: translate('Add to address book'),
             child: Icon(model.icons[PeerTabIndex.ab.index])),
       ).marginOnly(left: isMobile ? 11 : 6),
     );
@@ -763,8 +765,6 @@ class PeerViewDropdown extends StatefulWidget {
 }
 
 class _PeerViewDropdownState extends State<PeerViewDropdown> {
-  RelativeRect menuPos = RelativeRect.fromLTRB(0, 0, 0, 0);
-
   @override
   Widget build(BuildContext context) {
     final List<PeerUiType> types  = [PeerUiType.grid, PeerUiType.tile, PeerUiType.list];
@@ -804,6 +804,7 @@ class _PeerViewDropdownState extends State<PeerViewDropdown> {
               ))));
     }
 
+    var menuPos = RelativeRect.fromLTRB(0, 0, 0, 0);
     return _hoverAction(
       context: context,
       child: Tooltip(
@@ -819,16 +820,14 @@ class _PeerViewDropdownState extends State<PeerViewDropdown> {
       onTapDown: (details) {
         final x = details.globalPosition.dx;
         final y = details.globalPosition.dy;
-        setState(() {
-          menuPos = RelativeRect.fromLTRB(x, y, x, y);
-        });
+        menuPos = RelativeRect.fromLTRB(x, y, x, y);
       },
       onTap: () => showMenu(
         context: context,
         position: menuPos,
         items: items,
         elevation: 8,
-      ),
+      )
     );
   }
 }
