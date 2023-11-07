@@ -975,7 +975,11 @@ jobs:
                cmake \
                crossbuild-essential-arm64 \
                curl \
+               g++ \
+               gcc \
+               git \
                nasm \
+               ninja-build \
                pkg-config \
                unzip \
                xz-utils \
@@ -1167,7 +1171,11 @@ jobs:
                cmake \
                crossbuild-essential-armhf \
                curl \
+               g++ \
+               gcc \
+               git \
                nasm \
+               ninja-build \
                pkg-config \
                unzip \
                xz-utils \
