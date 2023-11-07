@@ -15,7 +15,7 @@ env:
   LLVM_VERSION: "15.0.6"
   FLUTTER_VERSION: "3.13.9"
   FLUTTER_RUST_BRIDGE_VERSION: "1.80.1"
-  # for arm64 linux
+  # for arm64 linux because official Dart SDK does not work
   FLUTTER_ELINUX_VERSION: "3.13.9"
   FLUTTER_ELINUX_COMMIT_ID: "f4d4205893c16b0aa9cb6ba46b9f32b639d3b057"
   TAG_NAME: "${{ inputs.upload-tag }}"
@@ -431,7 +431,6 @@ jobs:
 
   build-rustdesk-ios:
     if: ${{ inputs.upload-artifact }}
-    needs: [generate-bridge-linux]
     name: build rustdesk ios ipa ${{ matrix.job.target }} (${{ matrix.job.os }}) [${{ matrix.job.extra-build-features }}]
     runs-on: ${{ matrix.job.os }}
     strategy:
@@ -472,12 +471,6 @@ jobs:
         run: |
           $VCPKG_ROOT/vcpkg install --triplet arm64-ios --x-install-root="$VCPKG_ROOT/installed"
         shell: bash
-
-      - name: Restore bridge files
-        uses: actions/download-artifact@master
-        with:
-          name: bridge-artifact
-          path: ./
 
       - name: Install Rust toolchain
         uses: actions-rs/toolchain@v1
