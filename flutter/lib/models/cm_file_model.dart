@@ -123,14 +123,21 @@ class CmFileModel {
       }
       int removeUnreadCount = 0;
       if (data.dir) {
+        bool isChild(String parent, String child) {
+          if (child.startsWith(parent) && child.length > parent.length) {
+            final suffix = child.substring(parent.length);
+            return suffix.startsWith('/') || suffix.startsWith('\\');
+          }
+          return false;
+        }
+
         removeUnreadCount = jobTable
             .where((e) =>
                 e.action == CmFileAction.remove &&
-                e.fileName.startsWith(data.path))
+                isChild(data.path, e.fileName))
             .length;
         jobTable.removeWhere((e) =>
-            e.action == CmFileAction.remove &&
-            e.fileName.startsWith(data.path));
+            e.action == CmFileAction.remove && isChild(data.path, e.fileName));
       }
       jobTable.add(CmFileLog()
         ..id = data.id

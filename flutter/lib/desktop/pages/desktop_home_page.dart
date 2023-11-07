@@ -336,11 +336,17 @@ class _DesktopHomePageState extends State<DesktopHomePage>
     }
     if (Platform.isWindows) {
       if (!bind.mainIsInstalled()) {
-        return buildInstallCard(
-            "", "install_tip", "Install", bind.mainGotoInstall);
+        return buildInstallCard("", "install_tip", "Install", () async {
+          await rustDeskWinManager.closeAllSubWindows();
+          bind.mainGotoInstall();
+        });
       } else if (bind.mainIsInstalledLowerVersion()) {
-        return buildInstallCard("Status", "Your installation is lower version.",
-            "Click to upgrade", bind.mainUpdateMe);
+        return buildInstallCard(
+            "Status", "Your installation is lower version.", "Click to upgrade",
+            () async {
+          await rustDeskWinManager.closeAllSubWindows();
+          bind.mainUpdateMe();
+        });
       }
     } else if (Platform.isMacOS) {
       if (!bind.mainIsCanScreenRecording(prompt: false)) {
@@ -384,13 +390,16 @@ class _DesktopHomePageState extends State<DesktopHomePage>
         final keyShowSelinuxHelpTip = "show-selinux-help-tip";
         if (bind.mainGetLocalOption(key: keyShowSelinuxHelpTip) != 'N') {
           LinuxCards.add(buildInstallCard(
-              "Warning", "selinux_tip", "", () async {},
-              marginTop: LinuxCards.isEmpty ? 20.0 : 5.0,
-              help: 'Help',
-              link:
-                  'https://rustdesk.com/docs/en/client/linux/#permissions-issue',
-              closeButton: true,
-              closeOption: keyShowSelinuxHelpTip,
+            "Warning",
+            "selinux_tip",
+            "",
+            () async {},
+            marginTop: LinuxCards.isEmpty ? 20.0 : 5.0,
+            help: 'Help',
+            link:
+                'https://rustdesk.com/docs/en/client/linux/#permissions-issue',
+            closeButton: true,
+            closeOption: keyShowSelinuxHelpTip,
           ));
         }
       }
@@ -418,7 +427,11 @@ class _DesktopHomePageState extends State<DesktopHomePage>
 
   Widget buildInstallCard(String title, String content, String btnText,
       GestureTapCallback onPressed,
-      {double marginTop = 20.0, String? help, String? link, bool? closeButton, String? closeOption}) {
+      {double marginTop = 20.0,
+      String? help,
+      String? link,
+      bool? closeButton,
+      String? closeOption}) {
     void closeCard() async {
       if (closeOption != null) {
         await bind.mainSetLocalOption(key: closeOption, value: 'N');
@@ -439,89 +452,90 @@ class _DesktopHomePageState extends State<DesktopHomePage>
         Container(
           margin: EdgeInsets.only(top: marginTop),
           child: Container(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-            begin: Alignment.centerLeft,
-            end: Alignment.centerRight,
-            colors: [
-              Color.fromARGB(255, 226, 66, 188),
-              Color.fromARGB(255, 244, 114, 124),
-            ],
-          )),
-          padding: EdgeInsets.all(20),
-          child: Column(
-              mainAxisAlignment: MainAxisAlignment.start,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: (title.isNotEmpty
-                      ? <Widget>[
-                          Center(
-                              child: Text(
-                            translate(title),
-                            style: TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 15),
-                          ).marginOnly(bottom: 6)),
-                        ]
-                      : <Widget>[]) +
-                  <Widget>[
-                    Text(
-                      translate(content),
-                      style: TextStyle(
-                          height: 1.5,
-                          color: Colors.white,
-                          fontWeight: FontWeight.normal,
-                          fontSize: 13),
-                    ).marginOnly(bottom: 20)
-                  ] +
-                  (btnText.isNotEmpty
-                      ? <Widget>[
-                          Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                FixedWidthButton(
-                                  width: 150,
-                                  padding: 8,
-                                  isOutline: true,
-                                  text: translate(btnText),
-                                  textColor: Colors.white,
-                                  borderColor: Colors.white,
-                                  textSize: 20,
-                                  radius: 10,
-                                  onTap: onPressed,
-                                )
-                              ])
-                        ]
-                      : <Widget>[]) +
-                  (help != null
-                      ? <Widget>[
-                          Center(
-                              child: InkWell(
-                                  onTap: () async =>
-                                      await launchUrl(Uri.parse(link!)),
+              decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                begin: Alignment.centerLeft,
+                end: Alignment.centerRight,
+                colors: [
+                  Color.fromARGB(255, 226, 66, 188),
+                  Color.fromARGB(255, 244, 114, 124),
+                ],
+              )),
+              padding: EdgeInsets.all(20),
+              child: Column(
+                  mainAxisAlignment: MainAxisAlignment.start,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: (title.isNotEmpty
+                          ? <Widget>[
+                              Center(
                                   child: Text(
-                                    translate(help),
-                                    style: TextStyle(
-                                        decoration: TextDecoration.underline,
-                                        color: Colors.white,
-                                        fontSize: 12),
-                                  )).marginOnly(top: 6)),
-                        ]
-                      : <Widget>[]))),
+                                translate(title),
+                                style: TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 15),
+                              ).marginOnly(bottom: 6)),
+                            ]
+                          : <Widget>[]) +
+                      <Widget>[
+                        Text(
+                          translate(content),
+                          style: TextStyle(
+                              height: 1.5,
+                              color: Colors.white,
+                              fontWeight: FontWeight.normal,
+                              fontSize: 13),
+                        ).marginOnly(bottom: 20)
+                      ] +
+                      (btnText.isNotEmpty
+                          ? <Widget>[
+                              Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    FixedWidthButton(
+                                      width: 150,
+                                      padding: 8,
+                                      isOutline: true,
+                                      text: translate(btnText),
+                                      textColor: Colors.white,
+                                      borderColor: Colors.white,
+                                      textSize: 20,
+                                      radius: 10,
+                                      onTap: onPressed,
+                                    )
+                                  ])
+                            ]
+                          : <Widget>[]) +
+                      (help != null
+                          ? <Widget>[
+                              Center(
+                                  child: InkWell(
+                                      onTap: () async =>
+                                          await launchUrl(Uri.parse(link!)),
+                                      child: Text(
+                                        translate(help),
+                                        style: TextStyle(
+                                            decoration:
+                                                TextDecoration.underline,
+                                            color: Colors.white,
+                                            fontSize: 12),
+                                      )).marginOnly(top: 6)),
+                            ]
+                          : <Widget>[]))),
         ),
         if (closeButton != null && closeButton == true)
-        Positioned(
-          top: 18,
-          right: 0,
-          child: IconButton(
-            icon: Icon(
-              Icons.close,
-              color: Colors.white,
-              size: 20,
+          Positioned(
+            top: 18,
+            right: 0,
+            child: IconButton(
+              icon: Icon(
+                Icons.close,
+                color: Colors.white,
+                size: 20,
+              ),
+              onPressed: closeCard,
             ),
-            onPressed: closeCard,
           ),
-        ),
       ],
     );
   }

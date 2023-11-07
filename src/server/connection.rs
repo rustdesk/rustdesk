@@ -49,6 +49,7 @@ use sha2::{Digest, Sha256};
 use std::sync::atomic::Ordering;
 use std::{
     num::NonZeroI64,
+    path::PathBuf,
     sync::{atomic::AtomicI64, mpsc as std_mpsc},
 };
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -2953,12 +2954,17 @@ impl FileRemoveLogControl {
 
     fn on_remove_dir(&mut self, d: FileRemoveDir) -> Option<ipc::Data> {
         self.instant = Instant::now();
-        self.removed_files.retain(|f| !f.path.starts_with(&d.path));
-        self.removed_dirs.retain(|x| !x.path.starts_with(&d.path));
+        let direct_child = |parent: &str, child: &str| {
+            PathBuf::from(child).parent().map(|x| x.to_path_buf()) == Some(PathBuf::from(parent))
+        };
+        self.removed_files
+            .retain(|f| !direct_child(&f.path, &d.path));
+        self.removed_dirs
+            .retain(|x| !direct_child(&d.path, &x.path));
         if !self
             .removed_dirs
             .iter()
-            .any(|x| d.path.starts_with(&x.path))
+            .any(|x| direct_child(&x.path, &d.path))
         {
             self.removed_dirs.push(d.clone());
         }
