@@ -1806,13 +1806,16 @@ impl Connection {
 
                     let encode_result = me.write_to_bytes();
 
-                    if let Ok(data) = encode_result {
-                        let result = call_main_service_key_event(&data);
-                        if let Err(e) = result {
-                            log::debug!("call_main_service_key_event fail:{}", e);
+                    match encode_result {
+                        Ok(data) => {
+                            let result = call_main_service_key_event(&data);
+                            if let Err(e) = result {
+                                log::debug!("call_main_service_key_event fail: {}", e);
+                            }
                         }
-                    } else {
-                        log::debug!("encode key event fail:{}", encode_result.err().unwrap());
+                        Err(e) => {
+                            log::debug!("encode key event fail: {}", e);
+                        }
                     }
                 }
                 #[cfg(not(any(target_os = "android", target_os = "ios")))]
