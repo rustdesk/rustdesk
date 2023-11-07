@@ -401,6 +401,8 @@ jobs:
       - name: Codesign app and create signed dmg
         if: env.MACOS_P12_BASE64 != null
         run: |
+          # Patch create-dmg to give more attempts to unmount image
+          sed -i -e 's/MAXIMUM_UNMOUNTING_ATTEMPTS=3/MAXIMUM_UNMOUNTING_ATTEMPTS=7/' $(command -v create-dmg)
           security default-keychain -s rustdesk.keychain
           security unlock-keychain -p ${{ secrets.MACOS_P12_PASSWORD }} rustdesk.keychain
           # start sign the rustdesk.app and dmg
