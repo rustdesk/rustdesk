@@ -15,6 +15,9 @@ env:
   LLVM_VERSION: "15.0.6"
   FLUTTER_VERSION: "3.13.9"
   FLUTTER_RUST_BRIDGE_VERSION: "1.80.1"
+  # for arm64 linux
+  FLUTTER_ELINUX_VERSION: "3.13.9"
+  FLUTTER_ELINUX_COMMIT_ID: "f4d4205893c16b0aa9cb6ba46b9f32b639d3b057"
   TAG_NAME: "${{ inputs.upload-tag }}"
   VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
   # vcpkg version: 2023.10.19
@@ -1397,6 +1400,19 @@ jobs:
           name: librustdesk-${{ matrix.job.arch }}-${{ matrix.job.extra-build-features }}.so
           path: ./target/release/
 
+      - name: Download Flutter
+        shell: bash
+        run: |
+          # disable git safe.directory
+          git config --global --add safe.directory "*"
+          pushd /opt
+          # clone repo and reset to flutter ${{ env.FLUTTER_VERSION }}
+          git clone https://github.com/sony/flutter-elinux.git || true
+          pushd flutter-elinux
+            git fetch
+            git reset --hard ${{ env.FLUTTER_ELINUX_COMMIT_ID }}
+          popd
+
       - uses: rustdesk-org/run-on-arch-action@amd64-support
         name: Build rustdesk binary for ${{ matrix.job.arch }}
         id: vcpkg
@@ -1409,6 +1425,7 @@ jobs:
           dockerRunArgs: |
             --volume "${PWD}:/workspace"
             --volume "/opt/artifacts:/opt/artifacts"
+            --volume "/opt/flutter-elinux:/opt/flutter-elinux"
           shell: /bin/bash
           install: |
             apt-get update -y
@@ -1435,14 +1452,18 @@ jobs:
           run: |
             # disable git safe.directory
             git config --global --add safe.directory "*"
-            # Setup Flutter
-            pushd /opt
-            wget https://storage.googleapis.com/flutter_infra_release/releases/stable/linux/flutter_linux_${{ env.FLUTTER_VERSION }}-stable.tar.xz
-            tar xf flutter_linux_${{ env.FLUTTER_VERSION }}-stable.tar.xz
-            ls -l .
-            export PATH=/opt/flutter/bin:$PATH
-            flutter doctor -v
-            flutter precache --linux
+            pushd /workspace
+            # we use flutter-elinux to build our rustdesk
+            export PATH=/opt/flutter-elinux/bin:$PATH
+            sed -i "s/flutter build linux --release/flutter-elinux build linux/g" ./build.py
+            # Setup flutter-elinux. Run doctor to check if issues here.
+            flutter-elinux doctor -v
+            # Patch arm64 engine for flutter 3.6.0+
+            flutter-elinux precache --linux
+            pushd /tmp
+            curl -O https://storage.googleapis.com/flutter_infra_release/releases/stable/linux/flutter_linux_${{ env.FLUTTER_ELINUX_VERSION }}-stable.tar.xz
+            tar -xvf flutter_linux_${{ env.FLUTTER_ELINUX_VERSION }}-stable.tar.xz flutter/bin/cache/artifacts/engine/linux-x64/shader_lib
+            cp -R flutter/bin/cache/artifacts/engine/linux-x64/shader_lib /opt/flutter-elinux/flutter/bin/cache/artifacts/engine/linux-arm64
             popd
             # edit to corresponding arch
             case ${{ matrix.job.arch }} in
