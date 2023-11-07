@@ -565,7 +565,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Big tiles", "Grote tegels"),
         ("Small tiles", "Kleine tegels"),
         ("List", "Overzicht"),
-        ("Virtual display", Virtuele weergave""),
+        ("Virtual display", "Virtuele weergave"),
         ("Plug out all", "Sluit alle"),
         ("True color (4:4:4)", "Ware kleur (4:4:4)"),
         ("Enable blocking user input", "Blokkeren van gebruikersinvoer inschakelen"),
