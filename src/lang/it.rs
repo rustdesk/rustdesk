@@ -568,7 +568,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Virtual display", "Scehrmo virtuale"),
         ("Plug out all", "Scollega tutto"),
         ("True color (4:4:4)", "Colore reale (4:4:4)"),
-        ("Enable blocking user input", ""),
-        ("id_input_tip", ""),
+        ("Enable blocking user input", "Abilita blocco input utente"),
+        ("id_input_tip", "Puoi inserire un ID, un IP diretto o un dominio con una porta (<dominio>:<porta>).\nSe vuoi accedere as un dispositivo in un altro server, aggiungi l'indirizzo del server (<id>@<indirizzo_server >?key=<valore_chiave>), ad esempio\n9123456234@192.168.16.1:21117?key=5Qbwsde3unUcJBtrx9ZkvUmwFNoExHzpryHuPUdqlWM=.\nSe vuoi accedere as un dispositivo in un server pubblico, inserisci \"<id>@public\", per il server pubblico la chiave non è necessaria"),
     ].iter().cloned().collect();
 }
