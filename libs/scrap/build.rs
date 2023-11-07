@@ -23,14 +23,18 @@ fn link_pkg_config(_name: &str) -> Vec<PathBuf> {
     unimplemented!()
 }
 
-/// Link vcppkg package.
+/// Link vcpkg package.
 fn link_vcpkg(mut path: PathBuf, name: &str) -> PathBuf {
     let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap();
     let mut target_arch = std::env::var("CARGO_CFG_TARGET_ARCH").unwrap();
     if target_arch == "x86_64" {
         target_arch = "x64".to_owned();
+    } else if target_arch == "x86" {
+        target_arch = "x86".to_owned();
     } else if target_arch == "aarch64" {
         target_arch = "arm64".to_owned();
+    } else {
+        target_arch = "arm".to_owned();
     }
     let mut target = if target_os == "macos" {
         if target_arch == "x64" {

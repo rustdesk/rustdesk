@@ -180,8 +180,8 @@ def generate_build_script_for_docker():
             export VCPKG_ROOT=`pwd`/vcpkg
             git clone https://github.com/microsoft/vcpkg
             vcpkg/bootstrap-vcpkg.sh
-            vcpkg/vcpkg install libvpx libyuv opus
             popd
+            $VCPKG_ROOT/vcpkg install --x-install-root="$VCPKG_ROOT/installed"
             # build rustdesk
             ./build.py --flutter --hwcodec
         ''')

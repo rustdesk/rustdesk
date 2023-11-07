@@ -1,0 +1,17 @@
+{
+  "name": "aom",
+  "version-semver": "3.7.0",
+  "description": "AV1 codec library",
+  "homepage": "https://aomedia.googlesource.com/aom",
+  "license": "BSD-2-Clause",
+  "dependencies": [
+    {
+      "name": "vcpkg-cmake",
+      "host": true
+    },
+    {
+      "name": "vcpkg-cmake-config",
+      "host": true
+    }
+  ]
+}
