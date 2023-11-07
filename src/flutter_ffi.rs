@@ -395,6 +395,7 @@ pub fn session_is_keyboard_mode_supported(session_id: SessionID, mode: String) -
             SyncReturn(is_keyboard_mode_supported(
                 &mode,
                 session.get_peer_version(),
+                &session.peer_platform()
             ))
         } else {
             SyncReturn(false)

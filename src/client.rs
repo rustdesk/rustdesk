@@ -1795,14 +1795,14 @@ impl LoginConfigHandler {
             crate::flutter::push_global_event(crate::flutter::APP_TYPE_MAIN, evt);
         }
         if config.keyboard_mode.is_empty() {
-            if is_keyboard_mode_supported(&KeyboardMode::Map, get_version_number(&pi.version)) {
+            if is_keyboard_mode_supported(&KeyboardMode::Map, get_version_number(&pi.version), &pi.platform) {
                 config.keyboard_mode = KeyboardMode::Map.to_string();
             } else {
                 config.keyboard_mode = KeyboardMode::Legacy.to_string();
             }
         } else {
             let keyboard_modes =
-                crate::get_supported_keyboard_modes(get_version_number(&pi.version));
+                crate::get_supported_keyboard_modes(get_version_number(&pi.version), &pi.platform);
             let current_mode = &KeyboardMode::from_str(&config.keyboard_mode).unwrap_or_default();
             if !keyboard_modes.contains(current_mode) {
                 config.keyboard_mode = KeyboardMode::Legacy.to_string();

@@ -365,6 +365,10 @@ class _RemotePageState extends State<RemotePage> {
                       : gFFI.ffiModel.isPeerAndroid
                           ? [
                               IconButton(
+                                  color: Colors.white,
+                                  icon: Icon(Icons.keyboard),
+                                  onPressed: openKeyboard),
+                              IconButton(
                                 color: Colors.white,
                                 icon: const Icon(Icons.build),
                                 onPressed: () => gFFI.dialogManager
