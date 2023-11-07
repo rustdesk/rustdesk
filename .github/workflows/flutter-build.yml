@@ -972,6 +972,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y \
+               cmake \
                crossbuild-essential-arm64 \
                curl \
                nasm \
@@ -1163,6 +1164,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y \
+               cmake \
                crossbuild-essential-armhf \
                curl \
                nasm \
