@@ -236,6 +236,7 @@ pub enum Data {
     FileTransferLog((String, String)),
     #[cfg(windows)]
     ControlledSessionCount(usize),
+    CmErr(String),
 }
 
 #[tokio::main(flavor = "current_thread")]
