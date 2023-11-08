@@ -395,7 +395,7 @@ pub fn session_is_keyboard_mode_supported(session_id: SessionID, mode: String) -
             SyncReturn(is_keyboard_mode_supported(
                 &mode,
                 session.get_peer_version(),
-                &session.peer_platform()
+                &session.peer_platform(),
             ))
         } else {
             SyncReturn(false)
@@ -1527,6 +1527,21 @@ pub fn cm_elevate_portable(conn_id: i32) {
 pub fn cm_switch_back(conn_id: i32) {
     #[cfg(not(any(target_os = "ios")))]
     crate::ui_cm_interface::switch_back(conn_id);
+}
+
+pub fn cm_get_config(name: String) -> String {
+    #[cfg(not(target_os = "ios"))]
+    {
+        if let Ok(Some(v)) = crate::ipc::get_config(&name) {
+            v
+        } else {
+            "".to_string()
+        }
+    }
+    #[cfg(target_os = "ios")]
+    {
+        "".to_string()
+    }
 }
 
 pub fn main_get_build_date() -> String {

@@ -26,6 +26,8 @@ use cidr_utils::cidr::IpCidr;
 #[cfg(all(target_os = "linux", feature = "linux_headless"))]
 #[cfg(not(any(feature = "flatpak", feature = "appimage")))]
 use hbb_common::platform::linux::run_cmds;
+#[cfg(target_os = "android")]
+use hbb_common::protobuf::EnumOrUnknown;
 use hbb_common::{
     config::Config,
     fs,
@@ -34,7 +36,6 @@ use hbb_common::{
     get_time, get_version_number,
     message_proto::{option_message::BoolOption, permission_info::Permission},
     password_security::{self as password, ApproveMode},
-    protobuf::EnumOrUnknown,
     sleep, timeout,
     tokio::{
         net::TcpStream,
@@ -2791,9 +2792,6 @@ async fn start_ipc(
         #[allow(unused_mut)]
         #[allow(unused_assignments)]
         let mut args = vec!["--cm"];
-        if crate::hbbs_http::sync::is_pro() && password::hide_cm() {
-            args.push("--hide");
-        }
         #[allow(unused_mut)]
         #[cfg(target_os = "linux")]
         let mut user = None;

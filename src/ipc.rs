@@ -408,6 +408,12 @@ async fn handle(data: Data, stream: &mut Connection) {
                     } else {
                         None
                     };
+                } else if name == "hide_cm" {
+                    value = if crate::hbbs_http::sync::is_pro() {
+                        Some(hbb_common::password_security::hide_cm().to_string())
+                    } else {
+                        None
+                    };
                 } else {
                     value = None;
                 }
@@ -699,7 +705,7 @@ where
 }
 
 #[tokio::main(flavor = "current_thread")]
-async fn get_config(name: &str) -> ResultType<Option<String>> {
+pub async fn get_config(name: &str) -> ResultType<Option<String>> {
     get_config_async(name, 1_000).await
 }
 
