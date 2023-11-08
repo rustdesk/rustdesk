@@ -9,6 +9,10 @@
       "name": "vcpkg-msbuild",
       "host": true,
       "platform": "windows"
+    },
+    {
+      "name": "vcpkg-cmake-get-vars",
+      "host": true
     }
   ],
   "features": {

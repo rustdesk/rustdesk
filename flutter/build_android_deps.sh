@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -e -o pipefail
+
 ANDROID_ABI=$1
 
 # Build RustDesk dependencies for Android using vcpkg.json
