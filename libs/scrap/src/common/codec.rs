@@ -26,7 +26,7 @@ use hbb_common::{
         supported_decoding::PreferCodec, video_frame, Chroma, CodecAbility, EncodedVideoFrames,
         SupportedDecoding, SupportedEncoding, VideoFrame,
     },
-    sysinfo::{System, SystemExt},
+    sysinfo::{System},
     tokio::time::Instant,
     ResultType,
 };
