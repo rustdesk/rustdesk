@@ -395,7 +395,7 @@ pub fn session_is_keyboard_mode_supported(session_id: SessionID, mode: String) -
             SyncReturn(is_keyboard_mode_supported(
                 &mode,
                 session.get_peer_version(),
-                &session.peer_platform()
+                &session.peer_platform(),
             ))
         } else {
             SyncReturn(false)
@@ -408,12 +408,6 @@ pub fn session_is_keyboard_mode_supported(session_id: SessionID, mode: String) -
 pub fn session_set_custom_image_quality(session_id: SessionID, value: i32) {
     if let Some(session) = sessions::get_session_by_session_id(&session_id) {
         session.save_custom_image_quality(value);
-    }
-}
-
-pub fn session_set_custom_fps(session_id: SessionID, fps: i32) {
-    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
-        session.set_custom_fps(fps);
     }
 }
 
