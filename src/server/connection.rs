@@ -3,6 +3,8 @@ use super::{input_service::*, *};
 use crate::clipboard_file::*;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use crate::common::update_clipboard;
+#[cfg(target_os = "android")]
+use crate::keyboard::client::map_key_to_control_key;
 #[cfg(all(target_os = "linux", feature = "linux_headless"))]
 #[cfg(not(any(feature = "flatpak", feature = "appimage")))]
 use crate::platform::linux_desktop_manager;
@@ -24,6 +26,8 @@ use cidr_utils::cidr::IpCidr;
 #[cfg(all(target_os = "linux", feature = "linux_headless"))]
 #[cfg(not(any(feature = "flatpak", feature = "appimage")))]
 use hbb_common::platform::linux::run_cmds;
+#[cfg(target_os = "android")]
+use hbb_common::protobuf::EnumOrUnknown;
 use hbb_common::{
     config::Config,
     fs,
@@ -38,12 +42,10 @@ use hbb_common::{
         sync::mpsc,
         time::{self, Duration, Instant, Interval},
     },
-    tokio_util::codec::{BytesCodec, Framed}, protobuf::EnumOrUnknown,
+    tokio_util::codec::{BytesCodec, Framed},
 };
 #[cfg(any(target_os = "android", target_os = "ios"))]
-use scrap::android::{call_main_service_pointer_input, call_main_service_key_event};
-#[cfg(target_os = "android")]
-use crate::keyboard::client::map_key_to_control_key;
+use scrap::android::{call_main_service_key_event, call_main_service_pointer_input};
 use serde_derive::Serialize;
 use serde_json::{json, value::Value};
 use sha2::{Digest, Sha256};
@@ -439,6 +441,13 @@ impl Connection {
                             conn.on_close("connection manager", true).await;
                             break;
                         }
+                        ipc::Data::CmErr(e) => {
+                            if e != "expected" {
+                                // cm closed before connection
+                                conn.on_close(&format!("connection manager error: {}", e), false).await;
+                                break;
+                            }
+                        }
                         ipc::Data::ChatMessage{text} => {
                             let mut misc = Misc::new();
                             misc.set_chat_message(ChatMessage {
@@ -816,7 +825,11 @@ impl Connection {
                     Some(data) = rx_from_cm.recv() => {
                         match data {
                             ipc::Data::Close => {
-                                bail!("Close requested from selection manager");
+                                bail!("Close requested from connection manager");
+                            }
+                            ipc::Data::CmErr(e) => {
+                                log::error!("Connection manager error: {e}");
+                                bail!("{e}");
                             }
                             _ => {}
                         }
@@ -1383,15 +1396,15 @@ impl Connection {
     }
 
     fn is_recent_session(&mut self) -> bool {
+        SESSIONS
+            .lock()
+            .unwrap()
+            .retain(|_, s| s.last_recv_time.lock().unwrap().elapsed() < SESSION_TIMEOUT);
         let session = SESSIONS
             .lock()
             .unwrap()
             .get(&self.lr.my_id)
             .map(|s| s.to_owned());
-        SESSIONS
-            .lock()
-            .unwrap()
-            .retain(|_, s| s.last_recv_time.lock().unwrap().elapsed() < SESSION_TIMEOUT);
         // last_recv_time is a mutex variable shared with connection, can be updated lively.
         if let Some(session) = session {
             if session.name == self.lr.my_name
@@ -1461,6 +1474,7 @@ impl Connection {
     fn try_start_cm_ipc(&mut self) {
         if let Some(p) = self.start_cm_ipc_para.take() {
             tokio::spawn(async move {
+                let tx_from_cm_clone = p.tx_from_cm.clone();
                 if let Err(err) = start_ipc(
                     p.rx_to_cm,
                     p.tx_from_cm,
@@ -1470,6 +1484,7 @@ impl Connection {
                 .await
                 {
                     log::error!("ipc to connection manager exit: {}", err);
+                    allow_err!(tx_from_cm_clone.send(Data::CmErr(err.to_string())));
                 }
             });
             #[cfg(all(windows, feature = "flutter"))]
@@ -2777,9 +2792,6 @@ async fn start_ipc(
         #[allow(unused_mut)]
         #[allow(unused_assignments)]
         let mut args = vec!["--cm"];
-        if crate::hbbs_http::sync::is_pro() && password::hide_cm() {
-            args.push("--hide");
-        }
         #[allow(unused_mut)]
         #[cfg(target_os = "linux")]
         let mut user = None;

@@ -236,6 +236,7 @@ pub enum Data {
     FileTransferLog((String, String)),
     #[cfg(windows)]
     ControlledSessionCount(usize),
+    CmErr(String),
 }
 
 #[tokio::main(flavor = "current_thread")]
@@ -404,6 +405,12 @@ async fn handle(data: Data, stream: &mut Connection) {
                 } else if name == "fingerprint" {
                     value = if Config::get_key_confirmed() {
                         Some(crate::common::pk_to_fingerprint(Config::get_key_pair().1))
+                    } else {
+                        None
+                    };
+                } else if name == "hide_cm" {
+                    value = if crate::hbbs_http::sync::is_pro() {
+                        Some(hbb_common::password_security::hide_cm().to_string())
                     } else {
                         None
                     };
@@ -698,7 +705,7 @@ where
 }
 
 #[tokio::main(flavor = "current_thread")]
-async fn get_config(name: &str) -> ResultType<Option<String>> {
+pub async fn get_config(name: &str) -> ResultType<Option<String>> {
     get_config_async(name, 1_000).await
 }
 

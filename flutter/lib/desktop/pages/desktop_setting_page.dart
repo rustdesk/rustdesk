@@ -1319,7 +1319,7 @@ class _DisplayState extends State<_Display> {
       otherRow('Zoom cursor', 'zoom-cursor'),
       otherRow('Show quality monitor', 'show_quality_monitor'),
       otherRow('Mute', 'disable_audio'),
-      otherRow('Allow file copy and paste', 'enable_file_transfer'),
+      otherRow('Enable file copy and paste', 'enable_file_transfer'),
       otherRow('Disable clipboard', 'disable_clipboard'),
       otherRow('Lock after session end', 'lock_after_session_end'),
       otherRow('Privacy mode', 'privacy_mode'),
