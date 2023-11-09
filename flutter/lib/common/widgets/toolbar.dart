@@ -449,7 +449,7 @@ Future<List<TToggleMenu>> toolbarDisplayToggle(
           if (value == null) return;
           bind.sessionToggleOption(sessionId: sessionId, value: option);
         },
-        child: Text(translate('Allow file copy and paste'))));
+        child: Text(translate('Enable file copy and paste'))));
   }
   // disable clipboard
   if (ffiModel.keyboard && perms['clipboard'] != false) {
