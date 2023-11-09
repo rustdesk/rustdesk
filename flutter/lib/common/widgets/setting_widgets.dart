@@ -7,16 +7,13 @@ import 'package:get/get.dart';
 
 customImageQualityWidget(
     {required double initQuality,
-    required double initFps,
     required Function(double) setQuality,
-    required Function(double) setFps,
-    required bool showFps,
     required bool showMoreQuality}) {
-  if (!showMoreQuality && initQuality > 100) {
+  final maxValue = showMoreQuality ? 2000 : 10;
+  if (initQuality < 10 || initQuality > maxValue) {
     initQuality = 50;
   }
   final qualityValue = initQuality.obs;
-  final fpsValue = initFps.obs;
 
   final RxBool moreQualityChecked = RxBool(qualityValue.value > 100);
   final debouncerQuality = Debouncer<double>(
@@ -25,13 +22,6 @@ customImageQualityWidget(
       setQuality(v);
     },
     initialValue: qualityValue.value,
-  );
-  final debouncerFps = Debouncer<double>(
-    Duration(milliseconds: 1000),
-    onChanged: (double v) {
-      setFps(v);
-    },
-    initialValue: fpsValue.value,
   );
 
   onMoreChanged(bool? value) {
@@ -106,65 +96,21 @@ customImageQualityWidget(
                 )
               ],
             )),
-      if (showFps)
-        Obx(() => Row(
-              children: [
-                Expanded(
-                  flex: 3,
-                  child: Slider(
-                    value: fpsValue.value,
-                    min: 5.0,
-                    max: 120.0,
-                    divisions: 23,
-                    onChanged: (double value) async {
-                      fpsValue.value = value;
-                      debouncerFps.value = value;
-                    },
-                  ),
-                ),
-                Expanded(
-                    flex: 1,
-                    child: Text(
-                      '${fpsValue.value.round()}',
-                      style: const TextStyle(fontSize: 15),
-                    )),
-                Expanded(
-                    flex: 2,
-                    child: Text(
-                      translate('FPS'),
-                      style: const TextStyle(fontSize: 15),
-                    ))
-              ],
-            )),
     ],
   );
 }
 
 customImageQualitySetting() {
   final qualityKey = 'custom_image_quality';
-  final fpsKey = 'custom-fps';
 
   var initQuality =
       (double.tryParse(bind.mainGetUserDefaultOption(key: qualityKey)) ?? 50.0);
-  if (initQuality < 10 || initQuality > 2000) {
-    initQuality = 50;
-  }
-  var initFps =
-      (double.tryParse(bind.mainGetUserDefaultOption(key: fpsKey)) ?? 30.0);
-  if (initFps < 5 || initFps > 120) {
-    initFps = 30;
-  }
 
   return customImageQualityWidget(
       initQuality: initQuality,
-      initFps: initFps,
       setQuality: (v) {
         bind.mainSetUserDefaultOption(key: qualityKey, value: v.toString());
       },
-      setFps: (v) {
-        bind.mainSetUserDefaultOption(key: fpsKey, value: v.toString());
-      },
-      showFps: true,
       showMoreQuality: true);
 }
 
