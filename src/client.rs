@@ -1166,6 +1166,12 @@ impl LoginConfigHandler {
             }
             self.other_server = Some((real_id.clone(), server.to_owned(), key.to_owned()));
             id = format!("{real_id}@{server}");
+        } else {
+            let real_id = crate::ui_interface::handle_relay_id(&id);
+            if real_id != id {
+                force_relay = true;
+                id = real_id.to_owned();
+            }
         }
 
         self.id = id;
