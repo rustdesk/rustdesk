@@ -512,7 +512,7 @@ class FfiModel with ChangeNotifier {
       showWaitUacDialog(sessionId, dialogManager, type);
     } else if (type == 'elevation-error') {
       showElevationError(sessionId, type, title, text, dialogManager);
-    } else if (type == 'relay-hint') {
+    } else if (type == 'relay-hint' || type == 'relay-hint2') {
       showRelayHintDialog(sessionId, type, title, text, dialogManager, peerId);
     } else if (text == 'Connected, waiting for image...') {
       showConnectedWaitingForImage(dialogManager, sessionId, type, title, text);
@@ -564,17 +564,19 @@ class FfiModel with ChangeNotifier {
       if (text.contains("10054") || text.contains("104")) {
         hint = "";
       }
-      final alreadyForceAlwaysRelay = bind
-          .mainGetPeerOptionSync(id: peerId, key: 'force-always-relay')
-          .isNotEmpty;
       return CustomAlertDialog(
         title: null,
         content: msgboxContent(type, title, "${translate(text)}$hint"),
         actions: [
           dialogButton('Close', onPressed: onClose, isOutline: true),
+          if (type == 'relay-hint')
+            dialogButton('Connect via relay',
+                onPressed: () => reconnect(dialogManager, sessionId, true),
+                buttonStyle: style,
+                isOutline: true),
           dialogButton('Retry',
               onPressed: () => reconnect(dialogManager, sessionId, false)),
-          if (!alreadyForceAlwaysRelay)
+          if (type == 'relay-hint2')
             dialogButton('Connect via relay',
                 onPressed: () => reconnect(dialogManager, sessionId, true),
                 buttonStyle: style),
