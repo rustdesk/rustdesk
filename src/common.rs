@@ -877,7 +877,7 @@ pub fn hostname() -> String {
 
 #[inline]
 pub fn get_sysinfo() -> serde_json::Value {
-    use hbb_common::sysinfo::{CpuExt, System, SystemExt};
+    use hbb_common::sysinfo::{System};
     let system = System::new_all();
     let memory = system.total_memory();
     let memory = (memory as f64 / 1024. / 1024. / 1024. * 100.).round() / 100.;
@@ -1213,7 +1213,7 @@ pub async fn get_next_nonkeyexchange_msg(
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub fn check_process(arg: &str, same_uid: bool) -> bool {
-    use hbb_common::sysinfo::{ProcessExt, System, SystemExt};
+    use hbb_common::sysinfo::{System};
     let mut sys = System::new();
     sys.refresh_processes();
     let mut path = std::env::current_exe().unwrap_or_default();
