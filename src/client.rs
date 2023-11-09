@@ -1483,6 +1483,10 @@ impl LoginConfigHandler {
                 config.custom_image_quality[0]
             };
             msg.custom_image_quality = quality << 8;
+            #[cfg(feature = "flutter")]
+            if let Some(custom_fps) = self.options.get("custom-fps") {
+                msg.custom_fps = custom_fps.parse().unwrap_or(30);
+            }
             n += 1;
         }
         let view_only = self.get_toggle_option("view-only");
@@ -1663,6 +1667,27 @@ impl LoginConfigHandler {
         res
     }
 
+    /// Create a [`Message`] for saving custom fps.
+    ///
+    /// # Arguments
+    ///
+    /// * `fps` - The given fps.
+    pub fn set_custom_fps(&mut self, fps: i32) -> Message {
+        let mut misc = Misc::new();
+        misc.set_option(OptionMessage {
+            custom_fps: fps,
+            ..Default::default()
+        });
+        let mut msg_out = Message::new();
+        msg_out.set_misc(misc);
+        let mut config = self.load_config();
+        config
+            .options
+            .insert("custom-fps".to_owned(), fps.to_string());
+        self.save_config(config);
+        msg_out
+    }
+
     pub fn get_option(&self, k: &str) -> String {
         if let Some(v) = self.config.options.get(k) {
             v.clone()
@@ -1770,11 +1795,7 @@ impl LoginConfigHandler {
             crate::flutter::push_global_event(crate::flutter::APP_TYPE_MAIN, evt);
         }
         if config.keyboard_mode.is_empty() {
-            if is_keyboard_mode_supported(
-                &KeyboardMode::Map,
-                get_version_number(&pi.version),
-                &pi.platform,
-            ) {
+            if is_keyboard_mode_supported(&KeyboardMode::Map, get_version_number(&pi.version), &pi.platform) {
                 config.keyboard_mode = KeyboardMode::Map.to_string();
             } else {
                 config.keyboard_mode = KeyboardMode::Legacy.to_string();
