@@ -25,6 +25,10 @@
       "platform": "android"
     },
     {
+      "name": "oboe-wrapper",
+      "platform": "android"
+    },
+    {
       "name": "opus",
       "host": true
     },

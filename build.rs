@@ -70,6 +70,7 @@ fn install_android_deps() {
     );
     println!("cargo:rustc-link-lib=ndk_compat");
     println!("cargo:rustc-link-lib=oboe");
+    println!("cargo:rustc-link-lib=oboe_wrapper");
     println!("cargo:rustc-link-lib=c++");
     println!("cargo:rustc-link-lib=OpenSLES");
 }
