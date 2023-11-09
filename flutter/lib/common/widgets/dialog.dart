@@ -1245,29 +1245,44 @@ void showConfirmSwitchSidesDialog(
 
 customImageQualityDialog(SessionID sessionId, String id, FFI ffi) async {
   double qualityInitValue = 50;
+  double fpsInitValue = 30;
   bool qualitySet = false;
+  bool fpsSet = false;
 
   bool? direct;
   try {
     direct =
         ConnectionTypeState.find(id).direct.value == ConnectionType.strDirect;
   } catch (_) {}
+  bool hideFps = (await bind.mainIsUsingPublicServer() && direct != true) ||
+      versionCmp(ffi.ffiModel.pi.version, '1.2.0') < 0;
   bool hideMoreQuality =
       (await bind.mainIsUsingPublicServer() && direct != true) ||
           versionCmp(ffi.ffiModel.pi.version, '1.2.2') < 0;
 
-  setCustomValues({double? quality}) async {
+  setCustomValues({double? quality, double? fps}) async {
     if (quality != null) {
       qualitySet = true;
       await bind.sessionSetCustomImageQuality(
           sessionId: sessionId, value: quality.toInt());
       print("quality:$quality");
     }
+    if (fps != null) {
+      fpsSet = true;
+      await bind.sessionSetCustomFps(sessionId: sessionId, fps: fps.toInt());
+      print("fps:$fps");
+    }
     if (!qualitySet) {
       qualitySet = true;
       await bind.sessionSetCustomImageQuality(
           sessionId: sessionId, value: qualityInitValue.toInt());
       print("qualityInitValue:$qualityInitValue");
+    }
+    if (!hideFps && !fpsSet) {
+      fpsSet = true;
+      await bind.sessionSetCustomFps(
+          sessionId: sessionId, fps: fpsInitValue.toInt());
+      print("fpsInitValue:$fpsInitValue");
     }
   }
 
@@ -1280,10 +1295,25 @@ customImageQualityDialog(SessionID sessionId, String id, FFI ffi) async {
   final quality = await bind.sessionGetCustomImageQuality(sessionId: sessionId);
   qualityInitValue =
       quality != null && quality.isNotEmpty ? quality[0].toDouble() : 50.0;
+  if ((hideMoreQuality && qualityInitValue > 100) ||
+      qualityInitValue < 10 ||
+      qualityInitValue > 2000) {
+    qualityInitValue = 50;
+  }
+  // fps
+  final fpsOption =
+      await bind.sessionGetOption(sessionId: sessionId, arg: 'custom-fps');
+  fpsInitValue = fpsOption == null ? 30 : double.tryParse(fpsOption) ?? 30;
+  if (fpsInitValue < 5 || fpsInitValue > 120) {
+    fpsInitValue = 30;
+  }
 
   final content = customImageQualityWidget(
       initQuality: qualityInitValue,
+      initFps: fpsInitValue,
       setQuality: (v) => setCustomValues(quality: v),
+      setFps: (v) => setCustomValues(fps: v),
+      showFps: !hideFps,
       showMoreQuality: !hideMoreQuality);
   msgBoxCommon(ffi.dialogManager, 'Custom Image Quality', content, [btnClose]);
 }
