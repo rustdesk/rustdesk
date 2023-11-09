@@ -130,9 +130,7 @@ if(VCPKG_TARGET_IS_WINDOWS AND NOT VCPKG_TARGET_IS_MINGW)
     endif()
 
 else()
-    vcpkg_find_acquire_program(YASM)
-    get_filename_component(YASM_EXE_PATH ${YASM} DIRECTORY)
-    vcpkg_add_to_path(${YASM_EXE_PATH})
+    yasm_tool_helper(APPEND_TO_PATH)
 
     set(OPTIONS "--disable-examples --disable-tools --disable-docs --disable-unit-tests --enable-pic")
 
@@ -169,12 +167,17 @@ else()
     include("${cmake_vars_file}")
 
     # Set environment variables for configure
-    set(ENV{CC} ${VCPKG_DETECTED_CMAKE_C_COMPILER})
-    set(ENV{CXX} ${VCPKG_DETECTED_CMAKE_CXX_COMPILER})
-    set(ENV{AR} ${VCPKG_DETECTED_CMAKE_AR})
-    set(ENV{LD} ${VCPKG_DETECTED_CMAKE_LINKER})
-    set(ENV{RANLIB} ${VCPKG_DETECTED_CMAKE_RANLIB})
-    set(ENV{STRIP} ${VCPKG_DETECTED_CMAKE_STRIP})
+    if(VCPKG_DETECTED_CMAKE_C_COMPILER MATCHES "([^\/]*-)gcc$")
+        message(STATUS "Cross-building for ${TARGET_TRIPLET} with ${CMAKE_MATCH_1}")
+        set(ENV{CROSS} ${CMAKE_MATCH_1})
+    else()
+        set(ENV{CC} ${VCPKG_DETECTED_CMAKE_C_COMPILER})
+        set(ENV{CXX} ${VCPKG_DETECTED_CMAKE_CXX_COMPILER})
+        set(ENV{AR} ${VCPKG_DETECTED_CMAKE_AR})
+        set(ENV{LD} ${VCPKG_DETECTED_CMAKE_LINKER})
+        set(ENV{RANLIB} ${VCPKG_DETECTED_CMAKE_RANLIB})
+        set(ENV{STRIP} ${VCPKG_DETECTED_CMAKE_STRIP})
+    endif()
 
     if(VCPKG_TARGET_IS_MINGW)
         if(LIBVPX_TARGET_ARCH STREQUAL "x86")
@@ -184,16 +187,6 @@ else()
         endif()
     elseif(VCPKG_TARGET_IS_LINUX)
         set(LIBVPX_TARGET "${LIBVPX_TARGET_ARCH}-linux-gcc")
-        if(VCPKG_TARGET_ARCHITECTURE STREQUAL arm AND NOT VCPKG_DETECTED_CMAKE_HOST_SYSTEM_PROCESSOR STREQUAL arm)
-          message(STATUS "Cross-building for arm-linux with arm-linux-gnueabihf")
-          set(ENV{CROSS} "arm-linux-gnueabihf-")
-          unset(ENV{CC})
-          unset(ENV{CXX})
-          unset(ENV{AR})
-          unset(ENV{LD})
-          unset(ENV{RANLIB})
-          unset(ENV{STRIP})
-        endif()
     elseif(VCPKG_TARGET_IS_ANDROID)
         set(LIBVPX_TARGET "generic-gnu")
         # Settings
@@ -255,7 +248,7 @@ else()
         message(STATUS "Building libvpx for Release")
         vcpkg_execute_required_process(
             COMMAND
-                ${BASH} --noprofile --norc -c "make -j"
+                ${BASH} --noprofile --norc -c "make -j${VCPKG_CONCURRENCY}"
             WORKING_DIRECTORY "${CURRENT_BUILDTREES_DIR}/${TARGET_TRIPLET}-rel"
             LOGNAME build-${TARGET_TRIPLET}-rel
         )
@@ -288,7 +281,7 @@ else()
         message(STATUS "Building libvpx for Debug")
         vcpkg_execute_required_process(
             COMMAND
-                ${BASH} --noprofile --norc -c "make -j"
+                ${BASH} --noprofile --norc -c "make -j${VCPKG_CONCURRENCY}"
             WORKING_DIRECTORY "${CURRENT_BUILDTREES_DIR}/${TARGET_TRIPLET}-dbg"
             LOGNAME build-${TARGET_TRIPLET}-dbg
         )
