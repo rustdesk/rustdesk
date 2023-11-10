@@ -83,6 +83,14 @@ impl WindowHandlers {
 }
 
 pub fn turn_on_privacy(conn_id: i32) -> ResultType<bool> {
+    let pre_conn_id = *CONN_ID.lock().unwrap();
+    if pre_conn_id == conn_id {
+        return Ok(true);
+    }
+    if pre_conn_id != 0 {
+        bail!("Privacy occupied by another one");
+    }
+
     let exe_file = std::env::current_exe()?;
     if let Some(cur_dir) = exe_file.parent() {
         if !cur_dir.join("WindowInjection.dll").exists() {
@@ -99,14 +107,6 @@ pub fn turn_on_privacy(conn_id: i32) -> ResultType<bool> {
         log::info!("turn_on_privacy, dll not found when started, try start");
         start()?;
         std::thread::sleep(std::time::Duration::from_millis(1_000));
-    }
-
-    let pre_conn_id = *CONN_ID.lock().unwrap();
-    if pre_conn_id == conn_id {
-        return Ok(true);
-    }
-    if pre_conn_id != 0 {
-        bail!("Privacy occupied by another one");
     }
 
     let hwnd = wait_find_privacy_hwnd(0)?;
@@ -150,6 +150,14 @@ pub fn start() -> ResultType<()> {
     let mut wnd_handlers = WND_HANDLERS.lock().unwrap();
     if wnd_handlers.hprocess != 0 {
         return Ok(());
+    }
+
+    log::info!("Start privacy mode window broker, check_update_broker_process");
+    if let Err(e) = crate::platform::windows::check_update_broker_process() {
+        log::warn!(
+            "Failed to check update broker process. Privacy mode may not work properly. {}",
+            e
+        );
     }
 
     let exe_file = std::env::current_exe()?;
