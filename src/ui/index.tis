@@ -33,7 +33,7 @@ class ConnectStatus: Reactor.Component {
             <div .connect-status>
                 <span class={"connect-status-icon connect-status" + (service_stopped ? 0 : connect_status)} />
                 {this.getConnectStatusStr()}
-                {service_stopped ? <span .link #start-service>{translate('Start Service')}</span> : ""}
+                {service_stopped ? <span .link #start-service>{translate('Start service')}</span> : ""}
             </div>;
     }
 
@@ -93,7 +93,7 @@ class DirectServer: Reactor.Component {
     }
 
     function render() {
-        var text = translate("Enable Direct IP Access");
+        var text = translate("Enable direct IP access");
         var enabled = handler.get_option("direct-server") == "Y";
         var cls = enabled ? "selected" : "line-through";
         return <li class={cls}><span>{svg_checkmark}</span>{text}{enabled && <EditDirectAccessPort />}</li>;
@@ -249,7 +249,7 @@ class Enhancements: Reactor.Component {
             var ts1 = handler.get_option("allow-auto-record-incoming") == 'Y' ? { checked: true } : {};
             msgbox("custom-recording", translate('Recording'),
                 <div .form>
-                    <div><button|checkbox(enable_record_session) {ts0}>{translate('Enable Recording Session')}</button></div>
+                    <div><button|checkbox(enable_record_session) {ts0}>{translate('Enable recording session')}</button></div>
                     <div><button|checkbox(auto_record_incoming) {ts1}>{translate('Automatically record incoming sessions')}</button></div>
                     <div>
                         <div style="word-wrap:break-word"><span>{translate("Directory")}:&nbsp;&nbsp;</span><span #folderPath>{dir}</span></div>
@@ -301,12 +301,13 @@ class MyIdMenu: Reactor.Component {
         var username = handler.get_local_option("access_token") ? getUserName() : '';
         return <popup>
             <menu.context #config-options>
-                <li #enable-keyboard><span>{svg_checkmark}</span>{translate('Enable Keyboard/Mouse')}</li>
-                <li #enable-clipboard><span>{svg_checkmark}</span>{translate('Enable Clipboard')}</li>
-                <li #enable-file-transfer><span>{svg_checkmark}</span>{translate('Enable File Transfer')}</li> 
-                <li #enable-remote-restart><span>{svg_checkmark}</span>{translate('Enable Remote Restart')}</li> 
-                <li #enable-tunnel><span>{svg_checkmark}</span>{translate('Enable TCP Tunneling')}</li>
-                <li #enable-lan-discovery><span>{svg_checkmark}</span>{translate('Enable LAN Discovery')}</li>
+                <li #enable-keyboard><span>{svg_checkmark}</span>{translate('Enable keyboard/mouse')}</li>
+                <li #enable-clipboard><span>{svg_checkmark}</span>{translate('Enable clipboard')}</li>
+                <li #enable-file-transfer><span>{svg_checkmark}</span>{translate('Enable file transfer')}</li> 
+                <li #enable-remote-restart><span>{svg_checkmark}</span>{translate('Enable remote restart')}</li> 
+                <li #enable-tunnel><span>{svg_checkmark}</span>{translate('Enable TCP tunneling')}</li>
+                {is_win ? <li #enable-block-input><span>{svg_checkmark}</span>{translate('Enable blocking user input')}</li> : ""}
+                <li #enable-lan-discovery><span>{svg_checkmark}</span>{translate('Enable LAN discovery')}</li>
                 <AudioInputs />
                 <Enhancements />
                 <li #allow-remote-config-modification><span>{svg_checkmark}</span>{translate('Enable remote configuration modification')}</li>
@@ -315,7 +316,7 @@ class MyIdMenu: Reactor.Component {
                 <li #whitelist title={translate('whitelist_tip')}>{translate('IP Whitelisting')}</li>
                 <li #socks5-server>{translate('Socks5 Proxy')}</li>
                 <div .separator />
-                <li #stop-service class={service_stopped ? "line-through" : "selected"}><span>{svg_checkmark}</span>{translate("Enable Service")}</li>
+                <li #stop-service class={service_stopped ? "line-through" : "selected"}><span>{svg_checkmark}</span>{translate("Enable service")}</li>
                 {handler.is_rdp_service_open() ? <ShareRdp /> : ""}
                 <DirectServer />
                 {false && handler.using_public_server() && <li #allow-always-relay><span>{svg_checkmark}</span>{translate('Always connect via relay')}</li>}
@@ -578,7 +579,7 @@ class App: Reactor.Component
                             <div .title>{translate('Control Remote Desktop')}</div>
                             <ID @{this.remote_id} />
                             <div .right-buttons>
-                                <button .button .outline #file-transfer>{translate('Transfer File')}</button>
+                                <button .button .outline #file-transfer>{translate('Transfer file')}</button>
                                 <button .button #connect>{translate('Connect')}</button>
                             </div>
                         </div>
@@ -1016,7 +1017,7 @@ updatePasswordArea();
 
 class ID: Reactor.Component {
     function render() {
-        return <input type="text" #remote_id .outline-focus novalue={translate("Enter Remote ID")} maxlength="21"
+        return <input type="text" #remote_id .outline-focus novalue={translate("Enter Remote ID")}
         value={formatId(handler.get_remote_id())} />;
     }
 

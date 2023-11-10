@@ -50,13 +50,14 @@ class Body: Reactor.Component
                 <div />
                 {c.is_file_transfer || c.port_forward || disconnected ? "" : <div>{translate('Permissions')}</div>}
                 {c.is_file_transfer || c.port_forward || disconnected ? "" : <div> <div .permissions>
-                    <div class={!c.keyboard ? "disabled" : ""} title={translate('Allow using keyboard and mouse')}><icon .keyboard /></div>
-                    <div class={!c.clipboard ? "disabled" : ""} title={translate('Allow using clipboard')}><icon .clipboard /></div>
-                    <div class={!c.audio ? "disabled" : ""} title={translate('Allow hearing sound')}><icon .audio /></div>
-                    <div class={!c.file ? "disabled" : ""} title={translate('Allow file copy and paste')}><icon .file /></div>
-                    <div class={!c.restart ? "disabled" : ""} title={translate('Allow remote restart')}><icon .restart /></div>
+                    <div class={!c.keyboard ? "disabled" : ""} title={translate('Enable keyboard/mouse')}><icon .keyboard /></div>
+                    <div class={!c.clipboard ? "disabled" : ""} title={translate('Enable clipboard')}><icon .clipboard /></div>
+                    <div class={!c.audio ? "disabled" : ""} title={translate('Enable audio')}><icon .audio /></div>
+                    <div class={!c.file ? "disabled" : ""} title={translate('Enable file copy and paste')}><icon .file /></div>
+                    <div class={!c.restart ? "disabled" : ""} title={translate('Enable remote restart')}><icon .restart /></div>
                 </div> <div .permissions style="margin-top:8px;" >
-                    <div class={!c.recording ? "disabled" : ""} title={translate('Allow recording session')}><icon .recording /></div>
+                    <div class={!c.recording ? "disabled" : ""} title={translate('Enable recording session')}><icon .recording /></div>
+                    <div class={!c.block_input ? "disabled" : ""} title={translate('Enable blocking user input')} style={is_win ? "" : "display:none;"}><icon .block_input /></div>
                 </div></div>
                 }
                 {c.port_forward ? <div>Port Forwarding: {c.port_forward}</div> : ""}
@@ -140,6 +141,15 @@ class Body: Reactor.Component
             connection.recording = !connection.recording;
             body.update();
             handler.switch_permission(cid, "recording", connection.recording);
+        });
+    }
+
+    event click $(icon.block_input) {
+        var { cid, connection } = this;
+        checkClickTime(function() {
+            connection.block_input = !connection.block_input;
+            body.update();
+            handler.switch_permission(cid, "block_input", connection.block_input);
         });
     }
 
@@ -346,7 +356,7 @@ function bring_to_top(idx=-1) {
     }
 }
 
-handler.addConnection = function(id, is_file_transfer, port_forward, peer_id, name, authorized, keyboard, clipboard, audio, file, restart, recording) {
+handler.addConnection = function(id, is_file_transfer, port_forward, peer_id, name, authorized, keyboard, clipboard, audio, file, restart, recording, block_input) {
     stdout.println("new connection #" + id + ": " + peer_id);
     var conn;
     connections.map(function(c) {
@@ -368,6 +378,7 @@ handler.addConnection = function(id, is_file_transfer, port_forward, peer_id, na
         name: name, authorized: authorized, time: new Date(), now: new Date(),
         keyboard: keyboard, clipboard: clipboard, msgs: [], unreaded: 0,
         audio: audio, file: file, restart: restart, recording: recording,
+        block_input:block_input,
         disconnected: false
     };
     if (idx < 0) {

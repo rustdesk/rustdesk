@@ -20,6 +20,8 @@ use winapi::{
     },
 };
 
+use crate::RotationMode::*;
+
 pub struct ComPtr<T>(*mut T);
 impl<T> ComPtr<T> {
     fn is_null(&self) -> bool {
@@ -45,8 +47,6 @@ pub struct Capturer {
     surface: ComPtr<IDXGISurface>,
     width: usize,
     height: usize,
-    use_yuv: bool,
-    yuv: Vec<u8>,
     rotated: Vec<u8>,
     gdi_capturer: Option<CapturerGDI>,
     gdi_buffer: Vec<u8>,
@@ -54,7 +54,7 @@ pub struct Capturer {
 }
 
 impl Capturer {
-    pub fn new(display: Display, use_yuv: bool) -> io::Result<Capturer> {
+    pub fn new(display: Display) -> io::Result<Capturer> {
         let mut device = ptr::null_mut();
         let mut context = ptr::null_mut();
         let mut duplication = ptr::null_mut();
@@ -148,17 +148,11 @@ impl Capturer {
             width: display.width() as usize,
             height: display.height() as usize,
             display,
-            use_yuv,
-            yuv: Vec::new(),
             rotated: Vec::new(),
             gdi_capturer,
             gdi_buffer: Vec::new(),
             saved_raw_data: Vec::new(),
         })
-    }
-
-    pub fn set_use_yuv(&mut self, use_yuv: bool) {
-        self.use_yuv = use_yuv;
     }
 
     pub fn is_gdi(&self) -> bool {
@@ -259,10 +253,10 @@ impl Capturer {
                     self.unmap();
                     let r = self.load_frame(timeout)?;
                     let rotate = match self.display.rotation() {
-                        DXGI_MODE_ROTATION_IDENTITY | DXGI_MODE_ROTATION_UNSPECIFIED => 0,
-                        DXGI_MODE_ROTATION_ROTATE90 => 90,
-                        DXGI_MODE_ROTATION_ROTATE180 => 180,
-                        DXGI_MODE_ROTATION_ROTATE270 => 270,
+                        DXGI_MODE_ROTATION_IDENTITY | DXGI_MODE_ROTATION_UNSPECIFIED => kRotate0,
+                        DXGI_MODE_ROTATION_ROTATE90 => kRotate90,
+                        DXGI_MODE_ROTATION_ROTATE180 => kRotate180,
+                        DXGI_MODE_ROTATION_ROTATE270 => kRotate270,
                         _ => {
                             return Err(io::Error::new(
                                 io::ErrorKind::Other,
@@ -270,7 +264,7 @@ impl Capturer {
                             ));
                         }
                     };
-                    if rotate == 0 {
+                    if rotate == kRotate0 {
                         slice::from_raw_parts(r.0, r.1 as usize * self.height)
                     } else {
                         self.rotated.resize(self.width * self.height * 4, 0);
@@ -279,12 +273,12 @@ impl Capturer {
                             r.1,
                             self.rotated.as_mut_ptr(),
                             4 * self.width as i32,
-                            if rotate == 180 {
+                            if rotate == kRotate180 {
                                 self.width
                             } else {
                                 self.height
                             } as _,
-                            if rotate != 180 {
+                            if rotate != kRotate180 {
                                 self.width
                             } else {
                                 self.height
@@ -295,19 +289,7 @@ impl Capturer {
                     }
                 }
             };
-            Ok({
-                if self.use_yuv {
-                    crate::common::bgra_to_i420(
-                        self.width as usize,
-                        self.height as usize,
-                        &result,
-                        &mut self.yuv,
-                    );
-                    &self.yuv[..]
-                } else {
-                    result
-                }
-            })
+            Ok(result)
         }
     }
 

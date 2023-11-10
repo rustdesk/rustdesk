@@ -1,4 +1,4 @@
-name: Build the flutter version of the RustDesk 
+name: Build the flutter version of the RustDesk
 
 on:
   workflow_call:
@@ -13,23 +13,25 @@ on:
 env:
   CARGO_NDK_VERSION: "3.1.2"
   LLVM_VERSION: "15.0.6"
-  FLUTTER_VERSION: "3.10.6"
-  FLUTTER_RUST_BRIDGE_VERSION: "1.75.3"
-  # for arm64 linux
-  FLUTTER_ELINUX_VERSION: "3.10.6"
-  FLUTTER_ELINUX_COMMIT_ID: "410b3ca42f2cd0c485edf517a1666652bab442d4"
+  FLUTTER_VERSION: "3.13.9"
+  FLUTTER_RUST_BRIDGE_VERSION: "1.80.1"
+  # for arm64 linux because official Dart SDK does not work
+  FLUTTER_ELINUX_VERSION: "3.13.9"
+  FLUTTER_ELINUX_COMMIT_ID: "f4d4205893c16b0aa9cb6ba46b9f32b639d3b057"
   TAG_NAME: "${{ inputs.upload-tag }}"
-  # vcpkg version: 2023.04.15
+  VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
+  # vcpkg version: 2023.10.19
   # for multiarch gcc compatibility
-  VCPKG_COMMIT_ID: "501db0f17ef6df184fcdbfbe0f87cde2313b6ab1"
+  VCPKG_COMMIT_ID: "8eb57355a4ffb410a2e94c07b4dca2dffbee8e50"
   VERSION: "1.2.4"
-  NDK_VERSION: "r25c"
+  NDK_VERSION: "r26b"
   #signing keys env variable checks
   ANDROID_SIGNING_KEY: '${{ secrets.ANDROID_SIGNING_KEY }}'
   MACOS_P12_BASE64: '${{ secrets.MACOS_P12_BASE64 }}'
   # To make a custom build with your own servers set the below secret values
   RS_PUB_KEY: '${{ secrets.RS_PUB_KEY }}'
   RENDEZVOUS_SERVER: '${{ secrets.RENDEZVOUS_SERVER }}'
+  API_SERVER: '${{ secrets.API_SERVER }}'
   UPLOAD_ARTIFACT: "${{ inputs.upload-artifact }}"
 
 jobs:
@@ -45,6 +47,13 @@ jobs:
           - { target: x86_64-pc-windows-msvc, os: windows-2019, arch: x86_64 }
           # - { target: aarch64-pc-windows-msvc, os: windows-2019, arch: aarch64 }
     steps:
+      - name: Export GitHub Actions cache environment variables
+        uses: actions/github-script@v6
+        with:
+          script: |
+            core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
+            core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
+
       - name: Checkout source code
         uses: actions/checkout@v3
 
@@ -60,13 +69,13 @@ jobs:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           cache: true
 
-      # - name: Replace engine with rustdesk custom flutter engine
-      #   run: |
-      #     flutter doctor -v
-      #     flutter precache --windows
-      #     Invoke-WebRequest -Uri https://github.com/Kingtous/engine/releases/download/v3.7.0-rustdesk/windows-x64-release-flutter.zip -OutFile windows-x64-flutter-release.zip
-      #     Expand-Archive windows-x64-flutter-release.zip -DestinationPath engine
-      #     mv -Force engine/*  C:/hostedtoolcache/windows/flutter/stable-${{ env.FLUTTER_VERSION }}-x64/bin/cache/artifacts/engine/windows-x64-release/
+      - name: Replace engine with rustdesk custom flutter engine
+        run: |
+          flutter doctor -v
+          flutter precache --windows
+          Invoke-WebRequest -Uri https://github.com/fufesou/flutter-engine/releases/download/bugfix-crash-windows-angle-context-frameBuffer/windows-x64-release.zip -OutFile windows-x64-flutter-release.zip
+          Expand-Archive windows-x64-flutter-release.zip -DestinationPath .
+          mv -Force windows-x64-release/*  C:/hostedtoolcache/windows/flutter/stable-${{ env.FLUTTER_VERSION }}-x64/bin/cache/artifacts/engine/windows-x64-release/
 
       - name: Install Rust toolchain
         uses: actions-rs/toolchain@v1
@@ -87,14 +96,18 @@ jobs:
           Push-Location flutter ; flutter pub get ; Pop-Location
           ~/.cargo/bin/flutter_rust_bridge_codegen --rust-input ./src/flutter_ffi.rs --dart-output ./flutter/lib/generated_bridge.dart
 
+      - name: Setup vcpkg with Github Actions binary cache
+        uses: lukka/run-vcpkg@v11
+        with:
+          vcpkgDirectory: C:\vcpkg
+          vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
+
       - name: Install vcpkg dependencies
         run: |
-          cd C:\
-          git clone https://github.com/Kingtous/rustdesk_thirdpary_lib --depth=1 
-          
+          $VCPKG_ROOT/vcpkg install --triplet x64-windows-static --x-install-root="$VCPKG_ROOT/installed"
+        shell: bash
+
       - name: Build rustdesk
-        env:
-          VCPKG_ROOT: C:\rustdesk_thirdpary_lib\vcpkg
         run: python3 .\build.py --portable --hwcodec --flutter --feature IddDriver
 
       - name: find Runner.res
@@ -169,6 +182,13 @@ jobs:
           - { target: i686-pc-windows-msvc, os: windows-2019, arch: x86 }
           # - { target: aarch64-pc-windows-msvc, os: windows-2019 }
     steps:
+      - name: Export GitHub Actions cache environment variables
+        uses: actions/github-script@v6
+        with:
+          script: |
+            core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
+            core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
+
       - name: Checkout source code
         uses: actions/checkout@v3
 
@@ -189,22 +209,20 @@ jobs:
         with:
           prefix-key: ${{ matrix.job.os }}-sciter
 
-      - name: Restore from cache and install vcpkg
-        uses: lukka/run-vcpkg@v7
+      - name: Setup vcpkg with Github Actions binary cache
+        uses: lukka/run-vcpkg@v11
         with:
-          setupOnly: true
+          vcpkgDirectory: C:\vcpkg
           vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
 
       - name: Install vcpkg dependencies
         run: |
-          cd C:\
-          git clone https://github.com/Kingtous/rustdesk_thirdpary_lib --depth=1 
+          $VCPKG_ROOT/vcpkg install --triplet x86-windows-static --x-install-root="$VCPKG_ROOT/installed"
+        shell: bash
 
       - name: Build rustdesk
         id: build
         shell: bash
-        env:
-          VCPKG_ROOT: C:\rustdesk_thirdpary_lib\vcpkg
         run: |
           python3 res/inline-sciter.py
           # Patch sciter x86
@@ -251,7 +269,7 @@ jobs:
           popd
           mkdir -p ./SignOutput
           mv ./target/release/rustdesk-portable-packer.exe ./SignOutput/rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}-sciter.exe
-      
+
       - name: Sign rustdesk self-extracted file
         uses: GermanBluefox/code-sign-action@v7
         with:
@@ -285,17 +303,24 @@ jobs:
               arch: x86_64
             }
     steps:
+      - name: Export GitHub Actions cache environment variables
+        uses: actions/github-script@v6
+        with:
+          script: |
+            core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
+            core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
+
       - name: Checkout source code
         uses: actions/checkout@v3
 
       - name: Import the codesign cert
         if: env.MACOS_P12_BASE64 != null
         uses: apple-actions/import-codesign-certs@v1
-        with: 
+        with:
           p12-file-base64: ${{ secrets.MACOS_P12_BASE64 }}
           p12-password: ${{ secrets.MACOS_P12_PASSWORD }}
           keychain: rustdesk
-      
+
       - name: Check sign and import sign key
         if: env.MACOS_P12_BASE64 != null
         run: |
@@ -310,11 +335,11 @@ jobs:
           fileName: rustdesk.json
           fileDir: ${{ github.workspace }}
           encodedString: ${{ secrets.MACOS_NOTARIZE_JSON }}
-          
+
       - name: Install rcodesign tool
         if: env.MACOS_P12_BASE64 != null
         shell: bash
-        run: | 
+        run: |
           pushd /tmp
           wget https://github.com/indygreg/apple-platform-rs/releases/download/apple-codesign%2F0.22.0/apple-codesign-0.22.0-macos-universal.tar.gz
           tar -zxvf apple-codesign-0.22.0-macos-universal.tar.gz
@@ -350,15 +375,14 @@ jobs:
           pushd flutter && flutter pub get && popd
           ~/.cargo/bin/flutter_rust_bridge_codegen --rust-input ./src/flutter_ffi.rs --dart-output ./flutter/lib/generated_bridge.dart --c-output ./flutter/macos/Runner/bridge_generated.h
 
-      - name: Restore from cache and install vcpkg
-        uses: lukka/run-vcpkg@v7
+      - name: Setup vcpkg with Github Actions binary cache
+        uses: lukka/run-vcpkg@v11
         with:
-          setupOnly: true
           vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
 
       - name: Install vcpkg dependencies
         run: |
-          $VCPKG_ROOT/vcpkg install libvpx libyuv opus aom
+          $VCPKG_ROOT/vcpkg install --x-install-root="$VCPKG_ROOT/installed"
 
       - name: Show version information (Rust, cargo, Clang)
         shell: bash
@@ -378,6 +402,11 @@ jobs:
       - name: Codesign app and create signed dmg
         if: env.MACOS_P12_BASE64 != null
         run: |
+          # Patch create-dmg to give more attempts to unmount image
+          CREATE_DMG="$(command -v create-dmg)"
+          CREATE_DMG="$(readlink -f "$CREATE_DMG")"
+          sed -i -e 's/MAXIMUM_UNMOUNTING_ATTEMPTS=3/MAXIMUM_UNMOUNTING_ATTEMPTS=7/' "$CREATE_DMG"
+          # Unlock keychain
           security default-keychain -s rustdesk.keychain
           security unlock-keychain -p ${{ secrets.MACOS_P12_PASSWORD }} rustdesk.keychain
           # start sign the rustdesk.app and dmg
@@ -403,15 +432,11 @@ jobs:
           files: |
             rustdesk*-${{ matrix.job.arch }}.dmg
 
-  build-vcpkg-deps-linux:
-    uses: ./.github/workflows/vcpkg-deps-linux.yml
-
   generate-bridge-linux:
     uses: ./.github/workflows/bridge.yml
 
   build-rustdesk-ios:
     if: ${{ inputs.upload-artifact }}
-    needs: [generate-bridge-linux]
     name: build rustdesk ios ipa ${{ matrix.job.target }} (${{ matrix.job.os }}) [${{ matrix.job.extra-build-features }}]
     runs-on: ${{ matrix.job.os }}
     strategy:
@@ -425,6 +450,13 @@ jobs:
               extra-build-features: "",
             }
     steps:
+      - name: Export GitHub Actions cache environment variables
+        uses: actions/github-script@v6
+        with:
+          script: |
+            core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
+            core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
+
       - name: Install dependencies
         run: |
           brew install nasm yasm
@@ -436,17 +468,15 @@ jobs:
           channel: "stable"
           flutter-version: ${{ env.FLUTTER_VERSION }}
 
-      - name: Clone deps
-        shell: bash
-        run: |
-          pushd /opt
-          sudo git clone https://github.com/rustdesk-org/rustdesk_thirdparty_lib.git --depth=1
-
-      - name: Restore bridge files
-        uses: actions/download-artifact@master
+      - name: Setup vcpkg with Github Actions binary cache
+        uses: lukka/run-vcpkg@v11
         with:
-          name: bridge-artifact
-          path: ./
+          vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
+
+      - name: Install vcpkg dependencies
+        run: |
+          $VCPKG_ROOT/vcpkg install --triplet arm64-ios --x-install-root="$VCPKG_ROOT/installed"
+        shell: bash
 
       - name: Install Rust toolchain
         uses: actions-rs/toolchain@v1
@@ -458,7 +488,7 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
         with:
-          prefix-key: rustdesk-lib-cache
+          prefix-key: rustdesk-lib-cache-ios
           key: ${{ matrix.job.target }}-${{ matrix.job.extra-build-features }}
 
       - name: Install flutter rust bridge deps
@@ -469,10 +499,8 @@ jobs:
           ~/.cargo/bin/flutter_rust_bridge_codegen --rust-input ./src/flutter_ffi.rs --dart-output ./flutter/lib/generated_bridge.dart --c-output ./flutter/ios/Runner/bridge_generated.h
 
       - name: Build rustdesk lib
-        env:
-          VCPKG_ROOT: /opt/rustdesk_thirdparty_lib/vcpkg
         run: |
-          rustup target add ${{ matrix.job.target }} 
+          rustup target add ${{ matrix.job.target }}
           cargo build --features flutter --release --target aarch64-apple-ios --lib
 
       - name: Build rustdesk
@@ -482,7 +510,7 @@ jobs:
           # flutter build ipa --release --obfuscate --split-debug-info=./split-debug-info --no-codesign
           # for easy debugging
           flutter build ipa --release --no-codesign
-      
+
       # - name: Upload Artifacts
       #   # if: env.ANDROID_SIGNING_KEY != null && env.UPLOAD_ARTIFACT == 'true'
       #   uses: actions/upload-artifact@master
@@ -498,7 +526,6 @@ jobs:
       #     tag_name: ${{ env.TAG_NAME }}
       #     files: |
       #       flutter/build/ios/ipa/*.ipa
-    
 
   build-rustdesk-android:
     needs: [generate-bridge-linux]
@@ -523,10 +550,51 @@ jobs:
               openssl-arch: android-arm
             }
     steps:
+      - name: Export GitHub Actions cache environment variables
+        uses: actions/github-script@v6
+        with:
+          script: |
+            core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
+            core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
+
       - name: Install dependencies
         run: |
-          sudo apt update
-          sudo apt-get -qq install -y  git curl wget nasm yasm libgtk-3-dev clang libxcb-randr0-dev libxdo-dev libxfixes-dev libxcb-shape0-dev libxcb-xfixes0-dev libasound2-dev libpulse-dev cmake libclang-dev ninja-build libappindicator3-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev libvdpau-dev libva-dev libpam0g-dev libclang-dev llvm-dev libclang-10-dev llvm-10-dev pkg-config tree g++ libc6-dev gcc-multilib g++-multilib openjdk-11-jdk-headless
+          sudo apt-get update
+          sudo apt-get install -y \
+               clang \
+               cmake \
+               curl \
+               gcc-multilib \
+               git \
+               g++ \
+               g++-multilib \
+               libappindicator3-dev \
+               libasound2-dev \
+               libc6-dev \
+               libclang-10-dev \
+               libclang-dev \
+               libgstreamer1.0-dev \
+               libgstreamer-plugins-base1.0-dev \
+               libgtk-3-dev \
+               libpam0g-dev \
+               libpulse-dev \
+               libva-dev \
+               libvdpau-dev \
+               libxcb-randr0-dev \
+               libxcb-shape0-dev \
+               libxcb-xfixes0-dev \
+               libxdo-dev \
+               libxfixes-dev \
+               llvm-10-dev \
+               llvm-dev \
+               nasm \
+               ninja-build \
+               openjdk-11-jdk-headless \
+               pkg-config \
+               tree \
+               wget \
+               yasm
+
       - name: Checkout source code
         uses: actions/checkout@v3
       - name: Install flutter
@@ -540,11 +608,23 @@ jobs:
           ndk-version: ${{ env.NDK_VERSION }}
           add-to-path: true
 
-      - name: Clone deps
-        shell: bash
+      - name: Setup vcpkg with Github Actions binary cache
+        uses: lukka/run-vcpkg@v11
+        with:
+          vcpkgDirectory: /opt/artifacts/vcpkg
+          vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
+
+      - name: Install vcpkg dependencies
         run: |
-          pushd /opt
-          git clone https://github.com/rustdesk-org/rustdesk_thirdparty_lib.git --depth=1
+          case ${{ matrix.job.target }} in
+            aarch64-linux-android)
+              ./flutter/build_android_deps.sh arm64-v8a
+            ;;
+            armv7-linux-androideabi)
+              ./flutter/build_android_deps.sh armeabi-v7a
+            ;;
+          esac
+        shell: bash
 
       - name: Restore bridge files
         uses: actions/download-artifact@master
@@ -561,16 +641,15 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
         with:
-          prefix-key: rustdesk-lib-cache
+          prefix-key: rustdesk-lib-cache-android # TODO: drop '-android' part after caches are invalidated
           key: ${{ matrix.job.target }}-${{ matrix.job.extra-build-features }}
 
       - name: Build rustdesk lib
         env:
           ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
           ANDROID_NDK_ROOT: ${{ steps.setup-ndk.outputs.ndk-path }}
-          VCPKG_ROOT: /opt/rustdesk_thirdparty_lib/vcpkg
         run: |
-          rustup target add ${{ matrix.job.target }} 
+          rustup target add ${{ matrix.job.target }}
           cargo install cargo-ndk --version ${{ env.CARGO_NDK_VERSION }}
           case ${{ matrix.job.target }} in
             aarch64-linux-android)
@@ -596,7 +675,7 @@ jobs:
           case ${{ matrix.job.target }} in
             aarch64-linux-android)
               mkdir -p ./flutter/android/app/src/main/jniLibs/arm64-v8a
-              cp /opt/rustdesk_thirdparty_lib/android/app/src/main/jniLibs/arm64-v8a/*.so ./flutter/android/app/src/main/jniLibs/arm64-v8a/
+              cp ${ANDROID_NDK_HOME}/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/libc++_shared.so ./flutter/android/app/src/main/jniLibs/arm64-v8a/
               cp ./target/${{ matrix.job.target }}/release/liblibrustdesk.so ./flutter/android/app/src/main/jniLibs/arm64-v8a/librustdesk.so
               # build flutter
               pushd flutter
@@ -605,7 +684,7 @@ jobs:
             ;;
             armv7-linux-androideabi)
               mkdir -p ./flutter/android/app/src/main/jniLibs/armeabi-v7a
-              cp /opt/rustdesk_thirdparty_lib/android/app/src/main/jniLibs/armeabi-v7a/*.so ./flutter/android/app/src/main/jniLibs/armeabi-v7a/
+              cp ${ANDROID_NDK_HOME}/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/arm-linux-androideabi/libc++_shared.so ./flutter/android/app/src/main/jniLibs/armeabi-v7a/
               cp ./target/${{ matrix.job.target }}/release/liblibrustdesk.so ./flutter/android/app/src/main/jniLibs/armeabi-v7a/librustdesk.so
               # build flutter
               pushd flutter
@@ -616,7 +695,7 @@ jobs:
           popd
           mkdir -p signed-apk; pushd signed-apk
           mv ../rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}.apk .
-      
+
       - uses: r0adkll/sign-android-release@v1
         name: Sign app APK
         if: env.ANDROID_SIGNING_KEY != null
@@ -657,7 +736,7 @@ jobs:
             signed-apk/rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}.apk
 
   build-rustdesk-lib-linux-amd64:
-    needs: [generate-bridge-linux, build-vcpkg-deps-linux]
+    needs: [generate-bridge-linux]
     name: build-rust-lib ${{ matrix.job.target }} (${{ matrix.job.os }}) [${{ matrix.job.extra-build-features }}]
     runs-on: ${{ matrix.job.os }}
     strategy:
@@ -690,13 +769,20 @@ jobs:
             }
           # - { target: x86_64-unknown-linux-musl   , os: ubuntu-20.04, use-cross: true }
     steps:
+      - name: Export GitHub Actions cache environment variables
+        uses: actions/github-script@v6
+        with:
+          script: |
+            core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
+            core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
+
       - name: Maximize build space
         run: |
           sudo rm -rf /opt/ghc
           sudo rm -rf /usr/local/lib/android
           sudo rm -rf /usr/share/dotnet
-          sudo apt update -y
-          sudo apt install qemu-user-static -y
+          sudo apt-get update -y
+          sudo apt-get install -y nasm qemu-user-static yasm
 
       - name: Checkout source code
         uses: actions/checkout@v3
@@ -718,7 +804,7 @@ jobs:
           target: ${{ matrix.job.target }}
           override: true
           profile: minimal # minimal component installation (ie, no documentation)
-      
+
       - name: Save Rust toolchain version
         run: |
           RUST_TOOLCHAIN_VERSION=$(cargo --version | awk '{print $2}')
@@ -735,11 +821,16 @@ jobs:
           name: bridge-artifact
           path: ./
 
-      - name: Restore vcpkg files
-        uses: actions/download-artifact@master
+      - name: Setup vcpkg with Github Actions binary cache
+        uses: lukka/run-vcpkg@v11
         with:
-          name: vcpkg-artifact-${{ matrix.job.arch }}
-          path: /opt/artifacts/vcpkg/installed
+          vcpkgDirectory: /opt/artifacts/vcpkg
+          vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
+
+      - name: Install vcpkg dependencies
+        run: |
+          $VCPKG_ROOT/vcpkg install --x-install-root="$VCPKG_ROOT/installed"
+        shell: bash
 
       - uses: rustdesk-org/run-on-arch-action@amd64-support
         name: Build rustdesk library for ${{ matrix.job.arch }}
@@ -758,11 +849,41 @@ jobs:
             --volume "/opt/artifacts:/opt/artifacts"
           shell: /bin/bash
           install: |
-            apt update -y
+            apt-get update -y
             echo -e "installing deps"
-            apt-get -qq install -y  git curl wget nasm yasm libgtk-3-dev clang libxcb-randr0-dev libxdo-dev libxfixes-dev libxcb-shape0-dev libxcb-xfixes0-dev libasound2-dev libpulse-dev cmake libclang-dev ninja-build libappindicator3-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev libvdpau-dev libva-dev libpam0g-dev libclang-dev llvm-dev libclang-10-dev llvm-10-dev pkg-config tree g++ gcc libvpx-dev tree > /dev/null
+            apt-get install -y \
+               clang \
+               cmake \
+               curl \
+               gcc \
+               git \
+               g++ \
+               libappindicator3-dev \
+               libasound2-dev \
+               libclang-10-dev \
+               libclang-dev \
+               libgstreamer1.0-dev \
+               libgstreamer-plugins-base1.0-dev \
+               libgtk-3-dev \
+               libpam0g-dev \
+               libpulse-dev \
+               libva-dev \
+               libvdpau-dev \
+               libxcb-randr0-dev \
+               libxcb-shape0-dev \
+               libxcb-xfixes0-dev \
+               libxdo-dev \
+               libxfixes-dev \
+               llvm-10-dev \
+               llvm-dev \
+               nasm \
+               ninja-build \
+               pkg-config \
+               tree \
+               wget \
+               yasm
             # we have libopus compiled by us.
-            apt remove -y libopus-dev || true
+            apt-get remove -y libopus-dev || true
             # output devs
             ls -l ./
             tree -L 3 /opt/artifacts/vcpkg/installed
@@ -806,7 +927,7 @@ jobs:
 
   build-rustdesk-lib-linux-arm:
     if: ${{ inputs.upload-artifact }}
-    needs: [generate-bridge-linux, build-vcpkg-deps-linux]
+    needs: [generate-bridge-linux]
     name: build-rust-lib ${{ matrix.job.target }} (${{ matrix.job.os }}) [${{ matrix.job.extra-build-features }}]
     runs-on: [self-hosted, Linux, ARM64]
     strategy:
@@ -841,13 +962,39 @@ jobs:
           # - { arch: armv7, target: armv7-unknown-linux-gnueabihf , os: ubuntu-20.04, use-cross: true, extra-build-features: "appimage" }
           # - { target: arm-unknown-linux-musleabihf, os: ubuntu-20.04, use-cross: true }
     steps:
+      - name: Export GitHub Actions cache environment variables
+        uses: actions/github-script@v6
+        with:
+          script: |
+            core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
+            core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+               cmake \
+               crossbuild-essential-arm64 \
+               curl \
+               g++ \
+               gcc \
+               git \
+               nasm \
+               ninja-build \
+               pkg-config \
+               unzip \
+               xz-utils \
+               wget \
+               yasm \
+               zip
+
       #- name: Maximize build space
       #  run: |
       #    sudo rm -rf /opt/ghc
       #    sudo rm -rf /usr/local/lib/android
       #    sudo rm -rf /usr/share/dotnet
-      #    sudo apt update -y
-      #    sudo apt install qemu-user-static -y
+      #    sudo apt-get update -y
+      #    sudo apt-get install qemu-user-static -y
 
       - name: Checkout source code
         uses: actions/checkout@v3
@@ -869,7 +1016,7 @@ jobs:
           target: ${{ matrix.job.target }}
           override: true
           profile: minimal # minimal component installation (ie, no documentation)
-      
+
       - name: Save Rust toolchain version
         run: |
           RUST_TOOLCHAIN_VERSION=$(cargo --version | awk '{print $2}')
@@ -886,11 +1033,23 @@ jobs:
           name: bridge-artifact
           path: ./
 
-      - name: Restore vcpkg files
-        uses: actions/download-artifact@master
+      - name: Setup vcpkg with Github Actions binary cache
+        uses: lukka/run-vcpkg@v11
         with:
-          name: vcpkg-artifact-${{ matrix.job.arch }}
-          path: /opt/artifacts/vcpkg/installed
+          vcpkgDirectory: /opt/artifacts/vcpkg
+          vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
+
+      - name: Install vcpkg dependencies
+        run: |
+          case ${{ matrix.job.target }} in
+            aarch64-unknown-linux-gnu)
+              $VCPKG_ROOT/vcpkg install --triplet arm64-linux --x-install-root="$VCPKG_ROOT/installed"
+            ;;
+            armv7-unknown-linux-gnueabihf)
+              $VCPKG_ROOT/vcpkg install --triplet arm-linux --x-install-root="$VCPKG_ROOT/installed"
+            ;;
+          esac
+        shell: bash
 
       - uses: rustdesk-org/run-on-arch-action@amd64-support
         name: Build rustdesk library for ${{ matrix.job.arch }}
@@ -907,11 +1066,41 @@ jobs:
             --volume "/opt/artifacts:/opt/artifacts"
           shell: /bin/bash
           install: |
-            apt update -y
+            apt-get update -y
             echo -e "installing deps"
-            apt-get -qq install -y  git curl wget nasm yasm libgtk-3-dev clang libxcb-randr0-dev libxdo-dev libxfixes-dev libxcb-shape0-dev libxcb-xfixes0-dev libasound2-dev libpulse-dev cmake libclang-dev ninja-build libappindicator3-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev libvdpau-dev libva-dev libpam0g-dev libclang-dev llvm-dev libclang-10-dev llvm-10-dev pkg-config tree g++ gcc libvpx-dev tree > /dev/null
+            apt-get install -y \
+               clang \
+               cmake \
+               curl \
+               gcc \
+               git \
+               g++ \
+               libappindicator3-dev \
+               libasound2-dev \
+               libclang-10-dev \
+               libclang-dev \
+               libgstreamer1.0-dev \
+               libgstreamer-plugins-base1.0-dev \
+               libgtk-3-dev \
+               libpam0g-dev \
+               libpulse-dev \
+               libva-dev \
+               libvdpau-dev \
+               libxcb-randr0-dev \
+               libxcb-shape0-dev \
+               libxcb-xfixes0-dev \
+               libxdo-dev \
+               libxfixes-dev \
+               llvm-10-dev \
+               llvm-dev \
+               nasm \
+               ninja-build \
+               pkg-config \
+               tree \
+               wget \
+               yasm
             # we have libopus compiled by us.
-            apt remove -y libopus-dev || true
+            apt-get remove -y libopus-dev || true
             # output devs
             ls -l ./
             tree -L 3 /opt/artifacts/vcpkg/installed
@@ -950,7 +1139,6 @@ jobs:
 
   build-rustdesk-sciter-arm:
     if: ${{ inputs.upload-artifact }}
-    needs: [build-vcpkg-deps-linux]
     name: build-rustdesk(sciter) ${{ matrix.job.target }} (${{ matrix.job.os }}) [${{ matrix.job.extra-build-features }}]
     runs-on: [self-hosted, Linux, ARM64]
     strategy:
@@ -970,14 +1158,38 @@ jobs:
           # - { arch: armv7, target: armv7-unknown-linux-gnueabihf , os: ubuntu-20.04, use-cross: true, extra-build-features: "appimage" }
           # - { target: arm-unknown-linux-musleabihf, os: ubuntu-20.04, use-cross: true }
     steps:
+      - name: Export GitHub Actions cache environment variables
+        uses: actions/github-script@v6
+        with:
+          script: |
+            core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
+            core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+               cmake \
+               crossbuild-essential-armhf \
+               curl \
+               g++ \
+               gcc \
+               git \
+               nasm \
+               ninja-build \
+               pkg-config \
+               unzip \
+               xz-utils \
+               yasm \
+               zip
 
       #- name: Maximize build space
       #  run: |
       #    sudo rm -rf /opt/ghc
       #    sudo rm -rf /usr/local/lib/android
       #    sudo rm -rf /usr/share/dotnet
-      #    sudo apt update -y
-      #    sudo apt install qemu-user-static -y
+      #    sudo apt-get update -y
+      #    sudo apt-get install qemu-user-static -y
 
       - name: Checkout source code
         uses: actions/checkout@v3
@@ -999,17 +1211,22 @@ jobs:
           target: ${{ matrix.job.target }}
           override: true
           profile: minimal # minimal component installation (ie, no documentation)
-      
+
       - name: Save Rust toolchain version
         run: |
           RUST_TOOLCHAIN_VERSION=$(cargo --version | awk '{print $2}')
           echo "RUST_TOOLCHAIN_VERSION=$RUST_TOOLCHAIN_VERSION" >> $GITHUB_ENV
 
-      - name: Restore vcpkg files
-        uses: actions/download-artifact@master
+      - name: Setup vcpkg with Github Actions binary cache
+        uses: lukka/run-vcpkg@v11
         with:
-          name: vcpkg-artifact-${{ matrix.job.arch }}
-          path: /opt/artifacts/vcpkg/installed
+          vcpkgDirectory: /opt/artifacts/vcpkg
+          vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
+
+      - name: Install vcpkg dependencies
+        run: |
+          $VCPKG_ROOT/vcpkg install --triplet arm-linux --x-install-root="$VCPKG_ROOT/installed"
+        shell: bash
 
       - uses: rustdesk-org/run-on-arch-action@amd64-support
         name: Build rustdesk sciter binary for ${{ matrix.job.arch }}
@@ -1025,10 +1242,42 @@ jobs:
             --volume "/opt/artifacts:/opt/artifacts"
           shell: /bin/bash
           install: |
-            apt update -y
-            apt-get -qq install -y git cmake g++ gcc build-essential nasm yasm curl unzip xz-utils python3 wget pkg-config ninja-build pkg-config libgtk-3-dev liblzma-dev clang libappindicator3-dev rpm libclang-dev
-            apt-get -qq install -y libdbus-1-dev pkg-config nasm yasm libglib2.0-dev libxcb-randr0-dev libxdo-dev libxfixes-dev libxcb-shape0-dev libxcb-xfixes0-dev libasound2-dev 
-            apt-get -qq install -y libpulse-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev libvpx-dev libvdpau-dev libva-dev libpam0g-dev
+            apt-get update -y
+            apt-get install -y \
+               build-essential \
+               clang \
+               cmake \
+               curl \
+               gcc \
+               git \
+               g++ \
+               libappindicator3-dev \
+               libasound2-dev \
+               libclang-dev \
+               libdbus-1-dev \
+               libglib2.0-dev \
+               libgstreamer1.0-dev \
+               libgstreamer-plugins-base1.0-dev \
+               libgtk-3-dev \
+               liblzma-dev \
+               libpam0g-dev \
+               libpulse-dev \
+               libva-dev \
+               libvdpau-dev \
+               libxcb-randr0-dev \
+               libxcb-shape0-dev \
+               libxcb-xfixes0-dev \
+               libxdo-dev \
+               libxfixes-dev \
+               nasm \
+               ninja-build \
+               pkg-config \
+               python3 \
+               rpm \
+               unzip \
+               wget \
+               xz-utils \
+               yasm
           run: |
             # disable git safe.directory
             git config --global --add safe.directory "*"
@@ -1046,7 +1295,7 @@ jobs:
               registry = 'https://github.com/rust-lang/crates.io-index'
             """ > ~/.cargo/config
             cat ~/.cargo/config
-            
+
             # build
             pushd /workspace
             python3 ./res/inline-sciter.py
@@ -1133,8 +1382,15 @@ jobs:
 
       - name: Prepare env
         run: |
-          sudo apt update -y
-          sudo apt-get -qq install -y git curl wget nasm yasm libgtk-3-dev libarchive-tools
+          sudo apt-get update -y
+          sudo apt-get install -y \
+               curl \
+               git \
+               libarchive-tools \
+               libgtk-3-dev \
+               nasm \
+               wget \
+               yasm
           mkdir -p ./target/release/
 
       - name: Restore the rustdesk lib file
@@ -1153,7 +1409,7 @@ jobs:
           git clone https://github.com/sony/flutter-elinux.git || true
           pushd flutter-elinux
             git fetch
-            git reset --hard ${{ env.FLUTTER_ELINUX_COMMIT_ID }} 
+            git reset --hard ${{ env.FLUTTER_ELINUX_COMMIT_ID }}
           popd
 
       - uses: rustdesk-org/run-on-arch-action@amd64-support
@@ -1171,8 +1427,27 @@ jobs:
             --volume "/opt/flutter-elinux:/opt/flutter-elinux"
           shell: /bin/bash
           install: |
-            apt update -y
-            apt-get -qq install -y git cmake g++ gcc build-essential nasm yasm curl unzip xz-utils python3 wget pkg-config ninja-build pkg-config libgtk-3-dev liblzma-dev clang libappindicator3-dev rpm
+            apt-get update -y
+            apt-get install -y \
+               build-essential \
+               clang \
+               cmake \
+               curl \
+               gcc \
+               git \
+               g++ \
+               libappindicator3-dev \
+               libgtk-3-dev \
+               liblzma-dev \
+               nasm \
+               ninja-build \
+               pkg-config \
+               python3 \
+               rpm \
+               unzip \
+               wget \
+               xz-utils \
+               yasm
           run: |
             # disable git safe.directory
             git config --global --add safe.directory "*"
@@ -1218,7 +1493,7 @@ jobs:
             pushd ~/rpmbuild/RPMS/${{ matrix.job.arch }}
             mkdir -p /opt/artifacts/rpm
             for name in rustdesk*??.rpm; do
-                mv "$name" "/opt/artifacts/rpm/${name%%.rpm}.rpm" 
+                mv "$name" "/opt/artifacts/rpm/${name%%.rpm}.rpm"
             done
             # rpm suse package
             echo -e "start packaging suse package"
@@ -1236,7 +1511,7 @@ jobs:
             pushd ~/rpmbuild/RPMS/${{ matrix.job.arch }}
             mkdir -p /opt/artifacts/rpm
             for name in rustdesk*??.rpm; do
-                mv "$name" "/opt/artifacts/rpm/${name%%.rpm}-suse.rpm" 
+                mv "$name" "/opt/artifacts/rpm/${name%%.rpm}-suse.rpm"
             done
 
       - name: Rename rustdesk
@@ -1254,7 +1529,7 @@ jobs:
           tag_name: ${{ env.TAG_NAME }}
           files: |
             rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}.deb
-      
+
       - name: Build appimage package
         if: ${{ matrix.job.extra-build-features == 'appimage' }}
         shell: bash
@@ -1365,7 +1640,7 @@ jobs:
           - {
               arch: x86_64,
               target: x86_64-unknown-linux-gnu,
-              os: ubuntu-18.04, 
+              os: ubuntu-18.04,
               extra-build-features: "",
             }
           - {
@@ -1393,8 +1668,15 @@ jobs:
 
       - name: Prepare env
         run: |
-          sudo apt update -y
-          sudo apt-get -qq install -y git curl wget nasm yasm libgtk-3-dev libarchive-tools
+          sudo apt-get update -y
+          sudo apt-get install -y \
+               curl \
+               git \
+               libarchive-tools \
+               libgtk-3-dev \
+               nasm \
+               wget \
+               yasm
           mkdir -p ./target/release/
 
       - name: Restore the rustdesk lib file
@@ -1417,8 +1699,27 @@ jobs:
             --volume "/opt/artifacts:/opt/artifacts"
           shell: /bin/bash
           install: |
-            apt update -y
-            apt-get -qq install -y git cmake g++ gcc build-essential nasm yasm curl unzip xz-utils python3 wget pkg-config ninja-build pkg-config libgtk-3-dev liblzma-dev clang libappindicator3-dev rpm
+            apt-get update -y
+            apt-get install -y \
+               build-essential \
+               clang \
+               cmake \
+               curl \
+               gcc \
+               git \
+               g++ \
+               libappindicator3-dev \
+               libgtk-3-dev \
+               liblzma-dev \
+               nasm \
+               ninja-build \
+               pkg-config \
+               python3 \
+               rpm \
+               unzip \
+               wget \
+               xz-utils \
+               yasm
           run: |
             # disable git safe.directory
             git config --global --add safe.directory "*"
@@ -1442,7 +1743,7 @@ jobs:
             pushd ~/rpmbuild/RPMS/${{ matrix.job.arch }}
             mkdir -p /opt/artifacts/rpm
             for name in rustdesk*??.rpm; do
-                mv "$name" "/opt/artifacts/rpm/${name%%.rpm}.rpm" 
+                mv "$name" "/opt/artifacts/rpm/${name%%.rpm}.rpm"
             done
             # rpm suse package
             pushd /workspace
@@ -1455,7 +1756,7 @@ jobs:
             pushd ~/rpmbuild/RPMS/${{ matrix.job.arch }}
             mkdir -p /opt/artifacts/rpm
             for name in rustdesk*??.rpm; do
-                mv "$name" "/opt/artifacts/rpm/${name%%.rpm}-suse.rpm" 
+                mv "$name" "/opt/artifacts/rpm/${name%%.rpm}-suse.rpm"
             done
 
       - name: Rename rustdesk
@@ -1605,13 +1906,24 @@ jobs:
   #           --volume "${PWD}:/workspace"
   #         shell: /bin/bash
   #         install: |
-  #           apt update -y
-  #           apt install -y rpm
+  #           apt-get update -y
+  #           apt-get install -y rpm
   #         run: |
   #           pushd /workspace
   #           # install
-  #           apt update -y
-  #           apt install -y flatpak flatpak-builder cmake g++ gcc git curl wget nasm yasm libgtk-3-dev git
+  #           apt-get update -y
+  #           apt-get install -y \
+  #             cmake \
+  #             curl \
+  #             flatpak \
+  #             flatpak-builder \
+  #             gcc \
+  #             git \
+  #             g++ \
+  #             libgtk-3-dev \
+  #             nasm \
+  #             wget \
+  #             yasm
   #           # flatpak deps
   #           flatpak --user remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
   #           flatpak --user install -y flathub org.freedesktop.Platform/${{ matrix.job.arch }}/23.08
@@ -1666,15 +1978,30 @@ jobs:
             --volume "${PWD}:/workspace"
           shell: /bin/bash
           install: |
-            apt update -y
-            apt install -y rpm git wget curl
+            apt-get update -y
+            apt-get install -y \
+               curl \
+               git \
+               rpm \
+               wget
           run: |
             # disable git safe.directory
             git config --global --add safe.directory "*"
             pushd /workspace
             # install 
-            apt update -y
-            apt install -y flatpak flatpak-builder cmake g++ gcc git curl wget nasm yasm libgtk-3-dev git
+            apt-get update -y
+            apt-get install -y \
+               cmake \
+               curl \
+               flatpak \
+               flatpak-builder \
+               gcc \
+               git \
+               g++ \
+               libgtk-3-dev \
+               nasm \
+               wget \
+               yasm
             # flatpak deps
             flatpak --user remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
             flatpak --user install -y flathub org.freedesktop.Platform/${{ matrix.job.arch }}/23.08

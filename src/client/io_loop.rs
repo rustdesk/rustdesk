@@ -7,14 +7,14 @@ use std::{
     },
 };
 
-#[cfg(windows)]
-use clipboard::{cliprdr::CliprdrClientContext, empty_clipboard, ContextSend};
+#[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
+use clipboard::ContextSend;
 use crossbeam_queue::ArrayQueue;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use hbb_common::sleep;
 #[cfg(not(target_os = "ios"))]
 use hbb_common::tokio::sync::mpsc::error::TryRecvError;
-#[cfg(windows)]
+#[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
 use hbb_common::tokio::sync::Mutex as TokioMutex;
 use hbb_common::{
     allow_err,
@@ -34,7 +34,7 @@ use hbb_common::{
         sync::mpsc,
         time::{self, Duration, Instant, Interval},
     },
-    Stream,
+    ResultType, Stream,
 };
 use scrap::CodecFormat;
 
@@ -66,7 +66,7 @@ pub struct Remote<T: InvokeUiSession> {
     last_update_jobs_status: (Instant, HashMap<i32, u64>),
     is_connected: bool,
     first_frame: bool,
-    #[cfg(windows)]
+    #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
     client_conn_id: i32, // used for file clipboard
     data_count: Arc<AtomicUsize>,
     frame_count_map: Arc<RwLock<HashMap<usize, usize>>>,
@@ -74,6 +74,7 @@ pub struct Remote<T: InvokeUiSession> {
     elevation_requested: bool,
     fps_control_map: HashMap<usize, FpsControl>,
     decode_fps_map: Arc<RwLock<HashMap<usize, usize>>>,
+    chroma: Arc<RwLock<Option<Chroma>>>,
 }
 
 impl<T: InvokeUiSession> Remote<T> {
@@ -86,6 +87,7 @@ impl<T: InvokeUiSession> Remote<T> {
         sender: mpsc::UnboundedSender<Data>,
         frame_count_map: Arc<RwLock<HashMap<usize, usize>>>,
         decode_fps: Arc<RwLock<HashMap<usize, usize>>>,
+        chroma: Arc<RwLock<Option<Chroma>>>,
     ) -> Self {
         Self {
             handler,
@@ -101,7 +103,7 @@ impl<T: InvokeUiSession> Remote<T> {
             last_update_jobs_status: (Instant::now(), Default::default()),
             is_connected: false,
             first_frame: false,
-            #[cfg(windows)]
+            #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
             client_conn_id: 0,
             data_count: Arc::new(AtomicUsize::new(0)),
             frame_count_map,
@@ -111,6 +113,7 @@ impl<T: InvokeUiSession> Remote<T> {
             elevation_requested: false,
             fps_control_map: Default::default(),
             decode_fps_map: decode_fps,
+            chroma,
         }
     }
 
@@ -124,7 +127,7 @@ impl<T: InvokeUiSession> Remote<T> {
         };
 
         match Client::start(
-            &self.handler.id,
+            &self.handler.get_id(),
             key,
             token,
             conn_type,
@@ -146,24 +149,25 @@ impl<T: InvokeUiSession> Remote<T> {
                 }
 
                 // just build for now
-                #[cfg(not(windows))]
+                #[cfg(not(any(target_os = "windows", target_os = "linux", target_os = "macos")))]
                 let (_tx_holder, mut rx_clip_client) = mpsc::unbounded_channel::<i32>();
 
-                #[cfg(windows)]
+                #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
                 let (_tx_holder, rx) = mpsc::unbounded_channel();
-                #[cfg(windows)]
+                #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
                 let mut rx_clip_client_lock = Arc::new(TokioMutex::new(rx));
-                #[cfg(windows)]
+                #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
                 {
                     let is_conn_not_default = self.handler.is_file_transfer()
                         || self.handler.is_port_forward()
                         || self.handler.is_rdp();
                     if !is_conn_not_default {
+                        log::debug!("get cliprdr client for conn_id {}", self.client_conn_id);
                         (self.client_conn_id, rx_clip_client_lock) =
-                            clipboard::get_rx_cliprdr_client(&self.handler.id);
+                            clipboard::get_rx_cliprdr_client(&self.handler.get_id());
                     };
                 }
-                #[cfg(windows)]
+                #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
                 let mut rx_clip_client = rx_clip_client_lock.lock().await;
 
                 let mut status_timer = time::interval(Duration::new(1, 0));
@@ -193,7 +197,7 @@ impl<T: InvokeUiSession> Remote<T> {
                             } else {
                                 if self.handler.is_restarting_remote_device() {
                                     log::info!("Restart remote device");
-                                    self.handler.msgbox("restarting", "Restarting Remote Device", "remote_restarting_tip", "");
+                                    self.handler.msgbox("restarting", "Restarting remote device", "remote_restarting_tip", "");
                                 } else {
                                     log::info!("Reset by the peer");
                                     self.handler.msgbox("error", "Connection Error", "Reset by the peer", "");
@@ -209,8 +213,8 @@ impl<T: InvokeUiSession> Remote<T> {
                             }
                         }
                         _msg = rx_clip_client.recv() => {
-                            #[cfg(windows)]
-                            self.handle_local_clipboard_msg(&mut peer, _msg).await;
+                            #[cfg(any(target_os="windows", target_os="linux", target_os = "macos"))]
+                           self.handle_local_clipboard_msg(&mut peer, _msg).await;
                         }
                         _ = self.timer.tick() => {
                             if last_recv_time.elapsed() >= SEC30 {
@@ -246,15 +250,23 @@ impl<T: InvokeUiSession> Remote<T> {
                                 // Correcting the inaccuracy of status_timer
                                 (k.clone(), (*v as i32) * 1000 / elapsed as i32)
                             }).collect::<HashMap<usize, i32>>();
+                            let chroma = self.chroma.read().unwrap().clone();
+                            let chroma = match chroma {
+                                Some(Chroma::I444) => "4:4:4",
+                                Some(Chroma::I420) => "4:2:0",
+                                None => "-",
+                            };
+                            let chroma = Some(chroma.to_string());
                             self.handler.update_quality_status(QualityStatus {
                                 speed: Some(speed),
                                 fps,
+                                chroma,
                                 ..Default::default()
                             });
                         }
                     }
                 }
-                log::debug!("Exit io_loop of id={}", self.handler.id);
+                log::debug!("Exit io_loop of id={}", self.handler.get_id());
                 // Stop client audio server.
                 if let Some(s) = self.stop_voice_call_sender.take() {
                     s.send(()).ok();
@@ -274,20 +286,21 @@ impl<T: InvokeUiSession> Remote<T> {
 
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
         if _set_disconnected_ok {
-            Client::try_stop_clipboard(&self.handler.id);
+            Client::try_stop_clipboard(&self.handler.get_id());
         }
 
-        #[cfg(windows)]
+        #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
         if _set_disconnected_ok {
             let conn_id = self.client_conn_id;
-            ContextSend::proc(|context: &mut CliprdrClientContext| -> u32 {
-                empty_clipboard(context, conn_id);
-                0
+            log::debug!("try empty cliprdr for conn_id {}", conn_id);
+            let _ = ContextSend::proc(|context| -> ResultType<()> {
+                context.empty_clipboard(conn_id)?;
+                Ok(())
             });
         }
     }
 
-    #[cfg(windows)]
+    #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
     async fn handle_local_clipboard_msg(
         &self,
         peer: &mut crate::client::FramedStream,
@@ -315,7 +328,12 @@ impl<T: InvokeUiSession> Remote<T> {
                     if stop {
                         ContextSend::set_is_stopped();
                     } else {
-                        allow_err!(peer.send(&crate::clipboard_file::clip_2_msg(clip)).await);
+                        if let Err(e) = ContextSend::make_sure_enabled() {
+                            log::error!("failed to restart clipboard context: {}", e);
+                        };
+                        log::debug!("Send system clipboard message to remote");
+                        let msg = crate::clipboard_file::clip_2_msg(clip);
+                        allow_err!(peer.send(&msg).await);
                     }
                 }
             },
@@ -1069,7 +1087,6 @@ impl<T: InvokeUiSession> Remote<T> {
                     }
                     Some(login_response::Union::PeerInfo(pi)) => {
                         self.handler.handle_peer_info(pi);
-                        #[cfg(not(feature = "flutter"))]
                         self.check_clipboard_file_context();
                         if !(self.handler.is_file_transfer() || self.handler.is_port_forward()) {
                             #[cfg(feature = "flutter")]
@@ -1102,7 +1119,7 @@ impl<T: InvokeUiSession> Remote<T> {
                             #[cfg(not(any(target_os = "android", target_os = "ios")))]
                             crate::plugin::handle_listen_event(
                                 crate::plugin::EVENT_ON_CONN_CLIENT.to_owned(),
-                                self.handler.id.clone(),
+                                self.handler.get_id(),
                             )
                         }
 
@@ -1140,7 +1157,7 @@ impl<T: InvokeUiSession> Remote<T> {
                         }
                     }
                 }
-                #[cfg(windows)]
+                #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
                 Some(message::Union::Cliprdr(clip)) => {
                     self.handle_cliprdr_msg(clip);
                 }
@@ -1330,6 +1347,9 @@ impl<T: InvokeUiSession> Remote<T> {
                             Ok(Permission::Recording) => {
                                 self.handler.set_permission("recording", p.enabled);
                             }
+                            Ok(Permission::BlockInput) => {
+                                self.handler.set_permission("block_input", p.enabled);
+                            }
                             _ => {}
                         }
                     }
@@ -1445,14 +1465,14 @@ impl<T: InvokeUiSession> Remote<T> {
                     }
                     Some(misc::Union::SwitchBack(_)) => {
                         #[cfg(feature = "flutter")]
-                        self.handler.switch_back(&self.handler.id);
+                        self.handler.switch_back(&self.handler.get_id());
                     }
                     #[cfg(all(feature = "flutter", feature = "plugin_framework"))]
                     #[cfg(not(any(target_os = "android", target_os = "ios")))]
                     Some(misc::Union::PluginRequest(p)) => {
                         allow_err!(crate::plugin::handle_server_event(
                             &p.id,
-                            &self.handler.id,
+                            &self.handler.get_id(),
                             &p.content
                         ));
                         // to-do: show message box on UI when error occurs?
@@ -1531,6 +1551,7 @@ impl<T: InvokeUiSession> Remote<T> {
                 }
                 Some(message::Union::PeerInfo(pi)) => {
                     self.handler.set_displays(&pi.displays);
+                    self.handler.set_platform_additions(&pi.platform_additions);
                 }
                 _ => {}
             }
@@ -1699,9 +1720,14 @@ impl<T: InvokeUiSession> Remote<T> {
         true
     }
 
-    #[cfg(not(feature = "flutter"))]
     fn check_clipboard_file_context(&self) {
-        #[cfg(windows)]
+        #[cfg(any(
+            target_os = "windows",
+            all(
+                feature = "unix-file-copy-paste",
+                any(target_os = "linux", target_os = "macos")
+            )
+        ))]
         {
             let enabled = *self.handler.server_file_transfer_enabled.read().unwrap()
                 && self.handler.lc.read().unwrap().enable_file_transfer.v;
@@ -1709,8 +1735,9 @@ impl<T: InvokeUiSession> Remote<T> {
         }
     }
 
-    #[cfg(windows)]
+    #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
     fn handle_cliprdr_msg(&self, clip: hbb_common::message_proto::Cliprdr) {
+        log::debug!("handling cliprdr msg from server peer");
         #[cfg(feature = "flutter")]
         if let Some(hbb_common::message_proto::cliprdr::Union::FormatList(_)) = &clip.union {
             if self.client_conn_id
@@ -1720,18 +1747,26 @@ impl<T: InvokeUiSession> Remote<T> {
             }
         }
 
-        if let Some(clip) = crate::clipboard_file::msg_2_clip(clip) {
-            let is_stopping_allowed = clip.is_stopping_allowed_from_peer();
-            let file_transfer_enabled = self.handler.lc.read().unwrap().enable_file_transfer.v;
-            let stop = is_stopping_allowed && !file_transfer_enabled;
-            log::debug!(
+        let Some(clip) = crate::clipboard_file::msg_2_clip(clip) else {
+            log::warn!("failed to decode cliprdr msg from server peer");
+            return;
+        };
+
+        let is_stopping_allowed = clip.is_stopping_allowed_from_peer();
+        let file_transfer_enabled = self.handler.lc.read().unwrap().enable_file_transfer.v;
+        let stop = is_stopping_allowed && !file_transfer_enabled;
+        log::debug!(
                 "Process clipboard message from server peer, stop: {}, is_stopping_allowed: {}, file_transfer_enabled: {}",
                 stop, is_stopping_allowed, file_transfer_enabled);
-            if !stop {
-                ContextSend::proc(|context: &mut CliprdrClientContext| -> u32 {
-                    clipboard::server_clip_file(context, self.client_conn_id, clip)
-                });
-            }
+        if !stop {
+            if let Err(e) = ContextSend::make_sure_enabled() {
+                log::error!("failed to restart clipboard context: {}", e);
+            };
+            let _ = ContextSend::proc(|context| -> ResultType<()> {
+                context
+                    .server_clip_file(self.client_conn_id, clip)
+                    .map_err(|e| e.into())
+            });
         }
     }
 }

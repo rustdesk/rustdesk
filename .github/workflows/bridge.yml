@@ -6,9 +6,9 @@ on:
   workflow_call:
 
 env:
-  FLUTTER_VERSION: "3.10.6"
-  FLUTTER_RUST_BRIDGE_VERSION: "1.75.3"
-  
+  FLUTTER_VERSION: "3.13.9"
+  FLUTTER_RUST_BRIDGE_VERSION: "1.80.1"
+
 jobs:
   generate_bridge:
     runs-on: ${{ matrix.job.os }}
@@ -27,9 +27,25 @@ jobs:
 
       - name: Install prerequisites
         run: |
-          sudo apt install ca-certificates -y        
-          sudo apt update -y
-          sudo apt install -y g++ gcc git curl wget nasm yasm libgtk-3-dev clang cmake libclang-dev ninja-build llvm-dev libclang-10-dev llvm-10-dev pkg-config
+          sudo apt-get install ca-certificates -y
+          sudo apt-get update -y
+          sudo apt-get install -y \
+            clang \
+            cmake \
+            curl \
+            gcc \
+            git \
+            g++ \
+            libclang-10-dev \
+            libclang-dev \
+            libgtk-3-dev \
+            llvm-10-dev \
+            llvm-dev \
+            nasm \
+            ninja-build \
+            pkg-config \
+            wget \
+            yasm
 
       - name: Install Rust toolchain
         uses: actions-rs/toolchain@v1
@@ -74,5 +90,5 @@ jobs:
           path: |
             ./src/bridge_generated.rs
             ./src/bridge_generated.io.rs
-            ./flutter/lib/generated_bridge.dart 
+            ./flutter/lib/generated_bridge.dart
             ./flutter/lib/generated_bridge.freezed.dart

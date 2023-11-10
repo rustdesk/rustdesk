@@ -159,7 +159,7 @@
 		97C146E61CF9000F007C117D /* Project object */ = {
 			isa = PBXProject;
 			attributes = {
-				LastUpgradeCheck = 1300;
+				LastUpgradeCheck = 1430;
 				ORGANIZATIONNAME = "";
 				TargetAttributes = {
 					97C146ED1CF9000F007C117D = {
@@ -434,7 +434,7 @@
 					"-framework",
 					"\"video_player_avfoundation\"",
 					"-framework",
-					"\"wakelock\"",
+					"\"wakelock_plus\"",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.carriez.flutterHbb;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -632,7 +632,7 @@
 					"-framework",
 					"\"video_player_avfoundation\"",
 					"-framework",
-					"\"wakelock\"",
+					"\"wakelock_plus\"",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.carriez.flutterHbb;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -722,7 +722,7 @@
 					"-framework",
 					"\"video_player_avfoundation\"",
 					"-framework",
-					"\"wakelock\"",
+					"\"wakelock_plus\"",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.carriez.flutterHbb;
 				PRODUCT_NAME = "$(TARGET_NAME)";

@@ -12,6 +12,9 @@ use scrap::Display;
 
 pub const NAME: &'static str = "display";
 
+#[cfg(all(windows, feature = "virtual_display_driver"))]
+const DUMMY_DISPLAY_SIDE_MAX_SIZE: usize = 1024;
+
 struct ChangedResolution {
     original: (i32, i32),
     changed: (i32, i32),
@@ -154,6 +157,20 @@ fn displays_to_msg(displays: Vec<DisplayInfo>) -> Message {
         ..Default::default()
     };
     pi.displays = displays.clone();
+
+    #[cfg(all(windows, feature = "virtual_display_driver"))]
+    if crate::platform::is_installed() {
+        let virtual_displays = crate::virtual_display_manager::get_virtual_displays();
+        if !virtual_displays.is_empty() {
+            let mut platform_additions = serde_json::Map::new();
+            platform_additions.insert(
+                "virtual_displays".into(),
+                serde_json::json!(&virtual_displays),
+            );
+            pi.platform_additions = serde_json::to_string(&platform_additions).unwrap_or("".into());
+        }
+    }
+
     // current_display should not be used in server.
     // It is set to 0 for compatibility with old clients.
     pi.current_display = 0;
@@ -166,11 +183,6 @@ fn check_get_displays_changed_msg() -> Option<Message> {
     check_update_displays(&try_get_displays().ok()?);
     let displays = SYNC_DISPLAYS.lock().unwrap().get_update_sync_displays()?;
     Some(displays_to_msg(displays))
-}
-
-#[cfg(all(windows, feature = "virtual_display_driver"))]
-pub fn try_plug_out_virtual_display() {
-    let _res = virtual_display_manager::plug_out_headless();
 }
 
 fn run(sp: EmptyExtraFieldService) -> ResultType<()> {
@@ -312,9 +324,18 @@ fn no_displays(displays: &Vec<Display>) -> bool {
         true
     } else if display_len == 1 {
         let display = &displays[0];
-        let dummy_display_side_max_size = 800;
-        display.width() <= dummy_display_side_max_size
-            && display.height() <= dummy_display_side_max_size
+        if display.width() > DUMMY_DISPLAY_SIDE_MAX_SIZE
+            || display.height() > DUMMY_DISPLAY_SIDE_MAX_SIZE
+        {
+            return false;
+        }
+        let any_real = crate::platform::resolutions(&display.name())
+            .iter()
+            .any(|r| {
+                (r.height as usize) > DUMMY_DISPLAY_SIDE_MAX_SIZE
+                    || (r.width as usize) > DUMMY_DISPLAY_SIDE_MAX_SIZE
+            });
+        !any_real
     } else {
         false
     }
@@ -329,7 +350,7 @@ pub fn try_get_displays() -> ResultType<Vec<Display>> {
 #[cfg(all(windows, feature = "virtual_display_driver"))]
 pub fn try_get_displays() -> ResultType<Vec<Display>> {
     let mut displays = Display::all()?;
-    if no_displays(&displays) {
+    if crate::platform::is_installed() && no_displays(&displays) {
         log::debug!("no displays, create virtual display");
         if let Err(e) = virtual_display_manager::plug_in_headless() {
             log::error!("plug in headless failed {}", e);

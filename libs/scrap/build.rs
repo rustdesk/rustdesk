@@ -23,14 +23,18 @@ fn link_pkg_config(_name: &str) -> Vec<PathBuf> {
     unimplemented!()
 }
 
-/// Link vcppkg package.
+/// Link vcpkg package.
 fn link_vcpkg(mut path: PathBuf, name: &str) -> PathBuf {
     let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap();
     let mut target_arch = std::env::var("CARGO_CFG_TARGET_ARCH").unwrap();
     if target_arch == "x86_64" {
         target_arch = "x64".to_owned();
+    } else if target_arch == "x86" {
+        target_arch = "x86".to_owned();
     } else if target_arch == "aarch64" {
         target_arch = "arm64".to_owned();
+    } else {
+        target_arch = "arm".to_owned();
     }
     let mut target = if target_os == "macos" {
         if target_arch == "x64" {
@@ -197,6 +201,7 @@ fn main() {
     find_package("libyuv");
     gen_vcpkg_package("libvpx", "vpx_ffi.h", "vpx_ffi.rs", "^[vV].*");
     gen_vcpkg_package("aom", "aom_ffi.h", "aom_ffi.rs", "^(aom|AOM|OBU|AV1).*");
+    gen_vcpkg_package("libyuv", "yuv_ffi.h", "yuv_ffi.rs", ".*");
 
     // there is problem with cfg(target_os) in build.rs, so use our workaround
     let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap();

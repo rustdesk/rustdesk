@@ -107,7 +107,7 @@ class _ToolbarTheme {
   static const double dividerHeight = 12.0;
 
   static const double buttonSize = 32;
-  static const double buttonHMargin = 3;
+  static const double buttonHMargin = 2;
   static const double buttonVMargin = 6;
   static const double iconRadius = 8;
   static const double elevation = 3;
@@ -125,12 +125,13 @@ class _ToolbarTheme {
       : EdgeInsets.fromLTRB(6, 14, 6, 14);
   static const double menuButtonBorderRadius = 3.0;
 
+  static get borderColor =>
+      MyTheme.currentThemeMode() == ThemeMode.light ? bordLight : bordDark;
+
   static final defaultMenuStyle = MenuStyle(
     side: MaterialStateProperty.all(BorderSide(
       width: 1,
-      color: MyTheme.currentThemeMode() == ThemeMode.light
-          ? _ToolbarTheme.bordLight
-          : _ToolbarTheme.bordDark,
+      color: borderColor,
     )),
     shape: MaterialStatePropertyAll(RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(_ToolbarTheme.menuBorderRadius))),
@@ -141,6 +142,19 @@ class _ToolbarTheme {
     padding: MaterialStatePropertyAll(EdgeInsets.zero),
     overlayColor: MaterialStatePropertyAll(Colors.transparent),
   );
+
+  static Widget borderWrapper(Widget child, BorderRadius borderRadius) {
+    return Container(
+      decoration: BoxDecoration(
+        border: Border.all(
+          color: borderColor,
+          width: 1,
+        ),
+        borderRadius: borderRadius,
+      ),
+      child: child,
+    );
+  }
 }
 
 typedef DismissFunc = void Function();
@@ -420,6 +434,9 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
       if (show.isTrue && _dragging.isFalse) {
         triggerAutoHide();
       }
+      final borderRadius = BorderRadius.vertical(
+        bottom: Radius.circular(5),
+      );
       return Align(
         alignment: FractionalOffset(_fractionX.value, 0),
         child: Offstage(
@@ -427,6 +444,7 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
           child: Material(
             elevation: _ToolbarTheme.elevation,
             shadowColor: MyTheme.color(context).shadow,
+            borderRadius: borderRadius,
             child: _DraggableShowHide(
               sessionId: widget.ffi.sessionId,
               dragging: _dragging,
@@ -434,6 +452,7 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
               show: show,
               setFullscreen: _setFullscreen,
               setMinimize: _minimize,
+              borderRadius: borderRadius,
             ),
           ),
         ),
@@ -475,13 +494,14 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
     }
     toolbarItems.add(_RecordMenu());
     toolbarItems.add(_CloseMenu(id: widget.id, ffi: widget.ffi));
+    final toolbarBorderRadius = BorderRadius.all(Radius.circular(4.0));
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
         Material(
           elevation: _ToolbarTheme.elevation,
           shadowColor: MyTheme.color(context).shadow,
-          borderRadius: BorderRadius.all(Radius.circular(4.0)),
+          borderRadius: toolbarBorderRadius,
           color: Theme.of(context)
               .menuBarTheme
               .style
@@ -491,13 +511,15 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
             scrollDirection: Axis.horizontal,
             child: Theme(
               data: themeData(),
-              child: Row(
-                children: [
-                  SizedBox(width: _ToolbarTheme.buttonHMargin * 2),
-                  ...toolbarItems,
-                  SizedBox(width: _ToolbarTheme.buttonHMargin * 2)
-                ],
-              ),
+              child: _ToolbarTheme.borderWrapper(
+                  Row(
+                    children: [
+                      SizedBox(width: _ToolbarTheme.buttonHMargin * 2),
+                      ...toolbarItems,
+                      SizedBox(width: _ToolbarTheme.buttonHMargin * 2)
+                    ],
+                  ),
+                  toolbarBorderRadius),
             ),
           ),
         ),
@@ -598,14 +620,19 @@ class _MonitorMenu extends StatelessWidget {
       useTextureRender && ffi.ffiModel.pi.isSupportMultiDisplay;
 
   @override
-  Widget build(BuildContext context) =>
-      showMonitorsToolbar ? buildMultiMonitorMenu() : buildMonitorMenu();
+  Widget build(BuildContext context) => showMonitorsToolbar
+      ? buildMultiMonitorMenu()
+      : Obx(() => buildMonitorMenu());
 
   Widget buildMonitorMenu() {
+    final width = SimpleWrapper<double>(0);
+    final monitorsIcon =
+        globalMonitorsWidget(width, Colors.white, Colors.black38);
     return _IconSubmenuButton(
         tooltip: 'Select Monitor',
-        icon: icon(),
+        icon: monitorsIcon,
         ffi: ffi,
+        width: width.value,
         color: _ToolbarTheme.blueColor,
         hoverColor: _ToolbarTheme.hoverBlueColor,
         menuStyle: MenuStyle(
@@ -644,26 +671,37 @@ class _MonitorMenu extends StatelessWidget {
         child: Text(translate('Show displays as individual windows')));
   }
 
+  buildOneMonitorButton(i, curDisplay) => Text(
+        '${i + 1}',
+        style: TextStyle(
+          color: i == curDisplay
+              ? _ToolbarTheme.blueColor
+              : _ToolbarTheme.inactiveColor,
+          fontSize: 12,
+          fontWeight: FontWeight.bold,
+        ),
+      );
+
   List<Widget> buildMonitorList(bool isMulti) {
     final List<Widget> monitorList = [];
     final pi = ffi.ffiModel.pi;
 
-    getMonitorText(int i) {
-      if (i == kAllDisplayValue) {
-        if (pi.displays.length == 2) {
-          return '1|2';
-        } else {
-          return 'ALL';
-        }
-      } else {
-        return (i + 1).toString();
-      }
-    }
-
     buildMonitorButton(int i) => Obx(() {
           RxInt display = CurrentDisplayState.find(id);
+
+          final isAllMonitors = i == kAllDisplayValue;
+          final width = SimpleWrapper<double>(0);
+          Widget? monitorsIcon;
+          if (isAllMonitors) {
+            monitorsIcon = globalMonitorsWidget(
+                width, Colors.white, _ToolbarTheme.blueColor);
+          }
           return _IconMenuButton(
-            tooltip: isMulti ? '' : '#${i + 1} monitor',
+            tooltip: isMulti
+                ? ''
+                : isAllMonitors
+                    ? 'all monitors'
+                    : '#${i + 1} monitor',
             hMargin: isMulti ? null : 6,
             vMargin: isMulti ? null : 12,
             topLevel: false,
@@ -673,33 +711,25 @@ class _MonitorMenu extends StatelessWidget {
             hoverColor: i == display.value
                 ? _ToolbarTheme.hoverBlueColor
                 : _ToolbarTheme.hoverInactiveColor,
-            icon: Container(
-              alignment: AlignmentDirectional.center,
-              constraints:
-                  const BoxConstraints(minHeight: _ToolbarTheme.height),
-              child: Stack(
-                alignment: Alignment.center,
-                children: [
-                  SvgPicture.asset(
-                    "assets/screen.svg",
-                    colorFilter:
-                        ColorFilter.mode(Colors.white, BlendMode.srcIn),
-                  ),
-                  Obx(
-                    () => Text(
-                      getMonitorText(i),
-                      style: TextStyle(
-                        color: i == display.value
-                            ? _ToolbarTheme.blueColor
-                            : _ToolbarTheme.inactiveColor,
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                      ),
+            width: isAllMonitors ? width.value : null,
+            icon: isAllMonitors
+                ? monitorsIcon
+                : Container(
+                    alignment: AlignmentDirectional.center,
+                    constraints:
+                        const BoxConstraints(minHeight: _ToolbarTheme.height),
+                    child: Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        SvgPicture.asset(
+                          "assets/screen.svg",
+                          colorFilter:
+                              ColorFilter.mode(Colors.white, BlendMode.srcIn),
+                        ),
+                        Obx(() => buildOneMonitorButton(i, display.value)),
+                      ],
                     ),
                   ),
-                ],
-              ),
-            ),
             onPressed: () => onPressed(i, pi),
           );
         });
@@ -713,26 +743,69 @@ class _MonitorMenu extends StatelessWidget {
     return monitorList;
   }
 
-  icon() {
-    final pi = ffi.ffiModel.pi;
+  globalMonitorsWidget(
+      SimpleWrapper<double> width, Color activeTextColor, Color activeBgColor) {
+    getMonitors() {
+      final pi = ffi.ffiModel.pi;
+      RxInt display = CurrentDisplayState.find(id);
+      final rect = ffi.ffiModel.globalDisplaysRect();
+      if (rect == null) {
+        return Offstage();
+      }
+
+      final scale = _ToolbarTheme.buttonSize / rect.height * 0.75;
+      final startY = (_ToolbarTheme.buttonSize - rect.height * scale) * 0.5;
+      final startX = startY;
+
+      final children = <Widget>[];
+      for (var i = 0; i < pi.displays.length; i++) {
+        final d = pi.displays[i];
+        final fontSize = (d.width * scale < d.height * scale
+                ? d.width * scale
+                : d.height * scale) *
+            0.65;
+        children.add(Positioned(
+          left: (d.x - rect.left) * scale + startX,
+          top: (d.y - rect.top) * scale + startY,
+          width: d.width * scale,
+          height: d.height * scale,
+          child: Container(
+            decoration: BoxDecoration(
+              border: Border.all(
+                color: Colors.grey,
+                width: 1.0,
+              ),
+              color: display.value == i ? activeBgColor : Colors.white,
+            ),
+            child: Center(
+                child: Text(
+              '${i + 1}',
+              style: TextStyle(
+                color: display.value == i
+                    ? activeTextColor
+                    : _ToolbarTheme.inactiveColor,
+                fontSize: fontSize,
+                fontWeight: FontWeight.bold,
+              ),
+            )),
+          ),
+        ));
+      }
+      width.value = rect.width * scale + startX * 2;
+      return SizedBox(
+        width: width.value,
+        height: rect.height * scale + startY * 2,
+        child: Stack(
+          children: children,
+        ),
+      );
+    }
+
     return Stack(
       alignment: Alignment.center,
       children: [
-        SvgPicture.asset(
-          "assets/screen.svg",
-          colorFilter: ColorFilter.mode(Colors.white, BlendMode.srcIn),
-        ),
-        Obx(() {
-          RxInt display = CurrentDisplayState.find(id);
-          return Text(
-            '${display.value == kAllDisplayValue ? 'A' : '${display.value + 1}'}/${pi.displays.length}',
-            style: const TextStyle(
-              color: _ToolbarTheme.blueColor,
-              fontSize: 8,
-              fontWeight: FontWeight.bold,
-            ),
-          );
-        }),
+        SizedBox(height: _ToolbarTheme.buttonSize),
+        getMonitors(),
       ],
     );
   }
@@ -978,6 +1051,10 @@ class _DisplayMenuState extends State<_DisplayMenu> {
             ffi: widget.ffi,
             screenAdjustor: _screenAdjustor,
           ),
+          _VirtualDisplayMenu(
+            id: widget.id,
+            ffi: widget.ffi,
+          ),
           Divider(),
           toggles(),
           widget.pluginItem,
@@ -1146,8 +1223,9 @@ class _ResolutionsMenuState extends State<_ResolutionsMenu> {
   @override
   Widget build(BuildContext context) {
     final isVirtualDisplay = ffiModel.isVirtualDisplayResolution;
-    final visible =
-        ffiModel.keyboard && (isVirtualDisplay || resolutions.length > 1);
+    final visible = ffiModel.keyboard &&
+        (isVirtualDisplay || resolutions.length > 1) &&
+        pi.currentDisplay != kAllDisplayValue;
     if (!visible) return Offstage();
     final showOriginalBtn =
         ffiModel.isOriginalResolutionSet && !ffiModel.isOriginalResolution;
@@ -1384,6 +1462,70 @@ class _ResolutionsMenuState extends State<_ResolutionsMenu> {
     }
     return bestFitResolution.width == rect?.width.toInt() &&
         bestFitResolution.height == rect?.height.toInt();
+  }
+}
+
+class _VirtualDisplayMenu extends StatefulWidget {
+  final String id;
+  final FFI ffi;
+
+  _VirtualDisplayMenu({
+    Key? key,
+    required this.id,
+    required this.ffi,
+  }) : super(key: key);
+
+  @override
+  State<_VirtualDisplayMenu> createState() => _VirtualDisplayMenuState();
+}
+
+class _VirtualDisplayMenuState extends State<_VirtualDisplayMenu> {
+  @override
+  void initState() {
+    super.initState();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (widget.ffi.ffiModel.pi.platform != kPeerPlatformWindows) {
+      return Offstage();
+    }
+    if (!widget.ffi.ffiModel.pi.isInstalled) {
+      return Offstage();
+    }
+
+    final virtualDisplays = widget.ffi.ffiModel.pi.virtualDisplays;
+
+    final children = <Widget>[];
+    for (var i = 0; i < kMaxVirtualDisplayCount; i++) {
+      children.add(CkbMenuButton(
+        value: virtualDisplays.contains(i + 1),
+        onChanged: (bool? value) async {
+          if (value != null) {
+            bind.sessionToggleVirtualDisplay(
+                sessionId: widget.ffi.sessionId, index: i + 1, on: value);
+          }
+        },
+        child: Text('${translate('Virtual display')} ${i + 1}'),
+        ffi: widget.ffi,
+      ));
+    }
+    children.add(Divider());
+    children.add(MenuButton(
+      onPressed: () {
+        bind.sessionToggleVirtualDisplay(
+            sessionId: widget.ffi.sessionId,
+            index: kAllVirtualDisplay,
+            on: false);
+      },
+      ffi: widget.ffi,
+      child: Text(translate('Plug out all')),
+    ));
+    return _SubmenuButton(
+      ffi: widget.ffi,
+      menuChildren: children,
+      child: Text(translate("Virtual display")),
+    );
   }
 }
 
@@ -1693,6 +1835,7 @@ class _IconMenuButton extends StatefulWidget {
   final double? hMargin;
   final double? vMargin;
   final bool topLevel;
+  final double? width;
   const _IconMenuButton({
     Key? key,
     this.assetName,
@@ -1704,6 +1847,7 @@ class _IconMenuButton extends StatefulWidget {
     this.hMargin,
     this.vMargin,
     this.topLevel = true,
+    this.width,
   }) : super(key: key);
 
   @override
@@ -1724,7 +1868,7 @@ class _IconMenuButtonState extends State<_IconMenuButton> {
           height: _ToolbarTheme.buttonSize,
         );
     var button = SizedBox(
-      width: _ToolbarTheme.buttonSize,
+      width: widget.width ?? _ToolbarTheme.buttonSize,
       height: _ToolbarTheme.buttonSize,
       child: MenuItemButton(
           style: ButtonStyle(
@@ -1771,18 +1915,20 @@ class _IconSubmenuButton extends StatefulWidget {
   final List<Widget> menuChildren;
   final MenuStyle? menuStyle;
   final FFI ffi;
+  final double? width;
 
-  _IconSubmenuButton(
-      {Key? key,
-      this.svg,
-      this.icon,
-      required this.tooltip,
-      required this.color,
-      required this.hoverColor,
-      required this.menuChildren,
-      required this.ffi,
-      this.menuStyle})
-      : super(key: key);
+  _IconSubmenuButton({
+    Key? key,
+    this.svg,
+    this.icon,
+    required this.tooltip,
+    required this.color,
+    required this.hoverColor,
+    required this.menuChildren,
+    required this.ffi,
+    this.menuStyle,
+    this.width,
+  }) : super(key: key);
 
   @override
   State<_IconSubmenuButton> createState() => _IconSubmenuButtonState();
@@ -1802,7 +1948,7 @@ class _IconSubmenuButtonState extends State<_IconSubmenuButton> {
           height: _ToolbarTheme.buttonSize,
         );
     final button = SizedBox(
-        width: _ToolbarTheme.buttonSize,
+        width: widget.width ?? _ToolbarTheme.buttonSize,
         height: _ToolbarTheme.buttonSize,
         child: SubmenuButton(
             menuStyle: widget.menuStyle ?? _ToolbarTheme.defaultMenuStyle,
@@ -1948,6 +2094,7 @@ class _DraggableShowHide extends StatefulWidget {
   final RxDouble fractionX;
   final RxBool dragging;
   final RxBool show;
+  final BorderRadius borderRadius;
 
   final Function(bool) setFullscreen;
   final Function() setMinimize;
@@ -1960,6 +2107,7 @@ class _DraggableShowHide extends StatefulWidget {
     required this.show,
     required this.setFullscreen,
     required this.setMinimize,
+    required this.borderRadius,
   }) : super(key: key);
 
   @override
@@ -2096,9 +2244,11 @@ class _DraggableShowHideState extends State<_DraggableShowHide> {
               .style
               ?.backgroundColor
               ?.resolve(MaterialState.values.toSet()),
-          borderRadius: BorderRadius.vertical(
-            bottom: Radius.circular(5),
+          border: Border.all(
+            color: _ToolbarTheme.borderColor,
+            width: 1,
           ),
+          borderRadius: widget.borderRadius,
         ),
         child: SizedBox(
           height: 20,

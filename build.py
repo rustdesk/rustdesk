@@ -24,17 +24,20 @@ else:
 flutter_build_dir_2 = f'flutter/{flutter_build_dir}'
 skip_cargo = False
 
+
 def get_arch() -> str:
     custom_arch = os.environ.get("ARCH")
     if custom_arch is None:
         return "amd64"
     return custom_arch
 
+
 def system2(cmd):
     err = os.system(cmd)
     if err != 0:
         print(f"Error occurred when executing: {cmd}. Exiting.")
         sys.exit(-1)
+
 
 def get_version():
     with open("Cargo.toml", encoding="utf-8") as fh:
@@ -124,6 +127,11 @@ def make_parser():
         help='Build windows portable'
     )
     parser.add_argument(
+        '--unix-file-copy-paste',
+        action='store_true',
+        help='Build with unix file copy paste feature'
+    )
+    parser.add_argument(
         '--flatpak',
         action='store_true',
         help='Build rustdesk libs with the flatpak feature enabled'
@@ -172,8 +180,8 @@ def generate_build_script_for_docker():
             export VCPKG_ROOT=`pwd`/vcpkg
             git clone https://github.com/microsoft/vcpkg
             vcpkg/bootstrap-vcpkg.sh
-            vcpkg/vcpkg install libvpx libyuv opus
             popd
+            $VCPKG_ROOT/vcpkg install --x-install-root="$VCPKG_ROOT/installed"
             # build rustdesk
             ./build.py --flutter --hwcodec
         ''')
@@ -185,6 +193,7 @@ def download_extract_features(features, res_dir):
     import re
 
     proxy = ''
+
     def req(url):
         if not proxy:
             return url
@@ -196,9 +205,9 @@ def download_extract_features(features, res_dir):
 
     for (feat, feat_info) in features.items():
         includes = feat_info['include'] if 'include' in feat_info and feat_info['include'] else []
-        includes = [ re.compile(p) for p in includes ]
+        includes = [re.compile(p) for p in includes]
         excludes = feat_info['exclude'] if 'exclude' in feat_info and feat_info['exclude'] else []
-        excludes = [ re.compile(p) for p in excludes ]
+        excludes = [re.compile(p) for p in excludes]
 
         print(f'{feat} download begin')
         download_filename = feat_info['zip_url'].split('/')[-1]
@@ -272,6 +281,8 @@ def get_features(args):
         features.append('flatpak')
     if args.appimage:
         features.append('appimage')
+    if args.unix_file_copy_paste:
+        features.append('unix-file-copy-paste')
     print("features:", features)
     return features
 
@@ -350,6 +361,7 @@ def build_flutter_deb(version, features):
     os.rename('rustdesk.deb', '../rustdesk-%s.deb' % version)
     os.chdir("..")
 
+
 def build_deb_from_folder(version, binary_folder):
     os.chdir('flutter')
     system2('mkdir -p tmpdeb/usr/bin/')
@@ -388,10 +400,12 @@ def build_deb_from_folder(version, binary_folder):
     os.rename('rustdesk.deb', '../rustdesk-%s.deb' % version)
     os.chdir("..")
 
+
 def build_flutter_dmg(version, features):
     if not skip_cargo:
         # set minimum osx build target, now is 10.14, which is the same as the flutter xcode project
-        system2(f'MACOSX_DEPLOYMENT_TARGET=10.14 cargo build --features {features} --lib --release')
+        system2(
+            f'MACOSX_DEPLOYMENT_TARGET=10.14 cargo build --features {features} --lib --release')
     # copy dylib
     system2(
         "cp target/release/liblibrustdesk.dylib target/release/librustdesk.dylib")
@@ -557,7 +571,8 @@ def main():
     codesign -s "Developer ID Application: {0}" --force --options runtime  ./target/release/bundle/osx/RustDesk.app/Contents/MacOS/*
     codesign -s "Developer ID Application: {0}" --force --options runtime  ./target/release/bundle/osx/RustDesk.app
     '''.format(pa))
-                system2('create-dmg "RustDesk %s.dmg" "target/release/bundle/osx/RustDesk.app"' % version)
+                system2(
+                    'create-dmg "RustDesk %s.dmg" "target/release/bundle/osx/RustDesk.app"' % version)
                 os.rename('RustDesk %s.dmg' %
                           version, 'rustdesk-%s.dmg' % version)
                 if pa:
@@ -577,7 +592,7 @@ def main():
                 else:
                     print('Not signed')
             else:
-                # buid deb package
+                # build deb package
                 system2(
                     'mv target/release/bundle/deb/rustdesk*.deb ./rustdesk.deb')
                 system2('dpkg-deb -R rustdesk.deb tmpdeb')

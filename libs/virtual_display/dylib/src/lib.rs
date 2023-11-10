@@ -1,9 +1,10 @@
 #[cfg(windows)]
 pub mod win10;
+use hbb_common::ResultType;
 #[cfg(windows)]
-use hbb_common::lazy_static;
-use hbb_common::{bail, ResultType};
-use std::path::Path;
+use hbb_common::{bail, lazy_static};
+#[cfg(windows)]
+use std::path::PathBuf;
 
 #[cfg(windows)]
 use std::sync::Mutex;
@@ -33,18 +34,25 @@ pub fn download_driver() -> ResultType<()> {
     Ok(())
 }
 
-#[no_mangle]
-pub fn install_update_driver(_reboot_required: &mut bool) -> ResultType<()> {
-    #[cfg(windows)]
+#[cfg(windows)]
+fn get_driver_install_abs_path() -> ResultType<PathBuf> {
     let install_path = win10::DRIVER_INSTALL_PATH;
-    #[cfg(not(windows))]
-    let install_path = "";
-
-    let abs_path = Path::new(install_path).canonicalize()?;
+    let exe_file = std::env::current_exe()?;
+    let abs_path = match exe_file.parent() {
+        Some(cur_dir) => cur_dir.join(install_path),
+        None => bail!(
+            "Invalid exe parent for {}",
+            exe_file.to_string_lossy().as_ref()
+        ),
+    };
     if !abs_path.exists() {
         bail!("{} not exists", install_path)
     }
+    Ok(abs_path)
+}
 
+#[no_mangle]
+pub fn install_update_driver(_reboot_required: &mut bool) -> ResultType<()> {
     #[cfg(windows)]
     unsafe {
         {
@@ -54,6 +62,7 @@ pub fn install_update_driver(_reboot_required: &mut bool) -> ResultType<()> {
                 bail!("{}", e);
             }
 
+            let abs_path = get_driver_install_abs_path()?;
             let full_install_path: Vec<u16> = abs_path
                 .to_string_lossy()
                 .as_ref()
@@ -77,18 +86,9 @@ pub fn install_update_driver(_reboot_required: &mut bool) -> ResultType<()> {
 #[no_mangle]
 pub fn uninstall_driver(_reboot_required: &mut bool) -> ResultType<()> {
     #[cfg(windows)]
-    let install_path = win10::DRIVER_INSTALL_PATH;
-    #[cfg(not(windows))]
-    let install_path = "";
-
-    let abs_path = Path::new(install_path).canonicalize()?;
-    if !abs_path.exists() {
-        bail!("{} not exists", install_path)
-    }
-
-    #[cfg(windows)]
     unsafe {
         {
+            let abs_path = get_driver_install_abs_path()?;
             let full_install_path: Vec<u16> = abs_path
                 .to_string_lossy()
                 .as_ref()

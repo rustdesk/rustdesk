@@ -54,10 +54,12 @@ class _ConnectionPageState extends State<ConnectionPage> {
   }
   bool isPeersLoading = false;
   bool isPeersLoaded = false;
+  StreamSubscription? _uniLinksSubscription;
 
   @override
   void initState() {
     super.initState();
+    _uniLinksSubscription = listenUniLinks();
     if (_idController.text.isEmpty) {
       () async {
         final lastRemoteId = await bind.mainGetLastRemoteId();
@@ -245,6 +247,12 @@ class _ConnectionPageState extends State<ConnectionPage> {
                     inputFormatters: [IDTextInputFormatter()],
                      );
                     },
+                    onSelected: (option) {
+                      setState(() {
+                        _idController.id = option.id;
+                        FocusScope.of(context).unfocus();
+                      });
+                    },
                     optionsViewBuilder: (BuildContext context, AutocompleteOnSelected<Peer> onSelected, Iterable<Peer> options) {
                       double maxHeight = options.length * 50;
                       maxHeight = maxHeight > 200 ? 200 : maxHeight;
@@ -268,7 +276,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
                                       )))
                               : ListView(
                               padding: EdgeInsets.only(top: 5),
-                              children: options.map((peer) => AutocompletePeerTile(idController: _idController, peer: peer)).toList(),
+                              children: options.map((peer) => AutocompletePeerTile(onSelect: () => onSelected(peer), peer: peer)).toList(),
                             ))))
                       );
                     },
@@ -306,6 +314,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
 
   @override
   void dispose() {
+    _uniLinksSubscription?.cancel();
     _idController.dispose();
     if (Get.isRegistered<IDTextEditingController>()) {
       Get.delete<IDTextEditingController>();

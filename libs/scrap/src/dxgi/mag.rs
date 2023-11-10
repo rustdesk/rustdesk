@@ -245,9 +245,6 @@ pub struct CapturerMag {
     rect: RECT,
     width: usize,
     height: usize,
-
-    use_yuv: bool,
-    data: Vec<u8>,
 }
 
 impl Drop for CapturerMag {
@@ -262,12 +259,7 @@ impl CapturerMag {
         MagInterface::new().is_ok()
     }
 
-    pub(crate) fn new(
-        origin: (i32, i32),
-        width: usize,
-        height: usize,
-        use_yuv: bool,
-    ) -> Result<Self> {
+    pub(crate) fn new(origin: (i32, i32), width: usize, height: usize) -> Result<Self> {
         unsafe {
             let x = GetSystemMetrics(SM_XVIRTUALSCREEN);
             let y = GetSystemMetrics(SM_YVIRTUALSCREEN);
@@ -311,8 +303,6 @@ impl CapturerMag {
             },
             width,
             height,
-            use_yuv,
-            data: Vec::new(),
         };
 
         unsafe {
@@ -435,10 +425,6 @@ impl CapturerMag {
         }
 
         Ok(s)
-    }
-
-    pub(crate) fn set_use_yuv(&mut self, use_yuv: bool) {
-        self.use_yuv = use_yuv;
     }
 
     pub(crate) fn exclude(&mut self, cls: &str, name: &str) -> Result<bool> {
@@ -579,22 +565,9 @@ impl CapturerMag {
             ));
         }
 
-        if self.use_yuv {
-            self.data.resize(lock.1.len(), 0);
-            unsafe {
-                std::ptr::copy_nonoverlapping(&mut lock.1[0], &mut self.data[0], self.data.len());
-            }
-            crate::common::bgra_to_i420(
-                self.width as usize,
-                self.height as usize,
-                &self.data,
-                data,
-            );
-        } else {
-            data.resize(lock.1.len(), 0);
-            unsafe {
-                std::ptr::copy_nonoverlapping(&mut lock.1[0], &mut data[0], data.len());
-            }
+        data.resize(lock.1.len(), 0);
+        unsafe {
+            std::ptr::copy_nonoverlapping(&mut lock.1[0], &mut data[0], data.len());
         }
 
         Ok(())
@@ -651,7 +624,7 @@ mod tests {
     use super::*;
     #[test]
     fn test() {
-        let mut capture_mag = CapturerMag::new((0, 0), 1920, 1080, false).unwrap();
+        let mut capture_mag = CapturerMag::new((0, 0), 1920, 1080).unwrap();
         capture_mag.exclude("", "RustDeskPrivacyWindow").unwrap();
         std::thread::sleep(std::time::Duration::from_millis(1000 * 10));
         let mut data = Vec::new();

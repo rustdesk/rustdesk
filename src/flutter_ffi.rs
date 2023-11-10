@@ -395,6 +395,7 @@ pub fn session_is_keyboard_mode_supported(session_id: SessionID, mode: String) -
             SyncReturn(is_keyboard_mode_supported(
                 &mode,
                 session.get_peer_version(),
+                &session.peer_platform(),
             ))
         } else {
             SyncReturn(false)
@@ -429,13 +430,7 @@ pub fn session_ctrl_alt_del(session_id: SessionID) {
 }
 
 pub fn session_switch_display(session_id: SessionID, value: Vec<i32>) {
-    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
-        if value.len() == 1 {
-            session.switch_display(value[0]);
-        } else {
-            session.capture_displays(vec![], vec![], value);
-        }
-    }
+    sessions::session_switch_display(session_id, value);
 }
 
 pub fn session_handle_flutter_key_event(
@@ -1094,7 +1089,7 @@ pub fn main_get_user_default_option(key: String) -> SyncReturn<String> {
 }
 
 pub fn main_handle_relay_id(id: String) -> String {
-    handle_relay_id(id)
+    handle_relay_id(&id).to_owned()
 }
 
 pub fn main_get_main_display() -> SyncReturn<String> {
@@ -1401,6 +1396,12 @@ pub fn session_on_waiting_for_image_dialog_show(session_id: SessionID) {
     super::flutter::session_on_waiting_for_image_dialog_show(session_id);
 }
 
+pub fn session_toggle_virtual_display(session_id: SessionID, index: i32, on: bool) {
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
+        session.toggle_virtual_display(index, on);
+    }
+}
+
 pub fn main_set_home_dir(_home: String) {
     #[cfg(any(target_os = "android", target_os = "ios"))]
     {
@@ -1526,6 +1527,21 @@ pub fn cm_elevate_portable(conn_id: i32) {
 pub fn cm_switch_back(conn_id: i32) {
     #[cfg(not(any(target_os = "ios")))]
     crate::ui_cm_interface::switch_back(conn_id);
+}
+
+pub fn cm_get_config(name: String) -> String {
+    #[cfg(not(target_os = "ios"))]
+    {
+        if let Ok(Some(v)) = crate::ipc::get_config(&name) {
+            v
+        } else {
+            "".to_string()
+        }
+    }
+    #[cfg(target_os = "ios")]
+    {
+        "".to_string()
+    }
 }
 
 pub fn main_get_build_date() -> String {
@@ -1717,6 +1733,17 @@ pub fn main_use_texture_render() -> SyncReturn<bool> {
     {
         SyncReturn(true)
     }
+}
+
+pub fn main_has_file_clipboard() -> SyncReturn<bool> {
+    let ret = cfg!(any(
+        target_os = "windows",
+        all(
+            feature = "unix-file-copy-paste",
+            any(target_os = "linux", target_os = "macos")
+        )
+    ));
+    SyncReturn(ret)
 }
 
 pub fn cm_init() {

@@ -131,7 +131,8 @@ impl InvokeUiSession for SciterHandler {
                 status.target_bitrate.map_or(Value::null(), |it| it.into()),
                 status
                     .codec_format
-                    .map_or(Value::null(), |it| it.to_string().into())
+                    .map_or(Value::null(), |it| it.to_string().into()),
+                status.chroma.map_or(Value::null(), |it| it.into())
             ),
         );
     }
@@ -252,6 +253,10 @@ impl InvokeUiSession for SciterHandler {
             "updateDisplays",
             &make_args!(Self::make_displays_array(displays)),
         );
+    }
+
+    fn set_platform_additions(&self, _data: &str) {
+        // Ignore for sciter version.
     }
 
     fn on_connected(&self, conn_type: ConnType) {
@@ -477,8 +482,7 @@ impl sciter::EventHandler for SciterSession {
 impl SciterSession {
     pub fn new(cmd: String, id: String, password: String, args: Vec<String>) -> Self {
         let force_relay = args.contains(&"--relay".to_string());
-        let session: Session<SciterHandler> = Session {
-            id: id.clone(),
+        let mut session: Session<SciterHandler> = Session {
             password: password.clone(),
             args,
             server_keyboard_enabled: Arc::new(RwLock::new(true)),

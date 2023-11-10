@@ -11,10 +11,10 @@ pub enum Capturer {
 }
 
 impl Capturer {
-    pub fn new(display: Display, yuv: bool) -> io::Result<Capturer> {
+    pub fn new(display: Display) -> io::Result<Capturer> {
         Ok(match display {
-            Display::X11(d) => Capturer::X11(x11::Capturer::new(d, yuv)?),
-            Display::WAYLAND(d) => Capturer::WAYLAND(wayland::Capturer::new(d, yuv)?),
+            Display::X11(d) => Capturer::X11(x11::Capturer::new(d)?),
+            Display::WAYLAND(d) => Capturer::WAYLAND(wayland::Capturer::new(d)?),
         })
     }
 
@@ -34,13 +34,6 @@ impl Capturer {
 }
 
 impl TraitCapturer for Capturer {
-    fn set_use_yuv(&mut self, use_yuv: bool) {
-        match self {
-            Capturer::X11(d) => d.set_use_yuv(use_yuv),
-            Capturer::WAYLAND(d) => d.set_use_yuv(use_yuv),
-        }
-    }
-
     fn frame<'a>(&'a mut self, timeout: Duration) -> io::Result<Frame<'a>> {
         match self {
             Capturer::X11(d) => d.frame(timeout),

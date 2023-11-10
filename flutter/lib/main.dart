@@ -91,7 +91,7 @@ Future<void> main(List<String> args) async {
     debugPrint("--cm started");
     desktopType = DesktopType.cm;
     await windowManager.ensureInitialized();
-    runConnectionManagerScreen(args.contains('--hide'));
+    runConnectionManagerScreen();
   } else if (args.contains('--install')) {
     runInstallPage();
   } else {
@@ -156,6 +156,7 @@ void runMobileApp() async {
   await Future.wait([gFFI.abModel.loadCache(), gFFI.groupModel.loadCache()]);
   gFFI.userModel.refreshCurrentUser();
   runApp(App());
+  await initUniLinks();
 }
 
 void runMultiWindow(
@@ -224,13 +225,14 @@ void runMultiWindow(
   WindowController.fromWindowId(kWindowId!).show();
 }
 
-void runConnectionManagerScreen(bool hide) async {
+void runConnectionManagerScreen() async {
   await initEnv(kAppTypeConnectionManager);
   _runApp(
     '',
     const DesktopServerPage(),
     MyTheme.currentThemeMode(),
   );
+  final hide = await bind.cmGetConfig(name: "hide_cm") == 'true';
   gFFI.serverModel.hideCm = hide;
   if (hide) {
     await hideCmWindow(isStartup: true);

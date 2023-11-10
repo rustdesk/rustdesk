@@ -4,12 +4,10 @@ on: [workflow_dispatch]
 
 env:
   LLVM_VERSION: "10.0"
-  FLUTTER_VERSION: "3.10.6"
+  FLUTTER_VERSION: "3.13.9"
   TAG_NAME: "tmp"
-  FLUTTER_RUST_BRIDGE_VERSION: "1.75.3"
-  # vcpkg version: 2022.05.10
-  # for multiarch gcc compatibility
-  VCPKG_COMMIT_ID: "501db0f17ef6df184fcdbfbe0f87cde2313b6ab1"
+  FLUTTER_RUST_BRIDGE_VERSION: "1.80.1"
+  VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
   VERSION: "1.2.4"
 
 jobs:
@@ -54,14 +52,18 @@ jobs:
           Push-Location flutter ; flutter pub get ; Pop-Location
           ~/.cargo/bin/flutter_rust_bridge_codegen --rust-input ./src/flutter_ffi.rs --dart-output ./flutter/lib/generated_bridge.dart
 
+      - name: Setup vcpkg with Github Actions binary cache
+        uses: lukka/run-vcpkg@v11
+        with:
+          vcpkgDirectory: C:\vcpkg
+          vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
+
       - name: Install vcpkg dependencies
         run: |
-          cd C:\
-          git clone https://github.com/Kingtous/rustdesk_thirdpary_lib --depth=1 
-          
+          $VCPKG_ROOT/vcpkg install --x-install-root="$VCPKG_ROOT/installed"
+        shell: bash
+
       - name: Build rustdesk
-        env:
-          VCPKG_ROOT: C:\rustdesk_thirdpary_lib\vcpkg
         run: python3 .\build.py --portable --hwcodec --flutter --feature IddDriver
 
       - name: Build self-extracted executable
@@ -72,7 +74,7 @@ jobs:
           popd
           mkdir -p ./SignOutput
           mv ./target/release/rustdesk-portable-packer.exe ./SignOutput/rustdesk-${{ matrix.job.date }}-${{ matrix.job.target }}.exe
-          
+
       - name: Publish Release
         uses: softprops/action-gh-release@v1
         with:

@@ -177,6 +177,7 @@ pub enum Data {
         file_transfer_enabled: bool,
         restart: bool,
         recording: bool,
+        block_input: bool,
         from_switch: bool,
     },
     ChatMessage {
@@ -232,9 +233,10 @@ pub enum Data {
     Plugin(Plugin),
     #[cfg(windows)]
     SyncWinCpuUsage(Option<f64>),
-    FileTransferLog(String),
+    FileTransferLog((String, String)),
     #[cfg(windows)]
     ControlledSessionCount(usize),
+    CmErr(String),
 }
 
 #[tokio::main(flavor = "current_thread")]
@@ -403,6 +405,12 @@ async fn handle(data: Data, stream: &mut Connection) {
                 } else if name == "fingerprint" {
                     value = if Config::get_key_confirmed() {
                         Some(crate::common::pk_to_fingerprint(Config::get_key_pair().1))
+                    } else {
+                        None
+                    };
+                } else if name == "hide_cm" {
+                    value = if crate::hbbs_http::sync::is_pro() {
+                        Some(hbb_common::password_security::hide_cm().to_string())
                     } else {
                         None
                     };
@@ -595,7 +603,7 @@ async fn check_pid(postfix: &str) {
         file.read_to_string(&mut content).ok();
         let pid = content.parse::<usize>().unwrap_or(0);
         if pid > 0 {
-            use hbb_common::sysinfo::{ProcessExt, System, SystemExt};
+            use hbb_common::sysinfo::{System};
             let mut sys = System::new();
             sys.refresh_processes();
             if let Some(p) = sys.process(pid.into()) {
@@ -697,7 +705,7 @@ where
 }
 
 #[tokio::main(flavor = "current_thread")]
-async fn get_config(name: &str) -> ResultType<Option<String>> {
+pub async fn get_config(name: &str) -> ResultType<Option<String>> {
     get_config_async(name, 1_000).await
 }
 

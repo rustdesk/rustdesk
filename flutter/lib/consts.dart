@@ -5,6 +5,9 @@ import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/models/state_model.dart';
 import 'package:get/get.dart';
 
+const int kMaxVirtualDisplayCount = 4;
+const int kAllVirtualDisplay = -1;
+
 const double kDesktopRemoteTabBarHeight = 28.0;
 const int kInvalidWindowId = -1;
 const int kMainWindowId = 0;
@@ -14,6 +17,12 @@ const kAllDisplayValue = -1;
 const kKeyLegacyMode = 'legacy';
 const kKeyMapMode = 'map';
 const kKeyTranslateMode = 'translate';
+
+const String kPlatformAdditionsIsWayland = "is_wayland";
+const String kPlatformAdditionsHeadless = "headless";
+const String kPlatformAdditionsIsInstalled = "is_installed";
+const String kPlatformAdditionsVirtualDisplays = "virtual_displays";
+const String kPlatformAdditionsHasFileClipboard = "has_file_clipboard";
 
 const String kPeerPlatformWindows = "Windows";
 const String kPeerPlatformLinux = "Linux";
