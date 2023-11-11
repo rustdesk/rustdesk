@@ -98,7 +98,7 @@ system_shutdown = "4.0"
 shutdown_hooks = "0.1"
 
 [target.'cfg(target_os = "windows")'.dependencies]
-winapi = { version = "0.3", features = ["winuser", "wincrypt", "shellscalingapi"] }
+winapi = { version = "0.3", features = ["winuser", "wincrypt", "shellscalingapi", "pdh", "synchapi", "memoryapi"] }
 winreg = "0.11"
 windows-service = "0.6"
 virtual_display = { path = "libs/virtual_display", optional = true }
@@ -159,7 +159,7 @@ FileDescription = "RustDesk"
 
 [target.'cfg(target_os="windows")'.build-dependencies]
 winres = "0.1"
-winapi = { version = "0.3", features = [ "winnt" ] }
+winapi = { version = "0.3", features = [ "winnt", "pdh", "synchapi" ] }
 
 [build-dependencies]
 cc = "1.0"
