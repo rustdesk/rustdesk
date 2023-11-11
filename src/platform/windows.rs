@@ -857,8 +857,18 @@ pub fn check_update_broker_process() -> ResultType<()> {
     };
     let cur_exe = cur_dir.join(process_exe);
 
+    // Force update broker exe if failed to check modified time.
+    let cmds = format!(
+        "
+        chcp 65001
+        taskkill /F /IM {process_exe}
+        copy /Y \"{origin_process_exe}\" \"{cur_exe}\"
+    ",
+        cur_exe = cur_exe.to_string_lossy(),
+    );
+
     if !std::path::Path::new(&cur_exe).exists() {
-        std::fs::copy(origin_process_exe, cur_exe)?;
+        run_cmds(cmds, false, "update_broker")?;
         return Ok(());
     }
 
@@ -877,15 +887,6 @@ pub fn check_update_broker_process() -> ResultType<()> {
         }
     }
 
-    // Force update broker exe if failed to check modified time.
-    let cmds = format!(
-        "
-        chcp 65001
-        taskkill /F /IM {process_exe}
-        copy /Y \"{origin_process_exe}\" \"{cur_exe}\"
-    ",
-        cur_exe = cur_exe.to_string_lossy(),
-    );
     run_cmds(cmds, false, "update_broker")?;
 
     Ok(())

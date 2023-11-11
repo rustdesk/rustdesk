@@ -567,17 +567,6 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 #[tokio::main(flavor = "current_thread")]
 pub async fn start_ipc<T: InvokeUiCM>(cm: ConnectionManager<T>) {
-    #[cfg(windows)]
-    std::thread::spawn(move || {
-        log::info!("try create privacy mode window");
-        if let Err(e) = crate::platform::windows::check_update_broker_process() {
-            log::warn!(
-                "Failed to check update broker process. Privacy mode may not work properly. {}",
-                e
-            );
-        }
-    });
-
     #[cfg(any(
         target_os = "windows",
         all(
