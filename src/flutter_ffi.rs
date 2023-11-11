@@ -1098,7 +1098,7 @@ pub fn main_get_main_display() -> SyncReturn<String> {
     #[cfg(not(target_os = "ios"))]
     let mut display_info = "".to_owned();
     #[cfg(not(target_os = "ios"))]
-    if let Ok(displays) = crate::display_service::try_get_displays() {
+    if let Ok(displays) = crate::display_service::try_get_displays(false) {
         // to-do: Need to detect current display index.
         if let Some(display) = displays.iter().next() {
             display_info = serde_json::to_string(&HashMap::from([
@@ -1117,7 +1117,7 @@ pub fn main_get_displays() -> SyncReturn<String> {
     #[cfg(not(target_os = "ios"))]
     let mut display_info = "".to_owned();
     #[cfg(not(target_os = "ios"))]
-    if let Ok(displays) = crate::display_service::try_get_displays() {
+    if let Ok(displays) = crate::display_service::try_get_displays(false) {
         let displays = displays
             .iter()
             .map(|d| {

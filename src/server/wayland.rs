@@ -139,7 +139,7 @@ pub(super) async fn check_init() -> ResultType<()> {
         if *CAP_DISPLAY_INFO.read().unwrap() == 0 {
             let mut lock = CAP_DISPLAY_INFO.write().unwrap();
             if *lock == 0 {
-                let mut all = Display::all()?;
+                let mut all = super::display_service::get_displays(true)?;
                 let num = all.len();
                 let primary = super::display_service::get_primary_2(&all);
                 let current = primary;

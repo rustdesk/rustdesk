@@ -317,7 +317,7 @@ pub mod server {
                 let current_display = (*para).current_display;
                 let timeout_ms = (*para).timeout_ms;
                 if c.is_none() {
-                    let Ok(mut displays) = display_service::try_get_displays() else {
+                    let Ok(mut displays) = display_service::try_get_displays(true) else {
                         log::error!("Failed to get displays");
                         *EXIT.lock().unwrap() = true;
                         return;
@@ -534,7 +534,7 @@ pub mod client {
             bail!("already running");
         }
         if SHMEM.lock().unwrap().is_none() {
-            let displays = scrap::Display::all()?;
+            let displays = crate::display_service::get_displays(false)?;
             if displays.is_empty() {
                 bail!("no display available!");
             }
@@ -655,7 +655,7 @@ pub mod client {
                 shmem.write(ADDR_CAPTURE_WOULDBLOCK, &utils::i32_to_vec(TRUE));
             }
             let (mut width, mut height) = (0, 0);
-            if let Ok(displays) = display_service::try_get_displays() {
+            if let Ok(displays) = display_service::try_get_displays(true) {
                 if let Some(display) = displays.get(current_display) {
                     width = display.width();
                     height = display.height();
