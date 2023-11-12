@@ -1057,7 +1057,11 @@ impl Connection {
             pi.hostname = DEVICE_NAME.lock().unwrap().clone();
             pi.platform = "Android".into();
         }
-        #[cfg(any(target_os = "linux", target_os = "windows", target_os = "macos"))]
+        #[cfg(any(
+            target_os = "windows",
+            target_os = "linux",
+            all(target_os = "macos", feature = "unix-file-copy-paste")
+        ))]
         let mut platform_additions = serde_json::Map::new();
         #[cfg(target_os = "linux")]
         {
