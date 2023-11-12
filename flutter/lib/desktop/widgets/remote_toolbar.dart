@@ -1495,32 +1495,39 @@ class _VirtualDisplayMenuState extends State<_VirtualDisplayMenu> {
     }
 
     final virtualDisplays = widget.ffi.ffiModel.pi.virtualDisplays;
+    final privacyModeState = PrivacyModeState.find(widget.id);
 
     final children = <Widget>[];
     for (var i = 0; i < kMaxVirtualDisplayCount; i++) {
-      children.add(CkbMenuButton(
-        value: virtualDisplays.contains(i + 1),
-        onChanged: (bool? value) async {
-          if (value != null) {
-            bind.sessionToggleVirtualDisplay(
-                sessionId: widget.ffi.sessionId, index: i + 1, on: value);
-          }
-        },
-        child: Text('${translate('Virtual display')} ${i + 1}'),
-        ffi: widget.ffi,
-      ));
+      children.add(Obx(() => CkbMenuButton(
+            value: virtualDisplays.contains(i + 1),
+            onChanged: privacyModeState.isTrue
+                ? null
+                : (bool? value) async {
+                    if (value != null) {
+                      bind.sessionToggleVirtualDisplay(
+                          sessionId: widget.ffi.sessionId,
+                          index: i + 1,
+                          on: value);
+                    }
+                  },
+            child: Text('${translate('Virtual display')} ${i + 1}'),
+            ffi: widget.ffi,
+          )));
     }
     children.add(Divider());
-    children.add(MenuButton(
-      onPressed: () {
-        bind.sessionToggleVirtualDisplay(
-            sessionId: widget.ffi.sessionId,
-            index: kAllVirtualDisplay,
-            on: false);
-      },
-      ffi: widget.ffi,
-      child: Text(translate('Plug out all')),
-    ));
+    children.add(Obx(() => MenuButton(
+          onPressed: privacyModeState.isTrue
+              ? null
+              : () {
+                  bind.sessionToggleVirtualDisplay(
+                      sessionId: widget.ffi.sessionId,
+                      index: kAllVirtualDisplay,
+                      on: false);
+                },
+          ffi: widget.ffi,
+          child: Text(translate('Plug out all')),
+        )));
     return _SubmenuButton(
       ffi: widget.ffi,
       menuChildren: children,
