@@ -1,6 +1,6 @@
 use super::*;
 use hbb_common::{allow_err, platform::linux::DISTRO};
-use scrap::{is_cursor_embedded, set_map_err, Capturer, Display, Frame, TraitCapturer};
+use scrap::{is_cursor_embedded, set_map_err, Capturer, Frame, TraitCapturer};
 use std::io;
 use std::process::{Command, Output};
 
@@ -139,7 +139,7 @@ pub(super) async fn check_init() -> ResultType<()> {
         if *CAP_DISPLAY_INFO.read().unwrap() == 0 {
             let mut lock = CAP_DISPLAY_INFO.write().unwrap();
             if *lock == 0 {
-                let mut all = Display::all()?;
+                let mut all = super::display_service::get_displays(true)?;
                 let num = all.len();
                 let primary = super::display_service::get_primary_2(&all);
                 let current = primary;
@@ -186,8 +186,7 @@ pub(super) async fn check_init() -> ResultType<()> {
                 maxy = max_height;
 
                 let capturer = Box::into_raw(Box::new(
-                    Capturer::new(display)
-                        .with_context(|| "Failed to create capturer")?,
+                    Capturer::new(display).with_context(|| "Failed to create capturer")?,
                 ));
                 let capturer = CapturerPtr(capturer);
                 let cap_display_info = Box::into_raw(Box::new(CapDisplayInfo {
