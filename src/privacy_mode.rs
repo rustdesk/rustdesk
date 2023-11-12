@@ -1,8 +1,9 @@
-use crate::{
-    ipc::{connect, Data, PrivacyModeState},
-    ui_interface::get_option,
-};
-use hbb_common::{bail, lazy_static, tokio, ResultType};
+#[cfg(windows)]
+use crate::ipc::{connect, Data};
+use crate::{ipc::PrivacyModeState, ui_interface::get_option};
+#[cfg(windows)]
+use hbb_common::tokio;
+use hbb_common::{bail, lazy_static, ResultType};
 use std::{
     collections::HashMap,
     sync::{Arc, Mutex},
@@ -165,6 +166,7 @@ pub fn check_on_conn_id(conn_id: i32) -> Option<ResultType<bool>> {
     )
 }
 
+#[cfg(windows)]
 #[tokio::main(flavor = "current_thread")]
 async fn set_privacy_mode_state(
     conn_id: i32,
@@ -198,4 +200,20 @@ pub fn get_supported_privacy_mode_impl() -> Vec<(&'static str, &'static str)> {
 #[inline]
 pub fn is_current_privacy_mode_impl(impl_method: &str) -> bool {
     *CUR_PRIVACY_MODE_IMPL.lock().unwrap() == impl_method
+}
+
+#[inline]
+#[cfg(not(windows))]
+pub fn check_privacy_mode_err() -> String {
+    "".to_owned()
+}
+
+#[inline]
+#[cfg(windows)]
+pub fn check_privacy_mode_err() -> String {
+    if is_current_privacy_mode_impl(PRIVACY_MODE_IMPL_WIN_MAG) {
+        video_service::test_create_capturer(self.inner.id, self.display_idx, 5_000)
+    } else {
+        "".to_owned()
+    };
 }

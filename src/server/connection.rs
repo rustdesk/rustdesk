@@ -1472,6 +1472,7 @@ impl Connection {
     fn try_start_cm_ipc(&mut self) {
         if let Some(p) = self.start_cm_ipc_para.take() {
             tokio::spawn(async move {
+                #[cfg(windows)]
                 let tx_from_cm_clone = p.tx_from_cm.clone();
                 if let Err(err) = start_ipc(
                     p.rx_to_cm,
@@ -2549,18 +2550,7 @@ impl Connection {
                         } else {
                             match privacy_mode::turn_on_privacy(self.inner.id) {
                                 Ok(true) => {
-                                    let err_msg =
-                                        if crate::privacy_mode::is_current_privacy_mode_impl(
-                                            crate::privacy_mode::PRIVACY_MODE_IMPL_WIN_MAG,
-                                        ) {
-                                            video_service::test_create_capturer(
-                                                self.inner.id,
-                                                self.display_idx,
-                                                5_000,
-                                            )
-                                        } else {
-                                            "".to_owned()
-                                        };
+                                    let err_msg = crate::privacy_mode::check_privacy_mode_err();
                                     if err_msg.is_empty() {
                                         video_service::set_privacy_mode_conn_id(self.inner.id);
                                         crate::common::make_privacy_mode_msg(
@@ -2568,7 +2558,8 @@ impl Connection {
                                         )
                                     } else {
                                         log::error!(
-                                            "Wait privacy mode timeout, turn off privacy mode"
+                                            "Check privacy mode failed: {}, turn off privacy mode.",
+                                            &err_msg
                                         );
                                         video_service::set_privacy_mode_conn_id(0);
                                         let _ = privacy_mode::turn_off_privacy(self.inner.id);
