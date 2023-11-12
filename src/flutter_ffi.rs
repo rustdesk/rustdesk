@@ -1974,6 +1974,17 @@ pub fn is_selinux_enforcing() -> SyncReturn<bool> {
     }
 }
 
+pub fn main_default_privacy_mode_impl() -> SyncReturn<String> {
+    SyncReturn(crate::privacy_mode::DEFAULT_PRIVACY_MODE_IMPL.to_owned())
+}
+
+pub fn main_supported_privacy_mode_impls() -> SyncReturn<String> {
+    SyncReturn(
+        serde_json::to_string(&crate::privacy_mode::get_supported_privacy_mode_impl())
+            .unwrap_or_default(),
+    )
+}
+
 #[cfg(target_os = "android")]
 pub mod server_side {
     use hbb_common::{config, log};

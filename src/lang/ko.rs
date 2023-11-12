@@ -572,5 +572,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("id_input_tip", "입력된 ID, IP, 도메인과 포트(<domain>:<port>)를 입력할 수 있습니다.\n다른 서버에 있는 장치에 접속하려면 서버 주소(<id>@<server_address>?key=<key_value>)를 추가하세요.
         예:\n9123456234@192.168.16.1:21117?key=5Qbwsde3unUcJBtrx9ZkvUmwFNoExHzpryHuPUdqlWM=.\n
         공개 서버의 장치에 액세스하려면 \"<id>@public\",을 입력하세요. 공개 서버에는 키가 필요하지 않습니다"),
+        ("privacy_mode_impl_mag_tip", ""),
+        ("privacy_mode_impl_virtual_display_tip", ""),
     ].iter().cloned().collect();
 }

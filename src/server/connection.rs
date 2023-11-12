@@ -684,8 +684,6 @@ impl Connection {
         if video_privacy_conn_id == id {
             video_service::set_privacy_mode_conn_id(0);
             let _ = privacy_mode::turn_off_privacy(id);
-        } else if video_privacy_conn_id == 0 {
-            let _ = privacy_mode::turn_off_privacy(0);
         }
         #[cfg(all(feature = "flutter", feature = "plugin_framework"))]
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -2551,11 +2549,18 @@ impl Connection {
                         } else {
                             match privacy_mode::turn_on_privacy(self.inner.id) {
                                 Ok(true) => {
-                                    let err_msg = video_service::test_create_capturer(
-                                        self.inner.id,
-                                        self.display_idx,
-                                        5_000,
-                                    );
+                                    let err_msg =
+                                        if crate::privacy_mode::is_current_privacy_mode_impl(
+                                            crate::privacy_mode::PRIVACY_MODE_IMPL_WIN_MAG,
+                                        ) {
+                                            video_service::test_create_capturer(
+                                                self.inner.id,
+                                                self.display_idx,
+                                                5_000,
+                                            )
+                                        } else {
+                                            "".to_owned()
+                                        };
                                     if err_msg.is_empty() {
                                         video_service::set_privacy_mode_conn_id(self.inner.id);
                                         crate::common::make_privacy_mode_msg(
@@ -2930,23 +2935,26 @@ fn try_activate_screen() {
 mod privacy_mode {
     use super::*;
     #[cfg(windows)]
-    use crate::privacy_win_mag;
+    use crate::privacy_mode as crate_privacy_mode;
 
     pub(super) fn turn_off_privacy(_conn_id: i32) -> Message {
         #[cfg(windows)]
         {
-            let res = privacy_win_mag::turn_off_privacy(_conn_id, None);
-            match res {
-                Ok(_) => crate::common::make_privacy_mode_msg(
+            match crate_privacy_mode::turn_off_privacy(_conn_id, None) {
+                Some(Ok(_)) => crate::common::make_privacy_mode_msg(
                     back_notification::PrivacyModeState::PrvOffSucceeded,
                 ),
-                Err(e) => {
+                Some(Err(e)) => {
                     log::error!("Failed to turn off privacy mode {}", e);
                     crate::common::make_privacy_mode_msg_with_details(
                         back_notification::PrivacyModeState::PrvOffFailed,
                         e.to_string(),
                     )
                 }
+                None => crate::common::make_privacy_mode_msg_with_details(
+                    back_notification::PrivacyModeState::PrvOffFailed,
+                    "Not supported".to_string(),
+                ),
             }
         }
         #[cfg(not(windows))]
@@ -2958,8 +2966,12 @@ mod privacy_mode {
     pub(super) fn turn_on_privacy(_conn_id: i32) -> ResultType<bool> {
         #[cfg(windows)]
         {
-            let plugin_exist = privacy_win_mag::turn_on_privacy(_conn_id)?;
-            Ok(plugin_exist)
+            match crate_privacy_mode::turn_on_privacy(_conn_id) {
+                Some(r) => Ok(r?),
+                None => {
+                    bail!("Not supported")
+                }
+            }
         }
         #[cfg(not(windows))]
         {
@@ -3212,8 +3224,6 @@ mod raii {
                 display_service::reset_resolutions();
                 #[cfg(all(windows, feature = "virtual_display_driver"))]
                 let _ = virtual_display_manager::reset_all();
-                #[cfg(all(windows))]
-                crate::privacy_win_mag::stop();
             }
         }
     }

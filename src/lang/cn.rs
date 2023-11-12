@@ -570,5 +570,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("True color (4:4:4)", "真彩模式（4:4:4）"),
         ("Enable blocking user input", "允许阻止用户输入"),
         ("id_input_tip", ""),
+        ("privacy_mode_impl_mag_tip", "旧的 Windows API"),
+        ("privacy_mode_impl_virtual_display_tip", "禁用物理显示器"),
     ].iter().cloned().collect();
 }
