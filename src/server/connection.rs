@@ -2550,7 +2550,11 @@ impl Connection {
                         } else {
                             match privacy_mode::turn_on_privacy(self.inner.id) {
                                 Ok(true) => {
-                                    let err_msg = crate::privacy_mode::check_privacy_mode_err();
+                                    let err_msg = crate::privacy_mode::check_privacy_mode_err(
+                                        self.inner.id,
+                                        self.display_idx,
+                                        5_000,
+                                    );
                                     if err_msg.is_empty() {
                                         video_service::set_privacy_mode_conn_id(self.inner.id);
                                         crate::common::make_privacy_mode_msg(

@@ -204,16 +204,24 @@ pub fn is_current_privacy_mode_impl(impl_method: &str) -> bool {
 
 #[inline]
 #[cfg(not(windows))]
-pub fn check_privacy_mode_err() -> String {
+pub fn check_privacy_mode_err(
+    _privacy_mode_id: i32,
+    _display_idx: usize,
+    _timeout_millis: u64,
+) -> String {
     "".to_owned()
 }
 
 #[inline]
 #[cfg(windows)]
-pub fn check_privacy_mode_err() -> String {
+pub fn check_privacy_mode_err(
+    privacy_mode_id: i32,
+    display_idx: usize,
+    timeout_millis: u64,
+) -> String {
     if is_current_privacy_mode_impl(PRIVACY_MODE_IMPL_WIN_MAG) {
-        video_service::test_create_capturer(self.inner.id, self.display_idx, 5_000)
+        crate::video_service::test_create_capturer(privacy_mode_id, display_idx, timeout_millis)
     } else {
         "".to_owned()
-    };
+    }
 }
