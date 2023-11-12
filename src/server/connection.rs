@@ -1484,7 +1484,10 @@ impl Connection {
                 .await
                 {
                     log::error!("ipc to connection manager exit: {}", err);
-                    allow_err!(tx_from_cm_clone.send(Data::CmErr(err.to_string())));
+                    #[cfg(windows)]
+                    if !crate::platform::is_prelogin() {
+                        allow_err!(tx_from_cm_clone.send(Data::CmErr(err.to_string())));
+                    }
                 }
             });
             #[cfg(all(windows, feature = "flutter"))]
