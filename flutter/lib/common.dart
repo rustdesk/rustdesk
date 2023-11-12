@@ -956,9 +956,15 @@ class CustomAlertDialog extends StatelessWidget {
   }
 }
 
+var privacyModeMsgboxTime = DateTime.now().subtract(const Duration(hours: 1));
+
 void msgBox(SessionID sessionId, String type, String title, String text,
     String link, OverlayDialogManager dialogManager,
     {bool? hasCancel, ReconnectHandle? reconnect, int? reconnectTimeout}) {
+  if (title == 'Privacy mode') {
+    privacyModeMsgboxTime = DateTime.now();
+  }
+
   dialogManager.dismissAll();
   List<Widget> buttons = [];
   bool hasOk = false;
@@ -1983,8 +1989,8 @@ List<String>? urlLinkToCmdArgs(Uri uri) {
     id = uri.authority;
   }
 
-  if (isMobile){
-    if (id != null){
+  if (isMobile) {
+    if (id != null) {
       connect(Get.context!, id);
       return null;
     }
@@ -2040,7 +2046,7 @@ connect(
         final idController = Get.find<IDTextEditingController>();
         idController.text = formatID(id);
       }
-      if (Get.isRegistered<TextEditingController>()){
+      if (Get.isRegistered<TextEditingController>()) {
         final fieldTextEditingController = Get.find<TextEditingController>();
         fieldTextEditingController.text = formatID(id);
       }
