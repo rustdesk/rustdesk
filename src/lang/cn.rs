@@ -302,8 +302,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Peer exit", "被控端退出"),
         ("Failed to turn off", "退出失败"),
         ("Turned off", "退出"),
-        ("In privacy mode", "进入隐私模式"),
-        ("Out privacy mode", "退出隐私模式"),
         ("Language", "语言"),
         ("Keep RustDesk background service", "保持 RustDesk 后台服务"),
         ("Ignore Battery Optimizations", "忽略电池优化"),
@@ -572,5 +570,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("id_input_tip", ""),
         ("privacy_mode_impl_mag_tip", "旧的 Windows API"),
         ("privacy_mode_impl_virtual_display_tip", "禁用物理显示器"),
+        ("Enter privacy mode", "进入隐私模式"),
+        ("Exit privacy mode", "退出隐私模式"),
     ].iter().cloned().collect();
 }

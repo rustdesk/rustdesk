@@ -414,7 +414,12 @@ impl PrivacyMode for PrivacyModeImpl {
 
         if self.conn_id != INVALID_PRIVACY_MODE_CONN_ID {
             if let Some(state) = state {
-                allow_err!(super::set_privacy_mode_state(conn_id, state, 1_000));
+                allow_err!(super::set_privacy_mode_state(
+                    conn_id,
+                    state,
+                    PRIVACY_MODE_IMPL.to_string(),
+                    1_000
+                ));
             }
             self.conn_id = INVALID_PRIVACY_MODE_CONN_ID.to_owned();
         }

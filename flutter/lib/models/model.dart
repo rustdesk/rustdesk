@@ -967,11 +967,20 @@ class FfiModel with ChangeNotifier {
   }
 
   updatePrivacyMode(
-      Map<String, dynamic> evt, SessionID sessionId, String peerId) {
+      Map<String, dynamic> evt, SessionID sessionId, String peerId) async {
     notifyListeners();
     try {
-      PrivacyModeState.find(peerId).value = bind.sessionGetToggleOptionSync(
+      final isOn = bind.sessionGetToggleOptionSync(
           sessionId: sessionId, arg: 'privacy-mode');
+      if (isOn) {
+        // For compatibility, version < 1.2.4, the default value is 'privacy_mode_impl_mag'.
+        final initDefaultPrivacyMode = 'privacy_mode_impl_mag';
+        PrivacyModeState.find(peerId).value = await bind.sessionGetOption(
+                sessionId: sessionId, arg: 'privacy-mode-impl-key') ??
+            initDefaultPrivacyMode;
+      } else {
+        PrivacyModeState.find(peerId).value = '';
+      }
     } catch (e) {
       //
     }

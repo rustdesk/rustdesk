@@ -518,6 +518,11 @@ message ToggleVirtualDisplay {
   bool on = 2;
 }
 
+message TogglePrivacyMode {
+  string impl_key = 1;
+  bool on = 2;
+}
+
 message PermissionInfo {
   enum Permission {
     Keyboard = 0;
@@ -656,6 +661,8 @@ message BackNotification {
   }
   // Supplementary message, for "PrvOnFailed" and "PrvOffFailed"
   string details = 3;
+  // The key of the implementation
+  string impl_key = 4;
 }
 
 message ElevationRequestWithLogon {
@@ -721,6 +728,7 @@ message Misc {
     CaptureDisplays capture_displays = 30;
     int32 refresh_video_display = 31;
     ToggleVirtualDisplay toggle_virtual_display = 32;
+    TogglePrivacyMode toggle_privacy_mode = 33;
   }
 }
 

@@ -302,8 +302,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Peer exit", "A távoli fél kilépett"),
         ("Failed to turn off", "Nem sikerült kikapcsolni"),
         ("Turned off", "Kikapcsolva"),
-        ("In privacy mode", "Belépés inkognitó módba"),
-        ("Out privacy mode", "Kilépés inkognitó módból"),
         ("Language", "Nyelv"),
         ("Keep RustDesk background service", "RustDesk futtatása a háttérben"),
         ("Ignore Battery Optimizations", "Akkumulátorkímélő figyelmen kívűl hagyása"),
@@ -572,5 +570,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("id_input_tip", ""),
         ("privacy_mode_impl_mag_tip", ""),
         ("privacy_mode_impl_virtual_display_tip", ""),
+        ("Enter privacy mode", ""),
+        ("Exit privacy mode", ""),
     ].iter().cloned().collect();
 }

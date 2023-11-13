@@ -302,8 +302,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Peer exit", "Вийти з віддаленого пристрою"),
         ("Failed to turn off", "Не вдалося вимкнути"),
         ("Turned off", "Вимкнений"),
-        ("In privacy mode", "У режимі конфіденційності"),
-        ("Out privacy mode", "Вихід із режиму конфіденційності"),
         ("Language", "Мова"),
         ("Keep RustDesk background service", "Зберегти фонову службу RustDesk"),
         ("Ignore Battery Optimizations", "Ігнорувати оптимізації батареї"),
@@ -572,5 +570,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("id_input_tip", ""),
         ("privacy_mode_impl_mag_tip", ""),
         ("privacy_mode_impl_virtual_display_tip", ""),
+        ("Enter privacy mode", ""),
+        ("Exit privacy mode", ""),
     ].iter().cloned().collect();
 }

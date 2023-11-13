@@ -482,22 +482,13 @@ Future<List<TToggleMenu>> toolbarDisplayToggle(
         child: Text(translate('Lock after session end'))));
   }
   // privacy mode
-  if (ffiModel.keyboard && pi.features.privacyMode) {
-    final option = 'privacy-mode';
-    final rxValue = PrivacyModeState.find(id);
-    v.add(TToggleMenu(
-        value: rxValue.value,
-        onChanged: (value) {
-          if (value == null) return;
-          if (ffiModel.pi.currentDisplay != 0 &&
-              ffiModel.pi.currentDisplay != kAllDisplayValue) {
-            msgBox(sessionId, 'custom-nook-nocancel-hasclose', 'info',
-                'Please switch to Display 1 first', '', ffi.dialogManager);
-            return;
-          }
-          bind.sessionToggleOption(sessionId: sessionId, value: option);
-        },
-        child: Text(translate('Privacy mode'))));
+  if (!isDesktop && ffiModel.keyboard && pi.features.privacyMode) {
+    final privacyModeState = PrivacyModeState.find(id);
+    final privacyModeList =
+        toolbarPrivacyMode(privacyModeState, context, id, ffi);
+    if (privacyModeList.isNotEmpty) {
+      v.addAll(privacyModeList);
+    }
   }
   // swap key
   if (ffiModel.keyboard &&
@@ -517,7 +508,7 @@ Future<List<TToggleMenu>> toolbarDisplayToggle(
 
   if (useTextureRender &&
       pi.isSupportMultiDisplay &&
-      PrivacyModeState.find(id).isFalse &&
+      PrivacyModeState.find(id).isEmpty &&
       pi.displaysCount.value > 1 &&
       bind.mainGetUserDefaultOption(key: kKeyShowMonitorsToolbar) == 'Y') {
     final value =
@@ -566,4 +557,74 @@ Future<List<TToggleMenu>> toolbarDisplayToggle(
   }
 
   return v;
+}
+
+List<TToggleMenu> toolbarPrivacyMode(
+    RxString privacyModeState, BuildContext context, String id, FFI ffi) {
+  final ffiModel = ffi.ffiModel;
+  final pi = ffiModel.pi;
+  final sessionId = ffi.sessionId;
+
+  getDefaultMenu(Future<void> Function(SessionID sid, String opt) toggleFunc) {
+    return TToggleMenu(
+        value: privacyModeState.isNotEmpty,
+        onChanged: (value) {
+          if (value == null) return;
+          if (ffiModel.pi.currentDisplay != 0 &&
+              ffiModel.pi.currentDisplay != kAllDisplayValue) {
+            msgBox(sessionId, 'custom-nook-nocancel-hasclose', 'info',
+                'Please switch to Display 1 first', '', ffi.dialogManager);
+            return;
+          }
+          final option = 'privacy-mode';
+          toggleFunc(sessionId, option);
+        },
+        child: Text(translate('Privacy mode')));
+  }
+
+  final supportedPrivacyModeImpls = pi
+      .platformAdditions[kPlatformAdditionsSupportedPrivacyModeImpl] as String?;
+  if (supportedPrivacyModeImpls == null) {
+    return [
+      getDefaultMenu(
+          (sid, opt) => bind.sessionToggleOption(sessionId: sid, value: opt))
+    ];
+  }
+
+  late final List<dynamic> privacyModeImpls;
+  try {
+    privacyModeImpls = jsonDecode(supportedPrivacyModeImpls);
+  } catch (e) {
+    debugPrint('failed to parse supported privacy mode impls, err=$e');
+    return [];
+  }
+  if (privacyModeImpls.isEmpty) {
+    return [];
+  }
+
+  if (privacyModeImpls.length == 1) {
+    final implKey = (privacyModeImpls[0] as List<dynamic>)[0] as String;
+    return [
+      getDefaultMenu((sid, opt) =>
+          bind.sessionTogglePrivacyMode(sessionId: sid, implKey: implKey))
+    ];
+  } else {
+    return privacyModeImpls.map((e) {
+      final implKey = (e as List<dynamic>)[0] as String;
+      final implName = (e)[1] as String;
+      return TToggleMenu(
+          child: Text(isDesktop
+              ? translate(implName)
+              : '${translate('Privacy mode')} - ${translate(implName)}'),
+          value: privacyModeState.value == implKey,
+          onChanged:
+              (privacyModeState.isEmpty || privacyModeState.value == implKey)
+                  ? (value) {
+                      if (value == null) return;
+                      bind.sessionTogglePrivacyMode(
+                          sessionId: sessionId, implKey: implKey);
+                    }
+                  : null);
+    }).toList();
+  }
 }

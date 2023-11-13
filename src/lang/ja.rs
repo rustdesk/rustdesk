@@ -302,8 +302,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Peer exit", "相手が終了しました"),
         ("Failed to turn off", "オフにできませんでした"),
         ("Turned off", "オフになりました"),
-        ("In privacy mode", "プライバシーモード開始"),
-        ("Out privacy mode", "プライバシーモード終了"),
         ("Language", "言語"),
         ("Keep RustDesk background service", "RustDesk バックグラウンドサービスを維持"),
         ("Ignore Battery Optimizations", "バッテリーの最適化を無効にする"),
@@ -572,5 +570,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("id_input_tip", ""),
         ("privacy_mode_impl_mag_tip", ""),
         ("privacy_mode_impl_virtual_display_tip", ""),
+        ("Enter privacy mode", ""),
+        ("Exit privacy mode", ""),
     ].iter().cloned().collect();
 }

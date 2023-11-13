@@ -468,7 +468,7 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
     }
 
     toolbarItems.add(Obx(() {
-      if (PrivacyModeState.find(widget.id).isFalse &&
+      if (PrivacyModeState.find(widget.id).isEmpty &&
           pi.displaysCount.value > 1) {
         return _MonitorMenu(
             id: widget.id,
@@ -1034,31 +1034,64 @@ class _DisplayMenuState extends State<_DisplayMenu> {
   @override
   Widget build(BuildContext context) {
     _screenAdjustor.updateScreen();
-    return _IconSubmenuButton(
-        tooltip: 'Display Settings',
-        svg: "assets/display.svg",
+
+    final menuChildren = <Widget>[
+      _screenAdjustor.adjustWindow(context),
+      viewStyle(),
+      scrollStyle(),
+      imageQuality(),
+      codec(),
+      _ResolutionsMenu(
+        id: widget.id,
         ffi: widget.ffi,
-        color: _ToolbarTheme.blueColor,
-        hoverColor: _ToolbarTheme.hoverBlueColor,
-        menuChildren: [
-          _screenAdjustor.adjustWindow(context),
-          viewStyle(),
-          scrollStyle(),
-          imageQuality(),
-          codec(),
-          _ResolutionsMenu(
-            id: widget.id,
-            ffi: widget.ffi,
-            screenAdjustor: _screenAdjustor,
-          ),
-          _VirtualDisplayMenu(
-            id: widget.id,
-            ffi: widget.ffi,
-          ),
+        screenAdjustor: _screenAdjustor,
+      ),
+      _VirtualDisplayMenu(
+        id: widget.id,
+        ffi: widget.ffi,
+      ),
+      Divider(),
+      toggles(),
+    ];
+    // privacy mode
+    if (ffiModel.keyboard && pi.features.privacyMode) {
+      final privacyModeState = PrivacyModeState.find(id);
+      final privacyModeList =
+          toolbarPrivacyMode(privacyModeState, context, id, ffi);
+      if (privacyModeList.length == 1) {
+        menuChildren.add(CkbMenuButton(
+            value: privacyModeList[0].value,
+            onChanged: privacyModeList[0].onChanged,
+            child: privacyModeList[0].child,
+            ffi: ffi));
+      } else if (privacyModeList.length > 1) {
+        menuChildren.addAll([
           Divider(),
-          toggles(),
-          widget.pluginItem,
+          _SubmenuButton(
+              ffi: widget.ffi,
+              child: Text(translate('Privacy Mode')),
+              menuChildren: privacyModeList
+                  .map((e) => Obx(() => CkbMenuButton(
+                      value: e.value,
+                      onChanged: (privacyModeState.isEmpty || e.value)
+                          ? e.onChanged
+                          : null,
+                      child: e.child,
+                      ffi: ffi)))
+                  .toList()),
         ]);
+      }
+    }
+    menuChildren.add(widget.pluginItem);
+
+    return _IconSubmenuButton(
+      tooltip: 'Display Settings',
+      svg: "assets/display.svg",
+      ffi: widget.ffi,
+      color: _ToolbarTheme.blueColor,
+      hoverColor: _ToolbarTheme.hoverBlueColor,
+      menuChildren: menuChildren,
+    );
   }
 
   viewStyle() {
@@ -1501,7 +1534,7 @@ class _VirtualDisplayMenuState extends State<_VirtualDisplayMenu> {
     for (var i = 0; i < kMaxVirtualDisplayCount; i++) {
       children.add(Obx(() => CkbMenuButton(
             value: virtualDisplays.contains(i + 1),
-            onChanged: privacyModeState.isTrue
+            onChanged: privacyModeState.isNotEmpty
                 ? null
                 : (bool? value) async {
                     if (value != null) {
@@ -1517,7 +1550,7 @@ class _VirtualDisplayMenuState extends State<_VirtualDisplayMenu> {
     }
     children.add(Divider());
     children.add(Obx(() => MenuButton(
-          onPressed: privacyModeState.isTrue
+          onPressed: privacyModeState.isNotEmpty
               ? null
               : () {
                   bind.sessionToggleVirtualDisplay(

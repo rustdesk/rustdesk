@@ -1,9 +1,11 @@
 #[cfg(windows)]
 use crate::ipc::{connect, Data};
-use crate::{ipc::PrivacyModeState, ui_interface::get_option};
+#[cfg(all(windows, feature = "virtual_display_driver"))]
+use crate::platform::is_installed;
+use crate::{display_service, ipc::PrivacyModeState, ui_interface::get_option};
 #[cfg(windows)]
 use hbb_common::tokio;
-use hbb_common::{bail, lazy_static, ResultType};
+use hbb_common::{anyhow::anyhow, bail, lazy_static, ResultType};
 use std::{
     collections::HashMap,
     sync::{Arc, Mutex},
@@ -31,11 +33,6 @@ pub const PRIVACY_MODE_IMPL_WIN_MAG: &str = win_mag::PRIVACY_MODE_IMPL;
 
 #[cfg(all(windows, feature = "virtual_display_driver"))]
 pub const PRIVACY_MODE_IMPL_WIN_VIRTUAL_DISPLAY: &str = win_virtual_display::PRIVACY_MODE_IMPL;
-
-#[cfg(windows)]
-pub const DEFAULT_PRIVACY_MODE_IMPL: &str = PRIVACY_MODE_IMPL_WIN_MAG;
-#[cfg(not(windows))]
-pub const DEFAULT_PRIVACY_MODE_IMPL: &str = "";
 
 pub trait PrivacyMode: Sync + Send {
     fn init(&self) -> ResultType<()>;
@@ -72,8 +69,34 @@ pub trait PrivacyMode: Sync + Send {
 }
 
 lazy_static::lazy_static! {
+    pub static ref DEFAULT_PRIVACY_MODE_IMPL: String = {
+        #[cfg(windows)]
+        {
+            if display_service::is_privacy_mode_mag_supported() {
+                PRIVACY_MODE_IMPL_WIN_MAG
+            } else {
+                #[cfg(feature = "virtual_display_driver")]
+                {
+                    if is_installed() {
+                        PRIVACY_MODE_IMPL_WIN_VIRTUAL_DISPLAY
+                    } else {
+                        ""
+                    }
+                }
+                #[cfg(not(feature = "virtual_display_driver"))]
+                {
+                    ""
+                }
+            }.to_owned()
+        }
+        #[cfg(not(windows))]
+        {
+            "".to_owned()
+        }
+    };
+
     static ref CUR_PRIVACY_MODE_IMPL: Arc<Mutex<String>> = {
-        let mut cur_impl = get_option("privacy-mode-impl".to_owned());
+        let mut cur_impl = get_option("privacy-mode-impl-key".to_owned());
         if !get_supported_privacy_mode_impl().iter().any(|(k, _)| k == &cur_impl) {
             cur_impl = DEFAULT_PRIVACY_MODE_IMPL.to_owned();
         }
@@ -122,26 +145,64 @@ pub fn clear() -> Option<()> {
 }
 
 #[inline]
-pub fn switch(impl_method: &str) {
+pub fn switch(impl_key: &str) {
     let mut cur_impl_lock = CUR_PRIVACY_MODE_IMPL.lock().unwrap();
-    if *cur_impl_lock == impl_method {
+    if *cur_impl_lock == impl_key {
         return;
     }
-    if let Some(creator) = PRIVACY_MODE_CREATOR.lock().unwrap().get(impl_method) {
+    if let Some(creator) = PRIVACY_MODE_CREATOR.lock().unwrap().get(impl_key) {
         *PRIVACY_MODE.lock().unwrap() = Some(creator());
-        *cur_impl_lock = impl_method.to_owned();
+        *cur_impl_lock = impl_key.to_owned();
     }
 }
 
+fn get_supported_impl(impl_key: &str) -> String {
+    let supported_impls = get_supported_privacy_mode_impl();
+    if supported_impls.iter().any(|(k, _)| k == &impl_key) {
+        return impl_key.to_owned();
+    };
+    // fallback
+    let mut cur_impl = get_option("privacy-mode-impl-key".to_owned());
+    if !get_supported_privacy_mode_impl()
+        .iter()
+        .any(|(k, _)| k == &cur_impl)
+    {
+        // fallback
+        cur_impl = DEFAULT_PRIVACY_MODE_IMPL.to_owned();
+    }
+    cur_impl
+}
+
 #[inline]
-pub fn turn_on_privacy(conn_id: i32) -> Option<ResultType<bool>> {
-    Some(
-        PRIVACY_MODE
+pub fn turn_on_privacy(impl_key: &str, conn_id: i32) -> Option<ResultType<bool>> {
+    // Check if privacy mode is already on or occupied by another one
+    let mut privacy_mode_lock = PRIVACY_MODE.lock().unwrap();
+    if let Some(privacy_mode) = privacy_mode_lock.as_ref() {
+        let check_on_conn_id = privacy_mode.check_on_conn_id(conn_id);
+        match check_on_conn_id.as_ref() {
+            Ok(true) | Err(_) => return Some(check_on_conn_id),
+            _ => {}
+        }
+    }
+
+    // Check or switch privacy mode implementation
+    let impl_key = get_supported_impl(impl_key);
+    let mut cur_impl_lock = CUR_PRIVACY_MODE_IMPL.lock().unwrap();
+    if *cur_impl_lock != impl_key {
+        if let Some(creator) = PRIVACY_MODE_CREATOR
             .lock()
             .unwrap()
-            .as_mut()?
-            .turn_on_privacy(conn_id),
-    )
+            .get(&(&impl_key as &str))
+        {
+            *privacy_mode_lock = Some(creator());
+            *cur_impl_lock = impl_key.to_owned();
+        } else {
+            return Some(Err(anyhow!("Unsupported privacy mode: {}", impl_key)));
+        }
+    }
+
+    // turn on privacy mode
+    Some(privacy_mode_lock.as_mut()?.turn_on_privacy(conn_id))
 }
 
 #[inline]
@@ -171,19 +232,23 @@ pub fn check_on_conn_id(conn_id: i32) -> Option<ResultType<bool>> {
 async fn set_privacy_mode_state(
     conn_id: i32,
     state: PrivacyModeState,
+    impl_key: String,
     ms_timeout: u64,
 ) -> ResultType<()> {
     let mut c = connect(ms_timeout, "_cm").await?;
-    c.send(&Data::PrivacyModeState((conn_id, state))).await
+    c.send(&Data::PrivacyModeState((conn_id, state, impl_key)))
+        .await
 }
 
 pub fn get_supported_privacy_mode_impl() -> Vec<(&'static str, &'static str)> {
     #[cfg(target_os = "windows")]
     {
         let mut vec_impls = Vec::new();
-        vec_impls.push((PRIVACY_MODE_IMPL_WIN_MAG, "privacy_mode_impl_mag_tip"));
+        if display_service::is_privacy_mode_mag_supported() {
+            vec_impls.push((PRIVACY_MODE_IMPL_WIN_MAG, "privacy_mode_impl_mag_tip"));
+        }
         #[cfg(feature = "virtual_display_driver")]
-        if crate::platform::windows::is_installed() {
+        if is_installed() {
             vec_impls.push((
                 PRIVACY_MODE_IMPL_WIN_VIRTUAL_DISPLAY,
                 "privacy_mode_impl_virtual_display_tip",
@@ -198,8 +263,8 @@ pub fn get_supported_privacy_mode_impl() -> Vec<(&'static str, &'static str)> {
 }
 
 #[inline]
-pub fn is_current_privacy_mode_impl(impl_method: &str) -> bool {
-    *CUR_PRIVACY_MODE_IMPL.lock().unwrap() == impl_method
+pub fn is_current_privacy_mode_impl(impl_key: &str) -> bool {
+    *CUR_PRIVACY_MODE_IMPL.lock().unwrap() == impl_key
 }
 
 #[inline]
@@ -224,4 +289,9 @@ pub fn check_privacy_mode_err(
     } else {
         "".to_owned()
     }
+}
+
+#[inline]
+pub fn is_privacy_mode_supported() -> bool {
+    !DEFAULT_PRIVACY_MODE_IMPL.is_empty()
 }
