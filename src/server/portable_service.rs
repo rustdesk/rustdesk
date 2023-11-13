@@ -329,10 +329,18 @@ pub mod server {
                     }
                     let display = displays.remove(current_display);
                     #[cfg(windows)]
-                    let Ok(Some(display)) = display_service::try_get_dxgi_display(display) else {
-                        log::error!("Failed to try get dxgi display");
-                        *EXIT.lock().unwrap() = true;
-                        return;
+                    let display = match display_service::try_get_dxgi_display(display) {
+                        Ok(Some(d)) => d,
+                        Ok(None) => {
+                            log::error!("Failed to try get dxgi display");
+                            *EXIT.lock().unwrap() = true;
+                            return;
+                        }
+                        Err(e) => {
+                            log::error!("Failed to try get dxgi display:{:?}", e);
+                            *EXIT.lock().unwrap() = true;
+                            return;
+                        }
                     };
                     display_width = display.width();
                     display_height = display.height();

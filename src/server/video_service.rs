@@ -333,7 +333,7 @@ fn get_capturer(current: usize, portable_service_running: bool) -> ResultType<Ca
     }
     let display = displays.remove(current);
     #[cfg(windows)]
-    let Ok(Some(display)) = display_service::try_get_dxgi_display(display) else {
+    let Some(display) = display_service::try_get_dxgi_display(display)? else {
         bail!(
             "Failed to try get display {}, displays len: {}",
             current,
