@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hbb/common/shared_state.dart';
 import 'package:flutter_hbb/common/widgets/setting_widgets.dart';
+import 'package:flutter_hbb/consts.dart';
 import 'package:get/get.dart';
 
 import '../../common.dart';
@@ -1244,8 +1245,8 @@ void showConfirmSwitchSidesDialog(
 }
 
 customImageQualityDialog(SessionID sessionId, String id, FFI ffi) async {
-  double qualityInitValue = 50;
-  double fpsInitValue = 30;
+  double initQuality = kDefaultQuality;
+  double initFps = kDefaultFps;
   bool qualitySet = false;
   bool fpsSet = false;
 
@@ -1261,28 +1262,25 @@ customImageQualityDialog(SessionID sessionId, String id, FFI ffi) async {
           versionCmp(ffi.ffiModel.pi.version, '1.2.2') < 0;
 
   setCustomValues({double? quality, double? fps}) async {
+    debugPrint("setCustomValues quality:$quality, fps:$fps");
     if (quality != null) {
       qualitySet = true;
       await bind.sessionSetCustomImageQuality(
           sessionId: sessionId, value: quality.toInt());
-      print("quality:$quality");
     }
     if (fps != null) {
       fpsSet = true;
       await bind.sessionSetCustomFps(sessionId: sessionId, fps: fps.toInt());
-      print("fps:$fps");
     }
     if (!qualitySet) {
       qualitySet = true;
       await bind.sessionSetCustomImageQuality(
-          sessionId: sessionId, value: qualityInitValue.toInt());
-      print("qualityInitValue:$qualityInitValue");
+          sessionId: sessionId, value: initQuality.toInt());
     }
     if (!hideFps && !fpsSet) {
       fpsSet = true;
       await bind.sessionSetCustomFps(
-          sessionId: sessionId, fps: fpsInitValue.toInt());
-      print("fpsInitValue:$fpsInitValue");
+          sessionId: sessionId, fps: initFps.toInt());
     }
   }
 
@@ -1293,24 +1291,26 @@ customImageQualityDialog(SessionID sessionId, String id, FFI ffi) async {
 
   // quality
   final quality = await bind.sessionGetCustomImageQuality(sessionId: sessionId);
-  qualityInitValue =
-      quality != null && quality.isNotEmpty ? quality[0].toDouble() : 50.0;
-  if ((hideMoreQuality && qualityInitValue > 100) ||
-      qualityInitValue < 10 ||
-      qualityInitValue > 2000) {
-    qualityInitValue = 50;
+  initQuality = quality != null && quality.isNotEmpty
+      ? quality[0].toDouble()
+      : kDefaultQuality;
+  if (initQuality < kMinQuality ||
+      initQuality > (!hideMoreQuality ? kMaxMoreQuality : kMaxQuality)) {
+    initQuality = kDefaultQuality;
   }
   // fps
   final fpsOption =
       await bind.sessionGetOption(sessionId: sessionId, arg: 'custom-fps');
-  fpsInitValue = fpsOption == null ? 30 : double.tryParse(fpsOption) ?? 30;
-  if (fpsInitValue < 5 || fpsInitValue > 120) {
-    fpsInitValue = 30;
+  initFps = fpsOption == null
+      ? kDefaultFps
+      : double.tryParse(fpsOption) ?? kDefaultFps;
+  if (initFps < kMinFps || initFps > kMaxFps) {
+    initFps = kDefaultFps;
   }
 
   final content = customImageQualityWidget(
-      initQuality: qualityInitValue,
-      initFps: fpsInitValue,
+      initQuality: initQuality,
+      initFps: initFps,
       setQuality: (v) => setCustomValues(quality: v),
       setFps: (v) => setCustomValues(fps: v),
       showFps: !hideFps,

@@ -1,4 +1,7 @@
-use crate::{input::{MOUSE_BUTTON_LEFT, MOUSE_TYPE_DOWN, MOUSE_TYPE_UP, MOUSE_TYPE_WHEEL}, common::{is_keyboard_mode_supported, get_supported_keyboard_modes}};
+use crate::{
+    common::{get_supported_keyboard_modes, is_keyboard_mode_supported},
+    input::{MOUSE_BUTTON_LEFT, MOUSE_TYPE_DOWN, MOUSE_TYPE_UP, MOUSE_TYPE_WHEEL},
+};
 use async_trait::async_trait;
 use bytes::Bytes;
 use rdev::{Event, EventType::*, KeyCode};
@@ -213,7 +216,7 @@ impl<T: InvokeUiSession> Session<T> {
         self.lc.read().unwrap().version.clone()
     }
 
-    pub fn fallback_keyboard_mode(&self) -> String { 
+    pub fn fallback_keyboard_mode(&self) -> String {
         let peer_version = self.get_peer_version();
         let platform = self.peer_platform();
 
@@ -386,14 +389,19 @@ impl<T: InvokeUiSession> Session<T> {
     }
 
     pub fn save_image_quality(&self, value: String) {
-        let msg = self.lc.write().unwrap().save_image_quality(value);
+        let msg = self.lc.write().unwrap().save_image_quality(value.clone());
         if let Some(msg) = msg {
+            self.send(Data::Message(msg));
+        }
+        if value != "custom" {
+            // non custom quality use 30 fps
+            let msg = self.lc.write().unwrap().set_custom_fps(30, false);
             self.send(Data::Message(msg));
         }
     }
 
     pub fn set_custom_fps(&self, custom_fps: i32) {
-        let msg = self.lc.write().unwrap().set_custom_fps(custom_fps);
+        let msg = self.lc.write().unwrap().set_custom_fps(custom_fps, true);
         self.send(Data::Message(msg));
     }
 

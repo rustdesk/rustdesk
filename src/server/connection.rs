@@ -2179,10 +2179,6 @@ impl Connection {
                             crate::plugin::handle_client_event(&p.id, &self.lr.my_id, &p.content);
                         self.send(msg).await;
                     }
-                    Some(misc::Union::FullSpeedFps(fps)) => video_service::VIDEO_QOS
-                        .lock()
-                        .unwrap()
-                        .user_full_speed_fps(self.inner.id(), fps),
                     Some(misc::Union::AutoAdjustFps(fps)) => video_service::VIDEO_QOS
                         .lock()
                         .unwrap()

@@ -939,6 +939,12 @@ impl<T: InvokeUiSession> Remote<T> {
 
     #[inline]
     fn fps_control(&mut self, direct: bool) {
+        let custom_fps = self.handler.lc.read().unwrap().custom_fps.clone();
+        let custom_fps = custom_fps.lock().unwrap().clone();
+        let mut custom_fps = custom_fps.unwrap_or(30);
+        if custom_fps < 5 || custom_fps > 120 {
+            custom_fps = 30;
+        }
         let decode_fps_read = self.decode_fps_map.read().unwrap();
         for (display, decode_fps) in decode_fps_read.iter() {
             let video_queue_map_read = self.video_queue_map.read().unwrap();
@@ -955,32 +961,15 @@ impl<T: InvokeUiSession> Remote<T> {
 
             let len = video_queue.len();
             let decode_fps = *decode_fps;
-            let limited_fps = if direct {
+            let mut limited_fps = if direct {
                 decode_fps * 9 / 10 // 30 got 27
             } else {
                 decode_fps * 4 / 5 // 30 got 24
             };
-            // send full speed fps
-            let version = self.handler.lc.read().unwrap().version;
-            let max_encode_speed = 144 * 10 / 9;
-            if version >= hbb_common::get_version_number("1.2.1")
-                && (ctl.last_full_speed_fps.is_none() // First time
-                    || ((ctl.last_full_speed_fps.unwrap_or_default() - decode_fps as i32).abs() >= 5 // diff 5
-                        && !(decode_fps > max_encode_speed // already exceed max encoding speed
-                            && ctl.last_full_speed_fps.unwrap_or_default() > max_encode_speed as i32)))
-            {
-                let mut misc = Misc::new();
-                misc.set_full_speed_fps(decode_fps as _);
-                let mut msg = Message::new();
-                msg.set_misc(misc);
-                self.sender.send(Data::Message(msg)).ok();
-                ctl.last_full_speed_fps = Some(decode_fps as _);
+            if limited_fps > custom_fps {
+                limited_fps = custom_fps;
             }
-            // decrease judgement
-            let debounce = if decode_fps > 10 { decode_fps / 2 } else { 5 }; // 500ms
-            let should_decrease = len >= debounce // exceed debounce
-                && len > ctl.last_queue_size + 5 // still caching
-                && !ctl.last_custom_fps.unwrap_or(i32::MAX) < limited_fps as i32; // NOT already set a smaller one
+            let should_decrease = len > 1 && ctl.last_auto_fps.unwrap_or(0) > limited_fps as i32;
 
             // increase judgement
             if len <= 1 {
@@ -989,35 +978,30 @@ impl<T: InvokeUiSession> Remote<T> {
                 ctl.idle_counter = 0;
             }
             let mut should_increase = false;
-            if let Some(last_custom_fps) = ctl.last_custom_fps {
+            if let Some(last_auto_fps) = ctl.last_auto_fps {
                 // ever set
-                if last_custom_fps + 5 < limited_fps as i32 && ctl.idle_counter > 3 {
+                if last_auto_fps + 3 <= limited_fps as i32 && ctl.idle_counter > 3 {
                     // limited_fps is 5 larger than last set, and idle time is more than 3 seconds
                     should_increase = true;
                 }
             }
-            if should_decrease || should_increase {
+            if ctl.last_auto_fps.is_none() || should_decrease || should_increase {
                 // limited_fps to ensure decoding is faster than encoding
-                let mut custom_fps = limited_fps as i32;
-                if custom_fps < 1 {
-                    custom_fps = 1;
+                let mut auto_fps = limited_fps as i32;
+                if auto_fps < 1 {
+                    auto_fps = 1;
                 }
                 // send custom fps
                 let mut misc = Misc::new();
-                if version > hbb_common::get_version_number("1.2.1") {
-                    // avoid confusion with custom image quality fps
-                    misc.set_auto_adjust_fps(custom_fps as _);
-                } else {
-                    misc.set_option(OptionMessage {
-                        custom_fps,
-                        ..Default::default()
-                    });
-                }
+                misc.set_option(OptionMessage {
+                    custom_fps: auto_fps,
+                    ..Default::default()
+                });
                 let mut msg = Message::new();
                 msg.set_misc(misc);
                 self.sender.send(Data::Message(msg)).ok();
                 ctl.last_queue_size = len;
-                ctl.last_custom_fps = Some(custom_fps);
+                ctl.last_auto_fps = Some(auto_fps);
             }
             // send refresh
             if ctl.refresh_times < 10 // enough
@@ -1805,8 +1789,7 @@ struct FpsControl {
     last_queue_size: usize,
     refresh_times: usize,
     last_refresh_instant: Instant,
-    last_full_speed_fps: Option<i32>,
-    last_custom_fps: Option<i32>,
+    last_auto_fps: Option<i32>,
     idle_counter: usize,
 }
 
@@ -1816,8 +1799,7 @@ impl Default for FpsControl {
             last_queue_size: Default::default(),
             refresh_times: Default::default(),
             last_refresh_instant: Instant::now(),
-            last_full_speed_fps: None,
-            last_custom_fps: None,
+            last_auto_fps: None,
             idle_counter: 0,
         }
     }

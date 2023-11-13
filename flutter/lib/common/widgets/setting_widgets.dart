@@ -2,6 +2,7 @@ import 'package:debounce_throttle/debounce_throttle.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hbb/common.dart';
+import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:get/get.dart';
 
@@ -12,13 +13,17 @@ customImageQualityWidget(
     required Function(double) setFps,
     required bool showFps,
     required bool showMoreQuality}) {
-  if (!showMoreQuality && initQuality > 100) {
-    initQuality = 50;
+  if (initQuality < kMinQuality ||
+      initQuality > (showMoreQuality ? kMaxMoreQuality : kMaxQuality)) {
+    initQuality = kDefaultQuality;
+  }
+  if (initFps < kMinFps || initFps > kMaxFps) {
+    initFps = kDefaultFps;
   }
   final qualityValue = initQuality.obs;
   final fpsValue = initFps.obs;
 
-  final RxBool moreQualityChecked = RxBool(qualityValue.value > 100);
+  final RxBool moreQualityChecked = RxBool(qualityValue.value > kMaxQuality);
   final debouncerQuality = Debouncer<double>(
     Duration(milliseconds: 1000),
     onChanged: (double v) {
@@ -51,9 +56,11 @@ customImageQualityWidget(
                 flex: 3,
                 child: Slider(
                   value: qualityValue.value,
-                  min: 10.0,
-                  max: moreQualityChecked.value ? 2000 : 100,
-                  divisions: moreQualityChecked.value ? 199 : 18,
+                  min: kMinQuality,
+                  max: moreQualityChecked.value ? kMaxMoreQuality : kMaxQuality,
+                  divisions: moreQualityChecked.value
+                      ? ((kMaxMoreQuality - kMinQuality) / 10).round()
+                      : ((kMaxQuality - kMinQuality) / 5).round(),
                   onChanged: (double value) async {
                     qualityValue.value = value;
                     debouncerQuality.value = value;
@@ -113,9 +120,9 @@ customImageQualityWidget(
                   flex: 3,
                   child: Slider(
                     value: fpsValue.value,
-                    min: 5.0,
-                    max: 120.0,
-                    divisions: 23,
+                    min: kMinFps,
+                    max: kMaxFps,
+                    divisions: ((kMaxFps - kMinFps) / 5).round(),
                     onChanged: (double value) async {
                       fpsValue.value = value;
                       debouncerFps.value = value;
@@ -145,15 +152,10 @@ customImageQualitySetting() {
   final fpsKey = 'custom-fps';
 
   var initQuality =
-      (double.tryParse(bind.mainGetUserDefaultOption(key: qualityKey)) ?? 50.0);
-  if (initQuality < 10 || initQuality > 2000) {
-    initQuality = 50;
-  }
-  var initFps =
-      (double.tryParse(bind.mainGetUserDefaultOption(key: fpsKey)) ?? 30.0);
-  if (initFps < 5 || initFps > 120) {
-    initFps = 30;
-  }
+      (double.tryParse(bind.mainGetUserDefaultOption(key: qualityKey)) ??
+          kDefaultQuality);
+  var initFps = (double.tryParse(bind.mainGetUserDefaultOption(key: fpsKey)) ??
+      kDefaultFps);
 
   return customImageQualityWidget(
       initQuality: initQuality,
