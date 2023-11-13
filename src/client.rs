@@ -1113,6 +1113,7 @@ pub struct LoginConfigHandler {
     switch_uuid: Option<String>,
     pub save_ab_password_to_recent: bool, // true: connected with ab password
     pub other_server: Option<(String, String, String)>,
+    pub custom_fps: Arc<Mutex<Option<usize>>>,
 }
 
 impl Deref for LoginConfigHandler {
@@ -1483,15 +1484,26 @@ impl LoginConfigHandler {
             n += 1;
         } else if q == "custom" {
             let config = self.load_config();
+            let allow_more =
+                !crate::ui_interface::using_public_server() || self.direct == Some(true);
             let quality = if config.custom_image_quality.is_empty() {
                 50
             } else {
-                config.custom_image_quality[0]
+                let mut quality = config.custom_image_quality[0];
+                if !allow_more && quality > 100 {
+                    quality = 50;
+                }
+                quality
             };
             msg.custom_image_quality = quality << 8;
             #[cfg(feature = "flutter")]
             if let Some(custom_fps) = self.options.get("custom-fps") {
-                msg.custom_fps = custom_fps.parse().unwrap_or(30);
+                let mut custom_fps = custom_fps.parse().unwrap_or(30);
+                if !allow_more && custom_fps > 30 {
+                    custom_fps = 30;
+                }
+                msg.custom_fps = custom_fps;
+                *self.custom_fps.lock().unwrap() = Some(custom_fps as _);
             }
             n += 1;
         }
@@ -1678,7 +1690,8 @@ impl LoginConfigHandler {
     /// # Arguments
     ///
     /// * `fps` - The given fps.
-    pub fn set_custom_fps(&mut self, fps: i32) -> Message {
+    /// * `save_config` - Save the config.
+    pub fn set_custom_fps(&mut self, fps: i32, save_config: bool) -> Message {
         let mut misc = Misc::new();
         misc.set_option(OptionMessage {
             custom_fps: fps,
@@ -1686,11 +1699,14 @@ impl LoginConfigHandler {
         });
         let mut msg_out = Message::new();
         msg_out.set_misc(misc);
-        let mut config = self.load_config();
-        config
-            .options
-            .insert("custom-fps".to_owned(), fps.to_string());
-        self.save_config(config);
+        if save_config {
+            let mut config = self.load_config();
+            config
+                .options
+                .insert("custom-fps".to_owned(), fps.to_string());
+            self.save_config(config);
+        }
+        *self.custom_fps.lock().unwrap() = Some(fps as _);
         msg_out
     }
 
