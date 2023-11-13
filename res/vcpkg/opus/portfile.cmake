@@ -5,7 +5,6 @@ vcpkg_from_github(
     SHA512 86df35cd62ebf3551b2739effb8f818d635656d91d386d7d600a424a92c4c0d6bfbc3986f1ec6cf4950910ac87b28dc9640b9df3b9a6a5a75eb37ae71782b72e
     HEAD_REF master
     PATCHES fix-pkgconfig-version.patch
-            reinstate-opus-use-neon.patch
 )
 
 vcpkg_check_features(OUT_FEATURE_OPTIONS FEATURE_OPTIONS
@@ -24,10 +23,11 @@ else()
     set(STACK_PROTECTOR ON)
 endif()
 
-# Fix build on mingw arm{,64}-* and arm-linux
-if(VCPKG_TARGET_ARCHITECTURE MATCHES "^(ARM|arm)")
-    list(APPEND ADDITIONAL_OPUS_OPTIONS "-DOPUS_USE_NEON=OFF") # for version 1.3.1 (remove for future Opus release)
-    list(APPEND ADDITIONAL_OPUS_OPTIONS "-DOPUS_DISABLE_INTRINSICS=ON") # for HEAD (and future Opus release)
+if((VCPKG_TARGET_IS_MINGW AND VCPKG_TARGET_ARCHITECTURE MATCHES "^arm") OR
+   (VCPKG_TARGET_IS_LINUX AND VCPKG_TARGET_ARCHITECTURE STREQUAL "arm") OR
+   (VCPKG_TARGET_IS_ANDROID AND VCPKG_TARGET_ARCHITECTURE STREQUAL "arm" AND VCPKG_CMAKE_CONFIGURE_OPTIONS MATCHES "ANDROID_ARM_NEON"))
+    message(STATUS "Disabling ARM NEON and intrinsics on ${TARGET_TRIPLET}")
+    list(APPEND ADDITIONAL_OPUS_OPTIONS "-DOPUS_DISABLE_INTRINSICS=ON -DCOMPILER_SUPPORTS_NEON=OFF") # for HEAD (and future Opus release)
 endif()
 
 vcpkg_cmake_configure(
