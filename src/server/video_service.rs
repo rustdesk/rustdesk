@@ -249,7 +249,7 @@ pub fn test_create_capturer(
 ) -> String {
     let test_begin = Instant::now();
     loop {
-        let err = match super::display_service::get_displays(true) {
+        let err = match Display::all() {
             Ok(mut displays) => {
                 if displays.len() <= display_idx {
                     anyhow!(
@@ -322,7 +322,7 @@ fn get_capturer(current: usize, portable_service_running: bool) -> ResultType<Ca
         }
     }
 
-    let mut displays = super::display_service::get_displays(true)?;
+    let mut displays = Display::all()?;
     let ndisplay = displays.len();
     if ndisplay <= current {
         bail!(

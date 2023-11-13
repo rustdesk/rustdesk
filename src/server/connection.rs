@@ -1165,7 +1165,7 @@ impl Connection {
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
         {
             pi.resolutions = Some(SupportedResolutions {
-                resolutions: display_service::try_get_displays(true)
+                resolutions: display_service::try_get_displays()
                     .map(|displays| {
                         displays
                             .get(self.display_idx)
@@ -2369,7 +2369,7 @@ impl Connection {
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     fn change_resolution(&mut self, r: &Resolution) {
         if self.keyboard {
-            if let Ok(displays) = display_service::try_get_displays(true) {
+            if let Ok(displays) = display_service::try_get_displays() {
                 if let Some(display) = displays.get(self.display_idx) {
                     let name = display.name();
                     #[cfg(all(windows, feature = "virtual_display_driver"))]

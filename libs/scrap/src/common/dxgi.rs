@@ -111,23 +111,16 @@ impl Display {
         let tmp = Self::all_().unwrap_or(Default::default());
         if tmp.is_empty() {
             println!("Display got from gdi");
-            return Ok(Self::displays_from_dxgi_displays(
-                dxgi::Displays::get_from_gdi().drain(..),
-            ));
+            return Ok(dxgi::Displays::get_from_gdi()
+                .drain(..)
+                .map(Display)
+                .collect::<Vec<_>>());
         }
         Ok(tmp)
     }
 
-    #[inline]
-    pub fn displays_from_dxgi_displays<I>(displays: I) -> Vec<Display>
-    where
-        I: Iterator<Item = dxgi::Display>,
-    {
-        displays.map(Display).collect::<Vec<_>>()
-    }
-
     fn all_() -> io::Result<Vec<Display>> {
-        Ok(Self::displays_from_dxgi_displays(dxgi::Displays::new()?))
+        Ok(dxgi::Displays::new()?.map(Display).collect::<Vec<_>>())
     }
 
     pub fn width(&self) -> usize {
