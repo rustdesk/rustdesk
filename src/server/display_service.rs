@@ -180,7 +180,7 @@ fn displays_to_msg(displays: Vec<DisplayInfo>) -> Message {
 }
 
 fn check_get_displays_changed_msg() -> Option<Message> {
-    check_update_displays(&try_get_displays(true).ok()?);
+    check_update_displays(&try_get_displays().ok()?);
     let displays = SYNC_DISPLAYS.lock().unwrap().get_update_sync_displays()?;
     Some(displays_to_msg(displays))
 }
@@ -292,7 +292,7 @@ pub async fn update_get_sync_displays() -> ResultType<Vec<DisplayInfo>> {
             return super::wayland::get_displays().await;
         }
     }
-    check_update_displays(&try_get_displays(true)?);
+    check_update_displays(&try_get_displays()?);
     Ok(SYNC_DISPLAYS.lock().unwrap().displays.clone())
 }
 
@@ -308,9 +308,7 @@ pub fn get_primary() -> usize {
         }
     }
 
-    try_get_displays(false)
-        .map(|d| get_primary_2(&d))
-        .unwrap_or(0)
+    try_get_displays().map(|d| get_primary_2(&d)).unwrap_or(0)
 }
 
 #[inline]
@@ -345,41 +343,20 @@ fn no_displays(displays: &Vec<Display>) -> bool {
 
 #[inline]
 #[cfg(not(all(windows, feature = "virtual_display_driver")))]
-pub fn try_get_displays(_order: bool) -> ResultType<Vec<Display>> {
-    Ok(get_displays(_order)?)
+pub fn try_get_displays() -> ResultType<Vec<Display>> {
+    Ok(Display::all()?)
 }
 
 #[cfg(all(windows, feature = "virtual_display_driver"))]
-pub fn try_get_displays(order: bool) -> ResultType<Vec<Display>> {
-    let mut displays = get_displays(order)?;
+pub fn try_get_displays() -> ResultType<Vec<Display>> {
+    let mut displays = Display::all()?;
     if crate::platform::is_installed() && no_displays(&displays) {
         log::debug!("no displays, create virtual display");
         if let Err(e) = virtual_display_manager::plug_in_headless() {
             log::error!("plug in headless failed {}", e);
         } else {
-            displays = get_displays(order)?;
+            displays = Display::all()?;
         }
     }
     Ok(displays)
-}
-
-// Note: Do not use `Display::all()` to get displays.
-// Use `get_displays()` instead.
-
-#[cfg(not(windows))]
-pub fn get_displays(_order: bool) -> ResultType<Vec<Display>> {
-    Ok(Display::all()?)
-}
-
-// get_from_gdi() returns the displays in the same order of the windows display settings.
-// dxgi does not guarantee the order of displays.
-#[cfg(windows)]
-pub fn get_displays(order: bool) -> ResultType<Vec<Display>> {
-    if !order {
-        Ok(Display::all()?)
-    } else {
-        Ok(Display::displays_from_dxgi_displays(
-            scrap::dxgi::Displays::get_from_gdi().drain(..),
-        ))
-    }
 }
