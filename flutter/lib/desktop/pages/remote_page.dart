@@ -17,6 +17,7 @@ import '../../common/widgets/overlay.dart';
 import '../../common/widgets/remote_input.dart';
 import '../../common.dart';
 import '../../common/widgets/dialog.dart';
+import '../../common/widgets/toolbar.dart';
 import '../../models/model.dart';
 import '../../models/desktop_render_texture.dart';
 import '../../models/platform_model.dart';
@@ -310,7 +311,7 @@ class _RemotePageState extends State<RemotePage>
         if (imageReady) {
           // If the privacy mode(disable physical displays) is switched,
           // we should not dismiss the dialog immediately.
-          if (DateTime.now().difference(privacyModeMsgboxTime) >
+          if (DateTime.now().difference(togglePrivacyModeTime) >
               const Duration(milliseconds: 3000)) {
             // `dismissAll()` is to ensure that the state is clean.
             // It's ok to call dismissAll() here.

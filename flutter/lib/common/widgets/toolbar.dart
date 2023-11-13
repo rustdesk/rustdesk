@@ -559,6 +559,8 @@ Future<List<TToggleMenu>> toolbarDisplayToggle(
   return v;
 }
 
+var togglePrivacyModeTime = DateTime.now().subtract(const Duration(hours: 1));
+
 List<TToggleMenu> toolbarPrivacyMode(
     RxString privacyModeState, BuildContext context, String id, FFI ffi) {
   final ffiModel = ffi.ffiModel;
@@ -582,21 +584,16 @@ List<TToggleMenu> toolbarPrivacyMode(
         child: Text(translate('Privacy mode')));
   }
 
-  final supportedPrivacyModeImpls = pi
-      .platformAdditions[kPlatformAdditionsSupportedPrivacyModeImpl] as String?;
-  if (supportedPrivacyModeImpls == null) {
+  final privacyModeImpls =
+      pi.platformAdditions[kPlatformAdditionsSupportedPrivacyModeImpl]
+          as List<dynamic>?;
+  if (privacyModeImpls == null) {
     return [
-      getDefaultMenu(
-          (sid, opt) => bind.sessionToggleOption(sessionId: sid, value: opt))
+      getDefaultMenu((sid, opt) async {
+        bind.sessionToggleOption(sessionId: sid, value: opt);
+        togglePrivacyModeTime = DateTime.now();
+      })
     ];
-  }
-
-  late final List<dynamic> privacyModeImpls;
-  try {
-    privacyModeImpls = jsonDecode(supportedPrivacyModeImpls);
-  } catch (e) {
-    debugPrint('failed to parse supported privacy mode impls, err=$e');
-    return [];
   }
   if (privacyModeImpls.isEmpty) {
     return [];
@@ -605,8 +602,10 @@ List<TToggleMenu> toolbarPrivacyMode(
   if (privacyModeImpls.length == 1) {
     final implKey = (privacyModeImpls[0] as List<dynamic>)[0] as String;
     return [
-      getDefaultMenu((sid, opt) =>
-          bind.sessionTogglePrivacyMode(sessionId: sid, implKey: implKey))
+      getDefaultMenu((sid, opt) async {
+        bind.sessionTogglePrivacyMode(sessionId: sid, implKey: implKey);
+        togglePrivacyModeTime = DateTime.now();
+      })
     ];
   } else {
     return privacyModeImpls.map((e) {

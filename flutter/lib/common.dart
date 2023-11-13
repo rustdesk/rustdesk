@@ -956,14 +956,9 @@ class CustomAlertDialog extends StatelessWidget {
   }
 }
 
-var privacyModeMsgboxTime = DateTime.now().subtract(const Duration(hours: 1));
-
 void msgBox(SessionID sessionId, String type, String title, String text,
     String link, OverlayDialogManager dialogManager,
     {bool? hasCancel, ReconnectHandle? reconnect, int? reconnectTimeout}) {
-  if (title == 'Privacy mode') {
-    privacyModeMsgboxTime = DateTime.now();
-  }
 
   dialogManager.dismissAll();
   List<Widget> buttons = [];
