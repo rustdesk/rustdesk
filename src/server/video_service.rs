@@ -332,6 +332,14 @@ fn get_capturer(current: usize, portable_service_running: bool) -> ResultType<Ca
         );
     }
     let display = displays.remove(current);
+    #[cfg(windows)]
+    let Ok(Some(display)) = display_service::try_get_dxgi_display(display) else {
+        bail!(
+            "Failed to try get display {}, displays len: {}",
+            current,
+            ndisplay
+        );
+    };
     let (origin, width, height) = (display.origin(), display.width(), display.height());
     let name = display.name();
     log::debug!(

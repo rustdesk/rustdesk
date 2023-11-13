@@ -383,3 +383,11 @@ pub fn get_displays(order: bool) -> ResultType<Vec<Display>> {
         ))
     }
 }
+
+#[inline]
+#[cfg(windows)]
+pub fn try_get_dxgi_display(display: Display) -> ResultType<Option<Display>> {
+    Ok(Display::all()?
+        .into_iter()
+        .find(|d| d.name() == display.name()))
+}

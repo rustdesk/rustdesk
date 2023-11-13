@@ -328,6 +328,12 @@ pub mod server {
                         return;
                     }
                     let display = displays.remove(current_display);
+                    #[cfg(windows)]
+                    let Ok(Some(display)) = display_service::try_get_dxgi_display(display) else {
+                        log::error!("Failed to try get dxgi display");
+                        *EXIT.lock().unwrap() = true;
+                        return;
+                    };
                     display_width = display.width();
                     display_height = display.height();
                     match Capturer::new(display) {
