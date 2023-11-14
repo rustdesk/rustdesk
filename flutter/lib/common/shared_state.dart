@@ -1,3 +1,4 @@
+import 'package:flutter_hbb/common.dart';
 import 'package:get/get.dart';
 
 import '../consts.dart';
@@ -318,6 +319,7 @@ initSharedStates(String id) {
   FingerprintState.init(id);
   PeerBoolOption.init(id, 'zoom-cursor', () => false);
   UnreadChatCountState.init(id);
+  if (isMobile) ConnectionTypeState.init(id); // desktop in other places
 }
 
 removeSharedStates(String id) {
@@ -330,4 +332,5 @@ removeSharedStates(String id) {
   FingerprintState.delete(id);
   PeerBoolOption.delete(id, 'zoom-cursor');
   UnreadChatCountState.delete(id);
+  if (isMobile) ConnectionTypeState.delete(id);
 }
