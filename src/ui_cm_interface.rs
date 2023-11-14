@@ -401,7 +401,7 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
                                     log::info!("cm ipc connection disconnect");
                                     break;
                                 }
-                                Data::PrivacyModeState((_id, _)) => {
+                                Data::PrivacyModeState((_id, _, _)) => {
                                     #[cfg(windows)]
                                     cm_inner_send(_id, data);
                                 }

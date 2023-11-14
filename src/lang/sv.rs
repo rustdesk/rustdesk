@@ -302,8 +302,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Peer exit", "Avsluta klient"),
         ("Failed to turn off", "Misslyckades med avstängning"),
         ("Turned off", "Avstängd"),
-        ("In privacy mode", "I säkerhetsläge"),
-        ("Out privacy mode", "Ur säkerhetsläge"),
         ("Language", "Språk"),
         ("Keep RustDesk background service", "Behåll RustDesk i bakgrunden"),
         ("Ignore Battery Optimizations", "Ignorera batterioptimering"),
@@ -570,5 +568,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("True color (4:4:4)", ""),
         ("Enable blocking user input", ""),
         ("id_input_tip", ""),
+        ("privacy_mode_impl_mag_tip", ""),
+        ("privacy_mode_impl_virtual_display_tip", ""),
+        ("Enter privacy mode", ""),
+        ("Exit privacy mode", ""),
     ].iter().cloned().collect();
 }

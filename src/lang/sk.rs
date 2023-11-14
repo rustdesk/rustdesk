@@ -302,8 +302,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Peer exit", "Peer exit"),
         ("Failed to turn off", "Nepodarilo sa vypnúť"),
         ("Turned off", "Vypnutý"),
-        ("In privacy mode", "V režime súkromia"),
-        ("Out privacy mode", "Mimo režimu súkromia"),
         ("Language", "Jazyk"),
         ("Keep RustDesk background service", "Ponechať službu RustDesk na pozadí"),
         ("Ignore Battery Optimizations", "Ignorovať optimalizácie batérie"),
@@ -570,5 +568,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("True color (4:4:4)", "Skutočná farba (4:4:4)"),
         ("Enable blocking user input", "Povoliť blokovanie vstupu od používateľa"),
         ("id_input_tip", "Môžete zadať ID, priamu IP adresu alebo doménu s portom (<doména>:<port>).\nAk chcete získať prístup k zariadeniu na inom serveri, doplňte adresu servera (<id>@<adresa_servera>?key=<hodnota_kľúča>), napríklad,\n9123456234@192.168.16.1:21117?key=5Qbwsde3unUcJBtrx9ZkvUmwFNoExHzpryHuPUdqlWM=.\nAk chcete získať prístup k zariadeniu na verejnom serveri, zadajte \"<id>@public\", kľúč nie je potrebný pre verejný server."),
+        ("privacy_mode_impl_mag_tip", ""),
+        ("privacy_mode_impl_virtual_display_tip", ""),
+        ("Enter privacy mode", ""),
+        ("Exit privacy mode", ""),
     ].iter().cloned().collect();
 }

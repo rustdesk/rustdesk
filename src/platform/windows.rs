@@ -3,7 +3,7 @@ use crate::common::PORTABLE_APPNAME_RUNTIME_ENV_KEY;
 use crate::{
     ipc,
     license::*,
-    privacy_win_mag::{self, WIN_MAG_INJECTED_PROCESS_EXE},
+    privacy_mode::win_mag::{self, WIN_MAG_INJECTED_PROCESS_EXE},
 };
 use hbb_common::{
     allow_err,
@@ -472,7 +472,7 @@ async fn run_service(_arguments: Vec<OsString>) -> ResultType<()> {
         log::info!("Got service control event: {:?}", control_event);
         match control_event {
             ServiceControl::Interrogate => ServiceControlHandlerResult::NoError,
-            ServiceControl::Stop => {
+            ServiceControl::Stop | ServiceControl::Preshutdown | ServiceControl::Shutdown => {
                 send_close(crate::POSTFIX_SERVICE).ok();
                 ServiceControlHandlerResult::NoError
             }
@@ -848,8 +848,8 @@ fn get_default_install_path() -> String {
 }
 
 pub fn check_update_broker_process() -> ResultType<()> {
-    let process_exe = privacy_win_mag::INJECTED_PROCESS_EXE;
-    let origin_process_exe = privacy_win_mag::ORIGIN_PROCESS_EXE;
+    let process_exe = win_mag::INJECTED_PROCESS_EXE;
+    let origin_process_exe = win_mag::ORIGIN_PROCESS_EXE;
 
     let exe_file = std::env::current_exe()?;
     let Some(cur_dir) = exe_file.parent() else {
@@ -926,8 +926,8 @@ pub fn copy_exe_cmd(src_exe: &str, exe: &str, path: &str) -> ResultType<String> 
         {main_exe}
         copy /Y \"{ORIGIN_PROCESS_EXE}\" \"{path}\\{broker_exe}\"
         ",
-        ORIGIN_PROCESS_EXE = privacy_win_mag::ORIGIN_PROCESS_EXE,
-        broker_exe = privacy_win_mag::INJECTED_PROCESS_EXE,
+        ORIGIN_PROCESS_EXE = win_mag::ORIGIN_PROCESS_EXE,
+        broker_exe = win_mag::INJECTED_PROCESS_EXE,
     ))
 }
 

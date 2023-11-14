@@ -302,8 +302,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Peer exit", "Uscita dal dispostivo remoto"),
         ("Failed to turn off", "Impossibile spegnere"),
         ("Turned off", "Spegni"),
-        ("In privacy mode", "In modalità privacy"),
-        ("Out privacy mode", "Uscita dalla modalità privacy"),
         ("Language", "Lingua"),
         ("Keep RustDesk background service", "Mantieni il servizio di RustDesk in background"),
         ("Ignore Battery Optimizations", "Ignora le ottimizzazioni della batteria"),
@@ -570,5 +568,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("True color (4:4:4)", "Colore reale (4:4:4)"),
         ("Enable blocking user input", "Abilita blocco input utente"),
         ("id_input_tip", "Puoi inserire un ID, un IP diretto o un dominio con una porta (<dominio>:<porta>).\nSe vuoi accedere as un dispositivo in un altro server, aggiungi l'indirizzo del server (<id>@<indirizzo_server >?key=<valore_chiave>), ad esempio\n9123456234@192.168.16.1:21117?key=5Qbwsde3unUcJBtrx9ZkvUmwFNoExHzpryHuPUdqlWM=.\nSe vuoi accedere as un dispositivo in un server pubblico, inserisci \"<id>@public\", per il server pubblico la chiave non è necessaria"),
+        ("privacy_mode_impl_mag_tip", ""),
+        ("privacy_mode_impl_virtual_display_tip", ""),
+        ("Enter privacy mode", ""),
+        ("Exit privacy mode", ""),
     ].iter().cloned().collect();
 }

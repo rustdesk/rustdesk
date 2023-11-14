@@ -29,7 +29,11 @@ use crate::common::SimpleCallOnReturn;
 #[cfg(target_os = "linux")]
 use crate::platform::linux::is_x11;
 #[cfg(windows)]
-use crate::{platform::windows::is_process_consent_running, privacy_win_mag};
+use crate::{
+    platform::windows::is_process_consent_running,
+    privacy_mode::{is_current_privacy_mode_impl, PRIVACY_MODE_IMPL_WIN_MAG},
+    ui_interface::is_installed,
+};
 use hbb_common::{
     anyhow::anyhow,
     tokio::sync::{
@@ -182,43 +186,13 @@ fn create_capturer(
     if privacy_mode_id > 0 {
         #[cfg(windows)]
         {
-            match scrap::CapturerMag::new(display.origin(), display.width(), display.height()) {
-                Ok(mut c1) => {
-                    let mut ok = false;
-                    let check_begin = Instant::now();
-                    while check_begin.elapsed().as_secs() < 5 {
-                        match c1.exclude("", privacy_win_mag::PRIVACY_WINDOW_NAME) {
-                            Ok(false) => {
-                                ok = false;
-                                std::thread::sleep(std::time::Duration::from_millis(500));
-                            }
-                            Err(e) => {
-                                bail!(
-                                    "Failed to exclude privacy window {} - {}, err: {}",
-                                    "",
-                                    privacy_win_mag::PRIVACY_WINDOW_NAME,
-                                    e
-                                );
-                            }
-                            _ => {
-                                ok = true;
-                                break;
-                            }
-                        }
-                    }
-                    if !ok {
-                        bail!(
-                            "Failed to exclude privacy window {} - {} ",
-                            "",
-                            privacy_win_mag::PRIVACY_WINDOW_NAME
-                        );
-                    }
-                    log::debug!("Create magnifier capture for {}", privacy_mode_id);
-                    c = Some(Box::new(c1));
-                }
-                Err(e) => {
-                    bail!(format!("Failed to create magnifier capture {}", e));
-                }
+            if let Some(c1) = crate::privacy_mode::win_mag::create_capturer(
+                privacy_mode_id,
+                display.origin(),
+                display.width(),
+                display.height(),
+            )? {
+                c = Some(Box::new(c1));
             }
         }
     }
@@ -274,16 +248,19 @@ pub fn test_create_capturer(
     }
 }
 
+// Note: This function is extremely expensive, do not call it frequently.
 #[cfg(windows)]
 fn check_uac_switch(privacy_mode_id: i32, capturer_privacy_mode_id: i32) -> ResultType<()> {
-    if capturer_privacy_mode_id != 0 {
-        if privacy_mode_id != capturer_privacy_mode_id {
-            if !is_process_consent_running()? {
+    if capturer_privacy_mode_id != 0 && is_current_privacy_mode_impl(PRIVACY_MODE_IMPL_WIN_MAG) {
+        if !is_installed() {
+            if privacy_mode_id != capturer_privacy_mode_id {
+                if !is_process_consent_running()? {
+                    bail!("consent.exe is not running");
+                }
+            }
+            if is_process_consent_running()? {
                 bail!("consent.exe is running");
             }
-        }
-        if is_process_consent_running()? {
-            bail!("consent.exe is running");
         }
     }
     Ok(())
@@ -352,9 +329,14 @@ fn get_capturer(current: usize, portable_service_running: bool) -> ResultType<Ca
     #[cfg(windows)]
     let mut capturer_privacy_mode_id = privacy_mode_id;
     #[cfg(windows)]
-    if capturer_privacy_mode_id != 0 {
-        if is_process_consent_running()? {
-            capturer_privacy_mode_id = 0;
+    {
+        if capturer_privacy_mode_id != 0 && is_current_privacy_mode_impl(PRIVACY_MODE_IMPL_WIN_MAG)
+        {
+            if !is_installed() {
+                if is_process_consent_running()? {
+                    capturer_privacy_mode_id = 0;
+                }
+            }
         }
     }
     log::debug!(
@@ -586,8 +568,6 @@ fn run(vs: VideoService) -> ResultType<()> {
         let wait_begin = Instant::now();
         while wait_begin.elapsed().as_millis() < timeout_millis as _ {
             check_privacy_mode_changed(&sp, c.privacy_mode_id)?;
-            #[cfg(windows)]
-            check_uac_switch(c.privacy_mode_id, c._capturer_privacy_mode_id)?;
             frame_controller.try_wait_next(&mut fetched_conn_ids, 300);
             // break if all connections have received current frame
             if fetched_conn_ids.len() >= frame_controller.send_conn_ids.len() {
@@ -683,6 +663,7 @@ fn check_privacy_mode_changed(sp: &GenericService, privacy_mode_id: i32) -> Resu
         if privacy_mode_id_2 != 0 {
             let msg_out = crate::common::make_privacy_mode_msg(
                 back_notification::PrivacyModeState::PrvOnByOther,
+                "".to_owned(),
             );
             sp.send_to_others(msg_out, privacy_mode_id_2);
         }

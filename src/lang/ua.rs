@@ -302,8 +302,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Peer exit", "Вийти з віддаленого пристрою"),
         ("Failed to turn off", "Не вдалося вимкнути"),
         ("Turned off", "Вимкнений"),
-        ("In privacy mode", "У режимі конфіденційності"),
-        ("Out privacy mode", "Вихід із режиму конфіденційності"),
         ("Language", "Мова"),
         ("Keep RustDesk background service", "Зберегти фонову службу RustDesk"),
         ("Ignore Battery Optimizations", "Ігнорувати оптимізації батареї"),
@@ -570,5 +568,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("True color (4:4:4)", "Спражній колір (4:4:4)"),
         ("Enable blocking user input", "Увімкнути блокування введення користувача"),
         ("id_input_tip", "Ви можете ввести ID, безпосередню IP, або ж домен з портом (<домен>:<порт>).\nЯкщо ви хочете отримати доступ до пристрою на іншому сервері, будь ласка, додайте адресу сервера (<id>@<адреса_сервера>?key=<значення_ключа>), наприклад,\n9123456234@192.168.16.1:21117?key=5Qbwsde3unUcJBtrx9ZkvUmwFNoExHzpryHuPUdqlWM=.\nЯкщо ви хочете отримати доступ до пристрою на публічному сервері, будь ласка, введіть \"<id>@public\", ключ для публічного сервера не потрібен."),
+        ("privacy_mode_impl_mag_tip", ""),
+        ("privacy_mode_impl_virtual_display_tip", ""),
+        ("Enter privacy mode", ""),
+        ("Exit privacy mode", ""),
     ].iter().cloned().collect();
 }

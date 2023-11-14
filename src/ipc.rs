@@ -28,7 +28,7 @@ use hbb_common::{
     ResultType,
 };
 
-use crate::rendezvous_mediator::RendezvousMediator;
+use crate::{common::is_server, privacy_mode, rendezvous_mediator::RendezvousMediator};
 
 // State with timestamp, because std::time::Instant cannot be serialized
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -207,7 +207,7 @@ pub enum Data {
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     ClipboardFile(ClipboardFile),
     ClipboardFileEnabled(bool),
-    PrivacyModeState((i32, PrivacyModeState)),
+    PrivacyModeState((i32, PrivacyModeState, String)),
     TestRendezvousServer,
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     Keyboard(DataKeyboard),
@@ -352,6 +352,9 @@ async fn handle(data: Data, stream: &mut Connection) {
             if EXIT_RECV_CLOSE.load(Ordering::SeqCst) {
                 #[cfg(not(target_os = "android"))]
                 crate::server::input_service::fix_key_down_timeout_at_exit();
+                if is_server() {
+                    let _ = privacy_mode::turn_off_privacy(0, Some(PrivacyModeState::OffByPeer));
+                }
                 std::process::exit(0);
             }
         }
@@ -442,6 +445,9 @@ async fn handle(data: Data, stream: &mut Connection) {
             }
             Some(value) => {
                 let _chk = CheckIfRestart::new();
+                if let Some(v) = value.get("privacy-mode-impl-key") {
+                    crate::privacy_mode::switch(v);
+                }
                 Config::set_options(value);
                 allow_err!(stream.send(&Data::Options(None)).await);
             }
@@ -603,7 +609,7 @@ async fn check_pid(postfix: &str) {
         file.read_to_string(&mut content).ok();
         let pid = content.parse::<usize>().unwrap_or(0);
         if pid > 0 {
-            use hbb_common::sysinfo::{System};
+            use hbb_common::sysinfo::System;
             let mut sys = System::new();
             sys.refresh_processes();
             if let Some(p) = sys.process(pid.into()) {

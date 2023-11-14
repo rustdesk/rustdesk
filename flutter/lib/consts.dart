@@ -23,6 +23,7 @@ const String kPlatformAdditionsHeadless = "headless";
 const String kPlatformAdditionsIsInstalled = "is_installed";
 const String kPlatformAdditionsVirtualDisplays = "virtual_displays";
 const String kPlatformAdditionsHasFileClipboard = "has_file_clipboard";
+const String kPlatformAdditionsSupportedPrivacyModeImpl = "supported_privacy_mode_impl";
 
 const String kPeerPlatformWindows = "Windows";
 const String kPeerPlatformLinux = "Linux";

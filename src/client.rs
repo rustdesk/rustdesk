@@ -1552,9 +1552,11 @@ impl LoginConfigHandler {
         }
         let mut n = 0;
         let mut msg = OptionMessage::new();
-        if self.get_toggle_option("privacy-mode") {
-            msg.privacy_mode = BoolOption::Yes.into();
-            n += 1;
+        if self.version < hbb_common::get_version_number("1.2.4") {
+            if self.get_toggle_option("privacy-mode") {
+                msg.privacy_mode = BoolOption::Yes.into();
+                n += 1;
+            }
         }
         if n > 0 {
             Some(msg)
