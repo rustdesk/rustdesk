@@ -26,7 +26,7 @@ use hbb_common::{
         supported_decoding::PreferCodec, video_frame, Chroma, CodecAbility, EncodedVideoFrames,
         SupportedDecoding, SupportedEncoding, VideoFrame,
     },
-    sysinfo::{System},
+    sysinfo::System,
     tokio::time::Instant,
     ResultType,
 };
@@ -198,7 +198,9 @@ impl Encoder {
         if av1_useable {
             auto_codec = CodecName::AV1;
         }
-        if vp8_useable && System::new_all().total_memory() <= 4 * 1024 * 1024 * 1024 {
+        let mut system = System::new();
+        system.refresh_memory();
+        if vp8_useable && system.total_memory() <= 4 * 1024 * 1024 * 1024 {
             // 4 Gb
             auto_codec = CodecName::VP8
         }
@@ -581,7 +583,8 @@ pub fn codec_thread_num() -> usize {
     }
     #[cfg(not(windows))]
     {
-        let s = System::new_all();
+        let mut s = System::new();
+        s.refresh_cpu_usage();
         // https://man7.org/linux/man-pages/man3/getloadavg.3.html
         let avg = s.load_average();
         info = format!("cpu loadavg:{}", avg.one);
