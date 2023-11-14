@@ -481,15 +481,6 @@ Future<List<TToggleMenu>> toolbarDisplayToggle(
         },
         child: Text(translate('Lock after session end'))));
   }
-  // privacy mode
-  if (!isDesktop && ffiModel.keyboard && pi.features.privacyMode) {
-    final privacyModeState = PrivacyModeState.find(id);
-    final privacyModeList =
-        toolbarPrivacyMode(privacyModeState, context, id, ffi);
-    if (privacyModeList.isNotEmpty) {
-      v.addAll(privacyModeList);
-    }
-  }
   // swap key
   if (ffiModel.keyboard &&
       ((Platform.isMacOS && pi.platform != kPeerPlatformMacOS) ||
@@ -612,19 +603,14 @@ List<TToggleMenu> toolbarPrivacyMode(
       final implKey = (e as List<dynamic>)[0] as String;
       final implName = (e)[1] as String;
       return TToggleMenu(
-          child: Text(isDesktop
-              ? translate(implName)
-              : '${translate('Privacy mode')} - ${translate(implName)}'),
+          child: Text(translate(implName)),
           value: privacyModeState.value == implKey,
-          onChanged:
-              (privacyModeState.isEmpty || privacyModeState.value == implKey)
-                  ? (value) {
-                      if (value == null) return;
-                      togglePrivacyModeTime = DateTime.now();
-                      bind.sessionTogglePrivacyMode(
-                          sessionId: sessionId, implKey: implKey);
-                    }
-                  : null);
+          onChanged: (value) {
+            if (value == null) return;
+            togglePrivacyModeTime = DateTime.now();
+            bind.sessionTogglePrivacyMode(
+                sessionId: sessionId, implKey: implKey);
+          });
     }).toList();
   }
 }
