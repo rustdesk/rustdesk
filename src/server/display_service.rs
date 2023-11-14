@@ -138,12 +138,10 @@ pub fn capture_cursor_embedded() -> bool {
 }
 
 #[inline]
-pub fn is_privacy_mode_supported() -> bool {
-    #[cfg(windows)]
+#[cfg(windows)]
+pub fn is_privacy_mode_mag_supported() -> bool {
     return *IS_CAPTURER_MAGNIFIER_SUPPORTED
         && get_version_number(&crate::VERSION) > get_version_number("1.1.9");
-    #[cfg(not(windows))]
-    return false;
 }
 
 pub fn new() -> GenericService {

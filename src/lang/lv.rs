@@ -302,8 +302,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Peer exit", "Iziet no attālās ierīces"),
         ("Failed to turn off", "Neizdevās izslēgt"),
         ("Turned off", "Izslēgts"),
-        ("In privacy mode", "Privātuma režīmā"),
-        ("Out privacy mode", "Izslēgts privātuma režīms"),
         ("Language", "Valoda"),
         ("Keep RustDesk background service", "Saglabāt RustDesk fona servisu"),
         ("Ignore Battery Optimizations", "Ignorēt akumulatora optimizāciju"),
@@ -570,5 +568,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("True color (4:4:4)", "Īstā krāsa (4:4:4)"),
         ("Enable blocking user input", "Iespējot lietotāja ievades bloķēšanu"),
         ("id_input_tip", "Varat ievadīt ID, tiešo IP vai domēnu ar portu (<domēns>:<ports>).\nJa vēlaties piekļūt ierīcei citā serverī, lūdzu, pievienojiet servera adresi (<id>@<servera_adrese>?key=<atslēgas_vērtība>), piemēram,\n9123456234@192.168.16.1:21117?key=5Qbwsde3unUcJBtrx9ZkvUmwFNoExHzpryHuPUdqlWM=.\nJa vēlaties piekļūt ierīcei publiskajā serverī, lūdzu, ievadiet \"<id>@public\", publiskajam serverim atslēga nav nepieciešama"),
+        ("privacy_mode_impl_mag_tip", ""),
+        ("privacy_mode_impl_virtual_display_tip", ""),
+        ("Enter privacy mode", ""),
+        ("Exit privacy mode", ""),
     ].iter().cloned().collect();
 }

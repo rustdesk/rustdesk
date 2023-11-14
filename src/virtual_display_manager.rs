@@ -6,8 +6,8 @@ use std::{
 
 // virtual display index range: 0 - 2 are reserved for headless and other special uses.
 const VIRTUAL_DISPLAY_INDEX_FOR_HEADLESS: u32 = 0;
-const VIRTUAL_DISPLAY_START_FOR_PEER: u32 = 3;
-const VIRTUAL_DISPLAY_MAX_COUNT: u32 = 10;
+const VIRTUAL_DISPLAY_START_FOR_PEER: u32 = 1;
+const VIRTUAL_DISPLAY_MAX_COUNT: u32 = 5;
 
 lazy_static::lazy_static! {
     static ref VIRTUAL_DISPLAY_MANAGER: Arc<Mutex<VirtualDisplayManager>> =
@@ -165,6 +165,7 @@ pub fn plug_in_peer_request(modes: Vec<Vec<virtual_display::MonitorMode>>) -> Re
                         log::error!("Plug in monitor failed {}", e);
                     }
                 }
+                break;
             }
         }
     }

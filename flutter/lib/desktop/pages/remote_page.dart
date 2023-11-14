@@ -17,6 +17,7 @@ import '../../common/widgets/overlay.dart';
 import '../../common/widgets/remote_input.dart';
 import '../../common.dart';
 import '../../common/widgets/dialog.dart';
+import '../../common/widgets/toolbar.dart';
 import '../../models/model.dart';
 import '../../models/desktop_render_texture.dart';
 import '../../models/platform_model.dart';
@@ -281,24 +282,23 @@ class _RemotePageState extends State<RemotePage>
                   },
                   inputModel: _ffi.inputModel,
                   child: getBodyForDesktop(context))),
-              Stack(
-                children: [
-                  _ffi.ffiModel.pi.isSet.isTrue &&
-                          _ffi.ffiModel.waitForFirstImage.isTrue
-                      ? emptyOverlay()
-                      : () {
-                          _ffi.ffiModel.tryShowAndroidActionsOverlay();
-                          return Offstage();
-                        }(),
-                  // Use Overlay to enable rebuild every time on menu button click.
-                  _ffi.ffiModel.pi.isSet.isTrue
-                      ? Overlay(initialEntries: [
-                          OverlayEntry(builder: remoteToolbar)
-                        ])
-                      : remoteToolbar(context),
-                  _ffi.ffiModel.pi.isSet.isFalse ? emptyOverlay() : Offstage(),
-                ],
-              ),
+          Stack(
+            children: [
+              _ffi.ffiModel.pi.isSet.isTrue &&
+                      _ffi.ffiModel.waitForFirstImage.isTrue
+                  ? emptyOverlay()
+                  : () {
+                      _ffi.ffiModel.tryShowAndroidActionsOverlay();
+                      return Offstage();
+                    }(),
+              // Use Overlay to enable rebuild every time on menu button click.
+              _ffi.ffiModel.pi.isSet.isTrue
+                  ? Overlay(
+                      initialEntries: [OverlayEntry(builder: remoteToolbar)])
+                  : remoteToolbar(context),
+              _ffi.ffiModel.pi.isSet.isFalse ? emptyOverlay() : Offstage(),
+            ],
+          ),
         ],
       );
     }
@@ -309,12 +309,17 @@ class _RemotePageState extends State<RemotePage>
         final imageReady = _ffi.ffiModel.pi.isSet.isTrue &&
             _ffi.ffiModel.waitForFirstImage.isFalse;
         if (imageReady) {
-          // `dismissAll()` is to ensure that the state is clean.
-          // It's ok to call dismissAll() here.
-          _ffi.dialogManager.dismissAll();
-          // Recreate the block state to refresh the state.
-          _blockableOverlayState = BlockableOverlayState();
-          _blockableOverlayState.applyFfi(_ffi);
+          // If the privacy mode(disable physical displays) is switched,
+          // we should not dismiss the dialog immediately.
+          if (DateTime.now().difference(togglePrivacyModeTime) >
+              const Duration(milliseconds: 3000)) {
+            // `dismissAll()` is to ensure that the state is clean.
+            // It's ok to call dismissAll() here.
+            _ffi.dialogManager.dismissAll();
+            // Recreate the block state to refresh the state.
+            _blockableOverlayState = BlockableOverlayState();
+            _blockableOverlayState.applyFfi(_ffi);
+          }
           // Block the whole `bodyWidget()` when dialog shows.
           return BlockableOverlay(
             underlying: bodyWidget(),

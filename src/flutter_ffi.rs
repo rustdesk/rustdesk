@@ -224,6 +224,12 @@ pub fn session_toggle_option(session_id: SessionID, value: String) {
     }
 }
 
+pub fn session_toggle_privacy_mode(session_id: SessionID, impl_key: String, on: bool) {
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
+        session.toggle_privacy_mode(impl_key, on);
+    }
+}
+
 pub fn session_get_flutter_option(session_id: SessionID, k: String) -> Option<String> {
     if let Some(session) = sessions::get_session_by_session_id(&session_id) {
         Some(session.get_flutter_option(k))
@@ -1972,6 +1978,17 @@ pub fn is_selinux_enforcing() -> SyncReturn<bool> {
     {
         SyncReturn(false)
     }
+}
+
+pub fn main_default_privacy_mode_impl() -> SyncReturn<String> {
+    SyncReturn(crate::privacy_mode::DEFAULT_PRIVACY_MODE_IMPL.to_owned())
+}
+
+pub fn main_supported_privacy_mode_impls() -> SyncReturn<String> {
+    SyncReturn(
+        serde_json::to_string(&crate::privacy_mode::get_supported_privacy_mode_impl())
+            .unwrap_or_default(),
+    )
 }
 
 #[cfg(target_os = "android")]

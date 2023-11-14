@@ -302,8 +302,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Peer exit", "다른 사용자가 나감"),
         ("Failed to turn off", "종료에 실패함"),
         ("Turned off", "종료됨"),
-        ("In privacy mode", "개인정보 보호 모드 진입"),
-        ("Out privacy mode", "개인정보 보호 모드 나감"),
         ("Language", "언어"),
         ("Keep RustDesk background service", "RustDesk 백그라운드 서비스로 유지하기"),
         ("Ignore Battery Optimizations", "배터리 최적화 무시하기"),
@@ -569,8 +567,10 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Plug out all", "모두 플러그 아웃"),
         ("True color (4:4:4)", "트루컬러(4:4:4)"),
         ("Enable blocking user input", "사용자 입력 차단 허용"),
-        ("id_input_tip", "입력된 ID, IP, 도메인과 포트(<domain>:<port>)를 입력할 수 있습니다.\n다른 서버에 있는 장치에 접속하려면 서버 주소(<id>@<server_address>?key=<key_value>)를 추가하세요.
-        예:\n9123456234@192.168.16.1:21117?key=5Qbwsde3unUcJBtrx9ZkvUmwFNoExHzpryHuPUdqlWM=.\n
-        공개 서버의 장치에 액세스하려면 \"<id>@public\",을 입력하세요. 공개 서버에는 키가 필요하지 않습니다"),
+        ("id_input_tip", "입력된 ID, IP, 도메인과 포트(<domain>:<port>)를 입력할 수 있습니다.\n다른 서버에 있는 장치에 접속하려면 서버 주소(<id>@<server_address>?key=<key_value>)를 추가하세요"),
+        ("privacy_mode_impl_mag_tip", ""),
+        ("privacy_mode_impl_virtual_display_tip", ""),
+        ("Enter privacy mode", ""),
+        ("Exit privacy mode", ""),
     ].iter().cloned().collect();
 }

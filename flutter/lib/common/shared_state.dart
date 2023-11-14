@@ -11,7 +11,7 @@ class PrivacyModeState {
   static void init(String id) {
     final key = tag(id);
     if (!Get.isRegistered(tag: key)) {
-      final RxBool state = false.obs;
+      final RxString state = ''.obs;
       Get.put(state, tag: key);
     }
   }
@@ -21,11 +21,11 @@ class PrivacyModeState {
     if (Get.isRegistered(tag: key)) {
       Get.delete(tag: key);
     } else {
-      Get.find<RxBool>(tag: key).value = false;
+      Get.find<RxString>(tag: key).value = '';
     }
   }
 
-  static RxBool find(String id) => Get.find<RxBool>(tag: tag(id));
+  static RxString find(String id) => Get.find<RxString>(tag: tag(id));
 }
 
 class BlockInputState {

@@ -17,11 +17,10 @@ use crate::{
         new_voice_call_request, new_voice_call_response, start_audio_thread, MediaData, MediaSender,
     },
     common::{get_default_sound_input, set_sound_input},
-    display_service, video_service,
+    display_service, ipc, privacy_mode, video_service, VERSION,
 };
 #[cfg(any(target_os = "android", target_os = "ios"))]
 use crate::{common::DEVICE_NAME, flutter::connection_manager::start_channel};
-use crate::{ipc, VERSION};
 use cidr_utils::cidr::IpCidr;
 #[cfg(all(target_os = "linux", feature = "linux_headless"))]
 #[cfg(not(any(feature = "flatpak", feature = "appimage")))]
@@ -506,24 +505,27 @@ impl Connection {
                         ipc::Data::ClipboardFile(clip) => {
                             allow_err!(conn.stream.send(&clip_2_msg(clip)).await);
                         }
-                        ipc::Data::PrivacyModeState((_, state)) => {
+                        ipc::Data::PrivacyModeState((_, state, impl_key)) => {
                             let msg_out = match state {
                                 ipc::PrivacyModeState::OffSucceeded => {
                                     video_service::set_privacy_mode_conn_id(0);
                                     crate::common::make_privacy_mode_msg(
                                         back_notification::PrivacyModeState::PrvOffSucceeded,
+                                        impl_key,
                                     )
                                 }
                                 ipc::PrivacyModeState::OffByPeer => {
                                     video_service::set_privacy_mode_conn_id(0);
                                     crate::common::make_privacy_mode_msg(
                                         back_notification::PrivacyModeState::PrvOffByPeer,
+                                        impl_key,
                                     )
                                 }
                                 ipc::PrivacyModeState::OffUnknown => {
                                     video_service::set_privacy_mode_conn_id(0);
                                      crate::common::make_privacy_mode_msg(
                                         back_notification::PrivacyModeState::PrvOffUnknown,
+                                        impl_key,
                                     )
                                 }
                             };
@@ -683,9 +685,7 @@ impl Connection {
         let video_privacy_conn_id = video_service::get_privacy_mode_conn_id();
         if video_privacy_conn_id == id {
             video_service::set_privacy_mode_conn_id(0);
-            let _ = privacy_mode::turn_off_privacy(id);
-        } else if video_privacy_conn_id == 0 {
-            let _ = privacy_mode::turn_off_privacy(0);
+            let _ = Self::turn_off_privacy_to_msg(id);
         }
         #[cfg(all(feature = "flutter", feature = "plugin_framework"))]
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -1059,7 +1059,13 @@ impl Connection {
             pi.hostname = DEVICE_NAME.lock().unwrap().clone();
             pi.platform = "Android".into();
         }
-        #[cfg(any(target_os = "linux", target_os = "windows", target_os = "macos"))]
+        #[cfg(all(target_os = "macos", not(feature = "unix-file-copy-paste")))]
+        let platform_additions = serde_json::Map::new();
+        #[cfg(any(
+            target_os = "windows",
+            target_os = "linux",
+            all(target_os = "macos", feature = "unix-file-copy-paste")
+        ))]
         let mut platform_additions = serde_json::Map::new();
         #[cfg(target_os = "linux")]
         {
@@ -1087,6 +1093,10 @@ impl Connection {
                     platform_additions.insert("virtual_displays".into(), json!(&virtual_displays));
                 }
             }
+            platform_additions.insert(
+                "supported_privacy_mode_impl".into(),
+                json!(privacy_mode::get_supported_privacy_mode_impl()),
+            );
         }
 
         #[cfg(any(
@@ -1158,7 +1168,7 @@ impl Connection {
         pi.username = username;
         pi.sas_enabled = sas_enabled;
         pi.features = Some(Features {
-            privacy_mode: display_service::is_privacy_mode_supported(),
+            privacy_mode: privacy_mode::is_privacy_mode_supported(),
             ..Default::default()
         })
         .into();
@@ -1474,6 +1484,7 @@ impl Connection {
     fn try_start_cm_ipc(&mut self) {
         if let Some(p) = self.start_cm_ipc_para.take() {
             tokio::spawn(async move {
+                #[cfg(windows)]
                 let tx_from_cm_clone = p.tx_from_cm.clone();
                 if let Err(err) = start_ipc(
                     p.rx_to_cm,
@@ -2090,6 +2101,9 @@ impl Connection {
                     Some(misc::Union::ToggleVirtualDisplay(t)) => {
                         self.toggle_virtual_display(t).await;
                     }
+                    Some(misc::Union::TogglePrivacyMode(t)) => {
+                        self.toggle_privacy_mode(t).await;
+                    }
                     Some(misc::Union::ChatMessage(c)) => {
                         self.send_to_cm(ipc::Data::ChatMessage { text: c.text });
                         self.chat_unanswered = true;
@@ -2362,6 +2376,14 @@ impl Connection {
         }
     }
 
+    async fn toggle_privacy_mode(&mut self, t: TogglePrivacyMode) {
+        if t.on {
+            self.turn_on_privacy(t.impl_key).await;
+        } else {
+            self.turn_off_privacy(t.impl_key).await;
+        }
+    }
+
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     fn change_resolution(&mut self, r: &Resolution) {
         if self.keyboard {
@@ -2535,70 +2557,21 @@ impl Connection {
                 }
             }
         }
-        if let Ok(q) = o.privacy_mode.enum_value() {
-            if self.keyboard {
-                match q {
-                    BoolOption::Yes => {
-                        let msg_out = if !display_service::is_privacy_mode_supported() {
-                            crate::common::make_privacy_mode_msg_with_details(
-                                back_notification::PrivacyModeState::PrvNotSupported,
-                                "Unsupported. 1 Multi-screen is not supported. 2 Please confirm the license is activated.".to_string(),
-                            )
-                        } else {
-                            match privacy_mode::turn_on_privacy(self.inner.id) {
-                                Ok(true) => {
-                                    let err_msg = video_service::test_create_capturer(
-                                        self.inner.id,
-                                        self.display_idx,
-                                        5_000,
-                                    );
-                                    if err_msg.is_empty() {
-                                        video_service::set_privacy_mode_conn_id(self.inner.id);
-                                        crate::common::make_privacy_mode_msg(
-                                            back_notification::PrivacyModeState::PrvOnSucceeded,
-                                        )
-                                    } else {
-                                        log::error!(
-                                            "Wait privacy mode timeout, turn off privacy mode"
-                                        );
-                                        video_service::set_privacy_mode_conn_id(0);
-                                        let _ = privacy_mode::turn_off_privacy(self.inner.id);
-                                        crate::common::make_privacy_mode_msg_with_details(
-                                            back_notification::PrivacyModeState::PrvOnFailed,
-                                            err_msg,
-                                        )
-                                    }
-                                }
-                                Ok(false) => crate::common::make_privacy_mode_msg(
-                                    back_notification::PrivacyModeState::PrvOnFailedPlugin,
-                                ),
-                                Err(e) => {
-                                    log::error!("Failed to turn on privacy mode. {}", e);
-                                    if video_service::get_privacy_mode_conn_id() == 0 {
-                                        let _ = privacy_mode::turn_off_privacy(0);
-                                    }
-                                    crate::common::make_privacy_mode_msg_with_details(
-                                        back_notification::PrivacyModeState::PrvOnFailed,
-                                        e.to_string(),
-                                    )
-                                }
-                            }
-                        };
-                        self.send(msg_out).await;
+        // For compatibility with old versions ( < 1.2.4 ).
+        if hbb_common::get_version_number(&self.lr.version)
+            < hbb_common::get_version_number("1.2.4")
+        {
+            if let Ok(q) = o.privacy_mode.enum_value() {
+                if self.keyboard {
+                    match q {
+                        BoolOption::Yes => {
+                            self.turn_on_privacy("".to_owned()).await;
+                        }
+                        BoolOption::No => {
+                            self.turn_off_privacy("".to_owned()).await;
+                        }
+                        _ => {}
                     }
-                    BoolOption::No => {
-                        let msg_out = if !display_service::is_privacy_mode_supported() {
-                            crate::common::make_privacy_mode_msg_with_details(
-                                back_notification::PrivacyModeState::PrvNotSupported,
-                                "Unsupported. 1 Multi-screen is not supported. 2 Please confirm the license is activated.".to_string(),
-                            )
-                        } else {
-                            video_service::set_privacy_mode_conn_id(0);
-                            privacy_mode::turn_off_privacy(self.inner.id)
-                        };
-                        self.send(msg_out).await;
-                    }
-                    _ => {}
                 }
             }
         }
@@ -2625,6 +2598,107 @@ impl Connection {
                     }
                 }
             }
+        }
+    }
+
+    async fn turn_on_privacy(&mut self, impl_key: String) {
+        let msg_out = if !privacy_mode::is_privacy_mode_supported() {
+            crate::common::make_privacy_mode_msg_with_details(
+                back_notification::PrivacyModeState::PrvNotSupported,
+                "Unsupported. 1 Multi-screen is not supported. 2 Please confirm the license is activated.".to_string(),
+                impl_key,
+            )
+        } else {
+            match privacy_mode::turn_on_privacy(&impl_key, self.inner.id) {
+                Some(Ok(res)) => {
+                    if res {
+                        let err_msg = privacy_mode::check_privacy_mode_err(
+                            self.inner.id,
+                            self.display_idx,
+                            5_000,
+                        );
+                        if err_msg.is_empty() {
+                            video_service::set_privacy_mode_conn_id(self.inner.id);
+                            crate::common::make_privacy_mode_msg(
+                                back_notification::PrivacyModeState::PrvOnSucceeded,
+                                impl_key,
+                            )
+                        } else {
+                            log::error!(
+                                "Check privacy mode failed: {}, turn off privacy mode.",
+                                &err_msg
+                            );
+                            video_service::set_privacy_mode_conn_id(0);
+                            let _ = Self::turn_off_privacy_to_msg(self.inner.id);
+                            crate::common::make_privacy_mode_msg_with_details(
+                                back_notification::PrivacyModeState::PrvOnFailed,
+                                err_msg,
+                                impl_key,
+                            )
+                        }
+                    } else {
+                        crate::common::make_privacy_mode_msg(
+                            back_notification::PrivacyModeState::PrvOnFailedPlugin,
+                            impl_key,
+                        )
+                    }
+                }
+                Some(Err(e)) => {
+                    log::error!("Failed to turn on privacy mode. {}", e);
+                    if video_service::get_privacy_mode_conn_id() == 0 {
+                        let _ = Self::turn_off_privacy_to_msg(0);
+                    }
+                    crate::common::make_privacy_mode_msg_with_details(
+                        back_notification::PrivacyModeState::PrvOnFailed,
+                        e.to_string(),
+                        impl_key,
+                    )
+                }
+                None => crate::common::make_privacy_mode_msg_with_details(
+                    back_notification::PrivacyModeState::PrvOffFailed,
+                    "Not supported".to_string(),
+                    impl_key,
+                ),
+            }
+        };
+        self.send(msg_out).await;
+    }
+
+    async fn turn_off_privacy(&mut self, impl_key: String) {
+        let msg_out = if !privacy_mode::is_privacy_mode_supported() {
+            crate::common::make_privacy_mode_msg_with_details(
+                back_notification::PrivacyModeState::PrvNotSupported,
+                // This error message is used for magnifier. It is ok to use it here.
+                "Unsupported. 1 Multi-screen is not supported. 2 Please confirm the license is activated.".to_string(),
+                impl_key,
+            )
+        } else {
+            video_service::set_privacy_mode_conn_id(0);
+            Self::turn_off_privacy_to_msg(self.inner.id)
+        };
+        self.send(msg_out).await;
+    }
+
+    pub fn turn_off_privacy_to_msg(_conn_id: i32) -> Message {
+        let impl_key = "".to_owned();
+        match privacy_mode::turn_off_privacy(_conn_id, None) {
+            Some(Ok(_)) => crate::common::make_privacy_mode_msg(
+                back_notification::PrivacyModeState::PrvOffSucceeded,
+                impl_key,
+            ),
+            Some(Err(e)) => {
+                log::error!("Failed to turn off privacy mode {}", e);
+                crate::common::make_privacy_mode_msg_with_details(
+                    back_notification::PrivacyModeState::PrvOffFailed,
+                    e.to_string(),
+                    impl_key,
+                )
+            }
+            None => crate::common::make_privacy_mode_msg_with_details(
+                back_notification::PrivacyModeState::PrvOffFailed,
+                "Not supported".to_string(),
+                impl_key,
+            ),
         }
     }
 
@@ -2923,47 +2997,6 @@ fn try_activate_screen() {
     });
 }
 
-mod privacy_mode {
-    use super::*;
-    #[cfg(windows)]
-    use crate::privacy_win_mag;
-
-    pub(super) fn turn_off_privacy(_conn_id: i32) -> Message {
-        #[cfg(windows)]
-        {
-            let res = privacy_win_mag::turn_off_privacy(_conn_id, None);
-            match res {
-                Ok(_) => crate::common::make_privacy_mode_msg(
-                    back_notification::PrivacyModeState::PrvOffSucceeded,
-                ),
-                Err(e) => {
-                    log::error!("Failed to turn off privacy mode {}", e);
-                    crate::common::make_privacy_mode_msg_with_details(
-                        back_notification::PrivacyModeState::PrvOffFailed,
-                        e.to_string(),
-                    )
-                }
-            }
-        }
-        #[cfg(not(windows))]
-        {
-            crate::common::make_privacy_mode_msg(back_notification::PrivacyModeState::PrvOffFailed)
-        }
-    }
-
-    pub(super) fn turn_on_privacy(_conn_id: i32) -> ResultType<bool> {
-        #[cfg(windows)]
-        {
-            let plugin_exist = privacy_win_mag::turn_on_privacy(_conn_id)?;
-            Ok(plugin_exist)
-        }
-        #[cfg(not(windows))]
-        {
-            Ok(true)
-        }
-    }
-}
-
 pub enum AlarmAuditType {
     IpWhitelist = 0,
     ExceedThirtyAttempts = 1,
@@ -3208,8 +3241,6 @@ mod raii {
                 display_service::reset_resolutions();
                 #[cfg(all(windows, feature = "virtual_display_driver"))]
                 let _ = virtual_display_manager::reset_all();
-                #[cfg(all(windows))]
-                crate::privacy_win_mag::stop();
             }
         }
     }
