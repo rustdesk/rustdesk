@@ -1,8 +1,11 @@
-#[cfg(windows)]
-use crate::ipc::{connect, Data};
 #[cfg(all(windows, feature = "virtual_display_driver"))]
 use crate::platform::is_installed;
-use crate::{display_service, ipc::PrivacyModeState, ui_interface::get_option};
+#[cfg(windows)]
+use crate::{
+    display_service,
+    ipc::{connect, Data},
+};
+use crate::{ipc::PrivacyModeState, ui_interface::get_option};
 #[cfg(windows)]
 use hbb_common::tokio;
 use hbb_common::{anyhow::anyhow, bail, lazy_static, ResultType};

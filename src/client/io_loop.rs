@@ -14,8 +14,6 @@ use crossbeam_queue::ArrayQueue;
 use hbb_common::sleep;
 #[cfg(not(target_os = "ios"))]
 use hbb_common::tokio::sync::mpsc::error::TryRecvError;
-#[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
-use hbb_common::tokio::sync::Mutex as TokioMutex;
 use hbb_common::{
     allow_err,
     config::{PeerConfig, TransferSerde},
@@ -34,8 +32,10 @@ use hbb_common::{
         sync::mpsc,
         time::{self, Duration, Instant, Interval},
     },
-    ResultType, Stream,
+    Stream,
 };
+#[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
+use hbb_common::{tokio::sync::Mutex as TokioMutex, ResultType};
 use scrap::CodecFormat;
 
 use crate::client::{

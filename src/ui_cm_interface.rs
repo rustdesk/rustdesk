@@ -19,8 +19,6 @@ use crate::ipc::{self, Data};
 use clipboard::ContextSend;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use hbb_common::tokio::sync::mpsc::unbounded_channel;
-#[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
-use hbb_common::tokio::sync::Mutex as TokioMutex;
 use hbb_common::{
     allow_err,
     config::Config,
@@ -34,8 +32,9 @@ use hbb_common::{
         sync::mpsc::{self, UnboundedSender},
         task::spawn_blocking,
     },
-    ResultType,
 };
+#[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
+use hbb_common::{tokio::sync::Mutex as TokioMutex, ResultType};
 use serde_derive::Serialize;
 
 #[derive(Serialize, Clone)]
