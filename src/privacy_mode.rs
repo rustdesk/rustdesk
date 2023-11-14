@@ -177,23 +177,36 @@ fn get_supported_impl(impl_key: &str) -> String {
 pub fn turn_on_privacy(impl_key: &str, conn_id: i32) -> Option<ResultType<bool>> {
     // Check if privacy mode is already on or occupied by another one
     let mut privacy_mode_lock = PRIVACY_MODE.lock().unwrap();
-    if let Some(privacy_mode) = privacy_mode_lock.as_ref() {
-        let check_on_conn_id = privacy_mode.check_on_conn_id(conn_id);
-        match check_on_conn_id.as_ref() {
-            Ok(true) | Err(_) => return Some(check_on_conn_id),
-            _ => {}
-        }
-    }
 
     // Check or switch privacy mode implementation
     let impl_key = get_supported_impl(impl_key);
     let mut cur_impl_lock = CUR_PRIVACY_MODE_IMPL.lock().unwrap();
+
+    if let Some(privacy_mode) = privacy_mode_lock.as_ref() {
+        let check_on_conn_id = privacy_mode.check_on_conn_id(conn_id);
+        match check_on_conn_id.as_ref() {
+            Ok(true) => {
+                if *cur_impl_lock == impl_key {
+                    return Some(Ok(true));
+                } else {
+                    // Same peer, switch to new implementation.
+                }
+            }
+            Err(_) => return Some(check_on_conn_id),
+            _ => {}
+        }
+    }
+
     if *cur_impl_lock != impl_key {
         if let Some(creator) = PRIVACY_MODE_CREATOR
             .lock()
             .unwrap()
             .get(&(&impl_key as &str))
         {
+            if let Some(privacy_mode) = privacy_mode_lock.as_mut() {
+                privacy_mode.clear();
+            }
+
             *privacy_mode_lock = Some(creator());
             *cur_impl_lock = impl_key.to_owned();
         } else {

@@ -277,9 +277,7 @@ void setPrivacyModeDialog(
                     visualDensity: VisualDensity.compact,
                     title: value.child,
                     value: value.value,
-                    onChanged: (privacyModeState.isEmpty || value.value)
-                        ? value.onChanged
-                        : null,
+                    onChanged: value.onChanged,
                   ))
               .toList()),
     );

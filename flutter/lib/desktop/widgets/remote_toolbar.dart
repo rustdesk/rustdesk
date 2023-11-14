@@ -1073,9 +1073,7 @@ class _DisplayMenuState extends State<_DisplayMenu> {
               menuChildren: privacyModeList
                   .map((e) => Obx(() => CkbMenuButton(
                       value: e.value,
-                      onChanged: (privacyModeState.isEmpty || e.value)
-                          ? e.onChanged
-                          : null,
+                      onChanged: e.onChanged,
                       child: e.child,
                       ffi: ffi)))
                   .toList()),
