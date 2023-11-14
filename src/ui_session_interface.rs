@@ -317,11 +317,11 @@ impl<T: InvokeUiSession> Session<T> {
         }
     }
 
-    pub fn toggle_privacy_mode(&self, impl_key: String) {
+    pub fn toggle_privacy_mode(&self, impl_key: String, on: bool) {
         let mut misc = Misc::new();
         misc.set_toggle_privacy_mode(TogglePrivacyMode {
             impl_key,
-            on: !self.lc.read().unwrap().get_toggle_option("privacy-mode"),
+            on,
             ..Default::default()
         });
         let mut msg_out = Message::new();

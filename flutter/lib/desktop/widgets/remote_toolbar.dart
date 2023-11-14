@@ -1071,11 +1071,11 @@ class _DisplayMenuState extends State<_DisplayMenu> {
               ffi: widget.ffi,
               child: Text(translate('Privacy Mode')),
               menuChildren: privacyModeList
-                  .map((e) => Obx(() => CkbMenuButton(
+                  .map((e) => CkbMenuButton(
                       value: e.value,
                       onChanged: e.onChanged,
                       child: e.child,
-                      ffi: ffi)))
+                      ffi: ffi))
                   .toList()),
         ]);
       }

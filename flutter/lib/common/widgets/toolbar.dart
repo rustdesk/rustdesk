@@ -594,7 +594,8 @@ List<TToggleMenu> toolbarPrivacyMode(
     final implKey = (privacyModeImpls[0] as List<dynamic>)[0] as String;
     return [
       getDefaultMenu((sid, opt) async {
-        bind.sessionTogglePrivacyMode(sessionId: sid, implKey: implKey);
+        bind.sessionTogglePrivacyMode(
+            sessionId: sid, implKey: implKey, on: privacyModeState.isEmpty);
         togglePrivacyModeTime = DateTime.now();
       })
     ];
@@ -609,7 +610,7 @@ List<TToggleMenu> toolbarPrivacyMode(
             if (value == null) return;
             togglePrivacyModeTime = DateTime.now();
             bind.sessionTogglePrivacyMode(
-                sessionId: sessionId, implKey: implKey);
+                sessionId: sessionId, implKey: implKey, on: value);
           });
     }).toList();
   }
