@@ -507,21 +507,21 @@ impl Connection {
                         }
                         ipc::Data::PrivacyModeState((_, state, impl_key)) => {
                             let msg_out = match state {
-                                ipc::PrivacyModeState::OffSucceeded => {
+                                privacy_mode::PrivacyModeState::OffSucceeded => {
                                     video_service::set_privacy_mode_conn_id(0);
                                     crate::common::make_privacy_mode_msg(
                                         back_notification::PrivacyModeState::PrvOffSucceeded,
                                         impl_key,
                                     )
                                 }
-                                ipc::PrivacyModeState::OffByPeer => {
+                                privacy_mode::PrivacyModeState::OffByPeer => {
                                     video_service::set_privacy_mode_conn_id(0);
                                     crate::common::make_privacy_mode_msg(
                                         back_notification::PrivacyModeState::PrvOffByPeer,
                                         impl_key,
                                     )
                                 }
-                                ipc::PrivacyModeState::OffUnknown => {
+                                privacy_mode::PrivacyModeState::OffUnknown => {
                                     video_service::set_privacy_mode_conn_id(0);
                                      crate::common::make_privacy_mode_msg(
                                         back_notification::PrivacyModeState::PrvOffUnknown,
