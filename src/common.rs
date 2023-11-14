@@ -877,8 +877,10 @@ pub fn hostname() -> String {
 
 #[inline]
 pub fn get_sysinfo() -> serde_json::Value {
-    use hbb_common::sysinfo::{System};
-    let system = System::new_all();
+    use hbb_common::sysinfo::System;
+    let mut system = System::new();
+    system.refresh_memory();
+    system.refresh_cpu();
     let memory = system.total_memory();
     let memory = (memory as f64 / 1024. / 1024. / 1024. * 100.).round() / 100.;
     let cpus = system.cpus();
@@ -1086,7 +1088,11 @@ pub fn make_privacy_mode_msg(state: back_notification::PrivacyModeState) -> Mess
     make_privacy_mode_msg_with_details(state, "".to_owned())
 }
 
-pub fn is_keyboard_mode_supported(keyboard_mode: &KeyboardMode, version_number: i64, peer_platform: &str) -> bool {
+pub fn is_keyboard_mode_supported(
+    keyboard_mode: &KeyboardMode,
+    version_number: i64,
+    peer_platform: &str,
+) -> bool {
     match keyboard_mode {
         KeyboardMode::Legacy => true,
         KeyboardMode::Map => {
@@ -1213,7 +1219,7 @@ pub async fn get_next_nonkeyexchange_msg(
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub fn check_process(arg: &str, same_uid: bool) -> bool {
-    use hbb_common::sysinfo::{System};
+    use hbb_common::sysinfo::System;
     let mut sys = System::new();
     sys.refresh_processes();
     let mut path = std::env::current_exe().unwrap_or_default();
