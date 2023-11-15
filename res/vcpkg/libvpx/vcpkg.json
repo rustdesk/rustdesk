@@ -13,14 +13,6 @@
       "name": "vcpkg-msbuild",
       "host": true,
       "platform": "windows"
-    },
-    {
-      "name": "yasm",
-      "host": true,
-      "features": [
-        "tools"
-      ],
-      "platform": "!(windows & !mingw)"
     }
   ],
   "features": {

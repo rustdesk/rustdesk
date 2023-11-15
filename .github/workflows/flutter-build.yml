@@ -1225,9 +1225,7 @@ jobs:
 
       - name: Install vcpkg dependencies
         run: |
-          pushd $VCPKG_ROOT
-          git apply --ignore-space-change "$OLDPWD/res/vcpkg/0001-Extend-crosscompiling-efforts-to-other-architectures.patch"
-          popd
+          cp $PWD/res/vcpkg/linux.cmake $VCPKG_ROOT/scripts/toolchains/linux.cmake
           $VCPKG_ROOT/vcpkg install --triplet arm-linux --x-install-root="$VCPKG_ROOT/installed"
         shell: bash
 
