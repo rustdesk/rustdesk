@@ -565,12 +565,12 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("List", "Список"),
         ("Virtual display", "Виртуальный дисплей"),
         ("Plug out all", "Отключить все"),
-        ("True color (4:4:4)", "Истинный цвет (4:4:4)"),
+        ("True color (4:4:4)", "True color (4:4:4)"),
         ("Enable blocking user input", "Блокировать ввод пользователя"),
         ("id_input_tip", "Можно ввести идентификатор, прямой IP-адрес или домен с портом (<домен>:<порт>).\nЕсли необходимо получить доступ к устройству на другом сервере, добавьте адрес сервера (<id>@<адрес_сервера>?key=<ключ_значение>), например:\n9123456234@192.168.16.1:21117?key=5Qbwsde3unUcJBtrx9ZkvUmwFNoExHzpryHuPUdqlWM=.\nЕсли необходимо получить доступ к устройству на общедоступном сервере, введите \"<id>@public\", ключ для публичного сервера не требуется."),
-        ("privacy_mode_impl_mag_tip", ""),
-        ("privacy_mode_impl_virtual_display_tip", ""),
-        ("Enter privacy mode", ""),
-        ("Exit privacy mode", ""),
+        ("privacy_mode_impl_mag_tip", "Режим 1 (устаревший)"),
+        ("privacy_mode_impl_virtual_display_tip", "Режим 2 (рекомендуемый)"),
+        ("Enter privacy mode", "Включить режим конфиденциальности"),
+        ("Exit privacy mode", "Отключить режим конфиденциальности"),
     ].iter().cloned().collect();
 }
