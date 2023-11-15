@@ -1,5 +1,5 @@
 use super::{PrivacyMode, INVALID_PRIVACY_MODE_CONN_ID};
-use crate::{ipc::PrivacyModeState, platform::windows::get_user_token};
+use crate::{platform::windows::get_user_token, privacy_mode::PrivacyModeState};
 use hbb_common::{allow_err, bail, log, ResultType};
 use std::{
     ffi::CString,

@@ -1,14 +1,15 @@
 #[cfg(all(windows, feature = "virtual_display_driver"))]
 use crate::platform::is_installed;
+use crate::ui_interface::get_option;
 #[cfg(windows)]
 use crate::{
     display_service,
     ipc::{connect, Data},
 };
-use crate::{ipc::PrivacyModeState, ui_interface::get_option};
 #[cfg(windows)]
 use hbb_common::tokio;
 use hbb_common::{anyhow::anyhow, bail, lazy_static, ResultType};
+use serde_derive::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
     sync::{Arc, Mutex},
@@ -36,6 +37,14 @@ pub const PRIVACY_MODE_IMPL_WIN_MAG: &str = win_mag::PRIVACY_MODE_IMPL;
 
 #[cfg(all(windows, feature = "virtual_display_driver"))]
 pub const PRIVACY_MODE_IMPL_WIN_VIRTUAL_DISPLAY: &str = win_virtual_display::PRIVACY_MODE_IMPL;
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(tag = "t", content = "c")]
+pub enum PrivacyModeState {
+    OffSucceeded,
+    OffByPeer,
+    OffUnknown,
+}
 
 pub trait PrivacyMode: Sync + Send {
     fn init(&self) -> ResultType<()>;

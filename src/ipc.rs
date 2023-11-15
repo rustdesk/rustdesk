@@ -5,6 +5,7 @@ use std::{
 #[cfg(not(windows))]
 use std::{fs::File, io::prelude::*};
 
+use crate::privacy_mode::PrivacyModeState;
 use bytes::Bytes;
 use parity_tokio_ipc::{
     Connection as Conn, ConnectionClient as ConnClient, Endpoint, Incoming, SecurityAttributes,
@@ -30,14 +31,6 @@ use hbb_common::{
 
 use crate::{common::is_server, privacy_mode, rendezvous_mediator::RendezvousMediator};
 
-// State with timestamp, because std::time::Instant cannot be serialized
-#[derive(Debug, Serialize, Deserialize, Clone)]
-#[serde(tag = "t", content = "c")]
-pub enum PrivacyModeState {
-    OffSucceeded,
-    OffByPeer,
-    OffUnknown,
-}
 // IPC actions here.
 pub const IPC_ACTION_CLOSE: &str = "close";
 pub static EXIT_RECV_CLOSE: AtomicBool = AtomicBool::new(true);
