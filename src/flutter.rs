@@ -1597,3 +1597,76 @@ pub mod sessions {
             .unwrap_or(false)
     }
 }
+
+pub(super) mod async_tasks {
+    use hbb_common::{
+        bail,
+        tokio::{
+            self, select,
+            sync::mpsc::{unbounded_channel, UnboundedSender},
+        },
+        ResultType,
+    };
+    use std::{
+        collections::HashMap,
+        sync::{Arc, Mutex},
+    };
+
+    type TxQueryOnlines = UnboundedSender<Vec<String>>;
+    lazy_static::lazy_static! {
+        static ref TX_QUERY_ONLINES: Arc<Mutex<Option<TxQueryOnlines>>> = Default::default();
+    }
+
+    #[inline]
+    pub fn start_flutter_async_runner() {
+        std::thread::spawn(start_flutter_async_runner_);
+    }
+
+    #[allow(dead_code)]
+    pub fn stop_flutter_async_runner() {
+        let _ = TX_QUERY_ONLINES.lock().unwrap().take();
+    }
+
+    #[tokio::main(flavor = "current_thread")]
+    async fn start_flutter_async_runner_() {
+        let (tx_onlines, mut rx_onlines) = unbounded_channel::<Vec<String>>();
+        TX_QUERY_ONLINES.lock().unwrap().replace(tx_onlines);
+
+        loop {
+            select! {
+                ids = rx_onlines.recv() => {
+                    match ids {
+                        Some(_ids) => {
+                            #[cfg(not(any(target_os = "ios")))]
+                            crate::rendezvous_mediator::query_online_states(_ids, handle_query_onlines).await
+                        }
+                        None => {
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    pub fn query_onlines(ids: Vec<String>) -> ResultType<()> {
+        if let Some(tx) = TX_QUERY_ONLINES.lock().unwrap().as_ref() {
+            let _ = tx.send(ids)?;
+        } else {
+            bail!("No tx_query_onlines");
+        }
+        Ok(())
+    }
+
+    fn handle_query_onlines(onlines: Vec<String>, offlines: Vec<String>) {
+        let data = HashMap::from([
+            ("name", "callback_query_onlines".to_owned()),
+            ("onlines", onlines.join(",")),
+            ("offlines", offlines.join(",")),
+        ]);
+        let _res = super::push_global_event(
+            super::APP_TYPE_MAIN,
+            serde_json::ser::to_string(&data).unwrap_or("".to_owned()),
+        );
+    }
+}

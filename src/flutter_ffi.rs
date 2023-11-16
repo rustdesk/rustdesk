@@ -36,6 +36,7 @@ lazy_static::lazy_static! {
 }
 
 fn initialize(app_dir: &str) {
+    flutter::async_tasks::start_flutter_async_runner();
     *config::APP_DIR.write().unwrap() = app_dir.to_owned();
     #[cfg(target_os = "android")]
     {
@@ -1554,18 +1555,6 @@ pub fn main_get_build_date() -> String {
     crate::BUILD_DATE.to_string()
 }
 
-fn handle_query_onlines(onlines: Vec<String>, offlines: Vec<String>) {
-    let data = HashMap::from([
-        ("name", "callback_query_onlines".to_owned()),
-        ("onlines", onlines.join(",")),
-        ("offlines", offlines.join(",")),
-    ]);
-    let _res = flutter::push_global_event(
-        flutter::APP_TYPE_MAIN,
-        serde_json::ser::to_string(&data).unwrap_or("".to_owned()),
-    );
-}
-
 pub fn translate(name: String, locale: String) -> SyncReturn<String> {
     SyncReturn(crate::client::translate_locale(name, &locale))
 }
@@ -1589,8 +1578,7 @@ pub fn session_register_texture(
 }
 
 pub fn query_onlines(ids: Vec<String>) {
-    #[cfg(not(any(target_os = "ios")))]
-    crate::rendezvous_mediator::query_online_states(ids, handle_query_onlines)
+    let _ = flutter::async_tasks::query_onlines(ids);
 }
 
 pub fn version_to_number(v: String) -> SyncReturn<i64> {
