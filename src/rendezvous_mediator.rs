@@ -598,7 +598,7 @@ pub async fn query_online_states<F: FnOnce(Vec<String>, Vec<String>)>(ids: Vec<S
             }
 
             if query_begin.elapsed() > query_timeout {
-                log::debug!("query onlines timeout {:?}", query_timeout);
+                log::debug!("query onlines timeout {:?} ({:?})", query_begin.elapsed(), query_timeout);
                 break;
             }
 
