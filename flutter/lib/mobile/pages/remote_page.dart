@@ -448,7 +448,11 @@ class _RemotePageState extends State<RemotePage> {
               height: 0,
               child: !_showEdit
                   ? Container()
-                  : TextFormField(
+                  // A container wrapper is needed here on some android devices for flutter 3.13.9, otherwise the focusNode will not work.
+                  // But for flutter 3.10.*, the container wrapper is not needed.
+                  // It maybe the flutter compatibility issue.
+                  : Container(
+                      child: TextFormField(
                       textInputAction: TextInputAction.newline,
                       autocorrect: false,
                       enableSuggestions: false,
@@ -459,7 +463,7 @@ class _RemotePageState extends State<RemotePage> {
                       // trick way to make backspace work always
                       keyboardType: TextInputType.multiline,
                       onChanged: handleSoftKeyboardInput,
-                    ),
+                    )),
             ),
           ];
           if (showCursorPaint) {
