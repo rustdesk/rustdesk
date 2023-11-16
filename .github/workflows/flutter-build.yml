@@ -348,7 +348,7 @@ jobs:
 
       - name: Install build runtime
         run: |
-          brew install llvm create-dmg nasm yasm cmake gcc wget ninja pkg-config
+          brew install llvm create-dmg nasm cmake gcc wget ninja pkg-config
 
       - name: Install flutter
         uses: subosito/flutter-action@v2
@@ -459,7 +459,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          brew install nasm yasm
+          brew install nasm
       - name: Checkout source code
         uses: actions/checkout@v3
       - name: Install flutter
@@ -592,8 +592,7 @@ jobs:
                openjdk-11-jdk-headless \
                pkg-config \
                tree \
-               wget \
-               yasm
+               wget
 
       - name: Checkout source code
         uses: actions/checkout@v3
@@ -782,7 +781,7 @@ jobs:
           sudo rm -rf /usr/local/lib/android
           sudo rm -rf /usr/share/dotnet
           sudo apt-get update -y
-          sudo apt-get install -y nasm qemu-user-static yasm
+          sudo apt-get install -y nasm qemu-user-static
 
       - name: Checkout source code
         uses: actions/checkout@v3
@@ -880,8 +879,7 @@ jobs:
                ninja-build \
                pkg-config \
                tree \
-               wget \
-               yasm
+               wget
             # we have libopus compiled by us.
             apt-get remove -y libopus-dev || true
             # output devs
@@ -985,7 +983,6 @@ jobs:
                unzip \
                xz-utils \
                wget \
-               yasm \
                zip
 
       #- name: Maximize build space
@@ -1097,8 +1094,7 @@ jobs:
                ninja-build \
                pkg-config \
                tree \
-               wget \
-               yasm
+               wget
             # we have libopus compiled by us.
             apt-get remove -y libopus-dev || true
             # output devs
@@ -1180,7 +1176,6 @@ jobs:
                pkg-config \
                unzip \
                xz-utils \
-               yasm \
                zip
 
       #- name: Maximize build space
@@ -1225,9 +1220,7 @@ jobs:
 
       - name: Install vcpkg dependencies
         run: |
-          pushd $VCPKG_ROOT
-          git apply --ignore-space-change "$OLDPWD/res/vcpkg/0001-Extend-crosscompiling-efforts-to-other-architectures.patch"
-          popd
+          cp $PWD/res/vcpkg/linux.cmake $VCPKG_ROOT/scripts/toolchains/linux.cmake
           $VCPKG_ROOT/vcpkg install --triplet arm-linux --x-install-root="$VCPKG_ROOT/installed"
         shell: bash
 
@@ -1279,8 +1272,7 @@ jobs:
                rpm \
                unzip \
                wget \
-               xz-utils \
-               yasm
+               xz-utils
           run: |
             # disable git safe.directory
             git config --global --add safe.directory "*"
@@ -1392,8 +1384,7 @@ jobs:
                libarchive-tools \
                libgtk-3-dev \
                nasm \
-               wget \
-               yasm
+               wget
           mkdir -p ./target/release/
 
       - name: Restore the rustdesk lib file
@@ -1449,8 +1440,7 @@ jobs:
                rpm \
                unzip \
                wget \
-               xz-utils \
-               yasm
+               xz-utils
           run: |
             # disable git safe.directory
             git config --global --add safe.directory "*"
@@ -1594,7 +1584,6 @@ jobs:
       #       gcc
       #       curl
       #       wget
-      #       yasm
       #       nasm
       #       zip
       #       make
@@ -1678,8 +1667,7 @@ jobs:
                libarchive-tools \
                libgtk-3-dev \
                nasm \
-               wget \
-               yasm
+               wget
           mkdir -p ./target/release/
 
       - name: Restore the rustdesk lib file
@@ -1721,8 +1709,7 @@ jobs:
                rpm \
                unzip \
                wget \
-               xz-utils \
-               yasm
+               xz-utils
           run: |
             # disable git safe.directory
             git config --global --add safe.directory "*"
@@ -1808,7 +1795,6 @@ jobs:
             gcc
             curl
             wget
-            yasm
             nasm
             zip
             make
@@ -1925,8 +1911,7 @@ jobs:
   #             g++ \
   #             libgtk-3-dev \
   #             nasm \
-  #             wget \
-  #             yasm
+  #             wget
   #           # flatpak deps
   #           flatpak --user remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
   #           flatpak --user install -y flathub org.freedesktop.Platform/${{ matrix.job.arch }}/23.08
@@ -2003,8 +1988,7 @@ jobs:
                g++ \
                libgtk-3-dev \
                nasm \
-               wget \
-               yasm
+               wget
             # flatpak deps
             flatpak --user remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
             flatpak --user install -y flathub org.freedesktop.Platform/${{ matrix.job.arch }}/23.08

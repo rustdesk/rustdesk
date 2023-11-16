@@ -44,8 +44,7 @@ jobs:
             nasm \
             ninja-build \
             pkg-config \
-            wget \
-            yasm
+            wget
 
       - name: Install Rust toolchain
         uses: actions-rs/toolchain@v1

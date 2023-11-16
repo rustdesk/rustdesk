@@ -26,10 +26,11 @@ else()
     set(ENV{PATH} "${MSYS_ROOT}/usr/bin:$ENV{PATH}:${PERL_EXE_PATH}")
 endif()
 
+vcpkg_find_acquire_program(NASM)
+get_filename_component(NASM_EXE_PATH ${NASM} DIRECTORY)
+vcpkg_add_to_path(${NASM_EXE_PATH})
+
 if(VCPKG_TARGET_IS_WINDOWS AND NOT VCPKG_TARGET_IS_MINGW)
-    vcpkg_find_acquire_program(NASM)
-    get_filename_component(NASM_EXE_PATH ${NASM} DIRECTORY)
-    vcpkg_add_to_path(${NASM_EXE_PATH})
 
     file(REMOVE_RECURSE "${CURRENT_BUILDTREES_DIR}/${TARGET_TRIPLET}-tmp")
 
@@ -130,12 +131,12 @@ if(VCPKG_TARGET_IS_WINDOWS AND NOT VCPKG_TARGET_IS_MINGW)
     endif()
 
 else()
-    yasm_tool_helper(APPEND_TO_PATH)
 
     set(OPTIONS "--disable-examples --disable-tools --disable-docs --disable-unit-tests --enable-pic")
 
     set(OPTIONS_DEBUG "--enable-debug-libs --enable-debug --prefix=${CURRENT_PACKAGES_DIR}/debug")
     set(OPTIONS_RELEASE "--prefix=${CURRENT_PACKAGES_DIR}")
+    set(AS_NASM "--as=nasm")
 
     if(VCPKG_LIBRARY_LINKAGE STREQUAL "dynamic")
         set(OPTIONS "${OPTIONS} --disable-static --enable-shared")
@@ -170,6 +171,7 @@ else()
     if(VCPKG_DETECTED_CMAKE_C_COMPILER MATCHES "([^\/]*-)gcc$")
         message(STATUS "Cross-building for ${TARGET_TRIPLET} with ${CMAKE_MATCH_1}")
         set(ENV{CROSS} ${CMAKE_MATCH_1})
+        unset(AS_NASM)
     else()
         set(ENV{CC} ${VCPKG_DETECTED_CMAKE_C_COMPILER})
         set(ENV{CXX} ${VCPKG_DETECTED_CMAKE_CXX_COMPILER})
@@ -191,16 +193,12 @@ else()
         set(LIBVPX_TARGET "generic-gnu")
         # Settings
         if(VCPKG_TARGET_ARCHITECTURE STREQUAL x86)
-            set(ANDROID_TARGET_TRIPLET i686-linux-android)
             set(OPTIONS "${OPTIONS} --disable-sse4_1 --disable-avx --disable-avx2 --disable-avx512")
         elseif(VCPKG_TARGET_ARCHITECTURE STREQUAL x64)
-            set(ANDROID_TARGET_TRIPLET x86_64-linux-android)
             set(OPTIONS "${OPTIONS} --disable-avx --disable-avx2 --disable-avx512")
         elseif(VCPKG_TARGET_ARCHITECTURE STREQUAL arm)
-            set(ANDROID_TARGET_TRIPLET armv7a-linux-androideabi)
             set(OPTIONS "${OPTIONS} --enable-thumb --disable-neon")
         elseif(VCPKG_TARGET_ARCHITECTURE STREQUAL arm64)
-            set(ANDROID_TARGET_TRIPLET aarch64-linux-android)
             set(OPTIONS "${OPTIONS} --enable-thumb")
         endif()
         # Set environment variables for configure
@@ -208,6 +206,8 @@ else()
         set(ENV{LDFLAGS} "${LDFLAGS} --target=${VCPKG_DETECTED_CMAKE_C_COMPILER_TARGET}")
         # Set clang target
         set(OPTIONS "${OPTIONS} --extra-cflags=--target=${VCPKG_DETECTED_CMAKE_C_COMPILER_TARGET} --extra-cxxflags=--target=${VCPKG_DETECTED_CMAKE_CXX_COMPILER_TARGET}")
+        # Unset nasm and let AS do its job
+        unset(AS_NASM)
     elseif(VCPKG_TARGET_IS_OSX)
         if(VCPKG_TARGET_ARCHITECTURE STREQUAL "arm64")
             set(LIBVPX_TARGET "arm64-darwin20-gcc")
@@ -242,6 +242,7 @@ else()
             ${OPTIONS}
             ${OPTIONS_RELEASE}
             ${MAC_OSX_MIN_VERSION_CFLAGS}
+            ${AS_NASM}
         WORKING_DIRECTORY "${CURRENT_BUILDTREES_DIR}/${TARGET_TRIPLET}-rel"
         LOGNAME configure-${TARGET_TRIPLET}-rel)
 
@@ -275,6 +276,7 @@ else()
             ${OPTIONS}
             ${OPTIONS_DEBUG}
             ${MAC_OSX_MIN_VERSION_CFLAGS}
+            ${AS_NASM}
         WORKING_DIRECTORY "${CURRENT_BUILDTREES_DIR}/${TARGET_TRIPLET}-dbg"
         LOGNAME configure-${TARGET_TRIPLET}-dbg)
 
