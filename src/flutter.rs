@@ -1602,7 +1602,7 @@ pub(super) mod async_tasks {
     use hbb_common::{
         bail,
         tokio::{
-            select,
+            self, select,
             sync::mpsc::{unbounded_channel, UnboundedSender},
         },
         ResultType,
@@ -1617,26 +1617,9 @@ pub(super) mod async_tasks {
         static ref TX_QUERY_ONLINES: Arc<Mutex<Option<TxQueryOnlines>>> = Default::default();
     }
 
+    #[inline]
     pub fn start_flutter_async_runner() {
-        std::thread::spawn(|| async {
-            let (tx_onlines, mut rx_onlines) = unbounded_channel::<Vec<String>>();
-            TX_QUERY_ONLINES.lock().unwrap().replace(tx_onlines);
-            loop {
-                select! {
-                    ids = rx_onlines.recv() => {
-                        match ids {
-                            Some(_ids) => {
-                                #[cfg(not(any(target_os = "ios")))]
-                                crate::rendezvous_mediator::query_online_states(_ids, handle_query_onlines)
-                            }
-                            None => {
-                                break;
-                            }
-                        }
-                    }
-                }
-            }
-        });
+        std::thread::spawn(start_flutter_async_runner_);
     }
 
     #[allow(dead_code)]
@@ -1644,9 +1627,31 @@ pub(super) mod async_tasks {
         let _ = TX_QUERY_ONLINES.lock().unwrap().take();
     }
 
+    #[tokio::main(flavor = "current_thread")]
+    async fn start_flutter_async_runner_() {
+        let (tx_onlines, mut rx_onlines) = unbounded_channel::<Vec<String>>();
+        TX_QUERY_ONLINES.lock().unwrap().replace(tx_onlines);
+
+        loop {
+            select! {
+                ids = rx_onlines.recv() => {
+                    match ids {
+                        Some(_ids) => {
+                            #[cfg(not(any(target_os = "ios")))]
+                            crate::rendezvous_mediator::query_online_states(_ids, handle_query_onlines).await
+                        }
+                        None => {
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     pub fn query_onlines(ids: Vec<String>) -> ResultType<()> {
         if let Some(tx) = TX_QUERY_ONLINES.lock().unwrap().as_ref() {
-            tx.send(ids)?;
+            let _ = tx.send(ids)?;
         } else {
             bail!("No tx_query_onlines");
         }

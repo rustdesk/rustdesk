@@ -82,7 +82,7 @@ class _PeersViewState extends State<_PeersView> with WindowListener {
   final _curPeers = <String>{};
   var _lastChangeTime = DateTime.now();
   var _lastQueryPeers = <String>{};
-  var _lastQueryTime = DateTime.now().subtract(const Duration(hours: 1));
+  var _lastQueryTime = DateTime.now().add(const Duration(seconds: 30));
   var _queryCount = 0;
   var _exit = false;
 
@@ -272,8 +272,7 @@ class _PeersViewState extends State<_PeersView> with WindowListener {
           if (_queryCount < _maxQueryCount) {
             if (now.difference(_lastQueryTime) >= _queryInterval) {
               if (_curPeers.isNotEmpty) {
-                platformFFI.ffiBind
-                    .queryOnlines(ids: _curPeers.toList(growable: false));
+                bind.queryOnlines(ids: _curPeers.toList(growable: false));
                 _lastQueryTime = DateTime.now();
                 _queryCount += 1;
               }
@@ -287,7 +286,7 @@ class _PeersViewState extends State<_PeersView> with WindowListener {
 
   _queryOnlines(bool isLoadEvent) {
     if (_curPeers.isNotEmpty) {
-      platformFFI.ffiBind.queryOnlines(ids: _curPeers.toList(growable: false));
+      bind.queryOnlines(ids: _curPeers.toList(growable: false));
       _lastQueryPeers = {..._curPeers};
       if (isLoadEvent) {
         _lastChangeTime = DateTime.now();
