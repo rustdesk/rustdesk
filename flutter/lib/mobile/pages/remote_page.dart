@@ -448,7 +448,8 @@ class _RemotePageState extends State<RemotePage> {
               height: 0,
               child: !_showEdit
                   ? Container()
-                  : TextFormField(
+                  : Container(
+                      child: TextFormField(
                       textInputAction: TextInputAction.newline,
                       autocorrect: false,
                       enableSuggestions: false,
@@ -459,7 +460,7 @@ class _RemotePageState extends State<RemotePage> {
                       // trick way to make backspace work always
                       keyboardType: TextInputType.multiline,
                       onChanged: handleSoftKeyboardInput,
-                    ),
+                    )),
             ),
           ];
           if (showCursorPaint) {
