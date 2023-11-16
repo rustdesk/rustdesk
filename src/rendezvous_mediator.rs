@@ -27,6 +27,7 @@ use hbb_common::{
     udp::FramedSocket,
     AddrMangle, ResultType,
 };
+use hbb_common::anyhow::anyhow;
 
 use crate::server::{check_zombie, new as new_server, ServerPtr};
 
@@ -133,6 +134,7 @@ impl RendezvousMediator {
             host_prefix,
             last_id_pk_registry: "".to_owned(),
         };
+        rz.handshake().await?;
 
         const TIMER_OUT: Duration = Duration::from_secs(1);
         let mut timer = interval(TIMER_OUT);
@@ -483,6 +485,39 @@ impl RendezvousMediator {
         });
         socket.send(&msg_out, self.addr.to_owned()).await?;
         Ok(())
+    }
+
+    /// Initialize the connection to rendezvous server
+    async fn handshake(&self) -> ResultType<()> {
+        let mut socket = socket_client::connect_tcp(&*self.host, CONNECT_TIMEOUT).await?;
+
+        // Register id
+        let id = Config::get_id();
+        log::trace!(
+            "Register my id {:?} to rendezvous server {:?}",
+            id,
+            self.addr,
+        );
+        let mut msg_out = Message::new();
+        let serial = Config::get_serial();
+        msg_out.set_register_peer(RegisterPeer {
+            id,
+            serial,
+            ..Default::default()
+        });
+        socket.send(&msg_out).await?;
+
+        let msg_in = crate::common::get_next_nonkeyexchange_msg(&mut socket, None)
+            .await
+            .ok_or_else(|| anyhow!("Failed to get response when register peer"))?;
+
+        if let Some(rendezvous_message::Union::RegisterPeerResponse(rpr)) = msg_in.union {
+            return Ok(());
+        } else {
+            bail!("Want RegisterPeerResponse but receive unknown message: {:?}", msg_in);
+        }
+
+        // TODO: Connect to MQ server
     }
 
     fn get_relay_server(&self, provided_by_rendezvous_server: String) -> String {
