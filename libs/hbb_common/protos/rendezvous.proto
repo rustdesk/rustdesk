@@ -13,7 +13,10 @@ enum ConnType {
   RDP = 3;
 }
 
-message RegisterPeerResponse { bool request_pk = 2; }
+message RegisterPeerResponse {
+  bool request_pk = 2;
+  string mq_token = 3;
+}
 
 message PunchHoleRequest { 
   string id = 1; 

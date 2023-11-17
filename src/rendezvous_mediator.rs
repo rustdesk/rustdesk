@@ -6,6 +6,7 @@ use std::{
     },
     time::Instant,
 };
+use async_nats::ConnectOptions;
 
 use uuid::Uuid;
 
@@ -28,6 +29,7 @@ use hbb_common::{
     AddrMangle, ResultType,
 };
 use hbb_common::anyhow::anyhow;
+use crate::common::increase_port;
 
 use crate::server::{check_zombie, new as new_server, ServerPtr};
 
@@ -134,7 +136,7 @@ impl RendezvousMediator {
             host_prefix,
             last_id_pk_registry: "".to_owned(),
         };
-        rz.handshake().await?;
+        let mut mq_client = rz.handshake(&host).await?;
 
         const TIMER_OUT: Duration = Duration::from_secs(1);
         let mut timer = interval(TIMER_OUT);
@@ -488,7 +490,7 @@ impl RendezvousMediator {
     }
 
     /// Initialize the connection to rendezvous server
-    async fn handshake(&self) -> ResultType<()> {
+    async fn handshake(&self, host: &str) -> ResultType<async_nats::client::Client> {
         let mut socket = socket_client::connect_tcp(&*self.host, CONNECT_TIMEOUT).await?;
 
         // Register id
@@ -511,13 +513,22 @@ impl RendezvousMediator {
             .await
             .ok_or_else(|| anyhow!("Failed to get response when register peer"))?;
 
-        if let Some(rendezvous_message::Union::RegisterPeerResponse(rpr)) = msg_in.union {
-            return Ok(());
+        let mq_token = if let Some(rendezvous_message::Union::RegisterPeerResponse(rpr)) = msg_in.union {
+            rpr.mq_token
         } else {
             bail!("Want RegisterPeerResponse but receive unknown message: {:?}", msg_in);
-        }
+        };
 
-        // TODO: Connect to MQ server
+        // Connect to mq server
+        let mq_host = increase_port(host, 4);
+        let mq_url = format!("nats://{}", mq_host);
+
+        let options = ConnectOptions::new()
+            .token(mq_token)
+            .ping_interval(Duration::from_millis(REG_INTERVAL as u64));
+        let client = async_nats::connect_with_options(&mq_url, options).await?;
+        log::info!("Connected to mq server at: {}", mq_url);
+        Ok(client)
     }
 
     fn get_relay_server(&self, provided_by_rendezvous_server: String) -> String {
