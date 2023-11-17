@@ -1244,6 +1244,7 @@ impl Connection {
                 #[cfg(not(any(target_os = "android", target_os = "ios")))]
                 let _h = try_start_record_cursor_pos();
                 self.auto_disconnect_timer = Self::get_auto_disconenct_timer();
+                s.try_add_primay_video_service();
                 s.add_connection(self.inner.clone(), &noperms);
             }
         }
