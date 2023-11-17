@@ -464,14 +464,14 @@ fn request_screen_cast(
     // between the caller subscribing to the signal after receiving the reply for the method call and the signal getting emitted,
     // a convention for Request object paths has been established that allows
     // the caller to subscribe to the signal before making the method call.
-    let path = screencast_portal::create_session(&portal, args)?;
+    let path = remote_desktop_portal::create_session(&portal, args)?;
     handle_response(
         &conn,
         path,
         move |r: OrgFreedesktopPortalRequestResponse, c, _| {
             let portal = get_portal(c);
             let mut args: PropMap = HashMap::new();
-            if let Ok(version) = screencast_portal::version(&portal) {
+            if let Ok(version) = remote_desktop_portal::version(&portal) {
                 if version >= 4 {
                     let restore_token = config::LocalConfig::get_option(RESTORE_TOKEN_CONF_KEY);
                     if !restore_token.is_empty() {
@@ -540,7 +540,7 @@ fn request_screen_cast(
                         "handle_token".to_string(),
                         Variant(Box::new("u3".to_string())),
                     );
-                    let path = screencast_portal::start(&portal, session.clone(), "", args)?;
+                    let path = remote_desktop_portal::start(&portal, session.clone(), "", args)?;
                     let session = session.clone();
                     let fd = fd.clone();
                     let streams = streams.clone();
@@ -551,7 +551,7 @@ fn request_screen_cast(
                         path,
                         move |r: OrgFreedesktopPortalRequestResponse, c, _| {
                             let portal = get_portal(c);
-                            if let Ok(version) = screencast_portal::version(&portal) {
+                            if let Ok(version) = remote_desktop_portal::version(&portal) {
                                 if version >= 4 {
                                     if let Some(restore_token) = r.results.get(RESTORE_TOKEN) {
                                         if let Some(restore_token) = restore_token.as_str() {
