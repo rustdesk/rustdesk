@@ -1113,6 +1113,7 @@ pub struct LoginConfigHandler {
     switch_uuid: Option<String>,
     pub save_ab_password_to_recent: bool, // true: connected with ab password
     pub other_server: Option<(String, String, String)>,
+    pub custom_fps: Arc<Mutex<Option<usize>>>,
 }
 
 impl Deref for LoginConfigHandler {
@@ -1483,15 +1484,26 @@ impl LoginConfigHandler {
             n += 1;
         } else if q == "custom" {
             let config = self.load_config();
+            let allow_more =
+                !crate::ui_interface::using_public_server() || self.direct == Some(true);
             let quality = if config.custom_image_quality.is_empty() {
                 50
             } else {
-                config.custom_image_quality[0]
+                let mut quality = config.custom_image_quality[0];
+                if !allow_more && quality > 100 {
+                    quality = 50;
+                }
+                quality
             };
             msg.custom_image_quality = quality << 8;
             #[cfg(feature = "flutter")]
             if let Some(custom_fps) = self.options.get("custom-fps") {
-                msg.custom_fps = custom_fps.parse().unwrap_or(30);
+                let mut custom_fps = custom_fps.parse().unwrap_or(30);
+                if !allow_more && custom_fps > 30 {
+                    custom_fps = 30;
+                }
+                msg.custom_fps = custom_fps;
+                *self.custom_fps.lock().unwrap() = Some(custom_fps as _);
             }
             n += 1;
         }
@@ -1540,9 +1552,11 @@ impl LoginConfigHandler {
         }
         let mut n = 0;
         let mut msg = OptionMessage::new();
-        if self.get_toggle_option("privacy-mode") {
-            msg.privacy_mode = BoolOption::Yes.into();
-            n += 1;
+        if self.version < hbb_common::get_version_number("1.2.4") {
+            if self.get_toggle_option("privacy-mode") {
+                msg.privacy_mode = BoolOption::Yes.into();
+                n += 1;
+            }
         }
         if n > 0 {
             Some(msg)
@@ -1678,7 +1692,8 @@ impl LoginConfigHandler {
     /// # Arguments
     ///
     /// * `fps` - The given fps.
-    pub fn set_custom_fps(&mut self, fps: i32) -> Message {
+    /// * `save_config` - Save the config.
+    pub fn set_custom_fps(&mut self, fps: i32, save_config: bool) -> Message {
         let mut misc = Misc::new();
         misc.set_option(OptionMessage {
             custom_fps: fps,
@@ -1686,11 +1701,14 @@ impl LoginConfigHandler {
         });
         let mut msg_out = Message::new();
         msg_out.set_misc(misc);
-        let mut config = self.load_config();
-        config
-            .options
-            .insert("custom-fps".to_owned(), fps.to_string());
-        self.save_config(config);
+        if save_config {
+            let mut config = self.load_config();
+            config
+                .options
+                .insert("custom-fps".to_owned(), fps.to_string());
+            self.save_config(config);
+        }
+        *self.custom_fps.lock().unwrap() = Some(fps as _);
         msg_out
     }
 
@@ -1801,7 +1819,11 @@ impl LoginConfigHandler {
             crate::flutter::push_global_event(crate::flutter::APP_TYPE_MAIN, evt);
         }
         if config.keyboard_mode.is_empty() {
-            if is_keyboard_mode_supported(&KeyboardMode::Map, get_version_number(&pi.version), &pi.platform) {
+            if is_keyboard_mode_supported(
+                &KeyboardMode::Map,
+                get_version_number(&pi.version),
+                &pi.platform,
+            ) {
                 config.keyboard_mode = KeyboardMode::Map.to_string();
             } else {
                 config.keyboard_mode = KeyboardMode::Legacy.to_string();
@@ -2670,21 +2692,25 @@ pub trait Interface: Send + Clone + 'static + Sized {
         let lc = self.get_lch();
         let direct = lc.read().unwrap().direct;
         let received = lc.read().unwrap().received;
-        let relay_condition = direct == Some(true) && !received;
 
+        let mut relay_hint = false;
+        let mut relay_hint_type = "relay-hint";
         // force relay
         let errno = errno::errno().0;
         log::error!("Connection closed: {err}({errno})");
-        if relay_condition
-            && (cfg!(windows) && (errno == 10054 || err.contains("10054"))
-                || !cfg!(windows) && (errno == 104 || err.contains("104")))
+        if direct == Some(true)
+            && ((cfg!(windows) && (errno == 10054 || err.contains("10054")))
+                || (!cfg!(windows) && (errno == 104 || err.contains("104"))))
         {
-            lc.write().unwrap().force_relay = true;
+            relay_hint = true;
+            if !received {
+                relay_hint_type = "relay-hint2"
+            }
         }
 
         // relay-hint
-        if cfg!(feature = "flutter") && relay_condition {
-            self.msgbox("relay-hint", title, &text, "");
+        if cfg!(feature = "flutter") && relay_hint {
+            self.msgbox(relay_hint_type, title, &text, "");
         } else {
             self.msgbox("error", title, &text, "");
         }

@@ -378,19 +378,6 @@ pub fn update_clipboard(clipboard: Clipboard, old: Option<&Arc<Mutex<String>>>) 
     }
 }
 
-pub async fn send_opts_after_login(
-    config: &crate::client::LoginConfigHandler,
-    peer: &mut FramedStream,
-) {
-    if let Some(opts) = config.get_option_message_after_login() {
-        let mut misc = Misc::new();
-        misc.set_option(opts);
-        let mut msg_out = Message::new();
-        msg_out.set_misc(misc);
-        allow_err!(peer.send(&msg_out).await);
-    }
-}
-
 #[cfg(feature = "use_rubato")]
 pub fn resample_channels(
     data: &[f32],
@@ -877,8 +864,10 @@ pub fn hostname() -> String {
 
 #[inline]
 pub fn get_sysinfo() -> serde_json::Value {
-    use hbb_common::sysinfo::{System};
-    let system = System::new_all();
+    use hbb_common::sysinfo::System;
+    let mut system = System::new();
+    system.refresh_memory();
+    system.refresh_cpu();
     let memory = system.total_memory();
     let memory = (memory as f64 / 1024. / 1024. / 1024. * 100.).round() / 100.;
     let cpus = system.cpus();
@@ -1068,10 +1057,12 @@ pub async fn post_request_sync(url: String, body: String, header: &str) -> Resul
 pub fn make_privacy_mode_msg_with_details(
     state: back_notification::PrivacyModeState,
     details: String,
+    impl_key: String,
 ) -> Message {
     let mut misc = Misc::new();
     let mut back_notification = BackNotification {
         details,
+        impl_key,
         ..Default::default()
     };
     back_notification.set_privacy_mode_state(state);
@@ -1082,11 +1073,15 @@ pub fn make_privacy_mode_msg_with_details(
 }
 
 #[inline]
-pub fn make_privacy_mode_msg(state: back_notification::PrivacyModeState) -> Message {
-    make_privacy_mode_msg_with_details(state, "".to_owned())
+pub fn make_privacy_mode_msg(state: back_notification::PrivacyModeState, impl_key: String) -> Message {
+    make_privacy_mode_msg_with_details(state, "".to_owned(), impl_key)
 }
 
-pub fn is_keyboard_mode_supported(keyboard_mode: &KeyboardMode, version_number: i64, peer_platform: &str) -> bool {
+pub fn is_keyboard_mode_supported(
+    keyboard_mode: &KeyboardMode,
+    version_number: i64,
+    peer_platform: &str,
+) -> bool {
     match keyboard_mode {
         KeyboardMode::Legacy => true,
         KeyboardMode::Map => {
@@ -1213,7 +1208,7 @@ pub async fn get_next_nonkeyexchange_msg(
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub fn check_process(arg: &str, same_uid: bool) -> bool {
-    use hbb_common::sysinfo::{System};
+    use hbb_common::sysinfo::System;
     let mut sys = System::new();
     sys.refresh_processes();
     let mut path = std::env::current_exe().unwrap_or_default();

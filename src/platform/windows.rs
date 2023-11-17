@@ -3,7 +3,7 @@ use crate::common::PORTABLE_APPNAME_RUNTIME_ENV_KEY;
 use crate::{
     ipc,
     license::*,
-    privacy_win_mag::{self, WIN_MAG_INJECTED_PROCESS_EXE},
+    privacy_mode::win_mag::{self, WIN_MAG_INJECTED_PROCESS_EXE},
 };
 use hbb_common::{
     allow_err,
@@ -472,7 +472,7 @@ async fn run_service(_arguments: Vec<OsString>) -> ResultType<()> {
         log::info!("Got service control event: {:?}", control_event);
         match control_event {
             ServiceControl::Interrogate => ServiceControlHandlerResult::NoError,
-            ServiceControl::Stop => {
+            ServiceControl::Stop | ServiceControl::Preshutdown | ServiceControl::Shutdown => {
                 send_close(crate::POSTFIX_SERVICE).ok();
                 ServiceControlHandlerResult::NoError
             }
@@ -848,8 +848,8 @@ fn get_default_install_path() -> String {
 }
 
 pub fn check_update_broker_process() -> ResultType<()> {
-    let process_exe = privacy_win_mag::INJECTED_PROCESS_EXE;
-    let origin_process_exe = privacy_win_mag::ORIGIN_PROCESS_EXE;
+    let process_exe = win_mag::INJECTED_PROCESS_EXE;
+    let origin_process_exe = win_mag::ORIGIN_PROCESS_EXE;
 
     let exe_file = std::env::current_exe()?;
     let Some(cur_dir) = exe_file.parent() else {
@@ -857,8 +857,18 @@ pub fn check_update_broker_process() -> ResultType<()> {
     };
     let cur_exe = cur_dir.join(process_exe);
 
+    // Force update broker exe if failed to check modified time.
+    let cmds = format!(
+        "
+        chcp 65001
+        taskkill /F /IM {process_exe}
+        copy /Y \"{origin_process_exe}\" \"{cur_exe}\"
+    ",
+        cur_exe = cur_exe.to_string_lossy(),
+    );
+
     if !std::path::Path::new(&cur_exe).exists() {
-        std::fs::copy(origin_process_exe, cur_exe)?;
+        run_cmds(cmds, false, "update_broker")?;
         return Ok(());
     }
 
@@ -877,15 +887,6 @@ pub fn check_update_broker_process() -> ResultType<()> {
         }
     }
 
-    // Force update broker exe if failed to check modified time.
-    let cmds = format!(
-        "
-        chcp 65001
-        taskkill /F /IM {process_exe}
-        copy /Y \"{origin_process_exe}\" \"{cur_exe}\"
-    ",
-        cur_exe = cur_exe.to_string_lossy(),
-    );
     run_cmds(cmds, false, "update_broker")?;
 
     Ok(())
@@ -925,8 +926,8 @@ pub fn copy_exe_cmd(src_exe: &str, exe: &str, path: &str) -> ResultType<String> 
         {main_exe}
         copy /Y \"{ORIGIN_PROCESS_EXE}\" \"{path}\\{broker_exe}\"
         ",
-        ORIGIN_PROCESS_EXE = privacy_win_mag::ORIGIN_PROCESS_EXE,
-        broker_exe = privacy_win_mag::INJECTED_PROCESS_EXE,
+        ORIGIN_PROCESS_EXE = win_mag::ORIGIN_PROCESS_EXE,
+        broker_exe = win_mag::INJECTED_PROCESS_EXE,
     ))
 }
 

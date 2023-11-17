@@ -342,6 +342,10 @@ pub fn init_log(_is_async: bool, _name: &str) -> Option<flexi_logger::LoggerHand
         // though async logger more efficient, but it also causes more problems, disable it for now
         let mut logger_holder: Option<flexi_logger::LoggerHandle> = None;
         let mut path = config::Config::log_path();
+        #[cfg(target_os = "android")]
+        if !config::Config::get_home().exists() {
+            return None;
+        }
         if !_name.is_empty() {
             path.push(_name);
         }

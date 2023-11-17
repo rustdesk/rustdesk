@@ -108,15 +108,48 @@ impl Display {
     }
 
     pub fn all() -> io::Result<Vec<Display>> {
-        let tmp = Self::all_().unwrap_or(Default::default());
-        if tmp.is_empty() {
+        let displays_gdi = dxgi::Displays::get_from_gdi()
+            .drain(..)
+            .map(Display)
+            .collect::<Vec<_>>();
+
+        let displays_dxgi = Self::all_().unwrap_or(Default::default());
+
+        // Return gdi displays if dxgi is not supported
+        if displays_dxgi.is_empty() {
             println!("Display got from gdi");
-            return Ok(dxgi::Displays::get_from_gdi()
-                .drain(..)
-                .map(Display)
-                .collect::<Vec<_>>());
+            return Ok(displays_gdi);
         }
-        Ok(tmp)
+
+        // Return dxgi displays if length is not equal
+        if displays_dxgi.len() != displays_gdi.len() {
+            return Ok(displays_dxgi);
+        }
+
+        // Check if names are equal
+        let names_gdi = displays_gdi.iter().map(|d| d.name()).collect::<Vec<_>>();
+        let names_dxgi = displays_dxgi.iter().map(|d| d.name()).collect::<Vec<_>>();
+        for name in names_gdi.iter() {
+            if !names_dxgi.contains(name) {
+                return Ok(displays_dxgi);
+            }
+        }
+
+        // Reorder displays from dxgi
+        let mut displays_dxgi = displays_dxgi;
+        let mut displays_dxgi_ordered = Vec::new();
+        for name in names_gdi.iter() {
+            let pos = match displays_dxgi.iter().position(|d| d.name() == *name) {
+                Some(pos) => pos,
+                None => {
+                    // unreachable!
+                    0
+                }
+            };
+            displays_dxgi_ordered.push(displays_dxgi.remove(pos));
+        }
+
+        Ok(displays_dxgi_ordered)
     }
 
     fn all_() -> io::Result<Vec<Display>> {

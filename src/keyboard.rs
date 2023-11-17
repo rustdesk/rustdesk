@@ -177,7 +177,6 @@ pub mod client {
             Key::MetaRight => Some(ControlKey::RWin),
             _ => None,
         }
-
     }
 
     pub fn event_lock_screen() -> KeyEvent {

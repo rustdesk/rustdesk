@@ -36,6 +36,7 @@ lazy_static::lazy_static! {
 }
 
 fn initialize(app_dir: &str) {
+    flutter::async_tasks::start_flutter_async_runner();
     *config::APP_DIR.write().unwrap() = app_dir.to_owned();
     #[cfg(target_os = "android")]
     {
@@ -221,6 +222,12 @@ pub fn session_toggle_option(session_id: SessionID, value: String) {
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     if sessions::get_session_by_session_id(&session_id).is_some() && value == "disable-clipboard" {
         crate::flutter::update_text_clipboard_required();
+    }
+}
+
+pub fn session_toggle_privacy_mode(session_id: SessionID, impl_key: String, on: bool) {
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
+        session.toggle_privacy_mode(impl_key, on);
     }
 }
 
@@ -1548,18 +1555,6 @@ pub fn main_get_build_date() -> String {
     crate::BUILD_DATE.to_string()
 }
 
-fn handle_query_onlines(onlines: Vec<String>, offlines: Vec<String>) {
-    let data = HashMap::from([
-        ("name", "callback_query_onlines".to_owned()),
-        ("onlines", onlines.join(",")),
-        ("offlines", offlines.join(",")),
-    ]);
-    let _res = flutter::push_global_event(
-        flutter::APP_TYPE_MAIN,
-        serde_json::ser::to_string(&data).unwrap_or("".to_owned()),
-    );
-}
-
 pub fn translate(name: String, locale: String) -> SyncReturn<String> {
     SyncReturn(crate::client::translate_locale(name, &locale))
 }
@@ -1583,8 +1578,7 @@ pub fn session_register_texture(
 }
 
 pub fn query_onlines(ids: Vec<String>) {
-    #[cfg(not(any(target_os = "ios")))]
-    crate::rendezvous_mediator::query_online_states(ids, handle_query_onlines)
+    let _ = flutter::async_tasks::query_onlines(ids);
 }
 
 pub fn version_to_number(v: String) -> SyncReturn<i64> {
@@ -1972,6 +1966,17 @@ pub fn is_selinux_enforcing() -> SyncReturn<bool> {
     {
         SyncReturn(false)
     }
+}
+
+pub fn main_default_privacy_mode_impl() -> SyncReturn<String> {
+    SyncReturn(crate::privacy_mode::DEFAULT_PRIVACY_MODE_IMPL.to_owned())
+}
+
+pub fn main_supported_privacy_mode_impls() -> SyncReturn<String> {
+    SyncReturn(
+        serde_json::to_string(&crate::privacy_mode::get_supported_privacy_mode_impl())
+            .unwrap_or_default(),
+    )
 }
 
 #[cfg(target_os = "android")]
