@@ -115,6 +115,13 @@ class _RemotePageState extends State<RemotePage> {
           gFFI.ffiModel.pi.version.isNotEmpty) {
         gFFI.invokeMethod("enable_soft_keyboard", false);
       }
+    } else {
+      _timer?.cancel();
+      _timer = Timer(kMobileDelaySoftKeyboardFocus, () {
+        SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual,
+            overlays: SystemUiOverlay.values);
+        _mobileFocusNode.requestFocus();
+      });
     }
     // update for Scaffold
     setState(() {});
@@ -204,12 +211,12 @@ class _RemotePageState extends State<RemotePage> {
     _value = initText;
     setState(() => _showEdit = false);
     _timer?.cancel();
-    _timer = Timer(Duration(milliseconds: 30), () {
+    _timer = Timer(kMobileDelaySoftKeyboard, () {
       // show now, and sleep a while to requestFocus to
       // make sure edit ready, so that keyboard wont show/hide/show/hide happen
       setState(() => _showEdit = true);
       _timer?.cancel();
-      _timer = Timer(Duration(milliseconds: 30), () {
+      _timer = Timer(kMobileDelaySoftKeyboardFocus, () {
         SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual,
             overlays: SystemUiOverlay.values);
         _mobileFocusNode.requestFocus();
@@ -448,11 +455,7 @@ class _RemotePageState extends State<RemotePage> {
               height: 0,
               child: !_showEdit
                   ? Container()
-                  // A container wrapper is needed here on some android devices for flutter 3.13.9, otherwise the focusNode will not work.
-                  // But for flutter 3.10.*, the container wrapper is not needed.
-                  // It maybe the flutter compatibility issue.
-                  : Container(
-                      child: TextFormField(
+                  : TextFormField(
                       textInputAction: TextInputAction.newline,
                       autocorrect: false,
                       enableSuggestions: false,
@@ -463,7 +466,7 @@ class _RemotePageState extends State<RemotePage> {
                       // trick way to make backspace work always
                       keyboardType: TextInputType.multiline,
                       onChanged: handleSoftKeyboardInput,
-                    )),
+                    ),
             ),
           ];
           if (showCursorPaint) {
