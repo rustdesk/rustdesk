@@ -77,7 +77,6 @@ lazy_static::lazy_static! {
     // Now we use this [`CLIENT_SERVER`] to do following operations:
     // - record local audio, and send to remote
     pub static ref CLIENT_SERVER: ServerPtr = new();
-    static ref PRIMARY_VIDEO_SERVICE_LOCK: Arc<Mutex<()>> = Default::default();
 }
 
 pub struct Server {
@@ -260,8 +259,7 @@ impl Server {
         name.starts_with(video_service::NAME)
     }
 
-    pub fn try_add_privay_video_service(&mut self) {
-        let _lock = PRIMARY_VIDEO_SERVICE_LOCK.lock().unwrap();
+    pub fn try_add_primay_video_service(&mut self) {
         let primary_video_service_name =
             video_service::get_service_name(*display_service::PRIMARY_DISPLAY_IDX);
         if !self.contains(&primary_video_service_name) {
