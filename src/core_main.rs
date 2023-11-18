@@ -148,7 +148,7 @@ pub fn core_main() -> Option<Vec<String>> {
     {
         use crate::portable_service::client;
         if let Err(e) = client::start_portable_service(client::StartPara::Direct) {
-            log::error!("Failed to start portable service:{:?}", e);
+            log::error!("Failed to start portable service: {:?}", e);
         }
     }
     #[cfg(windows)]

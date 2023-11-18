@@ -382,7 +382,7 @@ pub trait GoogleImage {
                     );
                 }
                 // (Chroma::I444, ImageFormat::Raw), new version libyuv have I444ToRAW
-                _ => log::error!("unsupported pixfmt:{:?}", self.chroma()),
+                _ => log::error!("unsupported pixfmt: {:?}", self.chroma()),
             }
         }
     }

@@ -402,7 +402,7 @@ fn run(vs: VideoService) -> ResultType<()> {
     let mut spf;
     let mut quality = video_qos.quality();
     let abr = VideoQoS::abr_enabled();
-    log::info!("init quality={:?}, abr enabled:{}", quality, abr);
+    log::info!("initial quality: {quality:?}, abr enabled: {abr}");
     let codec_name = Encoder::negotiated_codec();
     let recorder = get_recorder(c.width, c.height, &codec_name);
     let last_recording = recorder.lock().unwrap().is_some() || video_qos.record();

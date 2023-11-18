@@ -2085,7 +2085,7 @@ where
                         }
                     }
                     MediaData::RecordScreen(start, display, w, h, id) => {
-                        log::info!("record screen command: start:{start}, display:{display}");
+                        log::info!("record screen command: start: {start}, display: {display}");
                         if handler_controller_map.len() == 1 {
                             // Compatible with the sciter version(single ui session).
                             // For the sciter version, there're no multi-ui-sessions for one connection.
