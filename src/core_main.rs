@@ -203,6 +203,8 @@ pub fn core_main() -> Option<Vec<String>> {
             } else if args[0] == "--install-cert" {
                 #[cfg(windows)]
                 hbb_common::allow_err!(crate::platform::windows::install_cert(&args[1]));
+                #[cfg(all(windows, feature = "virtual_display_driver"))]
+                hbb_common::allow_err!(crate::virtual_display_manager::install_update_driver());
                 return None;
             } else if args[0] == "--uninstall-cert" {
                 #[cfg(windows)]
