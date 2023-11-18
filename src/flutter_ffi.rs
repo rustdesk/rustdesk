@@ -1761,7 +1761,7 @@ pub fn main_test_wallpaper(_second: u64) {
             std::thread::sleep(std::time::Duration::from_secs(_second));
         }
         Err(e) => {
-            log::info!("create wallpaper remover failed:{:?}", e);
+            log::info!("create wallpaper remover failed: {:?}", e);
         }
     });
 }

@@ -144,12 +144,12 @@ fn create_media_codec(name: &str, direction: MediaCodecDirection) -> Option<Medi
     media_format.set_i32("height", 0);
     media_format.set_i32("color-format", 19); // COLOR_FormatYUV420Planar
     if let Err(e) = codec.configure(&media_format, None, direction) {
-        log::error!("Failed to init decoder:{:?}", e);
+        log::error!("Failed to init decoder: {:?}", e);
         return None;
     };
     log::error!("decoder init success");
     if let Err(e) = codec.start() {
-        log::error!("Failed to start decoder:{:?}", e);
+        log::error!("Failed to start decoder: {:?}", e);
         return None;
     };
     log::debug!("Init decoder successed!: {:?}", name);

@@ -1504,7 +1504,7 @@ pub fn run_as_system(arg: &str) -> ResultType<()> {
 pub fn elevate_or_run_as_system(is_setup: bool, is_elevate: bool, is_run_as_system: bool) {
     // avoid possible run recursively due to failed run.
     log::info!(
-        "elevate:{}->{:?}, run_as_system:{}->{}",
+        "elevate: {} -> {:?}, run_as_system: {} -> {}",
         is_elevate,
         is_elevated(None),
         is_run_as_system,
@@ -1534,7 +1534,7 @@ pub fn elevate_or_run_as_system(is_setup: bool, is_elevate: bool, is_run_as_syst
                             std::process::exit(0);
                         } else {
                             unsafe {
-                                log::error!("Failed to run as system, errno={}", GetLastError());
+                                log::error!("Failed to run as system, errno = {}", GetLastError());
                             }
                         }
                     }
@@ -1544,14 +1544,14 @@ pub fn elevate_or_run_as_system(is_setup: bool, is_elevate: bool, is_run_as_syst
                             std::process::exit(0);
                         } else {
                             unsafe {
-                                log::error!("Failed to elevate, errno={}", GetLastError());
+                                log::error!("Failed to elevate, errno = {}", GetLastError());
                             }
                         }
                     }
                 }
             }
             Err(_) => unsafe {
-                log::error!("Failed to get elevation status, errno={}", GetLastError());
+                log::error!("Failed to get elevation status, errno = {}", GetLastError());
             },
         }
     }
@@ -2409,13 +2409,13 @@ impl WallPaperRemover {
         let old_path = match Self::get_recent_wallpaper() {
             Ok(old_path) => old_path,
             Err(e) => {
-                log::info!("Failed to get recent wallpaper:{:?}, use fallback", e);
+                log::info!("Failed to get recent wallpaper: {:?}, use fallback", e);
                 wallpaper::get().map_err(|e| anyhow!(e.to_string()))?
             }
         };
         Self::set_wallpaper(None)?;
         log::info!(
-            "created wallpaper remover,  old_path:{:?},  elapsed:{:?}",
+            "created wallpaper remover,  old_path: {:?},  elapsed: {:?}",
             old_path,
             start.elapsed(),
         );
@@ -2433,7 +2433,7 @@ impl WallPaperRemover {
         let (hkcu, sid) = if is_root() {
             let username = get_active_username();
             let sid = get_sid_of_user(&username)?;
-            log::info!("username:{username}, sid:{sid}");
+            log::info!("username: {username}, sid: {sid}");
             (RegKey::predef(HKEY_USERS), format!("{}\\", sid))
         } else {
             (RegKey::predef(HKEY_CURRENT_USER), "".to_string())

@@ -534,7 +534,7 @@ impl Connection {
                         #[cfg(windows)]
                         ipc::Data::DataPortableService(ipc::DataPortableService::RequestStart) => {
                             if let Err(e) = portable_client::start_portable_service(portable_client::StartPara::Direct) {
-                                log::error!("Failed to start portable service from cm:{:?}", e);
+                                log::error!("Failed to start portable service from cm: {:?}", e);
                             }
                         }
                         ipc::Data::SwitchSidesBack => {
@@ -1267,7 +1267,7 @@ impl Connection {
                         });
                     }
                     Err(e) => {
-                        log::info!("create wallpaper remover failed:{:?}", e);
+                        log::info!("create wallpaper remover failed: {:?}", e);
                     }
                 }
             }
@@ -2143,7 +2143,7 @@ impl Connection {
                         if self.restart {
                             match system_shutdown::reboot() {
                                 Ok(_) => log::info!("Restart by the peer"),
-                                Err(e) => log::error!("Failed to restart:{}", e),
+                                Err(e) => log::error!("Failed to restart: {}", e),
                             }
                         }
                     }
@@ -2410,7 +2410,7 @@ impl Connection {
                         crate::platform::change_resolution(&name, r.width as _, r.height as _)
                     {
                         log::error!(
-                            "Failed to change resolution '{}' to ({},{}):{:?}",
+                            "Failed to change resolution '{}' to ({},{}): {:?}",
                             &name,
                             r.width,
                             r.height,

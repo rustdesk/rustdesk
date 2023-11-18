@@ -89,7 +89,7 @@ impl SharedMemory {
                 bail!("Unable to create shmem flink {} : {}", flink, e);
             }
         };
-        log::info!("Create shared memory, size:{}, flink:{}", size, flink);
+        log::info!("Create shared memory, size: {}, flink: {}", size, flink);
         set_path_permission(&PathBuf::from(flink), "F").ok();
         Ok(SharedMemory { inner: shmem })
     }
@@ -102,7 +102,7 @@ impl SharedMemory {
                 bail!("Unable to open existing shmem flink {} : {}", flink, e);
             }
         };
-        log::info!("open existing shared memory, flink:{:?}", flink);
+        log::info!("open existing shared memory, flink: {:?}", flink);
         Ok(SharedMemory { inner: shmem })
     }
 
@@ -351,7 +351,7 @@ pub mod server {
                             }
                         }
                         Err(e) => {
-                            log::error!("Failed to create gdi capturer:{:?}", e);
+                            log::error!("Failed to create gdi capturer: {:?}", e);
                             std::thread::sleep(std::time::Duration::from_secs(1));
                             continue;
                         }
@@ -359,7 +359,7 @@ pub mod server {
                 } else {
                     if recreate || current_display != last_current_display {
                         log::info!(
-                            "create capturer, display:{}->{}",
+                            "create capturer, display: {} -> {}",
                             last_current_display,
                             current_display,
                         );
@@ -399,7 +399,7 @@ pub mod server {
                     Some(Err(e)) => {
                         if e.kind() != std::io::ErrorKind::WouldBlock {
                             // DXGI_ERROR_INVALID_CALL after each success on Microsoft GPU driver
-                            // log::error!("capture frame failed:{:?}", e);
+                            // log::error!("capture frame failed: {:?}", e);
                             if crate::platform::windows::desktop_changed() {
                                 crate::platform::try_change_desktop();
                                 c = None;
@@ -500,7 +500,7 @@ pub mod server {
                 }
             }
             Err(e) => {
-                log::error!("Failed to connect portable service ipc:{:?}", e);
+                log::error!("Failed to connect portable service ipc: {:?}", e);
             }
         }
 

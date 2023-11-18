@@ -1335,7 +1335,7 @@ impl WallPaperRemover {
         wallpaper::set_from_path("").map_err(|e| anyhow!(e.to_string()))?;
         wallpaper::set_dark_from_path("").ok();
         log::info!(
-            "created wallpaper remover,  old_path:{:?}, old_path_dark:{:?}, elapsed:{:?}",
+            "created wallpaper remover,  old_path: {:?}, old_path_dark: {:?}, elapsed: {:?}",
             old_path,
             old_path_dark,
             start.elapsed(),

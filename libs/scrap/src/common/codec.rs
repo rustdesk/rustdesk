@@ -108,7 +108,7 @@ pub enum EncodingUpdate {
 
 impl Encoder {
     pub fn new(config: EncoderCfg, i444: bool) -> ResultType<Encoder> {
-        log::info!("new encoder:{config:?}, i444:{i444}");
+        log::info!("new encoder: {config:?}, i444: {i444}");
         match config {
             EncoderCfg::VPX(_) => Ok(Encoder {
                 codec: Box::new(VpxEncoder::new(config, i444)?),
@@ -215,7 +215,7 @@ impl Encoder {
         }
 
         log::info!(
-            "connection count:{}, used preference:{:?}, encoder:{:?}",
+            "connection count: {}, used preference: {:?}, encoder: {:?}",
             decodings.len(),
             preference,
             *name
@@ -600,7 +600,7 @@ pub fn codec_thread_num() -> usize {
         None => true,
     };
     if log {
-        log::info!("cpu num:{max}, {info}, codec thread:{res}");
+        log::info!("cpu num: {max}, {info}, codec thread: {res}");
         *THREAD_LOG_TIME.lock().unwrap() = Some(Instant::now());
     }
     res
