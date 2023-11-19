@@ -570,6 +570,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("id_input_tip", "Je kunt een ID, een direct IP of een domein met een poort (<domein>:<poort>) invoeren. Als je toegang wilt als apparaat op een andere server, voeg dan het serveradres toe (<id>@<server_adres>?key=<key_value>), bijvoorbeeld \n9123456234@192.168.16.1:21117?key=5Qbwsde3unUcJBtrx9ZkvUmwFNoExHzpryHuPUdqlWM=.Als je toegang wilt als apparaat op een openbare server, voer dan \"<id>@public\" in, voor de openbare server is de sleutel niet nodig."),
         ("privacy_mode_impl_mag_tip", ""),
         ("privacy_mode_impl_virtual_display_tip", ""),
+        ("privacy_mode_impl_exclude_from_capture_tip", ""),
         ("Enter privacy mode", ""),
         ("Exit privacy mode", ""),
     ].iter().cloned().collect();

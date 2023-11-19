@@ -570,6 +570,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("id_input_tip", "입력된 ID, IP, 도메인과 포트(<domain>:<port>)를 입력할 수 있습니다.\n다른 서버에 있는 장치에 접속하려면 서버 주소(<id>@<server_address>?key=<key_value>)를 추가하세요"),
         ("privacy_mode_impl_mag_tip", "모드 1(더 이상 사용되지 않음)"),
         ("privacy_mode_impl_virtual_display_tip", "모드 2(권장)"),
+        ("privacy_mode_impl_exclude_from_capture_tip", ""),
         ("Enter privacy mode", "개인정보 보호 모드 사용"),
         ("Exit privacy mode", "개인정보 보호 모드 종료"),
     ].iter().cloned().collect();

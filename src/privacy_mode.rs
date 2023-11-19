@@ -16,10 +16,13 @@ use std::{
 };
 
 #[cfg(windows)]
+pub mod win_exclude_from_capture;
+#[cfg(windows)]
 mod win_input;
-
 #[cfg(windows)]
 pub mod win_mag;
+#[cfg(windows)]
+pub mod win_topmost_window;
 
 #[cfg(all(windows, feature = "virtual_display_driver"))]
 mod win_virtual_display;
@@ -34,6 +37,9 @@ pub const NO_DISPLAYS: &'static str = "No displays";
 
 #[cfg(windows)]
 pub const PRIVACY_MODE_IMPL_WIN_MAG: &str = win_mag::PRIVACY_MODE_IMPL;
+#[cfg(windows)]
+pub const PRIVACY_MODE_IMPL_WIN_EXCLUDE_FROM_CAPTURE: &str =
+    win_exclude_from_capture::PRIVACY_MODE_IMPL;
 
 #[cfg(all(windows, feature = "virtual_display_driver"))]
 pub const PRIVACY_MODE_IMPL_WIN_VIRTUAL_DISPLAY: &str = win_virtual_display::PRIVACY_MODE_IMPL;
@@ -84,22 +90,23 @@ lazy_static::lazy_static! {
     pub static ref DEFAULT_PRIVACY_MODE_IMPL: String = {
         #[cfg(windows)]
         {
-            if display_service::is_privacy_mode_mag_supported() {
-                PRIVACY_MODE_IMPL_WIN_MAG
-            } else {
-                #[cfg(feature = "virtual_display_driver")]
-                {
-                    if is_installed() {
-                        PRIVACY_MODE_IMPL_WIN_VIRTUAL_DISPLAY
-                    } else {
-                        ""
-                    }
-                }
-                #[cfg(not(feature = "virtual_display_driver"))]
-                {
-                    ""
-                }
-            }.to_owned()
+            PRIVACY_MODE_IMPL_WIN_EXCLUDE_FROM_CAPTURE.to_owned()
+            // if display_service::is_privacy_mode_mag_supported() {
+            //     PRIVACY_MODE_IMPL_WIN_MAG
+            // } else {
+            //     #[cfg(feature = "virtual_display_driver")]
+            //     {
+            //         if is_installed() {
+            //             PRIVACY_MODE_IMPL_WIN_VIRTUAL_DISPLAY
+            //         } else {
+            //             ""
+            //         }
+            //     }
+            //     #[cfg(not(feature = "virtual_display_driver"))]
+            //     {
+            //         ""
+            //     }
+            // }.to_owned()
         }
         #[cfg(not(windows))]
         {
@@ -135,6 +142,10 @@ lazy_static::lazy_static! {
         {
             map.insert(win_mag::PRIVACY_MODE_IMPL, || {
                     Box::new(win_mag::PrivacyModeImpl::default())
+                });
+
+            map.insert(win_exclude_from_capture::PRIVACY_MODE_IMPL, || {
+                    Box::new(win_exclude_from_capture::PrivacyModeImpl::default())
                 });
 
             #[cfg(feature = "virtual_display_driver")]
@@ -272,6 +283,10 @@ pub fn get_supported_privacy_mode_impl() -> Vec<(&'static str, &'static str)> {
         if display_service::is_privacy_mode_mag_supported() {
             vec_impls.push((PRIVACY_MODE_IMPL_WIN_MAG, "privacy_mode_impl_mag_tip"));
         }
+        vec_impls.push((
+            PRIVACY_MODE_IMPL_WIN_EXCLUDE_FROM_CAPTURE,
+            "privacy_mode_impl_exclude_from_capture_tip",
+        ));
         #[cfg(feature = "virtual_display_driver")]
         if is_installed() {
             vec_impls.push((
