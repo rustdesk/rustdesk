@@ -65,22 +65,10 @@ impl WindowHandlers {
 }
 
 pub struct PrivacyModeImpl {
+    impl_key: String,
     conn_id: i32,
     handlers: WindowHandlers,
     hwnd: u64,
-}
-
-impl Default for PrivacyModeImpl {
-    fn default() -> Self {
-        Self {
-            conn_id: INVALID_PRIVACY_MODE_CONN_ID,
-            handlers: WindowHandlers {
-                hthread: 0,
-                hprocess: 0,
-            },
-            hwnd: 0,
-        }
-    }
 }
 
 impl PrivacyMode for PrivacyModeImpl {
@@ -163,9 +151,26 @@ impl PrivacyMode for PrivacyModeImpl {
     fn pre_conn_id(&self) -> i32 {
         self.conn_id
     }
+
+    #[inline]
+    fn get_impl_key(&self) -> &str {
+        &self.impl_key
+    }
 }
 
 impl PrivacyModeImpl {
+    pub fn new(impl_key: &str) -> Self {
+        Self {
+            impl_key: impl_key.to_owned(),
+            conn_id: INVALID_PRIVACY_MODE_CONN_ID,
+            handlers: WindowHandlers {
+                hthread: 0,
+                hprocess: 0,
+            },
+            hwnd: 0,
+        }
+    }
+
     #[inline]
     pub fn get_hwnd(&self) -> u64 {
         self.hwnd
@@ -372,4 +377,3 @@ pub(super) fn wait_find_privacy_hwnd(msecs: u128) -> ResultType<HWND> {
         std::thread::sleep(Duration::from_millis(100));
     }
 }
-

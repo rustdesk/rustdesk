@@ -35,21 +35,11 @@ struct Display {
 }
 
 pub struct PrivacyModeImpl {
+    impl_key: String,
     conn_id: i32,
     displays: Vec<Display>,
     virtual_displays: Vec<Display>,
     virtual_displays_added: Vec<u32>,
-}
-
-impl Default for PrivacyModeImpl {
-    fn default() -> Self {
-        Self {
-            conn_id: INVALID_PRIVACY_MODE_CONN_ID,
-            displays: Vec::new(),
-            virtual_displays: Vec::new(),
-            virtual_displays_added: Vec::new(),
-        }
-    }
 }
 
 struct TurnOnGuard<'a> {
@@ -82,6 +72,16 @@ impl<'a> Drop for TurnOnGuard<'a> {
 }
 
 impl PrivacyModeImpl {
+    pub fn new(impl_key: &str) -> Self {
+        Self {
+            impl_key: impl_key.to_owned(),
+            conn_id: INVALID_PRIVACY_MODE_CONN_ID,
+            displays: Vec::new(),
+            virtual_displays: Vec::new(),
+            virtual_displays_added: Vec::new(),
+        }
+    }
+
     // mainly from https://github.com/fufesou/rustdesk/blob/44c3a52ca8502cf53b58b59db130611778d34dbe/libs/scrap/src/dxgi/mod.rs#L365
     fn set_displays(&mut self) {
         self.displays.clear();
@@ -430,6 +430,11 @@ impl PrivacyMode for PrivacyModeImpl {
     #[inline]
     fn pre_conn_id(&self) -> i32 {
         self.conn_id
+    }
+
+    #[inline]
+    fn get_impl_key(&self) -> &str {
+        &self.impl_key
     }
 }
 
