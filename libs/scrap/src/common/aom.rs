@@ -106,7 +106,7 @@ mod webrtc {
         // Overwrite default config with input encoder settings & RTC-relevant values.
         c.g_w = cfg.width;
         c.g_h = cfg.height;
-        c.g_threads = codec_thread_num() as _;
+        c.g_threads = codec_thread_num(64) as _;
         c.g_timebase.num = 1;
         c.g_timebase.den = kRtpTicksPerSecond;
         c.g_input_bit_depth = kBitDepth;
@@ -452,7 +452,7 @@ impl AomDecoder {
         let i = call_aom_ptr!(aom_codec_av1_dx());
         let mut ctx = Default::default();
         let cfg = aom_codec_dec_cfg_t {
-            threads: codec_thread_num() as _,
+            threads: codec_thread_num(64) as _,
             w: 0,
             h: 0,
             allow_lowbitdepth: 1,

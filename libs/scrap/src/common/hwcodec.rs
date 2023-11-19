@@ -63,7 +63,7 @@ impl EncoderApi for HwEncoder {
                     gop,
                     quality: DEFAULT_HW_QUALITY,
                     rc: DEFAULT_RC,
-                    thread_count: codec_thread_num() as _, // ffmpeg's thread_count is used for cpu
+                    thread_count: codec_thread_num(16) as _, // ffmpeg's thread_count is used for cpu
                 };
                 let format = match Encoder::format_from_name(config.name.clone()) {
                     Ok(format) => format,
@@ -235,7 +235,7 @@ impl HwDecoder {
         let ctx = DecodeContext {
             name: info.name.clone(),
             device_type: info.hwdevice.clone(),
-            thread_count: codec_thread_num() as _,
+            thread_count: codec_thread_num(16) as _,
         };
         match Decoder::new(ctx) {
             Ok(decoder) => Ok(HwDecoder { decoder, info }),
