@@ -53,6 +53,13 @@ impl VirtualDisplayManager {
     }
 }
 
+pub fn install_update_driver() -> ResultType<()> {
+    VIRTUAL_DISPLAY_MANAGER
+        .lock()
+        .unwrap()
+        .install_update_driver()
+}
+
 pub fn plug_in_headless() -> ResultType<()> {
     let mut manager = VIRTUAL_DISPLAY_MANAGER.lock().unwrap();
     manager.prepare_driver()?;
