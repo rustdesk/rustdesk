@@ -989,6 +989,10 @@ impl Config {
         }
     }
 
+    pub fn get_push_topic(id: &str) -> String {
+        format!("push.{}", id)
+    }
+
     pub fn get() -> Config {
         return CONFIG.read().unwrap().clone();
     }

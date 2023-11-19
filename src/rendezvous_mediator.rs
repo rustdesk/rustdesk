@@ -1,3 +1,4 @@
+use hbb_common::futures::StreamExt;
 use std::{
     net::SocketAddr,
     sync::{
@@ -137,6 +138,8 @@ impl RendezvousMediator {
             last_id_pk_registry: "".to_owned(),
         };
         let mut mq_client = rz.handshake(&host).await?;
+        let mut push_subscription =
+            mq_client.subscribe(Config::get_push_topic(&Config::get_id())).await?;
 
         const TIMER_OUT: Duration = Duration::from_secs(1);
         let mut timer = interval(TIMER_OUT);
@@ -178,6 +181,36 @@ impl RendezvousMediator {
                 }
             };
             select! {
+                message = push_subscription.next() => if let Some(message) = message {
+                    if let Ok(msg_in) = Message::parse_from_bytes(&message.payload) {
+                        match msg_in.union {
+                            Some(rendezvous_message::Union::PunchHole(ph)) => {
+                                let rz = rz.clone();
+                                let server = server.clone();
+                                tokio::spawn(async move {
+                                    allow_err!(rz.handle_punch_hole(ph, server).await);
+                                });
+                            }
+                            Some(rendezvous_message::Union::RequestRelay(rr)) => {
+                                let rz = rz.clone();
+                                let server = server.clone();
+                                tokio::spawn(async move {
+                                    allow_err!(rz.handle_request_relay(rr, server).await);
+                                });
+                            }
+                            Some(rendezvous_message::Union::FetchLocalAddr(fla)) => {
+                                let rz = rz.clone();
+                                let server = server.clone();
+                                tokio::spawn(async move {
+                                    allow_err!(rz.handle_intranet(fla, server).await);
+                                });
+                            }
+                            _ => {}
+                        }
+                    } else {
+                        log::debug!("Non-protobuf message bytes received: {:?}", message);
+                    }
+                },
                 n = socket.next() => {
                     match n {
                         Some(Ok((bytes, _))) => {
@@ -206,27 +239,6 @@ impl RendezvousMediator {
                                                 log::error!("unknown RegisterPkResponse");
                                             }
                                         }
-                                    }
-                                    Some(rendezvous_message::Union::PunchHole(ph)) => {
-                                        let rz = rz.clone();
-                                        let server = server.clone();
-                                        tokio::spawn(async move {
-                                            allow_err!(rz.handle_punch_hole(ph, server).await);
-                                        });
-                                    }
-                                    Some(rendezvous_message::Union::RequestRelay(rr)) => {
-                                        let rz = rz.clone();
-                                        let server = server.clone();
-                                        tokio::spawn(async move {
-                                            allow_err!(rz.handle_request_relay(rr, server).await);
-                                        });
-                                    }
-                                    Some(rendezvous_message::Union::FetchLocalAddr(fla)) => {
-                                        let rz = rz.clone();
-                                        let server = server.clone();
-                                        tokio::spawn(async move {
-                                            allow_err!(rz.handle_intranet(fla, server).await);
-                                        });
                                     }
                                     Some(rendezvous_message::Union::ConfigureUpdate(cu)) => {
                                         let v0 = Config::get_rendezvous_servers();
