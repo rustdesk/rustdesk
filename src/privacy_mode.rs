@@ -90,23 +90,26 @@ lazy_static::lazy_static! {
     pub static ref DEFAULT_PRIVACY_MODE_IMPL: String = {
         #[cfg(windows)]
         {
-            PRIVACY_MODE_IMPL_WIN_EXCLUDE_FROM_CAPTURE.to_owned()
-            // if display_service::is_privacy_mode_mag_supported() {
-            //     PRIVACY_MODE_IMPL_WIN_MAG
-            // } else {
-            //     #[cfg(feature = "virtual_display_driver")]
-            //     {
-            //         if is_installed() {
-            //             PRIVACY_MODE_IMPL_WIN_VIRTUAL_DISPLAY
-            //         } else {
-            //             ""
-            //         }
-            //     }
-            //     #[cfg(not(feature = "virtual_display_driver"))]
-            //     {
-            //         ""
-            //     }
-            // }.to_owned()
+            if win_exclude_from_capture::is_supported() {
+                PRIVACY_MODE_IMPL_WIN_EXCLUDE_FROM_CAPTURE
+            } else {
+                if display_service::is_privacy_mode_mag_supported() {
+                    PRIVACY_MODE_IMPL_WIN_MAG
+                } else {
+                    #[cfg(feature = "virtual_display_driver")]
+                    {
+                        if is_installed() {
+                            PRIVACY_MODE_IMPL_WIN_VIRTUAL_DISPLAY
+                        } else {
+                            ""
+                        }
+                    }
+                    #[cfg(not(feature = "virtual_display_driver"))]
+                    {
+                        ""
+                    }
+                }
+            }.to_owned()
         }
         #[cfg(not(windows))]
         {
@@ -140,13 +143,15 @@ lazy_static::lazy_static! {
         let mut map: HashMap<&'static str, PrivacyModeCreator> = HashMap::new();
         #[cfg(windows)]
         {
-            map.insert(win_mag::PRIVACY_MODE_IMPL, || {
-                    Box::new(win_mag::PrivacyModeImpl::default())
-                });
-
-            map.insert(win_exclude_from_capture::PRIVACY_MODE_IMPL, || {
+            if win_exclude_from_capture::is_supported() {
+                map.insert(win_exclude_from_capture::PRIVACY_MODE_IMPL, || {
                     Box::new(win_exclude_from_capture::PrivacyModeImpl::default())
                 });
+            } else {
+                map.insert(win_mag::PRIVACY_MODE_IMPL, || {
+                    Box::new(win_mag::PrivacyModeImpl::default())
+                });
+            }
 
             #[cfg(feature = "virtual_display_driver")]
             map.insert(win_virtual_display::PRIVACY_MODE_IMPL, || {
@@ -280,13 +285,18 @@ pub fn get_supported_privacy_mode_impl() -> Vec<(&'static str, &'static str)> {
     #[cfg(target_os = "windows")]
     {
         let mut vec_impls = Vec::new();
-        if display_service::is_privacy_mode_mag_supported() {
-            vec_impls.push((PRIVACY_MODE_IMPL_WIN_MAG, "privacy_mode_impl_mag_tip"));
+
+        if win_exclude_from_capture::is_supported() {
+            vec_impls.push((
+                PRIVACY_MODE_IMPL_WIN_EXCLUDE_FROM_CAPTURE,
+                "privacy_mode_impl_exclude_from_capture_tip",
+            ));
+        } else {
+            if display_service::is_privacy_mode_mag_supported() {
+                vec_impls.push((PRIVACY_MODE_IMPL_WIN_MAG, "privacy_mode_impl_mag_tip"));
+            }
         }
-        vec_impls.push((
-            PRIVACY_MODE_IMPL_WIN_EXCLUDE_FROM_CAPTURE,
-            "privacy_mode_impl_exclude_from_capture_tip",
-        ));
+
         #[cfg(feature = "virtual_display_driver")]
         if is_installed() {
             vec_impls.push((
@@ -294,6 +304,7 @@ pub fn get_supported_privacy_mode_impl() -> Vec<(&'static str, &'static str)> {
                 "privacy_mode_impl_virtual_display_tip",
             ));
         }
+
         vec_impls
     }
     #[cfg(not(target_os = "windows"))]
@@ -324,6 +335,7 @@ pub fn check_privacy_mode_err(
     display_idx: usize,
     timeout_millis: u64,
 ) -> String {
+    // win magnifier implementation requires a test of creating a capturer.
     if is_current_privacy_mode_impl(PRIVACY_MODE_IMPL_WIN_MAG) {
         crate::video_service::test_create_capturer(privacy_mode_id, display_idx, timeout_millis)
     } else {

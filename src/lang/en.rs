@@ -205,6 +205,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("id_input_tip", "You can input an ID, a direct IP, or a domain with a port (<domain>:<port>).\nIf you want to access a device on another server, please append the server address (<id>@<server_address>?key=<key_value>), for example,\n9123456234@192.168.16.1:21117?key=5Qbwsde3unUcJBtrx9ZkvUmwFNoExHzpryHuPUdqlWM=.\nIf you want to access a device on a public server, please input \"<id>@public\", the key is not needed for public server"),
         ("privacy_mode_impl_mag_tip", "Mode 1 (deprecated)"),
         ("privacy_mode_impl_virtual_display_tip", "Mode 2 (recommended)"),
-        ("privacy_mode_impl_exclude_from_capture_tip", "Mode 3"),
+        ("privacy_mode_impl_exclude_from_capture_tip", "Mode 1"),
     ].iter().cloned().collect();
 }
