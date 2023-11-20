@@ -247,7 +247,6 @@ impl RendezvousMediator {
                             let result = rz.handshake(&host).await?;
                             mq_client = result.0;
                             push_subscription = result.1;
-                            return Ok(());
                         }
                         allow_err!(rz.register_peer(&mut socket).await);
                         last_register_sent = now;
