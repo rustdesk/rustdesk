@@ -293,7 +293,12 @@ BOOL DeviceCreateWithLifetime(SW_DEVICE_LIFETIME *lifetime, PHSWDEVICE hSwDevice
         hSwDevice);
     if (FAILED(hr))
     {
-        SetLastMsg("Failed DeviceCreate SwDeviceCreate 0x%lx\n", hr);
+        LPSTR errorString = formatErrorString((DWORD)hr);
+        SetLastMsg("Failed DeviceCreate SwDeviceCreate, hresult 0x%lx, %s\n", hr, errorString == NULL ? "(NULL)\n" : errorString);
+        if (errorString != NULL)
+        {
+            LocalFree(errorString);
+        }
         if (g_printMsg)
         {
             printf(g_lastMsg);
@@ -308,7 +313,29 @@ BOOL DeviceCreateWithLifetime(SW_DEVICE_LIFETIME *lifetime, PHSWDEVICE hSwDevice
     CloseHandle(hEvent);
     if (waitResult != WAIT_OBJECT_0)
     {
-        SetLastMsg("Failed DeviceCreate wait for device creation 0x%d\n", waitResult);
+        DWORD error = 0;
+        LPSTR errorString = NULL;
+        switch (waitResult)
+        {
+            case WAIT_ABANDONED:
+                SetLastMsg("Failed DeviceCreate wait for device creation 0x%d, WAIT_ABANDONED\n", waitResult);
+                break;
+            case WAIT_TIMEOUT:
+                SetLastMsg("Failed DeviceCreate wait for device creation 0x%d, WAIT_TIMEOUT\n", waitResult);
+                break;
+            default:
+                error = GetLastError();
+                if (error != 0)
+                {
+                    errorString = formatErrorString(error);
+                    SetLastMsg("Failed DeviceCreate wait for device creation, error: 0x%x, %s", error, errorString == NULL ? "(NULL)\n" : errorString);
+                    if (errorString != NULL)
+                    {
+                        LocalFree(errorString);
+                    }
+                }
+                break;
+        }
         if (g_printMsg)
         {
             printf(g_lastMsg);
@@ -323,7 +350,12 @@ BOOL DeviceCreateWithLifetime(SW_DEVICE_LIFETIME *lifetime, PHSWDEVICE hSwDevice
     }
     else
     {
-        SetLastMsg("Failed DeviceCreate SwDeviceCreate, hrCreateResult 0x%lx\n", callbackContext.hrCreateResult);
+        LPSTR errorString = formatErrorString((DWORD)callbackContext.hrCreateResult);
+        SetLastMsg("Failed DeviceCreate SwDeviceCreate, hrCreateResult 0x%lx, %s", callbackContext.hrCreateResult, errorString == NULL ? "(NULL)\n" : errorString);
+        if (errorString != NULL)
+        {
+            LocalFree(errorString);
+        }
         return FALSE;
     }
 }
@@ -405,7 +437,12 @@ BOOL MonitorPlugIn(UINT index, UINT edid, INT retries)
     HRESULT hr = CoCreateGuid(&plugIn.ContainerId);
     if (!SUCCEEDED(hr))
     {
-        SetLastMsg("Failed MonitorPlugIn CoCreateGuid %d\n", hr);
+        LPSTR errorString = formatErrorString((DWORD)hr);
+        SetLastMsg("Failed MonitorPlugIn CoCreateGuid, hresult 0x%lx, %s\n", hr, errorString == NULL ? "(NULL)\n" : errorString);
+        if (errorString != NULL)
+        {
+            LocalFree(errorString);
+        }
         if (g_printMsg)
         {
             printf(g_lastMsg);
@@ -513,7 +550,7 @@ BOOL MonitorModesUpdate(UINT index, UINT modeCount, PMonitorMode modes)
     PCtlMonitorModes pMonitorModes = (PCtlMonitorModes)malloc(buflen);
     if (pMonitorModes == NULL)
     {
-        SetLastMsg("Failed MonitorModesUpdate CtlMonitorModes malloc 0x%lx\n");
+        SetLastMsg("Failed MonitorModesUpdate CtlMonitorModes malloc\n");
         if (g_printMsg)
         {
             printf(g_lastMsg);
@@ -618,7 +655,7 @@ GetDevicePath(
         CM_GET_DEVICE_INTERFACE_LIST_ALL_DEVICES);
     if (cr != CR_SUCCESS)
     {
-        SetLastMsg("Failed GetDevicePath 0x%x retrieving device interface list size.\n", cr);
+        SetLastMsg("Failed GetDevicePath 0x%x, retrieving device interface list size.\n", cr);
         if (g_printMsg)
         {
             printf(g_lastMsg);
@@ -688,7 +725,12 @@ GetDevicePath(
     hr = StringCchCopy(DevicePath, BufLen, deviceInterfaceList);
     if (FAILED(hr))
     {
-        SetLastMsg("Error: GetDevicePath StringCchCopy failed with HRESULT 0x%x", hr);
+        LPSTR errorString = formatErrorString((DWORD)hr);
+        SetLastMsg("Failed GetDevicePath StringCchCopy, hresult 0x%lx, %s\n", hr, errorString == NULL ? "(NULL)\n" : errorString);
+        if (errorString != NULL)
+        {
+            LocalFree(errorString);
+        }
         if (g_printMsg)
         {
             printf(g_lastMsg);
@@ -851,7 +893,12 @@ BOOLEAN GetDevicePath2(
     hr = StringCchCopy(DevicePath, BufLen, deviceInterfaceDetailData->DevicePath);
     if (FAILED(hr))
     {
-        SetLastMsg("Failed GetDevicePath2 StringCchCopy, HRESULT 0x%x", hr);
+        LPSTR errorString = formatErrorString((DWORD)hr);
+        SetLastMsg("Failed GetDevicePath2 StringCchCopy, hresult 0x%lx, %s\n", hr, errorString == NULL ? "(NULL)\n" : errorString);
+        if (errorString != NULL)
+        {
+            LocalFree(errorString);
+        }
         if (g_printMsg)
         {
             printf(g_lastMsg);
