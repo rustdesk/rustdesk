@@ -294,7 +294,7 @@ BOOL DeviceCreateWithLifetime(SW_DEVICE_LIFETIME *lifetime, PHSWDEVICE hSwDevice
     if (FAILED(hr))
     {
         LPSTR errorString = formatErrorString((DWORD)hr);
-        SetLastMsg("Failed DeviceCreate SwDeviceCreate, hresult 0x%lx, %s\n", hr, errorString == NULL ? "(NULL)\n" : errorString);
+        SetLastMsg("Failed DeviceCreate SwDeviceCreate, hresult 0x%lx, %s", hr, errorString == NULL ? "(NULL)\n" : errorString);
         if (errorString != NULL)
         {
             LocalFree(errorString);
@@ -438,7 +438,7 @@ BOOL MonitorPlugIn(UINT index, UINT edid, INT retries)
     if (!SUCCEEDED(hr))
     {
         LPSTR errorString = formatErrorString((DWORD)hr);
-        SetLastMsg("Failed MonitorPlugIn CoCreateGuid, hresult 0x%lx, %s\n", hr, errorString == NULL ? "(NULL)\n" : errorString);
+        SetLastMsg("Failed MonitorPlugIn CoCreateGuid, hresult 0x%lx, %s", hr, errorString == NULL ? "(NULL)\n" : errorString);
         if (errorString != NULL)
         {
             LocalFree(errorString);
@@ -726,7 +726,7 @@ GetDevicePath(
     if (FAILED(hr))
     {
         LPSTR errorString = formatErrorString((DWORD)hr);
-        SetLastMsg("Failed GetDevicePath StringCchCopy, hresult 0x%lx, %s\n", hr, errorString == NULL ? "(NULL)\n" : errorString);
+        SetLastMsg("Failed GetDevicePath StringCchCopy, hresult 0x%lx, %s", hr, errorString == NULL ? "(NULL)\n" : errorString);
         if (errorString != NULL)
         {
             LocalFree(errorString);
@@ -894,7 +894,7 @@ BOOLEAN GetDevicePath2(
     if (FAILED(hr))
     {
         LPSTR errorString = formatErrorString((DWORD)hr);
-        SetLastMsg("Failed GetDevicePath2 StringCchCopy, hresult 0x%lx, %s\n", hr, errorString == NULL ? "(NULL)\n" : errorString);
+        SetLastMsg("Failed GetDevicePath2 StringCchCopy, hresult 0x%lx, %s", hr, errorString == NULL ? "(NULL)\n" : errorString);
         if (errorString != NULL)
         {
             LocalFree(errorString);
