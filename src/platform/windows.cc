@@ -637,6 +637,7 @@ extern "C"
 
 extern "C"
 {
+    // https://learn.microsoft.com/en-us/windows/win32/sysinfo/targeting-your-application-at-windows-8-1
     // https://github.com/nodejs/node-convergence-archive/blob/e11fe0c2777561827cdb7207d46b0917ef3c42a7/deps/uv/src/win/util.c#L780
     BOOL IsWindowsVersionOrGreater(DWORD os_major,
                                    DWORD os_minor,

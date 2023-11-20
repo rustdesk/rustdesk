@@ -7,11 +7,3 @@ pub(super) fn is_supported() -> bool {
     // https://en.wikipedia.org/wiki/Windows_10_version_history
     crate::platform::windows::is_windows_version_or_greater(10, 0, 19041, 0, 0)
 }
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn test_is_support() {
-        println!("is exclude from capture supported: {}", super::is_supported());
-    }
-}
