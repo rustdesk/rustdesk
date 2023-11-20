@@ -173,7 +173,10 @@ impl MagInterface {
                 if FALSE == init_func() {
                     return Err(Error::new(
                         ErrorKind::Other,
-                        format!("Failed to MagInitialize, error: {:?}", Error::last_os_error()),
+                        format!(
+                            "Failed to MagInitialize, error: {:?}",
+                            Error::last_os_error()
+                        ),
                     ));
                 } else {
                     s.init_succeeded = true;
@@ -315,7 +318,10 @@ impl CapturerMag {
             ) {
                 return Err(Error::new(
                     ErrorKind::Other,
-                    format!("Failed to GetModuleHandleExA, error {:?}", Error::last_os_error()),
+                    format!(
+                        "Failed to GetModuleHandleExA, error {:?}",
+                        Error::last_os_error()
+                    ),
                 ));
             }
 
@@ -342,7 +348,10 @@ impl CapturerMag {
                 if code != ERROR_CLASS_ALREADY_EXISTS {
                     return Err(Error::new(
                         ErrorKind::Other,
-                        format!("Failed to RegisterClassExA, error: {}", code),
+                        format!(
+                            "Failed to RegisterClassExA, error {:?}",
+                            Error::from_raw_os_error(code as _)
+                        ),
                     ));
                 }
             }
@@ -546,7 +555,10 @@ impl CapturerMag {
                 if FALSE == set_window_source_func(self.magnifier_window, self.rect) {
                     return Err(Error::new(
                         ErrorKind::Other,
-                        format!("Failed to MagSetWindowSource, error {:?}", Error::last_os_error()),
+                        format!(
+                            "Failed to MagSetWindowSource, error {:?}",
+                            Error::last_os_error()
+                        ),
                     ));
                 }
             } else {
@@ -578,7 +590,10 @@ impl CapturerMag {
             unsafe {
                 if FALSE == DestroyWindow(self.magnifier_window) {
                     //
-                    println!("Failed DestroyWindow magnifier window, error {:?}", Error::last_os_error())
+                    println!(
+                        "Failed DestroyWindow magnifier window, error {:?}",
+                        Error::last_os_error()
+                    )
                 }
             }
         }
@@ -588,7 +603,10 @@ impl CapturerMag {
             unsafe {
                 if FALSE == DestroyWindow(self.host_window) {
                     //
-                    println!("Failed DestroyWindow host window, error {:?}", Error::last_os_error())
+                    println!(
+                        "Failed DestroyWindow host window, error {:?}",
+                        Error::last_os_error()
+                    )
                 }
             }
         }
