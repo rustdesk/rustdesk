@@ -319,7 +319,7 @@ fn get_rich_cursor_data(
         let dc = DC::new()?;
         let bitmap_dc = BitmapDC::new(dc.0, hbm_color)?;
         if get_di_bits(out.as_mut_ptr(), bitmap_dc.dc(), hbm_color, width, height) > 0 {
-            bail!("Failed to get di bits: {}", get_error());
+            bail!("Failed to get di bits: {}", io::Error::last_os_error());
         }
     }
     Ok(())
@@ -603,7 +603,7 @@ async fn launch_server(session_id: DWORD, close_first: bool) -> ResultType<HANDL
     let wstr = wstr.as_ptr();
     let h = unsafe { LaunchProcessWin(wstr, session_id, FALSE) };
     if h.is_null() {
-        log::error!("Failed to launch server: {}", get_error());
+        log::error!("Failed to launch server: {}", io::Error::last_os_error());
     }
     Ok(h)
 }
@@ -627,7 +627,7 @@ pub fn run_as_user(arg: Vec<&str>) -> ResultType<Option<std::process::Child>> {
             "Failed to launch {:?} with session id {}: {}",
             arg,
             session_id,
-            get_error()
+            io::Error::last_os_error()
         );
     }
     Ok(None)
@@ -676,7 +676,7 @@ pub fn try_change_desktop() -> bool {
             if !res {
                 let mut s = SUPPRESS.lock().unwrap();
                 if s.elapsed() > std::time::Duration::from_secs(3) {
-                    log::error!("Failed to switch desktop: {}", get_error());
+                    log::error!("Failed to switch desktop: {}", io::Error::last_os_error());
                     *s = Instant::now();
                 }
             } else {
@@ -686,41 +686,6 @@ pub fn try_change_desktop() -> bool {
         }
     }
     return false;
-}
-
-fn get_error() -> String {
-    unsafe {
-        let buff_size = 256;
-        let mut buff: Vec<u16> = Vec::with_capacity(buff_size);
-        buff.resize(buff_size, 0);
-        let errno = GetLastError();
-        let chars_copied = FormatMessageW(
-            FORMAT_MESSAGE_IGNORE_INSERTS
-                | FORMAT_MESSAGE_FROM_SYSTEM
-                | FORMAT_MESSAGE_ARGUMENT_ARRAY,
-            std::ptr::null(),
-            errno,
-            0,
-            buff.as_mut_ptr(),
-            (buff_size + 1) as u32,
-            std::ptr::null_mut(),
-        );
-        if chars_copied == 0 {
-            return "".to_owned();
-        }
-        let mut curr_char: usize = chars_copied as usize;
-        while curr_char > 0 {
-            let ch = buff[curr_char];
-
-            if ch >= ' ' as u16 {
-                break;
-            }
-            curr_char -= 1;
-        }
-        let sl = std::slice::from_raw_parts(buff.as_ptr(), curr_char);
-        let err_msg = String::from_utf16(sl);
-        return err_msg.unwrap_or("".to_owned());
-    }
 }
 
 fn share_rdp() -> BOOL {
@@ -1285,7 +1250,7 @@ pub fn block_input(v: bool) -> (bool, String) {
         if BlockInput(v) == TRUE {
             (true, "".to_owned())
         } else {
-            (false, format!("Error: {:?}", io::Error::last_os_error()))
+            (false, format!("Error: {}", io::Error::last_os_error()))
         }
     }
 }
@@ -1560,7 +1525,7 @@ pub fn elevate_or_run_as_system(is_setup: bool, is_elevate: bool, is_run_as_syst
                             std::process::exit(0);
                         } else {
                             log::error!(
-                                "Failed to run as system, error {:?}",
+                                "Failed to run as system, error {}",
                                 io::Error::last_os_error()
                             );
                         }
@@ -1570,16 +1535,13 @@ pub fn elevate_or_run_as_system(is_setup: bool, is_elevate: bool, is_run_as_syst
                         if let Ok(true) = elevate(arg_elevate) {
                             std::process::exit(0);
                         } else {
-                            log::error!(
-                                "Failed to elevate, error {:?}",
-                                io::Error::last_os_error()
-                            );
+                            log::error!("Failed to elevate, error {}", io::Error::last_os_error());
                         }
                     }
                 }
             }
             Err(_) => log::error!(
-                "Failed to get elevation status, error {:?}",
+                "Failed to get elevation status, error {}",
                 io::Error::last_os_error()
             ),
         }
@@ -1595,7 +1557,7 @@ pub fn is_elevated(process_id: Option<DWORD>) -> ResultType<bool> {
         };
         if handle == NULL {
             bail!(
-                "Failed to open process, error {:?}",
+                "Failed to open process, error {}",
                 io::Error::last_os_error()
             )
         }
@@ -1603,7 +1565,7 @@ pub fn is_elevated(process_id: Option<DWORD>) -> ResultType<bool> {
         let mut token: HANDLE = mem::zeroed();
         if OpenProcessToken(handle, TOKEN_QUERY, &mut token) == FALSE {
             bail!(
-                "Failed to open process token, error {:?}",
+                "Failed to open process token, error {}",
                 io::Error::last_os_error()
             )
         }
@@ -1619,7 +1581,7 @@ pub fn is_elevated(process_id: Option<DWORD>) -> ResultType<bool> {
         ) == FALSE
         {
             bail!(
-                "Failed to get token information, error {:?}",
+                "Failed to get token information, error {}",
                 io::Error::last_os_error()
             )
         }
@@ -1801,7 +1763,7 @@ pub fn current_resolution(name: &str) -> ResultType<Resolution> {
         dm.dmSize = std::mem::size_of::<DEVMODEW>() as _;
         if EnumDisplaySettingsW(device_name.as_ptr(), ENUM_CURRENT_SETTINGS, &mut dm) == 0 {
             bail!(
-                "failed to get currrent resolution, error {:?}",
+                "failed to get currrent resolution, error {}",
                 io::Error::last_os_error()
             );
         }
@@ -1835,7 +1797,7 @@ pub(super) fn change_resolution_directly(
         );
         if res != DISP_CHANGE_SUCCESSFUL {
             bail!(
-                "ChangeDisplaySettingsExW failed, res={}, error {:?}",
+                "ChangeDisplaySettingsExW failed, res={}, error {}",
                 res,
                 io::Error::last_os_error()
             );

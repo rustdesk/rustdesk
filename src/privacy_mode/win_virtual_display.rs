@@ -195,7 +195,7 @@ impl PrivacyModeImpl {
                 )
             {
                 bail!(
-                    "Failed EnumDisplaySettingsW, device name: {:?}, error: {:?}",
+                    "Failed EnumDisplaySettingsW, device name: {:?}, error: {}",
                     std::string::String::from_utf16(&display.name),
                     Error::last_os_error()
                 );
@@ -229,7 +229,7 @@ impl PrivacyModeImpl {
                     == EnumDisplaySettingsW(dd.DeviceName.as_ptr(), ENUM_CURRENT_SETTINGS, &mut dm)
                 {
                     bail!(
-                        "Failed EnumDisplaySettingsW, device name: {:?}, error: {:?}",
+                        "Failed EnumDisplaySettingsW, device name: {:?}, error: {}",
                         std::string::String::from_utf16(&dd.DeviceName),
                         Error::last_os_error()
                     );

@@ -43,7 +43,7 @@ fn do_hook(tx: Sender<String>) -> ResultType<(HHOOK, HHOOK)> {
             &mut hm_keyboard as _,
         ) {
             tx.send(format!(
-                "Failed to GetModuleHandleExA, error: {:?}",
+                "Failed to GetModuleHandleExA, error: {}",
                 Error::last_os_error()
             ))?;
             return Ok(invalid_ret);
@@ -55,7 +55,7 @@ fn do_hook(tx: Sender<String>) -> ResultType<(HHOOK, HHOOK)> {
             &mut hm_mouse as _,
         ) {
             tx.send(format!(
-                "Failed to GetModuleHandleExA, error: {:?}",
+                "Failed to GetModuleHandleExA, error: {}",
                 Error::last_os_error()
             ))?;
             return Ok(invalid_ret);
@@ -69,7 +69,7 @@ fn do_hook(tx: Sender<String>) -> ResultType<(HHOOK, HHOOK)> {
         );
         if hook_keyboard.is_null() {
             tx.send(format!(
-                " SetWindowsHookExA keyboard, error {:?}",
+                " SetWindowsHookExA keyboard, error {}",
                 Error::last_os_error()
             ))?;
             return Ok(invalid_ret);
@@ -80,12 +80,12 @@ fn do_hook(tx: Sender<String>) -> ResultType<(HHOOK, HHOOK)> {
             if FALSE == UnhookWindowsHookEx(hook_keyboard) {
                 // Fatal error
                 log::error!(
-                    " UnhookWindowsHookEx keyboard, error {:?}",
+                    " UnhookWindowsHookEx keyboard, error {}",
                     Error::last_os_error()
                 );
             }
             tx.send(format!(
-                " SetWindowsHookExA mouse, error {:?}",
+                " SetWindowsHookExA mouse, error {}",
                 Error::last_os_error()
             ))?;
             return Ok(invalid_ret);
@@ -141,7 +141,7 @@ pub fn hook() -> ResultType<()> {
             if FALSE == UnhookWindowsHookEx(hook_keyboard as _) {
                 // Fatal error
                 log::error!(
-                    "Failed UnhookWindowsHookEx keyboard, error {:?}",
+                    "Failed UnhookWindowsHookEx keyboard, error {}",
                     Error::last_os_error()
                 );
             }
@@ -149,7 +149,7 @@ pub fn hook() -> ResultType<()> {
             if FALSE == UnhookWindowsHookEx(hook_mouse as _) {
                 // Fatal error
                 log::error!(
-                    "Failed UnhookWindowsHookEx mouse, error {:?}",
+                    "Failed UnhookWindowsHookEx mouse, error {}",
                     Error::last_os_error()
                 );
             }
@@ -178,7 +178,7 @@ pub fn unhook() -> ResultType<()> {
         if *cur_hook_thread_id != 0 {
             if FALSE == PostThreadMessageA(*cur_hook_thread_id, WM_USER_EXIT_HOOK, 0, 0) {
                 bail!(
-                    "Failed to post message to exit hook, error {:?}",
+                    "Failed to post message to exit hook, error {}",
                     Error::last_os_error()
                 );
             }

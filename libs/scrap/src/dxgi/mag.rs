@@ -139,7 +139,7 @@ impl MagInterface {
                 return Err(Error::new(
                     ErrorKind::Other,
                     format!(
-                        "Failed to LoadLibraryExA {}, error: {:?}",
+                        "Failed to LoadLibraryExA {}, error: {}",
                         lib_file_name,
                         Error::last_os_error()
                     ),
@@ -173,10 +173,7 @@ impl MagInterface {
                 if FALSE == init_func() {
                     return Err(Error::new(
                         ErrorKind::Other,
-                        format!(
-                            "Failed to MagInitialize, error: {:?}",
-                            Error::last_os_error()
-                        ),
+                        format!("Failed to MagInitialize, error: {}", Error::last_os_error()),
                     ));
                 } else {
                     s.init_succeeded = true;
@@ -198,7 +195,7 @@ impl MagInterface {
             return Err(Error::new(
                 ErrorKind::Other,
                 format!(
-                    "Failed to GetProcAddress {}, error {:?}",
+                    "Failed to GetProcAddress {}, error {}",
                     func_name,
                     Error::last_os_error()
                 ),
@@ -212,14 +209,14 @@ impl MagInterface {
             if let Some(uninit_func) = self.mag_uninitialize_func {
                 unsafe {
                     if FALSE == uninit_func() {
-                        println!("Failed MagUninitialize, error {:?}", Error::last_os_error())
+                        println!("Failed MagUninitialize, error {}", Error::last_os_error())
                     }
                 }
             }
             if !self.lib_handle.is_null() {
                 unsafe {
                     if FALSE == FreeLibrary(self.lib_handle) {
-                        println!("Failed FreeLibrary, error {:?}", Error::last_os_error())
+                        println!("Failed FreeLibrary, error {}", Error::last_os_error())
                     }
                 }
                 self.lib_handle = NULL as _;
@@ -319,7 +316,7 @@ impl CapturerMag {
                 return Err(Error::new(
                     ErrorKind::Other,
                     format!(
-                        "Failed to GetModuleHandleExA, error {:?}",
+                        "Failed to GetModuleHandleExA, error {}",
                         Error::last_os_error()
                     ),
                 ));
@@ -375,7 +372,7 @@ impl CapturerMag {
                 return Err(Error::new(
                     ErrorKind::Other,
                     format!(
-                        "Failed to CreateWindowExA host_window, error {:?}",
+                        "Failed to CreateWindowExA host_window, error {}",
                         Error::last_os_error()
                     ),
                 ));
@@ -400,7 +397,7 @@ impl CapturerMag {
                 return Err(Error::new(
                     ErrorKind::Other,
                     format!(
-                        "Failed CreateWindowA magnifier_window, error {:?}",
+                        "Failed CreateWindowA magnifier_window, error {}",
                         Error::last_os_error()
                     ),
                 ));
@@ -420,7 +417,7 @@ impl CapturerMag {
                     return Err(Error::new(
                         ErrorKind::Other,
                         format!(
-                            "Failed to MagSetImageScalingCallback, error {:?}",
+                            "Failed to MagSetImageScalingCallback, error {}",
                             Error::last_os_error()
                         ),
                     ));
@@ -464,7 +461,7 @@ impl CapturerMag {
                     return Err(Error::new(
                         ErrorKind::Other,
                         format!(
-                            "Failed MagSetWindowFilterList for cls {} name {}, error {:?}",
+                            "Failed MagSetWindowFilterList for cls {} name {}, error {}",
                             cls,
                             name,
                             Error::last_os_error()
@@ -539,7 +536,7 @@ impl CapturerMag {
                 return Err(Error::new(
                     ErrorKind::Other,
                     format!(
-                        "Failed SetWindowPos (x, y, w , h) - ({}, {}, {}, {}), error {:?}",
+                        "Failed SetWindowPos (x, y, w , h) - ({}, {}, {}, {}), error {}",
                         self.rect.left,
                         self.rect.top,
                         self.rect.right - self.rect.left,
@@ -556,7 +553,7 @@ impl CapturerMag {
                     return Err(Error::new(
                         ErrorKind::Other,
                         format!(
-                            "Failed to MagSetWindowSource, error {:?}",
+                            "Failed to MagSetWindowSource, error {}",
                             Error::last_os_error()
                         ),
                     ));
@@ -591,7 +588,7 @@ impl CapturerMag {
                 if FALSE == DestroyWindow(self.magnifier_window) {
                     //
                     println!(
-                        "Failed DestroyWindow magnifier window, error {:?}",
+                        "Failed DestroyWindow magnifier window, error {}",
                         Error::last_os_error()
                     )
                 }
@@ -604,7 +601,7 @@ impl CapturerMag {
                 if FALSE == DestroyWindow(self.host_window) {
                     //
                     println!(
-                        "Failed DestroyWindow host window, error {:?}",
+                        "Failed DestroyWindow host window, error {}",
                         Error::last_os_error()
                     )
                 }

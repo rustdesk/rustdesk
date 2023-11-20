@@ -266,7 +266,7 @@ impl PrivacyModeImpl {
             CloseHandle(token);
             if 0 == create_res {
                 bail!(
-                    "Failed to create privacy window process {}, error {:?}",
+                    "Failed to create privacy window process {}, error {}",
                     cmdline,
                     Error::last_os_error()
                 );
@@ -284,7 +284,7 @@ impl PrivacyModeImpl {
                 CloseHandle(proc_info.hProcess);
 
                 bail!(
-                    "Failed to create privacy window process, error {:?}",
+                    "Failed to create privacy window process, error {}",
                     Error::last_os_error()
                 );
             }
