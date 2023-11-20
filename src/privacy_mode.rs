@@ -16,10 +16,13 @@ use std::{
 };
 
 #[cfg(windows)]
+pub mod win_exclude_from_capture;
+#[cfg(windows)]
 mod win_input;
-
 #[cfg(windows)]
 pub mod win_mag;
+#[cfg(windows)]
+pub mod win_topmost_window;
 
 #[cfg(all(windows, feature = "virtual_display_driver"))]
 mod win_virtual_display;
@@ -34,6 +37,9 @@ pub const NO_DISPLAYS: &'static str = "No displays";
 
 #[cfg(windows)]
 pub const PRIVACY_MODE_IMPL_WIN_MAG: &str = win_mag::PRIVACY_MODE_IMPL;
+#[cfg(windows)]
+pub const PRIVACY_MODE_IMPL_WIN_EXCLUDE_FROM_CAPTURE: &str =
+    win_exclude_from_capture::PRIVACY_MODE_IMPL;
 
 #[cfg(all(windows, feature = "virtual_display_driver"))]
 pub const PRIVACY_MODE_IMPL_WIN_VIRTUAL_DISPLAY: &str = win_virtual_display::PRIVACY_MODE_IMPL;
@@ -54,6 +60,8 @@ pub trait PrivacyMode: Sync + Send {
         -> ResultType<()>;
 
     fn pre_conn_id(&self) -> i32;
+
+    fn get_impl_key(&self) -> &str;
 
     #[inline]
     fn check_on_conn_id(&self, conn_id: i32) -> ResultType<bool> {
@@ -84,20 +92,24 @@ lazy_static::lazy_static! {
     pub static ref DEFAULT_PRIVACY_MODE_IMPL: String = {
         #[cfg(windows)]
         {
-            if display_service::is_privacy_mode_mag_supported() {
-                PRIVACY_MODE_IMPL_WIN_MAG
+            if win_exclude_from_capture::is_supported() {
+                PRIVACY_MODE_IMPL_WIN_EXCLUDE_FROM_CAPTURE
             } else {
-                #[cfg(feature = "virtual_display_driver")]
-                {
-                    if is_installed() {
-                        PRIVACY_MODE_IMPL_WIN_VIRTUAL_DISPLAY
-                    } else {
+                if display_service::is_privacy_mode_mag_supported() {
+                    PRIVACY_MODE_IMPL_WIN_MAG
+                } else {
+                    #[cfg(feature = "virtual_display_driver")]
+                    {
+                        if is_installed() {
+                            PRIVACY_MODE_IMPL_WIN_VIRTUAL_DISPLAY
+                        } else {
+                            ""
+                        }
+                    }
+                    #[cfg(not(feature = "virtual_display_driver"))]
+                    {
                         ""
                     }
-                }
-                #[cfg(not(feature = "virtual_display_driver"))]
-                {
-                    ""
                 }
             }.to_owned()
         }
@@ -107,24 +119,21 @@ lazy_static::lazy_static! {
         }
     };
 
-    static ref CUR_PRIVACY_MODE_IMPL: Arc<Mutex<String>> = {
+    static ref PRIVACY_MODE: Arc<Mutex<Option<Box<dyn PrivacyMode>>>> = {
         let mut cur_impl = get_option("privacy-mode-impl-key".to_owned());
         if !get_supported_privacy_mode_impl().iter().any(|(k, _)| k == &cur_impl) {
             cur_impl = DEFAULT_PRIVACY_MODE_IMPL.to_owned();
         }
-        Arc::new(Mutex::new(cur_impl))
-    };
-    static ref PRIVACY_MODE: Arc<Mutex<Option<Box<dyn PrivacyMode>>>> = {
-        let cur_impl = (*CUR_PRIVACY_MODE_IMPL.lock().unwrap()).clone();
+
         let privacy_mode = match PRIVACY_MODE_CREATOR.lock().unwrap().get(&(&cur_impl as &str)) {
-            Some(creator) => Some(creator()),
+            Some(creator) => Some(creator(&cur_impl)),
             None => None,
         };
         Arc::new(Mutex::new(privacy_mode))
     };
 }
 
-pub type PrivacyModeCreator = fn() -> Box<dyn PrivacyMode>;
+pub type PrivacyModeCreator = fn(impl_key: &str) -> Box<dyn PrivacyMode>;
 lazy_static::lazy_static! {
     static ref PRIVACY_MODE_CREATOR: Arc<Mutex<HashMap<&'static str, PrivacyModeCreator>>> = {
         #[cfg(not(windows))]
@@ -133,13 +142,19 @@ lazy_static::lazy_static! {
         let mut map: HashMap<&'static str, PrivacyModeCreator> = HashMap::new();
         #[cfg(windows)]
         {
-            map.insert(win_mag::PRIVACY_MODE_IMPL, || {
-                    Box::new(win_mag::PrivacyModeImpl::default())
+            if win_exclude_from_capture::is_supported() {
+                map.insert(win_exclude_from_capture::PRIVACY_MODE_IMPL, |impl_key: &str| {
+                    Box::new(win_exclude_from_capture::PrivacyModeImpl::new(impl_key))
                 });
+            } else {
+                map.insert(win_mag::PRIVACY_MODE_IMPL, |impl_key: &str| {
+                    Box::new(win_mag::PrivacyModeImpl::new(impl_key))
+                });
+            }
 
             #[cfg(feature = "virtual_display_driver")]
-            map.insert(win_virtual_display::PRIVACY_MODE_IMPL, || {
-                    Box::new(win_virtual_display::PrivacyModeImpl::default())
+            map.insert(win_virtual_display::PRIVACY_MODE_IMPL, |impl_key: &str| {
+                    Box::new(win_virtual_display::PrivacyModeImpl::new(impl_key))
                 });
         }
         Arc::new(Mutex::new(map))
@@ -158,13 +173,15 @@ pub fn clear() -> Option<()> {
 
 #[inline]
 pub fn switch(impl_key: &str) {
-    let mut cur_impl_lock = CUR_PRIVACY_MODE_IMPL.lock().unwrap();
-    if *cur_impl_lock == impl_key {
-        return;
+    let mut privacy_mode_lock = PRIVACY_MODE.lock().unwrap();
+    if let Some(privacy_mode) = privacy_mode_lock.as_ref() {
+        if privacy_mode.get_impl_key() == impl_key {
+            return;
+        }
     }
+
     if let Some(creator) = PRIVACY_MODE_CREATOR.lock().unwrap().get(impl_key) {
-        *PRIVACY_MODE.lock().unwrap() = Some(creator());
-        *cur_impl_lock = impl_key.to_owned();
+        *privacy_mode_lock = Some(creator(impl_key));
     }
 }
 
@@ -192,13 +209,15 @@ pub fn turn_on_privacy(impl_key: &str, conn_id: i32) -> Option<ResultType<bool>>
 
     // Check or switch privacy mode implementation
     let impl_key = get_supported_impl(impl_key);
-    let mut cur_impl_lock = CUR_PRIVACY_MODE_IMPL.lock().unwrap();
 
+    let mut cur_impl_key = "".to_string();
     if let Some(privacy_mode) = privacy_mode_lock.as_ref() {
+        cur_impl_key = privacy_mode.get_impl_key().to_string();
         let check_on_conn_id = privacy_mode.check_on_conn_id(conn_id);
         match check_on_conn_id.as_ref() {
             Ok(true) => {
-                if *cur_impl_lock == impl_key {
+                if cur_impl_key == impl_key {
+                    // Same peer, same implementation.
                     return Some(Ok(true));
                 } else {
                     // Same peer, switch to new implementation.
@@ -209,7 +228,7 @@ pub fn turn_on_privacy(impl_key: &str, conn_id: i32) -> Option<ResultType<bool>>
         }
     }
 
-    if *cur_impl_lock != impl_key {
+    if cur_impl_key != impl_key {
         if let Some(creator) = PRIVACY_MODE_CREATOR
             .lock()
             .unwrap()
@@ -219,8 +238,7 @@ pub fn turn_on_privacy(impl_key: &str, conn_id: i32) -> Option<ResultType<bool>>
                 privacy_mode.clear();
             }
 
-            *privacy_mode_lock = Some(creator());
-            *cur_impl_lock = impl_key.to_owned();
+            *privacy_mode_lock = Some(creator(&impl_key));
         } else {
             return Some(Err(anyhow!("Unsupported privacy mode: {}", impl_key)));
         }
@@ -269,9 +287,18 @@ pub fn get_supported_privacy_mode_impl() -> Vec<(&'static str, &'static str)> {
     #[cfg(target_os = "windows")]
     {
         let mut vec_impls = Vec::new();
-        if display_service::is_privacy_mode_mag_supported() {
-            vec_impls.push((PRIVACY_MODE_IMPL_WIN_MAG, "privacy_mode_impl_mag_tip"));
+
+        if win_exclude_from_capture::is_supported() {
+            vec_impls.push((
+                PRIVACY_MODE_IMPL_WIN_EXCLUDE_FROM_CAPTURE,
+                "privacy_mode_impl_mag_tip",
+            ));
+        } else {
+            if display_service::is_privacy_mode_mag_supported() {
+                vec_impls.push((PRIVACY_MODE_IMPL_WIN_MAG, "privacy_mode_impl_mag_tip"));
+            }
         }
+
         #[cfg(feature = "virtual_display_driver")]
         if is_installed() {
             vec_impls.push((
@@ -279,6 +306,7 @@ pub fn get_supported_privacy_mode_impl() -> Vec<(&'static str, &'static str)> {
                 "privacy_mode_impl_virtual_display_tip",
             ));
         }
+
         vec_impls
     }
     #[cfg(not(target_os = "windows"))]
@@ -288,8 +316,22 @@ pub fn get_supported_privacy_mode_impl() -> Vec<(&'static str, &'static str)> {
 }
 
 #[inline]
+pub fn get_cur_impl_key() -> Option<String> {
+    PRIVACY_MODE
+        .lock()
+        .unwrap()
+        .as_ref()
+        .map(|pm| pm.get_impl_key().to_owned())
+}
+
+#[inline]
 pub fn is_current_privacy_mode_impl(impl_key: &str) -> bool {
-    *CUR_PRIVACY_MODE_IMPL.lock().unwrap() == impl_key
+    PRIVACY_MODE
+        .lock()
+        .unwrap()
+        .as_ref()
+        .map(|pm| pm.get_impl_key() == impl_key)
+        .unwrap_or(false)
 }
 
 #[inline]
@@ -309,6 +351,7 @@ pub fn check_privacy_mode_err(
     display_idx: usize,
     timeout_millis: u64,
 ) -> String {
+    // win magnifier implementation requires a test of creating a capturer.
     if is_current_privacy_mode_impl(PRIVACY_MODE_IMPL_WIN_MAG) {
         crate::video_service::test_create_capturer(privacy_mode_id, display_idx, timeout_millis)
     } else {
@@ -319,4 +362,23 @@ pub fn check_privacy_mode_err(
 #[inline]
 pub fn is_privacy_mode_supported() -> bool {
     !DEFAULT_PRIVACY_MODE_IMPL.is_empty()
+}
+
+#[inline]
+pub fn get_privacy_mode_conn_id() -> Option<i32> {
+    PRIVACY_MODE
+        .lock()
+        .unwrap()
+        .as_ref()
+        .map(|pm| pm.pre_conn_id())
+}
+
+#[inline]
+pub fn is_in_privacy_mode() -> bool {
+    PRIVACY_MODE
+        .lock()
+        .unwrap()
+        .as_ref()
+        .map(|pm| pm.pre_conn_id() != INVALID_PRIVACY_MODE_CONN_ID)
+        .unwrap_or(false)
 }

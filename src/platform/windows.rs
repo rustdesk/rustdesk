@@ -3,7 +3,7 @@ use crate::common::PORTABLE_APPNAME_RUNTIME_ENV_KEY;
 use crate::{
     ipc,
     license::*,
-    privacy_mode::win_mag::{self, WIN_MAG_INJECTED_PROCESS_EXE},
+    privacy_mode::win_topmost_window::{self, WIN_TOPMOST_INJECTED_PROCESS_EXE},
 };
 use hbb_common::{
     allow_err,
@@ -460,6 +460,13 @@ extern "C" {
     fn is_win_down() -> BOOL;
     fn is_local_system() -> BOOL;
     fn alloc_console_and_redirect();
+    fn IsWindowsVersionOrGreater(
+        os_major: DWORD,
+        os_minor: DWORD,
+        build_number: DWORD,
+        service_pack_major: WORD,
+        service_pack_minor: WORD,
+    ) -> BOOL;
 }
 
 extern "system" {
@@ -848,8 +855,8 @@ fn get_default_install_path() -> String {
 }
 
 pub fn check_update_broker_process() -> ResultType<()> {
-    let process_exe = win_mag::INJECTED_PROCESS_EXE;
-    let origin_process_exe = win_mag::ORIGIN_PROCESS_EXE;
+    let process_exe = win_topmost_window::INJECTED_PROCESS_EXE;
+    let origin_process_exe = win_topmost_window::ORIGIN_PROCESS_EXE;
 
     let exe_file = std::env::current_exe()?;
     let Some(cur_dir) = exe_file.parent() else {
@@ -926,8 +933,8 @@ pub fn copy_exe_cmd(src_exe: &str, exe: &str, path: &str) -> ResultType<String> 
         {main_exe}
         copy /Y \"{ORIGIN_PROCESS_EXE}\" \"{path}\\{broker_exe}\"
         ",
-        ORIGIN_PROCESS_EXE = win_mag::ORIGIN_PROCESS_EXE,
-        broker_exe = win_mag::INJECTED_PROCESS_EXE,
+        ORIGIN_PROCESS_EXE = win_topmost_window::ORIGIN_PROCESS_EXE,
+        broker_exe = win_topmost_window::INJECTED_PROCESS_EXE,
     ))
 }
 
@@ -1157,7 +1164,7 @@ fn get_before_uninstall(kill_self: bool) -> String {
     reg delete HKEY_CLASSES_ROOT\\{ext} /f
     netsh advfirewall firewall delete rule name=\"{app_name} Service\"
     ",
-        broker_exe = WIN_MAG_INJECTED_PROCESS_EXE,
+        broker_exe = WIN_TOPMOST_INJECTED_PROCESS_EXE,
     )
 }
 
@@ -1280,6 +1287,25 @@ pub fn block_input(v: bool) -> (bool, String) {
         } else {
             (false, format!("Error code: {}", GetLastError()))
         }
+    }
+}
+
+#[inline]
+pub fn is_windows_version_or_greater(
+    os_major: u32,
+    os_minor: u32,
+    build_number: u32,
+    service_pack_major: u32,
+    service_pack_minor: u32,
+) -> bool {
+    unsafe {
+        IsWindowsVersionOrGreater(
+            os_major as _,
+            os_minor as _,
+            build_number as _,
+            service_pack_major as _,
+            service_pack_minor as _,
+        ) == TRUE
     }
 }
 
@@ -2164,7 +2190,7 @@ pub fn uninstall_service(show_new_window: bool) -> bool {
     taskkill /F /IM {app_name}.exe{filter}
     ",
         app_name = crate::get_app_name(),
-        broker_exe = WIN_MAG_INJECTED_PROCESS_EXE,
+        broker_exe = WIN_TOPMOST_INJECTED_PROCESS_EXE,
     );
     if let Err(err) = run_cmds(cmds, false, "uninstall") {
         Config::set_option("stop-service".into(), "".into());
@@ -2279,7 +2305,10 @@ fn run_after_run_cmds(silent: bool) {
 pub fn try_kill_broker() {
     allow_err!(std::process::Command::new("cmd")
         .arg("/c")
-        .arg(&format!("taskkill /F /IM {}", WIN_MAG_INJECTED_PROCESS_EXE))
+        .arg(&format!(
+            "taskkill /F /IM {}",
+            WIN_TOPMOST_INJECTED_PROCESS_EXE
+        ))
         .creation_flags(winapi::um::winbase::CREATE_NO_WINDOW)
         .spawn());
 }

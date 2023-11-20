@@ -568,8 +568,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("True color (4:4:4)", "트루컬러(4:4:4)"),
         ("Enable blocking user input", "사용자 입력 차단 허용"),
         ("id_input_tip", "입력된 ID, IP, 도메인과 포트(<domain>:<port>)를 입력할 수 있습니다.\n다른 서버에 있는 장치에 접속하려면 서버 주소(<id>@<server_address>?key=<key_value>)를 추가하세요"),
-        ("privacy_mode_impl_mag_tip", "모드 1(더 이상 사용되지 않음)"),
-        ("privacy_mode_impl_virtual_display_tip", "모드 2(권장)"),
+        ("privacy_mode_impl_mag_tip", "모드 1"),
+        ("privacy_mode_impl_virtual_display_tip", "모드 2"),
         ("Enter privacy mode", "개인정보 보호 모드 사용"),
         ("Exit privacy mode", "개인정보 보호 모드 종료"),
     ].iter().cloned().collect();
