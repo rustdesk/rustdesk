@@ -1,7 +1,10 @@
 use super::{PrivacyMode, PrivacyModeState, INVALID_PRIVACY_MODE_CONN_ID, NO_DISPLAYS};
 use crate::virtual_display_manager;
 use hbb_common::{allow_err, bail, config::Config, log, ResultType};
-use std::ops::{Deref, DerefMut};
+use std::{
+    io::Error,
+    ops::{Deref, DerefMut},
+};
 use virtual_display::MonitorMode;
 use winapi::{
     shared::{
@@ -9,7 +12,6 @@ use winapi::{
         ntdef::{NULL, WCHAR},
     },
     um::{
-        errhandlingapi::GetLastError,
         wingdi::{
             DEVMODEW, DISPLAY_DEVICEW, DISPLAY_DEVICE_ACTIVE, DISPLAY_DEVICE_ATTACHED_TO_DESKTOP,
             DISPLAY_DEVICE_MIRRORING_DRIVER, DISPLAY_DEVICE_PRIMARY_DEVICE, DM_POSITION,
@@ -193,9 +195,9 @@ impl PrivacyModeImpl {
                 )
             {
                 bail!(
-                    "Failed EnumDisplaySettingsW, device name: {:?}, error code: {}",
+                    "Failed EnumDisplaySettingsW, device name: {:?}, error: {:?}",
                     std::string::String::from_utf16(&display.name),
-                    GetLastError()
+                    Error::last_os_error()
                 );
             }
 
@@ -227,9 +229,9 @@ impl PrivacyModeImpl {
                     == EnumDisplaySettingsW(dd.DeviceName.as_ptr(), ENUM_CURRENT_SETTINGS, &mut dm)
                 {
                     bail!(
-                        "Failed EnumDisplaySettingsW, device name: {:?}, error code: {}",
+                        "Failed EnumDisplaySettingsW, device name: {:?}, error: {:?}",
                         std::string::String::from_utf16(&dd.DeviceName),
-                        GetLastError()
+                        Error::last_os_error()
                     );
                 }
 

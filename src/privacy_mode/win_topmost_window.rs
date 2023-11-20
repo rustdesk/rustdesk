@@ -3,6 +3,7 @@ use crate::{platform::windows::get_user_token, privacy_mode::PrivacyModeState};
 use hbb_common::{allow_err, bail, log, ResultType};
 use std::{
     ffi::CString,
+    io::Error,
     time::{Duration, Instant},
 };
 use winapi::{
@@ -12,7 +13,6 @@ use winapi::{
         windef::HWND,
     },
     um::{
-        errhandlingapi::GetLastError,
         handleapi::CloseHandle,
         libloaderapi::{GetModuleHandleA, GetProcAddress},
         memoryapi::{VirtualAllocEx, WriteProcessMemory},
@@ -266,9 +266,9 @@ impl PrivacyModeImpl {
             CloseHandle(token);
             if 0 == create_res {
                 bail!(
-                    "Failed to create privacy window process {}, code {}",
+                    "Failed to create privacy window process {}, error {:?}",
                     cmdline,
-                    GetLastError()
+                    Error::last_os_error()
                 );
             };
 
@@ -284,8 +284,8 @@ impl PrivacyModeImpl {
                 CloseHandle(proc_info.hProcess);
 
                 bail!(
-                    "Failed to create privacy window process, {}",
-                    GetLastError()
+                    "Failed to create privacy window process, error {:?}",
+                    Error::last_os_error()
                 );
             }
 

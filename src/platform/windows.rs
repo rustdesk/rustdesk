@@ -1285,7 +1285,7 @@ pub fn block_input(v: bool) -> (bool, String) {
         if BlockInput(v) == TRUE {
             (true, "".to_owned())
         } else {
-            (false, format!("Error code: {}", GetLastError()))
+            (false, format!("Error: {:?}", io::Error::last_os_error()))
         }
     }
 }
@@ -1559,9 +1559,10 @@ pub fn elevate_or_run_as_system(is_setup: bool, is_elevate: bool, is_run_as_syst
                         if run_as_system(arg_run_as_system).is_ok() {
                             std::process::exit(0);
                         } else {
-                            unsafe {
-                                log::error!("Failed to run as system, errno = {}", GetLastError());
-                            }
+                            log::error!(
+                                "Failed to run as system, error {:?}",
+                                io::Error::last_os_error()
+                            );
                         }
                     }
                 } else {
@@ -1569,16 +1570,18 @@ pub fn elevate_or_run_as_system(is_setup: bool, is_elevate: bool, is_run_as_syst
                         if let Ok(true) = elevate(arg_elevate) {
                             std::process::exit(0);
                         } else {
-                            unsafe {
-                                log::error!("Failed to elevate, errno = {}", GetLastError());
-                            }
+                            log::error!(
+                                "Failed to elevate, error {:?}",
+                                io::Error::last_os_error()
+                            );
                         }
                     }
                 }
             }
-            Err(_) => unsafe {
-                log::error!("Failed to get elevation status, errno = {}", GetLastError());
-            },
+            Err(_) => log::error!(
+                "Failed to get elevation status, error {:?}",
+                io::Error::last_os_error()
+            ),
         }
     }
 }
@@ -1591,12 +1594,18 @@ pub fn is_elevated(process_id: Option<DWORD>) -> ResultType<bool> {
             None => GetCurrentProcess(),
         };
         if handle == NULL {
-            bail!("Failed to open process, errno {}", GetLastError())
+            bail!(
+                "Failed to open process, error {:?}",
+                io::Error::last_os_error()
+            )
         }
         let _handle = RAIIHandle(handle);
         let mut token: HANDLE = mem::zeroed();
         if OpenProcessToken(handle, TOKEN_QUERY, &mut token) == FALSE {
-            bail!("Failed to open process token, errno {}", GetLastError())
+            bail!(
+                "Failed to open process token, error {:?}",
+                io::Error::last_os_error()
+            )
         }
         let _token = RAIIHandle(token);
         let mut token_elevation: TOKEN_ELEVATION = mem::zeroed();
@@ -1609,7 +1618,10 @@ pub fn is_elevated(process_id: Option<DWORD>) -> ResultType<bool> {
             &mut size,
         ) == FALSE
         {
-            bail!("Failed to get token information, errno {}", GetLastError())
+            bail!(
+                "Failed to get token information, error {:?}",
+                io::Error::last_os_error()
+            )
         }
 
         Ok(token_elevation.TokenIsElevated != 0)
@@ -1621,7 +1633,10 @@ pub fn is_foreground_window_elevated() -> ResultType<bool> {
         let mut process_id: DWORD = 0;
         GetWindowThreadProcessId(GetForegroundWindow(), &mut process_id);
         if process_id == 0 {
-            bail!("Failed to get processId, errno {}", GetLastError())
+            bail!(
+                "Failed to get processId, error {}",
+                io::Error::last_os_error()
+            )
         }
         is_elevated(Some(process_id))
     }
@@ -1786,8 +1801,8 @@ pub fn current_resolution(name: &str) -> ResultType<Resolution> {
         dm.dmSize = std::mem::size_of::<DEVMODEW>() as _;
         if EnumDisplaySettingsW(device_name.as_ptr(), ENUM_CURRENT_SETTINGS, &mut dm) == 0 {
             bail!(
-                "failed to get currrent resolution, errno={}",
-                GetLastError()
+                "failed to get currrent resolution, error {:?}",
+                io::Error::last_os_error()
             );
         }
         let r = Resolution {
@@ -1820,9 +1835,9 @@ pub(super) fn change_resolution_directly(
         );
         if res != DISP_CHANGE_SUCCESSFUL {
             bail!(
-                "ChangeDisplaySettingsExW failed, res={}, errno={}",
+                "ChangeDisplaySettingsExW failed, res={}, error {:?}",
                 res,
-                GetLastError()
+                io::Error::last_os_error()
             );
         }
         Ok(())
