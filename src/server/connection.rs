@@ -508,21 +508,18 @@ impl Connection {
                         ipc::Data::PrivacyModeState((_, state, impl_key)) => {
                             let msg_out = match state {
                                 privacy_mode::PrivacyModeState::OffSucceeded => {
-                                    video_service::set_privacy_mode_conn_id(0);
                                     crate::common::make_privacy_mode_msg(
                                         back_notification::PrivacyModeState::PrvOffSucceeded,
                                         impl_key,
                                     )
                                 }
                                 privacy_mode::PrivacyModeState::OffByPeer => {
-                                    video_service::set_privacy_mode_conn_id(0);
                                     crate::common::make_privacy_mode_msg(
                                         back_notification::PrivacyModeState::PrvOffByPeer,
                                         impl_key,
                                     )
                                 }
                                 privacy_mode::PrivacyModeState::OffUnknown => {
-                                    video_service::set_privacy_mode_conn_id(0);
                                      crate::common::make_privacy_mode_msg(
                                         back_notification::PrivacyModeState::PrvOffUnknown,
                                         impl_key,
@@ -534,7 +531,7 @@ impl Connection {
                         #[cfg(windows)]
                         ipc::Data::DataPortableService(ipc::DataPortableService::RequestStart) => {
                             if let Err(e) = portable_client::start_portable_service(portable_client::StartPara::Direct) {
-                                log::error!("Failed to start portable service from cm:{:?}", e);
+                                log::error!("Failed to start portable service from cm: {:?}", e);
                             }
                         }
                         ipc::Data::SwitchSidesBack => {
@@ -682,10 +679,10 @@ impl Connection {
             }
         }
 
-        let video_privacy_conn_id = video_service::get_privacy_mode_conn_id();
-        if video_privacy_conn_id == id {
-            video_service::set_privacy_mode_conn_id(0);
-            let _ = Self::turn_off_privacy_to_msg(id);
+        if let Some(video_privacy_conn_id) = privacy_mode::get_privacy_mode_conn_id() {
+            if video_privacy_conn_id == id {
+                let _ = Self::turn_off_privacy_to_msg(id);
+            }
         }
         #[cfg(all(feature = "flutter", feature = "plugin_framework"))]
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -880,7 +877,7 @@ impl Connection {
     }
 
     async fn check_privacy_mode_on(&mut self) -> bool {
-        if video_service::get_privacy_mode_conn_id() > 0 {
+        if privacy_mode::is_in_privacy_mode() {
             self.send_login_error("Someone turns on privacy mode, exit")
                 .await;
             false
@@ -1244,6 +1241,7 @@ impl Connection {
                 #[cfg(not(any(target_os = "android", target_os = "ios")))]
                 let _h = try_start_record_cursor_pos();
                 self.auto_disconnect_timer = Self::get_auto_disconenct_timer();
+                s.try_add_primay_video_service();
                 s.add_connection(self.inner.clone(), &noperms);
             }
         }
@@ -1266,7 +1264,7 @@ impl Connection {
                         });
                     }
                     Err(e) => {
-                        log::info!("create wallpaper remover failed:{:?}", e);
+                        log::info!("create wallpaper remover failed: {:?}", e);
                     }
                 }
             }
@@ -2142,7 +2140,7 @@ impl Connection {
                         if self.restart {
                             match system_shutdown::reboot() {
                                 Ok(_) => log::info!("Restart by the peer"),
-                                Err(e) => log::error!("Failed to restart:{}", e),
+                                Err(e) => log::error!("Failed to restart: {}", e),
                             }
                         }
                     }
@@ -2359,10 +2357,28 @@ impl Connection {
 
     #[cfg(all(windows, feature = "virtual_display_driver"))]
     async fn toggle_virtual_display(&mut self, t: ToggleVirtualDisplay) {
+        let make_msg = |text: String| {
+            let mut msg_out = Message::new();
+            let res = MessageBox {
+                msgtype: "nook-nocancel-hasclose".to_owned(),
+                title: "Virtual display".to_owned(),
+                text,
+                link: "".to_owned(),
+                ..Default::default()
+            };
+            msg_out.set_message_box(res);
+            msg_out
+        };
+
         if t.on {
             if let Err(e) = virtual_display_manager::plug_in_index_modes(t.display as _, Vec::new())
             {
                 log::error!("Failed to plug in virtual display: {}", e);
+                self.send(make_msg(format!(
+                    "Failed to plug in virtual display: {}",
+                    e
+                )))
+                .await;
             }
         } else {
             let indices = if t.display == -1 {
@@ -2372,6 +2388,11 @@ impl Connection {
             };
             if let Err(e) = virtual_display_manager::plug_out_peer_request(&indices) {
                 log::error!("Failed to plug out virtual display {:?}: {}", &indices, e);
+                self.send(make_msg(format!(
+                    "Failed to plug out virtual displays: {}",
+                    e
+                )))
+                .await;
             }
         }
     }
@@ -2409,7 +2430,7 @@ impl Connection {
                         crate::platform::change_resolution(&name, r.width as _, r.height as _)
                     {
                         log::error!(
-                            "Failed to change resolution '{}' to ({},{}):{:?}",
+                            "Failed to change resolution '{}' to ({},{}): {:?}",
                             &name,
                             r.width,
                             r.height,
@@ -2609,7 +2630,23 @@ impl Connection {
                 impl_key,
             )
         } else {
-            match privacy_mode::turn_on_privacy(&impl_key, self.inner.id) {
+            let is_pre_privacy_on = privacy_mode::is_in_privacy_mode();
+            let pre_impl_key = privacy_mode::get_cur_impl_key();
+            let turn_on_res = privacy_mode::turn_on_privacy(&impl_key, self.inner.id);
+
+            if is_pre_privacy_on {
+                if let Some(pre_impl_key) = pre_impl_key {
+                    if !privacy_mode::is_current_privacy_mode_impl(&pre_impl_key) {
+                        let off_msg = crate::common::make_privacy_mode_msg(
+                            back_notification::PrivacyModeState::PrvOffSucceeded,
+                            pre_impl_key,
+                        );
+                        self.send(off_msg).await;
+                    }
+                }
+            }
+
+            match turn_on_res {
                 Some(Ok(res)) => {
                     if res {
                         let err_msg = privacy_mode::check_privacy_mode_err(
@@ -2618,7 +2655,6 @@ impl Connection {
                             5_000,
                         );
                         if err_msg.is_empty() {
-                            video_service::set_privacy_mode_conn_id(self.inner.id);
                             crate::common::make_privacy_mode_msg(
                                 back_notification::PrivacyModeState::PrvOnSucceeded,
                                 impl_key,
@@ -2628,7 +2664,6 @@ impl Connection {
                                 "Check privacy mode failed: {}, turn off privacy mode.",
                                 &err_msg
                             );
-                            video_service::set_privacy_mode_conn_id(0);
                             let _ = Self::turn_off_privacy_to_msg(self.inner.id);
                             crate::common::make_privacy_mode_msg_with_details(
                                 back_notification::PrivacyModeState::PrvOnFailed,
@@ -2645,8 +2680,10 @@ impl Connection {
                 }
                 Some(Err(e)) => {
                     log::error!("Failed to turn on privacy mode. {}", e);
-                    if video_service::get_privacy_mode_conn_id() == 0 {
-                        let _ = Self::turn_off_privacy_to_msg(0);
+                    if !privacy_mode::is_in_privacy_mode() {
+                        let _ = Self::turn_off_privacy_to_msg(
+                            privacy_mode::INVALID_PRIVACY_MODE_CONN_ID,
+                        );
                     }
                     crate::common::make_privacy_mode_msg_with_details(
                         back_notification::PrivacyModeState::PrvOnFailed,
@@ -2673,7 +2710,6 @@ impl Connection {
                 impl_key,
             )
         } else {
-            video_service::set_privacy_mode_conn_id(0);
             Self::turn_off_privacy_to_msg(self.inner.id)
         };
         self.send(msg_out).await;

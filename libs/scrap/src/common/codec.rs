@@ -108,7 +108,7 @@ pub enum EncodingUpdate {
 
 impl Encoder {
     pub fn new(config: EncoderCfg, i444: bool) -> ResultType<Encoder> {
-        log::info!("new encoder:{config:?}, i444:{i444}");
+        log::info!("new encoder: {config:?}, i444: {i444}");
         match config {
             EncoderCfg::VPX(_) => Ok(Encoder {
                 codec: Box::new(VpxEncoder::new(config, i444)?),
@@ -215,7 +215,7 @@ impl Encoder {
         }
 
         log::info!(
-            "connection count:{}, used preference:{:?}, encoder:{:?}",
+            "connection count: {}, used preference: {:?}, encoder: {:?}",
             decodings.len(),
             preference,
             *name
@@ -566,15 +566,18 @@ pub fn base_bitrate(width: u32, height: u32) -> u32 {
     base_bitrate
 }
 
-pub fn codec_thread_num() -> usize {
+pub fn codec_thread_num(limit: usize) -> usize {
     let max: usize = num_cpus::get();
     let mut res;
     let info;
+    let mut s = System::new();
+    s.refresh_memory();
+    let memory = s.available_memory() / 1024 / 1024 / 1024;
     #[cfg(windows)]
     {
         res = 0;
         let percent = hbb_common::platform::windows::cpu_uage_one_minute();
-        info = format!("cpu usage:{:?}", percent);
+        info = format!("cpu usage: {:?}", percent);
         if let Some(pecent) = percent {
             if pecent < 100.0 {
                 res = ((100.0 - pecent) * (max as f64) / 200.0).round() as usize;
@@ -583,24 +586,41 @@ pub fn codec_thread_num() -> usize {
     }
     #[cfg(not(windows))]
     {
-        let mut s = System::new();
         s.refresh_cpu_usage();
         // https://man7.org/linux/man-pages/man3/getloadavg.3.html
         let avg = s.load_average();
-        info = format!("cpu loadavg:{}", avg.one);
+        info = format!("cpu loadavg: {}", avg.one);
         res = (((max as f64) - avg.one) * 0.5).round() as usize;
     }
     res = std::cmp::min(res, max / 2);
-    if res == 0 {
-        res = 1;
-    }
+    res = std::cmp::min(res, memory as usize / 2);
+    //  Use common thread count
+    res = match res {
+        _ if res >= 64 => 64,
+        _ if res >= 32 => 32,
+        _ if res >= 16 => 16,
+        _ if res >= 8 => 8,
+        _ if res >= 4 => 4,
+        _ if res >= 2 => 2,
+        _ => 1,
+    };
+    // https://aomedia.googlesource.com/aom/+/refs/heads/main/av1/av1_cx_iface.c#677
+    // https://aomedia.googlesource.com/aom/+/refs/heads/main/aom_util/aom_thread.h#26
+    // https://chromium.googlesource.com/webm/libvpx/+/refs/heads/main/vp8/vp8_cx_iface.c#148
+    // https://chromium.googlesource.com/webm/libvpx/+/refs/heads/main/vp9/vp9_cx_iface.c#190
+    // https://github.com/FFmpeg/FFmpeg/blob/7c16bf0829802534004326c8e65fb6cdbdb634fa/libavcodec/pthread.c#L65
+    // https://github.com/FFmpeg/FFmpeg/blob/7c16bf0829802534004326c8e65fb6cdbdb634fa/libavcodec/pthread_internal.h#L26
+    // libaom: MAX_NUM_THREADS = 64
+    // libvpx: MAX_NUM_THREADS = 64
+    // ffmpeg: MAX_AUTO_THREADS = 16
+    res = std::cmp::min(res, limit);
     // avoid frequent log
     let log = match THREAD_LOG_TIME.lock().unwrap().clone() {
         Some(instant) => instant.elapsed().as_secs() > 1,
         None => true,
     };
     if log {
-        log::info!("cpu num:{max}, {info}, codec thread:{res}");
+        log::info!("cpu num: {max}, {info}, available memory: {memory}G, codec thread: {res}");
         *THREAD_LOG_TIME.lock().unwrap() = Some(Instant::now());
     }
     res

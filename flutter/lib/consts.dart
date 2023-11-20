@@ -205,6 +205,12 @@ const kRemoteAudioDualWay = 'dual-way';
 
 const kIgnoreDpi = true;
 
+// ================================ mobile ================================
+
+// Magic numbers, maybe need to avoid it or use a better way to get them.
+const kMobileDelaySoftKeyboard = Duration(milliseconds: 30);
+const kMobileDelaySoftKeyboardFocus = Duration(milliseconds: 30);
+
 /// Android constants
 const kActionApplicationDetailsSettings =
     "android.settings.APPLICATION_DETAILS_SETTINGS";

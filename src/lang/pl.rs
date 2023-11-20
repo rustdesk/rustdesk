@@ -568,8 +568,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("True color (4:4:4)", "True color (4:4:4)"),
         ("Enable blocking user input", "Zablokuj wprowadzanie danych przez użytkownika"),
         ("id_input_tip", "Możesz wprowadzić identyfikator, bezpośredni adres IP lub domenę z portem (<adres_domenowy>:<port>).\nJeżeli chcesz uzyskać dostęp do urządzenia na innym serwerze, dołącz adres serwera (<id>@<adres_serwera>?key=<wartość_klucza>, np. \n9123456234@192.168.16.1:21117?key=5Qbwsde3unUcJBtrx9ZkvUmwFNoExHzpryHuPUdqlWM=.\nJeżeli chcesz uzyskać dostęp do urządzenia na serwerze publicznym, wpisz \"<id>@public\", klucz nie jest potrzebny dla serwera publicznego."),
-        ("privacy_mode_impl_mag_tip", "Tryb 1 (przestarzały)"),
-        ("privacy_mode_impl_virtual_display_tip", "Tryb 2 (zalecany)"),
+        ("privacy_mode_impl_mag_tip", "Tryb 1"),
+        ("privacy_mode_impl_virtual_display_tip", "Tryb 2"),
         ("Enter privacy mode", "Wejdź w tryb prywatności"),
         ("Exit privacy mode", "Wyjdź z trybu prywatności"),
     ].iter().cloned().collect();

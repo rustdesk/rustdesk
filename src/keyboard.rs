@@ -315,7 +315,7 @@ pub fn start_grab_loop() {
     if let Err(err) = rdev::start_grab_listen(move |event: Event| match event.event_type {
         EventType::KeyPress(key) | EventType::KeyRelease(key) => {
             if let Key::Unknown(keycode) = key {
-                log::error!("rdev get unknown key, keycode is : {:?}", keycode);
+                log::error!("rdev get unknown key, keycode is {:?}", keycode);
             } else {
                 client::process_event(&get_keyboard_mode(), &event, None);
             }

@@ -94,11 +94,11 @@ mod windows {
 
     // Used for privacy mode(magnifier impl).
     pub const RUNTIME_BROKER_EXE: &'static str = "C:\\Windows\\System32\\RuntimeBroker.exe";
-    pub const WIN_MAG_INJECTED_PROCESS_EXE: &'static str = "RuntimeBroker_rustdesk.exe";
+    pub const WIN_TOPMOST_INJECTED_PROCESS_EXE: &'static str = "RuntimeBroker_rustdesk.exe";
 
     pub(super) fn copy_runtime_broker(dir: &PathBuf) {
         let src = RUNTIME_BROKER_EXE;
-        let tgt = WIN_MAG_INJECTED_PROCESS_EXE;
+        let tgt = WIN_TOPMOST_INJECTED_PROCESS_EXE;
         let target_file = dir.join(tgt);
         if target_file.exists() {
             if let (Ok(src_file), Ok(tgt_file)) = (fs::read(src), fs::read(&target_file)) {

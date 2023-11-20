@@ -628,8 +628,48 @@ extern "C"
         return bSystem;
     }
 
-    void alloc_console_and_redirect() {
+    void alloc_console_and_redirect()
+    {
         AllocConsole();
         freopen("CONOUT$", "w", stdout);
     }
 } // end of extern "C"
+
+extern "C"
+{
+    // https://learn.microsoft.com/en-us/windows/win32/sysinfo/targeting-your-application-at-windows-8-1
+    // https://github.com/nodejs/node-convergence-archive/blob/e11fe0c2777561827cdb7207d46b0917ef3c42a7/deps/uv/src/win/util.c#L780
+    BOOL IsWindowsVersionOrGreater(DWORD os_major,
+                                   DWORD os_minor,
+                                   DWORD build_number,
+                                   WORD service_pack_major,
+                                   WORD service_pack_minor)
+    {
+        OSVERSIONINFOEX osvi;
+        DWORDLONG condition_mask = 0;
+        int op = VER_GREATER_EQUAL;
+
+        /* Initialize the OSVERSIONINFOEX structure. */
+        ZeroMemory(&osvi, sizeof(OSVERSIONINFOEX));
+        osvi.dwOSVersionInfoSize = sizeof(OSVERSIONINFOEX);
+        osvi.dwMajorVersion = os_major;
+        osvi.dwMinorVersion = os_minor;
+        osvi.dwBuildNumber = build_number;
+        osvi.wServicePackMajor = service_pack_major;
+        osvi.wServicePackMinor = service_pack_minor;
+
+        /* Initialize the condition mask. */
+        VER_SET_CONDITION(condition_mask, VER_MAJORVERSION, op);
+        VER_SET_CONDITION(condition_mask, VER_MINORVERSION, op);
+        VER_SET_CONDITION(condition_mask, VER_BUILDNUMBER, op);
+        VER_SET_CONDITION(condition_mask, VER_SERVICEPACKMAJOR, op);
+        VER_SET_CONDITION(condition_mask, VER_SERVICEPACKMINOR, op);
+
+        /* Perform the test. */
+        return VerifyVersionInfo(
+            &osvi,
+            VER_MAJORVERSION | VER_MINORVERSION | VER_BUILDNUMBER |
+                VER_SERVICEPACKMAJOR | VER_SERVICEPACKMINOR,
+            condition_mask);
+    }
+}

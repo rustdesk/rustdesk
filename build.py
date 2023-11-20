@@ -57,9 +57,9 @@ def parse_rc_features(feature):
         },
         'PrivacyMode': {
             'platform': ['windows'],
-            'zip_url': 'https://github.com/fufesou/RustDeskTempTopMostWindow/releases/download/v0.1'
-                       '/TempTopMostWindow_x64_pic_en.zip',
-            'checksum_url': 'https://github.com/fufesou/RustDeskTempTopMostWindow/releases/download/v0.1/checksum_md5',
+            'zip_url': 'https://github.com/fufesou/RustDeskTempTopMostWindow/releases/download/v0.3'
+                       '/TempTopMostWindow_x64.zip',
+            'checksum_url': 'https://github.com/fufesou/RustDeskTempTopMostWindow/releases/download/v0.3/checksum_md5',
             'include': ['WindowInjection.dll'],
         }
     }

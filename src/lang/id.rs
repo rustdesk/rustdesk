@@ -567,10 +567,10 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Plug out all", "Lepaskan semua"),
         ("True color (4:4:4)", ""),
         ("Enable blocking user input", "Aktifkan pemblokiran input pengguna"),
-        ("id_input_tip", "Kamu bisa memasukkan ID, IP langsung, atau domain dengan port kostum yang sudah ditentukan (<domain>:<port>).\nJika kamu ingin mengakses perangkat lain yang berbeda server, tambahkan alamat server setelah penulisan ID(<id>@<server_address>?key=<key_value>), sebagai contoh,\n9123456234@192.168.16.1:21117?key=5Qbwsde3unUcJBtrx9ZkvUmwFNoExHzpryHuPUdqlWM=.\nJika kamu ingin mengakses perangkat yang menggunakan server publik, masukkan \"<id>@public\", server public tidak memerlukan key khusus"),
-        ("privacy_mode_impl_mag_tip", ""),
-        ("privacy_mode_impl_virtual_display_tip", ""),
-        ("Enter privacy mode", ""),
-        ("Exit privacy mode", ""),
+        ("id_input_tip", "Anda bisa memasukkan ID, IP langsung, atau domain dengan port kostum yang sudah ditentukan (<domain>:<port>).\nJika anda ingin mengakses perangkat lain yang berbeda server, tambahkan alamat server setelah penulisan ID(<id>@<server_address>?key=<key_value>), sebagai contoh,\n9123456234@192.168.16.1:21117?key=5Qbwsde3unUcJBtrx9ZkvUmwFNoExHzpryHuPUdqlWM=.\nJika anda ingin mengakses perangkat yang menggunakan server publik, masukkan \"<id>@public\", server public tidak memerlukan key khusus"),
+        ("privacy_mode_impl_mag_tip", "Mode 1"),
+        ("privacy_mode_impl_virtual_display_tip", "Mode 2"),
+        ("Enter privacy mode", "Masuk mode privasi"),
+        ("Exit privacy mode", "Keluar mode privasi"),
     ].iter().cloned().collect();
 }
