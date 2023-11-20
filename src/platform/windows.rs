@@ -460,13 +460,6 @@ extern "C" {
     fn is_win_down() -> BOOL;
     fn is_local_system() -> BOOL;
     fn alloc_console_and_redirect();
-    fn IsWindowsVersionOrGreater(
-        os_major: DWORD,
-        os_minor: DWORD,
-        build_number: DWORD,
-        service_pack_major: WORD,
-        service_pack_minor: WORD,
-    ) -> BOOL;
 }
 
 extern "system" {
@@ -1252,25 +1245,6 @@ pub fn block_input(v: bool) -> (bool, String) {
         } else {
             (false, format!("Error: {}", io::Error::last_os_error()))
         }
-    }
-}
-
-#[inline]
-pub fn is_windows_version_or_greater(
-    os_major: u32,
-    os_minor: u32,
-    build_number: u32,
-    service_pack_major: u32,
-    service_pack_minor: u32,
-) -> bool {
-    unsafe {
-        IsWindowsVersionOrGreater(
-            os_major as _,
-            os_minor as _,
-            build_number as _,
-            service_pack_major as _,
-            service_pack_minor as _,
-        ) == TRUE
     }
 }
 

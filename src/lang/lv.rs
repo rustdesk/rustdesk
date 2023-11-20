@@ -572,5 +572,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("privacy_mode_impl_virtual_display_tip", "2. režīms"),
         ("Enter privacy mode", "Ieiet privātuma režīmā"),
         ("Exit privacy mode", "Iziet no privātuma režīma"),
+        ("idd_not_support_tip", ""),
     ].iter().cloned().collect();
 }
