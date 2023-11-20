@@ -569,7 +569,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Enable blocking user input", "允许阻止用户输入"),
         ("id_input_tip", ""),
         ("privacy_mode_impl_mag_tip", "模式 1"),
-        ("privacy_mode_impl_virtual_display_tip", "模式 2 (推荐)"),
+        ("privacy_mode_impl_virtual_display_tip", "模式 2"),
         ("Enter privacy mode", "进入隐私模式"),
         ("Exit privacy mode", "退出隐私模式"),
     ].iter().cloned().collect();
