@@ -660,13 +660,14 @@ extern "C"
         /* Initialize the condition mask. */
         VER_SET_CONDITION(condition_mask, VER_MAJORVERSION, op);
         VER_SET_CONDITION(condition_mask, VER_MINORVERSION, op);
+        VER_SET_CONDITION(condition_mask, VER_BUILDNUMBER, op);
         VER_SET_CONDITION(condition_mask, VER_SERVICEPACKMAJOR, op);
         VER_SET_CONDITION(condition_mask, VER_SERVICEPACKMINOR, op);
 
         /* Perform the test. */
         return VerifyVersionInfo(
             &osvi,
-            VER_MAJORVERSION | VER_MINORVERSION |
+            VER_MAJORVERSION | VER_MINORVERSION | VER_BUILDNUMBER |
                 VER_SERVICEPACKMAJOR | VER_SERVICEPACKMINOR,
             condition_mask);
     }
