@@ -3,7 +3,6 @@ use std::{
     net::SocketAddr,
     sync::{
         atomic::{AtomicBool, Ordering},
-        Arc, Mutex,
     },
     time::Instant,
 };
@@ -15,8 +14,9 @@ use hbb_common::tcp::FramedStream;
 use hbb_common::{allow_err, anyhow::bail, config::{Config, CONNECT_TIMEOUT, READ_TIMEOUT, REG_INTERVAL, RENDEZVOUS_PORT}, futures::future::join_all, log, protobuf::Message as _, rendezvous_proto::*, sleep, socket_client::{self, is_ipv4}, tokio::{
     self, select,
     time::{interval, Duration},
-}, udp::FramedSocket, AddrMangle, ResultType, anyhow};
-use hbb_common::anyhow::anyhow;
+}, AddrMangle, ResultType, anyhow, IntoTargetAddr};
+use hbb_common::config::NetworkType;
+use hbb_common::socket_client::test_target;
 use crate::common::increase_port;
 
 use crate::server::{check_zombie, new as new_server, ServerPtr};
@@ -114,9 +114,17 @@ impl RendezvousMediator {
             })
             .unwrap_or(host.to_owned());
         let host = crate::check_port(&host, RENDEZVOUS_PORT);
-        let (mut socket, addr) = socket_client::new_udp_for(&host, CONNECT_TIMEOUT).await?;
+        let addr = match Config::get_network_type() {
+            NetworkType::Direct => {
+                let addr = test_target(&host).await?;
+                addr.into_target_addr()?
+            }
+            NetworkType::ProxySocks => {
+                host.clone().into_target_addr()?
+            }
+        };
         let mut rz = Self {
-            addr: addr,
+            addr,
             host: host.clone(),
             host_prefix,
             last_id_pk_registry: "".to_owned(),
@@ -187,46 +195,29 @@ impl RendezvousMediator {
                                     allow_err!(rz.handle_intranet(fla, server).await);
                                 });
                             }
+                            Some(rendezvous_message::Union::RegisterPeerResponse(rpr)) => {
+                                update_latency();
+                                if rpr.request_pk {
+                                    log::info!("request_pk received from {}", host);
+                                    // Redo handshake
+                                    let result = rz.handshake(&host).await?;
+                                    mq_client = result.0;
+                                    push_subscription = result.1;
+                                    continue;
+                                }
+                            }
+                            Some(rendezvous_message::Union::ConfigureUpdate(cu)) => {
+                                let v0 = Config::get_rendezvous_servers();
+                                Config::set_option("rendezvous-servers".to_owned(), cu.rendezvous_servers.join(","));
+                                Config::set_serial(cu.serial);
+                                if v0 != Config::get_rendezvous_servers() {
+                                    Self::restart();
+                                }
+                            }
                             _ => {}
                         }
                     } else {
                         log::debug!("Non-protobuf message bytes received: {:?}", message);
-                    }
-                },
-                n = socket.next() => {
-                    match n {
-                        Some(Ok((bytes, _))) => {
-                            if let Ok(msg_in) = Message::parse_from_bytes(&bytes) {
-                                match msg_in.union {
-                                    Some(rendezvous_message::Union::RegisterPeerResponse(rpr)) => {
-                                        update_latency();
-                                        if rpr.request_pk {
-                                            log::info!("request_pk received from {}", host);
-                                            // Redo handshake
-                                            let result = rz.handshake(&host).await?;
-                                            mq_client = result.0;
-                                            push_subscription = result.1;
-                                            continue;
-                                        }
-                                    }
-                                    Some(rendezvous_message::Union::ConfigureUpdate(cu)) => {
-                                        let v0 = Config::get_rendezvous_servers();
-                                        Config::set_option("rendezvous-servers".to_owned(), cu.rendezvous_servers.join(","));
-                                        Config::set_serial(cu.serial);
-                                        if v0 != Config::get_rendezvous_servers() {
-                                            Self::restart();
-                                        }
-                                    }
-                                    _ => {}
-                                }
-                            } else {
-                                log::debug!("Non-protobuf message bytes received: {:?}", bytes);
-                            }
-                        },
-                        Some(Err(e)) => bail!("Failed to receive next {}", e),  // maybe socks5 tcp disconnected
-                        None => {
-                            bail!("Socket receive none. Maybe socks5 server is down.");
-                        },
                     }
                 },
                 _ = timer.tick() => {
@@ -248,7 +239,7 @@ impl RendezvousMediator {
                             mq_client = result.0;
                             push_subscription = result.1;
                         }
-                        allow_err!(rz.register_peer(&mut socket).await);
+                        allow_err!(rz.register_peer(&mq_client).await);
                         last_register_sent = now;
                         if timeout {
                             fails += 1;
@@ -256,12 +247,11 @@ impl RendezvousMediator {
                                 Config::update_latency(&host, -1);
                                 old_latency = 0;
                                 if last_dns_check.elapsed().as_millis() as i64 > DNS_INTERVAL {
-                                    // in some case of network reconnect (dial IP network),
-                                    // old UDP socket not work any more after network recover
-                                    if let Some((s, addr)) = socket_client::rebind_udp_for(&rz.host).await? {
-                                        socket = s;
-                                        rz.addr = addr;
-                                    }
+                                    // The server might have been restarted and lost the temporal
+                                    // information of this client. So we need to redo handshake.
+                                    let result = rz.handshake(&host).await?;
+                                    mq_client = result.0;
+                                    push_subscription = result.1;
                                     last_dns_check = Instant::now();
                                 }
                             } else if fails > MAX_FAILS1 {
@@ -467,7 +457,7 @@ impl RendezvousMediator {
         }
     }
 
-    async fn register_peer(&mut self, socket: &mut FramedSocket) -> ResultType<()> {
+    async fn register_peer(&mut self, client: &async_nats::client::Client) -> ResultType<()> {
         let id = Config::get_id();
         log::trace!(
             "Register my id {:?} to rendezvous server {:?}",
@@ -477,11 +467,13 @@ impl RendezvousMediator {
         let mut msg_out = Message::new();
         let serial = Config::get_serial();
         msg_out.set_register_peer(RegisterPeer {
-            id,
+            id: id.clone(),
             serial,
             ..Default::default()
         });
-        socket.send(&msg_out, self.addr.to_owned()).await?;
+        let topic = Config::get_ping_topic(&id);
+        let payload = bytes::Bytes::from(msg_out.write_to_bytes()?);
+        client.publish(topic, payload).await?;
         Ok(())
     }
 
