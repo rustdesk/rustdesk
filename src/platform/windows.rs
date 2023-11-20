@@ -1700,7 +1700,7 @@ pub fn create_process_with_logon(user: &str, pwd: &str, exe: &str, arg: &str) ->
         {
             let last_error = GetLastError();
             bail!(
-                "CreateProcessWithLogonW failed : \"{}\", error {:?}",
+                "CreateProcessWithLogonW failed : \"{}\", error {}",
                 last_error_table
                     .get(&last_error)
                     .unwrap_or(&"Unknown error"),

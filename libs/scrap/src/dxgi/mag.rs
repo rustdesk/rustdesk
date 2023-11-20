@@ -139,7 +139,7 @@ impl MagInterface {
                 return Err(Error::new(
                     ErrorKind::Other,
                     format!(
-                        "Failed to LoadLibraryExA {}, error: {}",
+                        "Failed to LoadLibraryExA {}, error {}",
                         lib_file_name,
                         Error::last_os_error()
                     ),
@@ -173,7 +173,7 @@ impl MagInterface {
                 if FALSE == init_func() {
                     return Err(Error::new(
                         ErrorKind::Other,
-                        format!("Failed to MagInitialize, error: {}", Error::last_os_error()),
+                        format!("Failed to MagInitialize, error {}", Error::last_os_error()),
                     ));
                 } else {
                     s.init_succeeded = true;
@@ -346,7 +346,7 @@ impl CapturerMag {
                     return Err(Error::new(
                         ErrorKind::Other,
                         format!(
-                            "Failed to RegisterClassExA, error {:?}",
+                            "Failed to RegisterClassExA, error {}",
                             Error::from_raw_os_error(code as _)
                         ),
                     ));
