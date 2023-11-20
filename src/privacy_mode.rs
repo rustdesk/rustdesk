@@ -291,7 +291,7 @@ pub fn get_supported_privacy_mode_impl() -> Vec<(&'static str, &'static str)> {
         if win_exclude_from_capture::is_supported() {
             vec_impls.push((
                 PRIVACY_MODE_IMPL_WIN_EXCLUDE_FROM_CAPTURE,
-                "privacy_mode_impl_exclude_from_capture_tip",
+                "privacy_mode_impl_mag_tip",
             ));
         } else {
             if display_service::is_privacy_mode_mag_supported() {

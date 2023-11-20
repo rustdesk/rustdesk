@@ -570,7 +570,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("id_input_tip", ""),
         ("privacy_mode_impl_mag_tip", ""),
         ("privacy_mode_impl_virtual_display_tip", ""),
-        ("privacy_mode_impl_exclude_from_capture_tip", ""),
         ("Enter privacy mode", ""),
         ("Exit privacy mode", ""),
     ].iter().cloned().collect();
