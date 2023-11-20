@@ -97,7 +97,7 @@ BOOL InstallUpdate(LPCWSTR fullInfPath, PBOOL rebootRequired)
                 SetLastMsg("Failed InstallUpdate UpdateDriverForPlugAndPlayDevicesW, error: 0x%x, %s  Please try: Install the cert.\n", error, errorString == NULL ? "(NULL)\n" : errorString);
                 break;
             case 0xe0000247:
-                SetLastMsg("Failed InstallUpdate UpdateDriverForPlugAndPlayDevicesW, error: 0x%x, %s  Please try: \n1. Uninstall the driver first.\n2. Install the cert.\n3. Check the device manager and event viewer.\n", error, errorString == NULL ? "(NULL)\n" : errorString);
+                SetLastMsg("Failed InstallUpdate UpdateDriverForPlugAndPlayDevicesW, error: 0x%x, %s  Please try: \n1. Check the device manager and event viewer.\n2. Uninstall the driver, install the cert, then try again.\n", error, errorString == NULL ? "(NULL)\n" : errorString);
                 break;
             default:
                 SetLastMsg("Failed InstallUpdate UpdateDriverForPlugAndPlayDevicesW, error: 0x%x, %s  Please try: Check the device manager and event viewer.\n", error, errorString == NULL ? "(NULL)\n" : errorString);
