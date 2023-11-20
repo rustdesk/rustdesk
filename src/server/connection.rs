@@ -2357,10 +2357,28 @@ impl Connection {
 
     #[cfg(all(windows, feature = "virtual_display_driver"))]
     async fn toggle_virtual_display(&mut self, t: ToggleVirtualDisplay) {
+        let make_msg = |text: String| {
+            let mut msg_out = Message::new();
+            let res = MessageBox {
+                msgtype: "nook-nocancel-hasclose".to_owned(),
+                title: "Virtual display".to_owned(),
+                text,
+                link: "".to_owned(),
+                ..Default::default()
+            };
+            msg_out.set_message_box(res);
+            msg_out
+        };
+
         if t.on {
             if let Err(e) = virtual_display_manager::plug_in_index_modes(t.display as _, Vec::new())
             {
                 log::error!("Failed to plug in virtual display: {}", e);
+                self.send(make_msg(format!(
+                    "Failed to plug in virtual display: {}",
+                    e
+                )))
+                .await;
             }
         } else {
             let indices = if t.display == -1 {
@@ -2370,6 +2388,11 @@ impl Connection {
             };
             if let Err(e) = virtual_display_manager::plug_out_peer_request(&indices) {
                 log::error!("Failed to plug out virtual display {:?}: {}", &indices, e);
+                self.send(make_msg(format!(
+                    "Failed to plug out virtual displays: {}",
+                    e
+                )))
+                .await;
             }
         }
     }
