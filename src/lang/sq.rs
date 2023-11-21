@@ -145,7 +145,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Failed to make direct connection to remote desktop", "Lidhja direkte me desktopin në distancë dështoi"),
         ("Set Password", "Vendosni fjalëkalimin"),
         ("OS Password", "OS fjalëkalim"),
-        ("install_tip", "Për shkak të UAC, Rustdesk nuk mund të punoj sic duhet si nje remote në distancë në disa raste. Për të shamngur UAC, ju lutem klikoni butonin më poshtë për të instaluar RustDesk në sistem."),
+        ("install_tip", "Për shkak të UAC, RustDesk nuk mund të punoj sic duhet si nje remote në distancë në disa raste. Për të shamngur UAC, ju lutem klikoni butonin më poshtë për të instaluar RustDesk në sistem."),
         ("Click to upgrade", "Klikoni për përmirësim"),
         ("Click to download", "Klikoni për tu shkarkuar"),
         ("Click to update", "Klikoni për përditësim"),

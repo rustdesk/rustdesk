@@ -18,10 +18,10 @@ jobs:
       upload-tag: ${{ env.GITHUB_REF_NAME }}
 
   update-fdroid-version-file:
-    name: Publish Rustdesk version file for F-Droid updater
+    name: Publish RustDesk version file for F-Droid updater
     runs-on: ubuntu-latest
     steps:
-      - name: Generate Rustdesk version file
+      - name: Generate RustDesk version file
         run: |
           UPSTREAM_VERNAME="$GITHUB_REF_NAME"
           UPSTREAM_VERCODE="$(echo "$UPSTREAM_VERNAME" | tr -d '.')"
@@ -29,7 +29,7 @@ jobs:
           echo "versionCode=$UPSTREAM_VERCODE" >> rustdesk-version.txt
         shell: bash
 
-      - name: Publish Rustdesk version file
+      - name: Publish RustDesk version file
         uses: softprops/action-gh-release@v1
         with:
           prerelease: true
