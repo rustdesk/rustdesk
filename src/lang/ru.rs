@@ -380,7 +380,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Keyboard Settings", "Настройки клавиатуры"),
         ("Full Access", "Полный доступ"),
         ("Screen Share", "Демонстрация экрана"),
-        ("Wayland requires Ubuntu 21.04 or higher version.", "Wayland требует Ubuntu 21.04 или более позднюю версию."),
+        ("Wayland requires Ubuntu 21.04 or higher version.", "Wayland требуется Ubuntu версии 21.04 или новее."),
         ("Wayland requires higher version of linux distro. Please try X11 desktop or change your OS.", "Для Wayland требуется более поздняя версия дистрибутива Linux. Используйте рабочий стол X11 или смените ОС."),
         ("JumpLink", "Просмотр"),
         ("Please Select the screen to be shared(Operate on the peer side).", "Выберите экран для демонстрации (работайте на одноранговой стороне)."),
@@ -572,6 +572,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("privacy_mode_impl_virtual_display_tip", "Режим 2"),
         ("Enter privacy mode", "Включить режим конфиденциальности"),
         ("Exit privacy mode", "Отключить режим конфиденциальности"),
-        ("idd_not_support_under_win10_2004_tip", ""),
+        ("idd_not_support_under_win10_2004_tip", "Драйвер непрямого отображения не поддерживается. Требуется Windows 10 версии 2004 или новее."),
     ].iter().cloned().collect();
 }
