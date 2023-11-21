@@ -571,7 +571,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("privacy_mode_impl_mag_tip", "Režim 1"),
         ("privacy_mode_impl_virtual_display_tip", "Režim 2"),
         ("Enter privacy mode", "Vstup do režimu súkromia"),
-        ("Exit privacy mode", "Ukončiť režimu súkromia"),
+        ("Exit privacy mode", "Ukončiť režim súkromia"),
         ("idd_not_support_under_win10_2004_tip", "Ovládač nepriameho zobrazenia nie je podporovaný. Vyžaduje sa systém Windows 10, verzia 2004 alebo novšia."),
     ].iter().cloned().collect();
 }
