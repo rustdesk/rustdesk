@@ -568,10 +568,10 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("True color (4:4:4)", "Skutečné barvy (4:4:4)"),
         ("Enable blocking user input", "Povolit blokování uživatelského vstupu"),
         ("id_input_tip", "Můžete zadat ID, přímou IP adresu nebo doménu s portem (<doména>:<port>).\nPokud chcete přistupovat k zařízení na jiném serveru, připojte adresu serveru (<id>@<adresa_serveru>?key=<hodnota_klíče>), například,\n9123456234@192.168.16.1:21117?key=5Qbwsde3unUcJBtrx9ZkvUmwFNoExHzpryHuPUdqlWM=.\nPokud chcete přistupovat k zařízení na veřejném serveru, zadejte \"<id>@public\", klíč není pro veřejný server potřeba."),
-        ("privacy_mode_impl_mag_tip", ""),
-        ("privacy_mode_impl_virtual_display_tip", ""),
-        ("Enter privacy mode", ""),
-        ("Exit privacy mode", ""),
-        ("idd_not_support_under_win10_2004_tip", ""),
+        ("privacy_mode_impl_mag_tip", "Režim 1"),
+        ("privacy_mode_impl_virtual_display_tip", "Režim 2"),
+        ("Enter privacy mode", "Vstup do režimu soukromí"),
+        ("Exit privacy mode", "Ukončit režim soukromí"),
+        ("idd_not_support_under_win10_2004_tip", "Ovladač nepřímého zobrazení není podporován. Je vyžadován systém Windows 10, verze 2004 nebo novější."),
     ].iter().cloned().collect();
 }
