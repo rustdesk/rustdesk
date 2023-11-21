@@ -19,8 +19,6 @@ use crate::ipc::{self, Data};
 use clipboard::ContextSend;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use hbb_common::tokio::sync::mpsc::unbounded_channel;
-#[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
-use hbb_common::tokio::sync::Mutex as TokioMutex;
 use hbb_common::{
     allow_err,
     config::Config,
@@ -34,8 +32,9 @@ use hbb_common::{
         sync::mpsc::{self, UnboundedSender},
         task::spawn_blocking,
     },
-    ResultType,
 };
+#[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
+use hbb_common::{tokio::sync::Mutex as TokioMutex, ResultType};
 use serde_derive::Serialize;
 
 #[derive(Serialize, Clone)]
@@ -53,6 +52,7 @@ pub struct Client {
     pub file: bool,
     pub restart: bool,
     pub recording: bool,
+    pub block_input: bool,
     pub from_switch: bool,
     pub in_voice_call: bool,
     pub incoming_voice_call: bool,
@@ -101,7 +101,7 @@ pub trait InvokeUiCM: Send + Clone + 'static + Sized {
 
     fn update_voice_call_state(&self, client: &Client);
 
-    fn file_transfer_log(&self, log: String);
+    fn file_transfer_log(&self, action: &str, log: &str);
 }
 
 impl<T: InvokeUiCM> Deref for ConnectionManager<T> {
@@ -133,6 +133,7 @@ impl<T: InvokeUiCM> ConnectionManager<T> {
         file: bool,
         restart: bool,
         recording: bool,
+        block_input: bool,
         from_switch: bool,
         #[cfg(not(any(target_os = "ios")))] tx: mpsc::UnboundedSender<Data>,
     ) {
@@ -150,6 +151,7 @@ impl<T: InvokeUiCM> ConnectionManager<T> {
             file,
             restart,
             recording,
+            block_input,
             from_switch,
             #[cfg(not(any(target_os = "ios")))]
             tx,
@@ -378,9 +380,9 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
                         }
                         Ok(Some(data)) => {
                             match data {
-                                Data::Login{id, is_file_transfer, port_forward, peer_id, name, authorized, keyboard, clipboard, audio, file, file_transfer_enabled: _file_transfer_enabled, restart, recording, from_switch} => {
+                                Data::Login{id, is_file_transfer, port_forward, peer_id, name, authorized, keyboard, clipboard, audio, file, file_transfer_enabled: _file_transfer_enabled, restart, recording, block_input, from_switch} => {
                                     log::debug!("conn_id: {}", id);
-                                    self.cm.add_connection(id, is_file_transfer, port_forward, peer_id, name, authorized, keyboard, clipboard, audio, file, restart, recording, from_switch,self.tx.clone());
+                                    self.cm.add_connection(id, is_file_transfer, port_forward, peer_id, name, authorized, keyboard, clipboard, audio, file, restart, recording, block_input, from_switch, self.tx.clone());
                                     self.conn_id = id;
                                     #[cfg(any(target_os = "linux", target_os = "windows", target_os = "macos"))]
                                     {
@@ -398,7 +400,7 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
                                     log::info!("cm ipc connection disconnect");
                                     break;
                                 }
-                                Data::PrivacyModeState((_id, _)) => {
+                                Data::PrivacyModeState((_id, _, _)) => {
                                     #[cfg(windows)]
                                     cm_inner_send(_id, data);
                                 }
@@ -418,10 +420,10 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
                                         handle_fs(fs, &mut write_jobs, &self.tx, Some(&tx_log)).await;
                                     }
                                     let log = fs::serialize_transfer_jobs(&write_jobs);
-                                    self.cm.ui_handler.file_transfer_log(log);
+                                    self.cm.ui_handler.file_transfer_log("transfer", &log);
                                 }
-                                Data::FileTransferLog(log) => {
-                                    self.cm.ui_handler.file_transfer_log(log);
+                                Data::FileTransferLog((action, log)) => {
+                                    self.cm.ui_handler.file_transfer_log(&action, &log);
                                 }
                                 #[cfg(not(any(target_os = "android", target_os = "ios")))]
                                 Data::ClipboardFile(_clip) => {
@@ -526,7 +528,7 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
                     }
                 },
                 Some(job_log) = rx_log.recv() => {
-                    self.cm.ui_handler.file_transfer_log(job_log);
+                    self.cm.ui_handler.file_transfer_log("transfer", &job_log);
                 }
             }
         }
@@ -564,17 +566,6 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 #[tokio::main(flavor = "current_thread")]
 pub async fn start_ipc<T: InvokeUiCM>(cm: ConnectionManager<T>) {
-    #[cfg(windows)]
-    std::thread::spawn(move || {
-        log::info!("try create privacy mode window");
-        if let Err(e) = crate::platform::windows::check_update_broker_process() {
-            log::warn!(
-                "Failed to check update broker process. Privacy mode may not work properly. {}",
-                e
-            );
-        }
-    });
-
     #[cfg(any(
         target_os = "windows",
         all(
@@ -632,6 +623,7 @@ pub async fn start_listen<T: InvokeUiCM>(
                 file,
                 restart,
                 recording,
+                block_input,
                 from_switch,
                 ..
             }) => {
@@ -649,6 +641,7 @@ pub async fn start_listen<T: InvokeUiCM>(
                     file,
                     restart,
                     recording,
+                    block_input,
                     from_switch,
                     tx.clone(),
                 );

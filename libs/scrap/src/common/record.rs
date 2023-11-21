@@ -60,7 +60,7 @@ impl RecorderContext {
                 ".mp4"
             };
         self.filename = PathBuf::from(&dir).join(file).to_string_lossy().to_string();
-        log::info!("video will save to:{}", self.filename);
+        log::info!("video will save to {}", self.filename);
         Ok(())
     }
 }
@@ -225,7 +225,7 @@ impl Recorder {
         let old_pts = self.pts;
         self.pts = Some(pts);
         if old_pts.clone().unwrap_or_default() > pts {
-            log::info!("pts {:?}->{}, change record filename", old_pts, pts);
+            log::info!("pts {:?} -> {}, change record filename", old_pts, pts);
             self.change(self.ctx.clone())?;
         }
         Ok(())

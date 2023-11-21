@@ -518,6 +518,11 @@ message ToggleVirtualDisplay {
   bool on = 2;
 }
 
+message TogglePrivacyMode {
+  string impl_key = 1;
+  bool on = 2;
+}
+
 message PermissionInfo {
   enum Permission {
     Keyboard = 0;
@@ -526,6 +531,7 @@ message PermissionInfo {
     File = 4;
     Restart = 5;
     Recording = 6;
+    BlockInput = 7;
   }
 
   Permission permission = 1;
@@ -655,6 +661,8 @@ message BackNotification {
   }
   // Supplementary message, for "PrvOnFailed" and "PrvOffFailed"
   string details = 3;
+  // The key of the implementation
+  string impl_key = 4;
 }
 
 message ElevationRequestWithLogon {
@@ -714,12 +722,13 @@ message Misc {
     Resolution change_resolution = 24;
     PluginRequest plugin_request = 25;
     PluginFailure plugin_failure = 26;
-    uint32 full_speed_fps = 27;
+    uint32 full_speed_fps = 27; // deprecated
     uint32 auto_adjust_fps = 28;
     bool client_record_status = 29;
     CaptureDisplays capture_displays = 30;
     int32 refresh_video_display = 31;
     ToggleVirtualDisplay toggle_virtual_display = 32;
+    TogglePrivacyMode toggle_privacy_mode = 33;
   }
 }
 

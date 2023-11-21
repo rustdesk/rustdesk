@@ -75,8 +75,8 @@ CancelFunc showRightMenu(ToastBuilder builder,
   return BotToast.showAttachedWidget(
     target: target,
     targetContext: context,
-    verticalOffset: 0,
-    horizontalOffset: 0,
+    verticalOffset: 0.0,
+    horizontalOffset: 0.0,
     duration: Duration(seconds: 300),
     animationDuration: Duration(milliseconds: 0),
     animationReverseDuration: Duration(milliseconds: 0),
@@ -583,32 +583,19 @@ class WindowActionPanelState extends State<WindowActionPanel>
   void onWindowClose() async {
     mainWindowClose() async => await windowManager.hide();
     notMainWindowClose(WindowController controller) async {
-      if (widget.tabController.length == 0) {
-        debugPrint("close emtpy multiwindow, hide");
-        await controller.hide();
-        await rustDeskWinManager
-            .call(WindowType.Main, kWindowEventHide, {"id": kWindowId!});
-      } else {
+      if (widget.tabController.length != 0) {
         debugPrint("close not emtpy multiwindow from taskbar");
         if (Platform.isWindows) {
           await controller.show();
           await controller.focus();
           final res = await widget.onClose?.call() ?? true;
-          if (res) {
-            Future.delayed(Duration.zero, () async {
-              // onWindowClose will be called again to hide
-              await WindowController.fromWindowId(kWindowId!).close();
-            });
-          }
-        } else {
-          // ubuntu22.04 windowOnTop not work from taskbar
-          widget.tabController.clear();
-          Future.delayed(Duration.zero, () async {
-            // onWindowClose will be called again to hide
-            await WindowController.fromWindowId(kWindowId!).close();
-          });
+          if (!res) return;
         }
+        widget.tabController.clear();
       }
+      await controller.hide();
+      await rustDeskWinManager
+          .call(WindowType.Main, kWindowEventHide, {"id": kWindowId!});
     }
 
     macOSWindowClose(

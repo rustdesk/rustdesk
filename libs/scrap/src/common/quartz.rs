@@ -55,7 +55,12 @@ impl crate::TraitCapturer for Capturer {
                     Some(mut frame) => {
                         crate::would_block_if_equal(&mut self.saved_raw_data, frame.inner())?;
                         frame.surface_to_bgra(self.height());
-                        Ok(Frame(frame, PhantomData))
+                        Ok(Frame {
+                            frame,
+                            data: PhantomData,
+                            width: self.width(),
+                            height: self.height(),
+                        })
                     }
 
                     None => Err(io::ErrorKind::WouldBlock.into()),
@@ -69,16 +74,29 @@ impl crate::TraitCapturer for Capturer {
     }
 }
 
-pub struct Frame<'a>(pub quartz::Frame, PhantomData<&'a [u8]>);
+pub struct Frame<'a> {
+    frame: quartz::Frame,
+    data: PhantomData<&'a [u8]>,
+    width: usize,
+    height: usize,
+}
 
 impl<'a> crate::TraitFrame for Frame<'a> {
     fn data(&self) -> &[u8] {
-        &*self.0
+        &*self.frame
+    }
+
+    fn width(&self) -> usize {
+        self.width
+    }
+
+    fn height(&self) -> usize {
+        self.height
     }
 
     fn stride(&self) -> Vec<usize> {
         let mut v = Vec::new();
-        v.push(self.0.stride());
+        v.push(self.frame.stride());
         v
     }
 

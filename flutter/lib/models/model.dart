@@ -353,7 +353,7 @@ class FfiModel with ChangeNotifier {
         }
       } else if (name == "cm_file_transfer_log") {
         if (isDesktop) {
-          gFFI.cmFileModel.onFileTransferLog(evt['log']);
+          gFFI.cmFileModel.onFileTransferLog(evt);
         }
       } else {
         debugPrint('Unknown event name: $name');
@@ -512,7 +512,7 @@ class FfiModel with ChangeNotifier {
       showWaitUacDialog(sessionId, dialogManager, type);
     } else if (type == 'elevation-error') {
       showElevationError(sessionId, type, title, text, dialogManager);
-    } else if (type == 'relay-hint') {
+    } else if (type == 'relay-hint' || type == 'relay-hint2') {
       showRelayHintDialog(sessionId, type, title, text, dialogManager, peerId);
     } else if (text == 'Connected, waiting for image...') {
       showConnectedWaitingForImage(dialogManager, sessionId, type, title, text);
@@ -564,17 +564,19 @@ class FfiModel with ChangeNotifier {
       if (text.contains("10054") || text.contains("104")) {
         hint = "";
       }
-      final alreadyForceAlwaysRelay = bind
-          .mainGetPeerOptionSync(id: peerId, key: 'force-always-relay')
-          .isNotEmpty;
       return CustomAlertDialog(
         title: null,
         content: msgboxContent(type, title, "${translate(text)}$hint"),
         actions: [
           dialogButton('Close', onPressed: onClose, isOutline: true),
+          if (type == 'relay-hint')
+            dialogButton('Connect via relay',
+                onPressed: () => reconnect(dialogManager, sessionId, true),
+                buttonStyle: style,
+                isOutline: true),
           dialogButton('Retry',
               onPressed: () => reconnect(dialogManager, sessionId, false)),
-          if (!alreadyForceAlwaysRelay)
+          if (type == 'relay-hint2')
             dialogButton('Connect via relay',
                 onPressed: () => reconnect(dialogManager, sessionId, true),
                 buttonStyle: style),
@@ -965,11 +967,21 @@ class FfiModel with ChangeNotifier {
   }
 
   updatePrivacyMode(
-      Map<String, dynamic> evt, SessionID sessionId, String peerId) {
+      Map<String, dynamic> evt, SessionID sessionId, String peerId) async {
     notifyListeners();
     try {
-      PrivacyModeState.find(peerId).value = bind.sessionGetToggleOptionSync(
+      final isOn = bind.sessionGetToggleOptionSync(
           sessionId: sessionId, arg: 'privacy-mode');
+      if (isOn) {
+        var privacyModeImpl = await bind.sessionGetOption(
+            sessionId: sessionId, arg: 'privacy-mode-impl-key');
+        // For compatibility, version < 1.2.4, the default value is 'privacy_mode_impl_mag'.
+        final initDefaultPrivacyMode = 'privacy_mode_impl_mag';
+        PrivacyModeState.find(peerId).value =
+            privacyModeImpl ?? initDefaultPrivacyMode;
+      } else {
+        PrivacyModeState.find(peerId).value = '';
+      }
     } catch (e) {
       //
     }

@@ -632,23 +632,27 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
             }).marginOnly(left: _kContentHMargin),
         Column(
           children: [
-            _OptionCheckBox(context, 'Enable Keyboard/Mouse', 'enable-keyboard',
+            _OptionCheckBox(context, 'Enable keyboard/mouse', 'enable-keyboard',
                 enabled: enabled, fakeValue: fakeValue),
-            _OptionCheckBox(context, 'Enable Clipboard', 'enable-clipboard',
-                enabled: enabled, fakeValue: fakeValue),
-            _OptionCheckBox(
-                context, 'Enable File Transfer', 'enable-file-transfer',
-                enabled: enabled, fakeValue: fakeValue),
-            _OptionCheckBox(context, 'Enable Audio', 'enable-audio',
-                enabled: enabled, fakeValue: fakeValue),
-            _OptionCheckBox(context, 'Enable TCP Tunneling', 'enable-tunnel',
+            _OptionCheckBox(context, 'Enable clipboard', 'enable-clipboard',
                 enabled: enabled, fakeValue: fakeValue),
             _OptionCheckBox(
-                context, 'Enable Remote Restart', 'enable-remote-restart',
+                context, 'Enable file transfer', 'enable-file-transfer',
+                enabled: enabled, fakeValue: fakeValue),
+            _OptionCheckBox(context, 'Enable audio', 'enable-audio',
+                enabled: enabled, fakeValue: fakeValue),
+            _OptionCheckBox(context, 'Enable TCP tunneling', 'enable-tunnel',
                 enabled: enabled, fakeValue: fakeValue),
             _OptionCheckBox(
-                context, 'Enable Recording Session', 'enable-record-session',
+                context, 'Enable remote restart', 'enable-remote-restart',
                 enabled: enabled, fakeValue: fakeValue),
+            _OptionCheckBox(
+                context, 'Enable recording session', 'enable-record-session',
+                enabled: enabled, fakeValue: fakeValue),
+            if (Platform.isWindows)
+              _OptionCheckBox(
+                  context, 'Enable blocking user input', 'enable-block-input',
+                  enabled: enabled, fakeValue: fakeValue),
             _OptionCheckBox(context, 'Enable remote configuration modification',
                 'allow-remote-config-modification',
                 enabled: enabled, fakeValue: fakeValue),
@@ -769,7 +773,7 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
     bool enabled = !locked;
     return _Card(title: 'Security', children: [
       shareRdp(context, enabled),
-      _OptionCheckBox(context, 'Deny LAN Discovery', 'enable-lan-discovery',
+      _OptionCheckBox(context, 'Deny LAN discovery', 'enable-lan-discovery',
           reverse: true, enabled: enabled),
       ...directIp(context),
       whitelist(),
@@ -809,7 +813,7 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
     update() => setState(() {});
     RxBool applyEnabled = false.obs;
     return [
-      _OptionCheckBox(context, 'Enable Direct IP Access', 'direct-server',
+      _OptionCheckBox(context, 'Enable direct IP access', 'direct-server',
           update: update, enabled: !locked),
       () {
         // Simple temp wrapper for PR check
@@ -1056,7 +1060,7 @@ class _NetworkState extends State<_Network> with AutomaticKeepAliveClientMixin {
     tmpWrapper() {
       // Setting page is not modal, oldOptions should only be used when getting options, never when setting.
       Map<String, dynamic> oldOptions =
-          jsonDecode(bind.mainGetOptionsSync() as String);
+          jsonDecode(bind.mainGetOptionsSync());
       old(String key) {
         return (oldOptions[key] ?? '').trim();
       }
@@ -1147,6 +1151,7 @@ class _DisplayState extends State<_Display> {
               scrollStyle(context),
               imageQuality(context),
               codec(context),
+              privacyModeImpl(context),
               other(context),
             ]).marginOnly(bottom: _kListViewBottomMargin));
   }
@@ -1286,6 +1291,42 @@ class _DisplayState extends State<_Display> {
     ]);
   }
 
+  Widget privacyModeImpl(BuildContext context) {
+    final supportedPrivacyModeImpls = bind.mainSupportedPrivacyModeImpls();
+    late final List<dynamic> privacyModeImpls;
+    try {
+      privacyModeImpls = jsonDecode(supportedPrivacyModeImpls);
+    } catch (e) {
+      debugPrint('failed to parse supported privacy mode impls, err=$e');
+      return Offstage();
+    }
+    if (privacyModeImpls.length < 2) {
+      return Offstage();
+    }
+
+    final key = 'privacy-mode-impl-key';
+    onChanged(String value) async {
+      await bind.mainSetOption(key: key, value: value);
+      setState(() {});
+    }
+
+    String groupValue = bind.mainGetOptionSync(key: key);
+    if (groupValue.isEmpty) {
+      groupValue = bind.mainDefaultPrivacyModeImpl();
+    }
+    return _Card(
+      title: 'Privacy mode',
+      children: privacyModeImpls.map((impl) {
+        final d = impl as List<dynamic>;
+        return _Radio(context,
+            value: d[0] as String,
+            groupValue: groupValue,
+            label: d[1] as String,
+            onChanged: onChanged);
+      }).toList(),
+    );
+  }
+
   Widget otherRow(String label, String key) {
     final value = bind.mainGetUserDefaultOption(key: key) == 'Y';
     onChanged(bool b) async {
@@ -1315,7 +1356,7 @@ class _DisplayState extends State<_Display> {
       otherRow('Zoom cursor', 'zoom-cursor'),
       otherRow('Show quality monitor', 'show_quality_monitor'),
       otherRow('Mute', 'disable_audio'),
-      otherRow('Allow file copy and paste', 'enable_file_transfer'),
+      otherRow('Enable file copy and paste', 'enable_file_transfer'),
       otherRow('Disable clipboard', 'disable_clipboard'),
       otherRow('Lock after session end', 'lock_after_session_end'),
       otherRow('Privacy mode', 'privacy_mode'),

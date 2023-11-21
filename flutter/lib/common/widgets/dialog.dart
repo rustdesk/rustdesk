@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hbb/common/shared_state.dart';
 import 'package:flutter_hbb/common/widgets/setting_widgets.dart';
+import 'package:flutter_hbb/consts.dart';
 import 'package:get/get.dart';
 
 import '../../common.dart';
@@ -972,7 +973,7 @@ void showRestartRemoteDevice(PeerInfo pi, String id, SessionID sessionId,
             title: Row(children: [
               Icon(Icons.warning_rounded, color: Colors.redAccent, size: 28),
               Flexible(
-                  child: Text(translate("Restart Remote Device"))
+                  child: Text(translate("Restart remote device"))
                       .paddingOnly(left: 10)),
             ]),
             content: Text(
@@ -1244,11 +1245,24 @@ void showConfirmSwitchSidesDialog(
 }
 
 customImageQualityDialog(SessionID sessionId, String id, FFI ffi) async {
-  double qualityInitValue = 50;
-  double fpsInitValue = 30;
+  double initQuality = kDefaultQuality;
+  double initFps = kDefaultFps;
   bool qualitySet = false;
   bool fpsSet = false;
+
+  bool? direct;
+  try {
+    direct =
+        ConnectionTypeState.find(id).direct.value == ConnectionType.strDirect;
+  } catch (_) {}
+  bool hideFps = (await bind.mainIsUsingPublicServer() && direct != true) ||
+      versionCmp(ffi.ffiModel.pi.version, '1.2.0') < 0;
+  bool hideMoreQuality =
+      (await bind.mainIsUsingPublicServer() && direct != true) ||
+          versionCmp(ffi.ffiModel.pi.version, '1.2.2') < 0;
+
   setCustomValues({double? quality, double? fps}) async {
+    debugPrint("setCustomValues quality:$quality, fps:$fps");
     if (quality != null) {
       qualitySet = true;
       await bind.sessionSetCustomImageQuality(
@@ -1261,12 +1275,12 @@ customImageQualityDialog(SessionID sessionId, String id, FFI ffi) async {
     if (!qualitySet) {
       qualitySet = true;
       await bind.sessionSetCustomImageQuality(
-          sessionId: sessionId, value: qualityInitValue.toInt());
+          sessionId: sessionId, value: initQuality.toInt());
     }
-    if (!fpsSet) {
+    if (!hideFps && !fpsSet) {
       fpsSet = true;
       await bind.sessionSetCustomFps(
-          sessionId: sessionId, fps: fpsInitValue.toInt());
+          sessionId: sessionId, fps: initFps.toInt());
     }
   }
 
@@ -1277,32 +1291,30 @@ customImageQualityDialog(SessionID sessionId, String id, FFI ffi) async {
 
   // quality
   final quality = await bind.sessionGetCustomImageQuality(sessionId: sessionId);
-  qualityInitValue =
-      quality != null && quality.isNotEmpty ? quality[0].toDouble() : 50.0;
-  if (qualityInitValue < 10 || qualityInitValue > 2000) {
-    qualityInitValue = 50;
+  initQuality = quality != null && quality.isNotEmpty
+      ? quality[0].toDouble()
+      : kDefaultQuality;
+  if (initQuality < kMinQuality ||
+      initQuality > (!hideMoreQuality ? kMaxMoreQuality : kMaxQuality)) {
+    initQuality = kDefaultQuality;
   }
   // fps
   final fpsOption =
       await bind.sessionGetOption(sessionId: sessionId, arg: 'custom-fps');
-  fpsInitValue = fpsOption == null ? 30 : double.tryParse(fpsOption) ?? 30;
-  if (fpsInitValue < 5 || fpsInitValue > 120) {
-    fpsInitValue = 30;
+  initFps = fpsOption == null
+      ? kDefaultFps
+      : double.tryParse(fpsOption) ?? kDefaultFps;
+  if (initFps < kMinFps || initFps > kMaxFps) {
+    initFps = kDefaultFps;
   }
-  bool? direct;
-  try {
-    direct =
-        ConnectionTypeState.find(id).direct.value == ConnectionType.strDirect;
-  } catch (_) {}
-  bool notShowFps = (await bind.mainIsUsingPublicServer() && direct != true) ||
-      versionCmp(ffi.ffiModel.pi.version, '1.2.0') < 0;
 
   final content = customImageQualityWidget(
-      initQuality: qualityInitValue,
-      initFps: fpsInitValue,
+      initQuality: initQuality,
+      initFps: initFps,
       setQuality: (v) => setCustomValues(quality: v),
       setFps: (v) => setCustomValues(fps: v),
-      showFps: !notShowFps);
+      showFps: !hideFps,
+      showMoreQuality: !hideMoreQuality);
   msgBoxCommon(ffi.dialogManager, 'Custom Image Quality', content, [btnClose]);
 }
 

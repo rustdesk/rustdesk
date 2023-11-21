@@ -1007,8 +1007,13 @@ async fn check_connect_status_(reconnect: bool, rx: mpsc::UnboundedReceiver<ipc:
     let mut mouse_time = 0;
     #[cfg(not(feature = "flutter"))]
     let mut id = "".to_owned();
-    #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
-    #[allow(unused_mut, dead_code)]
+    #[cfg(any(
+        target_os = "windows",
+        all(
+            any(target_os = "linux", target_os = "macos"),
+            feature = "unix-file-copy-paste"
+        )
+    ))]
     let mut enable_file_transfer = "".to_owned();
 
     loop {
@@ -1256,9 +1261,9 @@ async fn check_id(
 }
 
 // if it's relay id, return id processed, otherwise return original id
-pub fn handle_relay_id(id: String) -> String {
+pub fn handle_relay_id(id: &str) -> &str {
     if id.ends_with(r"\r") || id.ends_with(r"/r") {
-        id[0..id.len() - 2].to_string()
+        &id[0..id.len() - 2]
     } else {
         id
     }

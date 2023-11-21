@@ -8,7 +8,7 @@ use hbb_common::message_proto::{Chroma, EncodedVideoFrame, EncodedVideoFrames, V
 use hbb_common::ResultType;
 
 use crate::codec::{base_bitrate, codec_thread_num, EncoderApi, Quality};
-use crate::{GoogleImage, Pixfmt, STRIDE_ALIGN};
+use crate::{EncodeYuvFormat, GoogleImage, Pixfmt, STRIDE_ALIGN};
 
 use super::vpx::{vp8e_enc_control_id::*, vpx_codec_err_t::*, *};
 use crate::{generate_call_macro, generate_call_ptr_macro, Error, Result};
@@ -40,6 +40,7 @@ pub struct VpxEncoder {
     height: usize,
     id: VpxVideoCodecId,
     i444: bool,
+    yuvfmt: EncodeYuvFormat,
 }
 
 pub struct VpxDecoder {
@@ -72,7 +73,7 @@ impl EncoderApi for VpxEncoder {
                 // When the data buffer falls below this percentage of fullness, a dropped frame is indicated. Set the threshold to zero (0) to disable this feature.
                 // In dynamic scenes, low bitrate gets low fps while high bitrate gets high fps.
                 c.rc_dropframe_thresh = 25;
-                c.g_threads = codec_thread_num() as _;
+                c.g_threads = codec_thread_num(64) as _;
                 c.g_error_resilient = VPX_ERROR_RESILIENT_DEFAULT;
                 // https://developers.google.com/media/vp9/bitrate-modes/
                 // Constant Bitrate mode (CBR) is recommended for live streaming with VP9.
@@ -175,6 +176,7 @@ impl EncoderApi for VpxEncoder {
                     height: config.height as _,
                     id: config.codec,
                     i444,
+                    yuvfmt: Self::get_yuvfmt(config.width, config.height, i444),
                 })
             }
             _ => Err(anyhow!("encoder type mismatch")),
@@ -202,35 +204,7 @@ impl EncoderApi for VpxEncoder {
     }
 
     fn yuvfmt(&self) -> crate::EncodeYuvFormat {
-        let mut img = Default::default();
-        let fmt = if self.i444 {
-            vpx_img_fmt::VPX_IMG_FMT_I444
-        } else {
-            vpx_img_fmt::VPX_IMG_FMT_I420
-        };
-        unsafe {
-            vpx_img_wrap(
-                &mut img,
-                fmt,
-                self.width as _,
-                self.height as _,
-                crate::STRIDE_ALIGN as _,
-                0x1 as _,
-            );
-        }
-        let pixfmt = if self.i444 {
-            Pixfmt::I444
-        } else {
-            Pixfmt::I420
-        };
-        crate::EncodeYuvFormat {
-            pixfmt,
-            w: img.w as _,
-            h: img.h as _,
-            stride: img.stride.map(|s| s as usize).to_vec(),
-            u: img.planes[1] as usize - img.planes[0] as usize,
-            v: img.planes[2] as usize - img.planes[0] as usize,
-        }
+        self.yuvfmt.clone()
     }
 
     fn set_quality(&mut self, quality: Quality) -> ResultType<()> {
@@ -362,6 +336,34 @@ impl VpxEncoder {
 
         (q_min, q_max)
     }
+
+    fn get_yuvfmt(width: u32, height: u32, i444: bool) -> EncodeYuvFormat {
+        let mut img = Default::default();
+        let fmt = if i444 {
+            vpx_img_fmt::VPX_IMG_FMT_I444
+        } else {
+            vpx_img_fmt::VPX_IMG_FMT_I420
+        };
+        unsafe {
+            vpx_img_wrap(
+                &mut img,
+                fmt,
+                width as _,
+                height as _,
+                crate::STRIDE_ALIGN as _,
+                0x1 as _,
+            );
+        }
+        let pixfmt = if i444 { Pixfmt::I444 } else { Pixfmt::I420 };
+        EncodeYuvFormat {
+            pixfmt,
+            w: img.w as _,
+            h: img.h as _,
+            stride: img.stride.map(|s| s as usize).to_vec(),
+            u: img.planes[1] as usize - img.planes[0] as usize,
+            v: img.planes[2] as usize - img.planes[0] as usize,
+        }
+    }
 }
 
 impl Drop for VpxEncoder {
@@ -448,7 +450,7 @@ impl VpxDecoder {
         };
         let mut ctx = Default::default();
         let cfg = vpx_codec_dec_cfg_t {
-            threads: codec_thread_num() as _,
+            threads: codec_thread_num(64) as _,
             w: 0,
             h: 0,
         };

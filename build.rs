@@ -41,7 +41,7 @@ fn build_manifest() {
     }
 }
 
-fn install_oboe() {
+fn install_android_deps() {
     let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap();
     if target_os != "android" {
         return;
@@ -49,6 +49,8 @@ fn install_oboe() {
     let mut target_arch = std::env::var("CARGO_CFG_TARGET_ARCH").unwrap();
     if target_arch == "x86_64" {
         target_arch = "x64".to_owned();
+    } else if target_arch == "x86" {
+        target_arch = "x86".to_owned();
     } else if target_arch == "aarch64" {
         target_arch = "arm64".to_owned();
     } else {
@@ -66,22 +68,16 @@ fn install_oboe() {
             path.join("lib").to_str().unwrap()
         )
     );
+    println!("cargo:rustc-link-lib=ndk_compat");
     println!("cargo:rustc-link-lib=oboe");
+    println!("cargo:rustc-link-lib=oboe_wrapper");
     println!("cargo:rustc-link-lib=c++");
     println!("cargo:rustc-link-lib=OpenSLES");
-    // I always got some strange link error with oboe, so as workaround, put oboe.cc into oboe src: src/common/AudioStreamBuilder.cpp
-    // also to avoid libc++_shared not found issue, cp ndk's libc++_shared.so to jniLibs, e.g.
-    // ./flutter_hbb/android/app/src/main/jniLibs/arm64-v8a/libc++_shared.so
-    // let include = path.join("include");
-    //cc::Build::new().file("oboe.cc").include(include).compile("oboe_wrapper");
 }
 
 fn main() {
     hbb_common::gen_version();
-    install_oboe();
-    // there is problem with cfg(target_os) in build.rs, so use our workaround
-    // let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap();
-    // if target_os == "android" || target_os == "ios" {
+    install_android_deps();
     #[cfg(all(windows, feature = "inline"))]
     build_manifest();
     #[cfg(windows)]

@@ -959,6 +959,7 @@ class CustomAlertDialog extends StatelessWidget {
 void msgBox(SessionID sessionId, String type, String title, String text,
     String link, OverlayDialogManager dialogManager,
     {bool? hasCancel, ReconnectHandle? reconnect, int? reconnectTimeout}) {
+
   dialogManager.dismissAll();
   List<Widget> buttons = [];
   bool hasOk = false;
@@ -1955,6 +1956,7 @@ bool handleUriLink({List<String>? cmdArgs, Uri? uri, String? uriString}) {
 List<String>? urlLinkToCmdArgs(Uri uri) {
   String? command;
   String? id;
+  final options = ["connect", "play", "file-transfer", "port-forward", "rdp"];
   if (uri.authority.isEmpty &&
       uri.path.split('').every((char) => char == '/')) {
     return [];
@@ -1962,16 +1964,31 @@ List<String>? urlLinkToCmdArgs(Uri uri) {
     // For compatibility
     command = '--connect';
     id = uri.path.substring("/new/".length);
-  } else if (['connect', "play", 'file-transfer', 'port-forward', 'rdp']
-      .contains(uri.authority)) {
+  } else if (options.contains(uri.authority)) {
+    final optionIndex = options.indexOf(uri.authority);
     command = '--${uri.authority}';
     if (uri.path.length > 1) {
       id = uri.path.substring(1);
+    }
+    if (isMobile && id != null) {
+      if (optionIndex == 0 || optionIndex == 1) {
+        connect(Get.context!, id);
+      } else if (optionIndex == 2) {
+        connect(Get.context!, id, isFileTransfer: true);
+      }
+      return null;
     }
   } else if (uri.authority.length > 2 && uri.path.length <= 1) {
     // rustdesk://<connect-id>
     command = '--connect';
     id = uri.authority;
+  }
+
+  if (isMobile) {
+    if (id != null) {
+      connect(Get.context!, id);
+      return null;
+    }
   }
 
   List<String> args = List.empty(growable: true);
@@ -2024,7 +2041,7 @@ connect(
         final idController = Get.find<IDTextEditingController>();
         idController.text = formatID(id);
       }
-      if (Get.isRegistered<TextEditingController>()){
+      if (Get.isRegistered<TextEditingController>()) {
         final fieldTextEditingController = Get.find<TextEditingController>();
         fieldTextEditingController.text = formatID(id);
       }

@@ -23,6 +23,7 @@ const String kPlatformAdditionsHeadless = "headless";
 const String kPlatformAdditionsIsInstalled = "is_installed";
 const String kPlatformAdditionsVirtualDisplays = "virtual_displays";
 const String kPlatformAdditionsHasFileClipboard = "has_file_clipboard";
+const String kPlatformAdditionsSupportedPrivacyModeImpl = "supported_privacy_mode_impl";
 
 const String kPeerPlatformWindows = "Windows";
 const String kPeerPlatformLinux = "Linux";
@@ -101,6 +102,15 @@ const int kDesktopMaxDisplaySize = 3840;
 
 const double kDesktopFileTransferRowHeight = 30.0;
 const double kDesktopFileTransferHeaderHeight = 25.0;
+
+const double kMinFps = 5;
+const double kDefaultFps = 30;
+const double kMaxFps = 120;
+
+const double kMinQuality = 10;
+const double kDefaultQuality = 50;
+const double kMaxQuality = 100;
+const double kMaxMoreQuality = 2000;
 
 double kNewWindowOffset = Platform.isWindows
     ? 56.0
@@ -194,6 +204,12 @@ const kRemoteAudioGuestToHost = 'guest-to-host';
 const kRemoteAudioDualWay = 'dual-way';
 
 const kIgnoreDpi = true;
+
+// ================================ mobile ================================
+
+// Magic numbers, maybe need to avoid it or use a better way to get them.
+const kMobileDelaySoftKeyboard = Duration(milliseconds: 30);
+const kMobileDelaySoftKeyboardFocus = Duration(milliseconds: 30);
 
 /// Android constants
 const kActionApplicationDetailsSettings =

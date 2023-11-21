@@ -585,7 +585,6 @@ async fn direct_server(server: ServerPtr) {
     }
 }
 
-#[tokio::main(flavor = "current_thread")]
 pub async fn query_online_states<F: FnOnce(Vec<String>, Vec<String>)>(ids: Vec<String>, f: F) {
     let test = false;
     if test {
@@ -611,7 +610,11 @@ pub async fn query_online_states<F: FnOnce(Vec<String>, Vec<String>)>(ids: Vec<S
             }
 
             if query_begin.elapsed() > query_timeout {
-                log::debug!("query onlines timeout {:?}", query_timeout);
+                log::debug!(
+                    "query onlines timeout {:?} ({:?})",
+                    query_begin.elapsed(),
+                    query_timeout
+                );
                 break;
             }
 
@@ -692,8 +695,10 @@ async fn query_online_states_(
 
 #[cfg(test)]
 mod tests {
-    #[test]
-    fn test_query_onlines() {
+    use hbb_common::tokio;
+
+    #[tokio::test]
+    async fn test_query_onlines() {
         super::query_online_states(
             vec![
                 "152183996".to_owned(),
@@ -704,6 +709,7 @@ mod tests {
             |onlines: Vec<String>, offlines: Vec<String>| {
                 println!("onlines: {:?}, offlines: {:?}", &onlines, &offlines);
             },
-        );
+        )
+        .await;
     }
 }

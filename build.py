@@ -57,9 +57,9 @@ def parse_rc_features(feature):
         },
         'PrivacyMode': {
             'platform': ['windows'],
-            'zip_url': 'https://github.com/fufesou/RustDeskTempTopMostWindow/releases/download/v0.1'
-                       '/TempTopMostWindow_x64_pic_en.zip',
-            'checksum_url': 'https://github.com/fufesou/RustDeskTempTopMostWindow/releases/download/v0.1/checksum_md5',
+            'zip_url': 'https://github.com/fufesou/RustDeskTempTopMostWindow/releases/download/v0.3'
+                       '/TempTopMostWindow_x64.zip',
+            'checksum_url': 'https://github.com/fufesou/RustDeskTempTopMostWindow/releases/download/v0.3/checksum_md5',
             'include': ['WindowInjection.dll'],
         }
     }
@@ -180,8 +180,8 @@ def generate_build_script_for_docker():
             export VCPKG_ROOT=`pwd`/vcpkg
             git clone https://github.com/microsoft/vcpkg
             vcpkg/bootstrap-vcpkg.sh
-            vcpkg/vcpkg install libvpx libyuv opus
             popd
+            $VCPKG_ROOT/vcpkg install --x-install-root="$VCPKG_ROOT/installed"
             # build rustdesk
             ./build.py --flutter --hwcodec
         ''')

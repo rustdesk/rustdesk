@@ -28,8 +28,13 @@ use super::{
 use crate::common::SimpleCallOnReturn;
 #[cfg(target_os = "linux")]
 use crate::platform::linux::is_x11;
+use crate::privacy_mode::{get_privacy_mode_conn_id, INVALID_PRIVACY_MODE_CONN_ID};
 #[cfg(windows)]
-use crate::{platform::windows::is_process_consent_running, privacy_win_mag};
+use crate::{
+    platform::windows::is_process_consent_running,
+    privacy_mode::{is_current_privacy_mode_impl, PRIVACY_MODE_IMPL_WIN_MAG},
+    ui_interface::is_installed,
+};
 use hbb_common::{
     anyhow::anyhow,
     tokio::sync::{
@@ -64,7 +69,6 @@ lazy_static::lazy_static! {
         let (tx, rx) = unbounded_channel();
         (tx, Arc::new(TokioMutex::new(rx)))
     };
-    static ref PRIVACY_MODE_CONN_ID: Mutex<i32> = Mutex::new(0);
     pub static ref VIDEO_QOS: Arc<Mutex<VideoQoS>> = Default::default();
     pub static ref IS_UAC_RUNNING: Arc<Mutex<bool>> = Default::default();
     pub static ref IS_FOREGROUND_WINDOW_ELEVATED: Arc<Mutex<bool>> = Default::default();
@@ -73,16 +77,6 @@ lazy_static::lazy_static! {
 #[inline]
 pub fn notify_video_frame_fetched(conn_id: i32, frame_tm: Option<Instant>) {
     FRAME_FETCHED_NOTIFIER.0.send((conn_id, frame_tm)).ok();
-}
-
-#[inline]
-pub fn set_privacy_mode_conn_id(conn_id: i32) {
-    *PRIVACY_MODE_CONN_ID.lock().unwrap() = conn_id
-}
-
-#[inline]
-pub fn get_privacy_mode_conn_id() -> i32 {
-    *PRIVACY_MODE_CONN_ID.lock().unwrap()
 }
 
 struct VideoFrameController {
@@ -182,43 +176,13 @@ fn create_capturer(
     if privacy_mode_id > 0 {
         #[cfg(windows)]
         {
-            match scrap::CapturerMag::new(display.origin(), display.width(), display.height()) {
-                Ok(mut c1) => {
-                    let mut ok = false;
-                    let check_begin = Instant::now();
-                    while check_begin.elapsed().as_secs() < 5 {
-                        match c1.exclude("", privacy_win_mag::PRIVACY_WINDOW_NAME) {
-                            Ok(false) => {
-                                ok = false;
-                                std::thread::sleep(std::time::Duration::from_millis(500));
-                            }
-                            Err(e) => {
-                                bail!(
-                                    "Failed to exclude privacy window {} - {}, err: {}",
-                                    "",
-                                    privacy_win_mag::PRIVACY_WINDOW_NAME,
-                                    e
-                                );
-                            }
-                            _ => {
-                                ok = true;
-                                break;
-                            }
-                        }
-                    }
-                    if !ok {
-                        bail!(
-                            "Failed to exclude privacy window {} - {} ",
-                            "",
-                            privacy_win_mag::PRIVACY_WINDOW_NAME
-                        );
-                    }
-                    log::debug!("Create magnifier capture for {}", privacy_mode_id);
-                    c = Some(Box::new(c1));
-                }
-                Err(e) => {
-                    bail!(format!("Failed to create magnifier capture {}", e));
-                }
+            if let Some(c1) = crate::privacy_mode::win_mag::create_capturer(
+                privacy_mode_id,
+                display.origin(),
+                display.width(),
+                display.height(),
+            )? {
+                c = Some(Box::new(c1));
             }
         }
     }
@@ -274,16 +238,21 @@ pub fn test_create_capturer(
     }
 }
 
+// Note: This function is extremely expensive, do not call it frequently.
 #[cfg(windows)]
 fn check_uac_switch(privacy_mode_id: i32, capturer_privacy_mode_id: i32) -> ResultType<()> {
-    if capturer_privacy_mode_id != 0 {
-        if privacy_mode_id != capturer_privacy_mode_id {
-            if !is_process_consent_running()? {
+    if capturer_privacy_mode_id != INVALID_PRIVACY_MODE_CONN_ID
+        && is_current_privacy_mode_impl(PRIVACY_MODE_IMPL_WIN_MAG)
+    {
+        if !is_installed() {
+            if privacy_mode_id != capturer_privacy_mode_id {
+                if !is_process_consent_running()? {
+                    bail!("consent.exe is not running");
+                }
+            }
+            if is_process_consent_running()? {
                 bail!("consent.exe is running");
             }
-        }
-        if is_process_consent_running()? {
-            bail!("consent.exe is running");
         }
     }
     Ok(())
@@ -346,15 +315,21 @@ fn get_capturer(current: usize, portable_service_running: bool) -> ResultType<Ca
         &name,
     );
 
-    let privacy_mode_id = *PRIVACY_MODE_CONN_ID.lock().unwrap();
+    let privacy_mode_id = get_privacy_mode_conn_id().unwrap_or(INVALID_PRIVACY_MODE_CONN_ID);
     #[cfg(not(windows))]
     let capturer_privacy_mode_id = privacy_mode_id;
     #[cfg(windows)]
     let mut capturer_privacy_mode_id = privacy_mode_id;
     #[cfg(windows)]
-    if capturer_privacy_mode_id != 0 {
-        if is_process_consent_running()? {
-            capturer_privacy_mode_id = 0;
+    {
+        if capturer_privacy_mode_id != INVALID_PRIVACY_MODE_CONN_ID
+            && is_current_privacy_mode_impl(PRIVACY_MODE_IMPL_WIN_MAG)
+        {
+            if !is_installed() {
+                if is_process_consent_running()? {
+                    capturer_privacy_mode_id = INVALID_PRIVACY_MODE_CONN_ID;
+                }
+            }
         }
     }
     log::debug!(
@@ -362,7 +337,7 @@ fn get_capturer(current: usize, portable_service_running: bool) -> ResultType<Ca
         capturer_privacy_mode_id,
     );
 
-    if privacy_mode_id != 0 {
+    if privacy_mode_id != INVALID_PRIVACY_MODE_CONN_ID {
         if privacy_mode_id != capturer_privacy_mode_id {
             log::info!("In privacy mode, but show UAC prompt window for now");
         } else {
@@ -420,7 +395,7 @@ fn run(vs: VideoService) -> ResultType<()> {
     let mut spf;
     let mut quality = video_qos.quality();
     let abr = VideoQoS::abr_enabled();
-    log::info!("init quality={:?}, abr enabled:{}", quality, abr);
+    log::info!("initial quality: {quality:?}, abr enabled: {abr}");
     let codec_name = Encoder::negotiated_codec();
     let recorder = get_recorder(c.width, c.height, &codec_name);
     let last_recording = recorder.lock().unwrap().is_some() || video_qos.record();
@@ -586,8 +561,6 @@ fn run(vs: VideoService) -> ResultType<()> {
         let wait_begin = Instant::now();
         while wait_begin.elapsed().as_millis() < timeout_millis as _ {
             check_privacy_mode_changed(&sp, c.privacy_mode_id)?;
-            #[cfg(windows)]
-            check_uac_switch(c.privacy_mode_id, c._capturer_privacy_mode_id)?;
             frame_controller.try_wait_next(&mut fetched_conn_ids, 300);
             // break if all connections have received current frame
             if fetched_conn_ids.len() >= frame_controller.send_conn_ids.len() {
@@ -678,11 +651,12 @@ fn get_recorder(
 }
 
 fn check_privacy_mode_changed(sp: &GenericService, privacy_mode_id: i32) -> ResultType<()> {
-    let privacy_mode_id_2 = *PRIVACY_MODE_CONN_ID.lock().unwrap();
+    let privacy_mode_id_2 = get_privacy_mode_conn_id().unwrap_or(INVALID_PRIVACY_MODE_CONN_ID);
     if privacy_mode_id != privacy_mode_id_2 {
-        if privacy_mode_id_2 != 0 {
+        if privacy_mode_id_2 != INVALID_PRIVACY_MODE_CONN_ID {
             let msg_out = crate::common::make_privacy_mode_msg(
                 back_notification::PrivacyModeState::PrvOnByOther,
+                "".to_owned(),
             );
             sp.send_to_others(msg_out, privacy_mode_id_2);
         }

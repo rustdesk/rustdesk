@@ -1903,7 +1903,7 @@ dependencies = [
  "log",
  "objc",
  "pkg-config",
- "rdev",
+ "rdev 0.5.0-2 (git+https://github.com/fufesou/rdev)",
  "serde 1.0.190",
  "serde_derive",
  "tfc",
@@ -2130,9 +2130,9 @@ dependencies = [
 
 [[package]]
 name = "flexi_logger"
-version = "0.25.6"
+version = "0.27.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "84075a94fd76ea9b7a0d2c257444ae30356e58fdac6cd0fe68af33f5279981ae"
+checksum = "2ac35b454b60e1836602173e2eb7ef531173388c0212e02ec7f9fac086159ee5"
 dependencies = [
  "chrono",
  "crossbeam-channel",
@@ -3086,8 +3086,8 @@ checksum = "9a3a5bfb195931eeb336b2a7b4d761daec841b97f947d34394601737a7bba5e4"
 
 [[package]]
 name = "hwcodec"
-version = "0.1.1"
-source = "git+https://github.com/21pages/hwcodec?branch=stable#82cdc15457e42feaf14e1b38622506b2d54baf76"
+version = "0.1.3"
+source = "git+https://github.com/21pages/hwcodec?branch=stable#83300549075158e5a3fa6c59ea527af3330e48ff"
 dependencies = [
  "bindgen 0.59.2",
  "cc",
@@ -3484,9 +3484,9 @@ dependencies = [
 
 [[package]]
 name = "libc"
-version = "0.2.149"
+version = "0.2.150"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a08173bc88b7955d1b3145aa561539096c421ac8debde8cbc3612ec635fee29b"
+checksum = "89d92a4743f9a61002fae18374ed11e7973f530cb3a3255fb354818118b2203c"
 
 [[package]]
 name = "libdbus-sys"
@@ -5047,6 +5047,30 @@ dependencies = [
 [[package]]
 name = "rdev"
 version = "0.5.0-2"
+source = "git+https://github.com/fufesou/rdev?branch=master#339b2a334ba273afebb7e27fb76984e620fc76e5"
+dependencies = [
+ "cocoa",
+ "core-foundation 0.9.3 (registry+https://github.com/rust-lang/crates.io-index)",
+ "core-foundation-sys 0.8.4",
+ "core-graphics 0.22.3",
+ "dispatch",
+ "enum-map",
+ "epoll",
+ "inotify",
+ "lazy_static",
+ "libc",
+ "log",
+ "mio",
+ "strum 0.24.1",
+ "strum_macros 0.24.3",
+ "widestring",
+ "winapi 0.3.9",
+ "x11 2.21.0",
+]
+
+[[package]]
+name = "rdev"
+version = "0.5.0-2"
 source = "git+https://github.com/fufesou/rdev#339b2a334ba273afebb7e27fb76984e620fc76e5"
 dependencies = [
  "cocoa",
@@ -5390,7 +5414,7 @@ dependencies = [
  "pam",
  "parity-tokio-ipc",
  "percent-encoding",
- "rdev",
+ "rdev 0.5.0-2 (git+https://github.com/fufesou/rdev?branch=master)",
  "repng",
  "reqwest",
  "ringbuf",
@@ -6068,8 +6092,7 @@ dependencies = [
 [[package]]
 name = "sysinfo"
 version = "0.29.10"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0a18d114d420ada3a891e6bc8e96a2023402203296a47cdd65083377dad18ba5"
+source = "git+https://github.com/rustdesk-org/sysinfo#f45dcc6510d48c3a1401c5a33eedccc8899f67b2"
 dependencies = [
  "cfg-if 1.0.0",
  "core-foundation-sys 0.8.4",
@@ -6077,7 +6100,7 @@ dependencies = [
  "ntapi",
  "once_cell",
  "rayon",
- "winapi 0.3.9",
+ "windows 0.51.1",
 ]
 
 [[package]]

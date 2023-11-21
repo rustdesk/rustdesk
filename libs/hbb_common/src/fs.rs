@@ -540,7 +540,7 @@ impl TransferJob {
         msg.set_file_response(resp);
         stream.send(&msg).await?;
         log::info!(
-            "id: {}, file_num:{}, digest message is sent. waiting for confirm. msg: {:?}",
+            "id: {}, file_num: {}, digest message is sent. waiting for confirm. msg: {:?}",
             self.id,
             self.file_num,
             msg
@@ -723,7 +723,7 @@ pub fn new_receive(
 
 #[inline]
 pub fn new_send(id: i32, path: String, file_num: i32, include_hidden: bool) -> Message {
-    log::info!("new send: {},id : {}", path, id);
+    log::info!("new send: {}, id: {}", path, id);
     let mut action = FileAction::new();
     action.set_send(FileTransferSendRequest {
         id,

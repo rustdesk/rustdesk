@@ -1,4 +1,7 @@
-use crate::input::{MOUSE_BUTTON_LEFT, MOUSE_TYPE_DOWN, MOUSE_TYPE_UP, MOUSE_TYPE_WHEEL};
+use crate::{
+    common::{get_supported_keyboard_modes, is_keyboard_mode_supported},
+    input::{MOUSE_BUTTON_LEFT, MOUSE_TYPE_DOWN, MOUSE_TYPE_UP, MOUSE_TYPE_WHEEL},
+};
 use async_trait::async_trait;
 use bytes::Bytes;
 use rdev::{Event, EventType::*, KeyCode};
@@ -32,8 +35,8 @@ use hbb_common::{
 use crate::client::io_loop::Remote;
 use crate::client::{
     check_if_retry, handle_hash, handle_login_error, handle_login_from_ui, handle_test_delay,
-    input_os_password, load_config, send_mouse, send_pointer_device_event,
-    start_video_audio_threads, FileManager, Key, LoginConfigHandler, QualityStatus, KEY_MAP,
+    input_os_password, send_mouse, send_pointer_device_event, start_video_audio_threads,
+    FileManager, Key, LoginConfigHandler, QualityStatus, KEY_MAP,
 };
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use crate::common::GrabState;
@@ -47,7 +50,6 @@ const CHANGE_RESOLUTION_VALID_TIMEOUT_SECS: u64 = 15;
 
 #[derive(Clone, Default)]
 pub struct Session<T: InvokeUiSession> {
-    pub id: String, // peer id
     pub password: String,
     pub args: Vec<String>,
     pub lc: Arc<RwLock<LoginConfigHandler>>,
@@ -214,18 +216,36 @@ impl<T: InvokeUiSession> Session<T> {
         self.lc.read().unwrap().version.clone()
     }
 
+    pub fn fallback_keyboard_mode(&self) -> String {
+        let peer_version = self.get_peer_version();
+        let platform = self.peer_platform();
+
+        let supported_modes = get_supported_keyboard_modes(peer_version, &platform);
+        if let Some(mode) = supported_modes.first() {
+            return mode.to_string();
+        } else {
+            if self.get_peer_version() >= get_version_number("1.2.0") {
+                return KeyboardMode::Map.to_string();
+            } else {
+                return KeyboardMode::Legacy.to_string();
+            }
+        }
+    }
+
     pub fn get_keyboard_mode(&self) -> String {
         let mode = self.lc.read().unwrap().keyboard_mode.clone();
-        if ["map", "translate", "legacy"].contains(&(&mode as &str)) {
-            mode
-        } else {
-            if self.get_peer_version() > hbb_common::get_version_number("1.2.0") {
-                "map"
-            } else {
-                "legacy"
+        let keyboard_mode = KeyboardMode::from_str(&mode);
+
+        let peer_version = self.get_peer_version();
+        let platform = self.peer_platform();
+
+        // Saved keyboard mode still exists in this version.
+        if let Ok(mode) = keyboard_mode {
+            if is_keyboard_mode_supported(&mode, peer_version, &platform) {
+                return mode.to_string();
             }
-            .to_string()
         }
+        self.fallback_keyboard_mode()
     }
 
     pub fn save_keyboard_mode(&self, value: String) {
@@ -297,6 +317,18 @@ impl<T: InvokeUiSession> Session<T> {
         }
     }
 
+    pub fn toggle_privacy_mode(&self, impl_key: String, on: bool) {
+        let mut misc = Misc::new();
+        misc.set_toggle_privacy_mode(TogglePrivacyMode {
+            impl_key,
+            on,
+            ..Default::default()
+        });
+        let mut msg_out = Message::new();
+        msg_out.set_misc(misc);
+        self.send(Data::Message(msg_out));
+    }
+
     pub fn get_toggle_option(&self, name: String) -> bool {
         self.lc.read().unwrap().get_toggle_option(&name)
     }
@@ -347,7 +379,7 @@ impl<T: InvokeUiSession> Session<T> {
             display as usize,
             w,
             h,
-            self.id.clone(),
+            self.get_id(),
         ));
     }
 
@@ -369,14 +401,19 @@ impl<T: InvokeUiSession> Session<T> {
     }
 
     pub fn save_image_quality(&self, value: String) {
-        let msg = self.lc.write().unwrap().save_image_quality(value);
+        let msg = self.lc.write().unwrap().save_image_quality(value.clone());
         if let Some(msg) = msg {
+            self.send(Data::Message(msg));
+        }
+        if value != "custom" {
+            // non custom quality use 30 fps
+            let msg = self.lc.write().unwrap().set_custom_fps(30, false);
             self.send(Data::Message(msg));
         }
     }
 
     pub fn set_custom_fps(&self, custom_fps: i32) {
-        let msg = self.lc.write().unwrap().set_custom_fps(custom_fps);
+        let msg = self.lc.write().unwrap().set_custom_fps(custom_fps, true);
         self.send(Data::Message(msg));
     }
 
@@ -452,7 +489,7 @@ impl<T: InvokeUiSession> Session<T> {
 
     pub fn send_note(&self, note: String) {
         let url = self.get_audit_server("conn".to_string());
-        let id = self.id.clone();
+        let id = self.get_id();
         let session_id = self.lc.read().unwrap().session_id;
         std::thread::spawn(move || {
             send_note(url, id, session_id, note);
@@ -496,11 +533,6 @@ impl<T: InvokeUiSession> Session<T> {
         self.send(Data::AddPortForward(pf));
     }
 
-    #[cfg(not(feature = "flutter"))]
-    pub fn get_id(&self) -> String {
-        self.id.clone()
-    }
-
     pub fn get_option(&self, k: String) -> String {
         if k.eq("remote_dir") {
             return self.lc.read().unwrap().get_remote_dir();
@@ -518,7 +550,7 @@ impl<T: InvokeUiSession> Session<T> {
 
     #[inline]
     pub fn load_config(&self) -> PeerConfig {
-        load_config(&self.id)
+        self.lc.read().unwrap().load_config()
     }
 
     #[inline]
@@ -1092,7 +1124,7 @@ impl<T: InvokeUiSession> Session<T> {
         match crate::ipc::connect(1000, "").await {
             Ok(mut conn) => {
                 if conn
-                    .send(&crate::ipc::Data::SwitchSidesRequest(self.id.to_string()))
+                    .send(&crate::ipc::Data::SwitchSidesRequest(self.get_id()))
                     .await
                     .is_ok()
                 {
@@ -1268,7 +1300,7 @@ impl<T: InvokeUiSession> FileManager for Session<T> {}
 
 #[async_trait]
 impl<T: InvokeUiSession> Interface for Session<T> {
-    fn get_login_config_handler(&self) -> Arc<RwLock<LoginConfigHandler>> {
+    fn get_lch(&self) -> Arc<RwLock<LoginConfigHandler>> {
         return self.lc.clone();
     }
 
@@ -1343,7 +1375,7 @@ impl<T: InvokeUiSession> Interface for Session<T> {
         #[cfg(windows)]
         {
             let mut path = std::env::temp_dir();
-            path.push(&self.id);
+            path.push(self.get_id());
             let path = path.with_extension(crate::get_app_name().to_lowercase());
             std::fs::File::create(&path).ok();
             if let Some(path) = path.to_str() {
@@ -1565,7 +1597,7 @@ async fn start_one_port_forward<T: InvokeUiSession>(
     token: &str,
 ) {
     if let Err(err) = crate::port_forward::listen(
-        handler.id.clone(),
+        handler.get_id(),
         handler.password.clone(),
         port,
         handler.clone(),

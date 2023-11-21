@@ -12,6 +12,7 @@ use scrap::Display;
 
 pub const NAME: &'static str = "display";
 
+#[cfg(all(windows, feature = "virtual_display_driver"))]
 const DUMMY_DISPLAY_SIDE_MAX_SIZE: usize = 1024;
 
 struct ChangedResolution {
@@ -23,7 +24,7 @@ lazy_static::lazy_static! {
     static ref IS_CAPTURER_MAGNIFIER_SUPPORTED: bool = is_capturer_mag_supported();
     static ref CHANGED_RESOLUTIONS: Arc<RwLock<HashMap<String, ChangedResolution>>> = Default::default();
     // Initial primary display index.
-    // It should only be updated when the rustdesk server is started, and should not be updated when displays changed.
+    // It should should not be updated when displays changed.
     pub static ref PRIMARY_DISPLAY_IDX: usize = get_primary();
     static ref SYNC_DISPLAYS: Arc<Mutex<SyncDisplaysInfo>> = Default::default();
 }
@@ -137,12 +138,10 @@ pub fn capture_cursor_embedded() -> bool {
 }
 
 #[inline]
-pub fn is_privacy_mode_supported() -> bool {
-    #[cfg(windows)]
+#[cfg(windows)]
+pub fn is_privacy_mode_mag_supported() -> bool {
     return *IS_CAPTURER_MAGNIFIER_SUPPORTED
         && get_version_number(&crate::VERSION) > get_version_number("1.1.9");
-    #[cfg(not(windows))]
-    return false;
 }
 
 pub fn new() -> GenericService {
