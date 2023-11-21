@@ -358,7 +358,7 @@ impl PrivacyMode for PrivacyModeImpl {
 
     fn turn_on_privacy(&mut self, conn_id: i32) -> ResultType<bool> {
         if !virtual_display_manager::is_virtual_display_supported() {
-            bail!("idd_not_support_tip");
+            bail!("idd_not_support_under_win10_2004_tip");
         }
 
         if self.check_on_conn_id(conn_id)? {
