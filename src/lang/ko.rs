@@ -572,5 +572,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("privacy_mode_impl_virtual_display_tip", "모드 2"),
         ("Enter privacy mode", "개인정보 보호 모드 사용"),
         ("Exit privacy mode", "개인정보 보호 모드 종료"),
+        ("idd_not_support_under_win10_2004_tip", ""),
     ].iter().cloned().collect();
 }

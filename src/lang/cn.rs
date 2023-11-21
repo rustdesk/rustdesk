@@ -537,7 +537,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Reverse mouse wheel", "鼠标滚轮反向"),
         ("{} sessions", "{}个会话"),
         ("scam_title", "你可能被骗了！"),
-        ("scam_text1", "如果你正在和素不相识的人通话，而对方要求你使用 Rustdesk 启动服务，请勿继续操作并立刻挂断电话。"),
+        ("scam_text1", "如果你正在和素不相识的人通话，而对方要求你使用 RustDesk 启动服务，请勿继续操作并立刻挂断电话。"),
         ("scam_text2", "他们很可能是骗子，试图窃取您的钱财或其他个人信息。"),
         ("Don't show again", "下次不再显示"),
         ("I Agree", "同意"),
@@ -572,5 +572,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("privacy_mode_impl_virtual_display_tip", "模式 2"),
         ("Enter privacy mode", "进入隐私模式"),
         ("Exit privacy mode", "退出隐私模式"),
+        ("idd_not_support_under_win10_2004_tip", "不支持 Indirect display driver 。需要 windows 10, version 2004 及更高的版本。"),
     ].iter().cloned().collect();
 }

@@ -2371,14 +2371,19 @@ impl Connection {
         };
 
         if t.on {
-            if let Err(e) = virtual_display_manager::plug_in_index_modes(t.display as _, Vec::new())
-            {
-                log::error!("Failed to plug in virtual display: {}", e);
-                self.send(make_msg(format!(
-                    "Failed to plug in virtual display: {}",
-                    e
-                )))
-                .await;
+            if !virtual_display_manager::is_virtual_display_supported() {
+                self.send(make_msg("idd_not_support_under_win10_2004_tip".to_string())).await;
+            } else {
+                if let Err(e) =
+                    virtual_display_manager::plug_in_index_modes(t.display as _, Vec::new())
+                {
+                    log::error!("Failed to plug in virtual display: {}", e);
+                    self.send(make_msg(format!(
+                        "Failed to plug in virtual display: {}",
+                        e
+                    )))
+                    .await;
+                }
             }
         } else {
             let indices = if t.display == -1 {

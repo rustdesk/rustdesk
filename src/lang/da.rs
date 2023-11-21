@@ -150,8 +150,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Click to download", "Klik for at downloade"),
         ("Click to update", "Klik for at opdatere"),
         ("Configure", "Konfigurer"),
-        ("config_acc", "For at kontrollere dit skrivebord på afstand skal du give Rustdesk \"Access \" Rettigheder."),
-        ("config_screen", "For at kunne få adgang til dit skrivebord langtfra, skal du give Rustdesk \"skærmstøtte \" tilladelser."),
+        ("config_acc", "For at kontrollere dit skrivebord på afstand skal du give RustDesk \"Access \" Rettigheder."),
+        ("config_screen", "For at kunne få adgang til dit skrivebord langtfra, skal du give RustDesk \"skærmstøtte \" tilladelser."),
         ("Installing ...", "Installerer ..."),
         ("Install", "installere"),
         ("Installation", "Installation"),
@@ -572,5 +572,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("privacy_mode_impl_virtual_display_tip", ""),
         ("Enter privacy mode", ""),
         ("Exit privacy mode", ""),
+        ("idd_not_support_under_win10_2004_tip", ""),
     ].iter().cloned().collect();
 }
