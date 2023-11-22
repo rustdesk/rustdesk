@@ -285,6 +285,18 @@ pub struct PeerConfig {
         skip_serializing_if = "String::is_empty"
     )]
     pub reverse_mouse_wheel: String,
+    #[serde(
+        default = "PeerConfig::default_displays_as_individual_windows",
+        deserialize_with = "PeerConfig::deserialize_displays_as_individual_windows",
+        skip_serializing_if = "String::is_empty"
+    )]
+    pub displays_as_individual_windows: String,
+    #[serde(
+        default = "PeerConfig::default_use_all_my_displays_for_the_remote_session",
+        deserialize_with = "PeerConfig::deserialize_use_all_my_displays_for_the_remote_session",
+        skip_serializing_if = "String::is_empty"
+    )]
+    pub use_all_my_displays_for_the_remote_session: String,
 
     #[serde(
         default,
@@ -329,6 +341,9 @@ impl Default for PeerConfig {
             keyboard_mode: Default::default(),
             view_only: Default::default(),
             reverse_mouse_wheel: Self::default_reverse_mouse_wheel(),
+            displays_as_individual_windows: Self::default_displays_as_individual_windows(),
+            use_all_my_displays_for_the_remote_session:
+                Self::default_use_all_my_displays_for_the_remote_session(),
             custom_resolutions: Default::default(),
             options: Self::default_options(),
             ui_flutter: Default::default(),
@@ -555,7 +570,7 @@ impl Config {
 
     pub fn get_home() -> PathBuf {
         #[cfg(any(target_os = "android", target_os = "ios"))]
-        return Self::path(APP_HOME_DIR.read().unwrap().as_str());
+        return PathBuf::from(APP_HOME_DIR.read().unwrap().as_str());
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
         {
             if let Some(path) = dirs_next::home_dir() {
@@ -606,6 +621,13 @@ impl Config {
         {
             let mut path = Self::get_home();
             path.push(format!(".local/share/logs/{}", *APP_NAME.read().unwrap()));
+            std::fs::create_dir_all(&path).ok();
+            return path;
+        }
+        #[cfg(target_os = "android")]
+        {
+            let mut path = Self::get_home();
+            path.push(format!("{}/Logs", *APP_NAME.read().unwrap()));
             std::fs::create_dir_all(&path).ok();
             return path;
         }
@@ -1145,6 +1167,16 @@ impl PeerConfig {
         deserialize_reverse_mouse_wheel,
         UserDefaultConfig::read().get("reverse_mouse_wheel")
     );
+    serde_field_string!(
+        default_displays_as_individual_windows,
+        deserialize_displays_as_individual_windows,
+        UserDefaultConfig::read().get("displays_as_individual_windows")
+    );
+    serde_field_string!(
+        default_use_all_my_displays_for_the_remote_session,
+        deserialize_use_all_my_displays_for_the_remote_session,
+        UserDefaultConfig::read().get("use_all_my_displays_for_the_remote_session")
+    );
 
     fn default_custom_image_quality() -> Vec<i32> {
         let f: f64 = UserDefaultConfig::read()
@@ -1195,6 +1227,10 @@ impl PeerConfig {
             mp.insert(key.to_owned(), UserDefaultConfig::read().get(key));
         }
         key = "touch-mode";
+        if !mp.contains_key(key) {
+            mp.insert(key.to_owned(), UserDefaultConfig::read().get(key));
+        }
+        key = "i444";
         if !mp.contains_key(key) {
             mp.insert(key.to_owned(), UserDefaultConfig::read().get(key));
         }
