@@ -149,7 +149,7 @@ jobs:
         cargo -V
         rustc -V
 
-    - uses: Swatinem/rust-cache@v1
+    - uses: Swatinem/rust-cache@v2
 
     - name: Build
       uses: actions-rs/cargo@v1
@@ -215,7 +215,8 @@ jobs:
             ;;
         esac;
 
-        echo ::set-output name=CARGO_TEST_OPTIONS::${CARGO_TEST_OPTIONS}
+        #deprecated echo ::set-output name=CARGO_TEST_OPTIONS::${CARGO_TEST_OPTIONS}
+        echo "CARGO_TEST_OPTIONS=${CARGO_TEST_OPTIONS}" >> $GITHUB_ENV
 
     - name: Run tests
       uses: actions-rs/cargo@v1
