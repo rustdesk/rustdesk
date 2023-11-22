@@ -494,10 +494,23 @@ class _RemotePageState extends State<RemotePage> {
     final x = 120.0;
     final y = size.height;
     final menus = toolbarControls(context, id, gFFI);
+    getChild(TTextMenu menu) {
+      if (menu.trailingIcon != null) {
+        return Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              menu.child,
+              menu.trailingIcon!,
+            ]);
+      } else {
+        return menu.child;
+      }
+    }
+
     final more = menus
         .asMap()
         .entries
-        .map((e) => PopupMenuItem<int>(child: e.value.child, value: e.key))
+        .map((e) => PopupMenuItem<int>(child: getChild(e.value), value: e.key))
         .toList();
     () async {
       var index = await showMenu(
