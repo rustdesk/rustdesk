@@ -154,7 +154,7 @@ pub fn ipv4_to_ipv6(addr: String, ipv4: bool) -> String {
     addr
 }
 
-async fn test_target(target: &str) -> ResultType<SocketAddr> {
+pub async fn test_target(target: &str) -> ResultType<SocketAddr> {
     if let Ok(Ok(s)) = super::timeout(1000, tokio::net::TcpStream::connect(target)).await {
         if let Ok(addr) = s.peer_addr() {
             return Ok(addr);

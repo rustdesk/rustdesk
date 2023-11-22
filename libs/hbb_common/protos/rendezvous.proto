@@ -73,6 +73,7 @@ message RegisterPkResponse {
     SERVER_ERROR = 7;
   }
   Result result = 1;
+  string mq_token = 2;
 }
 
 message PunchHoleResponse {

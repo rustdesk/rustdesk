@@ -6,27 +6,19 @@ use std::{
     },
     time::Instant,
 };
+use async_nats::{ConnectOptions, Subscriber};
 
 use uuid::Uuid;
 
 use hbb_common::tcp::FramedStream;
-use hbb_common::{
-    allow_err,
-    anyhow::bail,
-    config::{Config, CONNECT_TIMEOUT, READ_TIMEOUT, REG_INTERVAL, RENDEZVOUS_PORT},
-    futures::future::join_all,
-    log,
-    protobuf::Message as _,
-    rendezvous_proto::*,
-    sleep,
-    socket_client::{self, is_ipv4},
-    tokio::{
-        self, select,
-        time::{interval, Duration},
-    },
-    udp::FramedSocket,
-    AddrMangle, ResultType,
-};
+use hbb_common::{allow_err, anyhow::bail, config::{Config, CONNECT_TIMEOUT, READ_TIMEOUT, REG_INTERVAL, RENDEZVOUS_PORT}, futures::future::join_all, log, protobuf::Message as _, rendezvous_proto::*, sleep, socket_client::{self, is_ipv4}, tokio::{
+    self, select,
+    time::{interval, Duration},
+}, udp::FramedSocket, AddrMangle, ResultType, IntoTargetAddr, anyhow};
+use hbb_common::anyhow::anyhow;
+use hbb_common::config::NetworkType;
+use hbb_common::socket_client::test_target;
+use crate::common::increase_port;
 
 use crate::server::{check_zombie, new as new_server, ServerPtr};
 
@@ -92,7 +84,11 @@ impl RendezvousMediator {
                 for host in servers.clone() {
                     let server = server.clone();
                     futs.push(tokio::spawn(async move {
-                        if let Err(err) = Self::start(server, host).await {
+                        if let Err(err) = Self::start(server.clone(), host.clone()).await {
+                            log::error!("rendezvous mediator error: {err}");
+                        }
+                        // Fallback to legacy udp protocol
+                        if let Err(err) = Self::legacy_start(server, host).await {
                             log::error!("rendezvous mediator error: {err}");
                         }
                         // SHOULD_EXIT here is to ensure once one exits, the others also exit.
@@ -112,8 +108,8 @@ impl RendezvousMediator {
         // crate::platform::linux_desktop_manager::stop_xdesktop();
     }
 
-    pub async fn start(server: ServerPtr, host: String) -> ResultType<()> {
-        log::info!("start rendezvous mediator of {}", host);
+    pub async fn legacy_start(server: ServerPtr, host: String) -> ResultType<()> {
+        log::info!("start legacy rendezvous mediator of {}", host);
         let host_prefix: String = host
             .split(".")
             .next()
@@ -483,6 +479,121 @@ impl RendezvousMediator {
         });
         socket.send(&msg_out, self.addr.to_owned()).await?;
         Ok(())
+    }
+
+    pub async fn start(server: ServerPtr, host: String) -> ResultType<()> {
+        log::info!("start rendezvous mediator of {}", host);
+        let host_prefix: String = host
+            .split(".")
+            .next()
+            .map(|x| {
+                if x.parse::<i32>().is_ok() {
+                    host.clone()
+                } else {
+                    x.to_string()
+                }
+            })
+            .unwrap_or(host.to_owned());
+        let host = crate::check_port(&host, RENDEZVOUS_PORT);
+        let addr = match Config::get_network_type() {
+            NetworkType::Direct => {
+                let addr = test_target(&host).await?;
+                addr.into_target_addr()?
+            }
+            NetworkType::ProxySocks => {
+                host.clone().into_target_addr()?
+            }
+        };
+        let mut rz = Self {
+            addr: addr,
+            host: host.clone(),
+            host_prefix,
+            last_id_pk_registry: "".to_owned(),
+        };
+
+        // Handshake to register client and connect to mq server
+        let (mut mq_client, mut push_subscription) = rz.handshake(&host).await?;
+
+        // TODO
+        Ok(())
+    }
+
+    /// Initialize the connection to rendezvous server
+    async fn handshake(&mut self, host: &str) -> ResultType<(async_nats::client::Client, Subscriber)> {
+        // Register pk & id
+        let mq_token = self.register_pk_tcp().await?;
+
+        // Connect to mq server
+        let mq_host = increase_port(host, 4);
+        let mq_url = format!("nats://{}", mq_host);
+
+        let options = ConnectOptions::new()
+            .token(mq_token)
+            .ping_interval(Duration::from_millis(REG_INTERVAL as u64));
+        let client = async_nats::connect_with_options(&mq_url, options).await?;
+        log::info!("Connected to mq server at: {}", mq_url);
+
+        // Subscribe to push channel
+        let subscription = client.subscribe(Config::get_push_topic(&Config::get_id())).await?;
+
+        Ok((client, subscription))
+    }
+
+    async fn register_pk_tcp(&mut self) -> ResultType<String> {
+        loop {
+            let mut socket = socket_client::connect_tcp(&*self.host, CONNECT_TIMEOUT).await?;
+
+            // Send RegisterPk
+            let mut msg_out = Message::new();
+            let pk = Config::get_key_pair().1;
+            let uuid = hbb_common::get_uuid();
+            let id = Config::get_id();
+
+            self.last_id_pk_registry = id.clone();
+            msg_out.set_register_pk(RegisterPk {
+                id,
+                uuid: uuid.into(),
+                pk: pk.into(),
+                ..Default::default()
+            });
+            socket.send(&msg_out).await?;
+
+            // Wait RegisterPkResponse
+            if let Some(msg_in) =
+                crate::common::get_next_nonkeyexchange_msg(&mut socket, None).await
+            {
+                match msg_in.union {
+                    Some(rendezvous_message::Union::RegisterPkResponse(rpr)) => {
+                        match rpr.result.enum_value() {
+                            Ok(register_pk_response::Result::OK) => {
+                                // Success
+                                Config::set_key_confirmed(true);
+                                Config::set_host_key_confirmed(&self.host_prefix, true);
+                                return Ok(rpr.mq_token);
+                            }
+                            Ok(register_pk_response::Result::UUID_MISMATCH) => {
+                                // Try using another id
+                                log::info!("UUID_MISMATCH received from {}", self.host);
+                                Config::set_key_confirmed(false);
+                                Config::update_id();
+                                continue;
+                            }
+                            _ => {
+                                log::info!("Server not support mq rendezvous protocol, send unknown RegisterPkResponse {:?}", rpr);
+                                bail!("Server not support mq rendezvous protocol");
+                            }
+                        }
+                    }
+                    _ => {
+                        log::error!("Unexpected protobuf msg received: {:?}", msg_in);
+                        bail!("Unexpected protobuf msg received");
+                    }
+                }
+            } else {
+                log::error!("Unknown error when receiving RegisterPkResponse");
+                bail!("Unknown error when receiving RegisterPkResponse");
+            }
+        }
     }
 
     fn get_relay_server(&self, provided_by_rendezvous_server: String) -> String {
