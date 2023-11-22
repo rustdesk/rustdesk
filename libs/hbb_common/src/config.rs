@@ -993,6 +993,10 @@ impl Config {
         format!("push.{}", id)
     }
 
+    pub fn get_ping_topic(id: &str) -> String {
+        format!("ping.{}", id)
+    }
+
     pub fn get() -> Config {
         return CONFIG.read().unwrap().clone();
     }

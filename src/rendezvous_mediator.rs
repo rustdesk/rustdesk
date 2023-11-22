@@ -6,6 +6,7 @@ use std::{
     },
     time::Instant,
 };
+use std::cmp::min;
 use async_nats::{ConnectOptions, Subscriber};
 
 use uuid::Uuid;
@@ -15,9 +16,9 @@ use hbb_common::{allow_err, anyhow::bail, config::{Config, CONNECT_TIMEOUT, READ
     self, select,
     time::{interval, Duration},
 }, udp::FramedSocket, AddrMangle, ResultType, IntoTargetAddr, anyhow};
-use hbb_common::anyhow::anyhow;
 use hbb_common::config::NetworkType;
 use hbb_common::socket_client::test_target;
+use hbb_common::futures::StreamExt;
 use crate::common::increase_port;
 
 use crate::server::{check_zombie, new as new_server, ServerPtr};
@@ -514,7 +515,133 @@ impl RendezvousMediator {
         // Handshake to register client and connect to mq server
         let (mut mq_client, mut push_subscription) = rz.handshake(&host).await?;
 
-        // TODO
+        // Start main IO Loop
+        const TIMER_OUT: Duration = Duration::from_secs(1);
+        const REG_TIMEOUT: i64 = 3_000;
+        const MAX_FAILS1: i64 = 3;
+        const MAX_FAILS2: i64 = 6;
+        const RE_HANDSHAKE_INTERVAL: i64 = 60_000;
+
+        let mut timer = interval(TIMER_OUT);
+        let mut fails = 0;
+
+        let mut time_last_register_resp: Option<Instant> = None;
+        let mut time_last_register_sent: Option<Instant> = None;
+        let mut time_last_timer: Option<Instant> = None;
+        let mut time_last_handshake = Instant::now();
+
+        let mut latency = 0;
+        let mut old_latency = 0;
+
+        loop {
+            select! {
+                message = push_subscription.next() => if let Some(message) = message {
+                    if let Ok(msg_in) = Message::parse_from_bytes(&message.payload) {
+                        match msg_in.union {
+                            Some(rendezvous_message::Union::RegisterPeerResponse(rpr)) => {
+                                // Clear failure count
+                                fails = 0;
+
+                                // Calculate raw latency
+                                time_last_register_resp = Some(Instant::now());
+                                let mut latency_raw = match (time_last_register_sent, time_last_register_resp) {
+                                    (Some(sent), Some(resp)) => resp.duration_since(sent).as_micros() as i64,
+                                    _ => 0,
+                                };
+                                if latency_raw < 0 || latency_raw > 1_000_000 {
+                                    continue;
+                                }
+
+                                // Calculate EMA latency
+                                let latency_ema = if latency == 0 {
+                                    latency_raw
+                                } else {
+                                    latency_raw / 30 + (latency * 29 / 30)
+                                };
+
+                                // Update latency
+                                let update_threshold = min(latency_ema / 5, 3000);
+                                if (latency_ema - old_latency).abs() > update_threshold || old_latency <= 0 {
+                                    Config::update_latency(&host, latency_ema);
+                                    log::debug!("Latency of {}: {}ms", host, latency as f64 / 1000.);
+                                    old_latency = latency_ema;
+                                }
+
+                                // Server request pk, redo handshake to update pk
+                                if rpr.request_pk {
+                                    log::info!("request_pk received from {}", host);
+                                    let result = rz.handshake(&host).await?;
+                                    mq_client = result.0;
+                                    push_subscription = result.1;
+                                    time_last_handshake = Instant::now();
+                                    continue;
+                                }
+                            }
+                            _ => {}
+                        }
+                    } else {
+                        log::debug!("Non-protobuf message bytes received: {:?}", message);
+                    }
+                },
+                _ = timer.tick() => {
+                    if SHOULD_EXIT.load(Ordering::SeqCst) {
+                        break;
+                    }
+
+                    // Workaround for tokio timer bug
+                    let now = Some(Instant::now());
+                    if time_last_timer.map(|x| x.elapsed() < TIMER_OUT).unwrap_or(false) {
+                        continue;
+                    }
+                    time_last_timer = now;
+
+                    // Check if we need to send ping message
+                    let first_ping = time_last_register_sent.is_none();
+
+                    let elapse_since_last_resp = time_last_register_resp
+                        .map(|x| x.elapsed().as_millis() as i64).unwrap_or(REG_INTERVAL);
+                    let last_ping_too_old = elapse_since_last_resp > REG_INTERVAL;
+
+                    let mut ping_latency = match (time_last_register_sent, time_last_register_resp) {
+                        (Some(sent), Some(resp)) => resp.duration_since(sent).as_micros() as i64,
+                        (Some(sent), None) => sent.elapsed().as_micros() as i64,
+                        _ => 0,
+                    };
+                    let timeout = ping_latency > REG_TIMEOUT;
+
+                    if first_ping || last_ping_too_old || timeout {
+                        // Redo handshake if client key not confirmed
+                        if !Config::get_key_confirmed() || !Config::get_host_key_confirmed(&rz.host_prefix) {
+                            let result = rz.handshake(&host).await?;
+                            mq_client = result.0;
+                            push_subscription = result.1;
+                        }
+
+                        // Send ping message
+                        allow_err!(rz.register_peer_mq(&mq_client).await);
+                        time_last_register_sent = now;
+                    }
+                    if timeout {
+                        fails += 1;
+                        if fails > MAX_FAILS2 {
+                            Config::update_latency(&host, -1);
+                            old_latency = 0;
+                            if time_last_handshake.elapsed().as_millis() as i64 > RE_HANDSHAKE_INTERVAL {
+                                // The server might have been restarted and lost the temporal
+                                // information of this client. So we need to redo handshake.
+                                let result = rz.handshake(&host).await?;
+                                mq_client = result.0;
+                                push_subscription = result.1;
+                                time_last_handshake = Instant::now();
+                            }
+                        } else if fails > MAX_FAILS1 {
+                            Config::update_latency(&host, 0);
+                            old_latency = 0;
+                        }
+                    }
+                }
+            }
+        }
         Ok(())
     }
 
@@ -594,6 +721,26 @@ impl RendezvousMediator {
                 bail!("Unknown error when receiving RegisterPkResponse");
             }
         }
+    }
+
+    async fn register_peer_mq(&mut self, client: &async_nats::client::Client) -> ResultType<()> {
+        let id = Config::get_id();
+        log::trace!(
+            "Register my id {:?} to rendezvous server {:?}",
+            id,
+            self.addr,
+        );
+        let mut msg_out = Message::new();
+        let serial = Config::get_serial();
+        msg_out.set_register_peer(RegisterPeer {
+            id: id.clone(),
+            serial,
+            ..Default::default()
+        });
+        let topic = Config::get_ping_topic(&id);
+        let payload = bytes::Bytes::from(msg_out.write_to_bytes()?);
+        client.publish(topic, payload).await?;
+        Ok(())
     }
 
     fn get_relay_server(&self, provided_by_rendezvous_server: String) -> String {
