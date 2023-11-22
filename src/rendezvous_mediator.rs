@@ -577,6 +577,35 @@ impl RendezvousMediator {
                                     continue;
                                 }
                             }
+                            Some(rendezvous_message::Union::PunchHole(ph)) => {
+                                let rz = rz.clone();
+                                let server = server.clone();
+                                tokio::spawn(async move {
+                                    allow_err!(rz.handle_punch_hole(ph, server).await);
+                                });
+                            }
+                            Some(rendezvous_message::Union::RequestRelay(rr)) => {
+                                let rz = rz.clone();
+                                let server = server.clone();
+                                tokio::spawn(async move {
+                                    allow_err!(rz.handle_request_relay(rr, server).await);
+                                });
+                            }
+                            Some(rendezvous_message::Union::FetchLocalAddr(fla)) => {
+                                let rz = rz.clone();
+                                let server = server.clone();
+                                tokio::spawn(async move {
+                                    allow_err!(rz.handle_intranet(fla, server).await);
+                                });
+                            }
+                            Some(rendezvous_message::Union::ConfigureUpdate(cu)) => {
+                                let v0 = Config::get_rendezvous_servers();
+                                Config::set_option("rendezvous-servers".to_owned(), cu.rendezvous_servers.join(","));
+                                Config::set_serial(cu.serial);
+                                if v0 != Config::get_rendezvous_servers() {
+                                    Self::restart();
+                                }
+                            }
                             _ => {}
                         }
                     } else {
