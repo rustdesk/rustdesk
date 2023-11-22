@@ -3,7 +3,7 @@ name: Flutter Nightly Build
 on:
   schedule:
     # schedule build every night
-    - cron: "0 0 * * *"
+    - cron: "0 0 * * 1,3,5"
   workflow_dispatch:
 
 jobs:
@@ -12,4 +12,4 @@ jobs:
     secrets: inherit
     with:
       upload-artifact: true
-      upload-tag: "nightly"
+      upload-tag: "nightly" 
