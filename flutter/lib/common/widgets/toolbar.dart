@@ -92,18 +92,21 @@ List<TTextMenu> toolbarControls(BuildContext context, String id, FFI ffi) {
     TTextMenu(
       child: Row(children: [
         Text(translate(pi.isHeadless ? 'OS Account' : 'OS Password')),
-        Offstage(
-          offstage: isDesktop,
-          child: Icon(Icons.edit, color: MyTheme.accent).marginOnly(left: 12),
-        )
       ]),
       trailingIcon: Transform.scale(
-        scale: 0.8,
-        child: InkWell(
-          onTap: () => pi.isHeadless
-              ? showSetOSAccount(sessionId, ffi.dialogManager)
-              : handleOsPasswordEditIcon(sessionId, ffi.dialogManager),
-          child: Icon(Icons.edit),
+        scale: isDesktop ? 0.8 : 1,
+        child: IconButton(
+          onPressed: () {
+            if (isMobile && Navigator.canPop(context)) {
+              Navigator.pop(context);
+            }
+            if (pi.isHeadless) {
+              showSetOSAccount(sessionId, ffi.dialogManager);
+            } else {
+              handleOsPasswordEditIcon(sessionId, ffi.dialogManager);
+            }
+          },
+          icon: Icon(Icons.edit, color: isMobile ? MyTheme.accent : null),
         ),
       ),
       onPressed: () => pi.isHeadless
