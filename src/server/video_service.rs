@@ -363,8 +363,12 @@ fn get_capturer(current: usize, portable_service_running: bool) -> ResultType<Ca
 }
 
 fn run(vs: VideoService) -> ResultType<()> {
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(not(target_os = "android"))]
     let _wake_lock = get_wake_lock();
+    #[cfg(target_os = "android")]
+    let wake_lock = crate::platform::WakeLock::new("video service");
+    #[cfg(target_os = "android")]
+    let _lock_guard = wake_lock.acquire();
 
     // Wayland only support one video capturer for now. It is ok to call ensure_inited() here.
     //
@@ -619,7 +623,6 @@ fn get_recorder(
     height: usize,
     codec_name: &CodecName,
 ) -> Arc<Mutex<Option<Recorder>>> {
-    #[cfg(not(target_os = "ios"))]
     let recorder = if !Config::get_option("allow-auto-record-incoming").is_empty() {
         use crate::hbbs_http::record_upload;
 
@@ -644,8 +647,6 @@ fn get_recorder(
     } else {
         Default::default()
     };
-    #[cfg(target_os = "ios")]
-    let recorder: Arc<Mutex<Option<Recorder>>> = Default::default();
 
     recorder
 }
@@ -690,7 +691,6 @@ fn handle_one_frame(
         vf.display = display as _;
         let mut msg = Message::new();
         msg.set_video_frame(vf);
-        #[cfg(not(target_os = "ios"))]
         recorder
             .lock()
             .unwrap()
@@ -735,7 +735,7 @@ fn start_uac_elevation_check() {
     });
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(target_os = "android"))]
 fn get_wake_lock() -> crate::platform::WakeLock {
     let (display, idle, sleep) = if cfg!(windows) {
         (true, false, false)
@@ -784,7 +784,7 @@ pub fn make_display_changed_msg(
         width: display.width,
         height: display.height,
         cursor_embedded: display_service::capture_cursor_embedded(),
-        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+        #[cfg(not(target_os = "android"))]
         resolutions: Some(SupportedResolutions {
             resolutions: if display.name.is_empty() {
                 vec![]

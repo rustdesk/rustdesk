@@ -147,6 +147,7 @@ once_cell = {version = "1.18", optional = true}
 [target.'cfg(target_os = "android")'.dependencies]
 android_logger = "0.13"
 jni = "0.21"
+android-wakelock = "0.1"
 
 [workspace]
 members = ["libs/scrap", "libs/hbb_common", "libs/enigo", "libs/clipboard", "libs/virtual_display", "libs/virtual_display/dylib", "libs/portable"]
