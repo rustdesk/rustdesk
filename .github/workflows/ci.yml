@@ -132,12 +132,11 @@ jobs:
       shell: bash
 
     - name: Install Rust toolchain
-      uses: actions-rs/toolchain@v1
+      uses: dtolnay/rust-toolchain@v1
       with:
         toolchain: stable
-        target: ${{ matrix.job.target }}
-        override: true
-        profile: minimal # minimal component installation (ie, no documentation)
+        targets: ${{ matrix.job.target }}
+        components: ''
 
     - name: Show version information (Rust, cargo, GCC)
       shell: bash
