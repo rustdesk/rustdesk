@@ -11,7 +11,7 @@ build = "build.rs"
 embed-resource = "2.1"
 
 [dependencies]
-brotli = "3.3"
+brotli = "3.4"
 dirs = "5.0"
 md5 = "0.7"
 winapi = { version = "0.3", features = ["winbase"] }
