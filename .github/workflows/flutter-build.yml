@@ -128,7 +128,7 @@ jobs:
 
       - name: Sign rustdesk files
         uses: GermanBluefox/code-sign-action@v7
-        if: env.UPLOAD_ARTIFACT == 'true'
+        if: false # env.UPLOAD_ARTIFACT == 'true'
         with:
           certificate: '${{ secrets.WINDOWS_PFX_BASE64 }}'
           password: '${{ secrets.WINDOWS_PFX_PASSWORD }}'
@@ -149,7 +149,7 @@ jobs:
 
       - name: Sign rustdesk self-extracted file
         uses: GermanBluefox/code-sign-action@v7
-        if: env.UPLOAD_ARTIFACT == 'true'
+        if: false #env.UPLOAD_ARTIFACT == 'true'
         with:
           certificate: '${{ secrets.WINDOWS_PFX_BASE64 }}'
           password: '${{ secrets.WINDOWS_PFX_PASSWORD }}'
@@ -252,7 +252,7 @@ jobs:
 
       - name: Sign rustdesk files
         uses: GermanBluefox/code-sign-action@v7
-        if: env.UPLOAD_ARTIFACT == 'true'
+        if: false #env.UPLOAD_ARTIFACT == 'true'
         with:
           certificate: '${{ secrets.WINDOWS_PFX_BASE64 }}'
           password: '${{ secrets.WINDOWS_PFX_PASSWORD }}'
@@ -273,6 +273,7 @@ jobs:
 
       - name: Sign rustdesk self-extracted file
         uses: GermanBluefox/code-sign-action@v7
+        if: false #env.UPLOAD_ARTIFACT == 'true'
         with:
           certificate: '${{ secrets.WINDOWS_PFX_BASE64 }}'
           password: '${{ secrets.WINDOWS_PFX_PASSWORD }}'
@@ -401,7 +402,7 @@ jobs:
           ./build.py --flutter ${{ matrix.job.extra-build-args }}
 
       - name: Codesign app and create signed dmg
-        if: env.MACOS_P12_BASE64 != null
+        if: env.MACOS_P12_BASE64 != null && env.UPLOAD_ARTIFACT == 'true'
         run: |
           # Patch create-dmg to give more attempts to unmount image
           CREATE_DMG="$(command -v create-dmg)"
@@ -419,6 +420,7 @@ jobs:
           rcodesign notary-submit --api-key-path ${{ github.workspace }}/rustdesk.json  --staple rustdesk-${{ env.VERSION }}.dmg
 
       - name: Rename rustdesk
+        if: env.UPLOAD_ARTIFACT == 'true'
         run: |
           for name in rustdesk*??.dmg; do
               mv "$name" "${name%%.dmg}-${{ matrix.job.arch }}.dmg"

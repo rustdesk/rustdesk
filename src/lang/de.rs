@@ -568,10 +568,10 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("True color (4:4:4)", "True Color (4:4:4)"),
         ("Enable blocking user input", "Blockieren von Benutzereingaben aktivieren"),
         ("id_input_tip", "Sie können eine ID, eine direkte IP oder eine Domäne mit einem Port (<domain>:<port>) eingeben.\nWenn Sie auf ein Gerät auf einem anderen Server zugreifen möchten, fügen Sie bitte die Serveradresse (<id>@<server_address>?key=<key_value>) hinzu, zum Beispiel\n9123456234@192.168.16.1:21117?key=5Qbwsde3unUcJBtrx9ZkvUmwFNoExHzpryHuPUdqlWM=.\nWenn Sie auf ein Gerät auf einem öffentlichen Server zugreifen wollen, geben Sie bitte \"<id>@public\" ein. Der Schlüssel wird für öffentliche Server nicht benötigt."),
-        ("privacy_mode_impl_mag_tip", ""),
-        ("privacy_mode_impl_virtual_display_tip", ""),
-        ("Enter privacy mode", ""),
-        ("Exit privacy mode", ""),
-        ("idd_not_support_under_win10_2004_tip", ""),
+        ("privacy_mode_impl_mag_tip", "Modus 1"),
+        ("privacy_mode_impl_virtual_display_tip", "Modus 2"),
+        ("Enter privacy mode", "Datenschutzmodus aktivieren"),
+        ("Exit privacy mode", "Datenschutzmodus beenden"),
+        ("idd_not_support_under_win10_2004_tip", "Indirekter Grafiktreiber wird nicht unterstützt. Windows 10, Version 2004 oder neuer ist erforderlich."),
     ].iter().cloned().collect();
 }
