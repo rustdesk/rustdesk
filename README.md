@@ -31,6 +31,14 @@ RustDesk welcomes contribution from everyone. See [CONTRIBUTING.md](docs/CONTRIB
     alt="Get it on F-Droid"
     height="80">](https://f-droid.org/en/packages/com.carriez.flutter_hbb)
 
+_Follow the below steps to make sure android doesn't stop the app service due to battery optimization:_
+  1. Open your phone's Settings
+  2. Tap Battery & power saving
+  3. Tap Battery usage
+  4. Tap Ignore optimizations
+  5. Turn on to ignore battery optimization for the app
+
+
 ## Free Public Servers
 
 Below are the servers you are using for free, they may change over time. If you are not close to one of these, your network may be slow.
