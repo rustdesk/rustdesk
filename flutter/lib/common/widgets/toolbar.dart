@@ -88,32 +88,34 @@ List<TTextMenu> toolbarControls(BuildContext context, String id, FFI ffi) {
     );
   }
   // osAccount / osPassword
-  v.add(
-    TTextMenu(
-      child: Row(children: [
-        Text(translate(pi.isHeadless ? 'OS Account' : 'OS Password')),
-      ]),
-      trailingIcon: Transform.scale(
-        scale: isDesktop ? 0.8 : 1,
-        child: IconButton(
-          onPressed: () {
-            if (isMobile && Navigator.canPop(context)) {
-              Navigator.pop(context);
-            }
-            if (pi.isHeadless) {
-              showSetOSAccount(sessionId, ffi.dialogManager);
-            } else {
-              handleOsPasswordEditIcon(sessionId, ffi.dialogManager);
-            }
-          },
-          icon: Icon(Icons.edit, color: isMobile ? MyTheme.accent : null),
+  if (perms['keyboard'] != false) {
+    v.add(
+      TTextMenu(
+        child: Row(children: [
+          Text(translate(pi.isHeadless ? 'OS Account' : 'OS Password')),
+        ]),
+        trailingIcon: Transform.scale(
+          scale: isDesktop ? 0.8 : 1,
+          child: IconButton(
+            onPressed: () {
+              if (isMobile && Navigator.canPop(context)) {
+                Navigator.pop(context);
+              }
+              if (pi.isHeadless) {
+                showSetOSAccount(sessionId, ffi.dialogManager);
+              } else {
+                handleOsPasswordEditIcon(sessionId, ffi.dialogManager);
+              }
+            },
+            icon: Icon(Icons.edit, color: isMobile ? MyTheme.accent : null),
+          ),
         ),
+        onPressed: () => pi.isHeadless
+            ? showSetOSAccount(sessionId, ffi.dialogManager)
+            : handleOsPasswordAction(sessionId, ffi.dialogManager),
       ),
-      onPressed: () => pi.isHeadless
-          ? showSetOSAccount(sessionId, ffi.dialogManager)
-          : handleOsPasswordAction(sessionId, ffi.dialogManager),
-    ),
-  );
+    );
+  }
   // paste
   if (isMobile && perms['keyboard'] != false && perms['clipboard'] != false) {
     v.add(TTextMenu(

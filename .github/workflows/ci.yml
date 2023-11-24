@@ -132,12 +132,11 @@ jobs:
       shell: bash
 
     - name: Install Rust toolchain
-      uses: actions-rs/toolchain@v1
+      uses: dtolnay/rust-toolchain@v1
       with:
         toolchain: stable
-        target: ${{ matrix.job.target }}
-        override: true
-        profile: minimal # minimal component installation (ie, no documentation)
+        targets: ${{ matrix.job.target }}
+        components: ''
 
     - name: Show version information (Rust, cargo, GCC)
       shell: bash
@@ -149,7 +148,7 @@ jobs:
         cargo -V
         rustc -V
 
-    - uses: Swatinem/rust-cache@v1
+    - uses: Swatinem/rust-cache@v2
 
     - name: Build
       uses: actions-rs/cargo@v1
@@ -215,7 +214,9 @@ jobs:
             ;;
         esac;
 
-        echo ::set-output name=CARGO_TEST_OPTIONS::${CARGO_TEST_OPTIONS}
+        #deprecated echo ::set-output name=CARGO_TEST_OPTIONS::${CARGO_TEST_OPTIONS}
+        echo "CARGO_TEST_OPTIONS=${CARGO_TEST_OPTIONS}" >> $GITHUB_ENV
+        echo "CARGO_TEST_OPTIONS=${CARGO_TEST_OPTIONS}" >> $GITHUB_OUTPUT
 
     - name: Run tests
       uses: actions-rs/cargo@v1
