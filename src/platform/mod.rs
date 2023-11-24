@@ -80,6 +80,39 @@ pub fn get_active_username() -> String {
 #[cfg(target_os = "android")]
 pub const PA_SAMPLE_RATE: u32 = 48000;
 
+#[cfg(target_os = "android")]
+#[derive(Default)]
+pub struct WakeLock {
+    lock: Option<android_wakelock::WakeLock>,
+}
+
+#[cfg(target_os = "android")]
+impl WakeLock {
+    pub fn new(tag: &str) -> Self {
+        let tag = format!("{}:{tag}", crate::get_app_name());
+        match android_wakelock::partial(tag) {
+            Ok(lock) => Self { lock: Some(lock) },
+            Err(e) => {
+                hbb_common::log::error!("Failed to get wakelock: {e:?}");
+                Self::default()
+            }
+        }
+    }
+
+    pub fn acquire(&self) -> Option<android_wakelock::Guard> {
+        match self.lock.as_ref() {
+            Some(lock) => match lock.acquire() {
+                Ok(guard) => Some(guard),
+                Err(e) => {
+                    hbb_common::log::error!("Failed to acquire wakelock guard: {e:?}");
+                    None
+                }
+            },
+            None => None,
+        }
+    }
+}
+
 pub(crate) struct InstallingService; // please use new
 
 impl InstallingService {

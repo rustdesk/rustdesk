@@ -122,6 +122,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e999941b234f3131b00bc13c22d06e8c5ff726d1b6318ac7eb276997bbb4fef0"
 
 [[package]]
+name = "android-wakelock"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "296e5b7c23adb32743194b1810604b772f2be10f0b0387365cb3ba09cd5c1851"
+dependencies = [
+ "jni 0.21.1",
+ "log",
+ "ndk-context",
+]
+
+[[package]]
 name = "android_log-sys"
 version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5197,6 +5208,7 @@ dependencies = [
 name = "rustdesk"
 version = "1.2.4"
 dependencies = [
+ "android-wakelock",
  "android_logger",
  "arboard",
  "async-process",
@@ -5487,6 +5499,7 @@ dependencies = [
  "lazy_static",
  "log",
  "ndk",
+ "ndk-context",
  "num_cpus",
  "pkg-config",
  "quest",
