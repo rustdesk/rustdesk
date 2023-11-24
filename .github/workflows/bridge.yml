@@ -1,6 +1,6 @@
 # This yaml shares the build bridge steps with ci and nightly.
 name: Build flutter-rust-bridge
-# 2023-04-19 15:48:00+00:00
+# 2023-11-23 18:00:00+00:00
 
 on:
   workflow_call:
@@ -47,12 +47,11 @@ jobs:
             wget
 
       - name: Install Rust toolchain
-        uses: actions-rs/toolchain@v1
+        uses: dtolnay/rust-toolchain@v1
         with:
           toolchain: stable
-          target: ${{ matrix.job.target }}
-          override: true
-          profile: minimal # minimal component installation (ie, no documentation)
+          targets: ${{ matrix.job.target }}
+          components: ''
 
       - uses: Swatinem/rust-cache@v2
         with:
