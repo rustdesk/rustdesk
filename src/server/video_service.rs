@@ -363,13 +363,6 @@ fn get_capturer(current: usize, portable_service_running: bool) -> ResultType<Ca
 }
 
 fn run(vs: VideoService) -> ResultType<()> {
-    #[cfg(not(target_os = "android"))]
-    let _wake_lock = get_wake_lock();
-    #[cfg(target_os = "android")]
-    let wake_lock = crate::platform::WakeLock::new("video service");
-    #[cfg(target_os = "android")]
-    let _lock_guard = wake_lock.acquire();
-
     // Wayland only support one video capturer for now. It is ok to call ensure_inited() here.
     //
     // ensure_inited() is needed because clear() may be called.
@@ -733,19 +726,6 @@ fn start_uac_elevation_check() {
             });
         }
     });
-}
-
-#[cfg(not(target_os = "android"))]
-fn get_wake_lock() -> crate::platform::WakeLock {
-    let (display, idle, sleep) = if cfg!(windows) {
-        (true, false, false)
-    } else if cfg!(linux) {
-        (false, false, true)
-    } else {
-        //macos
-        (true, false, false)
-    };
-    crate::platform::WakeLock::new(display, idle, sleep)
 }
 
 #[inline]

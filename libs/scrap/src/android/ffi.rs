@@ -260,6 +260,7 @@ fn init_ndk_context() -> JniResult<()> {
         unsafe {
             ndk_context::release_android_context();
         }
+        *lock = false;
     }
     if let (Some(jvm), Some(ctx)) = (
         JVM.read().unwrap().as_ref(),

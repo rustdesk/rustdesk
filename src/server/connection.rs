@@ -70,6 +70,7 @@ lazy_static::lazy_static! {
     static ref ALIVE_CONNS: Arc::<Mutex<Vec<i32>>> = Default::default();
     static ref AUTHED_CONNS: Arc::<Mutex<Vec<(i32, AuthConnType)>>> = Default::default();
     static ref SWITCH_SIDES_UUID: Arc::<Mutex<HashMap<String, (Instant, uuid::Uuid)>>> = Default::default();
+    static ref WAKE_LOCK: Arc::<Mutex<Option<(crate::platform::WakeLock, bool)>>> = Default::default();
 }
 
 #[cfg(any(target_os = "windows", target_os = "linux"))]
@@ -1248,8 +1249,6 @@ impl Connection {
     }
 
     fn on_remote_authorized(&self) {
-        use std::sync::Once;
-        static _ONCE: Once = Once::new();
         self.update_codec_on_login();
         #[cfg(any(target_os = "windows", target_os = "linux"))]
         if !Config::get_option("allow-remove-wallpaper").is_empty() {
@@ -1259,9 +1258,6 @@ impl Connection {
                 match crate::platform::WallPaperRemover::new() {
                     Ok(remover) => {
                         *wallpaper = Some(remover);
-                        _ONCE.call_once(|| {
-                            shutdown_hooks::add_shutdown_hook(shutdown_hook);
-                        });
                     }
                     Err(e) => {
                         log::info!("create wallpaper remover failed: {:?}", e);
@@ -2372,7 +2368,8 @@ impl Connection {
 
         if t.on {
             if !virtual_display_manager::is_virtual_display_supported() {
-                self.send(make_msg("idd_not_support_under_win10_2004_tip".to_string())).await;
+                self.send(make_msg("idd_not_support_under_win10_2004_tip".to_string()))
+                    .await;
             } else {
                 if let Err(e) =
                     virtual_display_manager::plug_in_index_modes(t.display as _, Vec::new())
@@ -3230,9 +3227,14 @@ impl LinuxHeadlessHandle {
     }
 }
 
-#[cfg(any(target_os = "windows", target_os = "linux"))]
-extern "C" fn shutdown_hook() {
-    *WALLPAPER_REMOVER.lock().unwrap() = None;
+extern "C" fn connection_shutdown_hook() {
+    // https://stackoverflow.com/questions/35980148/why-does-an-atexit-handler-panic-when-it-accesses-stdout
+    // Please make sure there is no print in the call stack
+    *WAKE_LOCK.lock().unwrap() = None;
+    #[cfg(any(target_os = "windows", target_os = "linux"))]
+    {
+        *WALLPAPER_REMOVER.lock().unwrap() = None;
+    }
 }
 
 mod raii {
@@ -3262,7 +3264,37 @@ mod raii {
     impl AuthedConnID {
         pub fn new(id: i32, conn_type: AuthConnType) -> Self {
             AUTHED_CONNS.lock().unwrap().push((id, conn_type));
+            Self::check_wake_lock();
+            use std::sync::Once;
+            static _ONCE: Once = Once::new();
+            _ONCE.call_once(|| {
+                shutdown_hooks::add_shutdown_hook(connection_shutdown_hook);
+            });
             Self(id, conn_type)
+        }
+
+        fn check_wake_lock() {
+            let mut wake_lock = WAKE_LOCK.lock().unwrap();
+            let remote_count = AUTHED_CONNS
+                .lock()
+                .unwrap()
+                .iter()
+                .filter(|c| c.1 == AuthConnType::Remote)
+                .count();
+            let display = remote_count > 0;
+            if let Some((_, last_display)) = *wake_lock {
+                if last_display != display {
+                    *wake_lock = None;
+                }
+            }
+            let empty = AUTHED_CONNS.lock().unwrap().is_empty();
+            if empty {
+                *wake_lock = None;
+            } else {
+                if wake_lock.is_none() {
+                    *wake_lock = Some((crate::platform::get_wake_lock(display), display));
+                }
+            }
         }
     }
 
@@ -3271,9 +3303,14 @@ mod raii {
             if self.1 == AuthConnType::Remote {
                 scrap::codec::Encoder::update(self.0, scrap::codec::EncodingUpdate::Remove);
             }
-            let mut lock = AUTHED_CONNS.lock().unwrap();
-            lock.retain(|&c| c.0 != self.0);
-            if lock.iter().filter(|c| c.1 == AuthConnType::Remote).count() == 0 {
+            AUTHED_CONNS.lock().unwrap().retain(|&c| c.0 != self.0);
+            let remote_count = AUTHED_CONNS
+                .lock()
+                .unwrap()
+                .iter()
+                .filter(|c| c.1 == AuthConnType::Remote)
+                .count();
+            if remote_count == 0 {
                 #[cfg(any(target_os = "windows", target_os = "linux"))]
                 {
                     *WALLPAPER_REMOVER.lock().unwrap() = None;
@@ -3283,6 +3320,7 @@ mod raii {
                 #[cfg(all(windows, feature = "virtual_display_driver"))]
                 let _ = virtual_display_manager::reset_all();
             }
+            Self::check_wake_lock();
         }
     }
 }
