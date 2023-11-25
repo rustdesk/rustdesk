@@ -81,6 +81,7 @@ cidr-utils = "0.5"
 libloading = "0.8"
 fon = "0.6"
 zip = "0.6"
+shutdown_hooks = "0.1"
 
 [target.'cfg(not(any(target_os = "android", target_os = "linux")))'.dependencies]
 cpal = "0.15"
@@ -95,7 +96,6 @@ clipboard = { path = "libs/clipboard" }
 ctrlc = "3.2"
 arboard = "3.2"
 system_shutdown = "4.0"
-shutdown_hooks = "0.1"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 winapi = { version = "0.3", features = ["winuser", "wincrypt", "shellscalingapi", "pdh", "synchapi", "memoryapi"] }
@@ -147,7 +147,7 @@ once_cell = {version = "1.18", optional = true}
 [target.'cfg(target_os = "android")'.dependencies]
 android_logger = "0.13"
 jni = "0.21"
-android-wakelock = "0.1"
+android-wakelock = { git = "https://github.com/21pages/android-wakelock" }
 
 [workspace]
 members = ["libs/scrap", "libs/hbb_common", "libs/enigo", "libs/clipboard", "libs/virtual_display", "libs/virtual_display/dylib", "libs/portable"]

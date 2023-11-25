@@ -124,8 +124,7 @@ checksum = "e999941b234f3131b00bc13c22d06e8c5ff726d1b6318ac7eb276997bbb4fef0"
 [[package]]
 name = "android-wakelock"
 version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "296e5b7c23adb32743194b1810604b772f2be10f0b0387365cb3ba09cd5c1851"
+source = "git+https://github.com/21pages/android-wakelock#d0292e5a367e627c4fa6f1ca6bdfad005dca7d90"
 dependencies = [
  "jni 0.21.1",
  "log",
