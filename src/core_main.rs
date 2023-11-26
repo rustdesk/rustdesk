@@ -219,15 +219,18 @@ pub fn core_main() -> Option<Vec<String>> {
                 #[cfg(windows)]
                 hbb_common::allow_err!(crate::platform::windows::uninstall_cert());
                 return None;
-            } else if args[0] == "--install-update-idd" {
-                // --install-cert must be called before this.
+            } else if args[0] == "--install-idd" {
+                // Install cert if cert file is provided (2rd arg).
+                if args.len() == 2 {
+                    #[cfg(windows)]
+                    hbb_common::allow_err!(crate::platform::windows::install_cert(&args[1]));
+                }
                 #[cfg(all(windows, feature = "virtual_display_driver"))]
                 if crate::virtual_display_manager::is_virtual_display_supported() {
                     hbb_common::allow_err!(crate::virtual_display_manager::install_update_driver());
                 }
                 return None;
-            }
-             else if args[0] == "--portable-service" {
+            } else if args[0] == "--portable-service" {
                 crate::platform::elevate_or_run_as_system(
                     click_setup,
                     _is_elevate,
