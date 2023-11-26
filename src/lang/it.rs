@@ -572,6 +572,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("privacy_mode_impl_virtual_display_tip", "Modo 2"),
         ("Enter privacy mode", "Entra in modalità privacy"),
         ("Exit privacy mode", "Esci dalla modalità privacy"),
-        ("idd_not_support_under_win10_2004_tip", ""),
+        ("idd_not_support_under_win10_2004_tip", "Il driver video indiretto non è supportato. È richiesto Windows 10, versione 2004 o successiva."),
     ].iter().cloned().collect();
 }
