@@ -201,8 +201,15 @@ pub fn core_main() -> Option<Vec<String>> {
                     .ok();
                 return None;
             } else if args[0] == "--install-cert" {
+                if args.len() == 1 {
+                    log::error!("--install-cert must be called with cert file path");
+                    return None;
+                }
                 #[cfg(windows)]
                 hbb_common::allow_err!(crate::platform::windows::install_cert(&args[1]));
+                if args.len() > 2 && args[2] == "silent" {
+                    return None;
+                }
                 #[cfg(all(windows, feature = "virtual_display_driver"))]
                 if crate::virtual_display_manager::is_virtual_display_supported() {
                     hbb_common::allow_err!(crate::virtual_display_manager::install_update_driver());
@@ -212,7 +219,15 @@ pub fn core_main() -> Option<Vec<String>> {
                 #[cfg(windows)]
                 hbb_common::allow_err!(crate::platform::windows::uninstall_cert());
                 return None;
-            } else if args[0] == "--portable-service" {
+            } else if args[0] == "--install-update-idd" {
+                // --install-cert must be called before this.
+                #[cfg(all(windows, feature = "virtual_display_driver"))]
+                if crate::virtual_display_manager::is_virtual_display_supported() {
+                    hbb_common::allow_err!(crate::virtual_display_manager::install_update_driver());
+                }
+                return None;
+            }
+             else if args[0] == "--portable-service" {
                 crate::platform::elevate_or_run_as_system(
                     click_setup,
                     _is_elevate,

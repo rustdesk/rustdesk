@@ -1029,7 +1029,12 @@ if exist \"{tmp_path}\\{app_name} Tray.lnk\" del /f /q \"{tmp_path}\\{app_name} 
     let src_exe = std::env::current_exe()?.to_str().unwrap_or("").to_string();
 
     let install_cert = if options.contains("driverCert") {
-        format!("\"{}\" --install-cert \"RustDeskIddDriver.cer\"", src_exe)
+        let s = format!(r#""{}" --install-cert "RustDeskIddDriver.cer""#, src_exe);
+        if silent {
+            format!("{} silent", s)
+        } else {
+            s
+        }
     } else {
         "".to_owned()
     };
