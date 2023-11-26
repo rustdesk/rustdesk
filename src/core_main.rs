@@ -201,13 +201,11 @@ pub fn core_main() -> Option<Vec<String>> {
                     .ok();
                 return None;
             } else if args[0] == "--install-cert" {
-                if args.len() == 1 {
-                    log::error!("--install-cert must be called with cert file path");
-                    return None;
-                }
                 #[cfg(windows)]
-                hbb_common::allow_err!(crate::platform::windows::install_cert(&args[1]));
-                if args.len() > 2 && args[2] == "silent" {
+                hbb_common::allow_err!(crate::platform::windows::install_cert(
+                    crate::platform::windows::DRIVER_CERT_FILE
+                ));
+                if args.len() > 1 && args[1] == "silent" {
                     return None;
                 }
                 #[cfg(all(windows, feature = "virtual_display_driver"))]
@@ -220,10 +218,12 @@ pub fn core_main() -> Option<Vec<String>> {
                 hbb_common::allow_err!(crate::platform::windows::uninstall_cert());
                 return None;
             } else if args[0] == "--install-idd" {
-                // Install cert if cert file is provided (2rd arg).
-                if args.len() == 2 {
-                    #[cfg(windows)]
-                    hbb_common::allow_err!(crate::platform::windows::install_cert(&args[1]));
+                #[cfg(windows)]
+                {
+                    // It's ok to install cert multiple times.
+                    hbb_common::allow_err!(crate::platform::windows::install_cert(
+                        crate::platform::windows::DRIVER_CERT_FILE
+                    ));
                 }
                 #[cfg(all(windows, feature = "virtual_display_driver"))]
                 if crate::virtual_display_manager::is_virtual_display_supported() {
