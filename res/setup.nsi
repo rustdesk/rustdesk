@@ -11,10 +11,10 @@
 ####################################################################
 # File Info
 
-!define PRODUCT_NAME "Axians"
+!define PRODUCT_NAME "RustDesk"
 !define PRODUCT_DESCRIPTION "Installer for ${PRODUCT_NAME}"
-!define COPYRIGHT "Copyright © 2024"
-!define VERSION "2.0"
+!define COPYRIGHT "Copyright © 2021"
+!define VERSION "1.1.6"
 
 VIProductVersion "${VERSION}.0"
 VIAddVersionKey "ProductName" "${PRODUCT_NAME}"
