@@ -573,5 +573,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Enter privacy mode", ""),
         ("Exit privacy mode", ""),
         ("idd_not_support_under_win10_2004_tip", ""),
+        ("input_source_1_tip", ""),
+        ("input_source_2_tip", ""),
     ].iter().cloned().collect();
 }

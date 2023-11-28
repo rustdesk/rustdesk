@@ -744,8 +744,7 @@ class FfiModel with ChangeNotifier {
     }
 
     // If current keyboard mode is not supported, change to another one.
-
-    if (stateGlobal.grabKeyboard) {
+    if (isInputSourceFlutter) {
       for (final mode in [kKeyMapMode, kKeyLegacyMode]) {
         if (bind.sessionIsKeyboardModeSupported(
             sessionId: sessionId, mode: mode)) {

@@ -469,13 +469,15 @@ pub fn session_handle_flutter_key_event(
 // This will cause the keyboard input to take no effect.
 pub fn session_enter_or_leave(_session_id: SessionID, _enter: bool) -> SyncReturn<()> {
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    if let Some(session) = sessions::get_session_by_session_id(&_session_id) {
-        let keyboard_mode = session.get_keyboard_mode();
-        if _enter {
-            set_cur_session_id_(_session_id, &keyboard_mode);
-            session.enter(keyboard_mode);
-        } else {
-            session.leave(keyboard_mode);
+    if crate::keyboard::input_source::is_cur_input_source_rdev() {
+        if let Some(session) = sessions::get_session_by_session_id(&_session_id) {
+            let keyboard_mode = session.get_keyboard_mode();
+            if _enter {
+                set_cur_session_id_(_session_id, &keyboard_mode);
+                session.enter(keyboard_mode);
+            } else {
+                session.leave(keyboard_mode);
+            }
         }
     }
     SyncReturn(())
@@ -846,7 +848,12 @@ pub fn main_post_request(url: String, body: String, header: String) {
 }
 
 pub fn main_get_local_option(key: String) -> SyncReturn<String> {
-    SyncReturn(get_local_option(key))
+    let v = if key == crate::keyboard::input_source::CONFIG_OPTION_INPUT_SOURCE {
+        crate::keyboard::input_source::get_cur_session_input_source()
+    } else {
+        get_local_option(key)
+    };
+    SyncReturn(v)
 }
 
 pub fn main_get_env(key: String) -> SyncReturn<String> {
@@ -854,7 +861,11 @@ pub fn main_get_env(key: String) -> SyncReturn<String> {
 }
 
 pub fn main_set_local_option(key: String, value: String) {
-    set_local_option(key, value)
+    if key == crate::keyboard::input_source::CONFIG_OPTION_INPUT_SOURCE {
+        crate::keyboard::input_source::change_input_source(&value);
+    } else {
+        set_local_option(key, value);
+    }
 }
 
 pub fn main_get_my_id() -> String {
@@ -1593,16 +1604,10 @@ pub fn main_is_installed() -> SyncReturn<bool> {
     SyncReturn(is_installed())
 }
 
-pub fn main_start_grab_keyboard() -> SyncReturn<bool> {
-    #[cfg(target_os = "linux")]
-    if !crate::platform::linux::is_x11() {
-        return SyncReturn(false);
-    }
-    crate::keyboard::client::start_grab_loop();
-    if !is_can_input_monitoring(false) {
-        return SyncReturn(false);
-    }
-    SyncReturn(true)
+pub fn main_init_input_source() -> SyncReturn<()> {
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    crate::keyboard::input_source::init_input_source();
+    SyncReturn(())
 }
 
 pub fn main_is_installed_lower_version() -> SyncReturn<bool> {
@@ -1977,6 +1982,20 @@ pub fn main_supported_privacy_mode_impls() -> SyncReturn<String> {
         serde_json::to_string(&crate::privacy_mode::get_supported_privacy_mode_impl())
             .unwrap_or_default(),
     )
+}
+
+pub fn main_supported_input_source() -> SyncReturn<String> {
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    {
+        SyncReturn("".to_owned())
+    }
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    {
+        SyncReturn(
+            serde_json::to_string(&crate::keyboard::input_source::get_supported_input_source())
+                .unwrap_or_default(),
+        )
+    }
 }
 
 #[cfg(target_os = "android")]

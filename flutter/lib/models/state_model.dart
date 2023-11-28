@@ -5,12 +5,12 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
 import '../consts.dart';
+import './platform_model.dart';
 
 enum SvcStatus { notReady, connecting, ready }
 
 class StateGlobal {
   int _windowId = -1;
-  bool grabKeyboard = false;
   final RxBool _fullscreen = false.obs;
   bool _isMinimized = false;
   final RxBool isMaximized = false.obs;
@@ -21,6 +21,8 @@ class StateGlobal {
   final svcStatus = SvcStatus.notReady.obs;
   // Only used for macOS
   bool? closeOnFullscreen;
+
+  String _inputSource = '';
 
   // Use for desktop -> remote toolbar -> resolution
   final Map<String, Map<int, String?>> _lastResolutionGroupValues = {};
@@ -92,6 +94,18 @@ class StateGlobal {
         });
       }
     }
+  }
+
+  String getInputSource({bool force = false}) {
+    if (force || _inputSource.isEmpty) {
+      _inputSource = bind.mainGetLocalOption(key: kOptionInputSource);
+    }
+    return _inputSource;
+  }
+
+  void setInputSource(String v) async {
+    await bind.mainSetLocalOption(key: kOptionInputSource, value: v);
+    _inputSource = bind.mainGetLocalOption(key: kOptionInputSource);
   }
 
   StateGlobal._();

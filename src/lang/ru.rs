@@ -573,5 +573,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Enter privacy mode", "Включить режим конфиденциальности"),
         ("Exit privacy mode", "Отключить режим конфиденциальности"),
         ("idd_not_support_under_win10_2004_tip", "Драйвер непрямого отображения не поддерживается. Требуется Windows 10 версии 2004 или новее."),
+        ("input_source_1_tip", ""),
+        ("input_source_2_tip", ""),
     ].iter().cloned().collect();
 }

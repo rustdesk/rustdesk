@@ -573,5 +573,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Enter privacy mode", "Datenschutzmodus aktivieren"),
         ("Exit privacy mode", "Datenschutzmodus beenden"),
         ("idd_not_support_under_win10_2004_tip", "Indirekter Grafiktreiber wird nicht unterstützt. Windows 10, Version 2004 oder neuer ist erforderlich."),
+        ("input_source_1_tip", ""),
+        ("input_source_2_tip", ""),
     ].iter().cloned().collect();
 }

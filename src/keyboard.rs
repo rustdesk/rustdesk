@@ -52,18 +52,6 @@ lazy_static::lazy_static! {
 
 pub mod client {
     use super::*;
-    lazy_static::lazy_static! {
-        static ref IS_GRAB_STARTED: Arc<Mutex<bool>> = Arc::new(Mutex::new(false));
-    }
-
-    pub fn start_grab_loop() {
-        let mut lock = IS_GRAB_STARTED.lock().unwrap();
-        if *lock {
-            return;
-        }
-        super::start_grab_loop();
-        *lock = true;
-    }
 
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     pub fn change_grab_status(state: GrabState, keyboard_mode: &str) {
@@ -325,6 +313,14 @@ pub fn start_grab_loop() {
     }) {
         log::error!("Failed to init rdev grab thread: {:?}", err);
     };
+}
+
+pub fn stop_grab_loop() -> Result<(), rdev::GrabError> {
+    #[cfg(any(target_os = "windows", target_os = "macos"))]
+    rdev::exit_grab()?;
+    #[cfg(target_os = "linux")]
+    rdev::exit_grab_listen()?;
+    Ok(())
 }
 
 pub fn is_long_press(event: &Event) -> bool {
@@ -1075,4 +1071,110 @@ pub fn keycode_to_rdev_key(keycode: u32) -> Key {
     return rdev::android_key_from_code(keycode);
     #[cfg(target_os = "macos")]
     return rdev::macos_key_from_code(keycode.try_into().unwrap_or_default());
+}
+
+#[cfg(feature = "flutter")]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+pub mod input_source {
+    use crate::ui_interface::{get_local_option, set_local_option};
+    use hbb_common::log;
+
+    pub const CONFIG_OPTION_INPUT_SOURCE: &str = "input-source";
+    // rdev grab mode
+    pub const CONFIG_INPUT_SOURCE_1: &str = "Input source 1";
+    pub const CONFIG_INPUT_SOURCE_1_TIP: &str = "input_source_1_tip";
+    // flutter grab mode
+    pub const CONFIG_INPUT_SOURCE_2: &str = "Input source 2";
+    pub const CONFIG_INPUT_SOURCE_2_TIP: &str = "input_source_2_tip";
+
+    #[cfg(not(target_os = "macos"))]
+    pub const CONFIG_INPUT_SOURCE_DEFAULT: &str = CONFIG_INPUT_SOURCE_1;
+    #[cfg(target_os = "macos")]
+    pub const CONFIG_INPUT_SOURCE_DEFAULT: &str = CONFIG_INPUT_SOURCE_2;
+
+    pub fn init_input_source() {
+        let cur_input_source = get_cur_session_input_source();
+        if cur_input_source == CONFIG_INPUT_SOURCE_1 {
+            #[cfg(target_os = "macos")]
+            if !crate::platform::macos::is_can_input_monitoring(false) {
+                log::error!("init_input_source, is_can_input_monitoring() false");
+                set_local_option(
+                    CONFIG_OPTION_INPUT_SOURCE.to_string(),
+                    CONFIG_INPUT_SOURCE_2.to_string(),
+                );
+                return;
+            }
+            #[cfg(target_os = "linux")]
+            if !crate::platform::linux::is_x11() {
+                // If switching from X11 to Wayland, the grab loop will not be started.
+                // Do not change the config here.
+                return;
+            }
+            super::start_grab_loop();
+        }
+    }
+
+    pub fn change_input_source(input_source: &str) {
+        let cur_input_source = get_cur_session_input_source();
+        if cur_input_source == input_source {
+            return;
+        }
+        if input_source == CONFIG_INPUT_SOURCE_1 {
+            #[cfg(target_os = "macos")]
+            if !crate::platform::macos::is_can_input_monitoring(false) {
+                log::error!("change_input_source, is_can_input_monitoring() false");
+                return;
+            }
+            super::start_grab_loop();
+        } else if input_source == CONFIG_INPUT_SOURCE_2 {
+            if let Err(e) = super::stop_grab_loop() {
+                log::error!("change_input_source, stop_grab_loop error: {:?}", e);
+                return;
+            }
+        }
+        set_local_option(
+            CONFIG_OPTION_INPUT_SOURCE.to_string(),
+            input_source.to_string(),
+        );
+    }
+
+    #[inline]
+    pub fn get_cur_session_input_source() -> String {
+        #[cfg(target_os = "linux")]
+        if !crate::platform::linux::is_x11() {
+            return CONFIG_INPUT_SOURCE_2.to_string();
+        }
+        let input_source = get_local_option(CONFIG_OPTION_INPUT_SOURCE.to_string());
+        if input_source.is_empty() {
+            CONFIG_INPUT_SOURCE_DEFAULT.to_string()
+        } else {
+            input_source
+        }
+    }
+
+    #[inline]
+    pub fn is_cur_input_source_rdev() -> bool {
+        get_cur_session_input_source() == CONFIG_INPUT_SOURCE_1
+    }
+
+    #[inline]
+    pub fn get_supported_input_source() -> Vec<(String, String)> {
+        #[cfg(target_os = "linux")]
+        if !crate::platform::linux::is_x11() {
+            return vec![(
+                CONFIG_INPUT_SOURCE_2.to_string(),
+                CONFIG_INPUT_SOURCE_2_TIP.to_string(),
+            )];
+        }
+        vec![
+            (
+                CONFIG_INPUT_SOURCE_1.to_string(),
+                CONFIG_INPUT_SOURCE_1_TIP.to_string(),
+            ),
+            (
+                CONFIG_INPUT_SOURCE_2.to_string(),
+                CONFIG_INPUT_SOURCE_2_TIP.to_string(),
+            ),
+        ]
+    }
 }

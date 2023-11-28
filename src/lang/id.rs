@@ -573,5 +573,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Enter privacy mode", "Masuk mode privasi"),
         ("Exit privacy mode", "Keluar mode privasi"),
         ("idd_not_support_under_win10_2004_tip", "Driver grafis yang Anda gunakan tidak kompatibel dengan versi Windows Anda dan memerlukan Windows 10 versi 2004 atau yang lebih baru"),
+        ("input_source_1_tip", ""),
+        ("input_source_2_tip", ""),
     ].iter().cloned().collect();
 }

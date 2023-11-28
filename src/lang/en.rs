@@ -206,5 +206,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("privacy_mode_impl_mag_tip", "Mode 1"),
         ("privacy_mode_impl_virtual_display_tip", "Mode 2"),
         ("idd_not_support_under_win10_2004_tip", "Indirect display driver is not supported. Windows 10, version 2004 or newer is required."),
+        ("input_source_1_tip", "Input source 1"),
+        ("input_source_2_tip", "Input source 2"),
     ].iter().cloned().collect();
 }

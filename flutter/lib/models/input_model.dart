@@ -13,7 +13,6 @@ import '../../models/model.dart';
 import '../../models/platform_model.dart';
 import '../common.dart';
 import '../consts.dart';
-import './state_model.dart';
 
 /// Mouse button enum.
 enum MouseButtons { left, right, wheel }
@@ -91,7 +90,7 @@ class InputModel {
   }
 
   KeyEventResult handleRawKeyEvent(FocusNode data, RawKeyEvent e) {
-    if (isDesktop && !stateGlobal.grabKeyboard) {
+    if (isDesktop && !isInputSourceFlutter) {
       return KeyEventResult.handled;
     }
 
@@ -325,7 +324,9 @@ class InputModel {
       resetModifiers();
     }
     _flingTimer?.cancel();
-    bind.sessionEnterOrLeave(sessionId: sessionId, enter: enter);
+    if (!isInputSourceFlutter) {
+      bind.sessionEnterOrLeave(sessionId: sessionId, enter: enter);
+    }
   }
 
   /// Send mouse movement event with distance in [x] and [y].
@@ -396,7 +397,8 @@ class InputModel {
     }
     if (x != 0 || y != 0) {
       if (peerPlatform == kPeerPlatformAndroid) {
-        handlePointerEvent('touch', 'pan_update', Offset(x.toDouble(), y.toDouble()));
+        handlePointerEvent(
+            'touch', 'pan_update', Offset(x.toDouble(), y.toDouble()));
       } else {
         bind.sessionSendMouse(
             sessionId: sessionId,

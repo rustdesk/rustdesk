@@ -1585,7 +1585,7 @@ class _KeyboardMenu extends StatelessWidget {
     // If use flutter to grab keys, we can only use one mode.
     // Map mode and Legacy mode, at least one of them is supported.
     String? modeOnly;
-    if (stateGlobal.grabKeyboard) {
+    if (isInputSourceFlutter) {
       if (bind.sessionIsKeyboardModeSupported(
           sessionId: ffi.sessionId, mode: kKeyMapMode)) {
         modeOnly = kKeyMapMode;
@@ -1603,6 +1603,8 @@ class _KeyboardMenu extends StatelessWidget {
         menuChildren: [
           keyboardMode(modeOnly),
           localKeyboardType(),
+          Divider(),
+          inputSource(),
           Divider(),
           viewMode(),
           Divider(),
@@ -1676,6 +1678,39 @@ class _KeyboardMenu extends StatelessWidget {
         )
       ],
     );
+  }
+
+  inputSource() {
+    final supportedInputSource = bind.mainSupportedInputSource();
+    if (supportedInputSource.isEmpty) return Offstage();
+    late final List<dynamic> supportedInputSourceList;
+    try {
+      supportedInputSourceList = jsonDecode(supportedInputSource);
+    } catch (e) {
+      debugPrint('Failed to decode $supportedInputSource, $e');
+      return;
+    }
+    if (supportedInputSourceList.length < 2) return Offstage();
+    final inputSource = stateGlobal.getInputSource();
+    final enabled = !ffi.ffiModel.viewOnly;
+    return Column(
+          children: supportedInputSourceList.map((e) {
+            final d = e as List<dynamic>;
+            return RdoMenuButton<String>(
+              child: Text(translate(d[1] as String)),
+              value: d[0] as String,
+              groupValue: inputSource,
+              onChanged: enabled
+                  ? (e) {
+                      if (e != null) {
+                        stateGlobal.setInputSource(e);
+                      }
+                    }
+                  : null,
+              ffi: ffi,
+            );
+          }).toList(),
+        );
   }
 
   viewMode() {
