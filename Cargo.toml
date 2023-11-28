@@ -1,10 +1,10 @@
 [package]
-name = "rustdesk"
+name = "axians"
 version = "1.2.4"
-authors = ["rustdesk <info@rustdesk.com>"]
+authors = ["axians <avayasupport@axians.com>"]
 edition = "2021"
 build= "build.rs"
-description = "A remote control software."
+description = "A remote control software from Axians."
 default-run = "rustdesk"
 
 [lib]
