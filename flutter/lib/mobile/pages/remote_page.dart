@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -788,9 +787,7 @@ void showOptions(
       children.add(InkWell(
           onTap: () {
             if (i == cur) return;
-            gFFI.recordingModel.onClose();
-            bind.sessionSwitchDisplay(
-                sessionId: gFFI.sessionId, value: Int32List.fromList([i]));
+            openMonitorInTheSameTab(i, gFFI, pi);
             gFFI.dialogManager.dismissAll();
           },
           child: Ink(
