@@ -1,13 +1,15 @@
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
-use crate::common::get_default_sound_input;
 use crate::{
     client::file_trait::FileManager,
     common::is_keyboard_mode_supported,
     common::make_fd_to_json,
     flutter::{self, session_add, session_add_existed, session_start_, sessions},
     input::*,
-    keyboard::input_source::{change_input_source, get_cur_session_input_source},
     ui_interface::{self, *},
+};
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+use crate::{
+    common::get_default_sound_input,
+    keyboard::input_source::{change_input_source, get_cur_session_input_source},
 };
 use flutter_rust_bridge::{StreamSink, SyncReturn};
 #[cfg(feature = "plugin_framework")]
@@ -858,10 +860,15 @@ pub fn main_set_local_option(key: String, value: String) {
 }
 
 pub fn main_get_input_source() -> SyncReturn<String> {
-    SyncReturn(get_cur_session_input_source())
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    let input_source = get_cur_session_input_source();
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    let input_source = "".to_owned();
+    SyncReturn(input_source)
 }
 
 pub fn main_set_input_source(session_id: SessionID, value: String) {
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     change_input_source(session_id, value);
 }
 
