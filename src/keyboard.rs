@@ -56,6 +56,19 @@ lazy_static::lazy_static! {
 pub mod client {
     use super::*;
 
+    lazy_static::lazy_static! {
+        static ref IS_GRAB_STARTED: Arc<Mutex<bool>> = Arc::new(Mutex::new(false));
+    }
+
+    pub fn start_grab_loop() {
+        let mut lock = IS_GRAB_STARTED.lock().unwrap();
+        if *lock {
+            return;
+        }
+        super::start_grab_loop();
+        *lock = true;
+    }
+
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     pub fn change_grab_status(state: GrabState, keyboard_mode: &str) {
         if !IS_RDEV_ENABLED.load(Ordering::SeqCst) {
@@ -234,7 +247,7 @@ fn get_keyboard_mode() -> String {
     "legacy".to_string()
 }
 
-pub fn start_grab_loop() {
+fn start_grab_loop() {
     std::env::set_var("KEYBOARD_ONLY", "y");
     #[cfg(any(target_os = "windows", target_os = "macos"))]
     std::thread::spawn(move || {
@@ -320,7 +333,7 @@ pub fn start_grab_loop() {
 
 // #[allow(dead_code)] is ok here. No need to stop grabbing loop.
 #[allow(dead_code)]
-pub fn stop_grab_loop() -> Result<(), rdev::GrabError> {
+fn stop_grab_loop() -> Result<(), rdev::GrabError> {
     #[cfg(any(target_os = "windows", target_os = "macos"))]
     rdev::exit_grab()?;
     #[cfg(target_os = "linux")]
@@ -1081,9 +1094,9 @@ pub fn keycode_to_rdev_key(keycode: u32) -> Key {
 #[cfg(feature = "flutter")]
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub mod input_source {
-    use hbb_common::SessionID;
     #[cfg(target_os = "macos")]
     use hbb_common::log;
+    use hbb_common::SessionID;
 
     use crate::ui_interface::{get_local_option, set_local_option};
 
@@ -1117,7 +1130,7 @@ pub mod input_source {
         if cur_input_source == CONFIG_INPUT_SOURCE_1 {
             super::IS_RDEV_ENABLED.store(true, super::Ordering::SeqCst);
         }
-        super::start_grab_loop();
+        super::client::start_grab_loop();
     }
 
     pub fn change_input_source(session_id: SessionID, input_source: String) {
@@ -1132,7 +1145,7 @@ pub mod input_source {
                 return;
             }
             // It is ok to start grab loop multiple times.
-            super::start_grab_loop();
+            super::client::start_grab_loop();
             super::IS_RDEV_ENABLED.store(true, super::Ordering::SeqCst);
             crate::flutter_ffi::session_enter_or_leave(session_id, true);
         } else if input_source == CONFIG_INPUT_SOURCE_2 {
