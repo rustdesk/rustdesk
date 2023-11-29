@@ -5,23 +5,36 @@ use std::{
         Arc, Mutex,
     },
     time::Instant,
+    cmp::min,
 };
-use std::cmp::min;
 use async_nats::{ConnectOptions, Subscriber};
 
 use uuid::Uuid;
 
-use hbb_common::tcp::FramedStream;
-use hbb_common::{allow_err, anyhow::bail, config::{Config, CONNECT_TIMEOUT, READ_TIMEOUT, REG_INTERVAL, RENDEZVOUS_PORT}, futures::future::join_all, log, protobuf::Message as _, rendezvous_proto::*, sleep, socket_client::{self, is_ipv4}, tokio::{
-    self, select,
-    time::{interval, Duration},
-}, udp::FramedSocket, AddrMangle, ResultType, IntoTargetAddr, anyhow};
-use hbb_common::config::NetworkType;
-use hbb_common::socket_client::test_target;
-use hbb_common::futures::StreamExt;
-use crate::common::increase_port;
+use hbb_common::{
+    allow_err,
+    anyhow::bail,
+    config::{Config, NetworkType, CONNECT_TIMEOUT, READ_TIMEOUT, REG_INTERVAL, RENDEZVOUS_PORT},
+    futures::future::join_all,
+    log,
+    protobuf::Message as _,
+    rendezvous_proto::*,
+    sleep,
+    socket_client::{self, is_ipv4, test_target},
+    tokio::{
+        self, select,
+        time::{interval, Duration},
+    },
+    udp::FramedSocket,
+    tcp::FramedStream,
+    AddrMangle, ResultType, IntoTargetAddr,
+    futures::StreamExt,
+};
 
-use crate::server::{check_zombie, new as new_server, ServerPtr};
+use crate::{
+    common::increase_port,
+    server::{check_zombie, new as new_server, ServerPtr},
+};
 
 type Message = RendezvousMessage;
 
@@ -88,8 +101,8 @@ impl RendezvousMediator {
                         if let Err(err) = Self::start(server.clone(), host.clone()).await {
                             log::error!("rendezvous mediator error: {err}");
                         }
-                        // Fallback to legacy udp protocol
-                        if let Err(err) = Self::legacy_start(server, host).await {
+                        // Switch to udp protocol
+                        if let Err(err) = Self::udp_start(server, host).await {
                             log::error!("rendezvous mediator error: {err}");
                         }
                         // SHOULD_EXIT here is to ensure once one exits, the others also exit.
@@ -109,8 +122,8 @@ impl RendezvousMediator {
         // crate::platform::linux_desktop_manager::stop_xdesktop();
     }
 
-    pub async fn legacy_start(server: ServerPtr, host: String) -> ResultType<()> {
-        log::info!("start legacy rendezvous mediator of {}", host);
+    pub async fn udp_start(server: ServerPtr, host: String) -> ResultType<()> {
+        log::info!("start udp rendezvous mediator of {}", host);
         let host_prefix: String = host
             .split(".")
             .next()
