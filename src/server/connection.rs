@@ -2134,7 +2134,7 @@ impl Connection {
                     {
                         #[cfg(not(any(target_os = "android", target_os = "ios")))]
                         if self.restart {
-                            match system_shutdown::reboot() {
+                            match system_shutdown::force_reboot() {
                                 Ok(_) => log::info!("Restart by the peer"),
                                 Err(e) => log::error!("Failed to restart: {}", e),
                             }
