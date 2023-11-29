@@ -12,7 +12,7 @@ use hbb_common::message_proto::*;
 #[cfg(any(target_os = "windows", target_os = "macos"))]
 use rdev::KeyCode;
 use rdev::{Event, EventType, Key};
-#[cfg(any(target_os = "windows", target_os = "macos"))]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::{
     collections::HashMap,
@@ -34,6 +34,9 @@ const OS_LOWER_ANDROID: &str = "android";
 #[cfg(any(target_os = "windows", target_os = "macos"))]
 static KEYBOARD_HOOKED: AtomicBool = AtomicBool::new(false);
 
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+static IS_RDEV_ENABLED: AtomicBool = AtomicBool::new(false);
+
 lazy_static::lazy_static! {
     static ref TO_RELEASE: Arc<Mutex<HashMap<Key, Event>>> = Arc::new(Mutex::new(HashMap::new()));
     static ref MODIFIERS_STATE: Mutex<HashMap<Key, bool>> = {
@@ -52,6 +55,7 @@ lazy_static::lazy_static! {
 
 pub mod client {
     use super::*;
+
     lazy_static::lazy_static! {
         static ref IS_GRAB_STARTED: Arc<Mutex<bool>> = Arc::new(Mutex::new(false));
     }
@@ -67,6 +71,9 @@ pub mod client {
 
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     pub fn change_grab_status(state: GrabState, keyboard_mode: &str) {
+        if !IS_RDEV_ENABLED.load(Ordering::SeqCst) {
+            return;
+        }
         match state {
             GrabState::Ready => {}
             GrabState::Run => {
@@ -90,10 +97,7 @@ pub mod client {
                 #[cfg(target_os = "linux")]
                 rdev::disable_grab();
             }
-            GrabState::Exit => {
-                #[cfg(target_os = "linux")]
-                rdev::exit_grab_listen();
-            }
+            GrabState::Exit => {}
         }
     }
 
@@ -243,7 +247,7 @@ fn get_keyboard_mode() -> String {
     "legacy".to_string()
 }
 
-pub fn start_grab_loop() {
+fn start_grab_loop() {
     std::env::set_var("KEYBOARD_ONLY", "y");
     #[cfg(any(target_os = "windows", target_os = "macos"))]
     std::thread::spawn(move || {
@@ -325,6 +329,16 @@ pub fn start_grab_loop() {
     }) {
         log::error!("Failed to init rdev grab thread: {:?}", err);
     };
+}
+
+// #[allow(dead_code)] is ok here. No need to stop grabbing loop.
+#[allow(dead_code)]
+fn stop_grab_loop() -> Result<(), rdev::GrabError> {
+    #[cfg(any(target_os = "windows", target_os = "macos"))]
+    rdev::exit_grab()?;
+    #[cfg(target_os = "linux")]
+    rdev::exit_grab_listen();
+    Ok(())
 }
 
 pub fn is_long_press(event: &Event) -> bool {
@@ -1075,4 +1089,105 @@ pub fn keycode_to_rdev_key(keycode: u32) -> Key {
     return rdev::android_key_from_code(keycode);
     #[cfg(target_os = "macos")]
     return rdev::macos_key_from_code(keycode.try_into().unwrap_or_default());
+}
+
+#[cfg(feature = "flutter")]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+pub mod input_source {
+    #[cfg(target_os = "macos")]
+    use hbb_common::log;
+    use hbb_common::SessionID;
+
+    use crate::ui_interface::{get_local_option, set_local_option};
+
+    pub const CONFIG_OPTION_INPUT_SOURCE: &str = "input-source";
+    // rdev grab mode
+    pub const CONFIG_INPUT_SOURCE_1: &str = "Input source 1";
+    pub const CONFIG_INPUT_SOURCE_1_TIP: &str = "input_source_1_tip";
+    // flutter grab mode
+    pub const CONFIG_INPUT_SOURCE_2: &str = "Input source 2";
+    pub const CONFIG_INPUT_SOURCE_2_TIP: &str = "input_source_2_tip";
+
+    pub const CONFIG_INPUT_SOURCE_DEFAULT: &str = CONFIG_INPUT_SOURCE_1;
+
+    pub fn init_input_source() {
+        #[cfg(target_os = "linux")]
+        if !crate::platform::linux::is_x11() {
+            // If switching from X11 to Wayland, the grab loop will not be started.
+            // Do not change the config here.
+            return;
+        }
+        #[cfg(target_os = "macos")]
+        if !crate::platform::macos::is_can_input_monitoring(false) {
+            log::error!("init_input_source, is_can_input_monitoring() false");
+            set_local_option(
+                CONFIG_OPTION_INPUT_SOURCE.to_string(),
+                CONFIG_INPUT_SOURCE_2.to_string(),
+            );
+            return;
+        }
+        let cur_input_source = get_cur_session_input_source();
+        if cur_input_source == CONFIG_INPUT_SOURCE_1 {
+            super::IS_RDEV_ENABLED.store(true, super::Ordering::SeqCst);
+        }
+        super::client::start_grab_loop();
+    }
+
+    pub fn change_input_source(session_id: SessionID, input_source: String) {
+        let cur_input_source = get_cur_session_input_source();
+        if cur_input_source == input_source {
+            return;
+        }
+        if input_source == CONFIG_INPUT_SOURCE_1 {
+            #[cfg(target_os = "macos")]
+            if !crate::platform::macos::is_can_input_monitoring(false) {
+                log::error!("change_input_source, is_can_input_monitoring() false");
+                return;
+            }
+            // It is ok to start grab loop multiple times.
+            super::client::start_grab_loop();
+            super::IS_RDEV_ENABLED.store(true, super::Ordering::SeqCst);
+            crate::flutter_ffi::session_enter_or_leave(session_id, true);
+        } else if input_source == CONFIG_INPUT_SOURCE_2 {
+            // No need to stop grab loop.
+            crate::flutter_ffi::session_enter_or_leave(session_id, false);
+            super::IS_RDEV_ENABLED.store(false, super::Ordering::SeqCst);
+        }
+        set_local_option(CONFIG_OPTION_INPUT_SOURCE.to_string(), input_source);
+    }
+
+    #[inline]
+    pub fn get_cur_session_input_source() -> String {
+        #[cfg(target_os = "linux")]
+        if !crate::platform::linux::is_x11() {
+            return CONFIG_INPUT_SOURCE_2.to_string();
+        }
+        let input_source = get_local_option(CONFIG_OPTION_INPUT_SOURCE.to_string());
+        if input_source.is_empty() {
+            CONFIG_INPUT_SOURCE_DEFAULT.to_string()
+        } else {
+            input_source
+        }
+    }
+
+    #[inline]
+    pub fn get_supported_input_source() -> Vec<(String, String)> {
+        #[cfg(target_os = "linux")]
+        if !crate::platform::linux::is_x11() {
+            return vec![(
+                CONFIG_INPUT_SOURCE_2.to_string(),
+                CONFIG_INPUT_SOURCE_2_TIP.to_string(),
+            )];
+        }
+        vec![
+            (
+                CONFIG_INPUT_SOURCE_1.to_string(),
+                CONFIG_INPUT_SOURCE_1_TIP.to_string(),
+            ),
+            (
+                CONFIG_INPUT_SOURCE_2.to_string(),
+                CONFIG_INPUT_SOURCE_2_TIP.to_string(),
+            ),
+        ]
+    }
 }

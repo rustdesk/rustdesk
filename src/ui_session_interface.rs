@@ -5,8 +5,6 @@ use crate::{
 use async_trait::async_trait;
 use bytes::Bytes;
 use rdev::{Event, EventType::*, KeyCode};
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::{
     collections::HashMap,
     ops::{Deref, DerefMut},
@@ -42,9 +40,6 @@ use crate::client::{
 use crate::common::GrabState;
 use crate::keyboard;
 use crate::{client::Data, client::Interface};
-
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
-pub static IS_IN: AtomicBool = AtomicBool::new(false);
 
 const CHANGE_RESOLUTION_VALID_TIMEOUT_SECS: u64 = 15;
 
@@ -725,13 +720,11 @@ impl<T: InvokeUiSession> Session<T> {
 
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     pub fn enter(&self, keyboard_mode: String) {
-        IS_IN.store(true, Ordering::SeqCst);
         keyboard::client::change_grab_status(GrabState::Run, &keyboard_mode);
     }
 
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     pub fn leave(&self, keyboard_mode: String) {
-        IS_IN.store(false, Ordering::SeqCst);
         keyboard::client::change_grab_status(GrabState::Wait, &keyboard_mode);
     }
 

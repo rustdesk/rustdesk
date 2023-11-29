@@ -959,7 +959,6 @@ class CustomAlertDialog extends StatelessWidget {
 void msgBox(SessionID sessionId, String type, String title, String text,
     String link, OverlayDialogManager dialogManager,
     {bool? hasCancel, ReconnectHandle? reconnect, int? reconnectTimeout}) {
-
   dialogManager.dismissAll();
   List<Widget> buttons = [];
   bool hasOk = false;
@@ -2765,6 +2764,8 @@ parseParamScreenRect(Map<String, dynamic> params) {
   }
   return screenRect;
 }
+
+get isInputSourceFlutter => stateGlobal.getInputSource() == "Input source 2";
 
 class _ReconnectCountDownButton extends StatefulWidget {
   _ReconnectCountDownButton({

@@ -573,5 +573,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Enter privacy mode", "Ieiet privātuma režīmā"),
         ("Exit privacy mode", "Iziet no privātuma režīma"),
         ("idd_not_support_under_win10_2004_tip", "Netiešā displeja draiveris netiek atbalstīts. Nepieciešama operētājsistēma Windows 10, versija 2004 vai jaunāka."),
+        ("input_source_1_tip", ""),
+        ("input_source_2_tip", ""),
     ].iter().cloned().collect();
 }

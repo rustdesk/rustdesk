@@ -573,5 +573,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Enter privacy mode", "개인정보 보호 모드 사용"),
         ("Exit privacy mode", "개인정보 보호 모드 종료"),
         ("idd_not_support_under_win10_2004_tip", "간접 디스플레이 드라이버는 지원되지 않습니다. Windows 10 버전 2004 이상이 필요합니다."),
+        ("input_source_1_tip", ""),
+        ("input_source_2_tip", ""),
     ].iter().cloned().collect();
 }

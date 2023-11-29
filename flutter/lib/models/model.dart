@@ -735,17 +735,9 @@ class FfiModel with ChangeNotifier {
   }
 
   checkDesktopKeyboardMode() async {
-    final curMode = await bind.sessionGetKeyboardMode(sessionId: sessionId);
-    if (curMode != null) {
-      if (bind.sessionIsKeyboardModeSupported(
-          sessionId: sessionId, mode: curMode)) {
-        return;
-      }
-    }
-
-    // If current keyboard mode is not supported, change to another one.
-
-    if (stateGlobal.grabKeyboard) {
+    if (isInputSourceFlutter) {
+      // Local side, flutter keyboard input source
+      // Currently only map mode is supported, legacy mode is used for compatibility.
       for (final mode in [kKeyMapMode, kKeyLegacyMode]) {
         if (bind.sessionIsKeyboardModeSupported(
             sessionId: sessionId, mode: mode)) {
@@ -754,6 +746,15 @@ class FfiModel with ChangeNotifier {
         }
       }
     } else {
+      final curMode = await bind.sessionGetKeyboardMode(sessionId: sessionId);
+      if (curMode != null) {
+        if (bind.sessionIsKeyboardModeSupported(
+            sessionId: sessionId, mode: curMode)) {
+          return;
+        }
+      }
+
+      // If current keyboard mode is not supported, change to another one.
       for (final mode in [kKeyMapMode, kKeyTranslateMode, kKeyLegacyMode]) {
         if (bind.sessionIsKeyboardModeSupported(
             sessionId: sessionId, mode: mode)) {

@@ -573,5 +573,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Enter privacy mode", "进入隐私模式"),
         ("Exit privacy mode", "退出隐私模式"),
         ("idd_not_support_under_win10_2004_tip", "不支持 Indirect display driver 。需要 windows 10, version 2004 及更高的版本。"),
+        ("input_source_1_tip", "输入源 1"),
+        ("input_source_2_tip", "输入源 2"),
     ].iter().cloned().collect();
 }
