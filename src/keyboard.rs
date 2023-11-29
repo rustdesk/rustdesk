@@ -12,7 +12,7 @@ use hbb_common::message_proto::*;
 #[cfg(any(target_os = "windows", target_os = "macos"))]
 use rdev::KeyCode;
 use rdev::{Event, EventType, Key};
-#[cfg(any(target_os = "windows", target_os = "macos"))]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::{
     collections::HashMap,
@@ -324,7 +324,7 @@ pub fn stop_grab_loop() -> Result<(), rdev::GrabError> {
     #[cfg(any(target_os = "windows", target_os = "macos"))]
     rdev::exit_grab()?;
     #[cfg(target_os = "linux")]
-    rdev::exit_grab_listen()?;
+    rdev::exit_grab_listen();
     Ok(())
 }
 
@@ -1082,6 +1082,8 @@ pub fn keycode_to_rdev_key(keycode: u32) -> Key {
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub mod input_source {
     use hbb_common::SessionID;
+    #[cfg(target_os = "macos")]
+    use hbb_common::log;
 
     use crate::ui_interface::{get_local_option, set_local_option};
 

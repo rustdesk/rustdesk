@@ -1603,7 +1603,6 @@ class _KeyboardMenu extends StatelessWidget {
         menuChildren: [
           keyboardMode(modeOnly),
           localKeyboardType(),
-          Divider(),
           inputSource(),
           Divider(),
           viewMode(),
@@ -1693,25 +1692,25 @@ class _KeyboardMenu extends StatelessWidget {
     if (supportedInputSourceList.length < 2) return Offstage();
     final inputSource = stateGlobal.getInputSource();
     final enabled = !ffi.ffiModel.viewOnly;
-    return Column(
-      children: supportedInputSourceList.map((e) {
-        final d = e as List<dynamic>;
-        return RdoMenuButton<String>(
-          child: Text(translate(d[1] as String)),
-          value: d[0] as String,
-          groupValue: inputSource,
-          onChanged: enabled
-              ? (v) async {
-                  if (v != null) {
-                    await stateGlobal.setInputSource(ffi.sessionId, v);
-                    await ffi.ffiModel.checkDesktopKeyboardMode();
-                  }
+    final children = <Widget>[Divider()];
+    children.addAll(supportedInputSourceList.map((e) {
+      final d = e as List<dynamic>;
+      return RdoMenuButton<String>(
+        child: Text(translate(d[1] as String)),
+        value: d[0] as String,
+        groupValue: inputSource,
+        onChanged: enabled
+            ? (v) async {
+                if (v != null) {
+                  await stateGlobal.setInputSource(ffi.sessionId, v);
+                  await ffi.ffiModel.checkDesktopKeyboardMode();
                 }
-              : null,
-          ffi: ffi,
-        );
-      }).toList(),
-    );
+              }
+            : null,
+        ffi: ffi,
+      );
+    }));
+    return Column(children: children);
   }
 
   viewMode() {
