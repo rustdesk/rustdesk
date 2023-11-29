@@ -159,7 +159,7 @@ class ToReleaseKeys {
 
 class InputModel {
   final WeakReference<FFI> parent;
-  String keyboardMode = "legacy";
+  String keyboardMode = '';
 
   // keyboard
   var shift = false;
@@ -194,18 +194,29 @@ class InputModel {
 
   InputModel(this.parent) {
     sessionId = parent.target!.sessionId;
+
+    // It is ok to call updateKeyboardMode() directly.
+    // Because `bind` is initialized in `PlatformFFI.init()` which is called very early.
+    // But we still wrap it in a Future.delayed() to make it more clear.
+    Future.delayed(Duration(milliseconds: 100), () {
+      updateKeyboardMode();
+    });
+  }
+
+  updateKeyboardMode() async {
+    // * Currently mobile does not enable map mode
+    if (isDesktop) {
+      if (keyboardMode.isEmpty) {
+        keyboardMode =
+            await bind.sessionGetKeyboardMode(sessionId: sessionId) ??
+                kKeyLegacyMode;
+      }
+    }
   }
 
   KeyEventResult handleRawKeyEvent(RawKeyEvent e) {
     if (isDesktop && !isInputSourceFlutter) {
       return KeyEventResult.handled;
-    }
-
-    // * Currently mobile does not enable map mode
-    if (isDesktop) {
-      bind.sessionGetKeyboardMode(sessionId: sessionId).then((result) {
-        keyboardMode = result.toString();
-      });
     }
 
     final key = e.logicalKey;

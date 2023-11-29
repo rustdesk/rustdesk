@@ -1628,6 +1628,7 @@ class _KeyboardMenu extends StatelessWidget {
         if (value == null) return;
         await bind.sessionSetKeyboardMode(
             sessionId: ffi.sessionId, value: value);
+        await ffi.inputModel.updateKeyboardMode();
       }
 
       for (InputModeMenu mode in modes) {
@@ -1704,6 +1705,7 @@ class _KeyboardMenu extends StatelessWidget {
                 if (v != null) {
                   await stateGlobal.setInputSource(ffi.sessionId, v);
                   await ffi.ffiModel.checkDesktopKeyboardMode();
+                  await ffi.inputModel.updateKeyboardMode();
                 }
               }
             : null,
