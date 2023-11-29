@@ -471,6 +471,7 @@ pub fn session_handle_flutter_key_event(
 // As rust is multi-thread, it is possible that enter() is called before leave().
 // This will cause the keyboard input to take no effect.
 pub fn session_enter_or_leave(_session_id: SessionID, _enter: bool) -> SyncReturn<()> {
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     if let Some(session) = sessions::get_session_by_session_id(&_session_id) {
         let keyboard_mode = session.get_keyboard_mode();
         if _enter {
