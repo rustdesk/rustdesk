@@ -1098,7 +1098,6 @@ pub mod input_source {
     pub const CONFIG_INPUT_SOURCE_DEFAULT: &str = CONFIG_INPUT_SOURCE_1;
 
     pub fn init_input_source() {
-        let cur_input_source = get_cur_session_input_source();
         #[cfg(target_os = "linux")]
         if !crate::platform::linux::is_x11() {
             // If switching from X11 to Wayland, the grab loop will not be started.
@@ -1114,6 +1113,7 @@ pub mod input_source {
             );
             return;
         }
+        let cur_input_source = get_cur_session_input_source();
         if cur_input_source == CONFIG_INPUT_SOURCE_1 {
             super::IS_RDEV_ENABLED.store(true, super::Ordering::SeqCst);
         }
