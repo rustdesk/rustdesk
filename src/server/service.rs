@@ -99,6 +99,7 @@ impl<T: Subscriber + From<ConnInner>> Service for ServiceTmpl<T> {
 
     fn is_subed(&self, id: i32) -> bool {
         self.0.read().unwrap().subscribes.get(&id).is_some()
+            || self.0.read().unwrap().new_subscribes.get(&id).is_some()
     }
 
     fn on_subscribe(&self, sub: ConnInner) {
