@@ -2333,7 +2333,7 @@ impl Connection {
             let res = MessageBox {
                 msgtype: "nook-nocancel-hasclose".to_owned(),
                 title: "Prompt".to_owned(),
-                text: "switch_display_elevated_connections_tip".to_owned(),
+                text: "capture_display_elevated_connections_tip".to_owned(),
                 link: "".to_owned(),
                 ..Default::default()
             };
