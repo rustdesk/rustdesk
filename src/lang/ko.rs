@@ -552,6 +552,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Remove wallpaper during incoming sessions", "세션 수락시 배경화면 제거"),
         ("Test", "테스트"),
         ("switch_display_elevated_connections_tip", "권한을 승격한 후에는 사용자에게 다중 연결 요금이 부과되며 기본이 아닌 디스플레이로 전환할 수 없습니다. 여러 대의 모니터를 제어하려면 설치 후 다시 시도하세요"),
+        ("capture_display_elevated_connections_tip", ""),
         ("display_is_plugged_out_msg", "모니터의 연결이 끈어지면 첫 번째 모니터로 전환됩니다"),
         ("No displays", "디스플레이 없음"),
         ("elevated_switch_display_msg", "권한 상승 이후에는 다중 모니터 화면이 지원되지 않으므로 메인 모니터로 전환하세요"),

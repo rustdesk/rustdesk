@@ -552,6 +552,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Remove wallpaper during incoming sessions", "Achtergrond verwijderen tijdens inkomende sessies"),
         ("Test", "Test"),
         ("switch_display_elevated_connections_tip", "Overschakelen naar een niet-hoofdbeeldscherm wordt niet ondersteund in de verhoogde modus wanneer er meerdere verbindingen zijn. Probeer het opnieuw na de installatie als je meerdere schermen wilt beheren."),
+        ("capture_display_elevated_connections_tip", ""),
         ("display_is_plugged_out_msg", "Beeldscherm is uitgeschakeld, schakel over naar het primaire beeldscherm."),
         ("No displays", "Geen beeldschermen"),
         ("elevated_switch_display_msg", "Schakel over naar het primaire beeldscherm, aangezien meerdere beeldschermen niet worden ondersteund in de modus met verhoogde rechten."),

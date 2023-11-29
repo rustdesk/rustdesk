@@ -2332,6 +2332,22 @@ impl Connection {
     }
 
     async fn capture_displays(&mut self, add: &[usize], sub: &[usize], set: &[usize]) {
+        #[cfg(windows)]
+        if portable_client::running() && (add.len() > 0 || set.len() > 1) {
+            log::info!("Capturing multiple displays is not supported in the elevated mode.");
+            let mut msg_out = Message::new();
+            let res = MessageBox {
+                msgtype: "nook-nocancel-hasclose".to_owned(),
+                title: "Prompt".to_owned(),
+                text: "capture_display_elevated_connections_tip".to_owned(),
+                link: "".to_owned(),
+                ..Default::default()
+            };
+            msg_out.set_message_box(res);
+            self.send(msg_out).await;
+            return;
+        }
+
         if let Some(sever) = self.server.upgrade() {
             let mut lock = sever.write().unwrap();
             for display in add.iter() {

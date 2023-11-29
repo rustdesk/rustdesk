@@ -552,6 +552,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Remove wallpaper during incoming sessions", "Hintergrundbild während eingehender Sitzungen entfernen"),
         ("Test", "Test"),
         ("switch_display_elevated_connections_tip", "Das Umschalten auf einen sekundären Bildschirm wird mit erhöhten Rechten nicht unterstützt, wenn mehrere Verbindungen bestehen. Bitte versuchen Sie es nach der Installation erneut, wenn Sie mehrere Bildschirme steuern möchten."),
+        ("capture_display_elevated_connections_tip", ""),
         ("display_is_plugged_out_msg", "Der Bildschirm ist nicht angeschlossen, schalten Sie auf den ersten Bildschirm um."),
         ("No displays", "Keine Bildschirme"),
         ("elevated_switch_display_msg", "Wechseln Sie zum primären Bildschirm, da mehrere Bildschirme im erweiterten Modus nicht unterstützt werden."),

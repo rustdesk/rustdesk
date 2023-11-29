@@ -552,6 +552,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Remove wallpaper during incoming sessions", "Rimuovi lo sfondo durante le sessioni in entrata"),
         ("Test", "Test"),
         ("switch_display_elevated_connections_tip", "Nella modalità elevata quando sono presenti più connessioni non è supportato il passaggio allo schermo non primario. Se vuoi controllare più schermi riprova dopo l'installazione."),
+        ("capture_display_elevated_connections_tip", ""),
         ("display_is_plugged_out_msg", "Lo schermo è scollegato, passo al primo schermo."),
         ("No displays", "Nessuno schermo"),
         ("elevated_switch_display_msg", "Passo allo schermo principale perché in modalità elevata non sono supportati più schermi."),

@@ -552,6 +552,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Remove wallpaper during incoming sessions", "Прибирати шпалеру під час вхідних сеансів"),
         ("Test", "Тест"),
         ("switch_display_elevated_connections_tip", "В режимі розширених прав, коли є декілька підключень, не підтримується перемикання на неосновний дисплей. Якщо вам потрібен контроль декількох дисплеїв, будь ласка, спробуйте ще раз після встановлення"),
+        ("capture_display_elevated_connections_tip", ""),
         ("display_is_plugged_out_msg", "Дисплей відключено, перемкніться на перший дисплей"),
         ("No displays", "Відсутні дисплеї"),
         ("elevated_switch_display_msg", "Перемкніться на основний дисплей, оскільки в режимі розширених прав одночасне використання декілька дисплеїв не підтримуються."),

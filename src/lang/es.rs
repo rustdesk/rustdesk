@@ -552,6 +552,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Remove wallpaper during incoming sessions", "Quitar el fonde de pantalla durante sesiones entrantes"),
         ("Test", "Probar"),
         ("switch_display_elevated_connections_tip", "Cambiar a una pantalla no principal no está soportado en el modo elevado cuando hay múltiples conexiones. Por favor, inténtalo de nuevo tras la instalación si quieres controlar múltiples pantallas."),
+        ("capture_display_elevated_connections_tip", ""),
         ("display_is_plugged_out_msg", "La pantalla está desconectada, cambia a la principal."),
         ("No displays", "No hay pantallas"),
         ("elevated_switch_display_msg", "Cambiar a la pantalla principal porque mútliples pantallas no están soportadas en modo elevado."),
