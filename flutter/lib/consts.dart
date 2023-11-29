@@ -69,8 +69,6 @@ const String kOptionOpenInTabs = "allow-open-in-tabs";
 const String kOptionOpenInWindows = "allow-open-in-windows";
 const String kOptionForceAlwaysRelay = "force-always-relay";
 
-const String kOptionInputSource = "input-source";
-
 const String kUniLinksPrefix = "rustdesk://";
 const String kUrlActionClose = "close";
 

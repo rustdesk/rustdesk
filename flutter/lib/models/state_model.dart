@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_hbb/common.dart';
 import 'package:get/get.dart';
 
 import '../consts.dart';
@@ -98,14 +99,14 @@ class StateGlobal {
 
   String getInputSource({bool force = false}) {
     if (force || _inputSource.isEmpty) {
-      _inputSource = bind.mainGetLocalOption(key: kOptionInputSource);
+      _inputSource = bind.mainGetInputSource();
     }
     return _inputSource;
   }
 
-  void setInputSource(String v) async {
-    await bind.mainSetLocalOption(key: kOptionInputSource, value: v);
-    _inputSource = bind.mainGetLocalOption(key: kOptionInputSource);
+  setInputSource(SessionID sessionId, String v) async {
+    await bind.mainSetInputSource(sessionId: sessionId, value: v);
+    _inputSource = bind.mainGetInputSource();
   }
 
   StateGlobal._();

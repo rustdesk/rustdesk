@@ -6,6 +6,7 @@ use crate::{
     common::make_fd_to_json,
     flutter::{self, session_add, session_add_existed, session_start_, sessions},
     input::*,
+    keyboard::input_source::{change_input_source, get_cur_session_input_source},
     ui_interface::{self, *},
 };
 use flutter_rust_bridge::{StreamSink, SyncReturn};
@@ -468,16 +469,13 @@ pub fn session_handle_flutter_key_event(
 // As rust is multi-thread, it is possible that enter() is called before leave().
 // This will cause the keyboard input to take no effect.
 pub fn session_enter_or_leave(_session_id: SessionID, _enter: bool) -> SyncReturn<()> {
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    if crate::keyboard::input_source::is_cur_input_source_rdev() {
-        if let Some(session) = sessions::get_session_by_session_id(&_session_id) {
-            let keyboard_mode = session.get_keyboard_mode();
-            if _enter {
-                set_cur_session_id_(_session_id, &keyboard_mode);
-                session.enter(keyboard_mode);
-            } else {
-                session.leave(keyboard_mode);
-            }
+    if let Some(session) = sessions::get_session_by_session_id(&_session_id) {
+        let keyboard_mode = session.get_keyboard_mode();
+        if _enter {
+            set_cur_session_id_(_session_id, &keyboard_mode);
+            session.enter(keyboard_mode);
+        } else {
+            session.leave(keyboard_mode);
         }
     }
     SyncReturn(())
@@ -848,12 +846,7 @@ pub fn main_post_request(url: String, body: String, header: String) {
 }
 
 pub fn main_get_local_option(key: String) -> SyncReturn<String> {
-    let v = if key == crate::keyboard::input_source::CONFIG_OPTION_INPUT_SOURCE {
-        crate::keyboard::input_source::get_cur_session_input_source()
-    } else {
-        get_local_option(key)
-    };
-    SyncReturn(v)
+    SyncReturn(get_local_option(key))
 }
 
 pub fn main_get_env(key: String) -> SyncReturn<String> {
@@ -861,11 +854,15 @@ pub fn main_get_env(key: String) -> SyncReturn<String> {
 }
 
 pub fn main_set_local_option(key: String, value: String) {
-    if key == crate::keyboard::input_source::CONFIG_OPTION_INPUT_SOURCE {
-        crate::keyboard::input_source::change_input_source(&value);
-    } else {
-        set_local_option(key, value);
-    }
+    set_local_option(key, value)
+}
+
+pub fn main_get_input_source() -> SyncReturn<String> {
+    SyncReturn(get_cur_session_input_source())
+}
+
+pub fn main_set_input_source(session_id: SessionID, value: String) {
+    change_input_source(session_id, value);
 }
 
 pub fn main_get_my_id() -> String {

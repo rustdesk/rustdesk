@@ -34,6 +34,9 @@ const OS_LOWER_ANDROID: &str = "android";
 #[cfg(any(target_os = "windows", target_os = "macos"))]
 static KEYBOARD_HOOKED: AtomicBool = AtomicBool::new(false);
 
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+static IS_RDEV_ENABLED: AtomicBool = AtomicBool::new(false);
+
 lazy_static::lazy_static! {
     static ref TO_RELEASE: Arc<Mutex<HashMap<Key, Event>>> = Arc::new(Mutex::new(HashMap::new()));
     static ref MODIFIERS_STATE: Mutex<HashMap<Key, bool>> = {
@@ -55,6 +58,9 @@ pub mod client {
 
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     pub fn change_grab_status(state: GrabState, keyboard_mode: &str) {
+        if !IS_RDEV_ENABLED.load(Ordering::SeqCst) {
+            return;
+        }
         match state {
             GrabState::Ready => {}
             GrabState::Run => {
@@ -78,10 +84,7 @@ pub mod client {
                 #[cfg(target_os = "linux")]
                 rdev::disable_grab();
             }
-            GrabState::Exit => {
-                #[cfg(target_os = "linux")]
-                rdev::exit_grab_listen();
-            }
+            GrabState::Exit => {}
         }
     }
 
@@ -315,6 +318,8 @@ pub fn start_grab_loop() {
     };
 }
 
+// #[allow(dead_code)] is ok here. No need to stop grabbing loop.
+#[allow(dead_code)]
 pub fn stop_grab_loop() -> Result<(), rdev::GrabError> {
     #[cfg(any(target_os = "windows", target_os = "macos"))]
     rdev::exit_grab()?;
@@ -1076,8 +1081,9 @@ pub fn keycode_to_rdev_key(keycode: u32) -> Key {
 #[cfg(feature = "flutter")]
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub mod input_source {
+    use hbb_common::SessionID;
+
     use crate::ui_interface::{get_local_option, set_local_option};
-    use hbb_common::log;
 
     pub const CONFIG_OPTION_INPUT_SOURCE: &str = "input-source";
     // rdev grab mode
@@ -1087,34 +1093,32 @@ pub mod input_source {
     pub const CONFIG_INPUT_SOURCE_2: &str = "Input source 2";
     pub const CONFIG_INPUT_SOURCE_2_TIP: &str = "input_source_2_tip";
 
-    #[cfg(not(target_os = "macos"))]
     pub const CONFIG_INPUT_SOURCE_DEFAULT: &str = CONFIG_INPUT_SOURCE_1;
-    #[cfg(target_os = "macos")]
-    pub const CONFIG_INPUT_SOURCE_DEFAULT: &str = CONFIG_INPUT_SOURCE_2;
 
     pub fn init_input_source() {
         let cur_input_source = get_cur_session_input_source();
-        if cur_input_source == CONFIG_INPUT_SOURCE_1 {
-            #[cfg(target_os = "macos")]
-            if !crate::platform::macos::is_can_input_monitoring(false) {
-                log::error!("init_input_source, is_can_input_monitoring() false");
-                set_local_option(
-                    CONFIG_OPTION_INPUT_SOURCE.to_string(),
-                    CONFIG_INPUT_SOURCE_2.to_string(),
-                );
-                return;
-            }
-            #[cfg(target_os = "linux")]
-            if !crate::platform::linux::is_x11() {
-                // If switching from X11 to Wayland, the grab loop will not be started.
-                // Do not change the config here.
-                return;
-            }
-            super::start_grab_loop();
+        #[cfg(target_os = "linux")]
+        if !crate::platform::linux::is_x11() {
+            // If switching from X11 to Wayland, the grab loop will not be started.
+            // Do not change the config here.
+            return;
         }
+        #[cfg(target_os = "macos")]
+        if !crate::platform::macos::is_can_input_monitoring(false) {
+            log::error!("init_input_source, is_can_input_monitoring() false");
+            set_local_option(
+                CONFIG_OPTION_INPUT_SOURCE.to_string(),
+                CONFIG_INPUT_SOURCE_2.to_string(),
+            );
+            return;
+        }
+        if cur_input_source == CONFIG_INPUT_SOURCE_1 {
+            super::IS_RDEV_ENABLED.store(true, super::Ordering::SeqCst);
+        }
+        super::start_grab_loop();
     }
 
-    pub fn change_input_source(input_source: &str) {
+    pub fn change_input_source(session_id: SessionID, input_source: String) {
         let cur_input_source = get_cur_session_input_source();
         if cur_input_source == input_source {
             return;
@@ -1125,17 +1129,16 @@ pub mod input_source {
                 log::error!("change_input_source, is_can_input_monitoring() false");
                 return;
             }
+            // It is ok to start grab loop multiple times.
             super::start_grab_loop();
+            super::IS_RDEV_ENABLED.store(true, super::Ordering::SeqCst);
+            crate::flutter_ffi::session_enter_or_leave(session_id, true);
         } else if input_source == CONFIG_INPUT_SOURCE_2 {
-            if let Err(e) = super::stop_grab_loop() {
-                log::error!("change_input_source, stop_grab_loop error: {:?}", e);
-                return;
-            }
+            // No need to stop grab loop.
+            crate::flutter_ffi::session_enter_or_leave(session_id, false);
+            super::IS_RDEV_ENABLED.store(false, super::Ordering::SeqCst);
         }
-        set_local_option(
-            CONFIG_OPTION_INPUT_SOURCE.to_string(),
-            input_source.to_string(),
-        );
+        set_local_option(CONFIG_OPTION_INPUT_SOURCE.to_string(), input_source);
     }
 
     #[inline]
@@ -1150,11 +1153,6 @@ pub mod input_source {
         } else {
             input_source
         }
-    }
-
-    #[inline]
-    pub fn is_cur_input_source_rdev() -> bool {
-        get_cur_session_input_source() == CONFIG_INPUT_SOURCE_1
     }
 
     #[inline]

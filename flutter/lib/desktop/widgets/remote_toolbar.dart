@@ -1694,23 +1694,24 @@ class _KeyboardMenu extends StatelessWidget {
     final inputSource = stateGlobal.getInputSource();
     final enabled = !ffi.ffiModel.viewOnly;
     return Column(
-          children: supportedInputSourceList.map((e) {
-            final d = e as List<dynamic>;
-            return RdoMenuButton<String>(
-              child: Text(translate(d[1] as String)),
-              value: d[0] as String,
-              groupValue: inputSource,
-              onChanged: enabled
-                  ? (e) {
-                      if (e != null) {
-                        stateGlobal.setInputSource(e);
-                      }
-                    }
-                  : null,
-              ffi: ffi,
-            );
-          }).toList(),
+      children: supportedInputSourceList.map((e) {
+        final d = e as List<dynamic>;
+        return RdoMenuButton<String>(
+          child: Text(translate(d[1] as String)),
+          value: d[0] as String,
+          groupValue: inputSource,
+          onChanged: enabled
+              ? (v) async {
+                  if (v != null) {
+                    await stateGlobal.setInputSource(ffi.sessionId, v);
+                    await ffi.ffiModel.checkDesktopKeyboardMode();
+                  }
+                }
+              : null,
+          ffi: ffi,
         );
+      }).toList(),
+    );
   }
 
   viewMode() {
