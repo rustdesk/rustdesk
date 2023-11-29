@@ -552,6 +552,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Remove wallpaper during incoming sessions", "接受会话时移除桌面壁纸"),
         ("Test", "测试"),
         ("switch_display_elevated_connections_tip", "提权后，被控有多个连接，不能切换到非主显示器。若要控制多显示器，请安装后再试。"),
+        ("capture_display_elevated_connections_tip", "提权后，不能显示多个显示器。若要控制多显示器，请安装后再试。"),
         ("display_is_plugged_out_msg", "显示器被拔出，切换到第一个显示器。"),
         ("No displays", "没有显示器。"),
         ("elevated_switch_display_msg", "切换到主显示器，因为提权后，不支持多显示器画面。"),

@@ -878,15 +878,7 @@ pub mod client {
         }
         if portable_service_running {
             log::info!("Create shared memory capturer");
-            if current_display == *display_service::PRIMARY_DISPLAY_IDX {
-                return Ok(Box::new(CapturerPortable::new(current_display)));
-            } else {
-                bail!(
-                    "Ignore capture display index: {}, the primary display index is: {}",
-                    current_display,
-                    *display_service::PRIMARY_DISPLAY_IDX
-                );
-            }
+            return Ok(Box::new(CapturerPortable::new(current_display)));
         } else {
             log::debug!("Create capturer dxgi|gdi");
             return Ok(Box::new(

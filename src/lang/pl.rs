@@ -552,6 +552,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Remove wallpaper during incoming sessions", "Usuń tapetę podczas sesji przychodzących"),
         ("Test", "Test"),
         ("switch_display_elevated_connections_tip", "Przełączanie na ekran inny niż główny nie jest obsługiwane przy podniesionych uprawnieniach, gdy istnieje wiele połączeń. Jeśli chcesz sterować wieloma ekranami, należy zainstalować program."),
+        ("capture_display_elevated_connections_tip", ""),
         ("display_is_plugged_out_msg", "Ekran został odłączony, przełącz się na pierwszy ekran."),
         ("No displays", "Brak ekranów"),
         ("elevated_switch_display_msg", "Przełącz się na ekran główny, ponieważ wyświetlanie kilku ekranów nie jest obsługiwane przy podniesionych uprawnieniach."),

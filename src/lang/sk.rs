@@ -552,6 +552,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Remove wallpaper during incoming sessions", "Odstrániť tapetu počas prichádzajúcich relácií"),
         ("Test", "Test"),
         ("switch_display_elevated_connections_tip", "Prepínanie na inú ako primárnu obrazovku nie je podporované vo zvýšenom režime, ak existuje viacero pripojení. Ak chcete ovládať viacero obrazoviek, skúste to po inštalácii znova."),
+        ("capture_display_elevated_connections_tip", ""),
         ("display_is_plugged_out_msg", "Obrazovka je odpojená, prepnite na prvú obrazovku."),
         ("No displays", "Žiadne obrazovky"),
         ("elevated_switch_display_msg", "Prepnite na primárnu obrazovku, pretože viacero obrazoviek nie je podporovaných vo zvýšenom režime."),
