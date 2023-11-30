@@ -551,10 +551,10 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Filter by intersection", "Nach Schnittmenge filtern"),
         ("Remove wallpaper during incoming sessions", "Hintergrundbild während eingehender Sitzungen entfernen"),
         ("Test", "Test"),
-        ("capture_display_elevated_connections_tip", ""),
+        ("capture_display_elevated_connections_tip", "Das Erfassen mehrerer Bildschirme wird im erweiterten Benutzermodus nicht unterstützt. Bitte versuchen Sie es nach der Installation erneut, wenn Sie mehrere Bildschirme steuern möchten."),
         ("display_is_plugged_out_msg", "Der Bildschirm ist nicht angeschlossen, schalten Sie auf den ersten Bildschirm um."),
         ("No displays", "Keine Bildschirme"),
-        ("elevated_switch_display_msg", "Wechseln Sie zum primären Bildschirm, da mehrere Bildschirme im erweiterten Modus nicht unterstützt werden."),
+        ("elevated_switch_display_msg", "Wechseln Sie zum primären Bildschirm, da mehrere Bildschirme im erweiterten Benutzermodus nicht unterstützt werden."),
         ("Open in new window", "In einem neuen Fenster öffnen"),
         ("Show displays as individual windows", "Jeden Bildschirm in einem eigenen Fenster anzeigen"),
         ("Use all my displays for the remote session", "Alle meine Bildschirme für die Fernsitzung verwenden"),
@@ -574,7 +574,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Exit privacy mode", "Datenschutzmodus beenden"),
         ("idd_not_support_under_win10_2004_tip", "Indirekter Grafiktreiber wird nicht unterstützt. Windows 10, Version 2004 oder neuer ist erforderlich."),
         ("switch_display_elevated_connections_tip", "Das Umschalten auf einen sekundären Bildschirm wird mit erhöhten Rechten nicht unterstützt, wenn mehrere Verbindungen bestehen. Bitte versuchen Sie es nach der Installation erneut, wenn Sie mehrere Bildschirme steuern möchten."),
-        ("input_source_1_tip", ""),
-        ("input_source_2_tip", ""),
+        ("input_source_1_tip", "Eingangsquelle 1"),
+        ("input_source_2_tip", "Eingangsquelle 2"),
     ].iter().cloned().collect();
 }
