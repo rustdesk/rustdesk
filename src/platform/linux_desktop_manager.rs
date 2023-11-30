@@ -76,15 +76,12 @@ fn detect_headless() -> Option<&'static str> {
         }
     }
 
-    match run_cmds("ls /usr/share/xsessions/") {
-        Ok(output) => {
-            if output.trim().is_empty() {
-                return Some(LOGIN_MSG_DESKTOP_NO_DESKTOP);
-            }
-        }
-        _ => {
+    if let Ok(entries) = fs::read_dir("/usr/share/xsessions/") {
+        if entries.count() > 0 {
             return Some(LOGIN_MSG_DESKTOP_NO_DESKTOP);
         }
+    } else {
+        return Some(LOGIN_MSG_DESKTOP_NO_DESKTOP);
     }
 
     None
@@ -452,7 +449,7 @@ impl DesktopManager {
     fn wait_x_server_running(pid: u32, display_num: u32, max_wait_secs: u64) -> ResultType<()> {
         let wait_begin = Instant::now();
         loop {
-            if run_cmds(&format!("ls /proc/{}", pid))?.is_empty() {
+            if fs::read_dir(&format!("/proc/{}", pid))?.count() == 0 {
                 bail!("X server exit");
             }
 

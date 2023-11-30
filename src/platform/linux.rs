@@ -17,7 +17,8 @@ use hbb_common::{
 use std::{
     cell::RefCell,
     ffi::OsStr,
-    io::Write,
+    fs::File,
+    io::{BufRead, BufReader, Write},
     path::{Path, PathBuf},
     process::{Child, Command},
     string::String,
@@ -559,12 +560,14 @@ pub fn is_root() -> bool {
 }
 
 fn is_opensuse() -> bool {
-    if let Ok(res) = run_cmds("cat /etc/os-release | grep opensuse") {
-        if !res.is_empty() {
-            return true;
-        }
-    }
-    false
+    File::open("/etc/os-release")
+        .map(|file| {
+            BufReader::new(file)
+                .lines()
+                .filter_map(|line| line.ok())
+                .any(|line| line.contains("opensuse"))
+        })
+        .unwrap_or(false)
 }
 
 pub fn run_as_user<I, K, V>(
@@ -1139,13 +1142,17 @@ mod desktop {
         }
 
         fn set_is_subprocess(&mut self) {
-            self.is_rustdesk_subprocess = false;
-            let cmd = "ps -ef | grep 'rustdesk/xorg.conf' | grep -v grep | wc -l";
-            if let Ok(res) = run_cmds(cmd) {
-                if res.trim() != "0" {
-                    self.is_rustdesk_subprocess = true;
-                }
-            }
+            let rustdesk_flag_str = "rustdesk/xorg.conf";
+            self.is_rustdesk_subprocess = Command::new("ps")
+                .arg("-ef")
+                .output()
+                .map(|output| {
+                    output
+                        .stdout
+                        .lines()
+                        .any(|line| line.map_or(false, |l| l.contains(rustdesk_flag_str)))
+                })
+                .unwrap_or(false);
         }
 
         pub fn refresh(&mut self) {

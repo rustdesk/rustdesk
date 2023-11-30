@@ -1,5 +1,10 @@
 use crate::ResultType;
-use std::{collections::HashMap, process::Command};
+use std::{
+    collections::HashMap,
+    fs::{self, File},
+    io::{BufRead, BufReader},
+    process::Command,
+};
 
 lazy_static::lazy_static! {
     pub static ref DISTRO: Distro = Distro::new();
@@ -15,16 +20,27 @@ pub struct Distro {
 
 impl Distro {
     fn new() -> Self {
-        let name = run_cmds("awk -F'=' '/^NAME=/ {print $2}' /etc/os-release")
-            .unwrap_or_default()
-            .trim()
-            .trim_matches('"')
-            .to_string();
-        let version_id = run_cmds("awk -F'=' '/^VERSION_ID=/ {print $2}' /etc/os-release")
-            .unwrap_or_default()
-            .trim()
-            .trim_matches('"')
-            .to_string();
+        let mut name = "".to_owned();
+        let mut version_id = "".to_owned();
+        if let Ok(file) = File::open("/etc/os-release") {
+            for line in BufReader::new(file).lines() {
+                if let Ok(line) = line {
+                    let parts: Vec<&str> = line.split('=').collect();
+                    if parts.len() < 2 {
+                        continue;
+                    }
+                    if parts[0].trim() == "NAME" {
+                        name = parts[1].trim().trim_matches('"').to_string();
+                    }
+                    if parts[0].trim() == "VERSION_ID" {
+                        version_id = parts[1].trim().trim_matches('"').to_string();
+                    }
+                    if !name.is_empty() && !version_id.is_empty() {
+                        break;
+                    }
+                }
+            }
+        }
         Self { name, version_id }
     }
 }
@@ -53,11 +69,11 @@ pub fn get_display_server() -> String {
     if session.is_empty() {
         // loginctl has not given the expected output.  try something else.
         if let Ok(sid) = std::env::var("XDG_SESSION_ID") {
-            // could also execute "cat /proc/self/sessionid"
+            // could also read "/proc/self/sessionid"
             session = sid;
         }
         if session.is_empty() {
-            session = run_cmds("cat /proc/self/sessionid").unwrap_or_default();
+            session = fs::read_to_string("cat /proc/self/sessionid").unwrap_or_default();
             if session == INVALID_SESSION {
                 session = "".to_owned();
             }
@@ -88,12 +104,17 @@ pub fn get_display_server_of_session(session: &str) -> String {
                     .replace("TTY=", "")
                     .trim_end()
                     .into();
-                if let Ok(xorg_results) = run_cmds(&format!("ps -e | grep \"{tty}.\\\\+Xorg\""))
+
                 // And check if Xorg is running on that tty
-                {
-                    if xorg_results.trim_end() != "" {
-                        // If it is, manually return "x11", otherwise return tty
-                        return "x11".to_owned();
+                if let Ok(output) = Command::new("ps").arg("-e").output() {
+                    for line in output.stdout.lines() {
+                        if let Ok(line) = line {
+                            // Check if the tty is in use
+                            if line.contains(&tty) && line.contains("Xorg") {
+                                // If it is, return "x11"
+                                return "x11".to_owned();
+                            }
+                        }
                     }
                 }
             }
