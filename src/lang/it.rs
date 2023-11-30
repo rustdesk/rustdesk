@@ -551,7 +551,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Filter by intersection", "Filtra per incrocio"),
         ("Remove wallpaper during incoming sessions", "Rimuovi lo sfondo durante le sessioni in entrata"),
         ("Test", "Test"),
-        ("switch_display_elevated_connections_tip", "Nella modalità elevata quando sono presenti più connessioni non è supportato il passaggio allo schermo non primario. Se vuoi controllare più schermi riprova dopo l'installazione."),
         ("capture_display_elevated_connections_tip", ""),
         ("display_is_plugged_out_msg", "Lo schermo è scollegato, passo al primo schermo."),
         ("No displays", "Nessuno schermo"),
@@ -574,6 +573,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Enter privacy mode", "Entra in modalità privacy"),
         ("Exit privacy mode", "Esci dalla modalità privacy"),
         ("idd_not_support_under_win10_2004_tip", "Il driver video indiretto non è supportato. È richiesto Windows 10, versione 2004 o successiva."),
+        ("switch_display_elevated_connections_tip", "Nella modalità elevata quando sono presenti più connessioni non è supportato il passaggio allo schermo non primario. Se vuoi controllare più schermi riprova dopo l'installazione."),
         ("input_source_1_tip", ""),
         ("input_source_2_tip", ""),
     ].iter().cloned().collect();

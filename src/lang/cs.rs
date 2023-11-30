@@ -551,7 +551,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Filter by intersection", "Filtrovat podle průsečíku"),
         ("Remove wallpaper during incoming sessions", "Odstranit tapetu během příchozích relací"),
         ("Test", "Test"),
-        ("switch_display_elevated_connections_tip", "Přepnutí na jinou než primární obrazovku není podporováno ve zvýšeném režimu, pokud existuje více připojení. Pokud chcete ovládat více obrazovek, zkuste to po instalaci znovu."),
         ("capture_display_elevated_connections_tip", ""),
         ("display_is_plugged_out_msg", "Obrazovka je odpojena, přepněte na první obrazovku."),
         ("No displays", "Žádné obrazovky"),
@@ -574,6 +573,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Enter privacy mode", "Vstup do režimu soukromí"),
         ("Exit privacy mode", "Ukončit režim soukromí"),
         ("idd_not_support_under_win10_2004_tip", "Ovladač nepřímého zobrazení není podporován. Je vyžadován systém Windows 10, verze 2004 nebo novější."),
+        ("switch_display_elevated_connections_tip", "Přepnutí na jinou než primární obrazovku není podporováno ve zvýšeném režimu, pokud existuje více připojení. Pokud chcete ovládat více obrazovek, zkuste to po instalaci znovu."),
         ("input_source_1_tip", ""),
         ("input_source_2_tip", ""),
     ].iter().cloned().collect();

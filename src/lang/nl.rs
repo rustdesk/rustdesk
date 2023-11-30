@@ -551,7 +551,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Filter by intersection", "Filter op kruising"),
         ("Remove wallpaper during incoming sessions", "Achtergrond verwijderen tijdens inkomende sessies"),
         ("Test", "Test"),
-        ("switch_display_elevated_connections_tip", "Overschakelen naar een niet-hoofdbeeldscherm wordt niet ondersteund in de verhoogde modus wanneer er meerdere verbindingen zijn. Probeer het opnieuw na de installatie als je meerdere schermen wilt beheren."),
         ("capture_display_elevated_connections_tip", ""),
         ("display_is_plugged_out_msg", "Beeldscherm is uitgeschakeld, schakel over naar het primaire beeldscherm."),
         ("No displays", "Geen beeldschermen"),
@@ -574,6 +573,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Enter privacy mode", "Privacymodus openen"),
         ("Exit privacy mode", "Privacymodus afsluiten"),
         ("idd_not_support_under_win10_2004_tip", "Het indirecte displaystuurprogramma wordt niet ondersteund. Windows 10 versie 2004 of later is vereist."),
+        ("switch_display_elevated_connections_tip", "Overschakelen naar een niet-hoofdbeeldscherm wordt niet ondersteund in de verhoogde modus wanneer er meerdere verbindingen zijn. Probeer het opnieuw na de installatie als je meerdere schermen wilt beheren."),
         ("input_source_1_tip", "Invoerbron 1"),
         ("input_source_2_tip", "Invoerbron 2"),
     ].iter().cloned().collect();

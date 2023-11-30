@@ -551,7 +551,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Filter by intersection", "교차로로 필터링"),
         ("Remove wallpaper during incoming sessions", "세션 수락시 배경화면 제거"),
         ("Test", "테스트"),
-        ("switch_display_elevated_connections_tip", "권한을 승격한 후에는 사용자에게 다중 연결 요금이 부과되며 기본이 아닌 디스플레이로 전환할 수 없습니다. 여러 대의 모니터를 제어하려면 설치 후 다시 시도하세요"),
         ("capture_display_elevated_connections_tip", ""),
         ("display_is_plugged_out_msg", "모니터의 연결이 끈어지면 첫 번째 모니터로 전환됩니다"),
         ("No displays", "디스플레이 없음"),
@@ -574,6 +573,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Enter privacy mode", "개인정보 보호 모드 사용"),
         ("Exit privacy mode", "개인정보 보호 모드 종료"),
         ("idd_not_support_under_win10_2004_tip", "간접 디스플레이 드라이버는 지원되지 않습니다. Windows 10 버전 2004 이상이 필요합니다."),
+        ("switch_display_elevated_connections_tip", "권한을 승격한 후에는 사용자에게 다중 연결 요금이 부과되며 기본이 아닌 디스플레이로 전환할 수 없습니다. 여러 대의 모니터를 제어하려면 설치 후 다시 시도하세요"),
         ("input_source_1_tip", ""),
         ("input_source_2_tip", ""),
     ].iter().cloned().collect();

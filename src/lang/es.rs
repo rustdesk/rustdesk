@@ -551,7 +551,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Filter by intersection", "Filtrar por intersección"),
         ("Remove wallpaper during incoming sessions", "Quitar el fonde de pantalla durante sesiones entrantes"),
         ("Test", "Probar"),
-        ("switch_display_elevated_connections_tip", "Cambiar a una pantalla no principal no está soportado en el modo elevado cuando hay múltiples conexiones. Por favor, inténtalo de nuevo tras la instalación si quieres controlar múltiples pantallas."),
         ("capture_display_elevated_connections_tip", ""),
         ("display_is_plugged_out_msg", "La pantalla está desconectada, cambia a la principal."),
         ("No displays", "No hay pantallas"),
@@ -574,6 +573,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Enter privacy mode", "Entrar al modo privado"),
         ("Exit privacy mode", "Salir del modo privado"),
         ("idd_not_support_under_win10_2004_tip", ""),
+        ("switch_display_elevated_connections_tip", "Cambiar a una pantalla no principal no está soportado en el modo elevado cuando hay múltiples conexiones. Por favor, inténtalo de nuevo tras la instalación si quieres controlar múltiples pantallas."),
         ("input_source_1_tip", ""),
         ("input_source_2_tip", ""),
     ].iter().cloned().collect();

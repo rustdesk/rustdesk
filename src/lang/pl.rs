@@ -551,7 +551,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Filter by intersection", "Filtruj wg przecięcia"),
         ("Remove wallpaper during incoming sessions", "Usuń tapetę podczas sesji przychodzących"),
         ("Test", "Test"),
-        ("switch_display_elevated_connections_tip", "Przełączanie na ekran inny niż główny nie jest obsługiwane przy podniesionych uprawnieniach, gdy istnieje wiele połączeń. Jeśli chcesz sterować wieloma ekranami, należy zainstalować program."),
         ("capture_display_elevated_connections_tip", ""),
         ("display_is_plugged_out_msg", "Ekran został odłączony, przełącz się na pierwszy ekran."),
         ("No displays", "Brak ekranów"),
@@ -574,6 +573,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Enter privacy mode", "Wejdź w tryb prywatności"),
         ("Exit privacy mode", "Wyjdź z trybu prywatności"),
         ("idd_not_support_under_win10_2004_tip", ""),
+        ("switch_display_elevated_connections_tip", "Przełączanie na ekran inny niż główny nie jest obsługiwane przy podniesionych uprawnieniach, gdy istnieje wiele połączeń. Jeśli chcesz sterować wieloma ekranami, należy zainstalować program."),
         ("input_source_1_tip", ""),
         ("input_source_2_tip", ""),
     ].iter().cloned().collect();
