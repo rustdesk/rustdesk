@@ -213,6 +213,9 @@ fn try_start_server_(desktop: Option<&Desktop>) -> ResultType<Option<Child>> {
             if !desktop.xauth.is_empty() {
                 envs.push(("XAUTHORITY", desktop.xauth.clone()));
             }
+            if !desktop.wl_display.is_empty() {
+                envs.push(("WAYLAND_DISPLAY", desktop.wl_display.clone()));
+            }
             run_as_user(
                 vec!["--server"],
                 Some((desktop.uid.clone(), desktop.username.clone())),
@@ -936,6 +939,7 @@ mod desktop {
         pub display: String,
         pub xauth: String,
         pub is_rustdesk_subprocess: bool,
+        pub wl_display: String,
     }
 
     impl Desktop {
@@ -966,6 +970,7 @@ mod desktop {
                 for proc in display_proc {
                     self.display = get_env("DISPLAY", &self.uid, proc);
                     self.xauth = get_env("XAUTHORITY", &self.uid, proc);
+                    self.wl_display = get_env("WAYLAND_DISPLAY", &self.uid, proc);
                     if !self.display.is_empty() && !self.xauth.is_empty() {
                         break;
                     }
