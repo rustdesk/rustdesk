@@ -2703,7 +2703,10 @@ openMonitorInTheSameTab(int i, FFI ffi, PeerInfo pi) {
       ? List.generate(pi.displays.length, (index) => index)
       : [i];
   bind.sessionSwitchDisplay(
-      sessionId: ffi.sessionId, value: Int32List.fromList(displays));
+    isDesktop: isDesktop,
+    sessionId: ffi.sessionId,
+    value: Int32List.fromList(displays),
+  );
   ffi.ffiModel.switchToNewDisplay(i, ffi.sessionId, ffi.id);
 }
 
