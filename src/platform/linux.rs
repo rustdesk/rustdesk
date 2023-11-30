@@ -591,10 +591,8 @@ where
     let xdg = &format!("XDG_RUNTIME_DIR=/run/user/{}", uid) as &str;
     let mut args = vec![xdg, "-u", &username, cmd.to_str().unwrap_or("")];
     args.append(&mut arg.clone());
-    // -E required for opensuse
-    if is_opensuse() {
+    // -E is required to preserve env
         args.insert(0, "-E");
-    }
 
     let task = Command::new("sudo").envs(envs).args(args).spawn()?;
     Ok(Some(task))
