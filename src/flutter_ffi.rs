@@ -439,8 +439,8 @@ pub fn session_ctrl_alt_del(session_id: SessionID) {
     }
 }
 
-pub fn session_switch_display(session_id: SessionID, value: Vec<i32>) {
-    sessions::session_switch_display(session_id, value);
+pub fn session_switch_display(is_desktop: bool, session_id: SessionID, value: Vec<i32>) {
+    sessions::session_switch_display(is_desktop, session_id, value);
 }
 
 pub fn session_handle_flutter_key_event(
