@@ -551,7 +551,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Filter by intersection", "Filtra per incrocio"),
         ("Remove wallpaper during incoming sessions", "Rimuovi lo sfondo durante le sessioni in entrata"),
         ("Test", "Test"),
-        ("capture_display_elevated_connections_tip", "La cattura di più display non è supportata nella modalità utente con privilegi elevati. Se vuoi controllare più display riprova dopo l'installazione."),
         ("display_is_plugged_out_msg", "Lo schermo è scollegato, passo al primo schermo."),
         ("No displays", "Nessuno schermo"),
         ("elevated_switch_display_msg", "Passo allo schermo principale perché in modalità elevata non sono supportati più schermi."),
@@ -576,5 +575,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("switch_display_elevated_connections_tip", "Nella modalità elevata quando sono presenti più connessioni non è supportato il passaggio allo schermo non primario. Se vuoi controllare più schermi riprova dopo l'installazione."),
         ("input_source_1_tip", "Sorgente ingresso (1)"),
         ("input_source_2_tip", "Sorgente ingresso (2)"),
+        ("capture_display_elevated_connections_tip", "La cattura di più display non è supportata nella modalità utente con privilegi elevati. Se vuoi controllare più display riprova dopo l'installazione."),
     ].iter().cloned().collect();
 }

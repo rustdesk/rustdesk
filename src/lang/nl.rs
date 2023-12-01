@@ -551,7 +551,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Filter by intersection", "Filter op kruising"),
         ("Remove wallpaper during incoming sessions", "Achtergrond verwijderen tijdens inkomende sessies"),
         ("Test", "Test"),
-        ("capture_display_elevated_connections_tip", ""),
         ("display_is_plugged_out_msg", "Beeldscherm is uitgeschakeld, schakel over naar het primaire beeldscherm."),
         ("No displays", "Geen beeldschermen"),
         ("elevated_switch_display_msg", "Schakel over naar het primaire beeldscherm, aangezien meerdere beeldschermen niet worden ondersteund in de modus met verhoogde rechten."),
@@ -576,5 +575,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("switch_display_elevated_connections_tip", "Overschakelen naar een niet-hoofdbeeldscherm wordt niet ondersteund in de verhoogde modus wanneer er meerdere verbindingen zijn. Probeer het opnieuw na de installatie als je meerdere schermen wilt beheren."),
         ("input_source_1_tip", "Invoerbron 1"),
         ("input_source_2_tip", "Invoerbron 2"),
+        ("capture_display_elevated_connections_tip", ""),
     ].iter().cloned().collect();
 }

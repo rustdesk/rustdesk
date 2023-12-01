@@ -551,7 +551,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Filter by intersection", "Filter berdasarkan persilangan"),
         ("Remove wallpaper during incoming sessions", "Hilangkan latar dinding ketika ada sesi yang masuk"),
         ("Test", "Tes"),
-        ("capture_display_elevated_connections_tip", ""),
         ("display_is_plugged_out_msg", "Layar terputus, pindah ke layar pertama"),
         ("No displays", "Tidak ada tampilan"),
         ("elevated_switch_display_msg", "Pindah ke tampilan utama, pada mode elevasi, pengggunaan lebih dari satu layar tidak diizinkan"),
@@ -576,5 +575,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("switch_display_elevated_connections_tip", "Pada mode elevasi, jika terdapat beberapa tampilan yang aktif, maka tidak diizinkan berpindah ke yang bukan tampilan utama, silahkan coba lagi setelah proses instalasi jika kamu ingin melakukan kontrol ke tampilan layar lainnya"),
         ("input_source_1_tip", ""),
         ("input_source_2_tip", ""),
+        ("capture_display_elevated_connections_tip", ""),
     ].iter().cloned().collect();
 }

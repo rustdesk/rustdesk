@@ -551,7 +551,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Filter by intersection", "Фільтр за збігом"),
         ("Remove wallpaper during incoming sessions", "Прибирати шпалеру під час вхідних сеансів"),
         ("Test", "Тест"),
-        ("capture_display_elevated_connections_tip", ""),
         ("display_is_plugged_out_msg", "Дисплей відключено, перемкніться на перший дисплей"),
         ("No displays", "Відсутні дисплеї"),
         ("elevated_switch_display_msg", "Перемкніться на основний дисплей, оскільки в режимі розширених прав одночасне використання декілька дисплеїв не підтримуються."),
@@ -576,5 +575,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("switch_display_elevated_connections_tip", "В режимі розширених прав, коли є декілька підключень, не підтримується перемикання на неосновний дисплей. Якщо вам потрібен контроль декількох дисплеїв, будь ласка, спробуйте ще раз після встановлення"),
         ("input_source_1_tip", ""),
         ("input_source_2_tip", ""),
+        ("capture_display_elevated_connections_tip", ""),
     ].iter().cloned().collect();
 }

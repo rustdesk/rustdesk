@@ -551,7 +551,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Filter by intersection", "Nach Schnittmenge filtern"),
         ("Remove wallpaper during incoming sessions", "Hintergrundbild während eingehender Sitzungen entfernen"),
         ("Test", "Test"),
-        ("capture_display_elevated_connections_tip", "Das Erfassen mehrerer Bildschirme wird im erweiterten Benutzermodus nicht unterstützt. Bitte versuchen Sie es nach der Installation erneut, wenn Sie mehrere Bildschirme steuern möchten."),
         ("display_is_plugged_out_msg", "Der Bildschirm ist nicht angeschlossen, schalten Sie auf den ersten Bildschirm um."),
         ("No displays", "Keine Bildschirme"),
         ("elevated_switch_display_msg", "Wechseln Sie zum primären Bildschirm, da mehrere Bildschirme im erweiterten Benutzermodus nicht unterstützt werden."),
@@ -576,5 +575,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("switch_display_elevated_connections_tip", "Das Umschalten auf einen sekundären Bildschirm wird mit erhöhten Rechten nicht unterstützt, wenn mehrere Verbindungen bestehen. Bitte versuchen Sie es nach der Installation erneut, wenn Sie mehrere Bildschirme steuern möchten."),
         ("input_source_1_tip", "Eingangsquelle 1"),
         ("input_source_2_tip", "Eingangsquelle 2"),
+        ("capture_display_elevated_connections_tip", "Das Erfassen mehrerer Bildschirme wird im erweiterten Benutzermodus nicht unterstützt. Bitte versuchen Sie es nach der Installation erneut, wenn Sie mehrere Bildschirme steuern möchten."),
     ].iter().cloned().collect();
 }

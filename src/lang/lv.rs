@@ -551,7 +551,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Filter by intersection", "Filtrēt pēc krustpunkta"),
         ("Remove wallpaper during incoming sessions", "Noņemt fona tapeti ienākošo sesiju laikā"),
         ("Test", "Pārbaudīt"),
-        ("capture_display_elevated_connections_tip", "Vairāku displeju uzņemšana netiek atbalstīta paaugstinātā lietotāja režīmā. Lūdzu, mēģiniet vēlreiz pēc instalēšanas, ja vēlaties kontrolēt vairākus displejus."),
         ("display_is_plugged_out_msg", "Displejs ir atvienots, pārslēdzieties uz pirmo displeju."),
         ("No displays", "Nav displeju"),
         ("elevated_switch_display_msg", "Pārslēdzieties uz primāro displeju, jo paaugstinātajā režīmā netiek atbalstīti vairāki displeji."),
@@ -576,5 +575,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("switch_display_elevated_connections_tip", "Pārslēgšanās uz ne primāro displeju netiek atbalstīta paaugstinātā lietotāja režīmā, ja ir vairāki savienojumi. Lūdzu, mēģiniet vēlreiz pēc instalēšanas, ja vēlaties kontrolēt vairākus displejus."),
         ("input_source_1_tip", "Ievades avots 1"),
         ("input_source_2_tip", "Ievades avots 2"),
+        ("capture_display_elevated_connections_tip", "Vairāku displeju uzņemšana netiek atbalstīta paaugstinātā lietotāja režīmā. Lūdzu, mēģiniet vēlreiz pēc instalēšanas, ja vēlaties kontrolēt vairākus displejus."),
     ].iter().cloned().collect();
 }

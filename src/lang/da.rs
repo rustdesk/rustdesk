@@ -551,7 +551,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Filter by intersection", ""),
         ("Remove wallpaper during incoming sessions", ""),
         ("Test", ""),
-        ("capture_display_elevated_connections_tip", ""),
         ("display_is_plugged_out_msg", ""),
         ("No displays", ""),
         ("elevated_switch_display_msg", ""),
@@ -576,5 +575,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("switch_display_elevated_connections_tip", ""),
         ("input_source_1_tip", ""),
         ("input_source_2_tip", ""),
+        ("capture_display_elevated_connections_tip", ""),
     ].iter().cloned().collect();
 }
