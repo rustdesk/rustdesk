@@ -23,7 +23,6 @@ use super::capturable::{Capturable, Recorder};
 use super::request_portal::OrgFreedesktopPortalRequestResponse;
 use super::screencast_portal::OrgFreedesktopPortalScreenCast as screencast_portal;
 use super::remote_desktop_portal::OrgFreedesktopPortalRemoteDesktop as remote_desktop_portal;
-use super::clipboard_portal::OrgFreedesktopPortalClipboard;
 
 #[derive(Debug, Clone, Copy)]
 struct PwStreamInfo {
