@@ -573,8 +573,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Exit privacy mode", "Ukončit režim soukromí"),
         ("idd_not_support_under_win10_2004_tip", "Ovladač nepřímého zobrazení není podporován. Je vyžadován systém Windows 10, verze 2004 nebo novější."),
         ("switch_display_elevated_connections_tip", "Přepnutí na jinou než primární obrazovku není podporováno ve zvýšeném režimu, pokud existuje více připojení. Pokud chcete ovládat více obrazovek, zkuste to po instalaci znovu."),
-        ("input_source_1_tip", ""),
-        ("input_source_2_tip", ""),
-        ("capture_display_elevated_connections_tip", ""),
+        ("input_source_1_tip", "Vstupní zdroj 1"),
+        ("input_source_2_tip", "Vstupní zdroj 2"),
+        ("capture_display_elevated_connections_tip", "Snímání více displejů není podporováno v uživatelském režimu se zvýšenými oprávněními. Pokud chcete ovládat více displejů, zkuste to znovu po instalaci."),
     ].iter().cloned().collect();
 }
