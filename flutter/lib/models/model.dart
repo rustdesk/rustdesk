@@ -915,7 +915,7 @@ class FfiModel with ChangeNotifier {
             if (_pi.isSupportMultiUiSession) {
               // If the peer supports multi-ui-session, no switch display message will be send back.
               // We need to update the display manually.
-              switchToNewDisplay(newDisplay, sessionId, peerId, true);
+              switchToNewDisplay(newDisplay, sessionId, peerId);
             }
           } else {
             msgBox(sessionId, 'nocancel-error', 'Prompt', 'No Displays', '',
@@ -955,12 +955,8 @@ class FfiModel with ChangeNotifier {
   }
 
   // Directly switch to the new display without waiting for the response.
-  switchToNewDisplay(
-    int display,
-    SessionID sessionId,
-    String peerId,
-    bool updateCursorPos,
-  ) {
+  switchToNewDisplay(int display, SessionID sessionId, String peerId,
+      {bool updateCursorPos = true}) {
     // VideoHandler creation is upon when video frames are received, so either caching commands(don't know next width/height) or stopping recording when switching displays.
     parent.target?.recordingModel.onClose();
     // no need to wait for the response

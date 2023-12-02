@@ -820,8 +820,7 @@ class _MonitorMenu extends StatelessWidget {
       if (isChooseDisplayToOpenInNewWindow(pi, ffi.sessionId)) {
         openMonitorInNewTabOrWindow(i, ffi.id, pi);
       } else {
-        final updateCursorPos = !isMulti;
-        openMonitorInTheSameTab(i, ffi, pi, updateCursorPos);
+        openMonitorInTheSameTab(i, ffi, pi, updateCursorPos: !isMulti);
       }
     }
   }
