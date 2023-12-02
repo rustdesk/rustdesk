@@ -730,7 +730,7 @@ class _MonitorMenu extends StatelessWidget {
                       ],
                     ),
                   ),
-            onPressed: () => onPressed(i, pi),
+            onPressed: () => onPressed(i, pi, isMulti),
           );
         });
 
@@ -810,14 +810,18 @@ class _MonitorMenu extends StatelessWidget {
     );
   }
 
-  onPressed(int i, PeerInfo pi) {
-    _menuDismissCallback(ffi);
+  onPressed(int i, PeerInfo pi, bool isMulti) {
+    if (!isMulti) {
+      // If show monitors in toolbar(`buildMultiMonitorMenu()`), then the menu will dismiss automatically.
+      _menuDismissCallback(ffi);
+    }
     RxInt display = CurrentDisplayState.find(id);
     if (display.value != i) {
       if (isChooseDisplayToOpenInNewWindow(pi, ffi.sessionId)) {
         openMonitorInNewTabOrWindow(i, ffi.id, pi);
       } else {
-        openMonitorInTheSameTab(i, ffi, pi);
+        final updateCursorPos = !isMulti;
+        openMonitorInTheSameTab(i, ffi, pi, updateCursorPos);
       }
     }
   }

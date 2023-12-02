@@ -787,7 +787,7 @@ void showOptions(
       children.add(InkWell(
           onTap: () {
             if (i == cur) return;
-            openMonitorInTheSameTab(i, gFFI, pi);
+            openMonitorInTheSameTab(i, gFFI, pi, false);
             gFFI.dialogManager.dismissAll();
           },
           child: Ink(
