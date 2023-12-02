@@ -2698,7 +2698,7 @@ Future<List<Rect>> getScreenRectList() async {
       : await getScreenListNotWayland();
 }
 
-openMonitorInTheSameTab(int i, FFI ffi, PeerInfo pi) {
+openMonitorInTheSameTab(int i, FFI ffi, PeerInfo pi, {bool updateCursorPos = true}) {
   final displays = i == kAllDisplayValue
       ? List.generate(pi.displays.length, (index) => index)
       : [i];
@@ -2707,7 +2707,7 @@ openMonitorInTheSameTab(int i, FFI ffi, PeerInfo pi) {
     sessionId: ffi.sessionId,
     value: Int32List.fromList(displays),
   );
-  ffi.ffiModel.switchToNewDisplay(i, ffi.sessionId, ffi.id);
+  ffi.ffiModel.switchToNewDisplay(i, ffi.sessionId, ffi.id, updateCursorPos: updateCursorPos);
 }
 
 // Open new tab or window to show this monitor.
