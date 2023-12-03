@@ -20,9 +20,9 @@ use hbb_common::config;
 
 use super::capturable::PixelProvider;
 use super::capturable::{Capturable, Recorder};
+use super::remote_desktop_portal::OrgFreedesktopPortalRemoteDesktop as remote_desktop_portal;
 use super::request_portal::OrgFreedesktopPortalRequestResponse;
 use super::screencast_portal::OrgFreedesktopPortalScreenCast as screencast_portal;
-use super::remote_desktop_portal::OrgFreedesktopPortalRemoteDesktop as remote_desktop_portal;
 
 #[derive(Debug, Clone, Copy)]
 struct PwStreamInfo {
@@ -470,47 +470,22 @@ fn request_screen_cast(
         move |r: OrgFreedesktopPortalRequestResponse, c, _| {
             let portal = get_portal(c);
             let mut args: PropMap = HashMap::new();
-            if let Ok(version) = remote_desktop_portal::version(&portal) {
-                if version >= 4 {
-                    let restore_token = config::LocalConfig::get_option(RESTORE_TOKEN_CONF_KEY);
-                    if !restore_token.is_empty() {
-                        args.insert(RESTORE_TOKEN.to_string(), Variant(Box::new(restore_token)));
-                    }
-                    // persist_mode may be configured by the user.
-                    args.insert("persist_mode".to_string(), Variant(Box::new(2u32)));
-                }
-            }
+
+            // if let Ok(version) = remote_desktop_portal::version(&portal) {
+            //     if version >= 4 {
+            //         let restore_token = config::LocalConfig::get_option(RESTORE_TOKEN_CONF_KEY);
+            //         if !restore_token.is_empty() {
+            //             args.insert(RESTORE_TOKEN.to_string(), Variant(Box::new(restore_token)));
+            //         }
+            //         // persist_mode may be configured by the user.
+            //         args.insert("persist_mode".to_string(), Variant(Box::new(2u32)));
+            //     }
+            // }
             args.insert(
                 "handle_token".to_string(),
                 Variant(Box::new("u2".to_string())),
             );
-            // https://flatpak.github.io/xdg-desktop-portal/portal-docs.html#gdbus-method-org-freedesktop-portal-ScreenCast.SelectSources
-            args.insert("multiple".into(), Variant(Box::new(true)));
-            args.insert("types".into(), Variant(Box::new(1u32))); //| 2u32)));
 
-            let mut cursor_mode = 0u32;
-            let mut available_cursor_modes = 0u32;
-            if let Ok(modes) = portal.available_cursor_modes() {
-                available_cursor_modes = modes;
-            }
-            // if capture_cursor {
-            //     cursor_mode = PORTAL_CURSOR_MODE_METADATA & available_cursor_modes;
-            // }
-            if cursor_mode == 0 {
-                cursor_mode = PORTAL_CURSOR_MODE_HIDDEN & available_cursor_modes;
-            }
-            let plasma = std::env::var("DESKTOP_SESSION").map_or(false, |s| s.contains("plasma"));
-            if plasma && capture_cursor {
-                // Warn the user if capturing the cursor is tried on kde as this can crash
-                // kwin_wayland and tear down the plasma desktop, see:
-                // https://bugs.kde.org/show_bug.cgi?id=435042
-                warn!("You are attempting to capture the cursor under KDE Plasma, this may crash your \
-                    desktop, see https://bugs.kde.org/show_bug.cgi?id=435042 for details! \
-                    You have been warned.");
-            }
-            if cursor_mode > 0 {
-                args.insert("cursor_mode".into(), Variant(Box::new(cursor_mode)));
-            }
             let session: dbus::Path = r
                 .results
                 .get("session_handle")
@@ -524,7 +499,9 @@ fn request_screen_cast(
                 .ok_or_else(|| DBusError("Failed to convert session_handle to string.".into()))?
                 .to_string()
                 .into();
-            let path = portal.select_sources(session.clone(), args)?;
+
+            let path = portal.select_devices(session.clone(), args)?;
+            let session = session.clone();
             let fd = fd.clone();
             let streams = streams.clone();
             let failure = failure.clone();
@@ -535,48 +512,112 @@ fn request_screen_cast(
                 move |_: OrgFreedesktopPortalRequestResponse, c, _| {
                     let portal = get_portal(c);
                     let mut args: PropMap = HashMap::new();
+                    if let Ok(version) = remote_desktop_portal::version(&portal) {
+                        if version >= 4 {
+                            let restore_token = config::LocalConfig::get_option(RESTORE_TOKEN_CONF_KEY);
+                            if !restore_token.is_empty() {
+                                args.insert(RESTORE_TOKEN.to_string(), Variant(Box::new(restore_token)));
+                            }
+                            // persist_mode may be configured by the user.
+                            args.insert("persist_mode".to_string(), Variant(Box::new(2u32)));
+                        }
+                    }
                     args.insert(
                         "handle_token".to_string(),
                         Variant(Box::new("u3".to_string())),
                     );
-                    let path = remote_desktop_portal::start(&portal, session.clone(), "", args)?;
-                    let session = session.clone();
+                    // https://flatpak.github.io/xdg-desktop-portal/portal-docs.html#gdbus-method-org-freedesktop-portal-ScreenCast.SelectSources
+                    args.insert("multiple".into(), Variant(Box::new(true)));
+                    args.insert("types".into(), Variant(Box::new(1u32))); //| 2u32)));
+
+                    let mut cursor_mode = 0u32;
+                    let mut available_cursor_modes = 0u32;
+                    if let Ok(modes) = portal.available_cursor_modes() {
+                        available_cursor_modes = modes;
+                    }
+                    // if capture_cursor {
+                    //     cursor_mode = PORTAL_CURSOR_MODE_METADATA & available_cursor_modes;
+                    // }
+                    if cursor_mode == 0 {
+                        cursor_mode = PORTAL_CURSOR_MODE_HIDDEN & available_cursor_modes;
+                    }
+                    let plasma = std::env::var("DESKTOP_SESSION").map_or(false, |s| s.contains("plasma"));
+                    if plasma && capture_cursor {
+                        // Warn the user if capturing the cursor is tried on kde as this can crash
+                        // kwin_wayland and tear down the plasma desktop, see:
+                        // https://bugs.kde.org/show_bug.cgi?id=435042
+                        warn!("You are attempting to capture the cursor under KDE Plasma, this may crash your \
+                            desktop, see https://bugs.kde.org/show_bug.cgi?id=435042 for details! \
+                            You have been warned.");
+                    }
+                    if cursor_mode > 0 {
+                        args.insert("cursor_mode".into(), Variant(Box::new(cursor_mode)));
+                    }
+                    let path = portal.select_sources(session.clone(), args)?;
                     let fd = fd.clone();
                     let streams = streams.clone();
                     let failure = failure.clone();
                     let failure_out = failure.clone();
+                    let session = session.clone();
                     handle_response(
                         c,
                         path,
-                        move |r: OrgFreedesktopPortalRequestResponse, c, _| {
+                        move |_: OrgFreedesktopPortalRequestResponse, c, _| {
                             let portal = get_portal(c);
-                            if let Ok(version) = remote_desktop_portal::version(&portal) {
-                                if version >= 4 {
-                                    if let Some(restore_token) = r.results.get(RESTORE_TOKEN) {
-                                        if let Some(restore_token) = restore_token.as_str() {
-                                            config::LocalConfig::set_option(
-                                                RESTORE_TOKEN_CONF_KEY.to_owned(),
-                                                restore_token.to_owned(),
-                                            );
+                            let mut args: PropMap = HashMap::new();
+                            args.insert(
+                                "handle_token".to_string(),
+                                Variant(Box::new("u4".to_string())),
+                            );
+                            let path = remote_desktop_portal::start(&portal, session.clone(), "", args)?;
+                            let session = session.clone();
+                            let fd = fd.clone();
+                            let streams = streams.clone();
+                            let failure = failure.clone();
+                            let failure_out = failure.clone();
+                            handle_response(
+                                c,
+                                path,
+                                move |r: OrgFreedesktopPortalRequestResponse, c, _| {
+                                    let portal = get_portal(c);
+                                    if let Ok(version) = remote_desktop_portal::version(&portal) {
+                                        if version >= 4 {
+                                            if let Some(restore_token) = r.results.get(RESTORE_TOKEN) {
+                                                if let Some(restore_token) = restore_token.as_str() {
+                                                    config::LocalConfig::set_option(
+                                                        RESTORE_TOKEN_CONF_KEY.to_owned(),
+                                                        restore_token.to_owned(),
+                                                    );
+                                                }
+                                            }
                                         }
                                     }
-                                }
-                            }
-                            streams
-                                .clone()
-                                .lock()
-                                .unwrap()
-                                .append(&mut streams_from_response(r));
-                            fd.clone().lock().unwrap().replace(
-                                portal.open_pipe_wire_remote(session.clone(), HashMap::new())?,
-                            );
+
+                                    //ex: simulate meta
+                                    // let options: PropMap = HashMap::new();
+                                    // let options1: PropMap = HashMap::new();
+                                    // portal.notify_keyboard_keycode(session.clone(), options, 125, 1)?;
+                                    // portal.notify_keyboard_keycode(session.clone(), options1, 125, 0)?;
+
+                                    streams
+                                        .clone()
+                                        .lock()
+                                        .unwrap()
+                                        .append(&mut streams_from_response(r));
+                                    fd.clone().lock().unwrap().replace(
+                                        portal.open_pipe_wire_remote(session.clone(), HashMap::new())?,
+                                    );
+                                    Ok(())
+                                },
+                                failure_out,
+                            )?;
                             Ok(())
                         },
                         failure_out,
                     )?;
                     Ok(())
                 },
-                failure_out,
+                failure_out
             )?;
             Ok(())
         },
