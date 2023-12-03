@@ -575,6 +575,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("switch_display_elevated_connections_tip", "Overschakelen naar een niet-hoofdbeeldscherm wordt niet ondersteund in de verhoogde modus wanneer er meerdere verbindingen zijn. Probeer het opnieuw na de installatie als je meerdere schermen wilt beheren."),
         ("input_source_1_tip", "Invoerbron 1"),
         ("input_source_2_tip", "Invoerbron 2"),
-        ("capture_display_elevated_connections_tip", ""),
+        ("capture_display_elevated_connections_tip", "Scannen van meerdere schermen wordt niet ondersteund in de bevoorrechte gebruikersmodus. Als je meerdere schermen wilt bedienen, probeer het dan opnieuw na de installatie."),
     ].iter().cloned().collect();
 }
