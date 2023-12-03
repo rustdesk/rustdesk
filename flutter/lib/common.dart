@@ -1994,15 +1994,30 @@ List<String>? urlLinkToCmdArgs(Uri uri) {
       }
       return null;
     }
-  } else if (uri.authority.length > 2 && uri.path.length <= 1) {
+  } else if (uri.authority.length > 2 &&
+      (uri.path.length <= 1 ||
+          (uri.path == '/r' || uri.path.startsWith('/r@')))) {
     // rustdesk://<connect-id>
+    // rustdesk://<connect-id>/r
+    // rustdesk://<connect-id>/r@<server>
     command = '--connect';
     id = uri.authority;
+    if (uri.path.length > 1) {
+      id = id + uri.path;
+    }
+  }
+    
+  var key = uri.queryParameters["key"];
+  if (id != null) {
+    if (key != null) {
+      id = "$id?key=$key";
+    }
   }
 
   if (isMobile) {
     if (id != null) {
-      connect(Get.context!, id);
+      final forceRelay = uri.queryParameters["relay"] != null;
+      connect(Get.context!, id, forceRelay: forceRelay);
       return null;
     }
   }
@@ -2049,6 +2064,7 @@ connect(
   bool isFileTransfer = false,
   bool isTcpTunneling = false,
   bool isRDP = false,
+  bool forceRelay = false,
 }) async {
   if (id == '') return;
   if (!isDesktop || desktopType == DesktopType.main) {
@@ -2066,7 +2082,7 @@ connect(
   id = id.replaceAll(' ', '');
   final oldId = id;
   id = await bind.mainHandleRelayId(id: id);
-  final forceRelay = id != oldId;
+  final forceRelay2 = id != oldId || forceRelay;
   assert(!(isFileTransfer && isTcpTunneling && isRDP),
       "more than one connect type");
 
@@ -2077,7 +2093,7 @@ connect(
         isFileTransfer: isFileTransfer,
         isTcpTunneling: isTcpTunneling,
         isRDP: isRDP,
-        forceRelay: forceRelay,
+        forceRelay: forceRelay2,
       );
     } else {
       await rustDeskWinManager.call(WindowType.Main, kWindowConnect, {
