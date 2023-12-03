@@ -171,7 +171,7 @@ void showServerSettingsWithValue(
         isInProgress = true;
       });
       bool ret = await setServerConfig(
-          controllers,
+          null,
           errMsgs,
           ServerConfig(
               idServer: idCtrl.text.trim(),

@@ -848,7 +848,7 @@ class OverlayDialogManager {
   }
 }
 
-void showToast(String text, {Duration timeout = const Duration(seconds: 2)}) {
+void showToast(String text, {Duration timeout = const Duration(seconds: 3)}) {
   final overlayState = globalKey.currentState?.overlay;
   if (overlayState == null) return;
   final entry = OverlayEntry(builder: (_) {
@@ -1963,6 +1963,13 @@ List<String>? urlLinkToCmdArgs(Uri uri) {
     // For compatibility
     command = '--connect';
     id = uri.path.substring("/new/".length);
+  } else if (uri.authority == "config") {
+    final config = uri.path.substring("/".length);
+    // add a timer to make showToast work
+    Timer(Duration(seconds: 1), () {
+      importConfig(null, null, config);
+    });
+    return null;
   } else if (options.contains(uri.authority)) {
     final optionIndex = options.indexOf(uri.authority);
     command = '--${uri.authority}';
@@ -2821,4 +2828,91 @@ class _ReconnectCountDownButtonState extends State<_ReconnectCountDownButton> {
       isOutline: true,
     );
   }
+}
+
+importConfig(
+  List<TextEditingController>? controllers,
+  List<RxString>? errMsgs,
+  String? text) {
+        if (text != null && text.isNotEmpty) {
+        try {
+          final sc = ServerConfig.decode(text);
+          if (sc.idServer.isNotEmpty) {
+            Future<bool> success = setServerConfig(controllers, errMsgs, sc);
+            success.then((value) {
+              if (value) {
+                showToast(
+                    translate('Import server configuration successfully'));
+              } else {
+                showToast(translate('Invalid server configuration'));
+              }
+            });
+          } else {
+            showToast(translate('Invalid server configuration'));
+          }
+          return sc;
+        } catch (e) {
+          showToast(translate('Invalid server configuration'));
+        }
+      } else {
+        showToast(translate('Clipboard is empty'));
+      }
+}
+
+Future<bool> setServerConfig(
+  List<TextEditingController>? controllers,
+  List<RxString>? errMsgs,
+  ServerConfig config,
+) async {
+  config.idServer = config.idServer.trim();
+  config.relayServer = config.relayServer.trim();
+  config.apiServer = config.apiServer.trim();
+  config.key = config.key.trim();
+  if (controllers != null) {
+    controllers[0].text = config.idServer;
+    controllers[1].text = config.relayServer;
+    controllers[2].text = config.apiServer;
+    controllers[3].text = config.key;
+  }  
+  // id
+  if (config.idServer.isNotEmpty && errMsgs != null) {
+    errMsgs[0].value =
+        translate(await bind.mainTestIfValidServer(server: config.idServer));
+    if (errMsgs[0].isNotEmpty) {
+      return false;
+    }
+  }
+  // relay
+  if (config.relayServer.isNotEmpty && errMsgs != null) {
+    errMsgs[1].value =
+        translate(await bind.mainTestIfValidServer(server: config.relayServer));
+    if (errMsgs[1].isNotEmpty) {
+      return false;
+    }
+  }
+  // api
+  if (config.apiServer.isNotEmpty && errMsgs != null) {
+    if (!config.apiServer.startsWith('http://') &&
+        !config.apiServer.startsWith('https://')) {
+      errMsgs[2].value =
+          '${translate("API Server")}: ${translate("invalid_http")}';
+      return false;
+    }
+  }
+  final oldApiServer = await bind.mainGetApiServer();
+
+  // should set one by one
+  await bind.mainSetOption(
+      key: 'custom-rendezvous-server', value: config.idServer);
+  await bind.mainSetOption(key: 'relay-server', value: config.relayServer);
+  await bind.mainSetOption(key: 'api-server', value: config.apiServer);
+  await bind.mainSetOption(key: 'key', value: config.key);
+
+  final newApiServer = await bind.mainGetApiServer();
+  if (oldApiServer.isNotEmpty &&
+      oldApiServer != newApiServer &&
+      gFFI.userModel.isLogin) {
+    gFFI.userModel.logOut(apiServer: oldApiServer);
+  }
+  return true;
 }
