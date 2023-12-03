@@ -8,6 +8,7 @@ import 'package:qr_code_scanner/qr_code_scanner.dart';
 import 'package:zxing2/qrcode.dart';
 
 import '../../common.dart';
+import '../../consts.dart';
 import '../widgets/dialog.dart';
 
 class ScanPage extends StatefulWidget {
@@ -60,7 +61,11 @@ class _ScanPageState extends State<ScanPage> {
                     var reader = QRCodeReader();
                     try {
                       var result = reader.decode(bitmap);
-                      showServerSettingFromQr(result.text);
+                      if (result.text.startsWith(kUniLinksPrefix)) {
+                        handleUriLink(uriString: result.text);
+                      } else {
+                        showServerSettingFromQr(result.text);
+                      }
                     } catch (e) {
                       showToast('No QR code found');
                     }

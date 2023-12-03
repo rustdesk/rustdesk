@@ -1964,14 +1964,16 @@ List<String>? urlLinkToCmdArgs(Uri uri) {
     command = '--connect';
     id = uri.path.substring("/new/".length);
   } else if (uri.authority == "config") {
-    final config = uri.path.substring("/".length);
-    // add a timer to make showToast work
-    Timer(Duration(seconds: 1), () {
-      importConfig(null, null, config);
-    });
+    if (Platform.isAndroid || Platform.isIOS) {
+      final config = uri.path.substring("/".length);
+      // add a timer to make showToast work
+      Timer(Duration(seconds: 1), () {
+        importConfig(null, null, config);
+      });
+    }
     return null;
   } else if (uri.authority == "password") {
-    if (Platform.isAndroid) {
+    if (Platform.isAndroid || Platform.isIOS) {
       final password = uri.path.substring("/".length);
       if (password.isNotEmpty) {
         Timer(Duration(seconds: 1), () async {
