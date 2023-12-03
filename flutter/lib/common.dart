@@ -106,6 +106,8 @@ class ColorThemeExtension extends ThemeExtension<ColorThemeExtension> {
     required this.shadow,
     required this.errorBannerBg,
     required this.me,
+    required this.toastBg,
+    required this.toastText,
   });
 
   final Color? border;
@@ -115,6 +117,8 @@ class ColorThemeExtension extends ThemeExtension<ColorThemeExtension> {
   final Color? shadow;
   final Color? errorBannerBg;
   final Color? me;
+  final Color? toastBg;
+  final Color? toastText;
 
   static final light = ColorThemeExtension(
     border: Color(0xFFCCCCCC),
@@ -124,6 +128,8 @@ class ColorThemeExtension extends ThemeExtension<ColorThemeExtension> {
     shadow: Colors.black,
     errorBannerBg: Color(0xFFFDEEEB),
     me: Colors.green,
+    toastBg: Colors.black.withOpacity(0.6),
+    toastText: Colors.white,
   );
 
   static final dark = ColorThemeExtension(
@@ -134,6 +140,8 @@ class ColorThemeExtension extends ThemeExtension<ColorThemeExtension> {
     shadow: Colors.grey,
     errorBannerBg: Color(0xFF470F2D),
     me: Colors.greenAccent,
+    toastBg: Colors.white.withOpacity(0.6),
+    toastText: Colors.black,
   );
 
   @override
@@ -145,6 +153,8 @@ class ColorThemeExtension extends ThemeExtension<ColorThemeExtension> {
     Color? shadow,
     Color? errorBannerBg,
     Color? me,
+    Color? toastBg,
+    Color? toastText,
   }) {
     return ColorThemeExtension(
       border: border ?? this.border,
@@ -154,6 +164,8 @@ class ColorThemeExtension extends ThemeExtension<ColorThemeExtension> {
       shadow: shadow ?? this.shadow,
       errorBannerBg: errorBannerBg ?? this.errorBannerBg,
       me: me ?? this.me,
+      toastBg: toastBg ?? this.toastBg,
+      toastText: toastText ?? this.toastText,
     );
   }
 
@@ -171,6 +183,8 @@ class ColorThemeExtension extends ThemeExtension<ColorThemeExtension> {
       shadow: Color.lerp(shadow, other.shadow, t),
       errorBannerBg: Color.lerp(shadow, other.errorBannerBg, t),
       me: Color.lerp(shadow, other.me, t),
+      toastBg: Color.lerp(shadow, other.toastBg, t),
+      toastText: Color.lerp(shadow, other.toastText, t),
     );
   }
 }
@@ -851,13 +865,13 @@ class OverlayDialogManager {
 void showToast(String text, {Duration timeout = const Duration(seconds: 3)}) {
   final overlayState = globalKey.currentState?.overlay;
   if (overlayState == null) return;
-  final entry = OverlayEntry(builder: (_) {
+  final entry = OverlayEntry(builder: (context) {
     return IgnorePointer(
         child: Align(
             alignment: const Alignment(0.0, 0.8),
             child: Container(
               decoration: BoxDecoration(
-                color: Colors.black.withOpacity(0.6),
+                color: MyTheme.color(context).toastBg,
                 borderRadius: const BorderRadius.all(
                   Radius.circular(20),
                 ),
@@ -866,11 +880,11 @@ void showToast(String text, {Duration timeout = const Duration(seconds: 3)}) {
               child: Text(
                 text,
                 textAlign: TextAlign.center,
-                style: const TextStyle(
+                style: TextStyle(
                     decoration: TextDecoration.none,
                     fontWeight: FontWeight.w300,
                     fontSize: 18,
-                    color: Colors.white),
+                    color: MyTheme.color(context).toastText),
               ),
             )));
   });
@@ -2733,7 +2747,8 @@ Future<List<Rect>> getScreenRectList() async {
       : await getScreenListNotWayland();
 }
 
-openMonitorInTheSameTab(int i, FFI ffi, PeerInfo pi, {bool updateCursorPos = true}) {
+openMonitorInTheSameTab(int i, FFI ffi, PeerInfo pi,
+    {bool updateCursorPos = true}) {
   final displays = i == kAllDisplayValue
       ? List.generate(pi.displays.length, (index) => index)
       : [i];
@@ -2742,7 +2757,8 @@ openMonitorInTheSameTab(int i, FFI ffi, PeerInfo pi, {bool updateCursorPos = tru
     sessionId: ffi.sessionId,
     value: Int32List.fromList(displays),
   );
-  ffi.ffiModel.switchToNewDisplay(i, ffi.sessionId, ffi.id, updateCursorPos: updateCursorPos);
+  ffi.ffiModel.switchToNewDisplay(i, ffi.sessionId, ffi.id,
+      updateCursorPos: updateCursorPos);
 }
 
 // Open new tab or window to show this monitor.
@@ -2858,33 +2874,30 @@ class _ReconnectCountDownButtonState extends State<_ReconnectCountDownButton> {
   }
 }
 
-importConfig(
-  List<TextEditingController>? controllers,
-  List<RxString>? errMsgs,
-  String? text) {
-        if (text != null && text.isNotEmpty) {
-        try {
-          final sc = ServerConfig.decode(text);
-          if (sc.idServer.isNotEmpty) {
-            Future<bool> success = setServerConfig(controllers, errMsgs, sc);
-            success.then((value) {
-              if (value) {
-                showToast(
-                    translate('Import server configuration successfully'));
-              } else {
-                showToast(translate('Invalid server configuration'));
-              }
-            });
+importConfig(List<TextEditingController>? controllers, List<RxString>? errMsgs,
+    String? text) {
+  if (text != null && text.isNotEmpty) {
+    try {
+      final sc = ServerConfig.decode(text);
+      if (sc.idServer.isNotEmpty) {
+        Future<bool> success = setServerConfig(controllers, errMsgs, sc);
+        success.then((value) {
+          if (value) {
+            showToast(translate('Import server configuration successfully'));
           } else {
             showToast(translate('Invalid server configuration'));
           }
-          return sc;
-        } catch (e) {
-          showToast(translate('Invalid server configuration'));
-        }
+        });
       } else {
-        showToast(translate('Clipboard is empty'));
+        showToast(translate('Invalid server configuration'));
       }
+      return sc;
+    } catch (e) {
+      showToast(translate('Invalid server configuration'));
+    }
+  } else {
+    showToast(translate('Clipboard is empty'));
+  }
 }
 
 Future<bool> setServerConfig(
@@ -2901,7 +2914,7 @@ Future<bool> setServerConfig(
     controllers[1].text = config.relayServer;
     controllers[2].text = config.apiServer;
     controllers[3].text = config.key;
-  }  
+  }
   // id
   if (config.idServer.isNotEmpty && errMsgs != null) {
     errMsgs[0].value =
