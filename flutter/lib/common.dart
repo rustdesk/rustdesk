@@ -1970,6 +1970,16 @@ List<String>? urlLinkToCmdArgs(Uri uri) {
       importConfig(null, null, config);
     });
     return null;
+  } else if (uri.authority == "password") {
+    if (Platform.isAndroid) {
+      final password = uri.path.substring("/".length);
+      if (password.isNotEmpty) {
+        Timer(Duration(seconds: 1), () async {
+          await bind.mainSetPermanentPassword(password: password);
+          showToast(translate('Successful'));
+        });
+      }
+    }
   } else if (options.contains(uri.authority)) {
     final optionIndex = options.indexOf(uri.authority);
     command = '--${uri.authority}';
