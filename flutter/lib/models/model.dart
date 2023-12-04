@@ -1294,7 +1294,10 @@ class CanvasModel with ChangeNotifier {
     if (refreshMousePos) {
       parent.target?.inputModel.refreshMousePos();
     }
-    updateScrollPercent();
+    if (style == kRemoteViewStyleOriginal &&
+        _scrollStyle == ScrollStyle.scrollbar) {
+      updateScrollPercent();
+    }
   }
 
   updateScrollStyle() async {
