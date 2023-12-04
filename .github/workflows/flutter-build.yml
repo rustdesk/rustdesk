@@ -1774,7 +1774,7 @@ jobs:
 
       - name: Build archlinux package
         if: ${{ matrix.job.extra-build-features == '' }}
-        uses: vufa/arch-makepkg-action@master
+        uses: rustdesk-org/arch-makepkg-action@master
         with:
           packages: >
             llvm
