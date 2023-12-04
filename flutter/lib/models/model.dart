@@ -421,11 +421,10 @@ class FfiModel with ChangeNotifier {
       return;
     }
     if (newRect != _rect) {
-      if (updateCursorPos) {
-        if (newRect.left != _rect?.left || newRect.top != _rect?.top) {
-          parent.target?.cursorModel
-              .updateDisplayOrigin(newRect.left, newRect.top);
-        }
+      if (newRect.left != _rect?.left || newRect.top != _rect?.top) {
+        parent.target?.cursorModel.updateDisplayOrigin(
+            newRect.left, newRect.top,
+            updateCursorPos: updateCursorPos);
       }
       _rect = newRect;
       parent.target?.canvasModel
@@ -1842,12 +1841,14 @@ class CursorModel with ChangeNotifier {
     notifyListeners();
   }
 
-  updateDisplayOrigin(double x, double y) {
+  updateDisplayOrigin(double x, double y, {updateCursorPos = true}) {
     _displayOriginX = x;
     _displayOriginY = y;
-    _x = x + 1;
-    _y = y + 1;
-    parent.target?.inputModel.moveMouse(x, y);
+    if (updateCursorPos) {
+      _x = x + 1;
+      _y = y + 1;
+      parent.target?.inputModel.moveMouse(x, y);
+    }
     parent.target?.canvasModel.resetOffset();
     notifyListeners();
   }
