@@ -733,4 +733,11 @@ impl WakeLock {
                 .ok(),
         )
     }
+
+    pub fn set_display(&mut self, display: bool) -> ResultType<()> {
+        self.0
+            .as_mut()
+            .map(|h| h.set_display(display))
+            .ok_or(anyhow!("no AwakeHandle"))?
+    }
 }
