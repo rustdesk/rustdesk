@@ -100,6 +100,8 @@ pub const RS_PUB_KEY: &str = match option_env!("RS_PUB_KEY") {
 pub const RENDEZVOUS_PORT: i32 = 21116;
 pub const RELAY_PORT: i32 = 21117;
 
+pub const RS_TOPIC_REGISTER: &str = "api.register";
+
 macro_rules! serde_field_string {
     ($default_func:ident, $de_func:ident, $default_expr:expr) => {
         fn $default_func() -> String {

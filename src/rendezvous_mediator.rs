@@ -14,7 +14,10 @@ use uuid::Uuid;
 use hbb_common::{
     allow_err,
     anyhow::bail,
-    config::{Config, NetworkType, CONNECT_TIMEOUT, READ_TIMEOUT, REG_INTERVAL, RENDEZVOUS_PORT},
+    config::{
+        Config, NetworkType, CONNECT_TIMEOUT, READ_TIMEOUT, REG_INTERVAL, RENDEZVOUS_PORT,
+        RS_TOPIC_REGISTER,
+    },
     futures::future::join_all,
     futures::StreamExt,
     log,
@@ -32,7 +35,6 @@ use hbb_common::{
 };
 
 use crate::{
-    client::secure_punch_connection,
     common::increase_port,
     server::{check_zombie, new as new_server, ServerPtr},
 };
@@ -99,10 +101,11 @@ impl RendezvousMediator {
                 for host in servers.clone() {
                     let server = server.clone();
                     futs.push(tokio::spawn(async move {
-                        if let Err(err) = Self::start(server.clone(), host.clone()).await {
+                        // Try mq protocol first
+                        if let Err(err) = Self::mq_start(server.clone(), host.clone()).await {
                             log::error!("rendezvous mediator error: {err}");
                         }
-                        // Switch to udp protocol
+                        // If failed, switch to udp protocol
                         if let Err(err) = Self::udp_start(server, host).await {
                             log::error!("rendezvous mediator error: {err}");
                         }
@@ -496,8 +499,9 @@ impl RendezvousMediator {
         Ok(())
     }
 
-    pub async fn start(server: ServerPtr, host: String) -> ResultType<()> {
-        log::info!("start rendezvous mediator of {}", host);
+    /// Start connection to rendezvous server using mq protocol
+    pub async fn mq_start(server: ServerPtr, host: String) -> ResultType<()> {
+        log::info!("start mq rendezvous mediator of {}", host);
         let host_prefix: String = host
             .split(".")
             .next()
@@ -692,10 +696,7 @@ impl RendezvousMediator {
         &mut self,
         host: &str,
     ) -> ResultType<(async_nats::client::Client, Subscriber)> {
-        // Register pk & id
-        let mq_token = self.register_pk_tcp().await?;
-
-        // Connect to mq server
+        // Register pk & id anonymously
         let mq_host = increase_port(host, 4);
         let mq_url = format!("nats://{}", mq_host);
 
@@ -703,6 +704,7 @@ impl RendezvousMediator {
             .credentials(&mq_token)?
             .ping_interval(Duration::from_millis(REG_INTERVAL as u64));
         let client = async_nats::connect_with_options(&mq_url, options).await?;
+        self.register_pk_mq(&client).await?;
         log::info!("Connected to mq server at: {}", mq_url);
 
         // Subscribe to push channel
@@ -713,16 +715,8 @@ impl RendezvousMediator {
         Ok((client, subscription))
     }
 
-    async fn register_pk_tcp(&mut self) -> ResultType<String> {
+    async fn register_pk_mq(&mut self, client: &async_nats::client::Client) -> ResultType<String> {
         for _ in 0..3 {
-            let mut socket = socket_client::connect_tcp(&*self.host, CONNECT_TIMEOUT).await?;
-
-            // Securing connection
-            let key = crate::get_key(false).await;
-            if !key.is_empty() {
-                allow_err!(secure_punch_connection(&mut socket, &key).await);
-            }
-
             // Send RegisterPk
             let mut msg_out = Message::new();
             let pk = Config::get_key_pair().1;
@@ -736,12 +730,17 @@ impl RendezvousMediator {
                 pk: pk.into(),
                 ..Default::default()
             });
-            socket.send(&msg_out).await?;
 
-            // Wait RegisterPkResponse
-            if let Some(msg_in) =
-                crate::common::get_next_nonkeyexchange_msg(&mut socket, None).await
-            {
+            let topic = RS_TOPIC_REGISTER;
+            let payload = bytes::Bytes::from(msg_out.write_to_bytes()?);
+            let response = tokio::time::timeout(
+                Duration::from_millis(READ_TIMEOUT),
+                client.request(topic, payload),
+            )
+            .await??;
+
+            // Receive RegisterPkResponse
+            if let Ok(msg_in) = Message::parse_from_bytes(&response.payload) {
                 match msg_in.union {
                     Some(rendezvous_message::Union::RegisterPkResponse(rpr)) => {
                         match rpr.result.enum_value() {
