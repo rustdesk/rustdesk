@@ -101,6 +101,7 @@ class ColorThemeExtension extends ThemeExtension<ColorThemeExtension> {
   const ColorThemeExtension({
     required this.border,
     required this.border2,
+    required this.border3,
     required this.highlight,
     required this.drag_indicator,
     required this.shadow,
@@ -108,10 +109,12 @@ class ColorThemeExtension extends ThemeExtension<ColorThemeExtension> {
     required this.me,
     required this.toastBg,
     required this.toastText,
+    required this.divider,
   });
 
   final Color? border;
   final Color? border2;
+  final Color? border3;
   final Color? highlight;
   final Color? drag_indicator;
   final Color? shadow;
@@ -119,10 +122,12 @@ class ColorThemeExtension extends ThemeExtension<ColorThemeExtension> {
   final Color? me;
   final Color? toastBg;
   final Color? toastText;
+  final Color? divider;
 
   static final light = ColorThemeExtension(
     border: Color(0xFFCCCCCC),
     border2: Color(0xFFBBBBBB),
+    border3: Colors.black26,
     highlight: Color(0xFFE5E5E5),
     drag_indicator: Colors.grey[800],
     shadow: Colors.black,
@@ -130,11 +135,13 @@ class ColorThemeExtension extends ThemeExtension<ColorThemeExtension> {
     me: Colors.green,
     toastBg: Colors.black.withOpacity(0.6),
     toastText: Colors.white,
+    divider: Colors.black38,
   );
 
   static final dark = ColorThemeExtension(
     border: Color(0xFF555555),
     border2: Color(0xFFE5E5E5),
+    border3: Colors.white24,
     highlight: Color(0xFF3F3F3F),
     drag_indicator: Colors.grey,
     shadow: Colors.grey,
@@ -142,12 +149,14 @@ class ColorThemeExtension extends ThemeExtension<ColorThemeExtension> {
     me: Colors.greenAccent,
     toastBg: Colors.white.withOpacity(0.6),
     toastText: Colors.black,
+    divider: Colors.white38,
   );
 
   @override
   ThemeExtension<ColorThemeExtension> copyWith({
     Color? border,
     Color? border2,
+    Color? border3,
     Color? highlight,
     Color? drag_indicator,
     Color? shadow,
@@ -155,10 +164,12 @@ class ColorThemeExtension extends ThemeExtension<ColorThemeExtension> {
     Color? me,
     Color? toastBg,
     Color? toastText,
+    Color? divider,
   }) {
     return ColorThemeExtension(
       border: border ?? this.border,
       border2: border2 ?? this.border2,
+      border3: border3 ?? this.border3,
       highlight: highlight ?? this.highlight,
       drag_indicator: drag_indicator ?? this.drag_indicator,
       shadow: shadow ?? this.shadow,
@@ -166,6 +177,7 @@ class ColorThemeExtension extends ThemeExtension<ColorThemeExtension> {
       me: me ?? this.me,
       toastBg: toastBg ?? this.toastBg,
       toastText: toastText ?? this.toastText,
+      divider: divider ?? this.divider,
     );
   }
 
@@ -178,6 +190,7 @@ class ColorThemeExtension extends ThemeExtension<ColorThemeExtension> {
     return ColorThemeExtension(
       border: Color.lerp(border, other.border, t),
       border2: Color.lerp(border2, other.border2, t),
+      border3: Color.lerp(border3, other.border3, t),
       highlight: Color.lerp(highlight, other.highlight, t),
       drag_indicator: Color.lerp(drag_indicator, other.drag_indicator, t),
       shadow: Color.lerp(shadow, other.shadow, t),
@@ -185,6 +198,7 @@ class ColorThemeExtension extends ThemeExtension<ColorThemeExtension> {
       me: Color.lerp(shadow, other.me, t),
       toastBg: Color.lerp(shadow, other.toastBg, t),
       toastText: Color.lerp(shadow, other.toastText, t),
+      divider: Color.lerp(shadow, other.divider, t),
     );
   }
 }
@@ -204,10 +218,6 @@ class MyTheme {
   static const Color dark = Colors.black87;
   static const Color button = Color(0xFF2C8CFF);
   static const Color hoverBorder = Color(0xFF999999);
-  static const Color bordDark = Colors.white24;
-  static const Color bordLight = Colors.black26;
-  static const Color dividerDark = Colors.white38;
-  static const Color dividerLight = Colors.black38;
 
   // ListTile
   static const ListTileThemeData listTileTheme = ListTileThemeData(
@@ -394,6 +404,13 @@ class MyTheme {
             MenuStyle(backgroundColor: MaterialStatePropertyAll(Colors.white))),
     colorScheme: ColorScheme.light(
         primary: Colors.blue, secondary: accent, background: grayBg),
+    popupMenuTheme: PopupMenuThemeData(
+        color: Colors.white,
+        shape: RoundedRectangleBorder(
+          side: BorderSide(
+              color: isDesktop ? Color(0xFFECECEC) : Colors.transparent),
+          borderRadius: BorderRadius.all(Radius.circular(8.0)),
+        )),
   ).copyWith(
     extensions: <ThemeExtension<dynamic>>[
       ColorThemeExtension.light,
@@ -492,6 +509,11 @@ class MyTheme {
       secondary: accent,
       background: Color(0xFF24252B),
     ),
+    popupMenuTheme: PopupMenuThemeData(
+        shape: RoundedRectangleBorder(
+      side: BorderSide(color: Colors.white24),
+      borderRadius: BorderRadius.all(Radius.circular(8.0)),
+    )),
   ).copyWith(
     extensions: <ThemeExtension<dynamic>>[
       ColorThemeExtension.dark,
@@ -2022,7 +2044,7 @@ List<String>? urlLinkToCmdArgs(Uri uri) {
       id = id + uri.path;
     }
   }
-    
+
   var key = uri.queryParameters["key"];
   if (id != null) {
     if (key != null) {
