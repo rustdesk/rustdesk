@@ -645,8 +645,8 @@ impl RendezvousMediator {
                     let last_ping_too_old = elapse_since_last_resp > REG_INTERVAL;
 
                     let mut ping_latency = match (time_last_register_sent, time_last_register_resp) {
-                        (Some(sent), Some(resp)) => resp.duration_since(sent).as_micros() as i64,
-                        (Some(sent), None) => sent.elapsed().as_micros() as i64,
+                        (Some(sent), Some(resp)) => resp.duration_since(sent).as_millis() as i64,
+                        (Some(sent), None) => sent.elapsed().as_millis() as i64,
                         _ => 0,
                     };
                     let timeout = ping_latency > REG_TIMEOUT;
@@ -662,6 +662,7 @@ impl RendezvousMediator {
                         // Send ping message
                         allow_err!(rz.register_peer_mq(&mq_client).await);
                         time_last_register_sent = now;
+                        time_last_register_resp = None;
                     }
                     if timeout {
                         fails += 1;
