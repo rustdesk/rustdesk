@@ -1172,10 +1172,7 @@ impl Connection {
             ..Default::default()
         })
         .into();
-        #[cfg(not(any(target_os = "android", target_os = "ios")))]
-        {
-            pi.resolutions = Self::get_supported_resolutions(self.display_idx).into();
-        }
+        pi.resolutions = Self::get_supported_resolutions(self.display_idx).into();
 
         let mut sub_service = false;
         if self.file_transfer.is_some() {
@@ -1240,23 +1237,26 @@ impl Connection {
     }
 
     fn get_supported_resolutions(display_idx: usize) -> Option<SupportedResolutions> {
-        #[cfg(target_os = "linux")]
+        #[cfg(not(any(target_os = "android", target_os = "ios")))]
         {
-            if !is_x11() {
-                return None;
+            #[cfg(target_os = "linux")]
+            {
+                if !is_x11() {
+                    return None;
+                }
             }
+            Some(SupportedResolutions {
+                resolutions: display_service::try_get_displays()
+                    .map(|displays| {
+                        displays
+                            .get(display_idx)
+                            .map(|d| crate::platform::resolutions(&d.name()))
+                            .unwrap_or(vec![])
+                    })
+                    .unwrap_or(vec![]),
+                ..Default::default()
+            })
         }
-        Some(SupportedResolutions {
-            resolutions: display_service::try_get_displays()
-                .map(|displays| {
-                    displays
-                        .get(display_idx)
-                        .map(|d| crate::platform::resolutions(&d.name()))
-                        .unwrap_or(vec![])
-                })
-                .unwrap_or(vec![]),
-            ..Default::default()
-        })
     }
 
     fn on_remote_authorized(&self) {
