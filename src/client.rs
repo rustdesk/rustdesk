@@ -2828,7 +2828,7 @@ fn create_symmetric_key_msg(their_pk_b: [u8; 32]) -> (Bytes, Bytes, secretbox::K
     (Vec::from(our_pk_b.0).into(), sealed_key.into(), key)
 }
 
-async fn secure_punch_connection(conn: &mut FramedStream, key: &str) -> ResultType<()> {
+pub async fn secure_punch_connection(conn: &mut FramedStream, key: &str) -> ResultType<()> {
     let rs_pk = get_rs_pk(key);
     let Some(rs_pk) = rs_pk else {
         bail!("Handshake failed: invalid public key from rendezvous server");

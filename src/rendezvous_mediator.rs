@@ -32,6 +32,7 @@ use hbb_common::{
 };
 
 use crate::{
+    client::secure_punch_connection,
     common::increase_port,
     server::{check_zombie, new as new_server, ServerPtr},
 };
@@ -715,6 +716,12 @@ impl RendezvousMediator {
     async fn register_pk_tcp(&mut self) -> ResultType<String> {
         for _ in 0..3 {
             let mut socket = socket_client::connect_tcp(&*self.host, CONNECT_TIMEOUT).await?;
+
+            // Securing connection
+            let key = crate::get_key(false).await;
+            if !key.is_empty() {
+                allow_err!(secure_punch_connection(&mut socket, &key).await);
+            }
 
             // Send RegisterPk
             let mut msg_out = Message::new();
