@@ -78,12 +78,11 @@ jobs:
           mv -Force windows-x64-release/*  C:/hostedtoolcache/windows/flutter/stable-${{ env.FLUTTER_VERSION }}-x64/bin/cache/artifacts/engine/windows-x64-release/
 
       - name: Install Rust toolchain
-        uses: actions-rs/toolchain@v1
+        uses: dtolnay/rust-toolchain@v1
         with:
           toolchain: stable
-          target: ${{ matrix.job.target }}
-          override: true
-          profile: minimal # minimal component installation (ie, no documentation)
+          targets: ${{ matrix.job.target }}
+          components: ''
 
       - uses: Swatinem/rust-cache@v2
         with:
@@ -128,7 +127,7 @@ jobs:
 
       - name: Sign rustdesk files
         uses: GermanBluefox/code-sign-action@v7
-        if: env.UPLOAD_ARTIFACT == 'true'
+        if: false # env.UPLOAD_ARTIFACT == 'true'
         with:
           certificate: '${{ secrets.WINDOWS_PFX_BASE64 }}'
           password: '${{ secrets.WINDOWS_PFX_PASSWORD }}'
@@ -149,7 +148,7 @@ jobs:
 
       - name: Sign rustdesk self-extracted file
         uses: GermanBluefox/code-sign-action@v7
-        if: env.UPLOAD_ARTIFACT == 'true'
+        if: false #env.UPLOAD_ARTIFACT == 'true'
         with:
           certificate: '${{ secrets.WINDOWS_PFX_BASE64 }}'
           password: '${{ secrets.WINDOWS_PFX_PASSWORD }}'
@@ -198,12 +197,11 @@ jobs:
           version: ${{ env.LLVM_VERSION }}
 
       - name: Install Rust toolchain
-        uses: actions-rs/toolchain@v1
+        uses: dtolnay/rust-toolchain@v1
         with:
           toolchain: nightly-${{ matrix.job.target }}
-          target: ${{ matrix.job.target }}
-          override: true
-          profile: minimal # minimal component installation (ie, no documentation)
+          targets: ${{ matrix.job.target }}
+          components: ''
 
       - uses: Swatinem/rust-cache@v2
         with:
@@ -251,7 +249,7 @@ jobs:
 
       - name: Sign rustdesk files
         uses: GermanBluefox/code-sign-action@v7
-        if: env.UPLOAD_ARTIFACT == 'true'
+        if: false #env.UPLOAD_ARTIFACT == 'true'
         with:
           certificate: '${{ secrets.WINDOWS_PFX_BASE64 }}'
           password: '${{ secrets.WINDOWS_PFX_PASSWORD }}'
@@ -272,6 +270,7 @@ jobs:
 
       - name: Sign rustdesk self-extracted file
         uses: GermanBluefox/code-sign-action@v7
+        if: false #env.UPLOAD_ARTIFACT == 'true'
         with:
           certificate: '${{ secrets.WINDOWS_PFX_BASE64 }}'
           password: '${{ secrets.WINDOWS_PFX_PASSWORD }}'
@@ -357,12 +356,11 @@ jobs:
           flutter-version: ${{ env.FLUTTER_VERSION }}
 
       - name: Install Rust toolchain
-        uses: actions-rs/toolchain@v1
+        uses: dtolnay/rust-toolchain@v1
         with:
           toolchain: stable
-          target: ${{ matrix.job.target }}
-          override: true
-          profile: minimal # minimal component installation (ie, no documentation)
+          targets: ${{ matrix.job.target }}
+          components: ''
 
       - uses: Swatinem/rust-cache@v2
         with:
@@ -400,7 +398,7 @@ jobs:
           ./build.py --flutter ${{ matrix.job.extra-build-args }}
 
       - name: Codesign app and create signed dmg
-        if: env.MACOS_P12_BASE64 != null
+        if: env.MACOS_P12_BASE64 != null && env.UPLOAD_ARTIFACT == 'true'
         run: |
           # Patch create-dmg to give more attempts to unmount image
           CREATE_DMG="$(command -v create-dmg)"
@@ -418,6 +416,7 @@ jobs:
           rcodesign notary-submit --api-key-path ${{ github.workspace }}/rustdesk.json  --staple rustdesk-${{ env.VERSION }}.dmg
 
       - name: Rename rustdesk
+        if: env.UPLOAD_ARTIFACT == 'true'
         run: |
           for name in rustdesk*??.dmg; do
               mv "$name" "${name%%.dmg}-${{ matrix.job.arch }}.dmg"
@@ -479,12 +478,11 @@ jobs:
         shell: bash
 
       - name: Install Rust toolchain
-        uses: actions-rs/toolchain@v1
+        uses: dtolnay/rust-toolchain@v1
         with:
           toolchain: stable
-          target: ${{ matrix.job.target }}
-          override: true
-          profile: minimal # minimal component installation (ie, no documentation)
+          targets: ${{ matrix.job.target }}
+          components: ''
 
       - uses: Swatinem/rust-cache@v2
         with:
@@ -632,11 +630,10 @@ jobs:
           path: ./
 
       - name: Install Rust toolchain
-        uses: actions-rs/toolchain@v1
+        uses: dtolnay/rust-toolchain@v1
         with:
           toolchain: stable
-          override: true
-          profile: minimal # minimal component installation (ie, no documentation)
+          components: ''
 
       - uses: Swatinem/rust-cache@v2
         with:
@@ -797,12 +794,11 @@ jobs:
           free -m
 
       - name: Install Rust toolchain
-        uses: actions-rs/toolchain@v1
+        uses: dtolnay/rust-toolchain@v1
         with:
           toolchain: stable
-          target: ${{ matrix.job.target }}
-          override: true
-          profile: minimal # minimal component installation (ie, no documentation)
+          targets: ${{ matrix.job.target }}
+          components: ''
 
       - name: Save Rust toolchain version
         run: |
@@ -1007,12 +1003,11 @@ jobs:
           free -m
 
       - name: Install Rust toolchain
-        uses: actions-rs/toolchain@v1
+        uses: dtolnay/rust-toolchain@v1
         with:
           toolchain: stable
-          target: ${{ matrix.job.target }}
-          override: true
-          profile: minimal # minimal component installation (ie, no documentation)
+          targets: ${{ matrix.job.target }}
+          components: ''
 
       - name: Save Rust toolchain version
         run: |
@@ -1200,12 +1195,11 @@ jobs:
           free -m
 
       - name: Install Rust toolchain
-        uses: actions-rs/toolchain@v1
+        uses: dtolnay/rust-toolchain@v1
         with:
           toolchain: stable
-          target: ${{ matrix.job.target }}
-          override: true
-          profile: minimal # minimal component installation (ie, no documentation)
+          targets: ${{ matrix.job.target }}
+          components: ''
 
       - name: Save Rust toolchain version
         run: |
@@ -1780,7 +1774,7 @@ jobs:
 
       - name: Build archlinux package
         if: ${{ matrix.job.extra-build-features == '' }}
-        uses: vufa/arch-makepkg-action@master
+        uses: rustdesk-org/arch-makepkg-action@master
         with:
           packages: >
             llvm

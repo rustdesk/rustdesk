@@ -28,6 +28,7 @@ use super::{
 use crate::common::SimpleCallOnReturn;
 #[cfg(target_os = "linux")]
 use crate::platform::linux::is_x11;
+use crate::privacy_mode::{get_privacy_mode_conn_id, INVALID_PRIVACY_MODE_CONN_ID};
 #[cfg(windows)]
 use crate::{
     platform::windows::is_process_consent_running,
@@ -68,7 +69,6 @@ lazy_static::lazy_static! {
         let (tx, rx) = unbounded_channel();
         (tx, Arc::new(TokioMutex::new(rx)))
     };
-    static ref PRIVACY_MODE_CONN_ID: Mutex<i32> = Mutex::new(0);
     pub static ref VIDEO_QOS: Arc<Mutex<VideoQoS>> = Default::default();
     pub static ref IS_UAC_RUNNING: Arc<Mutex<bool>> = Default::default();
     pub static ref IS_FOREGROUND_WINDOW_ELEVATED: Arc<Mutex<bool>> = Default::default();
@@ -77,16 +77,6 @@ lazy_static::lazy_static! {
 #[inline]
 pub fn notify_video_frame_fetched(conn_id: i32, frame_tm: Option<Instant>) {
     FRAME_FETCHED_NOTIFIER.0.send((conn_id, frame_tm)).ok();
-}
-
-#[inline]
-pub fn set_privacy_mode_conn_id(conn_id: i32) {
-    *PRIVACY_MODE_CONN_ID.lock().unwrap() = conn_id
-}
-
-#[inline]
-pub fn get_privacy_mode_conn_id() -> i32 {
-    *PRIVACY_MODE_CONN_ID.lock().unwrap()
 }
 
 struct VideoFrameController {
@@ -251,7 +241,9 @@ pub fn test_create_capturer(
 // Note: This function is extremely expensive, do not call it frequently.
 #[cfg(windows)]
 fn check_uac_switch(privacy_mode_id: i32, capturer_privacy_mode_id: i32) -> ResultType<()> {
-    if capturer_privacy_mode_id != 0 && is_current_privacy_mode_impl(PRIVACY_MODE_IMPL_WIN_MAG) {
+    if capturer_privacy_mode_id != INVALID_PRIVACY_MODE_CONN_ID
+        && is_current_privacy_mode_impl(PRIVACY_MODE_IMPL_WIN_MAG)
+    {
         if !is_installed() {
             if privacy_mode_id != capturer_privacy_mode_id {
                 if !is_process_consent_running()? {
@@ -323,18 +315,19 @@ fn get_capturer(current: usize, portable_service_running: bool) -> ResultType<Ca
         &name,
     );
 
-    let privacy_mode_id = *PRIVACY_MODE_CONN_ID.lock().unwrap();
+    let privacy_mode_id = get_privacy_mode_conn_id().unwrap_or(INVALID_PRIVACY_MODE_CONN_ID);
     #[cfg(not(windows))]
     let capturer_privacy_mode_id = privacy_mode_id;
     #[cfg(windows)]
     let mut capturer_privacy_mode_id = privacy_mode_id;
     #[cfg(windows)]
     {
-        if capturer_privacy_mode_id != 0 && is_current_privacy_mode_impl(PRIVACY_MODE_IMPL_WIN_MAG)
+        if capturer_privacy_mode_id != INVALID_PRIVACY_MODE_CONN_ID
+            && is_current_privacy_mode_impl(PRIVACY_MODE_IMPL_WIN_MAG)
         {
             if !is_installed() {
                 if is_process_consent_running()? {
-                    capturer_privacy_mode_id = 0;
+                    capturer_privacy_mode_id = INVALID_PRIVACY_MODE_CONN_ID;
                 }
             }
         }
@@ -344,7 +337,7 @@ fn get_capturer(current: usize, portable_service_running: bool) -> ResultType<Ca
         capturer_privacy_mode_id,
     );
 
-    if privacy_mode_id != 0 {
+    if privacy_mode_id != INVALID_PRIVACY_MODE_CONN_ID {
         if privacy_mode_id != capturer_privacy_mode_id {
             log::info!("In privacy mode, but show UAC prompt window for now");
         } else {
@@ -370,9 +363,6 @@ fn get_capturer(current: usize, portable_service_running: bool) -> ResultType<Ca
 }
 
 fn run(vs: VideoService) -> ResultType<()> {
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    let _wake_lock = get_wake_lock();
-
     // Wayland only support one video capturer for now. It is ok to call ensure_inited() here.
     //
     // ensure_inited() is needed because clear() may be called.
@@ -402,7 +392,7 @@ fn run(vs: VideoService) -> ResultType<()> {
     let mut spf;
     let mut quality = video_qos.quality();
     let abr = VideoQoS::abr_enabled();
-    log::info!("init quality={:?}, abr enabled:{}", quality, abr);
+    log::info!("initial quality: {quality:?}, abr enabled: {abr}");
     let codec_name = Encoder::negotiated_codec();
     let recorder = get_recorder(c.width, c.height, &codec_name);
     let last_recording = recorder.lock().unwrap().is_some() || video_qos.record();
@@ -626,7 +616,6 @@ fn get_recorder(
     height: usize,
     codec_name: &CodecName,
 ) -> Arc<Mutex<Option<Recorder>>> {
-    #[cfg(not(target_os = "ios"))]
     let recorder = if !Config::get_option("allow-auto-record-incoming").is_empty() {
         use crate::hbbs_http::record_upload;
 
@@ -651,16 +640,14 @@ fn get_recorder(
     } else {
         Default::default()
     };
-    #[cfg(target_os = "ios")]
-    let recorder: Arc<Mutex<Option<Recorder>>> = Default::default();
 
     recorder
 }
 
 fn check_privacy_mode_changed(sp: &GenericService, privacy_mode_id: i32) -> ResultType<()> {
-    let privacy_mode_id_2 = *PRIVACY_MODE_CONN_ID.lock().unwrap();
+    let privacy_mode_id_2 = get_privacy_mode_conn_id().unwrap_or(INVALID_PRIVACY_MODE_CONN_ID);
     if privacy_mode_id != privacy_mode_id_2 {
-        if privacy_mode_id_2 != 0 {
+        if privacy_mode_id_2 != INVALID_PRIVACY_MODE_CONN_ID {
             let msg_out = crate::common::make_privacy_mode_msg(
                 back_notification::PrivacyModeState::PrvOnByOther,
                 "".to_owned(),
@@ -697,7 +684,6 @@ fn handle_one_frame(
         vf.display = display as _;
         let mut msg = Message::new();
         msg.set_video_frame(vf);
-        #[cfg(not(target_os = "ios"))]
         recorder
             .lock()
             .unwrap()
@@ -742,19 +728,6 @@ fn start_uac_elevation_check() {
     });
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
-fn get_wake_lock() -> crate::platform::WakeLock {
-    let (display, idle, sleep) = if cfg!(windows) {
-        (true, false, false)
-    } else if cfg!(linux) {
-        (false, false, true)
-    } else {
-        //macos
-        (true, false, false)
-    };
-    crate::platform::WakeLock::new(display, idle, sleep)
-}
-
 #[inline]
 fn try_broadcast_display_changed(
     sp: &GenericService,
@@ -791,7 +764,7 @@ pub fn make_display_changed_msg(
         width: display.width,
         height: display.height,
         cursor_embedded: display_service::capture_cursor_embedded(),
-        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+        #[cfg(not(target_os = "android"))]
         resolutions: Some(SupportedResolutions {
             resolutions: if display.name.is_empty() {
                 vec![]

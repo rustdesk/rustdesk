@@ -34,7 +34,8 @@ class RawKeyFocusScope extends StatelessWidget {
             canRequestFocus: true,
             focusNode: focusNode,
             onFocusChange: onFocusChange,
-            onKey: inputModel.handleRawKeyEvent,
+            onKey: (FocusNode data, RawKeyEvent e) =>
+                inputModel.handleRawKeyEvent(e),
             child: child));
   }
 }

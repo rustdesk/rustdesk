@@ -45,6 +45,7 @@ const String kAppTypeDesktopPortForward = "port forward";
 const String kWindowMainWindowOnTop = "main_window_on_top";
 const String kWindowGetWindowInfo = "get_window_info";
 const String kWindowGetScreenList = "get_screen_list";
+// This method is not used, maybe it can be removed.
 const String kWindowDisableGrabKeyboard = "disable_grab_keyboard";
 const String kWindowActionRebuild = "rebuild";
 const String kWindowEventHide = "hide";
@@ -204,6 +205,12 @@ const kRemoteAudioGuestToHost = 'guest-to-host';
 const kRemoteAudioDualWay = 'dual-way';
 
 const kIgnoreDpi = true;
+
+// ================================ mobile ================================
+
+// Magic numbers, maybe need to avoid it or use a better way to get them.
+const kMobileDelaySoftKeyboard = Duration(milliseconds: 30);
+const kMobileDelaySoftKeyboardFocus = Duration(milliseconds: 30);
 
 /// Android constants
 const kActionApplicationDetailsSettings =

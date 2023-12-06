@@ -1,7 +1,10 @@
 use hbb_common::{allow_err, bail, lazy_static, log, ResultType};
-use std::sync::{
-    mpsc::{channel, Sender},
-    Mutex,
+use std::{
+    io::Error,
+    sync::{
+        mpsc::{channel, Sender},
+        Mutex,
+    },
 };
 use winapi::{
     ctypes::c_int,
@@ -10,10 +13,7 @@ use winapi::{
         ntdef::NULL,
         windef::{HHOOK, POINT},
     },
-    um::{
-        errhandlingapi::GetLastError, libloaderapi::GetModuleHandleExA,
-        processthreadsapi::GetCurrentThreadId, winuser::*,
-    },
+    um::{libloaderapi::GetModuleHandleExA, processthreadsapi::GetCurrentThreadId, winuser::*},
 };
 
 const GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT: u32 = 2;
@@ -44,7 +44,7 @@ fn do_hook(tx: Sender<String>) -> ResultType<(HHOOK, HHOOK)> {
         ) {
             tx.send(format!(
                 "Failed to GetModuleHandleExA, error: {}",
-                GetLastError()
+                Error::last_os_error()
             ))?;
             return Ok(invalid_ret);
         }
@@ -56,7 +56,7 @@ fn do_hook(tx: Sender<String>) -> ResultType<(HHOOK, HHOOK)> {
         ) {
             tx.send(format!(
                 "Failed to GetModuleHandleExA, error: {}",
-                GetLastError()
+                Error::last_os_error()
             ))?;
             return Ok(invalid_ret);
         }
@@ -68,7 +68,10 @@ fn do_hook(tx: Sender<String>) -> ResultType<(HHOOK, HHOOK)> {
             0,
         );
         if hook_keyboard.is_null() {
-            tx.send(format!(" SetWindowsHookExA keyboard {}", GetLastError()))?;
+            tx.send(format!(
+                " SetWindowsHookExA keyboard, error {}",
+                Error::last_os_error()
+            ))?;
             return Ok(invalid_ret);
         }
 
@@ -76,9 +79,15 @@ fn do_hook(tx: Sender<String>) -> ResultType<(HHOOK, HHOOK)> {
         if hook_mouse.is_null() {
             if FALSE == UnhookWindowsHookEx(hook_keyboard) {
                 // Fatal error
-                log::error!(" UnhookWindowsHookEx keyboard {}", GetLastError());
+                log::error!(
+                    " UnhookWindowsHookEx keyboard, error {}",
+                    Error::last_os_error()
+                );
             }
-            tx.send(format!(" SetWindowsHookExA mouse {}", GetLastError()))?;
+            tx.send(format!(
+                " SetWindowsHookExA mouse, error {}",
+                Error::last_os_error()
+            ))?;
             return Ok(invalid_ret);
         }
 
@@ -131,12 +140,18 @@ pub fn hook() -> ResultType<()> {
 
             if FALSE == UnhookWindowsHookEx(hook_keyboard as _) {
                 // Fatal error
-                log::error!("Failed UnhookWindowsHookEx keyboard {}", GetLastError());
+                log::error!(
+                    "Failed UnhookWindowsHookEx keyboard, error {}",
+                    Error::last_os_error()
+                );
             }
 
             if FALSE == UnhookWindowsHookEx(hook_mouse as _) {
                 // Fatal error
-                log::error!("Failed UnhookWindowsHookEx mouse {}", GetLastError());
+                log::error!(
+                    "Failed UnhookWindowsHookEx mouse, error {}",
+                    Error::last_os_error()
+                );
             }
 
             *CUR_HOOK_THREAD_ID.lock().unwrap() = 0;
@@ -162,7 +177,10 @@ pub fn unhook() -> ResultType<()> {
         let cur_hook_thread_id = CUR_HOOK_THREAD_ID.lock().unwrap();
         if *cur_hook_thread_id != 0 {
             if FALSE == PostThreadMessageA(*cur_hook_thread_id, WM_USER_EXIT_HOOK, 0, 0) {
-                bail!("Failed to post message to exit hook, {}", GetLastError());
+                bail!(
+                    "Failed to post message to exit hook, error {}",
+                    Error::last_os_error()
+                );
             }
         }
     }

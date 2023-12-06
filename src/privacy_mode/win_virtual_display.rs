@@ -1,7 +1,10 @@
 use super::{PrivacyMode, PrivacyModeState, INVALID_PRIVACY_MODE_CONN_ID, NO_DISPLAYS};
 use crate::virtual_display_manager;
 use hbb_common::{allow_err, bail, config::Config, log, ResultType};
-use std::ops::{Deref, DerefMut};
+use std::{
+    io::Error,
+    ops::{Deref, DerefMut},
+};
 use virtual_display::MonitorMode;
 use winapi::{
     shared::{
@@ -9,7 +12,6 @@ use winapi::{
         ntdef::{NULL, WCHAR},
     },
     um::{
-        errhandlingapi::GetLastError,
         wingdi::{
             DEVMODEW, DISPLAY_DEVICEW, DISPLAY_DEVICE_ACTIVE, DISPLAY_DEVICE_ATTACHED_TO_DESKTOP,
             DISPLAY_DEVICE_MIRRORING_DRIVER, DISPLAY_DEVICE_PRIMARY_DEVICE, DM_POSITION,
@@ -35,21 +37,11 @@ struct Display {
 }
 
 pub struct PrivacyModeImpl {
+    impl_key: String,
     conn_id: i32,
     displays: Vec<Display>,
     virtual_displays: Vec<Display>,
     virtual_displays_added: Vec<u32>,
-}
-
-impl Default for PrivacyModeImpl {
-    fn default() -> Self {
-        Self {
-            conn_id: INVALID_PRIVACY_MODE_CONN_ID,
-            displays: Vec::new(),
-            virtual_displays: Vec::new(),
-            virtual_displays_added: Vec::new(),
-        }
-    }
 }
 
 struct TurnOnGuard<'a> {
@@ -82,6 +74,16 @@ impl<'a> Drop for TurnOnGuard<'a> {
 }
 
 impl PrivacyModeImpl {
+    pub fn new(impl_key: &str) -> Self {
+        Self {
+            impl_key: impl_key.to_owned(),
+            conn_id: INVALID_PRIVACY_MODE_CONN_ID,
+            displays: Vec::new(),
+            virtual_displays: Vec::new(),
+            virtual_displays_added: Vec::new(),
+        }
+    }
+
     // mainly from https://github.com/fufesou/rustdesk/blob/44c3a52ca8502cf53b58b59db130611778d34dbe/libs/scrap/src/dxgi/mod.rs#L365
     fn set_displays(&mut self) {
         self.displays.clear();
@@ -193,9 +195,9 @@ impl PrivacyModeImpl {
                 )
             {
                 bail!(
-                    "Failed EnumDisplaySettingsW, device name: {:?}, error code: {}",
+                    "Failed EnumDisplaySettingsW, device name: {:?}, error: {}",
                     std::string::String::from_utf16(&display.name),
-                    GetLastError()
+                    Error::last_os_error()
                 );
             }
 
@@ -227,9 +229,9 @@ impl PrivacyModeImpl {
                     == EnumDisplaySettingsW(dd.DeviceName.as_ptr(), ENUM_CURRENT_SETTINGS, &mut dm)
                 {
                     bail!(
-                        "Failed EnumDisplaySettingsW, device name: {:?}, error code: {}",
+                        "Failed EnumDisplaySettingsW, device name: {:?}, error: {}",
                         std::string::String::from_utf16(&dd.DeviceName),
-                        GetLastError()
+                        Error::last_os_error()
                     );
                 }
 
@@ -355,6 +357,10 @@ impl PrivacyMode for PrivacyModeImpl {
     }
 
     fn turn_on_privacy(&mut self, conn_id: i32) -> ResultType<bool> {
+        if !virtual_display_manager::is_virtual_display_supported() {
+            bail!("idd_not_support_under_win10_2004_tip");
+        }
+
         if self.check_on_conn_id(conn_id)? {
             log::debug!("Privacy mode of conn {} is already on", conn_id);
             return Ok(true);
@@ -430,6 +436,11 @@ impl PrivacyMode for PrivacyModeImpl {
     #[inline]
     fn pre_conn_id(&self) -> i32 {
         self.conn_id
+    }
+
+    #[inline]
+    fn get_impl_key(&self) -> &str {
+        &self.impl_key
     }
 }
 

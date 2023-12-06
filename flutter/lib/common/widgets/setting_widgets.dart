@@ -170,91 +170,13 @@ customImageQualitySetting() {
       showMoreQuality: true);
 }
 
-Future<bool> setServerConfig(
-  List<TextEditingController> controllers,
-  List<RxString> errMsgs,
-  ServerConfig config,
-) async {
-  config.idServer = config.idServer.trim();
-  config.relayServer = config.relayServer.trim();
-  config.apiServer = config.apiServer.trim();
-  config.key = config.key.trim();
-  // id
-  if (config.idServer.isNotEmpty) {
-    errMsgs[0].value =
-        translate(await bind.mainTestIfValidServer(server: config.idServer));
-    if (errMsgs[0].isNotEmpty) {
-      return false;
-    }
-  }
-  // relay
-  if (config.relayServer.isNotEmpty) {
-    errMsgs[1].value =
-        translate(await bind.mainTestIfValidServer(server: config.relayServer));
-    if (errMsgs[1].isNotEmpty) {
-      return false;
-    }
-  }
-  // api
-  if (config.apiServer.isNotEmpty) {
-    if (!config.apiServer.startsWith('http://') &&
-        !config.apiServer.startsWith('https://')) {
-      errMsgs[2].value =
-          '${translate("API Server")}: ${translate("invalid_http")}';
-      return false;
-    }
-  }
-  final oldApiServer = await bind.mainGetApiServer();
-
-  // should set one by one
-  await bind.mainSetOption(
-      key: 'custom-rendezvous-server', value: config.idServer);
-  await bind.mainSetOption(key: 'relay-server', value: config.relayServer);
-  await bind.mainSetOption(key: 'api-server', value: config.apiServer);
-  await bind.mainSetOption(key: 'key', value: config.key);
-
-  final newApiServer = await bind.mainGetApiServer();
-  if (oldApiServer.isNotEmpty &&
-      oldApiServer != newApiServer &&
-      gFFI.userModel.isLogin) {
-    gFFI.userModel.logOut(apiServer: oldApiServer);
-  }
-  return true;
-}
-
 List<Widget> ServerConfigImportExportWidgets(
   List<TextEditingController> controllers,
   List<RxString> errMsgs,
 ) {
   import() {
     Clipboard.getData(Clipboard.kTextPlain).then((value) {
-      final text = value?.text;
-      if (text != null && text.isNotEmpty) {
-        try {
-          final sc = ServerConfig.decode(text);
-          if (sc.idServer.isNotEmpty) {
-            controllers[0].text = sc.idServer;
-            controllers[1].text = sc.relayServer;
-            controllers[2].text = sc.apiServer;
-            controllers[3].text = sc.key;
-            Future<bool> success = setServerConfig(controllers, errMsgs, sc);
-            success.then((value) {
-              if (value) {
-                showToast(
-                    translate('Import server configuration successfully'));
-              } else {
-                showToast(translate('Invalid server configuration'));
-              }
-            });
-          } else {
-            showToast(translate('Invalid server configuration'));
-          }
-        } catch (e) {
-          showToast(translate('Invalid server configuration'));
-        }
-      } else {
-        showToast(translate('Clipboard is empty'));
-      }
+      importConfig(controllers, errMsgs, value?.text);
     });
   }
 

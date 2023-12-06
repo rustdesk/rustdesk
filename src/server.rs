@@ -97,9 +97,6 @@ pub fn new() -> ServerPtr {
     server.add_service(Box::new(audio_service::new()));
     #[cfg(not(target_os = "ios"))]
     server.add_service(Box::new(display_service::new()));
-    server.add_service(Box::new(video_service::new(
-        *display_service::PRIMARY_DISPLAY_IDX,
-    )));
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     {
         server.add_service(Box::new(clipboard_service::new()));
@@ -260,6 +257,16 @@ async fn create_relay_connection_(
 impl Server {
     fn is_video_service_name(name: &str) -> bool {
         name.starts_with(video_service::NAME)
+    }
+
+    pub fn try_add_primay_video_service(&mut self) {
+        let primary_video_service_name =
+            video_service::get_service_name(*display_service::PRIMARY_DISPLAY_IDX);
+        if !self.contains(&primary_video_service_name) {
+            self.add_service(Box::new(video_service::new(
+                *display_service::PRIMARY_DISPLAY_IDX,
+            )));
+        }
     }
 
     pub fn add_connection(&mut self, conn: ConnInner, noperms: &Vec<&'static str>) {

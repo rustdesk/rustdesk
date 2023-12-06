@@ -71,7 +71,7 @@ default-net = "0.14"
 wol-rs = "1.0"
 flutter_rust_bridge = { version = "=1.80", features = ["uuid"], optional = true}
 errno = "0.3"
-rdev = { git = "https://github.com/fufesou/rdev", branch = "master" }
+rdev = { git = "https://github.com/fufesou/rdev" }
 url = { version = "2.3", features = ["serde"] }
 crossbeam-queue = "0.3"
 hex = "0.4"
@@ -81,6 +81,7 @@ cidr-utils = "0.5"
 libloading = "0.8"
 fon = "0.6"
 zip = "0.6"
+shutdown_hooks = "0.1"
 
 [target.'cfg(not(any(target_os = "android", target_os = "linux")))'.dependencies]
 cpal = "0.15"
@@ -93,9 +94,8 @@ sys-locale = "0.3"
 enigo = { path = "libs/enigo", features = [ "with_serde" ] }
 clipboard = { path = "libs/clipboard" }
 ctrlc = "3.2"
-arboard = "3.2"
+arboard = { version = "3.2", features = ["wayland-data-control"] }
 system_shutdown = "4.0"
-shutdown_hooks = "0.1"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 winapi = { version = "0.3", features = ["winuser", "wincrypt", "shellscalingapi", "pdh", "synchapi", "memoryapi"] }
@@ -147,6 +147,7 @@ once_cell = {version = "1.18", optional = true}
 [target.'cfg(target_os = "android")'.dependencies]
 android_logger = "0.13"
 jni = "0.21"
+android-wakelock = { git = "https://github.com/21pages/android-wakelock" }
 
 [workspace]
 members = ["libs/scrap", "libs/hbb_common", "libs/enigo", "libs/clipboard", "libs/virtual_display", "libs/virtual_display/dylib", "libs/portable"]

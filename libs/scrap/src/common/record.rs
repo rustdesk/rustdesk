@@ -60,7 +60,7 @@ impl RecorderContext {
                 ".mp4"
             };
         self.filename = PathBuf::from(&dir).join(file).to_string_lossy().to_string();
-        log::info!("video will save to:{}", self.filename);
+        log::info!("video will save to {}", self.filename);
         Ok(())
     }
 }
@@ -225,7 +225,7 @@ impl Recorder {
         let old_pts = self.pts;
         self.pts = Some(pts);
         if old_pts.clone().unwrap_or_default() > pts {
-            log::info!("pts {:?}->{}, change record filename", old_pts, pts);
+            log::info!("pts {:?} -> {}, change record filename", old_pts, pts);
             self.change(self.ctx.clone())?;
         }
         Ok(())
@@ -310,7 +310,7 @@ impl RecorderApi for WebmRecorder {
 
 impl Drop for WebmRecorder {
     fn drop(&mut self) {
-        std::mem::replace(&mut self.webm, None).map_or(false, |webm| webm.finalize(None));
+        let _ = std::mem::replace(&mut self.webm, None).map_or(false, |webm| webm.finalize(None));
         let mut state = RecordState::WriteTail;
         if !self.written || self.start.elapsed().as_secs() < MIN_SECS {
             std::fs::remove_file(&self.ctx.filename).ok();

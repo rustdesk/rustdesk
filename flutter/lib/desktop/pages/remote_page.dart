@@ -540,8 +540,6 @@ class ImagePaint extends StatefulWidget {
 
 class _ImagePaintState extends State<ImagePaint> {
   bool _lastRemoteCursorMoved = false;
-  final ScrollController _horizontal = ScrollController();
-  final ScrollController _vertical = ScrollController();
 
   String get id => widget.id;
   RxBool get zoomCursor => widget.zoomCursor;
@@ -610,24 +608,18 @@ class _ImagePaintState extends State<ImagePaint> {
           : _buildScrollbarNonTextureRender(m, paintSize, s);
       return NotificationListener<ScrollNotification>(
           onNotification: (notification) {
-            final percentX = _horizontal.hasClients
-                ? _horizontal.position.extentBefore /
-                    (_horizontal.position.extentBefore +
-                        _horizontal.position.extentInside +
-                        _horizontal.position.extentAfter)
-                : 0.0;
-            final percentY = _vertical.hasClients
-                ? _vertical.position.extentBefore /
-                    (_vertical.position.extentBefore +
-                        _vertical.position.extentInside +
-                        _vertical.position.extentAfter)
-                : 0.0;
-            c.setScrollPercent(percentX, percentY);
+            c.updateScrollPercent();
             return false;
           },
           child: mouseRegion(
             child: Obx(() => _buildCrossScrollbarFromLayout(
-                context, _buildListener(paintWidget), c.size, paintSize)),
+                  context,
+                  _buildListener(paintWidget),
+                  c.size,
+                  paintSize,
+                  c.scrollHorizontal,
+                  c.scrollVertical,
+                )),
           ));
     } else {
       if (c.size.width > 0 && c.size.height > 0) {
@@ -740,7 +732,13 @@ class _ImagePaintState extends State<ImagePaint> {
   }
 
   Widget _buildCrossScrollbarFromLayout(
-      BuildContext context, Widget child, Size layoutSize, Size size) {
+    BuildContext context,
+    Widget child,
+    Size layoutSize,
+    Size size,
+    ScrollController horizontal,
+    ScrollController vertical,
+  ) {
     final scrollConfig = CustomMouseWheelScrollConfig(
         scrollDuration: kDefaultScrollDuration,
         scrollCurve: Curves.linearToEaseOut,
@@ -752,7 +750,7 @@ class _ImagePaintState extends State<ImagePaint> {
       widget = ScrollConfiguration(
         behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
         child: SingleChildScrollView(
-          controller: _horizontal,
+          controller: horizontal,
           scrollDirection: Axis.horizontal,
           physics: cursorOverImage.isTrue
               ? const NeverScrollableScrollPhysics()
@@ -774,7 +772,7 @@ class _ImagePaintState extends State<ImagePaint> {
       widget = ScrollConfiguration(
         behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
         child: SingleChildScrollView(
-          controller: _vertical,
+          controller: vertical,
           physics: cursorOverImage.isTrue
               ? const NeverScrollableScrollPhysics()
               : null,
@@ -793,13 +791,13 @@ class _ImagePaintState extends State<ImagePaint> {
     }
     if (layoutSize.width < size.width) {
       widget = ImprovedScrolling(
-        scrollController: _horizontal,
+        scrollController: horizontal,
         enableCustomMouseWheelScrolling: cursorOverImage.isFalse,
         customMouseWheelScrollConfig: scrollConfig,
         child: RawScrollbar(
           thickness: kScrollbarThickness,
           thumbColor: Colors.grey,
-          controller: _horizontal,
+          controller: horizontal,
           thumbVisibility: false,
           trackVisibility: false,
           notificationPredicate: layoutSize.height < size.height
@@ -811,13 +809,13 @@ class _ImagePaintState extends State<ImagePaint> {
     }
     if (layoutSize.height < size.height) {
       widget = ImprovedScrolling(
-        scrollController: _vertical,
+        scrollController: vertical,
         enableCustomMouseWheelScrolling: cursorOverImage.isFalse,
         customMouseWheelScrollConfig: scrollConfig,
         child: RawScrollbar(
           thickness: kScrollbarThickness,
           thumbColor: Colors.grey,
-          controller: _vertical,
+          controller: vertical,
           thumbVisibility: false,
           trackVisibility: false,
           child: widget,
@@ -874,10 +872,14 @@ class CursorPaint extends StatelessWidget {
         debugPrint('unreachable! The displays rect is null.');
         return Container();
       }
-      final imageWidth = rect.width * c.scale;
-      final imageHeight = rect.height * c.scale;
-      cx = -imageWidth * c.scrollX;
-      cy = -imageHeight * c.scrollY;
+      if (cx < 0) {
+        final imageWidth = rect.width * c.scale;
+        cx = -imageWidth * c.scrollX;
+      }
+      if (cy < 0) {
+        final imageHeight = rect.height * c.scale;
+        cy = -imageHeight * c.scrollY;
+      }
     }
 
     double x = (m.x - hotx) * c.scale + cx;

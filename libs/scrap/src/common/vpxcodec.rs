@@ -73,7 +73,7 @@ impl EncoderApi for VpxEncoder {
                 // When the data buffer falls below this percentage of fullness, a dropped frame is indicated. Set the threshold to zero (0) to disable this feature.
                 // In dynamic scenes, low bitrate gets low fps while high bitrate gets high fps.
                 c.rc_dropframe_thresh = 25;
-                c.g_threads = codec_thread_num() as _;
+                c.g_threads = codec_thread_num(64) as _;
                 c.g_error_resilient = VPX_ERROR_RESILIENT_DEFAULT;
                 // https://developers.google.com/media/vp9/bitrate-modes/
                 // Constant Bitrate mode (CBR) is recommended for live streaming with VP9.
@@ -450,7 +450,7 @@ impl VpxDecoder {
         };
         let mut ctx = Default::default();
         let cfg = vpx_codec_dec_cfg_t {
-            threads: codec_thread_num() as _,
+            threads: codec_thread_num(64) as _,
             w: 0,
             h: 0,
         };
