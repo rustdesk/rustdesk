@@ -178,7 +178,17 @@ fn displays_to_msg(displays: Vec<DisplayInfo>) -> Message {
 }
 
 fn check_get_displays_changed_msg() -> Option<Message> {
+    #[cfg(target_os = "linux")]
+    {
+        if !is_x11() {
+            return get_displays_msg();
+        }
+    }
     check_update_displays(&try_get_displays().ok()?);
+    get_displays_msg()
+}
+
+fn get_displays_msg() -> Option<Message> {
     let displays = SYNC_DISPLAYS.lock().unwrap().get_update_sync_displays()?;
     Some(displays_to_msg(displays))
 }
