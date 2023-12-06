@@ -1237,6 +1237,8 @@ impl Connection {
     }
 
     fn get_supported_resolutions(display_idx: usize) -> Option<SupportedResolutions> {
+        #[cfg(any(target_os = "android", target_os = "ios"))]
+        return None;
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
         {
             #[cfg(target_os = "linux")]
