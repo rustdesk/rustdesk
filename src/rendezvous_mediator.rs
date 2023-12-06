@@ -699,7 +699,7 @@ impl RendezvousMediator {
         let mq_url = format!("nats://{}", mq_host);
 
         let options = ConnectOptions::new()
-            .token(mq_token)
+            .credentials(&mq_token)?
             .ping_interval(Duration::from_millis(REG_INTERVAL as u64));
         let client = async_nats::connect_with_options(&mq_url, options).await?;
         log::info!("Connected to mq server at: {}", mq_url);
