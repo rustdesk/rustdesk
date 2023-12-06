@@ -1,13 +1,13 @@
+use async_nats::{ConnectOptions, Subscriber};
 use std::{
+    cmp::min,
     net::SocketAddr,
     sync::{
         atomic::{AtomicBool, Ordering},
         Arc, Mutex,
     },
     time::Instant,
-    cmp::min,
 };
-use async_nats::{ConnectOptions, Subscriber};
 
 use uuid::Uuid;
 
@@ -16,19 +16,19 @@ use hbb_common::{
     anyhow::bail,
     config::{Config, NetworkType, CONNECT_TIMEOUT, READ_TIMEOUT, REG_INTERVAL, RENDEZVOUS_PORT},
     futures::future::join_all,
+    futures::StreamExt,
     log,
     protobuf::Message as _,
     rendezvous_proto::*,
     sleep,
     socket_client::{self, is_ipv4, test_target},
+    tcp::FramedStream,
     tokio::{
         self, select,
         time::{interval, Duration},
     },
     udp::FramedSocket,
-    tcp::FramedStream,
-    AddrMangle, ResultType, IntoTargetAddr,
-    futures::StreamExt,
+    AddrMangle, IntoTargetAddr, ResultType,
 };
 
 use crate::{
@@ -514,9 +514,7 @@ impl RendezvousMediator {
                 let addr = test_target(&host).await?;
                 addr.into_target_addr()?
             }
-            NetworkType::ProxySocks => {
-                host.clone().into_target_addr()?
-            }
+            NetworkType::ProxySocks => host.clone().into_target_addr()?,
         };
         let mut rz = Self {
             addr: addr,
@@ -689,7 +687,10 @@ impl RendezvousMediator {
     }
 
     /// Initialize the connection to rendezvous server
-    async fn handshake(&mut self, host: &str) -> ResultType<(async_nats::client::Client, Subscriber)> {
+    async fn handshake(
+        &mut self,
+        host: &str,
+    ) -> ResultType<(async_nats::client::Client, Subscriber)> {
         // Register pk & id
         let mq_token = self.register_pk_tcp().await?;
 
@@ -704,13 +705,15 @@ impl RendezvousMediator {
         log::info!("Connected to mq server at: {}", mq_url);
 
         // Subscribe to push channel
-        let subscription = client.subscribe(Config::get_push_topic(&Config::get_id())).await?;
+        let subscription = client
+            .subscribe(Config::get_push_topic(&Config::get_id()))
+            .await?;
 
         Ok((client, subscription))
     }
 
     async fn register_pk_tcp(&mut self) -> ResultType<String> {
-        loop {
+        for _ in 0..3 {
             let mut socket = socket_client::connect_tcp(&*self.host, CONNECT_TIMEOUT).await?;
 
             // Send RegisterPk
@@ -764,6 +767,8 @@ impl RendezvousMediator {
                 bail!("Unknown error when receiving RegisterPkResponse");
             }
         }
+        log::error!("Too many UUID_MISMATCH received");
+        bail!("Too many UUID_MISMATCH received")
     }
 
     async fn register_peer_mq(&mut self, client: &async_nats::client::Client) -> ResultType<()> {
