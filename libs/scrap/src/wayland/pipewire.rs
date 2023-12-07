@@ -25,7 +25,7 @@ use super::request_portal::OrgFreedesktopPortalRequestResponse;
 use super::screencast_portal::OrgFreedesktopPortalScreenCast as screencast_portal;
 
 #[derive(Debug, Clone, Copy)]
-struct PwStreamInfo {
+pub struct PwStreamInfo {
     path: u64,
     source_type: u64,
     position: (i32, i32),
@@ -449,12 +449,6 @@ static mut INIT: bool = false;
 const RESTORE_TOKEN: &str = "restore_token";
 const RESTORE_TOKEN_CONF_KEY: &str = "wayland-restore-token";
 
-const PORTAL_CURSOR_MODE_HIDDEN: u32 = 1;
-#[allow(dead_code)]
-const PORTAL_CURSOR_MODE_EMBEDDED: u32 = 2;
-#[allow(dead_code)]
-const PORTAL_CURSOR_MODE_METADATA: u32 = 4;
-
 pub fn get_available_cursor_modes() -> Result<u32, dbus::Error> {
     let conn = SyncConnection::new_session()?;
     let portal = get_portal(&conn);
@@ -462,9 +456,8 @@ pub fn get_available_cursor_modes() -> Result<u32, dbus::Error> {
 }
 
 // mostly inspired by https://gitlab.gnome.org/snippets/19
-fn request_screen_cast(
-    capture_cursor: bool,
-) -> Result<(SyncConnection, OwnedFd, Vec<PwStreamInfo>), Box<dyn Error>> {
+pub fn request_remote_desktop(
+) -> Result<(SyncConnection, OwnedFd, Vec<PwStreamInfo>, dbus::Path<'static>), Box<dyn Error>> {
     unsafe {
         if !INIT {
             gstreamer::init()?;
@@ -480,6 +473,8 @@ fn request_screen_cast(
     let streams_res = streams.clone();
     let failure = Arc::new(AtomicBool::new(false));
     let failure_res = failure.clone();
+    let session: Arc<Mutex<Option<dbus::Path>>> = Arc::new(Mutex::new(None));
+    let session_res = session.clone();
     args.insert(
         "session_handle_token".to_string(),
         Variant(Box::new("u1".to_string())),
@@ -502,22 +497,12 @@ fn request_screen_cast(
             let portal = get_portal(c);
             let mut args: PropMap = HashMap::new();
 
-            // if let Ok(version) = remote_desktop_portal::version(&portal) {
-            //     if version >= 4 {
-            //         let restore_token = config::LocalConfig::get_option(RESTORE_TOKEN_CONF_KEY);
-            //         if !restore_token.is_empty() {
-            //             args.insert(RESTORE_TOKEN.to_string(), Variant(Box::new(restore_token)));
-            //         }
-            //         // persist_mode may be configured by the user.
-            //         args.insert("persist_mode".to_string(), Variant(Box::new(2u32)));
-            //     }
-            // }
             args.insert(
                 "handle_token".to_string(),
                 Variant(Box::new("u2".to_string())),
             );
 
-            let session: dbus::Path = r
+            let ses: dbus::Path = r
                 .results
                 .get("session_handle")
                 .ok_or_else(|| {
@@ -531,8 +516,12 @@ fn request_screen_cast(
                 .to_string()
                 .into();
 
+            session.lock().unwrap().replace(
+                ses.clone()
+            );
+
+            let session = session.lock().unwrap().clone().unwrap();
             let path = portal.select_devices(session.clone(), args)?;
-            let session = session.clone();
             let fd = fd.clone();
             let streams = streams.clone();
             let failure = failure.clone();
@@ -561,29 +550,6 @@ fn request_screen_cast(
                     args.insert("multiple".into(), Variant(Box::new(true)));
                     args.insert("types".into(), Variant(Box::new(1u32))); //| 2u32)));
 
-                    let mut cursor_mode = 0u32;
-                    let mut available_cursor_modes = 0u32;
-                    if let Ok(modes) = portal.available_cursor_modes() {
-                        available_cursor_modes = modes;
-                    }
-                    // if capture_cursor {
-                    //     cursor_mode = PORTAL_CURSOR_MODE_METADATA & available_cursor_modes;
-                    // }
-                    if cursor_mode == 0 {
-                        cursor_mode = PORTAL_CURSOR_MODE_HIDDEN & available_cursor_modes;
-                    }
-                    let plasma = std::env::var("DESKTOP_SESSION").map_or(false, |s| s.contains("plasma"));
-                    if plasma && capture_cursor {
-                        // Warn the user if capturing the cursor is tried on kde as this can crash
-                        // kwin_wayland and tear down the plasma desktop, see:
-                        // https://bugs.kde.org/show_bug.cgi?id=435042
-                        warn!("You are attempting to capture the cursor under KDE Plasma, this may crash your \
-                            desktop, see https://bugs.kde.org/show_bug.cgi?id=435042 for details! \
-                            You have been warned.");
-                    }
-                    if cursor_mode > 0 {
-                        args.insert("cursor_mode".into(), Variant(Box::new(cursor_mode)));
-                    }
                     let path = portal.select_sources(session.clone(), args)?;
                     let fd = fd.clone();
                     let streams = streams.clone();
@@ -668,9 +634,11 @@ fn request_screen_cast(
     }
     let fd_res = fd_res.lock().unwrap();
     let streams_res = streams_res.lock().unwrap();
+    let session_res = session_res.lock().unwrap();
+
     if let Some(fd_res) = fd_res.clone() {
-        if !streams_res.is_empty() {
-            return Ok((conn, fd_res, streams_res.clone()));
+        if !streams_res.is_empty() && !session_res.is_none() {
+            return Ok((conn, fd_res, streams_res.clone(), session_res.clone().unwrap()));
         }
     }
     Err(Box::new(DBusError(
@@ -678,8 +646,8 @@ fn request_screen_cast(
     )))
 }
 
-pub fn get_capturables(capture_cursor: bool) -> Result<Vec<PipeWireCapturable>, Box<dyn Error>> {
-    let (conn, fd, streams) = request_screen_cast(capture_cursor)?;
+pub fn get_capturables() -> Result<Vec<PipeWireCapturable>, Box<dyn Error>> {
+    let (conn, fd, streams, _) = request_remote_desktop()?;
     let conn = Arc::new(conn);
     Ok(streams
         .into_iter()
