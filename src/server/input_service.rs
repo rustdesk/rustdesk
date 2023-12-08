@@ -461,6 +461,16 @@ pub async fn setup_uinput(minx: i32, maxx: i32, miny: i32, maxy: i32) -> ResultT
     Ok(())
 }
 
+pub async fn setup_rdp_input() -> ResultType<(), Box<dyn std::error::Error>> {
+        let mut en = ENIGO.lock().unwrap();
+        let (conn,_,_,session) = scrap::wayland::pipewire::request_remote_desktop()?;
+        let keyboard = super::rdp_input::client::RdpInputKeyboard::new(conn, session)?;
+
+        en.set_custom_keyboard(Box::new(keyboard));
+        log::info!("RdpInput keyboard created");
+        Ok(())
+}
+
 #[cfg(target_os = "linux")]
 pub async fn update_mouse_resolution(minx: i32, maxx: i32, miny: i32, maxy: i32) -> ResultType<()> {
     set_uinput_resolution(minx, maxx, miny, maxy).await?;

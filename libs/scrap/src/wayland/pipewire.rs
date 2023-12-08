@@ -359,7 +359,7 @@ where
     })
 }
 
-fn get_portal(conn: &SyncConnection) -> Proxy<&SyncConnection> {
+pub fn get_portal(conn: &SyncConnection) -> Proxy<&SyncConnection> {
     conn.with_proxy(
         "org.freedesktop.portal.Desktop",
         "/org/freedesktop/portal/desktop",

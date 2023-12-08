@@ -1183,6 +1183,11 @@ impl Connection {
                 self.send(msg_out).await;
             }
 
+            //todo: combine get display and input into one request prompt
+            if !is_x11() {
+                let _ = setup_rdp_input().await;
+            }
+
             match super::display_service::update_get_sync_displays().await {
                 Err(err) => {
                     res.set_error(format!("{}", err));
