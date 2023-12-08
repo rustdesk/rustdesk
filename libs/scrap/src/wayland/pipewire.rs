@@ -590,12 +590,6 @@ pub fn request_remote_desktop(
                                         }
                                     }
 
-                                    //ex: simulate meta
-                                    // let options: PropMap = HashMap::new();
-                                    // let options1: PropMap = HashMap::new();
-                                    // portal.notify_keyboard_keycode(session.clone(), options, 125, 1)?;
-                                    // portal.notify_keyboard_keycode(session.clone(), options1, 125, 0)?;
-
                                     streams
                                         .clone()
                                         .lock()
