@@ -1,21 +1,21 @@
 use enigo::{Key, KeyboardControllable, MouseButton, MouseControllable};
 use hbb_common::ResultType;
 use dbus::{blocking::SyncConnection, Path};
-use scrap::wayland::pipewire::get_portal;
+use scrap::wayland::pipewire::{PwStreamInfo, get_portal};
 use scrap::wayland::remote_desktop_portal::OrgFreedesktopPortalRemoteDesktop as remote_desktop_portal;
 use std::collections::HashMap;
+use std::sync::Arc;
 
 pub mod client {
     use super::*;
 
-    pub struct RdpInputKeyboard {
-        conn: SyncConnection,
+pub struct RdpInputKeyboard {
+        conn: Arc<SyncConnection>,
         session: Path<'static>,
     }
 
     impl RdpInputKeyboard {
-        pub fn new( conn: SyncConnection, session: Path<'static>) -> ResultType<Self> {
-                // let conn = get_portal(&conn);
+        pub fn new( conn: Arc<SyncConnection>, session: Path<'static>) -> ResultType<Self> {
                 Ok(Self { conn, session })
         }
     }
@@ -29,33 +29,64 @@ pub mod client {
             self
         }
 
-        fn get_key_state(&mut self, key: Key) -> bool {
-            true // todo
+        fn get_key_state(&mut self, _: Key) -> bool {
+            // no api for this
+            true 
         }
 
-        fn key_sequence(&mut self, sequence: &str) {
+        fn key_sequence(&mut self, _: &str) {
+            // no api for this
         }
 
         fn key_down(&mut self, key: Key) -> enigo::ResultType {
-            //ex: simulate meta
-            // let p = get_portal(&self.conn);
-            // remote_desktop_portal::notify_keyboard_keycode(&p,self.session.clone(), HashMap::new(), 125, 1)?; 
-            // remote_desktop_portal::notify_keyboard_keycode(&p,self.session.clone(), HashMap::new(), 125, 0)?; 
+            let p = get_portal(&self.conn);
+            match key {
+                Key::Raw(key) => {
+                    remote_desktop_portal::notify_keyboard_keycode(&p,self.session.clone(), HashMap::new(), key as i32, 1)?; 
+                },
+                _ => {}
+            }
             Ok(())
         }
         fn key_up(&mut self, key: Key) {
+            let p = get_portal(&self.conn);
+            match key {
+                Key::Raw(key) => {
+                    let _ = remote_desktop_portal::notify_keyboard_keycode(&p,self.session.clone(), HashMap::new(), key as i32, 0); 
+                },
+                _ => {}
+            }
         }
         fn key_click(&mut self, key: Key) {
+            let p = get_portal(&self.conn);
+            match key {
+                Key::Raw(key) => {
+                    let _ = remote_desktop_portal::notify_keyboard_keycode(&p,self.session.clone(), HashMap::new(), key as i32, 1); 
+                    let _ = remote_desktop_portal::notify_keyboard_keycode(&p,self.session.clone(), HashMap::new(), key as i32, 0); 
+                },
+                _ => {}
+            }
         }
     }
 
 
     pub struct RdpInputMouse {
+        conn: Arc<SyncConnection>,
+        session: Path<'static>,
+        stream: PwStreamInfo,
     }
 
     impl RdpInputMouse {
-        pub async fn new() -> ResultType<Self> {
-                Ok(Self {})
+        pub fn new(
+            conn: Arc<SyncConnection>,
+            session: Path<'static>,
+            stream: PwStreamInfo,
+        ) -> ResultType<Self> {
+            Ok(Self {
+                conn,
+                session,
+                stream,
+            })
         }
     }
 
@@ -69,8 +100,25 @@ pub mod client {
         }
 
         fn mouse_move_to(&mut self, x: i32, y: i32) {
+            let p = get_portal(&self.conn);
+            let _ = remote_desktop_portal::notify_pointer_motion_absolute(
+                &p,
+                self.session.clone(),
+                HashMap::new(),
+                self.stream.path.clone() as u32,
+                x as f64,
+                y as f64,
+            );
         }
         fn mouse_move_relative(&mut self, x: i32, y: i32) {
+            let p = get_portal(&self.conn);
+            let _ = remote_desktop_portal::notify_pointer_motion(
+                &p,
+                self.session.clone(),
+                HashMap::new(),
+                x as f64,
+                y as f64,
+            );
         }
         fn mouse_down(&mut self, button: MouseButton) -> enigo::ResultType {
             Ok(())

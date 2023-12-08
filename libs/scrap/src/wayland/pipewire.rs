@@ -26,7 +26,7 @@ use super::screencast_portal::OrgFreedesktopPortalScreenCast as screencast_porta
 
 #[derive(Debug, Clone, Copy)]
 pub struct PwStreamInfo {
-    path: u64,
+    pub path: u64,
     source_type: u64,
     position: (i32, i32),
     size: (usize, usize),

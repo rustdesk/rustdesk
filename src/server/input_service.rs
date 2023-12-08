@@ -463,11 +463,19 @@ pub async fn setup_uinput(minx: i32, maxx: i32, miny: i32, maxy: i32) -> ResultT
 
 pub async fn setup_rdp_input() -> ResultType<(), Box<dyn std::error::Error>> {
         let mut en = ENIGO.lock().unwrap();
-        let (conn,_,_,session) = scrap::wayland::pipewire::request_remote_desktop()?;
-        let keyboard = super::rdp_input::client::RdpInputKeyboard::new(conn, session)?;
+        let (conn,_,streams,session) = scrap::wayland::pipewire::request_remote_desktop()?;
+        let conn = Arc::new(conn);
 
+        let keyboard = super::rdp_input::client::RdpInputKeyboard::new(conn.clone(), session.clone())?;
         en.set_custom_keyboard(Box::new(keyboard));
         log::info!("RdpInput keyboard created");
+
+        if let Some(stream) = streams.into_iter().next() {
+            let mouse = super::rdp_input::client::RdpInputMouse::new(conn, session, stream)?;
+            en.set_custom_mouse(Box::new(mouse));
+            log::info!("RdpInput mouse created");
+        }
+
         Ok(())
 }
 
