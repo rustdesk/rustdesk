@@ -5,6 +5,7 @@ use scrap::wayland::pipewire::{PwStreamInfo, get_portal};
 use scrap::wayland::remote_desktop_portal::OrgFreedesktopPortalRemoteDesktop as remote_desktop_portal;
 use std::collections::HashMap;
 use std::sync::Arc;
+use crate::uinput::service::map_key;
 
 pub mod client {
     use super::*;
@@ -39,36 +40,15 @@ pub struct RdpInputKeyboard {
         }
 
         fn key_down(&mut self, key: Key) -> enigo::ResultType {
-            let p = get_portal(&self.conn);
-            match key {
-                Key::Raw(key) => {
-                    let key = get_raw_evdev_keycode(key);
-                    remote_desktop_portal::notify_keyboard_keycode(&p,self.session.clone(), HashMap::new(), key, 1)?; 
-                },
-                _ => {}
-            }
+            handle_key(true, key, self.conn.clone(), self.session.clone())?;
             Ok(())
         }
         fn key_up(&mut self, key: Key) {
-            let p = get_portal(&self.conn);
-            match key {
-                Key::Raw(key) => {
-                    let key = get_raw_evdev_keycode(key);
-                    let _ = remote_desktop_portal::notify_keyboard_keycode(&p,self.session.clone(), HashMap::new(), key, 0); 
-                },
-                _ => {}
-            }
+            let _ = handle_key(false, key, self.conn.clone(), self.session.clone());
         }
         fn key_click(&mut self, key: Key) {
-            let p = get_portal(&self.conn);
-            match key {
-                Key::Raw(key) => {
-                    let key = get_raw_evdev_keycode(key);
-                    let _ = remote_desktop_portal::notify_keyboard_keycode(&p,self.session.clone(), HashMap::new(), key, 1); 
-                    let _ = remote_desktop_portal::notify_keyboard_keycode(&p,self.session.clone(), HashMap::new(), key, 0); 
-                },
-                _ => {}
-            }
+            let _ = handle_key(true, key, self.conn.clone(), self.session.clone());
+            let _ = handle_key(false, key, self.conn.clone(), self.session.clone());
         }
     }
 
@@ -139,5 +119,28 @@ pub struct RdpInputKeyboard {
         let mut key = key as i32 - 8; // 8 is the offset between xkb and evdev
         if key == 126 {key = 125;} // fix for right_meta key
         key
+    }
+    fn handle_key(down: bool, key: Key, conn : Arc<SyncConnection>, session: Path<'static>) -> ResultType<()> {
+        let state: u32 = if down {1} else {0};
+        let p = get_portal(&conn);
+        match key {
+            Key::Raw(key) => {
+                let key = get_raw_evdev_keycode(key);
+                remote_desktop_portal::notify_keyboard_keycode(&p,session, HashMap::new(), key, state)?; 
+            },
+            Key::CapsLock => {
+                // Todo fix capslock
+                return Ok(());
+            },
+            _ => {
+                if let Ok((key, is_shift)) = map_key(&key) {
+                    if is_shift {
+                        remote_desktop_portal::notify_keyboard_keycode(&p,session.clone(), HashMap::new(), evdev::Key::KEY_LEFTSHIFT.code() as i32, state)?; 
+                    }
+                    remote_desktop_portal::notify_keyboard_keycode(&p,session, HashMap::new(), key.code() as i32, state)?; 
+                }
+            }
+        }
+        Ok(())
     }
 }
