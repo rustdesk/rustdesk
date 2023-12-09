@@ -42,7 +42,7 @@ pub struct RdpInputKeyboard {
             let p = get_portal(&self.conn);
             match key {
                 Key::Raw(key) => {
-                    let key = key as i32 - 8; // 8 is the offset between xkb and evdev
+                    let key = get_raw_evdev_keycode(key);
                     remote_desktop_portal::notify_keyboard_keycode(&p,self.session.clone(), HashMap::new(), key, 1)?; 
                 },
                 _ => {}
@@ -53,7 +53,7 @@ pub struct RdpInputKeyboard {
             let p = get_portal(&self.conn);
             match key {
                 Key::Raw(key) => {
-                    let key = key as i32 - 8;
+                    let key = get_raw_evdev_keycode(key);
                     let _ = remote_desktop_portal::notify_keyboard_keycode(&p,self.session.clone(), HashMap::new(), key, 0); 
                 },
                 _ => {}
@@ -63,7 +63,7 @@ pub struct RdpInputKeyboard {
             let p = get_portal(&self.conn);
             match key {
                 Key::Raw(key) => {
-                    let key = key as i32 - 8;
+                    let key = get_raw_evdev_keycode(key);
                     let _ = remote_desktop_portal::notify_keyboard_keycode(&p,self.session.clone(), HashMap::new(), key, 1); 
                     let _ = remote_desktop_portal::notify_keyboard_keycode(&p,self.session.clone(), HashMap::new(), key, 0); 
                 },
@@ -71,7 +71,6 @@ pub struct RdpInputKeyboard {
             }
         }
     }
-
 
     pub struct RdpInputMouse {
         conn: Arc<SyncConnection>,
@@ -134,5 +133,11 @@ pub struct RdpInputKeyboard {
         }
         fn mouse_scroll_y(&mut self, length: i32) {
         }
+    }
+
+    fn get_raw_evdev_keycode(key: u16) -> i32 {
+        let mut key = key as i32 - 8; // 8 is the offset between xkb and evdev
+        if key == 126 {key = 125;} // fix for right_meta key
+        key
     }
 }
