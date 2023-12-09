@@ -23,12 +23,26 @@ pub fn make_tray() -> hbb_common::ResultType<()> {
     let icon;
     #[cfg(target_os = "macos")]
     {
-        let mode = dark_light::detect();
-        const LIGHT: &[u8] = include_bytes!("../res/mac-tray-light-x2.png");
         const DARK: &[u8] = include_bytes!("../res/mac-tray-dark-x2.png");
-        icon = match mode {
-            dark_light::Mode::Dark => LIGHT,
-            _ => DARK,
+        const LIGHT: &[u8] = include_bytes!("../res/mac-tray-light-x2.png");
+        let output = std::process::Command::new("sw_vers")
+            .args(&["-productVersion"])
+            .output()
+            .map(|x| x.stdout)
+            .unwrap_or_default();
+        let version: f64 = String::from_utf8_lossy(output.as_slice())
+            .trim()
+            .parse()
+            .unwrap_or_default();
+        icon = if version >= 14. {
+            // workaround for Sonoma, always light menubar
+            DARK
+        } else {
+            let mode = dark_light::detect();
+            match mode {
+                dark_light::Mode::Dark => LIGHT,
+                _ => DARK,
+            }
         };
     }
     #[cfg(not(target_os = "macos"))]
