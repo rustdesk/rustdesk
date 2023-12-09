@@ -42,7 +42,8 @@ pub struct RdpInputKeyboard {
             let p = get_portal(&self.conn);
             match key {
                 Key::Raw(key) => {
-                    remote_desktop_portal::notify_keyboard_keycode(&p,self.session.clone(), HashMap::new(), key as i32, 1)?; 
+                    let key = key as i32 - 8; // 8 is the offset between xkb and evdev
+                    remote_desktop_portal::notify_keyboard_keycode(&p,self.session.clone(), HashMap::new(), key, 1)?; 
                 },
                 _ => {}
             }
@@ -52,7 +53,8 @@ pub struct RdpInputKeyboard {
             let p = get_portal(&self.conn);
             match key {
                 Key::Raw(key) => {
-                    let _ = remote_desktop_portal::notify_keyboard_keycode(&p,self.session.clone(), HashMap::new(), key as i32, 0); 
+                    let key = key as i32 - 8;
+                    let _ = remote_desktop_portal::notify_keyboard_keycode(&p,self.session.clone(), HashMap::new(), key, 0); 
                 },
                 _ => {}
             }
@@ -61,8 +63,9 @@ pub struct RdpInputKeyboard {
             let p = get_portal(&self.conn);
             match key {
                 Key::Raw(key) => {
-                    let _ = remote_desktop_portal::notify_keyboard_keycode(&p,self.session.clone(), HashMap::new(), key as i32, 1); 
-                    let _ = remote_desktop_portal::notify_keyboard_keycode(&p,self.session.clone(), HashMap::new(), key as i32, 0); 
+                    let key = key as i32 - 8;
+                    let _ = remote_desktop_portal::notify_keyboard_keycode(&p,self.session.clone(), HashMap::new(), key, 1); 
+                    let _ = remote_desktop_portal::notify_keyboard_keycode(&p,self.session.clone(), HashMap::new(), key, 0); 
                 },
                 _ => {}
             }
