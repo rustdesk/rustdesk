@@ -103,11 +103,15 @@ pub struct RdpInputKeyboard {
             );
         }
         fn mouse_down(&mut self, button: MouseButton) -> enigo::ResultType {
+            handle_mouse(true, button, self.conn.clone(), self.session.clone());
             Ok(())
         }
         fn mouse_up(&mut self, button: MouseButton) {
+            handle_mouse(false , button, self.conn.clone(), self.session.clone());
         }
         fn mouse_click(&mut self, button: MouseButton) {
+            handle_mouse(true, button, self.conn.clone(), self.session.clone());
+            handle_mouse(false, button, self.conn.clone(), self.session.clone());
         }
         fn mouse_scroll_x(&mut self, length: i32) {
         }
@@ -142,5 +146,23 @@ pub struct RdpInputKeyboard {
             }
         }
         Ok(())
+    }
+    fn handle_mouse( down: bool, button: MouseButton, conn : Arc<SyncConnection>, session: Path<'static>){
+        let p = get_portal(&conn);
+        let but_key = match button {
+            // evdev mouse button codes
+            MouseButton::Left => 272,
+            MouseButton::Right => 273,
+            MouseButton::Middle => 274,
+            _ => {return;}
+        };
+        let state: u32 = if down {1} else {0};
+        let _ = remote_desktop_portal::notify_pointer_button(
+            &p,
+            session.clone(),
+            HashMap::new(),
+            but_key,
+            state,
+        );
     }
 }
