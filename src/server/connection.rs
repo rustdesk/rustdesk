@@ -5,6 +5,8 @@ use crate::clipboard_file::*;
 use crate::common::update_clipboard;
 #[cfg(target_os = "android")]
 use crate::keyboard::client::map_key_to_control_key;
+#[cfg(target_os = "linux")]
+use crate::platform::linux::is_x11;
 #[cfg(all(target_os = "linux", feature = "linux_headless"))]
 #[cfg(not(any(feature = "flatpak", feature = "appimage")))]
 use crate::platform::linux_desktop_manager;
@@ -12,8 +14,6 @@ use crate::platform::linux_desktop_manager;
 use crate::platform::WallPaperRemover;
 #[cfg(windows)]
 use crate::portable_service::client as portable_client;
-#[cfg(target_os = "linux")]
-use crate::platform::linux::is_x11;
 use crate::{
     client::{
         new_voice_call_request, new_voice_call_response, start_audio_thread, MediaData, MediaSender,
@@ -1195,9 +1195,12 @@ impl Connection {
                     res.set_peer_info(pi);
                     sub_service = true;
 
-                    // use rdp_input when uinput is not available in wayland. Ex: flatpak
-                    if !is_x11() && !crate::is_server() {
-                        let _ = setup_rdp_input().await;
+                    #[cfg(target_os = "linux")]
+                    {
+                        // use rdp_input when uinput is not available in wayland. Ex: flatpak
+                        if !is_x11() && !crate::is_server() {
+                            let _ = setup_rdp_input().await;
+                        }
                     }
                 }
             }
