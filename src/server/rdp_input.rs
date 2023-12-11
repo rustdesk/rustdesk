@@ -114,8 +114,24 @@ pub struct RdpInputKeyboard {
             handle_mouse(false, button, self.conn.clone(), self.session.clone());
         }
         fn mouse_scroll_x(&mut self, length: i32) {
+            let p = get_portal(&self.conn);
+            let _ = remote_desktop_portal::notify_pointer_axis(
+                &p,
+                self.session.clone(),
+                HashMap::new(),
+                length as f64,
+                0 as f64,
+            );
         }
         fn mouse_scroll_y(&mut self, length: i32) {
+            let p = get_portal(&self.conn);
+            let _ = remote_desktop_portal::notify_pointer_axis(
+                &p,
+                self.session.clone(),
+                HashMap::new(),
+                0 as f64,
+                length as f64,
+            );
         }
     }
 
