@@ -1214,26 +1214,19 @@ impl PeerConfig {
     }
 
     fn insert_default_options(mp: &mut HashMap<String, String>) {
-        let mut key = "codec-preference";
-        if !mp.contains_key(key) {
-            mp.insert(key.to_owned(), UserDefaultConfig::read().get(key));
-        }
-        key = "custom-fps";
-        if !mp.contains_key(key) {
-            mp.insert(key.to_owned(), UserDefaultConfig::read().get(key));
-        }
-        key = "zoom-cursor";
-        if !mp.contains_key(key) {
-            mp.insert(key.to_owned(), UserDefaultConfig::read().get(key));
-        }
-        key = "touch-mode";
-        if !mp.contains_key(key) {
-            mp.insert(key.to_owned(), UserDefaultConfig::read().get(key));
-        }
-        key = "i444";
-        if !mp.contains_key(key) {
-            mp.insert(key.to_owned(), UserDefaultConfig::read().get(key));
-        }
+        [
+            "codec-preference",
+            "custom-fps",
+            "zoom-cursor",
+            "touch-mode",
+            "i444",
+            "swap-left-right-mouse",
+        ]
+        .map(|key| {
+            if !mp.contains_key(key) {
+                mp.insert(key.to_owned(), UserDefaultConfig::read().get(key));
+            }
+        });
     }
 }
 

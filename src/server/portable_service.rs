@@ -618,10 +618,11 @@ pub mod client {
     }
 
     pub extern "C" fn drop_portable_service_shared_memory() {
+        // https://stackoverflow.com/questions/35980148/why-does-an-atexit-handler-panic-when-it-accesses-stdout
+        // Please make sure there is no print in the call stack
         let mut lock = SHMEM.lock().unwrap();
         if lock.is_some() {
             *lock = None;
-            log::info!("drop shared memory");
         }
     }
 
@@ -877,15 +878,7 @@ pub mod client {
         }
         if portable_service_running {
             log::info!("Create shared memory capturer");
-            if current_display == *display_service::PRIMARY_DISPLAY_IDX {
-                return Ok(Box::new(CapturerPortable::new(current_display)));
-            } else {
-                bail!(
-                    "Ignore capture display index: {}, the primary display index is: {}",
-                    current_display,
-                    *display_service::PRIMARY_DISPLAY_IDX
-                );
-            }
+            return Ok(Box::new(CapturerPortable::new(current_display)));
         } else {
             log::debug!("Create capturer dxgi|gdi");
             return Ok(Box::new(

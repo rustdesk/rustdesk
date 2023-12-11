@@ -551,7 +551,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Filter by intersection", "Filtruj wg przecięcia"),
         ("Remove wallpaper during incoming sessions", "Usuń tapetę podczas sesji przychodzących"),
         ("Test", "Test"),
-        ("switch_display_elevated_connections_tip", "Przełączanie na ekran inny niż główny nie jest obsługiwane przy podniesionych uprawnieniach, gdy istnieje wiele połączeń. Jeśli chcesz sterować wieloma ekranami, należy zainstalować program."),
         ("display_is_plugged_out_msg", "Ekran został odłączony, przełącz się na pierwszy ekran."),
         ("No displays", "Brak ekranów"),
         ("elevated_switch_display_msg", "Przełącz się na ekran główny, ponieważ wyświetlanie kilku ekranów nie jest obsługiwane przy podniesionych uprawnieniach."),
@@ -572,5 +571,12 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("privacy_mode_impl_virtual_display_tip", "Tryb 2"),
         ("Enter privacy mode", "Wejdź w tryb prywatności"),
         ("Exit privacy mode", "Wyjdź z trybu prywatności"),
+        ("idd_not_support_under_win10_2004_tip", "Pośredni sterownik ekranu nie jest obsługiwany. Wymagany jest system Windows 10 w wersji 2004 lub nowszej."),
+        ("switch_display_elevated_connections_tip", "Przełączanie na ekran inny niż główny nie jest obsługiwane przy podniesionych uprawnieniach, gdy istnieje wiele połączeń. Jeśli chcesz sterować wieloma ekranami, należy zainstalować program."),
+        ("input_source_1_tip", "Wejście źródła 1"),
+        ("input_source_2_tip", "Wejście źródła 2"),
+        ("capture_display_elevated_connections_tip", "Przechwytywanie wielu ekranów nie jest obsługiwane w trybie użytkownika z podwyższonym poziomem uprawnień. Jeśli chcesz sterować wieloma wyświetlaczami, spróbuj ponownie po instalacji."),
+        ("Swap control-command key", ""),
+        ("swap-left-right-mouse", ""),
     ].iter().cloned().collect();
 }

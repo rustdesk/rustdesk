@@ -67,13 +67,23 @@ pub struct PipeWireCapturable {
 
 impl PipeWireCapturable {
     fn new(conn: Arc<SyncConnection>, fd: OwnedFd, stream: PwStreamInfo) -> Self {
+        // alternative to get screen resolution as stream.size is not always correct ex: on fractional scaling
+        // https://github.com/rustdesk/rustdesk/issues/6116#issuecomment-1817724244
+        let res = get_res(Self {
+            dbus_conn: conn.clone(),
+            fd: fd.clone(),
+            path: stream.path,
+            source_type: stream.source_type,
+            position: stream.position,
+            size: stream.size,
+        });
         Self {
             dbus_conn: conn,
             fd,
             path: stream.path,
             source_type: stream.source_type,
             position: stream.position,
-            size: stream.size,
+            size: res.unwrap_or(stream.size),
         }
     }
 }
@@ -111,6 +121,27 @@ impl Capturable for PipeWireCapturable {
 
     fn recorder(&self, _capture_cursor: bool) -> Result<Box<dyn Recorder>, Box<dyn Error>> {
         Ok(Box::new(PipeWireRecorder::new(self.clone())?))
+    }
+}
+
+fn get_res(capturable:PipeWireCapturable) -> Result<(usize, usize), Box<dyn Error>> {
+    let rec = PipeWireRecorder::new(capturable)?;
+    if let Some(sample) = rec.appsink
+            .try_pull_sample(gst::ClockTime::from_mseconds(300))
+        {
+            let cap = sample
+                .get_caps()
+                .ok_or("Failed get caps")?
+                .get_structure(0)
+                .ok_or("Failed to get structure")?;
+            let w: i32 = cap.get_value("width")?.get_some()?;
+            let h: i32 = cap.get_value("height")?.get_some()?;
+            let w = w as usize;
+            let h = h as usize;
+            Ok((w,h))
+        }
+    else {
+        Err(Box::new(GStreamerError("Error getting screen resolution".into())))
     }
 }
 

@@ -310,7 +310,7 @@ impl RecorderApi for WebmRecorder {
 
 impl Drop for WebmRecorder {
     fn drop(&mut self) {
-        std::mem::replace(&mut self.webm, None).map_or(false, |webm| webm.finalize(None));
+        let _ = std::mem::replace(&mut self.webm, None).map_or(false, |webm| webm.finalize(None));
         let mut state = RecordState::WriteTail;
         if !self.written || self.start.elapsed().as_secs() < MIN_SECS {
             std::fs::remove_file(&self.ctx.filename).ok();

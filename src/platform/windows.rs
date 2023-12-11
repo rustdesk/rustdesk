@@ -63,6 +63,8 @@ use windows_service::{
 use winreg::enums::*;
 use winreg::RegKey;
 
+pub const DRIVER_CERT_FILE: &str = "RustDeskIddDriver.cer";
+
 pub fn get_cursor_pos() -> Option<(i32, i32)> {
     unsafe {
         #[allow(invalid_value)]
@@ -460,13 +462,6 @@ extern "C" {
     fn is_win_down() -> BOOL;
     fn is_local_system() -> BOOL;
     fn alloc_console_and_redirect();
-    fn IsWindowsVersionOrGreater(
-        os_major: DWORD,
-        os_minor: DWORD,
-        build_number: DWORD,
-        service_pack_major: WORD,
-        service_pack_minor: WORD,
-    ) -> BOOL;
 }
 
 extern "system" {
@@ -1036,7 +1031,12 @@ if exist \"{tmp_path}\\{app_name} Tray.lnk\" del /f /q \"{tmp_path}\\{app_name} 
     let src_exe = std::env::current_exe()?.to_str().unwrap_or("").to_string();
 
     let install_cert = if options.contains("driverCert") {
-        format!("\"{}\" --install-cert \"RustDeskIddDriver.cer\"", src_exe)
+        let s = format!(r#""{}" --install-cert"#, src_exe);
+        if silent {
+            format!("{} silent", s)
+        } else {
+            s
+        }
     } else {
         "".to_owned()
     };
@@ -1252,25 +1252,6 @@ pub fn block_input(v: bool) -> (bool, String) {
         } else {
             (false, format!("Error: {}", io::Error::last_os_error()))
         }
-    }
-}
-
-#[inline]
-pub fn is_windows_version_or_greater(
-    os_major: u32,
-    os_minor: u32,
-    build_number: u32,
-    service_pack_major: u32,
-    service_pack_minor: u32,
-) -> bool {
-    unsafe {
-        IsWindowsVersionOrGreater(
-            os_major as _,
-            os_minor as _,
-            build_number as _,
-            service_pack_major as _,
-            service_pack_minor as _,
-        ) == TRUE
     }
 }
 
@@ -2128,7 +2109,7 @@ pub fn is_process_consent_running() -> ResultType<bool> {
         .output()?;
     Ok(output.status.success() && !output.stdout.is_empty())
 }
-pub struct WakeLock;
+pub struct WakeLock(u32);
 // Failed to compile keepawake-rs on i686
 impl WakeLock {
     pub fn new(display: bool, idle: bool, sleep: bool) -> Self {
@@ -2143,7 +2124,20 @@ impl WakeLock {
             flag |= ES_AWAYMODE_REQUIRED;
         }
         unsafe { SetThreadExecutionState(flag) };
-        WakeLock {}
+        WakeLock(flag)
+    }
+
+    pub fn set_display(&mut self, display: bool) -> ResultType<()> {
+        let flag = if display {
+            self.0 | ES_DISPLAY_REQUIRED
+        } else {
+            self.0 & !ES_DISPLAY_REQUIRED
+        };
+        if flag != self.0 {
+            unsafe { SetThreadExecutionState(flag) };
+            self.0 = flag;
+        }
+        Ok(())
     }
 }
 

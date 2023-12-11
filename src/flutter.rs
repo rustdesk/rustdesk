@@ -1509,7 +1509,7 @@ pub mod sessions {
         }
     }
 
-    pub fn session_switch_display(session_id: SessionID, value: Vec<i32>) {
+    pub fn session_switch_display(is_desktop: bool, session_id: SessionID, value: Vec<i32>) {
         for s in SESSIONS.read().unwrap().values() {
             let read_lock = s.ui_handler.session_handlers.read().unwrap();
             if read_lock.contains_key(&session_id) {
@@ -1519,15 +1519,19 @@ pub mod sessions {
                     // The switch display message will contain `SupportedResolutions`, which is useful when changing resolutions.
                     s.switch_display(value[0]);
 
-                    // Check if other displays are needed.
-                    #[cfg(feature = "flutter_texture_render")]
-                    if value.len() == 1 {
-                        check_remove_unused_displays(
-                            Some(value[0] as _),
-                            &session_id,
-                            &s,
-                            &read_lock,
-                        );
+                    if !is_desktop {
+                        s.capture_displays(vec![], vec![], value);
+                    } else {
+                        // Check if other displays are needed.
+                        #[cfg(feature = "flutter_texture_render")]
+                        if value.len() == 1 {
+                            check_remove_unused_displays(
+                                Some(value[0] as _),
+                                &session_id,
+                                &s,
+                                &read_lock,
+                            );
+                        }
                     }
                 } else {
                     // Try capture all displays.

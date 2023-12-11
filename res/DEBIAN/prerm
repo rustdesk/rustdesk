@@ -5,9 +5,9 @@ set -e
 case $1 in
     remove|upgrade)
 		INITSYS=$(ls -al /proc/1/exe | awk -F' ' '{print $NF}' | awk -F'/' '{print $NF}')
+        rm /usr/bin/rustdesk
 		
 		if [ "systemd" == "${INITSYS}" ]; then
-			rm /usr/bin/rustdesk
 
 			systemctl stop rustdesk || true
 			systemctl disable rustdesk || true

@@ -88,29 +88,34 @@ List<TTextMenu> toolbarControls(BuildContext context, String id, FFI ffi) {
     );
   }
   // osAccount / osPassword
-  v.add(
-    TTextMenu(
-      child: Row(children: [
-        Text(translate(pi.isHeadless ? 'OS Account' : 'OS Password')),
-        Offstage(
-          offstage: isDesktop,
-          child: Icon(Icons.edit, color: MyTheme.accent).marginOnly(left: 12),
-        )
-      ]),
-      trailingIcon: Transform.scale(
-        scale: 0.8,
-        child: InkWell(
-          onTap: () => pi.isHeadless
-              ? showSetOSAccount(sessionId, ffi.dialogManager)
-              : handleOsPasswordEditIcon(sessionId, ffi.dialogManager),
-          child: Icon(Icons.edit),
+  if (perms['keyboard'] != false) {
+    v.add(
+      TTextMenu(
+        child: Row(children: [
+          Text(translate(pi.isHeadless ? 'OS Account' : 'OS Password')),
+        ]),
+        trailingIcon: Transform.scale(
+          scale: isDesktop ? 0.8 : 1,
+          child: IconButton(
+            onPressed: () {
+              if (isMobile && Navigator.canPop(context)) {
+                Navigator.pop(context);
+              }
+              if (pi.isHeadless) {
+                showSetOSAccount(sessionId, ffi.dialogManager);
+              } else {
+                handleOsPasswordEditIcon(sessionId, ffi.dialogManager);
+              }
+            },
+            icon: Icon(Icons.edit, color: isMobile ? MyTheme.accent : null),
+          ),
         ),
+        onPressed: () => pi.isHeadless
+            ? showSetOSAccount(sessionId, ffi.dialogManager)
+            : handleOsPasswordAction(sessionId, ffi.dialogManager),
       ),
-      onPressed: () => pi.isHeadless
-          ? showSetOSAccount(sessionId, ffi.dialogManager)
-          : handleOsPasswordAction(sessionId, ffi.dialogManager),
-    ),
-  );
+    );
+  }
   // paste
   if (isMobile && perms['keyboard'] != false && perms['clipboard'] != false) {
     v.add(TTextMenu(
@@ -481,21 +486,6 @@ Future<List<TToggleMenu>> toolbarDisplayToggle(
         },
         child: Text(translate('Lock after session end'))));
   }
-  // swap key
-  if (ffiModel.keyboard &&
-      ((Platform.isMacOS && pi.platform != kPeerPlatformMacOS) ||
-          (!Platform.isMacOS && pi.platform == kPeerPlatformMacOS))) {
-    final option = 'allow_swap_key';
-    final value =
-        bind.sessionGetToggleOptionSync(sessionId: sessionId, arg: option);
-    v.add(TToggleMenu(
-        value: value,
-        onChanged: (value) {
-          if (value == null) return;
-          bind.sessionToggleOption(sessionId: sessionId, value: option);
-        },
-        child: Text(translate('Swap control-command key'))));
-  }
 
   if (useTextureRender &&
       pi.isSupportMultiDisplay &&
@@ -545,6 +535,10 @@ Future<List<TToggleMenu>> toolbarDisplayToggle(
           bind.sessionChangePreferCodec(sessionId: sessionId);
         },
         child: Text(translate('True color (4:4:4)'))));
+  }
+
+  if (isMobile) {
+    v.addAll(toolbarKeyboardToggles(ffi));
   }
 
   return v;
@@ -614,4 +608,68 @@ List<TToggleMenu> toolbarPrivacyMode(
           });
     }).toList();
   }
+}
+
+List<TToggleMenu> toolbarKeyboardToggles(FFI ffi) {
+  final ffiModel = ffi.ffiModel;
+  final pi = ffiModel.pi;
+  final sessionId = ffi.sessionId;
+  List<TToggleMenu> v = [];
+
+  // swap key
+  if (ffiModel.keyboard &&
+      ((Platform.isMacOS && pi.platform != kPeerPlatformMacOS) ||
+          (!Platform.isMacOS && pi.platform == kPeerPlatformMacOS))) {
+    final option = 'allow_swap_key';
+    final value =
+        bind.sessionGetToggleOptionSync(sessionId: sessionId, arg: option);
+    onChanged(bool? value) {
+      if (value == null) return;
+      bind.sessionToggleOption(sessionId: sessionId, value: option);
+    }
+
+    final enabled = !ffi.ffiModel.viewOnly;
+    v.add(TToggleMenu(
+        value: value,
+        onChanged: enabled ? onChanged : null,
+        child: Text(translate('Swap control-command key'))));
+  }
+
+  // reverse mouse wheel
+  if (ffiModel.keyboard) {
+    var optionValue =
+        bind.sessionGetReverseMouseWheelSync(sessionId: sessionId) ?? '';
+    if (optionValue == '') {
+      optionValue = bind.mainGetUserDefaultOption(key: 'reverse_mouse_wheel');
+    }
+    onChanged(bool? value) async {
+      if (value == null) return;
+      await bind.sessionSetReverseMouseWheel(
+          sessionId: sessionId, value: value ? 'Y' : 'N');
+    }
+
+    final enabled = !ffi.ffiModel.viewOnly;
+    v.add(TToggleMenu(
+        value: optionValue == 'Y',
+        onChanged: enabled ? onChanged : null,
+        child: Text(translate('Reverse mouse wheel'))));
+  }
+
+  // swap left right mouse
+  if (ffiModel.keyboard) {
+    final option = 'swap-left-right-mouse';
+    final value =
+        bind.sessionGetToggleOptionSync(sessionId: sessionId, arg: option);
+    onChanged(bool? value) {
+      if (value == null) return;
+      bind.sessionToggleOption(sessionId: sessionId, value: option);
+    }
+
+    final enabled = !ffi.ffiModel.viewOnly;
+    v.add(TToggleMenu(
+        value: value,
+        onChanged: enabled ? onChanged : null,
+        child: Text(translate('swap-left-right-mouse'))));
+  }
+  return v;
 }

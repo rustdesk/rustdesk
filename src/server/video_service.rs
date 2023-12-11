@@ -363,9 +363,6 @@ fn get_capturer(current: usize, portable_service_running: bool) -> ResultType<Ca
 }
 
 fn run(vs: VideoService) -> ResultType<()> {
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    let _wake_lock = get_wake_lock();
-
     // Wayland only support one video capturer for now. It is ok to call ensure_inited() here.
     //
     // ensure_inited() is needed because clear() may be called.
@@ -619,7 +616,6 @@ fn get_recorder(
     height: usize,
     codec_name: &CodecName,
 ) -> Arc<Mutex<Option<Recorder>>> {
-    #[cfg(not(target_os = "ios"))]
     let recorder = if !Config::get_option("allow-auto-record-incoming").is_empty() {
         use crate::hbbs_http::record_upload;
 
@@ -644,8 +640,6 @@ fn get_recorder(
     } else {
         Default::default()
     };
-    #[cfg(target_os = "ios")]
-    let recorder: Arc<Mutex<Option<Recorder>>> = Default::default();
 
     recorder
 }
@@ -690,7 +684,6 @@ fn handle_one_frame(
         vf.display = display as _;
         let mut msg = Message::new();
         msg.set_video_frame(vf);
-        #[cfg(not(target_os = "ios"))]
         recorder
             .lock()
             .unwrap()
@@ -735,19 +728,6 @@ fn start_uac_elevation_check() {
     });
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
-fn get_wake_lock() -> crate::platform::WakeLock {
-    let (display, idle, sleep) = if cfg!(windows) {
-        (true, false, false)
-    } else if cfg!(linux) {
-        (false, false, true)
-    } else {
-        //macos
-        (true, false, false)
-    };
-    crate::platform::WakeLock::new(display, idle, sleep)
-}
-
 #[inline]
 fn try_broadcast_display_changed(
     sp: &GenericService,
@@ -784,7 +764,7 @@ pub fn make_display_changed_msg(
         width: display.width,
         height: display.height,
         cursor_embedded: display_service::capture_cursor_embedded(),
-        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+        #[cfg(not(target_os = "android"))]
         resolutions: Some(SupportedResolutions {
             resolutions: if display.name.is_empty() {
                 vec![]
