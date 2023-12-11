@@ -1184,7 +1184,8 @@ impl Connection {
             }
 
             //todo: combine get display and input into one request prompt
-            if !is_x11() {
+            // use rdp_input when uinput is not available. Ex: flatpak
+            if !is_x11() && !crate::is_server() {
                 let _ = setup_rdp_input().await;
             }
 
