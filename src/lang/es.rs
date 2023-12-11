@@ -573,10 +573,10 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Exit privacy mode", "Salir del modo privado"),
         ("idd_not_support_under_win10_2004_tip", ""),
         ("switch_display_elevated_connections_tip", "Cambiar a una pantalla no principal no está soportado en el modo elevado cuando hay múltiples conexiones. Por favor, inténtalo de nuevo tras la instalación si quieres controlar múltiples pantallas."),
-        ("input_source_1_tip", ""),
-        ("input_source_2_tip", ""),
-        ("capture_display_elevated_connections_tip", ""),
-        ("Swap control-command key", ""),
-        ("swap-left-right-mouse", ""),
+        ("input_source_1_tip", "Fuente de entrada 1"),
+        ("input_source_2_tip", "Fuente de entrada 2"),
+        ("capture_display_elevated_connections_tip", "La captura de múltiples pantallas en el modo de usaurio con privilegios elevados no está soportada. Por favor, inténtalo de nuevo tras la instalación si quieres controlar múltiples pantallas."),
+        ("Swap control-command key", "Intercambiar teclas control-comando"),
+        ("swap-left-right-mouse", "Intercambiar botones derecho-izqueirdo del ratón"),
     ].iter().cloned().collect();
 }
