@@ -522,9 +522,8 @@ Future<List<TToggleMenu>> toolbarDisplayToggle(
 
   // 444
   final codec_format = ffi.qualityMonitorModel.data.codecFormat;
-  if (codec_format != null &&
-      bind.sessionIsCodecSupport444(
-          sessionId: sessionId, codec: codec_format)) {
+  if (versionCmp(pi.version, "1.2.4") >= 0 &&
+      (codec_format == "AV1" || codec_format == "VP9")) {
     final option = 'i444';
     final value =
         bind.sessionGetToggleOptionSync(sessionId: sessionId, arg: option);

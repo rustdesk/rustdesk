@@ -400,8 +400,8 @@ fn run(vs: VideoService) -> ResultType<()> {
     let encoder_cfg = get_encoder_config(&c, quality, last_recording);
 
     let mut encoder;
-    let extra = Encoder::extra(&encoder_cfg);
-    match Encoder::new(encoder_cfg.clone(), extra) {
+    let use_i444 = Encoder::use_i444(&encoder_cfg);
+    match Encoder::new(encoder_cfg.clone(), use_i444) {
         Ok(x) => encoder = x,
         Err(err) => bail!("Failed to create encoder: {}", err),
     }
@@ -456,7 +456,7 @@ fn run(vs: VideoService) -> ResultType<()> {
         if last_portable_service_running != crate::portable_service::client::running() {
             bail!("SWITCH");
         }
-        if Encoder::extra(&encoder_cfg) != extra {
+        if Encoder::use_i444(&encoder_cfg) != use_i444 {
             bail!("SWITCH");
         }
         check_privacy_mode_changed(&sp, c.privacy_mode_id)?;
