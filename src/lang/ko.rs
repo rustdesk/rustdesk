@@ -576,5 +576,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("input_source_1_tip", "입력소스 1"),
         ("input_source_2_tip", "입력소스 2"),
         ("capture_display_elevated_connections_tip", "권한 상승된 사용자 모드에서는 다중 디스플레이 캡처가 지원되지 않습니다. 다중 디스플레이를 제어하려면 설치 후 재시도하세요."),
+        ("Swap control-command key", ""),
+        ("swap-left-right-mouse", ""),
     ].iter().cloned().collect();
 }

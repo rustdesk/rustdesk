@@ -1362,6 +1362,7 @@ class _DisplayState extends State<_Display> {
       otherRow('Privacy mode', 'privacy_mode'),
       otherRow('Reverse mouse wheel', 'reverse_mouse_wheel'),
       otherRow('True color (4:4:4)', 'i444'),
+      otherRow('swap-left-right-mouse', 'swap-left-right-mouse'),
     ];
     if (useTextureRender) {
       children.add(otherRow('Show displays as individual windows',

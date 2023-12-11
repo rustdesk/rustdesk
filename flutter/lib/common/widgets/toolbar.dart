@@ -552,6 +552,19 @@ Future<List<TToggleMenu>> toolbarDisplayToggle(
         child: Text(translate('True color (4:4:4)'))));
   }
 
+  if (ffiModel.keyboard) {
+    final option = 'swap-left-right-mouse';
+    final value =
+        bind.sessionGetToggleOptionSync(sessionId: sessionId, arg: option);
+    v.add(TToggleMenu(
+        value: value,
+        onChanged: (value) {
+          if (value == null) return;
+          bind.sessionToggleOption(sessionId: sessionId, value: option);
+        },
+        child: Text(translate('swap-left-right-mouse'))));
+  }
+
   return v;
 }
 
