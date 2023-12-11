@@ -2109,7 +2109,7 @@ pub fn is_process_consent_running() -> ResultType<bool> {
         .output()?;
     Ok(output.status.success() && !output.stdout.is_empty())
 }
-pub struct WakeLock;
+pub struct WakeLock(u32);
 // Failed to compile keepawake-rs on i686
 impl WakeLock {
     pub fn new(display: bool, idle: bool, sleep: bool) -> Self {
@@ -2124,7 +2124,20 @@ impl WakeLock {
             flag |= ES_AWAYMODE_REQUIRED;
         }
         unsafe { SetThreadExecutionState(flag) };
-        WakeLock {}
+        WakeLock(flag)
+    }
+
+    pub fn set_display(&mut self, display: bool) -> ResultType<()> {
+        let flag = if display {
+            self.0 | ES_DISPLAY_REQUIRED
+        } else {
+            self.0 & !ES_DISPLAY_REQUIRED
+        };
+        if flag != self.0 {
+            unsafe { SetThreadExecutionState(flag) };
+            self.0 = flag;
+        }
+        Ok(())
     }
 }
 

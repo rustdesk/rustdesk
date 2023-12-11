@@ -94,7 +94,7 @@ sys-locale = "0.3"
 enigo = { path = "libs/enigo", features = [ "with_serde" ] }
 clipboard = { path = "libs/clipboard" }
 ctrlc = "3.2"
-arboard = "3.2"
+arboard = { version = "3.2", features = ["wayland-data-control"] }
 system_shutdown = "4.0"
 
 [target.'cfg(target_os = "windows")'.dependencies]

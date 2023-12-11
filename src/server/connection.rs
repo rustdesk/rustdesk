@@ -12,6 +12,8 @@ use crate::platform::linux_desktop_manager;
 use crate::platform::WallPaperRemover;
 #[cfg(windows)]
 use crate::portable_service::client as portable_client;
+#[cfg(target_os = "linux")]
+use crate::platform::linux::is_x11;
 use crate::{
     client::{
         new_voice_call_request, new_voice_call_response, start_audio_thread, MediaData, MediaSender,
@@ -70,7 +72,7 @@ lazy_static::lazy_static! {
     static ref ALIVE_CONNS: Arc::<Mutex<Vec<i32>>> = Default::default();
     static ref AUTHED_CONNS: Arc::<Mutex<Vec<(i32, AuthConnType)>>> = Default::default();
     static ref SWITCH_SIDES_UUID: Arc::<Mutex<HashMap<String, (Instant, uuid::Uuid)>>> = Default::default();
-    static ref WAKE_LOCK: Arc::<Mutex<Option<(crate::platform::WakeLock, bool)>>> = Default::default();
+    static ref WAKELOCK_SENDER: Arc::<Mutex<std::sync::mpsc::Sender<(usize, usize)>>> = Arc::new(Mutex::new(start_wakelock_thread()));
 }
 
 #[cfg(any(target_os = "windows", target_os = "linux"))]
@@ -1170,21 +1172,7 @@ impl Connection {
             ..Default::default()
         })
         .into();
-        #[cfg(not(any(target_os = "android", target_os = "ios")))]
-        {
-            pi.resolutions = Some(SupportedResolutions {
-                resolutions: display_service::try_get_displays()
-                    .map(|displays| {
-                        displays
-                            .get(self.display_idx)
-                            .map(|d| crate::platform::resolutions(&d.name()))
-                            .unwrap_or(vec![])
-                    })
-                    .unwrap_or(vec![]),
-                ..Default::default()
-            })
-            .into();
-        }
+        pi.resolutions = Self::get_supported_resolutions(self.display_idx).into();
 
         let mut sub_service = false;
         if self.file_transfer.is_some() {
@@ -1245,6 +1233,31 @@ impl Connection {
                 s.try_add_primay_video_service();
                 s.add_connection(self.inner.clone(), &noperms);
             }
+        }
+    }
+
+    fn get_supported_resolutions(display_idx: usize) -> Option<SupportedResolutions> {
+        #[cfg(any(target_os = "android", target_os = "ios"))]
+        return None;
+        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+        {
+            #[cfg(target_os = "linux")]
+            {
+                if !is_x11() {
+                    return None;
+                }
+            }
+            Some(SupportedResolutions {
+                resolutions: display_service::try_get_displays()
+                    .map(|displays| {
+                        displays
+                            .get(display_idx)
+                            .map(|d| crate::platform::resolutions(&d.name()))
+                            .unwrap_or(vec![])
+                    })
+                    .unwrap_or(vec![]),
+                ..Default::default()
+            })
         }
     }
 
@@ -3176,6 +3189,51 @@ impl FileRemoveLogControl {
     }
 }
 
+fn start_wakelock_thread() -> std::sync::mpsc::Sender<(usize, usize)> {
+    use crate::platform::{get_wakelock, WakeLock};
+    let (tx, rx) = std::sync::mpsc::channel::<(usize, usize)>();
+    std::thread::spawn(move || {
+        let mut wakelock: Option<WakeLock> = None;
+        let mut last_display = false;
+        loop {
+            match rx.recv() {
+                Ok((conn_count, remote_count)) => {
+                    if conn_count == 0 {
+                        wakelock = None;
+                        log::info!("drop wakelock");
+                    } else {
+                        let mut display = remote_count > 0;
+                        if let Some(w) = wakelock.as_mut() {
+                            if display != last_display {
+                                #[cfg(any(target_os = "windows", target_os = "macos"))]
+                                {
+                                    log::info!("set wakelock display to {display}");
+                                    if let Err(e) = w.set_display(display) {
+                                        log::error!(
+                                            "failed to set wakelock display to {display}: {e:?}"
+                                        );
+                                    }
+                                }
+                            }
+                        } else {
+                            if cfg!(target_os = "linux") {
+                                display = true;
+                            }
+                            wakelock = Some(get_wakelock(display));
+                        }
+                        last_display = display;
+                    }
+                }
+                Err(e) => {
+                    log::error!("wakelock receive error: {e:?}");
+                    break;
+                }
+            }
+        }
+    });
+    tx
+}
+
 #[cfg(windows)]
 pub struct PortableState {
     pub last_uac: bool,
@@ -3252,7 +3310,6 @@ impl LinuxHeadlessHandle {
 extern "C" fn connection_shutdown_hook() {
     // https://stackoverflow.com/questions/35980148/why-does-an-atexit-handler-panic-when-it-accesses-stdout
     // Please make sure there is no print in the call stack
-    *WAKE_LOCK.lock().unwrap() = None;
     #[cfg(any(target_os = "windows", target_os = "linux"))]
     {
         *WALLPAPER_REMOVER.lock().unwrap() = None;
@@ -3296,27 +3353,17 @@ mod raii {
         }
 
         fn check_wake_lock() {
-            let mut wake_lock = WAKE_LOCK.lock().unwrap();
+            let conn_count = AUTHED_CONNS.lock().unwrap().len();
             let remote_count = AUTHED_CONNS
                 .lock()
                 .unwrap()
                 .iter()
                 .filter(|c| c.1 == AuthConnType::Remote)
                 .count();
-            let display = remote_count > 0;
-            if let Some((_, last_display)) = *wake_lock {
-                if last_display != display {
-                    *wake_lock = None;
-                }
-            }
-            let empty = AUTHED_CONNS.lock().unwrap().is_empty();
-            if empty {
-                *wake_lock = None;
-            } else {
-                if wake_lock.is_none() {
-                    *wake_lock = Some((crate::platform::get_wake_lock(display), display));
-                }
-            }
+            allow_err!(WAKELOCK_SENDER
+                .lock()
+                .unwrap()
+                .send((conn_count, remote_count)));
         }
     }
 

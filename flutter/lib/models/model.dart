@@ -415,18 +415,20 @@ class FfiModel with ChangeNotifier {
     }
   }
 
-  updateCurDisplay(SessionID sessionId) {
+  updateCurDisplay(SessionID sessionId, {updateCursorPos = true}) {
     final newRect = displaysRect();
     if (newRect == null) {
       return;
     }
     if (newRect != _rect) {
       if (newRect.left != _rect?.left || newRect.top != _rect?.top) {
-        parent.target?.cursorModel
-            .updateDisplayOrigin(newRect.left, newRect.top);
+        parent.target?.cursorModel.updateDisplayOrigin(
+            newRect.left, newRect.top,
+            updateCursorPos: updateCursorPos);
       }
       _rect = newRect;
-      parent.target?.canvasModel.updateViewStyle();
+      parent.target?.canvasModel
+          .updateViewStyle(refreshMousePos: updateCursorPos);
       _updateSessionWidthHeight(sessionId);
     }
   }
@@ -952,12 +954,13 @@ class FfiModel with ChangeNotifier {
   }
 
   // Directly switch to the new display without waiting for the response.
-  switchToNewDisplay(int display, SessionID sessionId, String peerId) {
+  switchToNewDisplay(int display, SessionID sessionId, String peerId,
+      {bool updateCursorPos = true}) {
     // VideoHandler creation is upon when video frames are received, so either caching commands(don't know next width/height) or stopping recording when switching displays.
     parent.target?.recordingModel.onClose();
     // no need to wait for the response
     pi.currentDisplay = display;
-    updateCurDisplay(sessionId);
+    updateCurDisplay(sessionId, updateCursorPos: updateCursorPos);
     try {
       CurrentDisplayState.find(peerId).value = display;
     } catch (e) {
@@ -1202,6 +1205,9 @@ class CanvasModel with ChangeNotifier {
   ScrollStyle _scrollStyle = ScrollStyle.scrollauto;
   ViewStyle _lastViewStyle = ViewStyle.defaultViewStyle();
 
+  final ScrollController _horizontal = ScrollController();
+  final ScrollController _vertical = ScrollController();
+
   final _imageOverflow = false.obs;
 
   WeakReference<FFI> parent;
@@ -1226,6 +1232,8 @@ class CanvasModel with ChangeNotifier {
     _scrollY = y;
   }
 
+  ScrollController get scrollHorizontal => _horizontal;
+  ScrollController get scrollVertical => _vertical;
   double get scrollX => _scrollX;
   double get scrollY => _scrollY;
 
@@ -1242,7 +1250,7 @@ class CanvasModel with ChangeNotifier {
       ? windowBorderWidth + kDragToResizeAreaPadding.bottom
       : 0;
 
-  updateViewStyle() async {
+  updateViewStyle({refreshMousePos = true}) async {
     Size getSize() {
       final size = MediaQueryData.fromWindow(ui.window).size;
       // If minimized, w or h may be negative here.
@@ -1283,7 +1291,13 @@ class CanvasModel with ChangeNotifier {
     _y = (size.height - displayHeight * _scale) / 2;
     _imageOverflow.value = _x < 0 || y < 0;
     notifyListeners();
-    parent.target?.inputModel.refreshMousePos();
+    if (refreshMousePos) {
+      parent.target?.inputModel.refreshMousePos();
+    }
+    if (style == kRemoteViewStyleOriginal &&
+        _scrollStyle == ScrollStyle.scrollbar) {
+      updateScrollPercent();
+    }
   }
 
   updateScrollStyle() async {
@@ -1418,6 +1432,22 @@ class CanvasModel with ChangeNotifier {
     _y = 0;
     _scale = 1.0;
     if (notify) notifyListeners();
+  }
+
+  updateScrollPercent() {
+    final percentX = _horizontal.hasClients
+        ? _horizontal.position.extentBefore /
+            (_horizontal.position.extentBefore +
+                _horizontal.position.extentInside +
+                _horizontal.position.extentAfter)
+        : 0.0;
+    final percentY = _vertical.hasClients
+        ? _vertical.position.extentBefore /
+            (_vertical.position.extentBefore +
+                _vertical.position.extentInside +
+                _vertical.position.extentAfter)
+        : 0.0;
+    setScrollPercent(percentX, percentY);
   }
 }
 
@@ -1836,12 +1866,14 @@ class CursorModel with ChangeNotifier {
     notifyListeners();
   }
 
-  updateDisplayOrigin(double x, double y) {
+  updateDisplayOrigin(double x, double y, {updateCursorPos = true}) {
     _displayOriginX = x;
     _displayOriginY = y;
-    _x = x + 1;
-    _y = y + 1;
-    parent.target?.inputModel.moveMouse(x, y);
+    if (updateCursorPos) {
+      _x = x + 1;
+      _y = y + 1;
+      parent.target?.inputModel.moveMouse(x, y);
+    }
     parent.target?.canvasModel.resetOffset();
     notifyListeners();
   }

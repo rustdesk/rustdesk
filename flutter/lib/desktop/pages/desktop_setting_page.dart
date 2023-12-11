@@ -1059,8 +1059,7 @@ class _NetworkState extends State<_Network> with AutomaticKeepAliveClientMixin {
     // Simple temp wrapper for PR check
     tmpWrapper() {
       // Setting page is not modal, oldOptions should only be used when getting options, never when setting.
-      Map<String, dynamic> oldOptions =
-          jsonDecode(bind.mainGetOptionsSync());
+      Map<String, dynamic> oldOptions = jsonDecode(bind.mainGetOptionsSync());
       old(String key) {
         return (oldOptions[key] ?? '').trim();
       }
@@ -1087,7 +1086,7 @@ class _NetworkState extends State<_Network> with AutomaticKeepAliveClientMixin {
 
       submit() async {
         bool result = await setServerConfig(
-            controllers,
+            null,
             errMsgs,
             ServerConfig(
                 idServer: idController.text,
@@ -1348,27 +1347,8 @@ class _DisplayState extends State<_Display> {
   }
 
   Widget other(BuildContext context) {
-    final children = [
-      otherRow('View Mode', 'view_only'),
-      otherRow('show_monitors_tip', kKeyShowMonitorsToolbar),
-      otherRow('Collapse toolbar', 'collapse_toolbar'),
-      otherRow('Show remote cursor', 'show_remote_cursor'),
-      otherRow('Zoom cursor', 'zoom-cursor'),
-      otherRow('Show quality monitor', 'show_quality_monitor'),
-      otherRow('Mute', 'disable_audio'),
-      otherRow('Enable file copy and paste', 'enable_file_transfer'),
-      otherRow('Disable clipboard', 'disable_clipboard'),
-      otherRow('Lock after session end', 'lock_after_session_end'),
-      otherRow('Privacy mode', 'privacy_mode'),
-      otherRow('Reverse mouse wheel', 'reverse_mouse_wheel'),
-      otherRow('True color (4:4:4)', 'i444'),
-    ];
-    if (useTextureRender) {
-      children.add(otherRow('Show displays as individual windows',
-          kKeyShowDisplaysAsIndividualWindows));
-      children.add(otherRow('Use all my displays for the remote session',
-          kKeyUseAllMyDisplaysForTheRemoteSession));
-    }
+    final children =
+        otherDefaultSettings().map((e) => otherRow(e.$1, e.$2)).toList();
     return _Card(title: 'Other Default Options', children: children);
   }
 }

@@ -789,22 +789,14 @@ class __DisplayPageState extends State<_DisplayPage> {
         ),
         SettingsSection(
           title: Text(translate('Other Default Options')),
-          tiles: [
-            otherRow('Show remote cursor', 'show_remote_cursor'),
-            otherRow('Show quality monitor', 'show_quality_monitor'),
-            otherRow('Mute', 'disable_audio'),
-            otherRow('Disable clipboard', 'disable_clipboard'),
-            otherRow('Lock after session end', 'lock_after_session_end'),
-            otherRow('Privacy mode', 'privacy_mode'),
-            otherRow('Touch mode', 'touch-mode'),
-            otherRow('True color (4:4:4)', 'i444'),
-          ],
+          tiles:
+              otherDefaultSettings().map((e) => otherRow(e.$1, e.$2)).toList(),
         ),
       ]),
     );
   }
 
-  otherRow(String label, String key) {
+  SettingsTile otherRow(String label, String key) {
     final value = bind.mainGetUserDefaultOption(key: key) == 'Y';
     return SettingsTile.switchTile(
       initialValue: value,
