@@ -1,5 +1,7 @@
+use hbb_common::regex::Regex;
 use std::ops::Deref;
 
+mod ar;
 mod ca;
 mod cn;
 mod cs;
@@ -17,6 +19,9 @@ mod it;
 mod ja;
 mod ko;
 mod kz;
+mod lt;
+mod lv;
+mod nb;
 mod nl;
 mod pl;
 mod ptbr;
@@ -32,8 +37,6 @@ mod tr;
 mod tw;
 mod ua;
 mod vn;
-mod lt;
-mod ar;
 
 pub const LANGS: &[(&str, &str)] = &[
     ("en", "English"),
@@ -41,6 +44,7 @@ pub const LANGS: &[(&str, &str)] = &[
     ("fr", "Français"),
     ("de", "Deutsch"),
     ("nl", "Nederlands"),
+    ("nb", "Norsk bokmål"),
     ("zh-cn", "简体中文"),
     ("zh-tw", "繁體中文"),
     ("pt", "Português"),
@@ -69,6 +73,7 @@ pub const LANGS: &[(&str, &str)] = &[
     ("sl", "Slovenščina"),
     ("ro", "Română"),
     ("lt", "Lietuvių"),
+    ("lv", "Latviešu"),
     ("ar", "العربية"),
 ];
 
@@ -106,6 +111,7 @@ pub fn translate_locale(name: String, locale: &str) -> String {
         "it" => it::T.deref(),
         "zh-tw" => tw::T.deref(),
         "de" => de::T.deref(),
+        "nb" => nb::T.deref(),
         "nl" => nl::T.deref(),
         "es" => es::T.deref(),
         "hu" => hu::T.deref(),
@@ -134,19 +140,71 @@ pub fn translate_locale(name: String, locale: &str) -> String {
         "sl" => sl::T.deref(),
         "ro" => ro::T.deref(),
         "lt" => lt::T.deref(),
+        "lv" => lv::T.deref(),
         "ar" => ar::T.deref(),
         _ => en::T.deref(),
+    };
+    let (name, placeholder_value) = extract_placeholder(&name);
+    let replace = |s: &&str| {
+        let mut s = s.to_string();
+        if let Some(value) = placeholder_value.as_ref() {
+            s = s.replace("{}", &value);
+        }
+        s
     };
     if let Some(v) = m.get(&name as &str) {
         if v.is_empty() {
             if lang != "en" {
                 if let Some(v) = en::T.get(&name as &str) {
-                    return v.to_string();
+                    return replace(v);
                 }
             }
         } else {
-            return v.to_string();
+            return replace(v);
         }
     }
-    name
+    replace(&name.as_str())
+}
+
+// Matching pattern is {}
+// Write {value} in the UI and {} in the translation file
+//
+// Example:
+// Write in the UI: translate("There are {24} hours in a day")
+// Write in the translation file: ("There are {} hours in a day", "{} hours make up a day")
+fn extract_placeholder(input: &str) -> (String, Option<String>) {
+    if let Ok(re) = Regex::new(r#"\{(.*?)\}"#) {
+        if let Some(captures) = re.captures(input) {
+            if let Some(inner_match) = captures.get(1) {
+                let name = re.replace(input, "{}").to_string();
+                let value = inner_match.as_str().to_string();
+                return (name, Some(value));
+            }
+        }
+    }
+    (input.to_string(), None)
+}
+
+mod test {
+    #[test]
+    fn test_extract_placeholders() {
+        use super::extract_placeholder as f;
+
+        assert_eq!(f(""), ("".to_string(), None));
+        assert_eq!(
+            f("{3} sessions"),
+            ("{} sessions".to_string(), Some("3".to_string()))
+        );
+        assert_eq!(f(" } { "), (" } { ".to_string(), None));
+        // Allow empty value
+        assert_eq!(
+            f("{} sessions"),
+            ("{} sessions".to_string(), Some("".to_string()))
+        );
+        // Match only the first one
+        assert_eq!(
+            f("{2} times {4} makes {8}"),
+            ("{} times {4} makes {8}".to_string(), Some("2".to_string()))
+        );
+    }
 }

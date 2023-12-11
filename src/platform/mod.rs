@@ -23,8 +23,17 @@ pub mod linux_desktop_manager;
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use hbb_common::{message_proto::CursorData, ResultType};
+use std::sync::{Arc, Mutex};
 #[cfg(not(any(target_os = "macos", target_os = "android", target_os = "ios")))]
 const SERVICE_INTERVAL: u64 = 300;
+
+lazy_static::lazy_static! {
+    static ref INSTALLING_SERVICE: Arc<Mutex<bool>>= Default::default();
+}
+
+pub fn installing_service() -> bool {
+    INSTALLING_SERVICE.lock().unwrap().clone()
+}
 
 pub fn is_xfce() -> bool {
     #[cfg(target_os = "linux")]
@@ -70,6 +79,48 @@ pub fn get_active_username() -> String {
 
 #[cfg(target_os = "android")]
 pub const PA_SAMPLE_RATE: u32 = 48000;
+
+#[cfg(target_os = "android")]
+#[derive(Default)]
+pub struct WakeLock(Option<android_wakelock::WakeLock>);
+
+#[cfg(target_os = "android")]
+impl WakeLock {
+    pub fn new(tag: &str) -> Self {
+        let tag = format!("{}:{tag}", crate::get_app_name());
+        match android_wakelock::partial(tag) {
+            Ok(lock) => Self(Some(lock)),
+            Err(e) => {
+                hbb_common::log::error!("Failed to get wakelock: {e:?}");
+                Self::default()
+            }
+        }
+    }
+}
+
+pub fn get_wakelock(_display: bool) -> WakeLock {
+    hbb_common::log::info!("new wakelock, require display on: {_display}");
+    #[cfg(target_os = "android")]
+    return crate::platform::WakeLock::new("server");
+    #[cfg(not(target_os = "android"))]
+    return crate::platform::WakeLock::new(_display, true, true);
+}
+
+pub(crate) struct InstallingService; // please use new
+
+impl InstallingService {
+    #[cfg(any(target_os = "windows", target_os = "linux"))]
+    pub fn new() -> Self {
+        *INSTALLING_SERVICE.lock().unwrap() = true;
+        Self
+    }
+}
+
+impl Drop for InstallingService {
+    fn drop(&mut self) {
+        *INSTALLING_SERVICE.lock().unwrap() = false;
+    }
+}
 
 #[cfg(test)]
 mod tests {

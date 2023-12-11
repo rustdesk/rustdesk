@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common/hbbs/hbbs.dart';
 import 'package:flutter_hbb/common/widgets/login.dart';
@@ -29,47 +31,26 @@ class _MyGroupState extends State<MyGroup> {
   @override
   Widget build(BuildContext context) {
     return Obx(() {
-      // use username to be same with ab
-      if (gFFI.userModel.userName.value.isEmpty) {
+      if (!gFFI.userModel.isLogin) {
         return Center(
             child: ElevatedButton(
                 onPressed: loginDialog, child: Text(translate("Login"))));
-      }
-      return buildBody(context);
-    });
-  }
-
-  Widget buildBody(BuildContext context) {
-    return Obx(() {
-      if (gFFI.groupModel.groupLoading.value) {
+      } else if (gFFI.groupModel.groupLoading.value && gFFI.groupModel.emtpy) {
         return const Center(
           child: CircularProgressIndicator(),
         );
       }
-      if (gFFI.groupModel.groupLoadError.isNotEmpty) {
-        return _buildShowError(gFFI.groupModel.groupLoadError.value);
-      }
-      if (isDesktop) {
-        return _buildDesktop();
-      } else {
-        return _buildMobile();
-      }
+      return Column(
+        children: [
+          buildErrorBanner(context,
+              loading: gFFI.groupModel.groupLoading,
+              err: gFFI.groupModel.groupLoadError,
+              retry: null,
+              close: () => gFFI.groupModel.groupLoadError.value = ''),
+          Expanded(child: isDesktop ? _buildDesktop() : _buildMobile())
+        ],
+      );
     });
-  }
-
-  Widget _buildShowError(String error) {
-    return Center(
-        child: Column(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        Text(translate(error)),
-        TextButton(
-            onPressed: () {
-              gFFI.groupModel.pull();
-            },
-            child: Text(translate("Retry")))
-      ],
-    ));
   }
 
   Widget _buildDesktop() {
@@ -100,10 +81,9 @@ class _MyGroupState extends State<MyGroup> {
         Expanded(
           child: Align(
               alignment: Alignment.topLeft,
-              child: Obx(() => MyGroupPeerView(
+              child: MyGroupPeerView(
                   menuPadding: widget.menuPadding,
-                  // ignore: invalid_use_of_protected_member
-                  initPeers: gFFI.groupModel.peersShow.value))),
+                  initPeers: gFFI.groupModel.peers)),
         )
       ],
     );
@@ -133,16 +113,16 @@ class _MyGroupState extends State<MyGroup> {
         Expanded(
           child: Align(
               alignment: Alignment.topLeft,
-              child: Obx(() => MyGroupPeerView(
+              child: MyGroupPeerView(
                   menuPadding: widget.menuPadding,
-                  // ignore: invalid_use_of_protected_member
-                  initPeers: gFFI.groupModel.peersShow.value))),
+                  initPeers: gFFI.groupModel.peers)),
         )
       ],
     );
   }
 
   Widget _buildLeftHeader() {
+    final fontSize = 14.0;
     return Row(
       children: [
         Expanded(
@@ -151,16 +131,16 @@ class _MyGroupState extends State<MyGroup> {
           onChanged: (value) {
             searchUserText.value = value;
           },
+          textAlignVertical: TextAlignVertical.center,
+          style: TextStyle(fontSize: fontSize),
           decoration: InputDecoration(
             filled: false,
             prefixIcon: Icon(
               Icons.search_rounded,
               color: Theme.of(context).hintColor,
-            ),
-            contentPadding: const EdgeInsets.symmetric(vertical: 10),
+            ).paddingOnly(top: 2),
             hintText: translate("Search"),
-            hintStyle:
-                TextStyle(fontSize: 14, color: Theme.of(context).hintColor),
+            hintStyle: TextStyle(fontSize: fontSize),
             border: InputBorder.none,
             isDense: true,
           ),
@@ -171,16 +151,22 @@ class _MyGroupState extends State<MyGroup> {
 
   Widget _buildUserContacts() {
     return Obx(() {
-      return Column(
-          children: gFFI.groupModel.users
-              .where((p0) {
-                if (searchUserText.isNotEmpty) {
-                  return p0.name.contains(searchUserText.value);
-                }
-                return true;
-              })
-              .map((e) => _buildUserItem(e))
-              .toList());
+      final items = gFFI.groupModel.users.where((p0) {
+        if (searchUserText.isNotEmpty) {
+          return p0.name
+              .toLowerCase()
+              .contains(searchUserText.value.toLowerCase());
+        }
+        return true;
+      }).toList();
+      final listView = ListView.builder(
+          shrinkWrap: isMobile,
+          itemCount: items.length,
+          itemBuilder: (context, index) => _buildUserItem(items[index]));
+      var maxHeight = max(MediaQuery.of(context).size.height / 6, 100.0);
+      return isDesktop
+          ? listView
+          : LimitedBox(maxHeight: maxHeight, child: listView);
     });
   }
 
@@ -195,6 +181,8 @@ class _MyGroupState extends State<MyGroup> {
     }, child: Obx(
       () {
         bool selected = selectedUser.value == username;
+        final isMe = username == gFFI.userModel.userName.value;
+        final colorMe = MyTheme.color(context).me!;
         return Container(
           decoration: BoxDecoration(
             color: selected ? MyTheme.color(context).highlight : null,
@@ -206,9 +194,42 @@ class _MyGroupState extends State<MyGroup> {
           child: Container(
             child: Row(
               children: [
-                Icon(Icons.person_rounded, color: Colors.grey, size: 16)
-                    .marginOnly(right: 4),
-                Expanded(child: Text(username)),
+                Container(
+                  width: 20,
+                  height: 20,
+                  decoration: BoxDecoration(
+                    color: str2color(username, 0xAF),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Align(
+                    alignment: Alignment.center,
+                    child: Center(
+                      child: Text(
+                        username.characters.first.toUpperCase(),
+                        style: TextStyle(color: Colors.white),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                  ),
+                ).marginOnly(right: 4),
+                if (isMe) Flexible(child: Text(username)),
+                if (isMe)
+                  Flexible(
+                    child: Container(
+                      margin: EdgeInsets.only(left: 5),
+                      padding: EdgeInsets.symmetric(horizontal: 3, vertical: 1),
+                      decoration: BoxDecoration(
+                          color: colorMe.withAlpha(20),
+                          borderRadius: BorderRadius.all(Radius.circular(2)),
+                          border: Border.all(color: colorMe.withAlpha(100))),
+                      child: Text(
+                        translate('Me'),
+                        style: TextStyle(
+                            color: colorMe.withAlpha(200), fontSize: 12),
+                      ),
+                    ),
+                  ),
+                if (!isMe) Expanded(child: Text(username)),
               ],
             ).paddingSymmetric(vertical: 4),
           ),

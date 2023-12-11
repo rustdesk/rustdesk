@@ -108,7 +108,7 @@ class _PortForwardTabPageState extends State<PortForwardTabPage> {
               return true;
             },
             tail: AddButton().paddingOnly(left: 10),
-            labelGetter: DesktopTab.labelGetterAlias,
+            labelGetter: DesktopTab.tablabelGetter,
           )),
     );
     return Platform.isMacOS || kUseCompatibleUiMode

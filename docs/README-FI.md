@@ -104,10 +104,6 @@ mv libsciter-gtk.so target/debug
 VCPKG_ROOT=$HOME/vcpkg cargo run
 ```
 
-### Vaihda Wayland-ympäristö X11 (Xorg)-ympäristöön
-
-RustDesk ei tue Waylandia. Tarkista [tämä](https://docs.fedoraproject.org/en-US/quick-docs/configuring-xorg-as-default-gnome-session/) asettamalla Xorg oletus GNOME-istuntoon.
-
 ## Kuinka rakennetaan Dockerin kanssa
 
 Aloita kloonaamalla tietovarasto ja rakentamalla docker-säiliö:

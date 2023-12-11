@@ -91,7 +91,7 @@ Future<void> main(List<String> args) async {
     debugPrint("--cm started");
     desktopType = DesktopType.cm;
     await windowManager.ensureInitialized();
-    runConnectionManagerScreen(args.contains('--hide'));
+    runConnectionManagerScreen();
   } else if (args.contains('--install')) {
     runInstallPage();
   } else {
@@ -125,7 +125,7 @@ void runMainApp(bool startService) async {
     bind.pluginSyncUi(syncTo: kAppTypeMain);
     bind.pluginListReload();
   }
-  gFFI.abModel.loadCache();
+  await Future.wait([gFFI.abModel.loadCache(), gFFI.groupModel.loadCache()]);
   gFFI.userModel.refreshCurrentUser();
   runApp(App());
   // Set window option.
@@ -153,9 +153,10 @@ void runMobileApp() async {
   await initEnv(kAppTypeMain);
   if (isAndroid) androidChannelInit();
   platformFFI.syncAndroidServiceAppDirConfigPath();
-  gFFI.abModel.loadCache();
+  await Future.wait([gFFI.abModel.loadCache(), gFFI.groupModel.loadCache()]);
   gFFI.userModel.refreshCurrentUser();
   runApp(App());
+  await initUniLinks();
 }
 
 void runMultiWindow(
@@ -198,8 +199,16 @@ void runMultiWindow(
   }
   switch (appType) {
     case kAppTypeDesktopRemote:
-      await restoreWindowPosition(WindowType.RemoteDesktop,
-          windowId: kWindowId!, peerId: argument['id'] as String?);
+      // If screen rect is set, the window will be moved to the target screen and then set fullscreen.
+      if (argument['screen_rect'] == null) {
+        // display can be used to control the offset of the window.
+        await restoreWindowPosition(
+          WindowType.RemoteDesktop,
+          windowId: kWindowId!,
+          peerId: argument['id'] as String?,
+          display: argument['display'] as int?,
+        );
+      }
       break;
     case kAppTypeDesktopFileTransfer:
       await restoreWindowPosition(WindowType.FileTransfer,
@@ -216,13 +225,14 @@ void runMultiWindow(
   WindowController.fromWindowId(kWindowId!).show();
 }
 
-void runConnectionManagerScreen(bool hide) async {
+void runConnectionManagerScreen() async {
   await initEnv(kAppTypeConnectionManager);
   _runApp(
     '',
     const DesktopServerPage(),
     MyTheme.currentThemeMode(),
   );
+  final hide = await bind.cmGetConfig(name: "hide_cm") == 'true';
   gFFI.serverModel.hideCm = hide;
   if (hide) {
     await hideCmWindow(isStartup: true);
@@ -234,19 +244,24 @@ void runConnectionManagerScreen(bool hide) async {
   listenUniLinks(handleByFlutter: false);
 }
 
+bool _isCmReadyToShow = false;
+
 showCmWindow({bool isStartup = false}) async {
   if (isStartup) {
     WindowOptions windowOptions = getHiddenTitleBarWindowOptions(
         size: kConnectionManagerWindowSizeClosedChat);
-    windowManager.waitUntilReadyToShow(windowOptions, () async {
-      bind.mainHideDocker();
-      await windowManager.show();
-      await Future.wait([windowManager.focus(), windowManager.setOpacity(1)]);
-      // ensure initial window size to be changed
-      await windowManager.setSizeAlignment(
-          kConnectionManagerWindowSizeClosedChat, Alignment.topRight);
-    });
-  } else {
+    await windowManager.waitUntilReadyToShow(windowOptions, null);
+    bind.mainHideDocker();
+    await Future.wait([
+      windowManager.show(),
+      windowManager.focus(),
+      windowManager.setOpacity(1)
+    ]);
+    // ensure initial window size to be changed
+    await windowManager.setSizeAlignment(
+        kConnectionManagerWindowSizeClosedChat, Alignment.topRight);
+    _isCmReadyToShow = true;
+  } else if (_isCmReadyToShow) {
     if (await windowManager.getOpacity() != 1) {
       await windowManager.setOpacity(1);
       await windowManager.focus();
@@ -263,12 +278,12 @@ hideCmWindow({bool isStartup = false}) async {
     WindowOptions windowOptions = getHiddenTitleBarWindowOptions(
         size: kConnectionManagerWindowSizeClosedChat);
     windowManager.setOpacity(0);
-    windowManager.waitUntilReadyToShow(windowOptions, () async {
-      bind.mainHideDocker();
-      await windowManager.minimize();
-      await windowManager.hide();
-    });
-  } else {
+    await windowManager.waitUntilReadyToShow(windowOptions, null);
+    bind.mainHideDocker();
+    await windowManager.minimize();
+    await windowManager.hide();
+    _isCmReadyToShow = true;
+  } else if (_isCmReadyToShow) {
     if (await windowManager.getOpacity() != 0) {
       await windowManager.setOpacity(0);
       bind.mainHideDocker();

@@ -1,6 +1,6 @@
 [package]
 name = "rustdesk"
-version = "1.2.3"
+version = "1.2.4"
 authors = ["rustdesk <info@rustdesk.com>"]
 edition = "2021"
 build= "build.rs"
@@ -32,6 +32,13 @@ linux_headless = ["pam" ]
 virtual_display_driver = ["virtual_display"]
 plugin_framework = []
 linux-pkg-config = ["magnum-opus/linux-pkg-config", "scrap/linux-pkg-config"]
+unix-file-copy-paste = [
+    "dep:x11-clipboard",
+    "dep:x11rb",
+    "dep:percent-encoding",
+    "dep:once_cell",
+    "clipboard/unix-file-copy-paste",
+]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -62,7 +69,7 @@ num_cpus = "1.15"
 bytes = { version = "1.4", features = ["serde"] }
 default-net = "0.14"
 wol-rs = "1.0"
-flutter_rust_bridge = { version = "1.75", features = ["uuid"], optional = true}
+flutter_rust_bridge = { version = "=1.80", features = ["uuid"], optional = true}
 errno = "0.3"
 rdev = { git = "https://github.com/fufesou/rdev" }
 url = { version = "2.3", features = ["serde"] }
@@ -74,6 +81,7 @@ cidr-utils = "0.5"
 libloading = "0.8"
 fon = "0.6"
 zip = "0.6"
+shutdown_hooks = "0.1"
 
 [target.'cfg(not(any(target_os = "android", target_os = "linux")))'.dependencies]
 cpal = "0.15"
@@ -86,17 +94,16 @@ sys-locale = "0.3"
 enigo = { path = "libs/enigo", features = [ "with_serde" ] }
 clipboard = { path = "libs/clipboard" }
 ctrlc = "3.2"
-arboard = "3.2"
+arboard = { version = "3.2", features = ["wayland-data-control"] }
 system_shutdown = "4.0"
 
 [target.'cfg(target_os = "windows")'.dependencies]
-winapi = { version = "0.3", features = ["winuser", "wincrypt", "shellscalingapi"] }
+winapi = { version = "0.3", features = ["winuser", "wincrypt", "shellscalingapi", "pdh", "synchapi", "memoryapi"] }
 winreg = "0.11"
 windows-service = "0.6"
 virtual_display = { path = "libs/virtual_display", optional = true }
 impersonate_system = { git = "https://github.com/21pages/impersonate-system" }
 shared_memory = "0.12"
-shutdown_hooks = "0.1"
 tauri-winrt-notification = "0.1.2"
 
 [target.'cfg(target_os = "macos")'.dependencies]
@@ -118,6 +125,9 @@ image = "0.24"
 [target.'cfg(any(target_os = "macos", target_os = "linux"))'.dependencies]
 keepawake = { git = "https://github.com/rustdesk-org/keepawake-rs" }
 
+[target.'cfg(any(target_os = "windows", target_os = "linux"))'.dependencies]
+wallpaper = { git = "https://github.com/21pages/wallpaper.rs" }
+
 [target.'cfg(target_os = "linux")'.dependencies]
 psimple = { package = "libpulse-simple-binding", version = "2.27" }
 pulse = { package = "libpulse-binding", version = "2.27" }
@@ -129,10 +139,15 @@ dbus = "0.9"
 dbus-crossroads = "0.5"
 pam = { git="https://github.com/fufesou/pam", optional = true }
 users = { version = "0.11" }
+x11-clipboard = {git="https://github.com/clslaid/x11-clipboard", branch = "feat/store-batch", optional = true}
+x11rb =  {version = "0.12", features = ["all-extensions"], optional = true}
+percent-encoding = {version = "2.3", optional = true}
+once_cell = {version = "1.18", optional = true}
 
 [target.'cfg(target_os = "android")'.dependencies]
 android_logger = "0.13"
 jni = "0.21"
+android-wakelock = { git = "https://github.com/21pages/android-wakelock" }
 
 [workspace]
 members = ["libs/scrap", "libs/hbb_common", "libs/enigo", "libs/clipboard", "libs/virtual_display", "libs/virtual_display/dylib", "libs/portable"]
@@ -145,12 +160,11 @@ FileDescription = "RustDesk"
 
 [target.'cfg(target_os="windows")'.build-dependencies]
 winres = "0.1"
-winapi = { version = "0.3", features = [ "winnt" ] }
+winapi = { version = "0.3", features = [ "winnt", "pdh", "synchapi" ] }
 
 [build-dependencies]
 cc = "1.0"
 hbb_common = { path = "libs/hbb_common" }
-flutter_rust_bridge_codegen = "1.75"
 os-version = "0.2"
 
 [dev-dependencies]

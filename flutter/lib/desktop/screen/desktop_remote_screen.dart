@@ -12,9 +12,8 @@ class DesktopRemoteScreen extends StatelessWidget {
   final Map<String, dynamic> params;
 
   DesktopRemoteScreen({Key? key, required this.params}) : super(key: key) {
-    if (!bind.mainStartGrabKeyboard()) {
-      stateGlobal.grabKeyboard = true;
-    }
+      bind.mainInitInputSource();
+      stateGlobal.getInputSource(force: true);
   }
 
   @override

@@ -4,11 +4,11 @@
 
 use hbb_common::anyhow::{anyhow, Context};
 use hbb_common::log;
-use hbb_common::message_proto::{EncodedVideoFrame, EncodedVideoFrames, Message, VideoFrame};
+use hbb_common::message_proto::{Chroma, EncodedVideoFrame, EncodedVideoFrames, VideoFrame};
 use hbb_common::ResultType;
 
 use crate::codec::{base_bitrate, codec_thread_num, EncoderApi, Quality};
-use crate::{GoogleImage, STRIDE_ALIGN};
+use crate::{EncodeYuvFormat, GoogleImage, Pixfmt, STRIDE_ALIGN};
 
 use super::vpx::{vp8e_enc_control_id::*, vpx_codec_err_t::*, *};
 use crate::{generate_call_macro, generate_call_ptr_macro, Error, Result};
@@ -39,6 +39,8 @@ pub struct VpxEncoder {
     width: usize,
     height: usize,
     id: VpxVideoCodecId,
+    i444: bool,
+    yuvfmt: EncodeYuvFormat,
 }
 
 pub struct VpxDecoder {
@@ -46,7 +48,7 @@ pub struct VpxDecoder {
 }
 
 impl EncoderApi for VpxEncoder {
-    fn new(cfg: crate::codec::EncoderCfg) -> ResultType<Self>
+    fn new(cfg: crate::codec::EncoderCfg, i444: bool) -> ResultType<Self>
     where
         Self: Sized,
     {
@@ -71,7 +73,7 @@ impl EncoderApi for VpxEncoder {
                 // When the data buffer falls below this percentage of fullness, a dropped frame is indicated. Set the threshold to zero (0) to disable this feature.
                 // In dynamic scenes, low bitrate gets low fps while high bitrate gets high fps.
                 c.rc_dropframe_thresh = 25;
-                c.g_threads = codec_thread_num() as _;
+                c.g_threads = codec_thread_num(64) as _;
                 c.g_error_resilient = VPX_ERROR_RESILIENT_DEFAULT;
                 // https://developers.google.com/media/vp9/bitrate-modes/
                 // Constant Bitrate mode (CBR) is recommended for live streaming with VP9.
@@ -98,6 +100,13 @@ impl EncoderApi for VpxEncoder {
                 } else {
                     c.rc_target_bitrate = base_bitrate;
                 }
+                // https://chromium.googlesource.com/webm/libvpx/+/refs/heads/main/vp9/common/vp9_enums.h#29
+                // https://chromium.googlesource.com/webm/libvpx/+/refs/heads/main/vp8/vp8_cx_iface.c#282
+                c.g_profile = if i444 && config.codec == VpxVideoCodecId::VP9 {
+                    1
+                } else {
+                    0
+                };
 
                 /*
                 The VPX encoder supports two-pass encoding for rate control purposes.
@@ -166,13 +175,15 @@ impl EncoderApi for VpxEncoder {
                     width: config.width as _,
                     height: config.height as _,
                     id: config.codec,
+                    i444,
+                    yuvfmt: Self::get_yuvfmt(config.width, config.height, i444),
                 })
             }
             _ => Err(anyhow!("encoder type mismatch")),
         }
     }
 
-    fn encode_to_message(&mut self, frame: &[u8], ms: i64) -> ResultType<Message> {
+    fn encode_to_message(&mut self, frame: &[u8], ms: i64) -> ResultType<VideoFrame> {
         let mut frames = Vec::new();
         for ref frame in self
             .encode(ms, frame, STRIDE_ALIGN)
@@ -186,14 +197,14 @@ impl EncoderApi for VpxEncoder {
 
         // to-do: flush periodically, e.g. 1 second
         if frames.len() > 0 {
-            Ok(VpxEncoder::create_msg(self.id, frames))
+            Ok(VpxEncoder::create_video_frame(self.id, frames))
         } else {
             Err(anyhow!("no valid frame"))
         }
     }
 
-    fn use_yuv(&self) -> bool {
-        true
+    fn yuvfmt(&self) -> crate::EncodeYuvFormat {
+        self.yuvfmt.clone()
     }
 
     fn set_quality(&mut self, quality: Quality) -> ResultType<()> {
@@ -219,14 +230,20 @@ impl EncoderApi for VpxEncoder {
 
 impl VpxEncoder {
     pub fn encode(&mut self, pts: i64, data: &[u8], stride_align: usize) -> Result<EncodeFrames> {
-        if 2 * data.len() < 3 * self.width * self.height {
+        let bpp = if self.i444 { 24 } else { 12 };
+        if data.len() < self.width * self.height * bpp / 8 {
             return Err(Error::FailedCall("len not enough".to_string()));
         }
+        let fmt = if self.i444 {
+            vpx_img_fmt::VPX_IMG_FMT_I444
+        } else {
+            vpx_img_fmt::VPX_IMG_FMT_I420
+        };
 
         let mut image = Default::default();
         call_vpx_ptr!(vpx_img_wrap(
             &mut image,
-            vpx_img_fmt::VPX_IMG_FMT_I420,
+            fmt,
             self.width as _,
             self.height as _,
             stride_align as _,
@@ -266,8 +283,10 @@ impl VpxEncoder {
     }
 
     #[inline]
-    pub fn create_msg(codec_id: VpxVideoCodecId, frames: Vec<EncodedVideoFrame>) -> Message {
-        let mut msg_out = Message::new();
+    pub fn create_video_frame(
+        codec_id: VpxVideoCodecId,
+        frames: Vec<EncodedVideoFrame>,
+    ) -> VideoFrame {
         let mut vf = VideoFrame::new();
         let vpxs = EncodedVideoFrames {
             frames: frames.into(),
@@ -277,8 +296,7 @@ impl VpxEncoder {
             VpxVideoCodecId::VP8 => vf.set_vp8s(vpxs),
             VpxVideoCodecId::VP9 => vf.set_vp9s(vpxs),
         }
-        msg_out.set_video_frame(vf);
-        msg_out
+        vf
     }
 
     #[inline]
@@ -317,6 +335,34 @@ impl VpxEncoder {
         let q_max = ((1.0 - t) * q_max1 as f32 + t * q_max2 as f32).round() as u32;
 
         (q_min, q_max)
+    }
+
+    fn get_yuvfmt(width: u32, height: u32, i444: bool) -> EncodeYuvFormat {
+        let mut img = Default::default();
+        let fmt = if i444 {
+            vpx_img_fmt::VPX_IMG_FMT_I444
+        } else {
+            vpx_img_fmt::VPX_IMG_FMT_I420
+        };
+        unsafe {
+            vpx_img_wrap(
+                &mut img,
+                fmt,
+                width as _,
+                height as _,
+                crate::STRIDE_ALIGN as _,
+                0x1 as _,
+            );
+        }
+        let pixfmt = if i444 { Pixfmt::I444 } else { Pixfmt::I420 };
+        EncodeYuvFormat {
+            pixfmt,
+            w: img.w as _,
+            h: img.h as _,
+            stride: img.stride.map(|s| s as usize).to_vec(),
+            u: img.planes[1] as usize - img.planes[0] as usize,
+            v: img.planes[2] as usize - img.planes[0] as usize,
+        }
     }
 }
 
@@ -404,7 +450,7 @@ impl VpxDecoder {
         };
         let mut ctx = Default::default();
         let cfg = vpx_codec_dec_cfg_t {
-            threads: codec_thread_num() as _,
+            threads: codec_thread_num(64) as _,
             w: 0,
             h: 0,
         };
@@ -531,6 +577,13 @@ impl GoogleImage for Image {
     #[inline]
     fn planes(&self) -> Vec<*mut u8> {
         self.inner().planes.iter().map(|p| *p as *mut u8).collect()
+    }
+
+    fn chroma(&self) -> Chroma {
+        match self.inner().fmt {
+            vpx_img_fmt::VPX_IMG_FMT_I444 => Chroma::I444,
+            _ => Chroma::I420,
+        }
     }
 }
 

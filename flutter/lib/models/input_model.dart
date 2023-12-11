@@ -13,7 +13,6 @@ import '../../models/model.dart';
 import '../../models/platform_model.dart';
 import '../common.dart';
 import '../consts.dart';
-import './state_model.dart';
 
 /// Mouse button enum.
 enum MouseButtons { left, right, wheel }
@@ -53,15 +52,122 @@ class PointerEventToRust {
   }
 }
 
+class ToReleaseKeys {
+  RawKeyEvent? lastLShiftKeyEvent;
+  RawKeyEvent? lastRShiftKeyEvent;
+  RawKeyEvent? lastLCtrlKeyEvent;
+  RawKeyEvent? lastRCtrlKeyEvent;
+  RawKeyEvent? lastLAltKeyEvent;
+  RawKeyEvent? lastRAltKeyEvent;
+  RawKeyEvent? lastLCommandKeyEvent;
+  RawKeyEvent? lastRCommandKeyEvent;
+  RawKeyEvent? lastSuperKeyEvent;
+
+  reset() {
+    lastLShiftKeyEvent = null;
+    lastRShiftKeyEvent = null;
+    lastLCtrlKeyEvent = null;
+    lastRCtrlKeyEvent = null;
+    lastLAltKeyEvent = null;
+    lastRAltKeyEvent = null;
+    lastLCommandKeyEvent = null;
+    lastRCommandKeyEvent = null;
+    lastSuperKeyEvent = null;
+  }
+
+  updateKeyDown(LogicalKeyboardKey logicKey, RawKeyDownEvent e) {
+    if (e.isAltPressed) {
+      if (logicKey == LogicalKeyboardKey.altLeft) {
+        lastLAltKeyEvent = e;
+      } else if (logicKey == LogicalKeyboardKey.altRight) {
+        lastRAltKeyEvent = e;
+      }
+    } else if (e.isControlPressed) {
+      if (logicKey == LogicalKeyboardKey.controlLeft) {
+        lastLCtrlKeyEvent = e;
+      } else if (logicKey == LogicalKeyboardKey.controlRight) {
+        lastRCtrlKeyEvent = e;
+      }
+    } else if (e.isShiftPressed) {
+      if (logicKey == LogicalKeyboardKey.shiftLeft) {
+        lastLShiftKeyEvent = e;
+      } else if (logicKey == LogicalKeyboardKey.shiftRight) {
+        lastRShiftKeyEvent = e;
+      }
+    } else if (e.isMetaPressed) {
+      if (logicKey == LogicalKeyboardKey.metaLeft) {
+        lastLCommandKeyEvent = e;
+      } else if (logicKey == LogicalKeyboardKey.metaRight) {
+        lastRCommandKeyEvent = e;
+      } else if (logicKey == LogicalKeyboardKey.superKey) {
+        lastSuperKeyEvent = e;
+      }
+    }
+  }
+
+  updateKeyUp(LogicalKeyboardKey logicKey, RawKeyUpEvent e) {
+    if (e.isAltPressed) {
+      if (logicKey == LogicalKeyboardKey.altLeft) {
+        lastLAltKeyEvent = null;
+      } else if (logicKey == LogicalKeyboardKey.altRight) {
+        lastRAltKeyEvent = null;
+      }
+    } else if (e.isControlPressed) {
+      if (logicKey == LogicalKeyboardKey.controlLeft) {
+        lastLCtrlKeyEvent = null;
+      } else if (logicKey == LogicalKeyboardKey.controlRight) {
+        lastRCtrlKeyEvent = null;
+      }
+    } else if (e.isShiftPressed) {
+      if (logicKey == LogicalKeyboardKey.shiftLeft) {
+        lastLShiftKeyEvent = null;
+      } else if (logicKey == LogicalKeyboardKey.shiftRight) {
+        lastRShiftKeyEvent = null;
+      }
+    } else if (e.isMetaPressed) {
+      if (logicKey == LogicalKeyboardKey.metaLeft) {
+        lastLCommandKeyEvent = null;
+      } else if (logicKey == LogicalKeyboardKey.metaRight) {
+        lastRCommandKeyEvent = null;
+      } else if (logicKey == LogicalKeyboardKey.superKey) {
+        lastSuperKeyEvent = null;
+      }
+    }
+  }
+
+  release(KeyEventResult Function(RawKeyEvent e) handleRawKeyEvent) {
+    for (final key in [
+      lastLShiftKeyEvent,
+      lastRShiftKeyEvent,
+      lastLCtrlKeyEvent,
+      lastRCtrlKeyEvent,
+      lastLAltKeyEvent,
+      lastRAltKeyEvent,
+      lastLCommandKeyEvent,
+      lastRCommandKeyEvent,
+      lastSuperKeyEvent,
+    ]) {
+      if (key != null) {
+        handleRawKeyEvent(RawKeyUpEvent(
+          data: key.data,
+          character: key.character,
+        ));
+      }
+    }
+  }
+}
+
 class InputModel {
   final WeakReference<FFI> parent;
-  String keyboardMode = "legacy";
+  String keyboardMode = '';
 
   // keyboard
   var shift = false;
   var ctrl = false;
   var alt = false;
   var command = false;
+
+  final ToReleaseKeys toReleaseKeys = ToReleaseKeys();
 
   // trackpad
   var _trackpadLastDelta = Offset.zero;
@@ -88,18 +194,29 @@ class InputModel {
 
   InputModel(this.parent) {
     sessionId = parent.target!.sessionId;
+
+    // It is ok to call updateKeyboardMode() directly.
+    // Because `bind` is initialized in `PlatformFFI.init()` which is called very early.
+    // But we still wrap it in a Future.delayed() to make it more clear.
+    Future.delayed(Duration(milliseconds: 100), () {
+      updateKeyboardMode();
+    });
   }
 
-  KeyEventResult handleRawKeyEvent(FocusNode data, RawKeyEvent e) {
-    if (isDesktop && !stateGlobal.grabKeyboard) {
-      return KeyEventResult.handled;
-    }
-
+  updateKeyboardMode() async {
     // * Currently mobile does not enable map mode
     if (isDesktop) {
-      bind.sessionGetKeyboardMode(sessionId: sessionId).then((result) {
-        keyboardMode = result.toString();
-      });
+      if (keyboardMode.isEmpty) {
+        keyboardMode =
+            await bind.sessionGetKeyboardMode(sessionId: sessionId) ??
+                kKeyLegacyMode;
+      }
+    }
+  }
+
+  KeyEventResult handleRawKeyEvent(RawKeyEvent e) {
+    if (isDesktop && !isInputSourceFlutter) {
+      return KeyEventResult.handled;
     }
 
     final key = e.logicalKey;
@@ -115,6 +232,7 @@ class InputModel {
           command = true;
         }
       }
+      toReleaseKeys.updateKeyDown(key, e);
     }
     if (e is RawKeyUpEvent) {
       if (key == LogicalKeyboardKey.altLeft ||
@@ -131,6 +249,8 @@ class InputModel {
           key == LogicalKeyboardKey.superKey) {
         command = false;
       }
+
+      toReleaseKeys.updateKeyUp(key, e);
     }
 
     // * Currently mobile does not enable map mode
@@ -320,12 +440,16 @@ class InputModel {
   }
 
   void enterOrLeave(bool enter) {
+    toReleaseKeys.release(handleRawKeyEvent);
+
     // Fix status
     if (!enter) {
       resetModifiers();
     }
     _flingTimer?.cancel();
-    bind.sessionEnterOrLeave(sessionId: sessionId, enter: enter);
+    if (!isInputSourceFlutter) {
+      bind.sessionEnterOrLeave(sessionId: sessionId, enter: enter);
+    }
   }
 
   /// Send mouse movement event with distance in [x] and [y].
@@ -396,7 +520,8 @@ class InputModel {
     }
     if (x != 0 || y != 0) {
       if (peerPlatform == kPeerPlatformAndroid) {
-        handlePointerEvent('touch', 'pan_update', Offset(x.toDouble(), y.toDouble()));
+        handlePointerEvent(
+            'touch', 'pan_update', Offset(x.toDouble(), y.toDouble()));
       } else {
         bind.sessionSendMouse(
             sessionId: sessionId,
@@ -552,22 +677,22 @@ class InputModel {
     return v;
   }
 
-  Offset setNearestEdge(double x, double y, Display d) {
-    double left = x - d.x;
-    double right = d.x + d.width - 1 - x;
-    double top = y - d.y;
-    double bottom = d.y + d.height - 1 - y;
+  Offset setNearestEdge(double x, double y, Rect rect) {
+    double left = x - rect.left;
+    double right = rect.right - 1 - x;
+    double top = y - rect.top;
+    double bottom = rect.bottom - 1 - y;
     if (left < right && left < top && left < bottom) {
-      x = d.x;
+      x = rect.left;
     }
     if (right < left && right < top && right < bottom) {
-      x = d.x + d.width - 1;
+      x = rect.right - 1;
     }
     if (top < left && top < right && top < bottom) {
-      y = d.y;
+      y = rect.top;
     }
     if (bottom < left && bottom < right && bottom < top) {
-      y = d.y + d.height - 1;
+      y = rect.bottom - 1;
     }
     return Offset(x, y);
   }
@@ -711,9 +836,12 @@ class InputModel {
     final nearThr = 3;
     var nearRight = (canvasModel.size.width - x) < nearThr;
     var nearBottom = (canvasModel.size.height - y) < nearThr;
-    final d = ffiModel.display;
-    final imageWidth = d.width * canvasModel.scale;
-    final imageHeight = d.height * canvasModel.scale;
+    final rect = ffiModel.rect;
+    if (rect == null) {
+      return null;
+    }
+    final imageWidth = rect.width * canvasModel.scale;
+    final imageHeight = rect.height * canvasModel.scale;
     if (canvasModel.scrollStyle == ScrollStyle.scrollbar) {
       x += imageWidth * canvasModel.scrollX;
       y += imageHeight * canvasModel.scrollY;
@@ -741,11 +869,11 @@ class InputModel {
         y += step;
       }
     }
-    x += d.x;
-    y += d.y;
+    x += rect.left;
+    y += rect.top;
 
     if (onExit) {
-      final pos = setNearestEdge(x, y, d);
+      final pos = setNearestEdge(x, y, rect);
       x = pos.dx;
       y = pos.dy;
     }
@@ -761,10 +889,10 @@ class InputModel {
       return null;
     }
 
-    int minX = d.x.toInt();
-    int maxX = (d.x + d.width).toInt() - 1;
-    int minY = d.y.toInt();
-    int maxY = (d.y + d.height).toInt() - 1;
+    int minX = rect.left.toInt();
+    int maxX = (rect.left + rect.width).toInt() - 1;
+    int minY = rect.top.toInt();
+    int maxY = (rect.top + rect.height).toInt() - 1;
     evtX = trySetNearestRange(evtX, minX, maxX, 5);
     evtY = trySetNearestRange(evtY, minY, maxY, 5);
     if (kind == kPointerEventKindMouse) {

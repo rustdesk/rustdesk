@@ -8,8 +8,8 @@ import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart' hide TabBarTheme;
 import 'package:flutter_hbb/common.dart';
-import 'package:flutter_hbb/common/shared_state.dart';
 import 'package:flutter_hbb/consts.dart';
+import 'package:flutter_hbb/desktop/pages/remote_page.dart';
 import 'package:flutter_hbb/main.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:flutter_hbb/models/state_model.dart';
@@ -75,8 +75,8 @@ CancelFunc showRightMenu(ToastBuilder builder,
   return BotToast.showAttachedWidget(
     target: target,
     targetContext: context,
-    verticalOffset: 0,
-    horizontalOffset: 0,
+    verticalOffset: 0.0,
+    horizontalOffset: 0.0,
     duration: Duration(seconds: 300),
     animationDuration: Duration(milliseconds: 0),
     animationReverseDuration: Duration(milliseconds: 0),
@@ -177,6 +177,19 @@ class DesktopTabController {
       jumpTo(state.value.tabs.indexWhere((tab) => tab.key == key),
           callOnSelected: callOnSelected);
 
+  bool jumpToByKeyAndDisplay(String key, int display) {
+    for (int i = 0; i < state.value.tabs.length; i++) {
+      final tab = state.value.tabs[i];
+      if (tab.key == key) {
+        final ffi = (tab.page as RemotePage).ffi;
+        if (ffi.ffiModel.pi.currentDisplay == display) {
+          return jumpTo(i, callOnSelected: true);
+        }
+      }
+    }
+    return false;
+  }
+
   void closeBy(String? key) {
     if (!isDesktop) return;
     assert(onRemoved != null);
@@ -267,13 +280,9 @@ class DesktopTab extends StatelessWidget {
         tabType == DesktopTabType.install;
   }
 
-  static RxString labelGetterAlias(String peerId) {
-    final opt = 'alias';
-    PeerStringOption.init(peerId, opt, () {
-      final alias = bind.mainGetPeerOptionSync(id: peerId, key: opt);
-      return alias.isEmpty ? peerId : alias;
-    });
-    return PeerStringOption.find(peerId, opt);
+  static RxString tablabelGetter(String peerId) {
+    final alias = bind.mainGetPeerOptionSync(id: peerId, key: 'alias');
+    return RxString(getDesktopTabLabel(peerId, alias));
   }
 
   @override
@@ -439,6 +448,7 @@ class DesktopTab extends StatelessWidget {
           isMainWindow: isMainWindow,
           tabType: tabType,
           state: state,
+          tabController: controller,
           tail: tail,
           showMinimize: showMinimize,
           showMaximize: showMaximize,
@@ -454,6 +464,7 @@ class WindowActionPanel extends StatefulWidget {
   final bool isMainWindow;
   final DesktopTabType tabType;
   final Rx<DesktopTabState> state;
+  final DesktopTabController tabController;
 
   final bool showMinimize;
   final bool showMaximize;
@@ -466,6 +477,7 @@ class WindowActionPanel extends StatefulWidget {
       required this.isMainWindow,
       required this.tabType,
       required this.state,
+      required this.tabController,
       this.tail,
       this.showMinimize = true,
       this.showMaximize = true,
@@ -571,19 +583,25 @@ class WindowActionPanelState extends State<WindowActionPanel>
   void onWindowClose() async {
     mainWindowClose() async => await windowManager.hide();
     notMainWindowClose(WindowController controller) async {
+      if (widget.tabController.length != 0) {
+        debugPrint("close not emtpy multiwindow from taskbar");
+        if (Platform.isWindows) {
+          await controller.show();
+          await controller.focus();
+          final res = await widget.onClose?.call() ?? true;
+          if (!res) return;
+        }
+        widget.tabController.clear();
+      }
       await controller.hide();
-      await Future.wait([
-        rustDeskWinManager
-            .call(WindowType.Main, kWindowEventHide, {"id": kWindowId!}),
-        widget.onClose?.call() ?? Future.microtask(() => null)
-      ]);
+      await rustDeskWinManager
+          .call(WindowType.Main, kWindowEventHide, {"id": kWindowId!});
     }
 
     macOSWindowClose(
-        Future<void> Function() restoreFunc,
-        Future<bool> Function() checkFullscreen,
-        Future<void> Function() closeFunc) async {
-      await restoreFunc();
+      Future<bool> Function() checkFullscreen,
+      Future<void> Function() closeFunc,
+    ) async {
       _macOSCheckRestoreCounter = 0;
       _macOSCheckRestoreTimer =
           Timer.periodic(Duration(milliseconds: 30), (timer) async {
@@ -603,26 +621,38 @@ class WindowActionPanelState extends State<WindowActionPanel>
       }
       // macOS specific workaround, the window is not hiding when in fullscreen.
       if (Platform.isMacOS && await windowManager.isFullScreen()) {
-        stateGlobal.closeOnFullscreen = true;
+        stateGlobal.closeOnFullscreen ??= true;
+        await windowManager.setFullScreen(false);
         await macOSWindowClose(
-            () async => await windowManager.setFullScreen(false),
-            () async => await windowManager.isFullScreen(),
-            mainWindowClose);
+          () async => await windowManager.isFullScreen(),
+          mainWindowClose,
+        );
       } else {
-        stateGlobal.closeOnFullscreen = false;
+        stateGlobal.closeOnFullscreen ??= false;
         await mainWindowClose();
       }
     } else {
       // it's safe to hide the subwindow
       final controller = WindowController.fromWindowId(kWindowId!);
-      if (Platform.isMacOS && await controller.isFullScreen()) {
-        stateGlobal.closeOnFullscreen = true;
-        await macOSWindowClose(
-            () async => await controller.setFullscreen(false),
-            () async => await controller.isFullScreen(),
-            () async => await notMainWindowClose(controller));
+      if (Platform.isMacOS) {
+        // onWindowClose() maybe called multiple times because of loopCloseWindow() in remote_tab_page.dart.
+        // use ??=  to make sure the value is set on first call.
+
+        if (await widget.onClose?.call() ?? true) {
+          if (await controller.isFullScreen()) {
+            stateGlobal.closeOnFullscreen ??= true;
+            await controller.setFullscreen(false);
+            stateGlobal.setFullscreen(false, procWnd: false);
+            await macOSWindowClose(
+              () async => await controller.isFullScreen(),
+              () async => await notMainWindowClose(controller),
+            );
+          } else {
+            stateGlobal.closeOnFullscreen ??= false;
+            await notMainWindowClose(controller);
+          }
+        }
       } else {
-        stateGlobal.closeOnFullscreen = false;
         await notMainWindowClose(controller);
       }
     }
@@ -921,14 +951,17 @@ class _TabState extends State<_Tab> with RestorationMixin {
     final labelWidget = Obx(() {
       return ConstrainedBox(
           constraints: BoxConstraints(maxWidth: widget.maxLabelWidth ?? 200),
-          child: Text(
-            translate(widget.label.value),
-            textAlign: TextAlign.center,
-            style: TextStyle(
-                color: isSelected
-                    ? MyTheme.tabbar(context).selectedTextColor
-                    : MyTheme.tabbar(context).unSelectedTextColor),
-            overflow: TextOverflow.ellipsis,
+          child: Tooltip(
+            message: translate(widget.label.value),
+            child: Text(
+              translate(widget.label.value),
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                  color: isSelected
+                      ? MyTheme.tabbar(context).selectedTextColor
+                      : MyTheme.tabbar(context).unSelectedTextColor),
+              overflow: TextOverflow.ellipsis,
+            ),
           ));
     });
 

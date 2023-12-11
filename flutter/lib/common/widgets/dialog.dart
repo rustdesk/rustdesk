@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hbb/common/shared_state.dart';
 import 'package:flutter_hbb/common/widgets/setting_widgets.dart';
+import 'package:flutter_hbb/consts.dart';
 import 'package:get/get.dart';
 
 import '../../common.dart';
@@ -293,6 +294,53 @@ Future<String> changeDirectAccessPort(
         dialogButton("OK", onPressed: () async {
           await bind.mainSetOption(
               key: 'direct-access-port', value: controller.text);
+          close();
+        }),
+      ],
+      onCancel: close,
+    );
+  });
+  return controller.text;
+}
+
+Future<String> changeAutoDisconnectTimeout(String old) async {
+  final controller = TextEditingController(text: old);
+  await gFFI.dialogManager.show((setState, close, context) {
+    return CustomAlertDialog(
+      title: Text(translate("Timeout in minutes")),
+      content: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const SizedBox(height: 8.0),
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                    maxLines: null,
+                    keyboardType: TextInputType.number,
+                    decoration: InputDecoration(
+                        hintText: '10',
+                        isCollapsed: true,
+                        suffix: IconButton(
+                            padding: EdgeInsets.zero,
+                            icon: const Icon(Icons.clear, size: 16),
+                            onPressed: () => controller.clear())),
+                    inputFormatters: [
+                      FilteringTextInputFormatter.allow(RegExp(
+                          r'^([0-9]|[1-9]\d|[1-9]\d{2}|[1-9]\d{3}|[1-5]\d{4}|6[0-4]\d{3}|65[0-4]\d{2}|655[0-2]\d|6553[0-5])$')),
+                    ],
+                    controller: controller,
+                    autofocus: true),
+              ),
+            ],
+          ),
+        ],
+      ),
+      actions: [
+        dialogButton("Cancel", onPressed: close, isOutline: true),
+        dialogButton("OK", onPressed: () async {
+          await bind.mainSetOption(
+              key: 'auto-disconnect-timeout', value: controller.text);
           close();
         }),
       ],
@@ -664,6 +712,13 @@ void showWaitUacDialog(
       (setState, close, context) => CustomAlertDialog(
             title: null,
             content: msgboxContent(type, 'Wait', 'wait_accept_uac_tip'),
+            actions: [
+              dialogButton(
+                'OK',
+                icon: Icon(Icons.done_rounded),
+                onPressed: close,
+              ),
+            ],
           ));
 }
 
@@ -884,7 +939,7 @@ void showElevationError(SessionID sessionId, String type, String title,
         dialogButton('Cancel', onPressed: () {
           close();
         }, isOutline: true),
-        dialogButton('Retry', onPressed: submit),
+        if (text != 'No permission') dialogButton('Retry', onPressed: submit),
       ],
       onSubmit: submit,
       onCancel: close,
@@ -918,7 +973,7 @@ void showRestartRemoteDevice(PeerInfo pi, String id, SessionID sessionId,
             title: Row(children: [
               Icon(Icons.warning_rounded, color: Colors.redAccent, size: 28),
               Flexible(
-                  child: Text(translate("Restart Remote Device"))
+                  child: Text(translate("Restart remote device"))
                       .paddingOnly(left: 10)),
             ]),
             content: Text(
@@ -1190,11 +1245,24 @@ void showConfirmSwitchSidesDialog(
 }
 
 customImageQualityDialog(SessionID sessionId, String id, FFI ffi) async {
-  double qualityInitValue = 50;
-  double fpsInitValue = 30;
+  double initQuality = kDefaultQuality;
+  double initFps = kDefaultFps;
   bool qualitySet = false;
   bool fpsSet = false;
+
+  bool? direct;
+  try {
+    direct =
+        ConnectionTypeState.find(id).direct.value == ConnectionType.strDirect;
+  } catch (_) {}
+  bool hideFps = (await bind.mainIsUsingPublicServer() && direct != true) ||
+      versionCmp(ffi.ffiModel.pi.version, '1.2.0') < 0;
+  bool hideMoreQuality =
+      (await bind.mainIsUsingPublicServer() && direct != true) ||
+          versionCmp(ffi.ffiModel.pi.version, '1.2.2') < 0;
+
   setCustomValues({double? quality, double? fps}) async {
+    debugPrint("setCustomValues quality:$quality, fps:$fps");
     if (quality != null) {
       qualitySet = true;
       await bind.sessionSetCustomImageQuality(
@@ -1207,12 +1275,12 @@ customImageQualityDialog(SessionID sessionId, String id, FFI ffi) async {
     if (!qualitySet) {
       qualitySet = true;
       await bind.sessionSetCustomImageQuality(
-          sessionId: sessionId, value: qualityInitValue.toInt());
+          sessionId: sessionId, value: initQuality.toInt());
     }
-    if (!fpsSet) {
+    if (!hideFps && !fpsSet) {
       fpsSet = true;
       await bind.sessionSetCustomFps(
-          sessionId: sessionId, fps: fpsInitValue.toInt());
+          sessionId: sessionId, fps: initFps.toInt());
     }
   }
 
@@ -1223,32 +1291,30 @@ customImageQualityDialog(SessionID sessionId, String id, FFI ffi) async {
 
   // quality
   final quality = await bind.sessionGetCustomImageQuality(sessionId: sessionId);
-  qualityInitValue =
-      quality != null && quality.isNotEmpty ? quality[0].toDouble() : 50.0;
-  if (qualityInitValue < 10 || qualityInitValue > 2000) {
-    qualityInitValue = 50;
+  initQuality = quality != null && quality.isNotEmpty
+      ? quality[0].toDouble()
+      : kDefaultQuality;
+  if (initQuality < kMinQuality ||
+      initQuality > (!hideMoreQuality ? kMaxMoreQuality : kMaxQuality)) {
+    initQuality = kDefaultQuality;
   }
   // fps
   final fpsOption =
       await bind.sessionGetOption(sessionId: sessionId, arg: 'custom-fps');
-  fpsInitValue = fpsOption == null ? 30 : double.tryParse(fpsOption) ?? 30;
-  if (fpsInitValue < 5 || fpsInitValue > 120) {
-    fpsInitValue = 30;
+  initFps = fpsOption == null
+      ? kDefaultFps
+      : double.tryParse(fpsOption) ?? kDefaultFps;
+  if (initFps < kMinFps || initFps > kMaxFps) {
+    initFps = kDefaultFps;
   }
-  bool? direct;
-  try {
-    direct =
-        ConnectionTypeState.find(id).direct.value == ConnectionType.strDirect;
-  } catch (_) {}
-  bool notShowFps = (await bind.mainIsUsingPublicServer() && direct != true) ||
-      version_cmp(ffi.ffiModel.pi.version, '1.2.0') < 0;
 
   final content = customImageQualityWidget(
-      initQuality: qualityInitValue,
-      initFps: fpsInitValue,
+      initQuality: initQuality,
+      initFps: initFps,
       setQuality: (v) => setCustomValues(quality: v),
       setFps: (v) => setCustomValues(fps: v),
-      showFps: !notShowFps);
+      showFps: !hideFps,
+      showMoreQuality: !hideMoreQuality);
   msgBoxCommon(ffi.dialogManager, 'Custom Image Quality', content, [btnClose]);
 }
 

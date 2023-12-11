@@ -126,7 +126,7 @@ pub fn is_can_screen_recording(prompt: bool) -> bool {
     if !can_record_screen && prompt {
         use scrap::{Capturer, Display};
         if let Ok(d) = Display::primary() {
-            Capturer::new(d, true).ok();
+            Capturer::new(d).ok();
         }
     }
     can_record_screen
@@ -572,8 +572,8 @@ pub fn toggle_blank_screen(_v: bool) {
     // https://unix.stackexchange.com/questions/17115/disable-keyboard-mouse-temporarily
 }
 
-pub fn block_input(_v: bool) -> bool {
-    true
+pub fn block_input(_v: bool) -> (bool, String) {
+    (true, "".to_owned())
 }
 
 pub fn is_installed() -> bool {
@@ -732,5 +732,12 @@ impl WakeLock {
                 .create()
                 .ok(),
         )
+    }
+
+    pub fn set_display(&mut self, display: bool) -> ResultType<()> {
+        self.0
+            .as_mut()
+            .map(|h| h.set_display(display))
+            .ok_or(anyhow!("no AwakeHandle"))?
     }
 }

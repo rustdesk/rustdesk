@@ -1,3 +1,6 @@
+import 'dart:math';
+
+import 'package:dynamic_layouts/dynamic_layouts.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common/formatter/id_formatter.dart';
 import 'package:flutter_hbb/common/widgets/peer_card.dart';
@@ -35,7 +38,7 @@ class _AddressBookState extends State<AddressBook> {
 
   @override
   Widget build(BuildContext context) => Obx(() {
-        if (gFFI.userModel.userName.value.isEmpty) {
+        if (!gFFI.userModel.isLogin) {
           return Center(
               child: ElevatedButton(
                   onPressed: loginDialog, child: Text(translate("Login"))));
@@ -49,11 +52,13 @@ class _AddressBookState extends State<AddressBook> {
             children: [
               // NOT use Offstage to wrap LinearProgressIndicator
               if (gFFI.abModel.retrying.value) LinearProgressIndicator(),
-              _buildErrorBanner(
+              buildErrorBanner(context,
+                  loading: gFFI.abModel.abLoading,
                   err: gFFI.abModel.pullError,
                   retry: null,
                   close: () => gFFI.abModel.pullError.value = ''),
-              _buildErrorBanner(
+              buildErrorBanner(context,
+                  loading: gFFI.abModel.abLoading,
                   err: gFFI.abModel.pushError,
                   retry: () => gFFI.abModel.pushAb(isRetry: true),
                   close: () => gFFI.abModel.pushError.value = ''),
@@ -65,61 +70,6 @@ class _AddressBookState extends State<AddressBook> {
           );
         }
       });
-
-  Widget _buildErrorBanner(
-      {required RxString err,
-      required Function? retry,
-      required Function close}) {
-    const double height = 25;
-    return Obx(() => Offstage(
-          offstage: !(!gFFI.abModel.abLoading.value && err.value.isNotEmpty),
-          child: Center(
-              child: Container(
-            height: height,
-            color: Color.fromARGB(255, 253, 238, 235),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                FittedBox(
-                  child: Icon(
-                    Icons.info,
-                    color: Color.fromARGB(255, 249, 81, 81),
-                  ),
-                ).marginAll(4),
-                Flexible(
-                  child: Align(
-                      alignment: Alignment.centerLeft,
-                      child: Tooltip(
-                        message: translate(err.value),
-                        child: Text(
-                          translate(err.value),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      )).marginSymmetric(vertical: 2),
-                ),
-                if (retry != null)
-                  InkWell(
-                      onTap: () {
-                        retry.call();
-                      },
-                      child: Text(
-                        translate("Retry"),
-                        style: TextStyle(color: MyTheme.accent),
-                      )).marginSymmetric(horizontal: 5),
-                FittedBox(
-                  child: InkWell(
-                    onTap: () {
-                      close.call();
-                    },
-                    child: Icon(Icons.close).marginSymmetric(horizontal: 5),
-                  ),
-                ).marginAll(4)
-              ],
-            ),
-          )).marginOnly(bottom: 14),
-        ));
-  }
 
   Widget _buildAddressBookDesktop() {
     return Row(
@@ -209,20 +159,31 @@ class _AddressBookState extends State<AddressBook> {
       } else {
         tags = gFFI.abModel.tags;
       }
-      return Wrap(
-        children: tags
-            .map((e) => AddressBookTag(
-                name: e,
-                tags: gFFI.abModel.selectedTags,
-                onTap: () {
-                  if (gFFI.abModel.selectedTags.contains(e)) {
-                    gFFI.abModel.selectedTags.remove(e);
-                  } else {
-                    gFFI.abModel.selectedTags.add(e);
-                  }
-                }))
-            .toList(),
-      );
+      tagBuilder(String e) {
+        return AddressBookTag(
+            name: e,
+            tags: gFFI.abModel.selectedTags,
+            onTap: () {
+              if (gFFI.abModel.selectedTags.contains(e)) {
+                gFFI.abModel.selectedTags.remove(e);
+              } else {
+                gFFI.abModel.selectedTags.add(e);
+              }
+            });
+      }
+
+      final gridView = DynamicGridView.builder(
+          shrinkWrap: isMobile,
+          gridDelegate: SliverGridDelegateWithWrapping(),
+          itemCount: tags.length,
+          itemBuilder: (BuildContext context, int index) {
+            final e = tags[index];
+            return tagBuilder(e);
+          });
+      final maxHeight = max(MediaQuery.of(context).size.height / 6, 100.0);
+      return isDesktop
+          ? gridView
+          : LimitedBox(maxHeight: maxHeight, child: gridView);
     });
   }
 
@@ -230,11 +191,10 @@ class _AddressBookState extends State<AddressBook> {
     return Expanded(
       child: Align(
           alignment: Alignment.topLeft,
-          child: Obx(() => AddressBookPeersView(
-                menuPadding: widget.menuPadding,
-                // ignore: invalid_use_of_protected_member
-                initPeers: gFFI.abModel.peers.value,
-              ))),
+          child: AddressBookPeersView(
+            menuPadding: widget.menuPadding,
+            initPeers: gFFI.abModel.peers,
+          )),
     );
   }
 
@@ -269,6 +229,22 @@ class _AddressBookState extends State<AddressBook> {
     );
   }
 
+  @protected
+  MenuEntryBase<String> filterMenuItem() {
+    return MenuEntrySwitch<String>(
+      switchType: SwitchType.scheckbox,
+      text: translate('Filter by intersection'),
+      getter: () async {
+        return filterAbTagByIntersection();
+      },
+      setter: (bool v) async {
+        bind.mainSetLocalOption(key: filterAbTagOption, value: v ? 'Y' : '');
+        gFFI.abModel.filterByIntersection.value = v;
+      },
+      dismissOnClicked: true,
+    );
+  }
+
   void _showMenu(RelativeRect pos) {
     final items = [
       getEntry(translate("Add ID"), abAddId),
@@ -276,6 +252,7 @@ class _AddressBookState extends State<AddressBook> {
       getEntry(translate("Unselect all tags"), gFFI.abModel.unsetSelectedTags),
       sortMenuItem(),
       syncMenuItem(),
+      filterMenuItem(),
     ];
 
     mod_menu.showMenu(

@@ -45,10 +45,12 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
   var _enableDirectIPAccess = false;
   var _enableRecordSession = false;
   var _autoRecordIncomingSession = false;
+  var _allowAutoDisconnect = false;
   var _localIP = "";
   var _directAccessPort = "";
   var _fingerprint = "";
   var _buildDate = "";
+  var _autoDisconnectTimeout = "";
 
   @override
   void initState() {
@@ -151,6 +153,20 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
         _buildDate = buildDate;
       }
 
+      final allowAutoDisconnect = option2bool('allow-auto-disconnect',
+          await bind.mainGetOption(key: 'allow-auto-disconnect'));
+      if (allowAutoDisconnect != _allowAutoDisconnect) {
+        update = true;
+        _allowAutoDisconnect = allowAutoDisconnect;
+      }
+
+      final autoDisconnectTimeout =
+          await bind.mainGetOption(key: 'auto-disconnect-timeout');
+      if (autoDisconnectTimeout != _autoDisconnectTimeout) {
+        update = true;
+        _autoDisconnectTimeout = autoDisconnectTimeout;
+      }
+
       if (update) {
         setState(() {});
       }
@@ -205,7 +221,7 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
     final List<AbstractSettingsTile> enhancementsTiles = [];
     final List<AbstractSettingsTile> shareScreenTiles = [
       SettingsTile.switchTile(
-        title: Text(translate('Deny LAN Discovery')),
+        title: Text(translate('Deny LAN discovery')),
         initialValue: _denyLANDiscovery,
         onToggle: (v) async {
           await bind.mainSetOption(
@@ -254,7 +270,7 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
         },
       ),
       SettingsTile.switchTile(
-        title: Text(translate('Enable Recording Session')),
+        title: Text(translate('Enable recording session')),
         initialValue: _enableRecordSession,
         onToggle: (v) async {
           await bind.mainSetOption(
@@ -306,6 +322,48 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
           await bind.mainSetOption(key: 'direct-server', value: value);
           setState(() {});
         },
+      ),
+      SettingsTile.switchTile(
+        title: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Expanded(
+                  child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                    Text(translate("auto_disconnect_option_tip")),
+                    Offstage(
+                        offstage: !_allowAutoDisconnect,
+                        child: Text(
+                          '${_autoDisconnectTimeout.isEmpty ? '10' : _autoDisconnectTimeout} min',
+                          style: Theme.of(context).textTheme.bodySmall,
+                        )),
+                  ])),
+              Offstage(
+                  offstage: !_allowAutoDisconnect,
+                  child: IconButton(
+                      padding: EdgeInsets.zero,
+                      icon: Icon(
+                        Icons.edit,
+                        size: 20,
+                      ),
+                      onPressed: () async {
+                        final timeout = await changeAutoDisconnectTimeout(
+                            _autoDisconnectTimeout);
+                        setState(() {
+                          _autoDisconnectTimeout = timeout;
+                        });
+                      }))
+            ]),
+        initialValue: _allowAutoDisconnect,
+        onToggle: (_) async {
+          _allowAutoDisconnect = !_allowAutoDisconnect;
+          String value =
+              bool2option('allow-auto-disconnect', _allowAutoDisconnect);
+          await bind.mainSetOption(key: 'allow-auto-disconnect', value: value);
+          setState(() {});
+        },
       )
     ];
     if (_hasIgnoreBattery) {
@@ -349,7 +407,7 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
     enhancementsTiles.add(SettingsTile.switchTile(
         initialValue: _enableStartOnBoot,
         title: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text("${translate('Start on Boot')} (beta)"),
+          Text("${translate('Start on boot')} (beta)"),
           Text(
               '* ${translate('Start the screen sharing service on boot, requires special permissions')}',
               style: Theme.of(context).textTheme.bodySmall),
@@ -731,21 +789,14 @@ class __DisplayPageState extends State<_DisplayPage> {
         ),
         SettingsSection(
           title: Text(translate('Other Default Options')),
-          tiles: [
-            otherRow('Show remote cursor', 'show_remote_cursor'),
-            otherRow('Show quality monitor', 'show_quality_monitor'),
-            otherRow('Mute', 'disable_audio'),
-            otherRow('Disable clipboard', 'disable_clipboard'),
-            otherRow('Lock after session end', 'lock_after_session_end'),
-            otherRow('Privacy mode', 'privacy_mode'),
-            otherRow('Touch mode', 'touch-mode'),
-          ],
+          tiles:
+              otherDefaultSettings().map((e) => otherRow(e.$1, e.$2)).toList(),
         ),
       ]),
     );
   }
 
-  otherRow(String label, String key) {
+  SettingsTile otherRow(String label, String key) {
     final value = bind.mainGetUserDefaultOption(key: key) == 'Y';
     return SettingsTile.switchTile(
       initialValue: value,

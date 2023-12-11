@@ -58,11 +58,10 @@ mod ui_session_interface;
 
 mod hbbs_http;
 
-#[cfg(windows)]
+#[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
 pub mod clipboard_file;
 
-#[cfg(windows)]
-pub mod privacy_win_mag;
+pub mod privacy_mode;
 
 #[cfg(all(windows, feature = "virtual_display_driver"))]
 pub mod virtual_display_manager;

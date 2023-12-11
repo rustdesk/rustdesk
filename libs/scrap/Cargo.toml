@@ -19,7 +19,7 @@ cfg-if = "1.0"
 num_cpus = "1.15"
 lazy_static = "1.4"
 hbb_common = { path = "../hbb_common" }
-webm = "1.0"
+webm = { git = "https://github.com/21pages/rust-webm" }
 
 [dependencies.winapi]
 version = "0.3"
@@ -36,6 +36,7 @@ lazy_static = "1.4"
 log = "0.4"
 serde_json = "1.0"
 ndk = { version = "0.7", features = ["media"], optional = true}
+ndk-context = "0.1"
 
 [target.'cfg(not(target_os = "android"))'.dev-dependencies]
 repng = "0.2"

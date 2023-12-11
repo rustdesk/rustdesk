@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter_hbb/consts.dart';
 
 import 'package:flutter_hbb/models/peer_model.dart';
 
@@ -48,11 +49,18 @@ class UserPayload {
     };
     return map;
   }
+
+  Map<String, dynamic> toGroupCacheJson() {
+    final Map<String, dynamic> map = {
+      'name': name,
+    };
+    return map;
+  }
 }
 
 class PeerPayload {
   String id = '';
-  String info = '';
+  Map<String, dynamic> info = {};
   int? status;
   String user = '';
   String user_name = '';
@@ -60,14 +68,45 @@ class PeerPayload {
 
   PeerPayload.fromJson(Map<String, dynamic> json)
       : id = json['id'] ?? '',
-        info = json['info'] ?? '',
+        info = (json['info'] is Map<String, dynamic>) ? json['info'] : {},
         status = json['status'],
         user = json['user'] ?? '',
         user_name = json['user_name'] ?? '',
         note = json['note'] ?? '';
 
   static Peer toPeer(PeerPayload p) {
-    return Peer.fromJson({"id": p.id, "username": p.user_name});
+    return Peer.fromJson({
+      "id": p.id,
+      'loginName': p.user_name,
+      "username": p.info['username'] ?? '',
+      "platform": _platform(p.info['os']),
+      "hostname": p.info['device_name'],
+    });
+  }
+
+  static String? _platform(dynamic field) {
+    if (field == null) {
+      return null;
+    }
+    final fieldStr = field.toString();
+    List<String> list = fieldStr.split(' / ');
+    if (list.isEmpty) return null;
+    final os = list[0];
+    switch (os.toLowerCase()) {
+      case 'windows':
+        return kPeerPlatformWindows;
+      case 'linux':
+        return kPeerPlatformLinux;
+      case 'macos':
+        return kPeerPlatformMacOS;
+      case 'android':
+        return kPeerPlatformAndroid;
+      default:
+        if (fieldStr.toLowerCase().contains('linux')) {
+          return kPeerPlatformLinux;
+        }
+        return null;
+    }
   }
 }
 

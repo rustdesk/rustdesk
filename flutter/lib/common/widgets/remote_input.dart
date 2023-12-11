@@ -34,7 +34,8 @@ class RawKeyFocusScope extends StatelessWidget {
             canRequestFocus: true,
             focusNode: focusNode,
             onFocusChange: onFocusChange,
-            onKey: inputModel.handleRawKeyEvent,
+            onKey: (FocusNode data, RawKeyEvent e) =>
+                inputModel.handleRawKeyEvent(e),
             child: child));
   }
 }
@@ -93,6 +94,7 @@ class _RawTouchGestureDetectorRegionState
       return;
     }
     if (handleTouch) {
+      // Desktop or mobile "Touch mode"
       ffi.cursorModel.move(d.localPosition.dx, d.localPosition.dy);
       inputModel.tapDown(MouseButtons.left);
     }
@@ -112,7 +114,10 @@ class _RawTouchGestureDetectorRegionState
     if (lastDeviceKind != PointerDeviceKind.touch) {
       return;
     }
-    inputModel.tap(MouseButtons.left);
+    if (!handleTouch) {
+      // Mobile, "Mouse mode"
+      inputModel.tap(MouseButtons.left);
+    }
   }
 
   onDoubleTapDown(TapDownDetails d) {

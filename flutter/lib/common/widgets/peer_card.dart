@@ -19,7 +19,7 @@ import 'dart:math' as math;
 typedef PopupMenuEntryBuilder = Future<List<mod_menu.PopupMenuEntry<String>>>
     Function(BuildContext);
 
-enum PeerUiType { grid, list }
+enum PeerUiType { grid, tile, list }
 
 final peerCardUiType = PeerUiType.grid.obs;
 
@@ -495,7 +495,7 @@ abstract class BasePeerCard extends StatelessWidget {
     return _connectCommonAction(
       context,
       id,
-      translate('Transfer File'),
+      translate('Transfer file'),
       isFileTransfer: true,
     );
   }
@@ -505,7 +505,7 @@ abstract class BasePeerCard extends StatelessWidget {
     return _connectCommonAction(
       context,
       id,
-      translate('TCP Tunneling'),
+      translate('TCP tunneling'),
       isTcpTunneling: true,
     );
   }
@@ -568,7 +568,7 @@ abstract class BasePeerCard extends StatelessWidget {
   MenuEntryBase<String> _createShortCutAction(String id) {
     return MenuEntryButton<String>(
       childBuilder: (TextStyle? style) => Text(
-        translate('Create Desktop Shortcut'),
+        translate('Create desktop shortcut'),
         style: style,
       ),
       proc: () {
@@ -600,7 +600,7 @@ abstract class BasePeerCard extends StatelessWidget {
       await _openNewConnInAction(id, 'Open in New Tab', kOptionOpenInTabs);
 
   _openInWindowsAction(String id) async => await _openNewConnInAction(
-      id, 'Open in New Window', kOptionOpenInWindows);
+      id, 'Open in new window', kOptionOpenInWindows);
 
   _openNewConnInOptAction(String id) async =>
       mainGetLocalBoolOptionSync(kOptionOpenNewConnInTabs)
@@ -727,7 +727,7 @@ abstract class BasePeerCard extends StatelessWidget {
   MenuEntryBase<String> _unrememberPasswordAction(String id) {
     return MenuEntryButton<String>(
       childBuilder: (TextStyle? style) => Text(
-        translate('Unremember Password'),
+        translate('Forget Password'),
         style: style,
       ),
       proc: () async {
@@ -818,7 +818,7 @@ abstract class BasePeerCard extends StatelessWidget {
   MenuEntryBase<String> _addToAb(Peer peer) {
     return MenuEntryButton<String>(
       childBuilder: (TextStyle? style) => Text(
-        translate('Add to Address Book'),
+        translate('Add to address book'),
         style: style,
       ),
       proc: () {
@@ -863,12 +863,12 @@ class RecentPeerCard extends BasePeerCard {
 
     final List favs = (await bind.mainGetFav()).toList();
 
-    if (isDesktop && peer.platform != 'Android') {
+    if (isDesktop && peer.platform != kPeerPlatformAndroid) {
       menuItems.add(_tcpTunnelingAction(context, peer.id));
     }
     // menuItems.add(await _openNewConnInOptAction(peer.id));
     menuItems.add(await _forceAlwaysRelayAction(peer.id));
-    if (peer.platform == 'Windows') {
+    if (Platform.isWindows && peer.platform == kPeerPlatformWindows) {
       menuItems.add(_rdpAction(context, peer.id));
     }
     if (Platform.isWindows) {
@@ -917,12 +917,12 @@ class FavoritePeerCard extends BasePeerCard {
       _connectAction(context, peer),
       _transferFileAction(context, peer.id),
     ];
-    if (isDesktop && peer.platform != 'Android') {
+    if (isDesktop && peer.platform != kPeerPlatformAndroid) {
       menuItems.add(_tcpTunnelingAction(context, peer.id));
     }
     // menuItems.add(await _openNewConnInOptAction(peer.id));
     menuItems.add(await _forceAlwaysRelayAction(peer.id));
-    if (peer.platform == 'Windows') {
+    if (Platform.isWindows && peer.platform == kPeerPlatformWindows) {
       menuItems.add(_rdpAction(context, peer.id));
     }
     if (Platform.isWindows) {
@@ -971,12 +971,12 @@ class DiscoveredPeerCard extends BasePeerCard {
 
     final List favs = (await bind.mainGetFav()).toList();
 
-    if (isDesktop && peer.platform != 'Android') {
+    if (isDesktop && peer.platform != kPeerPlatformAndroid) {
       menuItems.add(_tcpTunnelingAction(context, peer.id));
     }
     // menuItems.add(await _openNewConnInOptAction(peer.id));
     menuItems.add(await _forceAlwaysRelayAction(peer.id));
-    if (peer.platform == 'Windows') {
+    if (Platform.isWindows && peer.platform == kPeerPlatformWindows) {
       menuItems.add(_rdpAction(context, peer.id));
     }
     menuItems.add(_wolAction(peer.id));
@@ -1021,12 +1021,12 @@ class AddressBookPeerCard extends BasePeerCard {
       _connectAction(context, peer),
       _transferFileAction(context, peer.id),
     ];
-    if (isDesktop && peer.platform != 'Android') {
+    if (isDesktop && peer.platform != kPeerPlatformAndroid) {
       menuItems.add(_tcpTunnelingAction(context, peer.id));
     }
     // menuItems.add(await _openNewConnInOptAction(peer.id));
     menuItems.add(await _forceAlwaysRelayAction(peer.id));
-    if (peer.platform == 'Windows') {
+    if (Platform.isWindows && peer.platform == kPeerPlatformWindows) {
       menuItems.add(_rdpAction(context, peer.id));
     }
     if (Platform.isWindows) {
@@ -1089,21 +1089,26 @@ class MyGroupPeerCard extends BasePeerCard {
       _connectAction(context, peer),
       _transferFileAction(context, peer.id),
     ];
-    if (isDesktop && peer.platform != 'Android') {
+    if (isDesktop && peer.platform != kPeerPlatformAndroid) {
       menuItems.add(_tcpTunnelingAction(context, peer.id));
     }
     // menuItems.add(await _openNewConnInOptAction(peer.id));
-    menuItems.add(await _forceAlwaysRelayAction(peer.id));
-    if (peer.platform == 'Windows') {
+    // menuItems.add(await _forceAlwaysRelayAction(peer.id));
+    if (Platform.isWindows && peer.platform == kPeerPlatformWindows) {
       menuItems.add(_rdpAction(context, peer.id));
     }
     if (Platform.isWindows) {
       menuItems.add(_createShortCutAction(peer.id));
     }
-    menuItems.add(MenuEntryDivider());
-    menuItems.add(_renameAction(peer.id));
-    if (await bind.mainPeerHasPassword(id: peer.id)) {
-      menuItems.add(_unrememberPasswordAction(peer.id));
+    // menuItems.add(MenuEntryDivider());
+    // menuItems.add(_renameAction(peer.id));
+    // if (await bind.mainPeerHasPassword(id: peer.id)) {
+    //   menuItems.add(_unrememberPasswordAction(peer.id));
+    // }
+    if (gFFI.userModel.userName.isNotEmpty) {
+      if (!gFFI.abModel.idContainBy(peer.id)) {
+        menuItems.add(_addToAb(peer));
+      }
     }
     return menuItems;
   }

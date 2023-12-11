@@ -15,6 +15,7 @@ import 'package:flutter_hbb/common/formatter/id_formatter.dart';
 import 'package:flutter_hbb/desktop/widgets/refresh_wrapper.dart';
 import 'package:flutter_hbb/desktop/widgets/tabbar_widget.dart';
 import 'package:flutter_hbb/main.dart';
+import 'package:flutter_hbb/models/desktop_render_texture.dart';
 import 'package:flutter_hbb/models/peer_model.dart';
 import 'package:flutter_hbb/models/state_model.dart';
 import 'package:flutter_hbb/utils/multi_window_manager.dart';
@@ -51,6 +52,9 @@ int androidVersion = 0;
 /// only available for Windows target
 int windowsBuildNumber = 0;
 DesktopType? desktopType;
+
+bool get isMainDesktopWindow =>
+    desktopType == DesktopType.main || desktopType == DesktopType.cm;
 
 /// Check if the app is running with single view mode.
 bool isSingleViewApp() {
@@ -91,54 +95,89 @@ class IconFont {
   static const IconData roundClose = IconData(0xe6ed, fontFamily: _family2);
   static const IconData addressBook =
       IconData(0xe602, fontFamily: "AddressBook");
-  static const IconData checkbox = IconData(0xe7d6, fontFamily: "CheckBox");
 }
 
 class ColorThemeExtension extends ThemeExtension<ColorThemeExtension> {
   const ColorThemeExtension({
     required this.border,
     required this.border2,
+    required this.border3,
     required this.highlight,
     required this.drag_indicator,
     required this.shadow,
+    required this.errorBannerBg,
+    required this.me,
+    required this.toastBg,
+    required this.toastText,
+    required this.divider,
   });
 
   final Color? border;
   final Color? border2;
+  final Color? border3;
   final Color? highlight;
   final Color? drag_indicator;
   final Color? shadow;
+  final Color? errorBannerBg;
+  final Color? me;
+  final Color? toastBg;
+  final Color? toastText;
+  final Color? divider;
 
   static final light = ColorThemeExtension(
     border: Color(0xFFCCCCCC),
     border2: Color(0xFFBBBBBB),
+    border3: Colors.black26,
     highlight: Color(0xFFE5E5E5),
     drag_indicator: Colors.grey[800],
     shadow: Colors.black,
+    errorBannerBg: Color(0xFFFDEEEB),
+    me: Colors.green,
+    toastBg: Colors.black.withOpacity(0.6),
+    toastText: Colors.white,
+    divider: Colors.black38,
   );
 
   static final dark = ColorThemeExtension(
     border: Color(0xFF555555),
     border2: Color(0xFFE5E5E5),
+    border3: Colors.white24,
     highlight: Color(0xFF3F3F3F),
     drag_indicator: Colors.grey,
     shadow: Colors.grey,
+    errorBannerBg: Color(0xFF470F2D),
+    me: Colors.greenAccent,
+    toastBg: Colors.white.withOpacity(0.6),
+    toastText: Colors.black,
+    divider: Colors.white38,
   );
 
   @override
   ThemeExtension<ColorThemeExtension> copyWith({
     Color? border,
     Color? border2,
+    Color? border3,
     Color? highlight,
     Color? drag_indicator,
     Color? shadow,
+    Color? errorBannerBg,
+    Color? me,
+    Color? toastBg,
+    Color? toastText,
+    Color? divider,
   }) {
     return ColorThemeExtension(
       border: border ?? this.border,
       border2: border2 ?? this.border2,
+      border3: border3 ?? this.border3,
       highlight: highlight ?? this.highlight,
       drag_indicator: drag_indicator ?? this.drag_indicator,
       shadow: shadow ?? this.shadow,
+      errorBannerBg: errorBannerBg ?? this.errorBannerBg,
+      me: me ?? this.me,
+      toastBg: toastBg ?? this.toastBg,
+      toastText: toastText ?? this.toastText,
+      divider: divider ?? this.divider,
     );
   }
 
@@ -151,9 +190,15 @@ class ColorThemeExtension extends ThemeExtension<ColorThemeExtension> {
     return ColorThemeExtension(
       border: Color.lerp(border, other.border, t),
       border2: Color.lerp(border2, other.border2, t),
+      border3: Color.lerp(border3, other.border3, t),
       highlight: Color.lerp(highlight, other.highlight, t),
       drag_indicator: Color.lerp(drag_indicator, other.drag_indicator, t),
       shadow: Color.lerp(shadow, other.shadow, t),
+      errorBannerBg: Color.lerp(shadow, other.errorBannerBg, t),
+      me: Color.lerp(shadow, other.me, t),
+      toastBg: Color.lerp(shadow, other.toastBg, t),
+      toastText: Color.lerp(shadow, other.toastText, t),
+      divider: Color.lerp(shadow, other.divider, t),
     );
   }
 }
@@ -173,10 +218,6 @@ class MyTheme {
   static const Color dark = Colors.black87;
   static const Color button = Color(0xFF05AD93);
   static const Color hoverBorder = Color(0xFF999999);
-  static const Color bordDark = Colors.white24;
-  static const Color bordLight = Colors.black26;
-  static const Color dividerDark = Colors.white38;
-  static const Color dividerLight = Colors.black38;
 
   // ListTile
   static const ListTileThemeData listTileTheme = ListTileThemeData(
@@ -258,6 +299,32 @@ class MyTheme {
       ? EdgeInsets.only(left: dialogPadding)
       : EdgeInsets.only(left: dialogPadding / 3);
 
+  static ScrollbarThemeData scrollbarTheme = ScrollbarThemeData(
+    thickness: MaterialStateProperty.all(6),
+    thumbColor: MaterialStateProperty.resolveWith<Color?>((states) {
+      if (states.contains(MaterialState.dragged)) {
+        return Colors.grey[900];
+      } else if (states.contains(MaterialState.hovered)) {
+        return Colors.grey[700];
+      } else {
+        return Colors.grey[500];
+      }
+    }),
+    crossAxisMargin: 4,
+  );
+
+  static ScrollbarThemeData scrollbarThemeDark = scrollbarTheme.copyWith(
+    thumbColor: MaterialStateProperty.resolveWith<Color?>((states) {
+      if (states.contains(MaterialState.dragged)) {
+        return Colors.grey[100];
+      } else if (states.contains(MaterialState.hovered)) {
+        return Colors.grey[300];
+      } else {
+        return Colors.grey[500];
+      }
+    }),
+  );
+
   static ThemeData lightTheme = ThemeData(
     brightness: Brightness.light,
     hoverColor: Color.fromARGB(255, 224, 224, 224),
@@ -273,6 +340,7 @@ class MyTheme {
         ),
       ),
     ),
+    scrollbarTheme: scrollbarTheme,
     inputDecorationTheme: isDesktop
         ? InputDecorationTheme(
             fillColor: grayBg,
@@ -336,6 +404,13 @@ class MyTheme {
             MenuStyle(backgroundColor: MaterialStatePropertyAll(Colors.white))),
     colorScheme: ColorScheme.light(
         primary: Colors.blue, secondary: accent, background: grayBg),
+    popupMenuTheme: PopupMenuThemeData(
+        color: Colors.white,
+        shape: RoundedRectangleBorder(
+          side: BorderSide(
+              color: isDesktop ? Color(0xFFECECEC) : Colors.transparent),
+          borderRadius: BorderRadius.all(Radius.circular(8.0)),
+        )),
   ).copyWith(
     extensions: <ThemeExtension<dynamic>>[
       ColorThemeExtension.light,
@@ -357,6 +432,7 @@ class MyTheme {
         ),
       ),
     ),
+    scrollbarTheme: scrollbarThemeDark,
     inputDecorationTheme: isDesktop
         ? InputDecorationTheme(
             fillColor: Color(0xFF1B2B40),
@@ -382,9 +458,6 @@ class MyTheme {
     visualDensity: VisualDensity.adaptivePlatformDensity,
     tabBarTheme: const TabBarTheme(
       labelColor: Colors.white70,
-    ),
-    scrollbarTheme: ScrollbarThemeData(
-      thumbColor: MaterialStateProperty.all(Colors.grey[500]),
     ),
     tooltipTheme: tooltipTheme(),
     splashColor: isDesktop ? Colors.transparent : null,
@@ -436,6 +509,11 @@ class MyTheme {
       secondary: accent,
       background: Color(0xFF2A4363),
     ),
+    popupMenuTheme: PopupMenuThemeData(
+        shape: RoundedRectangleBorder(
+      side: BorderSide(color: Colors.white24),
+      borderRadius: BorderRadius.all(Radius.circular(8.0)),
+    )),
   ).copyWith(
     extensions: <ThemeExtension<dynamic>>[
       ColorThemeExtension.dark,
@@ -555,7 +633,7 @@ closeConnection({String? id}) {
   }
 }
 
-void windowOnTop(int? id) async {
+Future<void> windowOnTop(int? id) async {
   if (!isDesktop) {
     return;
   }
@@ -806,16 +884,16 @@ class OverlayDialogManager {
   }
 }
 
-void showToast(String text, {Duration timeout = const Duration(seconds: 2)}) {
+void showToast(String text, {Duration timeout = const Duration(seconds: 3)}) {
   final overlayState = globalKey.currentState?.overlay;
   if (overlayState == null) return;
-  final entry = OverlayEntry(builder: (_) {
+  final entry = OverlayEntry(builder: (context) {
     return IgnorePointer(
         child: Align(
             alignment: const Alignment(0.0, 0.8),
             child: Container(
               decoration: BoxDecoration(
-                color: Colors.black.withOpacity(0.6),
+                color: MyTheme.color(context).toastBg,
                 borderRadius: const BorderRadius.all(
                   Radius.circular(20),
                 ),
@@ -824,11 +902,11 @@ void showToast(String text, {Duration timeout = const Duration(seconds: 2)}) {
               child: Text(
                 text,
                 textAlign: TextAlign.center,
-                style: const TextStyle(
+                style: TextStyle(
                     decoration: TextDecoration.none,
                     fontWeight: FontWeight.w300,
                     fontSize: 18,
-                    color: Colors.white),
+                    color: MyTheme.color(context).toastText),
               ),
             )));
   });
@@ -916,7 +994,7 @@ class CustomAlertDialog extends StatelessWidget {
 
 void msgBox(SessionID sessionId, String type, String title, String text,
     String link, OverlayDialogManager dialogManager,
-    {bool? hasCancel, ReconnectHandle? reconnect}) {
+    {bool? hasCancel, ReconnectHandle? reconnect, int? reconnectTimeout}) {
   dialogManager.dismissAll();
   List<Widget> buttons = [];
   bool hasOk = false;
@@ -956,12 +1034,22 @@ void msgBox(SessionID sessionId, String type, String title, String text,
           dialogManager.dismissAll();
         }));
   }
-  if (reconnect != null && title == "Connection Error") {
-    buttons.insert(
-        0,
-        dialogButton('Reconnect', isOutline: true, onPressed: () {
-          reconnect(dialogManager, sessionId, false);
-        }));
+  if (reconnect != null &&
+      title == "Connection Error" &&
+      reconnectTimeout != null) {
+    // `enabled` is used to disable the dialog button once the button is clicked.
+    final enabled = true.obs;
+    final button = Obx(() => _ReconnectCountDownButton(
+          second: reconnectTimeout,
+          onPressed: enabled.isTrue
+              ? () {
+                  // Disable the button
+                  enabled.value = false;
+                  reconnect(dialogManager, sessionId, false);
+                }
+              : null,
+        ));
+    buttons.insert(0, button);
   }
   if (link.isNotEmpty) {
     buttons.insert(0, dialogButton('JumpLink', onPressed: jumplink));
@@ -1005,7 +1093,7 @@ Widget msgboxIcon(String type) {
   if (type == 'on-uac' || type == 'on-foreground-elevated') {
     iconData = Icons.admin_panel_settings;
   }
-  if (type == "info") {
+  if (type.contains('info')) {
     iconData = Icons.info;
   }
   if (iconData != null) {
@@ -1441,8 +1529,8 @@ Future<void> saveWindowPosition(WindowType type, {int? windowId}) async {
   late Offset position;
   late Size sz;
   late bool isMaximized;
-  bool isFullscreen = stateGlobal.fullscreen ||
-      (Platform.isMacOS && stateGlobal.closeOnFullscreen);
+  bool isFullscreen = stateGlobal.fullscreen.isTrue ||
+      (Platform.isMacOS && stateGlobal.closeOnFullscreen == true);
   setFrameIfMaximized() {
     if (isMaximized) {
       final pos = bind.getLocalFlutterOption(k: kWindowPrefix + type.name);
@@ -1620,8 +1708,10 @@ Future<Offset?> _adjustRestoreMainWindowOffset(
 
 /// Restore window position and size on start
 /// Note that windowId must be provided if it's subwindow
+//
+// display is used to set the offset of the window in individual display mode.
 Future<bool> restoreWindowPosition(WindowType type,
-    {int? windowId, String? peerId}) async {
+    {int? windowId, String? peerId, int? display}) async {
   if (bind
       .mainGetEnv(key: "DISABLE_RUSTDESK_RESTORE_WINDOW_POSITION")
       .isNotEmpty) {
@@ -1657,14 +1747,22 @@ Future<bool> restoreWindowPosition(WindowType type,
     debugPrint("no window position saved, ignoring position restoration");
     return false;
   }
-  if (type == WindowType.RemoteDesktop &&
-      !isRemotePeerPos &&
-      windowId != null) {
-    if (lpos.offsetWidth != null) {
-      lpos.offsetWidth = lpos.offsetWidth! + windowId * 20;
+  if (type == WindowType.RemoteDesktop) {
+    if (!isRemotePeerPos && windowId != null) {
+      if (lpos.offsetWidth != null) {
+        lpos.offsetWidth = lpos.offsetWidth! + windowId * kNewWindowOffset;
+      }
+      if (lpos.offsetHeight != null) {
+        lpos.offsetHeight = lpos.offsetHeight! + windowId * kNewWindowOffset;
+      }
     }
-    if (lpos.offsetHeight != null) {
-      lpos.offsetHeight = lpos.offsetHeight! + windowId * 20;
+    if (display != null) {
+      if (lpos.offsetWidth != null) {
+        lpos.offsetWidth = lpos.offsetWidth! + display * kNewWindowOffset;
+      }
+      if (lpos.offsetHeight != null) {
+        lpos.offsetHeight = lpos.offsetHeight! + display * kNewWindowOffset;
+      }
     }
   }
 
@@ -1785,10 +1883,10 @@ enum UriLinkType {
 // uri link handler
 bool handleUriLink({List<String>? cmdArgs, Uri? uri, String? uriString}) {
   List<String>? args;
-  if (cmdArgs != null) {
+  if (cmdArgs != null && cmdArgs.isNotEmpty) {
     args = cmdArgs;
     // rustdesk <uri link>
-    if (args.isNotEmpty && args[0].startsWith(kUniLinksPrefix)) {
+    if (args[0].startsWith(kUniLinksPrefix)) {
       final uri = Uri.tryParse(args[0]);
       if (uri != null) {
         args = urlLinkToCmdArgs(uri);
@@ -1893,6 +1991,7 @@ bool handleUriLink({List<String>? cmdArgs, Uri? uri, String? uriString}) {
 List<String>? urlLinkToCmdArgs(Uri uri) {
   String? command;
   String? id;
+  final options = ["connect", "play", "file-transfer", "port-forward", "rdp"];
   if (uri.authority.isEmpty &&
       uri.path.split('').every((char) => char == '/')) {
     return [];
@@ -1900,16 +1999,65 @@ List<String>? urlLinkToCmdArgs(Uri uri) {
     // For compatibility
     command = '--connect';
     id = uri.path.substring("/new/".length);
-  } else if (['connect', "play", 'file-transfer', 'port-forward', 'rdp']
-      .contains(uri.authority)) {
+  } else if (uri.authority == "config") {
+    if (Platform.isAndroid || Platform.isIOS) {
+      final config = uri.path.substring("/".length);
+      // add a timer to make showToast work
+      Timer(Duration(seconds: 1), () {
+        importConfig(null, null, config);
+      });
+    }
+    return null;
+  } else if (uri.authority == "password") {
+    if (Platform.isAndroid || Platform.isIOS) {
+      final password = uri.path.substring("/".length);
+      if (password.isNotEmpty) {
+        Timer(Duration(seconds: 1), () async {
+          await bind.mainSetPermanentPassword(password: password);
+          showToast(translate('Successful'));
+        });
+      }
+    }
+  } else if (options.contains(uri.authority)) {
+    final optionIndex = options.indexOf(uri.authority);
     command = '--${uri.authority}';
     if (uri.path.length > 1) {
       id = uri.path.substring(1);
     }
-  } else if (uri.authority.length > 2 && uri.path.length <= 1) {
+    if (isMobile && id != null) {
+      if (optionIndex == 0 || optionIndex == 1) {
+        connect(Get.context!, id);
+      } else if (optionIndex == 2) {
+        connect(Get.context!, id, isFileTransfer: true);
+      }
+      return null;
+    }
+  } else if (uri.authority.length > 2 &&
+      (uri.path.length <= 1 ||
+          (uri.path == '/r' || uri.path.startsWith('/r@')))) {
     // rustdesk://<connect-id>
+    // rustdesk://<connect-id>/r
+    // rustdesk://<connect-id>/r@<server>
     command = '--connect';
     id = uri.authority;
+    if (uri.path.length > 1) {
+      id = id + uri.path;
+    }
+  }
+
+  var key = uri.queryParameters["key"];
+  if (id != null) {
+    if (key != null) {
+      id = "$id?key=$key";
+    }
+  }
+
+  if (isMobile) {
+    if (id != null) {
+      final forceRelay = uri.queryParameters["relay"] != null;
+      connect(Get.context!, id, forceRelay: forceRelay);
+      return null;
+    }
   }
 
   List<String> args = List.empty(growable: true);
@@ -1954,6 +2102,7 @@ connect(
   bool isFileTransfer = false,
   bool isTcpTunneling = false,
   bool isRDP = false,
+  bool forceRelay = false,
 }) async {
   if (id == '') return;
   if (!isDesktop || desktopType == DesktopType.main) {
@@ -1962,12 +2111,16 @@ connect(
         final idController = Get.find<IDTextEditingController>();
         idController.text = formatID(id);
       }
+      if (Get.isRegistered<TextEditingController>()) {
+        final fieldTextEditingController = Get.find<TextEditingController>();
+        fieldTextEditingController.text = formatID(id);
+      }
     } catch (_) {}
   }
   id = id.replaceAll(' ', '');
   final oldId = id;
   id = await bind.mainHandleRelayId(id: id);
-  final forceRelay = id != oldId;
+  final forceRelay2 = id != oldId || forceRelay;
   assert(!(isFileTransfer && isTcpTunneling && isRDP),
       "more than one connect type");
 
@@ -1978,7 +2131,7 @@ connect(
         isFileTransfer: isFileTransfer,
         isTcpTunneling: isTcpTunneling,
         isRDP: isRDP,
-        forceRelay: forceRelay,
+        forceRelay: forceRelay2,
       );
     } else {
       await rustDeskWinManager.call(WindowType.Main, kWindowConnect, {
@@ -2268,7 +2421,7 @@ Widget dialogButton(String text,
   }
 }
 
-int version_cmp(String v1, String v2) {
+int versionCmp(String v1, String v2) {
   return bind.versionToNumber(v: v1) - bind.versionToNumber(v: v2);
 }
 
@@ -2289,7 +2442,7 @@ String getWindowName({WindowType? overrideType}) {
 }
 
 String getWindowNameWithId(String id, {WindowType? overrideType}) {
-  return "${DesktopTab.labelGetterAlias(id).value} - ${getWindowName(overrideType: overrideType)}";
+  return "${DesktopTab.tablabelGetter(id).value} - ${getWindowName(overrideType: overrideType)}";
 }
 
 Future<void> updateSystemWindowTheme() async {
@@ -2465,4 +2618,364 @@ String toCapitalized(String s) {
     return s;
   }
   return s.substring(0, 1).toUpperCase() + s.substring(1);
+}
+
+Widget buildErrorBanner(BuildContext context,
+    {required RxBool loading,
+    required RxString err,
+    required Function? retry,
+    required Function close}) {
+  const double height = 25;
+  return Obx(() => Offstage(
+        offstage: !(!loading.value && err.value.isNotEmpty),
+        child: Center(
+            child: Container(
+          height: height,
+          color: MyTheme.color(context).errorBannerBg,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              FittedBox(
+                child: Icon(
+                  Icons.info,
+                  color: Color.fromARGB(255, 249, 81, 81),
+                ),
+              ).marginAll(4),
+              Flexible(
+                child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: Tooltip(
+                      message: translate(err.value),
+                      child: Text(
+                        translate(err.value),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    )).marginSymmetric(vertical: 2),
+              ),
+              if (retry != null)
+                InkWell(
+                    onTap: () {
+                      retry.call();
+                    },
+                    child: Text(
+                      translate("Retry"),
+                      style: TextStyle(color: MyTheme.accent),
+                    )).marginSymmetric(horizontal: 5),
+              FittedBox(
+                child: InkWell(
+                  onTap: () {
+                    close.call();
+                  },
+                  child: Icon(Icons.close).marginSymmetric(horizontal: 5),
+                ),
+              ).marginAll(4)
+            ],
+          ),
+        )).marginOnly(bottom: 14),
+      ));
+}
+
+String getDesktopTabLabel(String peerId, String alias) {
+  String label = alias.isEmpty ? peerId : alias;
+  try {
+    String peer = bind.mainGetPeerSync(id: peerId);
+    Map<String, dynamic> config = jsonDecode(peer);
+    if (config['info']['hostname'] is String) {
+      String hostname = config['info']['hostname'];
+      if (hostname.isNotEmpty &&
+          !label.toLowerCase().contains(hostname.toLowerCase())) {
+        label += "@$hostname";
+      }
+    }
+  } catch (e) {
+    debugPrint("Failed to get hostname:$e");
+  }
+  return label;
+}
+
+sessionRefreshVideo(SessionID sessionId, PeerInfo pi) async {
+  if (pi.currentDisplay == kAllDisplayValue) {
+    for (int i = 0; i < pi.displays.length; i++) {
+      await bind.sessionRefresh(sessionId: sessionId, display: i);
+    }
+  } else {
+    await bind.sessionRefresh(sessionId: sessionId, display: pi.currentDisplay);
+  }
+}
+
+bool isChooseDisplayToOpenInNewWindow(PeerInfo pi, SessionID sessionId) =>
+    pi.isSupportMultiDisplay &&
+    useTextureRender &&
+    bind.sessionGetDisplaysAsIndividualWindows(sessionId: sessionId) == 'Y';
+
+Future<List<Rect>> getScreenListWayland() async {
+  final screenRectList = <Rect>[];
+  if (isMainDesktopWindow) {
+    for (var screen in await window_size.getScreenList()) {
+      final scale = kIgnoreDpi ? 1.0 : screen.scaleFactor;
+      double l = screen.frame.left;
+      double t = screen.frame.top;
+      double r = screen.frame.right;
+      double b = screen.frame.bottom;
+      final rect = Rect.fromLTRB(l / scale, t / scale, r / scale, b / scale);
+      screenRectList.add(rect);
+    }
+  } else {
+    final screenList = await rustDeskWinManager.call(
+        WindowType.Main, kWindowGetScreenList, '');
+    try {
+      for (var screen in jsonDecode(screenList.result) as List<dynamic>) {
+        final scale = kIgnoreDpi ? 1.0 : screen['scaleFactor'];
+        double l = screen['frame']['l'];
+        double t = screen['frame']['t'];
+        double r = screen['frame']['r'];
+        double b = screen['frame']['b'];
+        final rect = Rect.fromLTRB(l / scale, t / scale, r / scale, b / scale);
+        screenRectList.add(rect);
+      }
+    } catch (e) {
+      debugPrint('Failed to parse screenList: $e');
+    }
+  }
+  return screenRectList;
+}
+
+Future<List<Rect>> getScreenListNotWayland() async {
+  final screenRectList = <Rect>[];
+  final displays = bind.mainGetDisplays();
+  if (displays.isEmpty) {
+    return screenRectList;
+  }
+  try {
+    for (var display in jsonDecode(displays) as List<dynamic>) {
+      // to-do: scale factor ?
+      // final scale = kIgnoreDpi ? 1.0 : screen.scaleFactor;
+      double l = display['x'].toDouble();
+      double t = display['y'].toDouble();
+      double r = (display['x'] + display['w']).toDouble();
+      double b = (display['y'] + display['h']).toDouble();
+      screenRectList.add(Rect.fromLTRB(l, t, r, b));
+    }
+  } catch (e) {
+    debugPrint('Failed to parse displays: $e');
+  }
+  return screenRectList;
+}
+
+Future<List<Rect>> getScreenRectList() async {
+  return bind.mainCurrentIsWayland()
+      ? await getScreenListWayland()
+      : await getScreenListNotWayland();
+}
+
+openMonitorInTheSameTab(int i, FFI ffi, PeerInfo pi,
+    {bool updateCursorPos = true}) {
+  final displays = i == kAllDisplayValue
+      ? List.generate(pi.displays.length, (index) => index)
+      : [i];
+  bind.sessionSwitchDisplay(
+    isDesktop: isDesktop,
+    sessionId: ffi.sessionId,
+    value: Int32List.fromList(displays),
+  );
+  ffi.ffiModel.switchToNewDisplay(i, ffi.sessionId, ffi.id,
+      updateCursorPos: updateCursorPos);
+}
+
+// Open new tab or window to show this monitor.
+// For now just open new window.
+//
+// screenRect is used to move the new window to the specified screen and set fullscreen.
+openMonitorInNewTabOrWindow(int i, String peerId, PeerInfo pi,
+    {Rect? screenRect}) {
+  final args = {
+    'window_id': stateGlobal.windowId,
+    'peer_id': peerId,
+    'display': i,
+    'display_count': pi.displays.length,
+  };
+  if (screenRect != null) {
+    args['screen_rect'] = {
+      'l': screenRect.left,
+      't': screenRect.top,
+      'r': screenRect.right,
+      'b': screenRect.bottom,
+    };
+  }
+  DesktopMultiWindow.invokeMethod(
+      kMainWindowId, kWindowEventOpenMonitorSession, jsonEncode(args));
+}
+
+tryMoveToScreenAndSetFullscreen(Rect? screenRect) async {
+  if (screenRect == null) {
+    return;
+  }
+  final wc = WindowController.fromWindowId(stateGlobal.windowId);
+  final curFrame = await wc.getFrame();
+  final frame =
+      Rect.fromLTWH(screenRect.left + 30, screenRect.top + 30, 600, 400);
+  if (stateGlobal.fullscreen.isTrue &&
+      curFrame.left <= frame.left &&
+      curFrame.top <= frame.top &&
+      curFrame.width >= frame.width &&
+      curFrame.height >= frame.height) {
+    return;
+  }
+  await wc.setFrame(frame);
+  // An duration is needed to avoid the window being restored after fullscreen.
+  Future.delayed(Duration(milliseconds: 300), () async {
+    stateGlobal.setFullscreen(true);
+  });
+}
+
+parseParamScreenRect(Map<String, dynamic> params) {
+  Rect? screenRect;
+  if (params['screen_rect'] != null) {
+    double l = params['screen_rect']['l'];
+    double t = params['screen_rect']['t'];
+    double r = params['screen_rect']['r'];
+    double b = params['screen_rect']['b'];
+    screenRect = Rect.fromLTRB(l, t, r, b);
+  }
+  return screenRect;
+}
+
+get isInputSourceFlutter => stateGlobal.getInputSource() == "Input source 2";
+
+class _ReconnectCountDownButton extends StatefulWidget {
+  _ReconnectCountDownButton({
+    Key? key,
+    required this.second,
+    required this.onPressed,
+  }) : super(key: key);
+  final VoidCallback? onPressed;
+  final int second;
+
+  @override
+  State<_ReconnectCountDownButton> createState() =>
+      _ReconnectCountDownButtonState();
+}
+
+class _ReconnectCountDownButtonState extends State<_ReconnectCountDownButton> {
+  late int _countdownSeconds = widget.second;
+
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _startCountdownTimer();
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  void _startCountdownTimer() {
+    _timer = Timer.periodic(Duration(seconds: 1), (timer) {
+      if (_countdownSeconds <= 0) {
+        timer.cancel();
+      } else {
+        setState(() {
+          _countdownSeconds--;
+        });
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return dialogButton(
+      '${translate('Reconnect')} (${_countdownSeconds}s)',
+      onPressed: widget.onPressed,
+      isOutline: true,
+    );
+  }
+}
+
+importConfig(List<TextEditingController>? controllers, List<RxString>? errMsgs,
+    String? text) {
+  if (text != null && text.isNotEmpty) {
+    try {
+      final sc = ServerConfig.decode(text);
+      if (sc.idServer.isNotEmpty) {
+        Future<bool> success = setServerConfig(controllers, errMsgs, sc);
+        success.then((value) {
+          if (value) {
+            showToast(translate('Import server configuration successfully'));
+          } else {
+            showToast(translate('Invalid server configuration'));
+          }
+        });
+      } else {
+        showToast(translate('Invalid server configuration'));
+      }
+      return sc;
+    } catch (e) {
+      showToast(translate('Invalid server configuration'));
+    }
+  } else {
+    showToast(translate('Clipboard is empty'));
+  }
+}
+
+Future<bool> setServerConfig(
+  List<TextEditingController>? controllers,
+  List<RxString>? errMsgs,
+  ServerConfig config,
+) async {
+  config.idServer = config.idServer.trim();
+  config.relayServer = config.relayServer.trim();
+  config.apiServer = config.apiServer.trim();
+  config.key = config.key.trim();
+  if (controllers != null) {
+    controllers[0].text = config.idServer;
+    controllers[1].text = config.relayServer;
+    controllers[2].text = config.apiServer;
+    controllers[3].text = config.key;
+  }
+  // id
+  if (config.idServer.isNotEmpty && errMsgs != null) {
+    errMsgs[0].value =
+        translate(await bind.mainTestIfValidServer(server: config.idServer));
+    if (errMsgs[0].isNotEmpty) {
+      return false;
+    }
+  }
+  // relay
+  if (config.relayServer.isNotEmpty && errMsgs != null) {
+    errMsgs[1].value =
+        translate(await bind.mainTestIfValidServer(server: config.relayServer));
+    if (errMsgs[1].isNotEmpty) {
+      return false;
+    }
+  }
+  // api
+  if (config.apiServer.isNotEmpty && errMsgs != null) {
+    if (!config.apiServer.startsWith('http://') &&
+        !config.apiServer.startsWith('https://')) {
+      errMsgs[2].value =
+          '${translate("API Server")}: ${translate("invalid_http")}';
+      return false;
+    }
+  }
+  final oldApiServer = await bind.mainGetApiServer();
+
+  // should set one by one
+  await bind.mainSetOption(
+      key: 'custom-rendezvous-server', value: config.idServer);
+  await bind.mainSetOption(key: 'relay-server', value: config.relayServer);
+  await bind.mainSetOption(key: 'api-server', value: config.apiServer);
+  await bind.mainSetOption(key: 'key', value: config.key);
+
+  final newApiServer = await bind.mainGetApiServer();
+  if (oldApiServer.isNotEmpty &&
+      oldApiServer != newApiServer &&
+      gFFI.userModel.isLogin) {
+    gFFI.userModel.logOut(apiServer: oldApiServer);
+  }
+  return true;
 }

@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/desktop/widgets/tabbar_widget.dart';
 import 'package:flutter_hbb/models/chat_model.dart';
+import 'package:flutter_hbb/models/cm_file_model.dart';
 import 'package:flutter_hbb/utils/platform_channel.dart';
 import 'package:get/get.dart';
 import 'package:percent_indicator/linear_percent_indicator.dart';
@@ -175,34 +176,47 @@ class ConnectionManagerState extends State<ConnectionManager> {
                   ],
                 );
               },
-              pageViewBuilder: (pageView) => Row(
-                children: [
-                  Consumer<ChatModel>(
-                    builder: (_, model, child) => model.isShowCMSidePage
-                        ? Expanded(
-                            child: buildRemoteBlock(
-                              child: Container(
-                                  decoration: BoxDecoration(
-                                      border: Border(
-                                          right: BorderSide(
-                                              color: Theme.of(context)
-                                                  .dividerColor))),
-                                  child: buildSidePage()),
-                            ),
-                            flex: (kConnectionManagerWindowSizeOpenChat.width -
-                                    kConnectionManagerWindowSizeClosedChat
-                                        .width)
-                                .toInt(),
-                          )
-                        : Offstage(),
-                  ),
-                  Expanded(
-                      child: pageView,
-                      flex: kConnectionManagerWindowSizeClosedChat.width
-                              .toInt() -
-                          4 // prevent stretch of the page view when chat is open,
-                      ),
-                ],
+              pageViewBuilder: (pageView) => LayoutBuilder(
+                builder: (context, constrains) {
+                  var borderWidth = 0.0;
+                  if (constrains.maxWidth >
+                      kConnectionManagerWindowSizeClosedChat.width) {
+                    borderWidth = kConnectionManagerWindowSizeOpenChat.width -
+                        constrains.maxWidth;
+                  } else {
+                    borderWidth = kConnectionManagerWindowSizeClosedChat.width -
+                        constrains.maxWidth;
+                  }
+                  if (borderWidth < 0 || borderWidth > 50) {
+                    borderWidth = 0;
+                  }
+                  final realClosedWidth =
+                      kConnectionManagerWindowSizeClosedChat.width -
+                          borderWidth;
+                  final realChatPageWidth =
+                      constrains.maxWidth - realClosedWidth;
+                  return Row(children: [
+                    if (constrains.maxWidth >
+                        kConnectionManagerWindowSizeClosedChat.width)
+                      Consumer<ChatModel>(
+                          builder: (_, model, child) => SizedBox(
+                                width: realChatPageWidth,
+                                child: buildRemoteBlock(
+                                  child: Container(
+                                      decoration: BoxDecoration(
+                                          border: Border(
+                                              right: BorderSide(
+                                                  color: Theme.of(context)
+                                                      .dividerColor))),
+                                      child: buildSidePage()),
+                                ),
+                              )),
+                    SizedBox(
+                        width: realClosedWidth,
+                        child:
+                            SizedBox(width: realClosedWidth, child: pageView)),
+                  ]);
+                },
               ),
             ),
           );
@@ -469,8 +483,8 @@ class _CmHeaderState extends State<_CmHeader>
                     client.type_() != ClientType.file),
             child: IconButton(
               onPressed: () => checkClickTime(client.id, () {
-                if (client.type_() != ClientType.file) {
-                  gFFI.chatModel.toggleCMSidePage();
+                if (client.type_() == ClientType.file) {
+                  gFFI.chatModel.toggleCMFilePage();
                 } else {
                   gFFI.chatModel
                       .toggleCMChatPage(MessageKey(client.peerId, client.id));
@@ -506,6 +520,7 @@ class _PrivilegeBoardState extends State<_PrivilegeBoard> {
       Function(bool)? onTap, String tooltipText) {
     return Tooltip(
       message: "$tooltipText: ${enabled ? "ON" : "OFF"}",
+      waitDuration: Duration.zero,
       child: Container(
         decoration: BoxDecoration(
           color: enabled ? MyTheme.accent : Colors.grey[700],
@@ -522,7 +537,6 @@ class _PrivilegeBoardState extends State<_PrivilegeBoard> {
                 child: Icon(
                   iconData,
                   color: Colors.white,
-                  size: 32,
                 ),
               ),
             ],
@@ -534,9 +548,11 @@ class _PrivilegeBoardState extends State<_PrivilegeBoard> {
 
   @override
   Widget build(BuildContext context) {
+    final crossAxisCount = 4;
+    final spacing = 10.0;
     return Container(
       width: double.infinity,
-      height: 200.0,
+      height: 160.0,
       margin: EdgeInsets.all(5.0),
       padding: EdgeInsets.all(5.0),
       decoration: BoxDecoration(
@@ -561,10 +577,10 @@ class _PrivilegeBoardState extends State<_PrivilegeBoard> {
           ).marginOnly(left: 4.0, bottom: 8.0),
           Expanded(
             child: GridView.count(
-              crossAxisCount: 3,
-              padding: EdgeInsets.symmetric(horizontal: 20.0),
-              mainAxisSpacing: 20.0,
-              crossAxisSpacing: 20.0,
+              crossAxisCount: crossAxisCount,
+              padding: EdgeInsets.symmetric(horizontal: spacing),
+              mainAxisSpacing: spacing,
+              crossAxisSpacing: spacing,
               children: [
                 buildPermissionIcon(
                   client.keyboard,
@@ -576,7 +592,7 @@ class _PrivilegeBoardState extends State<_PrivilegeBoard> {
                       client.keyboard = enabled;
                     });
                   },
-                  translate('Allow using keyboard and mouse'),
+                  translate('Enable keyboard/mouse'),
                 ),
                 buildPermissionIcon(
                   client.clipboard,
@@ -588,7 +604,7 @@ class _PrivilegeBoardState extends State<_PrivilegeBoard> {
                       client.clipboard = enabled;
                     });
                   },
-                  translate('Allow using clipboard'),
+                  translate('Enable clipboard'),
                 ),
                 buildPermissionIcon(
                   client.audio,
@@ -600,7 +616,7 @@ class _PrivilegeBoardState extends State<_PrivilegeBoard> {
                       client.audio = enabled;
                     });
                   },
-                  translate('Allow hearing sound'),
+                  translate('Enable audio'),
                 ),
                 buildPermissionIcon(
                   client.file,
@@ -612,7 +628,7 @@ class _PrivilegeBoardState extends State<_PrivilegeBoard> {
                       client.file = enabled;
                     });
                   },
-                  translate('Allow file copy and paste'),
+                  translate('Enable file copy and paste'),
                 ),
                 buildPermissionIcon(
                   client.restart,
@@ -624,7 +640,7 @@ class _PrivilegeBoardState extends State<_PrivilegeBoard> {
                       client.restart = enabled;
                     });
                   },
-                  translate('Allow remote restart'),
+                  translate('Enable remote restart'),
                 ),
                 buildPermissionIcon(
                   client.recording,
@@ -636,8 +652,24 @@ class _PrivilegeBoardState extends State<_PrivilegeBoard> {
                       client.recording = enabled;
                     });
                   },
-                  translate('Allow recording session'),
-                )
+                  translate('Enable recording session'),
+                ),
+                // only windows support block input
+                if (Platform.isWindows)
+                  buildPermissionIcon(
+                    client.blockInput,
+                    Icons.block,
+                    (enabled) {
+                      bind.cmSwitchPermission(
+                          connId: client.id,
+                          name: "block_input",
+                          enabled: enabled);
+                      setState(() {
+                        client.blockInput = enabled;
+                      });
+                    },
+                    translate('Enable blocking user input'),
+                  )
               ],
             ),
           ),
@@ -962,16 +994,58 @@ class __FileTransferLogPageState extends State<_FileTransferLogPage> {
     );
   }
 
+  iconLabel(CmFileLog item) {
+    switch (item.action) {
+      case CmFileAction.none:
+        return Container();
+      case CmFileAction.localToRemote:
+      case CmFileAction.remoteToLocal:
+        return Column(
+          children: [
+            Transform.rotate(
+              angle: item.action == CmFileAction.remoteToLocal ? 0 : pi,
+              child: SvgPicture.asset(
+                "assets/arrow.svg",
+                color: Theme.of(context).tabBarTheme.labelColor,
+              ),
+            ),
+            Text(item.action == CmFileAction.remoteToLocal
+                ? translate('Send')
+                : translate('Receive'))
+          ],
+        );
+      case CmFileAction.remove:
+        return Column(
+          children: [
+            Icon(
+              Icons.delete,
+              color: Theme.of(context).tabBarTheme.labelColor,
+            ),
+            Text(translate('Delete'))
+          ],
+        );
+      case CmFileAction.createDir:
+        return Column(
+          children: [
+            Icon(
+              Icons.create_new_folder,
+              color: Theme.of(context).tabBarTheme.labelColor,
+            ),
+            Text(translate('Create Folder'))
+          ],
+        );
+    }
+  }
+
   Widget statusList() {
     return PreferredSize(
       preferredSize: const Size(200, double.infinity),
       child: Container(
-          margin: const EdgeInsets.only(top: 16.0, bottom: 16.0, right: 16.0),
-          padding: const EdgeInsets.all(8.0),
+          padding: const EdgeInsets.all(12.0),
           child: Obx(
             () {
               final jobTable = gFFI.cmFileModel.currentJobTable;
-              statusListView(List<JobProgress> jobs) => ListView.builder(
+              statusListView(List<CmFileLog> jobs) => ListView.builder(
                     controller: ScrollController(),
                     itemBuilder: (BuildContext context, int index) {
                       final item = jobs[index];
@@ -986,22 +1060,7 @@ class __FileTransferLogPageState extends State<_FileTransferLogPage> {
                                 children: [
                                   SizedBox(
                                     width: 50,
-                                    child: Column(
-                                      children: [
-                                        Transform.rotate(
-                                          angle: item.isRemoteToLocal ? 0 : pi,
-                                          child: SvgPicture.asset(
-                                            "assets/arrow.svg",
-                                            color: Theme.of(context)
-                                                .tabBarTheme
-                                                .labelColor,
-                                          ),
-                                        ),
-                                        Text(item.isRemoteToLocal
-                                            ? translate('Send')
-                                            : translate('Receive'))
-                                      ],
-                                    ),
+                                    child: iconLabel(item),
                                   ).paddingOnly(left: 15),
                                   const SizedBox(
                                     width: 16.0,
@@ -1036,8 +1095,9 @@ class __FileTransferLogPageState extends State<_FileTransferLogPage> {
                                             ),
                                           ),
                                         Offstage(
-                                          offstage:
-                                              item.state == JobState.inProgress,
+                                          offstage: !(item.isTransfer() &&
+                                              item.state !=
+                                                  JobState.inProgress),
                                           child: Text(
                                             translate(
                                               item.display(),

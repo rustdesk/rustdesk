@@ -8,7 +8,7 @@ import 'package:flutter_custom_cursor/cursor_manager.dart'
     as custom_cursor_manager;
 import 'package:get/get.dart';
 import 'package:provider/provider.dart';
-import 'package:wakelock/wakelock.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:flutter_custom_cursor/flutter_custom_cursor.dart';
 import 'package:flutter_improved_scrolling/flutter_improved_scrolling.dart';
 
@@ -17,6 +17,7 @@ import '../../common/widgets/overlay.dart';
 import '../../common/widgets/remote_input.dart';
 import '../../common.dart';
 import '../../common/widgets/dialog.dart';
+import '../../common/widgets/toolbar.dart';
 import '../../models/model.dart';
 import '../../models/desktop_render_texture.dart';
 import '../../models/platform_model.dart';
@@ -28,6 +29,7 @@ import '../widgets/tabbar_widget.dart';
 
 final SimpleWrapper<bool> _firstEnterImage = SimpleWrapper(false);
 
+// Used to skip session close if "move to new window" is clicked.
 final Map<String, bool> closeSessionOnDispose = {};
 
 class RemotePage extends StatefulWidget {
@@ -36,6 +38,8 @@ class RemotePage extends StatefulWidget {
     required this.id,
     required this.sessionId,
     required this.tabWindowId,
+    required this.display,
+    required this.displays,
     required this.password,
     required this.toolbarState,
     required this.tabController,
@@ -46,6 +50,8 @@ class RemotePage extends StatefulWidget {
   final String id;
   final SessionID? sessionId;
   final int? tabWindowId;
+  final int? display;
+  final List<int>? displays;
   final String? password;
   final ToolbarState toolbarState;
   final String? switchUuid;
@@ -73,9 +79,9 @@ class _RemotePageState extends State<RemotePage>
   late RxBool _zoomCursor;
   late RxBool _remoteCursorMoved;
   late RxBool _keyboardEnabled;
-  late RenderTexture _renderTexture;
+  final Map<int, RenderTexture> _renderTextures = {};
 
-  final _blockableOverlayState = BlockableOverlayState();
+  var _blockableOverlayState = BlockableOverlayState();
 
   final FocusNode _rawKeyFocusNode = FocusNode(debugLabel: "rawkeyFocusNode");
 
@@ -109,6 +115,8 @@ class _RemotePageState extends State<RemotePage>
       switchUuid: widget.switchUuid,
       forceRelay: widget.forceRelay,
       tabWindowId: widget.tabWindowId,
+      display: widget.display,
+      displays: widget.displays,
     );
     WidgetsBinding.instance.addPostFrameCallback((_) {
       SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual, overlays: []);
@@ -116,11 +124,8 @@ class _RemotePageState extends State<RemotePage>
           .showLoading(translate('Connecting...'), onCancel: closeConnection);
     });
     if (!Platform.isLinux) {
-      Wakelock.enable();
+      WakelockPlus.enable();
     }
-    // Register texture.
-    _renderTexture = RenderTexture();
-    _renderTexture.create(sessionId);
 
     _ffi.ffiModel.updateEventListener(sessionId, widget.id);
     bind.pluginSyncUi(syncTo: kAppTypeDesktopRemote);
@@ -179,7 +184,7 @@ class _RemotePageState extends State<RemotePage>
       _isWindowBlur = false;
     }
     if (!Platform.isLinux) {
-      Wakelock.enable();
+      WakelockPlus.enable();
     }
   }
 
@@ -188,7 +193,7 @@ class _RemotePageState extends State<RemotePage>
   void onWindowMaximize() {
     super.onWindowMaximize();
     if (!Platform.isLinux) {
-      Wakelock.enable();
+      WakelockPlus.enable();
     }
   }
 
@@ -196,7 +201,7 @@ class _RemotePageState extends State<RemotePage>
   void onWindowMinimize() {
     super.onWindowMinimize();
     if (!Platform.isLinux) {
-      Wakelock.disable();
+      WakelockPlus.disable();
     }
   }
 
@@ -207,9 +212,11 @@ class _RemotePageState extends State<RemotePage>
     // https://github.com/flutter/flutter/issues/64935
     super.dispose();
     debugPrint("REMOTE PAGE dispose session $sessionId ${widget.id}");
-    await _renderTexture.destroy(closeSession);
+    for (final texture in _renderTextures.values) {
+      await texture.destroy(closeSession);
+    }
     // ensure we leave this session, this is a double check
-    bind.sessionEnterOrLeave(sessionId: sessionId, enter: false);
+    _ffi.inputModel.enterOrLeave(false);
     DesktopMultiWindow.removeListener(this);
     _ffi.dialogManager.hideMobileActionsOverlay();
     _ffi.recordingModel.onClose();
@@ -222,7 +229,7 @@ class _RemotePageState extends State<RemotePage>
           overlays: SystemUiOverlay.values);
     }
     if (!Platform.isLinux) {
-      await Wakelock.disable();
+      await WakelockPlus.disable();
     }
     await Get.delete<FFI>(tag: widget.id);
     removeSharedStates(widget.id);
@@ -245,10 +252,11 @@ class _RemotePageState extends State<RemotePage>
           onEnterOrLeaveImageSetter: (func) =>
               _onEnterOrLeaveImage4Toolbar = func,
           onEnterOrLeaveImageCleaner: () => _onEnterOrLeaveImage4Toolbar = null,
+          setRemoteState: setState,
         );
-    return Scaffold(
-      backgroundColor: Theme.of(context).colorScheme.background,
-      body: Stack(
+
+    bodyWidget() {
+      return Stack(
         children: [
           Container(
               color: Colors.black,
@@ -274,26 +282,55 @@ class _RemotePageState extends State<RemotePage>
                   },
                   inputModel: _ffi.inputModel,
                   child: getBodyForDesktop(context))),
-          Obx(() => Stack(
-                children: [
-                  _ffi.ffiModel.pi.isSet.isTrue &&
-                          _ffi.ffiModel.waitForFirstImage.isTrue
-                      ? emptyOverlay()
-                      : () {
-                          _ffi.ffiModel.tryShowAndroidActionsOverlay();
-                          return Offstage();
-                        }(),
-                  // Use Overlay to enable rebuild every time on menu button click.
-                  _ffi.ffiModel.pi.isSet.isTrue
-                      ? Overlay(initialEntries: [
-                          OverlayEntry(builder: remoteToolbar)
-                        ])
-                      : remoteToolbar(context),
-                  _ffi.ffiModel.pi.isSet.isFalse ? emptyOverlay() : Offstage(),
-                ],
-              )),
+          Stack(
+            children: [
+              _ffi.ffiModel.pi.isSet.isTrue &&
+                      _ffi.ffiModel.waitForFirstImage.isTrue
+                  ? emptyOverlay()
+                  : () {
+                      _ffi.ffiModel.tryShowAndroidActionsOverlay();
+                      return Offstage();
+                    }(),
+              // Use Overlay to enable rebuild every time on menu button click.
+              _ffi.ffiModel.pi.isSet.isTrue
+                  ? Overlay(
+                      initialEntries: [OverlayEntry(builder: remoteToolbar)])
+                  : remoteToolbar(context),
+              _ffi.ffiModel.pi.isSet.isFalse ? emptyOverlay() : Offstage(),
+            ],
+          ),
         ],
-      ),
+      );
+    }
+
+    return Scaffold(
+      backgroundColor: Theme.of(context).colorScheme.background,
+      body: Obx(() {
+        final imageReady = _ffi.ffiModel.pi.isSet.isTrue &&
+            _ffi.ffiModel.waitForFirstImage.isFalse;
+        if (imageReady) {
+          // If the privacy mode(disable physical displays) is switched,
+          // we should not dismiss the dialog immediately.
+          if (DateTime.now().difference(togglePrivacyModeTime) >
+              const Duration(milliseconds: 3000)) {
+            // `dismissAll()` is to ensure that the state is clean.
+            // It's ok to call dismissAll() here.
+            _ffi.dialogManager.dismissAll();
+            // Recreate the block state to refresh the state.
+            _blockableOverlayState = BlockableOverlayState();
+            _blockableOverlayState.applyFfi(_ffi);
+          }
+          // Block the whole `bodyWidget()` when dialog shows.
+          return BlockableOverlay(
+            underlying: bodyWidget(),
+            state: _blockableOverlayState,
+          );
+        } else {
+          // `_blockableOverlayState` is not recreated here.
+          // The toolbar's block state won't work properly when reconnecting, but that's okay.
+          return bodyWidget();
+        }
+      }),
     );
   }
 
@@ -329,7 +366,7 @@ class _RemotePageState extends State<RemotePage>
       if (!_rawKeyFocusNode.hasFocus) {
         _rawKeyFocusNode.requestFocus();
       }
-      bind.sessionEnterOrLeave(sessionId: sessionId, enter: true);
+      _ffi.inputModel.enterOrLeave(true);
     }
   }
 
@@ -349,7 +386,7 @@ class _RemotePageState extends State<RemotePage>
     }
     // See [onWindowBlur].
     if (!Platform.isWindows) {
-      bind.sessionEnterOrLeave(sessionId: sessionId, enter: false);
+      _ffi.inputModel.enterOrLeave(false);
     }
   }
 
@@ -392,6 +429,38 @@ class _RemotePageState extends State<RemotePage>
     );
   }
 
+  Map<int, RenderTexture> _updateGetRenderTextures(int curDisplay) {
+    tryCreateTexture(int idx) {
+      if (!_renderTextures.containsKey(idx)) {
+        final renderTexture = RenderTexture();
+        _renderTextures[idx] = renderTexture;
+        renderTexture.create(idx, sessionId);
+      }
+    }
+
+    tryRemoveTexture(int idx) {
+      if (_renderTextures.containsKey(idx)) {
+        _renderTextures[idx]!.destroy(true);
+        _renderTextures.remove(idx);
+      }
+    }
+
+    if (curDisplay == kAllDisplayValue) {
+      final displays = _ffi.ffiModel.pi.getCurDisplays();
+      for (var i = 0; i < displays.length; i++) {
+        tryCreateTexture(i);
+      }
+    } else {
+      tryCreateTexture(curDisplay);
+      for (var i = 0; i < _ffi.ffiModel.pi.displays.length; i++) {
+        if (i != curDisplay) {
+          tryRemoveTexture(i);
+        }
+      }
+    }
+    return _renderTextures;
+  }
+
   Widget getBodyForDesktop(BuildContext context) {
     var paints = <Widget>[
       MouseRegion(onEnter: (evt) {
@@ -402,16 +471,20 @@ class _RemotePageState extends State<RemotePage>
         Future.delayed(Duration.zero, () {
           Provider.of<CanvasModel>(context, listen: false).updateViewStyle();
         });
-        return ImagePaint(
-          id: widget.id,
-          zoomCursor: _zoomCursor,
-          cursorOverImage: _cursorOverImage,
-          keyboardEnabled: _keyboardEnabled,
-          remoteCursorMoved: _remoteCursorMoved,
-          textureId: _renderTexture.textureId,
-          useTextureRender: _renderTexture.useTextureRender,
-          listenerBuilder: (child) =>
-              _buildRawTouchAndPointerRegion(child, enterView, leaveView),
+        final peerDisplay = CurrentDisplayState.find(widget.id);
+        return Obx(
+          () => _ffi.ffiModel.pi.isSet.isFalse
+              ? Container(color: Colors.transparent)
+              : Obx(() => ImagePaint(
+                    id: widget.id,
+                    zoomCursor: _zoomCursor,
+                    cursorOverImage: _cursorOverImage,
+                    keyboardEnabled: _keyboardEnabled,
+                    remoteCursorMoved: _remoteCursorMoved,
+                    renderTextures: _updateGetRenderTextures(peerDisplay.value),
+                    listenerBuilder: (child) => _buildRawTouchAndPointerRegion(
+                        child, enterView, leaveView),
+                  )),
         );
       }))
     ];
@@ -447,8 +520,7 @@ class ImagePaint extends StatefulWidget {
   final RxBool cursorOverImage;
   final RxBool keyboardEnabled;
   final RxBool remoteCursorMoved;
-  final RxInt textureId;
-  final bool useTextureRender;
+  final Map<int, RenderTexture> renderTextures;
   final Widget Function(Widget)? listenerBuilder;
 
   ImagePaint(
@@ -458,8 +530,7 @@ class ImagePaint extends StatefulWidget {
       required this.cursorOverImage,
       required this.keyboardEnabled,
       required this.remoteCursorMoved,
-      required this.textureId,
-      required this.useTextureRender,
+      required this.renderTextures,
       this.listenerBuilder})
       : super(key: key);
 
@@ -469,8 +540,6 @@ class ImagePaint extends StatefulWidget {
 
 class _ImagePaintState extends State<ImagePaint> {
   bool _lastRemoteCursorMoved = false;
-  final ScrollController _horizontal = ScrollController();
-  final ScrollController _vertical = ScrollController();
 
   String get id => widget.id;
   RxBool get zoomCursor => widget.zoomCursor;
@@ -485,21 +554,20 @@ class _ImagePaintState extends State<ImagePaint> {
     var c = Provider.of<CanvasModel>(context);
     final s = c.scale;
 
+    bool isViewAdaptive() => c.viewStyle.style == kRemoteViewStyleAdaptive;
+    bool isViewOriginal() => c.viewStyle.style == kRemoteViewStyleOriginal;
+
     mouseRegion({child}) => Obx(() {
           double getCursorScale() {
             var c = Provider.of<CanvasModel>(context);
             var cursorScale = 1.0;
             if (Platform.isWindows) {
               // debug win10
-              final isViewAdaptive =
-                  c.viewStyle.style == kRemoteViewStyleAdaptive;
-              if (zoomCursor.value && isViewAdaptive) {
+              if (zoomCursor.value && isViewAdaptive()) {
                 cursorScale = s * c.devicePixelRatio;
               }
             } else {
-              final isViewOriginal =
-                  c.viewStyle.style == kRemoteViewStyleOriginal;
-              if (zoomCursor.value || isViewOriginal) {
+              if (zoomCursor.value || isViewOriginal()) {
                 cursorScale = s;
               }
             }
@@ -531,71 +599,97 @@ class _ImagePaintState extends State<ImagePaint> {
         });
 
     if (c.imageOverflow.isTrue && c.scrollStyle == ScrollStyle.scrollbar) {
-      final imageWidth = c.getDisplayWidth() * s;
-      final imageHeight = c.getDisplayHeight() * s;
-      final imageSize = Size(imageWidth, imageHeight);
-      late final Widget imageWidget;
-      if (widget.useTextureRender) {
-        imageWidget = SizedBox(
-          width: imageWidth,
-          height: imageHeight,
-          child: Obx(() => Texture(textureId: widget.textureId.value)),
-        );
-      } else {
-        imageWidget = CustomPaint(
-          size: imageSize,
-          painter: ImagePainter(image: m.image, x: 0, y: 0, scale: s),
-        );
-      }
-
+      final paintWidth = c.getDisplayWidth() * s;
+      final paintHeight = c.getDisplayHeight() * s;
+      final paintSize = Size(paintWidth, paintHeight);
+      final paintWidget = useTextureRender
+          ? _BuildPaintTextureRender(
+              c, s, Offset.zero, paintSize, isViewOriginal())
+          : _buildScrollbarNonTextureRender(m, paintSize, s);
       return NotificationListener<ScrollNotification>(
           onNotification: (notification) {
-            final percentX = _horizontal.hasClients
-                ? _horizontal.position.extentBefore /
-                    (_horizontal.position.extentBefore +
-                        _horizontal.position.extentInside +
-                        _horizontal.position.extentAfter)
-                : 0.0;
-            final percentY = _vertical.hasClients
-                ? _vertical.position.extentBefore /
-                    (_vertical.position.extentBefore +
-                        _vertical.position.extentInside +
-                        _vertical.position.extentAfter)
-                : 0.0;
-            c.setScrollPercent(percentX, percentY);
+            c.updateScrollPercent();
             return false;
           },
           child: mouseRegion(
             child: Obx(() => _buildCrossScrollbarFromLayout(
-                context, _buildListener(imageWidget), c.size, imageSize)),
+                  context,
+                  _buildListener(paintWidget),
+                  c.size,
+                  paintSize,
+                  c.scrollHorizontal,
+                  c.scrollVertical,
+                )),
           ));
     } else {
-      late final Widget imageWidget;
       if (c.size.width > 0 && c.size.height > 0) {
-        if (widget.useTextureRender) {
-          imageWidget = Stack(
-            children: [
-              Positioned(
-                left: c.x.toInt().toDouble(),
-                top: c.y.toInt().toDouble(),
-                width: c.getDisplayWidth() * s,
-                height: c.getDisplayHeight() * s,
-                child: Texture(textureId: widget.textureId.value),
-              )
-            ],
-          );
-        } else {
-          imageWidget = CustomPaint(
-            size: Size(c.size.width, c.size.height),
-            painter:
-                ImagePainter(image: m.image, x: c.x / s, y: c.y / s, scale: s),
-          );
-        }
-        return mouseRegion(child: _buildListener(imageWidget));
+        final paintWidget = useTextureRender
+            ? _BuildPaintTextureRender(
+                c,
+                s,
+                Offset(
+                  Platform.isLinux ? c.x.toInt().toDouble() : c.x,
+                  Platform.isLinux ? c.y.toInt().toDouble() : c.y,
+                ),
+                c.size,
+                isViewOriginal())
+            : _buildScrollAuthNonTextureRender(m, c, s);
+        return mouseRegion(child: _buildListener(paintWidget));
       } else {
         return Container();
       }
     }
+  }
+
+  Widget _buildScrollbarNonTextureRender(
+      ImageModel m, Size imageSize, double s) {
+    return CustomPaint(
+      size: imageSize,
+      painter: ImagePainter(image: m.image, x: 0, y: 0, scale: s),
+    );
+  }
+
+  Widget _buildScrollAuthNonTextureRender(
+      ImageModel m, CanvasModel c, double s) {
+    return CustomPaint(
+      size: Size(c.size.width, c.size.height),
+      painter: ImagePainter(image: m.image, x: c.x / s, y: c.y / s, scale: s),
+    );
+  }
+
+  Widget _BuildPaintTextureRender(
+      CanvasModel c, double s, Offset offset, Size size, bool isViewOriginal) {
+    final ffiModel = c.parent.target!.ffiModel;
+    final displays = ffiModel.pi.getCurDisplays();
+    final children = <Widget>[];
+    final rect = ffiModel.rect;
+    if (rect == null) {
+      return Container();
+    }
+    final curDisplay = ffiModel.pi.currentDisplay;
+    for (var i = 0; i < displays.length; i++) {
+      final textureId = widget
+          .renderTextures[curDisplay == kAllDisplayValue ? i : curDisplay]
+          ?.textureId;
+      if (textureId != null) {
+        children.add(Positioned(
+          left: (displays[i].x - rect.left) * s + offset.dx,
+          top: (displays[i].y - rect.top) * s + offset.dy,
+          width: displays[i].width * s,
+          height: displays[i].height * s,
+          child: Obx(() => Texture(
+                textureId: textureId.value,
+                filterQuality:
+                    isViewOriginal ? FilterQuality.none : FilterQuality.low,
+              )),
+        ));
+      }
+    }
+    return SizedBox(
+      width: size.width,
+      height: size.height,
+      child: Stack(children: children),
+    );
   }
 
   MouseCursor _buildCursorOfCache(
@@ -605,7 +699,8 @@ class _ImagePaintState extends State<ImagePaint> {
     } else {
       final key = cache.updateGetKey(scale);
       if (!cursor.cachedKeys.contains(key)) {
-        debugPrint("Register custom cursor with key $key");
+        debugPrint(
+            "Register custom cursor with key $key (${cache.hotx},${cache.hoty})");
         // [Safety]
         // It's ok to call async registerCursor in current synchronous context,
         // because activating the cursor is also an async call and will always
@@ -637,7 +732,13 @@ class _ImagePaintState extends State<ImagePaint> {
   }
 
   Widget _buildCrossScrollbarFromLayout(
-      BuildContext context, Widget child, Size layoutSize, Size size) {
+    BuildContext context,
+    Widget child,
+    Size layoutSize,
+    Size size,
+    ScrollController horizontal,
+    ScrollController vertical,
+  ) {
     final scrollConfig = CustomMouseWheelScrollConfig(
         scrollDuration: kDefaultScrollDuration,
         scrollCurve: Curves.linearToEaseOut,
@@ -649,7 +750,7 @@ class _ImagePaintState extends State<ImagePaint> {
       widget = ScrollConfiguration(
         behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
         child: SingleChildScrollView(
-          controller: _horizontal,
+          controller: horizontal,
           scrollDirection: Axis.horizontal,
           physics: cursorOverImage.isTrue
               ? const NeverScrollableScrollPhysics()
@@ -671,7 +772,7 @@ class _ImagePaintState extends State<ImagePaint> {
       widget = ScrollConfiguration(
         behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
         child: SingleChildScrollView(
-          controller: _vertical,
+          controller: vertical,
           physics: cursorOverImage.isTrue
               ? const NeverScrollableScrollPhysics()
               : null,
@@ -690,12 +791,13 @@ class _ImagePaintState extends State<ImagePaint> {
     }
     if (layoutSize.width < size.width) {
       widget = ImprovedScrolling(
-        scrollController: _horizontal,
+        scrollController: horizontal,
         enableCustomMouseWheelScrolling: cursorOverImage.isFalse,
         customMouseWheelScrollConfig: scrollConfig,
         child: RawScrollbar(
+          thickness: kScrollbarThickness,
           thumbColor: Colors.grey,
-          controller: _horizontal,
+          controller: horizontal,
           thumbVisibility: false,
           trackVisibility: false,
           notificationPredicate: layoutSize.height < size.height
@@ -707,12 +809,13 @@ class _ImagePaintState extends State<ImagePaint> {
     }
     if (layoutSize.height < size.height) {
       widget = ImprovedScrolling(
-        scrollController: _vertical,
+        scrollController: vertical,
         enableCustomMouseWheelScrolling: cursorOverImage.isFalse,
         customMouseWheelScrollConfig: scrollConfig,
         child: RawScrollbar(
+          thickness: kScrollbarThickness,
           thumbColor: Colors.grey,
-          controller: _vertical,
+          controller: vertical,
           thumbVisibility: false,
           trackVisibility: false,
           child: widget,
@@ -720,7 +823,11 @@ class _ImagePaintState extends State<ImagePaint> {
       );
     }
 
-    return widget;
+    return Container(
+      child: widget,
+      width: layoutSize.width,
+      height: layoutSize.height,
+    );
   }
 
   Widget _buildListener(Widget child) {
@@ -759,11 +866,20 @@ class CursorPaint extends StatelessWidget {
     double cy = c.y;
     if (c.viewStyle.style == kRemoteViewStyleOriginal &&
         c.scrollStyle == ScrollStyle.scrollbar) {
-      final d = c.parent.target!.ffiModel.display;
-      final imageWidth = d.width * c.scale;
-      final imageHeight = d.height * c.scale;
-      cx = -imageWidth * c.scrollX;
-      cy = -imageHeight * c.scrollY;
+      final rect = c.parent.target!.ffiModel.rect;
+      if (rect == null) {
+        // unreachable!
+        debugPrint('unreachable! The displays rect is null.');
+        return Container();
+      }
+      if (cx < 0) {
+        final imageWidth = rect.width * c.scale;
+        cx = -imageWidth * c.scrollX;
+      }
+      if (cy < 0) {
+        final imageHeight = rect.height * c.scale;
+        cy = -imageHeight * c.scrollY;
+      }
     }
 
     double x = (m.x - hotx) * c.scale + cx;

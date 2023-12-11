@@ -28,12 +28,12 @@ impl super::service::Reset for State {
 }
 
 pub fn new() -> GenericService {
-    let sp = GenericService::new(NAME, true);
-    sp.repeat::<State, _>(INTERVAL, run);
-    sp
+    let svc = EmptyExtraFieldService::new(NAME.to_owned(), true);
+    GenericService::repeat::<State, _, _>(&svc.clone(), INTERVAL, run);
+    svc.sp
 }
 
-fn run(sp: GenericService, state: &mut State) -> ResultType<()> {
+fn run(sp: EmptyExtraFieldService, state: &mut State) -> ResultType<()> {
     if let Some(ctx) = state.ctx.as_mut() {
         if let Some(msg) = check_clipboard(ctx, None) {
             sp.send(msg);

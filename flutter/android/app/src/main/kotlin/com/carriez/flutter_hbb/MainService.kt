@@ -44,7 +44,6 @@ import java.nio.ByteBuffer
 import kotlin.math.max
 import kotlin.math.min
 
-
 const val DEFAULT_NOTIFY_TITLE = "RustDesk"
 const val DEFAULT_NOTIFY_TEXT = "Service is running"
 const val DEFAULT_NOTIFY_ID = 1
@@ -92,6 +91,12 @@ class MainService : Service() {
                 }
             }
         }
+    }
+
+    @Keep
+    @RequiresApi(Build.VERSION_CODES.N)
+    fun rustKeyEventInput(input: ByteArray) {
+        InputService.ctx?.onKeyEvent(input)
     }
 
     @Keep
@@ -206,6 +211,7 @@ class MainService : Service() {
     override fun onCreate() {
         super.onCreate()
         Log.d(logTag,"MainService onCreate")
+        init(this)
         HandlerThread("Service", Process.THREAD_PRIORITY_BACKGROUND).apply {
             start()
             serviceLooper = looper
@@ -310,7 +316,6 @@ class MainService : Service() {
                 mediaProjection =
                     mediaProjectionManager.getMediaProjection(Activity.RESULT_OK, it)
                 checkMediaPermission()
-                init(this)
                 _isReady = true
             } ?: let {
                 Log.d(logTag, "getParcelableExtra intent null, invoke requestMediaProjection")

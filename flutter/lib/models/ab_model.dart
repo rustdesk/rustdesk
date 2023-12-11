@@ -3,9 +3,9 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_hbb/common/widgets/peers_view.dart';
 import 'package:flutter_hbb/models/model.dart';
 import 'package:flutter_hbb/models/peer_model.dart';
-import 'package:flutter_hbb/models/peer_tab_model.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:get/get.dart';
 import 'package:bot_toast/bot_toast.dart';
@@ -23,6 +23,11 @@ bool shouldSortTags() {
   return bind.mainGetLocalOption(key: sortAbTagsOption).isNotEmpty;
 }
 
+final filterAbTagOption = 'filter-ab-by-intersection';
+bool filterAbTagByIntersection() {
+  return bind.mainGetLocalOption(key: filterAbTagOption).isNotEmpty;
+}
+
 class AbModel {
   final abLoading = false.obs;
   final pullError = "".obs;
@@ -31,6 +36,7 @@ class AbModel {
   final RxMap<String, int> tagColors = Map<String, int>.fromEntries([]).obs;
   final peers = List<Peer>.empty(growable: true).obs;
   final sortTags = shouldSortTags().obs;
+  final filterByIntersection = filterAbTagByIntersection().obs;
   final retrying = false.obs;
   bool get emtpy => peers.isEmpty && tags.isEmpty;
 
@@ -104,9 +110,6 @@ class AbModel {
       if (!quiet) {
         pullError.value =
             '${translate('pull_ab_failed_tip')}: ${translate(err.toString())}';
-        if (gFFI.peerTabModel.currentTab != PeerTabIndex.ab.index) {
-          BotToast.showText(contentColor: Colors.red, text: pullError.value);
-        }
       }
     } finally {
       abLoading.value = false;
@@ -115,9 +118,10 @@ class AbModel {
       _timerCounter = 0;
       if (pullError.isNotEmpty) {
         if (statusCode == 401) {
-          gFFI.userModel.reset(clearAbCache: true);
+          gFFI.userModel.reset(resetOther: true);
         }
       }
+      platformFFI.tryHandle({'name': LoadEvent.addressBook});
     }
   }
 
@@ -130,6 +134,7 @@ class AbModel {
       'alias': alias,
       'tags': tags,
     });
+    _mergePeerFromGroup(peer);
     peers.add(peer);
   }
 
@@ -241,7 +246,8 @@ class AbModel {
         ret = true;
         _saveCache();
       } else {
-        Map<String, dynamic> json = _jsonDecodeResp(resp.body, resp.statusCode);
+        Map<String, dynamic> json =
+            _jsonDecodeResp(utf8.decode(resp.bodyBytes), resp.statusCode);
         if (json.containsKey('error')) {
           throw json['error'];
         } else if (resp.statusCode == 200) {
@@ -477,13 +483,14 @@ class AbModel {
     }
   }
 
-  loadCache() async {
+  Future<void> loadCache() async {
     try {
-      if (_cacheLoadOnceFlag || abLoading.value) return;
+      if (_cacheLoadOnceFlag || abLoading.value || initialized) return;
       _cacheLoadOnceFlag = true;
       final access_token = bind.mainGetLocalOption(key: 'access_token');
       if (access_token.isEmpty) return;
       final cache = await bind.mainLoadAb();
+      if (abLoading.value) return;
       final data = jsonDecode(cache);
       if (data == null || data['access_token'] != access_token) return;
       _deserialize(data);
@@ -560,5 +567,27 @@ class AbModel {
             text: translate('synced_peer_readded_tip'));
       }
     });
+  }
+
+  reset() async {
+    pullError.value = '';
+    pushError.value = '';
+    tags.clear();
+    peers.clear();
+    await bind.mainClearAb();
+  }
+
+  _mergePeerFromGroup(Peer p) {
+    final g = gFFI.groupModel.peers.firstWhereOrNull((e) => p.id == e.id);
+    if (g == null) return;
+    if (p.username.isEmpty) {
+      p.username = g.username;
+    }
+    if (p.hostname.isEmpty) {
+      p.hostname = g.hostname;
+    }
+    if (p.platform.isEmpty) {
+      p.platform = g.platform;
+    }
   }
 }

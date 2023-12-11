@@ -30,8 +30,7 @@ struct Delay {
 
 #[derive(Default, Debug, Copy, Clone)]
 struct UserData {
-    full_speed_fps: Option<u32>,
-    auto_adjust_fps: Option<u32>,
+    auto_adjust_fps: Option<u32>, // reserve for compatibility
     custom_fps: Option<u32>,
     quality: Option<(i64, Quality)>, // (time, quality)
     delay: Option<Delay>,
@@ -126,18 +125,12 @@ impl VideoQoS {
     pub fn refresh(&mut self, typ: Option<RefreshType>) {
         // fps
         let user_fps = |u: &UserData| {
-            // full_speed_fps
-            let mut fps = u.full_speed_fps.unwrap_or_default() * 9 / 10;
+            // custom_fps
+            let mut fps = u.custom_fps.unwrap_or(FPS);
             // auto adjust fps
             if let Some(auto_adjust_fps) = u.auto_adjust_fps {
                 if fps == 0 || auto_adjust_fps < fps {
                     fps = auto_adjust_fps;
-                }
-            }
-            // custom_fps
-            if let Some(custom_fps) = u.custom_fps {
-                if fps == 0 || custom_fps < fps {
-                    fps = custom_fps;
                 }
             }
             // delay
@@ -257,21 +250,6 @@ impl VideoQoS {
                 id,
                 UserData {
                     custom_fps: Some(fps),
-                    ..Default::default()
-                },
-            );
-        }
-        self.refresh(None);
-    }
-
-    pub fn user_full_speed_fps(&mut self, id: i32, full_speed_fps: u32) {
-        if let Some(user) = self.users.get_mut(&id) {
-            user.full_speed_fps = Some(full_speed_fps);
-        } else {
-            self.users.insert(
-                id,
-                UserData {
-                    full_speed_fps: Some(full_speed_fps),
                     ..Default::default()
                 },
             );
