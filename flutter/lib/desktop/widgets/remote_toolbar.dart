@@ -1596,6 +1596,10 @@ class _KeyboardMenu extends StatelessWidget {
         modeOnly = kKeyLegacyMode;
       }
     }
+    final toolbarToggles = toolbarKeyboardToggles(ffi)
+        .map((e) => CkbMenuButton(
+            value: e.value, onChanged: e.onChanged, child: e.child, ffi: ffi))
+        .toList();
     return _IconSubmenuButton(
         tooltip: 'Keyboard Settings',
         svg: "assets/keyboard.svg",
@@ -1610,6 +1614,7 @@ class _KeyboardMenu extends StatelessWidget {
           viewMode(),
           Divider(),
           reverseMouseWheel(),
+          ...toolbarToggles,
         ]);
   }
 
