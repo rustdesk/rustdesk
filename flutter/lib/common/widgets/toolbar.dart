@@ -486,21 +486,6 @@ Future<List<TToggleMenu>> toolbarDisplayToggle(
         },
         child: Text(translate('Lock after session end'))));
   }
-  // swap key
-  if (ffiModel.keyboard &&
-      ((Platform.isMacOS && pi.platform != kPeerPlatformMacOS) ||
-          (!Platform.isMacOS && pi.platform == kPeerPlatformMacOS))) {
-    final option = 'allow_swap_key';
-    final value =
-        bind.sessionGetToggleOptionSync(sessionId: sessionId, arg: option);
-    v.add(TToggleMenu(
-        value: value,
-        onChanged: (value) {
-          if (value == null) return;
-          bind.sessionToggleOption(sessionId: sessionId, value: option);
-        },
-        child: Text(translate('Swap control-command key'))));
-  }
 
   if (useTextureRender &&
       pi.isSupportMultiDisplay &&
@@ -552,17 +537,8 @@ Future<List<TToggleMenu>> toolbarDisplayToggle(
         child: Text(translate('True color (4:4:4)'))));
   }
 
-  if (ffiModel.keyboard) {
-    final option = 'swap-left-right-mouse';
-    final value =
-        bind.sessionGetToggleOptionSync(sessionId: sessionId, arg: option);
-    v.add(TToggleMenu(
-        value: value,
-        onChanged: (value) {
-          if (value == null) return;
-          bind.sessionToggleOption(sessionId: sessionId, value: option);
-        },
-        child: Text(translate('swap-left-right-mouse'))));
+  if (isMobile) {
+    v.addAll(toolbarKeyboardToggles(ffi));
   }
 
   return v;
@@ -632,4 +608,42 @@ List<TToggleMenu> toolbarPrivacyMode(
           });
     }).toList();
   }
+}
+
+List<TToggleMenu> toolbarKeyboardToggles(FFI ffi) {
+  final ffiModel = ffi.ffiModel;
+  final pi = ffiModel.pi;
+  final sessionId = ffi.sessionId;
+  List<TToggleMenu> v = [];
+
+  // swap key
+  if (ffiModel.keyboard &&
+      ((Platform.isMacOS && pi.platform != kPeerPlatformMacOS) ||
+          (!Platform.isMacOS && pi.platform == kPeerPlatformMacOS))) {
+    final option = 'allow_swap_key';
+    final value =
+        bind.sessionGetToggleOptionSync(sessionId: sessionId, arg: option);
+    v.add(TToggleMenu(
+        value: value,
+        onChanged: (value) {
+          if (value == null) return;
+          bind.sessionToggleOption(sessionId: sessionId, value: option);
+        },
+        child: Text(translate('Swap control-command key'))));
+  }
+
+  // swap left right mouse
+  if (!isMobile && ffiModel.keyboard) {
+    final option = 'swap-left-right-mouse';
+    final value =
+        bind.sessionGetToggleOptionSync(sessionId: sessionId, arg: option);
+    v.add(TToggleMenu(
+        value: value,
+        onChanged: (value) {
+          if (value == null) return;
+          bind.sessionToggleOption(sessionId: sessionId, value: option);
+        },
+        child: Text(translate('swap-left-right-mouse'))));
+  }
+  return v;
 }
