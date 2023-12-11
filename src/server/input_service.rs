@@ -13,6 +13,7 @@ use hbb_common::{
 use rdev::{self, EventType, Key as RdevKey, KeyCode, RawKey};
 #[cfg(target_os = "macos")]
 use rdev::{CGEventSourceStateID, CGEventTapLocation, VirtualInput};
+use scrap::wayland::pipewire::RDP_RESPONSE;
 use std::{
     convert::TryFrom,
     ops::{Deref, DerefMut, Sub},
@@ -463,15 +464,15 @@ pub async fn setup_uinput(minx: i32, maxx: i32, miny: i32, maxy: i32) -> ResultT
 
 pub async fn setup_rdp_input() -> ResultType<(), Box<dyn std::error::Error>> {
         let mut en = ENIGO.lock().unwrap();
-        let (conn,_,streams,session) = scrap::wayland::pipewire::request_remote_desktop()?;
-        let conn = Arc::new(conn);
+        let rdp_res_lock = RDP_RESPONSE.lock().unwrap();
+        let rdp_res = rdp_res_lock.as_ref().unwrap();
 
-        let keyboard = super::rdp_input::client::RdpInputKeyboard::new(conn.clone(), session.clone())?;
+        let keyboard = super::rdp_input::client::RdpInputKeyboard::new(rdp_res.conn.clone(), rdp_res.session.clone())?;
         en.set_custom_keyboard(Box::new(keyboard));
         log::info!("RdpInput keyboard created");
 
-        if let Some(stream) = streams.into_iter().next() {
-            let mouse = super::rdp_input::client::RdpInputMouse::new(conn, session, stream)?;
+        if let Some(stream) = rdp_res.streams.clone().into_iter().next() {
+            let mouse = super::rdp_input::client::RdpInputMouse::new(rdp_res.conn.clone(), rdp_res.session.clone(), stream)?;
             en.set_custom_mouse(Box::new(mouse));
             log::info!("RdpInput mouse created");
         }

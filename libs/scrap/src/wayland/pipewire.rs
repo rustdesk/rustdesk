@@ -23,7 +23,18 @@ use super::capturable::{Capturable, Recorder};
 use super::remote_desktop_portal::OrgFreedesktopPortalRemoteDesktop as remote_desktop_portal;
 use super::request_portal::OrgFreedesktopPortalRequestResponse;
 use super::screencast_portal::OrgFreedesktopPortalScreenCast as screencast_portal;
+use lazy_static::lazy_static;
 
+lazy_static! {
+    pub static ref RDP_RESPONSE: Mutex<Option<RdpResponse>> = Mutex::new(None);
+}
+
+pub struct RdpResponse {
+    pub conn: Arc<SyncConnection>,
+    pub streams: Vec<PwStreamInfo>,
+    pub fd: OwnedFd,
+    pub session: dbus::Path<'static>,
+}
 #[derive(Debug, Clone, Copy)]
 pub struct PwStreamInfo {
     pub path: u64,
@@ -641,10 +652,23 @@ pub fn request_remote_desktop(
 }
 
 pub fn get_capturables() -> Result<Vec<PipeWireCapturable>, Box<dyn Error>> {
-    let (conn, fd, streams, _) = request_remote_desktop()?;
-    let conn = Arc::new(conn);
-    Ok(streams
+    let mut rdp_connection = RDP_RESPONSE.lock().unwrap();
+    if rdp_connection.is_none() {
+        let (conn, fd, streams, session) = request_remote_desktop()?;
+        let conn = Arc::new(conn);
+
+        let rdp_res = RdpResponse {
+            conn,
+            streams,
+            fd,
+            session
+        };
+        *rdp_connection = Some(rdp_res);
+    }
+
+    let rdp_res = rdp_connection.as_ref().unwrap();
+    Ok(rdp_res.streams.clone()
         .into_iter()
-        .map(|s| PipeWireCapturable::new(conn.clone(), fd.clone(), s))
+        .map(|s| PipeWireCapturable::new(rdp_res.conn.clone(), rdp_res.fd.clone(), s))
         .collect())
 }

@@ -1183,12 +1183,6 @@ impl Connection {
                 self.send(msg_out).await;
             }
 
-            //todo: combine get display and input into one request prompt
-            // use rdp_input when uinput is not available. Ex: flatpak
-            if !is_x11() && !crate::is_server() {
-                let _ = setup_rdp_input().await;
-            }
-
             match super::display_service::update_get_sync_displays().await {
                 Err(err) => {
                     res.set_error(format!("{}", err));
@@ -1200,6 +1194,11 @@ impl Connection {
                     pi.current_display = self.display_idx as _;
                     res.set_peer_info(pi);
                     sub_service = true;
+
+                    // use rdp_input when uinput is not available in wayland. Ex: flatpak
+                    if !is_x11() && !crate::is_server() {
+                        let _ = setup_rdp_input().await;
+                    }
                 }
             }
             self.on_remote_authorized();
