@@ -252,8 +252,8 @@ impl<T: InvokeUiSession> Remote<T> {
                             }).collect::<HashMap<usize, i32>>();
                             let chroma = self.chroma.read().unwrap().clone();
                             let chroma = match chroma {
-                                Some(Chroma::I444) => "4:4:4",
-                                Some(Chroma::I420) => "4:2:0",
+                                Some(Chroma::C444) => "4:4:4",
+                                Some(Chroma::C420) => "4:2:0",
                                 None => "-",
                             };
                             let chroma = Some(chroma.to_string());

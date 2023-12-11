@@ -1416,6 +1416,15 @@ pub fn session_change_prefer_codec(session_id: SessionID) {
     }
 }
 
+pub fn session_is_codec_support_444(session_id: SessionID, codec: String) -> SyncReturn<bool> {
+    let res = if let Some(session) = sessions::get_session_by_session_id(&session_id) {
+        session.is_codec_support_444(codec)
+    } else {
+        false
+    };
+    SyncReturn(res)
+}
+
 pub fn session_on_waiting_for_image_dialog_show(session_id: SessionID) {
     super::flutter::session_on_waiting_for_image_dialog_show(session_id);
 }

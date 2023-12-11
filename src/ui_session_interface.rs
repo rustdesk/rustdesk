@@ -1230,6 +1230,17 @@ impl<T: InvokeUiSession> Session<T> {
     pub fn close_voice_call(&self) {
         self.send(Data::CloseVoiceCall);
     }
+
+    pub fn is_codec_support_444(&self, codec: String) -> bool {
+        let codec = codec.to_uppercase();
+        let encoding = self.lc.read().unwrap().supported_encoding.clone();
+        // decoding support following
+        match codec.as_str() {
+            "VP9" => encoding.color_abilities.vp9.yuv444p_bt601_studio,
+            "AV1" => encoding.color_abilities.av1.yuv444p_bt601_studio,
+            _ => false,
+        }
+    }
 }
 
 pub trait InvokeUiSession: Send + Sync + Clone + 'static + Sized + Default {
