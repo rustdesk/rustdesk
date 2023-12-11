@@ -14,7 +14,7 @@ use crate::{
     aom::{self, AomDecoder, AomEncoder, AomEncoderConfig},
     common::GoogleImage,
     vpxcodec::{self, VpxDecoder, VpxDecoderConfig, VpxEncoder, VpxEncoderConfig, VpxVideoCodecId},
-    CodecName, ColorRange, EncodeYuvFormat, ImageRgb, Pixfmt,
+    CodecName, EncodeYuvFormat, ImageRgb,
 };
 
 use hbb_common::{
@@ -23,8 +23,8 @@ use hbb_common::{
     config::PeerConfig,
     log,
     message_proto::{
-        supported_decoding::PreferCodec, video_frame, Chroma, CodecAbility, ColorAbilities,
-        ColorAbility, EncodedVideoFrames, SupportedDecoding, SupportedEncoding, VideoFrame,
+        supported_decoding::PreferCodec, video_frame, Chroma, CodecAbility, EncodedVideoFrames,
+        SupportedDecoding, SupportedEncoding, VideoFrame,
     },
     sysinfo::System,
     tokio::time::Instant,
@@ -55,14 +55,8 @@ pub enum EncoderCfg {
     HW(HwEncoderConfig),
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct ExtraEncoderCfg {
-    pub pixfmt: Pixfmt,
-    pub range: ColorRange,
-}
-
 pub trait EncoderApi {
-    fn new(cfg: EncoderCfg, extra: ExtraEncoderCfg) -> ResultType<Self>
+    fn new(cfg: EncoderCfg, i444: bool) -> ResultType<Self>
     where
         Self: Sized;
 
@@ -113,18 +107,18 @@ pub enum EncodingUpdate {
 }
 
 impl Encoder {
-    pub fn new(config: EncoderCfg, extra: ExtraEncoderCfg) -> ResultType<Encoder> {
-        log::info!("new encoder: {config:?}, extra: {extra:?}");
+    pub fn new(config: EncoderCfg, i444: bool) -> ResultType<Encoder> {
+        log::info!("new encoder: {config:?}, i444: {i444}");
         match config {
             EncoderCfg::VPX(_) => Ok(Encoder {
-                codec: Box::new(VpxEncoder::new(config, extra)?),
+                codec: Box::new(VpxEncoder::new(config, i444)?),
             }),
             EncoderCfg::AOM(_) => Ok(Encoder {
-                codec: Box::new(AomEncoder::new(config, extra)?),
+                codec: Box::new(AomEncoder::new(config, i444)?),
             }),
 
             #[cfg(feature = "hwcodec")]
-            EncoderCfg::HW(_) => match HwEncoder::new(config, extra) {
+            EncoderCfg::HW(_) => match HwEncoder::new(config, i444) {
                 Ok(hw) => Ok(Encoder {
                     codec: Box::new(hw),
                 }),
@@ -244,22 +238,6 @@ impl Encoder {
                 ..Default::default()
             })
             .into(),
-            color_abilities: Some(ColorAbilities {
-                vp9: Some(ColorAbility {
-                    yuv420p_bt601_full: true,
-                    yuv444p_bt601_studio: true,
-                    ..Default::default()
-                })
-                .into(),
-                av1: Some(ColorAbility {
-                    yuv420p_bt601_full: true,
-                    yuv444p_bt601_studio: true,
-                    ..Default::default()
-                })
-                .into(),
-                ..Default::default()
-            })
-            .into(),
             ..Default::default()
         };
         #[cfg(feature = "hwcodec")]
@@ -271,54 +249,20 @@ impl Encoder {
         encoding
     }
 
-    pub fn extra(config: &EncoderCfg) -> ExtraEncoderCfg {
+    pub fn use_i444(config: &EncoderCfg) -> bool {
         let decodings = PEER_DECODINGS.lock().unwrap().clone();
         let prefer_i444 = decodings
             .iter()
-            .any(|d| d.1.prefer_chroma == Chroma::C444.into());
-        let (pixfmt, range) = match config {
+            .all(|d| d.1.prefer_chroma == Chroma::I444.into());
+        let i444_useable = match config {
             EncoderCfg::VPX(vpx) => match vpx.codec {
-                VpxVideoCodecId::VP8 => (Pixfmt::YUV420P, ColorRange::Studio),
-                VpxVideoCodecId::VP9 => {
-                    if prefer_i444
-                        && decodings.len() > 0
-                        && decodings
-                            .iter()
-                            .all(|d| d.1.color_abilities.vp9.yuv444p_bt601_studio)
-                    {
-                        (Pixfmt::YUV444P, ColorRange::Studio)
-                    } else if decodings.len() > 0
-                        && decodings
-                            .iter()
-                            .all(|d| d.1.color_abilities.vp9.yuv420p_bt601_full)
-                    {
-                        (Pixfmt::YUV420P, ColorRange::Full)
-                    } else {
-                        (Pixfmt::YUV420P, ColorRange::Studio)
-                    }
-                }
+                VpxVideoCodecId::VP8 => false,
+                VpxVideoCodecId::VP9 => decodings.iter().all(|d| d.1.i444.vp9),
             },
-            EncoderCfg::AOM(_) => {
-                if prefer_i444
-                    && decodings.len() > 0
-                    && decodings
-                        .iter()
-                        .all(|d| d.1.color_abilities.av1.yuv444p_bt601_studio)
-                {
-                    (Pixfmt::YUV444P, ColorRange::Studio)
-                } else if decodings.len() > 0
-                    && decodings
-                        .iter()
-                        .all(|d| d.1.color_abilities.av1.yuv420p_bt601_full)
-                {
-                    (Pixfmt::YUV420P, ColorRange::Full)
-                } else {
-                    (Pixfmt::YUV420P, ColorRange::Studio)
-                }
-            }
-            EncoderCfg::HW(_) => (Pixfmt::NV12, ColorRange::Studio),
+            EncoderCfg::AOM(_) => decodings.iter().all(|d| d.1.i444.av1),
+            EncoderCfg::HW(_) => false,
         };
-        ExtraEncoderCfg { pixfmt, range }
+        prefer_i444 && i444_useable && !decodings.is_empty()
     }
 }
 
@@ -331,7 +275,12 @@ impl Decoder {
             ability_vp8: 1,
             ability_vp9: 1,
             ability_av1: 1,
-            color_abilities: Some(Self::color_abilities()).into(),
+            i444: Some(CodecAbility {
+                vp9: true,
+                av1: true,
+                ..Default::default()
+            })
+            .into(),
             prefer: prefer.into(),
             prefer_chroma: prefer_chroma.into(),
             ..Default::default()
@@ -422,7 +371,7 @@ impl Decoder {
             }
             #[cfg(feature = "hwcodec")]
             video_frame::Union::H264s(h264s) => {
-                *chroma = Some(Chroma::C420);
+                *chroma = Some(Chroma::I420);
                 if let Some(decoder) = &mut self.hw.h264 {
                     Decoder::handle_hw_video_frame(decoder, h264s, rgb, &mut self.i420)
                 } else {
@@ -431,7 +380,7 @@ impl Decoder {
             }
             #[cfg(feature = "hwcodec")]
             video_frame::Union::H265s(h265s) => {
-                *chroma = Some(Chroma::C420);
+                *chroma = Some(Chroma::I420);
                 if let Some(decoder) = &mut self.hw.h265 {
                     Decoder::handle_hw_video_frame(decoder, h265s, rgb, &mut self.i420)
                 } else {
@@ -440,7 +389,7 @@ impl Decoder {
             }
             #[cfg(feature = "mediacodec")]
             video_frame::Union::H264s(h264s) => {
-                *chroma = Some(Chroma::C420);
+                *chroma = Some(Chroma::I420);
                 if let Some(decoder) = &mut self.media_codec.h264 {
                     Decoder::handle_mediacodec_video_frame(decoder, h264s, rgb)
                 } else {
@@ -449,7 +398,7 @@ impl Decoder {
             }
             #[cfg(feature = "mediacodec")]
             video_frame::Union::H265s(h265s) => {
-                *chroma = Some(Chroma::C420);
+                *chroma = Some(Chroma::I420);
                 if let Some(decoder) = &mut self.media_codec.h265 {
                     Decoder::handle_mediacodec_video_frame(decoder, h265s, rgb)
                 } else {
@@ -551,7 +500,7 @@ impl Decoder {
     fn preference(id: Option<&str>) -> (PreferCodec, Chroma) {
         let id = id.unwrap_or_default();
         if id.is_empty() {
-            return (PreferCodec::Auto, Chroma::C420);
+            return (PreferCodec::Auto, Chroma::I420);
         }
         let options = PeerConfig::load(id).options;
         let codec = options
@@ -571,29 +520,11 @@ impl Decoder {
             PreferCodec::Auto
         };
         let chroma = if options.get("i444") == Some(&"Y".to_string()) {
-            Chroma::C444
+            Chroma::I444
         } else {
-            Chroma::C420
+            Chroma::I420
         };
         (codec, chroma)
-    }
-
-    fn color_abilities() -> ColorAbilities {
-        ColorAbilities {
-            vp9: Some(ColorAbility {
-                yuv420p_bt601_full: true,
-                yuv444p_bt601_studio: true,
-                ..Default::default()
-            })
-            .into(),
-            av1: Some(ColorAbility {
-                yuv420p_bt601_full: true,
-                yuv444p_bt601_studio: true,
-                ..Default::default()
-            })
-            .into(),
-            ..Default::default()
-        }
     }
 }
 
