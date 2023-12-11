@@ -6,10 +6,10 @@
 
 include!(concat!(env!("OUT_DIR"), "/aom_ffi.rs"));
 
-use crate::codec::{base_bitrate, codec_thread_num, Quality};
+use crate::codec::{base_bitrate, codec_thread_num, ExtraEncoderCfg, Quality};
 use crate::{codec::EncoderApi, EncodeFrame, STRIDE_ALIGN};
 use crate::{common::GoogleImage, generate_call_macro, generate_call_ptr_macro, Error, Result};
-use crate::{EncodeYuvFormat, Pixfmt};
+use crate::{ColorRange, EncodeYuvFormat, Pixfmt};
 use hbb_common::{
     anyhow::{anyhow, Context},
     bytes::Bytes,
@@ -53,7 +53,7 @@ pub struct AomEncoder {
     ctx: aom_codec_ctx_t,
     width: usize,
     height: usize,
-    i444: bool,
+    extra: ExtraEncoderCfg,
     yuvfmt: EncodeYuvFormat,
 }
 
@@ -98,7 +98,7 @@ mod webrtc {
     pub fn enc_cfg(
         i: *const aom_codec_iface,
         cfg: AomEncoderConfig,
-        i444: bool,
+        extra: &ExtraEncoderCfg,
     ) -> ResultType<aom_codec_enc_cfg> {
         let mut c = unsafe { std::mem::MaybeUninit::zeroed().assume_init() };
         call_aom!(aom_codec_enc_config_default(i, &mut c, kUsageProfile));
@@ -144,12 +144,20 @@ mod webrtc {
         c.g_lag_in_frames = kLagInFrames; // No look ahead when lag equals 0.
 
         // https://aomedia.googlesource.com/aom/+/refs/tags/v3.6.0/av1/common/enums.h#82
-        c.g_profile = if i444 { 1 } else { 0 };
+        c.g_profile = if extra.pixfmt == Pixfmt::YUV444P {
+            1
+        } else {
+            0
+        };
 
         Ok(c)
     }
 
-    pub fn set_controls(ctx: *mut aom_codec_ctx_t, cfg: &aom_codec_enc_cfg) -> ResultType<()> {
+    pub fn set_controls(
+        ctx: *mut aom_codec_ctx_t,
+        cfg: &aom_codec_enc_cfg,
+        extra: ExtraEncoderCfg,
+    ) -> ResultType<()> {
         use aom_tune_content::*;
         use aome_enc_control_id::*;
         macro_rules! call_ctl {
@@ -211,20 +219,45 @@ mod webrtc {
         call_ctl!(ctx, AV1E_SET_ENABLE_SMOOTH_INTERINTRA, 0);
         call_ctl!(ctx, AV1E_SET_ENABLE_TX64, 0);
         call_ctl!(ctx, AV1E_SET_MAX_REFERENCE_FRAMES, 3);
+        // https://github.com/chromium/chromium/blob/327564a4861822c816d35395dfb54d7e5039e6ea/media/video/av1_video_encoder.cc#L662
+        call_ctl!(
+            ctx,
+            AV1E_SET_COLOR_RANGE,
+            if extra.range == ColorRange::Full {
+                aom_color_range::AOM_CR_FULL_RANGE
+            } else {
+                aom_color_range::AOM_CR_STUDIO_RANGE
+            }
+        );
+        call_ctl!(
+            ctx,
+            AV1E_SET_COLOR_PRIMARIES,
+            aom_color_primaries::AOM_CICP_CP_BT_601
+        );
+        call_ctl!(
+            ctx,
+            AV1E_SET_TRANSFER_CHARACTERISTICS,
+            aom_transfer_characteristics::AOM_CICP_TC_BT_601
+        );
+        call_ctl!(
+            ctx,
+            AV1E_SET_MATRIX_COEFFICIENTS,
+            aom_matrix_coefficients::AOM_CICP_MC_BT_601
+        );
 
         Ok(())
     }
 }
 
 impl EncoderApi for AomEncoder {
-    fn new(cfg: crate::codec::EncoderCfg, i444: bool) -> ResultType<Self>
+    fn new(cfg: crate::codec::EncoderCfg, extra: ExtraEncoderCfg) -> ResultType<Self>
     where
         Self: Sized,
     {
         match cfg {
             crate::codec::EncoderCfg::AOM(config) => {
                 let i = call_aom_ptr!(aom_codec_av1_cx());
-                let c = webrtc::enc_cfg(i, config, i444)?;
+                let c = webrtc::enc_cfg(i, config, &extra)?;
 
                 let mut ctx = Default::default();
                 // Flag options: AOM_CODEC_USE_PSNR and AOM_CODEC_USE_HIGHBITDEPTH
@@ -236,13 +269,13 @@ impl EncoderApi for AomEncoder {
                     flags,
                     AOM_ENCODER_ABI_VERSION as _
                 ));
-                webrtc::set_controls(&mut ctx, &c)?;
+                webrtc::set_controls(&mut ctx, &c, extra)?;
                 Ok(Self {
                     ctx,
                     width: config.width as _,
                     height: config.height as _,
-                    i444,
-                    yuvfmt: Self::get_yuvfmt(config.width, config.height, i444),
+                    extra,
+                    yuvfmt: Self::get_yuvfmt(config.width, config.height, &extra),
                 })
             }
             _ => Err(anyhow!("encoder type mismatch")),
@@ -291,16 +324,13 @@ impl EncoderApi for AomEncoder {
 
 impl AomEncoder {
     pub fn encode(&mut self, pts: i64, data: &[u8], stride_align: usize) -> Result<EncodeFrames> {
-        let bpp = if self.i444 { 24 } else { 12 };
+        let (fmt, bpp) = match self.extra.pixfmt {
+            Pixfmt::YUV444P => (aom_img_fmt::AOM_IMG_FMT_I444, 24),
+            _ => (aom_img_fmt::AOM_IMG_FMT_I420, 12),
+        };
         if data.len() < self.width * self.height * bpp / 8 {
             return Err(Error::FailedCall("len not enough".to_string()));
         }
-        let fmt = if self.i444 {
-            aom_img_fmt::AOM_IMG_FMT_I444
-        } else {
-            aom_img_fmt::AOM_IMG_FMT_I420
-        };
-
         let mut image = Default::default();
         call_aom_ptr!(aom_img_wrap(
             &mut image,
@@ -375,12 +405,11 @@ impl AomEncoder {
         (q_min, q_max)
     }
 
-    fn get_yuvfmt(width: u32, height: u32, i444: bool) -> EncodeYuvFormat {
+    fn get_yuvfmt(width: u32, height: u32, extra: &ExtraEncoderCfg) -> EncodeYuvFormat {
         let mut img = Default::default();
-        let fmt = if i444 {
-            aom_img_fmt::AOM_IMG_FMT_I444
-        } else {
-            aom_img_fmt::AOM_IMG_FMT_I420
+        let fmt = match extra.pixfmt {
+            Pixfmt::YUV444P => aom_img_fmt::AOM_IMG_FMT_I444,
+            _ => aom_img_fmt::AOM_IMG_FMT_I420,
         };
         unsafe {
             aom_img_wrap(
@@ -392,9 +421,9 @@ impl AomEncoder {
                 0x1 as _,
             );
         }
-        let pixfmt = if i444 { Pixfmt::I444 } else { Pixfmt::I420 };
         EncodeYuvFormat {
-            pixfmt,
+            pixfmt: extra.pixfmt,
+            range: extra.range,
             w: img.w as _,
             h: img.h as _,
             stride: img.stride.map(|s| s as usize).to_vec(),
@@ -570,8 +599,22 @@ impl GoogleImage for Image {
 
     fn chroma(&self) -> Chroma {
         match self.inner().fmt {
-            aom_img_fmt::AOM_IMG_FMT_I444 => Chroma::I444,
-            _ => Chroma::I420,
+            aom_img_fmt::AOM_IMG_FMT_I444 => Chroma::C444,
+            _ => Chroma::C420,
+        }
+    }
+
+    fn pixfmt(&self) -> Pixfmt {
+        match self.inner().fmt {
+            aom_img_fmt::AOM_IMG_FMT_I444 => Pixfmt::YUV444P,
+            _ => Pixfmt::YUV420P,
+        }
+    }
+
+    fn range(&self) -> ColorRange {
+        match self.inner().range {
+            aom_color_range::AOM_CR_STUDIO_RANGE => ColorRange::Studio,
+            aom_color_range::AOM_CR_FULL_RANGE => ColorRange::Full,
         }
     }
 }

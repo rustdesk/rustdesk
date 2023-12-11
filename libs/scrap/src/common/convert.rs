@@ -8,7 +8,7 @@ include!(concat!(env!("OUT_DIR"), "/yuv_ffi.rs"));
 
 #[cfg(not(target_os = "ios"))]
 use crate::Frame;
-use crate::{generate_call_macro, EncodeYuvFormat, TraitFrame};
+use crate::{generate_call_macro, ColorRange, EncodeYuvFormat, Pixfmt, TraitFrame};
 use hbb_common::{bail, log, ResultType};
 
 generate_call_macro!(call_yuv, false);
@@ -212,7 +212,7 @@ pub fn convert_to_yuv(
             dst_fmt.h
         );
     }
-    if src_pixfmt == crate::Pixfmt::BGRA || src_pixfmt == crate::Pixfmt::RGBA {
+    if src_pixfmt == Pixfmt::BGRA || src_pixfmt == Pixfmt::RGBA {
         if src.len() < src_stride[0] * src_height {
             bail!(
                 "wrong src len, {} < {} * {}",
@@ -222,22 +222,35 @@ pub fn convert_to_yuv(
             );
         }
     }
-    let align = |x:usize| {
-        (x + 63) / 64 * 64
-    };
+    let align = |x: usize| (x + 63) / 64 * 64;
 
     match (src_pixfmt, dst_fmt.pixfmt) {
-        (crate::Pixfmt::BGRA, crate::Pixfmt::I420) | (crate::Pixfmt::RGBA, crate::Pixfmt::I420) => {
+        (Pixfmt::BGRA, Pixfmt::YUV420P) | (Pixfmt::RGBA, Pixfmt::YUV420P) => {
             let dst_stride_y = dst_fmt.stride[0];
             let dst_stride_uv = dst_fmt.stride[1];
             dst.resize(dst_fmt.h * dst_stride_y * 2, 0); // waste some memory to ensure memory safety
             let dst_y = dst.as_mut_ptr();
             let dst_u = dst[dst_fmt.u..].as_mut_ptr();
             let dst_v = dst[dst_fmt.v..].as_mut_ptr();
-            let f = if src_pixfmt == crate::Pixfmt::BGRA {
-                ARGBToI420
-            } else {
-                ABGRToI420
+            let mut src = src;
+            let f = match (src_pixfmt, dst_fmt.pixfmt, dst_fmt.range) {
+                (Pixfmt::BGRA, Pixfmt::YUV420P, ColorRange::Studio) => ARGBToI420,
+                (Pixfmt::RGBA, Pixfmt::YUV420P, ColorRange::Studio) => ABGRToI420,
+                (Pixfmt::BGRA, Pixfmt::YUV420P, ColorRange::Full) => ARGBToJ420,
+                (Pixfmt::RGBA, Pixfmt::YUV420P, ColorRange::Full) => {
+                    mid_data.resize(src.len(), 0);
+                    call_yuv!(ABGRToARGB(
+                        src.as_ptr(),
+                        src_stride[0] as _,
+                        mid_data.as_mut_ptr(),
+                        src_stride[0] as _,
+                        src_width as _,
+                        src_height as _,
+                    ));
+                    src = mid_data;
+                    ARGBToJ420
+                }
+                _ => bail!("unreachable"),
             };
             call_yuv!(f(
                 src.as_ptr(),
@@ -252,7 +265,7 @@ pub fn convert_to_yuv(
                 src_height as _,
             ));
         }
-        (crate::Pixfmt::BGRA, crate::Pixfmt::NV12) | (crate::Pixfmt::RGBA, crate::Pixfmt::NV12) => {
+        (Pixfmt::BGRA, Pixfmt::NV12) | (Pixfmt::RGBA, Pixfmt::NV12) => {
             let dst_stride_y = dst_fmt.stride[0];
             let dst_stride_uv = dst_fmt.stride[1];
             dst.resize(
@@ -261,7 +274,7 @@ pub fn convert_to_yuv(
             );
             let dst_y = dst.as_mut_ptr();
             let dst_uv = dst[dst_fmt.u..].as_mut_ptr();
-            let f = if src_pixfmt == crate::Pixfmt::BGRA {
+            let f = if src_pixfmt == Pixfmt::BGRA {
                 ARGBToNV12
             } else {
                 ABGRToNV12
@@ -277,18 +290,19 @@ pub fn convert_to_yuv(
                 src_height as _,
             ));
         }
-        (crate::Pixfmt::BGRA, crate::Pixfmt::I444) | (crate::Pixfmt::RGBA, crate::Pixfmt::I444) => {
+        (Pixfmt::BGRA, Pixfmt::YUV444P) | (Pixfmt::RGBA, Pixfmt::YUV444P) => {
             let dst_stride_y = dst_fmt.stride[0];
             let dst_stride_u = dst_fmt.stride[1];
             let dst_stride_v = dst_fmt.stride[2];
             dst.resize(
-                align(dst_fmt.h) * (align(dst_stride_y) + align(dst_stride_u) + align(dst_stride_v)),
+                align(dst_fmt.h)
+                    * (align(dst_stride_y) + align(dst_stride_u) + align(dst_stride_v)),
                 0,
             );
             let dst_y = dst.as_mut_ptr();
             let dst_u = dst[dst_fmt.u..].as_mut_ptr();
             let dst_v = dst[dst_fmt.v..].as_mut_ptr();
-            let src = if src_pixfmt == crate::Pixfmt::BGRA {
+            let src = if src_pixfmt == Pixfmt::BGRA {
                 src
             } else {
                 mid_data.resize(src.len(), 0);

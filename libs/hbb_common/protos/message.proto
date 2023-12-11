@@ -18,8 +18,8 @@ message YUV {
 }
 
 enum Chroma {
-  I420 = 0;
-  I444 = 1;
+  C420 = 0;
+  C444 = 1;
 }
 
 message VideoFrame {
@@ -96,12 +96,28 @@ message CodecAbility {
   bool h265 = 5;
 }
 
+// vpx, aom have yuv420p_bt601_studio by default
+// h26x have nv12_bt601_studio by default
+message ColorAbility {
+  bool yuv420p_bt601_full = 1;
+  bool yuv444p_bt601_studio = 2;
+}
+
+message ColorAbilities {
+  ColorAbility vp8 = 1;
+  ColorAbility vp9 = 2;
+  ColorAbility av1 = 3;
+  ColorAbility h264 = 4;
+  ColorAbility h265 = 5;
+}
+
 message SupportedEncoding {
   bool h264 = 1;
   bool h265 = 2;
   bool vp8 = 3;
   bool av1 = 4;
-  CodecAbility i444 = 5;
+  CodecAbility i444 = 5; // deprecated, use color_abilities instead
+  ColorAbilities color_abilities = 6;
 }
 
 message PeerInfo {
@@ -563,6 +579,7 @@ message SupportedDecoding {
   int32 ability_av1 = 6;
   CodecAbility i444 = 7;
   Chroma prefer_chroma = 8;
+  ColorAbilities color_abilities = 9;
 }
 
 message OptionMessage {

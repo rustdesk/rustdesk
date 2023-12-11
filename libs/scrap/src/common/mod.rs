@@ -50,7 +50,7 @@ pub mod record;
 mod vpx;
 
 #[repr(usize)]
-#[derive(Copy, Clone)]
+#[derive(Debug, Copy, Clone)]
 pub enum ImageFormat {
     Raw,
     ABGR,
@@ -124,14 +124,21 @@ pub trait TraitFrame {
 pub enum Pixfmt {
     BGRA,
     RGBA,
-    I420,
+    YUV420P,
     NV12,
-    I444,
+    YUV444P,
+}
+
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub enum ColorRange {
+    Studio,
+    Full,
 }
 
 #[derive(Debug, Clone)]
 pub struct EncodeYuvFormat {
     pub pixfmt: Pixfmt,
+    pub range: ColorRange,
     pub w: usize,
     pub h: usize,
     pub stride: Vec<usize>,
@@ -292,6 +299,8 @@ pub trait GoogleImage {
     fn stride(&self) -> Vec<i32>;
     fn planes(&self) -> Vec<*mut u8>;
     fn chroma(&self) -> Chroma;
+    fn pixfmt(&self) -> Pixfmt;
+    fn range(&self) -> ColorRange;
     fn get_bytes_per_row(w: usize, fmt: ImageFormat, stride: usize) -> usize {
         let bytes_per_pixel = match fmt {
             ImageFormat::Raw => 3,
@@ -310,9 +319,13 @@ pub trait GoogleImage {
         let stride = self.stride();
         let planes = self.planes();
         unsafe {
-            match (self.chroma(), rgb.fmt()) {
-                (Chroma::I420, ImageFormat::Raw) => {
-                    super::I420ToRAW(
+            match (self.pixfmt(), rgb.fmt()) {
+                (Pixfmt::YUV420P, ImageFormat::Raw) => {
+                    let f = match self.range() {
+                        ColorRange::Studio => super::I420ToRAW,
+                        ColorRange::Full => super::J420ToRAW,
+                    };
+                    f(
                         planes[0],
                         stride[0],
                         planes[1],
@@ -325,8 +338,12 @@ pub trait GoogleImage {
                         self.height() as _,
                     );
                 }
-                (Chroma::I420, ImageFormat::ARGB) => {
-                    super::I420ToARGB(
+                (Pixfmt::YUV420P, ImageFormat::ARGB) => {
+                    let f = match self.range() {
+                        ColorRange::Studio => super::I420ToARGB,
+                        ColorRange::Full => super::J420ToARGB,
+                    };
+                    f(
                         planes[0],
                         stride[0],
                         planes[1],
@@ -339,8 +356,12 @@ pub trait GoogleImage {
                         self.height() as _,
                     );
                 }
-                (Chroma::I420, ImageFormat::ABGR) => {
-                    super::I420ToABGR(
+                (Pixfmt::YUV420P, ImageFormat::ABGR) => {
+                    let f = match self.range() {
+                        ColorRange::Studio => super::I420ToABGR,
+                        ColorRange::Full => super::J420ToABGR,
+                    };
+                    f(
                         planes[0],
                         stride[0],
                         planes[1],
@@ -353,8 +374,12 @@ pub trait GoogleImage {
                         self.height() as _,
                     );
                 }
-                (Chroma::I444, ImageFormat::ARGB) => {
-                    super::I444ToARGB(
+                (Pixfmt::YUV444P, ImageFormat::ARGB) => {
+                    let f = match self.range() {
+                        ColorRange::Studio => super::I444ToARGB,
+                        ColorRange::Full => super::J444ToARGB,
+                    };
+                    f(
                         planes[0],
                         stride[0],
                         planes[1],
@@ -367,8 +392,12 @@ pub trait GoogleImage {
                         self.height() as _,
                     );
                 }
-                (Chroma::I444, ImageFormat::ABGR) => {
-                    super::I444ToABGR(
+                (Pixfmt::YUV444P, ImageFormat::ABGR) => {
+                    let f = match self.range() {
+                        ColorRange::Studio => super::I444ToABGR,
+                        ColorRange::Full => super::J444ToABGR,
+                    };
+                    f(
                         planes[0],
                         stride[0],
                         planes[1],
@@ -382,7 +411,7 @@ pub trait GoogleImage {
                     );
                 }
                 // (Chroma::I444, ImageFormat::Raw), new version libyuv have I444ToRAW
-                _ => log::error!("unsupported pixfmt: {:?}", self.chroma()),
+                _ => log::error!("{:?} -> {:?} is not supported", self.pixfmt(), rgb.fmt()),
             }
         }
     }

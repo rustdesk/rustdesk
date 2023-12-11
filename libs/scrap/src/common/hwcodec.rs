@@ -1,5 +1,5 @@
 use crate::{
-    codec::{base_bitrate, codec_thread_num, EncoderApi, EncoderCfg},
+    codec::{base_bitrate, codec_thread_num, EncoderApi, EncoderCfg, ExtraEncoderCfg},
     hw, ImageFormat, ImageRgb, Pixfmt, HW_STRIDE_ALIGN,
 };
 use hbb_common::{
@@ -36,10 +36,11 @@ pub struct HwEncoder {
     width: u32,
     height: u32,
     bitrate: u32, //kbs
+    extra: ExtraEncoderCfg,
 }
 
 impl EncoderApi for HwEncoder {
-    fn new(cfg: EncoderCfg, _i444: bool) -> ResultType<Self>
+    fn new(cfg: EncoderCfg, extra: ExtraEncoderCfg) -> ResultType<Self>
     where
         Self: Sized,
     {
@@ -82,6 +83,7 @@ impl EncoderApi for HwEncoder {
                         width: ctx.width as _,
                         height: ctx.height as _,
                         bitrate,
+                        extra,
                     }),
                     Err(_) => Err(anyhow!(format!("Failed to create encoder"))),
                 }
@@ -120,7 +122,7 @@ impl EncoderApi for HwEncoder {
         let pixfmt = if self.pixfmt == AVPixelFormat::AV_PIX_FMT_NV12 {
             Pixfmt::NV12
         } else {
-            Pixfmt::I420
+            Pixfmt::YUV420P
         };
         let stride = self
             .encoder
@@ -131,6 +133,7 @@ impl EncoderApi for HwEncoder {
             .collect();
         crate::EncodeYuvFormat {
             pixfmt,
+            range: self.extra.range,
             w: self.encoder.ctx.width as _,
             h: self.encoder.ctx.height as _,
             stride,

@@ -5,9 +5,9 @@ use hbb_common::{
 };
 use scrap::{
     aom::{AomDecoder, AomEncoder, AomEncoderConfig},
-    codec::{EncoderApi, EncoderCfg, Quality as Q},
-    convert_to_yuv, Capturer, Display, TraitCapturer, VpxDecoder, VpxDecoderConfig, VpxEncoder,
-    VpxEncoderConfig,
+    codec::{EncoderApi, EncoderCfg, ExtraEncoderCfg, Quality as Q},
+    convert_to_yuv, Capturer, ColorRange, Display, TraitCapturer, VpxDecoder, VpxDecoderConfig,
+    VpxEncoder, VpxEncoderConfig,
     VpxVideoCodecId::{self, *},
     STRIDE_ALIGN,
 };
@@ -110,7 +110,15 @@ fn test_vpx(
         codec: codec_id,
         keyframe_interval: None,
     });
-    let mut encoder = VpxEncoder::new(config, i444).unwrap();
+    let extra = ExtraEncoderCfg {
+        pixfmt: if i444 {
+            scrap::Pixfmt::YUV444P
+        } else {
+            scrap::Pixfmt::YUV420P
+        },
+        range: ColorRange::Studio,
+    };
+    let mut encoder = VpxEncoder::new(config, extra).unwrap();
     let mut vpxs = vec![];
     let start = Instant::now();
     let mut size = 0;
@@ -122,7 +130,7 @@ fn test_vpx(
         match c.frame(std::time::Duration::from_millis(30)) {
             Ok(frame) => {
                 let tmp_timer = Instant::now();
-                convert_to_yuv(&frame, encoder.yuvfmt(), &mut yuv, &mut mid_data);
+                convert_to_yuv(&frame, encoder.yuvfmt(), &mut yuv, &mut mid_data).unwrap();
                 for ref frame in encoder
                     .encode(start.elapsed().as_millis() as _, &yuv, STRIDE_ALIGN)
                     .unwrap()
@@ -187,7 +195,15 @@ fn test_av1(
         quality,
         keyframe_interval: None,
     });
-    let mut encoder = AomEncoder::new(config, i444).unwrap();
+    let extra = ExtraEncoderCfg {
+        pixfmt: if i444 {
+            scrap::Pixfmt::YUV444P
+        } else {
+            scrap::Pixfmt::YUV420P
+        },
+        range: ColorRange::Studio,
+    };
+    let mut encoder = AomEncoder::new(config, extra).unwrap();
     let start = Instant::now();
     let mut size = 0;
     let mut av1s: Vec<Vec<u8>> = vec![];
@@ -199,7 +215,7 @@ fn test_av1(
         match c.frame(std::time::Duration::from_millis(30)) {
             Ok(frame) => {
                 let tmp_timer = Instant::now();
-                convert_to_yuv(&frame, encoder.yuvfmt(), &mut yuv, &mut mid_data);
+                convert_to_yuv(&frame, encoder.yuvfmt(), &mut yuv, &mut mid_data).unwrap();
                 for ref frame in encoder
                     .encode(start.elapsed().as_millis() as _, &yuv, STRIDE_ALIGN)
                     .unwrap()
@@ -274,6 +290,10 @@ mod hw {
         yuv_count: usize,
         h26xs: &mut Vec<Vec<u8>>,
     ) {
+        let extra = ExtraEncoderCfg {
+            pixfmt: scrap::Pixfmt::NV12,
+            range: ColorRange::Studio,
+        };
         let mut encoder = HwEncoder::new(
             EncoderCfg::HW(HwEncoderConfig {
                 name: info.name.clone(),
@@ -282,7 +302,7 @@ mod hw {
                 quality,
                 keyframe_interval: None,
             }),
-            false,
+            extra,
         )
         .unwrap();
         let mut size = 0;
@@ -295,7 +315,7 @@ mod hw {
             match c.frame(std::time::Duration::from_millis(30)) {
                 Ok(frame) => {
                     let tmp_timer = Instant::now();
-                    convert_to_yuv(&frame, encoder.yuvfmt(), &mut yuv, &mut mid_data);
+                    convert_to_yuv(&frame, encoder.yuvfmt(), &mut yuv, &mut mid_data).unwrap();
                     for ref frame in encoder.encode(&yuv).unwrap() {
                         size += frame.data.len();
 
