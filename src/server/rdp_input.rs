@@ -35,8 +35,12 @@ pub struct RdpInputKeyboard {
             true 
         }
 
-        fn key_sequence(&mut self, _: &str) {
-            // no api for this
+        fn key_sequence(&mut self, s: &str) {
+            for c in s.chars() {
+                let key = Key::Layout(c);
+                let _ = handle_key(true, key, self.conn.clone(), self.session.clone());
+                let _ = handle_key(false, key, self.conn.clone(), self.session.clone());
+            }
         }
 
         fn key_down(&mut self, key: Key) -> enigo::ResultType {
