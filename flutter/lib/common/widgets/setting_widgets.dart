@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/consts.dart';
+import 'package:flutter_hbb/models/desktop_render_texture.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:get/get.dart';
 
@@ -203,4 +204,36 @@ List<Widget> ServerConfigImportExportWidgets(
         child: IconButton(
             icon: Icon(Icons.copy, color: Colors.grey), onPressed: export))
   ];
+}
+
+List<(String, String)> otherDefaultSettings() {
+  List<(String, String)> v = [
+    ('View Mode', 'view_only'),
+    if (isDesktop) ('show_monitors_tip', kKeyShowMonitorsToolbar),
+    if (isDesktop) ('Collapse toolbar', 'collapse_toolbar'),
+    ('Show remote cursor', 'show_remote_cursor'),
+    if (isDesktop) ('Zoom cursor', 'zoom-cursor'),
+    ('Show quality monitor', 'show_quality_monitor'),
+    ('Mute', 'disable_audio'),
+    if (isDesktop) ('Enable file copy and paste', 'enable_file_transfer'),
+    ('Disable clipboard', 'disable_clipboard'),
+    ('Lock after session end', 'lock_after_session_end'),
+    ('Privacy mode', 'privacy_mode'),
+    if (isMobile) ('Touch mode', 'touch-mode'),
+    ('True color (4:4:4)', 'i444'),
+    ('Reverse mouse wheel', 'reverse_mouse_wheel'),
+    ('swap-left-right-mouse', 'swap-left-right-mouse'),
+    if (isDesktop && useTextureRender)
+      (
+        'Show displays as individual windows',
+        kKeyShowDisplaysAsIndividualWindows
+      ),
+    if (isDesktop && useTextureRender)
+      (
+        'Use all my displays for the remote session',
+        kKeyUseAllMyDisplaysForTheRemoteSession
+      )
+  ];
+
+  return v;
 }

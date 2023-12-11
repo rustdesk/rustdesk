@@ -1613,7 +1613,6 @@ class _KeyboardMenu extends StatelessWidget {
           Divider(),
           viewMode(),
           Divider(),
-          reverseMouseWheel(),
           ...toolbarToggles,
         ]);
   }
@@ -1737,30 +1736,6 @@ class _KeyboardMenu extends StatelessWidget {
             : null,
         ffi: ffi,
         child: Text(translate('View Mode')));
-  }
-
-  reverseMouseWheel() {
-    return futureBuilder(future: () async {
-      final v =
-          await bind.sessionGetReverseMouseWheel(sessionId: ffi.sessionId);
-      if (v != null && v != '') {
-        return v;
-      }
-      return bind.mainGetUserDefaultOption(key: 'reverse_mouse_wheel');
-    }(), hasData: (data) {
-      final enabled = !ffi.ffiModel.viewOnly;
-      onChanged(bool? value) async {
-        if (value == null) return;
-        await bind.sessionSetReverseMouseWheel(
-            sessionId: ffi.sessionId, value: value ? 'Y' : 'N');
-      }
-
-      return CkbMenuButton(
-          value: data == 'Y',
-          onChanged: enabled ? onChanged : null,
-          child: Text(translate('Reverse mouse wheel')),
-          ffi: ffi);
-    });
   }
 }
 

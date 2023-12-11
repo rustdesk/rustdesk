@@ -623,26 +623,52 @@ List<TToggleMenu> toolbarKeyboardToggles(FFI ffi) {
     final option = 'allow_swap_key';
     final value =
         bind.sessionGetToggleOptionSync(sessionId: sessionId, arg: option);
+    onChanged(bool? value) {
+      if (value == null) return;
+      bind.sessionToggleOption(sessionId: sessionId, value: option);
+    }
+
+    final enabled = !ffi.ffiModel.viewOnly;
     v.add(TToggleMenu(
         value: value,
-        onChanged: (value) {
-          if (value == null) return;
-          bind.sessionToggleOption(sessionId: sessionId, value: option);
-        },
+        onChanged: enabled ? onChanged : null,
         child: Text(translate('Swap control-command key'))));
   }
 
+  // reverse mouse wheel
+  if (ffiModel.keyboard) {
+    var optionValue =
+        bind.sessionGetReverseMouseWheelSync(sessionId: sessionId) ?? '';
+    if (optionValue == '') {
+      optionValue = bind.mainGetUserDefaultOption(key: 'reverse_mouse_wheel');
+    }
+    onChanged(bool? value) async {
+      if (value == null) return;
+      await bind.sessionSetReverseMouseWheel(
+          sessionId: sessionId, value: value ? 'Y' : 'N');
+    }
+
+    final enabled = !ffi.ffiModel.viewOnly;
+    v.add(TToggleMenu(
+        value: optionValue == 'Y',
+        onChanged: enabled ? onChanged : null,
+        child: Text(translate('Reverse mouse wheel'))));
+  }
+
   // swap left right mouse
-  if (!isMobile && ffiModel.keyboard) {
+  if (ffiModel.keyboard) {
     final option = 'swap-left-right-mouse';
     final value =
         bind.sessionGetToggleOptionSync(sessionId: sessionId, arg: option);
+    onChanged(bool? value) {
+      if (value == null) return;
+      bind.sessionToggleOption(sessionId: sessionId, value: option);
+    }
+
+    final enabled = !ffi.ffiModel.viewOnly;
     v.add(TToggleMenu(
         value: value,
-        onChanged: (value) {
-          if (value == null) return;
-          bind.sessionToggleOption(sessionId: sessionId, value: option);
-        },
+        onChanged: enabled ? onChanged : null,
         child: Text(translate('swap-left-right-mouse'))));
   }
   return v;

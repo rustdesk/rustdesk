@@ -340,12 +340,13 @@ pub fn session_set_keyboard_mode(session_id: SessionID, value: String) {
     }
 }
 
-pub fn session_get_reverse_mouse_wheel(session_id: SessionID) -> Option<String> {
-    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
+pub fn session_get_reverse_mouse_wheel_sync(session_id: SessionID) -> SyncReturn<Option<String>> {
+    let res = if let Some(session) = sessions::get_session_by_session_id(&session_id) {
         Some(session.get_reverse_mouse_wheel())
     } else {
         None
-    }
+    };
+    SyncReturn(res)
 }
 
 pub fn session_set_reverse_mouse_wheel(session_id: SessionID, value: String) {
