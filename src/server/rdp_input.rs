@@ -32,7 +32,7 @@ pub struct RdpInputKeyboard {
 
         fn get_key_state(&mut self, _: Key) -> bool {
             // no api for this
-            true 
+            false
         }
 
         fn key_sequence(&mut self, s: &str) {
@@ -151,10 +151,6 @@ pub struct RdpInputKeyboard {
             Key::Raw(key) => {
                 let key = get_raw_evdev_keycode(key);
                 remote_desktop_portal::notify_keyboard_keycode(&p,session, HashMap::new(), key, state)?; 
-            },
-            Key::CapsLock => {
-                // Todo fix capslock
-                return Ok(());
             },
             _ => {
                 if let Ok((key, is_shift)) = map_key(&key) {
