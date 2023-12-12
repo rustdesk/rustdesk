@@ -1,23 +1,23 @@
+use crate::uinput::service::map_key;
+use dbus::{blocking::SyncConnection, Path};
 use enigo::{Key, KeyboardControllable, MouseButton, MouseControllable};
 use hbb_common::ResultType;
-use dbus::{blocking::SyncConnection, Path};
-use scrap::wayland::pipewire::{PwStreamInfo, get_portal};
+use scrap::wayland::pipewire::{get_portal, PwStreamInfo};
 use scrap::wayland::remote_desktop_portal::OrgFreedesktopPortalRemoteDesktop as remote_desktop_portal;
 use std::collections::HashMap;
 use std::sync::Arc;
-use crate::uinput::service::map_key;
 
 pub mod client {
     use super::*;
 
-pub struct RdpInputKeyboard {
+    pub struct RdpInputKeyboard {
         conn: Arc<SyncConnection>,
         session: Path<'static>,
     }
 
     impl RdpInputKeyboard {
-        pub fn new( conn: Arc<SyncConnection>, session: Path<'static>) -> ResultType<Self> {
-                Ok(Self { conn, session })
+        pub fn new(conn: Arc<SyncConnection>, session: Path<'static>) -> ResultType<Self> {
+            Ok(Self { conn, session })
         }
     }
 
@@ -111,7 +111,7 @@ pub struct RdpInputKeyboard {
             Ok(())
         }
         fn mouse_up(&mut self, button: MouseButton) {
-            handle_mouse(false , button, self.conn.clone(), self.session.clone());
+            handle_mouse(false, button, self.conn.clone(), self.session.clone());
         }
         fn mouse_click(&mut self, button: MouseButton) {
             handle_mouse(true, button, self.conn.clone(), self.session.clone());
@@ -141,38 +141,70 @@ pub struct RdpInputKeyboard {
 
     fn get_raw_evdev_keycode(key: u16) -> i32 {
         let mut key = key as i32 - 8; // 8 is the offset between xkb and evdev
-        if key == 126 {key = 125;} // fix for right_meta key
+        if key == 126 {
+            key = 125;
+        } // fix for right_meta key
         key
     }
-    fn handle_key(down: bool, key: Key, conn : Arc<SyncConnection>, session: Path<'static>) -> ResultType<()> {
-        let state: u32 = if down {1} else {0};
+    fn handle_key(
+        down: bool,
+        key: Key,
+        conn: Arc<SyncConnection>,
+        session: Path<'static>,
+    ) -> ResultType<()> {
+        let state: u32 = if down { 1 } else { 0 };
         let p = get_portal(&conn);
         match key {
             Key::Raw(key) => {
                 let key = get_raw_evdev_keycode(key);
-                remote_desktop_portal::notify_keyboard_keycode(&p,session, HashMap::new(), key, state)?; 
-            },
+                remote_desktop_portal::notify_keyboard_keycode(
+                    &p,
+                    session,
+                    HashMap::new(),
+                    key,
+                    state,
+                )?;
+            }
             _ => {
                 if let Ok((key, is_shift)) = map_key(&key) {
                     if is_shift {
-                        remote_desktop_portal::notify_keyboard_keycode(&p,session.clone(), HashMap::new(), evdev::Key::KEY_LEFTSHIFT.code() as i32, state)?; 
+                        remote_desktop_portal::notify_keyboard_keycode(
+                            &p,
+                            session.clone(),
+                            HashMap::new(),
+                            evdev::Key::KEY_LEFTSHIFT.code() as i32,
+                            state,
+                        )?;
                     }
-                    remote_desktop_portal::notify_keyboard_keycode(&p,session, HashMap::new(), key.code() as i32, state)?; 
+                    remote_desktop_portal::notify_keyboard_keycode(
+                        &p,
+                        session,
+                        HashMap::new(),
+                        key.code() as i32,
+                        state,
+                    )?;
                 }
             }
         }
         Ok(())
     }
-    fn handle_mouse( down: bool, button: MouseButton, conn : Arc<SyncConnection>, session: Path<'static>){
+    fn handle_mouse(
+        down: bool,
+        button: MouseButton,
+        conn: Arc<SyncConnection>,
+        session: Path<'static>,
+    ) {
         let p = get_portal(&conn);
         let but_key = match button {
             // evdev mouse button codes
             MouseButton::Left => 272,
             MouseButton::Right => 273,
             MouseButton::Middle => 274,
-            _ => {return;}
+            _ => {
+                return;
+            }
         };
-        let state: u32 = if down {1} else {0};
+        let state: u32 = if down { 1 } else { 0 };
         let _ = remote_desktop_portal::notify_pointer_button(
             &p,
             session.clone(),
