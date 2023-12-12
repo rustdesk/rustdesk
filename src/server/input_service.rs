@@ -465,22 +465,23 @@ pub async fn setup_uinput(minx: i32, maxx: i32, miny: i32, maxy: i32) -> ResultT
     Ok(())
 }
 
+#[cfg(target_os = "linux")]
 pub async fn setup_rdp_input() -> ResultType<(), Box<dyn std::error::Error>> {
-        let mut en = ENIGO.lock().unwrap();
-        let rdp_res_lock = RDP_RESPONSE.lock().unwrap();
-        let rdp_res = rdp_res_lock.as_ref().unwrap();
+    let mut en = ENIGO.lock().unwrap();
+    let rdp_res_lock = RDP_RESPONSE.lock().unwrap();
+    let rdp_res = rdp_res_lock.as_ref().unwrap();
 
-        let keyboard = RdpInputKeyboard::new(rdp_res.conn.clone(), rdp_res.session.clone())?;
-        en.set_custom_keyboard(Box::new(keyboard));
-        log::info!("RdpInput keyboard created");
+    let keyboard = RdpInputKeyboard::new(rdp_res.conn.clone(), rdp_res.session.clone())?;
+    en.set_custom_keyboard(Box::new(keyboard));
+    log::info!("RdpInput keyboard created");
 
-        if let Some(stream) = rdp_res.streams.clone().into_iter().next() {
-            let mouse = RdpInputMouse::new(rdp_res.conn.clone(), rdp_res.session.clone(), stream)?;
-            en.set_custom_mouse(Box::new(mouse));
-            log::info!("RdpInput mouse created");
-        }
+    if let Some(stream) = rdp_res.streams.clone().into_iter().next() {
+        let mouse = RdpInputMouse::new(rdp_res.conn.clone(), rdp_res.session.clone(), stream)?;
+        en.set_custom_mouse(Box::new(mouse));
+        log::info!("RdpInput mouse created");
+    }
 
-        Ok(())
+    Ok(())
 }
 
 #[cfg(target_os = "linux")]
