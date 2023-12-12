@@ -137,24 +137,26 @@ impl Capturable for PipeWireCapturable {
     }
 }
 
-fn get_res(capturable:PipeWireCapturable) -> Result<(usize, usize), Box<dyn Error>> {
+fn get_res(capturable: PipeWireCapturable) -> Result<(usize, usize), Box<dyn Error>> {
     let rec = PipeWireRecorder::new(capturable)?;
-    if let Some(sample) = rec.appsink
-            .try_pull_sample(gst::ClockTime::from_mseconds(300))
-        {
-            let cap = sample
-                .get_caps()
-                .ok_or("Failed get caps")?
-                .get_structure(0)
-                .ok_or("Failed to get structure")?;
-            let w: i32 = cap.get_value("width")?.get_some()?;
-            let h: i32 = cap.get_value("height")?.get_some()?;
-            let w = w as usize;
-            let h = h as usize;
-            Ok((w,h))
-        }
-    else {
-        Err(Box::new(GStreamerError("Error getting screen resolution".into())))
+    if let Some(sample) = rec
+        .appsink
+        .try_pull_sample(gst::ClockTime::from_mseconds(300))
+    {
+        let cap = sample
+            .get_caps()
+            .ok_or("Failed get caps")?
+            .get_structure(0)
+            .ok_or("Failed to get structure")?;
+        let w: i32 = cap.get_value("width")?.get_some()?;
+        let h: i32 = cap.get_value("height")?.get_some()?;
+        let w = w as usize;
+        let h = h as usize;
+        Ok((w, h))
+    } else {
+        Err(Box::new(GStreamerError(
+            "Error getting screen resolution".into(),
+        )))
     }
 }
 
@@ -467,8 +469,15 @@ pub fn get_available_cursor_modes() -> Result<u32, dbus::Error> {
 }
 
 // mostly inspired by https://gitlab.gnome.org/snippets/19
-pub fn request_remote_desktop(
-) -> Result<(SyncConnection, OwnedFd, Vec<PwStreamInfo>, dbus::Path<'static>), Box<dyn Error>> {
+pub fn request_remote_desktop() -> Result<
+    (
+        SyncConnection,
+        OwnedFd,
+        Vec<PwStreamInfo>,
+        dbus::Path<'static>,
+    ),
+    Box<dyn Error>,
+> {
     unsafe {
         if !INIT {
             gstreamer::init()?;
@@ -527,9 +536,7 @@ pub fn request_remote_desktop(
                 .to_string()
                 .into();
 
-            session.lock().unwrap().replace(
-                ses.clone()
-            );
+            session.lock().unwrap().replace(ses.clone());
 
             let session = session.lock().unwrap().clone().unwrap();
             let path = portal.select_devices(session.clone(), args)?;
@@ -545,9 +552,13 @@ pub fn request_remote_desktop(
                     let mut args: PropMap = HashMap::new();
                     if let Ok(version) = remote_desktop_portal::version(&portal) {
                         if version >= 4 {
-                            let restore_token = config::LocalConfig::get_option(RESTORE_TOKEN_CONF_KEY);
+                            let restore_token =
+                                config::LocalConfig::get_option(RESTORE_TOKEN_CONF_KEY);
                             if !restore_token.is_empty() {
-                                args.insert(RESTORE_TOKEN.to_string(), Variant(Box::new(restore_token)));
+                                args.insert(
+                                    RESTORE_TOKEN.to_string(),
+                                    Variant(Box::new(restore_token)),
+                                );
                             }
                             // persist_mode may be configured by the user.
                             args.insert("persist_mode".to_string(), Variant(Box::new(2u32)));
@@ -577,7 +588,8 @@ pub fn request_remote_desktop(
                                 "handle_token".to_string(),
                                 Variant(Box::new("u4".to_string())),
                             );
-                            let path = remote_desktop_portal::start(&portal, session.clone(), "", args)?;
+                            let path =
+                                remote_desktop_portal::start(&portal, session.clone(), "", args)?;
                             let session = session.clone();
                             let fd = fd.clone();
                             let streams = streams.clone();
@@ -590,8 +602,11 @@ pub fn request_remote_desktop(
                                     let portal = get_portal(c);
                                     if let Ok(version) = remote_desktop_portal::version(&portal) {
                                         if version >= 4 {
-                                            if let Some(restore_token) = r.results.get(RESTORE_TOKEN) {
-                                                if let Some(restore_token) = restore_token.as_str() {
+                                            if let Some(restore_token) =
+                                                r.results.get(RESTORE_TOKEN)
+                                            {
+                                                if let Some(restore_token) = restore_token.as_str()
+                                                {
                                                     config::LocalConfig::set_option(
                                                         RESTORE_TOKEN_CONF_KEY.to_owned(),
                                                         restore_token.to_owned(),
@@ -607,7 +622,10 @@ pub fn request_remote_desktop(
                                         .unwrap()
                                         .append(&mut streams_from_response(r));
                                     fd.clone().lock().unwrap().replace(
-                                        portal.open_pipe_wire_remote(session.clone(), HashMap::new())?,
+                                        portal.open_pipe_wire_remote(
+                                            session.clone(),
+                                            HashMap::new(),
+                                        )?,
                                     );
                                     Ok(())
                                 },
@@ -619,7 +637,7 @@ pub fn request_remote_desktop(
                     )?;
                     Ok(())
                 },
-                failure_out
+                failure_out,
             )?;
             Ok(())
         },
@@ -643,7 +661,12 @@ pub fn request_remote_desktop(
 
     if let Some(fd_res) = fd_res.clone() {
         if !streams_res.is_empty() && !session_res.is_none() {
-            return Ok((conn, fd_res, streams_res.clone(), session_res.clone().unwrap()));
+            return Ok((
+                conn,
+                fd_res,
+                streams_res.clone(),
+                session_res.clone().unwrap(),
+            ));
         }
     }
     Err(Box::new(DBusError(
@@ -661,13 +684,15 @@ pub fn get_capturables() -> Result<Vec<PipeWireCapturable>, Box<dyn Error>> {
             conn,
             streams,
             fd,
-            session
+            session,
         };
         *rdp_connection = Some(rdp_res);
     }
 
     let rdp_res = rdp_connection.as_ref().unwrap();
-    Ok(rdp_res.streams.clone()
+    Ok(rdp_res
+        .streams
+        .clone()
         .into_iter()
         .map(|s| PipeWireCapturable::new(rdp_res.conn.clone(), rdp_res.fd.clone(), s))
         .collect())
