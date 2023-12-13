@@ -576,7 +576,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("input_source_1_tip", "Vstupný zdroj 1"),
         ("input_source_2_tip", "Vstupný zdroj 2"),
         ("capture_display_elevated_connections_tip", "Snímanie viacerých displejov nie je podporované v režime privilegovaného používateľa. Ak chcete ovládať viac displejov, skúste to po inštalácii znova."),
-        ("Swap control-command key", ""),
-        ("swap-left-right-mouse", ""),
+        ("Swap control-command key", "Vymeniť kláves ovládania a príkazu"),
+        ("swap-left-right-mouse", "Prehodiť ľavé a pravé tlačidlo myši"),
     ].iter().cloned().collect();
 }
