@@ -521,6 +521,7 @@ pub fn request_remote_desktop() -> Result<
                 "handle_token".to_string(),
                 Variant(Box::new("u2".to_string())),
             );
+            args.insert("types".to_string(), Variant(Box::new(7u32)));
 
             let ses: dbus::Path = r
                 .results
