@@ -74,6 +74,7 @@ message RegisterPkResponse {
   }
   Result result = 1;
   string mq_token = 2;
+  int64 mq_token_expire = 3;
 }
 
 message PunchHoleResponse {

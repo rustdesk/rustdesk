@@ -52,6 +52,15 @@ struct MqConnectInfo {
     url: String,
     inbox_prefix: String,
     credentials: String,
+    expire: i64,
+}
+
+impl MqConnectInfo {
+    fn to_connect_options(&self) -> ResultType<ConnectOptions> {
+        Ok(ConnectOptions::new()
+            .credentials(&self.credentials)?
+            .custom_inbox_prefix(self.inbox_prefix.clone()))
+    }
 }
 
 #[derive(Clone)]
@@ -60,6 +69,8 @@ pub struct RendezvousMediator {
     host: String,
     host_prefix: String,
     last_id_pk_registry: String,
+    mq_token_expire: i64,
+    mq_url: String,
 }
 
 impl RendezvousMediator {
@@ -154,6 +165,8 @@ impl RendezvousMediator {
             host: host.clone(),
             host_prefix,
             last_id_pk_registry: "".to_owned(),
+            mq_token_expire: -1,
+            mq_url: "".to_owned(),
         };
 
         const TIMER_OUT: Duration = Duration::from_secs(1);
@@ -534,6 +547,8 @@ impl RendezvousMediator {
             host: host.clone(),
             host_prefix,
             last_id_pk_registry: "".to_owned(),
+            mq_token_expire: -1,
+            mq_url: "".to_owned(),
         };
 
         // Handshake to register client and connect to mq server
@@ -545,6 +560,7 @@ impl RendezvousMediator {
         const MAX_FAILS1: i64 = 3;
         const MAX_FAILS2: i64 = 6;
         const RE_HANDSHAKE_INTERVAL: i64 = 60_000;
+        const MQ_TOKEN_RENEW_DEADLINE: i64 = 60;
 
         let mut timer = interval(TIMER_OUT);
         let mut fails = 0;
@@ -671,9 +687,33 @@ impl RendezvousMediator {
                     let timeout = ping_latency > REG_TIMEOUT;
 
                     if first_ping || last_ping_too_old || timeout {
-                        // Register pk if client key not confirmed
-                        if !Config::get_key_confirmed() || !Config::get_host_key_confirmed(&rz.host_prefix) {
-                            allow_err!(rz.register_pk_mq(&mq_client).await);
+                        // Register pk if client key not confirmed, or
+                        let key_not_confirmed = !Config::get_key_confirmed() ||
+                        !Config::get_host_key_confirmed(&rz.host_prefix);
+                        // if mq token was about to expire
+                        let now_timestamp = chrono::Utc::now().timestamp();
+                        let mq_token_expired =
+                            now_timestamp > rz.mq_token_expire - MQ_TOKEN_RENEW_DEADLINE;
+
+                        if key_not_confirmed || mq_token_expired {
+                            match rz.register_pk_mq(&mq_client).await {
+                                Ok(connect_info) => {
+                                    // Connect using new client credential
+                                    match rz.connect_mq(connect_info).await {
+                                        Ok((client, subscription)) => {
+                                            mq_client = client;
+                                            push_subscription = subscription;
+                                            log::info!("MQ token renewed");
+                                        }
+                                        Err(err) => {
+                                            log::error!("Failed to connect to mq server: {}", err);
+                                        }
+                                    }
+                                }
+                                Err(err) => {
+                                    log::error!("Failed to register pk: {}", err);
+                                }
+                            }
                         }
 
                         // Send ping message
@@ -728,12 +768,10 @@ impl RendezvousMediator {
         &mut self,
         host: &str,
     ) -> ResultType<(async_nats::client::Client, Subscriber)> {
-        const MQ_RECONNECT_INTERVAL: u64 = 5_000;
-
         // Get temporary credential
         let token_server = replace_port(host, TOKEN_SERVER_PORT);
         let token_server_url = format!("https://{}", token_server);
-        let connect_info = match self.get_temp_mq_connect_info(&token_server_url).await {
+        let temp_connect_info = match self.get_temp_mq_connect_info(&token_server_url).await {
             Ok(temp_mq_token) => temp_mq_token,
             Err(_) => {
                 // If failed, try http protocol
@@ -747,45 +785,18 @@ impl RendezvousMediator {
         log::debug!("Got temp token from token server");
 
         // Register pk & id using temporary credential
-        let options = ConnectOptions::new()
-            .credentials(&connect_info.credentials)?
-            .custom_inbox_prefix(connect_info.inbox_prefix);
-        let client = async_nats::connect_with_options(&connect_info.url, options).await?;
+        let options = temp_connect_info.to_connect_options()?;
+        let mq_url = temp_connect_info.url.clone();
+        let client = async_nats::connect_with_options(&mq_url, options).await?;
         log::debug!(
             "Connected to mq server at: {}, try to register client pk",
-            connect_info.url
+            mq_url
         );
-        let mq_token = self.register_pk_mq(&client).await?;
+        self.mq_url = mq_url;
+        let connect_info = self.register_pk_mq(&client).await?;
 
-        let options = ConnectOptions::new()
-            .credentials(&mq_token)?
-            .reconnect_delay_callback(|attempts| {
-                if attempts <= 2 {
-                    // Retry immediately for the first 2 attempts
-                    Duration::from_millis(0)
-                } else if attempts > 10 {
-                    // Workaround for nats.rs currently not support max attempts limit.
-                    // It is safe to retry only 10 times, since we'll redo handshake
-                    // when ping timeout occurs too much, which includes reconnecting
-                    // to the NATS server.
-                    Duration::MAX
-                } else {
-                    Duration::from_millis(MQ_RECONNECT_INTERVAL)
-                }
-            })
-            // Since we will send ping message (RegisterPeer) manually, we don't need
-            // NATS's ping mechanism. So we make sure the ping interval is longer enough
-            // than the interval of sending ping message (REG_INTERVAL).
-            .ping_interval(Duration::from_millis((REG_INTERVAL * 2) as u64));
-        let client = async_nats::connect_with_options(&connect_info.url, options).await?;
-        log::info!("Established mq connection to: {}", connect_info.url);
-
-        // Subscribe to push channel
-        let subscription = client
-            .subscribe(Config::get_push_topic(&Config::get_id()))
-            .await?;
-
-        Ok((client, subscription))
+        // Connect using client credential
+        self.connect_mq(connect_info).await
     }
 
     /// Get temp connect info from token server
@@ -823,11 +834,16 @@ impl RendezvousMediator {
             url: mq_url,
             inbox_prefix,
             credentials: temp_token,
+            // Temp token will only be used instantly, so expire time is not important.
+            expire: -1,
         })
     }
 
     /// Register pk to rendezvous server and renew the mq token
-    async fn register_pk_mq(&mut self, client: &async_nats::client::Client) -> ResultType<String> {
+    async fn register_pk_mq(
+        &mut self,
+        client: &async_nats::client::Client,
+    ) -> ResultType<MqConnectInfo> {
         for _ in 0..3 {
             // Send RegisterPk
             let mut msg_out = Message::new();
@@ -837,7 +853,7 @@ impl RendezvousMediator {
 
             self.last_id_pk_registry = id.clone();
             msg_out.set_register_pk(RegisterPk {
-                id,
+                id: id.clone(),
                 uuid: uuid.into(),
                 pk: pk.into(),
                 ..Default::default()
@@ -860,7 +876,14 @@ impl RendezvousMediator {
                                 // Success
                                 Config::set_key_confirmed(true);
                                 Config::set_host_key_confirmed(&self.host_prefix, true);
-                                return Ok(rpr.mq_token);
+
+                                let inbox_prefix = Config::get_inbox_prefix(&id);
+                                return Ok(MqConnectInfo {
+                                    url: self.mq_url.clone(),
+                                    credentials: rpr.mq_token,
+                                    inbox_prefix,
+                                    expire: rpr.mq_token_expire,
+                                });
                             }
                             Ok(register_pk_response::Result::UUID_MISMATCH) => {
                                 // Try using another id
@@ -887,6 +910,48 @@ impl RendezvousMediator {
         }
         log::error!("Too many UUID_MISMATCH received");
         bail!("Too many UUID_MISMATCH received")
+    }
+
+    async fn connect_mq(
+        &mut self,
+        connect_info: MqConnectInfo,
+    ) -> ResultType<(async_nats::client::Client, Subscriber)> {
+        const MQ_RECONNECT_INTERVAL: u64 = 5_000;
+
+        let options = connect_info
+            .to_connect_options()?
+            .reconnect_delay_callback(|attempts| {
+                if attempts <= 2 {
+                    // Retry immediately for the first 2 attempts
+                    Duration::from_millis(0)
+                } else if attempts > 10 {
+                    // Workaround for nats.rs currently not support max attempts limit.
+                    // It is safe to retry only 10 times, since we'll redo handshake
+                    // when ping timeout occurs too much, which includes reconnecting
+                    // to the NATS server.
+                    Duration::MAX
+                } else {
+                    Duration::from_millis(MQ_RECONNECT_INTERVAL)
+                }
+            })
+            // Since we will send ping message (RegisterPeer) manually, we don't need
+            // NATS's ping mechanism. So we make sure the ping interval is longer enough
+            // than the interval of sending ping message (REG_INTERVAL).
+            .ping_interval(Duration::from_millis((REG_INTERVAL * 2) as u64));
+        let client = async_nats::connect_with_options(&connect_info.url, options).await?;
+        self.mq_token_expire = connect_info.expire;
+        log::info!(
+            "Established mq connection to: {}, expires = {}",
+            connect_info.url,
+            connect_info.expire
+        );
+
+        // Subscribe to push channel
+        let subscription = client
+            .subscribe(Config::get_push_topic(&Config::get_id()))
+            .await?;
+
+        Ok((client, subscription))
     }
 
     async fn register_peer_mq(&mut self, client: &async_nats::client::Client) -> ResultType<()> {
