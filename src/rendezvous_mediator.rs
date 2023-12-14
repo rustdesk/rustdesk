@@ -1,4 +1,4 @@
-use async_nats::{ConnectOptions, Subscriber};
+use async_nats::{connection::State, ConnectOptions, Subscriber};
 use serde_json::Value;
 use std::{
     cmp::min,
@@ -594,7 +594,15 @@ impl RendezvousMediator {
                                 // Server request pk, redo handshake to update pk
                                 if rpr.request_pk {
                                     log::info!("request_pk received from {}", host);
-                                    let result = rz.handshake(&host).await?;
+                                    let result = match rz.handshake(&host).await {
+                                        Ok(result) => result,
+                                        Err(err) => {
+                                            // Bare handshake error to avoid udp fallback, since we
+                                            // already know the server supports mq protocol.
+                                            log::error!("Failed to redo handshake: {}", err);
+                                            continue;
+                                        }
+                                    };
                                     mq_client = result.0;
                                     push_subscription = result.1;
                                     time_last_handshake = Instant::now();
@@ -663,11 +671,9 @@ impl RendezvousMediator {
                     let timeout = ping_latency > REG_TIMEOUT;
 
                     if first_ping || last_ping_too_old || timeout {
-                        // Redo handshake if client key not confirmed
+                        // Register pk if client key not confirmed
                         if !Config::get_key_confirmed() || !Config::get_host_key_confirmed(&rz.host_prefix) {
-                            let result = rz.handshake(&host).await?;
-                            mq_client = result.0;
-                            push_subscription = result.1;
+                            allow_err!(rz.register_pk_mq(&mq_client).await);
                         }
 
                         // Send ping message
@@ -676,6 +682,16 @@ impl RendezvousMediator {
                         time_last_register_resp = None;
                     }
                     if timeout {
+                        // When MQ connection broken, update UI
+                        if mq_client.connection_state() == State::Disconnected {
+                            Config::update_latency(&host, 0);
+                            old_latency = 0;
+                            // We don't reconnect MQ connection ourselves because nat.rs will
+                            // do this automatically. So we just wait for the connection comes
+                            // alive (ping received) or redo handshake when fails too much.
+                        }
+
+                        // When ping fails too much, update UI or redo handshake
                         fails += 1;
                         if fails > MAX_FAILS2 {
                             Config::update_latency(&host, -1);
@@ -683,7 +699,15 @@ impl RendezvousMediator {
                             if time_last_handshake.elapsed().as_millis() as i64 > RE_HANDSHAKE_INTERVAL {
                                 // The server might have been restarted and lost the temporal
                                 // information of this client. So we need to redo handshake.
-                                let result = rz.handshake(&host).await?;
+                                let result = match rz.handshake(&host).await {
+                                    Ok(result) => result,
+                                    Err(err) => {
+                                        // Bare handshake error to avoid udp fallback, since we
+                                        // already know the server supports mq protocol.
+                                        log::error!("Failed to redo handshake: {}", err);
+                                        continue;
+                                    }
+                                };
                                 mq_client = result.0;
                                 push_subscription = result.1;
                                 time_last_handshake = Instant::now();
@@ -704,6 +728,8 @@ impl RendezvousMediator {
         &mut self,
         host: &str,
     ) -> ResultType<(async_nats::client::Client, Subscriber)> {
+        const MQ_RECONNECT_INTERVAL: u64 = 5_000;
+
         // Get temporary credential
         let token_server = replace_port(host, TOKEN_SERVER_PORT);
         let token_server_url = format!("https://{}", token_server);
@@ -733,6 +759,20 @@ impl RendezvousMediator {
 
         let options = ConnectOptions::new()
             .credentials(&mq_token)?
+            .reconnect_delay_callback(|attempts| {
+                if attempts <= 2 {
+                    // Retry immediately for the first 2 attempts
+                    Duration::from_millis(0)
+                } else if attempts > 10 {
+                    // Workaround for nats.rs currently not support max attempts limit.
+                    // It is safe to retry only 10 times, since we'll redo handshake
+                    // when ping timeout occurs too much, which includes reconnecting
+                    // to the NATS server.
+                    Duration::MAX
+                } else {
+                    Duration::from_millis(MQ_RECONNECT_INTERVAL)
+                }
+            })
             // Since we will send ping message (RegisterPeer) manually, we don't need
             // NATS's ping mechanism. So we make sure the ping interval is longer enough
             // than the interval of sending ping message (REG_INTERVAL).
