@@ -49,6 +49,27 @@ pub fn increase_port<T: std::string::ToString>(host: T, offset: i32) -> String {
     host
 }
 
+#[inline]
+pub fn replace_port<T: std::string::ToString>(host: T, port: i32) -> String {
+    let host = host.to_string();
+    if crate::is_ipv6_str(&host) {
+        if host.starts_with('[') {
+            let tmp: Vec<&str> = host.split("]:").collect();
+            if tmp.len() == 2 {
+                return format!("{}]:{}", tmp[0], port);
+            }
+        } else {
+            return format!("[{}]:{}", host, port);
+        }
+    } else if host.contains(':') {
+        let tmp: Vec<&str> = host.split(':').collect();
+        if tmp.len() == 2 {
+            return format!("{}:{}", tmp[0], port);
+        }
+    }
+    format!("{}:{}", host, port)
+}
+
 pub fn test_if_valid_server(host: &str) -> String {
     let host = check_port(host, 0);
 

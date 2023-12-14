@@ -928,6 +928,11 @@ pub fn increase_port<T: std::string::ToString>(host: T, offset: i32) -> String {
     hbb_common::socket_client::increase_port(host, offset)
 }
 
+#[inline]
+pub fn replace_port<T: std::string::ToString>(host: T, port: i32) -> String {
+    hbb_common::socket_client::replace_port(host, port)
+}
+
 pub const POSTFIX_SERVICE: &'static str = "_service";
 
 #[inline]

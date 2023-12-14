@@ -99,6 +99,9 @@ pub const RS_PUB_KEY: &str = match option_env!("RS_PUB_KEY") {
 
 pub const RENDEZVOUS_PORT: i32 = 21116;
 pub const RELAY_PORT: i32 = 21117;
+pub const DEFAULT_MQ_PORT: i32 = 4222;
+pub const TOKEN_SERVER_PORT: i32 = 443;
+pub const INSECURE_TOKEN_SERVER_PORT: i32 = 80;
 
 pub const RS_TOPIC_REGISTER: &str = "api.register";
 
@@ -997,6 +1000,10 @@ impl Config {
 
     pub fn get_ping_topic(id: &str) -> String {
         format!("ping.{}", id)
+    }
+
+    pub fn get_inbox_prefix(id: &str) -> String {
+        format!("_INBOX_{}", id)
     }
 
     pub fn get() -> Config {

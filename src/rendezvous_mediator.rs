@@ -1,6 +1,8 @@
 use async_nats::{ConnectOptions, Subscriber};
+use serde_json::Value;
 use std::{
     cmp::min,
+    collections::HashMap,
     net::SocketAddr,
     sync::{
         atomic::{AtomicBool, Ordering},
@@ -13,10 +15,10 @@ use uuid::Uuid;
 
 use hbb_common::{
     allow_err,
-    anyhow::bail,
+    anyhow::{anyhow, bail},
     config::{
-        Config, NetworkType, CONNECT_TIMEOUT, READ_TIMEOUT, REG_INTERVAL, RENDEZVOUS_PORT,
-        RS_TOPIC_REGISTER,
+        Config, NetworkType, CONNECT_TIMEOUT, DEFAULT_MQ_PORT, INSECURE_TOKEN_SERVER_PORT,
+        READ_TIMEOUT, REG_INTERVAL, RENDEZVOUS_PORT, RS_TOPIC_REGISTER, TOKEN_SERVER_PORT,
     },
     futures::future::join_all,
     futures::StreamExt,
@@ -35,7 +37,7 @@ use hbb_common::{
 };
 
 use crate::{
-    common::increase_port,
+    common::{post_request, replace_port},
     server::{check_zombie, new as new_server, ServerPtr},
 };
 
@@ -45,6 +47,12 @@ lazy_static::lazy_static! {
     static ref SOLVING_PK_MISMATCH: Arc<Mutex<String>> = Default::default();
 }
 static SHOULD_EXIT: AtomicBool = AtomicBool::new(false);
+
+struct MqConnectInfo {
+    url: String,
+    inbox_prefix: String,
+    credentials: String,
+}
 
 #[derive(Clone)]
 pub struct RendezvousMediator {
@@ -696,16 +704,41 @@ impl RendezvousMediator {
         &mut self,
         host: &str,
     ) -> ResultType<(async_nats::client::Client, Subscriber)> {
-        // Register pk & id anonymously
-        let mq_host = increase_port(host, 4);
-        let mq_url = format!("nats://{}", mq_host);
+        // Get temporary credential
+        let token_server = replace_port(host, TOKEN_SERVER_PORT);
+        let token_server_url = format!("https://{}", token_server);
+        let connect_info = match self.get_temp_mq_connect_info(&token_server_url).await {
+            Ok(temp_mq_token) => temp_mq_token,
+            Err(_) => {
+                // If failed, try http protocol
+                let token_server = replace_port(host, INSECURE_TOKEN_SERVER_PORT);
+                let token_server_url = format!("http://{}", token_server);
+                let connect_info = self.get_temp_mq_connect_info(&token_server_url).await?;
+                log::warn!("Token server {} is using http protocol!", token_server);
+                connect_info
+            }
+        };
+        log::debug!("Got temp token from token server");
+
+        // Register pk & id using temporary credential
+        let options = ConnectOptions::new()
+            .credentials(&connect_info.credentials)?
+            .custom_inbox_prefix(connect_info.inbox_prefix);
+        let client = async_nats::connect_with_options(&connect_info.url, options).await?;
+        log::debug!(
+            "Connected to mq server at: {}, try to register client pk",
+            connect_info.url
+        );
+        let mq_token = self.register_pk_mq(&client).await?;
 
         let options = ConnectOptions::new()
             .credentials(&mq_token)?
-            .ping_interval(Duration::from_millis(REG_INTERVAL as u64));
-        let client = async_nats::connect_with_options(&mq_url, options).await?;
-        self.register_pk_mq(&client).await?;
-        log::info!("Connected to mq server at: {}", mq_url);
+            // Since we will send ping message (RegisterPeer) manually, we don't need
+            // NATS's ping mechanism. So we make sure the ping interval is longer enough
+            // than the interval of sending ping message (REG_INTERVAL).
+            .ping_interval(Duration::from_millis((REG_INTERVAL * 2) as u64));
+        let client = async_nats::connect_with_options(&connect_info.url, options).await?;
+        log::info!("Established mq connection to: {}", connect_info.url);
 
         // Subscribe to push channel
         let subscription = client
@@ -715,6 +748,45 @@ impl RendezvousMediator {
         Ok((client, subscription))
     }
 
+    /// Get temp connect info from token server
+    async fn get_temp_mq_connect_info(&self, token_server_url: &str) -> ResultType<MqConnectInfo> {
+        // Send request
+        let api_url = format!("{}/api/get_token", token_server_url);
+        let response = post_request(api_url, "".to_string(), "").await?;
+
+        // Parse result
+        let data = serde_json::from_str::<HashMap<&str, Value>>(&response)
+            .map_err(|e| anyhow!("Failed to parse response from token server: {}", e))?;
+
+        let mq_url = data.get("mq_url").and_then(|x| x.as_str()).unwrap_or("");
+        let mq_url = if !mq_url.is_empty() {
+            mq_url.to_string()
+        } else {
+            // Default mq server is the same as rendzvous server
+            let mq_host = replace_port(&self.host, DEFAULT_MQ_PORT);
+            format!("nats://{}", mq_host)
+        };
+
+        let temp_id = data
+            .get("id")
+            .and_then(|x| x.as_str())
+            .ok_or_else(|| anyhow!("Failed to get temp id"))?;
+        let inbox_prefix = Config::get_inbox_prefix(temp_id);
+
+        let temp_token = data
+            .get("mq_token")
+            .and_then(|x| x.as_str())
+            .map(|x| x.to_owned())
+            .ok_or_else(|| anyhow!("Failed to get temp token"))?;
+
+        Ok(MqConnectInfo {
+            url: mq_url,
+            inbox_prefix,
+            credentials: temp_token,
+        })
+    }
+
+    /// Register pk to rendezvous server and renew the mq token
     async fn register_pk_mq(&mut self, client: &async_nats::client::Client) -> ResultType<String> {
         for _ in 0..3 {
             // Send RegisterPk
