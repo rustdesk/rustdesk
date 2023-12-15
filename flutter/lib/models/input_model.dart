@@ -890,9 +890,11 @@ class InputModel {
     }
 
     int minX = rect.left.toInt();
-    int maxX = (rect.left + rect.width).toInt() - 1;
+    // https://github.com/rustdesk/rustdesk/issues/6678
+    // For Windows, [0,maxX], [0,maxY] should be set to enable window snapping.
+    int maxX = (rect.left + rect.width).toInt() - (peerPlatform == kPeerPlatformWindows ? 0 : 1);
     int minY = rect.top.toInt();
-    int maxY = (rect.top + rect.height).toInt() - 1;
+    int maxY = (rect.top + rect.height).toInt() - (peerPlatform == kPeerPlatformWindows ? 0 : 1);
     evtX = trySetNearestRange(evtX, minX, maxX, 5);
     evtY = trySetNearestRange(evtY, minY, maxY, 5);
     if (kind == kPointerEventKindMouse) {
