@@ -591,7 +591,7 @@ impl<T: InvokeUiSession> Session<T> {
         return "".to_owned();
     }
 
-    pub fn swab_modifier_key(&self, msg: &mut KeyEvent) {
+    pub fn swap_modifier_key(&self, msg: &mut KeyEvent) {
         let allow_swap_key = self.get_toggle_option("allow_swap_key".to_string());
         if allow_swap_key {
             if let Some(key_event::Union::ControlKey(ck)) = msg.union {
@@ -670,7 +670,7 @@ impl<T: InvokeUiSession> Session<T> {
         // mode: legacy(0), map(1), translate(2), auto(3)
 
         let mut msg = evt.clone();
-        self.swab_modifier_key(&mut msg);
+        self.swap_modifier_key(&mut msg);
         let mut msg_out = Message::new();
         msg_out.set_key_event(msg);
         self.send(Data::Message(msg_out));
@@ -925,7 +925,7 @@ impl<T: InvokeUiSession> Session<T> {
 
     pub fn send_mouse(
         &self,
-        mask: i32,
+        mut mask: i32,
         x: i32,
         y: i32,
         alt: bool,
@@ -951,6 +951,20 @@ impl<T: InvokeUiSession> Session<T> {
         // #[cfg(not(any(target_os = "android", target_os = "ios")))]
         let (alt, ctrl, shift, command) =
             keyboard::client::get_modifiers_state(alt, ctrl, shift, command);
+
+        use crate::input::*;
+        let is_left = (mask & (MOUSE_BUTTON_LEFT << 3)) > 0;
+        let is_right = (mask & (MOUSE_BUTTON_RIGHT << 3)) > 0;
+        if is_left ^ is_right {
+            let swap_lr = self.get_toggle_option("swap-left-right-mouse".to_string());
+            if swap_lr {
+                if is_left {
+                    mask = (mask & (!(MOUSE_BUTTON_LEFT << 3))) | (MOUSE_BUTTON_RIGHT << 3);
+                } else {
+                    mask = (mask & (!(MOUSE_BUTTON_RIGHT << 3))) | (MOUSE_BUTTON_LEFT << 3);
+                }
+            }
+        }
 
         send_mouse(mask, x, y, alt, ctrl, shift, command, self);
         // on macos, ctrl + left button down = right button down, up won't emit, so we need to

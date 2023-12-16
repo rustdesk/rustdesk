@@ -576,5 +576,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("input_source_1_tip", "Sorgente ingresso (1)"),
         ("input_source_2_tip", "Sorgente ingresso (2)"),
         ("capture_display_elevated_connections_tip", "La cattura di più display non è supportata nella modalità utente con privilegi elevati. Se vuoi controllare più display riprova dopo l'installazione."),
+        ("Swap control-command key", "Scambia tasto controllo-comando"),
+        ("swap-left-right-mouse", "Scambia pulsante sinistro-destro mouse"),
     ].iter().cloned().collect();
 }

@@ -576,5 +576,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("input_source_1_tip", "Ievades avots 1"),
         ("input_source_2_tip", "Ievades avots 2"),
         ("capture_display_elevated_connections_tip", "Vairāku displeju uzņemšana netiek atbalstīta paaugstinātā lietotāja režīmā. Lūdzu, mēģiniet vēlreiz pēc instalēšanas, ja vēlaties kontrolēt vairākus displejus."),
+        ("Swap control-command key", "Apmainīt vadības un komandas taustiņu"),
+        ("swap-left-right-mouse", "Apmainīt kreiso un labo peles pogu"),
     ].iter().cloned().collect();
 }
