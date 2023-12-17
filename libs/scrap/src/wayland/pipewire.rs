@@ -468,7 +468,7 @@ pub fn get_available_cursor_modes() -> Result<u32, dbus::Error> {
     portal.available_cursor_modes()
 }
 
-// mostly inspired by https://gitlab.gnome.org/snippets/19
+// mostly inspired by https://gitlab.gnome.org/-/snippets/39
 pub fn request_remote_desktop() -> Result<
     (
         SyncConnection,
@@ -513,137 +513,15 @@ pub fn request_remote_desktop() -> Result<
     handle_response(
         &conn,
         path,
-        move |r: OrgFreedesktopPortalRequestResponse, c, _| {
-            let portal = get_portal(c);
-            let mut args: PropMap = HashMap::new();
-
-            args.insert(
-                "handle_token".to_string(),
-                Variant(Box::new("u2".to_string())),
-            );
-            args.insert("types".to_string(), Variant(Box::new(7u32)));
-
-            let ses: dbus::Path = r
-                .results
-                .get("session_handle")
-                .ok_or_else(|| {
-                    DBusError(format!(
-                        "Failed to obtain session_handle from response: {:?}",
-                        r
-                    ))
-                })?
-                .as_str()
-                .ok_or_else(|| DBusError("Failed to convert session_handle to string.".into()))?
-                .to_string()
-                .into();
-
-            session.lock().unwrap().replace(ses.clone());
-
-            let session = session.lock().unwrap().clone().unwrap();
-            let path = portal.select_devices(session.clone(), args)?;
-            let fd = fd.clone();
-            let streams = streams.clone();
-            let failure = failure.clone();
-            let failure_out = failure.clone();
-            handle_response(
-                c,
-                path,
-                move |_: OrgFreedesktopPortalRequestResponse, c, _| {
-                    let portal = get_portal(c);
-                    let mut args: PropMap = HashMap::new();
-                    if let Ok(version) = remote_desktop_portal::version(&portal) {
-                        if version >= 4 {
-                            let restore_token =
-                                config::LocalConfig::get_option(RESTORE_TOKEN_CONF_KEY);
-                            if !restore_token.is_empty() {
-                                args.insert(
-                                    RESTORE_TOKEN.to_string(),
-                                    Variant(Box::new(restore_token)),
-                                );
-                            }
-                            // persist_mode may be configured by the user.
-                            args.insert("persist_mode".to_string(), Variant(Box::new(2u32)));
-                        }
-                    }
-                    args.insert(
-                        "handle_token".to_string(),
-                        Variant(Box::new("u3".to_string())),
-                    );
-                    // https://flatpak.github.io/xdg-desktop-portal/portal-docs.html#gdbus-method-org-freedesktop-portal-ScreenCast.SelectSources
-                    args.insert("multiple".into(), Variant(Box::new(true)));
-                    args.insert("types".into(), Variant(Box::new(1u32))); //| 2u32)));
-
-                    let path = portal.select_sources(session.clone(), args)?;
-                    let fd = fd.clone();
-                    let streams = streams.clone();
-                    let failure = failure.clone();
-                    let failure_out = failure.clone();
-                    let session = session.clone();
-                    handle_response(
-                        c,
-                        path,
-                        move |_: OrgFreedesktopPortalRequestResponse, c, _| {
-                            let portal = get_portal(c);
-                            let mut args: PropMap = HashMap::new();
-                            args.insert(
-                                "handle_token".to_string(),
-                                Variant(Box::new("u4".to_string())),
-                            );
-                            let path =
-                                remote_desktop_portal::start(&portal, session.clone(), "", args)?;
-                            let session = session.clone();
-                            let fd = fd.clone();
-                            let streams = streams.clone();
-                            let failure = failure.clone();
-                            let failure_out = failure.clone();
-                            handle_response(
-                                c,
-                                path,
-                                move |r: OrgFreedesktopPortalRequestResponse, c, _| {
-                                    let portal = get_portal(c);
-                                    if let Ok(version) = remote_desktop_portal::version(&portal) {
-                                        if version >= 4 {
-                                            if let Some(restore_token) =
-                                                r.results.get(RESTORE_TOKEN)
-                                            {
-                                                if let Some(restore_token) = restore_token.as_str()
-                                                {
-                                                    config::LocalConfig::set_option(
-                                                        RESTORE_TOKEN_CONF_KEY.to_owned(),
-                                                        restore_token.to_owned(),
-                                                    );
-                                                }
-                                            }
-                                        }
-                                    }
-
-                                    streams
-                                        .clone()
-                                        .lock()
-                                        .unwrap()
-                                        .append(&mut streams_from_response(r));
-                                    fd.clone().lock().unwrap().replace(
-                                        portal.open_pipe_wire_remote(
-                                            session.clone(),
-                                            HashMap::new(),
-                                        )?,
-                                    );
-                                    Ok(())
-                                },
-                                failure_out,
-                            )?;
-                            Ok(())
-                        },
-                        failure_out,
-                    )?;
-                    Ok(())
-                },
-                failure_out,
-            )?;
-            Ok(())
-        },
+        on_create_session_response(
+            fd.clone(),
+            streams.clone(),
+            session.clone(),
+            failure.clone(),
+        ),
         failure_res.clone(),
     )?;
+
     // wait 3 minutes for user interaction
     for _ in 0..1800 {
         conn.process(Duration::from_millis(100))?;
@@ -673,6 +551,176 @@ pub fn request_remote_desktop() -> Result<
     Err(Box::new(DBusError(
         "Failed to obtain screen capture.".into(),
     )))
+}
+
+fn on_create_session_response(
+    fd: Arc<Mutex<Option<OwnedFd>>>,
+    streams: Arc<Mutex<Vec<PwStreamInfo>>>,
+    session: Arc<Mutex<Option<dbus::Path<'static>>>>,
+    failure: Arc<AtomicBool>,
+) -> impl Fn(
+    OrgFreedesktopPortalRequestResponse,
+    &SyncConnection,
+    &dbus::Message,
+) -> Result<(), Box<dyn Error>> {
+    move |r: OrgFreedesktopPortalRequestResponse, c, _| {
+        let portal = get_portal(c);
+        let mut args: PropMap = HashMap::new();
+
+        args.insert(
+            "handle_token".to_string(),
+            Variant(Box::new("u2".to_string())),
+        );
+        args.insert("types".to_string(), Variant(Box::new(7u32)));
+
+        let ses: dbus::Path = r
+            .results
+            .get("session_handle")
+            .ok_or_else(|| {
+                DBusError(format!(
+                    "Failed to obtain session_handle from response: {:?}",
+                    r
+                ))
+            })?
+            .as_str()
+            .ok_or_else(|| DBusError("Failed to convert session_handle to string.".into()))?
+            .to_string()
+            .into();
+
+        session.lock().unwrap().replace(ses.clone());
+
+        let session = session.lock().unwrap().clone().unwrap();
+        let path = portal.select_devices(session.clone(), args)?;
+        handle_response(
+            c,
+            path,
+            on_select_devices_response(
+                fd.clone(),
+                streams.clone(),
+                failure.clone(),
+                session.clone(),
+            ),
+            failure.clone(),
+        )?;
+
+        Ok(())
+    }
+}
+
+fn on_select_devices_response(
+    fd: Arc<Mutex<Option<OwnedFd>>>,
+    streams: Arc<Mutex<Vec<PwStreamInfo>>>,
+    failure: Arc<AtomicBool>,
+    session: dbus::Path<'static>,
+) -> impl Fn(
+    OrgFreedesktopPortalRequestResponse,
+    &SyncConnection,
+    &dbus::Message,
+) -> Result<(), Box<dyn Error>> {
+    move |_: OrgFreedesktopPortalRequestResponse, c, _| {
+        let portal = get_portal(c);
+        let mut args: PropMap = HashMap::new();
+        if let Ok(version) = remote_desktop_portal::version(&portal) {
+            if version >= 4 {
+                let restore_token = config::LocalConfig::get_option(RESTORE_TOKEN_CONF_KEY);
+                if !restore_token.is_empty() {
+                    args.insert(RESTORE_TOKEN.to_string(), Variant(Box::new(restore_token)));
+                }
+                // persist_mode may be configured by the user.
+                args.insert("persist_mode".to_string(), Variant(Box::new(2u32)));
+            }
+        }
+        args.insert(
+            "handle_token".to_string(),
+            Variant(Box::new("u3".to_string())),
+        );
+        // https://flatpak.github.io/xdg-desktop-portal/portal-docs.html#gdbus-method-org-freedesktop-portal-ScreenCast.SelectSources
+        args.insert("multiple".into(), Variant(Box::new(true)));
+        args.insert("types".into(), Variant(Box::new(1u32))); //| 2u32)));
+
+        let session = session.clone();
+        let path = portal.select_sources(session.clone(), args)?;
+        handle_response(
+            c,
+            path,
+            on_select_sources_response(
+                fd.clone(),
+                streams.clone(),
+                failure.clone(),
+                session.clone(),
+            ),
+            failure.clone(),
+        )?;
+
+        Ok(())
+    }
+}
+
+fn on_select_sources_response(
+    fd: Arc<Mutex<Option<OwnedFd>>>,
+    streams: Arc<Mutex<Vec<PwStreamInfo>>>,
+    failure: Arc<AtomicBool>,
+    session: dbus::Path<'static>,
+) -> impl Fn(
+    OrgFreedesktopPortalRequestResponse,
+    &SyncConnection,
+    &dbus::Message,
+) -> Result<(), Box<dyn Error>> {
+    move |_: OrgFreedesktopPortalRequestResponse, c, _| {
+        let portal = get_portal(c);
+        let mut args: PropMap = HashMap::new();
+        args.insert(
+            "handle_token".to_string(),
+            Variant(Box::new("u4".to_string())),
+        );
+        let path = remote_desktop_portal::start(&portal, session.clone(), "", args)?;
+        handle_response(
+            c,
+            path,
+            on_start_response(fd.clone(), streams.clone(), session.clone()),
+            failure.clone(),
+        )?;
+
+        Ok(())
+    }
+}
+
+fn on_start_response(
+    fd: Arc<Mutex<Option<OwnedFd>>>,
+    streams: Arc<Mutex<Vec<PwStreamInfo>>>,
+    session: dbus::Path<'static>,
+) -> impl Fn(
+    OrgFreedesktopPortalRequestResponse,
+    &SyncConnection,
+    &dbus::Message,
+) -> Result<(), Box<dyn Error>> {
+    move |r: OrgFreedesktopPortalRequestResponse, c, _| {
+        let portal = get_portal(c);
+        if let Ok(version) = remote_desktop_portal::version(&portal) {
+            if version >= 4 {
+                if let Some(restore_token) = r.results.get(RESTORE_TOKEN) {
+                    if let Some(restore_token) = restore_token.as_str() {
+                        config::LocalConfig::set_option(
+                            RESTORE_TOKEN_CONF_KEY.to_owned(),
+                            restore_token.to_owned(),
+                        );
+                    }
+                }
+            }
+        }
+
+        streams
+            .clone()
+            .lock()
+            .unwrap()
+            .append(&mut streams_from_response(r));
+        fd.clone()
+            .lock()
+            .unwrap()
+            .replace(portal.open_pipe_wire_remote(session.clone(), HashMap::new())?);
+
+        Ok(())
+    }
 }
 
 pub fn get_capturables() -> Result<Vec<PipeWireCapturable>, Box<dyn Error>> {
