@@ -181,6 +181,8 @@ class InputModel {
 
   var _lastScale = 1.0;
 
+  bool _pointerMovedAfterEnter = false;
+
   // mouse
   final isPhysicalMouse = false.obs;
   int _lastButtons = 0;
@@ -441,6 +443,7 @@ class InputModel {
 
   void enterOrLeave(bool enter) {
     toReleaseKeys.release(handleRawKeyEvent);
+    _pointerMovedAfterEnter = false;
 
     // Fix status
     if (!enter) {
@@ -778,12 +781,19 @@ class InputModel {
         type = 'up';
         break;
       case _kMouseEventMove:
+        _pointerMovedAfterEnter = true;
         isMove = true;
         break;
       default:
         return;
     }
     evt['type'] = type;
+
+    if (type == 'down' && !_pointerMovedAfterEnter) {
+      // Move mouse to the position of the down event first.
+      lastMousePos = ui.Offset(x, y);
+      refreshMousePos();
+    }
 
     final pos = handlePointerDevicePos(
       kPointerEventKindMouse,
