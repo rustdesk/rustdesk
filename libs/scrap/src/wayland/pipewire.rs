@@ -544,7 +544,7 @@ pub fn request_remote_desktop() -> Result<
                 conn,
                 fd_res,
                 streams_res.clone(),
-                session_res.clone().unwrap(),
+                session_res.clone().unwrap_or_default(),
             ));
         }
     }
@@ -589,7 +589,7 @@ fn on_create_session_response(
 
         session.lock().unwrap().replace(ses.clone());
 
-        let session = session.lock().unwrap().clone().unwrap();
+        let session = session.lock().unwrap().clone().unwrap_or_default();
         let path = portal.select_devices(session.clone(), args)?;
         handle_response(
             c,
