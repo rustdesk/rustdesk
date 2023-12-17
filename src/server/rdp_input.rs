@@ -10,6 +10,13 @@ use std::sync::Arc;
 pub mod client {
     use super::*;
 
+    const EVDEV_MOUSE_LEFT: i32 = 272;
+    const EVDEV_MOUSE_RIGHT: i32 = 273;
+    const EVDEV_MOUSE_MIDDLE: i32 = 274;
+
+    const PRESSED_DOWN_STATE: u32 = 1;
+    const PRESSED_UP_STATE: u32 = 0;
+
     pub struct RdpInputKeyboard {
         conn: Arc<SyncConnection>,
         session: Path<'static>,
@@ -86,20 +93,20 @@ pub mod client {
         }
 
         fn mouse_move_to(&mut self, x: i32, y: i32) {
-            let p = get_portal(&self.conn);
+            let portal = get_portal(&self.conn);
             let _ = remote_desktop_portal::notify_pointer_motion_absolute(
-                &p,
+                &portal,
                 self.session.clone(),
                 HashMap::new(),
-                self.stream.path.clone() as u32,
+                self.stream.path as u32,
                 x as f64,
                 y as f64,
             );
         }
         fn mouse_move_relative(&mut self, x: i32, y: i32) {
-            let p = get_portal(&self.conn);
+            let portal = get_portal(&self.conn);
             let _ = remote_desktop_portal::notify_pointer_motion(
-                &p,
+                &portal,
                 self.session.clone(),
                 HashMap::new(),
                 x as f64,
@@ -118,9 +125,9 @@ pub mod client {
             handle_mouse(false, button, self.conn.clone(), self.session.clone());
         }
         fn mouse_scroll_x(&mut self, length: i32) {
-            let p = get_portal(&self.conn);
+            let portal = get_portal(&self.conn);
             let _ = remote_desktop_portal::notify_pointer_axis(
-                &p,
+                &portal,
                 self.session.clone(),
                 HashMap::new(),
                 length as f64,
@@ -128,9 +135,9 @@ pub mod client {
             );
         }
         fn mouse_scroll_y(&mut self, length: i32) {
-            let p = get_portal(&self.conn);
+            let portal = get_portal(&self.conn);
             let _ = remote_desktop_portal::notify_pointer_axis(
-                &p,
+                &portal,
                 self.session.clone(),
                 HashMap::new(),
                 0 as f64,
@@ -140,25 +147,32 @@ pub mod client {
     }
 
     fn get_raw_evdev_keycode(key: u16) -> i32 {
-        let mut key = key as i32 - 8; // 8 is the offset between xkb and evdev
+        // 8 is the offset between xkb and evdev
+        let mut key = key as i32 - 8;
+        // fix for right_meta key
         if key == 126 {
             key = 125;
-        } // fix for right_meta key
+        }
         key
     }
+
     fn handle_key(
         down: bool,
         key: Key,
         conn: Arc<SyncConnection>,
         session: Path<'static>,
     ) -> ResultType<()> {
-        let state: u32 = if down { 1 } else { 0 };
-        let p = get_portal(&conn);
+        let state: u32 = if down {
+            PRESSED_DOWN_STATE
+        } else {
+            PRESSED_UP_STATE
+        };
+        let portal = get_portal(&conn);
         match key {
             Key::Raw(key) => {
                 let key = get_raw_evdev_keycode(key);
                 remote_desktop_portal::notify_keyboard_keycode(
-                    &p,
+                    &portal,
                     session,
                     HashMap::new(),
                     key,
@@ -169,7 +183,7 @@ pub mod client {
                 if let Ok((key, is_shift)) = map_key(&key) {
                     if is_shift {
                         remote_desktop_portal::notify_keyboard_keycode(
-                            &p,
+                            &portal,
                             session.clone(),
                             HashMap::new(),
                             evdev::Key::KEY_LEFTSHIFT.code() as i32,
@@ -177,7 +191,7 @@ pub mod client {
                         )?;
                     }
                     remote_desktop_portal::notify_keyboard_keycode(
-                        &p,
+                        &portal,
                         session,
                         HashMap::new(),
                         key.code() as i32,
@@ -188,25 +202,29 @@ pub mod client {
         }
         Ok(())
     }
+
     fn handle_mouse(
         down: bool,
         button: MouseButton,
         conn: Arc<SyncConnection>,
         session: Path<'static>,
     ) {
-        let p = get_portal(&conn);
+        let portal = get_portal(&conn);
         let but_key = match button {
-            // evdev mouse button codes
-            MouseButton::Left => 272,
-            MouseButton::Right => 273,
-            MouseButton::Middle => 274,
+            MouseButton::Left => EVDEV_MOUSE_LEFT,
+            MouseButton::Right => EVDEV_MOUSE_RIGHT,
+            MouseButton::Middle => EVDEV_MOUSE_MIDDLE,
             _ => {
                 return;
             }
         };
-        let state: u32 = if down { 1 } else { 0 };
+        let state: u32 = if down {
+            PRESSED_DOWN_STATE
+        } else {
+            PRESSED_UP_STATE
+        };
         let _ = remote_desktop_portal::notify_pointer_button(
-            &p,
+            &portal,
             session.clone(),
             HashMap::new(),
             but_key,
