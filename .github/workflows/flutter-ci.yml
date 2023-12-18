@@ -17,5 +17,6 @@ on:
 jobs:
   run-ci:
     uses: ./.github/workflows/flutter-build.yml
+    secrets: inherit
     with:
       upload-artifact: true
