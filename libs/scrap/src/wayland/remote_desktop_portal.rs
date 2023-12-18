@@ -20,14 +20,14 @@ pub trait OrgFreedesktopPortalRemoteDesktop {
     ) -> Result<dbus::Path<'static>, dbus::Error>;
     fn notify_pointer_motion(
         &self,
-        session_handle: dbus::Path,
+        session_handle: &dbus::Path,
         options: arg::PropMap,
         dx: f64,
         dy: f64,
     ) -> Result<(), dbus::Error>;
     fn notify_pointer_motion_absolute(
         &self,
-        session_handle: dbus::Path,
+        session_handle: &dbus::Path,
         options: arg::PropMap,
         stream: u32,
         x_: f64,
@@ -35,42 +35,42 @@ pub trait OrgFreedesktopPortalRemoteDesktop {
     ) -> Result<(), dbus::Error>;
     fn notify_pointer_button(
         &self,
-        session_handle: dbus::Path,
+        session_handle: &dbus::Path,
         options: arg::PropMap,
         button: i32,
         state: u32,
     ) -> Result<(), dbus::Error>;
     fn notify_pointer_axis(
         &self,
-        session_handle: dbus::Path,
+        session_handle: &dbus::Path,
         options: arg::PropMap,
         dx: f64,
         dy: f64,
     ) -> Result<(), dbus::Error>;
     fn notify_pointer_axis_discrete(
         &self,
-        session_handle: dbus::Path,
+        session_handle: &dbus::Path,
         options: arg::PropMap,
         axis: u32,
         steps: i32,
     ) -> Result<(), dbus::Error>;
     fn notify_keyboard_keycode(
         &self,
-        session_handle: dbus::Path,
+        session_handle: &dbus::Path,
         options: arg::PropMap,
         keycode: i32,
         state: u32,
     ) -> Result<(), dbus::Error>;
     fn notify_keyboard_keysym(
         &self,
-        session_handle: dbus::Path,
+        session_handle: &dbus::Path,
         options: arg::PropMap,
         keysym: i32,
         state: u32,
     ) -> Result<(), dbus::Error>;
     fn notify_touch_down(
         &self,
-        session_handle: dbus::Path,
+        session_handle: &dbus::Path,
         options: arg::PropMap,
         stream: u32,
         slot: u32,
@@ -79,7 +79,7 @@ pub trait OrgFreedesktopPortalRemoteDesktop {
     ) -> Result<(), dbus::Error>;
     fn notify_touch_motion(
         &self,
-        session_handle: dbus::Path,
+        session_handle: &dbus::Path,
         options: arg::PropMap,
         stream: u32,
         slot: u32,
@@ -88,13 +88,13 @@ pub trait OrgFreedesktopPortalRemoteDesktop {
     ) -> Result<(), dbus::Error>;
     fn notify_touch_up(
         &self,
-        session_handle: dbus::Path,
+        session_handle: &dbus::Path,
         options: arg::PropMap,
         slot: u32,
     ) -> Result<(), dbus::Error>;
     fn connect_to_eis(
         &self,
-        session_handle: dbus::Path,
+        session_handle: &dbus::Path,
         options: arg::PropMap,
     ) -> Result<arg::OwnedFd, dbus::Error>;
     fn available_device_types(&self) -> Result<u32, dbus::Error>;
@@ -142,7 +142,7 @@ impl<'a, T: blocking::BlockingSender, C: ::std::ops::Deref<Target = T>>
 
     fn notify_pointer_motion(
         &self,
-        session_handle: dbus::Path,
+        session_handle: &dbus::Path,
         options: arg::PropMap,
         dx: f64,
         dy: f64,
@@ -156,7 +156,7 @@ impl<'a, T: blocking::BlockingSender, C: ::std::ops::Deref<Target = T>>
 
     fn notify_pointer_motion_absolute(
         &self,
-        session_handle: dbus::Path,
+        session_handle: &dbus::Path,
         options: arg::PropMap,
         stream: u32,
         x_: f64,
@@ -171,7 +171,7 @@ impl<'a, T: blocking::BlockingSender, C: ::std::ops::Deref<Target = T>>
 
     fn notify_pointer_button(
         &self,
-        session_handle: dbus::Path,
+        session_handle: &dbus::Path,
         options: arg::PropMap,
         button: i32,
         state: u32,
@@ -185,7 +185,7 @@ impl<'a, T: blocking::BlockingSender, C: ::std::ops::Deref<Target = T>>
 
     fn notify_pointer_axis(
         &self,
-        session_handle: dbus::Path,
+        session_handle: &dbus::Path,
         options: arg::PropMap,
         dx: f64,
         dy: f64,
@@ -199,7 +199,7 @@ impl<'a, T: blocking::BlockingSender, C: ::std::ops::Deref<Target = T>>
 
     fn notify_pointer_axis_discrete(
         &self,
-        session_handle: dbus::Path,
+        session_handle: &dbus::Path,
         options: arg::PropMap,
         axis: u32,
         steps: i32,
@@ -213,7 +213,7 @@ impl<'a, T: blocking::BlockingSender, C: ::std::ops::Deref<Target = T>>
 
     fn notify_keyboard_keycode(
         &self,
-        session_handle: dbus::Path,
+        session_handle: &dbus::Path,
         options: arg::PropMap,
         keycode: i32,
         state: u32,
@@ -227,7 +227,7 @@ impl<'a, T: blocking::BlockingSender, C: ::std::ops::Deref<Target = T>>
 
     fn notify_keyboard_keysym(
         &self,
-        session_handle: dbus::Path,
+        session_handle: &dbus::Path,
         options: arg::PropMap,
         keysym: i32,
         state: u32,
@@ -241,7 +241,7 @@ impl<'a, T: blocking::BlockingSender, C: ::std::ops::Deref<Target = T>>
 
     fn notify_touch_down(
         &self,
-        session_handle: dbus::Path,
+        session_handle: &dbus::Path,
         options: arg::PropMap,
         stream: u32,
         slot: u32,
@@ -257,7 +257,7 @@ impl<'a, T: blocking::BlockingSender, C: ::std::ops::Deref<Target = T>>
 
     fn notify_touch_motion(
         &self,
-        session_handle: dbus::Path,
+        session_handle: &dbus::Path,
         options: arg::PropMap,
         stream: u32,
         slot: u32,
@@ -273,7 +273,7 @@ impl<'a, T: blocking::BlockingSender, C: ::std::ops::Deref<Target = T>>
 
     fn notify_touch_up(
         &self,
-        session_handle: dbus::Path,
+        session_handle: &dbus::Path,
         options: arg::PropMap,
         slot: u32,
     ) -> Result<(), dbus::Error> {
@@ -286,7 +286,7 @@ impl<'a, T: blocking::BlockingSender, C: ::std::ops::Deref<Target = T>>
 
     fn connect_to_eis(
         &self,
-        session_handle: dbus::Path,
+        session_handle: &dbus::Path,
         options: arg::PropMap,
     ) -> Result<arg::OwnedFd, dbus::Error> {
         self.method_call(

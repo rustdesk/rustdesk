@@ -45,21 +45,21 @@ pub mod client {
         fn key_sequence(&mut self, s: &str) {
             for c in s.chars() {
                 let key = Key::Layout(c);
-                let _ = handle_key(true, key, self.conn.clone(), self.session.clone());
-                let _ = handle_key(false, key, self.conn.clone(), self.session.clone());
+                let _ = handle_key(true, key, self.conn.clone(), &self.session);
+                let _ = handle_key(false, key, self.conn.clone(), &self.session);
             }
         }
 
         fn key_down(&mut self, key: Key) -> enigo::ResultType {
-            handle_key(true, key, self.conn.clone(), self.session.clone())?;
+            handle_key(true, key, self.conn.clone(), &self.session)?;
             Ok(())
         }
         fn key_up(&mut self, key: Key) {
-            let _ = handle_key(false, key, self.conn.clone(), self.session.clone());
+            let _ = handle_key(false, key, self.conn.clone(), &self.session);
         }
         fn key_click(&mut self, key: Key) {
-            let _ = handle_key(true, key, self.conn.clone(), self.session.clone());
-            let _ = handle_key(false, key, self.conn.clone(), self.session.clone());
+            let _ = handle_key(true, key, self.conn.clone(), &self.session);
+            let _ = handle_key(false, key, self.conn.clone(), &self.session);
         }
     }
 
@@ -96,7 +96,7 @@ pub mod client {
             let portal = get_portal(&self.conn);
             let _ = remote_desktop_portal::notify_pointer_motion_absolute(
                 &portal,
-                self.session.clone(),
+                &self.session,
                 HashMap::new(),
                 self.stream.path as u32,
                 x as f64,
@@ -107,28 +107,28 @@ pub mod client {
             let portal = get_portal(&self.conn);
             let _ = remote_desktop_portal::notify_pointer_motion(
                 &portal,
-                self.session.clone(),
+                &self.session,
                 HashMap::new(),
                 x as f64,
                 y as f64,
             );
         }
         fn mouse_down(&mut self, button: MouseButton) -> enigo::ResultType {
-            handle_mouse(true, button, self.conn.clone(), self.session.clone());
+            handle_mouse(true, button, self.conn.clone(), &self.session);
             Ok(())
         }
         fn mouse_up(&mut self, button: MouseButton) {
-            handle_mouse(false, button, self.conn.clone(), self.session.clone());
+            handle_mouse(false, button, self.conn.clone(), &self.session);
         }
         fn mouse_click(&mut self, button: MouseButton) {
-            handle_mouse(true, button, self.conn.clone(), self.session.clone());
-            handle_mouse(false, button, self.conn.clone(), self.session.clone());
+            handle_mouse(true, button, self.conn.clone(), &self.session);
+            handle_mouse(false, button, self.conn.clone(), &self.session);
         }
         fn mouse_scroll_x(&mut self, length: i32) {
             let portal = get_portal(&self.conn);
             let _ = remote_desktop_portal::notify_pointer_axis(
                 &portal,
-                self.session.clone(),
+                &self.session,
                 HashMap::new(),
                 length as f64,
                 0 as f64,
@@ -138,7 +138,7 @@ pub mod client {
             let portal = get_portal(&self.conn);
             let _ = remote_desktop_portal::notify_pointer_axis(
                 &portal,
-                self.session.clone(),
+                &self.session,
                 HashMap::new(),
                 0 as f64,
                 length as f64,
@@ -160,7 +160,7 @@ pub mod client {
         down: bool,
         key: Key,
         conn: Arc<SyncConnection>,
-        session: Path<'static>,
+        session: &Path<'static>,
     ) -> ResultType<()> {
         let state: u32 = if down {
             PRESSED_DOWN_STATE
@@ -173,7 +173,7 @@ pub mod client {
                 let key = get_raw_evdev_keycode(key);
                 remote_desktop_portal::notify_keyboard_keycode(
                     &portal,
-                    session,
+                    &session,
                     HashMap::new(),
                     key,
                     state,
@@ -184,7 +184,7 @@ pub mod client {
                     if is_shift {
                         remote_desktop_portal::notify_keyboard_keycode(
                             &portal,
-                            session.clone(),
+                            &session,
                             HashMap::new(),
                             evdev::Key::KEY_LEFTSHIFT.code() as i32,
                             state,
@@ -192,7 +192,7 @@ pub mod client {
                     }
                     remote_desktop_portal::notify_keyboard_keycode(
                         &portal,
-                        session,
+                        &session,
                         HashMap::new(),
                         key.code() as i32,
                         state,
@@ -207,7 +207,7 @@ pub mod client {
         down: bool,
         button: MouseButton,
         conn: Arc<SyncConnection>,
-        session: Path<'static>,
+        session: &Path<'static>,
     ) {
         let portal = get_portal(&conn);
         let but_key = match button {
@@ -225,7 +225,7 @@ pub mod client {
         };
         let _ = remote_desktop_portal::notify_pointer_button(
             &portal,
-            session.clone(),
+            &session,
             HashMap::new(),
             but_key,
             state,
