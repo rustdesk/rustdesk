@@ -539,13 +539,10 @@ pub fn request_remote_desktop() -> Result<
     let session_res = session_res.lock().unwrap();
 
     if let Some(fd_res) = fd_res.clone() {
-        if !streams_res.is_empty() && !session_res.is_none() {
-            return Ok((
-                conn,
-                fd_res,
-                streams_res.clone(),
-                session_res.clone().unwrap_or_default(),
-            ));
+        if let Some(session) = session_res.clone() {
+            if !streams_res.is_empty() {
+                return Ok((conn, fd_res, streams_res.clone(), session));
+            }
         }
     }
     Err(Box::new(DBusError(
@@ -587,19 +584,22 @@ fn on_create_session_response(
             .to_string()
             .into();
 
-        session.lock().unwrap().replace(ses.clone());
+        let mut session = match session.lock() {
+            Ok(session) => session,
+            Err(_) => {
+                return Err(Box::new(DBusError(
+                    "Failed to lock session.".into(),
+                )))
+            }
+        };
 
-        let session = session.lock().unwrap().clone().unwrap_or_default();
-        let path = portal.select_devices(session.clone(), args)?;
+        session.replace(ses.clone());
+
+        let path = portal.select_devices(ses.clone(), args)?;
         handle_response(
             c,
             path,
-            on_select_devices_response(
-                fd.clone(),
-                streams.clone(),
-                failure.clone(),
-                session.clone(),
-            ),
+            on_select_devices_response(fd.clone(), streams.clone(), failure.clone(), ses),
             failure.clone(),
         )?;
 
@@ -724,7 +724,11 @@ fn on_start_response(
 }
 
 pub fn get_capturables() -> Result<Vec<PipeWireCapturable>, Box<dyn Error>> {
-    let mut rdp_connection = RDP_RESPONSE.lock().unwrap();
+    let mut rdp_connection = match RDP_RESPONSE.lock() {
+        Ok(conn) => conn,
+        Err(err) => return Err(Box::new(err)),
+    };
+
     if rdp_connection.is_none() {
         let (conn, fd, streams, session) = request_remote_desktop()?;
         let conn = Arc::new(conn);
@@ -738,7 +742,13 @@ pub fn get_capturables() -> Result<Vec<PipeWireCapturable>, Box<dyn Error>> {
         *rdp_connection = Some(rdp_res);
     }
 
-    let rdp_res = rdp_connection.as_ref().unwrap();
+    let rdp_res = match rdp_connection.as_ref() {
+        Some(res) => res,
+        None => {
+            return Err(Box::new(DBusError("RDP response is None.".into())));
+        }
+    };
+
     Ok(rdp_res
         .streams
         .clone()

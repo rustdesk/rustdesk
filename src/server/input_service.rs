@@ -467,9 +467,9 @@ pub async fn setup_uinput(minx: i32, maxx: i32, miny: i32, maxy: i32) -> ResultT
 
 #[cfg(target_os = "linux")]
 pub async fn setup_rdp_input() -> ResultType<(), Box<dyn std::error::Error>> {
-    let mut en = ENIGO.lock().unwrap();
-    let rdp_res_lock = RDP_RESPONSE.lock().unwrap();
-    let rdp_res = rdp_res_lock.as_ref().unwrap();
+    let mut en = ENIGO.lock()?;
+    let rdp_res_lock = RDP_RESPONSE.lock()?;
+    let rdp_res = rdp_res_lock.as_ref().ok_or("RDP response is None")?;
 
     let keyboard = RdpInputKeyboard::new(rdp_res.conn.clone(), rdp_res.session.clone())?;
     en.set_custom_keyboard(Box::new(keyboard));
