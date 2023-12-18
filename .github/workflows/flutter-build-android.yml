@@ -1,4 +1,4 @@
-name: Build the Android flutter version of the RustDesk
+name: Build the Android flutter version of the StarDesk
 
 on:
   workflow_call:
@@ -36,15 +36,10 @@ env:
 
 jobs:
 
-  generate-bridge-linux:
-    uses: ./.github/workflows/bridge.yml
-
   build-rustdesk-android:
     needs: [generate-bridge-linux]
     name: build rustdesk android apk ${{ matrix.job.target }} (${{ matrix.job.os }}) [${{ matrix.job.extra-build-features }}]
     runs-on: ${{ matrix.job.os }}
-    env:
-      RUNNER_OS: macos
     strategy:
       fail-fast: false
       matrix:

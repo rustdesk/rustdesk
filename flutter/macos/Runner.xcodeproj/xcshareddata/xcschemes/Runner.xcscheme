@@ -82,6 +82,7 @@
    </AnalyzeAction>
    <ArchiveAction
       buildConfiguration = "Release"
+      customArchiveName = "StarDesk"
       revealArchiveInOrganizer = "YES">
    </ArchiveAction>
 </Scheme>

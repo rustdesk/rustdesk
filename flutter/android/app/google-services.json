@@ -1,37 +1,26 @@
 {
   "project_info": {
-    "project_number": "768133699366",
-    "firebase_url": "https://rustdesk.firebaseio.com",
-    "project_id": "rustdesk",
-    "storage_bucket": "rustdesk.appspot.com"
+    "project_number": "551418825250",
+    "project_id": "mobilestartools-com",
+    "storage_bucket": "mobilestartools-com.appspot.com"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:768133699366:android:5fc9015370e344457993e7",
+        "mobilesdk_app_id": "1:551418825250:android:376f29b9aecf268a4b187b",
         "android_client_info": {
-          "package_name": "com.carriez.flutter_hbb"
+          "package_name": "com.mobilestartools.remote"
         }
       },
-      "oauth_client": [
-        {
-          "client_id": "768133699366-s9gdfsijefsd5g1nura4kmfne42lencn.apps.googleusercontent.com",
-          "client_type": 3
-        }
-      ],
+      "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyAPOsKcXjrAR-7Z148sYr_gdB_JQZkamTM"
+          "current_key": "AIzaSyBWNBFgCbnK5BwnmunHsi2Zi8qOmiKl60A"
         }
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": [
-            {
-              "client_id": "768133699366-s9gdfsijefsd5g1nura4kmfne42lencn.apps.googleusercontent.com",
-              "client_type": 3
-            }
-          ]
+          "other_platform_oauth_client": []
         }
       }
     }
