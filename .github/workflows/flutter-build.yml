@@ -249,7 +249,7 @@ jobs:
 
       - name: Sign rustdesk files
         uses: GermanBluefox/code-sign-action@v7
-        if:env.UPLOAD_ARTIFACT == 'true'
+        if: env.UPLOAD_ARTIFACT == 'true'
         with:
           certificate: '${{ secrets.WINDOWS_PFX_BASE64 }}'
           password: '${{ secrets.WINDOWS_PFX_PASSWORD }}'
