@@ -160,7 +160,7 @@ jobs:
           create-dmg --icon "StarDesk.app" 200 190 --hide-extension "StarDesk.app" --window-size 800 400 --app-drop-link 600 185 stardesk-${{ env.VERSION }}.dmg ./flutter/build/macos/Build/Products/Release/StarDesk.app
           codesign --force --options runtime -s ${{ secrets.MACOS_CODESIGN_IDENTITY }} --deep --strict ruststardeskdesk-${{ env.VERSION }}.dmg -vvv
           # notarize the stardesk-${{ env.VERSION }}.dmg
-          rcodesign notary-submit --api-key-path ${{ github.workspace }}/rustdesk.json  --staple stardesk-${{ env.VERSION }}.dmg
+          # rcodesign notary-submit --api-key-path ${{ github.workspace }}/rustdesk.json  --staple stardesk-${{ env.VERSION }}.dmg
 
       - name: Rename rustdesk
         if: env.UPLOAD_ARTIFACT == 'true'
