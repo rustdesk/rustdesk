@@ -5,6 +5,8 @@ use crate::clipboard_file::*;
 use crate::common::update_clipboard;
 #[cfg(target_os = "android")]
 use crate::keyboard::client::map_key_to_control_key;
+#[cfg(target_os = "linux")]
+use crate::platform::linux::is_x11;
 #[cfg(all(target_os = "linux", feature = "linux_headless"))]
 #[cfg(not(any(feature = "flatpak", feature = "appimage")))]
 use crate::platform::linux_desktop_manager;
@@ -12,8 +14,6 @@ use crate::platform::linux_desktop_manager;
 use crate::platform::WallPaperRemover;
 #[cfg(windows)]
 use crate::portable_service::client as portable_client;
-#[cfg(target_os = "linux")]
-use crate::platform::linux::is_x11;
 use crate::{
     client::{
         new_voice_call_request, new_voice_call_response, start_audio_thread, MediaData, MediaSender,
@@ -1172,7 +1172,21 @@ impl Connection {
             ..Default::default()
         })
         .into();
-        pi.resolutions = Self::get_supported_resolutions(self.display_idx).into();
+        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+        {
+            pi.resolutions = Some(SupportedResolutions {
+                resolutions: display_service::try_get_displays()
+                    .map(|displays| {
+                        displays
+                            .get(self.display_idx)
+                            .map(|d| crate::platform::resolutions(&d.name()))
+                            .unwrap_or(vec![])
+                    })
+                    .unwrap_or(vec![]),
+                ..Default::default()
+            })
+            .into();
+        }
 
         let mut sub_service = false;
         if self.file_transfer.is_some() {
@@ -1194,6 +1208,14 @@ impl Connection {
                     pi.current_display = self.display_idx as _;
                     res.set_peer_info(pi);
                     sub_service = true;
+
+                    #[cfg(target_os = "linux")]
+                    {
+                        // use rdp_input when uinput is not available in wayland. Ex: flatpak
+                        if !is_x11() && !crate::is_server() {
+                            let _ = setup_rdp_input().await;
+                        }
+                    }
                 }
             }
             self.on_remote_authorized();
@@ -1233,31 +1255,6 @@ impl Connection {
                 s.try_add_primay_video_service();
                 s.add_connection(self.inner.clone(), &noperms);
             }
-        }
-    }
-
-    fn get_supported_resolutions(display_idx: usize) -> Option<SupportedResolutions> {
-        #[cfg(any(target_os = "android", target_os = "ios"))]
-        return None;
-        #[cfg(not(any(target_os = "android", target_os = "ios")))]
-        {
-            #[cfg(target_os = "linux")]
-            {
-                if !is_x11() {
-                    return None;
-                }
-            }
-            Some(SupportedResolutions {
-                resolutions: display_service::try_get_displays()
-                    .map(|displays| {
-                        displays
-                            .get(display_idx)
-                            .map(|d| crate::platform::resolutions(&d.name()))
-                            .unwrap_or(vec![])
-                    })
-                    .unwrap_or(vec![]),
-                ..Default::default()
-            })
         }
     }
 
