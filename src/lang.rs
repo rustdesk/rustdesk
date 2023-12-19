@@ -11,6 +11,7 @@ mod el;
 mod en;
 mod eo;
 mod es;
+mod et;
 mod fa;
 mod fr;
 mod hu;
@@ -49,6 +50,7 @@ pub const LANGS: &[(&str, &str)] = &[
     ("zh-tw", "繁體中文"),
     ("pt", "Português"),
     ("es", "Español"),
+    ("et", "Eesti keel"),
     ("hu", "Magyar"),
     ("ru", "Русский"),
     ("sk", "Slovenčina"),
@@ -114,6 +116,7 @@ pub fn translate_locale(name: String, locale: &str) -> String {
         "nb" => nb::T.deref(),
         "nl" => nl::T.deref(),
         "es" => es::T.deref(),
+        "et" => et::T.deref(),
         "hu" => hu::T.deref(),
         "ru" => ru::T.deref(),
         "eo" => eo::T.deref(),
