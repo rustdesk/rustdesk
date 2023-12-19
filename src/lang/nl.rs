@@ -576,7 +576,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("input_source_1_tip", "Invoerbron 1"),
         ("input_source_2_tip", "Invoerbron 2"),
         ("capture_display_elevated_connections_tip", "Scannen van meerdere schermen wordt niet ondersteund in de bevoorrechte gebruikersmodus. Als je meerdere schermen wilt bedienen, probeer het dan opnieuw na de installatie."),
-        ("Swap control-command key", ""),
-        ("swap-left-right-mouse", ""),
+        ("Swap control-command key", "Wissel controle-commando toets"),
+        ("swap-left-right-mouse", "wissel-links-rechts-muis"),
     ].iter().cloned().collect();
 }
