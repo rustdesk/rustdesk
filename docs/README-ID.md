@@ -1,12 +1,12 @@
 <p align="center">
-  <img src="../res/logo-header.svg" alt="RustDesk - Your remote desktop"><br>
+  <img src="../res/logo-header.svg" alt="StarDesk - Your remote desktop"><br>
   <a href="#free-public-servers">Servers</a> •
   <a href="#raw-steps-to-build">Build</a> •
   <a href="#how-to-build-with-docker">Docker</a> •
   <a href="#file-structure">Structure</a> •
   <a href="#snapshot">Snapshot</a><br>
   [<a href="../README.md">English</a>] | [<a href="README-UA.md">Українська</a>] | [<a href="README-CS.md">česky</a>] | [<a href="README-ZH.md">中文</a>] | [<a href="README-HU.md">Magyar</a>] | [<a href="README-ES.md">Español</a>] | [<a href="README-FA.md">فارسی</a>] | [<a href="README-FR.md">Français</a>] | [<a href="README-DE.md">Deutsch</a>] | [<a href="README-PL.md">Polski</a>] | [<a href="README-FI.md">Suomi</a>] | [<a href="README-ML.md">മലയാളം</a>] | [<a href="README-JP.md">日本語</a>] | [<a href="README-NL.md">Nederlands</a>] | [<a href="README-IT.md">Italiano</a>] | [<a href="README-RU.md">Русский</a>] | [<a href="README-PTBR.md">Português (Brasil)</a>] | [<a href="README-EO.md">Esperanto</a>] | [<a href="README-KR.md">한국어</a>] | [<a href="README-AR.md">العربي</a>] | [<a href="README-VN.md">Tiếng Việt</a>] | [<a href="README-GR.md">Ελληνικά</a>]<br>
-  <b>Kami membutuhkan bantuanmu untuk menterjemahkan file README dan <a href="https://github.com/rustdesk/rustdesk/tree/master/src/lang">RustDesk UI</a> ke Bahasa Indonesia</b>
+  <b>Kami membutuhkan bantuanmu untuk menterjemahkan file README dan <a href="https://github.com/rustdesk/rustdesk/tree/master/src/lang">StarDesk UI</a> ke Bahasa Indonesia</b>
 </p>
 
 Mari mengobrol bersama kami: [Discord](https://discord.gg/nDceKgxnkV) | [Twitter](https://twitter.com/rustdesk) | [Reddit](https://www.reddit.com/r/rustdesk)
@@ -19,7 +19,7 @@ Merupakan perangkat lunak Remote Desktop yang baru, dan dibangun dengan Rust. Ba
 
 ![image](https://user-images.githubusercontent.com/71636191/171661982-430285f0-2e12-4b1d-9957-4a58e375304d.png)
 
-RustDesk mengajak semua orang untuk ikut berkontribusi. Lihat [`docs/CONTRIBUTING-ID.md`](CONTRIBUTING-ID.md) untuk melihat panduan.
+StarDesk mengajak semua orang untuk ikut berkontribusi. Lihat [`docs/CONTRIBUTING-ID.md`](CONTRIBUTING-ID.md) untuk melihat panduan.
 
 [**FAQ**](https://github.com/rustdesk/rustdesk/wiki/FAQ)
 
@@ -156,7 +156,7 @@ Atau, jika kamu menjalankan rilis yang dapat dieksekusi:
 target/release/rustdesk
 ```
 
-Harap pastikan bahwa kamu menjalankan perintah ini dari repositori root RustDesk, jika tidak demikian, aplikasi mungkin tidak dapat menemukan sumber yang diperlukan. Dan juga, perintah cargo seperti `install` atau `run` saat ini tidak didukung melalui metode ini karena, proses menginstal atau menjalankan program terjadi di dalam container bukan pada host.
+Harap pastikan bahwa kamu menjalankan perintah ini dari repositori root StarDesk, jika tidak demikian, aplikasi mungkin tidak dapat menemukan sumber yang diperlukan. Dan juga, perintah cargo seperti `install` atau `run` saat ini tidak didukung melalui metode ini karena, proses menginstal atau menjalankan program terjadi di dalam container bukan pada host.
 
 ## Struktur File
 

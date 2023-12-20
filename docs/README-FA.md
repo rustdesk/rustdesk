@@ -1,5 +1,5 @@
 <p dir="rtl" align="center">
-  <img src="../res/logo-header.svg" alt="RustDesk - Your remote desktop"><br>
+  <img src="../res/logo-header.svg" alt="StarDesk - Your remote desktop"><br>
   <a href="#تصاویر-محیط-نرم افزار">تصاویر محیط نرم‌افزار</a> •
   <a href="#ساختار-پوشه-ها">ساختار</a> •
   <a href="#نحوه-ساخت-با-داکر">داکر</a> •
@@ -7,21 +7,21 @@
   <a href="#سرورهای-عمومی-رایگان">سرور</a>
 </p>
 <p align="center" dir="auto">[<a href="../README.md">English</a>] | [<a href="README-UA.md">Українська</a>] | [<a href="README-CS.md">česky</a>] | [<a href="README-ZH.md">中文</a>] | [<a href="README-HU.md">Magyar</a>] | [<a href="README-ES.md">Español</a>] | [<a href="README-FR.md">Français</a>] | [<a href="README-DE.md">Deutsch</a>] | [<a href="README-PL.md">Polski</a>] | [<a href="README-ID.md">Indonesian</a>] | [<a href="README-FI.md">Suomi</a>] | [<a href="README-ML.md">മലയാളം</a>] | [<a href="README-JP.md">日本語</a>] | [<a href="README-NL.md">Nederlands</a>] | [<a href="README-IT.md">Italiano</a>] | [<a href="README-RU.md">Русский</a>] | [<a href="README-PTBR.md">Português (Brasil)</a>] | [<a href="README-EO.md">Esperanto</a>] | [<a href="README-KR.md">한국어</a>] | [<a href="README-AR.md">العربي</a>] | [<a href="README-VN.md">Tiếng Việt</a>] | [<a href="README-GR.md">Ελληνικά</a>]</p>
-<p dir="rtl" align="center"><b>برای ترجمه این سند (README)، <a href="https://github.com/rustdesk/rustdesk/tree/master/src/lang" dir="rtl">رابط کاربری RustDesk</a>، <a href="https://github.com/rustdesk/doc.rustdesk.com" dir="rtl">و مستندات آن</a> به زبان مادری شما به کمکتان نیازمندیم. </b></p>
+<p dir="rtl" align="center"><b>برای ترجمه این سند (README)، <a href="https://github.com/rustdesk/rustdesk/tree/master/src/lang" dir="rtl">رابط کاربری StarDesk</a>، <a href="https://github.com/rustdesk/doc.rustdesk.com" dir="rtl">و مستندات آن</a> به زبان مادری شما به کمکتان نیازمندیم. </b></p>
 
 با ما گفتگو کنید:  [Reddit](https://www.reddit.com/r/rustdesk) | [Twitter](https://twitter.com/rustdesk) | [Discord](https://discord.gg/nDceKgxnkV) 
 
 
 [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/I2I04VU09)
 
-راست‌دسک (RustDesk) نرم‌افزاری برای کارکردن با رایانه‌ی رومیزی از راه دور است و با زبان برنامه‌نویسی Rust نوشته شده است. نیاز به تنظیمات چندانی ندارد و شما را قادر می سازد تا بدون نگرانی از امنیت اطلاعات خود بر آن‌ها کنترل کامل داشته باشید.
+راست‌دسک (StarDesk) نرم‌افزاری برای کارکردن با رایانه‌ی رومیزی از راه دور است و با زبان برنامه‌نویسی Rust نوشته شده است. نیاز به تنظیمات چندانی ندارد و شما را قادر می سازد تا بدون نگرانی از امنیت اطلاعات خود بر آن‌ها کنترل کامل داشته باشید.
 
 می‌توانید از سرور rendezvous/relay ما استفاده کنید، [سرور خودتان را راه‌اندازی کنید](https://rustdesk.com/server) یا
 [ سرورrendezvous/relay  خود را بنویسید](https://github.com/rustdesk/rustdesk).
 
 ما از مشارکت همه استقبال می کنیم. برای راهنمایی جهت مشارکت به[`docs/CONTRIBUTING.md`](CONTRIBUTING.md) مراجعه کنید.
 
-[راست‌دسک چطور کار می کند؟](https://github.com/rustdesk/rustdesk/wiki/How-does-RustDesk-work%3F)
+[راست‌دسک چطور کار می کند؟](https://github.com/rustdesk/rustdesk/wiki/How-does-StarDesk-work%3F)
 
 [دریافت نرم‌افزار](https://github.com/rustdesk/rustdesk/releases)
 
@@ -140,7 +140,7 @@ target/debug/rustdesk
 target/release/rustdesk
 ```
 
-لطفاً اطمینان حاصل کنید که این دستورات را از پوشه مخزن RustDesk اجرا می کنید، در غیر این صورت ممکن است برنامه نتواند منابع مورد نیاز را پیدا کند. همچنین توجه داشته باشید که سایر دستورات فرعی Cargo مانند `install` یا `run` در حال حاضر از طریق این روش پشتیبانی نمی شوند زیرا برنامه به جای سیستم عامل میزبان, در داخل کانتینر نصب و اجرا میشود.
+لطفاً اطمینان حاصل کنید که این دستورات را از پوشه مخزن StarDesk اجرا می کنید، در غیر این صورت ممکن است برنامه نتواند منابع مورد نیاز را پیدا کند. همچنین توجه داشته باشید که سایر دستورات فرعی Cargo مانند `install` یا `run` در حال حاضر از طریق این روش پشتیبانی نمی شوند زیرا برنامه به جای سیستم عامل میزبان, در داخل کانتینر نصب و اجرا میشود.
 
 ## ساختار پوشه ها 
 

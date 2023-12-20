@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="../res/logo-header.svg" alt="RustDesk - Your remote desktop"><br>
+  <img src="../res/logo-header.svg" alt="StarDesk - Your remote desktop"><br>
   <a href="#servidores-gratis-de-uso-público">Servidores</a> •
   <a href="#pasos-para-compilar-desde-el-inicio">Compilar</a> •
   <a href="#como-compilar-con-docker">Docker</a> •
@@ -15,9 +15,9 @@ Chatea con nosotros: [Discord](https://discord.gg/nDceKgxnkV) | [Twitter](https:
 
 Otro software de escritorio remoto, escrito en Rust. Funciona de forma inmediata, sin necesidad de configuración. Tienes el control total de tus datos, sin preocupaciones sobre la seguridad. Puedes utilizar nuestro servidor de rendezvous/relay, [instalar el tuyo](https://rustdesk.com/server), o [escribir tu propio servidor rendezvous/relay](https://github.com/rustdesk/rustdesk-server-demo).
 
-RustDesk agradece la contribución de todo el mundo. Lee [`docs/CONTRIBUTING.md`](CONTRIBUTING.md) para ayuda para empezar.
+StarDesk agradece la contribución de todo el mundo. Lee [`docs/CONTRIBUTING.md`](CONTRIBUTING.md) para ayuda para empezar.
 
-[**¿Cómo funciona rustdesk?**](https://github.com/rustdesk/rustdesk/wiki/How-does-RustDesk-work%3F)
+[**¿Cómo funciona rustdesk?**](https://github.com/rustdesk/rustdesk/wiki/How-does-StarDesk-work%3F)
 
 [**DESCARGA DE BINARIOS**](https://github.com/rustdesk/rustdesk/releases)
 
@@ -141,7 +141,7 @@ O si estas ejecutando una versión para su publicación:
 target/release/rustdesk
 ```
 
-Por favor, asegurate de que estás ejecutando estos comandos desde la raíz del repositorio de RustDesk, de lo contrario la aplicación puede ser incapaz de encontrar los recursos necesarios. También ten en cuenta que otros subcomandos de cargo como `install` o `run` no estan actualmente soportados usando este metodo, ya que instalarían o ejecutarían el programa dentro del contenedor en lugar del host.
+Por favor, asegurate de que estás ejecutando estos comandos desde la raíz del repositorio de StarDesk, de lo contrario la aplicación puede ser incapaz de encontrar los recursos necesarios. También ten en cuenta que otros subcomandos de cargo como `install` o `run` no estan actualmente soportados usando este metodo, ya que instalarían o ejecutarían el programa dentro del contenedor en lugar del host.
 
 ## Estructura de archivos
 

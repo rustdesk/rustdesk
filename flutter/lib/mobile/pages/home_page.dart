@@ -154,7 +154,7 @@ class WebHomePage extends StatelessWidget {
       // backgroundColor: MyTheme.grayBg,
       appBar: AppBar(
         centerTitle: true,
-        title: Text("RustDesk" + (isWeb ? " (Beta) " : "")),
+        title: Text("StarDesk" + (isWeb ? " (Beta) " : "")),
         actions: connectionPage.appBarActions,
       ),
       body: connectionPage,

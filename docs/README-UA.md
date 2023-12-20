@@ -1,12 +1,12 @@
 <p align="center">
-  <img src="../res/logo-header.svg" alt="RustDesk - Ваша віддалена стільниця"><br>
+  <img src="../res/logo-header.svg" alt="StarDesk - Ваша віддалена стільниця"><br>
   <a href="#безкоштовні-загальнодоступні-сервери">Сервери</a> •
   <a href="#кроки-для-збірки">Збирання</a> •
   <a href="#як-зібрати-за-допомогою-docker">Docker</a> •
   <a href="#структура-файлів">Структура</a> •
   <a href="#знімки">Знімки</a><br>
   [<a href="../README.md">English</a>] | [<a href="docs/README-CS.md">česky</a>] | [<a href="docs/README-ZH.md">中文</a>] | [<a href="docs/README-HU.md">Magyar</a>] | [<a href="docs/README-ES.md">Español</a>] | [<a href="docs/README-FA.md">فارسی</a>] | [<a href="docs/README-FR.md">Français</a>] | [<a href="docs/README-DE.md">Deutsch</a>] | [<a href="docs/README-PL.md">Polski</a>] | [<a href="docs/README-ID.md">Indonesian</a>] | [<a href="docs/README-FI.md">Suomi</a>] | [<a href="docs/README-ML.md">മലയാളം</a>] | [<a href="docs/README-JP.md">日本語</a>] | [<a href="docs/README-NL.md">Nederlands</a>] | [<a href="docs/README-IT.md">Italiano</a>] | [<a href="docs/README-RU.md">Русский</a>] | [<a href="docs/README-PTBR.md">Português (Brasil)</a>] | [<a href="docs/README-EO.md">Esperanto</a>] | [<a href="docs/README-KR.md">한국어</a>] | [<a href="docs/README-AR.md">العربي</a>] | [<a href="docs/README-VN.md">Tiếng Việt</a>] | [<a href="docs/README-DA.md">Dansk</a>] | [<a href="docs/README-GR.md">Ελληνικά</a>] | [<a href="docs/README-TR.md">Türkçe</a>]<br>
-  <b>Нам потрібна ваша допомога для перекладу цього README, <a href="https://github.com/rustdesk/rustdesk/tree/master/src/lang">інтерфейсу</a> та <a href="https://github.com/rustdesk/doc.rustdesk.com">документації</a> RustDesk на вашу рідну мову</B>
+  <b>Нам потрібна ваша допомога для перекладу цього README, <a href="https://github.com/rustdesk/rustdesk/tree/master/src/lang">інтерфейсу</a> та <a href="https://github.com/rustdesk/doc.rustdesk.com">документації</a> StarDesk на вашу рідну мову</B>
 </p>
 
 Спілкування з нами: [Discord](https://discord.gg/nDceKgxnkV) | [Twitter](https://twitter.com/rustdesk) | [Reddit](https://www.reddit.com/r/rustdesk)
@@ -19,7 +19,7 @@
 
 ![image](https://user-images.githubusercontent.com/71636191/171661982-430285f0-2e12-4b1d-9957-4a58e375304d.png)
 
-RustDesk вітає внесок кожного. Ознайомтеся з [CONTRIBUTING.md](docs/CONTRIBUTING.md), щоб отримати допомогу на початковому етапі.
+StarDesk вітає внесок кожного. Ознайомтеся з [CONTRIBUTING.md](docs/CONTRIBUTING.md), щоб отримати допомогу на початковому етапі.
 
 [**ЧаПи**](https://github.com/rustdesk/rustdesk/wiki/FAQ)
 
@@ -164,7 +164,7 @@ target/debug/rustdesk
 target/release/rustdesk
 ```
 
-Будь ласка, переконайтеся, що ви запускаєте ці команди з кореня сховища RustDesk, інакше додаток не зможе знайти необхідні ресурси. Також зверніть увагу, що інші cargo підкоманди, такі як `install` або `run`, наразі не підтримуються цим методом, оскільки вони будуть встановлювати або запускати програму всередині контейнера, а не на хості.
+Будь ласка, переконайтеся, що ви запускаєте ці команди з кореня сховища StarDesk, інакше додаток не зможе знайти необхідні ресурси. Також зверніть увагу, що інші cargo підкоманди, такі як `install` або `run`, наразі не підтримуються цим методом, оскільки вони будуть встановлювати або запускати програму всередині контейнера, а не на хості.
 
 ## Структура файлів
 

@@ -8,6 +8,6 @@ jobs:
     steps:
       - uses: vedantmgoyal2009/winget-releaser@v1
         with:
-          identifier: RustDesk.RustDesk
+          identifier: StarDesk.StarDesk
           version: ${{ github.event.release.tag_name }}
           token: ${{ secrets.WINGET_TOKEN }}

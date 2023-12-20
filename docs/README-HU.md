@@ -1,25 +1,25 @@
 <p align="center">
-  <img src="../res/logo-header.svg" alt="RustDesk - Your remote desktop"><br>
+  <img src="../res/logo-header.svg" alt="StarDesk - Your remote desktop"><br>
   <a href="#ingyenes-publikus-szerverek">Szerverek</a> •
   <a href="#építési-pontok">Építés</a> •
   <a href="#hogyan-éptís-dockerrel">Docker</a> •
   <a href="#fájl-struktúra">Struktúra</a> •
   <a href="#képernyőképek">Képernyőképek</a><br>
   [<a href="../README.md">English</a>] | [<a href="README-UA.md">Українська</a>] | [<a href="README-CS.md">česky</a>] | [<a href="README-ZH.md">中文</a>] | [<a href="README-ES.md">Español</a>] | [<a href="README-FA.md">فارسی</a>] | [<a href="README-FR.md">Français</a>] | [<a href="README-DE.md">Deutsch</a>] | [<a href="README-PL.md">Polski</a>] | [<a href="README-ID.md">Indonesian</a>] | [<a href="README-FI.md">Suomi</a>] | [<a href="README-ML.md">മലയാളം</a>] | [<a href="README-JP.md">日本語</a>] | [<a href="README-NL.md">Nederlands</a>] | [<a href="README-IT.md">Italiano</a>] | [<a href="README-RU.md">Русский</a>] | [<a href="README-PTBR.md">Português (Brasil)</a>] | [<a href="README-EO.md">Esperanto</a>] | [<a href="README-KR.md">한국어</a>] | [<a href="README-AR.md">العربي</a>] | [<a href="README-VN.md">Tiếng Việt</a>] | [<a href="README-GR.md">Ελληνικά</a>]<br>
-  <b>Kell a segítséged, hogy lefordítsuk ezt a README-t, <a href="https://github.com/rustdesk/rustdesk/tree/master/src/lang">a RustDesk UI-t</a> és a <a href="https://github.com/rustdesk/doc.rustdesk.com">Dokumentációt</a> az anyanyelvedre</b>
+  <b>Kell a segítséged, hogy lefordítsuk ezt a README-t, <a href="https://github.com/rustdesk/rustdesk/tree/master/src/lang">a StarDesk UI-t</a> és a <a href="https://github.com/rustdesk/doc.rustdesk.com">Dokumentációt</a> az anyanyelvedre</b>
 </p>
 
 Beszélgess velünk: [Discord](https://discord.gg/nDceKgxnkV) | [Twitter](https://twitter.com/rustdesk) | [Reddit](https://www.reddit.com/r/rustdesk)
 
 [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/I2I04VU09)
 
-A RustDesk egy távoli elérésű asztali szoftver, Rust-ban írva. Működik mindenféle konfiguráció nélkül, feltelepítéssel, vagy anélkül. Az adataidat teljesen te kezeled, nincs szükség aggódásra a harmadik felek miatt. Használhatod a RustDesk punblikus randevú/relay szervereit, [hostolhatsz sajátot](https://rustdesk.com/server), vagy akár [írhatsz is egyet](https://github.com/rustdesk/rustdesk-server-demo).
+A StarDesk egy távoli elérésű asztali szoftver, Rust-ban írva. Működik mindenféle konfiguráció nélkül, feltelepítéssel, vagy anélkül. Az adataidat teljesen te kezeled, nincs szükség aggódásra a harmadik felek miatt. Használhatod a StarDesk punblikus randevú/relay szervereit, [hostolhatsz sajátot](https://rustdesk.com/server), vagy akár [írhatsz is egyet](https://github.com/rustdesk/rustdesk-server-demo).
 
 ![image](https://user-images.githubusercontent.com/71636191/171661982-430285f0-2e12-4b1d-9957-4a58e375304d.png)
 
-A RustDesk szívesen fogad minden contributiont, támogatást mindenkitől. Lásd a [`docs/CONTRIBUTING.md`](CONTRIBUTING.md) fájlt a kezdéshez.
+A StarDesk szívesen fogad minden contributiont, támogatást mindenkitől. Lásd a [`docs/CONTRIBUTING.md`](CONTRIBUTING.md) fájlt a kezdéshez.
 
-[**Hogyan működik a RustDesk?**](https://github.com/rustdesk/rustdesk/wiki/How-does-RustDesk-work%3F)
+[**Hogyan működik a StarDesk?**](https://github.com/rustdesk/rustdesk/wiki/How-does-StarDesk-work%3F)
 
 [**BINARY LELTÖLTÉS**](https://github.com/rustdesk/rustdesk/releases)
 
@@ -126,7 +126,7 @@ cd rustdesk
 docker build -t "rustdesk-builder" .
 ```
 
-Ezután, minden egyes alkalommal amikor meg kell építened a RustDesk-et, futtasd a kövezkező parancsot:
+Ezután, minden egyes alkalommal amikor meg kell építened a StarDesk-et, futtasd a kövezkező parancsot:
 
 ```sh
 docker run --rm -it -v $PWD:/home/user/rustdesk -v rustdesk-git-cache:/home/user/.cargo/git -v rustdesk-registry-cache:/home/user/.cargo/registry -e PUID="$(id -u)" -e PGID="$(id -g)" rustdesk-builder
@@ -144,7 +144,7 @@ Vagy ha release binary, akkor:
 target/release/rustdesk
 ```
 
-Kérlek mindenképpen nézd meg hogy ezeket a parancsokat a root RustDesk mappában futtatod e, különben a RustDesk lehet hogy nem fogja megtalálni az építéshez szükséges elemeket. Fontos az is, hogy jelenleg más cargo subparancsok, például `install`vagy `run` nem támogatottak, mivel egy Dockeres építés esetén elindítanák a programot a containeren belül.
+Kérlek mindenképpen nézd meg hogy ezeket a parancsokat a root StarDesk mappában futtatod e, különben a StarDesk lehet hogy nem fogja megtalálni az építéshez szükséges elemeket. Fontos az is, hogy jelenleg más cargo subparancsok, például `install`vagy `run` nem támogatottak, mivel egy Dockeres építés esetén elindítanák a programot a containeren belül.
 
 
 ## Fájl Struktúra

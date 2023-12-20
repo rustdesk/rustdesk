@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="../res/logo-header.svg" alt="RustDesk - Your remote desktop"><br>
+  <img src="../res/logo-header.svg" alt="StarDesk - Your remote desktop"><br>
   <a href="#serveurs-publics-libres">Serveurs</a> -
   <a href="#étapes-brutes-de-la-compilationbuild">Build</a> -
   <a href="#comment-construire-avec-docker">Docker</a> -
@@ -15,7 +15,7 @@ Chattez avec nous : [Discord](https://discord.gg/nDceKgxnkV) | [Twitter](https:/
 
 Encore un autre logiciel de bureau à distance, écrit en Rust. Fonctionne directement, aucune configuration n'est nécessaire. Vous avez le contrôle total de vos données, sans aucun souci de sécurité. Vous pouvez utiliser notre serveur de rendez-vous/relais, [configurer le vôtre](https://rustdesk.com/server), ou [écrire votre propre serveur de rendez-vous/relais](https://github.com/rustdesk/rustdesk-server-demo).
 
-RustDesk accueille les contributions de tout le monde. Voir [`docs/CONTRIBUTING.md`](CONTRIBUTING.md) pour plus d'informations.
+StarDesk accueille les contributions de tout le monde. Voir [`docs/CONTRIBUTING.md`](CONTRIBUTING.md) pour plus d'informations.
 
 [**TÉLÉCHARGEMENT BINAIRE**](https://github.com/rustdesk/rustdesk/releases)
 
@@ -132,7 +132,7 @@ Ou, si vous exécutez un exécutable provenant d'une release :
 target/release/rustdesk
 ```
 
-Veuillez vous assurer que vous exécutez ces commandes à partir de la racine du dépôt RustDesk, sinon l'application ne pourra pas trouver les ressources requises. Notez également que les autres sous-commandes de cargo telles que `install` ou `run` ne sont pas actuellement supportées par cette méthode car elles installeraient ou exécuteraient le programme à l'intérieur du conteneur au lieu de l'hôte.
+Veuillez vous assurer que vous exécutez ces commandes à partir de la racine du dépôt StarDesk, sinon l'application ne pourra pas trouver les ressources requises. Notez également que les autres sous-commandes de cargo telles que `install` ou `run` ne sont pas actuellement supportées par cette méthode car elles installeraient ou exécuteraient le programme à l'intérieur du conteneur au lieu de l'hôte.
 
 ## Structure du projet
 

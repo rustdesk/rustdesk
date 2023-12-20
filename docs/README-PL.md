@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="../res/logo-header.svg" alt="RustDesk - Twój zdalny pulpit"><br>
+  <img src="../res/logo-header.svg" alt="StarDesk - Twój zdalny pulpit"><br>
   <a href="#darmowe-serwery-publiczne">Serwery</a> •
   <a href="#podstawowe-kroki-do-kompilacji">Kompilacja</a> •
   <a href="#jak-kompilować-za-pomocą-dockera">Docker</a> •
@@ -17,7 +17,7 @@ Kolejny program do zdalnego pulpitu, napisany w Rust. Działa od samego początk
 
 ![image](https://user-images.githubusercontent.com/71636191/171661982-430285f0-2e12-4b1d-9957-4a58e375304d.png) 
 
-RustDesk zaprasza do współpracy każdego. Zobacz [`docs/CONTRIBUTING-PL.md`](CONTRIBUTING-PL.md) pomoc w uruchomieniu programu.
+StarDesk zaprasza do współpracy każdego. Zobacz [`docs/CONTRIBUTING-PL.md`](CONTRIBUTING-PL.md) pomoc w uruchomieniu programu.
 
 [**PYTANIA I ODPOWIEDZI (FAQ)**](https://github.com/rustdesk/rustdesk/wiki/FAQ)
 
@@ -156,7 +156,7 @@ Lub jeśli uruchamiasz plik wykonywalny wersji:
 target/release/rustdesk
 ```
 
-Upewnij się, że uruchamiasz te polecenia z katalogu głównego repozytorium RustDesk, w przeciwnym razie aplikacja może nie być w stanie znaleźć wymaganych zasobów. Należy również pamiętać, że inne podpolecenia ładowania, takie jak `install` lub `run` nie są obecnie obsługiwane za pomocą tej metody, ponieważ instalowałyby lub uruchamiały program wewnątrz kontenera zamiast na hoście.
+Upewnij się, że uruchamiasz te polecenia z katalogu głównego repozytorium StarDesk, w przeciwnym razie aplikacja może nie być w stanie znaleźć wymaganych zasobów. Należy również pamiętać, że inne podpolecenia ładowania, takie jak `install` lub `run` nie są obecnie obsługiwane za pomocą tej metody, ponieważ instalowałyby lub uruchamiały program wewnątrz kontenera zamiast na hoście.
 
 ## Struktura plików
 

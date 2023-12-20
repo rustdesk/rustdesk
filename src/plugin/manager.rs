@@ -196,7 +196,7 @@ fn elevate_install(
     if !same_plugin_exists {
         args.push(&plugin_url);
     }
-    crate::platform::elevate(args, "RustDesk wants to install then plugin")
+    crate::platform::elevate(args, "StarDesk wants to install then plugin")
 }
 
 #[inline]
@@ -216,7 +216,7 @@ fn elevate_uninstall(plugin_id: &str) -> ResultType<bool> {
 fn elevate_uninstall(plugin_id: &str) -> ResultType<bool> {
     crate::platform::elevate(
         vec!["--plugin-uninstall", plugin_id],
-        "RustDesk wants to uninstall the plugin",
+        "StarDesk wants to uninstall the plugin",
     )
 }
 

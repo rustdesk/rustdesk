@@ -205,7 +205,7 @@ class PluginItem extends StatelessWidget {
             );
           }
         },
-        // to-do: RustDesk translate or plugin translate ?
+        // to-do: StarDesk translate or plugin translate ?
         child: Text(ui.text),
         ffi: ffi,
       );
@@ -235,7 +235,7 @@ class PluginItem extends StatelessWidget {
       // trailingIcon: Icon(
       //     IconData(int.parse(ui.icon, radix: 16), fontFamily: 'MaterialIcons')),
       //
-      // to-do: RustDesk translate or plugin translate ?
+      // to-do: StarDesk translate or plugin translate ?
       child: Text(ui.text),
       ffi: ffi,
     );

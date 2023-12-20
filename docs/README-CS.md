@@ -1,12 +1,12 @@
 <p align="center">
-  <img src="../res/logo-header.svg" alt="RustDesk – vaše vzdálená plocha"><br>
+  <img src="../res/logo-header.svg" alt="StarDesk – vaše vzdálená plocha"><br>
   <a href="#free-public-servers">Servery</a> •
   <a href="#raw-steps-to-build">Sestavení ze zdrojových kódů</a> •
   <a href="#how-to-build-with-docker">Docker</a> •
   <a href="#file-structure">Struktura</a> •
   <a href="#snapshot">Ukázky</a><br>
   [<a href="../README.md">English</a>] | [<a href="README-UA.md">Українська</a>] | [<a href="README-ZH.md">中文</a>] | [<a href="README-HU.md">Magyar</a>] | [<a href="README-ES.md">Español</a>] | [<a href="README-FA.md">فارسی</a>] | [<a href="README-FR.md">Français</a>] | [<a href="README-DE.md">Deutsch</a>] | [<a href="README-PL.md">Polski</a>] | [<a href="README-ID.md">Indonesian</a>] | [<a href="README-FI.md">Suomi</a>] | [<a href="README-ML.md">മലയാളം</a>] | [<a href="README-JP.md">日本語</a>] | [<a href="README-NL.md">Nederlands</a>] | [<a href="README-IT.md">Italiano</a>] | [<a href="README-RU.md">Русский</a>] | [<a href="README-PTBR.md">Português (Brasil)</a>] | [<a href="README-EO.md">Esperanto</a>] | [<a href="README-KR.md">한국어</a>] | [<a href="README-AR.md">العربي</a>] | [<a href="README-VN.md">Tiếng Việt</a>] | [<a href="README-GR.md">Ελληνικά</a>]<br>
-  <b>Potřebujeme Vaši pomoc s překladem tohoto README, <a href="https://github.com/rustdesk/rustdesk/tree/master/src/lang">uživatelského rozhraní aplikace RustDesk</a> a <a href="https://github.com/rustdesk/doc.rustdesk.com">dokumentace k ní</a> do vašeho jazyka</b>
+  <b>Potřebujeme Vaši pomoc s překladem tohoto README, <a href="https://github.com/rustdesk/rustdesk/tree/master/src/lang">uživatelského rozhraní aplikace StarDesk</a> a <a href="https://github.com/rustdesk/doc.rustdesk.com">dokumentace k ní</a> do vašeho jazyka</b>
 </p>
 
 Popovídejte si s námi: [Discord](https://discord.gg/nDceKgxnkV) | [Twitter](https://twitter.com/rustdesk) | [Reddit](https://www.reddit.com/r/rustdesk)
@@ -16,9 +16,9 @@ Popovídejte si s námi: [Discord](https://discord.gg/nDceKgxnkV) | [Twitter](ht
 
 Zase další software pro přístup k ploše na dálku, naprogramovaný v jazyce Rust. Funguje hned tak, jak je – není třeba žádného nastavování. Svá data máte ve svých rukách, bez obav o zabezpečení. Je možné používat námi poskytovaný propojovací/předávací (relay) server, [vytvořit si svůj vlastní](https://rustdesk.com/server), nebo [si dokonce svůj vlastní naprogramovat](https://github.com/rustdesk/rustdesk-server-demo), budete-li chtít.
 
-Projekt RustDesk vítá přiložení ruky k dílu od každého. Jak začít se dozvíte z [`docs/CONTRIBUTING.md`](CONTRIBUTING.md).
+Projekt StarDesk vítá přiložení ruky k dílu od každého. Jak začít se dozvíte z [`docs/CONTRIBUTING.md`](CONTRIBUTING.md).
 
-[**Jak RustDesk funguje?**](https://github.com/rustdesk/rustdesk/wiki/How-does-RustDesk-work%3F)
+[**Jak StarDesk funguje?**](https://github.com/rustdesk/rustdesk/wiki/How-does-StarDesk-work%3F)
 
 [**STAHOVÁNÍ ZKOMPILOVANÝCH APLIKACÍ**](https://github.com/rustdesk/rustdesk/releases)
 
@@ -139,7 +139,7 @@ Nebo, pokud spouštíte variantu pro vydání:
 target/release/rustdesk
 ```
 
-Ujistěte se, že tyto příkazy spouštíte z kořenového adresáře RustDesk, jinak aplikace nemusí být schopná nalézt potřebné prostředky (resources). Také si všimněte, že ostatní dílčí príkazy nástroje cargo, jako třeba `install` nebo `run` zatím nejsou prostřednictvím této metody podporovány, protože by vedly k instalaci či spuštění program uvnitř kontejneru namísto přímo v systému.
+Ujistěte se, že tyto příkazy spouštíte z kořenového adresáře StarDesk, jinak aplikace nemusí být schopná nalézt potřebné prostředky (resources). Také si všimněte, že ostatní dílčí príkazy nástroje cargo, jako třeba `install` nebo `run` zatím nejsou prostřednictvím této metody podporovány, protože by vedly k instalaci či spuštění program uvnitř kontejneru namísto přímo v systému.
 
 ## Struktura souborů
 

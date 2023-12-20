@@ -1,13 +1,13 @@
 
 <p align="center">
-  <img src="../res/logo-header.svg" alt="RustDesk - Uzak masaüstü uygulamanız"><br>
+  <img src="../res/logo-header.svg" alt="StarDesk - Uzak masaüstü uygulamanız"><br>
   <a href="#free-public-servers">Sunucular</a> •
   <a href="#raw-steps-to-build">Derleme</a> •
   <a href="#how-to-build-with-docker">Docker ile Derleme</a> •
   <a href="#file-structure">Dosya Yapısı</a> •
   <a href="#snapshot">Ekran Görüntüleri</a><br>
   [<a href="docs/README-UA.md">Українська</a>] | [<a href="docs/README-CS.md">česky</a>] | [<a href="docs/README-ZH.md">中文</a>] | [<a href="docs/README-HU.md">Magyar</a>] | [<a href="docs/README-ES.md">Español</a>] | [<a href="docs/README-FA.md">فارسی</a>] | [<a href="docs/README-FR.md">Français</a>] | [<a href="docs/README-DE.md">Deutsch</a>] | [<a href="docs/README-PL.md">Polski</a>] | [<a href="docs/README-ID.md">Indonesian</a>] | [<a href="docs/README-FI.md">Suomi</a>] | [<a href="docs/README-ML.md">മലയാളം</a>] | [<a href="docs/README-JP.md">日本語</a>] | [<a href="docs/README-NL.md">Nederlands</a>] | [<a href="docs/README-IT.md">Italiano</a>] | [<a href="docs/README-RU.md">Русский</a>] | [<a href="docs/README-PTBR.md">Português (Brasil)</a>] | [<a href="docs/README-EO.md">Esperanto</a>] | [<a href="docs/README-KR.md">한국어</a>] | [<a href="docs/README-AR.md">العربي</a>] | [<a href="docs/README-VN.md">Tiếng Việt</a>] | [<a href="docs/README-DA.md">Dansk</a>] | [<a href="docs/README-GR.md">Ελληνικά</a>]<br>
-  <b>README, <a href="https://github.com/rustdesk/rustdesk/tree/master/src/lang">RustDesk UI</a> ve <a href="https://github.com/rustdesk/doc.rustdesk.com">RustDesk Belge</a>'sini ana dilinize çevirmemiz için yardımınıza ihtiyacımız var</b>
+  <b>README, <a href="https://github.com/rustdesk/rustdesk/tree/master/src/lang">StarDesk UI</a> ve <a href="https://github.com/rustdesk/doc.rustdesk.com">StarDesk Belge</a>'sini ana dilinize çevirmemiz için yardımınıza ihtiyacımız var</b>
 </p>
 
 Bizimle sohbet edin: [Discord](https://discord.gg/nDceKgxnkV) | [Twitter](https://twitter.com/rustdesk) | [Reddit](https://www.reddit.com/r/rustdesk)
@@ -18,7 +18,7 @@ Başka bir uzak masaüstü yazılımı daha, Rust dilinde yazılmış. Hemen kul
 
 ![image](https://user-images.githubusercontent.com/71636191/171661982-430285f0-2e12-4b1d-9957-4a58e375304d.png)
 
-RustDesk, herkesten katkıyı kabul eder. Başlamak için [CONTRIBUTING.md](docs/CONTRIBUTING-TR.md) belgesine göz atın.
+StarDesk, herkesten katkıyı kabul eder. Başlamak için [CONTRIBUTING.md](docs/CONTRIBUTING-TR.md) belgesine göz atın.
 
 [**SSS**](https://github.com/rustdesk/rustdesk/wiki/FAQ)
 
@@ -168,7 +168,7 @@ Veya, yayın yürütülebilir dosyası çalıştırılıyorsa:
 target/release/rustdesk
 ```
 
-Lütfen bu komutları RustDesk deposunun kökünden çalıştırdığınızdan emin olun, aksi takdirde uygulama gereken kaynakları bulamayabilir. Ayrıca, `install` veya `run` gibi diğer cargo altkomutları şu anda bu yöntem aracılığıyla desteklenmemektedir, çünkü bunlar programı konteyner içinde kurar veya çalıştırır ve ana makinede değil.
+Lütfen bu komutları StarDesk deposunun kökünden çalıştırdığınızdan emin olun, aksi takdirde uygulama gereken kaynakları bulamayabilir. Ayrıca, `install` veya `run` gibi diğer cargo altkomutları şu anda bu yöntem aracılığıyla desteklenmemektedir, çünkü bunlar programı konteyner içinde kurar veya çalıştırır ve ana makinede değil.
  
 ## Dosya Yapısı
 

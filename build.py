@@ -340,7 +340,7 @@ def build_flutter_deb(version, features):
     system2(
         'cp ../res/rustdesk-link.desktop tmpdeb/usr/share/applications/rustdesk-link.desktop')
     system2(
-        'cp ../res/com.rustdesk.RustDesk.policy tmpdeb/usr/share/polkit-1/actions/')
+        'cp ../res/com.rustdesk.StarDesk.policy tmpdeb/usr/share/polkit-1/actions/')
     system2(
         'cp ../res/startwm.sh tmpdeb/etc/rustdesk/')
     system2(
@@ -385,7 +385,7 @@ def build_deb_from_folder(version, binary_folder):
     system2(
         'cp ../res/rustdesk-link.desktop tmpdeb/usr/share/applications/rustdesk-link.desktop')
     system2(
-        'cp ../res/com.rustdesk.RustDesk.policy tmpdeb/usr/share/polkit-1/actions/')
+        'cp ../res/com.rustdesk.StarDesk.policy tmpdeb/usr/share/polkit-1/actions/')
     system2(
         "echo \"#!/bin/sh\" >> tmpdeb/usr/share/rustdesk/files/polkit && chmod a+x tmpdeb/usr/share/rustdesk/files/polkit")
 
@@ -492,7 +492,7 @@ def main():
             return
         system2('cargo build --release --features ' + features)
         # system2('upx.exe target/release/rustdesk.exe')
-        system2('mv target/release/rustdesk.exe target/release/RustDesk.exe')
+        system2('mv target/release/rustdesk.exe target/release/StarDesk.exe')
         pa = os.environ.get('P')
         if pa:
             system2(
@@ -501,7 +501,7 @@ def main():
         else:
             print('Not signed')
         system2(
-            f'cp -rf target/release/RustDesk.exe {res_dir}')
+            f'cp -rf target/release/StarDesk.exe {res_dir}')
         os.chdir('libs/portable')
         system2('pip3 install -r requirements.txt')
         system2(

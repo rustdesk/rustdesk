@@ -1,4 +1,4 @@
-name: Build the flutter version of the RustDesk
+name: Build the flutter version of the StarDesk
 
 on:
   workflow_call:
@@ -2024,7 +2024,7 @@ jobs:
             pushd flatpak
             git clone https://github.com/flathub/shared-modules.git --depth=1
             flatpak-builder --user --force-clean --repo=repo ./build ./rustdesk.json
-            flatpak build-bundle ./repo rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}.flatpak com.rustdesk.RustDesk
+            flatpak build-bundle ./repo rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}.flatpak com.rustdesk.StarDesk
 
       - name: Publish flatpak package
         uses: softprops/action-gh-release@v1

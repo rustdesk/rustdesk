@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="../res/logo-header.svg" alt="RustDesk - Your remote desktop"><br>
+  <img src="../res/logo-header.svg" alt="StarDesk - Your remote desktop"><br>
   <a href="#免费的公共服务器">服务器</a> •
   <a href="#基本构建步骤">编译</a> •
   <a href="#使用-Docker-编译">Docker</a> •
@@ -18,7 +18,7 @@ Chat with us: [知乎](https://www.zhihu.com/people/rustdesk) | [Discord](https:
 
 ![image](https://user-images.githubusercontent.com/71636191/171661982-430285f0-2e12-4b1d-9957-4a58e375304d.png)
 
-RustDesk 期待各位的贡献. 如何参与开发? 详情请看 [CONTRIBUTING.md](docs/CONTRIBUTING.md).
+StarDesk 期待各位的贡献. 如何参与开发? 详情请看 [CONTRIBUTING.md](docs/CONTRIBUTING.md).
 
 [**FAQ**](https://github.com/rustdesk/rustdesk/wiki/FAQ)
 
@@ -182,7 +182,7 @@ docker build -t "rustdesk-builder" . # 构建容器
       docker build -t "rustdesk-builder" . --build-arg http_proxy=http://host:port --build-arg https_proxy=http://host:port
       ```
 
-### 构建 RustDesk 程序
+### 构建 StarDesk 程序
 
 然后, 每次需要构建应用程序时, 运行以下命令:
 
@@ -202,9 +202,9 @@ docker run --rm -it -v $PWD:/home/user/rustdesk -v rustdesk-git-cache:/home/user
    > **原因：** 容器的 entrypoint 脚本会检测 UID 和 GID，在度判和给定的环境变量的不一致时，会强行修改 user 的 UID 和 GID 并重新运行。但在重启后读不到环境中的 UID 和 GID，然后再次进入判错重启环节
 
 
-### 运行 RustDesk 程序
+### 运行 StarDesk 程序
 
-生成的可执行程序在 target 目录下，可直接通过指令运行调试 (Debug) 版本的 RustDesk:
+生成的可执行程序在 target 目录下，可直接通过指令运行调试 (Debug) 版本的 StarDesk:
 ```sh
 target/debug/rustdesk
 ```
@@ -216,7 +216,7 @@ target/release/rustdesk
 ```
 
 请注意：
-* 请保证您运行的目录是在 RustDesk 库的根目录内，否则软件会读不到文件。
+* 请保证您运行的目录是在 StarDesk 库的根目录内，否则软件会读不到文件。
 * `install`、`run`等 Cargo 的子指令在容器内不可用，宿主机才行。
 
 ## 文件结构

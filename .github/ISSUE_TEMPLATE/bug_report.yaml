@@ -35,8 +35,8 @@ body:
   - type: input
     id: version
     attributes:
-      label: RustDesk Version(s) on local side and remote side
-      description: What RustDesk version(s) do you see this bug on? local side -> remote side.
+      label: StarDesk Version(s) on local side and remote side
+      description: What StarDesk version(s) do you see this bug on? local side -> remote side.
       placeholder: |
         1.1.9 -> 1.1.8
     validations:

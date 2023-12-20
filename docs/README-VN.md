@@ -1,12 +1,12 @@
 <p align="center">
-  <img src="../res/logo-header.svg" alt="RustDesk - Phần mềm điểu khiển máy tính từ xa dành cho bạn"><br>
+  <img src="../res/logo-header.svg" alt="StarDesk - Phần mềm điểu khiển máy tính từ xa dành cho bạn"><br>
   <a href="#free-public-servers">Máy chủ</a> •
   <a href="#raw-steps-to-build">Build</a> •
   <a href="#how-to-build-with-docker">Docker</a> •
   <a href="#file-structure">Cấu trúc tệp tin</a> •
   <a href="#snapshot">Snapshot</a><br>
   [<a href="../README.md">English</a>] | [<a href="README-UA.md">Українська</a>] | [<a href="README-CS.md">česky</a>] | [<a href="README-ZH.md">中文</a>] | [<a href="README-HU.md">Magyar</a>] | [<a href="README-ES.md">Español</a>] | [<a href="README-FA.md">فارسی</a>] | [<a href="README-FR.md">Français</a>] | [<a href="README-DE.md">Deutsch</a>] | [<a href="README-PL.md">Polski</a>] | [<a href="README-ID.md">Indonesian</a>] | [<a href="README-FI.md">Suomi</a>] | [<a href="README-ML.md">മലയാളം</a>] | [<a href="README-JP.md">日本語</a>] | [<a href="README-NL.md">Nederlands</a>] | [<a href="README-IT.md">Italiano</a>] | [<a href="README-RU.md">Русский</a>] | [<a href="README-PTBR.md">Português (Brasil)</a>] | [<a href="README-EO.md">Esperanto</a>] | [<a href="README-KR.md">한국어</a>] | [<a href="README-AR.md">العربي</a>] | [<a href="README-GR.md">Ελληνικά</a>]<br>
-  <b>Chúng tôi cần sự gíup đỡ của bạn để dịch trang README này, <a href="https://github.com/rustdesk/rustdesk/tree/master/src/lang">RustDesk UI</a> và <a href="https://github.com/rustdesk/doc.rustdesk.com">tài liệu</a> sang ngôn ngữ bản địa của bạn</b>
+  <b>Chúng tôi cần sự gíup đỡ của bạn để dịch trang README này, <a href="https://github.com/rustdesk/rustdesk/tree/master/src/lang">StarDesk UI</a> và <a href="https://github.com/rustdesk/doc.rustdesk.com">tài liệu</a> sang ngôn ngữ bản địa của bạn</b>
 </p>
 
 Chat với chúng tôi qua: [Discord](https://discord.gg/nDceKgxnkV) | [Twitter](https://twitter.com/rustdesk) | [Reddit](https://www.reddit.com/r/rustdesk)
@@ -17,9 +17,9 @@ Một phần mềm điểu khiển máy tính từ xa, đuợc lập trình bằ
 
 ![image](https://user-images.githubusercontent.com/71636191/171661982-430285f0-2e12-4b1d-9957-4a58e375304d.png)
 
-Mọi người đều đuợc chào đón để đóng góp vào RustDesk. Để bắt đầu, hãy đọc [`docs/CONTRIBUTING.md`](CONTRIBUTING.md).
+Mọi người đều đuợc chào đón để đóng góp vào StarDesk. Để bắt đầu, hãy đọc [`docs/CONTRIBUTING.md`](CONTRIBUTING.md).
 
-[**RustDesk hoạt động như thế nào?**](https://github.com/rustdesk/rustdesk/wiki/How-does-RustDesk-work%3F)
+[**StarDesk hoạt động như thế nào?**](https://github.com/rustdesk/rustdesk/wiki/How-does-StarDesk-work%3F)
 
 [**CÁC BẢN PHÂN PHÁT MÃ NHỊ PHÂN**](https://github.com/rustdesk/rustdesk/releases)
 
@@ -144,7 +144,7 @@ Nếu bạn đang chạy bản build đuợc tối ưu hóa, thì bạn có th�
 target/release/rustdesk
 ```
 
-Hãy đảm bảo là bạn đang chạy những lệnh này từ thu mục rễ của repo RustDesk, vì nếu không thì ứng dụng có thể sẽ không tìm đuợc những tệp tài nguyên cần thiết. Cũng như nhớ rằng những lệnh con của cargo như `install` hoặc `run` hiện chưa được hỗ trợ bởi phương pháp này vì chúng sẽ cài đặt hoặc chạy ứng dụng trong container thay vì trên máy tính của bạn.
+Hãy đảm bảo là bạn đang chạy những lệnh này từ thu mục rễ của repo StarDesk, vì nếu không thì ứng dụng có thể sẽ không tìm đuợc những tệp tài nguyên cần thiết. Cũng như nhớ rằng những lệnh con của cargo như `install` hoặc `run` hiện chưa được hỗ trợ bởi phương pháp này vì chúng sẽ cài đặt hoặc chạy ứng dụng trong container thay vì trên máy tính của bạn.
 
 ## Cấu trúc tệp tin
 

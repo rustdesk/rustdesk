@@ -748,7 +748,7 @@ pub fn default_video_save_directory() -> String {
     #[cfg(any(target_os = "android", target_os = "ios"))]
     if let Ok(home) = config::APP_HOME_DIR.read() {
         let mut path = home.to_owned();
-        path.push_str("/RustDesk/ScreenRecord");
+        path.push_str("/StarDesk/ScreenRecord");
         let dir = try_create(&std::path::Path::new(&path));
         if !dir.is_empty() {
             return dir;

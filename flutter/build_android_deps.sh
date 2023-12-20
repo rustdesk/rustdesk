@@ -4,7 +4,7 @@ set -e -o pipefail
 
 ANDROID_ABI=$1
 
-# Build RustDesk dependencies for Android using vcpkg.json
+# Build StarDesk dependencies for Android using vcpkg.json
 # Required:
 #   1. set VCPKG_ROOT / ANDROID_NDK path environment variables
 #   2. vcpkg initialized

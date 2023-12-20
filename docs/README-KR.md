@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="../res/logo-header.svg" alt="RustDesk - Your remote desktop"><br>
+  <img src="../res/logo-header.svg" alt="StarDesk - Your remote desktop"><br>
   <a href="#free-public-servers">Servers</a> •
   <a href="#raw-steps-to-build">Build</a> •
   <a href="#how-to-build-with-docker">Docker</a> •
@@ -20,7 +20,7 @@ Rust로 작성되었고, 설정없이 바로 사용할 수 있는 원격 데스�
 
 RustDesk는 모든 기여를 환영합니다. 기여하고자 한다면 [`docs/CONTRIBUTING.md`](CONTRIBUTING.md)를 참조해주세요.
 
-[**RustDesk는 어떻게 작동하는가?**](https://github.com/rustdesk/rustdesk/wiki/How-does-RustDesk-work%3F)
+[**RustDesk는 어떻게 작동하는가?**](https://github.com/rustdesk/rustdesk/wiki/How-does-StarDesk-work%3F)
 
 [**BINARY DOWNLOAD**](https://github.com/rustdesk/rustdesk/releases)
 
@@ -140,7 +140,7 @@ target/debug/rustdesk
 target/release/rustdesk
 ```
 
-커맨드를 RustDesk 리포지토리 루트에서 실행한다는 것을 확인해주세요. 그렇게 하지 않으면 애플리케이션이 필요한 리소스를 발견하지 못 할 가능성이 있습니다. 또한 `install`, `run` 같은 cargo 서브커맨드는 호스트가 아니라 컨테이너 프로그램을 설치, 실행을 위함이므로 현재 이 방법은 지원하지 않다는 점을 유념해주시길 바랍니다.
+커맨드를 StarDesk 리포지토리 루트에서 실행한다는 것을 확인해주세요. 그렇게 하지 않으면 애플리케이션이 필요한 리소스를 발견하지 못 할 가능성이 있습니다. 또한 `install`, `run` 같은 cargo 서브커맨드는 호스트가 아니라 컨테이너 프로그램을 설치, 실행을 위함이므로 현재 이 방법은 지원하지 않다는 점을 유념해주시길 바랍니다.
 
 ## File Structure
 

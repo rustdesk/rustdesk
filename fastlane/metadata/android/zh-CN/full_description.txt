@@ -2,9 +2,9 @@
 源代码：https://github.com/rustdesk/rustdesk
 文档：https://rustdesk.com/docs/en/manual/mobile/
 
-为了让远程设备通过鼠标或触摸控制您的 Android 设备，您需要允许 RustDesk 使用“Accessibility”服务，RustDesk 使用 AccessibilityService API 来实现 Addroid 远程控制。
+为了让远程设备通过鼠标或触摸控制您的 Android 设备，您需要允许 StarDesk 使用“Accessibility”服务，StarDesk 使用 AccessibilityService API 来实现 Addroid 远程控制。
 
-除了远程控制，您还可以使用 RustDesk 在 Android 设备和 PC 之间轻松传输文件。
+除了远程控制，您还可以使用 StarDesk 在 Android 设备和 PC 之间轻松传输文件。
 
 您完全掌控数据，不用担心安全问题。您可以使用我们的注册/中继服务器，或者自建，亦或者开发您的版本。
 自托管服务器是免费和开源的：https://github.com/rustdesk/rustdesk-server

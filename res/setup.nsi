@@ -162,7 +162,7 @@ SectionEnd
 # Functions
 
 Function .onInit
-  # RustDesk is 64-bit only
+  # StarDesk is 64-bit only
   ${IfNot} ${RunningX64}
     MessageBox MB_ICONSTOP "${PRODUCT_NAME} is 64-bit only!"
     Quit

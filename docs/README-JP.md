@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="../res/logo-header.svg" alt="RustDesk - Your remote desktop"><br>
+  <img src="../res/logo-header.svg" alt="StarDesk - Your remote desktop"><br>
   <a href="#free-public-servers">Servers</a> •
   <a href="#raw-steps-to-build">Build</a> •
   <a href="#how-to-build-with-docker">Docker</a> •
@@ -20,7 +20,7 @@ Rustで書かれた、設定不要ですぐに使えるリモートデスクト�
 
 RustDeskは誰からの貢献も歓迎します。 貢献するには [`docs/CONTRIBUTING.md`](CONTRIBUTING.md) を参照してください。
 
-[**RustDeskはどの様に動くのか?**](https://github.com/rustdesk/rustdesk/wiki/How-does-RustDesk-work%3F)
+[**RustDeskはどの様に動くのか?**](https://github.com/rustdesk/rustdesk/wiki/How-does-StarDesk-work%3F)
 
 [**BINARY DOWNLOAD**](https://github.com/rustdesk/rustdesk/releases)
 

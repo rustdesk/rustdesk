@@ -8,13 +8,13 @@
         <true/>
         <key>ProgramArguments</key>
         <array>
-        	<string>/Applications/RustDesk.app/Contents/MacOS/rustdesk</string>
+        	<string>/Applications/StarDesk.app/Contents/MacOS/rustdesk</string>
         	<string>--service</string>
         </array>
         <key>RunAtLoad</key>
         <true/>
         <key>WorkingDirectory</key>
-        <string>/Applications/RustDesk.app/Contents/MacOS/</string>
+        <string>/Applications/StarDesk.app/Contents/MacOS/</string>
         <key>StandardErrorPath</key>
         <string>/tmp/rustdesk_service.err</string>
         <key>StandardOutPath</key>

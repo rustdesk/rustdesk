@@ -374,7 +374,7 @@ pub mod service {
         let mut miscs = AttributeSet::<evdev::MiscType>::new();
         miscs.insert(evdev::MiscType::MSC_SCAN);
         let keyboard = VirtualDeviceBuilder::new()?
-            .name("RustDesk UInput Keyboard")
+            .name("StarDesk UInput Keyboard")
             .with_keys(&keys)?
             .with_leds(&leds)?
             .with_miscs(&miscs)?

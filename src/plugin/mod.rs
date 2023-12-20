@@ -139,7 +139,7 @@ fn get_share_dir() -> ResultType<PathBuf> {
 #[inline]
 fn get_plugins_dir() -> ResultType<PathBuf> {
     Ok(get_share_dir()?
-        .join("RustDesk")
+        .join("StarDesk")
         .join(PLUGIN_SOURCE_LOCAL_DIR))
 }
 

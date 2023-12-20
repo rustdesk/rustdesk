@@ -1,10 +1,10 @@
-# Współtworzenie RustDesk
+# Współtworzenie StarDesk
 
-RustDesk z zadowoleniem przyjmuje wkład od każdego. Oto wytyczne, jeśli chcesz nam pomóc:
+StarDesk z zadowoleniem przyjmuje wkład od każdego. Oto wytyczne, jeśli chcesz nam pomóc:
 
 ## Współtwórcy
 
-Contributions to RustDesk or its dependencies should be made in the form of GitHub
+Contributions to StarDesk or its dependencies should be made in the form of GitHub
 pull requests. Each pull request will be reviewed by a core contributor
 (someone with permission to land patches) and either landed in the main tree or
 given feedback for changes that would be required. All contributions should
@@ -42,4 +42,4 @@ For specific git instructions, see [GitHub workflow 101](https://github.com/serv
 
 ## Komunikacja
 
-RustDesk contributors frequent the [Discord](https://discord.gg/nDceKgxnkV).
+StarDesk contributors frequent the [Discord](https://discord.gg/nDceKgxnkV).

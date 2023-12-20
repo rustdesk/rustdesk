@@ -1252,7 +1252,7 @@ fn switch_service(stop: bool) -> String {
     let home = std::env::var("HOME").unwrap_or_default();
     Config::set_option("stop-service".into(), if stop { "Y" } else { "" }.into());
     if home != "/root" && !Config::get().is_empty() {
-        format!("cp -f {home}/.config/rustdesk/RustDesk.toml /root/.config/rustdesk/; cp -f {home}/.config/rustdesk/RustDesk2.toml /root/.config/rustdesk/;")
+        format!("cp -f {home}/.config/rustdesk/StarDesk.toml /root/.config/rustdesk/; cp -f {home}/.config/rustdesk/RustDesk2.toml /root/.config/rustdesk/;")
     } else {
         "".to_owned()
     }

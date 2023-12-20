@@ -3,7 +3,7 @@
 pub const ERR_SUCCESS: i32 = 0;
 
 // ======================================================
-// Errors from the plugins, must be handled by RustDesk
+// Errors from the plugins, must be handled by StarDesk
 
 pub const ERR_RUSTDESK_HANDLE_BASE: i32 = 10000;
 
@@ -28,7 +28,7 @@ pub const ERR_CALL_CONFIG_VALUE: i32 = 10303;
 pub const ERR_NOT_HANDLED: i32 = 10401;
 
 // ======================================================
-// Errors from RustDesk callbacks.
+// Errors from StarDesk callbacks.
 
 pub const ERR_CALLBACK_HANDLE_BASE: i32 = 20000;
 pub const ERR_CALLBACK_PLUGIN_ID: i32 = 20001;
