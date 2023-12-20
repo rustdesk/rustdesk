@@ -177,5 +177,3 @@ jobs:
           tag_name: ${{ env.TAG_NAME }}
           files: |
             rustdesk*-${{ matrix.job.arch }}.dmg
-
-  
