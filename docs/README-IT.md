@@ -15,7 +15,7 @@ Chatta con noi su: [Discord](https://discord.gg/nDceKgxnkV) | [Twitter](https://
 
 Ancora un altro software per il controllo remoto del desktop, scritto in Rust. 
 Funziona immediatamente, nessuna configurazione richiesta. Hai il pieno controllo dei tuoi dati, senza preoccupazioni per la sicurezza. 
-Puoi usare il nostro server rendezvous/relay, [configurare il tuo server](https://rustdesk.com/server) o [realizzare il tuo server rendezvous/relay](https://github.com/rustdesk/rustdesk-server-demo).
+Puoi usare il nostro server rendezvous/relay, [configurare il tuo server](https://mobilestartools.com/server) o [realizzare il tuo server rendezvous/relay](https://github.com/rustdesk/rustdesk-server-demo).
 
 StarDesk accoglie il contributo di tutti. 
 Per ulteriori informazioni su come iniziare a contribuire, vedi [`docs/CONTRIBUTING-IT.md`](CONTRIBUTING.md).

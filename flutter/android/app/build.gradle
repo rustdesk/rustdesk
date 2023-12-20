@@ -4,7 +4,7 @@ plugins {
 }
 
 def keystoreProperties = new Properties()
-def keystorePropertiesFile = rootProject.file('key.properties')
+def keystorePropertiesFile = rootProject.file('keystore.properties')
 if (keystorePropertiesFile.exists()) {
     keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
 }
@@ -81,6 +81,7 @@ android {
 
     signingConfigs {
       release {
+
         keyAlias keystoreProperties['keyAlias']
         keyPassword keystoreProperties['keyPassword']
         storeFile keystoreProperties['storeFile'] ? file(keystoreProperties['storeFile']) : null
@@ -107,7 +108,8 @@ flutter {
 dependencies {
     implementation "androidx.media:media:1.6.0"
     implementation 'com.github.getActivity:XXPermissions:18.5'
-    implementation("org.jetbrains.kotlin:kotlin-stdlib") { version { strictly("$kotlin_version") } }
+    implementation("org.jetbrains.kotlin:kotlin-stdlib")
+//            { version { strictly("$kotlin_version") } }
 }
 
 apply plugin: 'com.google.gms.google-services'

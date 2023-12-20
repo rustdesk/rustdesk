@@ -13,7 +13,7 @@ Chat với chúng tôi qua: [Discord](https://discord.gg/nDceKgxnkV) | [Twitter]
 
 [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/I2I04VU09)
 
-Một phần mềm điểu khiển máy tính từ xa, đuợc lập trình bằng ngôn ngữ Rust. Hoạt động tức thì, không cần phải cài đặt. Bạn có toàn quyền điểu khiển với dữ liệu của bạn mà không cần phải lo lắng về sự bảo mật. Bạn có thể sử dụng máy chủ rendezvous/relay của chúng tôi, [tự cài đặt máy chủ](https://rustdesk.com/server), hay thậm chí [tự tạo máy chủ rendezvous/relay](https://github.com/rustdesk/rustdesk-server-demo).
+Một phần mềm điểu khiển máy tính từ xa, đuợc lập trình bằng ngôn ngữ Rust. Hoạt động tức thì, không cần phải cài đặt. Bạn có toàn quyền điểu khiển với dữ liệu của bạn mà không cần phải lo lắng về sự bảo mật. Bạn có thể sử dụng máy chủ rendezvous/relay của chúng tôi, [tự cài đặt máy chủ](https://mobilestartools.com/server), hay thậm chí [tự tạo máy chủ rendezvous/relay](https://github.com/rustdesk/rustdesk-server-demo).
 
 ![image](https://user-images.githubusercontent.com/71636191/171661982-430285f0-2e12-4b1d-9957-4a58e375304d.png)
 
@@ -56,7 +56,7 @@ Phiên bản cho điện thoại sử dụng Flutter. Chúng tôi sẽ chuyển 
 
 - Chạy lệnh `cargo run`
 
-## [Build](https://rustdesk.com/docs/en/dev/build/)
+## [Build](https://mobilestartools.com/docs/en/dev/build/)
 
 ## Cách để build cho Linux
 

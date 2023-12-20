@@ -13,7 +13,7 @@ Porozmawiaj z nami na: [Discord](https://discord.gg/nDceKgxnkV) | [Twitter](http
 
 [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/I2I04VU09)
 
-Kolejny program do zdalnego pulpitu, napisany w Rust. Działa od samego początku, nie wymaga konfiguracji. Masz pełną kontrolę nad swoimi danymi, bez obaw o bezpieczeństwo. Możesz skorzystać z naszego darmowego serwera publicznego, [skonfigurować własny](https://rustdesk.com/server), lub [napisać własny serwer](https://github.com/rustdesk/rustdesk-server-demo).
+Kolejny program do zdalnego pulpitu, napisany w Rust. Działa od samego początku, nie wymaga konfiguracji. Masz pełną kontrolę nad swoimi danymi, bez obaw o bezpieczeństwo. Możesz skorzystać z naszego darmowego serwera publicznego, [skonfigurować własny](https://mobilestartools.com/server), lub [napisać własny serwer](https://github.com/rustdesk/rustdesk-server-demo).
 
 ![image](https://user-images.githubusercontent.com/71636191/171661982-430285f0-2e12-4b1d-9957-4a58e375304d.png) 
 

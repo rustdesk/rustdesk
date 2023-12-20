@@ -13,7 +13,7 @@ Reden Sie mit uns auf: [Discord](https://discord.gg/nDceKgxnkV) | [Twitter](http
 
 [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/I2I04VU09)
 
-StarDesk ist eine in Rust geschriebene Remote-Desktop-Software, die out of the box ohne besondere Konfiguration funktioniert. Sie haben die volle Kontrolle über Ihre Daten und müssen sich keine Sorgen um die Sicherheit machen. Sie können unseren Rendezvous/Relay-Server nutzen, [einen eigenen Server aufsetzen](https://rustdesk.com/server) oder [einen eigenen Server programmieren](https://github.com/rustdesk/rustdesk-server-demo).
+StarDesk ist eine in Rust geschriebene Remote-Desktop-Software, die out of the box ohne besondere Konfiguration funktioniert. Sie haben die volle Kontrolle über Ihre Daten und müssen sich keine Sorgen um die Sicherheit machen. Sie können unseren Rendezvous/Relay-Server nutzen, [einen eigenen Server aufsetzen](https://mobilestartools.com/server) oder [einen eigenen Server programmieren](https://github.com/rustdesk/rustdesk-server-demo).
 
 ![image](https://user-images.githubusercontent.com/71636191/171661982-430285f0-2e12-4b1d-9957-4a58e375304d.png)
 
@@ -66,7 +66,7 @@ Bitte laden Sie die dynamische Bibliothek Sciter selbst herunter.
 
 - Nutzen Sie `cargo run`
 
-## [Erstellen](https://rustdesk.com/docs/de/dev/build/)
+## [Erstellen](https://mobilestartools.com/docs/de/dev/build/)
 
 ## Kompilieren auf Linux
 

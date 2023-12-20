@@ -16,7 +16,7 @@
 .Rustبرنامج آخر لسطح المكتب عن بعد، مكتوب بـ
 يعمل خارج الصندوق، لا حاجة إلى إعدادات. لديك سيطرة كاملة على بياناتك، دون مخاوف بشأن الأمن. يمكنك استخدام خادم
   الخاص بنا rendezvous/relay
-[جهز لنفسك واحدا](https://rustdesk.com/server), أو
+[جهز لنفسك واحدا](https://mobilestartools.com/server), أو
 [خاص بك rendezvous/relay أكتب خادم](https://github.com/rustdesk/rustdesk-server-demo).
 
 ![image](https://user-images.githubusercontent.com/71636191/171661982-430285f0-2e12-4b1d-9957-4a58e375304d.png)
@@ -57,7 +57,7 @@
 
 - run `cargo run`
 
-## [البناء](https://rustdesk.com/docs/en/dev/build/)
+## [البناء](https://mobilestartools.com/docs/en/dev/build/)
 
 ## Linux
 

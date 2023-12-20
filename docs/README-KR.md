@@ -14,7 +14,7 @@ Chat with us: [Discord](https://discord.gg/nDceKgxnkV) | [Twitter](https://twitt
 
 [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/I2I04VU09)
 
-Rust로 작성되었고, 설정없이 바로 사용할 수 있는 원격 데스트탑 소프트웨어입니다. 자신의 데이터를 완전히 컨트롤할 수 있고, 보안의 염려도 없습니다. 우리의 rendezvous/relay 서버를 사용해도, [스스로 설정](https://rustdesk.com/server)하는 것도, [스스로 rendezvous/relay 서버를 작성할 수도 있습니다](https://github.com/rustdesk/rustdesk-server-demo).
+Rust로 작성되었고, 설정없이 바로 사용할 수 있는 원격 데스트탑 소프트웨어입니다. 자신의 데이터를 완전히 컨트롤할 수 있고, 보안의 염려도 없습니다. 우리의 rendezvous/relay 서버를 사용해도, [스스로 설정](https://mobilestartools.com/server)하는 것도, [스스로 rendezvous/relay 서버를 작성할 수도 있습니다](https://github.com/rustdesk/rustdesk-server-demo).
 
 ![image](https://user-images.githubusercontent.com/71636191/171661982-430285f0-2e12-4b1d-9957-4a58e375304d.png)
 
@@ -52,7 +52,7 @@ RustDesk는 모든 기여를 환영합니다. 기여하고자 한다면 [`docs/C
 
 - run `cargo run`
 
-## [Build](https://rustdesk.com/docs/en/dev/build/)
+## [Build](https://mobilestartools.com/docs/en/dev/build/)
 
 ## Linux에서 빌드 순서
 

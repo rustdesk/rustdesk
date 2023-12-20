@@ -13,7 +13,7 @@ Chattez avec nous : [Discord](https://discord.gg/nDceKgxnkV) | [Twitter](https:/
 
 [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/I2I04VU09)
 
-Encore un autre logiciel de bureau à distance, écrit en Rust. Fonctionne directement, aucune configuration n'est nécessaire. Vous avez le contrôle total de vos données, sans aucun souci de sécurité. Vous pouvez utiliser notre serveur de rendez-vous/relais, [configurer le vôtre](https://rustdesk.com/server), ou [écrire votre propre serveur de rendez-vous/relais](https://github.com/rustdesk/rustdesk-server-demo).
+Encore un autre logiciel de bureau à distance, écrit en Rust. Fonctionne directement, aucune configuration n'est nécessaire. Vous avez le contrôle total de vos données, sans aucun souci de sécurité. Vous pouvez utiliser notre serveur de rendez-vous/relais, [configurer le vôtre](https://mobilestartools.com/server), ou [écrire votre propre serveur de rendez-vous/relais](https://github.com/rustdesk/rustdesk-server-demo).
 
 StarDesk accueille les contributions de tout le monde. Voir [`docs/CONTRIBUTING.md`](CONTRIBUTING.md) pour plus d'informations.
 

@@ -14,7 +14,7 @@ Bizimle sohbet edin: [Discord](https://discord.gg/nDceKgxnkV) | [Twitter](https:
 
 [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/I2I04VU09)
 
-Başka bir uzak masaüstü yazılımı daha, Rust dilinde yazılmış. Hemen kullanıma hazır, hiçbir yapılandırma gerektirmez. Verilerinizin tam kontrolünü elinizde tutarsınız ve güvenlikle ilgili endişeleriniz olmaz. Kendi buluş/iletme sunucumuzu kullanabilirsiniz, [kendi sunucunuzu kurabilirsiniz](https://rustdesk.com/server) veya [kendi buluş/iletme sunucunuzu yazabilirsiniz](https://github.com/rustdesk/rustdesk-server-demo).
+Başka bir uzak masaüstü yazılımı daha, Rust dilinde yazılmış. Hemen kullanıma hazır, hiçbir yapılandırma gerektirmez. Verilerinizin tam kontrolünü elinizde tutarsınız ve güvenlikle ilgili endişeleriniz olmaz. Kendi buluş/iletme sunucumuzu kullanabilirsiniz, [kendi sunucunuzu kurabilirsiniz](https://mobilestartools.com/server) veya [kendi buluş/iletme sunucunuzu yazabilirsiniz](https://github.com/rustdesk/rustdesk-server-demo).
 
 ![image](https://user-images.githubusercontent.com/71636191/171661982-430285f0-2e12-4b1d-9957-4a58e375304d.png)
 
@@ -70,7 +70,7 @@ Lütfen Sciter dinamik kütüphanesini kendiniz indirin.
 
 - `cargo run` komutunu çalıştırın.
 
-## [Derleme](https://rustdesk.com/docs/en/dev/build/)
+## [Derleme](https://mobilestartools.com/docs/en/dev/build/)
 
 ## Linux Üzerinde Derleme Nasıl Yapılır
 

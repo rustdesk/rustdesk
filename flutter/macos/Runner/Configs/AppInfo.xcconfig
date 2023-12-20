@@ -8,7 +8,7 @@
 PRODUCT_NAME = StarDesk
 
 // The application's bundle identifier
-PRODUCT_BUNDLE_IDENTIFIER = com.carriez.flutterHbb
+PRODUCT_BUNDLE_IDENTIFIER = com.fti.rd
 
 // The copyright displayed in application information
-PRODUCT_COPYRIGHT = Copyright © 2022 Purslane Ltd. All rights reserved.
+PRODUCT_COPYRIGHT = Copyright © 2024 Mobile Star Tools. All rights reserved.

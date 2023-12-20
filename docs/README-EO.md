@@ -13,7 +13,7 @@ Babili kun ni: [Discord](https://discord.gg/nDceKgxnkV) | [Twitter](https://twit
 
 [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/I2I04VU09)
 
-Denove alia fora labortabla programo, skribita en Rust. Ĝi funkcias elskatole, ne bezonas konfiguraĵon. Vi havas la tutan kontrolon sur viaj datumoj, sen zorgo pri sekureco. Vi povas uzi nian servilon rendezvous/relajsan, [agordi vian propran](https://rustdesk.com/server), aŭ [skribi vian propran servilon rendezvous/relajsan](https://github.com/rustdesk/rustdesk-server-demo).
+Denove alia fora labortabla programo, skribita en Rust. Ĝi funkcias elskatole, ne bezonas konfiguraĵon. Vi havas la tutan kontrolon sur viaj datumoj, sen zorgo pri sekureco. Vi povas uzi nian servilon rendezvous/relajsan, [agordi vian propran](https://mobilestartools.com/server), aŭ [skribi vian propran servilon rendezvous/relajsan](https://github.com/rustdesk/rustdesk-server-demo).
 
 StarDesk bonvenigas kontribuon de ĉiuj. Vidu [`docs/CONTRIBUTING.md`](CONTRIBUTING.md) por helpo komenci.
 

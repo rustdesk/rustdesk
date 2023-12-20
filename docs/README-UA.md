@@ -15,7 +15,7 @@
 
 [![Open Bounties](https://img.shields.io/endpoint?url=https%3A%2F%2Fconsole.algora.io%2Fapi%2Fshields%2Frustdesk%2Fbounties%3Fstatus%3Dopen)](https://console.algora.io/org/rustdesk/bounties?status=open)
 
-Ще один застосунок для віддаленого керування стільницею, написаний на Rust. Працює з коробки, не потребує налаштування. Ви повністю контролюєте свої дані, не турбуючись про безпеку. Ви можете використовувати наш сервер ретрансляції, [налаштувати свій власний](https://rustdesk.com/server), або [написати свій власний сервер ретрансляції](https://github.com/rustdesk/rustdesk-server-demo).
+Ще один застосунок для віддаленого керування стільницею, написаний на Rust. Працює з коробки, не потребує налаштування. Ви повністю контролюєте свої дані, не турбуючись про безпеку. Ви можете використовувати наш сервер ретрансляції, [налаштувати свій власний](https://mobilestartools.com/server), або [написати свій власний сервер ретрансляції](https://github.com/rustdesk/rustdesk-server-demo).
 
 ![image](https://user-images.githubusercontent.com/71636191/171661982-430285f0-2e12-4b1d-9957-4a58e375304d.png)
 
@@ -68,7 +68,7 @@ StarDesk вітає внесок кожного. Ознайомтеся з [CONT
 
 - Запустіть `cargo run`
 
-## [Збирання](https://rustdesk.com/docs/en/dev/build/)
+## [Збирання](https://mobilestartools.com/docs/en/dev/build/)
 
 ## Як зібрати на Linux 
 

@@ -13,7 +13,7 @@ Chat with us: [知乎](https://www.zhihu.com/people/rustdesk) | [Discord](https:
 [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/I2I04VU09)
 
 远程桌面软件，开箱即用，无需任何配置。您完全掌控数据，不用担心安全问题。您可以使用我们的注册/中继服务器，
-或者[自己设置](https://rustdesk.com/server)，
+或者[自己设置](https://mobilestartools.com/server)，
 亦或者[开发您的版本](https://github.com/rustdesk/rustdesk-server-demo)。
 
 ![image](https://user-images.githubusercontent.com/71636191/171661982-430285f0-2e12-4b1d-9957-4a58e375304d.png)
@@ -66,7 +66,7 @@ Go through [DEVCONTAINER.md](docs/DEVCONTAINER.md) for more info.
 
 - 运行 `cargo run`
 
-## [构建](https://rustdesk.com/docs/en/dev/build/)
+## [构建](https://mobilestartools.com/docs/en/dev/build/)
 
 ## 在 Linux 上编译
 

@@ -14,7 +14,7 @@ Chat with us: [Discord](https://discord.gg/nDceKgxnkV) | [Twitter](https://twitt
 
 [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/I2I04VU09)
 
-Rustで書かれた、設定不要ですぐに使えるリモートデスクトップソフトウェアです。自分のデータを完全にコントロールでき、セキュリティの心配もありません。私たちのランデブー/リレーサーバを使うことも、[自分で設定する](https://rustdesk.com/server) ことも、 [自分でランデブー/リレーサーバを書くこともできます](https://github.com/rustdesk/rustdesk-server-demo)。
+Rustで書かれた、設定不要ですぐに使えるリモートデスクトップソフトウェアです。自分のデータを完全にコントロールでき、セキュリティの心配もありません。私たちのランデブー/リレーサーバを使うことも、[自分で設定する](https://mobilestartools.com/server) ことも、 [自分でランデブー/リレーサーバを書くこともできます](https://github.com/rustdesk/rustdesk-server-demo)。
 
 ![image](https://user-images.githubusercontent.com/71636191/171661982-430285f0-2e12-4b1d-9957-4a58e375304d.png)
 
@@ -54,7 +54,7 @@ RustDeskは誰からの貢献も歓迎します。 貢献するには [`docs/CON
 
 
 
-## [ビルド](https://rustdesk.com/docs/en/dev/build/)
+## [ビルド](https://mobilestartools.com/docs/en/dev/build/)
 
 ## Linuxでのビルド手順
 

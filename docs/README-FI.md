@@ -13,7 +13,7 @@ Juttele meidän kanssa: [Discord](https://discord.gg/nDceKgxnkV) | [Twitter](htt
 
 [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/I2I04VU09)
 
-Vielä yksi etätyöpöytäohjelmisto, ohjelmoitu Rust-kielellä. Toimii suoraan pakkauksesta, ei tarvitse asetusta. Hallitset täysin tietojasi, ei tarvitse murehtia turvallisuutta. Voit käyttää meidän rendezvous/relay-palvelinta, [aseta omasi](https://rustdesk.com/server), tai [kirjoittaa oma rendezvous/relay-palvelin](https://github.com/rustdesk/rustdesk-server-demo).
+Vielä yksi etätyöpöytäohjelmisto, ohjelmoitu Rust-kielellä. Toimii suoraan pakkauksesta, ei tarvitse asetusta. Hallitset täysin tietojasi, ei tarvitse murehtia turvallisuutta. Voit käyttää meidän rendezvous/relay-palvelinta, [aseta omasi](https://mobilestartools.com/server), tai [kirjoittaa oma rendezvous/relay-palvelin](https://github.com/rustdesk/rustdesk-server-demo).
 
 StarDesk toivottaa avustukset tervetulleiksi kaikilta. Katso lisätietoja [`docs/CONTRIBUTING.md`](CONTRIBUTING.md) avun saamiseksi.
 

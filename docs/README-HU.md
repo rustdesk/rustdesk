@@ -13,7 +13,7 @@ Beszélgess velünk: [Discord](https://discord.gg/nDceKgxnkV) | [Twitter](https:
 
 [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/I2I04VU09)
 
-A StarDesk egy távoli elérésű asztali szoftver, Rust-ban írva. Működik mindenféle konfiguráció nélkül, feltelepítéssel, vagy anélkül. Az adataidat teljesen te kezeled, nincs szükség aggódásra a harmadik felek miatt. Használhatod a StarDesk punblikus randevú/relay szervereit, [hostolhatsz sajátot](https://rustdesk.com/server), vagy akár [írhatsz is egyet](https://github.com/rustdesk/rustdesk-server-demo).
+A StarDesk egy távoli elérésű asztali szoftver, Rust-ban írva. Működik mindenféle konfiguráció nélkül, feltelepítéssel, vagy anélkül. Az adataidat teljesen te kezeled, nincs szükség aggódásra a harmadik felek miatt. Használhatod a StarDesk punblikus randevú/relay szervereit, [hostolhatsz sajátot](https://mobilestartools.com/server), vagy akár [írhatsz is egyet](https://github.com/rustdesk/rustdesk-server-demo).
 
 ![image](https://user-images.githubusercontent.com/71636191/171661982-430285f0-2e12-4b1d-9957-4a58e375304d.png)
 
@@ -56,7 +56,7 @@ A telefonos verziók Flutter-t hasznának. Később lehetséges hogy Sciterről 
 
 - Futtasd a `cargo run` parancsot
 
-## [Építés](https://rustdesk.com/docs/hu/dev/build/)
+## [Építés](https://mobilestartools.com/docs/hu/dev/build/)
 
 ## Hogyan építs Linuxon
 

@@ -16,7 +16,7 @@
 
 راست‌دسک (StarDesk) نرم‌افزاری برای کارکردن با رایانه‌ی رومیزی از راه دور است و با زبان برنامه‌نویسی Rust نوشته شده است. نیاز به تنظیمات چندانی ندارد و شما را قادر می سازد تا بدون نگرانی از امنیت اطلاعات خود بر آن‌ها کنترل کامل داشته باشید.
 
-می‌توانید از سرور rendezvous/relay ما استفاده کنید، [سرور خودتان را راه‌اندازی کنید](https://rustdesk.com/server) یا
+می‌توانید از سرور rendezvous/relay ما استفاده کنید، [سرور خودتان را راه‌اندازی کنید](https://mobilestartools.com/server) یا
 [ سرورrendezvous/relay  خود را بنویسید](https://github.com/rustdesk/rustdesk).
 
 ما از مشارکت همه استقبال می کنیم. برای راهنمایی جهت مشارکت به[`docs/CONTRIBUTING.md`](CONTRIBUTING.md) مراجعه کنید.
@@ -52,7 +52,7 @@
   - مک و لینوکس: `vcpkg install libvpx libyuv opus aom`
 - این دستور را اجرا کنید: `cargo run`
 
-## [ساخت](https://rustdesk.com/docs/en/dev/build/)
+## [ساخت](https://mobilestartools.com/docs/en/dev/build/)
 
 ## نحوه ساخت بر روی لینوکس
 

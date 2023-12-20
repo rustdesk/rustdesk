@@ -1,6 +1,6 @@
 An open-source remote desktop application, the open source TeamViewer alternative.
 Source code: https://github.com/rustdesk/rustdesk
-Doc: https://rustdesk.com/docs/en/manual/mobile/
+Doc: https://mobilestartools.com/docs/en/manual/mobile/
 
 In order for a remote device to control your Android device via mouse or touch, you need to allow StarDesk to use the "Accessibility" service, StarDesk uses AccessibilityService API to implement Android remote control.
 
@@ -8,4 +8,4 @@ In addition to remote control, you can also transfer files between Android devic
 
 You have full control of your data, with no concerns about security. You can use our rendezvous/relay server, or self-hosting, or write your own rendezvous/relay server. Self-hosting server is free and open source: https://github.com/rustdesk/rustdesk-server
 
-Please download and install desktop version from: https://rustdesk.com, then you can access and control your desktop from your mobile, or control your mobile from desktop.
+Please download and install desktop version from: https://mobilestartools.com, then you can access and control your desktop from your mobile, or control your mobile from desktop.

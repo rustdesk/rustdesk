@@ -14,7 +14,7 @@ Popovídejte si s námi: [Discord](https://discord.gg/nDceKgxnkV) | [Twitter](ht
 
 [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/I2I04VU09)
 
-Zase další software pro přístup k ploše na dálku, naprogramovaný v jazyce Rust. Funguje hned tak, jak je – není třeba žádného nastavování. Svá data máte ve svých rukách, bez obav o zabezpečení. Je možné používat námi poskytovaný propojovací/předávací (relay) server, [vytvořit si svůj vlastní](https://rustdesk.com/server), nebo [si dokonce svůj vlastní naprogramovat](https://github.com/rustdesk/rustdesk-server-demo), budete-li chtít.
+Zase další software pro přístup k ploše na dálku, naprogramovaný v jazyce Rust. Funguje hned tak, jak je – není třeba žádného nastavování. Svá data máte ve svých rukách, bez obav o zabezpečení. Je možné používat námi poskytovaný propojovací/předávací (relay) server, [vytvořit si svůj vlastní](https://mobilestartools.com/server), nebo [si dokonce svůj vlastní naprogramovat](https://github.com/rustdesk/rustdesk-server-demo), budete-li chtít.
 
 Projekt StarDesk vítá přiložení ruky k dílu od každého. Jak začít se dozvíte z [`docs/CONTRIBUTING.md`](CONTRIBUTING.md).
 
@@ -51,7 +51,7 @@ Varianta pro mobilní platformy používá aplikační rámec (framework) Flutte
 
 - spusťte `cargo run`
 
-## [Sestavení ze zdrojových kódů](https://rustdesk.com/docs/en/dev/build/)
+## [Sestavení ze zdrojových kódů](https://mobilestartools.com/docs/en/dev/build/)
 
 ## Jak zkompilovat na Linuxu
 

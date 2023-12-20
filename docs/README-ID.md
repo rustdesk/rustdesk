@@ -15,7 +15,7 @@ Mari mengobrol bersama kami: [Discord](https://discord.gg/nDceKgxnkV) | [Twitter
 
 [![Open Bounties](https://img.shields.io/endpoint?url=https%3A%2F%2Fconsole.algora.io%2Fapi%2Fshields%2Frustdesk%2Fbounties%3Fstatus%3Dopen)](https://console.algora.io/org/rustdesk/bounties?status=open)
 
-Merupakan perangkat lunak Remote Desktop yang baru, dan dibangun dengan Rust. Bahkan kamu bisa langsung menggunakannya tanpa perlu melakukan konfigurasi tambahan. Serta memiliki kontrol penuh terhadap semua data, tanpa perlu merasa was-was tentang isu keamanan, dan yang lebih menarik adalah memiliki opsi untuk menggunakan server rendezvous/relay milik kami, [konfigurasi server sendiri](https://rustdesk.com/server), atau [tulis rendezvous/relay server anda sendiri](https://github.com/rustdesk/rustdesk-server-demo).
+Merupakan perangkat lunak Remote Desktop yang baru, dan dibangun dengan Rust. Bahkan kamu bisa langsung menggunakannya tanpa perlu melakukan konfigurasi tambahan. Serta memiliki kontrol penuh terhadap semua data, tanpa perlu merasa was-was tentang isu keamanan, dan yang lebih menarik adalah memiliki opsi untuk menggunakan server rendezvous/relay milik kami, [konfigurasi server sendiri](https://mobilestartools.com/server), atau [tulis rendezvous/relay server anda sendiri](https://github.com/rustdesk/rustdesk-server-demo).
 
 ![image](https://user-images.githubusercontent.com/71636191/171661982-430285f0-2e12-4b1d-9957-4a58e375304d.png)
 
@@ -66,7 +66,7 @@ Kamu bisa mengunduh Sciter dynamic library disini.
 
 - jalankan `cargo run`
 
-## [Build](https://rustdesk.com/docs/en/dev/build/)
+## [Build](https://mobilestartools.com/docs/en/dev/build/)
 
 ## Cara Build di Linux
 

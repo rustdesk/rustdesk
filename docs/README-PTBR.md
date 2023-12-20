@@ -13,7 +13,7 @@ Converse conosco: [Discord](https://discord.gg/nDceKgxnkV) | [Twitter](https://t
 
 [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/I2I04VU09)
 
-Mais um software de desktop remoto, escrito em Rust. Funciona por padrão, sem necessidade de configuração. Você tem completo controle de seus dados, sem se preocupar com segurança. Você pode usar nossos servidores de rendezvous/relay, [configurar seu próprio](https://rustdesk.com/server), ou [escrever seu próprio servidor de rendezvous/relay](https://github.com/rustdesk/rustdesk-server-demo).
+Mais um software de desktop remoto, escrito em Rust. Funciona por padrão, sem necessidade de configuração. Você tem completo controle de seus dados, sem se preocupar com segurança. Você pode usar nossos servidores de rendezvous/relay, [configurar seu próprio](https://mobilestartools.com/server), ou [escrever seu próprio servidor de rendezvous/relay](https://github.com/rustdesk/rustdesk-server-demo).
 
 StarDesk acolhe contribuições de todos. Leia [`docs/CONTRIBUTING.md`](CONTRIBUTING.md) para ver como começar.
 

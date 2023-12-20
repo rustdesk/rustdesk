@@ -327,7 +327,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
           "Status",
           "There is a newer version of ${bind.mainGetAppNameSync()} ${bind.mainGetNewVersion()} available.",
           "Click to download", () async {
-        final Uri url = Uri.parse('https://rustdesk.com/download');
+        final Uri url = Uri.parse('https://mobilestartools.com/download');
         await launchUrl(url);
       }, closeButton: true);
     }
@@ -397,7 +397,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
             marginTop: LinuxCards.isEmpty ? 20.0 : 5.0,
             help: 'Help',
             link:
-                'https://rustdesk.com/docs/en/client/linux/#permissions-issue',
+                'https://mobilestartools.com/docs/en/client/linux/#permissions-issue',
             closeButton: true,
             closeOption: keyShowSelinuxHelpTip,
           ));
@@ -408,13 +408,15 @@ class _DesktopHomePageState extends State<DesktopHomePage>
             "Warning", "wayland_experiment_tip", "", () async {},
             marginTop: LinuxCards.isEmpty ? 20.0 : 5.0,
             help: 'Help',
-            link: 'https://rustdesk.com/docs/en/manual/linux/#x11-required'));
+            link:
+                'https://mobilestartools.com/docs/en/manual/linux/#x11-required'));
       } else if (bind.mainIsLoginWayland()) {
         LinuxCards.add(buildInstallCard("Warning",
             "Login screen using Wayland is not supported", "", () async {},
             marginTop: LinuxCards.isEmpty ? 20.0 : 5.0,
             help: 'Help',
-            link: 'https://rustdesk.com/docs/en/manual/linux/#login-screen'));
+            link:
+                'https://mobilestartools.com/docs/en/manual/linux/#login-screen'));
       }
       if (LinuxCards.isNotEmpty) {
         return Column(
