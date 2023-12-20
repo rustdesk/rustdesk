@@ -1,4 +1,4 @@
-name: MacOS Flutter CI
+name: iOS Flutter CI
 
 on:
   workflow_dispatch:
