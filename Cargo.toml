@@ -172,7 +172,7 @@ hound = "3.5"
 
 [package.metadata.bundle]
 name = "StarDesk"
-identifier = "com.carriez.rustdesk"
+identifier = "com.fti.rd"
 icon = ["res/32x32.png", "res/128x128.png", "res/128x128@2x.png"]
 osx_minimum_system_version = "10.14"
 

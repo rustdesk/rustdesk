@@ -3,7 +3,7 @@
 <plist version="1.0">
     <dict>
         <key>Label</key>
-        <string>com.carriez.RustDesk_service</string>
+        <string>com.fti.rd_service</string>
         <key>KeepAlive</key>
         <true/>
         <key>ProgramArguments</key>
@@ -16,8 +16,8 @@
         <key>WorkingDirectory</key>
         <string>/Applications/StarDesk.app/Contents/MacOS/</string>
         <key>StandardErrorPath</key>
-        <string>/tmp/rustdesk_service.err</string>
+        <string>/tmp/stardesk_service.err</string>
         <key>StandardOutPath</key>
-        <string>/tmp/rustdesk_service.out</string>
+        <string>/tmp/stardesk_service.out</string>
     </dict>
 </plist>

@@ -3,7 +3,7 @@
 <plist version="1.0">
     <dict>
         <key>Label</key>
-        <string>com.carriez.RustDesk_server</string>
+        <string>com.fti.rd_server</string>
         <key>LimitLoadToSessionType</key>
         <array>
           <string>LoginWindow</string>

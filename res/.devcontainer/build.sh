@@ -29,7 +29,7 @@ build_apk(){
 }
 
 key_gen(){
-    if [ ! -f $WORKDIR/flutter/android/key.properties ]
+    if [ ! -f $WORKDIR/flutter/android/keystore.properties ]
     then
         if [ ! -f $HOME/upload-keystore.jks ]
         then
