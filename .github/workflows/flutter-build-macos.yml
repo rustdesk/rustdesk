@@ -29,6 +29,7 @@ env:
   ANDROID_SIGNING_KEY: '${{ secrets.ANDROID_SIGNING_KEY }}'
   # MACOS_P12_BASE64: '${{ secrets.MACOS_P12_BASE64 }}'
   MACOS_P12_BASE64: '${{ secrets.MACOS_P12_BASE64 }}'
+  MACOS_P12_PASSWORD: '${{ secrets.MACOS_P12_PASSWORD }}'
   # To make a custom build with your own servers set the below secret values
   RS_PUB_KEY: '${{ secrets.RS_PUB_KEY }}'
   RENDEZVOUS_SERVER: '${{ secrets.RENDEZVOUS_SERVER }}'
