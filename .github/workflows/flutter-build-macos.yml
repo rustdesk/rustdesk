@@ -27,6 +27,7 @@ env:
   NDK_VERSION: "r26b"
   #signing keys env variable checks
   ANDROID_SIGNING_KEY: '${{ secrets.ANDROID_SIGNING_KEY }}'
+  # MACOS_P12_BASE64: '${{ secrets.MACOS_P12_BASE64 }}'
   MACOS_P12_BASE64: '${{ secrets.MACOS_P12_BASE64 }}'
   # To make a custom build with your own servers set the below secret values
   RS_PUB_KEY: '${{ secrets.RS_PUB_KEY }}'
@@ -59,28 +60,28 @@ jobs:
       - name: Checkout source code
         uses: actions/checkout@v3
 
-      - name: Import the codesign cert
-        if: env.MACOS_P12_BASE64 != null
-        uses: apple-actions/import-codesign-certs@v1
-        with:
-          p12-file-base64: ${{ secrets.MACOS_P12_BASE64 }}
-          p12-password: ${{ secrets.MACOS_P12_PASSWORD }}
-          keychain: rustdesk
+      # - name: Import the codesign cert
+      #   if: env.MACOS_P12_BASE64 != null
+      #   uses: apple-actions/import-codesign-certs@v1
+      #   with:
+      #     p12-file-base64: ${{ secrets.MACOS_P12_BASE64 }}
+      #     p12-password: ${{ secrets.MACOS_P12_PASSWORD }}
+      #     keychain: rustdesk
 
-      - name: Check sign and import sign key
-        if: env.MACOS_P12_BASE64 != null
-        run: |
-          security default-keychain -s rustdesk.keychain
-          security find-identity -v
+      # - name: Check sign and import sign key
+      #   if: env.MAC_BUILD_CERTIFICATE_BASE64 != null
+      #   run: |
+      #     security default-keychain -s rustdesk.keychain
+      #     security find-identity -v
 
-      - name: Import notarize key
-        if: env.MACOS_P12_BASE64 != null
-        uses: timheuer/base64-to-file@v1.2
-        with:
-          # https://gregoryszorc.com/docs/apple-codesign/stable/apple_codesign_rcodesign.html#notarizing-and-stapling
-          fileName: rustdesk.json
-          fileDir: ${{ github.workspace }}
-          encodedString: ${{ secrets.MACOS_NOTARIZE_JSON }}
+      # - name: Import notarize key
+      #   if: env.MACOS_P12_BASE64 != null
+      #   uses: timheuer/base64-to-file@v1.2
+      #   with:
+      #     # https://gregoryszorc.com/docs/apple-codesign/stable/apple_codesign_rcodesign.html#notarizing-and-stapling
+      #     fileName: rustdesk.json
+      #     fileDir: ${{ github.workspace }}
+      #     encodedString: ${{ secrets.MACOS_NOTARIZE_JSON }}
 
       - name: Install rcodesign tool
         if: env.MACOS_P12_BASE64 != null
@@ -139,6 +140,27 @@ jobs:
           cargo -V
           rustc -V
 
+      - name: Install the Apple certificate and provisioning profile
+        if: env.MACOS_P12_BASE64 != null && env.UPLOAD_ARTIFACT == 'true'
+        run: |
+          # create variables
+          CERTIFICATE_PATH=$RUNNER_TEMP/build_certificate.p12
+          PP_PATH=$RUNNER_TEMP/build_pp.provisionprofile
+          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
+          # import certificate and provisioning profile from secrets
+          echo -n "$MACOS_P12_BASE64" | base64 --decode --output $CERTIFICATE_PATH
+          echo -n "$MACOS_BUILD_PROVISION_PROFILE_BASE64" | base64 --decode --output $PP_PATH
+          # create temporary keychain
+          security create-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+          security set-keychain-settings -lut 21600 $KEYCHAIN_PATH
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+          # import certificate to keychain
+          security import $CERTIFICATE_PATH -P "$MACOS_P12_PASSWORD" -A -t cert -f pkcs12 -k $KEYCHAIN_PATH
+          security list-keychain -d user -s $KEYCHAIN_PATH
+          # apply provisioning profile
+          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
+          cp $PP_PATH ~/Library/MobileDevice/Provisioning\ Profiles
+
       - name: Build rustdesk
         run: |
           # --hwcodec not supported on macos yet
@@ -152,8 +174,8 @@ jobs:
           CREATE_DMG="$(readlink -f "$CREATE_DMG")"
           sed -i -e 's/MAXIMUM_UNMOUNTING_ATTEMPTS=3/MAXIMUM_UNMOUNTING_ATTEMPTS=7/' "$CREATE_DMG"
           # Unlock keychain
-          security default-keychain -s rustdesk.keychain
-          security unlock-keychain -p ${{ secrets.MACOS_P12_PASSWORD }} rustdesk.keychain
+          # security default-keychain -s rustdesk.keychain
+          # security unlock-keychain -p ${{ secrets.MACOS_P12_PASSWORD }} rustdesk.keychain
           # start sign the StarDesk.app and dmg
           rm stardesk-${{ env.VERSION }}.dmg || true
           codesign --force --options runtime -s ${{ secrets.MACOS_CODESIGN_IDENTITY }} --deep --strict ./flutter/build/macos/Build/Products/Release/StarDesk.app -vvv
@@ -177,3 +199,8 @@ jobs:
           tag_name: ${{ env.TAG_NAME }}
           files: |
             rustdesk*-${{ matrix.job.arch }}.dmg
+      - name: Clean up keychain and provisioning profile
+        if: ${{ always() }}
+        run: |
+          security delete-keychain $RUNNER_TEMP/app-signing.keychain-db
+          rm ~/Library/MobileDevice/Provisioning\ Profiles/build_pp.provisionprofile
