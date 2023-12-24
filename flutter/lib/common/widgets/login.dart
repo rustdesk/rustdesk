@@ -357,6 +357,7 @@ class LoginWidgetUserPass extends StatelessWidget {
             PasswordWidget(
               controller: pass,
               autoFocus: false,
+              reRequestFocus: true,
               errorText: passMsg,
             ),
             // NOT use Offstage to wrap LinearProgressIndicator
