@@ -445,15 +445,18 @@ Future<List<TToggleMenu>> toolbarDisplayToggle(
   if (perms['file'] != false &&
       bind.mainHasFileClipboard() &&
       pi.platformAdditions.containsKey(kPlatformAdditionsHasFileClipboard)) {
+    final enabled = !ffiModel.viewOnly;
     final option = 'enable-file-transfer';
     final value =
         bind.sessionGetToggleOptionSync(sessionId: sessionId, arg: option);
     v.add(TToggleMenu(
         value: value,
-        onChanged: (value) {
-          if (value == null) return;
-          bind.sessionToggleOption(sessionId: sessionId, value: option);
-        },
+        onChanged: enabled
+            ? (value) {
+                if (value == null) return;
+                bind.sessionToggleOption(sessionId: sessionId, value: option);
+              }
+            : null,
         child: Text(translate('Enable file copy and paste'))));
   }
   // disable clipboard
