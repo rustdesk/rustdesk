@@ -1172,26 +1172,27 @@ impl Connection {
             ..Default::default()
         })
         .into();
-        #[cfg(not(any(target_os = "android", target_os = "ios")))]
-        {
-            pi.resolutions = Some(SupportedResolutions {
-                resolutions: display_service::try_get_displays()
-                    .map(|displays| {
-                        displays
-                            .get(self.display_idx)
-                            .map(|d| crate::platform::resolutions(&d.name()))
-                            .unwrap_or(vec![])
-                    })
-                    .unwrap_or(vec![]),
-                ..Default::default()
-            })
-            .into();
-        }
 
         let mut sub_service = false;
         if self.file_transfer.is_some() {
             res.set_peer_info(pi);
         } else {
+            #[cfg(not(any(target_os = "android", target_os = "ios")))]
+            {
+                pi.resolutions = Some(SupportedResolutions {
+                    resolutions: display_service::try_get_displays()
+                        .map(|displays| {
+                            displays
+                                .get(self.display_idx)
+                                .map(|d| crate::platform::resolutions(&d.name()))
+                                .unwrap_or(vec![])
+                        })
+                        .unwrap_or(vec![]),
+                    ..Default::default()
+                })
+                .into();
+            }
+
             try_activate_screen();
             if let Some(msg_out) = super::video_service::is_inited_msg() {
                 self.send(msg_out).await;
@@ -3200,12 +3201,12 @@ fn start_wakelock_thread() -> std::sync::mpsc::Sender<(usize, usize)> {
                         log::info!("drop wakelock");
                     } else {
                         let mut display = remote_count > 0;
-                        if let Some(w) = wakelock.as_mut() {
+                        if let Some(_w) = wakelock.as_mut() {
                             if display != last_display {
                                 #[cfg(any(target_os = "windows", target_os = "macos"))]
                                 {
                                     log::info!("set wakelock display to {display}");
-                                    if let Err(e) = w.set_display(display) {
+                                    if let Err(e) = _w.set_display(display) {
                                         log::error!(
                                             "failed to set wakelock display to {display}: {e:?}"
                                         );
