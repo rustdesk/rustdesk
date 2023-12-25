@@ -221,15 +221,7 @@ class ServiceNotRunningNotification extends StatelessWidget {
           ],
         ));
   }
-}
 
-showScamWarning(BuildContext context, ServerModel serverModel) {
-  showDialog(
-    context: context,
-    builder: (BuildContext context) {
-      return ScamWarningDialog(serverModel: serverModel);
-    },
-  );
 }
 
 class ScamWarningDialog extends StatefulWidget {
@@ -558,7 +550,7 @@ class _PermissionCheckerState extends State<PermissionChecker> {
                   .marginOnly(bottom: 8)
               : SizedBox.shrink(),
           PermissionRow(translate("Screen Capture"), serverModel.mediaOk,
-              showScamWarning(context, serverModel)),
+        () => showScamWarning(context, serverModel)),
           PermissionRow(translate("Input Control"), serverModel.inputOk,
               serverModel.toggleInput),
           PermissionRow(translate("Transfer file"), serverModel.fileOk,
@@ -800,4 +792,13 @@ void androidChannelInit() {
     }
     return "";
   });
+}  
+
+void showScamWarning(BuildContext context, ServerModel serverModel) {
+  showDialog(
+    context: context,
+    builder: (BuildContext context) {
+      return ScamWarningDialog(serverModel: serverModel);
+    },
+  );
 }
