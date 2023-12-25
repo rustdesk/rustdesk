@@ -550,7 +550,9 @@ class _PermissionCheckerState extends State<PermissionChecker> {
                   .marginOnly(bottom: 8)
               : SizedBox.shrink(),
           PermissionRow(translate("Screen Capture"), serverModel.mediaOk,
-        () => showScamWarning(context, serverModel)),
+            serverModel.mediaOk
+              ? serverModel.toggleService
+              : () => showScamWarning(context, serverModel)),
           PermissionRow(translate("Input Control"), serverModel.inputOk,
               serverModel.toggleInput),
           PermissionRow(translate("Transfer file"), serverModel.fileOk,
