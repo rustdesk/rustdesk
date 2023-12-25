@@ -479,15 +479,18 @@ Future<List<TToggleMenu>> toolbarDisplayToggle(
   }
   // lock after session end
   if (ffiModel.keyboard) {
+    final enabled = !ffiModel.viewOnly;
     final option = 'lock-after-session-end';
     final value =
         bind.sessionGetToggleOptionSync(sessionId: sessionId, arg: option);
     v.add(TToggleMenu(
         value: value,
-        onChanged: (value) {
-          if (value == null) return;
-          bind.sessionToggleOption(sessionId: sessionId, value: option);
-        },
+        onChanged: enabled
+            ? (value) {
+                if (value == null) return;
+                bind.sessionToggleOption(sessionId: sessionId, value: option);
+              }
+            : null,
         child: Text(translate('Lock after session end'))));
   }
 
@@ -557,19 +560,27 @@ List<TToggleMenu> toolbarPrivacyMode(
   final sessionId = ffi.sessionId;
 
   getDefaultMenu(Future<void> Function(SessionID sid, String opt) toggleFunc) {
+    final enabled = !ffi.ffiModel.viewOnly;
     return TToggleMenu(
         value: privacyModeState.isNotEmpty,
-        onChanged: (value) {
-          if (value == null) return;
-          if (ffiModel.pi.currentDisplay != 0 &&
-              ffiModel.pi.currentDisplay != kAllDisplayValue) {
-            msgBox(sessionId, 'custom-nook-nocancel-hasclose', 'info',
-                'Please switch to Display 1 first', '', ffi.dialogManager);
-            return;
-          }
-          final option = 'privacy-mode';
-          toggleFunc(sessionId, option);
-        },
+        onChanged: enabled
+            ? (value) {
+                if (value == null) return;
+                if (ffiModel.pi.currentDisplay != 0 &&
+                    ffiModel.pi.currentDisplay != kAllDisplayValue) {
+                  msgBox(
+                      sessionId,
+                      'custom-nook-nocancel-hasclose',
+                      'info',
+                      'Please switch to Display 1 first',
+                      '',
+                      ffi.dialogManager);
+                  return;
+                }
+                final option = 'privacy-mode';
+                toggleFunc(sessionId, option);
+              }
+            : null,
         child: Text(translate('Privacy mode')));
   }
 

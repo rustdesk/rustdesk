@@ -1423,11 +1423,13 @@ impl LoginConfigHandler {
                 option.disable_clipboard = f(true);
                 option.show_remote_cursor = f(true);
                 option.enable_file_transfer = f(false);
+                option.lock_after_session_end = f(false);
             } else {
                 option.disable_keyboard = f(false);
                 option.disable_clipboard = f(self.get_toggle_option("disable-clipboard"));
                 option.show_remote_cursor = f(self.get_toggle_option("show-remote-cursor"));
                 option.enable_file_transfer = f(self.config.enable_file_transfer.v);
+                option.lock_after_session_end = f(self.config.lock_after_session_end.v);
             }
         } else {
             let is_set = self
@@ -1518,7 +1520,7 @@ impl LoginConfigHandler {
             msg.show_remote_cursor = BoolOption::Yes.into();
             n += 1;
         }
-        if self.get_toggle_option("lock-after-session-end") {
+        if !view_only && self.get_toggle_option("lock-after-session-end") {
             msg.lock_after_session_end = BoolOption::Yes.into();
             n += 1;
         }
@@ -1526,7 +1528,7 @@ impl LoginConfigHandler {
             msg.disable_audio = BoolOption::Yes.into();
             n += 1;
         }
-        if self.get_toggle_option("enable-file-transfer") {
+        if !view_only && self.get_toggle_option("enable-file-transfer") {
             msg.enable_file_transfer = BoolOption::Yes.into();
             n += 1;
         }
