@@ -612,12 +612,7 @@ fn on_create_session_response(
             handle_response(
                 c,
                 path,
-                on_select_sources_response(
-                    fd.clone(),
-                    streams.clone(),
-                    failure.clone(),
-                    ses.clone(),
-                ),
+                on_select_sources_response(fd.clone(), streams.clone(), failure.clone(), ses),
                 failure.clone(),
             )?;
         } else {
@@ -666,12 +661,7 @@ fn on_select_devices_response(
         handle_response(
             c,
             path,
-            on_select_sources_response(
-                fd.clone(),
-                streams.clone(),
-                failure.clone(),
-                session.clone(),
-            ),
+            on_select_sources_response(fd.clone(), streams.clone(), failure.clone(), session),
             failure.clone(),
         )?;
 
