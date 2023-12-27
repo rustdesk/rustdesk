@@ -801,5 +801,5 @@ fn is_server_running() -> bool {
 
     let output_str = String::from_utf8_lossy(&output.stdout);
     let is_running = output_str.contains("rustdesk --server");
-    !is_running
+    is_running
 }
