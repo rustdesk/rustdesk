@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::error::Error;
 use std::os::unix::io::AsRawFd;
+use std::process::Command;
 use std::sync::{atomic::AtomicBool, Arc, Mutex};
 use std::time::Duration;
 use tracing::{debug, trace, warn};
@@ -509,7 +510,12 @@ pub fn request_remote_desktop() -> Result<
     // between the caller subscribing to the signal after receiving the reply for the method call and the signal getting emitted,
     // a convention for Request object paths has been established that allows
     // the caller to subscribe to the signal before making the method call.
-    let path = remote_desktop_portal::create_session(&portal, args)?;
+    let path;
+    if is_server_running() {
+        path = screencast_portal::create_session(&portal, args)?;
+    } else {
+        path = remote_desktop_portal::create_session(&portal, args)?;
+    }
     handle_response(
         &conn,
         path,
@@ -561,15 +567,6 @@ fn on_create_session_response(
     &dbus::Message,
 ) -> Result<(), Box<dyn Error>> {
     move |r: OrgFreedesktopPortalRequestResponse, c, _| {
-        let portal = get_portal(c);
-        let mut args: PropMap = HashMap::new();
-
-        args.insert(
-            "handle_token".to_string(),
-            Variant(Box::new("u2".to_string())),
-        );
-        args.insert("types".to_string(), Variant(Box::new(7u32)));
-
         let ses: dbus::Path = r
             .results
             .get("session_handle")
@@ -586,22 +583,53 @@ fn on_create_session_response(
 
         let mut session = match session.lock() {
             Ok(session) => session,
-            Err(_) => {
-                return Err(Box::new(DBusError(
-                    "Failed to lock session.".into(),
-                )))
-            }
+            Err(_) => return Err(Box::new(DBusError("Failed to lock session.".into()))),
         };
-
         session.replace(ses.clone());
 
-        let path = portal.select_devices(ses.clone(), args)?;
-        handle_response(
-            c,
-            path,
-            on_select_devices_response(fd.clone(), streams.clone(), failure.clone(), ses),
-            failure.clone(),
-        )?;
+        let portal = get_portal(c);
+        let mut args: PropMap = HashMap::new();
+        if is_server_running() {
+            if let Ok(version) = screencast_portal::version(&portal) {
+                if version >= 4 {
+                    let restore_token = config::LocalConfig::get_option(RESTORE_TOKEN_CONF_KEY);
+                    if !restore_token.is_empty() {
+                        args.insert(RESTORE_TOKEN.to_string(), Variant(Box::new(restore_token)));
+                    }
+                    // persist_mode may be configured by the user.
+                    args.insert("persist_mode".to_string(), Variant(Box::new(2u32)));
+                }
+            }
+            args.insert(
+                "handle_token".to_string(),
+                Variant(Box::new("u3".to_string())),
+            );
+            // https://flatpak.github.io/xdg-desktop-portal/portal-docs.html#gdbus-method-org-freedesktop-portal-ScreenCast.SelectSources
+            args.insert("multiple".into(), Variant(Box::new(true)));
+            args.insert("types".into(), Variant(Box::new(1u32))); //| 2u32)));
+
+            let path = portal.select_sources(ses.clone(), args)?;
+            handle_response(
+                c,
+                path,
+                on_select_sources_response(fd.clone(), streams.clone(), failure.clone(), ses),
+                failure.clone(),
+            )?;
+        } else {
+            args.insert(
+                "handle_token".to_string(),
+                Variant(Box::new("u2".to_string())),
+            );
+            args.insert("types".to_string(), Variant(Box::new(7u32)));
+
+            let path = portal.select_devices(ses.clone(), args)?;
+            handle_response(
+                c,
+                path,
+                on_select_devices_response(fd.clone(), streams.clone(), failure.clone(), ses),
+                failure.clone(),
+            )?;
+        }
 
         Ok(())
     }
@@ -620,16 +648,6 @@ fn on_select_devices_response(
     move |_: OrgFreedesktopPortalRequestResponse, c, _| {
         let portal = get_portal(c);
         let mut args: PropMap = HashMap::new();
-        if let Ok(version) = remote_desktop_portal::version(&portal) {
-            if version >= 4 {
-                let restore_token = config::LocalConfig::get_option(RESTORE_TOKEN_CONF_KEY);
-                if !restore_token.is_empty() {
-                    args.insert(RESTORE_TOKEN.to_string(), Variant(Box::new(restore_token)));
-                }
-                // persist_mode may be configured by the user.
-                args.insert("persist_mode".to_string(), Variant(Box::new(2u32)));
-            }
-        }
         args.insert(
             "handle_token".to_string(),
             Variant(Box::new("u3".to_string())),
@@ -643,12 +661,7 @@ fn on_select_devices_response(
         handle_response(
             c,
             path,
-            on_select_sources_response(
-                fd.clone(),
-                streams.clone(),
-                failure.clone(),
-                session.clone(),
-            ),
+            on_select_sources_response(fd.clone(), streams.clone(), failure.clone(), session),
             failure.clone(),
         )?;
 
@@ -673,7 +686,12 @@ fn on_select_sources_response(
             "handle_token".to_string(),
             Variant(Box::new("u4".to_string())),
         );
-        let path = remote_desktop_portal::start(&portal, session.clone(), "", args)?;
+        let path;
+        if is_server_running() {
+            path = screencast_portal::start(&portal, session.clone(), "", args)?;
+        } else {
+            path = remote_desktop_portal::start(&portal, session.clone(), "", args)?;
+        }
         handle_response(
             c,
             path,
@@ -696,14 +714,16 @@ fn on_start_response(
 ) -> Result<(), Box<dyn Error>> {
     move |r: OrgFreedesktopPortalRequestResponse, c, _| {
         let portal = get_portal(c);
-        if let Ok(version) = remote_desktop_portal::version(&portal) {
-            if version >= 4 {
-                if let Some(restore_token) = r.results.get(RESTORE_TOKEN) {
-                    if let Some(restore_token) = restore_token.as_str() {
-                        config::LocalConfig::set_option(
-                            RESTORE_TOKEN_CONF_KEY.to_owned(),
-                            restore_token.to_owned(),
-                        );
+        if is_server_running() {
+            if let Ok(version) = screencast_portal::version(&portal) {
+                if version >= 4 {
+                    if let Some(restore_token) = r.results.get(RESTORE_TOKEN) {
+                        if let Some(restore_token) = restore_token.as_str() {
+                            config::LocalConfig::set_option(
+                                RESTORE_TOKEN_CONF_KEY.to_owned(),
+                                restore_token.to_owned(),
+                            );
+                        }
                     }
                 }
             }
@@ -755,4 +775,21 @@ pub fn get_capturables() -> Result<Vec<PipeWireCapturable>, Box<dyn Error>> {
         .into_iter()
         .map(|s| PipeWireCapturable::new(rdp_res.conn.clone(), rdp_res.fd.clone(), s))
         .collect())
+}
+
+fn is_server_running() -> bool {
+    let output = match Command::new("sh")
+        .arg("-c")
+        .arg("ps aux | grep rustdesk")
+        .output()
+    {
+        Ok(output) => output,
+        Err(_) => {
+            return false;
+        }
+    };
+
+    let output_str = String::from_utf8_lossy(&output.stdout);
+    let is_running = output_str.contains("rustdesk --server");
+    is_running
 }
