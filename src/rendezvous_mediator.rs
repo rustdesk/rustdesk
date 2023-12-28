@@ -815,7 +815,7 @@ impl RendezvousMediator {
         } else {
             // Default mq server is the same as rendzvous server
             let mq_host = replace_port(&self.host, DEFAULT_MQ_PORT);
-            format!("nats://{}", mq_host)
+            format!("tls://{}", mq_host)
         };
 
         let temp_id = data
