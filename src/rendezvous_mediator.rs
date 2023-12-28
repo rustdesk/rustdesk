@@ -771,17 +771,7 @@ impl RendezvousMediator {
         // Get temporary credential
         let token_server = replace_port(host, TOKEN_SERVER_PORT);
         let token_server_url = format!("https://{}", token_server);
-        let temp_connect_info = match self.get_temp_mq_connect_info(&token_server_url).await {
-            Ok(temp_mq_token) => temp_mq_token,
-            Err(_) => {
-                // If failed, try http protocol
-                let token_server = replace_port(host, INSECURE_TOKEN_SERVER_PORT);
-                let token_server_url = format!("http://{}", token_server);
-                let connect_info = self.get_temp_mq_connect_info(&token_server_url).await?;
-                log::warn!("Token server {} is using http protocol!", token_server);
-                connect_info
-            }
-        };
+        let temp_connect_info = self.get_temp_mq_connect_info(&token_server_url).await?;
         log::debug!("Got temp token from token server");
 
         // Register pk & id using temporary credential
