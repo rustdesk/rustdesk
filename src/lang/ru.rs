@@ -576,7 +576,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("input_source_1_tip", "Источник ввода 1"),
         ("input_source_2_tip", "Источник ввода 2"),
         ("capture_display_elevated_connections_tip", "Захват экрана нескольких дисплеев не поддерживается в режиме повышенных прав. Повторите попытку после установки, если хотите управлять несколькими дисплеями."),
-        ("Swap control-command key", ""),
-        ("swap-left-right-mouse", ""),
+        ("Swap control-command key", "Поменять кнопки управления и команд"),
+        ("swap-left-right-mouse", "Поменять левую и правую кнопки мыши"),
     ].iter().cloned().collect();
 }

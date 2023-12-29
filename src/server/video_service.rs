@@ -741,7 +741,13 @@ fn try_broadcast_display_changed(
     ) {
         log::info!("Display {} changed", display);
         if let Some(msg_out) = make_display_changed_msg(display_idx, Some(display)) {
-            sp.send(msg_out);
+            let msg_out = Arc::new(msg_out);
+            sp.send_shared(msg_out.clone());
+            // switch display may occur before the first video frame, add snapshot to send to new subscribers
+            sp.snapshot(move |sps| {
+                sps.send_shared(msg_out.clone());
+                Ok(())
+            })?;
             bail!("SWITCH");
         }
     }

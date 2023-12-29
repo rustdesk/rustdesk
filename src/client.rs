@@ -6,7 +6,6 @@ use std::{
     sync::{mpsc, Arc, Mutex, RwLock},
 };
 
-pub use async_trait::async_trait;
 use bytes::Bytes;
 #[cfg(not(any(target_os = "android", target_os = "linux")))]
 use cpal::{
@@ -1422,10 +1421,14 @@ impl LoginConfigHandler {
                 option.disable_keyboard = f(true);
                 option.disable_clipboard = f(true);
                 option.show_remote_cursor = f(true);
+                option.enable_file_transfer = f(false);
+                option.lock_after_session_end = f(false);
             } else {
                 option.disable_keyboard = f(false);
                 option.disable_clipboard = f(self.get_toggle_option("disable-clipboard"));
                 option.show_remote_cursor = f(self.get_toggle_option("show-remote-cursor"));
+                option.enable_file_transfer = f(self.config.enable_file_transfer.v);
+                option.lock_after_session_end = f(self.config.lock_after_session_end.v);
             }
         } else {
             let is_set = self
@@ -1516,7 +1519,7 @@ impl LoginConfigHandler {
             msg.show_remote_cursor = BoolOption::Yes.into();
             n += 1;
         }
-        if self.get_toggle_option("lock-after-session-end") {
+        if !view_only && self.get_toggle_option("lock-after-session-end") {
             msg.lock_after_session_end = BoolOption::Yes.into();
             n += 1;
         }
@@ -1524,7 +1527,7 @@ impl LoginConfigHandler {
             msg.disable_audio = BoolOption::Yes.into();
             n += 1;
         }
-        if self.get_toggle_option("enable-file-transfer") {
+        if !view_only && self.get_toggle_option("enable-file-transfer") {
             msg.enable_file_transfer = BoolOption::Yes.into();
             n += 1;
         }
@@ -2645,7 +2648,6 @@ async fn send_switch_login_request(
 }
 
 /// Interface for client to send data and commands.
-#[async_trait]
 pub trait Interface: Send + Clone + 'static + Sized {
     /// Send message data to remote peer.
     fn send(&self, data: Data);
