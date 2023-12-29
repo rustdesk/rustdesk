@@ -41,7 +41,6 @@ impl Session {
     }
 }
 
-#[async_trait]
 impl Interface for Session {
     fn get_login_config_handler(&self) -> Arc<RwLock<LoginConfigHandler>> {
         return self.lc.clone();

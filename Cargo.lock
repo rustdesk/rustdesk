@@ -5236,7 +5236,6 @@ dependencies = [
  "android_logger",
  "arboard",
  "async-process",
- "async-trait",
  "base64",
  "bytes",
  "cc",
