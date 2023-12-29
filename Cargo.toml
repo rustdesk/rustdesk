@@ -6,6 +6,7 @@ edition = "2021"
 build= "build.rs"
 description = "A remote control software."
 default-run = "rustdesk"
+rust-version = "1.75"
 
 [lib]
 name = "librustdesk"
