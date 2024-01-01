@@ -269,7 +269,7 @@ impl Subscriber for ConnInner {
     }
 }
 
-const TEST_DELAY_TIMEOUT: Duration = Duration::from_secs(1);
+const TEST_DELAY_TIMEOUT: Duration = Duration::from_secs(3);
 const SEC30: Duration = Duration::from_secs(30);
 const H1: Duration = Duration::from_secs(3600);
 const MILLI1: Duration = Duration::from_millis(1);
@@ -671,7 +671,7 @@ impl Connection {
                         let mut msg_out = Message::new();
                         msg_out.set_test_delay(TestDelay{
                             time,
-                            last_delay:conn.network_delay.unwrap_or_default(),
+                            last_delay: conn.network_delay.unwrap_or_default(),
                             target_bitrate: qos.bitrate(),
                             ..Default::default()
                         });
