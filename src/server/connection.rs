@@ -188,8 +188,8 @@ pub struct Connection {
     restart: bool,
     recording: bool,
     block_input: bool,
-    last_test_delay: i64,
-    network_delay: Option<u32>,
+    last_test_delay: Option<Instant>,
+    network_delay: u32,
     lock_after_session_end: bool,
     show_remote_cursor: bool,
     // by peer
@@ -269,7 +269,7 @@ impl Subscriber for ConnInner {
     }
 }
 
-const TEST_DELAY_TIMEOUT: Duration = Duration::from_secs(3);
+const TEST_DELAY_TIMEOUT: Duration = Duration::from_secs(1);
 const SEC30: Duration = Duration::from_secs(30);
 const H1: Duration = Duration::from_secs(3600);
 const MILLI1: Duration = Duration::from_millis(1);
@@ -335,8 +335,8 @@ impl Connection {
             restart: Connection::permission("enable-remote-restart"),
             recording: Connection::permission("enable-record-session"),
             block_input: Connection::permission("enable-block-input"),
-            last_test_delay: 0,
-            network_delay: None,
+            last_test_delay: None,
+            network_delay: 0,
             lock_after_session_end: false,
             show_remote_cursor: false,
             ip: "".to_owned(),
@@ -408,8 +408,7 @@ impl Connection {
         if !conn.block_input {
             conn.send_permission(Permission::BlockInput, false).await;
         }
-        let mut test_delay_timer =
-            time::interval_at(Instant::now() + TEST_DELAY_TIMEOUT, TEST_DELAY_TIMEOUT);
+        let mut test_delay_timer = time::interval(TEST_DELAY_TIMEOUT);
         let mut last_recv_time = Instant::now();
 
         conn.stream.set_send_timeout(
@@ -664,14 +663,12 @@ impl Connection {
                         conn.on_close("Timeout", true).await;
                         break;
                     }
-                    let time = get_time();
                     let mut qos = video_service::VIDEO_QOS.lock().unwrap();
-                    if time > 0 && conn.last_test_delay == 0 {
-                        conn.last_test_delay = time;
+                    if conn.last_test_delay.is_none() {
+                        conn.last_test_delay = Some(Instant::now());
                         let mut msg_out = Message::new();
                         msg_out.set_test_delay(TestDelay{
-                            time,
-                            last_delay: conn.network_delay.unwrap_or_default(),
+                            last_delay: conn.network_delay,
                             target_bitrate: qos.bitrate(),
                             ..Default::default()
                         });
@@ -1715,13 +1712,15 @@ impl Connection {
                 msg_out.set_test_delay(t);
                 self.inner.send(msg_out.into());
             } else {
-                self.last_test_delay = 0;
-                let new_delay = (get_time() - t.time) as u32;
-                video_service::VIDEO_QOS
-                    .lock()
-                    .unwrap()
-                    .user_network_delay(self.inner.id(), new_delay);
-                self.network_delay = Some(new_delay);
+                if let Some(tm) = self.last_test_delay {
+                    self.last_test_delay = None;
+                    let new_delay = tm.elapsed().as_millis() as u32;
+                    video_service::VIDEO_QOS
+                        .lock()
+                        .unwrap()
+                        .user_network_delay(self.inner.id(), new_delay);
+                    self.network_delay = new_delay;
+                }
                 self.delay_response_instant = Instant::now();
             }
         } else if let Some(message::Union::SwitchSidesResponse(_s)) = msg.union {
