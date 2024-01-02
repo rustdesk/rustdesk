@@ -627,6 +627,7 @@ Future<bool?> verificationCodeDialog(
       try {
         final resp = await gFFI.userModel.login(LoginRequest(
             verificationCode: code.text,
+            tfaCode: isEmailVerification ? null : code.text,
             username: user?.name,
             id: await bind.mainGetMyId(),
             uuid: await bind.mainGetUuid(),

@@ -120,6 +120,7 @@ class LoginRequest {
   bool? autoLogin;
   String? type;
   String? verificationCode;
+  String? tfaCode;
 
   LoginRequest(
       {this.username,
@@ -128,7 +129,8 @@ class LoginRequest {
       this.uuid,
       this.autoLogin,
       this.type,
-      this.verificationCode});
+      this.verificationCode,
+      this.tfaCode});
 
   Map<String, dynamic> toJson() {
     final Map<String, dynamic> data = <String, dynamic>{};
@@ -141,6 +143,7 @@ class LoginRequest {
     if (verificationCode != null) {
       data['verificationCode'] = verificationCode;
     }
+    if (tfaCode != null) data['tfaCode'] = tfaCode;
 
     Map<String, dynamic> deviceInfo = {};
     try {
