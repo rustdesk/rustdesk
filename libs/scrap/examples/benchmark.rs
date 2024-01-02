@@ -6,8 +6,7 @@ use hbb_common::{
 use scrap::{
     aom::{AomDecoder, AomEncoder, AomEncoderConfig},
     codec::{EncoderApi, EncoderCfg, Quality as Q},
-    convert_to_yuv, Capturer, Display, TraitCapturer, VpxDecoder, VpxDecoderConfig, VpxEncoder,
-    VpxEncoderConfig,
+    Capturer, Display, TraitCapturer, VpxDecoder, VpxDecoderConfig, VpxEncoder, VpxEncoderConfig,
     VpxVideoCodecId::{self, *},
     STRIDE_ALIGN,
 };
@@ -122,7 +121,8 @@ fn test_vpx(
         match c.frame(std::time::Duration::from_millis(30)) {
             Ok(frame) => {
                 let tmp_timer = Instant::now();
-                convert_to_yuv(&frame, encoder.yuvfmt(), &mut yuv, &mut mid_data);
+                let frame = frame.to(encoder.yuvfmt(), &mut yuv, &mut mid_data).unwrap();
+                let yuv = frame.yuv().unwrap();
                 for ref frame in encoder
                     .encode(start.elapsed().as_millis() as _, &yuv, STRIDE_ALIGN)
                     .unwrap()
@@ -199,7 +199,8 @@ fn test_av1(
         match c.frame(std::time::Duration::from_millis(30)) {
             Ok(frame) => {
                 let tmp_timer = Instant::now();
-                convert_to_yuv(&frame, encoder.yuvfmt(), &mut yuv, &mut mid_data);
+                let frame = frame.to(encoder.yuvfmt(), &mut yuv, &mut mid_data).unwrap();
+                let yuv = frame.yuv().unwrap();
                 for ref frame in encoder
                     .encode(start.elapsed().as_millis() as _, &yuv, STRIDE_ALIGN)
                     .unwrap()
@@ -239,10 +240,7 @@ fn test_av1(
 #[cfg(feature = "hwcodec")]
 mod hw {
     use hwcodec::ffmpeg::CodecInfo;
-    use scrap::{
-        codec::HwEncoderConfig,
-        hwcodec::{HwDecoder, HwEncoder},
-    };
+    use scrap::hwcodec::{HwDecoder, HwEncoder, HwEncoderConfig};
 
     use super::*;
 
@@ -295,7 +293,8 @@ mod hw {
             match c.frame(std::time::Duration::from_millis(30)) {
                 Ok(frame) => {
                     let tmp_timer = Instant::now();
-                    convert_to_yuv(&frame, encoder.yuvfmt(), &mut yuv, &mut mid_data);
+                    let frame = frame.to(encoder.yuvfmt(), &mut yuv, &mut mid_data).unwrap();
+                    let yuv = frame.yuv().unwrap();
                     for ref frame in encoder.encode(&yuv).unwrap() {
                         size += frame.data.len();
 

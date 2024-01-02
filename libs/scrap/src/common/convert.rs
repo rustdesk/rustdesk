@@ -7,8 +7,8 @@
 include!(concat!(env!("OUT_DIR"), "/yuv_ffi.rs"));
 
 #[cfg(not(target_os = "ios"))]
-use crate::Frame;
-use crate::{generate_call_macro, EncodeYuvFormat, TraitFrame};
+use crate::PixelBuffer;
+use crate::{generate_call_macro, EncodeYuvFormat, TraitPixelBuffer};
 use hbb_common::{bail, log, ResultType};
 
 generate_call_macro!(call_yuv, false);
@@ -195,7 +195,7 @@ pub mod hw {
 }
 #[cfg(not(target_os = "ios"))]
 pub fn convert_to_yuv(
-    captured: &Frame,
+    captured: &PixelBuffer,
     dst_fmt: EncodeYuvFormat,
     dst: &mut Vec<u8>,
     mid_data: &mut Vec<u8>,

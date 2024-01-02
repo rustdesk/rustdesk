@@ -1,6 +1,6 @@
 use crate::{
-    codec::{base_bitrate, codec_thread_num, EncoderApi, EncoderCfg},
-    hw, ImageFormat, ImageRgb, Pixfmt, HW_STRIDE_ALIGN,
+    codec::{base_bitrate, codec_thread_num, EncoderApi, EncoderCfg, Quality as Q},
+    hw, EncodeInput, ImageFormat, ImageRgb, Pixfmt, HW_STRIDE_ALIGN,
 };
 use hbb_common::{
     allow_err,
@@ -29,8 +29,18 @@ const DEFAULT_GOP: i32 = i32::MAX;
 const DEFAULT_HW_QUALITY: Quality = Quality_Default;
 const DEFAULT_RC: RateControl = RC_DEFAULT;
 
+#[derive(Debug, Clone)]
+pub struct HwEncoderConfig {
+    pub name: String,
+    pub width: usize,
+    pub height: usize,
+    pub quality: Q,
+    pub keyframe_interval: Option<usize>,
+}
+
 pub struct HwEncoder {
     encoder: Encoder,
+    name: String,
     pub format: DataFormat,
     pub pixfmt: AVPixelFormat,
     width: u32,
@@ -77,6 +87,7 @@ impl EncoderApi for HwEncoder {
                 match Encoder::new(ctx.clone()) {
                     Ok(encoder) => Ok(HwEncoder {
                         encoder,
+                        name: config.name,
                         format,
                         pixfmt: ctx.pixfmt,
                         width: ctx.width as _,
@@ -90,10 +101,13 @@ impl EncoderApi for HwEncoder {
         }
     }
 
-    fn encode_to_message(&mut self, frame: &[u8], _ms: i64) -> ResultType<VideoFrame> {
+    fn encode_to_message(&mut self, input: EncodeInput, _ms: i64) -> ResultType<VideoFrame> {
         let mut vf = VideoFrame::new();
         let mut frames = Vec::new();
-        for frame in self.encode(frame).with_context(|| "Failed to encode")? {
+        for frame in self
+            .encode(input.yuv()?)
+            .with_context(|| "Failed to encode")?
+        {
             frames.push(EncodedVideoFrame {
                 data: Bytes::from(frame.data),
                 pts: frame.pts as _,
@@ -143,6 +157,11 @@ impl EncoderApi for HwEncoder {
         }
     }
 
+    #[cfg(feature = "gpucodec")]
+    fn input_texture(&self) -> bool {
+        false
+    }
+
     fn set_quality(&mut self, quality: crate::codec::Quality) -> ResultType<()> {
         let b = Self::convert_quality(quality);
         let bitrate = base_bitrate(self.width as _, self.height as _) * b / 100;
@@ -155,6 +174,10 @@ impl EncoderApi for HwEncoder {
 
     fn bitrate(&self) -> u32 {
         self.bitrate
+    }
+
+    fn support_abr(&self) -> bool {
+        !self.name.contains("qsv")
     }
 }
 
@@ -226,7 +249,7 @@ impl HwDecoder {
             }
         }
         if fail {
-            check_config_process();
+            hwcodec_new_check_process();
         }
         HwDecoders { h264, h265 }
     }
@@ -320,7 +343,7 @@ fn get_config(k: &str) -> ResultType<CodecInfos> {
     }
 }
 
-pub fn check_config() {
+pub fn check_available_hwcodec() {
     let ctx = EncodeContext {
         name: String::from(""),
         width: 1920,
@@ -357,7 +380,7 @@ pub fn check_config() {
     log::error!("Failed to serialize codec info");
 }
 
-pub fn check_config_process() {
+pub fn hwcodec_new_check_process() {
     use std::sync::Once;
     let f = || {
         // Clear to avoid checking process errors

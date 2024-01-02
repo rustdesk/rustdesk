@@ -4,19 +4,19 @@ use crate::{
     ui_session_interface::{io_loop, InvokeUiSession, Session},
 };
 use flutter_rust_bridge::StreamSink;
+#[cfg(any(feature = "flutter_texture_render", feature = "gpucodec"))]
+use hbb_common::dlopen::{
+    symbor::{Library, Symbol},
+    Error as LibError,
+};
 use hbb_common::{
     anyhow::anyhow, bail, config::LocalConfig, get_version_number, log, message_proto::*,
     rendezvous_proto::ConnType, ResultType,
 };
-#[cfg(feature = "flutter_texture_render")]
-use hbb_common::{
-    dlopen::{
-        symbor::{Library, Symbol},
-        Error as LibError,
-    },
-    libc::c_void,
-};
 use serde_json::json;
+
+#[cfg(any(feature = "flutter_texture_render", feature = "gpucodec"))]
+use std::os::raw::c_void;
 
 use std::{
     collections::HashMap,
@@ -60,6 +60,11 @@ lazy_static::lazy_static! {
 #[cfg(all(target_os = "macos", feature = "flutter_texture_render"))]
 lazy_static::lazy_static! {
     pub static ref TEXTURE_RGBA_RENDERER_PLUGIN: Result<Library, LibError> = Library::open_self();
+}
+
+#[cfg(all(target_os = "windows", feature = "gpucodec"))]
+lazy_static::lazy_static! {
+    pub static ref TEXTURE_GPU_RENDERER_PLUGIN: Result<Library, LibError> = Library::open("flutter_gpu_texture_renderer_plugin.dll");
 }
 
 /// FFI for rustdesk core's main entry.
@@ -151,19 +156,29 @@ pub unsafe extern "C" fn free_c_args(ptr: *mut *mut c_char, len: c_int) {
 #[derive(Default)]
 struct SessionHandler {
     event_stream: Option<StreamSink<EventToUI>>,
-    #[cfg(feature = "flutter_texture_render")]
-    notify_rendered: bool,
-    #[cfg(feature = "flutter_texture_render")]
+    #[cfg(any(feature = "flutter_texture_render", feature = "gpucodec"))]
     renderer: VideoRenderer,
 }
 
-#[cfg(feature = "flutter_texture_render")]
+#[cfg(any(feature = "flutter_texture_render", feature = "gpucodec"))]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+enum RenderType {
+    PixelBuffer,
+    #[cfg(feature = "gpucodec")]
+    Texture,
+}
+
 #[derive(Default, Clone)]
 pub struct FlutterHandler {
     // ui session id -> display handler data
     session_handlers: Arc<RwLock<HashMap<SessionID, SessionHandler>>>,
+    #[cfg(not(feature = "flutter_texture_render"))]
+    display_rgbas: Arc<RwLock<HashMap<usize, RgbaData>>>,
     peer_info: Arc<RwLock<PeerInfo>>,
-    #[cfg(feature = "plugin_framework")]
+    #[cfg(any(
+        not(feature = "flutter_texture_render"),
+        all(feature = "flutter_texture_render", feature = "plugin_framework")
+    ))]
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     hooks: Arc<RwLock<HashMap<String, SessionHook>>>,
 }
@@ -177,16 +192,6 @@ struct RgbaData {
     valid: bool,
 }
 
-#[cfg(not(feature = "flutter_texture_render"))]
-#[derive(Default, Clone)]
-pub struct FlutterHandler {
-    session_handlers: Arc<RwLock<HashMap<SessionID, SessionHandler>>>,
-    display_rgbas: Arc<RwLock<HashMap<usize, RgbaData>>>,
-    peer_info: Arc<RwLock<PeerInfo>>,
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    hooks: Arc<RwLock<HashMap<String, SessionHook>>>,
-}
-
 #[cfg(feature = "flutter_texture_render")]
 pub type FlutterRgbaRendererPluginOnRgba = unsafe extern "C" fn(
     texture_rgba: *mut c_void,
@@ -197,28 +202,44 @@ pub type FlutterRgbaRendererPluginOnRgba = unsafe extern "C" fn(
     dst_rgba_stride: c_int,
 );
 
+#[cfg(feature = "gpucodec")]
+pub type FlutterGpuTextureRendererPluginCApiSetTexture =
+    unsafe extern "C" fn(output: *mut c_void, texture: *mut c_void);
+
+#[cfg(feature = "gpucodec")]
+pub type FlutterGpuTextureRendererPluginCApiGetAdapterLuid = unsafe extern "C" fn() -> i64;
+
 #[cfg(feature = "flutter_texture_render")]
 pub(super) type TextureRgbaPtr = usize;
 
-#[cfg(feature = "flutter_texture_render")]
+#[cfg(any(feature = "flutter_texture_render", feature = "gpucodec"))]
 struct DisplaySessionInfo {
     // TextureRgba pointer in flutter native.
+    #[cfg(feature = "flutter_texture_render")]
     texture_rgba_ptr: TextureRgbaPtr,
+    #[cfg(feature = "flutter_texture_render")]
     size: (usize, usize),
+    #[cfg(feature = "gpucodec")]
+    gpu_output_ptr: usize,
+    notify_render_type: Option<RenderType>,
 }
 
 // Video Texture Renderer in Flutter
-#[cfg(feature = "flutter_texture_render")]
+#[cfg(any(feature = "flutter_texture_render", feature = "gpucodec"))]
 #[derive(Clone)]
 struct VideoRenderer {
     is_support_multi_ui_session: bool,
     map_display_sessions: Arc<RwLock<HashMap<usize, DisplaySessionInfo>>>,
+    #[cfg(feature = "flutter_texture_render")]
     on_rgba_func: Option<Symbol<'static, FlutterRgbaRendererPluginOnRgba>>,
+    #[cfg(feature = "gpucodec")]
+    on_texture_func: Option<Symbol<'static, FlutterGpuTextureRendererPluginCApiSetTexture>>,
 }
 
-#[cfg(feature = "flutter_texture_render")]
+#[cfg(any(feature = "flutter_texture_render", feature = "gpucodec"))]
 impl Default for VideoRenderer {
     fn default() -> Self {
+        #[cfg(feature = "flutter_texture_render")]
         let on_rgba_func = match &*TEXTURE_RGBA_RENDERER_PLUGIN {
             Ok(lib) => {
                 let find_sym_res = unsafe {
@@ -237,33 +258,64 @@ impl Default for VideoRenderer {
                 None
             }
         };
+        #[cfg(feature = "gpucodec")]
+        let on_texture_func = match &*TEXTURE_GPU_RENDERER_PLUGIN {
+            Ok(lib) => {
+                let find_sym_res = unsafe {
+                    lib.symbol::<FlutterGpuTextureRendererPluginCApiSetTexture>(
+                        "FlutterGpuTextureRendererPluginCApiSetTexture",
+                    )
+                };
+                match find_sym_res {
+                    Ok(sym) => Some(sym),
+                    Err(e) => {
+                        log::error!("Failed to find symbol FlutterGpuTextureRendererPluginCApiSetTexture, {e}");
+                        None
+                    }
+                }
+            }
+            Err(e) => {
+                log::error!("Failed to load texture gpu renderer plugin, {e}");
+                None
+            }
+        };
+
         Self {
             map_display_sessions: Default::default(),
             is_support_multi_ui_session: false,
+            #[cfg(feature = "flutter_texture_render")]
             on_rgba_func,
+            #[cfg(feature = "gpucodec")]
+            on_texture_func,
         }
     }
 }
 
-#[cfg(feature = "flutter_texture_render")]
+#[cfg(any(feature = "flutter_texture_render", feature = "gpucodec"))]
 impl VideoRenderer {
     #[inline]
+    #[cfg(feature = "flutter_texture_render")]
     fn set_size(&mut self, display: usize, width: usize, height: usize) {
         let mut sessions_lock = self.map_display_sessions.write().unwrap();
         if let Some(info) = sessions_lock.get_mut(&display) {
             info.size = (width, height);
+            info.notify_render_type = None;
         } else {
             sessions_lock.insert(
                 display,
                 DisplaySessionInfo {
                     texture_rgba_ptr: usize::default(),
                     size: (width, height),
+                    #[cfg(feature = "gpucodec")]
+                    gpu_output_ptr: usize::default(),
+                    notify_render_type: None,
                 },
             );
         }
     }
 
-    fn register_texture(&self, display: usize, ptr: usize) {
+    #[cfg(feature = "flutter_texture_render")]
+    fn register_pixelbuffer_texture(&self, display: usize, ptr: usize) {
         let mut sessions_lock = self.map_display_sessions.write().unwrap();
         if ptr == 0 {
             sessions_lock.remove(&display);
@@ -273,6 +325,7 @@ impl VideoRenderer {
                     log::error!("unreachable, texture_rgba_ptr is not null and not equal to ptr");
                 }
                 info.texture_rgba_ptr = ptr as _;
+                info.notify_render_type = None;
             } else {
                 if ptr != 0 {
                     sessions_lock.insert(
@@ -280,6 +333,9 @@ impl VideoRenderer {
                         DisplaySessionInfo {
                             texture_rgba_ptr: ptr as _,
                             size: (0, 0),
+                            #[cfg(feature = "gpucodec")]
+                            gpu_output_ptr: usize::default(),
+                            notify_render_type: None,
                         },
                     );
                 }
@@ -287,18 +343,49 @@ impl VideoRenderer {
         }
     }
 
-    pub fn on_rgba(&self, display: usize, rgba: &scrap::ImageRgb) {
-        let read_lock = self.map_display_sessions.read().unwrap();
-        let opt_info = if !self.is_support_multi_ui_session {
-            read_lock.values().next()
+    #[cfg(feature = "gpucodec")]
+    pub fn register_gpu_output(&self, display: usize, ptr: usize) {
+        let mut sessions_lock = self.map_display_sessions.write().unwrap();
+        if ptr == 0 {
+            sessions_lock.remove(&display);
         } else {
-            read_lock.get(&display)
+            if let Some(info) = sessions_lock.get_mut(&display) {
+                if info.gpu_output_ptr != 0 && info.gpu_output_ptr != ptr {
+                    log::error!("unreachable, gpu_output_ptr is not null and not equal to ptr");
+                }
+                info.gpu_output_ptr = ptr as _;
+                info.notify_render_type = None;
+            } else {
+                if ptr != 0 {
+                    sessions_lock.insert(
+                        display,
+                        DisplaySessionInfo {
+                            #[cfg(feature = "flutter_texture_render")]
+                            texture_rgba_ptr: 0,
+                            #[cfg(feature = "flutter_texture_render")]
+                            size: (0, 0),
+                            gpu_output_ptr: ptr,
+                            notify_render_type: None,
+                        },
+                    );
+                }
+            }
+        }
+    }
+
+    #[cfg(feature = "flutter_texture_render")]
+    pub fn on_rgba(&self, display: usize, rgba: &scrap::ImageRgb) -> bool {
+        let mut write_lock = self.map_display_sessions.write().unwrap();
+        let opt_info = if !self.is_support_multi_ui_session {
+            write_lock.values_mut().next()
+        } else {
+            write_lock.get_mut(&display)
         };
         let Some(info) = opt_info else {
-            return;
+            return false;
         };
         if info.texture_rgba_ptr == usize::default() {
-            return;
+            return false;
         }
 
         // It is also Ok to skip this check.
@@ -310,7 +397,7 @@ impl VideoRenderer {
                 rgba.w,
                 rgba.h
             );
-            return;
+            return false;
         }
         if let Some(func) = &self.on_rgba_func {
             unsafe {
@@ -324,14 +411,53 @@ impl VideoRenderer {
                 )
             };
         }
+        if info.notify_render_type != Some(RenderType::PixelBuffer) {
+            info.notify_render_type = Some(RenderType::PixelBuffer);
+            true
+        } else {
+            false
+        }
+    }
+
+    #[cfg(feature = "gpucodec")]
+    pub fn on_texture(&self, display: usize, texture: *mut c_void) -> bool {
+        let mut write_lock = self.map_display_sessions.write().unwrap();
+        let opt_info = if !self.is_support_multi_ui_session {
+            write_lock.values_mut().next()
+        } else {
+            write_lock.get_mut(&display)
+        };
+        let Some(info) = opt_info else {
+            return false;
+        };
+        if info.gpu_output_ptr == usize::default() {
+            return false;
+        }
+        if let Some(func) = &self.on_texture_func {
+            unsafe { func(info.gpu_output_ptr as _, texture) };
+        }
+        if info.notify_render_type != Some(RenderType::Texture) {
+            info.notify_render_type = Some(RenderType::Texture);
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn reset_all_display_render_type(&self) {
+        let mut write_lock = self.map_display_sessions.write().unwrap();
+        write_lock
+            .values_mut()
+            .map(|v| v.notify_render_type = None)
+            .count();
     }
 }
 
 impl SessionHandler {
-    pub fn on_waiting_for_image_dialog_show(&mut self) {
+    pub fn on_waiting_for_image_dialog_show(&self) {
         #[cfg(any(feature = "flutter_texture_render"))]
         {
-            self.notify_rendered = false;
+            self.renderer.reset_all_display_render_type();
         }
         // rgba array render will notify every frame
     }
@@ -623,21 +749,22 @@ impl InvokeUiSession for FlutterHandler {
     #[inline]
     #[cfg(feature = "flutter_texture_render")]
     fn on_rgba(&self, display: usize, rgba: &mut scrap::ImageRgb) {
-        let mut try_notify_sessions = Vec::new();
-        for (id, session) in self.session_handlers.read().unwrap().iter() {
-            session.renderer.on_rgba(display, rgba);
-            if !session.notify_rendered {
-                try_notify_sessions.push(id.clone());
+        for (_, session) in self.session_handlers.read().unwrap().iter() {
+            if session.renderer.on_rgba(display, rgba) {
+                if let Some(stream) = &session.event_stream {
+                    stream.add(EventToUI::Rgba(display));
+                }
             }
         }
-        if try_notify_sessions.len() > 0 {
-            let mut write_lock = self.session_handlers.write().unwrap();
-            for id in try_notify_sessions.iter() {
-                if let Some(session) = write_lock.get_mut(id) {
-                    if let Some(stream) = &session.event_stream {
-                        stream.add(EventToUI::Rgba(display));
-                        session.notify_rendered = true;
-                    }
+    }
+
+    #[inline]
+    #[cfg(feature = "gpucodec")]
+    fn on_texture(&self, display: usize, texture: *mut c_void) {
+        for (_, session) in self.session_handlers.read().unwrap().iter() {
+            if session.renderer.on_texture(display, texture) {
+                if let Some(stream) = &session.event_stream {
+                    stream.add(EventToUI::Texture(display));
                 }
             }
         }
@@ -876,11 +1003,19 @@ pub fn session_add(
         Some(switch_uuid.to_string())
     };
 
-    session
-        .lc
-        .write()
-        .unwrap()
-        .initialize(id.to_owned(), conn_type, switch_uuid, force_relay);
+    #[cfg(feature = "gpucodec")]
+    let adapter_luid = get_adapter_luid();
+    #[cfg(not(feature = "gpucodec"))]
+    let adapter_luid = None;
+
+    session.lc.write().unwrap().initialize(
+        id.to_owned(),
+        conn_type,
+        switch_uuid,
+        force_relay,
+        adapter_luid,
+    );
+
     let session = Arc::new(session.clone());
     sessions::insert_session(session_id.to_owned(), conn_type, session.clone());
 
@@ -1217,7 +1352,6 @@ pub fn session_set_size(_session_id: SessionID, _display: usize, _width: usize, 
             .unwrap()
             .get_mut(&_session_id)
         {
-            h.notify_rendered = false;
             h.renderer.set_size(_display, _width, _height);
             break;
         }
@@ -1225,7 +1359,7 @@ pub fn session_set_size(_session_id: SessionID, _display: usize, _width: usize, 
 }
 
 #[inline]
-pub fn session_register_texture(_session_id: SessionID, _display: usize, _ptr: usize) {
+pub fn session_register_pixelbuffer_texture(_session_id: SessionID, _display: usize, _ptr: usize) {
     #[cfg(feature = "flutter_texture_render")]
     for s in sessions::get_sessions() {
         if let Some(h) = s
@@ -1235,10 +1369,56 @@ pub fn session_register_texture(_session_id: SessionID, _display: usize, _ptr: u
             .unwrap()
             .get(&_session_id)
         {
-            h.renderer.register_texture(_display, _ptr);
+            h.renderer.register_pixelbuffer_texture(_display, _ptr);
             break;
         }
     }
+}
+
+#[inline]
+pub fn session_register_gpu_texture(_session_id: SessionID, _display: usize, _output_ptr: usize) {
+    #[cfg(feature = "gpucodec")]
+    for s in sessions::get_sessions() {
+        if let Some(h) = s
+            .ui_handler
+            .session_handlers
+            .read()
+            .unwrap()
+            .get(&_session_id)
+        {
+            h.renderer.register_gpu_output(_display, _output_ptr);
+            break;
+        }
+    }
+}
+
+#[cfg(feature = "gpucodec")]
+pub fn get_adapter_luid() -> Option<i64> {
+    let get_adapter_luid_func = match &*TEXTURE_GPU_RENDERER_PLUGIN {
+        Ok(lib) => {
+            let find_sym_res = unsafe {
+                lib.symbol::<FlutterGpuTextureRendererPluginCApiGetAdapterLuid>(
+                    "FlutterGpuTextureRendererPluginCApiGetAdapterLuid",
+                )
+            };
+            match find_sym_res {
+                Ok(sym) => Some(sym),
+                Err(e) => {
+                    log::error!("Failed to find symbol FlutterGpuTextureRendererPluginCApiGetAdapterLuid, {e}");
+                    None
+                }
+            }
+        }
+        Err(e) => {
+            log::error!("Failed to load texture gpu renderer plugin, {e}");
+            None
+        }
+    };
+    let adapter_luid = match get_adapter_luid_func {
+        Some(get_adapter_luid_func) => unsafe { Some(get_adapter_luid_func()) },
+        None => Default::default(),
+    };
+    return adapter_luid;
 }
 
 #[inline]

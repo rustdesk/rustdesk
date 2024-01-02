@@ -233,6 +233,8 @@ pub struct Connection {
     auto_disconnect_timer: Option<(Instant, u64)>,
     authed_conn_id: Option<self::raii::AuthedConnID>,
     file_remove_log_control: FileRemoveLogControl,
+    #[cfg(feature = "gpucodec")]
+    supported_encoding_flag: (bool, Option<bool>),
 }
 
 impl ConnInner {
@@ -377,6 +379,8 @@ impl Connection {
             auto_disconnect_timer: None,
             authed_conn_id: None,
             file_remove_log_control: FileRemoveLogControl::new(id),
+            #[cfg(feature = "gpucodec")]
+            supported_encoding_flag: (false, None),
         };
         let addr = hbb_common::try_into_v4(addr);
         if !conn.on_open(addr).await {
@@ -657,6 +661,8 @@ impl Connection {
                         }
                     }
                     conn.file_remove_log_control.on_timer().drain(..).map(|x| conn.send_to_cm(x)).count();
+                    #[cfg(feature = "gpucodec")]
+                    conn.update_supported_encoding();
                 }
                 _ = test_delay_timer.tick() => {
                     if last_recv_time.elapsed() >= SEC30 {
@@ -1112,7 +1118,9 @@ impl Connection {
             pi.platform_additions = serde_json::to_string(&platform_additions).unwrap_or("".into());
         }
 
-        pi.encoding = Some(scrap::codec::Encoder::supported_encoding()).into();
+        let supported_encoding = scrap::codec::Encoder::supported_encoding();
+        log::info!("peer info supported_encoding: {:?}", supported_encoding);
+        pi.encoding = Some(supported_encoding).into();
 
         if self.port_forward_socket.is_some() {
             let mut msg_out = Message::new();
@@ -1454,23 +1462,15 @@ impl Connection {
     }
 
     fn update_codec_on_login(&self) {
+        use scrap::codec::{Encoder, EncodingUpdate::*};
         if let Some(o) = self.lr.clone().option.as_ref() {
             if let Some(q) = o.supported_decoding.clone().take() {
-                scrap::codec::Encoder::update(
-                    self.inner.id(),
-                    scrap::codec::EncodingUpdate::New(q),
-                );
+                Encoder::update(Update(self.inner.id(), q));
             } else {
-                scrap::codec::Encoder::update(
-                    self.inner.id(),
-                    scrap::codec::EncodingUpdate::NewOnlyVP9,
-                );
+                Encoder::update(NewOnlyVP9(self.inner.id()));
             }
         } else {
-            scrap::codec::Encoder::update(
-                self.inner.id(),
-                scrap::codec::EncodingUpdate::NewOnlyVP9,
-            );
+            Encoder::update(NewOnlyVP9(self.inner.id()));
         }
     }
 
@@ -2537,7 +2537,7 @@ impl Connection {
                 .user_custom_fps(self.inner.id(), o.custom_fps as _);
         }
         if let Some(q) = o.supported_decoding.clone().take() {
-            scrap::codec::Encoder::update(self.inner.id(), scrap::codec::EncodingUpdate::New(q));
+            scrap::codec::Encoder::update(scrap::codec::EncodingUpdate::Update(self.inner.id(), q));
         }
         if let Ok(q) = o.lock_after_session_end.enum_value() {
             if q != BoolOption::NotSet {
@@ -2903,6 +2903,24 @@ impl Connection {
         self.auto_disconnect_timer
             .as_mut()
             .map(|t| t.0 = Instant::now());
+    }
+
+    #[cfg(feature = "gpucodec")]
+    fn update_supported_encoding(&mut self) {
+        let not_use = Some(scrap::gpucodec::GpuEncoder::not_use());
+        if !self.authorized
+            || self.supported_encoding_flag.0 && self.supported_encoding_flag.1 == not_use
+        {
+            return;
+        }
+        let mut misc: Misc = Misc::new();
+        let supported_encoding = scrap::codec::Encoder::supported_encoding();
+        log::info!("update supported encoding: {:?}", supported_encoding);
+        misc.set_supported_encoding(supported_encoding);
+        let mut msg = Message::new();
+        msg.set_misc(misc);
+        self.inner.send(msg.into());
+        self.supported_encoding_flag = (true, not_use);
     }
 }
 
@@ -3367,7 +3385,7 @@ mod raii {
     impl Drop for AuthedConnID {
         fn drop(&mut self) {
             if self.1 == AuthConnType::Remote {
-                scrap::codec::Encoder::update(self.0, scrap::codec::EncodingUpdate::Remove);
+                scrap::codec::Encoder::update(scrap::codec::EncodingUpdate::Remove(self.0));
             }
             AUTHED_CONNS.lock().unwrap().retain(|&c| c.0 != self.0);
             let remote_count = AUTHED_CONNS

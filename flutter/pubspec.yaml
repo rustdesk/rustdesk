@@ -92,6 +92,10 @@ dependencies:
   texture_rgba_renderer: ^0.0.16
   percent_indicator: ^4.2.2
   dropdown_button2: ^2.0.0
+  flutter_gpu_texture_renderer:
+    git:
+      url: https://github.com/21pages/flutter_gpu_texture_renderer
+      ref: 3865a99f60a92bea4d95bb5d55cf524b1bcbbf5a
   uuid: ^3.0.7
   auto_size_text_field: ^2.2.1
   flex_color_picker: ^3.3.0

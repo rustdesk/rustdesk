@@ -1,7 +1,10 @@
-use crate::common::{
-    wayland,
-    x11::{self, Frame},
-    TraitCapturer,
+use crate::{
+    common::{
+        wayland,
+        x11::{self},
+        TraitCapturer,
+    },
+    Frame,
 };
 use std::{io, time::Duration};
 

@@ -188,6 +188,11 @@ fn check_get_displays_changed_msg() -> Option<Message> {
     get_displays_msg()
 }
 
+pub fn check_displays_changed() -> ResultType<()> {
+    check_update_displays(&try_get_displays()?);
+    Ok(())
+}
+
 fn get_displays_msg() -> Option<Message> {
     let displays = SYNC_DISPLAYS.lock().unwrap().get_update_sync_displays()?;
     Some(displays_to_msg(displays))
