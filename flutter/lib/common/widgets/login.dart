@@ -460,15 +460,27 @@ Future<bool?> loginDialog() async {
             }
             break;
           case HttpType.kAuthResTypeEmailCheck:
-            if (isMobile) {
-              close(true);
-              verificationCodeDialog(resp.user);
+            bool? isEmailVerification;
+            if (resp.tfa_type == null ||
+                resp.tfa_type == HttpType.kAuthResTypeEmailCheck) {
+              isEmailVerification = true;
+            } else if (resp.tfa_type == HttpType.kAuthResTypeTfaCheck) {
+              isEmailVerification = false;
             } else {
-              setState(() => isInProgress = false);
-              final res = await verificationCodeDialog(resp.user);
-              if (res == true) {
+              passwordMsg = "Failed, bad tfa type from server";
+            }
+            if (isEmailVerification != null) {
+              if (isMobile) {
                 close(true);
-                return;
+                verificationCodeDialog(resp.user, isEmailVerification);
+              } else {
+                setState(() => isInProgress = false);
+                final res = await verificationCodeDialog(
+                    resp.user, isEmailVerification);
+                if (res == true) {
+                  close(true);
+                  return;
+                }
               }
             }
             break;
@@ -583,7 +595,8 @@ Future<bool?> loginDialog() async {
   return res;
 }
 
-Future<bool?> verificationCodeDialog(UserPayload? user) async {
+Future<bool?> verificationCodeDialog(
+    UserPayload? user, bool isEmailVerification) async {
   var autoLogin = true;
   var isInProgress = false;
   String? errorText;
@@ -648,20 +661,21 @@ Future<bool?> verificationCodeDialog(UserPayload? user) async {
         content: Column(
           children: [
             Offstage(
-                offstage: user?.email == null,
+                offstage: !isEmailVerification || user?.email == null,
                 child: TextField(
                   decoration: InputDecoration(
                       labelText: "Email", prefixIcon: Icon(Icons.email)),
                   readOnly: true,
                   controller: TextEditingController(text: user?.email),
                 )),
-            const SizedBox(height: 8),
+            isEmailVerification ? const SizedBox(height: 8) : const Offstage(),
             DialogTextField(
-              title: '${translate("Verification code")}:',
+              title:
+                  '${translate(isEmailVerification ? "Verification code" : "2FA code")}:',
               controller: code,
               errorText: errorText,
               focusNode: focusNode,
-              helperText: translate('verification_tip'),
+              helperText: translate(isEmailVerification ? 'verification_tip' : '2fa_tip'),
             ),
             /*
             CheckboxListTile(

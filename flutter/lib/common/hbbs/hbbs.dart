@@ -11,9 +11,11 @@ class HttpType {
   static const kAuthReqTypeMobile = "mobile";
   static const kAuthReqTypeSMSCode = "sms_code";
   static const kAuthReqTypeEmailCode = "email_code";
+  static const kAuthReqTypeTfaCode = "tfa_code";
 
   static const kAuthResTypeToken = "access_token";
   static const kAuthResTypeEmailCheck = "email_check";
+  static const kAuthResTypeTfaCheck = "tfa_check";
 }
 
 enum UserStatus { kDisabled, kNormal, kUnverified }
@@ -154,13 +156,15 @@ class LoginRequest {
 class LoginResponse {
   String? access_token;
   String? type;
+  String? tfa_type;
   UserPayload? user;
 
-  LoginResponse({this.access_token, this.type, this.user});
+  LoginResponse({this.access_token, this.type, this.tfa_type, this.user});
 
   LoginResponse.fromJson(Map<String, dynamic> json) {
     access_token = json['access_token'];
     type = json['type'];
+    tfa_type = json['tfa_type'];
     user = json['user'] != null ? UserPayload.fromJson(json['user']) : null;
   }
 }
