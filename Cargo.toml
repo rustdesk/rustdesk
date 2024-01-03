@@ -1,5 +1,5 @@
 [package]
-name = "rustdesk"
+name = "ourapp"
 version = "1.2.4"
 authors = ["rustdesk <info@rustdesk.com>"]
 edition = "2021"

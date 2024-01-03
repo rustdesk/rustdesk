@@ -13,7 +13,7 @@ import sys
 windows = platform.platform().startswith('Windows')
 osx = platform.platform().startswith(
     'Darwin') or platform.platform().startswith("macOS")
-hbb_name = 'rustdesk' + ('.exe' if windows else '')
+hbb_name = 'screener' + ('.exe' if windows else '')
 exe_path = 'target/release/' + hbb_name
 if windows:
     flutter_build_dir = 'build/windows/runner/Release/'
@@ -139,12 +139,12 @@ def make_parser():
     parser.add_argument(
         '--flatpak',
         action='store_true',
-        help='Build rustdesk libs with the flatpak feature enabled'
+        help='Build screener libs with the flatpak feature enabled'
     )
     parser.add_argument(
         '--appimage',
         action='store_true',
-        help='Build rustdesk libs with the appimage feature enabled'
+        help='Build screener libs with the appimage feature enabled'
     )
     parser.add_argument(
         '--skip-cargo',
