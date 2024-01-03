@@ -427,6 +427,54 @@ Future<bool?> loginDialog() async {
       close(false);
     }
 
+    handleLoginResponse(LoginResponse resp, bool storeIfAccessToken,
+        void Function([dynamic])? close) async {
+      switch (resp.type) {
+        case HttpType.kAuthResTypeToken:
+          if (resp.access_token != null) {
+            if (storeIfAccessToken) {
+              await bind.mainSetLocalOption(
+                  key: 'access_token', value: resp.access_token!);
+              await bind.mainSetLocalOption(
+                  key: 'user_info', value: jsonEncode(resp.user ?? {}));
+            }
+            if (close != null) {
+              close(true);
+            }
+            return;
+          }
+          break;
+        case HttpType.kAuthResTypeEmailCheck:
+          bool? isEmailVerification;
+          if (resp.tfa_type == null ||
+              resp.tfa_type == HttpType.kAuthResTypeEmailCheck) {
+            isEmailVerification = true;
+          } else if (resp.tfa_type == HttpType.kAuthResTypeTfaCheck) {
+            isEmailVerification = false;
+          } else {
+            passwordMsg = "Failed, bad tfa type from server";
+          }
+          if (isEmailVerification != null) {
+            if (isMobile) {
+              if (close != null) close(false);
+              verificationCodeDialog(resp.user, isEmailVerification);
+            } else {
+              setState(() => isInProgress = false);
+              final res =
+                  await verificationCodeDialog(resp.user, isEmailVerification);
+              if (res == true) {
+                if (close != null) close(false);
+                return;
+              }
+            }
+          }
+          break;
+        default:
+          passwordMsg = "Failed, bad response from server";
+          break;
+      }
+    }
+
     onLogin() async {
       // validate
       if (username.text.isEmpty) {
@@ -447,47 +495,7 @@ Future<bool?> loginDialog() async {
             uuid: await bind.mainGetUuid(),
             autoLogin: true,
             type: HttpType.kAuthReqTypeAccount));
-
-        switch (resp.type) {
-          case HttpType.kAuthResTypeToken:
-            if (resp.access_token != null) {
-              await bind.mainSetLocalOption(
-                  key: 'access_token', value: resp.access_token!);
-              await bind.mainSetLocalOption(
-                  key: 'user_info', value: jsonEncode(resp.user ?? {}));
-              close(true);
-              return;
-            }
-            break;
-          case HttpType.kAuthResTypeEmailCheck:
-            bool? isEmailVerification;
-            if (resp.tfa_type == null ||
-                resp.tfa_type == HttpType.kAuthResTypeEmailCheck) {
-              isEmailVerification = true;
-            } else if (resp.tfa_type == HttpType.kAuthResTypeTfaCheck) {
-              isEmailVerification = false;
-            } else {
-              passwordMsg = "Failed, bad tfa type from server";
-            }
-            if (isEmailVerification != null) {
-              if (isMobile) {
-                close(true);
-                verificationCodeDialog(resp.user, isEmailVerification);
-              } else {
-                setState(() => isInProgress = false);
-                final res = await verificationCodeDialog(
-                    resp.user, isEmailVerification);
-                if (res == true) {
-                  close(true);
-                  return;
-                }
-              }
-            }
-            break;
-          default:
-            passwordMsg = "Failed, bad response from server";
-            break;
-        }
+        await handleLoginResponse(resp, true, close);
       } on RequestException catch (err) {
         passwordMsg = translate(err.cause);
       } catch (err) {
@@ -518,15 +526,21 @@ Future<bool?> loginDialog() async {
                       .map((e) => ConfigOP(op: e['name'], icon: e['icon']))
                       .toList(),
                   curOP: curOP,
-                  cbLogin: (Map<String, dynamic> authBody) {
+                  cbLogin: (Map<String, dynamic> authBody) async {
+                    LoginResponse? resp;
                     try {
                       // access_token is already stored in the rust side.
-                      gFFI.userModel.getLoginResponseFromAuthBody(authBody);
+                      resp =
+                          gFFI.userModel.getLoginResponseFromAuthBody(authBody);
                     } catch (e) {
                       debugPrint(
                           'Failed to parse oidc login body: "$authBody"');
                     }
                     close(true);
+
+                    if (resp != null) {
+                      handleLoginResponse(resp, false, null);
+                    }
                   },
                 ),
               ],
@@ -676,7 +690,8 @@ Future<bool?> verificationCodeDialog(
               controller: code,
               errorText: errorText,
               focusNode: focusNode,
-              helperText: translate(isEmailVerification ? 'verification_tip' : '2fa_tip'),
+              helperText: translate(
+                  isEmailVerification ? 'verification_tip' : '2fa_tip'),
             ),
             /*
             CheckboxListTile(
