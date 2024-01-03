@@ -578,5 +578,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("capture_display_elevated_connections_tip", "Mitme ekraani jäädvustamine ei ole kõrgendatud kasutajarežiimis toetatud. Kui soovid juhtida mitut ekraani, palun proovi uuesti pärast paigaldamist."),
         ("Swap control-command key", ""),
         ("swap-left-right-mouse", "Vaheta vasak ja parem hiirenupp"),
+        ("2FA code", ""),
+        ("2fa_tip", ""),
     ].iter().cloned().collect();
 }

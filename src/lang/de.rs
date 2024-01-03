@@ -578,5 +578,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("capture_display_elevated_connections_tip", "Das Erfassen mehrerer Bildschirme wird im erweiterten Benutzermodus nicht unterstützt. Bitte versuchen Sie es nach der Installation erneut, wenn Sie mehrere Bildschirme steuern möchten."),
         ("Swap control-command key", "Steuerungs- und Befehlstasten tauschen"),
         ("swap-left-right-mouse", "Linke und rechte Maustaste tauschen"),
+        ("2FA code", ""),
+        ("2fa_tip", ""),
     ].iter().cloned().collect();
 }
