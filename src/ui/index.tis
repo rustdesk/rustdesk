@@ -1245,7 +1245,7 @@ function on_2fa_check(last_msg) {
     var isEmailCheck = !last_msg.tfa_type || last_msg.tfa_type == 'email_check';
 
     var emailHint = last_msg.user.email;
-    msgbox("custom-2fa-verification-code", translate(isEmailCheck ? 'Verification code' : '2FA code'), <div .form .set-password> 
+    msgbox("custom-2fa-verification-code", translate('Verification code'), <div .form .set-password> 
             { isEmailCheck && <div><span>{translate('Email')}:</span><span>{emailHint}</span></div> }
             <div><span>{translate(isEmailCheck ? 'Verification code' : '2FA code')}:</span><input|text name="verification_code" .outline-focus /></div> 
             <div style="font-size:0.9em; margin-bottom:1em;">{translate(isEmailCheck ? 'verification_tip' : '2fa_tip')}</div>
