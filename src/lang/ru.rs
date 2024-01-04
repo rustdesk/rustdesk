@@ -5,7 +5,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Your Desktop", "Ваш рабочий стол"),
         ("desk_tip", "Ваш рабочий стол доступен с этим ID и паролем"),
         ("Password", "Пароль"),
-        ("Ready", "Готово"),
+        ("Ready", "Готов"),
         ("Established", "Установлено"),
         ("connecting_status", "Подключение к сети RustDesk..."),
         ("Enable service", "Включить службу"),
