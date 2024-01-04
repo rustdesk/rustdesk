@@ -211,6 +211,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("capture_display_elevated_connections_tip", "Capturing multiple displays is not supported in the elevated user mode. Please try again after installation if you want to control multiple displays."),
         ("swap-left-right-mouse", "Swap left-right mouse button"),
         ("2FA code", "2FA code"),
-        ("2fa_tip", "Please enter the your 2FA code in the authentication app."),
+        ("2fa_tip", "Please enter your 2FA code in the authentication app."),
     ].iter().cloned().collect();
 }
