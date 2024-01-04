@@ -190,7 +190,7 @@ pub fn core_main() -> Option<Vec<String>> {
                 );
                 let text = match res {
                     Ok(_) => translate("Installation Successful!".to_string()),
-                    Err(_) => {
+                    Err(err) => {
                         println!("Failed with error: {err}");
                         translate("Installation failed!".to_string())
                     }
