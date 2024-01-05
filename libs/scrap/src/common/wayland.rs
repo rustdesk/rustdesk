@@ -1,6 +1,10 @@
-use crate::common::{x11::Frame, TraitCapturer};
-use crate::wayland::{capturable::*, *};
+use crate::{
+    wayland::{capturable::*, *},
+    Frame, TraitCapturer,
+};
 use std::{io, sync::RwLock, time::Duration};
+
+use super::x11::PixelBuffer;
 
 pub struct Capturer(Display, Box<dyn Recorder>, Vec<u8>);
 
@@ -39,8 +43,18 @@ impl Capturer {
 impl TraitCapturer for Capturer {
     fn frame<'a>(&'a mut self, timeout: Duration) -> io::Result<Frame<'a>> {
         match self.1.capture(timeout.as_millis() as _).map_err(map_err)? {
-            PixelProvider::BGR0(w, h, x) => Ok(Frame::new(x, crate::Pixfmt::BGRA, w, h)),
-            PixelProvider::RGB0(w, h, x) => Ok(Frame::new(x, crate::Pixfmt::RGBA, w,h)),
+            PixelProvider::BGR0(w, h, x) => Ok(Frame::PixelBuffer(PixelBuffer::new(
+                x,
+                crate::Pixfmt::BGRA,
+                w,
+                h,
+            ))),
+            PixelProvider::RGB0(w, h, x) => Ok(Frame::PixelBuffer(PixelBuffer::new(
+                x,
+                crate::Pixfmt::RGBA,
+                w,
+                h,
+            ))),
             PixelProvider::NONE => Err(std::io::ErrorKind::WouldBlock.into()),
             _ => Err(map_err("Invalid data")),
         }

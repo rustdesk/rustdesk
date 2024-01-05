@@ -578,5 +578,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("capture_display_elevated_connections_tip", "La cattura di più display non è supportata nella modalità utente con privilegi elevati. Se vuoi controllare più display riprova dopo l'installazione."),
         ("Swap control-command key", "Scambia tasto controllo-comando"),
         ("swap-left-right-mouse", "Scambia pulsante sinistro-destro mouse"),
+        ("2FA code", ""),
+        ("2fa_tip", ""),
     ].iter().cloned().collect();
 }

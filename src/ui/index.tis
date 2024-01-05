@@ -210,12 +210,13 @@ class Enhancements: Reactor.Component {
 
     function render() {
         var has_hwcodec = handler.has_hwcodec();
+        var has_gpucodec = handler.has_gpucodec();
         var support_remove_wallpaper = handler.support_remove_wallpaper();
         var me = this;
         self.timer(1ms, function() { me.toggleMenuState() });
         return <li>{translate('Enhancements')}
             <menu #enhancements-menu>
-                {has_hwcodec ? <li #enable-hwcodec><span>{svg_checkmark}</span>{translate("Hardware Codec")} (beta)</li> : ""}
+                {(has_hwcodec || has_gpucodec) ? <li #enable-hwcodec><span>{svg_checkmark}</span>{translate("Enable hardware codec")}</li> : ""}
                 <li #enable-abr><span>{svg_checkmark}</span>{translate("Adaptive bitrate")} (beta)</li>
                 <li #screen-recording>{translate("Recording")}</li>
                 {support_remove_wallpaper ? <li #allow-remove-wallpaper><span>{svg_checkmark}</span>{translate("Remove wallpaper during incoming sessions")}</li> : ""}
@@ -1222,7 +1223,7 @@ function login() {
             if (data.type == 'email_check') {
                 abLoading = false;
                 show_progress(-1);
-                on_email_check(data);
+                on_2fa_check(data);
                 return;
             }
             handler.set_local_option("access_token", data.access_token);
@@ -1240,12 +1241,14 @@ function login() {
       });
 }
 
-function on_email_check(last_msg) {
+function on_2fa_check(last_msg) {
+    var isEmailCheck = !last_msg.tfa_type || last_msg.tfa_type == 'email_check';
+
     var emailHint = last_msg.user.email;
-    msgbox("custom-email-verification-code", translate('Verification code'), <div .form .set-password> 
-            <div><span>{translate('Email')}:</span><span>{emailHint}</span></div> 
-            <div><span>{translate('Verification code')}:</span><input|text name="verification_code" .outline-focus /></div> 
-            <div style="font-size:0.9em; margin-bottom:1em;">{translate('verification_tip')}</div>
+    msgbox("custom-2fa-verification-code", translate('Verification code'), <div .form .set-password> 
+            { isEmailCheck && <div><span>{translate('Email')}:</span><span>{emailHint}</span></div> }
+            <div><span>{translate(isEmailCheck ? 'Verification code' : '2FA code')}:</span><input|text name="verification_code" .outline-focus /></div> 
+            <div style="font-size:0.9em; margin-bottom:1em;">{translate(isEmailCheck ? 'verification_tip' : '2fa_tip')}</div>
         </div>, "", 
         function(res=null, show_progress) {
             if (!res) return;
@@ -1257,7 +1260,8 @@ function on_email_check(last_msg) {
             }
             abLoading = true;
             var url = handler.get_api_server();
-            httpRequest(url + "/api/login", #post, {username: last_msg.user.name, id: my_id, uuid: handler.get_uuid(), type: 'email_code', autoLogin: true, verificationCode: code, deviceInfo: getDeviceInfo()}, 
+            const loginData = {username: last_msg.user.name, id: my_id, uuid: handler.get_uuid(), type: 'email_code', verificationCode: code, tfaCode: isEmailCheck ? '' : code, deviceInfo: getDeviceInfo()};
+            httpRequest(url + "/api/login", #post, loginData, 
                 function(data) {
                     if (data.error) {
                         abLoading = false;

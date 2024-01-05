@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use scrap::TraitFrame;
+use scrap::{Frame, TraitPixelBuffer};
 
 extern crate scrap;
 
@@ -36,6 +36,9 @@ fn main() {
         match capturer.frame(Duration::from_millis(0)) {
             Ok(frame) => {
                 // Write the frame, removing end-of-row padding.
+                let Frame::PixelBuffer(frame) = frame else {
+                    return;
+                };
                 let stride = frame.stride()[0];
                 let rowlen = 4 * w;
                 for row in frame.data().chunks(stride) {

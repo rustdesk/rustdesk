@@ -28,6 +28,7 @@ use_dasp = ["dasp"]
 flutter = ["flutter_rust_bridge"]
 default = ["use_dasp"]
 hwcodec = ["scrap/hwcodec"]
+gpucodec = ["scrap/gpucodec"]
 mediacodec = ["scrap/mediacodec"]
 linux_headless = ["pam" ]
 virtual_display_driver = ["virtual_display"]
@@ -75,7 +76,7 @@ rdev = { git = "https://github.com/fufesou/rdev" }
 url = { version = "2.3", features = ["serde"] }
 crossbeam-queue = "0.3"
 hex = "0.4"
-reqwest = { git = "https://github.com/rustdesk-org/reqwest", features = ["blocking", "json", "rustls-tls"], default-features=false }
+reqwest = { git = "https://github.com/rustdesk-org/reqwest", features = ["blocking", "json", "rustls-tls", "gzip"], default-features=false }
 chrono = "0.4"
 cidr-utils = "0.5"
 libloading = "0.8"

@@ -729,6 +729,7 @@ message Misc {
     int32 refresh_video_display = 31;
     ToggleVirtualDisplay toggle_virtual_display = 32;
     TogglePrivacyMode toggle_privacy_mode = 33;
+    SupportedEncoding supported_encoding = 34;
   }
 }
 
