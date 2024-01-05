@@ -309,10 +309,10 @@ impl Client {
         let mut signed_id_pk = Vec::new();
         let mut relay_server = "".to_owned();
 
-        if !key.is_empty() && !token.is_empty() {
+        //if !key.is_empty() && !token.is_empty() {
             // mainly for the security of token
-            allow_err!(secure_punch_connection(&mut socket, key).await);
-        }
+            //allow_err!(secure_punch_connection(&mut socket, key).await);
+        //}
 
         let start = std::time::Instant::now();
         let mut peer_addr = Config::get_any_listen_addr(true);
@@ -618,10 +618,10 @@ impl Client {
                 .await
                 .with_context(|| "Failed to connect to rendezvous server")?;
 
-            if !key.is_empty() && !token.is_empty() {
+            //if !key.is_empty() && !token.is_empty() {
                 // mainly for the security of token
-                allow_err!(secure_punch_connection(&mut socket, key).await);
-            }
+                //allow_err!(secure_punch_connection(&mut socket, key).await);
+            //}
 
             ipv4 = socket.local_addr().is_ipv4();
             let mut msg_out = RendezvousMessage::new();
