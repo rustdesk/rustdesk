@@ -1222,8 +1222,9 @@ fn run_cmds(cmds: String, show: bool, tip: &str) -> ResultType<()> {
     let tmp2 = get_undone_file(&tmp)?;
     let tmp_fn = tmp.to_str().unwrap_or("");
     // https://github.com/rustdesk/rustdesk/issues/6786#issuecomment-1879655410
-    // Execute the .bat file directly to avoid the replacement of cmd
-    let res = runas::Command::new(&tmp_fn)
+    // Specify cmd.exe explicitly to avoid the replacement of cmd commands.
+    let res = runas::Command::new("cmd.exe")
+        .args(&["/C", &tmp_fn])
         .show(show)
         .force_prompt(true)
         .status();
