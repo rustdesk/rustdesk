@@ -599,6 +599,7 @@ Future<bool?> loginDialog() async {
         ],
       ),
       onCancel: onDialogCancel,
+      onSubmit: onLogin,
     );
   });
 
