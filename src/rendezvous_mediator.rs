@@ -2,7 +2,7 @@ use std::{
     net::SocketAddr,
     sync::{
         atomic::{AtomicBool, Ordering},
-        Arc, Mutex,
+        Arc,
     },
     time::Instant,
 };
@@ -22,6 +22,7 @@ use hbb_common::{
     tcp::FramedStream,
     tokio::{
         self, select,
+        sync::Mutex,
         time::{interval, Duration},
     },
     udp::FramedSocket,
@@ -47,7 +48,6 @@ pub struct RendezvousMediator {
     addr: TargetAddr<'static>,
     host: String,
     host_prefix: String,
-    last_id_pk_registry: String,
 }
 
 impl RendezvousMediator {
@@ -84,6 +84,7 @@ impl RendezvousMediator {
         crate::platform::linux_desktop_manager::start_xdesktop();
         loop {
             Config::reset_online();
+            *SOLVING_PK_MISMATCH.lock().await = "".to_owned();
             if Config::get_option("stop-service").is_empty()
                 && !crate::platform::installing_service()
             {
@@ -135,7 +136,6 @@ impl RendezvousMediator {
             addr: addr.clone(),
             host: host.clone(),
             host_prefix,
-            last_id_pk_registry: "".to_owned(),
         };
 
         let mut timer = interval(TIMER_OUT);
@@ -205,7 +205,7 @@ impl RendezvousMediator {
                     let elapsed_resp = last_register_resp.map(|x| x.elapsed().as_millis() as i64).unwrap_or(REG_INTERVAL);
                     let timeout = (elapsed_resp - last_register_sent.map(|x| x.elapsed().as_millis() as i64).unwrap_or(REG_INTERVAL)) > REG_TIMEOUT;
                     if timeout || elapsed_resp >= REG_INTERVAL {
-                        allow_err!(rz.register_peer(Sink::Framed(&mut socket, &addr)).await);
+                        rz.register_peer(Sink::Framed(&mut socket, &addr)).await?;
                         last_register_sent = now;
                         if timeout {
                             fails += 1;
@@ -246,7 +246,7 @@ impl RendezvousMediator {
                 update_latency();
                 if rpr.request_pk {
                     log::info!("request_pk received from {}", self.host);
-                    allow_err!(self.register_pk(sink).await);
+                    self.register_pk(sink).await?;
                 }
             }
             Some(rendezvous_message::Union::RegisterPkResponse(rpr)) => {
@@ -255,10 +255,10 @@ impl RendezvousMediator {
                     Ok(register_pk_response::Result::OK) => {
                         Config::set_key_confirmed(true);
                         Config::set_host_key_confirmed(&self.host_prefix, true);
-                        *SOLVING_PK_MISMATCH.lock().unwrap() = "".to_owned();
+                        *SOLVING_PK_MISMATCH.lock().await = "".to_owned();
                     }
                     Ok(register_pk_response::Result::UUID_MISMATCH) => {
-                        allow_err!(self.handle_uuid_mismatch(sink).await);
+                        self.handle_uuid_mismatch(sink).await?;
                     }
                     _ => {
                         log::error!("unknown RegisterPkResponse");
@@ -310,7 +310,6 @@ impl RendezvousMediator {
             addr: conn.local_addr().into_target_addr()?,
             host: host.clone(),
             host_prefix: host.clone(),
-            last_id_pk_registry: "".to_owned(),
         };
         let mut timer = interval(TIMER_OUT);
         loop {
@@ -483,7 +482,6 @@ impl RendezvousMediator {
         let pk = Config::get_key_pair().1;
         let uuid = hbb_common::get_uuid();
         let id = Config::get_id();
-        self.last_id_pk_registry = id.clone();
         msg_out.set_register_pk(RegisterPk {
             id,
             uuid: uuid.into(),
@@ -495,11 +493,8 @@ impl RendezvousMediator {
     }
 
     async fn handle_uuid_mismatch(&mut self, socket: Sink<'_>) -> ResultType<()> {
-        if self.last_id_pk_registry != Config::get_id() {
-            return Ok(());
-        }
         {
-            let mut solving = SOLVING_PK_MISMATCH.lock().unwrap();
+            let mut solving = SOLVING_PK_MISMATCH.lock().await;
             if solving.is_empty() || *solving == self.host {
                 log::info!("UUID_MISMATCH received from {}", self.host);
                 Config::set_key_confirmed(false);
@@ -513,9 +508,11 @@ impl RendezvousMediator {
     }
 
     async fn register_peer(&mut self, socket: Sink<'_>) -> ResultType<()> {
-        if !SOLVING_PK_MISMATCH.lock().unwrap().is_empty() {
+        let solving = SOLVING_PK_MISMATCH.lock().await;
+        if !(solving.is_empty() || *solving == self.host) {
             return Ok(());
         }
+        drop(solving);
         if !Config::get_key_confirmed() || !Config::get_host_key_confirmed(&self.host_prefix) {
             log::info!(
                 "register_pk of {} due to key not confirmed",
