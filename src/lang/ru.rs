@@ -578,13 +578,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("capture_display_elevated_connections_tip", "Захват экрана нескольких дисплеев не поддерживается в режиме повышенных прав. Повторите попытку после установки, если хотите управлять несколькими дисплеями."),
         ("Swap control-command key", "Поменять кнопки управления и команд"),
         ("swap-left-right-mouse", "Поменять левую и правую кнопки мыши"),
-<<<<<<< Updated upstream
         ("2FA code", "Код 2FA"),
         ("2fa_tip", "Введите код двухфакторной аутентификации из приложения для аутентификации."),
-=======
-        ("2FA code", ""),
-        ("2fa_tip", ""),
         ("More", ""),
->>>>>>> Stashed changes
     ].iter().cloned().collect();
 }
