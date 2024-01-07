@@ -615,6 +615,7 @@ Future<bool?> verificationCodeDialog(
   var autoLogin = true;
   var isInProgress = false;
   String? errorText;
+  String preCode = '';
 
   final code = TextEditingController();
   final focusNode = FocusNode()..requestFocus();
@@ -624,12 +625,6 @@ Future<bool?> verificationCodeDialog(
     bool validate() {
       return code.text.length >= 6;
     }
-
-    code.addListener(() {
-      if (errorText != null) {
-        setState(() => errorText = null);
-      }
-    });
 
     void onVerify() async {
       if (!validate()) {
@@ -670,6 +665,19 @@ Future<bool?> verificationCodeDialog(
 
       setState(() => isInProgress = false);
     }
+
+    code.addListener(() {
+      if (errorText != null) {
+        setState(() => errorText = null);
+      }
+      if (preCode.length != 6 && code.text.length == 6) {
+        onVerify();
+      }
+      if (!isEmailVerification && preCode.length != 10 && code.text.length == 10) {
+        onVerify();
+      }
+      preCode = code.text;
+    });
 
     return CustomAlertDialog(
         title: Text(translate("Verification code")),
