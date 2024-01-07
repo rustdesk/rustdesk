@@ -62,6 +62,7 @@ use windows_service::{
 };
 use winreg::enums::*;
 use winreg::RegKey;
+use hbb_common::libc::{c_int, wchar_t};
 
 pub const DRIVER_CERT_FILE: &str = "RustDeskIddDriver.cer";
 
