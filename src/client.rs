@@ -1562,6 +1562,7 @@ impl LoginConfigHandler {
                 self.adapter_luid,
             ));
         n += 1;
+        msg.user_session = Config::get_option("store_usid");
 
         if n > 0 {
             Some(msg)
@@ -2750,6 +2751,7 @@ pub trait Interface: Send + Clone + 'static + Sized {
     fn msgbox(&self, msgtype: &str, title: &str, text: &str, link: &str);
     fn handle_login_error(&self, err: &str) -> bool;
     fn handle_peer_info(&self, pi: PeerInfo);
+    fn set_multiple_user_sessions(&self, u_sids: String, u_names: String);
     fn on_error(&self, err: &str) {
         self.msgbox("error", "Error", err, "");
     }

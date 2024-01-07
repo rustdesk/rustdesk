@@ -14,6 +14,7 @@ use crate::platform::linux_desktop_manager;
 use crate::platform::WallPaperRemover;
 #[cfg(windows)]
 use crate::portable_service::client as portable_client;
+use crate::ui_interface::{get_local_option, set_local_option};
 use crate::{
     client::{
         new_voice_call_request, new_voice_call_response, start_audio_thread, MediaData, MediaSender,
@@ -235,6 +236,7 @@ pub struct Connection {
     file_remove_log_control: FileRemoveLogControl,
     #[cfg(feature = "gpucodec")]
     supported_encoding_flag: (bool, Option<bool>),
+    user_session_id: Option<u32>,
 }
 
 impl ConnInner {
@@ -381,6 +383,7 @@ impl Connection {
             file_remove_log_control: FileRemoveLogControl::new(id),
             #[cfg(feature = "gpucodec")]
             supported_encoding_flag: (false, None),
+            user_session_id: None,
         };
         let addr = hbb_common::try_into_v4(addr);
         if !conn.on_open(addr).await {
@@ -1482,8 +1485,49 @@ impl Connection {
         self.video_ack_required = lr.video_ack_required;
     }
 
+    async fn handle_multiple_user_sessions(&mut self, lr: LoginRequest) -> bool {
+        let active_usids = crate::platform::get_all_active_session_ids();
+        let usids_vec = active_usids
+            .split(",")
+            .filter(|x| !x.is_empty())
+            .collect::<Vec<&str>>();
+        if usids_vec.len() <= 1 {
+            return true;
+        }
+        let usid;
+        match lr.option.user_session.parse::<u32>() {
+            Ok(n) => usid = Some(n),
+            Err(..) => usid = None,
+        }
+        let is_usid_changed = get_local_option("is_usid_changed".to_string()) == "true";
+        if usid.is_none() {
+            set_local_option("is_usid_changed".to_string(), "false".to_string());
+            let mut res = LoginResponse::new();
+            let mut mus = MultipleUserSessions::new();
+            mus.user_session_ids = active_usids;
+            mus.user_names = crate::platform::get_all_active_usernames();
+            res.set_multiple_user_sessions(mus);
+            let mut msg_out = Message::new();
+            msg_out.set_login_response(res);
+            self.send(msg_out).await;
+            return false;
+        } else if usid != self.user_session_id && !is_usid_changed {
+            set_local_option("is_usid_changed".to_string(), "true".to_string());
+            self.send_close_reason_no_retry("Restarting...").await;
+            std::thread::spawn(move || {
+                let _ = connect_to_user_session(usid);
+            });
+            return true;
+        } else if usid.is_some() {
+            self.user_session_id = usid.clone();
+            return true;
+        }
+        true
+    }
+
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     fn try_start_cm_ipc(&mut self) {
+        let usid = self.user_session_id;
         if let Some(p) = self.start_cm_ipc_para.take() {
             tokio::spawn(async move {
                 #[cfg(windows)]
@@ -1493,6 +1537,7 @@ impl Connection {
                     p.tx_from_cm,
                     p.rx_desktop_ready,
                     p.tx_cm_stream_ready,
+                    usid.clone(),
                 )
                 .await
                 {
@@ -1503,10 +1548,16 @@ impl Connection {
                     }
                 }
             });
-            #[cfg(all(windows, feature = "flutter"))]
+            #[cfg(all(feature = "flutter", not(target_os = "windows")))]
             std::thread::spawn(|| {
                 if crate::is_server() && !crate::check_process("--tray", false) {
                     crate::platform::run_as_user(vec!["--tray"]).ok();
+                }
+            });
+            #[cfg(all(feature = "flutter", target_os = "windows"))]
+            std::thread::spawn(move || {
+                if crate::is_server() && !crate::check_process("--tray", false) {
+                    crate::platform::run_as_user(vec!["--tray"], usid).ok();
                 }
             });
         }
@@ -1514,6 +1565,8 @@ impl Connection {
 
     async fn on_message(&mut self, msg: Message) -> bool {
         if let Some(message::Union::LoginRequest(lr)) = msg.union {
+            #[cfg(all(feature = "flutter", target_os = "windows"))]
+            self.handle_multiple_user_sessions(lr.clone()).await;
             self.handle_login_request_without_validation(&lr).await;
             if self.authorized {
                 return true;
@@ -2937,6 +2990,7 @@ async fn start_ipc(
     tx_from_cm: mpsc::UnboundedSender<ipc::Data>,
     mut _rx_desktop_ready: mpsc::Receiver<()>,
     tx_stream_ready: mpsc::Sender<()>,
+    user_session_id: Option<u32>,
 ) -> ResultType<()> {
     use hbb_common::anyhow::anyhow;
 
@@ -2984,7 +3038,7 @@ async fn start_ipc(
         if crate::platform::is_root() {
             let mut res = Ok(None);
             for _ in 0..10 {
-                #[cfg(not(target_os = "linux"))]
+                #[cfg(not(any(target_os = "linux", target_os = "windows")))]
                 {
                     log::debug!("Start cm");
                     res = crate::platform::run_as_user(args.clone());
@@ -2997,6 +3051,11 @@ async fn start_ipc(
                         user.clone(),
                         None::<(&str, &str)>,
                     );
+                }
+                #[cfg(target_os = "windows")]
+                {
+                    log::debug!("Start cm");
+                    res = crate::platform::run_as_user(args.clone(), user_session_id);
                 }
                 if res.is_ok() {
                     break;

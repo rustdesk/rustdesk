@@ -259,6 +259,10 @@ impl InvokeUiSession for SciterHandler {
         // Ignore for sciter version.
     }
 
+    fn set_multiple_user_session(&self, u_sids: String, u_names: String) {
+        // Ignore for sciter version. 
+     }
+
     fn on_connected(&self, conn_type: ConnType) {
         match conn_type {
             ConnType::RDP => {}

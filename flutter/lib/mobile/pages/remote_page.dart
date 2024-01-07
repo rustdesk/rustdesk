@@ -91,6 +91,7 @@ class _RemotePageState extends State<RemotePage> {
     await WakelockPlus.disable();
     await keyboardSubscription.cancel();
     removeSharedStates(widget.id);
+    bind.mainSetOption(key: "store_usid", value: "");
   }
 
   // to-do: It should be better to use transparent color instead of the bgColor.

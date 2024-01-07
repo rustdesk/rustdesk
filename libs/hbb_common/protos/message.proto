@@ -120,10 +120,16 @@ message PeerInfo {
   string platform_additions = 12;
 }
 
+message MultipleUserSessions {
+  string user_session_ids = 1;
+  string user_names = 2;
+}
+
 message LoginResponse {
   oneof union {
     string error = 1;
     PeerInfo peer_info = 2;
+    MultipleUserSessions multiple_user_sessions = 3;
   }
 }
 
@@ -585,6 +591,7 @@ message OptionMessage {
   BoolOption disable_keyboard = 12;
 // Position 13 is used for Resolution. Remove later.
 // Resolution custom_resolution = 13;
+  string user_session = 14;
 }
 
 message TestDelay {

@@ -187,6 +187,7 @@ pub enum Data {
     Authorize,
     Close,
     SAS,
+    UserSid(Option<u32>),
     OnlineStatus(Option<(i64, bool)>),
     Config((String, Option<String>)),
     Options(Option<HashMap<String, String>>),

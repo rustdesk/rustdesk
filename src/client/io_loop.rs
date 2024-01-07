@@ -1093,6 +1093,10 @@ impl<T: InvokeUiSession> Remote<T> {
                             return false;
                         }
                     }
+                    Some(login_response::Union::MultipleUserSessions(mus)) => {
+                        self.handler.set_multiple_user_session(mus.u_sids, mus.u_names);
+                        return false;
+                    }
                     Some(login_response::Union::PeerInfo(pi)) => {
                         self.handler.handle_peer_info(pi);
                         self.check_clipboard_file_context();

@@ -230,6 +230,7 @@ class _RemotePageState extends State<RemotePage>
     }
     await Get.delete<FFI>(tag: widget.id);
     removeSharedStates(widget.id);
+    bind.mainSetOption(key: "store_usid", value: "");
   }
 
   Widget emptyOverlay() => BlockableOverlay(

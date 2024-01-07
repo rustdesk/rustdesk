@@ -1501,3 +1501,96 @@ void renameDialog(
     );
   });
 }
+
+void showWindowsSessionsDialog(
+    String type,
+    String title,
+    String text,
+    OverlayDialogManager dialogManager,
+    SessionID sessionId,
+    String peerId,
+    String usids,
+    String unames) {
+  dialogManager.dismissAll();
+  dialogManager.show((setState, close, context) {
+    onConnect() {
+      bind.sessionReconnect(sessionId: sessionId, forceRelay: false);
+      dialogManager.dismissAll();
+      dialogManager.showLoading(translate('Connecting...'),
+          onCancel: closeConnection);
+    }
+
+    return CustomAlertDialog(
+      title: null,
+      content: msgboxContent(type, title, text),
+      actions: [
+        SessionsDropdown(peerId, sessionId, usids, unames),
+        dialogButton('Connect', onPressed: onConnect, isOutline: true),
+      ],
+    );
+  });
+}
+
+class SessionsDropdown extends StatefulWidget {
+  final String peerId;
+  final SessionID sessionId;
+  final String usids;
+  final String unames;
+  SessionsDropdown(this.peerId, this.sessionId, this.usids, this.unames);
+  @override
+  _SessionsDropdownState createState() => _SessionsDropdownState();
+}
+
+List<String> get_win_sids(String usids) {
+  String content = usids;
+  List<String> myList = content.split(',');
+  return myList;
+}
+
+List<String> get_win_unames(String unames) {
+  String content = unames;
+  List<String> myList = content.split(',');
+  return myList;
+}
+
+class _SessionsDropdownState extends State<SessionsDropdown> {
+  late String selectedValue;
+  late List<String> sessions;
+  late File file;
+  late List<String> unames;
+  @override
+  void initState() {
+    super.initState();
+    sessions = get_win_sids(widget.usids);
+    selectedValue = sessions[0];
+    unames = get_win_unames(widget.unames);
+    bind.mainSetOption(key: "store_usid", value: selectedValue.toString());
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+        width: 300,
+        child: DropdownButton(
+          value: selectedValue,
+          isExpanded: true,
+          borderRadius: BorderRadius.circular(8),
+          padding: EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+          items: sessions.map((session) {
+            return DropdownMenuItem(
+              value: session,
+              child: Text(unames[sessions.indexOf(session)]),
+            );
+          }).toList(),
+          onChanged: (value) {
+            setState(() {
+              selectedValue = value.toString();
+            });
+            bind.mainSetOption(key: "store_usid", value: selectedValue.toString());
+          },
+          style: TextStyle(
+            fontSize: 16.0,
+          ),
+        ));
+  }
+}
