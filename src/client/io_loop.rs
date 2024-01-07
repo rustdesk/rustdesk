@@ -1094,7 +1094,7 @@ impl<T: InvokeUiSession> Remote<T> {
                         }
                     }
                     Some(login_response::Union::MultipleUserSessions(mus)) => {
-                        self.handler.set_multiple_user_session(mus.u_sids, mus.u_names);
+                        self.handler.set_multiple_user_session(mus.user_session_ids, mus.user_names);
                         return false;
                     }
                     Some(login_response::Union::PeerInfo(pi)) => {
