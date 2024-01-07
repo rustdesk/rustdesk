@@ -578,7 +578,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("capture_display_elevated_connections_tip", "用户提权后，不能显示多个显示器。若要控制多显示器，请安装后再试。"),
         ("Swap control-command key", "交换Control键和Command键"),
         ("swap-left-right-mouse", "交换鼠标左右键"),
-        ("2FA code", "2FA code"),
-        ("2fa_tip", "请输入授权 app 中的 2FA code"),
+        ("2FA code", "双重认证代码"),
+        ("2fa_tip", "请输入授权 app 中的双重认证代码"),
     ].iter().cloned().collect();
 }
