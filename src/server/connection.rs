@@ -1485,6 +1485,7 @@ impl Connection {
         self.video_ack_required = lr.video_ack_required;
     }
 
+    #[cfg(all(feature = "flutter", target_os = "windows"))]
     async fn handle_multiple_user_sessions(&mut self, lr: LoginRequest) -> bool {
         let active_usids = crate::platform::get_all_active_session_ids();
         let usids_vec = active_usids
