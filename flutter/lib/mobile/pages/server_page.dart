@@ -212,7 +212,7 @@ class ServiceNotRunningNotification extends StatelessWidget {
                 icon: const Icon(Icons.play_arrow),
                 onPressed: () {
                   if (gFFI.userModel.userName.value.isEmpty && bind.mainGetLocalOption(key: "show-scam-warning") != "N") {
-                    _showScamWarning(context, serverModel);
+                    showScamWarning(context, serverModel);
                   } else {
                     serverModel.toggleService();
                   }
@@ -222,14 +222,6 @@ class ServiceNotRunningNotification extends StatelessWidget {
         ));
   }
 
-  void _showScamWarning(BuildContext context, ServerModel serverModel) {
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return ScamWarningDialog(serverModel: serverModel);
-      },
-    );
-  }
 }
 
 class ScamWarningDialog extends StatefulWidget {
@@ -558,7 +550,9 @@ class _PermissionCheckerState extends State<PermissionChecker> {
                   .marginOnly(bottom: 8)
               : SizedBox.shrink(),
           PermissionRow(translate("Screen Capture"), serverModel.mediaOk,
-              serverModel.toggleService),
+            !serverModel.mediaOk && gFFI.userModel.userName.value.isEmpty && bind.mainGetLocalOption(key: "show-scam-warning") != "N"
+              ? () => showScamWarning(context, serverModel)
+              : serverModel.toggleService),
           PermissionRow(translate("Input Control"), serverModel.inputOk,
               serverModel.toggleInput),
           PermissionRow(translate("Transfer file"), serverModel.fileOk,
@@ -800,4 +794,13 @@ void androidChannelInit() {
     }
     return "";
   });
+}  
+
+void showScamWarning(BuildContext context, ServerModel serverModel) {
+  showDialog(
+    context: context,
+    builder: (BuildContext context) {
+      return ScamWarningDialog(serverModel: serverModel);
+    },
+  );
 }

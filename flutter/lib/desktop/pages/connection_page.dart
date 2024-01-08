@@ -308,40 +308,59 @@ class _ConnectionPageState extends State<ConnectionPage>
                       AutocompleteOnSelected<Peer> onSelected,
                       Iterable<Peer> options) {
                     double maxHeight = options.length * 50;
-                    maxHeight = maxHeight > 200 ? 200 : maxHeight;
+                    if (options.length == 1) {
+                      maxHeight = 52;
+                    } else if (options.length == 3) {
+                      maxHeight = 146;
+                    } else if (options.length == 4) {
+                      maxHeight = 193;
+                    }
+                    maxHeight = maxHeight.clamp(0, 200);
 
                     return Align(
                       alignment: Alignment.topLeft,
-                      child: ClipRRect(
-                          borderRadius: BorderRadius.circular(5),
-                          child: Material(
-                            elevation: 4,
-                            child: ConstrainedBox(
-                              constraints: BoxConstraints(
-                                maxHeight: maxHeight,
-                                maxWidth: 319,
+                      child: Container(
+                          decoration: BoxDecoration(
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withOpacity(0.3),
+                                blurRadius: 5,
+                                spreadRadius: 1,
                               ),
-                              child: peers.isEmpty && isPeersLoading
-                                  ? Container(
-                                      height: 80,
-                                      child: Center(
-                                        child: CircularProgressIndicator(
-                                          strokeWidth: 2,
+                            ],
+                          ),
+                          child: ClipRRect(
+                              borderRadius: BorderRadius.circular(5),
+                              child: Material(
+                                elevation: 4,
+                                child: ConstrainedBox(
+                                  constraints: BoxConstraints(
+                                    maxHeight: maxHeight,
+                                    maxWidth: 319,
+                                  ),
+                                  child: peers.isEmpty && isPeersLoading
+                                      ? Container(
+                                          height: 80,
+                                          child: Center(
+                                            child: CircularProgressIndicator(
+                                              strokeWidth: 2,
+                                            ),
+                                          ))
+                                      : Padding(
+                                          padding:
+                                              const EdgeInsets.only(top: 5),
+                                          child: ListView(
+                                            children: options
+                                                .map((peer) =>
+                                                    AutocompletePeerTile(
+                                                        onSelect: () =>
+                                                            onSelected(peer),
+                                                        peer: peer))
+                                                .toList(),
+                                          ),
                                         ),
-                                      ))
-                                  : Padding(
-                                      padding: const EdgeInsets.only(top: 5),
-                                      child: ListView(
-                                        children: options
-                                            .map((peer) => AutocompletePeerTile(
-                                                onSelect: () =>
-                                                    onSelected(peer),
-                                                peer: peer))
-                                            .toList(),
-                                      ),
-                                    ),
-                            ),
-                          )),
+                                ),
+                              ))),
                     );
                   },
                 )),

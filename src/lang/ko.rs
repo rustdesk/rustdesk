@@ -578,5 +578,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("capture_display_elevated_connections_tip", "권한 상승된 사용자 모드에서는 다중 디스플레이 캡처가 지원되지 않습니다. 다중 디스플레이를 제어하려면 설치 후 재시도하세요."),
         ("Swap control-command key", ""),
         ("swap-left-right-mouse", ""),
+        ("2FA code", ""),
+        ("2fa_tip", ""),
+        ("More", ""),
     ].iter().cloned().collect();
 }

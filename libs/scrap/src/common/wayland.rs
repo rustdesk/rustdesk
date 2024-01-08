@@ -1,35 +1,16 @@
-use crate::common::{x11::Frame, TraitCapturer};
-use crate::wayland::{capturable::*, *};
+use crate::{
+    wayland::{capturable::*, *},
+    Frame, TraitCapturer,
+};
 use std::{io, sync::RwLock, time::Duration};
+
+use super::x11::PixelBuffer;
 
 pub struct Capturer(Display, Box<dyn Recorder>, Vec<u8>);
 
-static mut IS_CURSOR_EMBEDDED: Option<bool> = None;
 
 lazy_static::lazy_static! {
     static ref MAP_ERR: RwLock<Option<fn(err: String)-> io::Error>> = Default::default();
-}
-
-pub fn is_cursor_embedded() -> bool {
-    unsafe {
-        if IS_CURSOR_EMBEDDED.is_none() {
-            init_cursor_embedded();
-        }
-        IS_CURSOR_EMBEDDED.unwrap_or(false)
-    }
-}
-
-unsafe fn init_cursor_embedded() {
-    use crate::common::wayland::pipewire::get_available_cursor_modes;
-    match get_available_cursor_modes() {
-        Ok(_modes) => {
-            // IS_CURSOR_EMBEDDED = Some((_modes & 0x02) > 0);
-            IS_CURSOR_EMBEDDED = Some(false)
-        }
-        Err(..) => {
-            IS_CURSOR_EMBEDDED = Some(false);
-        }
-    }
 }
 
 pub fn set_map_err(f: fn(err: String) -> io::Error) {
@@ -62,8 +43,18 @@ impl Capturer {
 impl TraitCapturer for Capturer {
     fn frame<'a>(&'a mut self, timeout: Duration) -> io::Result<Frame<'a>> {
         match self.1.capture(timeout.as_millis() as _).map_err(map_err)? {
-            PixelProvider::BGR0(w, h, x) => Ok(Frame::new(x, crate::Pixfmt::BGRA, w, h)),
-            PixelProvider::RGB0(w, h, x) => Ok(Frame::new(x, crate::Pixfmt::RGBA, w,h)),
+            PixelProvider::BGR0(w, h, x) => Ok(Frame::PixelBuffer(PixelBuffer::new(
+                x,
+                crate::Pixfmt::BGRA,
+                w,
+                h,
+            ))),
+            PixelProvider::RGB0(w, h, x) => Ok(Frame::PixelBuffer(PixelBuffer::new(
+                x,
+                crate::Pixfmt::RGBA,
+                w,
+                h,
+            ))),
             PixelProvider::NONE => Err(std::io::ErrorKind::WouldBlock.into()),
             _ => Err(map_err("Invalid data")),
         }
@@ -82,7 +73,7 @@ impl Display {
     }
 
     pub fn all() -> io::Result<Vec<Display>> {
-        Ok(pipewire::get_capturables(is_cursor_embedded())
+        Ok(pipewire::get_capturables()
             .map_err(map_err)?
             .drain(..)
             .map(|x| Display(x))

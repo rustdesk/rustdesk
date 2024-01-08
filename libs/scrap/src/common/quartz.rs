@@ -1,4 +1,4 @@
-use crate::{quartz, Pixfmt};
+use crate::{quartz, Frame, Pixfmt};
 use std::marker::PhantomData;
 use std::sync::{Arc, Mutex, TryLockError};
 use std::{io, mem};
@@ -55,12 +55,12 @@ impl crate::TraitCapturer for Capturer {
                     Some(mut frame) => {
                         crate::would_block_if_equal(&mut self.saved_raw_data, frame.inner())?;
                         frame.surface_to_bgra(self.height());
-                        Ok(Frame {
+                        Ok(Frame::PixelBuffer(PixelBuffer {
                             frame,
                             data: PhantomData,
                             width: self.width(),
                             height: self.height(),
-                        })
+                        }))
                     }
 
                     None => Err(io::ErrorKind::WouldBlock.into()),
@@ -74,14 +74,14 @@ impl crate::TraitCapturer for Capturer {
     }
 }
 
-pub struct Frame<'a> {
+pub struct PixelBuffer<'a> {
     frame: quartz::Frame,
     data: PhantomData<&'a [u8]>,
     width: usize,
     height: usize,
 }
 
-impl<'a> crate::TraitFrame for Frame<'a> {
+impl<'a> crate::TraitPixelBuffer for PixelBuffer<'a> {
     fn data(&self) -> &[u8] {
         &*self.frame
     }
