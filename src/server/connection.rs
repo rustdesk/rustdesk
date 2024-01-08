@@ -1486,14 +1486,17 @@ impl Connection {
     }
 
     #[cfg(all(feature = "flutter", target_os = "windows"))]
-    async fn handle_multiple_user_sessions(&mut self, lr: LoginRequest) -> bool {
+    async fn handle_multiple_user_sessions(&mut self, lr: LoginRequest){
+        if let Some(login_request::Union::FileTransfer(_)) = lr.union {
+            return;
+        }
         let active_usids = crate::platform::get_all_active_session_ids();
         let usids_vec = active_usids
             .split(",")
             .filter(|x| !x.is_empty())
             .collect::<Vec<&str>>();
         if usids_vec.len() <= 1 {
-            return true;
+            return;
         }
         let usid;
         match lr.option.user_session.parse::<u32>() {
@@ -1511,19 +1514,15 @@ impl Connection {
             let mut msg_out = Message::new();
             msg_out.set_login_response(res);
             self.send(msg_out).await;
-            return false;
         } else if usid != self.user_session_id && !is_usid_changed {
             set_local_option("is_usid_changed".to_string(), "true".to_string());
             self.send_close_reason_no_retry("Restarting...").await;
             std::thread::spawn(move || {
                 let _ = connect_to_user_session(usid);
             });
-            return true;
         } else if usid.is_some() {
             self.user_session_id = usid.clone();
-            return true;
         }
-        true
     }
 
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
