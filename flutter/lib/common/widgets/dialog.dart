@@ -1579,14 +1579,21 @@ class _SessionsDropdownState extends State<SessionsDropdown> {
           items: sessions.map((session) {
             return DropdownMenuItem(
               value: session,
-              child: Text(unames[sessions.indexOf(session)]),
+              child: Text(
+                unames[sessions.indexOf(session)],
+                style: TextStyle(
+                    color: MyTheme.currentThemeMode() == ThemeMode.dark
+                        ? Colors.white
+                        : MyTheme.dark),
+              ),
             );
           }).toList(),
           onChanged: (value) {
             setState(() {
               selectedValue = value.toString();
             });
-            bind.mainSetOption(key: "store_usid", value: selectedValue.toString());
+            bind.mainSetOption(
+                key: "store_usid", value: selectedValue.toString());
           },
           style: TextStyle(
             fontSize: 16.0,
