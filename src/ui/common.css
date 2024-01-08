@@ -19,6 +19,7 @@ html {
     var(light-green): #D4EAB7;
     var(dark-green): #5CB85C;
     var(blood-red): #F82600;
+    var(gray-bg-osx): rgba(238, 238, 238, 0.75);
 }
 
 html.darktheme {
@@ -31,6 +32,7 @@ html.darktheme {
     var(light-text): #999;
     var(lighter-text): #777;
     var(placeholder): #555;
+    var(gray-bg-osx): rgba(37, 37, 37, 0.75);
 }
 
 body {

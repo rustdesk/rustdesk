@@ -580,5 +580,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("swap-left-right-mouse", "Поміняти місцями ліву та праву кнопки миші"),
         ("2FA code", ""),
         ("2fa_tip", ""),
+        ("More", ""),
     ].iter().cloned().collect();
 }

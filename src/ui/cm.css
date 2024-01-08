@@ -219,6 +219,7 @@ div.tab {
     text-align: center;
     position: relative;
     padding: 0 5px;
+    color: black
 }
 
 div.active-tab {
