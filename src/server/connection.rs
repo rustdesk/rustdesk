@@ -1548,13 +1548,7 @@ impl Connection {
                     }
                 }
             });
-            #[cfg(all(feature = "flutter", not(target_os = "windows")))]
-            std::thread::spawn(|| {
-                if crate::is_server() && !crate::check_process("--tray", false) {
-                    crate::platform::run_as_user(vec!["--tray"]).ok();
-                }
-            });
-            #[cfg(all(feature = "flutter", target_os = "windows"))]
+            #[cfg(all(windows, feature = "flutter"))]
             std::thread::spawn(move || {
                 if crate::is_server() && !crate::check_process("--tray", false) {
                     crate::platform::run_as_user(vec!["--tray"], usid).ok();
