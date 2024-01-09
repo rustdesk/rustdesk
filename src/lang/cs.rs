@@ -580,6 +580,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("swap-left-right-mouse", "Prohodit levé a pravé tlačítko myši"),
         ("2FA code", "2FA kód"),
         ("2fa_tip", "Zadejte svůj kód 2FA do ověřovací aplikace."),
-        ("More", ""),
+        ("More", "Více"),
     ].iter().cloned().collect();
 }
