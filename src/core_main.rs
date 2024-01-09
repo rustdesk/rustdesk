@@ -190,7 +190,10 @@ pub fn core_main() -> Option<Vec<String>> {
                 );
                 let text = match res {
                     Ok(_) => translate("Installation Successful!".to_string()),
-                    Err(_) => translate("Installation failed!".to_string()),
+                    Err(err) => {
+                        println!("Failed with error: {err}");
+                        translate("Installation failed!".to_string())
+                    }
                 };
                 Toast::new(Toast::POWERSHELL_APP_ID)
                     .title(&hbb_common::config::APP_NAME.read().unwrap())

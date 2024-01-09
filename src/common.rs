@@ -127,6 +127,9 @@ impl ClipboardContext {
 use hbb_common::compress::decompress;
 use hbb_common::{
     allow_err,
+    anyhow::{anyhow, Context},
+    bail,
+    bytes::Bytes,
     compress::compress as compress_func,
     config::{self, Config, CONNECT_TIMEOUT, READ_TIMEOUT},
     get_version_number, log,
@@ -135,8 +138,9 @@ use hbb_common::{
     protobuf::Message as _,
     rendezvous_proto::*,
     socket_client,
+    sodiumoxide::crypto::{box_, secretbox, sign},
     tcp::FramedStream,
-    tokio, ResultType,
+    timeout, tokio, ResultType,
 };
 // #[cfg(any(target_os = "android", target_os = "ios", feature = "cli"))]
 use hbb_common::{config::RENDEZVOUS_PORT, futures::future::join_all};
@@ -1076,7 +1080,10 @@ pub fn make_privacy_mode_msg_with_details(
 }
 
 #[inline]
-pub fn make_privacy_mode_msg(state: back_notification::PrivacyModeState, impl_key: String) -> Message {
+pub fn make_privacy_mode_msg(
+    state: back_notification::PrivacyModeState,
+    impl_key: String,
+) -> Message {
     make_privacy_mode_msg_with_details(state, "".to_owned(), impl_key)
 }
 
@@ -1165,7 +1172,7 @@ pub async fn get_key(sync: bool) -> String {
         let mut options = crate::ipc::get_options_async().await;
         options.remove("key").unwrap_or_default()
     };
-    if key.is_empty() && !option_env!("RENDEZVOUS_SERVER").unwrap_or("").is_empty() {
+    if key.is_empty() {
         key = config::RS_PUB_KEY.to_owned();
     }
     key
@@ -1243,4 +1250,81 @@ pub fn check_process(arg: &str, same_uid: bool) -> bool {
         }
     }
     false
+}
+
+pub async fn secure_tcp(conn: &mut FramedStream, key: &str) -> ResultType<()> {
+    let rs_pk = get_rs_pk(key);
+    let Some(rs_pk) = rs_pk else {
+        bail!("Handshake failed: invalid public key from rendezvous server");
+    };
+    match timeout(READ_TIMEOUT, conn.next()).await? {
+        Some(Ok(bytes)) => {
+            if let Ok(msg_in) = RendezvousMessage::parse_from_bytes(&bytes) {
+                match msg_in.union {
+                    Some(rendezvous_message::Union::KeyExchange(ex)) => {
+                        if ex.keys.len() != 1 {
+                            bail!("Handshake failed: invalid key exchange message");
+                        }
+                        let their_pk_b = sign::verify(&ex.keys[0], &rs_pk)
+                            .map_err(|_| anyhow!("Signature mismatch in key exchange"))?;
+                        let (asymmetric_value, symmetric_value, key) = create_symmetric_key_msg(
+                            get_pk(&their_pk_b)
+                                .context("Wrong their public length in key exchange")?,
+                        );
+                        let mut msg_out = RendezvousMessage::new();
+                        msg_out.set_key_exchange(KeyExchange {
+                            keys: vec![asymmetric_value, symmetric_value],
+                            ..Default::default()
+                        });
+                        timeout(CONNECT_TIMEOUT, conn.send(&msg_out)).await??;
+                        conn.set_key(key);
+                        log::info!("Connection secured");
+                    }
+                    _ => {}
+                }
+            }
+        }
+        _ => {}
+    }
+    Ok(())
+}
+
+#[inline]
+fn get_pk(pk: &[u8]) -> Option<[u8; 32]> {
+    if pk.len() == 32 {
+        let mut tmp = [0u8; 32];
+        tmp[..].copy_from_slice(&pk);
+        Some(tmp)
+    } else {
+        None
+    }
+}
+
+#[inline]
+pub fn get_rs_pk(str_base64: &str) -> Option<sign::PublicKey> {
+    if let Ok(pk) = crate::decode64(str_base64) {
+        get_pk(&pk).map(|x| sign::PublicKey(x))
+    } else {
+        None
+    }
+}
+
+pub fn decode_id_pk(signed: &[u8], key: &sign::PublicKey) -> ResultType<(String, [u8; 32])> {
+    let res = IdPk::parse_from_bytes(
+        &sign::verify(signed, key).map_err(|_| anyhow!("Signature mismatch"))?,
+    )?;
+    if let Some(pk) = get_pk(&res.pk) {
+        Ok((res.id, pk))
+    } else {
+        bail!("Wrong their public length");
+    }
+}
+
+pub fn create_symmetric_key_msg(their_pk_b: [u8; 32]) -> (Bytes, Bytes, secretbox::Key) {
+    let their_pk_b = box_::PublicKey(their_pk_b);
+    let (our_pk_b, out_sk_b) = box_::gen_keypair();
+    let key = secretbox::gen_key();
+    let nonce = box_::Nonce([0u8; box_::NONCEBYTES]);
+    let sealed_key = box_::seal(&key.0, &nonce, &their_pk_b, &out_sk_b);
+    (Vec::from(our_pk_b.0).into(), sealed_key.into(), key)
 }
