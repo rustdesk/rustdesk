@@ -50,3 +50,5 @@ lib/generated_bridge.dart
 .devcontainer/.*
 # build cache in examples
 examples/**/target/
+# ===
+vcpkg_installed
