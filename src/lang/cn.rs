@@ -580,6 +580,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("swap-left-right-mouse", "交换鼠标左右键"),
         ("2FA code", "双重认证代码"),
         ("2fa_tip", "请输入授权 app 中的双重认证代码"),
-        ("More", ""),
+        ("More", "更多"),
     ].iter().cloned().collect();
 }
