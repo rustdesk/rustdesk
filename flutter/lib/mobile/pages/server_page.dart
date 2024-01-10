@@ -267,6 +267,7 @@ class _ScamWarningDialogState extends State<ScamWarningDialog> {
   @override
   Widget build(BuildContext context) {
     final isButtonLocked = _countdown > 0;
+    final screenHeight = MediaQuery.of(context).size.height;
 
     return AlertDialog(
       content: Container(
@@ -321,7 +322,7 @@ class _ScamWarningDialogState extends State<ScamWarningDialog> {
             ),
             SizedBox(height: 18),
             SizedBox(
-              height: 220,
+              height: screenHeight * 0.3,
               child: Scrollbar(
                 child: SingleChildScrollView(
                   child: Text(
