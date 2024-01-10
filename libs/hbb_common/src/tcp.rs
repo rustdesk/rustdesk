@@ -330,7 +330,7 @@ impl Encrypt {
     }
 
     pub fn dec(&mut self, bytes: &mut BytesMut) -> Result<(), Error> {
-        if bytes.is_empty() {
+        if bytes.len() <= 1 {
             return Ok(());
         }
         self.2 += 1;
