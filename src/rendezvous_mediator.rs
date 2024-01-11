@@ -129,24 +129,26 @@ impl RendezvousMediator {
         // crate::platform::linux_desktop_manager::stop_xdesktop();
     }
 
-    pub async fn start_udp(server: ServerPtr, host: String) -> ResultType<()> {
-        let host_prefix: String = host
-            .split(".")
+    fn get_host_prefix(host: &str) -> String {
+        host.split(".")
             .next()
             .map(|x| {
                 if x.parse::<i32>().is_ok() {
-                    host.clone()
+                    host.to_owned()
                 } else {
-                    x.to_string()
+                    x.to_owned()
                 }
             })
-            .unwrap_or(host.to_owned());
+            .unwrap_or(host.to_owned())
+    }
+
+    pub async fn start_udp(server: ServerPtr, host: String) -> ResultType<()> {
         let host = check_port(&host, RENDEZVOUS_PORT);
         let (mut socket, addr) = socket_client::new_udp_for(&host, CONNECT_TIMEOUT).await?;
         let mut rz = Self {
             addr: addr.clone(),
             host: host.clone(),
-            host_prefix,
+            host_prefix: Self::get_host_prefix(&host),
             keep_alive: DEFAULT_KEEP_ALIVE,
         };
 
@@ -319,13 +321,14 @@ impl RendezvousMediator {
     }
 
     pub async fn start_tcp(server: ServerPtr, host: String) -> ResultType<()> {
-        let mut conn = connect_tcp(check_port(&host, RENDEZVOUS_PORT), CONNECT_TIMEOUT).await?;
+        let host = check_port(&host, RENDEZVOUS_PORT);
+        let mut conn = connect_tcp(host.clone(), CONNECT_TIMEOUT).await?;
         let key = crate::get_key(true).await;
         crate::secure_tcp(&mut conn, &key).await?;
         let mut rz = Self {
             addr: conn.local_addr().into_target_addr()?,
             host: host.clone(),
-            host_prefix: host.clone(),
+            host_prefix: Self::get_host_prefix(&host),
             keep_alive: DEFAULT_KEEP_ALIVE,
         };
         let mut timer = interval(TIMER_OUT);
