@@ -193,17 +193,22 @@ fn create_capturer(
     match c {
         Some(c1) => return Ok(c1),
         None => {
-            log::debug!("Create capturer dxgi|gdi");
             #[cfg(windows)]
-            return crate::portable_service::client::create_capturer(
-                _current,
-                display,
-                _portable_service_running,
-            );
+            {
+                log::debug!("Create capturer dxgi|gdi");
+                return crate::portable_service::client::create_capturer(
+                    _current,
+                    display,
+                    _portable_service_running,
+                );
+            }
             #[cfg(not(windows))]
-            return Ok(Box::new(
-                Capturer::new(display).with_context(|| "Failed to create capturer")?,
-            ));
+            {
+                log::debug!("Create capturer from scrap");
+                return Ok(Box::new(
+                    Capturer::new(display).with_context(|| "Failed to create capturer")?,
+                ));
+            }
         }
     };
 }
