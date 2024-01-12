@@ -122,6 +122,7 @@ pub fn session_add_sync(
     switch_uuid: String,
     force_relay: bool,
     password: String,
+    is_shared_password: bool,
 ) -> SyncReturn<String> {
     if let Err(e) = session_add(
         &session_id,
@@ -132,6 +133,7 @@ pub fn session_add_sync(
         &switch_uuid,
         force_relay,
         password,
+        is_shared_password,
     ) {
         SyncReturn(format!("Failed to add session with id {}, {}", &id, e))
     } else {
@@ -1016,14 +1018,6 @@ pub fn main_load_lan_peers_sync() -> SyncReturn<String> {
         ),
     ]);
     return SyncReturn(serde_json::ser::to_string(&data).unwrap_or("".to_owned()));
-}
-
-pub fn main_load_ab_sync() -> SyncReturn<String> {
-    return SyncReturn(serde_json::to_string(&config::Ab::load()).unwrap_or_default());
-}
-
-pub fn main_load_group_sync() -> SyncReturn<String> {
-    return SyncReturn(serde_json::to_string(&config::Group::load()).unwrap_or_default());
 }
 
 pub fn main_load_recent_peers_for_ab(filter: String) -> String {

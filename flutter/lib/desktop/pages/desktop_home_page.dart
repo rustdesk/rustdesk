@@ -800,6 +800,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
           isFileTransfer: call.arguments['isFileTransfer'],
           isTcpTunneling: call.arguments['isTcpTunneling'],
           isRDP: call.arguments['isRDP'],
+          password: call.arguments['password'],
           forceRelay: call.arguments['forceRelay'],
         );
       } else if (call.method == kWindowEventMoveTabToNewWindow) {

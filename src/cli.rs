@@ -32,11 +32,14 @@ impl Session {
             password,
             lc: Default::default(),
         };
-        session
-            .lc
-            .write()
-            .unwrap()
-            .initialize(id.to_owned(), ConnType::PORT_FORWARD, None);
+        session.lc.write().unwrap().initialize(
+            id.to_owned(),
+            ConnType::PORT_FORWARD,
+            None,
+            false,
+            None,
+            None,
+        );
         session
     }
 }

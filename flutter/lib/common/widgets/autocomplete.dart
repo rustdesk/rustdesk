@@ -9,9 +9,6 @@ import 'package:flutter_hbb/common/widgets/peer_card.dart';
 Future<List<Peer>> getAllPeers() async {
   Map<String, dynamic> recentPeers = jsonDecode(bind.mainLoadRecentPeersSync());
   Map<String, dynamic> lanPeers = jsonDecode(bind.mainLoadLanPeersSync());
-  Map<String, dynamic> abPeers = jsonDecode(bind.mainLoadAbSync());
-  Map<String, dynamic> groupPeers = jsonDecode(bind.mainLoadGroupSync());
-
   Map<String, dynamic> combinedPeers = {};
 
   void mergePeers(Map<String, dynamic> peers) {
@@ -42,8 +39,16 @@ Future<List<Peer>> getAllPeers() async {
 
   mergePeers(recentPeers);
   mergePeers(lanPeers);
-  mergePeers(abPeers);
-  mergePeers(groupPeers);
+  for (var p in gFFI.abModel.allPeers()) {
+    if (!combinedPeers.containsKey(p.id)) {
+      combinedPeers[p.id] = p.toJson();
+    }
+  }
+  for (var p in gFFI.groupModel.peers.map((e) => Peer.copy(e)).toList()) {
+    if (!combinedPeers.containsKey(p.id)) {
+      combinedPeers[p.id] = p.toJson();
+    }
+  }
 
   List<Peer> parsedPeers = [];
 
@@ -181,7 +186,7 @@ class AutocompletePeerTileState extends State<AutocompletePeerTile> {
                   ],
                 ))));
     final colors = _frontN(widget.peer.tags, 25)
-        .map((e) => gFFI.abModel.getTagColor(e))
+        .map((e) => gFFI.abModel.getCurrentAbTagColor(e))
         .toList();
     return Tooltip(
       message: isMobile

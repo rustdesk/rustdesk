@@ -45,6 +45,7 @@ class _FileManagerTabPageState extends State<FileManagerTabPage> {
           key: ValueKey(params['id']),
           id: params['id'],
           password: params['password'],
+          isSharedPassword: params['isSharedPassword'],
           tabController: tabController,
           forceRelay: params['forceRelay'],
         )));
@@ -74,6 +75,7 @@ class _FileManagerTabPageState extends State<FileManagerTabPage> {
               key: ValueKey(id),
               id: id,
               password: args['password'],
+              isSharedPassword: args['isSharedPassword'],
               tabController: tabController,
               forceRelay: args['forceRelay'],
             )));
