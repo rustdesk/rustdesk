@@ -309,6 +309,16 @@ fn get_capturer(current: usize, portable_service_running: bool) -> ResultType<Ca
         );
     }
     let display = displays.remove(current);
+
+    if let Display::X11(inner) = &display {
+        if let Err(err) = inner.get_shm_status() {
+            log::warn!(
+                "MIT-SHM extension not working properly on select X11 server: {:?}",
+                err
+            );
+        }
+    }
+
     let (origin, width, height) = (display.origin(), display.width(), display.height());
     let name = display.name();
     log::debug!(

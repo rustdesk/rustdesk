@@ -9,6 +9,7 @@ pub struct Server {
     raw: *mut xcb_connection_t,
     screenp: i32,
     setup: *const xcb_setup_t,
+    shm_status: Result<(), Error>,
 }
 
 /*
@@ -73,6 +74,7 @@ impl Server {
                     raw,
                     screenp,
                     setup,
+                    shm_status: check_x11_shm_available(raw),
                 })
             }
         }
@@ -86,6 +88,24 @@ impl Server {
     }
     pub fn setup(&self) -> *const xcb_setup_t {
         self.setup
+    }
+    pub fn get_shm_status(&self)->Result<(), Error>{
+        self.shm_status
+    }
+}
+
+unsafe fn check_x11_shm_available(c: *mut xcb_connection_t) -> Result<(), Error> {
+    let cookie = xcb_shm_query_version(c);
+    let mut e: *mut xcb_generic_error_t = std::ptr::null_mut();
+    let reply = xcb_shm_query_version_reply(c, cookie, &mut e as _);
+    if reply.is_null() {
+        // TODO: Should seperate SHM disabled from SHM not supported?
+        return Err(Error::UnsupportedExtension);
+    } else if e.is_null() {
+        return Ok(());
+    } else {
+        // TODO: Does "This request does never generate any errors" in manual means `e` is never set, so we would never reach here?
+        return Err(Error::Generic);
     }
 }
 
