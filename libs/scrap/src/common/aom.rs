@@ -9,7 +9,7 @@ include!(concat!(env!("OUT_DIR"), "/aom_ffi.rs"));
 use crate::codec::{base_bitrate, codec_thread_num, Quality};
 use crate::{codec::EncoderApi, EncodeFrame, STRIDE_ALIGN};
 use crate::{common::GoogleImage, generate_call_macro, generate_call_ptr_macro, Error, Result};
-use crate::{EncodeYuvFormat, Pixfmt};
+use crate::{EncodeInput, EncodeYuvFormat, Pixfmt};
 use hbb_common::{
     anyhow::{anyhow, Context},
     bytes::Bytes,
@@ -249,10 +249,10 @@ impl EncoderApi for AomEncoder {
         }
     }
 
-    fn encode_to_message(&mut self, frame: &[u8], ms: i64) -> ResultType<VideoFrame> {
+    fn encode_to_message(&mut self, input: EncodeInput, ms: i64) -> ResultType<VideoFrame> {
         let mut frames = Vec::new();
         for ref frame in self
-            .encode(ms, frame, STRIDE_ALIGN)
+            .encode(ms, input.yuv()?, STRIDE_ALIGN)
             .with_context(|| "Failed to encode")?
         {
             frames.push(Self::create_frame(frame));
@@ -266,6 +266,11 @@ impl EncoderApi for AomEncoder {
 
     fn yuvfmt(&self) -> crate::EncodeYuvFormat {
         self.yuvfmt.clone()
+    }
+
+    #[cfg(feature = "gpucodec")]
+    fn input_texture(&self) -> bool {
+        false
     }
 
     fn set_quality(&mut self, quality: Quality) -> ResultType<()> {
@@ -286,6 +291,10 @@ impl EncoderApi for AomEncoder {
     fn bitrate(&self) -> u32 {
         let c = unsafe { *self.ctx.config.enc.to_owned() };
         c.rc_target_bitrate
+    }
+
+    fn support_abr(&self) -> bool {
+        true
     }
 }
 

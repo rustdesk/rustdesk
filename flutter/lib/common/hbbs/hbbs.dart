@@ -11,9 +11,11 @@ class HttpType {
   static const kAuthReqTypeMobile = "mobile";
   static const kAuthReqTypeSMSCode = "sms_code";
   static const kAuthReqTypeEmailCode = "email_code";
+  static const kAuthReqTypeTfaCode = "tfa_code";
 
   static const kAuthResTypeToken = "access_token";
   static const kAuthResTypeEmailCheck = "email_check";
+  static const kAuthResTypeTfaCheck = "tfa_check";
 }
 
 enum UserStatus { kDisabled, kNormal, kUnverified }
@@ -118,6 +120,7 @@ class LoginRequest {
   bool? autoLogin;
   String? type;
   String? verificationCode;
+  String? tfaCode;
 
   LoginRequest(
       {this.username,
@@ -126,7 +129,8 @@ class LoginRequest {
       this.uuid,
       this.autoLogin,
       this.type,
-      this.verificationCode});
+      this.verificationCode,
+      this.tfaCode});
 
   Map<String, dynamic> toJson() {
     final Map<String, dynamic> data = <String, dynamic>{};
@@ -139,6 +143,7 @@ class LoginRequest {
     if (verificationCode != null) {
       data['verificationCode'] = verificationCode;
     }
+    if (tfaCode != null) data['tfaCode'] = tfaCode;
 
     Map<String, dynamic> deviceInfo = {};
     try {
@@ -154,13 +159,15 @@ class LoginRequest {
 class LoginResponse {
   String? access_token;
   String? type;
+  String? tfa_type;
   UserPayload? user;
 
-  LoginResponse({this.access_token, this.type, this.user});
+  LoginResponse({this.access_token, this.type, this.tfa_type, this.user});
 
   LoginResponse.fromJson(Map<String, dynamic> json) {
     access_token = json['access_token'];
     type = json['type'];
+    tfa_type = json['tfa_type'];
     user = json['user'] != null ? UserPayload.fromJson(json['user']) : null;
   }
 }

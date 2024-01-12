@@ -6,6 +6,7 @@ edition = "2021"
 build= "build.rs"
 description = "A remote control software."
 default-run = "rustdesk"
+rust-version = "1.75"
 
 [lib]
 name = "librustdesk"
@@ -27,6 +28,7 @@ use_dasp = ["dasp"]
 flutter = ["flutter_rust_bridge"]
 default = ["use_dasp"]
 hwcodec = ["scrap/hwcodec"]
+gpucodec = ["scrap/gpucodec"]
 mediacodec = ["scrap/mediacodec"]
 linux_headless = ["pam" ]
 virtual_display_driver = ["virtual_display"]
@@ -60,7 +62,6 @@ magnum-opus = { git = "https://github.com/rustdesk/magnum-opus" }
 dasp = { version = "0.11", features = ["signal", "interpolate-linear", "interpolate"], optional = true }
 rubato = { version = "0.12", optional = true }
 samplerate = { version = "0.2", optional = true }
-async-trait = "0.1"
 uuid = { version = "1.3", features = ["v4"] }
 clap = "4.2"
 rpassword = "7.2"
@@ -75,7 +76,7 @@ rdev = { git = "https://github.com/fufesou/rdev" }
 url = { version = "2.3", features = ["serde"] }
 crossbeam-queue = "0.3"
 hex = "0.4"
-reqwest = { git = "https://github.com/rustdesk-org/reqwest", features = ["blocking", "json", "rustls-tls"], default-features=false }
+reqwest = { git = "https://github.com/rustdesk-org/reqwest", features = ["blocking", "json", "rustls-tls", "gzip"], default-features=false }
 chrono = "0.4"
 cidr-utils = "0.5"
 libloading = "0.8"

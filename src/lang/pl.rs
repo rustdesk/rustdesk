@@ -578,5 +578,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("capture_display_elevated_connections_tip", "Przechwytywanie wielu ekranów nie jest obsługiwane w trybie użytkownika z podwyższonym poziomem uprawnień. Jeśli chcesz sterować wieloma wyświetlaczami, spróbuj ponownie po instalacji."),
         ("Swap control-command key", "Zamiana przycisków sterujących myszki"),
         ("swap-left-right-mouse", "Zamień przyciski myszki (lewy - prawy)"),
+        ("2FA code", ""),
+        ("2fa_tip", ""),
+        ("More", ""),
     ].iter().cloned().collect();
 }

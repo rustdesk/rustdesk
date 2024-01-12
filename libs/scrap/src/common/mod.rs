@@ -1,9 +1,10 @@
 pub use self::vpxcodec::*;
 use hbb_common::{
-    log,
+    bail, log,
     message_proto::{video_frame, Chroma, VideoFrame},
+    ResultType,
 };
-use std::slice;
+use std::{ffi::c_void, slice};
 
 cfg_if! {
     if #[cfg(quartz)] {
@@ -16,8 +17,8 @@ cfg_if! {
         mod wayland;
         mod x11;
         pub use self::linux::*;
-        pub use self::x11::Frame;
         pub use self::wayland::set_map_err;
+        pub use self::x11::PixelBuffer;
             } else {
                 mod x11;
                 pub use self::x11::*;
@@ -36,6 +37,8 @@ cfg_if! {
 
 pub mod codec;
 pub mod convert;
+#[cfg(feature = "gpucodec")]
+pub mod gpucodec;
 #[cfg(feature = "hwcodec")]
 pub mod hwcodec;
 #[cfg(feature = "mediacodec")]
@@ -107,9 +110,32 @@ pub trait TraitCapturer {
     fn is_gdi(&self) -> bool;
     #[cfg(windows)]
     fn set_gdi(&mut self) -> bool;
+
+    #[cfg(feature = "gpucodec")]
+    fn device(&self) -> AdapterDevice;
+
+    #[cfg(feature = "gpucodec")]
+    fn set_output_texture(&mut self, texture: bool);
 }
 
-pub trait TraitFrame {
+#[derive(Debug, Clone, Copy)]
+pub struct AdapterDevice {
+    pub device: *mut c_void,
+    pub vendor_id: ::std::os::raw::c_uint,
+    pub luid: i64,
+}
+
+impl Default for AdapterDevice {
+    fn default() -> Self {
+        Self {
+            device: std::ptr::null_mut(),
+            vendor_id: Default::default(),
+            luid: Default::default(),
+        }
+    }
+}
+
+pub trait TraitPixelBuffer {
     fn data(&self) -> &[u8];
 
     fn width(&self) -> usize;
@@ -120,6 +146,59 @@ pub trait TraitFrame {
 
     fn pixfmt(&self) -> Pixfmt;
 }
+
+#[cfg(not(any(target_os = "ios")))]
+pub enum Frame<'a> {
+    PixelBuffer(PixelBuffer<'a>),
+    Texture(*mut c_void),
+}
+
+#[cfg(not(any(target_os = "ios")))]
+impl Frame<'_> {
+    pub fn valid<'a>(&'a self) -> bool {
+        match self {
+            Frame::PixelBuffer(pixelbuffer) => !pixelbuffer.data().is_empty(),
+            Frame::Texture(texture) => !texture.is_null(),
+        }
+    }
+
+    pub fn to<'a>(
+        &'a self,
+        yuvfmt: EncodeYuvFormat,
+        yuv: &'a mut Vec<u8>,
+        mid_data: &mut Vec<u8>,
+    ) -> ResultType<EncodeInput> {
+        match self {
+            Frame::PixelBuffer(pixelbuffer) => {
+                convert_to_yuv(&pixelbuffer, yuvfmt, yuv, mid_data)?;
+                Ok(EncodeInput::YUV(yuv))
+            }
+            Frame::Texture(texture) => Ok(EncodeInput::Texture(*texture)),
+        }
+    }
+}
+
+pub enum EncodeInput<'a> {
+    YUV(&'a [u8]),
+    Texture(*mut c_void),
+}
+
+impl<'a> EncodeInput<'a> {
+    pub fn yuv(&self) -> ResultType<&'_ [u8]> {
+        match self {
+            Self::YUV(f) => Ok(f),
+            _ => bail!("not pixelfbuffer frame"),
+        }
+    }
+
+    pub fn texture(&self) -> ResultType<*mut c_void> {
+        match self {
+            Self::Texture(f) => Ok(*f),
+            _ => bail!("not texture frame"),
+        }
+    }
+}
+
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum Pixfmt {
     BGRA,
@@ -166,8 +245,10 @@ pub enum CodecName {
     VP8,
     VP9,
     AV1,
-    H264(String),
-    H265(String),
+    H264HW(String),
+    H265HW(String),
+    H264GPU,
+    H265GPU,
 }
 
 #[derive(PartialEq, Debug, Clone)]
@@ -199,8 +280,8 @@ impl From<&CodecName> for CodecFormat {
             CodecName::VP8 => Self::VP8,
             CodecName::VP9 => Self::VP9,
             CodecName::AV1 => Self::AV1,
-            CodecName::H264(_) => Self::H264,
-            CodecName::H265(_) => Self::H265,
+            CodecName::H264HW(_) | CodecName::H264GPU => Self::H264,
+            CodecName::H265HW(_) | CodecName::H265GPU => Self::H265,
         }
     }
 }

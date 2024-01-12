@@ -2,52 +2,61 @@ use std::{
     net::SocketAddr,
     sync::{
         atomic::{AtomicBool, Ordering},
-        Arc, Mutex,
+        Arc,
     },
     time::Instant,
 };
 
 use uuid::Uuid;
 
-use hbb_common::tcp::FramedStream;
 use hbb_common::{
     allow_err,
-    anyhow::bail,
+    anyhow::{self, bail},
     config::{Config, CONNECT_TIMEOUT, READ_TIMEOUT, REG_INTERVAL, RENDEZVOUS_PORT},
     futures::future::join_all,
     log,
     protobuf::Message as _,
     rendezvous_proto::*,
     sleep,
-    socket_client::{self, is_ipv4},
+    socket_client::{self, connect_tcp, is_ipv4},
+    tcp::FramedStream,
     tokio::{
         self, select,
+        sync::Mutex,
         time::{interval, Duration},
     },
     udp::FramedSocket,
-    AddrMangle, ResultType,
+    AddrMangle, IntoTargetAddr, ResultType, TargetAddr,
 };
 
-use crate::server::{check_zombie, new as new_server, ServerPtr};
+use crate::{
+    check_port,
+    server::{check_zombie, new as new_server, ServerPtr},
+};
 
 type Message = RendezvousMessage;
+
+const TIMER_OUT: Duration = Duration::from_secs(1);
+const DEFAULT_KEEP_ALIVE: i32 = 60_000;
 
 lazy_static::lazy_static! {
     static ref SOLVING_PK_MISMATCH: Arc<Mutex<String>> = Default::default();
 }
 static SHOULD_EXIT: AtomicBool = AtomicBool::new(false);
+static MANUAL_RESTARTED: AtomicBool = AtomicBool::new(false);
 
 #[derive(Clone)]
 pub struct RendezvousMediator {
-    addr: hbb_common::tokio_socks::TargetAddr<'static>,
+    addr: TargetAddr<'static>,
     host: String,
     host_prefix: String,
-    last_id_pk_registry: String,
+    keep_alive: i32,
 }
 
 impl RendezvousMediator {
     pub fn restart() {
         SHOULD_EXIT.store(true, Ordering::SeqCst);
+        MANUAL_RESTARTED.store(true, Ordering::SeqCst);
         log::info!("server restart");
     }
 
@@ -78,7 +87,8 @@ impl RendezvousMediator {
         #[cfg(not(any(feature = "flatpak", feature = "appimage")))]
         crate::platform::linux_desktop_manager::start_xdesktop();
         loop {
-            Config::reset_online();
+            let conn_start_time = Instant::now();
+            *SOLVING_PK_MISMATCH.lock().await = "".to_owned();
             if Config::get_option("stop-service").is_empty()
                 && !crate::platform::installing_service()
             {
@@ -89,6 +99,7 @@ impl RendezvousMediator {
                 let mut futs = Vec::new();
                 let servers = Config::get_rendezvous_servers();
                 SHOULD_EXIT.store(false, Ordering::SeqCst);
+                MANUAL_RESTARTED.store(false, Ordering::SeqCst);
                 for host in servers.clone() {
                     let server = server.clone();
                     futs.push(tokio::spawn(async move {
@@ -103,7 +114,13 @@ impl RendezvousMediator {
             } else {
                 server.write().unwrap().close_connections();
             }
-            sleep(1.).await;
+            Config::reset_online();
+            if !MANUAL_RESTARTED.load(Ordering::SeqCst) {
+                let elapsed = conn_start_time.elapsed().as_millis() as u64;
+                if elapsed < CONNECT_TIMEOUT {
+                    sleep(((CONNECT_TIMEOUT - elapsed) / 1000) as _).await;
+                }
+            }
         }
         // It should be better to call stop_xdesktop.
         // But for server, it also is Ok without calling this method.
@@ -112,29 +129,29 @@ impl RendezvousMediator {
         // crate::platform::linux_desktop_manager::stop_xdesktop();
     }
 
-    pub async fn start(server: ServerPtr, host: String) -> ResultType<()> {
-        log::info!("start rendezvous mediator of {}", host);
-        let host_prefix: String = host
-            .split(".")
+    fn get_host_prefix(host: &str) -> String {
+        host.split(".")
             .next()
             .map(|x| {
                 if x.parse::<i32>().is_ok() {
-                    host.clone()
+                    host.to_owned()
                 } else {
-                    x.to_string()
+                    x.to_owned()
                 }
             })
-            .unwrap_or(host.to_owned());
-        let host = crate::check_port(&host, RENDEZVOUS_PORT);
+            .unwrap_or(host.to_owned())
+    }
+
+    pub async fn start_udp(server: ServerPtr, host: String) -> ResultType<()> {
+        let host = check_port(&host, RENDEZVOUS_PORT);
         let (mut socket, addr) = socket_client::new_udp_for(&host, CONNECT_TIMEOUT).await?;
         let mut rz = Self {
-            addr: addr,
+            addr: addr.clone(),
             host: host.clone(),
-            host_prefix,
-            last_id_pk_registry: "".to_owned(),
+            host_prefix: Self::get_host_prefix(&host),
+            keep_alive: DEFAULT_KEEP_ALIVE,
         };
 
-        const TIMER_OUT: Duration = Duration::from_secs(1);
         let mut timer = interval(TIMER_OUT);
         let mut last_timer: Option<Instant> = None;
         const REG_TIMEOUT: i64 = 3_000;
@@ -177,63 +194,8 @@ impl RendezvousMediator {
                 n = socket.next() => {
                     match n {
                         Some(Ok((bytes, _))) => {
-                            if let Ok(msg_in) = Message::parse_from_bytes(&bytes) {
-                                match msg_in.union {
-                                    Some(rendezvous_message::Union::RegisterPeerResponse(rpr)) => {
-                                        update_latency();
-                                        if rpr.request_pk {
-                                            log::info!("request_pk received from {}", host);
-                                            allow_err!(rz.register_pk(&mut socket).await);
-                                            continue;
-                                        }
-                                    }
-                                    Some(rendezvous_message::Union::RegisterPkResponse(rpr)) => {
-                                        update_latency();
-                                        match rpr.result.enum_value() {
-                                            Ok(register_pk_response::Result::OK) => {
-                                                Config::set_key_confirmed(true);
-                                                Config::set_host_key_confirmed(&rz.host_prefix, true);
-                                                *SOLVING_PK_MISMATCH.lock().unwrap() = "".to_owned();
-                                            }
-                                            Ok(register_pk_response::Result::UUID_MISMATCH) => {
-                                                allow_err!(rz.handle_uuid_mismatch(&mut socket).await);
-                                            }
-                                            _ => {
-                                                log::error!("unknown RegisterPkResponse");
-                                            }
-                                        }
-                                    }
-                                    Some(rendezvous_message::Union::PunchHole(ph)) => {
-                                        let rz = rz.clone();
-                                        let server = server.clone();
-                                        tokio::spawn(async move {
-                                            allow_err!(rz.handle_punch_hole(ph, server).await);
-                                        });
-                                    }
-                                    Some(rendezvous_message::Union::RequestRelay(rr)) => {
-                                        let rz = rz.clone();
-                                        let server = server.clone();
-                                        tokio::spawn(async move {
-                                            allow_err!(rz.handle_request_relay(rr, server).await);
-                                        });
-                                    }
-                                    Some(rendezvous_message::Union::FetchLocalAddr(fla)) => {
-                                        let rz = rz.clone();
-                                        let server = server.clone();
-                                        tokio::spawn(async move {
-                                            allow_err!(rz.handle_intranet(fla, server).await);
-                                        });
-                                    }
-                                    Some(rendezvous_message::Union::ConfigureUpdate(cu)) => {
-                                        let v0 = Config::get_rendezvous_servers();
-                                        Config::set_option("rendezvous-servers".to_owned(), cu.rendezvous_servers.join(","));
-                                        Config::set_serial(cu.serial);
-                                        if v0 != Config::get_rendezvous_servers() {
-                                            Self::restart();
-                                        }
-                                    }
-                                    _ => {}
-                                }
+                            if let Ok(msg) = Message::parse_from_bytes(&bytes) {
+                                rz.handle_resp(msg.union, Sink::Framed(&mut socket, &addr), &server, &mut update_latency).await?;
                             } else {
                                 log::debug!("Non-protobuf message bytes received: {:?}", bytes);
                             }
@@ -257,7 +219,7 @@ impl RendezvousMediator {
                     let elapsed_resp = last_register_resp.map(|x| x.elapsed().as_millis() as i64).unwrap_or(REG_INTERVAL);
                     let timeout = (elapsed_resp - last_register_sent.map(|x| x.elapsed().as_millis() as i64).unwrap_or(REG_INTERVAL)) > REG_TIMEOUT;
                     if timeout || elapsed_resp >= REG_INTERVAL {
-                        allow_err!(rz.register_peer(&mut socket).await);
+                        rz.register_peer(Sink::Framed(&mut socket, &addr)).await?;
                         last_register_sent = now;
                         if timeout {
                             fails += 1;
@@ -283,6 +245,143 @@ impl RendezvousMediator {
             }
         }
         Ok(())
+    }
+
+    #[inline]
+    async fn handle_resp(
+        &mut self,
+        msg: Option<rendezvous_message::Union>,
+        sink: Sink<'_>,
+        server: &ServerPtr,
+        update_latency: &mut impl FnMut(),
+    ) -> ResultType<()> {
+        match msg {
+            Some(rendezvous_message::Union::RegisterPeerResponse(rpr)) => {
+                update_latency();
+                if rpr.request_pk {
+                    log::info!("request_pk received from {}", self.host);
+                    self.register_pk(sink).await?;
+                }
+            }
+            Some(rendezvous_message::Union::RegisterPkResponse(rpr)) => {
+                update_latency();
+                match rpr.result.enum_value() {
+                    Ok(register_pk_response::Result::OK) => {
+                        Config::set_key_confirmed(true);
+                        Config::set_host_key_confirmed(&self.host_prefix, true);
+                        *SOLVING_PK_MISMATCH.lock().await = "".to_owned();
+                    }
+                    Ok(register_pk_response::Result::UUID_MISMATCH) => {
+                        self.handle_uuid_mismatch(sink).await?;
+                    }
+                    _ => {
+                        log::error!("unknown RegisterPkResponse");
+                    }
+                }
+                if rpr.keep_alive > 0 {
+                    self.keep_alive = rpr.keep_alive * 1000;
+                    log::info!("keep_alive: {}ms", self.keep_alive);
+                }
+            }
+            Some(rendezvous_message::Union::PunchHole(ph)) => {
+                let rz = self.clone();
+                let server = server.clone();
+                tokio::spawn(async move {
+                    allow_err!(rz.handle_punch_hole(ph, server).await);
+                });
+            }
+            Some(rendezvous_message::Union::RequestRelay(rr)) => {
+                let rz = self.clone();
+                let server = server.clone();
+                tokio::spawn(async move {
+                    allow_err!(rz.handle_request_relay(rr, server).await);
+                });
+            }
+            Some(rendezvous_message::Union::FetchLocalAddr(fla)) => {
+                let rz = self.clone();
+                let server = server.clone();
+                tokio::spawn(async move {
+                    allow_err!(rz.handle_intranet(fla, server).await);
+                });
+            }
+            Some(rendezvous_message::Union::ConfigureUpdate(cu)) => {
+                let v0 = Config::get_rendezvous_servers();
+                Config::set_option(
+                    "rendezvous-servers".to_owned(),
+                    cu.rendezvous_servers.join(","),
+                );
+                Config::set_serial(cu.serial);
+                if v0 != Config::get_rendezvous_servers() {
+                    Self::restart();
+                }
+            }
+            _ => {}
+        }
+        Ok(())
+    }
+
+    pub async fn start_tcp(server: ServerPtr, host: String) -> ResultType<()> {
+        let host = check_port(&host, RENDEZVOUS_PORT);
+        let mut conn = connect_tcp(host.clone(), CONNECT_TIMEOUT).await?;
+        let key = crate::get_key(true).await;
+        crate::secure_tcp(&mut conn, &key).await?;
+        let mut rz = Self {
+            addr: conn.local_addr().into_target_addr()?,
+            host: host.clone(),
+            host_prefix: Self::get_host_prefix(&host),
+            keep_alive: DEFAULT_KEEP_ALIVE,
+        };
+        let mut timer = interval(TIMER_OUT);
+        let mut last_register_sent: Option<Instant> = None;
+        let mut last_recv_msg = Instant::now();
+        // we won't support connecting to multiple rendzvous servers any more, so we can use a global variable here.
+        Config::set_host_key_confirmed(&host, false);
+        loop {
+            let mut update_latency = || {
+                let latency = last_register_sent
+                    .map(|x| x.elapsed().as_micros() as i64)
+                    .unwrap_or(0);
+                Config::update_latency(&host, latency);
+                log::debug!("Latency of {}: {}ms", host, latency as f64 / 1000.);
+            };
+            select! {
+                res = conn.next() => {
+                    last_recv_msg = Instant::now();
+                    let bytes = res.ok_or_else(|| anyhow::anyhow!("Rendezvous connection is reset by the peer"))??;
+                    if bytes.is_empty() {
+                        conn.send_bytes(bytes::Bytes::new()).await?;
+                        continue; // heartbeat
+                    }
+                    let msg = Message::parse_from_bytes(&bytes)?;
+                    rz.handle_resp(msg.union, Sink::Stream(&mut conn), &server, &mut update_latency).await?
+                }
+                _ = timer.tick() => {
+                    if SHOULD_EXIT.load(Ordering::SeqCst) {
+                        break;
+                    }
+                    // https://www.emqx.com/en/blog/mqtt-keep-alive
+                    if last_recv_msg.elapsed().as_millis() as u64 > rz.keep_alive as u64 * 3 / 2 {
+                        bail!("Rendezvous connection is timeout");
+                    }
+                    if (!Config::get_key_confirmed() ||
+                        !Config::get_host_key_confirmed(&host)) &&
+                        last_register_sent.map(|x| x.elapsed().as_millis() as i64).unwrap_or(REG_INTERVAL) >= REG_INTERVAL {
+                        rz.register_pk(Sink::Stream(&mut conn)).await?;
+                        last_register_sent = Some(Instant::now());
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
+    pub async fn start(server: ServerPtr, host: String) -> ResultType<()> {
+        log::info!("start rendezvous mediator of {}", host);
+        if cfg!(debug_assertions) && option_env!("TEST_TCP").is_some() {
+            Self::start_tcp(server, host).await
+        } else {
+            Self::start_udp(server, host).await
+        }
     }
 
     async fn handle_request_relay(&self, rr: RequestRelay, server: ServerPtr) -> ResultType<()> {
@@ -315,7 +414,7 @@ impl RendezvousMediator {
             secure,
         );
 
-        let mut socket = socket_client::connect_tcp(&*self.host, CONNECT_TIMEOUT).await?;
+        let mut socket = connect_tcp(&*self.host, CONNECT_TIMEOUT).await?;
 
         let mut msg_out = Message::new();
         let mut rr = RelayResponse {
@@ -360,7 +459,7 @@ impl RendezvousMediator {
         }
         let peer_addr = AddrMangle::decode(&fla.socket_addr);
         log::debug!("Handle intranet from {:?}", peer_addr);
-        let mut socket = socket_client::connect_tcp(&*self.host, CONNECT_TIMEOUT).await?;
+        let mut socket = connect_tcp(&*self.host, CONNECT_TIMEOUT).await?;
         let local_addr = socket.local_addr();
         let local_addr: SocketAddr =
             format!("{}:{}", local_addr.ip(), local_addr.port()).parse()?;
@@ -399,7 +498,7 @@ impl RendezvousMediator {
         let peer_addr = AddrMangle::decode(&ph.socket_addr);
         log::debug!("Punch hole to {:?}", peer_addr);
         let mut socket = {
-            let socket = socket_client::connect_tcp(&*self.host, CONNECT_TIMEOUT).await?;
+            let socket = connect_tcp(&*self.host, CONNECT_TIMEOUT).await?;
             let local_addr = socket.local_addr();
             // key important here for punch hole to tell my gateway incoming peer is safe.
             // it can not be async here, because local_addr can not be reused, we must close the connection before use it again.
@@ -423,28 +522,24 @@ impl RendezvousMediator {
         Ok(())
     }
 
-    async fn register_pk(&mut self, socket: &mut FramedSocket) -> ResultType<()> {
+    async fn register_pk(&mut self, socket: Sink<'_>) -> ResultType<()> {
         let mut msg_out = Message::new();
         let pk = Config::get_key_pair().1;
         let uuid = hbb_common::get_uuid();
         let id = Config::get_id();
-        self.last_id_pk_registry = id.clone();
         msg_out.set_register_pk(RegisterPk {
             id,
             uuid: uuid.into(),
             pk: pk.into(),
             ..Default::default()
         });
-        socket.send(&msg_out, self.addr.to_owned()).await?;
+        socket.send(&msg_out).await?;
         Ok(())
     }
 
-    async fn handle_uuid_mismatch(&mut self, socket: &mut FramedSocket) -> ResultType<()> {
-        if self.last_id_pk_registry != Config::get_id() {
-            return Ok(());
-        }
+    async fn handle_uuid_mismatch(&mut self, socket: Sink<'_>) -> ResultType<()> {
         {
-            let mut solving = SOLVING_PK_MISMATCH.lock().unwrap();
+            let mut solving = SOLVING_PK_MISMATCH.lock().await;
             if solving.is_empty() || *solving == self.host {
                 log::info!("UUID_MISMATCH received from {}", self.host);
                 Config::set_key_confirmed(false);
@@ -457,10 +552,12 @@ impl RendezvousMediator {
         self.register_pk(socket).await
     }
 
-    async fn register_peer(&mut self, socket: &mut FramedSocket) -> ResultType<()> {
-        if !SOLVING_PK_MISMATCH.lock().unwrap().is_empty() {
+    async fn register_peer(&mut self, socket: Sink<'_>) -> ResultType<()> {
+        let solving = SOLVING_PK_MISMATCH.lock().await;
+        if !(solving.is_empty() || *solving == self.host) {
             return Ok(());
         }
+        drop(solving);
         if !Config::get_key_confirmed() || !Config::get_host_key_confirmed(&self.host_prefix) {
             log::info!(
                 "register_pk of {} due to key not confirmed",
@@ -481,7 +578,7 @@ impl RendezvousMediator {
             serial,
             ..Default::default()
         });
-        socket.send(&msg_out, self.addr.to_owned()).await?;
+        socket.send(&msg_out).await?;
         Ok(())
     }
 
@@ -622,7 +719,7 @@ async fn create_online_stream() -> ResultType<FramedStream> {
         bail!("Invalid server address: {}", rendezvous_server);
     }
     let online_server = format!("{}:{}", tmp[0], port - 1);
-    socket_client::connect_tcp(online_server, CONNECT_TIMEOUT).await
+    connect_tcp(online_server, CONNECT_TIMEOUT).await
 }
 
 async fn query_online_states_(
@@ -677,6 +774,20 @@ async fn query_online_states_(
         }
 
         sleep(300.0).await;
+    }
+}
+
+enum Sink<'a> {
+    Framed(&'a mut FramedSocket, &'a TargetAddr<'a>),
+    Stream(&'a mut FramedStream),
+}
+
+impl Sink<'_> {
+    async fn send(self, msg: &Message) -> ResultType<()> {
+        match self {
+            Sink::Framed(socket, addr) => socket.send(msg, addr.to_owned()).await,
+            Sink::Stream(stream) => stream.send(msg).await,
+        }
     }
 }
 

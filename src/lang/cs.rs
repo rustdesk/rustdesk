@@ -578,5 +578,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("capture_display_elevated_connections_tip", "Snímání více displejů není podporováno v uživatelském režimu se zvýšenými oprávněními. Pokud chcete ovládat více displejů, zkuste to znovu po instalaci."),
         ("Swap control-command key", "Prohození klávesy control-command"),
         ("swap-left-right-mouse", "Prohodit levé a pravé tlačítko myši"),
+        ("2FA code", "2FA kód"),
+        ("2fa_tip", "Zadejte svůj kód 2FA do ověřovací aplikace."),
+        ("More", "Více"),
     ].iter().cloned().collect();
 }

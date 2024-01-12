@@ -578,5 +578,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("capture_display_elevated_connections_tip", "Vairāku displeju uzņemšana netiek atbalstīta paaugstinātā lietotāja režīmā. Lūdzu, mēģiniet vēlreiz pēc instalēšanas, ja vēlaties kontrolēt vairākus displejus."),
         ("Swap control-command key", "Apmainīt vadības un komandas taustiņu"),
         ("swap-left-right-mouse", "Apmainīt kreiso un labo peles pogu"),
+        ("2FA code", "2FA kods"),
+        ("2fa_tip", "Lūdzu, ievadiet savu 2FA kodu autentifikācijas lietotnē."),
+        ("More", "Vairāk"),
     ].iter().cloned().collect();
 }

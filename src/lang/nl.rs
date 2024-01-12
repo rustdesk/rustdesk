@@ -578,5 +578,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("capture_display_elevated_connections_tip", "Scannen van meerdere schermen wordt niet ondersteund in de bevoorrechte gebruikersmodus. Als je meerdere schermen wilt bedienen, probeer het dan opnieuw na de installatie."),
         ("Swap control-command key", "Wissel controle-commando toets"),
         ("swap-left-right-mouse", "wissel-links-rechts-muis"),
+        ("2FA code", "2FA-code"),
+        ("2fa_tip", "Geef je 2FA-code op in de verificatie-app."),
+        ("More", "Meer"),
     ].iter().cloned().collect();
 }

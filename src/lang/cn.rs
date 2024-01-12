@@ -346,7 +346,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Dark", "黑暗"),
         ("Light", "明亮"),
         ("Follow System", "跟随系统"),
-        ("Enable hardware codec", "使用硬件编解码"),
+        ("Enable hardware codec", "使能硬件编解码"),
         ("Unlock Security Settings", "解锁安全设置"),
         ("Enable audio", "允许传输音频"),
         ("Unlock Network Settings", "解锁网络设置"),
@@ -578,5 +578,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("capture_display_elevated_connections_tip", "用户提权后，不能显示多个显示器。若要控制多显示器，请安装后再试。"),
         ("Swap control-command key", "交换Control键和Command键"),
         ("swap-left-right-mouse", "交换鼠标左右键"),
+        ("2FA code", "双重认证代码"),
+        ("2fa_tip", "请输入授权 app 中的双重认证代码"),
+        ("More", "更多"),
     ].iter().cloned().collect();
 }

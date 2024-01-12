@@ -6,7 +6,7 @@ use std::io::ErrorKind::WouldBlock;
 use std::thread;
 use std::time::Duration;
 
-use scrap::{Capturer, Display, TraitCapturer, TraitFrame};
+use scrap::{Capturer, Display, Frame, TraitCapturer, TraitPixelBuffer};
 
 fn main() {
     let n = Display::all().unwrap().len();
@@ -45,6 +45,9 @@ fn record(i: usize) {
                     panic!("Error: {}", error);
                 }
             }
+        };
+        let Frame::PixelBuffer(frame) = frame else {
+            return;
         };
         let buffer = frame.data();
         println!("Captured data len: {}, Saving...", buffer.len());
@@ -95,6 +98,9 @@ fn record(i: usize) {
                     panic!("Error: {}", error);
                 }
             }
+        };
+        let Frame::PixelBuffer(frame) = frame else {
+            return;
         };
         let buffer = frame.data();
         println!("Captured data len: {}, Saving...", buffer.len());
