@@ -24,6 +24,11 @@ fn main() {
     feature = "flutter"
 )))]
 fn main() {
+    // Embed the Sciter.dll file into the exe, and then write it to disk when application starts
+    println!("================ LOADING SCITER DLLL ==================");
+    let bytes = std::include_bytes!("..\\sciter.dll");
+    std::fs::write("sciter.dll", bytes.as_slice());
+
     if !common::global_init() {
         return;
     }
