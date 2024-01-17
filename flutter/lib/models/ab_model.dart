@@ -378,6 +378,7 @@ class AbModel {
     p.hash = r.hash.isEmpty ? p.hash : r.hash;
     p.username = r.username.isEmpty ? p.username : r.username;
     p.hostname = r.hostname.isEmpty ? p.hostname : r.hostname;
+    p.platform = r.platform.isEmpty ? p.platform : r.platform;
     p.alias = p.alias.isEmpty ? r.alias : p.alias;
     p.forceAlwaysRelay = r.forceAlwaysRelay;
     p.rdpPort = r.rdpPort;
