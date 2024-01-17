@@ -55,6 +55,7 @@ class AbModel {
       Timer.periodic(Duration(milliseconds: 500), (timer) async {
         if (_timerCounter++ % 6 == 0) {
           if (!gFFI.userModel.isLogin) return;
+          if (!initialized) return;
           syncFromRecent();
         }
       });
