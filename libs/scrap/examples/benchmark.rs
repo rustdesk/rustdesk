@@ -239,7 +239,7 @@ fn test_av1(
 
 #[cfg(feature = "hwcodec")]
 mod hw {
-    use hwcodec::ffmpeg::CodecInfo;
+    use hwcodec::ffmpeg_ram::CodecInfo;
     use scrap::{
         hwcodec::{HwDecoder, HwEncoder, HwEncoderConfig},
         CodecFormat,

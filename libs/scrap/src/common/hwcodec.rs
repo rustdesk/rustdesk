@@ -12,12 +12,15 @@ use hbb_common::{
     ResultType,
 };
 use hwcodec::{
-    decode::{DecodeContext, DecodeFrame, Decoder},
-    encode::{EncodeContext, EncodeFrame, Encoder},
-    ffmpeg::{CodecInfo, CodecInfos, DataFormat},
-    AVPixelFormat,
-    Quality::{self, *},
-    RateControl::{self, *},
+    common::DataFormat,
+    ffmpeg::AVPixelFormat,
+    ffmpeg_ram::{
+        decode::{DecodeContext, DecodeFrame, Decoder},
+        encode::{EncodeContext, EncodeFrame, Encoder},
+        CodecInfo, CodecInfos,
+        Quality::{self, *},
+        RateControl::{self, *},
+    },
 };
 
 const CFG_KEY_ENCODER: &str = "bestHwEncoders";
@@ -126,6 +129,7 @@ impl EncoderApi for HwEncoder {
             match self.format {
                 DataFormat::H264 => vf.set_h264s(frames),
                 DataFormat::H265 => vf.set_h265s(frames),
+                _ => bail!("unsupported format: {:?}", self.format),
             }
             Ok(vf)
         } else {

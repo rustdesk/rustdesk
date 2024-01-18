@@ -8,13 +8,6 @@ use crate::{
     codec::{base_bitrate, enable_gpucodec_option, EncoderApi, EncoderCfg, Quality},
     AdapterDevice, CodecFormat, CodecName, EncodeInput, EncodeYuvFormat, Pixfmt,
 };
-use gpucodec::gpu_common::{
-    self, Available, DecodeContext, DynamicContext, EncodeContext, FeatureContext, MAX_GOP,
-};
-use gpucodec::{
-    decode::{self, DecodeFrame, Decoder},
-    encode::{self, EncodeFrame, Encoder},
-};
 use hbb_common::{
     allow_err,
     anyhow::{anyhow, bail, Context},
@@ -22,6 +15,14 @@ use hbb_common::{
     log,
     message_proto::{EncodedVideoFrame, EncodedVideoFrames, VideoFrame},
     ResultType,
+};
+use hwcodec::{
+    common::{DataFormat, MAX_GOP},
+    native::{
+        decode::{self, DecodeFrame, Decoder},
+        encode::{self, EncodeFrame, Encoder},
+        Available, DecodeContext, DynamicContext, EncodeContext, EncodeDriver, FeatureContext,
+    },
 };
 
 const OUTPUT_SHARED_HANDLE: bool = false;
@@ -40,13 +41,13 @@ pub struct GpuEncoderConfig {
     pub width: usize,
     pub height: usize,
     pub quality: Quality,
-    pub feature: gpucodec::gpu_common::FeatureContext,
+    pub feature: FeatureContext,
     pub keyframe_interval: Option<usize>,
 }
 
 pub struct GpuEncoder {
     encoder: Encoder,
-    pub format: gpu_common::DataFormat,
+    pub format: DataFormat,
     ctx: EncodeContext,
     bitrate: u32,
     last_frame_len: usize,
@@ -138,8 +139,8 @@ impl EncoderApi for GpuEncoder {
                 ..Default::default()
             };
             match self.format {
-                gpu_common::DataFormat::H264 => vf.set_h264s(frames),
-                gpu_common::DataFormat::H265 => vf.set_h265s(frames),
+                DataFormat::H264 => vf.set_h264s(frames),
+                DataFormat::H265 => vf.set_h265s(frames),
                 _ => bail!("{:?} not supported", self.format),
             }
             Ok(vf)
@@ -181,7 +182,7 @@ impl EncoderApi for GpuEncoder {
     }
 
     fn support_abr(&self) -> bool {
-        self.ctx.f.driver != gpu_common::EncodeDriver::VPL
+        self.ctx.f.driver != EncodeDriver::VPL
     }
 }
 
@@ -205,8 +206,8 @@ impl GpuEncoder {
             return vec![];
         }
         let data_format = match name {
-            CodecName::H264GPU => gpu_common::DataFormat::H264,
-            CodecName::H265GPU => gpu_common::DataFormat::H265,
+            CodecName::H264GPU => DataFormat::H264,
+            CodecName::H265GPU => DataFormat::H265,
             _ => return vec![],
         };
         let Ok(displays) = crate::Display::all() else {
@@ -252,27 +253,21 @@ impl GpuEncoder {
     pub fn convert_quality(quality: Quality, f: &FeatureContext) -> u32 {
         match quality {
             Quality::Best => {
-                if f.driver == gpu_common::EncodeDriver::VPL
-                    && f.data_format == gpu_common::DataFormat::H264
-                {
+                if f.driver == EncodeDriver::VPL && f.data_format == DataFormat::H264 {
                     200
                 } else {
                     150
                 }
             }
             Quality::Balanced => {
-                if f.driver == gpu_common::EncodeDriver::VPL
-                    && f.data_format == gpu_common::DataFormat::H264
-                {
+                if f.driver == EncodeDriver::VPL && f.data_format == DataFormat::H264 {
                     150
                 } else {
                     100
                 }
             }
             Quality::Low => {
-                if f.driver == gpu_common::EncodeDriver::VPL
-                    && f.data_format == gpu_common::DataFormat::H264
-                {
+                if f.driver == EncodeDriver::VPL && f.data_format == DataFormat::H264 {
                     75
                 } else {
                     50
@@ -315,8 +310,8 @@ impl GpuDecoder {
     pub fn available(format: CodecFormat, luid: Option<i64>) -> Vec<DecodeContext> {
         let luid = luid.unwrap_or_default();
         let data_format = match format {
-            CodecFormat::H264 => gpu_common::DataFormat::H264,
-            CodecFormat::H265 => gpu_common::DataFormat::H265,
+            CodecFormat::H264 => DataFormat::H264,
+            CodecFormat::H265 => DataFormat::H265,
             _ => return vec![],
         };
         get_available_config()
@@ -333,10 +328,8 @@ impl GpuDecoder {
         }
         let v = get_available_config().map(|c| c.d).unwrap_or_default();
         (
-            v.iter()
-                .any(|d| d.data_format == gpu_common::DataFormat::H264),
-            v.iter()
-                .any(|d| d.data_format == gpu_common::DataFormat::H265),
+            v.iter().any(|d| d.data_format == DataFormat::H264),
+            v.iter().any(|d| d.data_format == DataFormat::H265),
         )
     }
 

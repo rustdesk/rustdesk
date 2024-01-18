@@ -335,8 +335,8 @@ impl Encoder {
             }
             #[cfg(feature = "gpucodec")]
             EncoderCfg::GPU(gpu) => match gpu.feature.data_format {
-                gpucodec::gpu_common::DataFormat::H264 => CodecName::H264GPU,
-                gpucodec::gpu_common::DataFormat::H265 => CodecName::H265GPU,
+                hwcodec::common::DataFormat::H264 => CodecName::H264GPU,
+                hwcodec::common::DataFormat::H265 => CodecName::H265GPU,
                 _ => {
                     log::error!(
                         "should not reach here, gpucodec not support {:?}",
