@@ -37,22 +37,26 @@ use crate::{
 type Message = RendezvousMessage;
 
 const TIMER_OUT: Duration = Duration::from_secs(1);
+const DEFAULT_KEEP_ALIVE: i32 = 60_000;
 
 lazy_static::lazy_static! {
     static ref SOLVING_PK_MISMATCH: Arc<Mutex<String>> = Default::default();
 }
 static SHOULD_EXIT: AtomicBool = AtomicBool::new(false);
+static MANUAL_RESTARTED: AtomicBool = AtomicBool::new(false);
 
 #[derive(Clone)]
 pub struct RendezvousMediator {
     addr: TargetAddr<'static>,
     host: String,
     host_prefix: String,
+    keep_alive: i32,
 }
 
 impl RendezvousMediator {
     pub fn restart() {
         SHOULD_EXIT.store(true, Ordering::SeqCst);
+        MANUAL_RESTARTED.store(true, Ordering::SeqCst);
         log::info!("server restart");
     }
 
@@ -83,7 +87,7 @@ impl RendezvousMediator {
         #[cfg(not(any(feature = "flatpak", feature = "appimage")))]
         crate::platform::linux_desktop_manager::start_xdesktop();
         loop {
-            Config::reset_online();
+            let conn_start_time = Instant::now();
             *SOLVING_PK_MISMATCH.lock().await = "".to_owned();
             if Config::get_option("stop-service").is_empty()
                 && !crate::platform::installing_service()
@@ -95,6 +99,7 @@ impl RendezvousMediator {
                 let mut futs = Vec::new();
                 let servers = Config::get_rendezvous_servers();
                 SHOULD_EXIT.store(false, Ordering::SeqCst);
+                MANUAL_RESTARTED.store(false, Ordering::SeqCst);
                 for host in servers.clone() {
                     let server = server.clone();
                     futs.push(tokio::spawn(async move {
@@ -109,7 +114,13 @@ impl RendezvousMediator {
             } else {
                 server.write().unwrap().close_connections();
             }
-            sleep(1.).await;
+            Config::reset_online();
+            if !MANUAL_RESTARTED.load(Ordering::SeqCst) {
+                let elapsed = conn_start_time.elapsed().as_millis() as u64;
+                if elapsed < CONNECT_TIMEOUT {
+                    sleep(((CONNECT_TIMEOUT - elapsed) / 1000) as _).await;
+                }
+            }
         }
         // It should be better to call stop_xdesktop.
         // But for server, it also is Ok without calling this method.
@@ -118,24 +129,27 @@ impl RendezvousMediator {
         // crate::platform::linux_desktop_manager::stop_xdesktop();
     }
 
-    pub async fn start_udp(server: ServerPtr, host: String) -> ResultType<()> {
-        let host_prefix: String = host
-            .split(".")
+    fn get_host_prefix(host: &str) -> String {
+        host.split(".")
             .next()
             .map(|x| {
                 if x.parse::<i32>().is_ok() {
-                    host.clone()
+                    host.to_owned()
                 } else {
-                    x.to_string()
+                    x.to_owned()
                 }
             })
-            .unwrap_or(host.to_owned());
+            .unwrap_or(host.to_owned())
+    }
+
+    pub async fn start_udp(server: ServerPtr, host: String) -> ResultType<()> {
         let host = check_port(&host, RENDEZVOUS_PORT);
         let (mut socket, addr) = socket_client::new_udp_for(&host, CONNECT_TIMEOUT).await?;
         let mut rz = Self {
             addr: addr.clone(),
             host: host.clone(),
-            host_prefix,
+            host_prefix: Self::get_host_prefix(&host),
+            keep_alive: DEFAULT_KEEP_ALIVE,
         };
 
         let mut timer = interval(TIMER_OUT);
@@ -264,6 +278,10 @@ impl RendezvousMediator {
                         log::error!("unknown RegisterPkResponse");
                     }
                 }
+                if rpr.keep_alive > 0 {
+                    self.keep_alive = rpr.keep_alive * 1000;
+                    log::info!("keep_alive: {}ms", self.keep_alive);
+                }
             }
             Some(rendezvous_message::Union::PunchHole(ph)) => {
                 let rz = self.clone();
@@ -303,26 +321,53 @@ impl RendezvousMediator {
     }
 
     pub async fn start_tcp(server: ServerPtr, host: String) -> ResultType<()> {
-        let mut conn = connect_tcp(check_port(&host, RENDEZVOUS_PORT), CONNECT_TIMEOUT).await?;
+        let host = check_port(&host, RENDEZVOUS_PORT);
+        let mut conn = connect_tcp(host.clone(), CONNECT_TIMEOUT).await?;
         let key = crate::get_key(true).await;
         crate::secure_tcp(&mut conn, &key).await?;
         let mut rz = Self {
             addr: conn.local_addr().into_target_addr()?,
             host: host.clone(),
-            host_prefix: host.clone(),
+            host_prefix: Self::get_host_prefix(&host),
+            keep_alive: DEFAULT_KEEP_ALIVE,
         };
         let mut timer = interval(TIMER_OUT);
+        let mut last_register_sent: Option<Instant> = None;
+        let mut last_recv_msg = Instant::now();
+        // we won't support connecting to multiple rendzvous servers any more, so we can use a global variable here.
+        Config::set_host_key_confirmed(&host, false);
         loop {
-            let mut update_latency = || {};
+            let mut update_latency = || {
+                let latency = last_register_sent
+                    .map(|x| x.elapsed().as_micros() as i64)
+                    .unwrap_or(0);
+                Config::update_latency(&host, latency);
+                log::debug!("Latency of {}: {}ms", host, latency as f64 / 1000.);
+            };
             select! {
                 res = conn.next() => {
-                    let bytes = res.ok_or_else(|| anyhow::anyhow!("rendezvous server disconnected"))??;
+                    last_recv_msg = Instant::now();
+                    let bytes = res.ok_or_else(|| anyhow::anyhow!("Rendezvous connection is reset by the peer"))??;
+                    if bytes.is_empty() {
+                        conn.send_bytes(bytes::Bytes::new()).await?;
+                        continue; // heartbeat
+                    }
                     let msg = Message::parse_from_bytes(&bytes)?;
                     rz.handle_resp(msg.union, Sink::Stream(&mut conn), &server, &mut update_latency).await?
                 }
                 _ = timer.tick() => {
                     if SHOULD_EXIT.load(Ordering::SeqCst) {
                         break;
+                    }
+                    // https://www.emqx.com/en/blog/mqtt-keep-alive
+                    if last_recv_msg.elapsed().as_millis() as u64 > rz.keep_alive as u64 * 3 / 2 {
+                        bail!("Rendezvous connection is timeout");
+                    }
+                    if (!Config::get_key_confirmed() ||
+                        !Config::get_host_key_confirmed(&host)) &&
+                        last_register_sent.map(|x| x.elapsed().as_millis() as i64).unwrap_or(REG_INTERVAL) >= REG_INTERVAL {
+                        rz.register_pk(Sink::Stream(&mut conn)).await?;
+                        last_register_sent = Some(Instant::now());
                     }
                 }
             }

@@ -1278,7 +1278,7 @@ pub async fn secure_tcp(conn: &mut FramedStream, key: &str) -> ResultType<()> {
                         });
                         timeout(CONNECT_TIMEOUT, conn.send(&msg_out)).await??;
                         conn.set_key(key);
-                        log::info!("Token secured");
+                        log::info!("Connection secured");
                     }
                     _ => {}
                 }
