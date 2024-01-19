@@ -614,6 +614,7 @@ Future<bool?> verificationCodeDialog(
     UserPayload? user, bool isEmailVerification) async {
   var autoLogin = true;
   var isInProgress = false;
+  var isListenderAdded = false;
   String? errorText;
   String preCode = '';
 
@@ -622,14 +623,24 @@ Future<bool?> verificationCodeDialog(
   Timer(Duration(milliseconds: 100), () => focusNode..requestFocus());
 
   final res = await gFFI.dialogManager.show<bool>((setState, close, context) {
-    bool validate() {
-      return code.text.length >= 6;
+    validate() {
+      if (isEmailVerification) {
+        if (code.text.length != 6) {
+          errorText =
+              translate('Email verification code must be 6 characters.');
+        }
+      } else {
+        if (![6, 8, 10].contains(code.text.length)) {
+          errorText = translate('2FA code must be 6, 8, 10 digits.');
+        }
+      }
     }
 
     void onVerify() async {
-      if (!validate()) {
-        setState(
-            () => errorText = translate('Too short, at least 6 characters.'));
+      errorText = null;
+      validate();
+      if (errorText != null) {
+        setState(() {});
         return;
       }
       setState(() => isInProgress = true);
@@ -666,18 +677,55 @@ Future<bool?> verificationCodeDialog(
       setState(() => isInProgress = false);
     }
 
-    code.addListener(() {
-      if (errorText != null) {
-        setState(() => errorText = null);
-      }
-      if (preCode.length != 6 && code.text.length == 6) {
-        onVerify();
-      }
-      if (!isEmailVerification && preCode.length != 10 && code.text.length == 10) {
-        onVerify();
-      }
-      preCode = code.text;
-    });
+    if (!isListenderAdded) {
+      code.addListener(() {
+        var stateChanged = false;
+
+        if (isEmailVerification) {
+          if (code.text.length > 6) {
+            errorText =
+                translate('Email verification code must be 6 characters.');
+            stateChanged = true;
+          }
+        } else {
+          if (code.text.isNotEmpty) {
+            if (code.text.length > 10) {
+              errorText = translate('2FA code must be 6, 8, 10 digits.');
+              stateChanged = true;
+            }
+            if (code.text.startsWith('-') || int.tryParse(code.text) == null) {
+              errorText = translate('2FA code must be digits.');
+              stateChanged = true;
+            }
+          }
+        }
+
+        if (preCode.length != 6 && code.text.length == 6) {
+          onVerify();
+          stateChanged = true;
+        }
+        if (!isEmailVerification &&
+            preCode.length != 10 &&
+            code.text.length == 10) {
+          onVerify();
+          stateChanged = true;
+        }
+
+        if (!stateChanged) {
+          if (errorText != null) {
+            errorText = null;
+            stateChanged = true;
+          }
+        }
+
+        if (stateChanged) {
+          setState(() {});
+        }
+
+        preCode = code.text;
+      });
+      isListenderAdded = true;
+    }
 
     return CustomAlertDialog(
         title: Text(translate("Verification code")),
