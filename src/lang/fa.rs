@@ -581,5 +581,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("2FA code", "کد ورود 2 مرحله ای"),
         ("2fa_tip", "لطفا کد ورود 2 مرحله ای خود را در برنامه احراز هویت وارد کنید"),
         ("More", ""),
+        ("enable-2fa-title", ""),
+        ("enable-2fa-desc", ""),
+        ("wrong-2fa-code", ""),
+        ("enter-2fa-title", ""),
     ].iter().cloned().collect();
 }

@@ -7,6 +7,7 @@ import 'package:flutter_hbb/common/shared_state.dart';
 import 'package:flutter_hbb/common/widgets/setting_widgets.dart';
 import 'package:flutter_hbb/consts.dart';
 import 'package:get/get.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 
 import '../../common.dart';
 import '../../models/model.dart';
@@ -1499,5 +1500,126 @@ void renameDialog(
       onSubmit: submit,
       onCancel: cancel,
     );
+  });
+}
+
+void change2fa({Function()? callback}) async {
+  if (bind.mainHasValid2FaSync()) {
+    await bind.mainSetOption(key: "2fa", value: "");
+    callback?.call();
+    return;
+  }
+  var new2fa = (await bind.mainGenerate2Fa());
+  final secretRegex = RegExp(r'secret=([^&]+)');
+  final secret = secretRegex.firstMatch(new2fa)?.group(1);
+  var msg = ''.obs;
+  final RxString code = "".obs;
+  gFFI.dialogManager.show((setState, close, context) {
+    return CustomAlertDialog(
+      title: Text(translate("enable-2fa-title")),
+      content: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SelectableText(translate("enable-2fa-desc"),
+                  style: TextStyle(fontSize: 12))
+              .marginOnly(bottom: 12),
+          SizedBox(
+              width: 160,
+              height: 160,
+              child: QrImageView(
+                backgroundColor: Colors.white,
+                data: new2fa,
+                version: QrVersions.auto,
+                size: 160,
+                gapless: false,
+              )).marginOnly(bottom: 6),
+          SelectableText(secret ?? '', style: TextStyle(fontSize: 12))
+              .marginOnly(bottom: 12),
+          Row(children: [
+            Expanded(
+                child: Obx(() => TextField(
+                    decoration: InputDecoration(
+                        errorText:
+                            msg.value.isEmpty ? null : translate(msg.value),
+                        hintText: translate("Verification code")),
+                    onChanged: (value) {
+                      code.value = value;
+                      msg.value = '';
+                    },
+                    autofocus: true)))
+          ]),
+        ],
+      ),
+      actions: [
+        dialogButton("Cancel", onPressed: close, isOutline: true),
+        Obx(() => dialogButton(
+              "OK",
+              onPressed: code.value.trim().length == 6
+                  ? () async {
+                      if (await bind.mainVerify2Fa(code: code.value.trim())) {
+                        callback?.call();
+                        close();
+                      } else {
+                        msg.value = translate('wrong-2fa-code');
+                      }
+                    }
+                  : null,
+            )),
+      ],
+      onCancel: close,
+    );
+  });
+}
+
+void enter2FaDialog(
+    SessionID sessionId, OverlayDialogManager dialogManager) async {
+  final RxString code = "".obs;
+  dialogManager.dismissAll();
+  dialogManager.show((setState, close, context) {
+    cancel() {
+      close();
+      closeConnection();
+    }
+
+    submit() {
+      if (code.value.trim().length != 6) {
+        return;
+      }
+      gFFI.send2FA(sessionId, code.value.trim());
+      close();
+      dialogManager.showLoading(translate('Logging in...'),
+          onCancel: closeConnection);
+    }
+
+    return CustomAlertDialog(
+        title: Text(translate("enter-2fa-title")),
+        content: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(children: [
+              Expanded(
+                  child: TextField(
+                      decoration: InputDecoration(
+                          hintText: translate("Verification code")),
+                      onChanged: (value) {
+                        code.value = value;
+                      },
+                      autofocus: true))
+            ]),
+          ],
+        ),
+        onSubmit: submit,
+        onCancel: cancel,
+        actions: [
+          dialogButton(
+            'Cancel',
+            onPressed: cancel,
+            isOutline: true,
+          ),
+          Obx(() => dialogButton(
+                'OK',
+                onPressed: code.value.trim().length == 6 ? submit : null,
+              )),
+        ]);
   });
 }

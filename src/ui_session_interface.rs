@@ -1082,6 +1082,15 @@ impl<T: InvokeUiSession> Session<T> {
         self.send(Data::Login((os_username, os_password, password, remember)));
     }
 
+    pub fn send2fa(&self, code: String) {
+        let mut msg_out = Message::new();
+        msg_out.set_auth_2fa(Auth2FA {
+            code,
+            ..Default::default()
+        });
+        self.send(Data::Message(msg_out));
+    }
+
     pub fn new_rdp(&self) {
         self.send(Data::NewRDP);
     }

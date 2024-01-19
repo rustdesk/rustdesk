@@ -581,5 +581,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("2FA code", "2FA-Code"),
         ("2fa_tip", "Bitte geben Sie Ihren 2FA-Code in der Authentifizierungs-App ein."),
         ("More", "Mehr"),
+        ("enable-2fa-title", ""),
+        ("enable-2fa-desc", ""),
+        ("wrong-2fa-code", ""),
+        ("enter-2fa-title", ""),
     ].iter().cloned().collect();
 }
