@@ -619,14 +619,7 @@ Future<bool?> verificationCodeDialog(
   final code = TextEditingController();
 
   final res = await gFFI.dialogManager.show<bool>((setState, close, context) {
-    late ValidationField codeField;
-
     void onVerify() async {
-      errorText = codeField.validate();
-      if (errorText != null) {
-        setState(() {});
-        return;
-      }
       setState(() => isInProgress = true);
 
       try {
@@ -661,17 +654,17 @@ Future<bool?> verificationCodeDialog(
       setState(() => isInProgress = false);
     }
 
-    codeField = isEmailVerification
+    final codeField = isEmailVerification
         ? DialogEmailCodeField(
             controller: code,
             errorText: errorText,
-            isReadyCallback: onVerify,
+            readyCallback: onVerify,
             onChanged: () => errorText = null,
           )
         : Dialog2FaField(
             controller: code,
             errorText: errorText,
-            isReadyCallback: onVerify,
+            readyCallback: onVerify,
             onChanged: () => errorText = null,
           );
 

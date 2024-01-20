@@ -422,31 +422,35 @@ class Dialog2FaField extends ValidationField {
     required this.controller,
     this.autoFocus = true,
     this.reRequestFocus = false,
+    this.title,
+    this.helperText,
     this.hintText,
     this.errorText,
-    this.isReadyCallback,
+    this.readyCallback,
     this.onChanged,
   }) : super(key: key);
 
   final TextEditingController controller;
   final bool autoFocus;
   final bool reRequestFocus;
+  final String? title;
+  final String? helperText;
   final String? hintText;
   final String? errorText;
-  final VoidCallback? isReadyCallback;
+  final VoidCallback? readyCallback;
   final VoidCallback? onChanged;
 
   @override
   Widget build(BuildContext context) {
     return DialogVerificationCodeField(
-      title: translate('2FA code'),
+      title: title ?? translate('2FA code'),
       controller: controller,
       errorText: errorText,
       autoFocus: autoFocus,
       reRequestFocus: reRequestFocus,
       hintText: hintText,
-      isReadyCallback: isReadyCallback,
-      helperText: translate('2fa_tip'),
+      readyCallback: readyCallback,
+      helperText: helperText ?? translate('2fa_tip'),
       onChanged: _onChanged,
     );
   }
@@ -476,7 +480,7 @@ class Dialog2FaField extends ValidationField {
     }
 
     if (isReady) {
-      isReadyCallback?.call();
+      readyCallback?.call();
       return;
     }
 
@@ -494,7 +498,7 @@ class DialogEmailCodeField extends ValidationField {
     this.reRequestFocus = false,
     this.hintText,
     this.errorText,
-    this.isReadyCallback,
+    this.readyCallback,
     this.onChanged,
   }) : super(key: key);
 
@@ -503,7 +507,7 @@ class DialogEmailCodeField extends ValidationField {
   final bool reRequestFocus;
   final String? hintText;
   final String? errorText;
-  final VoidCallback? isReadyCallback;
+  final VoidCallback? readyCallback;
   final VoidCallback? onChanged;
 
   @override
@@ -515,7 +519,7 @@ class DialogEmailCodeField extends ValidationField {
       autoFocus: autoFocus,
       reRequestFocus: reRequestFocus,
       hintText: hintText,
-      isReadyCallback: isReadyCallback,
+      readyCallback: readyCallback,
       helperText: translate('verification_tip'),
       onChanged: _onChanged,
     );
@@ -541,7 +545,7 @@ class DialogEmailCodeField extends ValidationField {
     }
 
     if (isReady) {
-      isReadyCallback?.call();
+      readyCallback?.call();
       return;
     }
 
@@ -562,7 +566,7 @@ class DialogVerificationCodeField extends StatefulWidget {
     this.hintText,
     this.errorText,
     this.textLength,
-    this.isReadyCallback,
+    this.readyCallback,
     this.onChanged,
   }) : super(key: key);
 
@@ -574,7 +578,7 @@ class DialogVerificationCodeField extends StatefulWidget {
   final String? hintText;
   final String? errorText;
   final int? textLength;
-  final VoidCallback? isReadyCallback;
+  final VoidCallback? readyCallback;
   final Function(StateSetter setState, SimpleWrapper<String?> errText)?
       onChanged;
 
@@ -1741,9 +1745,31 @@ void change2fa({Function()? callback}) async {
   var new2fa = (await bind.mainGenerate2Fa());
   final secretRegex = RegExp(r'secret=([^&]+)');
   final secret = secretRegex.firstMatch(new2fa)?.group(1);
-  var msg = ''.obs;
-  final RxString code = "".obs;
+  String? errorText;
+  final controller = TextEditingController();
   gFFI.dialogManager.show((setState, close, context) {
+    onVerify() async {
+      if (await bind.mainVerify2Fa(code: controller.text.trim())) {
+        callback?.call();
+        close();
+      } else {
+        errorText = translate('wrong-2fa-code');
+      }
+    }
+
+    final codeField = Dialog2FaField(
+      controller: controller,
+      errorText: errorText,
+      onChanged: () => setState(() => errorText = null),
+      title: translate('Verification code'),
+      readyCallback: () {
+        onVerify();
+        setState(() {});
+      },
+    );
+
+    getOnSubmit() => codeField.isReady ? onVerify : null;
+
     return CustomAlertDialog(
       title: Text(translate("enable-2fa-title")),
       content: Column(
@@ -1764,36 +1790,12 @@ void change2fa({Function()? callback}) async {
               )).marginOnly(bottom: 6),
           SelectableText(secret ?? '', style: TextStyle(fontSize: 12))
               .marginOnly(bottom: 12),
-          Row(children: [
-            Expanded(
-                child: Obx(() => TextField(
-                    decoration: InputDecoration(
-                        errorText:
-                            msg.value.isEmpty ? null : translate(msg.value),
-                        hintText: translate("Verification code")),
-                    onChanged: (value) {
-                      code.value = value;
-                      msg.value = '';
-                    },
-                    autofocus: true)))
-          ]),
+          Row(children: [Expanded(child: codeField)]),
         ],
       ),
       actions: [
         dialogButton("Cancel", onPressed: close, isOutline: true),
-        Obx(() => dialogButton(
-              "OK",
-              onPressed: code.value.trim().length == 6
-                  ? () async {
-                      if (await bind.mainVerify2Fa(code: code.value.trim())) {
-                        callback?.call();
-                        close();
-                      } else {
-                        msg.value = translate('wrong-2fa-code');
-                      }
-                    }
-                  : null,
-            )),
+        dialogButton("OK", onPressed: getOnSubmit()),
       ],
       onCancel: close,
     );
