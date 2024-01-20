@@ -585,5 +585,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("enable-2fa-desc", ""),
         ("wrong-2fa-code", ""),
         ("enter-2fa-title", ""),
+        ("Email verification code must be 6 characters.", "Email 验证码必须是 6 个字符。"),
+        ("2FA code must be 6 digits.", "2FA 码必须是6位数字。"),
     ].iter().cloned().collect();
 }
