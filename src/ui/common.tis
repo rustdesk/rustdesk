@@ -476,6 +476,7 @@ class MultipleSessionComponent extends Reactor.Component {
     this var sessions = [];
     this var selectedSessionId = null;
     this var sessionlength = 0;
+    this var messageText = translate("Please select the user you want to connect to");
 
     function this(params) {
         if (params && params.sessions) {
@@ -490,7 +491,7 @@ class MultipleSessionComponent extends Reactor.Component {
 
     function render() {
         return <div .user-session>
-            <div .title>Please select the user you want to connect to</div>    
+            <div .title>{this.messageText}</div>
             <select>
                 {this.sessions.map(session =>
                     <option value={session.id}>{session.name}</option>
@@ -500,7 +501,7 @@ class MultipleSessionComponent extends Reactor.Component {
     }
 
     event change {
-        var selectedSessionName = this.value.substr(this.sessionlength);
+        var selectedSessionName = this.value.substr(this.messageText.length + this.sessionlength);
         this.selectedSessionId = this.sessions.find(session => session.name == selectedSessionName).id;
         handler.set_selected_user_session_id(this.selectedSessionId);
     }
