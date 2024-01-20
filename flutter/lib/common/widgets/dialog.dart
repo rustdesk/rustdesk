@@ -442,6 +442,7 @@ class Dialog2FaField extends ValidationField {
   final String? errorText;
   final VoidCallback? readyCallback;
   final VoidCallback? onChanged;
+  final errMsg = translate('2FA code must be 6 digits.');
 
   @override
   Widget build(BuildContext context) {
@@ -468,20 +469,18 @@ class Dialog2FaField extends ValidationField {
   bool get isReady => text.length == 6 && isAllDigits;
 
   @override
-  String? validate() =>
-      isReady ? null : translate('2FA code must be 6 digits.');
+  String? validate() => isReady ? null : errMsg;
 
   _onChanged(StateSetter setState, SimpleWrapper<String?> errText) {
     onChanged?.call();
 
     if (text.length > 6) {
-      setState(() => errText.value =
-          translate('Email verification code must be 6 characters.'));
+      setState(() => errText.value = errMsg);
       return;
     }
 
     if (!isAllDigits) {
-      setState(() => errText.value = translate('2FA code must be 6 digits.'));
+      setState(() => errText.value = errMsg);
       return;
     }
 
@@ -515,6 +514,7 @@ class DialogEmailCodeField extends ValidationField {
   final String? errorText;
   final VoidCallback? readyCallback;
   final VoidCallback? onChanged;
+  final errMsg = translate('Email verification code must be 6 characters.');
 
   @override
   Widget build(BuildContext context) {
@@ -537,16 +537,13 @@ class DialogEmailCodeField extends ValidationField {
   bool get isReady => text.length == 6;
 
   @override
-  String? validate() => isReady
-      ? null
-      : translate('Email verification code must be 6 characters.');
+  String? validate() => isReady ? null : errMsg;
 
   _onChanged(StateSetter setState, SimpleWrapper<String?> errText) {
     onChanged?.call();
 
     if (text.length > 6) {
-      setState(() => errText.value =
-          translate('Email verification code must be 6 characters.'));
+      setState(() => errText.value = errMsg);
       return;
     }
 
