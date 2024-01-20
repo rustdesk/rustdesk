@@ -363,6 +363,7 @@ class DialogTextField extends StatelessWidget {
   final Widget? suffixIcon;
   final TextEditingController controller;
   final FocusNode? focusNode;
+  final List<TextInputFormatter>? inputFormatters;
 
   static const kUsernameTitle = 'Username';
   static const kUsernameIcon = Icon(Icons.account_circle_outlined);
@@ -378,6 +379,7 @@ class DialogTextField extends StatelessWidget {
       this.prefixIcon,
       this.suffixIcon,
       this.hintText,
+      this.inputFormatters,
       required this.title,
       required this.controller})
       : super(key: key);
@@ -402,6 +404,7 @@ class DialogTextField extends StatelessWidget {
             focusNode: focusNode,
             autofocus: true,
             obscureText: obscureText,
+            inputFormatters: inputFormatters,
           ),
         ),
       ],
@@ -452,6 +455,9 @@ class Dialog2FaField extends ValidationField {
       readyCallback: readyCallback,
       helperText: helperText ?? translate('2fa_tip'),
       onChanged: _onChanged,
+      inputFormatters: [
+        FilteringTextInputFormatter.allow(RegExp(r'[0-9]')),
+      ],
     );
   }
 
@@ -568,6 +574,7 @@ class DialogVerificationCodeField extends StatefulWidget {
     this.textLength,
     this.readyCallback,
     this.onChanged,
+    this.inputFormatters,
   }) : super(key: key);
 
   final TextEditingController controller;
@@ -581,6 +588,7 @@ class DialogVerificationCodeField extends StatefulWidget {
   final VoidCallback? readyCallback;
   final Function(StateSetter setState, SimpleWrapper<String?> errText)?
       onChanged;
+  final List<TextInputFormatter>? inputFormatters;
 
   @override
   State<DialogVerificationCodeField> createState() =>
@@ -637,6 +645,7 @@ class _DialogVerificationCodeField extends State<DialogVerificationCodeField> {
       errorText: widget.errorText ?? errorText.value,
       focusNode: _focusNode,
       helperText: widget.helperText,
+      inputFormatters: widget.inputFormatters,
     );
   }
 }
