@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -405,6 +406,234 @@ class DialogTextField extends StatelessWidget {
         ),
       ],
     ).paddingSymmetric(vertical: 4.0);
+  }
+}
+
+abstract class ValidationField extends StatelessWidget {
+  ValidationField({Key? key}) : super(key: key);
+
+  String? validate();
+  bool get isReady;
+}
+
+class Dialog2FaField extends ValidationField {
+  Dialog2FaField({
+    Key? key,
+    required this.controller,
+    this.autoFocus = true,
+    this.reRequestFocus = false,
+    this.hintText,
+    this.errorText,
+    this.isReadyCallback,
+    this.onChanged,
+  }) : super(key: key);
+
+  final TextEditingController controller;
+  final bool autoFocus;
+  final bool reRequestFocus;
+  final String? hintText;
+  final String? errorText;
+  final VoidCallback? isReadyCallback;
+  final VoidCallback? onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return DialogVerificationCodeField(
+      title: translate('2FA code'),
+      controller: controller,
+      errorText: errorText,
+      autoFocus: autoFocus,
+      reRequestFocus: reRequestFocus,
+      hintText: hintText,
+      isReadyCallback: isReadyCallback,
+      helperText: translate('2fa_tip'),
+      onChanged: _onChanged,
+    );
+  }
+
+  String get text => controller.text;
+  bool get isAllDigits => text.codeUnits.every((e) => e >= 48 && e <= 57);
+
+  @override
+  bool get isReady => text.length == 6 && isAllDigits;
+
+  @override
+  String? validate() =>
+      isReady ? null : translate('2FA code must be 6 digits.');
+
+  _onChanged(StateSetter setState, SimpleWrapper<String?> errText) {
+    onChanged?.call();
+
+    if (text.length > 6) {
+      setState(() => errText.value =
+          translate('Email verification code must be 6 characters.'));
+      return;
+    }
+
+    if (!isAllDigits) {
+      setState(() => errText.value = translate('2FA code must be 6 digits.'));
+      return;
+    }
+
+    if (isReady) {
+      isReadyCallback?.call();
+      return;
+    }
+
+    if (errText.value != null) {
+      setState(() => errText.value = null);
+    }
+  }
+}
+
+class DialogEmailCodeField extends ValidationField {
+  DialogEmailCodeField({
+    Key? key,
+    required this.controller,
+    this.autoFocus = true,
+    this.reRequestFocus = false,
+    this.hintText,
+    this.errorText,
+    this.isReadyCallback,
+    this.onChanged,
+  }) : super(key: key);
+
+  final TextEditingController controller;
+  final bool autoFocus;
+  final bool reRequestFocus;
+  final String? hintText;
+  final String? errorText;
+  final VoidCallback? isReadyCallback;
+  final VoidCallback? onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return DialogVerificationCodeField(
+      title: translate('Verification code'),
+      controller: controller,
+      errorText: errorText,
+      autoFocus: autoFocus,
+      reRequestFocus: reRequestFocus,
+      hintText: hintText,
+      isReadyCallback: isReadyCallback,
+      helperText: translate('verification_tip'),
+      onChanged: _onChanged,
+    );
+  }
+
+  String get text => controller.text;
+
+  @override
+  bool get isReady => text.length == 6;
+
+  @override
+  String? validate() => isReady
+      ? null
+      : translate('Email verification code must be 6 characters.');
+
+  _onChanged(StateSetter setState, SimpleWrapper<String?> errText) {
+    onChanged?.call();
+
+    if (text.length > 6) {
+      setState(() => errText.value =
+          translate('Email verification code must be 6 characters.'));
+      return;
+    }
+
+    if (isReady) {
+      isReadyCallback?.call();
+      return;
+    }
+
+    if (errText.value != null) {
+      setState(() => errText.value = null);
+    }
+  }
+}
+
+class DialogVerificationCodeField extends StatefulWidget {
+  DialogVerificationCodeField({
+    Key? key,
+    required this.controller,
+    required this.title,
+    this.autoFocus = true,
+    this.reRequestFocus = false,
+    this.helperText,
+    this.hintText,
+    this.errorText,
+    this.textLength,
+    this.isReadyCallback,
+    this.onChanged,
+  }) : super(key: key);
+
+  final TextEditingController controller;
+  final bool autoFocus;
+  final bool reRequestFocus;
+  final String title;
+  final String? helperText;
+  final String? hintText;
+  final String? errorText;
+  final int? textLength;
+  final VoidCallback? isReadyCallback;
+  final Function(StateSetter setState, SimpleWrapper<String?> errText)?
+      onChanged;
+
+  @override
+  State<DialogVerificationCodeField> createState() =>
+      _DialogVerificationCodeField();
+}
+
+class _DialogVerificationCodeField extends State<DialogVerificationCodeField> {
+  final _focusNode = FocusNode();
+  Timer? _timer;
+  Timer? _timerReRequestFocus;
+  SimpleWrapper<String?> errorText = SimpleWrapper(null);
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.autoFocus) {
+      _timer =
+          Timer(Duration(milliseconds: 50), () => _focusNode.requestFocus());
+
+      if (widget.onChanged != null) {
+        widget.controller.addListener(() {
+          widget.onChanged!(setState, errorText);
+        });
+      }
+    }
+
+    // software secure keyboard will take the focus since flutter 3.13
+    // request focus again when android account password obtain focus
+    if (Platform.isAndroid && widget.reRequestFocus) {
+      _focusNode.addListener(() {
+        if (_focusNode.hasFocus) {
+          _timerReRequestFocus?.cancel();
+          _timerReRequestFocus = Timer(
+              Duration(milliseconds: 100), () => _focusNode.requestFocus());
+        }
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    _timerReRequestFocus?.cancel();
+    _focusNode.unfocus();
+    _focusNode.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return DialogTextField(
+      title: widget.title,
+      controller: widget.controller,
+      errorText: widget.errorText ?? errorText.value,
+      focusNode: _focusNode,
+      helperText: widget.helperText,
+    );
   }
 }
 

@@ -615,21 +615,16 @@ Future<bool?> verificationCodeDialog(
   var autoLogin = true;
   var isInProgress = false;
   String? errorText;
-  String preCode = '';
 
   final code = TextEditingController();
-  final focusNode = FocusNode()..requestFocus();
-  Timer(Duration(milliseconds: 100), () => focusNode..requestFocus());
 
   final res = await gFFI.dialogManager.show<bool>((setState, close, context) {
-    bool validate() {
-      return code.text.length >= 6;
-    }
+    late ValidationField codeField;
 
     void onVerify() async {
-      if (!validate()) {
-        setState(
-            () => errorText = translate('Too short, at least 6 characters.'));
+      errorText = codeField.validate();
+      if (errorText != null) {
+        setState(() {});
         return;
       }
       setState(() => isInProgress = true);
@@ -666,18 +661,21 @@ Future<bool?> verificationCodeDialog(
       setState(() => isInProgress = false);
     }
 
-    code.addListener(() {
-      if (errorText != null) {
-        setState(() => errorText = null);
-      }
-      if (preCode.length != 6 && code.text.length == 6) {
-        onVerify();
-      }
-      if (!isEmailVerification && preCode.length != 10 && code.text.length == 10) {
-        onVerify();
-      }
-      preCode = code.text;
-    });
+    codeField = isEmailVerification
+        ? DialogEmailCodeField(
+            controller: code,
+            errorText: errorText,
+            isReadyCallback: onVerify,
+            onChanged: () => errorText = null,
+          )
+        : Dialog2FaField(
+            controller: code,
+            errorText: errorText,
+            isReadyCallback: onVerify,
+            onChanged: () => errorText = null,
+          );
+
+    getOnSubmit() => codeField.isReady ? onVerify : null;
 
     return CustomAlertDialog(
         title: Text(translate("Verification code")),
@@ -693,15 +691,7 @@ Future<bool?> verificationCodeDialog(
                   controller: TextEditingController(text: user?.email),
                 )),
             isEmailVerification ? const SizedBox(height: 8) : const Offstage(),
-            DialogTextField(
-              title:
-                  '${translate(isEmailVerification ? "Verification code" : "2FA code")}:',
-              controller: code,
-              errorText: errorText,
-              focusNode: focusNode,
-              helperText: translate(
-                  isEmailVerification ? 'verification_tip' : '2fa_tip'),
-            ),
+            codeField,
             /*
             CheckboxListTile(
               contentPadding: const EdgeInsets.all(0),
@@ -722,10 +712,10 @@ Future<bool?> verificationCodeDialog(
           ],
         ),
         onCancel: close,
-        onSubmit: onVerify,
+        onSubmit: getOnSubmit(),
         actions: [
           dialogButton("Cancel", onPressed: close, isOutline: true),
-          dialogButton("Verify", onPressed: onVerify),
+          dialogButton("Verify", onPressed: getOnSubmit()),
         ]);
   });
 
