@@ -918,6 +918,13 @@ pub fn close_all_instances() -> ResultType<bool> {
     }
 }
 
+#[tokio::main(flavor = "current_thread")]
+pub async fn connect_to_user_session(usid: Option<u32>) -> ResultType<()> {
+    let mut stream = crate::ipc::connect(1000, crate::POSTFIX_SERVICE).await?;
+    timeout(1000, stream.send(&crate::ipc::Data::UserSid(usid))).await??;
+    Ok(())
+}
+
 #[cfg(test)]
 mod test {
     use super::*;

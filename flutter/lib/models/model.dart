@@ -494,14 +494,13 @@ class FfiModel with ChangeNotifier {
       Map<String, dynamic> evt, SessionID sessionId, String peerId) {
     if (parent.target == null) return;
     final dialogManager = parent.target!.dialogManager;
-    final usids = evt['u_sids'];
-    final unames = evt['u_names'];
+    final sessions = evt['user_sessions'];
     final title = "Multiple active user sessions found";
     final text = "Please select the session you want to connect to";
     final type = "";
 
     showWindowsSessionsDialog(
-        type, title, text, dialogManager, sessionId, peerId, usids, unames);
+        type, title, text, dialogManager, sessionId, peerId, sessions);
   }
 
   /// Handle the message box event based on [evt] and [id].

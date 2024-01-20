@@ -333,8 +333,8 @@ impl UI {
         is_share_rdp()
     }
 
-    fn set_share_rdp(&self, _enable: bool) {
-        set_share_rdp(_enable);
+    fn set_share_rdp(&self, _disable: bool) {
+        set_share_rdp(_disable);
     }
 
     fn is_installed_lower_version(&self) -> bool {

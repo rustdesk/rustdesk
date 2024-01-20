@@ -120,17 +120,17 @@ message PeerInfo {
   string platform_additions = 12;
 }
 
-message MultipleUserSessions {
-  string user_session_ids = 1;
-  string user_names = 2;
-}
+message RdpUserSession {  
+  string user_session_id = 1;  
+  string user_name = 2;  
+}  
 
 message LoginResponse {
   oneof union {
     string error = 1;
     PeerInfo peer_info = 2;
-    MultipleUserSessions multiple_user_sessions = 3;
   }
+  repeated RdpUserSession rdp_user_sessions = 3;  
 }
 
 message TouchScaleUpdate {

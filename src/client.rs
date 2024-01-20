@@ -1562,7 +1562,12 @@ impl LoginConfigHandler {
                 self.adapter_luid,
             ));
         n += 1;
-        msg.user_session = Config::get_option("store_usid");
+        msg.user_session = self
+            .config
+            .options
+            .get("selected_user_session_id")
+            .unwrap_or(&String::from(""))
+            .to_owned();
 
         if n > 0 {
             Some(msg)
@@ -2751,7 +2756,7 @@ pub trait Interface: Send + Clone + 'static + Sized {
     fn msgbox(&self, msgtype: &str, title: &str, text: &str, link: &str);
     fn handle_login_error(&self, err: &str) -> bool;
     fn handle_peer_info(&self, pi: PeerInfo);
-    fn set_multiple_user_sessions(&self, u_sids: String, u_names: String);
+    fn set_multiple_user_sessions(&self, sessions: Vec<hbb_common::message_proto::RdpUserSession>);
     fn on_error(&self, err: &str) {
         self.msgbox("error", "Error", err, "");
     }

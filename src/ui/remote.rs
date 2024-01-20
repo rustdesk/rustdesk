@@ -259,8 +259,13 @@ impl InvokeUiSession for SciterHandler {
         // Ignore for sciter version.
     }
 
-    fn set_multiple_user_session(&self, u_sids: String, u_names: String) {
-        // Ignore for sciter version. 
+    fn set_multiple_user_session(&self, sessions: Vec<hbb_common::message_proto::RdpUserSession>) {
+        let formatted_sessions: Vec<String> = sessions.iter()
+        .map(|session| format!("{}-{}", session.user_session_id, session.user_name))
+        .collect();
+        let u_sids: String = formatted_sessions.iter().map(|s| s.split("-").next().unwrap().to_string()).collect::<Vec<String>>().join(",");
+        let u_names:String = formatted_sessions.iter().map(|s| s.split("-").nth(1).unwrap().to_string()).collect::<Vec<String>>().join(",");
+        self.call("setMultipleUserSession", &make_args!(u_sids, u_names));
      }
 
     fn on_connected(&self, conn_type: ConnType) {
@@ -350,6 +355,7 @@ impl sciter::EventHandler for SciterSession {
     }
 
     fn detached(&mut self, _root: HELEMENT) {
+        self.set_selected_user_session_id("".to_string());
         *self.element.lock().unwrap() = None;
         self.sender.write().unwrap().take().map(|sender| {
             sender.send(Data::Close).ok();
@@ -480,6 +486,7 @@ impl sciter::EventHandler for SciterSession {
         fn request_voice_call();
         fn close_voice_call();
         fn version_cmp(String, String);
+        fn set_selected_user_session_id(String);
     }
 }
 
@@ -581,6 +588,13 @@ impl SciterSession {
         }
         self.save_config(config);
         log::info!("size saved");
+    }
+
+    fn set_selected_user_session_id(&mut self, u_sid: String) {
+        let mut config = self.load_config();
+        config.options.insert("selected_user_session_id".to_string(), u_sid.clone());
+        self.save_config(config);
+        let mut config = self.load_config();
     }
 
     fn get_port_forwards(&mut self) -> Value {

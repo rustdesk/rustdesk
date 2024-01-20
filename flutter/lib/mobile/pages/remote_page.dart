@@ -78,6 +78,8 @@ class _RemotePageState extends State<RemotePage> {
   Future<void> dispose() async {
     // https://github.com/flutter/flutter/issues/64935
     super.dispose();
+    bind.sessionPeerOption(
+        sessionId: sessionId, name: 'selected_user_session_id', value: "");
     gFFI.dialogManager.hideMobileActionsOverlay();
     gFFI.inputModel.listenToMouse(false);
     await gFFI.invokeMethod("enable_soft_keyboard", true);
@@ -91,7 +93,6 @@ class _RemotePageState extends State<RemotePage> {
     await WakelockPlus.disable();
     await keyboardSubscription.cancel();
     removeSharedStates(widget.id);
-    bind.mainSetOption(key: "store_usid", value: "");
   }
 
   // to-do: It should be better to use transparent color instead of the bgColor.

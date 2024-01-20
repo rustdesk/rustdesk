@@ -14,7 +14,6 @@ use crate::platform::linux_desktop_manager;
 use crate::platform::WallPaperRemover;
 #[cfg(windows)]
 use crate::portable_service::client as portable_client;
-use crate::ui_interface::{get_local_option, set_local_option};
 use crate::{
     client::{
         new_voice_call_request, new_voice_call_response, start_audio_thread, MediaData, MediaSender,
@@ -25,6 +24,7 @@ use crate::{
 #[cfg(any(target_os = "android", target_os = "ios"))]
 use crate::{common::DEVICE_NAME, flutter::connection_manager::start_channel};
 use cidr_utils::cidr::IpCidr;
+use hbb_common::config::LocalConfig;
 #[cfg(all(target_os = "linux", feature = "linux_headless"))]
 #[cfg(not(any(feature = "flatpak", feature = "appimage")))]
 use hbb_common::platform::linux::run_cmds;
@@ -1485,43 +1485,49 @@ impl Connection {
         self.video_ack_required = lr.video_ack_required;
     }
 
-    #[cfg(all(feature = "flutter", target_os = "windows"))]
-    async fn handle_multiple_user_sessions(&mut self, lr: LoginRequest){
-        if let Some(login_request::Union::FileTransfer(_)) = lr.union {
+    #[cfg(target_os = "windows")]
+    async fn handle_multiple_user_sessions(&mut self, lr: LoginRequest) {
+        if self.file_transfer.is_some() {
             return;
-        }
-        let active_usids = crate::platform::get_all_active_session_ids();
-        let usids_vec = active_usids
-            .split(",")
-            .filter(|x| !x.is_empty())
-            .collect::<Vec<&str>>();
-        if usids_vec.len() <= 1 {
+        } else if self.port_forward_socket.is_some() {
             return;
-        }
-        let usid;
-        match lr.option.user_session.parse::<u32>() {
-            Ok(n) => usid = Some(n),
-            Err(..) => usid = None,
-        }
-        let is_usid_changed = get_local_option("is_usid_changed".to_string()) == "true";
-        if usid.is_none() {
-            set_local_option("is_usid_changed".to_string(), "false".to_string());
-            let mut res = LoginResponse::new();
-            let mut mus = MultipleUserSessions::new();
-            mus.user_session_ids = active_usids;
-            mus.user_names = crate::platform::get_all_active_usernames();
-            res.set_multiple_user_sessions(mus);
-            let mut msg_out = Message::new();
-            msg_out.set_login_response(res);
-            self.send(msg_out).await;
-        } else if usid != self.user_session_id && !is_usid_changed {
-            set_local_option("is_usid_changed".to_string(), "true".to_string());
-            self.send_close_reason_no_retry("Restarting...").await;
-            std::thread::spawn(move || {
-                let _ = connect_to_user_session(usid);
-            });
-        } else if usid.is_some() {
-            self.user_session_id = usid.clone();
+        } else {
+            let active_sessions = crate::platform::get_all_active_sessions();
+            if active_sessions.len() <= 1 {
+                return;
+            }
+            let usid;
+            match lr.option.user_session.parse::<u32>() {
+                Ok(n) => usid = Some(n),
+                Err(..) => usid = None,
+            }
+            let is_usid_changed = LocalConfig::get_option("is_usid_changed") == "true";
+            if usid.is_none() {
+                LocalConfig::set_option("is_usid_changed".to_string(), "false".to_string());
+                let mut res = LoginResponse::new();
+                let mut rdp = Vec::new();
+                for session in active_sessions {
+                    let u_sid = &session[0];
+                    let u_name = &session[1];
+                    let mut rdp_session = RdpUserSession::new();
+                    rdp_session.user_session_id = u_sid.clone();
+                    rdp_session.user_name = u_name.clone();
+                    rdp.push(rdp_session);
+                }
+                res.rdp_user_sessions = rdp;
+                let mut msg_out = Message::new();
+                msg_out.set_login_response(res);
+                self.send(msg_out).await;
+            }
+            if usid != self.user_session_id && !is_usid_changed {
+                LocalConfig::set_option("is_usid_changed".to_string(), "true".to_string());
+                self.send_close_reason_no_retry("Restarting...").await;
+                std::thread::spawn(move || {
+                    let _ = ipc::connect_to_user_session(usid);
+                });
+            } else if usid.is_some() {
+                self.user_session_id = usid.clone();
+            }
         }
     }
 
@@ -1559,8 +1565,10 @@ impl Connection {
 
     async fn on_message(&mut self, msg: Message) -> bool {
         if let Some(message::Union::LoginRequest(lr)) = msg.union {
-            #[cfg(all(feature = "flutter", target_os = "windows"))]
-            self.handle_multiple_user_sessions(lr.clone()).await;
+            #[cfg(target_os = "windows")]
+            if crate::platform::is_installed() && crate::platform::is_share_rdp() {
+                self.handle_multiple_user_sessions(lr.clone()).await;
+            }
             self.handle_login_request_without_validation(&lr).await;
             if self.authorized {
                 return true;

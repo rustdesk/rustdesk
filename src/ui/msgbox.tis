@@ -182,6 +182,7 @@ class MsgboxComponent: Reactor.Component {
     }
  
     event click $(button#cancel) {
+        handler.set_selected_user_session_id("");
         this.close();
         if (this.callback) this.callback(null);
     }

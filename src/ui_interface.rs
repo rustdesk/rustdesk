@@ -440,9 +440,9 @@ pub fn is_share_rdp() -> bool {
 }
 
 #[inline]
-pub fn set_share_rdp(_enable: bool) {
+pub fn set_share_rdp(_disable: bool) {
     #[cfg(windows)]
-    crate::platform::windows::set_share_rdp(_enable);
+    crate::platform::windows::set_share_rdp(_disable);
 }
 
 #[inline]

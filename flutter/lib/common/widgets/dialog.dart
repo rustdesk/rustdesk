@@ -1509,8 +1509,7 @@ void showWindowsSessionsDialog(
     OverlayDialogManager dialogManager,
     SessionID sessionId,
     String peerId,
-    String usids,
-    String unames) {
+    String sessions) {
   dialogManager.dismissAll();
   dialogManager.show((setState, close, context) {
     onConnect() {
@@ -1524,7 +1523,7 @@ void showWindowsSessionsDialog(
       title: null,
       content: msgboxContent(type, title, text),
       actions: [
-        SessionsDropdown(peerId, sessionId, usids, unames),
+        SessionsDropdown(peerId, sessionId, sessions),
         dialogButton('Connect', onPressed: onConnect, isOutline: true),
       ],
     );
@@ -1534,70 +1533,72 @@ void showWindowsSessionsDialog(
 class SessionsDropdown extends StatefulWidget {
   final String peerId;
   final SessionID sessionId;
-  final String usids;
-  final String unames;
-  SessionsDropdown(this.peerId, this.sessionId, this.usids, this.unames);
+  final String sessions;
+  SessionsDropdown(this.peerId, this.sessionId, this.sessions);
   @override
   _SessionsDropdownState createState() => _SessionsDropdownState();
 }
 
-List<String> get_win_sids(String usids) {
-  String content = usids;
-  List<String> myList = content.split(',');
-  return myList;
-}
-
-List<String> get_win_unames(String unames) {
-  String content = unames;
-  List<String> myList = content.split(',');
-  return myList;
-}
-
 class _SessionsDropdownState extends State<SessionsDropdown> {
   late String selectedValue;
+  late Map<String, String> sessionMap;
   late List<String> sessions;
-  late File file;
-  late List<String> unames;
+
   @override
   void initState() {
     super.initState();
-    sessions = get_win_sids(widget.usids);
-    selectedValue = sessions[0];
-    unames = get_win_unames(widget.unames);
-    bind.mainSetOption(key: "store_usid", value: selectedValue.toString());
+    sessions = widget.sessions.split(',');
+    sessionMap = {};
+    for (var session in sessions) {
+      var sessionInfo = session.split('-');
+      if (sessionInfo.isNotEmpty) {
+        sessionMap[sessionInfo[0]] = sessionInfo[1];
+      }
+    }
+    selectedValue = sessionMap.keys.first;
+    bind.sessionPeerOption(
+        sessionId: widget.sessionId,
+        name: 'selected_user_session_id',
+        value: selectedValue);
   }
 
   @override
   Widget build(BuildContext context) {
     return Container(
-        width: 300,
-        child: DropdownButton(
-          value: selectedValue,
-          isExpanded: true,
-          borderRadius: BorderRadius.circular(8),
-          padding: EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-          items: sessions.map((session) {
-            return DropdownMenuItem(
-              value: session,
-              child: Text(
-                unames[sessions.indexOf(session)],
-                style: TextStyle(
-                    color: MyTheme.currentThemeMode() == ThemeMode.dark
-                        ? Colors.white
-                        : MyTheme.dark),
+      width: 300,
+      child: DropdownButton<String>(
+        value: selectedValue,
+        isExpanded: true,
+        borderRadius: BorderRadius.circular(8),
+        padding: EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        items: sessionMap.entries.map((entry) {
+          return DropdownMenuItem(
+            value: entry.key,
+            child: Text(
+              entry.value,
+              style: TextStyle(
+                color: MyTheme.currentThemeMode() == ThemeMode.dark
+                    ? Colors.white
+                    : MyTheme.dark,
               ),
-            );
-          }).toList(),
-          onChanged: (value) {
+            ),
+          );
+        }).toList(),
+        onChanged: (value) {
+          if (value != null) {
             setState(() {
-              selectedValue = value.toString();
+              selectedValue = value;
             });
-            bind.mainSetOption(
-                key: "store_usid", value: selectedValue.toString());
-          },
-          style: TextStyle(
-            fontSize: 16.0,
-          ),
-        ));
+            bind.sessionPeerOption(
+                sessionId: widget.sessionId,
+                name: 'selected_user_session_id',
+                value: value);
+          }
+        },
+        style: TextStyle(
+          fontSize: 16.0,
+        ),
+      ),
+    );
   }
 }

@@ -5,6 +5,7 @@ use crate::{
     license::*,
     privacy_mode::win_topmost_window::{self, WIN_TOPMOST_INJECTED_PROCESS_EXE},
 };
+use hbb_common::libc::{c_int, wchar_t};
 use hbb_common::{
     allow_err,
     anyhow::anyhow,
@@ -62,7 +63,6 @@ use windows_service::{
 };
 use winreg::enums::*;
 use winreg::RegKey;
-use hbb_common::libc::{c_int, wchar_t};
 
 pub const DRIVER_CERT_FILE: &str = "RustDeskIddDriver.cer";
 
@@ -511,6 +511,14 @@ async fn run_service(_arguments: Vec<OsString>) -> ResultType<()> {
     let mut incoming = ipc::new_listener(crate::POSTFIX_SERVICE).await?;
     let mut stored_usid = None;
     loop {
+        let sids = get_all_active_session_ids();
+        if !sids.contains(&format!("{}", session_id)) || !is_share_rdp() {
+            let current_active_session = unsafe { get_current_session(share_rdp()) };
+            if session_id != current_active_session {
+                session_id = current_active_session;
+                h_process = launch_server(session_id, true).await.unwrap_or(NULL);
+            }
+        }
         let res = timeout(super::SERVICE_INTERVAL, incoming.next()).await;
         match res {
             Ok(res) => match res {
@@ -704,10 +712,10 @@ pub fn try_change_desktop() -> bool {
 }
 
 fn share_rdp() -> BOOL {
-    if get_reg("share_rdp") != "true" {
-        FALSE
-    } else {
+    if get_reg("share_rdp") != "false" {
         TRUE
+    } else {
+        FALSE
     }
 }
 
@@ -747,6 +755,20 @@ pub fn get_active_username() -> String {
         .to_owned()
 }
 
+pub fn get_all_active_sessions() -> Vec<Vec<String>> {
+    let sids = get_all_active_session_ids_with_station();
+    let mut out = Vec::new();
+    for sid in sids.split(',') {
+        let username = get_session_username(sid.to_owned());
+        if !username.is_empty() {
+            let sid_split = sid.split(':').collect::<Vec<_>>()[1];
+            let v = vec![sid_split.to_owned(), username];
+            out.push(v);
+        }
+    }
+    out
+}
+
 pub fn get_session_username(session_id_with_station_name: String) -> String {
     let mut session_id = session_id_with_station_name.split(':');
     let station = session_id.next().unwrap_or("");
@@ -780,20 +802,7 @@ pub fn get_session_username(session_id_with_station_name: String) -> String {
     station.to_owned() + ": " + &out
 }
 
-pub fn get_all_active_usernames() -> String {
-    let sids = get_session_ids_with_station();
-    let mut out = Vec::new();
-    for sid in sids.split(',') {
-        let username = get_session_username(sid.to_owned());
-        if !username.is_empty() {
-            out.push(username);
-        }
-    }
-    let string = out.join(",");
-    string
-}
-
-pub fn get_session_ids_with_station() -> String {
+pub fn get_all_active_session_ids_with_station() -> String {
     extern "C" {
         fn get_available_session_ids(buf: *mut wchar_t, buf_size: c_int, include_rdp: bool);
     }
@@ -808,7 +817,7 @@ pub fn get_session_ids_with_station() -> String {
 }
 
 pub fn get_all_active_session_ids() -> String {
-    let out = get_session_ids_with_station()
+    let out = get_all_active_session_ids_with_station()
         .split(',')
         .map(|x| x.split(':').nth(1).unwrap_or(""))
         .collect::<Vec<_>>()

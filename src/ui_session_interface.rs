@@ -1291,7 +1291,7 @@ pub trait InvokeUiSession: Send + Sync + Clone + 'static + Sized + Default {
     fn next_rgba(&self, display: usize);
     #[cfg(all(feature = "gpucodec", feature = "flutter"))]
     fn on_texture(&self, display: usize, texture: *mut c_void);
-    fn set_multiple_user_session(&self, u_sids: String, u_names: String);
+    fn set_multiple_user_session(&self, sessions: Vec<hbb_common::message_proto::RdpUserSession>);
 }
 
 impl<T: InvokeUiSession> Deref for Session<T> {
@@ -1333,9 +1333,8 @@ impl<T: InvokeUiSession> Interface for Session<T> {
         handle_login_error(self.lc.clone(), err, self)
     }
 
-    fn set_multiple_user_sessions(&self, u_sids: String, u_names: String) {
-        self.ui_handler
-            .set_multiple_user_session(u_sids, u_names);
+    fn set_multiple_user_sessions(&self, sessions: Vec<hbb_common::message_proto::RdpUserSession>) {
+        self.ui_handler.set_multiple_user_session(sessions);
     }
 
     fn handle_peer_info(&self, mut pi: PeerInfo) {

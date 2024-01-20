@@ -1087,62 +1087,69 @@ impl<T: InvokeUiSession> Remote<T> {
                         .handle_hash(&self.handler.password.clone(), hash, peer)
                         .await;
                 }
-                Some(message::Union::LoginResponse(lr)) => match lr.union {
-                    Some(login_response::Union::Error(err)) => {
-                        if !self.handler.handle_login_error(&err) {
-                            return false;
-                        }
-                    }
-                    Some(login_response::Union::MultipleUserSessions(mus)) => {
-                        self.handler.set_multiple_user_session(mus.user_session_ids, mus.user_names);
+                Some(message::Union::LoginResponse(lr)) => {
+                    if lr.rdp_user_sessions.len() > 1 {
+                        self.handler.set_multiple_user_session(lr.rdp_user_sessions);
                         return false;
-                    }
-                    Some(login_response::Union::PeerInfo(pi)) => {
-                        self.handler.handle_peer_info(pi);
-                        self.check_clipboard_file_context();
-                        if !(self.handler.is_file_transfer() || self.handler.is_port_forward()) {
-                            #[cfg(feature = "flutter")]
-                            #[cfg(not(any(target_os = "android", target_os = "ios")))]
-                            Client::try_start_clipboard(None);
-                            #[cfg(not(feature = "flutter"))]
-                            #[cfg(not(any(target_os = "android", target_os = "ios")))]
-                            Client::try_start_clipboard(Some(
-                                crate::client::ClientClipboardContext {
-                                    cfg: self.handler.get_permission_config(),
-                                    tx: self.sender.clone(),
-                                },
-                            ));
-
-                            #[cfg(not(any(target_os = "android", target_os = "ios")))]
-                            if let Some(msg_out) = Client::get_current_text_clipboard_msg() {
-                                let sender = self.sender.clone();
-                                let permission_config = self.handler.get_permission_config();
-                                tokio::spawn(async move {
-                                    // due to clipboard service interval time
-                                    sleep(common::CLIPBOARD_INTERVAL as f32 / 1_000.).await;
-                                    if permission_config.is_text_clipboard_required() {
-                                        sender.send(Data::Message(msg_out)).ok();
-                                    }
-                                });
+                    } else {
+                        match lr.union {
+                            Some(login_response::Union::Error(err)) => {
+                                if !self.handler.handle_login_error(&err) {
+                                    return false;
+                                }
                             }
+                            Some(login_response::Union::PeerInfo(pi)) => {
+                                self.handler.handle_peer_info(pi);
+                                self.check_clipboard_file_context();
+                                if !(self.handler.is_file_transfer()
+                                    || self.handler.is_port_forward())
+                                {
+                                    #[cfg(feature = "flutter")]
+                                    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+                                    Client::try_start_clipboard(None);
+                                    #[cfg(not(feature = "flutter"))]
+                                    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+                                    Client::try_start_clipboard(Some(
+                                        crate::client::ClientClipboardContext {
+                                            cfg: self.handler.get_permission_config(),
+                                            tx: self.sender.clone(),
+                                        },
+                                    ));
 
-                            // on connection established client
-                            #[cfg(all(feature = "flutter", feature = "plugin_framework"))]
-                            #[cfg(not(any(target_os = "android", target_os = "ios")))]
-                            crate::plugin::handle_listen_event(
-                                crate::plugin::EVENT_ON_CONN_CLIENT.to_owned(),
-                                self.handler.get_id(),
-                            )
+                                    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+                                    if let Some(msg_out) = Client::get_current_text_clipboard_msg()
+                                    {
+                                        let sender = self.sender.clone();
+                                        let permission_config =
+                                            self.handler.get_permission_config();
+                                        tokio::spawn(async move {
+                                            // due to clipboard service interval time
+                                            sleep(common::CLIPBOARD_INTERVAL as f32 / 1_000.).await;
+                                            if permission_config.is_text_clipboard_required() {
+                                                sender.send(Data::Message(msg_out)).ok();
+                                            }
+                                        });
+                                    }
+
+                                    // on connection established client
+                                    #[cfg(all(feature = "flutter", feature = "plugin_framework"))]
+                                    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+                                    crate::plugin::handle_listen_event(
+                                        crate::plugin::EVENT_ON_CONN_CLIENT.to_owned(),
+                                        self.handler.get_id(),
+                                    )
+                                }
+
+                                if self.handler.is_file_transfer() {
+                                    self.handler.load_last_jobs();
+                                }
+
+                                self.is_connected = true;
+                            }
+                            _ => {}
                         }
-
-                        if self.handler.is_file_transfer() {
-                            self.handler.load_last_jobs();
-                        }
-
-                        self.is_connected = true;
                     }
-                    _ => {}
-                },
+                }
                 Some(message::Union::CursorData(cd)) => {
                     self.handler.set_cursor_data(cd);
                 }
