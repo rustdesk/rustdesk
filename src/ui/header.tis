@@ -528,7 +528,7 @@ handler.updateDisplays = function(v) {
 }
 
 handler.setMultipleUserSession = function(usid,uname) {
-    msgbox("multiple-sessions", translate("Multiple active user sessions"), usid+"-"+uname, "", function(res) {});
+    msgbox("multiple-sessions", translate("Multiple active user sessions found"), usid+"-"+uname, "", function(res) {});
 }
 
 function updatePrivacyMode() {

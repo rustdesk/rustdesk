@@ -495,8 +495,8 @@ class FfiModel with ChangeNotifier {
     if (parent.target == null) return;
     final dialogManager = parent.target!.dialogManager;
     final sessions = evt['user_sessions'];
-    final title = "Multiple active user sessions found";
-    final text = "Please select the session you want to connect to";
+    final title = translate('Multiple active user sessions found');
+    final text = translate('Please select the user you want to connect to');
     final type = "";
 
     showWindowsSessionsDialog(
