@@ -597,6 +597,7 @@ class _DialogVerificationCodeField extends State<DialogVerificationCodeField> {
   Timer? _timer;
   Timer? _timerReRequestFocus;
   SimpleWrapper<String?> errorText = SimpleWrapper(null);
+  String _preText = '';
 
   @override
   void initState() {
@@ -607,7 +608,10 @@ class _DialogVerificationCodeField extends State<DialogVerificationCodeField> {
 
       if (widget.onChanged != null) {
         widget.controller.addListener(() {
+          final text = widget.controller.text.trim();
+          if (text == _preText) return;
           widget.onChanged!(setState, errorText);
+          _preText = text;
         });
       }
     }
