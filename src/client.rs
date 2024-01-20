@@ -41,7 +41,7 @@ use hbb_common::{
     rendezvous_proto::*,
     socket_client,
     sodiumoxide::base64,
-    sodiumoxide::crypto::{box_, secretbox, sign},
+    sodiumoxide::crypto::sign,
     tcp::FramedStream,
     timeout,
     tokio::time::Duration,
@@ -57,7 +57,7 @@ use scrap::{
 use crate::{
     check_port,
     common::input::{MOUSE_BUTTON_LEFT, MOUSE_BUTTON_RIGHT, MOUSE_TYPE_DOWN, MOUSE_TYPE_UP},
-    is_keyboard_mode_supported,
+    create_symmetric_key_msg, decode_id_pk, get_rs_pk, is_keyboard_mode_supported, secure_tcp,
     ui_session_interface::{InvokeUiSession, Session},
 };
 
@@ -92,6 +92,8 @@ pub const LOGIN_MSG_DESKTOP_SESSION_NOT_READY_PASSWORD_WRONG: &str =
     "Desktop session not ready, password wrong";
 pub const LOGIN_MSG_PASSWORD_EMPTY: &str = "Empty Password";
 pub const LOGIN_MSG_PASSWORD_WRONG: &str = "Wrong Password";
+pub const LOGIN_MSG_2FA_WRONG: &str = "Wrong 2FA Code";
+pub const REQUIRE_2FA: &'static str = "2FA Required";
 pub const LOGIN_MSG_NO_PASSWORD_ACCESS: &str = "No Password Access";
 pub const LOGIN_MSG_OFFLINE: &str = "Offline";
 pub const LOGIN_SCREEN_WAYLAND: &str = "Wayland login screen is not supported";
@@ -311,7 +313,7 @@ impl Client {
 
         if !key.is_empty() && !token.is_empty() {
             // mainly for the security of token
-            allow_err!(secure_punch_connection(&mut socket, key).await);
+            allow_err!(secure_tcp(&mut socket, key).await);
         }
 
         let start = std::time::Instant::now();
@@ -620,7 +622,7 @@ impl Client {
 
             if !key.is_empty() && !token.is_empty() {
                 // mainly for the security of token
-                allow_err!(secure_punch_connection(&mut socket, key).await);
+                allow_err!(secure_tcp(&mut socket, key).await);
             }
 
             ipv4 = socket.local_addr().is_ipv4();
@@ -2567,6 +2569,10 @@ pub fn handle_login_error(
         lc.write().unwrap().password = Default::default();
         interface.msgbox("re-input-password", err, "Do you want to enter again?", "");
         true
+    } else if err == LOGIN_MSG_2FA_WRONG || err == REQUIRE_2FA {
+        lc.write().unwrap().password = Default::default();
+        interface.msgbox("input-2fa", err, "", "");
+        true
     } else if LOGIN_ERROR_MAP.contains_key(err) {
         if let Some(msgbox_info) = LOGIN_ERROR_MAP.get(err) {
             interface.msgbox(
@@ -3002,81 +3008,4 @@ pub fn check_if_retry(msgtype: &str, title: &str, text: &str, retry_for_relay: b
                 && !text.to_lowercase().contains("mismatch")
                 && !text.to_lowercase().contains("manually")
                 && !text.to_lowercase().contains("not allowed")))
-}
-
-#[inline]
-fn get_pk(pk: &[u8]) -> Option<[u8; 32]> {
-    if pk.len() == 32 {
-        let mut tmp = [0u8; 32];
-        tmp[..].copy_from_slice(&pk);
-        Some(tmp)
-    } else {
-        None
-    }
-}
-
-#[inline]
-fn get_rs_pk(str_base64: &str) -> Option<sign::PublicKey> {
-    if let Ok(pk) = crate::decode64(str_base64) {
-        get_pk(&pk).map(|x| sign::PublicKey(x))
-    } else {
-        None
-    }
-}
-
-fn decode_id_pk(signed: &[u8], key: &sign::PublicKey) -> ResultType<(String, [u8; 32])> {
-    let res = IdPk::parse_from_bytes(
-        &sign::verify(signed, key).map_err(|_| anyhow!("Signature mismatch"))?,
-    )?;
-    if let Some(pk) = get_pk(&res.pk) {
-        Ok((res.id, pk))
-    } else {
-        bail!("Wrong their public length");
-    }
-}
-
-fn create_symmetric_key_msg(their_pk_b: [u8; 32]) -> (Bytes, Bytes, secretbox::Key) {
-    let their_pk_b = box_::PublicKey(their_pk_b);
-    let (our_pk_b, out_sk_b) = box_::gen_keypair();
-    let key = secretbox::gen_key();
-    let nonce = box_::Nonce([0u8; box_::NONCEBYTES]);
-    let sealed_key = box_::seal(&key.0, &nonce, &their_pk_b, &out_sk_b);
-    (Vec::from(our_pk_b.0).into(), sealed_key.into(), key)
-}
-
-async fn secure_punch_connection(conn: &mut FramedStream, key: &str) -> ResultType<()> {
-    let rs_pk = get_rs_pk(key);
-    let Some(rs_pk) = rs_pk else {
-        bail!("Handshake failed: invalid public key from rendezvous server");
-    };
-    match timeout(READ_TIMEOUT, conn.next()).await? {
-        Some(Ok(bytes)) => {
-            if let Ok(msg_in) = RendezvousMessage::parse_from_bytes(&bytes) {
-                match msg_in.union {
-                    Some(rendezvous_message::Union::KeyExchange(ex)) => {
-                        if ex.keys.len() != 1 {
-                            bail!("Handshake failed: invalid key exchange message");
-                        }
-                        let their_pk_b = sign::verify(&ex.keys[0], &rs_pk)
-                            .map_err(|_| anyhow!("Signature mismatch in key exchange"))?;
-                        let (asymmetric_value, symmetric_value, key) = create_symmetric_key_msg(
-                            get_pk(&their_pk_b)
-                                .context("Wrong their public length in key exchange")?,
-                        );
-                        let mut msg_out = RendezvousMessage::new();
-                        msg_out.set_key_exchange(KeyExchange {
-                            keys: vec![asymmetric_value, symmetric_value],
-                            ..Default::default()
-                        });
-                        timeout(CONNECT_TIMEOUT, conn.send(&msg_out)).await??;
-                        conn.set_key(key);
-                        log::info!("Token secured");
-                    }
-                    _ => {}
-                }
-            }
-        }
-        _ => {}
-    }
-    Ok(())
 }

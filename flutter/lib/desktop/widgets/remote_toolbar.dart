@@ -1071,7 +1071,7 @@ class _DisplayMenuState extends State<_DisplayMenu> {
           Divider(),
           _SubmenuButton(
               ffi: widget.ffi,
-              child: Text(translate('Privacy Mode')),
+              child: Text(translate('Privacy mode')),
               menuChildren: privacyModeList
                   .map((e) => CkbMenuButton(
                       value: e.value,
