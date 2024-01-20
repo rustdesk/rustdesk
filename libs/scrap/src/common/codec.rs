@@ -708,17 +708,10 @@ impl Decoder {
 
 #[cfg(any(feature = "hwcodec", feature = "mediacodec"))]
 pub fn enable_hwcodec_option() -> bool {
-    #[cfg(feature = "hwcodec")]
-    {
-        return false;
+    if let Some(v) = Config2::get().options.get("enable-hwcodec") {
+        return v != "N";
     }
-    #[cfg(feature = "mediacodec")]
-    {
-        if let Some(v) = Config2::get().options.get("enable-hwcodec") {
-            return v != "N";
-        }
-        return true; // default is true
-    }
+    return true; // default is true
 }
 #[cfg(feature = "gpucodec")]
 pub fn enable_gpucodec_option() -> bool {
