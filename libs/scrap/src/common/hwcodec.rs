@@ -381,7 +381,6 @@ pub fn check_available_hwcodec() {
 }
 
 pub fn hwcodec_new_check_process() {
-    /*
     use std::sync::Once;
     let f = || {
         // Clear to avoid checking process errors
@@ -424,5 +423,4 @@ pub fn hwcodec_new_check_process() {
     ONCE.call_once(|| {
         std::thread::spawn(f);
     });
-    */
 }
