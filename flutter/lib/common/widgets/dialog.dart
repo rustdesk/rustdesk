@@ -1804,7 +1804,9 @@ void change2fa({Function()? callback}) async {
 
 void enter2FaDialog(
     SessionID sessionId, OverlayDialogManager dialogManager) async {
-  final RxString code = "".obs;
+  final controller = TextEditingController();
+  final RxBool submitReady = false.obs;
+
   dialogManager.dismissAll();
   dialogManager.show((setState, close, context) {
     cancel() {
@@ -1813,34 +1815,23 @@ void enter2FaDialog(
     }
 
     submit() {
-      if (code.value.trim().length != 6) {
-        return;
-      }
-      gFFI.send2FA(sessionId, code.value.trim());
+      gFFI.send2FA(sessionId, controller.text.trim());
       close();
       dialogManager.showLoading(translate('Logging in...'),
           onCancel: closeConnection);
     }
 
+    late Dialog2FaField codeField;
+
+    codeField = Dialog2FaField(
+      controller: controller,
+      title: translate('Verification code'),
+      onChanged: () => submitReady.value = codeField.isReady,
+    );
+
     return CustomAlertDialog(
-        title: Text(translate("enter-2fa-title")),
-        content: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(children: [
-              Expanded(
-                  child: TextField(
-                      decoration: InputDecoration(
-                          hintText: translate("Verification code")),
-                      onChanged: (value) {
-                        code.value = value;
-                      },
-                      autofocus: true))
-            ]),
-          ],
-        ),
-        onSubmit: submit,
-        onCancel: cancel,
+        title: Text(translate('enter-2fa-title')),
+        content: codeField,
         actions: [
           dialogButton(
             'Cancel',
@@ -1849,7 +1840,7 @@ void enter2FaDialog(
           ),
           Obx(() => dialogButton(
                 'OK',
-                onPressed: code.value.trim().length == 6 ? submit : null,
+                onPressed: submitReady.isTrue ? submit : null,
               )),
         ]);
   });
