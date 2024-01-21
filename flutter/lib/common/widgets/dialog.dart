@@ -1851,11 +1851,11 @@ void enter2FaDialog(
         title: Text(translate('enter-2fa-title')),
         content: codeField,
         actions: [
-          dialogButton(
-            'Cancel',
-            onPressed: cancel,
-            isOutline: true,
-          ),
+          dialogButton('Cancel',
+              onPressed: cancel,
+              isOutline: true,
+              style: TextStyle(
+                  color: Theme.of(context).textTheme.bodyMedium?.color)),
           Obx(() => dialogButton(
                 'OK',
                 onPressed: submitReady.isTrue ? submit : null,
