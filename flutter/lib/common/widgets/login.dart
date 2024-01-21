@@ -390,8 +390,7 @@ class LoginWidgetUserPass extends StatelessWidget {
 
 const kAuthReqTypeOidc = 'oidc/';
 
-/// common login dialog for desktop
-/// call this directly
+// call this directly
 Future<bool?> loginDialog() async {
   var username =
       TextEditingController(text: UserModel.getLocalUserInfo()?['name'] ?? '');
@@ -457,11 +456,12 @@ Future<bool?> loginDialog() async {
           if (isEmailVerification != null) {
             if (isMobile) {
               if (close != null) close(false);
-              verificationCodeDialog(resp.user, isEmailVerification);
+              verificationCodeDialog(
+                  resp.user, resp.secret, isEmailVerification);
             } else {
               setState(() => isInProgress = false);
-              final res =
-                  await verificationCodeDialog(resp.user, isEmailVerification);
+              final res = await verificationCodeDialog(
+                  resp.user, resp.secret, isEmailVerification);
               if (res == true) {
                 if (close != null) close(false);
                 return;
@@ -611,7 +611,7 @@ Future<bool?> loginDialog() async {
 }
 
 Future<bool?> verificationCodeDialog(
-    UserPayload? user, bool isEmailVerification) async {
+    UserPayload? user, String? secret, bool isEmailVerification) async {
   var autoLogin = true;
   var isInProgress = false;
   String? errorText;
@@ -626,6 +626,7 @@ Future<bool?> verificationCodeDialog(
         final resp = await gFFI.userModel.login(LoginRequest(
             verificationCode: code.text,
             tfaCode: isEmailVerification ? null : code.text,
+            secret: secret,
             username: user?.name,
             id: await bind.mainGetMyId(),
             uuid: await bind.mainGetUuid(),
