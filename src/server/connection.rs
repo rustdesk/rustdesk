@@ -1625,8 +1625,8 @@ impl Connection {
                     #[cfg(all(target_os = "linux", feature = "linux_headless"))]
                     #[cfg(not(any(feature = "flatpak", feature = "appimage")))]
                     self.linux_headless_handle.wait_desktop_cm_ready().await;
-                    self.try_start_cm(lr.my_id.clone(), lr.my_name.clone(), true);
                     self.send_logon_response().await;
+                    self.try_start_cm(lr.my_id.clone(), lr.my_name.clone(), self.authorized);
                     if self.port_forward_socket.is_some() {
                         return false;
                     }
@@ -1666,7 +1666,7 @@ impl Connection {
                         #[cfg(not(any(feature = "flatpak", feature = "appimage")))]
                         self.linux_headless_handle.wait_desktop_cm_ready().await;
                         self.send_logon_response().await;
-                        self.try_start_cm(lr.my_id, lr.my_name, true);
+                        self.try_start_cm(lr.my_id, lr.my_name, self.authorized);
                         if self.port_forward_socket.is_some() {
                             return false;
                         }
@@ -1746,8 +1746,8 @@ impl Connection {
                     if let Some((_instant, uuid_old)) = uuid_old {
                         if uuid == uuid_old {
                             self.from_switch = true;
-                            self.try_start_cm(lr.my_id.clone(), lr.my_name.clone(), true);
                             self.send_logon_response().await;
+                            self.try_start_cm(lr.my_id.clone(), lr.my_name.clone(), self.authorized);
                             #[cfg(not(any(target_os = "android", target_os = "ios")))]
                             self.try_start_cm_ipc();
                         }
