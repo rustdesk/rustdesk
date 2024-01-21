@@ -82,6 +82,10 @@ message LoginRequest {
   OSLogin os_login = 12;
 }
 
+message Auth2FA {
+  string code = 1;
+}
+
 message ChatMessage { string text = 1; }
 
 message Features {
@@ -771,5 +775,6 @@ message Message {
     VoiceCallResponse voice_call_response = 24;
     PeerInfo peer_info = 25;
     PointerDeviceEvent pointer_device_event = 26;
+    Auth2FA auth_2fa = 27;
   }
 }

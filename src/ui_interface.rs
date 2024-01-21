@@ -142,6 +142,14 @@ pub fn get_license() -> String {
 }
 
 #[inline]
+pub fn refresh_options() {
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    {
+        *OPTIONS.lock().unwrap() = Config::get_options();
+    }
+}
+
+#[inline]
 pub fn get_option<T: AsRef<str>>(key: T) -> String {
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     {
