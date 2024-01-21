@@ -363,6 +363,7 @@ class DialogTextField extends StatelessWidget {
   final Widget? suffixIcon;
   final TextEditingController controller;
   final FocusNode? focusNode;
+  final TextInputType? keyboardType;
   final List<TextInputFormatter>? inputFormatters;
 
   static const kUsernameTitle = 'Username';
@@ -379,6 +380,7 @@ class DialogTextField extends StatelessWidget {
       this.prefixIcon,
       this.suffixIcon,
       this.hintText,
+      this.keyboardType,
       this.inputFormatters,
       required this.title,
       required this.controller})
@@ -404,6 +406,7 @@ class DialogTextField extends StatelessWidget {
             focusNode: focusNode,
             autofocus: true,
             obscureText: obscureText,
+            keyboardType: keyboardType,
             inputFormatters: inputFormatters,
           ),
         ),
@@ -456,6 +459,7 @@ class Dialog2FaField extends ValidationField {
       readyCallback: readyCallback,
       helperText: helperText ?? translate('2fa_tip'),
       onChanged: _onChanged,
+      keyboardType: TextInputType.number,
       inputFormatters: [
         FilteringTextInputFormatter.allow(RegExp(r'[0-9]')),
       ],
@@ -528,6 +532,7 @@ class DialogEmailCodeField extends ValidationField {
       readyCallback: readyCallback,
       helperText: translate('verification_tip'),
       onChanged: _onChanged,
+      keyboardType: TextInputType.visiblePassword,
     );
   }
 
@@ -571,6 +576,7 @@ class DialogVerificationCodeField extends StatefulWidget {
     this.textLength,
     this.readyCallback,
     this.onChanged,
+    this.keyboardType,
     this.inputFormatters,
   }) : super(key: key);
 
@@ -585,6 +591,7 @@ class DialogVerificationCodeField extends StatefulWidget {
   final VoidCallback? readyCallback;
   final Function(StateSetter setState, SimpleWrapper<String?> errText)?
       onChanged;
+  final TextInputType? keyboardType;
   final List<TextInputFormatter>? inputFormatters;
 
   @override
@@ -646,6 +653,7 @@ class _DialogVerificationCodeField extends State<DialogVerificationCodeField> {
       errorText: widget.errorText ?? errorText.value,
       focusNode: _focusNode,
       helperText: widget.helperText,
+      keyboardType: widget.keyboardType,
       inputFormatters: widget.inputFormatters,
     );
   }

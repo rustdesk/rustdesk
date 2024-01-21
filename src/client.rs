@@ -2570,7 +2570,6 @@ pub fn handle_login_error(
         interface.msgbox("re-input-password", err, "Do you want to enter again?", "");
         true
     } else if err == LOGIN_MSG_2FA_WRONG || err == REQUIRE_2FA {
-        lc.write().unwrap().password = Default::default();
         interface.msgbox("input-2fa", err, "", "");
         true
     } else if LOGIN_ERROR_MAP.contains_key(err) {
