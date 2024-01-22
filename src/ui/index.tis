@@ -1012,7 +1012,7 @@ class PasswordArea: Reactor.Component {
                     return translate('wrong-2fa-code');
                 }
                 me.update();
-            }, 320);
+            }, 400);
         }
     }
 }
