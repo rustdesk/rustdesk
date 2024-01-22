@@ -578,6 +578,9 @@ impl Connection {
                                     if !conn.on_message(msg_in).await {
                                         break;
                                     }
+                                    if conn.port_forward_socket.is_some() && conn.authorized {
+                                        break;
+                                    }
                                 }
                             }
                         }
@@ -1627,9 +1630,6 @@ impl Connection {
                     self.linux_headless_handle.wait_desktop_cm_ready().await;
                     self.send_logon_response().await;
                     self.try_start_cm(lr.my_id.clone(), lr.my_name.clone(), self.authorized);
-                    if self.port_forward_socket.is_some() {
-                        return false;
-                    }
                 } else {
                     self.send_login_error(err_msg).await;
                 }
@@ -1667,9 +1667,6 @@ impl Connection {
                         self.linux_headless_handle.wait_desktop_cm_ready().await;
                         self.send_logon_response().await;
                         self.try_start_cm(lr.my_id, lr.my_name, self.authorized);
-                        if self.port_forward_socket.is_some() {
-                            return false;
-                        }
                     } else {
                         self.send_login_error(err_msg).await;
                     }
