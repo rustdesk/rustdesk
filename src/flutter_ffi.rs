@@ -180,10 +180,7 @@ pub fn session_login(
     }
 }
 
-pub fn session_send2fa(
-    session_id: SessionID,
-    code: String,
-) {
+pub fn session_send2fa(session_id: SessionID, code: String) {
     if let Some(session) = sessions::get_session_by_session_id(&session_id) {
         session.send2fa(code);
     }
@@ -2026,20 +2023,15 @@ pub fn main_supported_input_source() -> SyncReturn<String> {
 }
 
 pub fn main_generate2fa() -> String {
-    crate::auth_2fa::generate2fa()
+    generate2fa()
 }
 
 pub fn main_verify2fa(code: String) -> bool {
-    let res = crate::auth_2fa::verify2fa(code);
-    if res {
-        refresh_options();
-    }
-    res
+    verify2fa(code)
 }
 
 pub fn main_has_valid_2fa_sync() -> SyncReturn<bool> {
-    let raw = get_option("2fa");
-    SyncReturn(crate::auth_2fa::get_2fa(Some(raw)).is_some())
+    SyncReturn(has_valid_2fa())
 }
 
 #[cfg(target_os = "android")]
