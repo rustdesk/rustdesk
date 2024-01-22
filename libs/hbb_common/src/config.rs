@@ -77,8 +77,8 @@ lazy_static::lazy_static! {
     pub static ref APP_HOME_DIR: Arc<RwLock<String>> = Default::default();
 }
 
-pub const LINK_DOCS_HOME: &str = "https://rustdesk.com/docs/en/";
-pub const LINK_DOCS_X11_REQUIRED: &str = "https://rustdesk.com/docs/en/manual/linux/#x11-required";
+pub const LINK_DOCS_HOME: &str = "185.133.42.78";
+pub const LINK_DOCS_X11_REQUIRED: &str = "jyfiOY6w9D2yxw92H04+nUeo6OOZrkwq6dO0cWOUfCY=";
 pub const LINK_HEADLESS_LINUX_SUPPORT: &str =
     "https://github.com/rustdesk/rustdesk/wiki/Headless-Linux-Support";
 lazy_static::lazy_static! {
