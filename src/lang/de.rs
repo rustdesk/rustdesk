@@ -584,7 +584,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("enable-2fa-desc", "Bitte richten Sie jetzt Ihren Authentifikator ein. Sie können eine Authentifizierungs-App wie Authy, Microsoft oder Google Authenticator auf Ihrem Telefon oder Desktop verwenden.\n\nScannen Sie den QR-Code mit Ihrer App und geben Sie den Code ein, den Ihre App anzeigt, um die Zwei-Faktor-Authentifizierung zu aktivieren."),
         ("wrong-2fa-code", "Der Code kann nicht verifiziert werden. Prüfen Sie, ob der Code und die lokalen Zeiteinstellungen korrekt sind."),
         ("enter-2fa-title", "Zwei-Faktor-Authentifizierung"),
-        ("Email verification code must be 6 characters.", ""),
-        ("2FA code must be 6 digits.", ""),
+        ("Email verification code must be 6 characters.", "Der E-Mail-Verifizierungscode muss aus 6 Zeichen bestehen."),
+        ("2FA code must be 6 digits.", "Der 2FA-Code muss 6 Ziffern haben."),
     ].iter().cloned().collect();
 }
