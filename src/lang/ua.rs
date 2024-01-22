@@ -579,7 +579,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Swap control-command key", "Поміняти місцями клавіші Control та Command"),
         ("swap-left-right-mouse", "Поміняти місцями ліву та праву кнопки миші"),
         ("2FA code", "Код двофакторної автентифікації"),
-        ("2fa_tip", "Будь ласка, введіть код двофакторної автентифікації в застосунку для автентифікації."),
         ("More", "Більше"),
         ("enable-2fa-title", ""),
         ("enable-2fa-desc", ""),
