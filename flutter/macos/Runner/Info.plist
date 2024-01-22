@@ -29,7 +29,7 @@
 			<string>com.fti.rd</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
-				<string>mobilestartools</string>
+				<string>stardesk</string>
 			</array>
 		</dict>
 	</array>
