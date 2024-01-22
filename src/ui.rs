@@ -617,7 +617,7 @@ impl UI {
     }
 
     fn generate_2fa_img_src(&self, data: String) -> String {
-        let v = qrcode_generator::to_png_to_vec(data, qrcode_generator::QrCodeEcc::Low, 64)
+        let v = qrcode_generator::to_png_to_vec(data, qrcode_generator::QrCodeEcc::Low, 128)
             .unwrap_or_default();
         let s = hbb_common::sodiumoxide::base64::encode(
             v,
