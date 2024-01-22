@@ -331,14 +331,14 @@ jobs:
           security default-keychain -s rustdesk.keychain
           security find-identity -v
 
-      - name: Import notarize key
-        if: env.MACOS_P12_BASE64 != null
-        uses: timheuer/base64-to-file@v1.2
-        with:
-          # https://gregoryszorc.com/docs/apple-codesign/stable/apple_codesign_rcodesign.html#notarizing-and-stapling
-          fileName: rustdesk.json
-          fileDir: ${{ github.workspace }}
-          encodedString: ${{ secrets.MACOS_NOTARIZE_JSON }}
+      # - name: Import notarize key
+      #   if: env.MACOS_P12_BASE64 != null
+      #   uses: timheuer/base64-to-file@v1.2
+      #   with:
+      #     # https://gregoryszorc.com/docs/apple-codesign/stable/apple_codesign_rcodesign.html#notarizing-and-stapling
+      #     fileName: rustdesk.json
+      #     fileDir: ${{ github.workspace }}
+      #     encodedString: ${{ secrets.MACOS_NOTARIZE_JSON }}
 
       - name: Install rcodesign tool
         if: env.MACOS_P12_BASE64 != null

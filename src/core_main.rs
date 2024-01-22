@@ -24,10 +24,10 @@ macro_rules! my_println{
 
 #[inline]
 fn is_empty_uni_link(arg: &str) -> bool {
-    if !arg.starts_with("rustdesk://") {
+    if !arg.starts_with("stardesk://") {
         return false;
     }
-    arg["rustdesk://".len()..].chars().all(|c| c == '/')
+    arg["stardesk://".len()..].chars().all(|c| c == '/')
 }
 
 /// shared by flutter and sciter main function
@@ -543,7 +543,7 @@ fn core_main_invoke_new_connection(mut args: std::env::Args) -> Option<Vec<Strin
             }
             let params = param_array.join("&");
             let params_flag = if params.is_empty() { "" } else { "?" };
-            uni_links = format!("rustdesk://{}/{}{}{}", authority, id, params_flag, params);
+            uni_links = format!("stardesk://{}/{}{}{}", authority, id, params_flag, params);
         }
     }
     if uni_links.is_empty() {
