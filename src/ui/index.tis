@@ -912,6 +912,8 @@ class PasswordArea: Reactor.Component {
             { !show_password ? '' : <div .separator /> }
             { !show_password ? '' : <li #set-password  disabled={ method == 'use-temporary-password' ? "true" : "false" }>{translate('Set permanent password')}</li> }
             { !show_password ? '' : <TemporaryPasswordLengthMenu /> }
+            <div .separator />
+            <li #tfa><span>{svg_checkmark}</span>{translate('enable-2fa-title')}</li>
         </menu></popup>;
     }
 
@@ -927,11 +929,14 @@ class PasswordArea: Reactor.Component {
         var pwd_id = handler.get_option('verification-method');
         if (pwd_id != 'use-temporary-password' && pwd_id != 'use-permanent-password')
             pwd_id = 'use-both-passwords';
+        var has_valid_2fa = handler.has_valid_2fa();
         for (var el in this.$$(menu#edit-password-context>li)) {
             if (el.id.indexOf("approve-mode-") == 0)
                 el.attributes.toggleClass("selected", el.id == mode_id);
             if (el.id.indexOf("use-") == 0)
                 el.attributes.toggleClass("selected", el.id == pwd_id);
+            if (el.id == "tfa")
+                el.attributes.toggleClass("selected", has_valid_2fa);
         }
     }
 
@@ -982,6 +987,32 @@ class PasswordArea: Reactor.Component {
             handler.set_option('approve-mode', approve_mode);
             this.toggleMenuState();
             passwordArea.update();
+        }
+    }
+
+    event click $(li#tfa) {
+        var me = this;
+        var has_valid_2fa = handler.has_valid_2fa();
+        if (has_valid_2fa) {
+            handler.set_option('2fa', '');
+            me.update();
+        } else {
+            var new2fa = handler.generate2fa();
+            var src = handler.generate_2fa_img_src(new2fa);
+            msgbox("custom-2fa-setting", translate('enable-2fa-title'),
+                <div .form>
+                    <div>{translate('enable-2fa-desc')}</div>
+                    <img src={src} />
+                    <div .code><input name='code' type='text' .outline-focus /></div>
+                </div>
+                , "", function(res=null) {
+                if (!res) return;
+                if (!res.code) return;
+                if (!handler.verify2fa(res.code)) {
+                    return translate('wrong-2fa-code');
+                }
+                me.update();
+            }, 320);
         }
     }
 }
