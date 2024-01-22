@@ -1,10 +1,10 @@
 use crate::{
     codec::{base_bitrate, codec_thread_num, EncoderApi, EncoderCfg, Quality as Q},
-    hw, EncodeInput, ImageFormat, ImageRgb, Pixfmt, HW_STRIDE_ALIGN,
+    hw, CodecFormat, EncodeInput, ImageFormat, ImageRgb, Pixfmt, HW_STRIDE_ALIGN,
 };
 use hbb_common::{
     allow_err,
-    anyhow::{anyhow, Context},
+    anyhow::{anyhow, bail, Context},
     bytes::Bytes,
     config::HwCodecConfig,
     log,
@@ -94,7 +94,10 @@ impl EncoderApi for HwEncoder {
                         height: ctx.height as _,
                         bitrate,
                     }),
-                    Err(_) => Err(anyhow!(format!("Failed to create encoder"))),
+                    Err(_) => {
+                        HwCodecConfig::clear();
+                        Err(anyhow!(format!("Failed to create encoder")))
+                    }
                 }
             }
             _ => Err(anyhow!("encoder type mismatch")),
@@ -230,31 +233,26 @@ impl HwDecoder {
         })
     }
 
-    pub fn new_decoders() -> HwDecoders {
+    pub fn new(format: CodecFormat) -> ResultType<Self> {
+        log::info!("try create {format:?} ram decoder");
         let best = HwDecoder::best();
-        let mut h264: Option<HwDecoder> = None;
-        let mut h265: Option<HwDecoder> = None;
-        let mut fail = false;
-
-        if let Some(info) = best.h264 {
-            h264 = HwDecoder::new(info).ok();
-            if h264.is_none() {
-                fail = true;
+        let info = match format {
+            CodecFormat::H264 => {
+                if let Some(info) = best.h264 {
+                    info
+                } else {
+                    bail!("no h264 decoder, should not be here");
+                }
             }
-        }
-        if let Some(info) = best.h265 {
-            h265 = HwDecoder::new(info).ok();
-            if h265.is_none() {
-                fail = true;
+            CodecFormat::H265 => {
+                if let Some(info) = best.h265 {
+                    info
+                } else {
+                    bail!("no h265 decoder, should not be here");
+                }
             }
-        }
-        if fail {
-            hwcodec_new_check_process();
-        }
-        HwDecoders { h264, h265 }
-    }
-
-    pub fn new(info: CodecInfo) -> ResultType<Self> {
+            _ => bail!("unsupported format: {:?}", format),
+        };
         let ctx = DecodeContext {
             name: info.name.clone(),
             device_type: info.hwdevice.clone(),
@@ -262,7 +260,10 @@ impl HwDecoder {
         };
         match Decoder::new(ctx) {
             Ok(decoder) => Ok(HwDecoder { decoder, info }),
-            Err(_) => Err(anyhow!(format!("Failed to create decoder"))),
+            Err(_) => {
+                HwCodecConfig::clear();
+                Err(anyhow!(format!("Failed to create decoder")))
+            }
         }
     }
     pub fn decode(&mut self, data: &[u8]) -> ResultType<Vec<HwDecoderImage>> {
