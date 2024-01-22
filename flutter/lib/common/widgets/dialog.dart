@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:io';
-import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -429,7 +428,6 @@ class Dialog2FaField extends ValidationField {
     this.autoFocus = true,
     this.reRequestFocus = false,
     this.title,
-    this.helperText,
     this.hintText,
     this.errorText,
     this.readyCallback,
@@ -440,7 +438,6 @@ class Dialog2FaField extends ValidationField {
   final bool autoFocus;
   final bool reRequestFocus;
   final String? title;
-  final String? helperText;
   final String? hintText;
   final String? errorText;
   final VoidCallback? readyCallback;
@@ -457,7 +454,6 @@ class Dialog2FaField extends ValidationField {
       reRequestFocus: reRequestFocus,
       hintText: hintText,
       readyCallback: readyCallback,
-      helperText: helperText ?? translate('2fa_tip'),
       onChanged: _onChanged,
       keyboardType: TextInputType.number,
       inputFormatters: [
@@ -1851,16 +1847,18 @@ void enter2FaDialog(
         title: Text(translate('enter-2fa-title')),
         content: codeField,
         actions: [
-          dialogButton(
-            'Cancel',
-            onPressed: cancel,
-            isOutline: true,
-          ),
+          dialogButton('Cancel',
+              onPressed: cancel,
+              isOutline: true,
+              style: TextStyle(
+                  color: Theme.of(context).textTheme.bodyMedium?.color)),
           Obx(() => dialogButton(
                 'OK',
                 onPressed: submitReady.isTrue ? submit : null,
               )),
-        ]);
+        ],
+        onSubmit: submit,
+        onCancel: cancel);
   });
 }
 

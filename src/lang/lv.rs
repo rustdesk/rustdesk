@@ -579,7 +579,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Swap control-command key", "Apmainīt vadības un komandas taustiņu"),
         ("swap-left-right-mouse", "Apmainīt kreiso un labo peles pogu"),
         ("2FA code", "2FA kods"),
-        ("2fa_tip", "Lūdzu, ievadiet savu 2FA kodu autentifikācijas lietotnē."),
         ("More", "Vairāk"),
         ("enable-2fa-title", "Iespējot divu faktoru autentifikāciju"),
         ("enable-2fa-desc", "Lūdzu, iestatiet savu autentifikatoru tūlīt. Tālrunī vai darbvirsmā varat izmantot autentifikācijas lietotni, piemēram, Authy, Microsoft vai Google Authenticator.\n\nIzmantojot lietotni, skenējiet QR kodu un ievadiet lietotnē parādīto kodu, lai iespējotu divu faktoru autentifikāciju."),

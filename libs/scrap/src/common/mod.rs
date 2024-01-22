@@ -251,7 +251,7 @@ pub enum CodecName {
     H265GPU,
 }
 
-#[derive(PartialEq, Debug, Clone)]
+#[derive(PartialEq, Debug, Clone, Copy)]
 pub enum CodecFormat {
     VP8,
     VP9,

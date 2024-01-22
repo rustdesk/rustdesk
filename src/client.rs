@@ -51,7 +51,7 @@ pub use helper::*;
 use scrap::{
     codec::Decoder,
     record::{Recorder, RecorderContext},
-    ImageFormat, ImageRgb,
+    CodecFormat, ImageFormat, ImageRgb,
 };
 
 use crate::{
@@ -76,6 +76,7 @@ pub mod io_loop;
 pub const MILLI1: Duration = Duration::from_millis(1);
 pub const SEC30: Duration = Duration::from_secs(30);
 pub const VIDEO_QUEUE_SIZE: usize = 120;
+const MAX_DECODE_FAIL_COUNTER: usize = 10; // Currently, failed decode cause refresh_video, so make it small
 
 #[cfg(all(target_os = "linux", feature = "linux_headless"))]
 #[cfg(not(any(feature = "flatpak", feature = "appimage")))]
@@ -1027,24 +1028,25 @@ pub struct VideoHandler {
     recorder: Arc<Mutex<Option<Recorder>>>,
     record: bool,
     _display: usize, // useful for debug
+    fail_counter: usize,
 }
 
 impl VideoHandler {
     /// Create a new video handler.
-    pub fn new(_display: usize) -> Self {
+    pub fn new(format: CodecFormat, _display: usize) -> Self {
         #[cfg(all(feature = "gpucodec", feature = "flutter"))]
         let luid = crate::flutter::get_adapter_luid();
         #[cfg(not(all(feature = "gpucodec", feature = "flutter")))]
         let luid = Default::default();
-        println!("new session_get_adapter_luid: {:?}", luid);
-        log::info!("new video handler for display #{_display}");
+        log::info!("new video handler for display #{_display}, format: {format:?}, luid: {luid:?}");
         VideoHandler {
-            decoder: Decoder::new(luid),
+            decoder: Decoder::new(format, luid),
             rgb: ImageRgb::new(ImageFormat::ARGB, crate::DST_STRIDE_RGBA),
             texture: std::ptr::null_mut(),
             recorder: Default::default(),
             record: false,
             _display,
+            fail_counter: 0,
         }
     }
 
@@ -1056,6 +1058,10 @@ impl VideoHandler {
         pixelbuffer: &mut bool,
         chroma: &mut Option<Chroma>,
     ) -> ResultType<bool> {
+        let format = CodecFormat::from(&vf);
+        if format != self.decoder.format() {
+            self.reset(Some(format));
+        }
         match &vf.union {
             Some(frame) => {
                 let res = self.decoder.handle_video_frame(
@@ -1065,6 +1071,13 @@ impl VideoHandler {
                     pixelbuffer,
                     chroma,
                 );
+                if res.as_ref().is_ok_and(|x| *x) {
+                    self.fail_counter = 0;
+                } else {
+                    if self.fail_counter < usize::MAX {
+                        self.fail_counter += 1
+                    }
+                }
                 if self.record {
                     self.recorder
                         .lock()
@@ -1078,13 +1091,15 @@ impl VideoHandler {
         }
     }
 
-    /// Reset the decoder.
-    pub fn reset(&mut self) {
+    /// Reset the decoder, change format if it is Some
+    pub fn reset(&mut self, format: Option<CodecFormat>) {
         #[cfg(all(feature = "flutter", feature = "gpucodec"))]
         let luid = crate::flutter::get_adapter_luid();
         #[cfg(not(all(feature = "flutter", feature = "gpucodec")))]
         let luid = None;
-        self.decoder = Decoder::new(luid);
+        let format = format.unwrap_or(self.decoder.format());
+        self.decoder = Decoder::new(format, luid);
+        self.fail_counter = 0;
     }
 
     /// Start or stop screen record.
@@ -1133,6 +1148,7 @@ pub struct LoginConfigHandler {
     pub other_server: Option<(String, String, String)>,
     pub custom_fps: Arc<Mutex<Option<usize>>>,
     pub adapter_luid: Option<i64>,
+    pub mark_unsupported: Vec<CodecFormat>,
 }
 
 impl Deref for LoginConfigHandler {
@@ -1562,6 +1578,7 @@ impl LoginConfigHandler {
                 Some(&self.id),
                 cfg!(feature = "flutter"),
                 self.adapter_luid,
+                &self.mark_unsupported,
             ));
         n += 1;
         msg.user_session = self
@@ -1953,6 +1970,7 @@ impl LoginConfigHandler {
             Some(&self.id),
             cfg!(feature = "flutter"),
             self.adapter_luid,
+            &self.mark_unsupported,
         );
         let mut misc = Misc::new();
         misc.set_option(OptionMessage {
@@ -1962,44 +1980,6 @@ impl LoginConfigHandler {
         let mut msg_out = Message::new();
         msg_out.set_misc(misc);
         msg_out
-    }
-
-    fn real_supported_decodings(
-        &self,
-        handler_controller_map: &Vec<VideoHandlerController>,
-    ) -> Data {
-        let abilities: Vec<CodecAbility> = handler_controller_map
-            .iter()
-            .map(|h| h.handler.decoder.exist_codecs(cfg!(feature = "flutter")))
-            .collect();
-        let all = |ability: fn(&CodecAbility) -> bool| -> i32 {
-            if abilities.iter().all(|d| ability(d)) {
-                1
-            } else {
-                0
-            }
-        };
-        let decoding = scrap::codec::Decoder::supported_decodings(
-            Some(&self.id),
-            cfg!(feature = "flutter"),
-            self.adapter_luid,
-        );
-        let decoding = SupportedDecoding {
-            ability_vp8: all(|e| e.vp8),
-            ability_vp9: all(|e| e.vp9),
-            ability_av1: all(|e| e.av1),
-            ability_h264: all(|e| e.h264),
-            ability_h265: all(|e| e.h265),
-            ..decoding
-        };
-        let mut misc = Misc::new();
-        misc.set_option(OptionMessage {
-            supported_decoding: hbb_common::protobuf::MessageField::some(decoding),
-            ..Default::default()
-        });
-        let mut msg_out = Message::new();
-        msg_out.set_misc(misc);
-        Data::Message(msg_out)
     }
 
     pub fn restart_remote_device(&self) -> Message {
@@ -2094,26 +2074,16 @@ where
                         };
                         let display = vf.display as usize;
                         let start = std::time::Instant::now();
-                        let mut created_new_handler = false;
+                        let format = CodecFormat::from(&vf);
                         if handler_controller_map.len() <= display {
                             for _i in handler_controller_map.len()..=display {
                                 handler_controller_map.push(VideoHandlerController {
-                                    handler: VideoHandler::new(_i),
+                                    handler: VideoHandler::new(format, _i),
                                     count: 0,
                                     duration: std::time::Duration::ZERO,
                                     skip_beginning: 0,
                                 });
-                                created_new_handler = true;
                             }
-                        }
-                        if created_new_handler {
-                            session.send(
-                                session
-                                    .lc
-                                    .read()
-                                    .unwrap()
-                                    .real_supported_decodings(&handler_controller_map),
-                            );
                         }
                         if let Some(handler_controller) = handler_controller_map.get_mut(display) {
                             let mut pixelbuffer = true;
@@ -2178,17 +2148,32 @@ where
                                 _ => {}
                             }
                         }
+
+                        // check invalid decoders
+                        let mut should_update_supported = false;
+                        handler_controller_map
+                            .iter()
+                            .map(|h| {
+                                if !h.handler.decoder.valid() || h.handler.fail_counter >= MAX_DECODE_FAIL_COUNTER {
+                                    let mut lc = session.lc.write().unwrap();
+                                    let format = h.handler.decoder.format();
+                                    if !lc.mark_unsupported.contains(&format) {
+                                        lc.mark_unsupported.push(format);
+                                        should_update_supported = true;
+                                        log::info!("mark {format:?} decoder as unsupported, valid:{}, fail_counter:{}, all unsupported:{:?}", h.handler.decoder.valid(), h.handler.fail_counter, lc.mark_unsupported);
+                                    }
+                                }
+                            })
+                            .count();
+                        if should_update_supported {
+                            session.send(Data::Message(
+                                session.lc.read().unwrap().update_supported_decodings(),
+                            ));
+                        }
                     }
                     MediaData::Reset(display) => {
                         if let Some(handler_controler) = handler_controller_map.get_mut(display) {
-                            handler_controler.handler.reset();
-                            session.send(
-                                session
-                                    .lc
-                                    .read()
-                                    .unwrap()
-                                    .real_supported_decodings(&handler_controller_map),
-                            );
+                            handler_controler.handler.reset(None);
                         }
                     }
                     MediaData::RecordScreen(start, display, w, h, id) => {
