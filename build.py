@@ -443,19 +443,19 @@ def build_flutter_windows(version, features):
     os.chdir('libs/portable')
     system2('pip3 install -r requirements.txt')
     system2(
-        f'python3 ./generate.py -f ../../{flutter_build_dir_2} -o . -e ../../{flutter_build_dir_2}/stardesk.exe')
+        f'python3 ./generate.py -f ../../{flutter_build_dir_2} -o . -e ../../{flutter_build_dir_2}/rustdesk.exe')
     os.chdir('../..')
-    if os.path.exists('./stardesk_portable.exe'):
-        os.replace('./target/release/stardesk-portable-packer.exe',
-                   './stardesk_portable.exe')
+    if os.path.exists('./rustdesk_portable.exe'):
+        os.replace('./target/release/rustdesk-portable-packer.exe',
+                   './rustdesk_portable.exe')
     else:
-        os.rename('./target/release/stardesk-portable-packer.exe',
-                  './stardesk_portable.exe')
+        os.rename('./target/release/rustdesk-portable-packer.exe',
+                  './rustdesk_portable.exe')
     print(
-        f'output location: {os.path.abspath(os.curdir)}/stardesk_portable.exe')
-    os.rename('./stardesk_portable.exe', f'./stardesk-{version}-install.exe')
+        f'output location: {os.path.abspath(os.curdir)}/rustdesk_portable.exe')
+    os.rename('./rustdesk_portable.exe', f'./rustdesk-{version}-install.exe')
     print(
-        f'output location: {os.path.abspath(os.curdir)}/stardesk-{version}-install.exe')
+        f'output location: {os.path.abspath(os.curdir)}/rustdesk-{version}-install.exe')
 
 
 def main():
