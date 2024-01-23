@@ -431,7 +431,7 @@ def build_flutter_arch_manjaro(version, features):
 def build_flutter_windows(version, features):
     if not skip_cargo:
         system2(f'cargo build --features {features} --lib --release')
-        if not os.path.exists("target/release/librustdesk.dll"):
+        if not os.path.exists("target/release/libstardesk.dll"):
             print("cargo build failed, please check rust source code.")
             exit(-1)
     os.chdir('flutter')
@@ -442,19 +442,19 @@ def build_flutter_windows(version, features):
     os.chdir('libs/portable')
     system2('pip3 install -r requirements.txt')
     system2(
-        f'python3 ./generate.py -f ../../{flutter_build_dir_2} -o . -e ../../{flutter_build_dir_2}/rustdesk.exe')
+        f'python3 ./generate.py -f ../../{flutter_build_dir_2} -o . -e ../../{flutter_build_dir_2}/stardesk.exe')
     os.chdir('../..')
-    if os.path.exists('./rustdesk_portable.exe'):
-        os.replace('./target/release/rustdesk-portable-packer.exe',
+    if os.path.exists('./stardesk_portable.exe'):
+        os.replace('./target/release/stardesk-portable-packer.exe',
                    './rustdesk_portable.exe')
     else:
-        os.rename('./target/release/rustdesk-portable-packer.exe',
+        os.rename('./target/release/stardesk-portable-packer.exe',
                   './rustdesk_portable.exe')
     print(
         f'output location: {os.path.abspath(os.curdir)}/rustdesk_portable.exe')
-    os.rename('./rustdesk_portable.exe', f'./rustdesk-{version}-install.exe')
+    os.rename('./rustdesk_portable.exe', f'./stardesk-{version}-install.exe')
     print(
-        f'output location: {os.path.abspath(os.curdir)}/rustdesk-{version}-install.exe')
+        f'output location: {os.path.abspath(os.curdir)}/stardesk-{version}-install.exe')
 
 
 def main():
@@ -491,13 +491,13 @@ def main():
             build_flutter_windows(version, features)
             return
         system2('cargo build --release --features ' + features)
-        # system2('upx.exe target/release/rustdesk.exe')
-        system2('mv target/release/rustdesk.exe target/release/StarDesk.exe')
+        # system2('upx.exe target/release/stardesk.exe')
+        system2('mv target/release/stardesk.exe target/release/StarDesk.exe')
         pa = os.environ.get('P')
         if pa:
             system2(
                 f'signtool sign /a /v /p {pa} /debug /f .\\cert.pfx /t http://timestamp.digicert.com  '
-                'target\\release\\rustdesk.exe')
+                'target\\release\\stardesk.exe')
         else:
             print('Not signed')
         system2(
@@ -505,8 +505,8 @@ def main():
         os.chdir('libs/portable')
         system2('pip3 install -r requirements.txt')
         system2(
-            f'python3 ./generate.py -f ../../{res_dir} -o . -e ../../{res_dir}/rustdesk-{version}-win7-install.exe')
-        system2('mv ../../{res_dir}/rustdesk-{version}-win7-install.exe ../..')
+            f'python3 ./generate.py -f ../../{res_dir} -o . -e ../../{res_dir}/stardesk-{version}-win7-install.exe')
+        system2('mv ../../{res_dir}/stardesk-{version}-win7-install.exe ../..')
     elif os.path.isfile('/usr/bin/pacman'):
         # pacman -S -needed base-devel
         system2("sed -i 's/pkgver=.*/pkgver=%s/g' res/PKGBUILD" % version)
