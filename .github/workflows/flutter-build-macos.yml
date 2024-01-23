@@ -167,23 +167,23 @@ jobs:
           # --hwcodec not supported on macos yet
           ./build.py --flutter ${{ matrix.job.extra-build-args }}
 
-      - name: Codesign app and create signed dmg
-        if: env.MACOS_P12_BASE64 != null && env.UPLOAD_ARTIFACT == 'true'
-        run: |
-          # Patch create-dmg to give more attempts to unmount image
-          CREATE_DMG="$(command -v create-dmg)"
-          CREATE_DMG="$(readlink -f "$CREATE_DMG")"
-          sed -i -e 's/MAXIMUM_UNMOUNTING_ATTEMPTS=3/MAXIMUM_UNMOUNTING_ATTEMPTS=7/' "$CREATE_DMG"
-          # Unlock keychain
-          # security default-keychain -s rustdesk.keychain
-          # security unlock-keychain -p ${{ secrets.MACOS_P12_PASSWORD }} rustdesk.keychain
-          # start sign the StarDesk.app and dmg
-          rm stardesk-${{ env.VERSION }}.dmg || true
-          codesign --force --options runtime -s ${{ secrets.MACOS_CODESIGN_IDENTITY }} --deep --strict ./flutter/build/macos/Build/Products/Release/StarDesk.app -vvv
-          create-dmg --icon "StarDesk.app" 200 190 --hide-extension "StarDesk.app" --window-size 800 400 --app-drop-link 600 185 stardesk-${{ env.VERSION }}.dmg ./flutter/build/macos/Build/Products/Release/StarDesk.app
-          codesign --force --options runtime -s ${{ secrets.MACOS_CODESIGN_IDENTITY }} --deep --strict ruststardeskdesk-${{ env.VERSION }}.dmg -vvv
-          # notarize the stardesk-${{ env.VERSION }}.dmg
-          # rcodesign notary-submit --api-key-path ${{ github.workspace }}/rustdesk.json  --staple stardesk-${{ env.VERSION }}.dmg
+      # - name: Codesign app and create signed dmg
+      #   if: env.MACOS_P12_BASE64 != null && env.UPLOAD_ARTIFACT == 'true'
+      #   run: |
+      #     # Patch create-dmg to give more attempts to unmount image
+      #     CREATE_DMG="$(command -v create-dmg)"
+      #     CREATE_DMG="$(readlink -f "$CREATE_DMG")"
+      #     sed -i -e 's/MAXIMUM_UNMOUNTING_ATTEMPTS=3/MAXIMUM_UNMOUNTING_ATTEMPTS=7/' "$CREATE_DMG"
+      #     # Unlock keychain
+      #     # security default-keychain -s rustdesk.keychain
+      #     # security unlock-keychain -p ${{ secrets.MACOS_P12_PASSWORD }} rustdesk.keychain
+      #     # start sign the StarDesk.app and dmg
+      #     rm stardesk-${{ env.VERSION }}.dmg || true
+      #     codesign --force --options runtime -s ${{ secrets.MACOS_CODESIGN_IDENTITY }} --deep --strict ./flutter/build/macos/Build/Products/Release/StarDesk.app -vvv
+      #     create-dmg --icon "StarDesk.app" 200 190 --hide-extension "StarDesk.app" --window-size 800 400 --app-drop-link 600 185 stardesk-${{ env.VERSION }}.dmg ./flutter/build/macos/Build/Products/Release/StarDesk.app
+      #     codesign --force --options runtime -s ${{ secrets.MACOS_CODESIGN_IDENTITY }} --deep --strict ruststardeskdesk-${{ env.VERSION }}.dmg -vvv
+      #     # notarize the stardesk-${{ env.VERSION }}.dmg
+      #     # rcodesign notary-submit --api-key-path ${{ github.workspace }}/rustdesk.json  --staple stardesk-${{ env.VERSION }}.dmg
 
       - name: Rename rustdesk
         if: env.UPLOAD_ARTIFACT == 'true'

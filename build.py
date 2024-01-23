@@ -492,12 +492,12 @@ def main():
             return
         system2('cargo build --release --features ' + features)
         # system2('upx.exe target/release/rustdesk.exe')
-        system2('mv target/release/stardesk.exe target/release/StarDesk.exe')
+        system2('mv target/release/rustdesk.exe target/release/StarDesk.exe')
         pa = os.environ.get('P')
         if pa:
             system2(
                 f'signtool sign /a /v /p {pa} /debug /f .\\cert.pfx /t http://timestamp.digicert.com  '
-                'target\\release\\stardesk.exe')
+                'target\\release\\rustdesk.exe')
         else:
             print('Not signed')
         system2(
@@ -505,8 +505,8 @@ def main():
         os.chdir('libs/portable')
         system2('pip3 install -r requirements.txt')
         system2(
-            f'python3 ./generate.py -f ../../{res_dir} -o . -e ../../{res_dir}/stardesk-{version}-win7-install.exe')
-        system2('mv ../../{res_dir}/stardesk-{version}-win7-install.exe ../..')
+            f'python3 ./generate.py -f ../../{res_dir} -o . -e ../../{res_dir}/rustdesk-{version}-win7-install.exe')
+        system2('mv ../../{res_dir}/rustdesk-{version}-win7-install.exe ../..')
     elif os.path.isfile('/usr/bin/pacman'):
         # pacman -S -needed base-devel
         system2("sed -i 's/pkgver=.*/pkgver=%s/g' res/PKGBUILD" % version)

@@ -132,12 +132,12 @@ jobs:
 
       - name: Sign stardesk files
         uses: GermanBluefox/code-sign-action@v7
-        if: env.UPLOAD_ARTIFACT == 'true'
+        if: false # env.UPLOAD_ARTIFACT == 'true'
         with:
           certificate: '${{ secrets.WINDOWS_PFX_BASE64 }}'
           password: '${{ secrets.WINDOWS_PFX_PASSWORD }}'
           certificatesha1: '${{ secrets.WINDOWS_PFX_SHA1_THUMBPRINT }}'
-          certificatename: '${{ secrets.CERTNAME }}'
+          # certificatename: '${{ secrets.CERTNAME }}'
           folder: './flutter/build/windows/runner/Release/'
           recursive: true
 
@@ -146,19 +146,20 @@ jobs:
         if: env.UPLOAD_ARTIFACT == 'true'
         run: |
           pushd ./libs/portable
-          python3 ./generate.py -f ../../flutter/build/windows/runner/Release/ -o . -e ../../flutter/build/windows/runner/Release/stardesk.exe
+          python3 ./generate.py -f ../../flutter/build/windows/runner/Release/ -o . -e ../../flutter/build/windows/runner/Release/rustdesk.exe
           popd
           mkdir -p ./SignOutput
-          mv ./target/release/stardesk-portable-packer.exe ./SignOutput/stardesk-${{ env.VERSION }}-${{ matrix.job.arch }}.exe
+          mv ./target/release/rustdesk-portable-packer.exe ./SignOutput/rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}.exe
+
 
       - name: Sign stardesk self-extracted file
         uses: GermanBluefox/code-sign-action@v7
-        if: env.UPLOAD_ARTIFACT == 'true'
+        if: false #env.UPLOAD_ARTIFACT == 'true'
         with:
           certificate: '${{ secrets.WINDOWS_PFX_BASE64 }}'
           password: '${{ secrets.WINDOWS_PFX_PASSWORD }}'
           certificatesha1: '${{ secrets.WINDOWS_PFX_SHA1_THUMBPRINT }}'
-          certificatename: '${{ secrets.WINDOWS_PFX_NAME }}'
+          # certificatename: '${{ secrets.WINDOWS_PFX_NAME }}'
           folder: './SignOutput'
           recursive: false
 
@@ -170,6 +171,7 @@ jobs:
           tag_name: ${{ env.TAG_NAME }}
           files: |
             ./SignOutput/stardesk-*.exe
+
 
   # The fallback for the flutter version, we use Sciter for 32bit Windows.
   build-for-windows-sciter:
@@ -402,23 +404,23 @@ jobs:
           # --hwcodec not supported on macos yet
           ./build.py --flutter ${{ matrix.job.extra-build-args }}
 
-      - name: Codesign app and create signed dmg
-        if: env.MACOS_P12_BASE64 != null && env.UPLOAD_ARTIFACT == 'true'
-        run: |
-          # Patch create-dmg to give more attempts to unmount image
-          CREATE_DMG="$(command -v create-dmg)"
-          CREATE_DMG="$(readlink -f "$CREATE_DMG")"
-          sed -i -e 's/MAXIMUM_UNMOUNTING_ATTEMPTS=3/MAXIMUM_UNMOUNTING_ATTEMPTS=7/' "$CREATE_DMG"
-          # Unlock keychain
-          security default-keychain -s rustdesk.keychain
-          security unlock-keychain -p ${{ secrets.MACOS_P12_PASSWORD }} rustdesk.keychain
-          # start sign the StarDesk.app and dmg
-          rm stardesk-${{ env.VERSION }}.dmg || true
-          codesign --force --options runtime -s ${{ secrets.MACOS_CODESIGN_IDENTITY }} --deep --strict ./flutter/build/macos/Build/Products/Release/StarDesk.app -vvv
-          create-dmg --icon "StarDesk.app" 200 190 --hide-extension "StarDesk.app" --window-size 800 400 --app-drop-link 600 185 stardesk-${{ env.VERSION }}.dmg ./flutter/build/macos/Build/Products/Release/StarDesk.app
-          codesign --force --options runtime -s ${{ secrets.MACOS_CODESIGN_IDENTITY }} --deep --strict ruststardeskdesk-${{ env.VERSION }}.dmg -vvv
-          # notarize the stardesk-${{ env.VERSION }}.dmg
-          # rcodesign notary-submit --api-key-path ${{ github.workspace }}/rustdesk.json  --staple stardesk-${{ env.VERSION }}.dmg
+      # - name: Codesign app and create signed dmg
+      #   if: env.MACOS_P12_BASE64 != null && env.UPLOAD_ARTIFACT == 'true'
+      #   run: |
+      #     # Patch create-dmg to give more attempts to unmount image
+      #     CREATE_DMG="$(command -v create-dmg)"
+      #     CREATE_DMG="$(readlink -f "$CREATE_DMG")"
+      #     sed -i -e 's/MAXIMUM_UNMOUNTING_ATTEMPTS=3/MAXIMUM_UNMOUNTING_ATTEMPTS=7/' "$CREATE_DMG"
+      #     # Unlock keychain
+      #     security default-keychain -s rustdesk.keychain
+      #     security unlock-keychain -p ${{ secrets.MACOS_P12_PASSWORD }} rustdesk.keychain
+      #     # start sign the StarDesk.app and dmg
+      #     # rm stardesk-${{ env.VERSION }}.dmg || true
+      #     codesign --force --options runtime -s ${{ secrets.MACOS_CODESIGN_IDENTITY }} --deep --strict ./flutter/build/macos/Build/Products/Release/StarDesk.app -vvv
+      #     create-dmg --icon "StarDesk.app" 200 190 --hide-extension "StarDesk.app" --window-size 800 400 --app-drop-link 600 185 stardesk-${{ env.VERSION }}.dmg ./flutter/build/macos/Build/Products/Release/StarDesk.app
+      #     codesign --force --options runtime -s ${{ secrets.MACOS_CODESIGN_IDENTITY }} --deep --strict ruststardeskdesk-${{ env.VERSION }}.dmg -vvv
+      #     # notarize the stardesk-${{ env.VERSION }}.dmg
+      #     # rcodesign notary-submit --api-key-path ${{ github.workspace }}/rustdesk.json  --staple stardesk-${{ env.VERSION }}.dmg
 
       - name: Rename rustdesk
         if: env.UPLOAD_ARTIFACT == 'true'
