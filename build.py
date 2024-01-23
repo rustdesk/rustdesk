@@ -429,9 +429,10 @@ def build_flutter_arch_manjaro(version, features):
 
 
 def build_flutter_windows(version, features):
+    print('--> build_flutter_windows')
     if not skip_cargo:
         system2(f'cargo build --features {features} --lib --release')
-        if not os.path.exists("target/release/libstardesk.dll"):
+        if not os.path.exists("target/release/librustdesk.dll"):
             print("cargo build failed, please check rust source code.")
             exit(-1)
     os.chdir('flutter')
@@ -446,13 +447,13 @@ def build_flutter_windows(version, features):
     os.chdir('../..')
     if os.path.exists('./stardesk_portable.exe'):
         os.replace('./target/release/stardesk-portable-packer.exe',
-                   './rustdesk_portable.exe')
+                   './stardesk_portable.exe')
     else:
         os.rename('./target/release/stardesk-portable-packer.exe',
-                  './rustdesk_portable.exe')
+                  './stardesk_portable.exe')
     print(
-        f'output location: {os.path.abspath(os.curdir)}/rustdesk_portable.exe')
-    os.rename('./rustdesk_portable.exe', f'./stardesk-{version}-install.exe')
+        f'output location: {os.path.abspath(os.curdir)}/stardesk_portable.exe')
+    os.rename('./stardesk_portable.exe', f'./stardesk-{version}-install.exe')
     print(
         f'output location: {os.path.abspath(os.curdir)}/stardesk-{version}-install.exe')
 
@@ -483,6 +484,7 @@ def main():
     external_resources(flutter, args, res_dir)
     if windows:
         # build virtual display dynamic library
+        print('--> cargo build --release')
         os.chdir('libs/virtual_display/dylib')
         system2('cargo build --release')
         os.chdir('../../..')
