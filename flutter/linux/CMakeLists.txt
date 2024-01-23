@@ -4,10 +4,10 @@ project(runner LANGUAGES CXX)
 
 # The name of the executable created for the application. Change this to change
 # the on-disk name of your application.
-set(BINARY_NAME "rustdesk")
+set(BINARY_NAME "stardesk")
 # The unique GTK application identifier for this application. See:
 # https://wiki.gnome.org/HowDoI/ChooseApplicationID
-set(APPLICATION_ID "com.carriez.flutter_hbb")
+set(APPLICATION_ID "com.mobilestartools.remote")
 
 # Explicitly opt into modern CMake behaviors to avoid warnings with recent
 # versions of CMake.

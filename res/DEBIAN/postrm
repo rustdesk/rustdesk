@@ -4,7 +4,7 @@ set -e
 
 case $1 in
     purge)
-		rm -rf /root/.config/rustdesk || true
+		rm -rf /root/.config/stardesk || true
         ;;
 esac
 

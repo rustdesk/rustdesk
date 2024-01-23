@@ -226,7 +226,7 @@ jobs:
           $VCPKG_ROOT/vcpkg install --triplet x86-windows-static --x-install-root="$VCPKG_ROOT/installed"
         shell: bash
 
-      - name: Build rustdesk
+      - name: Build stardesk
         id: build
         shell: bash
         run: |
@@ -235,7 +235,7 @@ jobs:
           sed -i 's/branch = "dyn"/branch = "dyn_x86"/g' ./Cargo.toml
           cargo build --features inline --release --bins
           mkdir -p ./Release
-          mv ./target/release/rustdesk.exe ./Release/rustdesk.exe
+          mv ./target/release/stardesk.exe ./Release/stardesk.exe
           curl -LJ -o ./Release/sciter.dll https://github.com/c-smile/sciter-sdk/raw/master/bin.win/x32/sciter.dll
           echo "output_folder=./Release" >> $GITHUB_OUTPUT
 
@@ -255,7 +255,7 @@ jobs:
             ls -l ./libs/portable/Runner.res;
           fi
 
-      - name: Sign rustdesk files
+      - name: Sign stardesk files
         uses: GermanBluefox/code-sign-action@v7
         if: env.UPLOAD_ARTIFACT == 'true'
         with:
@@ -271,12 +271,12 @@ jobs:
         run: |
           pushd ./libs/portable
           pip3 install -r requirements.txt
-          python3 ./generate.py -f ../../Release/ -o . -e ../../Release/rustdesk.exe
+          python3 ./generate.py -f ../../Release/ -o . -e ../../Release/stardesk.exe
           popd
           mkdir -p ./SignOutput
-          mv ./target/release/rustdesk-portable-packer.exe ./SignOutput/rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}-sciter.exe
+          mv ./target/release/stardesk-portable-packer.exe ./SignOutput/stardesk-${{ env.VERSION }}-${{ matrix.job.arch }}-sciter.exe
 
-      - name: Sign rustdesk self-extracted file
+      - name: Sign stardesk self-extracted file
         uses: GermanBluefox/code-sign-action@v7
         if: env.UPLOAD_ARTIFACT == 'true'
         with:
@@ -294,7 +294,7 @@ jobs:
           prerelease: true
           tag_name: ${{ env.TAG_NAME }}
           files: |
-            ./SignOutput/rustdesk-*.exe
+            ./SignOutput/stardesk-*.exe
 
   build-for-macOS:
     name: ${{ matrix.job.target }} (${{ matrix.job.os }}) [${{ matrix.job.extra-build-args }}]
@@ -423,7 +423,7 @@ jobs:
       #     # notarize the stardesk-${{ env.VERSION }}.dmg
       #     # rcodesign notary-submit --api-key-path ${{ github.workspace }}/rustdesk.json  --staple stardesk-${{ env.VERSION }}.dmg
 
-      - name: Rename rustdesk
+      - name: Rename stardesk
         if: env.UPLOAD_ARTIFACT == 'true'
         run: |
           for name in rustdesk*??.dmg; do
@@ -437,14 +437,14 @@ jobs:
           prerelease: true
           tag_name: ${{ env.TAG_NAME }}
           files: |
-            rustdesk*-${{ matrix.job.arch }}.dmg
+            stardesk*-${{ matrix.job.arch }}.dmg
 
   generate-bridge-linux:
     uses: ./.github/workflows/bridge.yml
 
   build-rustdesk-ios:
     if: ${{ inputs.upload-artifact }}
-    name: build rustdesk ios ipa ${{ matrix.job.target }} (${{ matrix.job.os }}) [${{ matrix.job.extra-build-features }}]
+    name: build stardesk ios ipa ${{ matrix.job.target }} (${{ matrix.job.os }}) [${{ matrix.job.extra-build-features }}]
     runs-on: ${{ matrix.job.os }}
     strategy:
       fail-fast: false
@@ -561,7 +561,7 @@ jobs:
 
   build-rustdesk-android:
     needs: [generate-bridge-linux]
-    name: build rustdesk android apk ${{ matrix.job.target }} (${{ matrix.job.os }}) [${{ matrix.job.extra-build-features }}]
+    name: build stardesk android apk ${{ matrix.job.target }} (${{ matrix.job.os }}) [${{ matrix.job.extra-build-features }}]
     runs-on: ${{ matrix.job.os }}
     strategy:
       fail-fast: false
@@ -674,7 +674,7 @@ jobs:
           prefix-key: rustdesk-lib-cache-android # TODO: drop '-android' part after caches are invalidated
           key: ${{ matrix.job.target }}-${{ matrix.job.extra-build-features }}
 
-      - name: Build rustdesk lib
+      - name: Build stardesk lib
         env:
           ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
           ANDROID_NDK_ROOT: ${{ steps.setup-ndk.outputs.ndk-path }}
@@ -694,7 +694,7 @@ jobs:
             ;;
           esac
 
-      - name: Build rustdesk
+      - name: Build stardesk
         shell: bash
         env:
           JAVA_HOME: /usr/lib/jvm/java-11-openjdk-amd64
@@ -710,7 +710,7 @@ jobs:
               # build flutter
               pushd flutter
               flutter build apk --release --target-platform android-arm64 --split-per-abi
-              mv build/app/outputs/flutter-apk/app-arm64-v8a-release.apk ../rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}.apk
+              mv build/app/outputs/flutter-apk/app-arm64-v8a-release.apk ../stardesk-${{ env.VERSION }}-${{ matrix.job.arch }}.apk
             ;;
             armv7-linux-androideabi)
               mkdir -p ./flutter/android/app/src/main/jniLibs/armeabi-v7a
@@ -719,12 +719,12 @@ jobs:
               # build flutter
               pushd flutter
               flutter build apk --release --target-platform android-arm --split-per-abi
-              mv build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk ../rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}.apk
+              mv build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk ../stardesk-${{ env.VERSION }}-${{ matrix.job.arch }}.apk
             ;;
           esac
           popd
           mkdir -p signed-apk; pushd signed-apk
-          mv ../rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}.apk .
+          mv ../stardesk-${{ env.VERSION }}-${{ matrix.job.arch }}.apk .
 
       - uses: r0adkll/sign-android-release@v1
         name: Sign app APK
@@ -744,7 +744,7 @@ jobs:
         if: env.ANDROID_SIGNING_KEY != null && env.UPLOAD_ARTIFACT == 'true'
         uses: actions/upload-artifact@master
         with:
-          name: rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}.apk
+          name: stardesk-${{ env.VERSION }}-${{ matrix.job.arch }}.apk
           path: ${{steps.sign-rustdesk.outputs.signedReleaseFile}}
 
       - name: Publish signed apk package
@@ -763,7 +763,7 @@ jobs:
           prerelease: true
           tag_name: ${{ env.TAG_NAME }}
           files: |
-            signed-apk/rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}.apk
+            signed-apk/stardesk-${{ env.VERSION }}-${{ matrix.job.arch }}.apk
 
   build-rustdesk-lib-linux-amd64:
     needs: [generate-bridge-linux]
@@ -1976,15 +1976,15 @@ jobs:
       - name: Download Binary
         uses: actions/download-artifact@master
         with:
-          name: rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}.deb
+          name: stardesk-${{ env.VERSION }}-${{ matrix.job.arch }}.deb
           path: .
 
       - name: Rename Binary
         run: |
-          mv rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}.deb rustdesk-${{ env.VERSION }}.deb
+          mv stardesk-${{ env.VERSION }}-${{ matrix.job.arch }}.deb stardesk-${{ env.VERSION }}.deb
 
       - uses: rustdesk-org/run-on-arch-action@amd64-support
-        name: Build rustdesk flatpak package for ${{ matrix.job.arch }}
+        name: Build stardesk flatpak package for ${{ matrix.job.arch }}
         id: rpm
         with:
           arch: ${{ matrix.job.arch }}
@@ -2027,7 +2027,7 @@ jobs:
             pushd flatpak
             git clone https://github.com/flathub/shared-modules.git --depth=1
             flatpak-builder --user --force-clean --repo=repo ./build ./rustdesk.json
-            flatpak build-bundle ./repo rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}.flatpak com.rustdesk.StarDesk
+            flatpak build-bundle ./repo stardesk-${{ env.VERSION }}-${{ matrix.job.arch }}.flatpak com.stardesk.StarDesk
 
       - name: Publish flatpak package
         uses: softprops/action-gh-release@v1
@@ -2036,4 +2036,4 @@ jobs:
           prerelease: true
           tag_name: ${{ env.TAG_NAME }}
           files: |
-            flatpak/rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}.flatpak
+            flatpak/stardesk-${{ env.VERSION }}-${{ matrix.job.arch }}.flatpak

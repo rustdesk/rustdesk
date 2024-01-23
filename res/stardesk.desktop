@@ -1,0 +1,18 @@
+[Desktop Entry]
+Name=StarDesk
+GenericName=Remote Desktop
+Comment=Remote Desktop
+Exec=stardesk %u
+Icon=stardesk
+Terminal=false
+Type=Application
+StartupNotify=true
+Categories=Network;RemoteAccess;GTK;
+Keywords=internet;
+Actions=new-window;
+
+X-Desktop-File-Install-Version=0.23
+
+[Desktop Action new-window]
+Name=Open a New Window
+Exec=stardesk %u

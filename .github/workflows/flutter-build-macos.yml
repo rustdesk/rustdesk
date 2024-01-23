@@ -162,7 +162,7 @@ jobs:
           mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
           cp $PP_PATH ~/Library/MobileDevice/Provisioning\ Profiles
 
-      - name: Build rustdesk
+      - name: Build stardesk
         run: |
           # --hwcodec not supported on macos yet
           ./build.py --flutter ${{ matrix.job.extra-build-args }}
@@ -185,7 +185,7 @@ jobs:
       #     # notarize the stardesk-${{ env.VERSION }}.dmg
       #     # rcodesign notary-submit --api-key-path ${{ github.workspace }}/rustdesk.json  --staple stardesk-${{ env.VERSION }}.dmg
 
-      - name: Rename rustdesk
+      - name: Rename stardesk
         if: env.UPLOAD_ARTIFACT == 'true'
         run: |
           for name in rustdesk*??.dmg; do
@@ -199,7 +199,7 @@ jobs:
           prerelease: true
           tag_name: ${{ env.TAG_NAME }}
           files: |
-            rustdesk*-${{ matrix.job.arch }}.dmg
+            stardesk*-${{ matrix.job.arch }}.dmg
       - name: Clean up keychain and provisioning profile
         if: ${{ always() }}
         run: |

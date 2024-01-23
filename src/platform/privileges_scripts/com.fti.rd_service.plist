@@ -8,7 +8,7 @@
         <true/>
         <key>ProgramArguments</key>
         <array>
-        	<string>/Applications/StarDesk.app/Contents/MacOS/rustdesk</string>
+        	<string>/Applications/StarDesk.app/Contents/MacOS/stardesk</string>
         	<string>--service</string>
         </array>
         <key>RunAtLoad</key>

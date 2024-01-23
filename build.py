@@ -134,12 +134,12 @@ def make_parser():
     parser.add_argument(
         '--flatpak',
         action='store_true',
-        help='Build rustdesk libs with the flatpak feature enabled'
+        help='Build stardesk libs with the flatpak feature enabled'
     )
     parser.add_argument(
         '--appimage',
         action='store_true',
-        help='Build rustdesk libs with the appimage feature enabled'
+        help='Build stardesk libs with the appimage feature enabled'
     )
     parser.add_argument(
         '--skip-cargo',
@@ -182,7 +182,7 @@ def generate_build_script_for_docker():
             vcpkg/bootstrap-vcpkg.sh
             popd
             $VCPKG_ROOT/vcpkg install --x-install-root="$VCPKG_ROOT/installed"
-            # build rustdesk
+            # build stardesk
             ./build.py --flutter --hwcodec
         ''')
     system2("chmod +x /tmp/build.sh")
@@ -318,86 +318,86 @@ def build_flutter_deb(version, features):
     os.chdir('flutter')
     system2('flutter build linux --release')
     system2('mkdir -p tmpdeb/usr/bin/')
-    system2('mkdir -p tmpdeb/usr/lib/rustdesk')
-    system2('mkdir -p tmpdeb/etc/rustdesk/')
+    system2('mkdir -p tmpdeb/usr/lib/stardesk')
+    system2('mkdir -p tmpdeb/etc/stardesk/')
     system2('mkdir -p tmpdeb/etc/pam.d/')
-    system2('mkdir -p tmpdeb/usr/share/rustdesk/files/systemd/')
+    system2('mkdir -p tmpdeb/usr/share/stardesk/files/systemd/')
     system2('mkdir -p tmpdeb/usr/share/icons/hicolor/256x256/apps/')
     system2('mkdir -p tmpdeb/usr/share/icons/hicolor/scalable/apps/')
     system2('mkdir -p tmpdeb/usr/share/applications/')
     system2('mkdir -p tmpdeb/usr/share/polkit-1/actions')
-    system2('rm tmpdeb/usr/bin/rustdesk || true')
+    system2('rm tmpdeb/usr/bin/stardesk || true')
     system2(
-        f'cp -r {flutter_build_dir}/* tmpdeb/usr/lib/rustdesk/')
+        f'cp -r {flutter_build_dir}/* tmpdeb/usr/lib/stardesk/')
     system2(
-        'cp ../res/rustdesk.service tmpdeb/usr/share/rustdesk/files/systemd/')
+        'cp ../res/stardesk.service tmpdeb/usr/share/stardesk/files/systemd/')
     system2(
-        'cp ../res/128x128@2x.png tmpdeb/usr/share/icons/hicolor/256x256/apps/rustdesk.png')
+        'cp ../res/128x128@2x.png tmpdeb/usr/share/icons/hicolor/256x256/apps/stardesk.png')
     system2(
-        'cp ../res/scalable.svg tmpdeb/usr/share/icons/hicolor/scalable/apps/rustdesk.svg')
+        'cp ../res/scalable.svg tmpdeb/usr/share/icons/hicolor/scalable/apps/stardesk.svg')
     system2(
-        'cp ../res/rustdesk.desktop tmpdeb/usr/share/applications/rustdesk.desktop')
+        'cp ../res/stardesk.desktop tmpdeb/usr/share/applications/stardesk.desktop')
     system2(
-        'cp ../res/rustdesk-link.desktop tmpdeb/usr/share/applications/rustdesk-link.desktop')
+        'cp ../res/stardesk-link.desktop tmpdeb/usr/share/applications/stardesk-link.desktop')
     system2(
-        'cp ../res/com.rustdesk.StarDesk.policy tmpdeb/usr/share/polkit-1/actions/')
+        'cp ../res/com.stardesk.StarDesk.policy tmpdeb/usr/share/polkit-1/actions/')
     system2(
-        'cp ../res/startwm.sh tmpdeb/etc/rustdesk/')
+        'cp ../res/startwm.sh tmpdeb/etc/stardesk/')
     system2(
-        'cp ../res/xorg.conf tmpdeb/etc/rustdesk/')
+        'cp ../res/xorg.conf tmpdeb/etc/stardesk/')
     system2(
-        'cp ../res/pam.d/rustdesk.debian tmpdeb/etc/pam.d/rustdesk')
+        'cp ../res/pam.d/stardesk.debian tmpdeb/etc/pam.d/stardesk')
     system2(
-        "echo \"#!/bin/sh\" >> tmpdeb/usr/share/rustdesk/files/polkit && chmod a+x tmpdeb/usr/share/rustdesk/files/polkit")
+        "echo \"#!/bin/sh\" >> tmpdeb/usr/share/stardesk/files/polkit && chmod a+x tmpdeb/usr/share/stardesk/files/polkit")
 
     system2('mkdir -p tmpdeb/DEBIAN')
     generate_control_file(version)
     system2('cp -a ../res/DEBIAN/* tmpdeb/DEBIAN/')
-    md5_file('usr/share/rustdesk/files/systemd/rustdesk.service')
-    system2('dpkg-deb -b tmpdeb rustdesk.deb;')
+    md5_file('usr/share/stardesk/files/systemd/stardesk.service')
+    system2('dpkg-deb -b tmpdeb stardesk.deb;')
 
     system2('/bin/rm -rf tmpdeb/')
     system2('/bin/rm -rf ../res/DEBIAN/control')
-    os.rename('rustdesk.deb', '../rustdesk-%s.deb' % version)
+    os.rename('stardesk.deb', '../stardesk-%s.deb' % version)
     os.chdir("..")
 
 
 def build_deb_from_folder(version, binary_folder):
     os.chdir('flutter')
     system2('mkdir -p tmpdeb/usr/bin/')
-    system2('mkdir -p tmpdeb/usr/lib/rustdesk')
-    system2('mkdir -p tmpdeb/usr/share/rustdesk/files/systemd/')
+    system2('mkdir -p tmpdeb/usr/lib/stardesk')
+    system2('mkdir -p tmpdeb/usr/share/stardesk/files/systemd/')
     system2('mkdir -p tmpdeb/usr/share/icons/hicolor/256x256/apps/')
     system2('mkdir -p tmpdeb/usr/share/icons/hicolor/scalable/apps/')
     system2('mkdir -p tmpdeb/usr/share/applications/')
     system2('mkdir -p tmpdeb/usr/share/polkit-1/actions')
-    system2('rm tmpdeb/usr/bin/rustdesk || true')
+    system2('rm tmpdeb/usr/bin/stardesk || true')
     system2(
-        f'cp -r ../{binary_folder}/* tmpdeb/usr/lib/rustdesk/')
+        f'cp -r ../{binary_folder}/* tmpdeb/usr/lib/stardesk/')
     system2(
-        'cp ../res/rustdesk.service tmpdeb/usr/share/rustdesk/files/systemd/')
+        'cp ../res/stardesk.service tmpdeb/usr/share/stardesk/files/systemd/')
     system2(
-        'cp ../res/128x128@2x.png tmpdeb/usr/share/icons/hicolor/256x256/apps/rustdesk.png')
+        'cp ../res/128x128@2x.png tmpdeb/usr/share/icons/hicolor/256x256/apps/stardesk.png')
     system2(
-        'cp ../res/scalable.svg tmpdeb/usr/share/icons/hicolor/scalable/apps/rustdesk.svg')
+        'cp ../res/scalable.svg tmpdeb/usr/share/icons/hicolor/scalable/apps/stardesk.svg')
     system2(
-        'cp ../res/rustdesk.desktop tmpdeb/usr/share/applications/rustdesk.desktop')
+        'cp ../res/stardesk.desktop tmpdeb/usr/share/applications/stardesk.desktop')
     system2(
-        'cp ../res/rustdesk-link.desktop tmpdeb/usr/share/applications/rustdesk-link.desktop')
+        'cp ../res/stardesk-link.desktop tmpdeb/usr/share/applications/stardesk-link.desktop')
     system2(
-        'cp ../res/com.rustdesk.StarDesk.policy tmpdeb/usr/share/polkit-1/actions/')
+        'cp ../res/com.stardesk.StarDesk.policy tmpdeb/usr/share/polkit-1/actions/')
     system2(
-        "echo \"#!/bin/sh\" >> tmpdeb/usr/share/rustdesk/files/polkit && chmod a+x tmpdeb/usr/share/rustdesk/files/polkit")
+        "echo \"#!/bin/sh\" >> tmpdeb/usr/share/stardesk/files/polkit && chmod a+x tmpdeb/usr/share/stardesk/files/polkit")
 
     system2('mkdir -p tmpdeb/DEBIAN')
     generate_control_file(version)
     system2('cp -a ../res/DEBIAN/* tmpdeb/DEBIAN/')
-    md5_file('usr/share/rustdesk/files/systemd/rustdesk.service')
-    system2('dpkg-deb -b tmpdeb rustdesk.deb;')
+    md5_file('usr/share/stardesk/files/systemd/stardesk.service')
+    system2('dpkg-deb -b tmpdeb stardesk.deb;')
 
     system2('/bin/rm -rf tmpdeb/')
     system2('/bin/rm -rf ../res/DEBIAN/control')
-    os.rename('rustdesk.deb', '../rustdesk-%s.deb' % version)
+    os.rename('stardesk.deb', '../stardesk-%s.deb' % version)
     os.chdir("..")
 
 
@@ -518,30 +518,30 @@ def main():
         else:
             system2('cargo build --release --features ' + features)
             system2('git checkout src/ui/common.tis')
-            system2('strip target/release/rustdesk')
+            system2('strip target/release/stardesk')
             system2('ln -s res/pacman_install && ln -s res/PKGBUILD')
             system2('HBB=`pwd` makepkg -f')
-        system2('mv rustdesk-%s-0-x86_64.pkg.tar.zst rustdesk-%s-manjaro-arch.pkg.tar.zst' % (
+        system2('mv stardesk-%s-0-x86_64.pkg.tar.zst stardesk-%s-manjaro-arch.pkg.tar.zst' % (
             version, version))
         # pacman -U ./rustdesk.pkg.tar.zst
     elif os.path.isfile('/usr/bin/yum'):
         system2('cargo build --release --features ' + features)
-        system2('strip target/release/rustdesk')
+        system2('strip target/release/stardesk')
         system2(
             "sed -i 's/Version:    .*/Version:    %s/g' res/rpm.spec" % version)
         system2('HBB=`pwd` rpmbuild -ba res/rpm.spec')
         system2(
-            'mv $HOME/rpmbuild/RPMS/x86_64/rustdesk-%s-0.x86_64.rpm ./rustdesk-%s-fedora28-centos8.rpm' % (
+            'mv $HOME/rpmbuild/RPMS/x86_64/stardesk-%s-0.x86_64.rpm ./stardesk-%s-fedora28-centos8.rpm' % (
                 version, version))
         # yum localinstall rustdesk.rpm
     elif os.path.isfile('/usr/bin/zypper'):
         system2('cargo build --release --features ' + features)
-        system2('strip target/release/rustdesk')
+        system2('strip target/release/stardesk')
         system2(
             "sed -i 's/Version:    .*/Version:    %s/g' res/rpm-suse.spec" % version)
         system2('HBB=`pwd` rpmbuild -ba res/rpm-suse.spec')
         system2(
-            'mv $HOME/rpmbuild/RPMS/x86_64/rustdesk-%s-0.x86_64.rpm ./rustdesk-%s-suse.rpm' % (
+            'mv $HOME/rpmbuild/RPMS/x86_64/stardesk-%s-0.x86_64.rpm ./stardesk-%s-suse.rpm' % (
                 version, version))
         # yum localinstall rustdesk.rpm
     else:
@@ -597,39 +597,39 @@ def main():
             else:
                 # build deb package
                 system2(
-                    'mv target/release/bundle/deb/rustdesk*.deb ./rustdesk.deb')
-                system2('dpkg-deb -R rustdesk.deb tmpdeb')
-                system2('mkdir -p tmpdeb/usr/share/rustdesk/files/systemd/')
+                    'mv target/release/bundle/deb/stardesk*.deb ./stardesk.deb')
+                system2('dpkg-deb -R stardesk.deb tmpdeb')
+                system2('mkdir -p tmpdeb/usr/share/stardesk/files/systemd/')
                 system2('mkdir -p tmpdeb/usr/share/icons/hicolor/256x256/apps/')
                 system2('mkdir -p tmpdeb/usr/share/icons/hicolor/scalable/apps/')
                 system2(
-                    'cp res/rustdesk.service tmpdeb/usr/share/rustdesk/files/systemd/')
+                    'cp res/stardesk.service tmpdeb/usr/share/stardesk/files/systemd/')
                 system2(
-                    'cp res/128x128@2x.png tmpdeb/usr/share/icons/hicolor/256x256/apps/rustdesk.png')
+                    'cp res/128x128@2x.png tmpdeb/usr/share/icons/hicolor/256x256/apps/stardesk.png')
                 system2(
-                    'cp res/scalable.svg tmpdeb/usr/share/icons/hicolor/scalable/apps/rustdesk.svg')
+                    'cp res/scalable.svg tmpdeb/usr/share/icons/hicolor/scalable/apps/stardesk.svg')
                 system2(
-                    'cp res/rustdesk.desktop tmpdeb/usr/share/applications/rustdesk.desktop')
+                    'cp res/stardesk.desktop tmpdeb/usr/share/applications/stardesk.desktop')
                 system2(
-                    'cp res/rustdesk-link.desktop tmpdeb/usr/share/applications/rustdesk-link.desktop')
-                os.system('mkdir -p tmpdeb/etc/rustdesk/')
-                os.system('cp -a res/startwm.sh tmpdeb/etc/rustdesk/')
-                os.system('mkdir -p tmpdeb/etc/X11/rustdesk/')
-                os.system('cp res/xorg.conf tmpdeb/etc/X11/rustdesk/')
+                    'cp res/stardesk-link.desktop tmpdeb/usr/share/applications/stardesk-link.desktop')
+                os.system('mkdir -p tmpdeb/etc/stardesk/')
+                os.system('cp -a res/startwm.sh tmpdeb/etc/stardesk/')
+                os.system('mkdir -p tmpdeb/etc/X11/stardesk/')
+                os.system('cp res/xorg.conf tmpdeb/etc/X11/stardesk/')
                 os.system('cp -a DEBIAN/* tmpdeb/DEBIAN/')
                 os.system('mkdir -p tmpdeb/etc/pam.d/')
-                os.system('cp pam.d/rustdesk.debian tmpdeb/etc/pam.d/rustdesk')
-                system2('strip tmpdeb/usr/bin/rustdesk')
-                system2('mkdir -p tmpdeb/usr/lib/rustdesk')
-                system2('mv tmpdeb/usr/bin/rustdesk tmpdeb/usr/lib/rustdesk/')
-                system2('cp libsciter-gtk.so tmpdeb/usr/lib/rustdesk/')
-                md5_file('usr/share/rustdesk/files/systemd/rustdesk.service')
-                md5_file('etc/rustdesk/startwm.sh')
-                md5_file('etc/X11/rustdesk/xorg.conf')
-                md5_file('etc/pam.d/rustdesk')
-                md5_file('usr/lib/rustdesk/libsciter-gtk.so')
-                system2('dpkg-deb -b tmpdeb rustdesk.deb; /bin/rm -rf tmpdeb/')
-                os.rename('rustdesk.deb', 'rustdesk-%s.deb' % version)
+                os.system('cp pam.d/stardesk.debian tmpdeb/etc/pam.d/stardesk')
+                system2('strip tmpdeb/usr/bin/stardesk')
+                system2('mkdir -p tmpdeb/usr/lib/stardesk')
+                system2('mv tmpdeb/usr/bin/stardesk tmpdeb/usr/lib/stardesk/')
+                system2('cp libsciter-gtk.so tmpdeb/usr/lib/stardesk/')
+                md5_file('usr/share/stardesk/files/systemd/stardesk.service')
+                md5_file('etc/stardesk/startwm.sh')
+                md5_file('etc/X11/stardesk/xorg.conf')
+                md5_file('etc/pam.d/stardesk')
+                md5_file('usr/lib/stardesk/libsciter-gtk.so')
+                system2('dpkg-deb -b tmpdeb stardesk.deb; /bin/rm -rf tmpdeb/')
+                os.rename('stardesk.deb', 'stardesk-%s.deb' % version)
 
 
 def md5_file(fn):

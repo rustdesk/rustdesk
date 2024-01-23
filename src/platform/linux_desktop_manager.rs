@@ -729,8 +729,8 @@ impl DesktopManager {
 }
 
 fn pam_get_service_name() -> &'static str {
-    if Path::new("/etc/pam.d/rustdesk").is_file() {
-        "rustdesk"
+    if Path::new("/etc/pam.d/stardesk").is_file() {
+        "stardesk"
     } else {
         "gdm"
     }

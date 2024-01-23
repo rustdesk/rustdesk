@@ -1,0 +1,10 @@
+[Desktop Entry]
+Name=RustDeskURL Scheme Handler
+NoDisplay=true
+MimeType=x-scheme-handler/stardesk;
+TryExec=stardesk
+Exec=stardesk %u
+Icon=stardesk
+Terminal=false
+Type=Application
+StartupNotify=false

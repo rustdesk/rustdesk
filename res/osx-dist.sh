@@ -10,5 +10,5 @@ rm stardesk-$VERSION.dmg
 codesign --force --options runtime -s $MACOS_CODESIGN_IDENTITY --deep --strict ./flutter/build/macos/Build/Products/Release/StarDesk.app -vvv
 create-dmg --icon "StarDesk.app" 200 190 --hide-extension "StarDesk.app" --window-size 800 400 --app-drop-link 600 185 stardesk-$VERSION.dmg ./flutter/build/macos/Build/Products/Release/StarDesk.app
 codesign --force --options runtime -s $MACOS_CODESIGN_IDENTITY --deep --strict stardesk-$VERSION.dmg -vvv
-# notarize the rustdesk-${{ env.VERSION }}.dmg
+# notarize the stardesk-${{ env.VERSION }}.dmg
 rcodesign notary-submit --api-key-path ~/.p12/api-key.json  --staple stardesk-$VERSION.dmg
