@@ -69,7 +69,7 @@ jobs:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           cache: true
 
-      - name: Replace engine with rustdesk custom flutter engine
+      - name: Replace engine with stardesk custom flutter engine
         run: |
           flutter doctor -v
           flutter precache --windows
@@ -106,7 +106,7 @@ jobs:
           $VCPKG_ROOT/vcpkg install --triplet x64-windows-static --x-install-root="$VCPKG_ROOT/installed"
         shell: bash
 
-      - name: Build rustdesk
+      - name: Build stardesk
         run: python3 .\build.py --portable --hwcodec --flutter --feature IddDriver
 
       - name: find Runner.res
@@ -125,7 +125,7 @@ jobs:
             ls -l ./libs/portable/Runner.res;
           fi
 
-      - name: Sign rustdesk files
+      - name: Sign stardesk files
         uses: GermanBluefox/code-sign-action@v7
         if: false # env.UPLOAD_ARTIFACT == 'true'
         with:
@@ -141,12 +141,12 @@ jobs:
         if: env.UPLOAD_ARTIFACT == 'true'
         run: |
           pushd ./libs/portable
-          python3 ./generate.py -f ../../flutter/build/windows/runner/Release/ -o . -e ../../flutter/build/windows/runner/Release/rustdesk.exe
+          python3 ./generate.py -f ../../flutter/build/windows/runner/Release/ -o . -e ../../flutter/build/windows/runner/Release/stardesk.exe
           popd
           mkdir -p ./SignOutput
-          mv ./target/release/rustdesk-portable-packer.exe ./SignOutput/rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}.exe
+          mv ./target/release/stardesk-portable-packer.exe ./SignOutput/stardesk-${{ env.VERSION }}-${{ matrix.job.arch }}.exe
 
-      - name: Sign rustdesk self-extracted file
+      - name: Sign stardesk self-extracted file
         uses: GermanBluefox/code-sign-action@v7
         if: false #env.UPLOAD_ARTIFACT == 'true'
         with:
@@ -164,4 +164,4 @@ jobs:
           prerelease: true
           tag_name: ${{ env.TAG_NAME }}
           files: |
-            ./SignOutput/rustdesk-*.exe
+            ./SignOutput/stardesk-*.exe
