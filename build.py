@@ -13,7 +13,7 @@ import sys
 windows = platform.platform().startswith('Windows')
 osx = platform.platform().startswith(
     'Darwin') or platform.platform().startswith("macOS")
-hbb_name = 'rustdesk' + ('.exe' if windows else '')
+hbb_name = 'stardesk' + ('.exe' if windows else '')
 exe_path = 'target/release/' + hbb_name
 if windows:
     flutter_build_dir = 'build/windows/runner/Release/'
@@ -492,7 +492,8 @@ def main():
             return
         system2('cargo build --release --features ' + features)
         # system2('upx.exe target/release/stardesk.exe')
-        system2('mv target/release/stardesk.exe target/release/StarDesk.exe')
+        system2('mv target/release/stardesk.exe target/release/stardesk.exe')
+        system2('mv target/release/rustdesk.exe target/release/stardesk.exe')
         pa = os.environ.get('P')
         if pa:
             system2(
@@ -501,7 +502,7 @@ def main():
         else:
             print('Not signed')
         system2(
-            f'cp -rf target/release/StarDesk.exe {res_dir}')
+            f'cp -rf target/release/stardesk.exe {res_dir}')
         os.chdir('libs/portable')
         system2('pip3 install -r requirements.txt')
         system2(
