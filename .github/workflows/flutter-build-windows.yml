@@ -127,7 +127,7 @@ jobs:
 
       - name: Sign stardesk files
         uses: GermanBluefox/code-sign-action@v7
-        if: false # env.UPLOAD_ARTIFACT == 'true'
+        if: env.UPLOAD_ARTIFACT == 'true'
         with:
           certificate: '${{ secrets.WINDOWS_PFX_BASE64 }}'
           password: '${{ secrets.WINDOWS_PFX_PASSWORD }}'
@@ -149,7 +149,7 @@ jobs:
 
       - name: Sign stardesk self-extracted file
         uses: GermanBluefox/code-sign-action@v7
-        if: false #env.UPLOAD_ARTIFACT == 'true'
+        if: env.UPLOAD_ARTIFACT == 'true'
         with:
           certificate: '${{ secrets.WINDOWS_PFX_BASE64 }}'
           password: '${{ secrets.WINDOWS_PFX_PASSWORD }}'
