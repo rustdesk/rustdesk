@@ -2,24 +2,24 @@
 version: 1
 script:
  - rm -rf ./AppDir || true
- - bsdtar -zxvf ../rustdesk-1.2.4.deb
+ - bsdtar -zxvf ../stardesk-1.2.4.deb
  - tar -xvf ./data.tar.xz
  - mkdir ./AppDir
  - mv ./usr ./AppDir/usr
  # 32x32 icon
- - for i in {32,64,128}; do mkdir -p ./AppDir/usr/share/icons/hicolor/$i\x$i/apps/; cp ../res/$i\x$i.png ./AppDir/usr/share/icons/hicolor/$i\x$i/apps/rustdesk.png; done
- - mkdir -p ./AppDir/usr/share/icons/hicolor/scalable/apps/; cp ../res/scalable.svg ./AppDir/usr/share/icons/hicolor/scalable/apps/rustdesk.svg
+ - for i in {32,64,128}; do mkdir -p ./AppDir/usr/share/icons/hicolor/$i\x$i/apps/; cp ../res/$i\x$i.png ./AppDir/usr/share/icons/hicolor/$i\x$i/apps/stardesk.png; done
+ - mkdir -p ./AppDir/usr/share/icons/hicolor/scalable/apps/; cp ../res/scalable.svg ./AppDir/usr/share/icons/hicolor/scalable/apps/stardesk.svg
  # desktop file
- # - sed -i "s/Icon=\/usr\/share\/rustdesk\/files\/rustdesk.png/Icon=rustdesk/g" ./AppDir/usr/share/applications/rustdesk.desktop
+ # - sed -i "s/Icon=\/usr\/share\/stardesk\/files\/stardesk.png/Icon=stardesk/g" ./AppDir/usr/share/applications/stardesk.desktop
  - rm -rf ./AppDir/usr/share/applications
 AppDir:
   path: ./AppDir
   app_info:
-    id: rustdesk
-    name: rustdesk
-    icon: rustdesk
+    id: stardesk
+    name: stardesk
+    icon: stardesk
     version: 1.2.4
-    exec: usr/lib/rustdesk/rustdesk
+    exec: usr/lib/stardesk/stardesk
     exec_args: $@
   apt:
     arch:
