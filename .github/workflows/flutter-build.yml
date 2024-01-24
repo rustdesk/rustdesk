@@ -1762,7 +1762,7 @@ jobs:
             HBB=`pwd` rpmbuild ./res/rpm-flutter.spec -bb
             pushd ~/rpmbuild/RPMS/${{ matrix.job.arch }}
             mkdir -p /opt/artifacts/rpm
-            for name in rustdesk*??.rpm; do
+            for name in stardesk*??.rpm; do
                 mv "$name" "/opt/artifacts/rpm/${name%%.rpm}.rpm"
             done
             # rpm suse package
@@ -1775,14 +1775,14 @@ jobs:
             HBB=`pwd` rpmbuild ./res/rpm-flutter-suse.spec -bb
             pushd ~/rpmbuild/RPMS/${{ matrix.job.arch }}
             mkdir -p /opt/artifacts/rpm
-            for name in rustdesk*??.rpm; do
+            for name in stardesk*??.rpm; do
                 mv "$name" "/opt/artifacts/rpm/${name%%.rpm}-suse.rpm"
             done
 
-      - name: Rename rustdesk
+      - name: Rename stardesk
         shell: bash
         run: |
-          for name in rustdesk*??.deb; do
+          for name in stardesk*??.deb; do
               # use cp to duplicate deb files to fit other packages.
               cp "$name" "${name%%.deb}-${{ matrix.job.arch }}.deb"
           done
@@ -1794,14 +1794,14 @@ jobs:
           prerelease: true
           tag_name: ${{ env.TAG_NAME }}
           files: |
-            rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}.deb
+            stardesk-${{ env.VERSION }}-${{ matrix.job.arch }}.deb
 
       - name: Upload Artifact
         uses: actions/upload-artifact@master
         if: ${{ contains(matrix.job.extra-build-features, 'flatpak') }}
         with:
-          name: rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}.deb
-          path: rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}.deb
+          name: stardesk-${{ env.VERSION }}-${{ matrix.job.arch }}.deb
+          path: stardesk-${{ env.VERSION }}-${{ matrix.job.arch }}.deb
 
       - name: Patch archlinux PKGBUILD
         if: ${{ matrix.job.extra-build-features == '' }}
@@ -1875,7 +1875,7 @@ jobs:
           prerelease: true
           tag_name: ${{ env.TAG_NAME }}
           files: |
-            ./appimage/rustdesk-${{ env.VERSION }}-*.AppImage
+            ./appimage/stardesk-${{ env.VERSION }}-*.AppImage
 
       - name: Publish fedora package
         if: matrix.job.extra-build-features == '' && env.UPLOAD_ARTIFACT == 'true'
