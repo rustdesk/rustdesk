@@ -310,6 +310,7 @@ fn get_capturer(current: usize, portable_service_running: bool) -> ResultType<Ca
     }
     let display = displays.remove(current);
 
+    #[cfg(target_os = "linux")]
     if let Display::X11(inner) = &display {
         if let Err(err) = inner.get_shm_status() {
             log::warn!(
