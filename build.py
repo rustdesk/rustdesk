@@ -265,6 +265,11 @@ def external_resources(flutter, args, res_dir):
             if f.is_file():
                 shutil.copy2(f, flutter_build_dir_2)
             else:
+                # shutil.copytree(f, f'{flutter_build_dir_2}{f.stem}')
+                destination = pathlib.Path(f'{flutter_build_dir_2}{f.stem}')
+                if destination.exists():
+                     shutil.rmtree(destination)
+
                 shutil.copytree(f, f'{flutter_build_dir_2}{f.stem}')
 
 

@@ -2,8 +2,8 @@
 name = "stardesk"
 version = "1.2.4"
 authors = ["stardesk <stardesk@mobilestartools.com>"]
-edition = "2024"
-build= "build.rs"
+edition = "2021"
+build = "build.rs"
 description = "A remote control software."
 default-run = "stardesk"
 
@@ -28,7 +28,7 @@ flutter = ["flutter_rust_bridge"]
 default = ["use_dasp"]
 hwcodec = ["scrap/hwcodec"]
 mediacodec = ["scrap/mediacodec"]
-linux_headless = ["pam" ]
+linux_headless = ["pam"]
 virtual_display_driver = ["virtual_display"]
 plugin_framework = []
 linux-pkg-config = ["magnum-opus/linux-pkg-config", "scrap/linux-pkg-config"]
@@ -57,7 +57,11 @@ repng = "0.2"
 parity-tokio-ipc = { git = "https://github.com/open-trade/parity-tokio-ipc" }
 runas = "=1.0" # https://github.com/mitsuhiko/rust-runas/issues/13
 magnum-opus = { git = "https://github.com/rustdesk/magnum-opus" }
-dasp = { version = "0.11", features = ["signal", "interpolate-linear", "interpolate"], optional = true }
+dasp = { version = "0.11", features = [
+    "signal",
+    "interpolate-linear",
+    "interpolate",
+], optional = true }
 rubato = { version = "0.12", optional = true }
 samplerate = { version = "0.2", optional = true }
 async-trait = "0.1"
@@ -69,13 +73,19 @@ num_cpus = "1.15"
 bytes = { version = "1.4", features = ["serde"] }
 default-net = "0.14"
 wol-rs = "1.0"
-flutter_rust_bridge = { version = "=1.80", features = ["uuid"], optional = true}
+flutter_rust_bridge = { version = "=1.80", features = [
+    "uuid",
+], optional = true }
 errno = "0.3"
 rdev = { git = "https://github.com/fufesou/rdev" }
 url = { version = "2.3", features = ["serde"] }
 crossbeam-queue = "0.3"
 hex = "0.4"
-reqwest = { git = "https://github.com/rustdesk-org/reqwest", features = ["blocking", "json", "rustls-tls"], default-features=false }
+reqwest = { git = "https://github.com/rustdesk-org/reqwest", features = [
+    "blocking",
+    "json",
+    "rustls-tls",
+], default-features = false }
 chrono = "0.4"
 cidr-utils = "0.5"
 libloading = "0.8"
@@ -91,14 +101,21 @@ ringbuf = "0.3"
 mac_address = "1.1"
 sciter-rs = { git = "https://github.com/open-trade/rust-sciter", branch = "dyn" }
 sys-locale = "0.3"
-enigo = { path = "libs/enigo", features = [ "with_serde" ] }
+enigo = { path = "libs/enigo", features = ["with_serde"] }
 clipboard = { path = "libs/clipboard" }
 ctrlc = "3.2"
 arboard = { version = "3.2", features = ["wayland-data-control"] }
 system_shutdown = "4.0"
 
 [target.'cfg(target_os = "windows")'.dependencies]
-winapi = { version = "0.3", features = ["winuser", "wincrypt", "shellscalingapi", "pdh", "synchapi", "memoryapi"] }
+winapi = { version = "0.3", features = [
+    "winuser",
+    "wincrypt",
+    "shellscalingapi",
+    "pdh",
+    "synchapi",
+    "memoryapi",
+] }
 winreg = "0.11"
 windows-service = "0.6"
 virtual_display = { path = "libs/virtual_display", optional = true }
@@ -133,16 +150,16 @@ psimple = { package = "libpulse-simple-binding", version = "2.27" }
 pulse = { package = "libpulse-binding", version = "2.27" }
 rust-pulsectl = { git = "https://github.com/open-trade/pulsectl" }
 async-process = "1.7"
-mouce = { git="https://github.com/fufesou/mouce.git" }
-evdev = { git="https://github.com/fufesou/evdev" }
+mouce = { git = "https://github.com/fufesou/mouce.git" }
+evdev = { git = "https://github.com/fufesou/evdev" }
 dbus = "0.9"
 dbus-crossroads = "0.5"
-pam = { git="https://github.com/fufesou/pam", optional = true }
+pam = { git = "https://github.com/fufesou/pam", optional = true }
 users = { version = "0.11" }
-x11-clipboard = {git="https://github.com/clslaid/x11-clipboard", branch = "feat/store-batch", optional = true}
-x11rb =  {version = "0.12", features = ["all-extensions"], optional = true}
-percent-encoding = {version = "2.3", optional = true}
-once_cell = {version = "1.18", optional = true}
+x11-clipboard = { git = "https://github.com/clslaid/x11-clipboard", branch = "feat/store-batch", optional = true }
+x11rb = { version = "0.12", features = ["all-extensions"], optional = true }
+percent-encoding = { version = "2.3", optional = true }
+once_cell = { version = "1.18", optional = true }
 
 [target.'cfg(target_os = "android")'.dependencies]
 android_logger = "0.13"
@@ -150,7 +167,15 @@ jni = "0.21"
 android-wakelock = { git = "https://github.com/21pages/android-wakelock" }
 
 [workspace]
-members = ["libs/scrap", "libs/hbb_common", "libs/enigo", "libs/clipboard", "libs/virtual_display", "libs/virtual_display/dylib", "libs/portable"]
+members = [
+    "libs/scrap",
+    "libs/hbb_common",
+    "libs/enigo",
+    "libs/clipboard",
+    "libs/virtual_display",
+    "libs/virtual_display/dylib",
+    "libs/portable",
+]
 exclude = ["vdi/host", "examples/custom_plugin"]
 
 [package.metadata.winres]
@@ -160,7 +185,7 @@ FileDescription = "StarDesk"
 
 [target.'cfg(target_os="windows")'.build-dependencies]
 winres = "0.1"
-winapi = { version = "0.3", features = [ "winnt", "pdh", "synchapi" ] }
+winapi = { version = "0.3", features = ["winnt", "pdh", "synchapi"] }
 
 [build-dependencies]
 cc = "1.0"

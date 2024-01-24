@@ -9,7 +9,7 @@ use bin_reader::BinaryReader;
 
 pub mod bin_reader;
 
-const APP_PREFIX: &str = "rustdesk";
+const APP_PREFIX: &str = "stardesk";
 const APPNAME_RUNTIME_ENV_KEY: &str = "RUSTDESK_APPNAME";
 
 fn setup(reader: BinaryReader, dir: Option<PathBuf>, clear: bool) -> Option<PathBuf> {
