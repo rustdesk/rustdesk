@@ -723,6 +723,11 @@ impl<T: InvokeUiSession> Session<T> {
         let mut msg_out = Message::new();
         msg_out.set_misc(misc);
         self.send(Data::Message(msg_out));
+
+        #[cfg(not(feature = "flutter"))]
+        {
+            self.capture_displays(vec![], vec![], vec![display]);
+        }
     }
 
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
