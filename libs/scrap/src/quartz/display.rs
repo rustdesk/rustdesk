@@ -35,11 +35,21 @@ impl Display {
     }
 
     pub fn width(self) -> usize {
-        unsafe { CGDisplayPixelsWide(self.0) }
+        let w = unsafe { CGDisplayPixelsWide(self.0) };
+        if self.is_retina() {
+            w * 2
+        } else {
+            w
+        }
     }
 
     pub fn height(self) -> usize {
-        unsafe { CGDisplayPixelsHigh(self.0) }
+        let h = unsafe { CGDisplayPixelsHigh(self.0) };
+        if self.is_retina() {
+            h * 2
+        } else {
+            h
+        }
     }
 
     pub fn is_builtin(self) -> bool {
@@ -56,6 +66,10 @@ impl Display {
 
     pub fn is_online(self) -> bool {
         unsafe { CGDisplayIsOnline(self.0) != 0 }
+    }
+
+    pub fn is_retina(self) -> bool {
+        unsafe { BackingScaleFactor() == 2.0 }
     }
 
     pub fn bounds(self) -> CGRect {
