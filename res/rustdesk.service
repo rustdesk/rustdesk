@@ -5,8 +5,8 @@ After=systemd-user-sessions.service
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/rustdesk --service
-PIDFile=/run/rustdesk.pid
+ExecStart=/usr/bin/stardesk --service
+PIDFile=/run/stardesk.pid
 KillMode=mixed
 TimeoutStopSec=30
 User=root
