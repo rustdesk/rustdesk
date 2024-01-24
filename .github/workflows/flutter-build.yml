@@ -953,7 +953,7 @@ jobs:
           name: libstardesk-${{ matrix.job.arch }}-${{ matrix.job.extra-build-features }}.so
           path: target/release/liblibstardesk.so
 
-  build-rustdesk-lib-linux-arm:
+  build-stardesk-lib-linux-arm:
     if: ${{ inputs.upload-artifact }}
     needs: [generate-bridge-linux]
     name: build-rust-lib ${{ matrix.job.target }} (${{ matrix.job.os }}) [${{ matrix.job.extra-build-features }}]
@@ -1079,7 +1079,7 @@ jobs:
         shell: bash
 
       - uses: rustdesk-org/run-on-arch-action@amd64-support
-        name: Build rustdesk library for ${{ matrix.job.arch }}
+        name: Build stardesk library for ${{ matrix.job.arch }}
         id: vcpkg
         with:
           arch: ${{ matrix.job.arch }}
@@ -1163,9 +1163,9 @@ jobs:
           name: libstardesk-${{ matrix.job.arch }}-${{ matrix.job.extra-build-features }}.so
           path: target/release/liblibstardesk.so
 
-  build-rustdesk-sciter-arm:
+  build-stardesk-sciter-arm:
     if: ${{ inputs.upload-artifact }}
-    name: build-rustdesk(sciter) ${{ matrix.job.target }} (${{ matrix.job.os }}) [${{ matrix.job.extra-build-features }}]
+    name: build-stardesk(sciter) ${{ matrix.job.target }} (${{ matrix.job.os }}) [${{ matrix.job.extra-build-features }}]
     # runs-on: [self-hosted, Linux, ARM64]
     runs-on: ${{ matrix.job.os }}
     strategy:
@@ -1255,7 +1255,7 @@ jobs:
         shell: bash
 
       - uses: rustdesk-org/run-on-arch-action@amd64-support
-        name: Build rustdesk sciter binary for ${{ matrix.job.arch }}
+        name: Build stardesk sciter binary for ${{ matrix.job.arch }}
         id: vcpkg
         with:
           arch: ${{ matrix.job.arch }}
@@ -1334,14 +1334,14 @@ jobs:
             cargo build --features inline,${{ matrix.job.extra-build-features }},$DEFAULT_FEAT --release --bins
             # package
             mkdir -p ./Release
-            mv ./target/release/rustdesk ./Release/rustdesk
+            mv ./target/release/stardesk ./Release/stardesk
             wget -O ./Release/libsciter-gtk.so https://github.com/c-smile/sciter-sdk/raw/master/bin.lnx/arm32/libsciter-gtk.so
             ./build.py --package ./Release
 
-      - name: Rename rustdesk
+      - name: Rename stardesk
         shell: bash
         run: |
-          for name in rustdesk*??.deb; do
+          for name in stardesk*??.deb; do
               # use cp to duplicate deb files to fit other packages.
               cp "$name" "${name%%.deb}-${{ matrix.job.arch }}-sciter.deb"
           done
@@ -1353,19 +1353,19 @@ jobs:
           prerelease: true
           tag_name: ${{ env.TAG_NAME }}
           files: |
-            rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}-sciter.deb
+            stardesk-${{ env.VERSION }}-${{ matrix.job.arch }}-sciter.deb
 
       - name: Upload Artifact
         uses: actions/upload-artifact@master
         if: ${{ contains(matrix.job.extra-build-features, 'flatpak') }}
         with:
-          name: rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}-sciter.deb
-          path: rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}-sciter.deb
+          name: stardesk-${{ env.VERSION }}-${{ matrix.job.arch }}-sciter.deb
+          path: stardesk-${{ env.VERSION }}-${{ matrix.job.arch }}-sciter.deb
 
-  build-rustdesk-linux-arm:
+  build-stardesk-linux-arm:
     if: ${{ inputs.upload-artifact }}
-    needs: [build-rustdesk-lib-linux-arm]
-    name: build-rustdesk ${{ matrix.job.target }} (${{ matrix.job.os }}) [${{ matrix.job.extra-build-features }}]
+    needs: [build-stardesk-lib-linux-arm]
+    name: build-stardesk ${{ matrix.job.target }} (${{ matrix.job.os }}) [${{ matrix.job.extra-build-features }}]
     runs-on: ubuntu-20.04 # 20.04 has more performance on arm build
     strategy:
       fail-fast: false
@@ -1417,7 +1417,7 @@ jobs:
                wget
           mkdir -p ./target/release/
 
-      - name: Restore the rustdesk lib file
+      - name: Restore the stardesk lib file
         uses: actions/download-artifact@master
         with:
           name: libstardesk-${{ matrix.job.arch }}-${{ matrix.job.extra-build-features }}.so
@@ -1437,7 +1437,7 @@ jobs:
           popd
 
       - uses: rustdesk-org/run-on-arch-action@amd64-support
-        name: Build rustdesk binary for ${{ matrix.job.arch }}
+        name: Build stardesk binary for ${{ matrix.job.arch }}
         id: vcpkg
         with:
           arch: ${{ matrix.job.arch }}
@@ -1475,7 +1475,7 @@ jobs:
             # disable git safe.directory
             git config --global --add safe.directory "*"
             pushd /workspace
-            # we use flutter-elinux to build our rustdesk
+            # we use flutter-elinux to build our stardesk
             export PATH=/opt/flutter-elinux/bin:$PATH
             sed -i "s/flutter build linux --release/flutter-elinux build linux/g" ./build.py
             # Setup flutter-elinux. Run doctor to check if issues here.
@@ -1515,7 +1515,7 @@ jobs:
             HBB=`pwd` rpmbuild ./res/rpm-flutter.spec -bb
             pushd ~/rpmbuild/RPMS/${{ matrix.job.arch }}
             mkdir -p /opt/artifacts/rpm
-            for name in rustdesk*??.rpm; do
+            for name in stardesk*??.rpm; do
                 mv "$name" "/opt/artifacts/rpm/${name%%.rpm}.rpm"
             done
             # rpm suse package
@@ -1533,14 +1533,14 @@ jobs:
             HBB=`pwd` rpmbuild ./res/rpm-flutter.spec -bb
             pushd ~/rpmbuild/RPMS/${{ matrix.job.arch }}
             mkdir -p /opt/artifacts/rpm
-            for name in rustdesk*??.rpm; do
+            for name in stardesk*??.rpm; do
                 mv "$name" "/opt/artifacts/rpm/${name%%.rpm}-suse.rpm"
             done
 
-      - name: Rename rustdesk
+      - name: Rename stardesk
         shell: bash
         run: |
-          for name in rustdesk*??.deb; do
+          for name in stardesk*??.deb; do
               cp "$name" "${name%%.deb}-${{ matrix.job.arch }}.deb"
           done
 
@@ -1551,7 +1551,7 @@ jobs:
           prerelease: true
           tag_name: ${{ env.TAG_NAME }}
           files: |
-            rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}.deb
+            stardesk-${{ env.VERSION }}-${{ matrix.job.arch }}.deb
 
       - name: Build appimage package
         if: ${{ matrix.job.extra-build-features == 'appimage' }}
@@ -1574,14 +1574,14 @@ jobs:
           prerelease: true
           tag_name: ${{ env.TAG_NAME }}
           files: |
-            ./appimage/rustdesk-${{ env.VERSION }}-*.AppImage
+            ./appimage/stardesk-${{ env.VERSION }}-*.AppImage
 
       - name: Upload Artifact
         uses: actions/upload-artifact@master
         if: ${{ contains(matrix.job.extra-build-features, 'flatpak') }}
         with:
-          name: rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}.deb
-          path: rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}.deb
+          name: stardesk-${{ env.VERSION }}-${{ matrix.job.arch }}.deb
+          path: stardesk-${{ env.VERSION }}-${{ matrix.job.arch }}.deb
 
       - name: Patch archlinux PKGBUILD
         if: ${{ matrix.job.extra-build-features == '' }}

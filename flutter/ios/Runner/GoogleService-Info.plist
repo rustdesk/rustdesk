@@ -2,22 +2,18 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<key>CLIENT_ID</key>
-	<string>768133699366-k1rn3ls1u2n3nklmgd9t4cmpdob0c8bn.apps.googleusercontent.com</string>
-	<key>REVERSED_CLIENT_ID</key>
-	<string>com.googleusercontent.apps.768133699366-k1rn3ls1u2n3nklmgd9t4cmpdob0c8bn</string>
 	<key>API_KEY</key>
-	<string>AIzaSyCf57HjCwSokt91CqFI0Mwf8D--ek0jvfc</string>
+	<string>AIzaSyAnwdTc5qMQMrxyP_jc--67XYiZz9SESa0</string>
 	<key>GCM_SENDER_ID</key>
-	<string>768133699366</string>
+	<string>551418825250</string>
 	<key>PLIST_VERSION</key>
 	<string>1</string>
 	<key>BUNDLE_ID</key>
-	<string>com.carriez.flutterHbb</string>
+	<string>com.fti.rd</string>
 	<key>PROJECT_ID</key>
-	<string>rustdesk</string>
+	<string>mobilestartools-com</string>
 	<key>STORAGE_BUCKET</key>
-	<string>rustdesk.appspot.com</string>
+	<string>mobilestartools-com.appspot.com</string>
 	<key>IS_ADS_ENABLED</key>
 	<false></false>
 	<key>IS_ANALYTICS_ENABLED</key>
@@ -29,8 +25,6 @@
 	<key>IS_SIGNIN_ENABLED</key>
 	<true></true>
 	<key>GOOGLE_APP_ID</key>
-	<string>1:768133699366:ios:c33078a6181b9d507993e7</string>
-	<key>DATABASE_URL</key>
-	<string>https://rustdesk.firebaseio.com</string>
+	<string>1:551418825250:ios:bcad7ce4f258463b4b187b</string>
 </dict>
 </plist>
