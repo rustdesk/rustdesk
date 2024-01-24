@@ -1,18 +1,18 @@
 #include <dlfcn.h>
 #include "my_application.h"
 
-#define RUSTDESK_LIB_PATH "librustdesk.so"
-// #define RUSTDESK_LIB_PATH "/usr/lib/rustdesk/librustdesk.so"
+#define RUSTDESK_LIB_PATH "libstardesk.so"
+// #define RUSTDESK_LIB_PATH "/usr/lib/rustdesk/libstardesk.so"
 typedef bool (*RustDeskCoreMain)();
 bool gIsConnectionManager = false;
 
 bool flutter_rustdesk_core_main() {
-   void* librustdesk = dlopen(RUSTDESK_LIB_PATH, RTLD_LAZY);
-   if (!librustdesk) {
-     fprintf(stderr,"load librustdesk.so failed\n");
+   void* libstardesk = dlopen(RUSTDESK_LIB_PATH, RTLD_LAZY);
+   if (!libstardesk) {
+     fprintf(stderr,"load libstardesk.so failed\n");
      return true;
    }
-   auto core_main = (RustDeskCoreMain) dlsym(librustdesk,"rustdesk_core_main");
+   auto core_main = (RustDeskCoreMain) dlsym(libstardesk,"rustdesk_core_main");
    char* error;
    if ((error = dlerror()) != nullptr) {
        fprintf(stderr, "error finding rustdesk_core_main: %s", error);

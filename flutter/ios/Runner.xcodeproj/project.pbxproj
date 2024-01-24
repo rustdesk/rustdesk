@@ -30,7 +30,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
-		0A3A301029F021DD0095DDA5 /* liblibrustdesk.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = liblibrustdesk.a; path = "../../target/aarch64-apple-ios/release/liblibrustdesk.a"; sourceTree = "<group>"; };
+		0A3A301029F021DD0095DDA5 /* liblibstardesk.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = liblibstardesk.a; path = "../../target/aarch64-apple-ios/release/liblibstardesk.a"; sourceTree = "<group>"; };
 		0A3A301329F0AB660095DDA5 /* Runner.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Runner.entitlements; sourceTree = "<group>"; };
 		1498D2321E8E86230040F4C2 /* GeneratedPluginRegistrant.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = GeneratedPluginRegistrant.h; sourceTree = "<group>"; };
 		1498D2331E8E89220040F4C2 /* GeneratedPluginRegistrant.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = GeneratedPluginRegistrant.m; sourceTree = "<group>"; };
@@ -112,7 +112,7 @@
 		F213315C743C5EC601AD8123 /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
-				0A3A301029F021DD0095DDA5 /* liblibrustdesk.a */,
+				0A3A301029F021DD0095DDA5 /* liblibstardesk.a */,
 				25E069BDBEF2890938537ABB /* Pods_Runner.framework */,
 			);
 			name = Frameworks;
@@ -385,7 +385,7 @@
 				);
 				OTHER_LDFLAGS = (
 					"$(inherited)",
-					"$(PROJECT_DIR)/../../target/aarch64-apple-ios/release/liblibrustdesk.a",
+					"$(PROJECT_DIR)/../../target/aarch64-apple-ios/release/liblibstardesk.a",
 					"-ObjC",
 					"-l\"c++\"",
 					"-l\"sqlite3\"",
@@ -589,7 +589,7 @@
 				);
 				OTHER_LDFLAGS = (
 					"$(inherited)",
-					"$(PROJECT_DIR)/../../target/aarch64-apple-ios/release/liblibrustdesk.a",
+					"$(PROJECT_DIR)/../../target/aarch64-apple-ios/release/liblibstardesk.a",
 					"-ObjC",
 					"-l\"c++\"",
 					"-l\"sqlite3\"",
@@ -685,7 +685,7 @@
 				);
 				OTHER_LDFLAGS = (
 					"$(inherited)",
-					"$(PROJECT_DIR)/../../target/aarch64-apple-ios/release/liblibrustdesk.a",
+					"$(PROJECT_DIR)/../../target/aarch64-apple-ios/release/liblibstardesk.a",
 					"-ObjC",
 					"-l\"c++\"",
 					"-l\"sqlite3\"",

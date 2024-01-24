@@ -685,12 +685,12 @@ jobs:
             aarch64-linux-android)
               ./flutter/ndk_arm64.sh
               mkdir -p ./flutter/android/app/src/main/jniLibs/arm64-v8a
-              cp ./target/${{ matrix.job.target }}/release/liblibrustdesk.so ./flutter/android/app/src/main/jniLibs/arm64-v8a/librustdesk.so
+              cp ./target/${{ matrix.job.target }}/release/liblibstardesk.so ./flutter/android/app/src/main/jniLibs/arm64-v8a/libstardesk.so
             ;;
             armv7-linux-androideabi)
               ./flutter/ndk_arm.sh
               mkdir -p ./flutter/android/app/src/main/jniLibs/armeabi-v7a
-              cp ./target/${{ matrix.job.target }}/release/liblibrustdesk.so ./flutter/android/app/src/main/jniLibs/armeabi-v7a/librustdesk.so
+              cp ./target/${{ matrix.job.target }}/release/liblibstardesk.so ./flutter/android/app/src/main/jniLibs/armeabi-v7a/libstardesk.so
             ;;
           esac
 
@@ -706,7 +706,7 @@ jobs:
             aarch64-linux-android)
               mkdir -p ./flutter/android/app/src/main/jniLibs/arm64-v8a
               cp ${ANDROID_NDK_HOME}/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/libc++_shared.so ./flutter/android/app/src/main/jniLibs/arm64-v8a/
-              cp ./target/${{ matrix.job.target }}/release/liblibrustdesk.so ./flutter/android/app/src/main/jniLibs/arm64-v8a/librustdesk.so
+              cp ./target/${{ matrix.job.target }}/release/liblibstardesk.so ./flutter/android/app/src/main/jniLibs/arm64-v8a/libstardesk.so
               # build flutter
               pushd flutter
               flutter build apk --release --target-platform android-arm64 --split-per-abi
@@ -715,7 +715,7 @@ jobs:
             armv7-linux-androideabi)
               mkdir -p ./flutter/android/app/src/main/jniLibs/armeabi-v7a
               cp ${ANDROID_NDK_HOME}/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/arm-linux-androideabi/libc++_shared.so ./flutter/android/app/src/main/jniLibs/armeabi-v7a/
-              cp ./target/${{ matrix.job.target }}/release/liblibrustdesk.so ./flutter/android/app/src/main/jniLibs/armeabi-v7a/librustdesk.so
+              cp ./target/${{ matrix.job.target }}/release/liblibstardesk.so ./flutter/android/app/src/main/jniLibs/armeabi-v7a/libstardesk.so
               # build flutter
               pushd flutter
               flutter build apk --release --target-platform android-arm --split-per-abi
@@ -950,8 +950,8 @@ jobs:
       - name: Upload Artifacts
         uses: actions/upload-artifact@master
         with:
-          name: librustdesk-${{ matrix.job.arch }}-${{ matrix.job.extra-build-features }}.so
-          path: target/release/liblibrustdesk.so
+          name: libstardesk-${{ matrix.job.arch }}-${{ matrix.job.extra-build-features }}.so
+          path: target/release/liblibstardesk.so
 
   build-rustdesk-lib-linux-arm:
     if: ${{ inputs.upload-artifact }}
@@ -1160,8 +1160,8 @@ jobs:
       - name: Upload Artifacts
         uses: actions/upload-artifact@master
         with:
-          name: librustdesk-${{ matrix.job.arch }}-${{ matrix.job.extra-build-features }}.so
-          path: target/release/liblibrustdesk.so
+          name: libstardesk-${{ matrix.job.arch }}-${{ matrix.job.extra-build-features }}.so
+          path: target/release/liblibstardesk.so
 
   build-rustdesk-sciter-arm:
     if: ${{ inputs.upload-artifact }}
@@ -1420,7 +1420,7 @@ jobs:
       - name: Restore the rustdesk lib file
         uses: actions/download-artifact@master
         with:
-          name: librustdesk-${{ matrix.job.arch }}-${{ matrix.job.extra-build-features }}.so
+          name: libstardesk-${{ matrix.job.arch }}-${{ matrix.job.extra-build-features }}.so
           path: ./target/release/
 
       - name: Download Flutter
@@ -1703,7 +1703,7 @@ jobs:
       - name: Restore the rustdesk lib file
         uses: actions/download-artifact@master
         with:
-          name: librustdesk-${{ matrix.job.arch }}-${{ matrix.job.extra-build-features }}.so
+          name: libstardesk-${{ matrix.job.arch }}-${{ matrix.job.extra-build-features }}.so
           path: ./target/release/
 
       - uses: rustdesk-org/run-on-arch-action@amd64-support

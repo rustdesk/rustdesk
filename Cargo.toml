@@ -1,14 +1,14 @@
 [package]
-name = "rustdesk"
+name = "stardesk"
 version = "1.2.4"
-authors = ["rustdesk <info@rustdesk.com>"]
-edition = "2021"
+authors = ["stardesk <stardesk@mobilestartools.com>"]
+edition = "2024"
 build= "build.rs"
 description = "A remote control software."
-default-run = "rustdesk"
+default-run = "stardesk"
 
 [lib]
-name = "librustdesk"
+name = "libstardesk"
 crate-type = ["cdylib", "staticlib", "rlib"]
 
 [[bin]]

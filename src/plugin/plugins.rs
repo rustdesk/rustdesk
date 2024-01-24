@@ -83,7 +83,7 @@ type CallbackGetId = extern "C" fn() -> *const c_char;
 /// msg:   The message.
 type CallbackLog = extern "C" fn(level: *const c_char, msg: *const c_char);
 
-/// Callback to the librustdesk core.
+/// Callback to the libstardesk core.
 ///
 /// method: the method name of this callback.
 /// json: the json data for the parameters. The argument *must* be non-null.

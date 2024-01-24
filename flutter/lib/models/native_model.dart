@@ -108,13 +108,13 @@ class PlatformFFI {
   Future<void> init(String appType) async {
     _appType = appType;
     final dylib = Platform.isAndroid
-        ? DynamicLibrary.open('librustdesk.so')
+        ? DynamicLibrary.open('libstardesk.so')
         : Platform.isLinux
-            ? DynamicLibrary.open('librustdesk.so')
+            ? DynamicLibrary.open('libstardesk.so')
             : Platform.isWindows
-                ? DynamicLibrary.open('librustdesk.dll')
+                ? DynamicLibrary.open('libstardesk.dll')
                 : Platform.isMacOS
-                    ? DynamicLibrary.open("liblibrustdesk.dylib")
+                    ? DynamicLibrary.open("liblibstardesk.dylib")
                     : DynamicLibrary.process();
     debugPrint('initializing FFI $_appType');
     try {
