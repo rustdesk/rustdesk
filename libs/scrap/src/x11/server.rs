@@ -9,7 +9,6 @@ pub struct Server {
     raw: *mut xcb_connection_t,
     screenp: i32,
     setup: *const xcb_setup_t,
-    shm_status: Result<(), Error>,
 }
 
 /*
@@ -74,7 +73,6 @@ impl Server {
                     raw,
                     screenp,
                     setup,
-                    shm_status: check_x11_shm_available(raw),
                 })
             }
         }
@@ -89,8 +87,8 @@ impl Server {
     pub fn setup(&self) -> *const xcb_setup_t {
         self.setup
     }
-    pub fn get_shm_status(&self)->Result<(), Error>{
-        self.shm_status
+    pub fn get_shm_status(&self) -> Result<(), Error> {
+        unsafe { check_x11_shm_available(self.raw) }
     }
 }
 
