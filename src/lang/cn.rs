@@ -579,7 +579,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Swap control-command key", "交换Control键和Command键"),
         ("swap-left-right-mouse", "交换鼠标左右键"),
         ("2FA code", "双重认证代码"),
-        ("2fa_tip", "请输入授权 app 中的双重认证代码"),
         ("More", "更多"),
         ("enable-2fa-title", "启用双重认证"),
         ("enable-2fa-desc", "现在请设置身份验证器。您可以在手机或台式电脑上使用 Authy、Microsoft 或 Google Authenticator 等验证器。用验证器扫描二维码，然后输入显示的验证码以启用双重认证。"),

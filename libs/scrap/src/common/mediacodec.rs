@@ -10,7 +10,7 @@ use std::{
 use crate::ImageFormat;
 use crate::{
     codec::{EncoderApi, EncoderCfg},
-    I420ToABGR, I420ToARGB, ImageRgb,
+    CodecFormat, I420ToABGR, I420ToARGB, ImageRgb,
 };
 
 /// MediaCodec mime type name
@@ -37,17 +37,16 @@ impl Deref for MediaCodecDecoder {
     }
 }
 
-#[derive(Default)]
-pub struct MediaCodecDecoders {
-    pub h264: Option<MediaCodecDecoder>,
-    pub h265: Option<MediaCodecDecoder>,
-}
-
 impl MediaCodecDecoder {
-    pub fn new_decoders() -> MediaCodecDecoders {
-        let h264 = create_media_codec(H264_MIME_TYPE, MediaCodecDirection::Decoder);
-        let h265 = create_media_codec(H265_MIME_TYPE, MediaCodecDirection::Decoder);
-        MediaCodecDecoders { h264, h265 }
+    pub fn new(format: CodecFormat) -> Option<MediaCodecDecoder> {
+        match format {
+            CodecFormat::H264 => create_media_codec(H264_MIME_TYPE, MediaCodecDirection::Decoder),
+            CodecFormat::H265 => create_media_codec(H265_MIME_TYPE, MediaCodecDirection::Decoder),
+            _ => {
+                log::error!("Unsupported codec format: {}", format);
+                None
+            }
+        }
     }
 
     // rgb [in/out] fmt and stride must be set in ImageRgb

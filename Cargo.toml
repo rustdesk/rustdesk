@@ -97,6 +97,7 @@ clipboard = { path = "libs/clipboard" }
 ctrlc = "3.2"
 arboard = { version = "3.2", features = ["wayland-data-control"] }
 system_shutdown = "4.0"
+qrcode-generator = "4.1"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 winapi = { version = "0.3", features = ["winuser", "wincrypt", "shellscalingapi", "pdh", "synchapi", "memoryapi"] }
@@ -134,7 +135,7 @@ wallpaper = { git = "https://github.com/21pages/wallpaper.rs" }
 reqwest = { git = "https://github.com/rustdesk-org/reqwest", features = ["blocking", "json", "native-tls", "gzip"], default-features=false }
 
 [target.'cfg(not(any(target_os = "macos", target_os = "windows")))'.dependencies]
-reqwest = { git = "https://github.com/rustdesk-org/reqwest", features = ["blocking", "json", "rustls-tls", "gzip"], default-features=false }
+reqwest = { git = "https://github.com/rustdesk-org/reqwest", features = ["blocking", "json", "rustls-tls", "rustls-tls-native-roots", "gzip"], default-features=false }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 psimple = { package = "libpulse-simple-binding", version = "2.27" }
@@ -192,3 +193,7 @@ panic = 'abort'
 strip = true
 #opt-level = 'z' # only have smaller size after strip
 rpath = true
+
+[profile.dev]
+split-debuginfo = '...'  # Platform-specific.
+#strip = "debuginfo" 
