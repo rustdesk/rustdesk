@@ -472,7 +472,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("show_monitors_tip", "Tampilkan monitor di toolbar"),
         ("View Mode", "Mode Tampilan"),
         ("login_linux_tip", "Anda harus masuk ke akun remote linux untuk mengaktifkan sesi X desktop"),
-        ("verify_StarDesk_password_tip", "Verifikasi Kata Sandi StarDesk"),
+        ("verify_stardesk_password_tip", "Verifikasi Kata Sandi StarDesk"),
         ("remember_account_tip", "Ingat akun ini"),
         ("os_account_desk_tip", "Akun ini digunakan untuk masuk ke sistem operasi remote dan mengaktifkan sesi desktop dalam mode tanpa tampilan (headless)"),
         ("OS Account", "Akun OS"),

@@ -12,7 +12,7 @@
       "name": "stardesk",
       "buildsystem": "simple",
       "build-commands": [
-        "bsdtar -zxvf stardesk-1.2.4.deb",
+        "bsdtar -zxvf stardesk-1.2.5.deb",
         "tar -xvf ./data.tar.xz",
         "cp -r ./usr/*  /app/",
         "mkdir -p /app/bin && ln -s /app/lib/stardesk/stardesk /app/bin/stardesk",
@@ -30,7 +30,7 @@
       "sources": [
         {
           "type": "file",
-          "path": "../stardesk-1.2.4.deb"
+          "path": "../stardesk-1.2.5.deb"
         },
         {
           "type": "file",

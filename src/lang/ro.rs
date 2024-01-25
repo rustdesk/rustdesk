@@ -472,7 +472,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("show_monitors_tip", "Afișează monitoare în bara de instrumente"),
         ("View Mode", "Mod vizualizare"),
         ("login_linux_tip", "Este necesar să te conectezi la contul de Linux de la distanță pentru a începe o sesiune cu un desktop care folosește X11"),
-        ("verify_StarDesk_password_tip", "Verifică parola StarDesk"),
+        ("verify_stardesk_password_tip", "Verifică parola StarDesk"),
         ("remember_account_tip", "Reține contul"),
         ("os_account_desk_tip", "Acest cont este utilizat pentru conectarea la sistemul de operare la distanță și începerea sesiunii cu desktopul în modul fără afișaj."),
         ("OS Account", "Cont OS"),

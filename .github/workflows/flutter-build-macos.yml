@@ -23,7 +23,7 @@ env:
   # vcpkg version: 2023.10.19
   # for multiarch gcc compatibility
   VCPKG_COMMIT_ID: "8eb57355a4ffb410a2e94c07b4dca2dffbee8e50"
-  VERSION: "1.2.4"
+  VERSION: "1.2.5"
   NDK_VERSION: "r26b"
   #signing keys env variable checks
   ANDROID_SIGNING_KEY: '${{ secrets.ANDROID_SIGNING_KEY }}'
@@ -189,7 +189,7 @@ jobs:
       - name: Rename stardesk
         if: env.UPLOAD_ARTIFACT == 'true'
         run: |
-          for name in rustdesk*??.dmg; do
+          for name in stardesk*??.dmg; do
               mv "$name" "${name%%.dmg}-${{ matrix.job.arch }}.dmg"
           done
 

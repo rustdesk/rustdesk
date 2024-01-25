@@ -472,7 +472,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("show_monitors_tip", "Monitörleri araç çubuğunda göster"),
         ("View Mode", "Görünüm Modu"),
         ("login_linux_tip", "X masaüstü oturumu başlatmak için uzaktaki Linux hesabına giriş yapmanız gerekiyor"),
-        ("verify_StarDesk_password_tip", "StarDesk parolasını doğrulayın"),
+        ("verify_stardesk_password_tip", "StarDesk parolasını doğrulayın"),
         ("remember_account_tip", "Bu hesabı hatırla"),
         ("os_account_desk_tip", "Bu hesap, uzaktaki işletim sistemine giriş yapmak ve başsız masaüstü oturumunu etkinleştirmek için kullanılır."),
         ("OS Account", "İşletim Sistemi Hesabı"),

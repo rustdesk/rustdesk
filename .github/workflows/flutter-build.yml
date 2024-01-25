@@ -23,7 +23,7 @@ env:
   # vcpkg version: 2023.10.19
   # for multiarch gcc compatibility
   VCPKG_COMMIT_ID: "8eb57355a4ffb410a2e94c07b4dca2dffbee8e50"
-  VERSION: "1.2.4"
+  VERSION: "1.2.5"
   NDK_VERSION: "r26b"
   #signing keys env variable checks
   ANDROID_SIGNING_KEY: '${{ secrets.ANDROID_SIGNING_KEY }}'
@@ -400,7 +400,7 @@ jobs:
           cargo -V
           rustc -V
 
-      - name: Build rustdesk
+      - name: Build stardesk
         run: |
           # --hwcodec not supported on macos yet
           ./build.py --flutter ${{ matrix.job.extra-build-args }}
@@ -426,7 +426,7 @@ jobs:
       - name: Rename stardesk
         if: env.UPLOAD_ARTIFACT == 'true'
         run: |
-          for name in rustdesk*??.dmg; do
+          for name in stardesk*??.dmg; do
               mv "$name" "${name%%.dmg}-${{ matrix.job.arch }}.dmg"
           done
 
@@ -442,7 +442,7 @@ jobs:
   generate-bridge-linux:
     uses: ./.github/workflows/bridge.yml
 
-  build-rustdesk-ios:
+  build-stardesk-ios:
     if: ${{ inputs.upload-artifact }}
     name: build stardesk ios ipa ${{ matrix.job.target }} (${{ matrix.job.os }}) [${{ matrix.job.extra-build-features }}]
     runs-on: ${{ matrix.job.os }}
@@ -559,7 +559,7 @@ jobs:
           files: |
             flutter/build/ios/ipa/*.ipa
 
-  build-rustdesk-android:
+  build-stardesk-android:
     needs: [generate-bridge-linux]
     name: build stardesk android apk ${{ matrix.job.target }} (${{ matrix.job.os }}) [${{ matrix.job.extra-build-features }}]
     runs-on: ${{ matrix.job.os }}
@@ -765,7 +765,7 @@ jobs:
           files: |
             signed-apk/stardesk-${{ env.VERSION }}-${{ matrix.job.arch }}.apk
 
-  build-rustdesk-lib-linux-amd64:
+  build-stardesk-lib-linux-amd64:
     needs: [generate-bridge-linux]
     name: build-rust-lib ${{ matrix.job.target }} (${{ matrix.job.os }}) [${{ matrix.job.extra-build-features }}]
     runs-on: ${{ matrix.job.os }}
@@ -1331,6 +1331,7 @@ jobs:
             if ${{ matrix.job.enable-headless }}; then
               export DEFAULT_FEAT=linux_headless
             fi
+            echo "--> cargo build --features inline"
             cargo build --features inline,${{ matrix.job.extra-build-features }},$DEFAULT_FEAT --release --bins
             # package
             mkdir -p ./Release
@@ -1649,9 +1650,9 @@ jobs:
           files: |
             /opt/artifacts/rpm/*.rpm
 
-  build-rustdesk-linux-amd64:
-    needs: [build-rustdesk-lib-linux-amd64]
-    name: build-rustdesk ${{ matrix.job.target }} (${{ matrix.job.os }}) [${{ matrix.job.extra-build-features }}]
+  build-stardesk-linux-amd64:
+    needs: [build-stardesk-lib-linux-amd64]
+    name: build-stardesk ${{ matrix.job.target }} (${{ matrix.job.os }}) [${{ matrix.job.extra-build-features }}]
     runs-on: ubuntu-20.04
     strategy:
       fail-fast: false
@@ -1700,14 +1701,14 @@ jobs:
                wget
           mkdir -p ./target/release/
 
-      - name: Restore the rustdesk lib file
+      - name: Restore the stardesk lib file
         uses: actions/download-artifact@master
         with:
           name: libstardesk-${{ matrix.job.arch }}-${{ matrix.job.extra-build-features }}.so
           path: ./target/release/
 
       - uses: rustdesk-org/run-on-arch-action@amd64-support
-        name: Build rustdesk binary for ${{ matrix.job.arch }}
+        name: Build stardesk binary for ${{ matrix.job.arch }}
         id: vcpkg
         with:
           arch: ${{ matrix.job.arch }}
@@ -1888,7 +1889,7 @@ jobs:
 
   build-flatpak-amd64:
     name: Build Flatpak
-    needs: [build-rustdesk-linux-amd64]
+    needs: [build-stardesk-linux-amd64]
     runs-on: ubuntu-20.04
     strategy:
       fail-fast: false

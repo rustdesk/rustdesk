@@ -472,7 +472,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("show_monitors_tip", "Rodyti monitorius įrankių juostoje"),
         ("View Mode", "Peržiūros režimas"),
         ("login_linux_tip", "Norėdami įjungti X darbalaukio seansą, turite būti prisijungę prie nuotolinės Linux paskyros."),
-        ("verify_StarDesk_password_tip", "Įveskite kliento StarDesk slaptažodį"),
+        ("verify_stardesk_password_tip", "Įveskite kliento StarDesk slaptažodį"),
         ("remember_account_tip", "Prisiminti šią paskyrą"),
         ("os_account_desk_tip", "Ši paskyra naudojama norint prisijungti prie nuotolinės OS ir įgalinti darbalaukio seansą režimu headless"),
         ("OS Account", "OS paskyra"),

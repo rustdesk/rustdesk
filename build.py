@@ -318,9 +318,11 @@ def ffi_bindgen_function_refactor():
 
 def build_flutter_deb(version, features):
     if not skip_cargo:
+        print(f'--> cargo build --features {features} --lib --release')
         system2(f'cargo build --features {features} --lib --release')
         ffi_bindgen_function_refactor()
     os.chdir('flutter')
+    print('--> flutter build linux --release')
     system2('flutter build linux --release')
     system2('mkdir -p tmpdeb/usr/bin/')
     system2('mkdir -p tmpdeb/usr/lib/stardesk')
@@ -576,8 +578,8 @@ def main():
     #rcodesign sign --p12-file ~/.p12/rustdesk-developer-id.p12 --p12-password-file ~/.p12/.cert-pass --code-signature-flags runtime ./target/release/bundle/osx/StarDesk.app/Contents/MacOS/libsciter.dylib
     #rcodesign sign --p12-file ~/.p12/rustdesk-developer-id.p12 --p12-password-file ~/.p12/.cert-pass --code-signature-flags runtime ./target/release/bundle/osx/StarDesk.app
     # goto "Keychain Access" -> "My Certificates" for below id which starts with "Developer ID Application:"
-    codesign -s "Developer ID Application: {0}" --force --options runtime  ./target/release/bundle/osx/StarDesk.app/Contents/MacOS/*
-    codesign -s "Developer ID Application: {0}" --force --options runtime  ./target/release/bundle/osx/StarDesk.app
+    # codesign -s "Developer ID Application: {0}" --force --options runtime  ./target/release/bundle/osx/StarDesk.app/Contents/MacOS/*
+    # codesign -s "Developer ID Application: {0}" --force --options runtime  ./target/release/bundle/osx/StarDesk.app
     '''.format(pa))
                 system2(
                     'create-dmg "StarDesk %s.dmg" "target/release/bundle/osx/StarDesk.app"' % version)
@@ -589,12 +591,12 @@ def main():
     # https://pyoxidizer.readthedocs.io/en/stable/tugger_code_signing.html
     # https://developer.apple.com/developer-id/
     # goto xcode and login with apple id, manager certificates (Developer ID Application and/or Developer ID Installer) online there (only download and double click (install) cer file can not export p12 because no private key)
-    #rcodesign sign --p12-file ~/.p12/rustdesk-developer-id.p12 --p12-password-file ~/.p12/.cert-pass --code-signature-flags runtime ./rustdesk-{1}.dmg
-    codesign -s "Developer ID Application: {0}" --force --options runtime ./stardesk-{1}.dmg
+    # rcodesign sign --p12-file ~/.p12/rustdesk-developer-id.p12 --p12-password-file ~/.p12/.cert-pass --code-signature-flags runtime ./rustdesk-{1}.dmg
+    # codesign -s "Developer ID Application: {0}" --force --options runtime ./stardesk-{1}.dmg
     # https://appstoreconnect.apple.com/access/api
     # https://gregoryszorc.com/docs/apple-codesign/stable/apple_codesign_getting_started.html#apple-codesign-app-store-connect-api-key
     # p8 file is generated when you generate api key (can download only once)
-    rcodesign notary-submit --api-key-path ../.p12/api-key.json  --staple stardesk-{1}.dmg
+    # rcodesign notary-submit --api-key-path ../.p12/api-key.json  --staple stardesk-{1}.dmg
     # verify:  spctl -a -t exec -v /Applications/StarDesk.app
     '''.format(pa, version))
                 else:

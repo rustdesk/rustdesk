@@ -472,7 +472,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("show_monitors_tip", "Hiện các màn hình trong thanh công cụ"),
         ("View Mode", "Chế độ xem"),
         ("login_linux_tip", "Bạn cần đăng nhập vào tài khoản Linux từ xa để bật X phiên kết nối"),
-        ("verify_StarDesk_password_tip", "Xác thực mật khẩu StarDesk"),
+        ("verify_stardesk_password_tip", "Xác thực mật khẩu StarDesk"),
         ("remember_account_tip", "Nhớ tài khoản này"),
         ("os_account_desk_tip", "Tài khoản này đã được dùng để đăng nhập tới hệ điều hành từ xa và kích hoạt phiên kết nối ở chế độ headless"),
         ("OS Account", "Tài khoản hệ điều hành"),

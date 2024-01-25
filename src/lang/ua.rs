@@ -472,7 +472,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("show_monitors_tip", "Показувати монітори на панелі інструментів"),
         ("View Mode", "Режим перегляду"),
         ("login_linux_tip", "Вам необхідно залогуватися у віддалений акаунт Linux, щоб увімкнути стільничний сеанс X"),
-        ("verify_StarDesk_password_tip", "Перевірте пароль StarDesk"),
+        ("verify_stardesk_password_tip", "Перевірте пароль StarDesk"),
         ("remember_account_tip", "Запамʼятати цей акаунт"),
         ("os_account_desk_tip", "Цей акаунт використовується для входу до віддаленої ОС та вмикання сеансу стільниці в неграфічному режимі"),
         ("OS Account", "Користувач ОС"),

@@ -472,7 +472,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("show_monitors_tip", "Monitoren weergeven in de werkbalk"),
         ("View Mode", "Weergave Mode"),
         ("login_linux_tip", "Toegang tot het externe Linux-account"),
-        ("verify_StarDesk_password_tip", "Bevestiging wachtwoord StarDesk"),
+        ("verify_stardesk_password_tip", "Bevestiging wachtwoord StarDesk"),
         ("remember_account_tip", "Herinner dit account"),
         ("os_account_desk_tip", "Dit account wordt gebruikt om toegang te krijgen tot het externe besturingssysteem en de bureaubladsessie in onbeheerde modus te activeren."),
         ("OS Account", "Besturingssysteem account"),

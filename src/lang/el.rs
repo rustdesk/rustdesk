@@ -472,7 +472,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("show_monitors_tip", "Εμφάνιση οθονών στη γραμμή εργαλείων"),
         ("View Mode", "Λειτουργία προβολής"),
         ("login_linux_tip", "Απαιτείται είσοδος σε απομακρυσμένο λογαριασμό Linux για την ενεργοποίηση του περιβάλλον εργασίας Χ."),
-        ("verify_StarDesk_password_tip", ""),
+        ("verify_stardesk_password_tip", ""),
         ("remember_account_tip", ""),
         ("os_account_desk_tip", ""),
         ("OS Account", ""),

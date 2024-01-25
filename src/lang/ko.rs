@@ -472,7 +472,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("show_monitors_tip", "도구 모음에 모니터 표시"),
         ("View Mode", "보기 모드"),
         ("login_linux_tip", "X 데스크탑을 활성화하려면 제어되는 터미널의 Linux 계정에 로그인하세요"),
-        ("verify_StarDesk_password_tip", "StarDesk 비밀번호 확인"),
+        ("verify_stardesk_password_tip", "StarDesk 비밀번호 확인"),
         ("remember_account_tip", "이 계정을 기억하세요"),
         ("os_account_desk_tip", "모니터가 없는 환경에서 이 계정은 제어되는 시스템에 로그인하고 데스크탑을 활성화하는 데 사용됩니다"),
         ("OS Account", "OS 계정"),

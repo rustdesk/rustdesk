@@ -472,7 +472,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("show_monitors_tip", "Rādīt monitorus rīkjoslā"),
         ("View Mode", "Skatīšanas režīms"),
         ("login_linux_tip", "Jums ir jāpiesakās attālajā Linux kontā, lai iespējotu X darbvirsmas sesiju"),
-        ("verify_StarDesk_password_tip", "Pārbaudīt StarDesk paroli"),
+        ("verify_stardesk_password_tip", "Pārbaudīt StarDesk paroli"),
         ("remember_account_tip", "Atcerēties šo kontu"),
         ("os_account_desk_tip", "Šis konts tiek izmantots, lai pieteiktos attālajā operētājsistēmā un iespējotu darbvirsmas sesiju fonā"),
         ("OS Account", "OS konts"),

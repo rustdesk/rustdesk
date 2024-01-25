@@ -472,7 +472,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("show_monitors_tip", "Mostrar monitores en la barra de herramientas"),
         ("View Mode", "Modo Vista"),
         ("login_linux_tip", "Necesitas iniciar sesión con la cueneta del Linux remoto para activar una sesión de escritorio X"),
-        ("verify_StarDesk_password_tip", "Verificar la contraseña de StarDesk"),
+        ("verify_stardesk_password_tip", "Verificar la contraseña de StarDesk"),
         ("remember_account_tip", "Recordar esta cuenta"),
         ("os_account_desk_tip", "Esta cueneta se usa para iniciar sesión en el sistema operativo remoto y habilitar la sesión de escritorio en headless."),
         ("OS Account", "Cuenta del SO"),

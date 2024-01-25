@@ -472,7 +472,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("show_monitors_tip", "Zobraziť monitory na paneli nástrojov"),
         ("View Mode", "Režim zobrazenia"),
         ("login_linux_tip", "Ak chcete povoliť reláciu Desktop X, musíte sa prihlásiť do vzdialeného konta Linuxu."),
-        ("verify_StarDesk_password_tip", "Overenie hesla StarDesk"),
+        ("verify_stardesk_password_tip", "Overenie hesla StarDesk"),
         ("remember_account_tip", "Zapamätať si tento účet"),
         ("os_account_desk_tip", "Toto konto sa používa na prihlásenie do vzdialeného operačného systému a na povolenie relácie pracovnej plochy v režime headless."),
         ("OS Account", "Účet operačného systému"),

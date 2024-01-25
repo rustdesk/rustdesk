@@ -472,7 +472,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("show_monitors_tip", ""),
         ("View Mode", ""),
         ("login_linux_tip", ""),
-        ("verify_StarDesk_password_tip", ""),
+        ("verify_stardesk_password_tip", ""),
         ("remember_account_tip", ""),
         ("os_account_desk_tip", ""),
         ("OS Account", ""),

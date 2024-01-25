@@ -1,6 +1,6 @@
 [package]
 name = "stardesk"
-version = "1.2.4"
+version = "1.2.5"
 authors = ["stardesk <stardesk@mobilestartools.com>"]
 edition = "2021"
 build = "build.rs"

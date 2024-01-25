@@ -8,7 +8,7 @@ env:
   TAG_NAME: "tmp"
   FLUTTER_RUST_BRIDGE_VERSION: "1.80.1"
   VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
-  VERSION: "1.2.4"
+  VERSION: "1.2.5"
 
 jobs:
   build-for-history-windows:
@@ -63,17 +63,17 @@ jobs:
           $VCPKG_ROOT/vcpkg install --x-install-root="$VCPKG_ROOT/installed"
         shell: bash
 
-      - name: Build rustdesk
+      - name: Build stardesk
         run: python3 .\build.py --portable --hwcodec --flutter --feature IddDriver
 
       - name: Build self-extracted executable
         shell: bash
         run: |
           pushd ./libs/portable
-          python3 ./generate.py -f ../../flutter/build/windows/runner/Release/ -o . -e ../../flutter/build/windows/runner/Release/rustdesk.exe
+          python3 ./generate.py -f ../../flutter/build/windows/runner/Release/ -o . -e ../../flutter/build/windows/runner/Release/stardesk.exe
           popd
           mkdir -p ./SignOutput
-          mv ./target/release/rustdesk-portable-packer.exe ./SignOutput/rustdesk-${{ matrix.job.date }}-${{ matrix.job.target }}.exe
+          mv ./target/release/stardesk-portable-packer.exe ./SignOutput/stardesk-${{ matrix.job.date }}-${{ matrix.job.target }}.exe
 
       - name: Publish Release
         uses: softprops/action-gh-release@v1
@@ -81,4 +81,4 @@ jobs:
           prerelease: true
           tag_name: ${{ env.TAG_NAME }}
           files: |
-            ./SignOutput/rustdesk-*.exe
+            ./SignOutput/stardesk-*.exe

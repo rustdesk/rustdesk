@@ -472,7 +472,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("show_monitors_tip", "Mostrar monitores na barra de ferramentas"),
         ("View Mode", "Modo de Visualização"),
         ("login_linux_tip", "Você precisa fazer login na conta Linux remota para habilitar uma sessão de desktop X"),
-        ("verify_StarDesk_password_tip", "Verifique a senha do StarDesk"),
+        ("verify_stardesk_password_tip", "Verifique a senha do StarDesk"),
         ("remember_account_tip", "Lembrar desta conta"),
         ("os_account_desk_tip", "Esta conta é usada para fazer login no Sistema Operacional remoto e habilitar a sessão da área de trabalho em headless"),
         ("OS Account", "Conta do Sistema Operacional"),

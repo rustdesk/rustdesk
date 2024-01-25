@@ -652,7 +652,7 @@ _connectDialog(
       }
       return Column(
         children: [
-          descWidget(translate('verify_rustdesk_password_tip')),
+          descWidget(translate('verify_stardesk_password_tip')),
           PasswordWidget(
             controller: passwordController,
             autoFocus: osUsernameController == null,

@@ -472,7 +472,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("show_monitors_tip", "نمایش مانیتورها در نوار ابزار"),
         ("View Mode", "حالت مشاهده"),
         ("login_linux_tip", "برای فعال کردن دسکتاپ X، باید به حساب لینوکس راه دور وارد شوید"),
-        ("verify_StarDesk_password_tip", "رمز عبور StarDesk را تأیید کنید"),
+        ("verify_stardesk_password_tip", "رمز عبور StarDesk را تأیید کنید"),
         ("remember_account_tip", "این حساب را به خاطر بسپارید"),
         ("os_account_desk_tip", "این حساب برای ورود به سیستم عامل راه دور و فعال کردن جلسه دسکتاپ در هدلس استفاده می شود"),
         ("OS Account", "حساب کاربری سیستم عامل"),

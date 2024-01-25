@@ -472,7 +472,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("show_monitors_tip", "Bildschirme in der Symbolleiste anzeigen"),
         ("View Mode", "Ansichtsmodus"),
         ("login_linux_tip", "Sie müssen sich an einem entfernten Linux-Konto anmelden, um eine X-Desktop-Sitzung zu eröffnen."),
-        ("verify_StarDesk_password_tip", "StarDesk-Passwort bestätigen"),
+        ("verify_stardesk_password_tip", "StarDesk-Passwort bestätigen"),
         ("remember_account_tip", "Dieses Konto merken"),
         ("os_account_desk_tip", "Dieses Konto wird verwendet, um sich beim entfernten Betriebssystem anzumelden und die Desktop-Sitzung im Headless-Modus zu aktivieren."),
         ("OS Account", "Betriebssystem-Konto"),

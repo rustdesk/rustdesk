@@ -157,7 +157,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("show_monitors_tip", "Kuva kuvarid tööriistaribal"),
         ("View Mode", "Kuvarežiim"),
         ("login_linux_tip", "X-töölaua seansi lubamiseks pead sisse logima Linuxi kaugkontosse."),
-        ("verify_rustdesk_password_tip", "Kinnita RustDeski parooli"),
+        ("verify_stardesk_password_tip", "Kinnita RustDeski parooli"),
         ("remember_account_tip", "Jäta see konto meelde"),
         ("os_account_desk_tip", "Seda kontot kasutatakse kaug-opsüsteemi sisselogimiseks ja töölaua seansi lubamiseks headless-režiimis."),
         ("OS Account", "Opsüsteemi konto"),

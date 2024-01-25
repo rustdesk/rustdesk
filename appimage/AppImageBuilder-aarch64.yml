@@ -2,7 +2,7 @@
 version: 1
 script:
  - rm -rf ./AppDir || true
- - bsdtar -zxvf ../stardesk-1.2.4.deb
+ - bsdtar -zxvf ../stardesk-1.2.5.deb
  - tar -xvf ./data.tar.xz
  - mkdir ./AppDir
  - mv ./usr ./AppDir/usr
@@ -18,7 +18,7 @@ AppDir:
     id: stardesk
     name: stardesk
     icon: stardesk
-    version: 1.2.4
+    version: 1.2.5
     exec: usr/lib/stardesk/stardesk
     exec_args: $@
   apt:

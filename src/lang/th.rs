@@ -472,7 +472,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("show_monitors_tip", "แสดงหน้าจอในแถบเครื่องมือ"),
         ("View Mode", "โหมดการดู"),
         ("login_linux_tip", "คุณจำเป็นจะต้องเข้าสู่ระบบไปยังบัญชีลินุกซ์ปลายทางเพื่อใช้งานเดสก์ท็อปเซสชัน X"),
-        ("verify_StarDesk_password_tip", "ยืนยันความถูกต้องรหัสผ่านของ StarDesk"),
+        ("verify_stardesk_password_tip", "ยืนยันความถูกต้องรหัสผ่านของ StarDesk"),
         ("remember_account_tip", "จดจำบัญชีนี้"),
         ("os_account_desk_tip", "บัญชีนี้จะถูกใช้ในการเข้าสู่ระบบเครื่องปลายทางและเริ่มใช้งานเดสก์ท็อปเซสชันแบบ headless"),
         ("OS Account", "บัญชีระบบปฏิบัติการ"),
