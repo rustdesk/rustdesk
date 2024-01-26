@@ -38,7 +38,7 @@ impl Display {
         let w = unsafe { CGDisplayPixelsWide(self.0) };
         let s = self.scale();
         if s > 1.0 {
-           ((w as f64) * s) as usize
+           ((w as f64) * s).round() as usize
         } else {
             w
         }
@@ -48,7 +48,7 @@ impl Display {
         let h = unsafe { CGDisplayPixelsHigh(self.0) };
         let s = self.scale();
         if s > 1.0 {
-           ((h as f64) * s) as usize
+           ((h as f64) * s).round() as usize
         } else {
             h
         }
