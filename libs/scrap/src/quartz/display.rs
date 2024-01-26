@@ -71,7 +71,8 @@ impl Display {
     }
 
     pub fn scale(self) -> f64 {
-        unsafe { BackingScaleFactor() as _ }
+        // unsafe { BackingScaleFactor() as _ }
+        1.
     }
 
     pub fn bounds(self) -> CGRect {
