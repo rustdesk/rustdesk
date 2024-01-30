@@ -135,7 +135,7 @@ wallpaper = { git = "https://github.com/21pages/wallpaper.rs" }
 reqwest = { git = "https://github.com/rustdesk-org/reqwest", features = ["blocking", "json", "native-tls", "gzip"], default-features=false }
 
 [target.'cfg(not(any(target_os = "macos", target_os = "windows")))'.dependencies]
-reqwest = { git = "https://github.com/rustdesk-org/reqwest", features = ["blocking", "json", "rustls-tls", "gzip"], default-features=false }
+reqwest = { git = "https://github.com/rustdesk-org/reqwest", features = ["blocking", "json", "rustls-tls", "rustls-tls-native-roots", "gzip"], default-features=false }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 psimple = { package = "libpulse-simple-binding", version = "2.27" }
@@ -193,3 +193,7 @@ panic = 'abort'
 strip = true
 #opt-level = 'z' # only have smaller size after strip
 rpath = true
+
+[profile.dev]
+split-debuginfo = '...'  # Platform-specific.
+#strip = "debuginfo" 
