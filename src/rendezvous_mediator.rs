@@ -157,8 +157,8 @@ impl RendezvousMediator {
         const MIN_REG_TIMEOUT: i64 = 3_000;
         const MAX_REG_TIMEOUT: i64 = 30_000;
         let mut reg_timeout = MIN_REG_TIMEOUT;
-        const MAX_FAILS1: i64 = 3;
-        const MAX_FAILS2: i64 = 6;
+        const MAX_FAILS1: i64 = 2;
+        const MAX_FAILS2: i64 = 4;
         const DNS_INTERVAL: i64 = 60_000;
         let mut fails = 0;
         let mut last_register_resp: Option<Instant> = None;
