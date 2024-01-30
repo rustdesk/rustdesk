@@ -1870,11 +1870,9 @@ void showWindowsSessionsDialog(
     SessionID sessionId,
     String peerId,
     String sessions) {
-  late Map<String, String> sessionMap;
-  late List<String> sessionss;
-  sessionss = sessions.split(',');
-  sessionMap = {};
-  for (var session in sessionss) {
+  List<String> sessionsList = sessions.split(',');
+  Map<String, String> sessionMap = {};
+  for (var session in sessionsList) {
     var sessionInfo = session.split('-');
     if (sessionInfo.isNotEmpty) {
       sessionMap[sessionInfo[0]] = sessionInfo[1];
