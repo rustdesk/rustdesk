@@ -1003,7 +1003,7 @@ impl<T: InvokeUiSession> Session<T> {
         }
     }
 
-    pub fn reconnect(&self, force_relay: bool) {
+    pub fn reconnect(&self, force_relay: bool, user_session_id: String) {
         // 1. If current session is connecting, do not reconnect.
         // 2. If the connection is established, send `Data::Close`.
         // 3. If the connection is disconnected, do nothing.
@@ -1022,6 +1022,13 @@ impl<T: InvokeUiSession> Session<T> {
         // override only if true
         if true == force_relay {
             self.lc.write().unwrap().force_relay = true;
+        }
+        if !user_session_id.is_empty() {
+            let mut config = self.load_config();
+            config
+                .options
+                .insert("selected_user_session_id".to_string(), user_session_id);
+            self.save_config(config);
         }
         let mut lock = self.thread.lock().unwrap();
         // No need to join the previous thread, because it will exit automatically.

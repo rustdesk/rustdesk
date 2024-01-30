@@ -1510,9 +1510,8 @@ impl Connection {
                 Ok(n) => usid = Some(n),
                 Err(..) => usid = None,
             }
-            let is_usid_changed = LocalConfig::get_option("is_usid_changed") == "Y";
+            let current_process_usid = crate::platform::get_current_process_session_id();
             if usid.is_none() {
-                LocalConfig::set_option("is_usid_changed".to_string(), "N".to_string());
                 let mut res = LoginResponse::new();
                 let mut rdp = Vec::new();
                 for session in active_sessions {
@@ -1528,9 +1527,8 @@ impl Connection {
                 msg_out.set_login_response(res);
                 self.send(msg_out).await;
             }
-            if usid != self.user_session_id && !is_usid_changed {
-                LocalConfig::set_option("is_usid_changed".to_string(), "Y".to_string());
-                self.send_close_reason_no_retry("Restarting...").await;
+            if usid != self.user_session_id && usid != Some(current_process_usid) {
+                self.on_close("Reconnecting...", false).await;
                 std::thread::spawn(move || {
                     let _ = ipc::connect_to_user_session(usid);
                 });

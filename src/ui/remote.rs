@@ -386,7 +386,7 @@ impl sciter::EventHandler for SciterSession {
                     let site = AssetPtr::adopt(ptr as *mut video_destination);
                     log::debug!("[video] start video");
                     *VIDEO.lock().unwrap() = Some(site);
-                    self.reconnect(false);
+                    self.reconnect(false, "".to_string());
                 }
             }
             BEHAVIOR_EVENTS::VIDEO_INITIALIZED => {
@@ -436,7 +436,7 @@ impl sciter::EventHandler for SciterSession {
         fn transfer_file();
         fn tunnel();
         fn lock_screen();
-        fn reconnect(bool);
+        fn reconnect(bool, String);
         fn get_chatbox();
         fn get_icon();
         fn get_home_dir();

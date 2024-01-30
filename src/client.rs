@@ -1511,14 +1511,22 @@ impl LoginConfigHandler {
     ///
     /// * `ignore_default` - If `true`, ignore the default value of the option.
     fn get_option_message(&self, ignore_default: bool) -> Option<OptionMessage> {
-        if self.conn_type.eq(&ConnType::FILE_TRANSFER)
-            || self.conn_type.eq(&ConnType::PORT_FORWARD)
-            || self.conn_type.eq(&ConnType::RDP)
-        {
+        if self.conn_type.eq(&ConnType::PORT_FORWARD) || self.conn_type.eq(&ConnType::RDP) {
             return None;
         }
         let mut n = 0;
         let mut msg = OptionMessage::new();
+        msg.user_session = self
+            .config
+            .options
+            .get("selected_user_session_id")
+            .unwrap_or(&String::from(""))
+            .to_owned();
+        n += 1;
+
+        if self.conn_type.eq(&ConnType::FILE_TRANSFER) {
+                return Some(msg);
+        }
         let q = self.image_quality.clone();
         if let Some(q) = self.get_image_quality_enum(&q, ignore_default) {
             msg.image_quality = q.into();
@@ -1581,13 +1589,6 @@ impl LoginConfigHandler {
                 &self.mark_unsupported,
             ));
         n += 1;
-        msg.user_session = self
-            .config
-            .options
-            .get("selected_user_session_id")
-            .unwrap_or(&String::from(""))
-            .to_owned();
-
         if n > 0 {
             Some(msg)
         } else {

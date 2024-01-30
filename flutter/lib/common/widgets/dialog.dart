@@ -1870,10 +1870,24 @@ void showWindowsSessionsDialog(
     SessionID sessionId,
     String peerId,
     String sessions) {
+  late Map<String, String> sessionMap;
+  late List<String> sessionss;
+  sessionss = sessions.split(',');
+  sessionMap = {};
+  for (var session in sessionss) {
+    var sessionInfo = session.split('-');
+    if (sessionInfo.isNotEmpty) {
+      sessionMap[sessionInfo[0]] = sessionInfo[1];
+    }
+  }
+  String selectedUserValue = sessionMap.keys.first;
   dialogManager.dismissAll();
   dialogManager.show((setState, close, context) {
     onConnect() {
-      bind.sessionReconnect(sessionId: sessionId, forceRelay: false);
+      bind.sessionReconnect(
+          sessionId: sessionId,
+          forceRelay: false,
+          userSessionId: selectedUserValue);
       dialogManager.dismissAll();
       dialogManager.showLoading(translate('Connecting...'),
           onCancel: closeConnection);
@@ -1883,8 +1897,12 @@ void showWindowsSessionsDialog(
       title: null,
       content: msgboxContent(type, title, text),
       actions: [
-        SessionsDropdown(peerId, sessionId, sessions),
-        dialogButton('Connect', onPressed: onConnect, isOutline: true),
+        SessionsDropdown(peerId, sessionId, sessionMap, (value) {
+          setState(() {
+            selectedUserValue = value;
+          });
+        }),
+        dialogButton('Connect', onPressed: onConnect, isOutline: false),
       ],
     );
   });
@@ -1893,33 +1911,22 @@ void showWindowsSessionsDialog(
 class SessionsDropdown extends StatefulWidget {
   final String peerId;
   final SessionID sessionId;
-  final String sessions;
-  SessionsDropdown(this.peerId, this.sessionId, this.sessions);
+  final Map<String, String> sessions;
+  final Function(String) onValueChanged;
+
+  SessionsDropdown(
+      this.peerId, this.sessionId, this.sessions, this.onValueChanged);
+
   @override
   _SessionsDropdownState createState() => _SessionsDropdownState();
 }
 
 class _SessionsDropdownState extends State<SessionsDropdown> {
   late String selectedValue;
-  late Map<String, String> sessionMap;
-  late List<String> sessions;
-
   @override
   void initState() {
     super.initState();
-    sessions = widget.sessions.split(',');
-    sessionMap = {};
-    for (var session in sessions) {
-      var sessionInfo = session.split('-');
-      if (sessionInfo.isNotEmpty) {
-        sessionMap[sessionInfo[0]] = sessionInfo[1];
-      }
-    }
-    selectedValue = sessionMap.keys.first;
-    bind.sessionPeerOption(
-        sessionId: widget.sessionId,
-        name: 'selected_user_session_id',
-        value: selectedValue);
+    selectedValue = widget.sessions.keys.first;
   }
 
   @override
@@ -1931,7 +1938,7 @@ class _SessionsDropdownState extends State<SessionsDropdown> {
         isExpanded: true,
         borderRadius: BorderRadius.circular(8),
         padding: EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-        items: sessionMap.entries.map((entry) {
+        items: widget.sessions.entries.map((entry) {
           return DropdownMenuItem(
             value: entry.key,
             child: Text(
@@ -1949,10 +1956,7 @@ class _SessionsDropdownState extends State<SessionsDropdown> {
             setState(() {
               selectedValue = value;
             });
-            bind.sessionPeerOption(
-                sessionId: widget.sessionId,
-                name: 'selected_user_session_id',
-                value: value);
+            widget.onValueChanged(value);
           }
         },
         style: TextStyle(

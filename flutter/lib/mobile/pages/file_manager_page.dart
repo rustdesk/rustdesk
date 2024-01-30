@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_breadcrumb/flutter_breadcrumb.dart';
 import 'package:flutter_hbb/models/file_model.dart';
+import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:get/get.dart';
 import 'package:toggle_switch/toggle_switch.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
@@ -84,6 +85,8 @@ class _FileManagerPageState extends State<FileManagerPage> {
       WakelockPlus.disable();
     });
     super.dispose();
+        bind.sessionPeerOption(
+        sessionId: gFFI.sessionId, name: 'selected_user_session_id', value: "");  
   }
 
   @override

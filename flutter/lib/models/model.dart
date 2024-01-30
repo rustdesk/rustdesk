@@ -564,7 +564,8 @@ class FfiModel with ChangeNotifier {
 
   void reconnect(OverlayDialogManager dialogManager, SessionID sessionId,
       bool forceRelay) {
-    bind.sessionReconnect(sessionId: sessionId, forceRelay: forceRelay);
+    bind.sessionReconnect(
+        sessionId: sessionId, forceRelay: forceRelay, userSessionId: "");
     clearPermissions();
     dialogManager.dismissAll();
     dialogManager.showLoading(translate('Connecting...'),

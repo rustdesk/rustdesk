@@ -109,6 +109,8 @@ class _FileManagerPageState extends State<FileManagerPage>
       Get.delete<FFI>(tag: 'ft_${widget.id}');
     });
     super.dispose();
+    bind.sessionPeerOption(
+        sessionId: _ffi.sessionId, name: 'selected_user_session_id', value: "");
   }
 
   @override

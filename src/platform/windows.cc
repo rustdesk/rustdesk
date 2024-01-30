@@ -434,6 +434,25 @@ extern "C"
         return nout;
     }
 
+    uint32_t get_current_process_session_id(PWSTR bufin, uint32_t nin)
+    {
+        uint32_t nout = 0;
+        PWSTR buf = NULL;
+        DWORD n = 0;
+        DWORD sessionId = 0;
+        HANDLE hProcess = GetCurrentProcess();
+        if (hProcess) {
+            ProcessIdToSessionId(GetCurrentProcessId(), &sessionId);
+            if (buf) {
+                nout = min(nin, n);
+                memcpy(bufin, buf, nout);
+                WTSFreeMemory(buf);
+            }
+            CloseHandle(hProcess);
+        }
+        return sessionId;
+    }
+
     uint32_t get_session_user_info(PWSTR bufin, uint32_t nin, BOOL rdp, uint32_t id)
     {
         uint32_t nout = 0;
