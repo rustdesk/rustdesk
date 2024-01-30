@@ -1496,9 +1496,7 @@ impl Connection {
 
     #[cfg(target_os = "windows")]
     async fn handle_multiple_user_sessions(&mut self, lr: LoginRequest) {
-        if self.file_transfer.is_some() {
-            return;
-        } else if self.port_forward_socket.is_some() {
+        if self.port_forward_socket.is_some() {
             return;
         } else {
             let active_sessions = crate::platform::get_all_active_sessions();
