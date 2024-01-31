@@ -101,11 +101,11 @@ fn get_atom_name(conn: *mut xcb_connection_t, atom: xcb_atom_t) -> String {
         return empty;
     }
     unsafe {
-        let mut e: xcb_generic_error_t = std::mem::zeroed();
+        let mut e: *mut xcb_generic_error_t = std::ptr::null_mut();
         let reply = xcb_get_atom_name_reply(
             conn,
             xcb_get_atom_name(conn, atom),
-            &mut ((&mut e) as *mut xcb_generic_error_t) as _,
+            &mut e as _,
         );
         if reply == std::ptr::null() {
             return empty;
