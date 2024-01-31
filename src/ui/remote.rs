@@ -592,10 +592,7 @@ impl SciterSession {
     }
 
     fn set_selected_user_session_id(&mut self, u_sid: String) {
-        let mut config = self.load_config();
-        config.options.insert("selected_user_session_id".to_string(), u_sid.clone());
-        self.save_config(config);
-        let mut config = self.load_config();
+        self.lc.write().unwrap().selected_user_session_id = u_sid;
     }
 
     fn get_port_forwards(&mut self) -> Value {
