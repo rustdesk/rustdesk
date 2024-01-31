@@ -437,8 +437,13 @@ impl<T: InvokeUiSession> Session<T> {
 
     pub fn alternative_codecs(&self) -> (bool, bool, bool, bool) {
         let luid = self.lc.read().unwrap().adapter_luid;
-        let decoder =
-            scrap::codec::Decoder::supported_decodings(None, cfg!(feature = "flutter"), luid);
+        let mark_unsupported = self.lc.read().unwrap().mark_unsupported.clone();
+        let decoder = scrap::codec::Decoder::supported_decodings(
+            None,
+            cfg!(feature = "flutter"),
+            luid,
+            &mark_unsupported,
+        );
         let mut vp8 = decoder.ability_vp8 > 0;
         let mut av1 = decoder.ability_av1 > 0;
         let mut h264 = decoder.ability_h264 > 0;
@@ -718,6 +723,11 @@ impl<T: InvokeUiSession> Session<T> {
         let mut msg_out = Message::new();
         msg_out.set_misc(misc);
         self.send(Data::Message(msg_out));
+
+        #[cfg(not(feature = "flutter"))]
+        {
+            self.capture_displays(vec![], vec![], vec![display]);
+        }
     }
 
     #[cfg(not(any(target_os = "android", target_os = "ios")))]

@@ -35,11 +35,23 @@ impl Display {
     }
 
     pub fn width(self) -> usize {
-        unsafe { CGDisplayPixelsWide(self.0) }
+        let w = unsafe { CGDisplayPixelsWide(self.0) };
+        let s = self.scale();
+        if s > 1.0 {
+           ((w as f64) * s).round() as usize
+        } else {
+            w
+        }
     }
 
     pub fn height(self) -> usize {
-        unsafe { CGDisplayPixelsHigh(self.0) }
+        let h = unsafe { CGDisplayPixelsHigh(self.0) };
+        let s = self.scale();
+        if s > 1.0 {
+           ((h as f64) * s).round() as usize
+        } else {
+            h
+        }
     }
 
     pub fn is_builtin(self) -> bool {
@@ -56,6 +68,11 @@ impl Display {
 
     pub fn is_online(self) -> bool {
         unsafe { CGDisplayIsOnline(self.0) != 0 }
+    }
+
+    pub fn scale(self) -> f64 {
+        // unsafe { BackingScaleFactor() as _ }
+        1.
     }
 
     pub fn bounds(self) -> CGRect {

@@ -579,7 +579,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Swap control-command key", "Échanger la touche de controle-commande"),
         ("swap-left-right-mouse", "Intervertir le bouton gauche et droit de la souris"),
         ("2FA code", ""),
-        ("2fa_tip", ""),
         ("More", ""),
         ("enable-2fa-title", ""),
         ("enable-2fa-desc", ""),

@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:io';
-import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -363,6 +362,7 @@ class DialogTextField extends StatelessWidget {
   final Widget? suffixIcon;
   final TextEditingController controller;
   final FocusNode? focusNode;
+  final TextInputType? keyboardType;
   final List<TextInputFormatter>? inputFormatters;
 
   static const kUsernameTitle = 'Username';
@@ -379,6 +379,7 @@ class DialogTextField extends StatelessWidget {
       this.prefixIcon,
       this.suffixIcon,
       this.hintText,
+      this.keyboardType,
       this.inputFormatters,
       required this.title,
       required this.controller})
@@ -404,6 +405,7 @@ class DialogTextField extends StatelessWidget {
             focusNode: focusNode,
             autofocus: true,
             obscureText: obscureText,
+            keyboardType: keyboardType,
             inputFormatters: inputFormatters,
           ),
         ),
@@ -426,7 +428,6 @@ class Dialog2FaField extends ValidationField {
     this.autoFocus = true,
     this.reRequestFocus = false,
     this.title,
-    this.helperText,
     this.hintText,
     this.errorText,
     this.readyCallback,
@@ -437,7 +438,6 @@ class Dialog2FaField extends ValidationField {
   final bool autoFocus;
   final bool reRequestFocus;
   final String? title;
-  final String? helperText;
   final String? hintText;
   final String? errorText;
   final VoidCallback? readyCallback;
@@ -454,8 +454,8 @@ class Dialog2FaField extends ValidationField {
       reRequestFocus: reRequestFocus,
       hintText: hintText,
       readyCallback: readyCallback,
-      helperText: helperText ?? translate('2fa_tip'),
       onChanged: _onChanged,
+      keyboardType: TextInputType.number,
       inputFormatters: [
         FilteringTextInputFormatter.allow(RegExp(r'[0-9]')),
       ],
@@ -528,6 +528,7 @@ class DialogEmailCodeField extends ValidationField {
       readyCallback: readyCallback,
       helperText: translate('verification_tip'),
       onChanged: _onChanged,
+      keyboardType: TextInputType.visiblePassword,
     );
   }
 
@@ -571,6 +572,7 @@ class DialogVerificationCodeField extends StatefulWidget {
     this.textLength,
     this.readyCallback,
     this.onChanged,
+    this.keyboardType,
     this.inputFormatters,
   }) : super(key: key);
 
@@ -585,6 +587,7 @@ class DialogVerificationCodeField extends StatefulWidget {
   final VoidCallback? readyCallback;
   final Function(StateSetter setState, SimpleWrapper<String?> errText)?
       onChanged;
+  final TextInputType? keyboardType;
   final List<TextInputFormatter>? inputFormatters;
 
   @override
@@ -646,6 +649,7 @@ class _DialogVerificationCodeField extends State<DialogVerificationCodeField> {
       errorText: widget.errorText ?? errorText.value,
       focusNode: _focusNode,
       helperText: widget.helperText,
+      keyboardType: widget.keyboardType,
       inputFormatters: widget.inputFormatters,
     );
   }
@@ -1843,15 +1847,17 @@ void enter2FaDialog(
         title: Text(translate('enter-2fa-title')),
         content: codeField,
         actions: [
-          dialogButton(
-            'Cancel',
-            onPressed: cancel,
-            isOutline: true,
-          ),
+          dialogButton('Cancel',
+              onPressed: cancel,
+              isOutline: true,
+              style: TextStyle(
+                  color: Theme.of(context).textTheme.bodyMedium?.color)),
           Obx(() => dialogButton(
                 'OK',
                 onPressed: submitReady.isTrue ? submit : null,
               )),
-        ]);
+        ],
+        onSubmit: submit,
+        onCancel: cancel);
   });
 }
