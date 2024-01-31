@@ -1149,6 +1149,7 @@ pub struct LoginConfigHandler {
     pub custom_fps: Arc<Mutex<Option<usize>>>,
     pub adapter_luid: Option<i64>,
     pub mark_unsupported: Vec<CodecFormat>,
+    pub selected_user_session_id: String,
 }
 
 impl Deref for LoginConfigHandler {
@@ -1235,6 +1236,7 @@ impl LoginConfigHandler {
         self.received = false;
         self.switch_uuid = switch_uuid;
         self.adapter_luid = adapter_luid;
+        self.selected_user_session_id = "".to_owned();
     }
 
     /// Check if the client should auto login.
@@ -1516,16 +1518,11 @@ impl LoginConfigHandler {
         }
         let mut n = 0;
         let mut msg = OptionMessage::new();
-        msg.user_session = self
-            .config
-            .options
-            .get("selected_user_session_id")
-            .unwrap_or(&String::from(""))
-            .to_owned();
+        msg.user_session = self.selected_user_session_id.clone();
         n += 1;
 
         if self.conn_type.eq(&ConnType::FILE_TRANSFER) {
-                return Some(msg);
+            return Some(msg);
         }
         let q = self.image_quality.clone();
         if let Some(q) = self.get_image_quality_enum(&q, ignore_default) {

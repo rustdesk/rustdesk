@@ -1024,11 +1024,7 @@ impl<T: InvokeUiSession> Session<T> {
             self.lc.write().unwrap().force_relay = true;
         }
         if !user_session_id.is_empty() {
-            let mut config = self.load_config();
-            config
-                .options
-                .insert("selected_user_session_id".to_string(), user_session_id);
-            self.save_config(config);
+            self.lc.write().unwrap().selected_user_session_id = user_session_id;
         }
         let mut lock = self.thread.lock().unwrap();
         // No need to join the previous thread, because it will exit automatically.

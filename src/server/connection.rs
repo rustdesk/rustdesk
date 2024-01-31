@@ -1494,13 +1494,13 @@ impl Connection {
     }
 
     #[cfg(target_os = "windows")]
-    async fn handle_multiple_user_sessions(&mut self, lr: LoginRequest) {
+    async fn handle_multiple_user_sessions(&mut self, lr: LoginRequest) -> bool {
         if self.port_forward_socket.is_some() {
-            return;
+            return true;
         } else {
             let active_sessions = crate::platform::get_all_active_sessions();
             if active_sessions.len() <= 1 {
-                return;
+                return true;
             }
             let usid;
             match lr.option.user_session.parse::<u32>() {
@@ -1523,15 +1523,19 @@ impl Connection {
                 let mut msg_out = Message::new();
                 msg_out.set_login_response(res);
                 self.send(msg_out).await;
+                return false;
             }
             if usid != self.user_session_id && usid != Some(current_process_usid) {
                 self.on_close("Reconnecting...", false).await;
                 std::thread::spawn(move || {
                     let _ = ipc::connect_to_user_session(usid);
                 });
+                return false;
             } else if usid.is_some() {
                 self.user_session_id = usid.clone();
+                return true;
             }
+            true
         }
     }
 
@@ -1571,7 +1575,9 @@ impl Connection {
         if let Some(message::Union::LoginRequest(lr)) = msg.union {
             #[cfg(target_os = "windows")]
             if crate::platform::is_installed() && crate::platform::is_share_rdp() {
-                self.handle_multiple_user_sessions(lr.clone()).await;
+                if !self.handle_multiple_user_sessions(lr.clone()).await {
+                    return false;
+                }
             }
             self.handle_login_request_without_validation(&lr).await;
             if self.authorized {

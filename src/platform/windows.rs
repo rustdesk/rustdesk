@@ -735,13 +735,9 @@ pub fn set_share_rdp(enable: bool) {
 
 pub fn get_current_process_session_id() -> u32 {
     extern "C" {
-        fn get_current_process_session_id(path: *mut u16, n: u32) -> u32;
+        fn get_current_process_session_id() -> u32;
     }
-    let buff_size = 256;
-    let mut buff: Vec<u16> = Vec::with_capacity(buff_size);
-    buff.resize(buff_size, 0);
-    let n = unsafe { get_current_process_session_id(buff.as_mut_ptr(), buff_size as _) };
-    n
+    unsafe { get_current_process_session_id() }
 }
 
 pub fn get_active_username() -> String {
