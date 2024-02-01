@@ -78,8 +78,6 @@ class _RemotePageState extends State<RemotePage> {
   Future<void> dispose() async {
     // https://github.com/flutter/flutter/issues/64935
     super.dispose();
-    bind.sessionPeerOption(
-        sessionId: sessionId, name: 'selected_user_session_id', value: "");
     gFFI.dialogManager.hideMobileActionsOverlay();
     gFFI.inputModel.listenToMouse(false);
     await gFFI.invokeMethod("enable_soft_keyboard", true);
