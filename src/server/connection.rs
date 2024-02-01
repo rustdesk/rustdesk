@@ -1814,15 +1814,17 @@ impl Connection {
             }
         } else if self.authorized {
             #[cfg(target_os = "windows")]
-            if crate::platform::is_installed()
-                && crate::platform::is_share_rdp()
-                && !*CONN_COUNT.lock().unwrap() > 1
-                && !self.checked_multiple_session
-            {
-                if !self.handle_multiple_user_sessions(self.lr.clone()).await {
-                    return false;
-                }
+            if !self.checked_multiple_session {
                 self.checked_multiple_session = true;
+                if crate::platform::is_installed()
+                    && crate::platform::is_share_rdp()
+                    && !*CONN_COUNT.lock().unwrap() > 1
+                    && get_version_number(&self.lr.version) >= get_version_number("1.2.4")
+                {
+                    if !self.handle_multiple_user_sessions(self.lr.clone()).await {
+                        return false;
+                    }
+                }
             }
             match msg.union {
                 Some(message::Union::MouseEvent(me)) => {
