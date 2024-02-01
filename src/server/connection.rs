@@ -238,6 +238,7 @@ pub struct Connection {
     #[cfg(feature = "gpucodec")]
     supported_encoding_flag: (bool, Option<bool>),
     user_session_id: Option<u32>,
+    checked_multiple_session: bool,
 }
 
 impl ConnInner {
@@ -386,6 +387,7 @@ impl Connection {
             #[cfg(feature = "gpucodec")]
             supported_encoding_flag: (false, None),
             user_session_id: None,
+            checked_multiple_session: false,
         };
         let addr = hbb_common::try_into_v4(addr);
         if !conn.on_open(addr).await {
@@ -1815,10 +1817,12 @@ impl Connection {
             if crate::platform::is_installed()
                 && crate::platform::is_share_rdp()
                 && !*CONN_COUNT.lock().unwrap() > 1
+                && !self.checked_multiple_session
             {
                 if !self.handle_multiple_user_sessions(self.lr.clone()).await {
                     return false;
                 }
+                self.checked_multiple_session = true;
             }
             match msg.union {
                 Some(message::Union::MouseEvent(me)) => {
