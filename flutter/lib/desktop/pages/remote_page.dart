@@ -211,8 +211,6 @@ class _RemotePageState extends State<RemotePage>
     // https://github.com/flutter/flutter/issues/64935
     super.dispose();
     debugPrint("REMOTE PAGE dispose session $sessionId ${widget.id}");
-    bind.sessionPeerOption(
-        sessionId: sessionId, name: 'selected_user_session_id', value: "");
     _ffi.textureModel.onRemotePageDispose(closeSession);
     // ensure we leave this session, this is a double check
     _ffi.inputModel.enterOrLeave(false);

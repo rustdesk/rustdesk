@@ -85,8 +85,6 @@ class _FileManagerPageState extends State<FileManagerPage> {
       WakelockPlus.disable();
     });
     super.dispose();
-        bind.sessionPeerOption(
-        sessionId: gFFI.sessionId, name: 'selected_user_session_id', value: "");  
   }
 
   @override
