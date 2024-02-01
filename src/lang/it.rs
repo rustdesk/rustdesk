@@ -579,7 +579,12 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Swap control-command key", "Scambia tasto controllo-comando"),
         ("swap-left-right-mouse", "Scambia pulsante sinistro-destro mouse"),
         ("2FA code", "Codice 2FA"),
-        ("2fa_tip", "Inserisci il codice 2FA nell'app di autenticazione."),
         ("More", "Altro"),
+        ("enable-2fa-title", "Abilita autenticazione a due fattori"),
+        ("enable-2fa-desc", "Configura l'autenticatore.\nPuoi usare un'app di autenticazione come Authy, Microsoft o Google Authenticator sul telefono o desktop.\n\nPer abilitare l'autenticazione a due fattori scansiona il codice QR con l'app e inserisci il codice visualizzato dall'app."),
+        ("wrong-2fa-code", "Impossibile verificare il codice.\nVerifica che le impostazioni del codice e dell'ora locale siano corrette"),
+        ("enter-2fa-title", "Autenticazione a due fattori"),
+        ("Email verification code must be 6 characters.", "Il codice di verifica email deve contenere 6 caratteri."),
+        ("2FA code must be 6 digits.", "Il codice 2FA deve essere composto da 6 cifre."),
     ].iter().cloned().collect();
 }

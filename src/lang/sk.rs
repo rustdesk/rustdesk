@@ -579,7 +579,12 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Swap control-command key", "Vymeniť kláves ovládania a príkazu"),
         ("swap-left-right-mouse", "Prehodiť ľavé a pravé tlačidlo myši"),
         ("2FA code", "2FA kód"),
-        ("2fa_tip", "Zadajte svoj kód 2FA do aplikácie na overovanie."),
         ("More", "Viac"),
+        ("enable-2fa-title", "Povoliť dvojfaktorové overenie"),
+        ("enable-2fa-desc", "Prosím, nastavte si svoj autentifikátor. Na svojom telefóne alebo počítači môžete použiť autentifikačnú aplikáciu, ako je Authy, Microsoft alebo Google Authenticator.\n\nNaskenujte QR kód pomocou svojej aplikácie a zadajte kód, ktorý aplikácia zobrazí, aby ste povolili dvojfaktorové overenie."),
+        ("wrong-2fa-code", "Kód sa nepodarilo overiť. Skontrolujte, či sú nastavenia kódu a miestneho času správne"),
+        ("enter-2fa-title", "Dvojfaktorové overenie"),
+        ("Email verification code must be 6 characters.", "Overovací kód e-mailu musí mať 6 znakov."),
+        ("2FA code must be 6 digits.", "Kód 2FA musí obsahovať 6 číslic."),
     ].iter().cloned().collect();
 }
