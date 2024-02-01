@@ -1573,12 +1573,6 @@ impl Connection {
 
     async fn on_message(&mut self, msg: Message) -> bool {
         if let Some(message::Union::LoginRequest(lr)) = msg.union {
-            #[cfg(target_os = "windows")]
-            if crate::platform::is_installed() && crate::platform::is_share_rdp() {
-                if !self.handle_multiple_user_sessions(lr.clone()).await {
-                    return false;
-                }
-            }
             self.handle_login_request_without_validation(&lr).await;
             if self.authorized {
                 return true;
@@ -1817,6 +1811,15 @@ impl Connection {
                 }
             }
         } else if self.authorized {
+            #[cfg(target_os = "windows")]
+            if crate::platform::is_installed()
+                && crate::platform::is_share_rdp()
+                && !*CONN_COUNT.lock().unwrap() > 1
+            {
+                if !self.handle_multiple_user_sessions(self.lr.clone()).await {
+                    return false;
+                }
+            }
             match msg.union {
                 Some(message::Union::MouseEvent(me)) => {
                     #[cfg(any(target_os = "android", target_os = "ios"))]
