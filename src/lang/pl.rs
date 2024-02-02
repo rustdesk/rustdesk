@@ -580,7 +580,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("swap-left-right-mouse", "Zamień przyciski myszki (lewy - prawy)"),
         ("2FA code", "Kod 2FA"),
         ("More", "Więcej"),
-
         ("enable-2fa-title", "Włącz autoryzację dwuskładnikową (2FA)"),
         ("enable-2fa-desc", "Skonfiguruj teraz swój moduł uwierzytelniający. Na telefonie lub komputerze możesz używać aplikacji autoryzującej, takiej jak Authy, Microsoft lub Google Authenticator.\n\nZeskanuj kod QR za pomocą aplikacji i wprowadź kod wyświetlany przez aplikację, aby włączyć uwierzytelnianie dwuskładnikowe."),
         ("wrong-2fa-code", "Nie można zweryfikować kodu. Sprawdź, czy kod oraz ustawienia lokalnego czasu są prawidłowe."),
