@@ -709,6 +709,10 @@ message PluginFailure {
   string msg = 3;
 }
 
+message RdpUserSessions {
+  repeated RdpUserSession rdp_user_sessions = 1;
+}
+
 message Misc {
   oneof union {
     ChatMessage chat_message = 4;
@@ -740,8 +744,8 @@ message Misc {
     ToggleVirtualDisplay toggle_virtual_display = 32;
     TogglePrivacyMode toggle_privacy_mode = 33;
     SupportedEncoding supported_encoding = 34;
+    RdpUserSessions rdp_user_sessions = 35;
   }
-  repeated RdpUserSession rdp_user_sessions = 35;
 }
 
 message VoiceCallRequest {

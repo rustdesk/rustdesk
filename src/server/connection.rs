@@ -1521,7 +1521,10 @@ impl Connection {
                     rdp_session.user_name = u_name.clone();
                     rdp.push(rdp_session);
                 }
-                res.rdp_user_sessions = rdp;
+                res.set_rdp_user_sessions(RdpUserSessions {
+                    rdp_user_sessions: rdp,
+                    ..Default::default()
+                });
                 let mut msg_out = Message::new();
                 msg_out.set_misc(res);
                 self.send(msg_out).await;
