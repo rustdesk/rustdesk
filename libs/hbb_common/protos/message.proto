@@ -134,7 +134,6 @@ message LoginResponse {
     string error = 1;
     PeerInfo peer_info = 2;
   }
-  repeated RdpUserSession rdp_user_sessions = 3;  
 }
 
 message TouchScaleUpdate {
@@ -742,6 +741,7 @@ message Misc {
     TogglePrivacyMode toggle_privacy_mode = 33;
     SupportedEncoding supported_encoding = 34;
   }
+  repeated RdpUserSession rdp_user_sessions = 35;
 }
 
 message VoiceCallRequest {

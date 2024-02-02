@@ -1511,7 +1511,7 @@ impl Connection {
             }
             let current_process_usid = crate::platform::get_current_process_session_id();
             if usid.is_none() {
-                let mut res = LoginResponse::new();
+                let mut res = Misc::new();
                 let mut rdp = Vec::new();
                 for session in active_sessions {
                     let u_sid = &session[0];
@@ -1523,9 +1523,9 @@ impl Connection {
                 }
                 res.rdp_user_sessions = rdp;
                 let mut msg_out = Message::new();
-                msg_out.set_login_response(res);
+                msg_out.set_misc(res);
                 self.send(msg_out).await;
-                return false;
+                return true;
             }
             if usid != self.user_session_id && usid != Some(current_process_usid) {
                 self.on_close("Reconnecting...", false).await;

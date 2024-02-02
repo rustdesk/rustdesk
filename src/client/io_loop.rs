@@ -1087,69 +1087,58 @@ impl<T: InvokeUiSession> Remote<T> {
                         .handle_hash(&self.handler.password.clone(), hash, peer)
                         .await;
                 }
-                Some(message::Union::LoginResponse(lr)) => {
-                    if lr.rdp_user_sessions.len() > 1 {
-                        self.handler.set_multiple_user_session(lr.rdp_user_sessions);
-                        return false;
-                    } else {
-                        match lr.union {
-                            Some(login_response::Union::Error(err)) => {
-                                if !self.handler.handle_login_error(&err) {
-                                    return false;
-                                }
-                            }
-                            Some(login_response::Union::PeerInfo(pi)) => {
-                                self.handler.handle_peer_info(pi);
-                                self.check_clipboard_file_context();
-                                if !(self.handler.is_file_transfer()
-                                    || self.handler.is_port_forward())
-                                {
-                                    #[cfg(feature = "flutter")]
-                                    #[cfg(not(any(target_os = "android", target_os = "ios")))]
-                                    Client::try_start_clipboard(None);
-                                    #[cfg(not(feature = "flutter"))]
-                                    #[cfg(not(any(target_os = "android", target_os = "ios")))]
-                                    Client::try_start_clipboard(Some(
-                                        crate::client::ClientClipboardContext {
-                                            cfg: self.handler.get_permission_config(),
-                                            tx: self.sender.clone(),
-                                        },
-                                    ));
-
-                                    #[cfg(not(any(target_os = "android", target_os = "ios")))]
-                                    if let Some(msg_out) = Client::get_current_text_clipboard_msg()
-                                    {
-                                        let sender = self.sender.clone();
-                                        let permission_config =
-                                            self.handler.get_permission_config();
-                                        tokio::spawn(async move {
-                                            // due to clipboard service interval time
-                                            sleep(common::CLIPBOARD_INTERVAL as f32 / 1_000.).await;
-                                            if permission_config.is_text_clipboard_required() {
-                                                sender.send(Data::Message(msg_out)).ok();
-                                            }
-                                        });
-                                    }
-
-                                    // on connection established client
-                                    #[cfg(all(feature = "flutter", feature = "plugin_framework"))]
-                                    #[cfg(not(any(target_os = "android", target_os = "ios")))]
-                                    crate::plugin::handle_listen_event(
-                                        crate::plugin::EVENT_ON_CONN_CLIENT.to_owned(),
-                                        self.handler.get_id(),
-                                    )
-                                }
-
-                                if self.handler.is_file_transfer() {
-                                    self.handler.load_last_jobs();
-                                }
-
-                                self.is_connected = true;
-                            }
-                            _ => {}
+                Some(message::Union::LoginResponse(lr)) => match lr.union {
+                    Some(login_response::Union::Error(err)) => {
+                        if !self.handler.handle_login_error(&err) {
+                            return false;
                         }
                     }
-                }
+                    Some(login_response::Union::PeerInfo(pi)) => {
+                        self.handler.handle_peer_info(pi);
+                        self.check_clipboard_file_context();
+                        if !(self.handler.is_file_transfer() || self.handler.is_port_forward()) {
+                            #[cfg(feature = "flutter")]
+                            #[cfg(not(any(target_os = "android", target_os = "ios")))]
+                            Client::try_start_clipboard(None);
+                            #[cfg(not(feature = "flutter"))]
+                            #[cfg(not(any(target_os = "android", target_os = "ios")))]
+                            Client::try_start_clipboard(Some(
+                                crate::client::ClientClipboardContext {
+                                    cfg: self.handler.get_permission_config(),
+                                    tx: self.sender.clone(),
+                                },
+                            ));
+
+                            #[cfg(not(any(target_os = "android", target_os = "ios")))]
+                            if let Some(msg_out) = Client::get_current_text_clipboard_msg() {
+                                let sender = self.sender.clone();
+                                let permission_config = self.handler.get_permission_config();
+                                tokio::spawn(async move {
+                                    // due to clipboard service interval time
+                                    sleep(common::CLIPBOARD_INTERVAL as f32 / 1_000.).await;
+                                    if permission_config.is_text_clipboard_required() {
+                                        sender.send(Data::Message(msg_out)).ok();
+                                    }
+                                });
+                            }
+
+                            // on connection established client
+                            #[cfg(all(feature = "flutter", feature = "plugin_framework"))]
+                            #[cfg(not(any(target_os = "android", target_os = "ios")))]
+                            crate::plugin::handle_listen_event(
+                                crate::plugin::EVENT_ON_CONN_CLIENT.to_owned(),
+                                self.handler.get_id(),
+                            )
+                        }
+
+                        if self.handler.is_file_transfer() {
+                            self.handler.load_last_jobs();
+                        }
+
+                        self.is_connected = true;
+                    }
+                    _ => {}
+                },
                 Some(message::Union::CursorData(cd)) => {
                     self.handler.set_cursor_data(cd);
                 }
@@ -1324,195 +1313,206 @@ impl<T: InvokeUiSession> Remote<T> {
                         _ => {}
                     }
                 }
-                Some(message::Union::Misc(misc)) => match misc.union {
-                    Some(misc::Union::AudioFormat(f)) => {
-                        self.audio_sender.send(MediaData::AudioFormat(f)).ok();
-                    }
-                    Some(misc::Union::ChatMessage(c)) => {
-                        self.handler.new_message(c.text);
-                    }
-                    Some(misc::Union::PermissionInfo(p)) => {
-                        log::info!("Change permission {:?} -> {}", p.permission, p.enabled);
-                        // https://github.com/rustdesk/rustdesk/issues/3703#issuecomment-1474734754
-                        match p.permission.enum_value() {
-                            Ok(Permission::Keyboard) => {
-                                #[cfg(feature = "flutter")]
-                                #[cfg(not(any(target_os = "android", target_os = "ios")))]
-                                crate::flutter::update_text_clipboard_required();
-                                *self.handler.server_keyboard_enabled.write().unwrap() = p.enabled;
-                                self.handler.set_permission("keyboard", p.enabled);
-                            }
-                            Ok(Permission::Clipboard) => {
-                                #[cfg(feature = "flutter")]
-                                #[cfg(not(any(target_os = "android", target_os = "ios")))]
-                                crate::flutter::update_text_clipboard_required();
-                                *self.handler.server_clipboard_enabled.write().unwrap() = p.enabled;
-                                self.handler.set_permission("clipboard", p.enabled);
-                            }
-                            Ok(Permission::Audio) => {
-                                self.handler.set_permission("audio", p.enabled);
-                            }
-                            Ok(Permission::File) => {
-                                *self.handler.server_file_transfer_enabled.write().unwrap() =
-                                    p.enabled;
-                                if !p.enabled && self.handler.is_file_transfer() {
-                                    return true;
-                                }
-                                self.handler.set_permission("file", p.enabled);
-                            }
-                            Ok(Permission::Restart) => {
-                                self.handler.set_permission("restart", p.enabled);
-                            }
-                            Ok(Permission::Recording) => {
-                                self.handler.set_permission("recording", p.enabled);
-                            }
-                            Ok(Permission::BlockInput) => {
-                                self.handler.set_permission("block_input", p.enabled);
-                            }
-                            _ => {}
-                        }
-                    }
-                    Some(misc::Union::SwitchDisplay(s)) => {
-                        self.handler.handle_peer_switch_display(&s);
-                        self.video_sender
-                            .send(MediaData::Reset(s.display as _))
-                            .ok();
-                        if s.width > 0 && s.height > 0 {
-                            self.handler.set_display(
-                                s.x,
-                                s.y,
-                                s.width,
-                                s.height,
-                                s.cursor_embedded,
-                            );
-                        }
-                    }
-                    Some(misc::Union::CloseReason(c)) => {
-                        self.handler.msgbox("error", "Connection Error", &c, "");
+                Some(message::Union::Misc(misc)) => {
+                    if misc.rdp_user_sessions.len() > 1 {
+                        self.handler
+                            .set_multiple_user_session(misc.rdp_user_sessions);
                         return false;
                     }
-                    Some(misc::Union::BackNotification(notification)) => {
-                        if !self.handle_back_notification(notification).await {
+                    match misc.union {
+                        Some(misc::Union::AudioFormat(f)) => {
+                            self.audio_sender.send(MediaData::AudioFormat(f)).ok();
+                        }
+                        Some(misc::Union::ChatMessage(c)) => {
+                            self.handler.new_message(c.text);
+                        }
+                        Some(misc::Union::PermissionInfo(p)) => {
+                            log::info!("Change permission {:?} -> {}", p.permission, p.enabled);
+                            // https://github.com/rustdesk/rustdesk/issues/3703#issuecomment-1474734754
+                            match p.permission.enum_value() {
+                                Ok(Permission::Keyboard) => {
+                                    #[cfg(feature = "flutter")]
+                                    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+                                    crate::flutter::update_text_clipboard_required();
+                                    *self.handler.server_keyboard_enabled.write().unwrap() =
+                                        p.enabled;
+                                    self.handler.set_permission("keyboard", p.enabled);
+                                }
+                                Ok(Permission::Clipboard) => {
+                                    #[cfg(feature = "flutter")]
+                                    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+                                    crate::flutter::update_text_clipboard_required();
+                                    *self.handler.server_clipboard_enabled.write().unwrap() =
+                                        p.enabled;
+                                    self.handler.set_permission("clipboard", p.enabled);
+                                }
+                                Ok(Permission::Audio) => {
+                                    self.handler.set_permission("audio", p.enabled);
+                                }
+                                Ok(Permission::File) => {
+                                    *self.handler.server_file_transfer_enabled.write().unwrap() =
+                                        p.enabled;
+                                    if !p.enabled && self.handler.is_file_transfer() {
+                                        return true;
+                                    }
+                                    self.handler.set_permission("file", p.enabled);
+                                }
+                                Ok(Permission::Restart) => {
+                                    self.handler.set_permission("restart", p.enabled);
+                                }
+                                Ok(Permission::Recording) => {
+                                    self.handler.set_permission("recording", p.enabled);
+                                }
+                                Ok(Permission::BlockInput) => {
+                                    self.handler.set_permission("block_input", p.enabled);
+                                }
+                                _ => {}
+                            }
+                        }
+                        Some(misc::Union::SwitchDisplay(s)) => {
+                            self.handler.handle_peer_switch_display(&s);
+                            self.video_sender
+                                .send(MediaData::Reset(s.display as _))
+                                .ok();
+                            if s.width > 0 && s.height > 0 {
+                                self.handler.set_display(
+                                    s.x,
+                                    s.y,
+                                    s.width,
+                                    s.height,
+                                    s.cursor_embedded,
+                                );
+                            }
+                        }
+                        Some(misc::Union::CloseReason(c)) => {
+                            self.handler.msgbox("error", "Connection Error", &c, "");
                             return false;
                         }
-                    }
-                    Some(misc::Union::Uac(uac)) => {
-                        let keyboard = self.handler.server_keyboard_enabled.read().unwrap().clone();
-                        #[cfg(feature = "flutter")]
-                        {
-                            if uac && keyboard {
+                        Some(misc::Union::BackNotification(notification)) => {
+                            if !self.handle_back_notification(notification).await {
+                                return false;
+                            }
+                        }
+                        Some(misc::Union::Uac(uac)) => {
+                            let keyboard =
+                                self.handler.server_keyboard_enabled.read().unwrap().clone();
+                            #[cfg(feature = "flutter")]
+                            {
+                                if uac && keyboard {
+                                    self.handler.msgbox(
+                                        "on-uac",
+                                        "Prompt",
+                                        "Please wait for confirmation of UAC...",
+                                        "",
+                                    );
+                                } else {
+                                    self.handler.cancel_msgbox("on-uac");
+                                    self.handler.cancel_msgbox("wait-uac");
+                                    self.handler.cancel_msgbox("elevation-error");
+                                }
+                            }
+                            #[cfg(not(feature = "flutter"))]
+                            {
+                                let msgtype = "custom-uac-nocancel";
+                                let title = "Prompt";
+                                let text = "Please wait for confirmation of UAC...";
+                                let link = "";
+                                if uac && keyboard {
+                                    self.handler.msgbox(msgtype, title, text, link);
+                                } else {
+                                    self.handler.cancel_msgbox(&format!(
+                                        "{}-{}-{}-{}",
+                                        msgtype, title, text, link,
+                                    ));
+                                }
+                            }
+                        }
+                        Some(misc::Union::ForegroundWindowElevated(elevated)) => {
+                            let keyboard =
+                                self.handler.server_keyboard_enabled.read().unwrap().clone();
+                            #[cfg(feature = "flutter")]
+                            {
+                                if elevated && keyboard {
+                                    self.handler.msgbox(
+                                        "on-foreground-elevated",
+                                        "Prompt",
+                                        "elevated_foreground_window_tip",
+                                        "",
+                                    );
+                                } else {
+                                    self.handler.cancel_msgbox("on-foreground-elevated");
+                                    self.handler.cancel_msgbox("wait-uac");
+                                    self.handler.cancel_msgbox("elevation-error");
+                                }
+                            }
+                            #[cfg(not(feature = "flutter"))]
+                            {
+                                let msgtype = "custom-elevated-foreground-nocancel";
+                                let title = "Prompt";
+                                let text = "elevated_foreground_window_tip";
+                                let link = "";
+                                if elevated && keyboard {
+                                    self.handler.msgbox(msgtype, title, text, link);
+                                } else {
+                                    self.handler.cancel_msgbox(&format!(
+                                        "{}-{}-{}-{}",
+                                        msgtype, title, text, link,
+                                    ));
+                                }
+                            }
+                        }
+                        Some(misc::Union::ElevationResponse(err)) => {
+                            if err.is_empty() {
+                                self.handler.msgbox("wait-uac", "", "", "");
+                            } else {
+                                self.handler.cancel_msgbox("wait-uac");
+                                self.handler
+                                    .msgbox("elevation-error", "Elevation Error", &err, "");
+                            }
+                        }
+                        Some(misc::Union::PortableServiceRunning(b)) => {
+                            self.handler.portable_service_running(b);
+                            if self.elevation_requested && b {
                                 self.handler.msgbox(
-                                    "on-uac",
-                                    "Prompt",
-                                    "Please wait for confirmation of UAC...",
+                                    "custom-nocancel-success",
+                                    "Successful",
+                                    "Elevate successfully",
                                     "",
                                 );
-                            } else {
-                                self.handler.cancel_msgbox("on-uac");
-                                self.handler.cancel_msgbox("wait-uac");
-                                self.handler.cancel_msgbox("elevation-error");
                             }
                         }
-                        #[cfg(not(feature = "flutter"))]
-                        {
-                            let msgtype = "custom-uac-nocancel";
-                            let title = "Prompt";
-                            let text = "Please wait for confirmation of UAC...";
-                            let link = "";
-                            if uac && keyboard {
-                                self.handler.msgbox(msgtype, title, text, link);
+                        Some(misc::Union::SwitchBack(_)) => {
+                            #[cfg(feature = "flutter")]
+                            self.handler.switch_back(&self.handler.get_id());
+                        }
+                        #[cfg(all(feature = "flutter", feature = "plugin_framework"))]
+                        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+                        Some(misc::Union::PluginRequest(p)) => {
+                            allow_err!(crate::plugin::handle_server_event(
+                                &p.id,
+                                &self.handler.get_id(),
+                                &p.content
+                            ));
+                            // to-do: show message box on UI when error occurs?
+                        }
+                        #[cfg(all(feature = "flutter", feature = "plugin_framework"))]
+                        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+                        Some(misc::Union::PluginFailure(p)) => {
+                            let name = if p.name.is_empty() {
+                                "plugin".to_string()
                             } else {
-                                self.handler.cancel_msgbox(&format!(
-                                    "{}-{}-{}-{}",
-                                    msgtype, title, text, link,
-                                ));
-                            }
+                                p.name
+                            };
+                            self.handler.msgbox("custom-nocancel", &name, &p.msg, "");
                         }
-                    }
-                    Some(misc::Union::ForegroundWindowElevated(elevated)) => {
-                        let keyboard = self.handler.server_keyboard_enabled.read().unwrap().clone();
-                        #[cfg(feature = "flutter")]
-                        {
-                            if elevated && keyboard {
-                                self.handler.msgbox(
-                                    "on-foreground-elevated",
-                                    "Prompt",
-                                    "elevated_foreground_window_tip",
-                                    "",
-                                );
-                            } else {
-                                self.handler.cancel_msgbox("on-foreground-elevated");
-                                self.handler.cancel_msgbox("wait-uac");
-                                self.handler.cancel_msgbox("elevation-error");
-                            }
+                        Some(misc::Union::SupportedEncoding(e)) => {
+                            log::info!("update supported encoding:{:?}", e);
+                            self.handler.lc.write().unwrap().supported_encoding = e;
                         }
-                        #[cfg(not(feature = "flutter"))]
-                        {
-                            let msgtype = "custom-elevated-foreground-nocancel";
-                            let title = "Prompt";
-                            let text = "elevated_foreground_window_tip";
-                            let link = "";
-                            if elevated && keyboard {
-                                self.handler.msgbox(msgtype, title, text, link);
-                            } else {
-                                self.handler.cancel_msgbox(&format!(
-                                    "{}-{}-{}-{}",
-                                    msgtype, title, text, link,
-                                ));
-                            }
-                        }
-                    }
-                    Some(misc::Union::ElevationResponse(err)) => {
-                        if err.is_empty() {
-                            self.handler.msgbox("wait-uac", "", "", "");
-                        } else {
-                            self.handler.cancel_msgbox("wait-uac");
-                            self.handler
-                                .msgbox("elevation-error", "Elevation Error", &err, "");
-                        }
-                    }
-                    Some(misc::Union::PortableServiceRunning(b)) => {
-                        self.handler.portable_service_running(b);
-                        if self.elevation_requested && b {
-                            self.handler.msgbox(
-                                "custom-nocancel-success",
-                                "Successful",
-                                "Elevate successfully",
-                                "",
-                            );
-                        }
-                    }
-                    Some(misc::Union::SwitchBack(_)) => {
-                        #[cfg(feature = "flutter")]
-                        self.handler.switch_back(&self.handler.get_id());
-                    }
-                    #[cfg(all(feature = "flutter", feature = "plugin_framework"))]
-                    #[cfg(not(any(target_os = "android", target_os = "ios")))]
-                    Some(misc::Union::PluginRequest(p)) => {
-                        allow_err!(crate::plugin::handle_server_event(
-                            &p.id,
-                            &self.handler.get_id(),
-                            &p.content
-                        ));
-                        // to-do: show message box on UI when error occurs?
-                    }
-                    #[cfg(all(feature = "flutter", feature = "plugin_framework"))]
-                    #[cfg(not(any(target_os = "android", target_os = "ios")))]
-                    Some(misc::Union::PluginFailure(p)) => {
-                        let name = if p.name.is_empty() {
-                            "plugin".to_string()
-                        } else {
-                            p.name
-                        };
-                        self.handler.msgbox("custom-nocancel", &name, &p.msg, "");
-                    }
-                    Some(misc::Union::SupportedEncoding(e)) => {
-                        log::info!("update supported encoding:{:?}", e);
-                        self.handler.lc.write().unwrap().supported_encoding = e;
-                    }
 
-                    _ => {}
-                },
+                        _ => {}
+                    }
+                }
                 Some(message::Union::TestDelay(t)) => {
                     self.handler.handle_test_delay(t, peer).await;
                 }
