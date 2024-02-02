@@ -1496,18 +1496,13 @@ impl Connection {
     }
 
     #[cfg(target_os = "windows")]
-    async fn handle_multiple_user_sessions(&mut self, lr: LoginRequest) -> bool {
-        if let Some(login_request::Union::PortForward(_)) = lr.union {
+    async fn handle_multiple_user_sessions(&mut self, usid: Option<u32>) -> bool {
+        if self.port_forward_socket.is_some() {
             return true;
         } else {
             let active_sessions = crate::platform::get_all_active_sessions();
             if active_sessions.len() <= 1 {
                 return true;
-            }
-            let usid;
-            match lr.option.user_session.parse::<u32>() {
-                Ok(n) => usid = Some(n),
-                Err(..) => usid = None,
             }
             let current_process_usid = crate::platform::get_current_process_session_id();
             if usid.is_none() {
@@ -1530,15 +1525,12 @@ impl Connection {
                 self.send(msg_out).await;
                 return true;
             }
-            if usid != self.user_session_id && usid != Some(current_process_usid) {
+            if usid != Some(current_process_usid) {
                 self.on_close("Reconnecting...", false).await;
                 std::thread::spawn(move || {
                     let _ = ipc::connect_to_user_session(usid);
                 });
                 return false;
-            } else if usid.is_some() {
-                self.user_session_id = usid.clone();
-                return true;
             }
             true
         }
@@ -1578,6 +1570,19 @@ impl Connection {
 
     async fn on_message(&mut self, msg: Message) -> bool {
         if let Some(message::Union::LoginRequest(lr)) = msg.union {
+            #[cfg(target_os = "windows")]
+            {
+                if !self.checked_multiple_session {
+                    let usid;
+                    match lr.option.user_session.parse::<u32>() {
+                        Ok(n) => usid = Some(n),
+                        Err(..) => usid = None,
+                    }
+                    if usid.is_some() {
+                        self.user_session_id = usid;
+                    }
+                }
+            }
             self.handle_login_request_without_validation(&lr).await;
             if self.authorized {
                 return true;
@@ -1824,7 +1829,10 @@ impl Connection {
                     && !*CONN_COUNT.lock().unwrap() > 1
                     && get_version_number(&self.lr.version) >= get_version_number("1.2.4")
                 {
-                    if !self.handle_multiple_user_sessions(self.lr.clone()).await {
+                    if !self
+                        .handle_multiple_user_sessions(self.user_session_id)
+                        .await
+                    {
                         return false;
                     }
                 }
