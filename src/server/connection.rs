@@ -1573,14 +1573,7 @@ impl Connection {
             #[cfg(target_os = "windows")]
             {
                 if !self.checked_multiple_session {
-                    let usid;
-                    match lr.option.user_session.parse::<u32>() {
-                        Ok(n) => usid = Some(n),
-                        Err(..) => usid = None,
-                    }
-                    if usid.is_some() {
-                        self.user_session_id = usid;
-                    }
+                    self.user_session_id = Some(crate::platform::get_current_process_session_id());
                 }
             }
             self.handle_login_request_without_validation(&lr).await;
@@ -1829,10 +1822,12 @@ impl Connection {
                     && !*CONN_COUNT.lock().unwrap() > 1
                     && get_version_number(&self.lr.version) >= get_version_number("1.2.4")
                 {
-                    if !self
-                        .handle_multiple_user_sessions(self.user_session_id)
-                        .await
-                    {
+                    let usid;
+                    match self.lr.option.user_session.parse::<u32>() {
+                        Ok(n) => usid = Some(n),
+                        Err(..) => usid = None,
+                    }
+                    if !self.handle_multiple_user_sessions(usid).await {
                         return false;
                     }
                 }
