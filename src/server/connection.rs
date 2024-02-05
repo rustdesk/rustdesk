@@ -1827,6 +1827,7 @@ impl Connection {
                         Ok(n) => usid = Some(n),
                         Err(..) => usid = None,
                     }
+                    self.user_session_id = usid;
                     if !self.handle_multiple_user_sessions(usid).await {
                         return false;
                     }
