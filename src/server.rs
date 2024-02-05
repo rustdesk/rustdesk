@@ -39,6 +39,8 @@ pub(crate) mod wayland;
 #[cfg(target_os = "linux")]
 pub mod uinput;
 #[cfg(target_os = "linux")]
+pub mod rdp_input;
+#[cfg(target_os = "linux")]
 pub mod dbus;
 pub mod input_service;
 } else {
@@ -430,7 +432,9 @@ pub async fn start_server(is_server: bool) {
         log::info!("XAUTHORITY={:?}", std::env::var("XAUTHORITY"));
     }
     #[cfg(feature = "hwcodec")]
-    scrap::hwcodec::check_config_process();
+    scrap::hwcodec::hwcodec_new_check_process();
+    #[cfg(feature = "gpucodec")]
+    scrap::gpucodec::gpucodec_new_check_process();
     #[cfg(windows)]
     hbb_common::platform::windows::start_cpu_performance_monitor();
 

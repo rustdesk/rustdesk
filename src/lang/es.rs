@@ -578,5 +578,13 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("capture_display_elevated_connections_tip", "La captura de múltiples pantallas en el modo de usaurio con privilegios elevados no está soportada. Por favor, inténtalo de nuevo tras la instalación si quieres controlar múltiples pantallas."),
         ("Swap control-command key", "Intercambiar teclas control-comando"),
         ("swap-left-right-mouse", "Intercambiar botones derecho-izquierdo del ratón"),
+        ("2FA code", ""),
+        ("More", ""),
+        ("enable-2fa-title", ""),
+        ("enable-2fa-desc", ""),
+        ("wrong-2fa-code", ""),
+        ("enter-2fa-title", ""),
+        ("Email verification code must be 6 characters.", ""),
+        ("2FA code must be 6 digits.", ""),
     ].iter().cloned().collect();
 }

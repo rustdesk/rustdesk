@@ -576,7 +576,15 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("input_source_1_tip", "Wejście źródła 1"),
         ("input_source_2_tip", "Wejście źródła 2"),
         ("capture_display_elevated_connections_tip", "Przechwytywanie wielu ekranów nie jest obsługiwane w trybie użytkownika z podwyższonym poziomem uprawnień. Jeśli chcesz sterować wieloma wyświetlaczami, spróbuj ponownie po instalacji."),
-        ("Swap control-command key", ""),
-        ("swap-left-right-mouse", ""),
+        ("Swap control-command key", "Zamiana przycisków sterujących myszki"),
+        ("swap-left-right-mouse", "Zamień przyciski myszki (lewy - prawy)"),
+        ("2FA code", "Kod 2FA"),
+        ("More", "Więcej"),
+        ("enable-2fa-title", "Włącz autoryzację dwuskładnikową (2FA)"),
+        ("enable-2fa-desc", "Skonfiguruj teraz swój moduł uwierzytelniający. Na telefonie lub komputerze możesz używać aplikacji autoryzującej, takiej jak Authy, Microsoft lub Google Authenticator.\n\nZeskanuj kod QR za pomocą aplikacji i wprowadź kod wyświetlany przez aplikację, aby włączyć uwierzytelnianie dwuskładnikowe."),
+        ("wrong-2fa-code", "Nie można zweryfikować kodu. Sprawdź, czy kod oraz ustawienia lokalnego czasu są prawidłowe."),
+        ("enter-2fa-title", "Autoryzacja dwuskładnikowa"),
+        ("Email verification code must be 6 characters.", "Kod weryfikacyjny wysłany e-mailem musi mieć 6 znaków."),
+        ("2FA code must be 6 digits.", "Kod 2FA musi zawierać 6 cyfr."),
     ].iter().cloned().collect();
 }

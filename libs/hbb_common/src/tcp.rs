@@ -330,6 +330,9 @@ impl Encrypt {
     }
 
     pub fn dec(&mut self, bytes: &mut BytesMut) -> Result<(), Error> {
+        if bytes.len() <= 1 {
+            return Ok(());
+        }
         self.2 += 1;
         let nonce = FramedStream::get_nonce(self.2);
         match secretbox::open(bytes, &nonce, &self.0) {

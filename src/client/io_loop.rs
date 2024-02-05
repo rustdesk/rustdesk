@@ -321,10 +321,15 @@ impl<T: InvokeUiSession> Remote<T> {
                         *self.handler.server_file_transfer_enabled.read().unwrap();
                     let file_transfer_enabled =
                         self.handler.lc.read().unwrap().enable_file_transfer.v;
+                    let view_only = self.handler.lc.read().unwrap().view_only.v;
                     let stop = is_stopping_allowed
-                        && (!self.is_connected
+                        && (view_only
+                            || !self.is_connected
                             || !(server_file_transfer_enabled && file_transfer_enabled));
-                    log::debug!("Process clipboard message from system, stop: {}, is_stopping_allowed: {}, server_file_transfer_enabled: {}, file_transfer_enabled: {}", stop, is_stopping_allowed, server_file_transfer_enabled, file_transfer_enabled);
+                    log::debug!(
+                        "Process clipboard message from system, stop: {}, is_stopping_allowed: {}, view_only: {}, server_file_transfer_enabled: {}, file_transfer_enabled: {}",
+                        view_only, stop, is_stopping_allowed, server_file_transfer_enabled, file_transfer_enabled
+                    );
                     if stop {
                         ContextSend::set_is_stopped();
                     } else {
@@ -1490,6 +1495,11 @@ impl<T: InvokeUiSession> Remote<T> {
                         };
                         self.handler.msgbox("custom-nocancel", &name, &p.msg, "");
                     }
+                    Some(misc::Union::SupportedEncoding(e)) => {
+                        log::info!("update supported encoding:{:?}", e);
+                        self.handler.lc.write().unwrap().supported_encoding = e;
+                    }
+
                     _ => {}
                 },
                 Some(message::Union::TestDelay(t)) => {

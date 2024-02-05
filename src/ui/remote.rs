@@ -417,6 +417,7 @@ impl sciter::EventHandler for SciterSession {
         fn is_port_forward();
         fn is_rdp();
         fn login(String, String, String, bool);
+        fn send2fa(String);
         fn new_rdp();
         fn send_mouse(i32, i32, i32, bool, bool, bool, bool);
         fn enter(String);
@@ -505,7 +506,7 @@ impl SciterSession {
             .lc
             .write()
             .unwrap()
-            .initialize(id, conn_type, None, force_relay);
+            .initialize(id, conn_type, None, force_relay, None);
 
         Self(session)
     }

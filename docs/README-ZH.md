@@ -18,7 +18,7 @@ Chat with us: [知乎](https://www.zhihu.com/people/rustdesk) | [Discord](https:
 
 ![image](https://user-images.githubusercontent.com/71636191/171661982-430285f0-2e12-4b1d-9957-4a58e375304d.png)
 
-RustDesk 期待各位的贡献. 如何参与开发? 详情请看 [CONTRIBUTING.md](docs/CONTRIBUTING.md).
+RustDesk 期待各位的贡献. 如何参与开发? 详情请看 [CONTRIBUTING.md](CONTRIBUTING.md).
 
 [**FAQ**](https://github.com/rustdesk/rustdesk/wiki/FAQ)
 

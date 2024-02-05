@@ -58,3 +58,6 @@ gstreamer-video = { version = "0.16", optional = true }
 
 [target.'cfg(any(target_os = "windows", target_os = "linux"))'.dependencies]
 hwcodec = { git = "https://github.com/21pages/hwcodec", branch = "stable", optional = true }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+gpucodec = { git = "https://github.com/21pages/gpucodec", optional = true }

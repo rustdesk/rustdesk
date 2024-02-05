@@ -24,7 +24,7 @@ fn get_display(i: usize) -> Display {
 fn record(i: usize) {
     use std::time::Duration;
 
-    use scrap::TraitFrame;
+    use scrap::{Frame, TraitPixelBuffer};
 
     for d in Display::all().unwrap() {
         println!("{:?} {} {}", d.origin(), d.width(), d.height());
@@ -44,8 +44,11 @@ fn record(i: usize) {
             println!("Filter window for cls {} name {}", wnd_cls, wnd_name);
         }
 
-        let captured_frame = capture_mag.frame(Duration::from_millis(0)).unwrap();
-        let frame = captured_frame.data();
+        let frame = capture_mag.frame(Duration::from_millis(0)).unwrap();
+        let Frame::PixelBuffer(frame) = frame else {
+            return;
+        };
+        let frame = frame.data();
         println!("Capture data len: {}, Saving...", frame.len());
 
         let mut bitflipped = Vec::with_capacity(w * h * 4);
@@ -81,6 +84,9 @@ fn record(i: usize) {
         }
 
         let frame = capture_mag.frame(Duration::from_millis(0)).unwrap();
+        let Frame::PixelBuffer(frame) = frame else {
+            return;
+        };
         println!("Capture data len: {}, Saving...", frame.data().len());
 
         let mut raw = Vec::new();

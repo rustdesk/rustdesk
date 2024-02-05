@@ -576,7 +576,15 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("input_source_1_tip", "Ievades avots 1"),
         ("input_source_2_tip", "Ievades avots 2"),
         ("capture_display_elevated_connections_tip", "Vairāku displeju uzņemšana netiek atbalstīta paaugstinātā lietotāja režīmā. Lūdzu, mēģiniet vēlreiz pēc instalēšanas, ja vēlaties kontrolēt vairākus displejus."),
-        ("Swap control-command key", ""),
-        ("swap-left-right-mouse", ""),
+        ("Swap control-command key", "Apmainīt vadības un komandas taustiņu"),
+        ("swap-left-right-mouse", "Apmainīt kreiso un labo peles pogu"),
+        ("2FA code", "2FA kods"),
+        ("More", "Vairāk"),
+        ("enable-2fa-title", "Iespējot divu faktoru autentifikāciju"),
+        ("enable-2fa-desc", "Lūdzu, iestatiet savu autentifikatoru tūlīt. Tālrunī vai darbvirsmā varat izmantot autentifikācijas lietotni, piemēram, Authy, Microsoft vai Google Authenticator.\n\nIzmantojot lietotni, skenējiet QR kodu un ievadiet lietotnē parādīto kodu, lai iespējotu divu faktoru autentifikāciju."),
+        ("wrong-2fa-code", "Nevar pārbaudīt kodu. Pārbaudiet, vai kods un vietējā laika iestatījumi ir pareizi"),
+        ("enter-2fa-title", "Divu faktoru autentifikācija"),
+        ("Email verification code must be 6 characters.", "E-pasta verifikācijas kodam jābūt ar 6 rakstzīmēm."),
+        ("2FA code must be 6 digits.", "2FA kodam ir jābūt ar 6 cipariem."),
     ].iter().cloned().collect();
 }

@@ -43,6 +43,7 @@ pub struct VideoQoS {
     quality: Quality,
     users: HashMap<i32, UserData>,
     bitrate_store: u32,
+    support_abr: HashMap<usize, bool>,
 }
 
 #[derive(PartialEq, Debug, Clone, Copy)]
@@ -80,6 +81,7 @@ impl Default for VideoQoS {
             quality: Default::default(),
             users: Default::default(),
             bitrate_store: 0,
+            support_abr: Default::default(),
         }
     }
 }
@@ -118,8 +120,8 @@ impl VideoQoS {
         self.users.iter().any(|u| u.1.record)
     }
 
-    pub fn abr_enabled() -> bool {
-        "N" != Config::get_option("enable-abr")
+    pub fn set_support_abr(&mut self, display_idx: usize, support: bool) {
+        self.support_abr.insert(display_idx, support);
     }
 
     pub fn refresh(&mut self, typ: Option<RefreshType>) {
@@ -176,7 +178,9 @@ impl VideoQoS {
         let mut quality = latest_quality;
 
         // network delay
-        if Self::abr_enabled() && typ != Some(RefreshType::SetImageQuality) {
+        let abr_enabled =
+            Config::get_option("enable-abr") != "N" && self.support_abr.iter().all(|e| *e.1);
+        if abr_enabled && typ != Some(RefreshType::SetImageQuality) {
             // max delay
             let delay = self
                 .users

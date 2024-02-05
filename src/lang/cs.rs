@@ -578,5 +578,13 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("capture_display_elevated_connections_tip", "Snímání více displejů není podporováno v uživatelském režimu se zvýšenými oprávněními. Pokud chcete ovládat více displejů, zkuste to znovu po instalaci."),
         ("Swap control-command key", "Prohození klávesy control-command"),
         ("swap-left-right-mouse", "Prohodit levé a pravé tlačítko myši"),
+        ("2FA code", "2FA kód"),
+        ("More", "Více"),
+        ("enable-2fa-title", "Povolit dvoufaktorové ověřování"),
+        ("enable-2fa-desc", "Prosím, nastavte si svůj autentizátor. Na svém telefonu nebo počítači můžete použít ověřovací aplikaci, jako je Authy, Microsoft nebo Google Authenticator.\n\nNaskenujte pomocí aplikace QR kód a zadejte kód, který aplikace zobrazí, abyste aktivovali dvoufaktorové ověření."),
+        ("wrong-2fa-code", "Kód nelze ověřit. Zkontrolujte správnost nastavení kódu a místního času"),
+        ("enter-2fa-title", "Dvoufaktorová autentizace"),
+        ("Email verification code must be 6 characters.", "E-mailový ověřovací kód musí mít 6 znaků."),
+        ("2FA code must be 6 digits.", "Kód 2FA musí mít 6 číslic."),
     ].iter().cloned().collect();
 }

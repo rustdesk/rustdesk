@@ -1,10 +1,10 @@
 use crate::{
-    codec::{base_bitrate, codec_thread_num, EncoderApi, EncoderCfg},
-    hw, ImageFormat, ImageRgb, Pixfmt, HW_STRIDE_ALIGN,
+    codec::{base_bitrate, codec_thread_num, EncoderApi, EncoderCfg, Quality as Q},
+    hw, CodecFormat, EncodeInput, ImageFormat, ImageRgb, Pixfmt, HW_STRIDE_ALIGN,
 };
 use hbb_common::{
     allow_err,
-    anyhow::{anyhow, Context},
+    anyhow::{anyhow, bail, Context},
     bytes::Bytes,
     config::HwCodecConfig,
     log,
@@ -29,8 +29,18 @@ const DEFAULT_GOP: i32 = i32::MAX;
 const DEFAULT_HW_QUALITY: Quality = Quality_Default;
 const DEFAULT_RC: RateControl = RC_DEFAULT;
 
+#[derive(Debug, Clone)]
+pub struct HwEncoderConfig {
+    pub name: String,
+    pub width: usize,
+    pub height: usize,
+    pub quality: Q,
+    pub keyframe_interval: Option<usize>,
+}
+
 pub struct HwEncoder {
     encoder: Encoder,
+    name: String,
     pub format: DataFormat,
     pub pixfmt: AVPixelFormat,
     width: u32,
@@ -77,23 +87,30 @@ impl EncoderApi for HwEncoder {
                 match Encoder::new(ctx.clone()) {
                     Ok(encoder) => Ok(HwEncoder {
                         encoder,
+                        name: config.name,
                         format,
                         pixfmt: ctx.pixfmt,
                         width: ctx.width as _,
                         height: ctx.height as _,
                         bitrate,
                     }),
-                    Err(_) => Err(anyhow!(format!("Failed to create encoder"))),
+                    Err(_) => {
+                        HwCodecConfig::clear();
+                        Err(anyhow!(format!("Failed to create encoder")))
+                    }
                 }
             }
             _ => Err(anyhow!("encoder type mismatch")),
         }
     }
 
-    fn encode_to_message(&mut self, frame: &[u8], _ms: i64) -> ResultType<VideoFrame> {
+    fn encode_to_message(&mut self, input: EncodeInput, _ms: i64) -> ResultType<VideoFrame> {
         let mut vf = VideoFrame::new();
         let mut frames = Vec::new();
-        for frame in self.encode(frame).with_context(|| "Failed to encode")? {
+        for frame in self
+            .encode(input.yuv()?)
+            .with_context(|| "Failed to encode")?
+        {
             frames.push(EncodedVideoFrame {
                 data: Bytes::from(frame.data),
                 pts: frame.pts as _,
@@ -143,6 +160,11 @@ impl EncoderApi for HwEncoder {
         }
     }
 
+    #[cfg(feature = "gpucodec")]
+    fn input_texture(&self) -> bool {
+        false
+    }
+
     fn set_quality(&mut self, quality: crate::codec::Quality) -> ResultType<()> {
         let b = Self::convert_quality(quality);
         let bitrate = base_bitrate(self.width as _, self.height as _) * b / 100;
@@ -155,6 +177,10 @@ impl EncoderApi for HwEncoder {
 
     fn bitrate(&self) -> u32 {
         self.bitrate
+    }
+
+    fn support_abr(&self) -> bool {
+        !self.name.contains("qsv")
     }
 }
 
@@ -207,31 +233,26 @@ impl HwDecoder {
         })
     }
 
-    pub fn new_decoders() -> HwDecoders {
+    pub fn new(format: CodecFormat) -> ResultType<Self> {
+        log::info!("try create {format:?} ram decoder");
         let best = HwDecoder::best();
-        let mut h264: Option<HwDecoder> = None;
-        let mut h265: Option<HwDecoder> = None;
-        let mut fail = false;
-
-        if let Some(info) = best.h264 {
-            h264 = HwDecoder::new(info).ok();
-            if h264.is_none() {
-                fail = true;
+        let info = match format {
+            CodecFormat::H264 => {
+                if let Some(info) = best.h264 {
+                    info
+                } else {
+                    bail!("no h264 decoder, should not be here");
+                }
             }
-        }
-        if let Some(info) = best.h265 {
-            h265 = HwDecoder::new(info).ok();
-            if h265.is_none() {
-                fail = true;
+            CodecFormat::H265 => {
+                if let Some(info) = best.h265 {
+                    info
+                } else {
+                    bail!("no h265 decoder, should not be here");
+                }
             }
-        }
-        if fail {
-            check_config_process();
-        }
-        HwDecoders { h264, h265 }
-    }
-
-    pub fn new(info: CodecInfo) -> ResultType<Self> {
+            _ => bail!("unsupported format: {:?}", format),
+        };
         let ctx = DecodeContext {
             name: info.name.clone(),
             device_type: info.hwdevice.clone(),
@@ -239,7 +260,10 @@ impl HwDecoder {
         };
         match Decoder::new(ctx) {
             Ok(decoder) => Ok(HwDecoder { decoder, info }),
-            Err(_) => Err(anyhow!(format!("Failed to create decoder"))),
+            Err(_) => {
+                HwCodecConfig::clear();
+                Err(anyhow!(format!("Failed to create decoder")))
+            }
         }
     }
     pub fn decode(&mut self, data: &[u8]) -> ResultType<Vec<HwDecoderImage>> {
@@ -320,7 +344,7 @@ fn get_config(k: &str) -> ResultType<CodecInfos> {
     }
 }
 
-pub fn check_config() {
+pub fn check_available_hwcodec() {
     let ctx = EncodeContext {
         name: String::from(""),
         width: 1920,
@@ -357,7 +381,7 @@ pub fn check_config() {
     log::error!("Failed to serialize codec info");
 }
 
-pub fn check_config_process() {
+pub fn hwcodec_new_check_process() {
     use std::sync::Once;
     let f = || {
         // Clear to avoid checking process errors
