@@ -237,6 +237,7 @@ pub struct Connection {
     file_remove_log_control: FileRemoveLogControl,
     #[cfg(feature = "gpucodec")]
     supported_encoding_flag: (bool, Option<bool>),
+    user_session_id: Option<u32>,
     checked_multiple_session: bool,
 }
 
@@ -385,6 +386,7 @@ impl Connection {
             file_remove_log_control: FileRemoveLogControl::new(id),
             #[cfg(feature = "gpucodec")]
             supported_encoding_flag: (false, None),
+            user_session_id: None,
             checked_multiple_session: false,
         };
         let addr = hbb_common::try_into_v4(addr);
@@ -1536,6 +1538,7 @@ impl Connection {
 
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     fn try_start_cm_ipc(&mut self) {
+        let usid = self.user_session_id;
         if let Some(p) = self.start_cm_ipc_para.take() {
             tokio::spawn(async move {
                 #[cfg(windows)]
@@ -1545,6 +1548,7 @@ impl Connection {
                     p.tx_from_cm,
                     p.rx_desktop_ready,
                     p.tx_cm_stream_ready,
+                    usid.clone(),
                 )
                 .await
                 {
@@ -1558,11 +1562,7 @@ impl Connection {
             #[cfg(all(windows, feature = "flutter"))]
             std::thread::spawn(move || {
                 if crate::is_server() && !crate::check_process("--tray", false) {
-                    crate::platform::run_as_user(
-                        vec!["--tray"],
-                        Some(crate::platform::get_current_process_session_id()),
-                    )
-                    .ok();
+                    crate::platform::run_as_user(vec!["--tray"], usid).ok();
                 }
             });
         }
@@ -1570,6 +1570,19 @@ impl Connection {
 
     async fn on_message(&mut self, msg: Message) -> bool {
         if let Some(message::Union::LoginRequest(lr)) = msg.union {
+            #[cfg(target_os = "windows")]
+            {
+                if !self.checked_multiple_session {
+                    let usid;
+                    match lr.option.user_session.parse::<u32>() {
+                        Ok(n) => usid = Some(n),
+                        Err(..) => usid = None,
+                    }
+                    if usid.is_some() {
+                        self.user_session_id = usid;
+                    }
+                }
+            }
             self.handle_login_request_without_validation(&lr).await;
             if self.authorized {
                 return true;
@@ -1816,12 +1829,10 @@ impl Connection {
                     && !*CONN_COUNT.lock().unwrap() > 1
                     && get_version_number(&self.lr.version) >= get_version_number("1.2.4")
                 {
-                    let usid;
-                    match self.lr.option.user_session.parse::<u32>() {
-                        Ok(n) => usid = Some(n),
-                        Err(..) => usid = None,
-                    }
-                    if !self.handle_multiple_user_sessions(usid).await {
+                    if !self
+                        .handle_multiple_user_sessions(self.user_session_id)
+                        .await
+                    {
                         return false;
                     }
                 }
@@ -3075,6 +3086,7 @@ async fn start_ipc(
     tx_from_cm: mpsc::UnboundedSender<ipc::Data>,
     mut _rx_desktop_ready: mpsc::Receiver<()>,
     tx_stream_ready: mpsc::Sender<()>,
+    user_session_id: Option<u32>,
 ) -> ResultType<()> {
     use hbb_common::anyhow::anyhow;
 
@@ -3139,10 +3151,7 @@ async fn start_ipc(
                 #[cfg(target_os = "windows")]
                 {
                     log::debug!("Start cm");
-                    res = crate::platform::run_as_user(
-                        args.clone(),
-                        Some(crate::platform::get_current_process_session_id()),
-                    );
+                    res = crate::platform::run_as_user(args.clone(), user_session_id);
                 }
                 if res.is_ok() {
                     break;

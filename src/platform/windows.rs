@@ -634,7 +634,7 @@ pub fn run_as_user(arg: Vec<&str>, usid: Option<u32>) -> ResultType<Option<std::
         std::env::current_exe()?.to_str().unwrap_or(""),
         arg.join(" "),
     );
-    let mut session_id = unsafe { get_current_session(share_rdp()) };
+    let mut session_id = get_current_process_session_id();
     if let Some(usid) = usid {
         session_id = usid;
     }
