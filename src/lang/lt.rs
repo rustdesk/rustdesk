@@ -451,8 +451,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Resolution", "Rezoliucija"),
         ("No transfers in progress", "Nevyksta jokių perdavimų"),
         ("Set one-time password length", "Nustatyti vienkartinio slaptažodžio ilgį"),
-        ("install_cert_tip", ""),
-        ("confirm_install_cert_tip", ""),
         ("RDP Settings", "RDP nustatymai"),
         ("Sort by", "Rūšiuoti pagal"),
         ("New Connection", "Naujas ryšys"),

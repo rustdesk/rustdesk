@@ -451,8 +451,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Resolution", "Rozlišení"),
         ("No transfers in progress", "Žádné probíhající přenosy"),
         ("Set one-time password length", "Nastavení délky jednorázového hesla"),
-        ("install_cert_tip", "Instalace certifikátu RustDesk"),
-        ("confirm_install_cert_tip", "Jedná se o testovací certifikát RustDesk, kterému lze důvěřovat. Certifikát bude v případě potřeby použit k důvěryhodnosti a instalaci ovladačů RustDesk."),
         ("RDP Settings", "Nastavení RDP"),
         ("Sort by", "Seřadit podle"),
         ("New Connection", "Nové připojení"),

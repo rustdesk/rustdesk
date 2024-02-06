@@ -451,8 +451,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Resolution", "解析度"),
         ("No transfers in progress", "沒有正在進行的傳輸"),
         ("Set one-time password length", "設定一次性密碼的長度"),
-        ("install_cert_tip", "安裝 RustDesk 憑證"),
-        ("confirm_install_cert_tip", "這是 RustDesk 的測試證書，這是可以信任的。 這個證書會被用來在需要的時候信任和安裝 RustDes 驅動。"),
         ("RDP Settings", "RDP 設定"),
         ("Sort by", "排序方式"),
         ("New Connection", "新連線"),
