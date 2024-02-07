@@ -1826,7 +1826,7 @@ impl Connection {
                 self.checked_multiple_session = true;
                 if crate::platform::is_installed()
                     && crate::platform::is_share_rdp()
-                    && !*CONN_COUNT.lock().unwrap() > 1
+                    && !(*CONN_COUNT.lock().unwrap() > 1)
                     && get_version_number(&self.lr.version) >= get_version_number("1.2.4")
                 {
                     if !self
