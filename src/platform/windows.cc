@@ -464,7 +464,7 @@ extern "C"
 
     void get_available_session_ids(PWSTR buf, uint32_t bufSize, BOOL include_rdp) {
         std::vector<std::wstring> sessionIds;
-        PWTS_SESSION_INFOA pInfos;
+        PWTS_SESSION_INFOA pInfos = NULL;
         DWORD count;
 
         if (WTSEnumerateSessionsA(WTS_CURRENT_SERVER_HANDLE, 0, 1, &pInfos, &count)) {
@@ -498,7 +498,7 @@ extern "C"
         }
 
         if (buf && !tmpStr.empty() && tmpStr.size() < bufSize) {
-            memcpy(buf, tmpStr.c_str(), (tmpStr.size() + 1) * sizeof(wchar_t));
+            wcsncpy_s(buf, bufSize, tmpStr.c_str(), tmpStr.size());
         }
     }
 

@@ -1826,7 +1826,7 @@ impl Connection {
                 self.checked_multiple_session = true;
                 if crate::platform::is_installed()
                     && crate::platform::is_share_rdp()
-                    && !(*CONN_COUNT.lock().unwrap() > 1)
+                    && Self::alive_conns().len() == 1
                     && get_version_number(&self.lr.version) >= get_version_number("1.2.4")
                 {
                     if !self
@@ -3487,6 +3487,10 @@ extern "C" fn connection_shutdown_hook() {
 }
 
 mod raii {
+    // CONN_COUNT: remote connection count in fact
+    // ALIVE_CONNS: all connections, including unauthorized connections
+    // AUTHED_CONNS: all authorized connections
+
     use super::*;
     pub struct ConnectionID(i32);
 
