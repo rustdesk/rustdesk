@@ -4,7 +4,7 @@ on: [workflow_dispatch]
 
 env:
   LLVM_VERSION: "10.0"
-  FLUTTER_VERSION: "3.13.9"
+  FLUTTER_VERSION: "3.16.9"
   TAG_NAME: "tmp"
   FLUTTER_RUST_BRIDGE_VERSION: "1.80.1"
   VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"

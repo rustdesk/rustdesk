@@ -13,11 +13,11 @@ on:
 env:
   CARGO_NDK_VERSION: "3.1.2"
   LLVM_VERSION: "15.0.6"
-  FLUTTER_VERSION: "3.13.9"
+  FLUTTER_VERSION: "3.16.9"
   FLUTTER_RUST_BRIDGE_VERSION: "1.80.1"
   # for arm64 linux because official Dart SDK does not work
-  FLUTTER_ELINUX_VERSION: "3.13.9"
-  FLUTTER_ELINUX_COMMIT_ID: "f4d4205893c16b0aa9cb6ba46b9f32b639d3b057"
+  FLUTTER_ELINUX_VERSION: "3.16.9"
+  FLUTTER_ELINUX_COMMIT_ID: "c02bd16e1630f5bd690b85c5c2456ac1920e25af"
   TAG_NAME: "${{ inputs.upload-tag }}"
   VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
   # vcpkg version: 2023.10.19
@@ -73,7 +73,7 @@ jobs:
         run: |
           flutter doctor -v
           flutter precache --windows
-          Invoke-WebRequest -Uri https://github.com/fufesou/flutter-engine/releases/download/bugfix-crash-windows-angle-context-frameBuffer/windows-x64-release.zip -OutFile windows-x64-flutter-release.zip
+          Invoke-WebRequest -Uri https://github.com/fufesou/flutter-engine/releases/download/bugfix-subwindow-crash-3.16.9-apply-pull-47787/windows-x64-release.zip -OutFile windows-x64-flutter-release.zip
           Expand-Archive windows-x64-flutter-release.zip -DestinationPath .
           mv -Force windows-x64-release/*  C:/hostedtoolcache/windows/flutter/stable-${{ env.FLUTTER_VERSION }}-x64/bin/cache/artifacts/engine/windows-x64-release/
 
@@ -141,7 +141,7 @@ jobs:
         if: env.UPLOAD_ARTIFACT == 'true'
         run: |
           pushd ./libs/portable
-          python3 ./generate.py -f ../../flutter/build/windows/runner/Release/ -o . -e ../../flutter/build/windows/runner/Release/rustdesk.exe
+          python3 ./generate.py -f ../../flutter/build/windows/x64/runner/Release/ -o . -e ../../flutter/build/windows/x64/runner/Release/rustdesk.exe
           popd
           mkdir -p ./SignOutput
           mv ./target/release/rustdesk-portable-packer.exe ./SignOutput/rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}.exe
