@@ -509,8 +509,8 @@ packages:
     dependency: "direct main"
     description:
       path: "."
-      ref: "3865a99f60a92bea4d95bb5d55cf524b1bcbbf5a"
-      resolved-ref: "3865a99f60a92bea4d95bb5d55cf524b1bcbbf5a"
+      ref: "38951317afe79d953ab25733667bd96e172a80d3"
+      resolved-ref: "38951317afe79d953ab25733667bd96e172a80d3"
       url: "https://github.com/21pages/flutter_gpu_texture_renderer"
     source: git
     version: "0.0.1"
