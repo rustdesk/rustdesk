@@ -43,13 +43,6 @@ class _ConnectionPageState extends State<ConnectionPage>
 
   bool isWindowMinimized = false;
   List<Peer> peers = [];
-  List _frontN<T>(List list, int n) {
-    if (list.length <= n) {
-      return list;
-    } else {
-      return list.sublist(0, n);
-    }
-  }
 
   bool isPeersLoading = false;
   bool isPeersLoaded = false;

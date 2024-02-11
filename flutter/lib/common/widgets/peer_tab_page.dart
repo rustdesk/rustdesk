@@ -237,7 +237,7 @@ class _PeerTabPageState extends State<PeerTabPage>
             "assets/checkbox-outline.svg",
             width: 18,
             height: 18,
-            color: textColor,
+            colorFilter: svgColor(textColor),
           )),
     );
   }
@@ -585,7 +585,7 @@ class _PeerTabPageState extends State<PeerTabPage>
                   "assets/chevron_up_chevron_down.svg",
                   width: 18,
                   height: 18,
-                  color: textColor,
+                  colorFilter: svgColor(textColor),
                 )),
             onTap: showMenu,
           );
