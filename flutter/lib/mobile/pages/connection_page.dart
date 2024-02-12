@@ -45,13 +45,6 @@ class _ConnectionPageState extends State<ConnectionPage> {
   /// Update url. If it's not null, means an update is available.
   var _updateUrl = '';
   List<Peer> peers = [];
-  List _frontN<T>(List list, int n) {
-    if (list.length <= n) {
-      return list;
-    } else {
-      return list.sublist(0, n);
-    }
-  }
 
   bool isPeersLoading = false;
   bool isPeersLoaded = false;

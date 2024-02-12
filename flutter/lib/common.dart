@@ -2555,7 +2555,7 @@ Future<void> start_service(bool is_start) async {
   }
 }
 
-typedef Future<bool> WhetherUseRemoteBlock();
+typedef WhetherUseRemoteBlock = Future<bool> Function();
 Widget buildRemoteBlock({required Widget child, WhetherUseRemoteBlock? use}) {
   var block = false.obs;
   return Obx(() => MouseRegion(
@@ -2981,4 +2981,12 @@ Future<bool> setServerConfig(
     gFFI.userModel.logOut(apiServer: oldApiServer);
   }
   return true;
+}
+
+ColorFilter? svgColor(Color? color) {
+  if (color == null) {
+    return null;
+  } else {
+    return ColorFilter.mode(color, BlendMode.srcIn);
+  }
 }

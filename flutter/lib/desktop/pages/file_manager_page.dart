@@ -182,10 +182,9 @@ class _FileManagerPageState extends State<FileManagerPage>
                       children: [
                         Transform.rotate(
                           angle: item.isRemoteToLocal ? pi : 0,
-                          child: SvgPicture.asset(
-                            "assets/arrow.svg",
-                            color: Theme.of(context).tabBarTheme.labelColor,
-                          ),
+                          child: SvgPicture.asset("assets/arrow.svg",
+                              colorFilter: svgColor(
+                                  Theme.of(context).tabBarTheme.labelColor)),
                         ).paddingOnly(left: 15),
                         const SizedBox(
                           width: 16.0,
@@ -262,7 +261,7 @@ class _FileManagerPageState extends State<FileManagerPage>
                                 },
                                 child: SvgPicture.asset(
                                   "assets/refresh.svg",
-                                  color: Colors.white,
+                                  colorFilter: svgColor(Colors.white),
                                 ),
                                 color: MyTheme.accent,
                                 hoverColor: MyTheme.accent80,
@@ -272,7 +271,7 @@ class _FileManagerPageState extends State<FileManagerPage>
                               padding: EdgeInsets.only(right: 15),
                               child: SvgPicture.asset(
                                 "assets/close.svg",
-                                color: Colors.white,
+                                colorFilter: svgColor(Colors.white),
                               ),
                               onPressed: () {
                                 jobController.jobTable.removeAt(index);
@@ -307,13 +306,14 @@ class _FileManagerPageState extends State<FileManagerPage>
                         children: [
                           SvgPicture.asset(
                             "assets/transfer.svg",
-                            color: Theme.of(context).tabBarTheme.labelColor,
+                            colorFilter: svgColor(
+                                Theme.of(context).tabBarTheme.labelColor),
                             height: 40,
                           ).paddingOnly(bottom: 10),
                           Text(
                             translate("No transfers in progress"),
                             textAlign: TextAlign.center,
-                            textScaleFactor: 1.20,
+                            textScaler: TextScaler.linear(1.20),
                             style: TextStyle(
                                 color:
                                     Theme.of(context).tabBarTheme.labelColor),
@@ -522,7 +522,8 @@ class _FileManagerViewState extends State<FileManagerView> {
                       quarterTurns: 2,
                       child: SvgPicture.asset(
                         "assets/arrow.svg",
-                        color: Theme.of(context).tabBarTheme.labelColor,
+                        colorFilter:
+                            svgColor(Theme.of(context).tabBarTheme.labelColor),
                       ),
                     ),
                     color: Theme.of(context).cardColor,
@@ -537,7 +538,8 @@ class _FileManagerViewState extends State<FileManagerView> {
                       quarterTurns: 3,
                       child: SvgPicture.asset(
                         "assets/arrow.svg",
-                        color: Theme.of(context).tabBarTheme.labelColor,
+                        colorFilter:
+                            svgColor(Theme.of(context).tabBarTheme.labelColor),
                       ),
                     ),
                     color: Theme.of(context).cardColor,
@@ -603,7 +605,8 @@ class _FileManagerViewState extends State<FileManagerView> {
                       },
                       child: SvgPicture.asset(
                         "assets/search.svg",
-                        color: Theme.of(context).tabBarTheme.labelColor,
+                        colorFilter:
+                            svgColor(Theme.of(context).tabBarTheme.labelColor),
                       ),
                       color: Theme.of(context).cardColor,
                       hoverColor: Theme.of(context).hoverColor,
@@ -613,7 +616,8 @@ class _FileManagerViewState extends State<FileManagerView> {
                       onPressed: null,
                       child: SvgPicture.asset(
                         "assets/close.svg",
-                        color: Theme.of(context).tabBarTheme.labelColor,
+                        colorFilter:
+                            svgColor(Theme.of(context).tabBarTheme.labelColor),
                       ),
                       color: Theme.of(context).disabledColor,
                       hoverColor: Theme.of(context).hoverColor,
@@ -626,7 +630,8 @@ class _FileManagerViewState extends State<FileManagerView> {
                       },
                       child: SvgPicture.asset(
                         "assets/close.svg",
-                        color: Theme.of(context).tabBarTheme.labelColor,
+                        colorFilter:
+                            svgColor(Theme.of(context).tabBarTheme.labelColor),
                       ),
                       color: Theme.of(context).cardColor,
                       hoverColor: Theme.of(context).hoverColor,
@@ -642,7 +647,8 @@ class _FileManagerViewState extends State<FileManagerView> {
                 },
                 child: SvgPicture.asset(
                   "assets/refresh.svg",
-                  color: Theme.of(context).tabBarTheme.labelColor,
+                  colorFilter:
+                      svgColor(Theme.of(context).tabBarTheme.labelColor),
                 ),
                 color: Theme.of(context).cardColor,
                 hoverColor: Theme.of(context).hoverColor,
@@ -666,7 +672,8 @@ class _FileManagerViewState extends State<FileManagerView> {
                       },
                       child: SvgPicture.asset(
                         "assets/home.svg",
-                        color: Theme.of(context).tabBarTheme.labelColor,
+                        colorFilter:
+                            svgColor(Theme.of(context).tabBarTheme.labelColor),
                       ),
                       color: Theme.of(context).cardColor,
                       hoverColor: Theme.of(context).hoverColor,
@@ -692,7 +699,7 @@ class _FileManagerViewState extends State<FileManagerView> {
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
                                 SvgPicture.asset("assets/folder_new.svg",
-                                    color: MyTheme.accent),
+                                    colorFilter: svgColor(MyTheme.accent)),
                                 Text(
                                   translate("Create Folder"),
                                 ).paddingOnly(
@@ -734,7 +741,8 @@ class _FileManagerViewState extends State<FileManagerView> {
                       },
                       child: SvgPicture.asset(
                         "assets/folder_new.svg",
-                        color: Theme.of(context).tabBarTheme.labelColor,
+                        colorFilter:
+                            svgColor(Theme.of(context).tabBarTheme.labelColor),
                       ),
                       color: Theme.of(context).cardColor,
                       hoverColor: Theme.of(context).hoverColor,
@@ -749,7 +757,8 @@ class _FileManagerViewState extends State<FileManagerView> {
                               : null,
                           child: SvgPicture.asset(
                             "assets/trash.svg",
-                            color: Theme.of(context).tabBarTheme.labelColor,
+                            colorFilter: svgColor(
+                                Theme.of(context).tabBarTheme.labelColor),
                           ),
                           color: Theme.of(context).cardColor,
                           hoverColor: Theme.of(context).hoverColor,
@@ -795,24 +804,24 @@ class _FileManagerViewState extends State<FileManagerView> {
                             quarterTurns: 2,
                             child: SvgPicture.asset(
                               "assets/arrow.svg",
-                              color: selectedItems.items.isEmpty
+                              colorFilter: svgColor(selectedItems.items.isEmpty
                                   ? Theme.of(context).brightness ==
                                           Brightness.light
                                       ? MyTheme.grayBg
                                       : MyTheme.darkGray
-                                  : Colors.white,
+                                  : Colors.white),
                               alignment: Alignment.bottomRight,
                             ),
                           ),
                     label: isLocal
                         ? SvgPicture.asset(
                             "assets/arrow.svg",
-                            color: selectedItems.items.isEmpty
+                            colorFilter: svgColor(selectedItems.items.isEmpty
                                 ? Theme.of(context).brightness ==
                                         Brightness.light
                                     ? MyTheme.grayBg
                                     : MyTheme.darkGray
-                                : Colors.white,
+                                : Colors.white),
                           )
                         : Text(
                             translate('Receive'),
@@ -889,7 +898,7 @@ class _FileManagerViewState extends State<FileManagerView> {
         ),
         child: SvgPicture.asset(
           "assets/dots.svg",
-          color: Theme.of(context).tabBarTheme.labelColor,
+          colorFilter: svgColor(Theme.of(context).tabBarTheme.labelColor),
         ),
         color: Theme.of(context).cardColor,
         hoverColor: Theme.of(context).hoverColor,
@@ -1000,9 +1009,10 @@ class _FileManagerViewState extends State<FileManagerView> {
                                                 entry.isFile
                                                     ? "assets/file.svg"
                                                     : "assets/folder.svg",
-                                                color: Theme.of(context)
-                                                    .tabBarTheme
-                                                    .labelColor,
+                                                colorFilter: svgColor(
+                                                    Theme.of(context)
+                                                        .tabBarTheme
+                                                        .labelColor),
                                               ),
                                         Expanded(
                                             child: Text(entry.name.nonBreaking,
@@ -1126,11 +1136,14 @@ class _FileManagerViewState extends State<FileManagerView> {
 
   void _onSelectedChanged(SelectedItems selectedItems, List<Entry> entries,
       Entry entry, bool isLocal) {
-    final isCtrlDown = RawKeyboard.instance.keysPressed.contains(LogicalKeyboardKey.controlLeft) ||
-        RawKeyboard.instance.keysPressed.contains(LogicalKeyboardKey.controlRight);
-    final isShiftDown =
-        RawKeyboard.instance.keysPressed.contains(LogicalKeyboardKey.shiftLeft) ||
-        RawKeyboard.instance.keysPressed.contains(LogicalKeyboardKey.shiftRight);
+    final isCtrlDown = RawKeyboard.instance.keysPressed
+            .contains(LogicalKeyboardKey.controlLeft) ||
+        RawKeyboard.instance.keysPressed
+            .contains(LogicalKeyboardKey.controlRight);
+    final isShiftDown = RawKeyboard.instance.keysPressed
+            .contains(LogicalKeyboardKey.shiftLeft) ||
+        RawKeyboard.instance.keysPressed
+            .contains(LogicalKeyboardKey.shiftRight);
     if (isCtrlDown) {
       if (selectedItems.items.contains(entry)) {
         selectedItems.remove(entry);
@@ -1445,7 +1458,7 @@ class _FileManagerViewState extends State<FileManagerView> {
           _locationStatus.value == LocationStatus.pathLocation
               ? "assets/folder.svg"
               : "assets/search.svg",
-          color: Theme.of(context).tabBarTheme.labelColor,
+          colorFilter: svgColor(Theme.of(context).tabBarTheme.labelColor),
         ),
         Expanded(
           child: TextField(
