@@ -336,15 +336,26 @@ class _PeerTabPageState extends State<PeerTabPage>
   Widget createMultiSelectionBar() {
     final model = Provider.of<PeerTabModel>(context);
     return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        deleteSelection(),
-        addSelectionToFav(),
-        addSelectionToAb(),
-        editSelectionTags(),
-        Expanded(child: Container()),
-        selectionCount(model.selectedPeers.length),
-        selectAll(),
-        closeSelection(),
+        Offstage(
+          offstage: model.selectedPeers.isEmpty,
+          child: Row(
+            children: [
+              deleteSelection(),
+              addSelectionToFav(),
+              addSelectionToAb(),
+              editSelectionTags(),
+            ],
+          ),
+        ),
+        Row(
+          children: [
+            selectionCount(model.selectedPeers.length),
+            selectAll(),
+            closeSelection(),
+          ],
+        )
       ],
     );
   }
