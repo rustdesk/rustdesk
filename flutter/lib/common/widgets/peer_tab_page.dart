@@ -88,6 +88,9 @@ class _PeerTabPageState extends State<PeerTabPage>
 
   Future<void> handleTabSelection(int tabIndex) async {
     if (tabIndex < entries.length) {
+      if (tabIndex != gFFI.peerTabModel.currentTab) {
+        gFFI.peerTabModel.setCurrentTabCachedPeers([]);
+      }
       gFFI.peerTabModel.setCurrentTab(tabIndex);
       entries[tabIndex].load(hint: false);
     }
