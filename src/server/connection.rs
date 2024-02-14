@@ -237,6 +237,8 @@ pub struct Connection {
     file_remove_log_control: FileRemoveLogControl,
     #[cfg(feature = "gpucodec")]
     supported_encoding_flag: (bool, Option<bool>),
+    user_session_id: Option<u32>,
+    checked_multiple_session: bool,
 }
 
 impl ConnInner {
@@ -384,6 +386,8 @@ impl Connection {
             file_remove_log_control: FileRemoveLogControl::new(id),
             #[cfg(feature = "gpucodec")]
             supported_encoding_flag: (false, None),
+            user_session_id: None,
+            checked_multiple_session: false,
         };
         let addr = hbb_common::try_into_v4(addr);
         if !conn.on_open(addr).await {
@@ -1491,8 +1495,50 @@ impl Connection {
         self.video_ack_required = lr.video_ack_required;
     }
 
+    #[cfg(target_os = "windows")]
+    async fn handle_multiple_user_sessions(&mut self, usid: Option<u32>) -> bool {
+        if self.port_forward_socket.is_some() {
+            return true;
+        } else {
+            let active_sessions = crate::platform::get_all_active_sessions();
+            if active_sessions.len() <= 1 {
+                return true;
+            }
+            let current_process_usid = crate::platform::get_current_process_session_id();
+            if usid.is_none() {
+                let mut res = Misc::new();
+                let mut rdp = Vec::new();
+                for session in active_sessions {
+                    let u_sid = &session[0];
+                    let u_name = &session[1];
+                    let mut rdp_session = RdpUserSession::new();
+                    rdp_session.user_session_id = u_sid.clone();
+                    rdp_session.user_name = u_name.clone();
+                    rdp.push(rdp_session);
+                }
+                res.set_rdp_user_sessions(RdpUserSessions {
+                    rdp_user_sessions: rdp,
+                    ..Default::default()
+                });
+                let mut msg_out = Message::new();
+                msg_out.set_misc(res);
+                self.send(msg_out).await;
+                return true;
+            }
+            if usid != Some(current_process_usid) {
+                self.on_close("Reconnecting...", false).await;
+                std::thread::spawn(move || {
+                    let _ = ipc::connect_to_user_session(usid);
+                });
+                return false;
+            }
+            true
+        }
+    }
+
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     fn try_start_cm_ipc(&mut self) {
+        let usid = self.user_session_id;
         if let Some(p) = self.start_cm_ipc_para.take() {
             tokio::spawn(async move {
                 #[cfg(windows)]
@@ -1502,6 +1548,7 @@ impl Connection {
                     p.tx_from_cm,
                     p.rx_desktop_ready,
                     p.tx_cm_stream_ready,
+                    usid.clone(),
                 )
                 .await
                 {
@@ -1513,9 +1560,9 @@ impl Connection {
                 }
             });
             #[cfg(all(windows, feature = "flutter"))]
-            std::thread::spawn(|| {
+            std::thread::spawn(move || {
                 if crate::is_server() && !crate::check_process("--tray", false) {
-                    crate::platform::run_as_user(vec!["--tray"]).ok();
+                    crate::platform::run_as_user(vec!["--tray"], usid).ok();
                 }
             });
         }
@@ -1523,6 +1570,19 @@ impl Connection {
 
     async fn on_message(&mut self, msg: Message) -> bool {
         if let Some(message::Union::LoginRequest(lr)) = msg.union {
+            #[cfg(target_os = "windows")]
+            {
+                if !self.checked_multiple_session {
+                    let usid;
+                    match lr.option.user_session.parse::<u32>() {
+                        Ok(n) => usid = Some(n),
+                        Err(..) => usid = None,
+                    }
+                    if usid.is_some() {
+                        self.user_session_id = usid;
+                    }
+                }
+            }
             self.handle_login_request_without_validation(&lr).await;
             if self.authorized {
                 return true;
@@ -1761,6 +1821,22 @@ impl Connection {
                 }
             }
         } else if self.authorized {
+            #[cfg(target_os = "windows")]
+            if !self.checked_multiple_session {
+                self.checked_multiple_session = true;
+                if crate::platform::is_installed()
+                    && crate::platform::is_share_rdp()
+                    && !(*CONN_COUNT.lock().unwrap() > 1)
+                    && get_version_number(&self.lr.version) >= get_version_number("1.2.4")
+                {
+                    if !self
+                        .handle_multiple_user_sessions(self.user_session_id)
+                        .await
+                    {
+                        return false;
+                    }
+                }
+            }
             match msg.union {
                 Some(message::Union::MouseEvent(me)) => {
                     #[cfg(any(target_os = "android", target_os = "ios"))]
@@ -3010,6 +3086,7 @@ async fn start_ipc(
     tx_from_cm: mpsc::UnboundedSender<ipc::Data>,
     mut _rx_desktop_ready: mpsc::Receiver<()>,
     tx_stream_ready: mpsc::Sender<()>,
+    user_session_id: Option<u32>,
 ) -> ResultType<()> {
     use hbb_common::anyhow::anyhow;
 
@@ -3057,7 +3134,7 @@ async fn start_ipc(
         if crate::platform::is_root() {
             let mut res = Ok(None);
             for _ in 0..10 {
-                #[cfg(not(target_os = "linux"))]
+                #[cfg(not(any(target_os = "linux", target_os = "windows")))]
                 {
                     log::debug!("Start cm");
                     res = crate::platform::run_as_user(args.clone());
@@ -3070,6 +3147,11 @@ async fn start_ipc(
                         user.clone(),
                         None::<(&str, &str)>,
                     );
+                }
+                #[cfg(target_os = "windows")]
+                {
+                    log::debug!("Start cm");
+                    res = crate::platform::run_as_user(args.clone(), user_session_id);
                 }
                 if res.is_ok() {
                     break;

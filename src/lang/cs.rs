@@ -586,5 +586,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("enter-2fa-title", "Dvoufaktorová autentizace"),
         ("Email verification code must be 6 characters.", "E-mailový ověřovací kód musí mít 6 znaků."),
         ("2FA code must be 6 digits.", "Kód 2FA musí mít 6 číslic."),
+        ("Multiple active user sessions found", ""),
+        ("Please select the user you want to connect to", ""),
     ].iter().cloned().collect();
 }

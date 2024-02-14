@@ -1861,3 +1861,106 @@ void enter2FaDialog(
         onCancel: cancel);
   });
 }
+
+void showWindowsSessionsDialog(
+    String type,
+    String title,
+    String text,
+    OverlayDialogManager dialogManager,
+    SessionID sessionId,
+    String peerId,
+    String sessions) {
+  List<String> sessionsList = sessions.split(',');
+  Map<String, String> sessionMap = {};
+  for (var session in sessionsList) {
+    var sessionInfo = session.split('-');
+    if (sessionInfo.isNotEmpty) {
+      sessionMap[sessionInfo[0]] = sessionInfo[1];
+    }
+  }
+  String selectedUserValue = sessionMap.keys.first;
+  dialogManager.dismissAll();
+  dialogManager.show((setState, close, context) {
+    onConnect() {
+      bind.sessionReconnect(
+          sessionId: sessionId,
+          forceRelay: false,
+          userSessionId: selectedUserValue);
+      dialogManager.dismissAll();
+      dialogManager.showLoading(translate('Connecting...'),
+          onCancel: closeConnection);
+    }
+
+    return CustomAlertDialog(
+      title: null,
+      content: msgboxContent(type, title, text),
+      actions: [
+        SessionsDropdown(peerId, sessionId, sessionMap, (value) {
+          setState(() {
+            selectedUserValue = value;
+          });
+        }),
+        dialogButton('Connect', onPressed: onConnect, isOutline: false),
+      ],
+    );
+  });
+}
+
+class SessionsDropdown extends StatefulWidget {
+  final String peerId;
+  final SessionID sessionId;
+  final Map<String, String> sessions;
+  final Function(String) onValueChanged;
+
+  SessionsDropdown(
+      this.peerId, this.sessionId, this.sessions, this.onValueChanged);
+
+  @override
+  _SessionsDropdownState createState() => _SessionsDropdownState();
+}
+
+class _SessionsDropdownState extends State<SessionsDropdown> {
+  late String selectedValue;
+  @override
+  void initState() {
+    super.initState();
+    selectedValue = widget.sessions.keys.first;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 300,
+      child: DropdownButton<String>(
+        value: selectedValue,
+        isExpanded: true,
+        borderRadius: BorderRadius.circular(8),
+        padding: EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        items: widget.sessions.entries.map((entry) {
+          return DropdownMenuItem(
+            value: entry.key,
+            child: Text(
+              entry.value,
+              style: TextStyle(
+                color: MyTheme.currentThemeMode() == ThemeMode.dark
+                    ? Colors.white
+                    : MyTheme.dark,
+              ),
+            ),
+          );
+        }).toList(),
+        onChanged: (value) {
+          if (value != null) {
+            setState(() {
+              selectedValue = value;
+            });
+            widget.onValueChanged(value);
+          }
+        },
+        style: TextStyle(
+          fontSize: 16.0,
+        ),
+      ),
+    );
+  }
+}

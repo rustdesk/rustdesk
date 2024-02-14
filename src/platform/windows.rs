@@ -5,6 +5,7 @@ use crate::{
     license::*,
     privacy_mode::win_topmost_window::{self, WIN_TOPMOST_INJECTED_PROCESS_EXE},
 };
+use hbb_common::libc::{c_int, wchar_t};
 use hbb_common::{
     allow_err,
     anyhow::anyhow,
@@ -508,7 +509,16 @@ async fn run_service(_arguments: Vec<OsString>) -> ResultType<()> {
     log::info!("session id {}", session_id);
     let mut h_process = launch_server(session_id, true).await.unwrap_or(NULL);
     let mut incoming = ipc::new_listener(crate::POSTFIX_SERVICE).await?;
+    let mut stored_usid = None;
     loop {
+        let sids = get_all_active_session_ids();
+        if !sids.contains(&format!("{}", session_id)) || !is_share_rdp() {
+            let current_active_session = unsafe { get_current_session(share_rdp()) };
+            if session_id != current_active_session {
+                session_id = current_active_session;
+                h_process = launch_server(session_id, true).await.unwrap_or(NULL);
+            }
+        }
         let res = timeout(super::SERVICE_INTERVAL, incoming.next()).await;
         match res {
             Ok(res) => match res {
@@ -522,6 +532,21 @@ async fn run_service(_arguments: Vec<OsString>) -> ResultType<()> {
                             }
                             ipc::Data::SAS => {
                                 send_sas();
+                            }
+                            ipc::Data::UserSid(usid) => {
+                                if let Some(usid) = usid {
+                                    if session_id != usid {
+                                        log::info!(
+                                            "session changed from {} to {}",
+                                            session_id,
+                                            usid
+                                        );
+                                        session_id = usid;
+                                        stored_usid = Some(session_id);
+                                        h_process =
+                                            launch_server(session_id, true).await.unwrap_or(NULL);
+                                    }
+                                }
                             }
                             _ => {}
                         }
@@ -537,7 +562,7 @@ async fn run_service(_arguments: Vec<OsString>) -> ResultType<()> {
                         continue;
                     }
                     let mut close_sent = false;
-                    if tmp != session_id {
+                    if tmp != session_id && stored_usid != Some(session_id) {
                         log::info!("session changed from {} to {}", session_id, tmp);
                         session_id = tmp;
                         send_close_async("").await.ok();
@@ -603,13 +628,16 @@ async fn launch_server(session_id: DWORD, close_first: bool) -> ResultType<HANDL
     Ok(h)
 }
 
-pub fn run_as_user(arg: Vec<&str>) -> ResultType<Option<std::process::Child>> {
+pub fn run_as_user(arg: Vec<&str>, usid: Option<u32>) -> ResultType<Option<std::process::Child>> {
     let cmd = format!(
         "\"{}\" {}",
         std::env::current_exe()?.to_str().unwrap_or(""),
         arg.join(" "),
     );
-    let session_id = unsafe { get_current_session(share_rdp()) };
+    let mut session_id = get_current_process_session_id();
+    if let Some(usid) = usid {
+        session_id = usid;
+    }
     use std::os::windows::ffi::OsStrExt;
     let wstr: Vec<u16> = std::ffi::OsStr::new(&cmd)
         .encode_wide()
@@ -684,10 +712,10 @@ pub fn try_change_desktop() -> bool {
 }
 
 fn share_rdp() -> BOOL {
-    if get_reg("share_rdp") != "true" {
-        FALSE
-    } else {
+    if get_reg("share_rdp") != "false" {
         TRUE
+    } else {
+        FALSE
     }
 }
 
@@ -703,6 +731,13 @@ pub fn set_share_rdp(enable: bool) {
         if enable { "true" } else { "false" }
     );
     run_cmds(cmd, false, "share_rdp").ok();
+}
+
+pub fn get_current_process_session_id() -> u32 {
+    extern "C" {
+        fn get_current_process_session_id() -> u32;
+    }
+    unsafe { get_current_process_session_id() }
 }
 
 pub fn get_active_username() -> String {
@@ -725,6 +760,76 @@ pub fn get_active_username() -> String {
         .unwrap_or("??".to_owned())
         .trim_end_matches('\0')
         .to_owned()
+}
+
+pub fn get_all_active_sessions() -> Vec<Vec<String>> {
+    let sids = get_all_active_session_ids_with_station();
+    let mut out = Vec::new();
+    for sid in sids.split(',') {
+        let username = get_session_username(sid.to_owned());
+        if !username.is_empty() {
+            let sid_split = sid.split(':').collect::<Vec<_>>()[1];
+            let v = vec![sid_split.to_owned(), username];
+            out.push(v);
+        }
+    }
+    out
+}
+
+pub fn get_session_username(session_id_with_station_name: String) -> String {
+    let mut session_id = session_id_with_station_name.split(':');
+    let station = session_id.next().unwrap_or("");
+    let session_id = session_id.next().unwrap_or("");
+    if session_id == "" {
+        return "".to_owned();
+    }
+
+    extern "C" {
+        fn get_session_user_info(path: *mut u16, n: u32, rdp: bool, session_id: u32) -> u32;
+    }
+    let buff_size = 256;
+    let mut buff: Vec<u16> = Vec::with_capacity(buff_size);
+    buff.resize(buff_size, 0);
+    let n = unsafe {
+        get_session_user_info(
+            buff.as_mut_ptr(),
+            buff_size as _,
+            true,
+            session_id.parse::<u32>().unwrap(),
+        )
+    };
+    if n == 0 {
+        return "".to_owned();
+    }
+    let sl = unsafe { std::slice::from_raw_parts(buff.as_ptr(), n as _) };
+    let out = String::from_utf16(sl)
+        .unwrap_or("".to_owned())
+        .trim_end_matches('\0')
+        .to_owned();
+    station.to_owned() + ": " + &out
+}
+
+pub fn get_all_active_session_ids_with_station() -> String {
+    extern "C" {
+        fn get_available_session_ids(buf: *mut wchar_t, buf_size: c_int, include_rdp: bool);
+    }
+    const BUF_SIZE: c_int = 1024;
+    let mut buf: Vec<wchar_t> = vec![0; BUF_SIZE as usize];
+
+    unsafe {
+        get_available_session_ids(buf.as_mut_ptr(), BUF_SIZE, true);
+        let session_ids = String::from_utf16_lossy(&buf);
+        session_ids.trim_matches(char::from(0)).trim().to_string()
+    }
+}
+
+pub fn get_all_active_session_ids() -> String {
+    let out = get_all_active_session_ids_with_station()
+        .split(',')
+        .map(|x| x.split(':').nth(1).unwrap_or(""))
+        .collect::<Vec<_>>()
+        .join(",");
+    out.trim_matches(char::from(0)).trim().to_string()
 }
 
 pub fn get_active_user_home() -> Option<PathBuf> {

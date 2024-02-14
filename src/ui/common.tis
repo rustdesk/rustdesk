@@ -304,7 +304,21 @@ function msgbox(type, title, content, link="", callback=null, height=180, width=
                 return;
             }
         };
-    }
+    } else if (type === "multiple-sessions") {
+        var parts = content.split("-");
+        var ids = parts[0].split(",");
+        var names = parts[1].split(",");
+        var sessionData = [];
+        for (var i = 0; i < ids.length; i++) {
+            sessionData.push({ id: ids[i], name: names[i] });
+        }
+        content = <MultipleSessionComponent sessions={sessionData} />;
+        callback = function () {
+            retryConnect();
+            return;
+        };
+        height += 50;
+    } 
     last_msgbox_tag = type + "-" + title + "-" + content + "-" + link;
     $(#msgbox).content(<MsgboxComponent width={width} height={height} autoLogin={autoLogin} type={type} title={title} content={content} link={link} remember={remember} callback={callback} contentStyle={contentStyle} hasRetry={hasRetry} />);
 }
@@ -339,7 +353,7 @@ handler.msgbox_retry = function(type, title, text, link, hasRetry) {
 function retryConnect(cancelTimer=false) {
     if (cancelTimer) self.timer(0, retryConnect);
     if (!is_port_forward) connecting();
-    handler.reconnect(false);
+    handler.reconnect(false, "");
 }
 /******************** end of msgbox ****************************************/
 
@@ -458,3 +472,37 @@ function awake() {
     view.focus = self;
 }
 
+class MultipleSessionComponent extends Reactor.Component {
+    this var sessions = [];
+    this var selectedSessionId = null;
+    this var sessionlength = 0;
+    this var messageText = translate("Please select the user you want to connect to");
+
+    function this(params) {
+        if (params && params.sessions) {
+            this.sessions = params.sessions;
+            this.selectedSessionId = params.sessions[0].id;
+            this.sessions.map(session => {
+                this.sessionlength += session.name.length;
+            });
+        }
+        handler.set_selected_user_session_id(this.selectedSessionId);
+    }
+
+    function render() {
+        return <div .user-session>
+            <div .title>{this.messageText}</div>
+            <select>
+                {this.sessions.map(session =>
+                    <option value={session.id}>{session.name}</option>
+                )}
+            </select>
+        </div>;
+    }
+
+    event change {
+        var selectedSessionName = this.value.substr(this.messageText.length + this.sessionlength);
+        this.selectedSessionId = this.sessions.find(session => session.name == selectedSessionName).id;
+        handler.set_selected_user_session_id(this.selectedSessionId);
+    }
+}

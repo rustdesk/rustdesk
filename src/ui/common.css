@@ -461,3 +461,18 @@ div#msgbox div.set-password input {
 div#msgbox #error {
   color: red;
 }
+
+div.user-session .title {
+  font-size: 1.2em;
+  margin-bottom: 2em;
+}
+
+div.user-session select {
+  width: 98%;
+  height: 2em;
+  border-radius: 0.5em;
+  border: color(border) solid 1px;
+  background: color(bg);
+  color: color(text);
+  padding-left: 0.5em;
+}

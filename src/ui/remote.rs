@@ -259,6 +259,15 @@ impl InvokeUiSession for SciterHandler {
         // Ignore for sciter version.
     }
 
+    fn set_multiple_user_session(&self, sessions: Vec<hbb_common::message_proto::RdpUserSession>) {
+        let formatted_sessions: Vec<String> = sessions.iter()
+        .map(|session| format!("{}-{}", session.user_session_id, session.user_name))
+        .collect();
+        let u_sids: String = formatted_sessions.iter().map(|s| s.split("-").next().unwrap().to_string()).collect::<Vec<String>>().join(",");
+        let u_names:String = formatted_sessions.iter().map(|s| s.split("-").nth(1).unwrap().to_string()).collect::<Vec<String>>().join(",");
+        self.call("setMultipleUserSession", &make_args!(u_sids, u_names));
+     }
+
     fn on_connected(&self, conn_type: ConnType) {
         match conn_type {
             ConnType::RDP => {}
@@ -346,6 +355,7 @@ impl sciter::EventHandler for SciterSession {
     }
 
     fn detached(&mut self, _root: HELEMENT) {
+        self.set_selected_user_session_id("".to_string());
         *self.element.lock().unwrap() = None;
         self.sender.write().unwrap().take().map(|sender| {
             sender.send(Data::Close).ok();
@@ -376,7 +386,7 @@ impl sciter::EventHandler for SciterSession {
                     let site = AssetPtr::adopt(ptr as *mut video_destination);
                     log::debug!("[video] start video");
                     *VIDEO.lock().unwrap() = Some(site);
-                    self.reconnect(false);
+                    self.reconnect(false, "".to_string());
                 }
             }
             BEHAVIOR_EVENTS::VIDEO_INITIALIZED => {
@@ -426,7 +436,7 @@ impl sciter::EventHandler for SciterSession {
         fn transfer_file();
         fn tunnel();
         fn lock_screen();
-        fn reconnect(bool);
+        fn reconnect(bool, String);
         fn get_chatbox();
         fn get_icon();
         fn get_home_dir();
@@ -477,6 +487,7 @@ impl sciter::EventHandler for SciterSession {
         fn request_voice_call();
         fn close_voice_call();
         fn version_cmp(String, String);
+        fn set_selected_user_session_id(String);
     }
 }
 
@@ -578,6 +589,10 @@ impl SciterSession {
         }
         self.save_config(config);
         log::info!("size saved");
+    }
+
+    fn set_selected_user_session_id(&mut self, u_sid: String) {
+        self.lc.write().unwrap().selected_user_session_id = u_sid;
     }
 
     fn get_port_forwards(&mut self) -> Value {

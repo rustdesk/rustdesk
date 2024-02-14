@@ -1149,6 +1149,7 @@ pub struct LoginConfigHandler {
     pub custom_fps: Arc<Mutex<Option<usize>>>,
     pub adapter_luid: Option<i64>,
     pub mark_unsupported: Vec<CodecFormat>,
+    pub selected_user_session_id: String,
 }
 
 impl Deref for LoginConfigHandler {
@@ -1235,6 +1236,7 @@ impl LoginConfigHandler {
         self.received = false;
         self.switch_uuid = switch_uuid;
         self.adapter_luid = adapter_luid;
+        self.selected_user_session_id = "".to_owned();
     }
 
     /// Check if the client should auto login.
@@ -1511,14 +1513,17 @@ impl LoginConfigHandler {
     ///
     /// * `ignore_default` - If `true`, ignore the default value of the option.
     fn get_option_message(&self, ignore_default: bool) -> Option<OptionMessage> {
-        if self.conn_type.eq(&ConnType::FILE_TRANSFER)
-            || self.conn_type.eq(&ConnType::PORT_FORWARD)
-            || self.conn_type.eq(&ConnType::RDP)
-        {
+        if self.conn_type.eq(&ConnType::PORT_FORWARD) || self.conn_type.eq(&ConnType::RDP) {
             return None;
         }
         let mut n = 0;
         let mut msg = OptionMessage::new();
+        msg.user_session = self.selected_user_session_id.clone();
+        n += 1;
+
+        if self.conn_type.eq(&ConnType::FILE_TRANSFER) {
+            return Some(msg);
+        }
         let q = self.image_quality.clone();
         if let Some(q) = self.get_image_quality_enum(&q, ignore_default) {
             msg.image_quality = q.into();
@@ -1581,7 +1586,6 @@ impl LoginConfigHandler {
                 &self.mark_unsupported,
             ));
         n += 1;
-
         if n > 0 {
             Some(msg)
         } else {
@@ -2740,6 +2744,7 @@ pub trait Interface: Send + Clone + 'static + Sized {
     fn msgbox(&self, msgtype: &str, title: &str, text: &str, link: &str);
     fn handle_login_error(&self, err: &str) -> bool;
     fn handle_peer_info(&self, pi: PeerInfo);
+    fn set_multiple_user_sessions(&self, sessions: Vec<hbb_common::message_proto::RdpUserSession>);
     fn on_error(&self, err: &str) {
         self.msgbox("error", "Error", err, "");
     }

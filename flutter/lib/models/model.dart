@@ -245,6 +245,8 @@ class FfiModel with ChangeNotifier {
       var name = evt['name'];
       if (name == 'msgbox') {
         handleMsgBox(evt, sessionId, peerId);
+      } else if (name == 'set_multiple_user_session') {
+        handleMultipleUserSession(evt, sessionId, peerId);
       } else if (name == 'peer_info') {
         handlePeerInfo(evt, peerId, false);
       } else if (name == 'sync_peer_info') {
@@ -488,6 +490,19 @@ class FfiModel with ChangeNotifier {
     dialogManager.dismissByTag(tag);
   }
 
+  handleMultipleUserSession(
+      Map<String, dynamic> evt, SessionID sessionId, String peerId) {
+    if (parent.target == null) return;
+    final dialogManager = parent.target!.dialogManager;
+    final sessions = evt['user_sessions'];
+    final title = translate('Multiple active user sessions found');
+    final text = translate('Please select the user you want to connect to');
+    final type = "";
+
+    showWindowsSessionsDialog(
+        type, title, text, dialogManager, sessionId, peerId, sessions);
+  }
+
   /// Handle the message box event based on [evt] and [id].
   handleMsgBox(Map<String, dynamic> evt, SessionID sessionId, String peerId) {
     if (parent.target == null) return;
@@ -549,7 +564,8 @@ class FfiModel with ChangeNotifier {
 
   void reconnect(OverlayDialogManager dialogManager, SessionID sessionId,
       bool forceRelay) {
-    bind.sessionReconnect(sessionId: sessionId, forceRelay: forceRelay);
+    bind.sessionReconnect(
+        sessionId: sessionId, forceRelay: forceRelay, userSessionId: "");
     clearPermissions();
     dialogManager.dismissAll();
     dialogManager.showLoading(translate('Connecting...'),

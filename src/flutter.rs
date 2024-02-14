@@ -826,6 +826,18 @@ impl InvokeUiSession for FlutterHandler {
         )
     }
 
+    fn set_multiple_user_session(&self, sessions: Vec<hbb_common::message_proto::RdpUserSession>) {
+        let formatted_sessions: Vec<String> = sessions
+            .iter()
+            .map(|session| format!("{}-{}", session.user_session_id, session.user_name))
+            .collect();
+        let sessions = formatted_sessions.join(",");
+        self.push_event(
+            "set_multiple_user_session",
+            vec![("user_sessions", &sessions)],
+        );
+    }
+
     fn on_connected(&self, _conn_type: ConnType) {}
 
     fn msgbox(&self, msgtype: &str, title: &str, text: &str, link: &str, retry: bool) {

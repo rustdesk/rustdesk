@@ -124,6 +124,11 @@ message PeerInfo {
   string platform_additions = 12;
 }
 
+message RdpUserSession {  
+  string user_session_id = 1;  
+  string user_name = 2;  
+}  
+
 message LoginResponse {
   oneof union {
     string error = 1;
@@ -589,6 +594,7 @@ message OptionMessage {
   BoolOption disable_keyboard = 12;
 // Position 13 is used for Resolution. Remove later.
 // Resolution custom_resolution = 13;
+  string user_session = 14;
 }
 
 message TestDelay {
@@ -703,6 +709,10 @@ message PluginFailure {
   string msg = 3;
 }
 
+message RdpUserSessions {
+  repeated RdpUserSession rdp_user_sessions = 1;
+}
+
 message Misc {
   oneof union {
     ChatMessage chat_message = 4;
@@ -734,6 +744,7 @@ message Misc {
     ToggleVirtualDisplay toggle_virtual_display = 32;
     TogglePrivacyMode toggle_privacy_mode = 33;
     SupportedEncoding supported_encoding = 34;
+    RdpUserSessions rdp_user_sessions = 35;
   }
 }
 
