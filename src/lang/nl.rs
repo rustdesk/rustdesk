@@ -292,7 +292,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Overwrite", "Overschrijven"),
         ("This file exists, skip or overwrite this file?", "Dit bestand bestaat reeds, overslaan of overschrijven?"),
         ("Quit", "Afsluiten"),
-        ("Help", "https://rustdesk.com/docs/en/manual/linux/#x11-required"),
         ("Failed", "Mislukt"),
         ("Succeeded", "Geslaagd"),
         ("Someone turns on privacy mode, exit", "Iemand schakelt privacymodus in, afsluiten"),

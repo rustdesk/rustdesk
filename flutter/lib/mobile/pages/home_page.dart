@@ -13,15 +13,15 @@ abstract class PageShape extends Widget {
 }
 
 class HomePage extends StatefulWidget {
-  static final homeKey = GlobalKey<_HomePageState>();
+  static final homeKey = GlobalKey<HomePageState>();
 
   HomePage() : super(key: homeKey);
 
   @override
-  _HomePageState createState() => _HomePageState();
+  HomePageState createState() => HomePageState();
 }
 
-class _HomePageState extends State<HomePage> {
+class HomePageState extends State<HomePage> {
   var _selectedIndex = 0;
   int get selectedIndex => _selectedIndex;
   final List<PageShape> _pages = [];
@@ -154,7 +154,7 @@ class WebHomePage extends StatelessWidget {
       // backgroundColor: MyTheme.grayBg,
       appBar: AppBar(
         centerTitle: true,
-        title: Text("RustDesk" + (isWeb ? " (Beta) " : "")),
+        title: Text("RustDesk${isWeb ? " (Beta) " : ""}"),
         actions: connectionPage.appBarActions,
       ),
       body: connectionPage,

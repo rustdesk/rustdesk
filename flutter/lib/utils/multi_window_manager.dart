@@ -9,6 +9,7 @@ import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/common.dart';
 
 /// must keep the order
+// ignore: constant_identifier_names
 enum WindowType { Main, RemoteDesktop, FileTransfer, PortForward, Unknown }
 
 extension Index on int {

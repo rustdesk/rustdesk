@@ -326,6 +326,8 @@ class MyTheme {
   );
 
   static ThemeData lightTheme = ThemeData(
+    // https://stackoverflow.com/questions/77537315/after-upgrading-to-flutter-3-16-the-app-bar-background-color-button-size-and
+    useMaterial3: false,
     brightness: Brightness.light,
     hoverColor: Color.fromARGB(255, 224, 224, 224),
     scaffoldBackgroundColor: Colors.white,
@@ -418,6 +420,7 @@ class MyTheme {
     ],
   );
   static ThemeData darkTheme = ThemeData(
+    useMaterial3: false,
     brightness: Brightness.dark,
     hoverColor: Color.fromARGB(255, 45, 46, 53),
     scaffoldBackgroundColor: Color(0xFF18191E),
@@ -2552,7 +2555,7 @@ Future<void> start_service(bool is_start) async {
   }
 }
 
-typedef Future<bool> WhetherUseRemoteBlock();
+typedef WhetherUseRemoteBlock = Future<bool> Function();
 Widget buildRemoteBlock({required Widget child, WhetherUseRemoteBlock? use}) {
   var block = false.obs;
   return Obx(() => MouseRegion(
@@ -2978,4 +2981,12 @@ Future<bool> setServerConfig(
     gFFI.userModel.logOut(apiServer: oldApiServer);
   }
   return true;
+}
+
+ColorFilter? svgColor(Color? color) {
+  if (color == null) {
+    return null;
+  } else {
+    return ColorFilter.mode(color, BlendMode.srcIn);
+  }
 }

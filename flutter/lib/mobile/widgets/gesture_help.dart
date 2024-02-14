@@ -7,30 +7,27 @@ class GestureIcons {
 
   GestureIcons._();
 
-  static const IconData icon_mouse = IconData(0xe65c, fontFamily: _family);
-  static const IconData icon_Tablet_Touch =
-      IconData(0xe9ce, fontFamily: _family);
-  static const IconData icon_gesture_f_drag =
+  static const IconData iconMouse = IconData(0xe65c, fontFamily: _family);
+  static const IconData iconTabletTouch = IconData(0xe9ce, fontFamily: _family);
+  static const IconData iconGestureFDrag =
       IconData(0xe686, fontFamily: _family);
-  static const IconData icon_Mobile_Touch =
-      IconData(0xe9cd, fontFamily: _family);
-  static const IconData icon_gesture_press =
+  static const IconData iconMobileTouch = IconData(0xe9cd, fontFamily: _family);
+  static const IconData iconGesturePress =
       IconData(0xe66c, fontFamily: _family);
-  static const IconData icon_gesture_tap =
-      IconData(0xe66f, fontFamily: _family);
-  static const IconData icon_gesture_pinch =
+  static const IconData iconGestureTap = IconData(0xe66f, fontFamily: _family);
+  static const IconData iconGesturePinch =
       IconData(0xe66a, fontFamily: _family);
-  static const IconData icon_gesture_press_hold =
+  static const IconData iconGesturePressHold =
       IconData(0xe66b, fontFamily: _family);
-  static const IconData icon_gesture_f_drag_up_down_ =
+  static const IconData iconGestureFDragUpDown_ =
       IconData(0xe685, fontFamily: _family);
-  static const IconData icon_gesture_f_tap_ =
+  static const IconData iconGestureFTap_ =
       IconData(0xe68e, fontFamily: _family);
-  static const IconData icon_gesture_f_swipe_right =
+  static const IconData iconGestureFSwipeRight =
       IconData(0xe68f, fontFamily: _family);
-  static const IconData icon_gesture_f_double_tap =
+  static const IconData iconGestureFdoubleTap =
       IconData(0xe691, fontFamily: _family);
-  static const IconData icon_gesture_f_three_fingers =
+  static const IconData iconGestureFThreeFingers =
       IconData(0xe687, fontFamily: _family);
 }
 
@@ -106,64 +103,64 @@ class _GestureHelpState extends State<GestureHelp> {
                       ? [
                           GestureInfo(
                               width,
-                              GestureIcons.icon_Mobile_Touch,
+                              GestureIcons.iconMobileTouch,
                               translate("One-Finger Tap"),
                               translate("Left Mouse")),
                           GestureInfo(
                               width,
-                              GestureIcons.icon_gesture_press_hold,
+                              GestureIcons.iconGesturePressHold,
                               translate("One-Long Tap"),
                               translate("Right Mouse")),
                           GestureInfo(
                               width,
-                              GestureIcons.icon_gesture_f_swipe_right,
+                              GestureIcons.iconGestureFSwipeRight,
                               translate("One-Finger Move"),
                               translate("Mouse Drag")),
                           GestureInfo(
                               width,
-                              GestureIcons.icon_gesture_f_three_fingers,
+                              GestureIcons.iconGestureFThreeFingers,
                               translate("Three-Finger vertically"),
                               translate("Mouse Wheel")),
                           GestureInfo(
                               width,
-                              GestureIcons.icon_gesture_f_drag,
+                              GestureIcons.iconGestureFDrag,
                               translate("Two-Finger Move"),
                               translate("Canvas Move")),
                           GestureInfo(
                               width,
-                              GestureIcons.icon_gesture_pinch,
+                              GestureIcons.iconGesturePinch,
                               translate("Pinch to Zoom"),
                               translate("Canvas Zoom")),
                         ]
                       : [
                           GestureInfo(
                               width,
-                              GestureIcons.icon_Mobile_Touch,
+                              GestureIcons.iconMobileTouch,
                               translate("One-Finger Tap"),
                               translate("Left Mouse")),
                           GestureInfo(
                               width,
-                              GestureIcons.icon_gesture_press_hold,
+                              GestureIcons.iconGesturePressHold,
                               translate("One-Long Tap"),
                               translate("Right Mouse")),
                           GestureInfo(
                               width,
-                              GestureIcons.icon_gesture_f_swipe_right,
+                              GestureIcons.iconGestureFSwipeRight,
                               translate("Double Tap & Move"),
                               translate("Mouse Drag")),
                           GestureInfo(
                               width,
-                              GestureIcons.icon_gesture_f_three_fingers,
+                              GestureIcons.iconGestureFThreeFingers,
                               translate("Three-Finger vertically"),
                               translate("Mouse Wheel")),
                           GestureInfo(
                               width,
-                              GestureIcons.icon_gesture_f_drag,
+                              GestureIcons.iconGestureFDrag,
                               translate("Two-Finger Move"),
                               translate("Canvas Move")),
                           GestureInfo(
                               width,
-                              GestureIcons.icon_gesture_pinch,
+                              GestureIcons.iconGesturePinch,
                               translate("Pinch to Zoom"),
                               translate("Canvas Zoom")),
                         ],

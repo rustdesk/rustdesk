@@ -661,6 +661,7 @@ class BottomSheetBody extends StatelessWidget {
 
   @override
   BottomSheet build(BuildContext context) {
+    // ignore: no_leading_underscores_for_local_identifiers
     final _actions = actions ?? [];
     return BottomSheet(
       builder: (BuildContext context) {
