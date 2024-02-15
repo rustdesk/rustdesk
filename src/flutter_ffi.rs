@@ -217,9 +217,9 @@ pub fn session_record_status(session_id: SessionID, status: bool) {
     }
 }
 
-pub fn session_reconnect(session_id: SessionID, force_relay: bool, user_session_id: String) {
+pub fn session_reconnect(session_id: SessionID, force_relay: bool) {
     if let Some(session) = sessions::get_session_by_session_id(&session_id) {
-        session.reconnect(force_relay, user_session_id);
+        session.reconnect(force_relay);
     }
     session_on_waiting_for_image_dialog_show(session_id);
 }
@@ -699,6 +699,12 @@ pub fn session_change_resolution(session_id: SessionID, display: i32, width: i32
 pub fn session_set_size(_session_id: SessionID, _display: usize, _width: usize, _height: usize) {
     #[cfg(feature = "flutter_texture_render")]
     super::flutter::session_set_size(_session_id, _display, _width, _height)
+}
+
+pub fn session_send_selected_session_id(session_id: SessionID, sid: String) {
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
+        session.send_selected_session_id(sid);
+    }
 }
 
 pub fn main_get_sound_inputs() -> Vec<String> {

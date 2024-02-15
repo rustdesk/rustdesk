@@ -826,15 +826,21 @@ impl InvokeUiSession for FlutterHandler {
         )
     }
 
-    fn set_multiple_user_session(&self, sessions: Vec<hbb_common::message_proto::RdpUserSession>) {
-        let formatted_sessions: Vec<String> = sessions
-            .iter()
-            .map(|session| format!("{}-{}", session.user_session_id, session.user_name))
-            .collect();
-        let sessions = formatted_sessions.join(",");
+    fn set_multiple_windows_session(&self, sessions: Vec<WindowsSession>) {
+        let mut msg_vec = Vec::new();
+        let mut sessions = sessions;
+        for d in sessions.drain(..) {
+            let mut h: HashMap<&str, String> = Default::default();
+            h.insert("sid", d.sid.to_string());
+            h.insert("name", d.name);
+            msg_vec.push(h);
+        }
         self.push_event(
-            "set_multiple_user_session",
-            vec![("user_sessions", &sessions)],
+            "set_multiple_windows_session",
+            vec![(
+                "user_sessions",
+                &serde_json::ser::to_string(&msg_vec).unwrap_or("".to_owned()),
+            )],
         );
     }
 

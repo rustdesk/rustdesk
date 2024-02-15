@@ -237,8 +237,8 @@ pub struct Connection {
     file_remove_log_control: FileRemoveLogControl,
     #[cfg(feature = "gpucodec")]
     supported_encoding_flag: (bool, Option<bool>),
-    user_session_id: Option<u32>,
-    checked_multiple_session: bool,
+    need_sub_remote_service: bool,
+    remote_service_subed: bool,
 }
 
 impl ConnInner {
@@ -386,8 +386,8 @@ impl Connection {
             file_remove_log_control: FileRemoveLogControl::new(id),
             #[cfg(feature = "gpucodec")]
             supported_encoding_flag: (false, None),
-            user_session_id: None,
-            checked_multiple_session: false,
+            need_sub_remote_service: false,
+            remote_service_subed: false,
         };
         let addr = hbb_common::try_into_v4(addr);
         if !conn.on_open(addr).await {
@@ -1194,6 +1194,9 @@ impl Connection {
         .into();
 
         let mut sub_service = false;
+        let mut delay_sub_service = false;
+        #[cfg(windows)]
+        self.handle_windows_specific_session(&mut pi, &mut delay_sub_service);
         if self.file_transfer.is_some() {
             res.set_peer_info(pi);
         } else {
@@ -1255,6 +1258,16 @@ impl Connection {
             };
             self.read_dir(dir, show_hidden);
         } else if sub_service {
+            self.need_sub_remote_service = true;
+            if !delay_sub_service {
+                self.check_sub_remote_services();
+            }
+        }
+    }
+
+    fn check_sub_remote_services(&mut self) {
+        if self.need_sub_remote_service && !self.remote_service_subed {
+            self.remote_service_subed = true;
             if let Some(s) = self.server.upgrade() {
                 let mut noperms = Vec::new();
                 if !self.peer_keyboard_enabled() && !self.show_remote_cursor {
@@ -1276,6 +1289,27 @@ impl Connection {
                 s.try_add_primay_video_service();
                 s.add_connection(self.inner.clone(), &noperms);
             }
+        }
+    }
+
+    #[cfg(windows)]
+    fn handle_windows_specific_session(&mut self, pi: &mut PeerInfo, delay_sub_service: &mut bool) {
+        let sessions = crate::platform::get_available_sessions(true);
+        let current_sid = crate::platform::get_current_process_session_id().unwrap_or_default();
+        if crate::platform::is_installed()
+            && crate::platform::is_share_rdp()
+            && raii::AuthedConnID::remote_and_file_conn_count() == 1
+            && sessions.len() > 1
+            && current_sid != 0
+            && self.lr.option.support_windows_specific_session == BoolOption::Yes.into()
+        {
+            pi.windows_sessions = Some(WindowsSessions {
+                sessions,
+                current_sid,
+                ..Default::default()
+            })
+            .into();
+            *delay_sub_service = true;
         }
     }
 
@@ -1495,50 +1529,8 @@ impl Connection {
         self.video_ack_required = lr.video_ack_required;
     }
 
-    #[cfg(target_os = "windows")]
-    async fn handle_multiple_user_sessions(&mut self, usid: Option<u32>) -> bool {
-        if self.port_forward_socket.is_some() {
-            return true;
-        } else {
-            let active_sessions = crate::platform::get_all_active_sessions();
-            if active_sessions.len() <= 1 {
-                return true;
-            }
-            let current_process_usid = crate::platform::get_current_process_session_id();
-            if usid.is_none() {
-                let mut res = Misc::new();
-                let mut rdp = Vec::new();
-                for session in active_sessions {
-                    let u_sid = &session[0];
-                    let u_name = &session[1];
-                    let mut rdp_session = RdpUserSession::new();
-                    rdp_session.user_session_id = u_sid.clone();
-                    rdp_session.user_name = u_name.clone();
-                    rdp.push(rdp_session);
-                }
-                res.set_rdp_user_sessions(RdpUserSessions {
-                    rdp_user_sessions: rdp,
-                    ..Default::default()
-                });
-                let mut msg_out = Message::new();
-                msg_out.set_misc(res);
-                self.send(msg_out).await;
-                return true;
-            }
-            if usid != Some(current_process_usid) {
-                self.on_close("Reconnecting...", false).await;
-                std::thread::spawn(move || {
-                    let _ = ipc::connect_to_user_session(usid);
-                });
-                return false;
-            }
-            true
-        }
-    }
-
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     fn try_start_cm_ipc(&mut self) {
-        let usid = self.user_session_id;
         if let Some(p) = self.start_cm_ipc_para.take() {
             tokio::spawn(async move {
                 #[cfg(windows)]
@@ -1548,7 +1540,6 @@ impl Connection {
                     p.tx_from_cm,
                     p.rx_desktop_ready,
                     p.tx_cm_stream_ready,
-                    usid.clone(),
                 )
                 .await
                 {
@@ -1562,7 +1553,7 @@ impl Connection {
             #[cfg(all(windows, feature = "flutter"))]
             std::thread::spawn(move || {
                 if crate::is_server() && !crate::check_process("--tray", false) {
-                    crate::platform::run_as_user(vec!["--tray"], usid).ok();
+                    crate::platform::run_as_user(vec!["--tray"]).ok();
                 }
             });
         }
@@ -1570,19 +1561,6 @@ impl Connection {
 
     async fn on_message(&mut self, msg: Message) -> bool {
         if let Some(message::Union::LoginRequest(lr)) = msg.union {
-            #[cfg(target_os = "windows")]
-            {
-                if !self.checked_multiple_session {
-                    let usid;
-                    match lr.option.user_session.parse::<u32>() {
-                        Ok(n) => usid = Some(n),
-                        Err(..) => usid = None,
-                    }
-                    if usid.is_some() {
-                        self.user_session_id = usid;
-                    }
-                }
-            }
             self.handle_login_request_without_validation(&lr).await;
             if self.authorized {
                 return true;
@@ -1821,22 +1799,6 @@ impl Connection {
                 }
             }
         } else if self.authorized {
-            #[cfg(target_os = "windows")]
-            if !self.checked_multiple_session {
-                self.checked_multiple_session = true;
-                if crate::platform::is_installed()
-                    && crate::platform::is_share_rdp()
-                    && Self::alive_conns().len() == 1
-                    && get_version_number(&self.lr.version) >= get_version_number("1.2.4")
-                {
-                    if !self
-                        .handle_multiple_user_sessions(self.user_session_id)
-                        .await
-                    {
-                        return false;
-                    }
-                }
-            }
             match msg.union {
                 Some(message::Union::MouseEvent(me)) => {
                     #[cfg(any(target_os = "android", target_os = "ios"))]
@@ -2303,6 +2265,26 @@ impl Connection {
                         .lock()
                         .unwrap()
                         .user_record(self.inner.id(), status),
+                    #[cfg(windows)]
+                    Some(misc::Union::SelectedSid(sid)) => {
+                        let current_process_usid =
+                            crate::platform::get_current_process_session_id().unwrap_or_default();
+                        let sessions = crate::platform::get_available_sessions(false);
+                        if crate::platform::is_installed()
+                            && crate::platform::is_share_rdp()
+                            && raii::AuthedConnID::remote_and_file_conn_count() == 1
+                            && sessions.len() > 1
+                            && current_process_usid != 0
+                            && current_process_usid != sid
+                            && sessions.iter().any(|e| e.sid == sid)
+                        {
+                            std::thread::spawn(move || {
+                                let _ = ipc::connect_to_user_session(Some(sid));
+                            });
+                            return false;
+                        }
+                        self.check_sub_remote_services();
+                    }
                     _ => {}
                 },
                 Some(message::Union::AudioFrame(frame)) => {
@@ -3086,7 +3068,6 @@ async fn start_ipc(
     tx_from_cm: mpsc::UnboundedSender<ipc::Data>,
     mut _rx_desktop_ready: mpsc::Receiver<()>,
     tx_stream_ready: mpsc::Sender<()>,
-    user_session_id: Option<u32>,
 ) -> ResultType<()> {
     use hbb_common::anyhow::anyhow;
 
@@ -3134,7 +3115,7 @@ async fn start_ipc(
         if crate::platform::is_root() {
             let mut res = Ok(None);
             for _ in 0..10 {
-                #[cfg(not(any(target_os = "linux", target_os = "windows")))]
+                #[cfg(not(any(target_os = "linux")))]
                 {
                     log::debug!("Start cm");
                     res = crate::platform::run_as_user(args.clone());
@@ -3148,14 +3129,10 @@ async fn start_ipc(
                         None::<(&str, &str)>,
                     );
                 }
-                #[cfg(target_os = "windows")]
-                {
-                    log::debug!("Start cm");
-                    res = crate::platform::run_as_user(args.clone(), user_session_id);
-                }
                 if res.is_ok() {
                     break;
                 }
+                log::error!("Failed to run cm: {res:?}");
                 sleep(1.).await;
             }
             if let Some(task) = res? {
@@ -3538,6 +3515,15 @@ mod raii {
                 .lock()
                 .unwrap()
                 .send((conn_count, remote_count)));
+        }
+
+        pub fn remote_and_file_conn_count() -> usize {
+            AUTHED_CONNS
+                .lock()
+                .unwrap()
+                .iter()
+                .filter(|c| c.1 == AuthConnType::Remote || c.1 == AuthConnType::FileTransfer)
+                .count()
         }
     }
 

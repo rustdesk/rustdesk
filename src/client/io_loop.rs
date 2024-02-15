@@ -1314,13 +1314,6 @@ impl<T: InvokeUiSession> Remote<T> {
                     }
                 }
                 Some(message::Union::Misc(misc)) => match misc.union {
-                    Some(misc::Union::RdpUserSessions(sessions)) => {
-                        if !sessions.rdp_user_sessions.is_empty() {
-                            self.handler
-                                .set_multiple_user_session(sessions.rdp_user_sessions);
-                            return false;
-                        }
-                    }
                     Some(misc::Union::AudioFormat(f)) => {
                         self.audio_sender.send(MediaData::AudioFormat(f)).ok();
                     }

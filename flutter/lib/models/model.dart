@@ -245,8 +245,8 @@ class FfiModel with ChangeNotifier {
       var name = evt['name'];
       if (name == 'msgbox') {
         handleMsgBox(evt, sessionId, peerId);
-      } else if (name == 'set_multiple_user_session') {
-        handleMultipleUserSession(evt, sessionId, peerId);
+      } else if (name == 'set_multiple_windows_session') {
+        handleMultipleWindowsSession(evt, sessionId, peerId);
       } else if (name == 'peer_info') {
         handlePeerInfo(evt, peerId, false);
       } else if (name == 'sync_peer_info') {
@@ -490,7 +490,7 @@ class FfiModel with ChangeNotifier {
     dialogManager.dismissByTag(tag);
   }
 
-  handleMultipleUserSession(
+  handleMultipleWindowsSession(
       Map<String, dynamic> evt, SessionID sessionId, String peerId) {
     if (parent.target == null) return;
     final dialogManager = parent.target!.dialogManager;
@@ -564,8 +564,7 @@ class FfiModel with ChangeNotifier {
 
   void reconnect(OverlayDialogManager dialogManager, SessionID sessionId,
       bool forceRelay) {
-    bind.sessionReconnect(
-        sessionId: sessionId, forceRelay: forceRelay, userSessionId: "");
+    bind.sessionReconnect(sessionId: sessionId, forceRelay: forceRelay);
     clearPermissions();
     dialogManager.dismissAll();
     dialogManager.showLoading(translate('Connecting...'),
