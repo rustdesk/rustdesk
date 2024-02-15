@@ -748,8 +748,17 @@ async fn query_online_states_(
             return Ok((Vec::new(), Vec::new()));
         }
 
-        let mut socket = create_online_stream().await?;
-        socket.send(&msg_out).await?;
+        let mut socket = match create_online_stream().await {
+            Ok(s) => s,
+            Err(e) => {
+                log::debug!("Failed to create peers online stream, {e}");
+                return Ok((vec![], ids.clone()));
+            }
+        };
+        if let Err(e) = socket.send(&msg_out).await {
+            log::debug!("Failed to send peers online states query, {e}");
+            return Ok((vec![], ids.clone()));
+        }
         if let Some(msg_in) = crate::common::get_next_nonkeyexchange_msg(&mut socket, None).await {
             match msg_in.union {
                 Some(rendezvous_message::Union::OnlineResponse(online_response)) => {
