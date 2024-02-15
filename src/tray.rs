@@ -129,6 +129,8 @@ pub fn make_tray() -> hbb_common::ResultType<()> {
     std::thread::spawn(move || {
         start_query_session_count(ipc_sender.clone());
     });
+    #[cfg(windows)]
+    let mut last_click = std::time::Instant::now();
     event_loop.run(move |_event, _, control_flow| {
         if !docker_hiden {
             #[cfg(target_os = "macos")]
@@ -158,7 +160,11 @@ pub fn make_tray() -> hbb_common::ResultType<()> {
         if let Ok(_event) = tray_channel.try_recv() {
             #[cfg(target_os = "windows")]
             if _event.event == tray_icon::ClickEvent::Left {
+                if last_click.elapsed() < std::time::Duration::from_secs(1) {
+                    return;
+                }
                 open_func();
+                last_click = std::time::Instant::now();
             }
         }
 
