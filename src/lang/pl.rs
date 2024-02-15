@@ -586,7 +586,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("enter-2fa-title", "Autoryzacja dwuskładnikowa"),
         ("Email verification code must be 6 characters.", "Kod weryfikacyjny wysłany e-mailem musi mieć 6 znaków."),
         ("2FA code must be 6 digits.", "Kod 2FA musi zawierać 6 cyfr."),
-        ("Multiple active user sessions found", ""),
-        ("Please select the user you want to connect to", ""),
+        ("Multiple active user sessions found", "Znaleziono wiele aktywnych sesji użytkownika"),
+        ("Please select the user you want to connect to", "Wybierz użytkownika, z którym chcesz się połączyć"),
     ].iter().cloned().collect();
 }
