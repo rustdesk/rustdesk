@@ -82,6 +82,12 @@ pub fn get_license_from_string(s: &str) -> ResultType<License> {
         for s in strs {
             if let Ok(lic) = get_license_from_string_(s) {
                 return Ok(lic);
+            } else if s.contains("(") { // https://github.com/rustdesk/rustdesk/issues/4162
+                for s in s.split("(") {
+                    if let Ok(lic) = get_license_from_string_(s) {
+                        return Ok(lic);
+                    }
+                }
             }
         }
     }
