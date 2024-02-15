@@ -2,6 +2,7 @@ use hbb_common::regex::Regex;
 use std::ops::Deref;
 
 mod ar;
+mod bg;
 mod ca;
 mod cn;
 mod cs;
@@ -52,6 +53,7 @@ pub const LANGS: &[(&str, &str)] = &[
     ("es", "Español"),
     ("et", "Eesti keel"),
     ("hu", "Magyar"),
+    ("bg", "Български"),
     ("ru", "Русский"),
     ("sk", "Slovenčina"),
     ("id", "Indonesia"),
