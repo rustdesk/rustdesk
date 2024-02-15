@@ -238,7 +238,9 @@ pub struct Connection {
     #[cfg(feature = "gpucodec")]
     supported_encoding_flag: (bool, Option<bool>),
     user_session_id: Option<u32>,
+    #[cfg(target_os = "windows")]
     checked_multiple_session: bool,
+    remote_service_sub_ctrl: RemoteServiceSubControl,
 }
 
 impl ConnInner {
@@ -387,7 +389,9 @@ impl Connection {
             #[cfg(feature = "gpucodec")]
             supported_encoding_flag: (false, None),
             user_session_id: None,
+            #[cfg(target_os = "windows")]
             checked_multiple_session: false,
+            remote_service_sub_ctrl: RemoteServiceSubControl::default(),
         };
         let addr = hbb_common::try_into_v4(addr);
         if !conn.on_open(addr).await {
@@ -1255,27 +1259,56 @@ impl Connection {
             };
             self.read_dir(dir, show_hidden);
         } else if sub_service {
-            if let Some(s) = self.server.upgrade() {
-                let mut noperms = Vec::new();
-                if !self.peer_keyboard_enabled() && !self.show_remote_cursor {
-                    noperms.push(NAME_CURSOR);
-                }
-                if !self.show_remote_cursor {
-                    noperms.push(NAME_POS);
-                }
-                if !self.clipboard_enabled() || !self.peer_keyboard_enabled() {
-                    noperms.push(super::clipboard_service::NAME);
-                }
-                if !self.audio_enabled() {
-                    noperms.push(super::audio_service::NAME);
-                }
-                let mut s = s.write().unwrap();
-                #[cfg(not(any(target_os = "android", target_os = "ios")))]
-                let _h = try_start_record_cursor_pos();
-                self.auto_disconnect_timer = Self::get_auto_disconenct_timer();
-                s.try_add_primay_video_service();
-                s.add_connection(self.inner.clone(), &noperms);
+            let ctrl = &mut self.remote_service_sub_ctrl;
+            ctrl.need_sub = Some(true);
+            #[cfg(windows)]
+            {
+                ctrl.both_support_specific_session = Some(
+                    crate::platform::is_installed()
+                        && crate::platform::is_share_rdp()
+                        && Self::alive_conns().len() == 1
+                        && crate::platform::get_all_active_sessions().len() > 1
+                        && (get_version_number(&self.lr.version) > get_version_number("1.2.4")
+                            || !self.lr.option.user_session.is_empty()),
+                );
             }
+            #[cfg(not(windows))]
+            {
+                ctrl.both_support_specific_session = Some(false);
+            }
+            if ctrl.both_support_specific_session != Some(true) {
+                ctrl.use_current_session = Some(true);
+                self.check_remote_services_sub();
+            }
+        }
+    }
+
+    fn check_remote_services_sub(&mut self) {
+        let ctrl = &mut self.remote_service_sub_ctrl;
+        if !(ctrl.need_sub == Some(true) && !ctrl.subed && ctrl.use_current_session == Some(true)) {
+            return;
+        }
+        ctrl.subed = true;
+        if let Some(s) = self.server.upgrade() {
+            let mut noperms = Vec::new();
+            if !self.peer_keyboard_enabled() && !self.show_remote_cursor {
+                noperms.push(NAME_CURSOR);
+            }
+            if !self.show_remote_cursor {
+                noperms.push(NAME_POS);
+            }
+            if !self.clipboard_enabled() || !self.peer_keyboard_enabled() {
+                noperms.push(super::clipboard_service::NAME);
+            }
+            if !self.audio_enabled() {
+                noperms.push(super::audio_service::NAME);
+            }
+            let mut s = s.write().unwrap();
+            #[cfg(not(any(target_os = "android", target_os = "ios")))]
+            let _h = try_start_record_cursor_pos();
+            self.auto_disconnect_timer = Self::get_auto_disconenct_timer();
+            s.try_add_primay_video_service();
+            s.add_connection(self.inner.clone(), &noperms);
         }
     }
 
@@ -1502,6 +1535,7 @@ impl Connection {
         } else {
             let active_sessions = crate::platform::get_all_active_sessions();
             if active_sessions.len() <= 1 {
+                self.remote_service_sub_ctrl.use_current_session = Some(true);
                 return true;
             }
             let current_process_usid = crate::platform::get_current_process_session_id();
@@ -1532,6 +1566,7 @@ impl Connection {
                 });
                 return false;
             }
+            self.remote_service_sub_ctrl.use_current_session = Some(true);
             true
         }
     }
@@ -1824,11 +1859,7 @@ impl Connection {
             #[cfg(target_os = "windows")]
             if !self.checked_multiple_session {
                 self.checked_multiple_session = true;
-                if crate::platform::is_installed()
-                    && crate::platform::is_share_rdp()
-                    && Self::alive_conns().len() == 1
-                    && get_version_number(&self.lr.version) >= get_version_number("1.2.4")
-                {
+                if self.remote_service_sub_ctrl.both_support_specific_session == Some(true) {
                     if !self
                         .handle_multiple_user_sessions(self.user_session_id)
                         .await
@@ -1836,6 +1867,7 @@ impl Connection {
                         return false;
                     }
                 }
+                self.check_remote_services_sub();
             }
             match msg.union {
                 Some(message::Union::MouseEvent(me)) => {
@@ -3483,6 +3515,24 @@ extern "C" fn connection_shutdown_hook() {
     #[cfg(any(target_os = "windows", target_os = "linux"))]
     {
         *WALLPAPER_REMOVER.lock().unwrap() = None;
+    }
+}
+
+struct RemoteServiceSubControl {
+    need_sub: Option<bool>,
+    subed: bool,
+    use_current_session: Option<bool>,
+    both_support_specific_session: Option<bool>,
+}
+
+impl Default for RemoteServiceSubControl {
+    fn default() -> Self {
+        Self {
+            need_sub: None,
+            subed: false,
+            use_current_session: None,
+            both_support_specific_session: None,
+        }
     }
 }
 

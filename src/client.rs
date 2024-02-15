@@ -1519,6 +1519,10 @@ impl LoginConfigHandler {
         let mut n = 0;
         let mut msg = OptionMessage::new();
         msg.user_session = self.selected_user_session_id.clone();
+        if msg.user_session.is_empty() {
+            // indicate support user session id
+            msg.user_session = "INVALID".to_owned();
+        }
         n += 1;
 
         if self.conn_type.eq(&ConnType::FILE_TRANSFER) {
