@@ -10,6 +10,8 @@ pub struct License {
     pub host: String,
     #[serde(default)]
     pub api: String,
+    #[serde(default)]
+    pub relay: String,
 }
 
 fn get_license_from_string_(s: &str) -> ResultType<License> {
@@ -56,6 +58,7 @@ pub fn get_license_from_string(s: &str) -> ResultType<License> {
         let mut host = "";
         let mut key = "";
         let mut api = "";
+        let mut relay = "";
         let strs_iter = strs.iter();
         for el in strs_iter {
             if el.starts_with("host=") {
@@ -67,11 +70,15 @@ pub fn get_license_from_string(s: &str) -> ResultType<License> {
             if el.starts_with("api=") {
                 api = &el[4..el.len()];
             }
+            if el.starts_with("relay=") {
+                relay = &el[4..el.len()];
+            }
         }
         return Ok(License {
             host: host.to_owned(),
             key: key.to_owned(),
             api: api.to_owned(),
+            relay: relay.to_owned(),
         });
     } else {
         let strs = if s.contains("-licensed-") {
