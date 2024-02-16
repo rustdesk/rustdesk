@@ -45,7 +45,7 @@ pub fn make_tray() -> hbb_common::ResultType<()> {
     let tray_menu = Menu::new();
     let quit_i = MenuItem::new(translate("Exit".to_owned()), true, None);
     let open_i = MenuItem::new(translate("Open".to_owned()), true, None);
-    tray_menu.append_items(&[&open_i, &quit_i]);
+    tray_menu.append_items(&[&open_i, &quit_i]).ok();
     let tooltip = |count: usize| {
         if count == 0 {
             format!(
@@ -140,7 +140,9 @@ pub fn make_tray() -> hbb_common::ResultType<()> {
 
         if let Ok(_event) = tray_channel.try_recv() {
             #[cfg(target_os = "windows")]
-            if _event.event == tray_icon::ClickEvent::Left {
+            if _event.click_type == tray_icon::ClickType::Left
+                || _event.click_type == tray_icon::ClickType::Double
+            {
                 if last_click.elapsed() < std::time::Duration::from_secs(1) {
                     return;
                 }
