@@ -1044,7 +1044,9 @@ async fn check_connect_status_(reconnect: bool, rx: mpsc::UnboundedReceiver<ipc:
 
     loop {
         if let Ok(mut c) = ipc::connect(1000, "").await {
-            let mut timer = time::interval(time::Duration::from_secs(1));
+            const TIMER_OUT: time::Duration = time::Duration::from_secs(1);
+            let mut timer = time::interval(TIMER_OUT);
+            let mut last_timer = time::Instant::now() - TIMER_OUT * 2;
             loop {
                 tokio::select! {
                     res = c.next() => {
@@ -1112,6 +1114,12 @@ async fn check_connect_status_(reconnect: bool, rx: mpsc::UnboundedReceiver<ipc:
                         allow_err!(c.send(&data).await);
                     }
                     _ = timer.tick() => {
+                        let now = time::Instant::now();
+                        if last_timer.elapsed() < TIMER_OUT {
+                            continue;
+                        }
+                        last_timer = now;
+
                         c.send(&ipc::Data::OnlineStatus(None)).await.ok();
                         c.send(&ipc::Data::Options(None)).await.ok();
                         c.send(&ipc::Data::Config(("id".to_owned(), None))).await.ok();
