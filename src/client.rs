@@ -1531,7 +1531,7 @@ impl LoginConfigHandler {
         } else if q == "custom" {
             let config = self.load_config();
             let allow_more =
-                !crate::ui_interface::using_public_server() || self.direct == Some(true);
+                !crate::using_public_server() || self.direct == Some(true);
             let quality = if config.custom_image_quality.is_empty() {
                 50
             } else {

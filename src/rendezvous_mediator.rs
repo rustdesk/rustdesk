@@ -222,8 +222,12 @@ impl RendezvousMediator {
                     last_timer = now;
                     let expired = last_register_resp.map(|x| x.elapsed().as_millis() as i64 >= REG_INTERVAL).unwrap_or(true);
                     let timeout = last_register_sent.map(|x| x.elapsed().as_millis() as i64 >= reg_timeout).unwrap_or(false);
-                    if timeout && reg_timeout < MAX_REG_TIMEOUT {
-                        reg_timeout += MIN_REG_TIMEOUT;
+                    // temporarily disable exponential backoff for android before we add wakeup trigger to force connect in android
+                    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+                    if crate::using_public_server() { // only turn on this for public server, may help DDNS self-hosting user.
+                        if timeout && reg_timeout < MAX_REG_TIMEOUT {
+                            reg_timeout += MIN_REG_TIMEOUT;
+                        }
                     }
                     if timeout || (last_register_sent.is_none() && expired) {
                         if timeout {

@@ -249,12 +249,6 @@ pub fn set_peer_option(id: String, name: String, value: String) {
 }
 
 #[inline]
-pub fn using_public_server() -> bool {
-    option_env!("RENDEZVOUS_SERVER").unwrap_or("").is_empty()
-        && crate::get_custom_rendezvous_server(get_option("custom-rendezvous-server")).is_empty()
-}
-
-#[inline]
 pub fn get_options() -> String {
     let options = {
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -1114,11 +1108,10 @@ async fn check_connect_status_(reconnect: bool, rx: mpsc::UnboundedReceiver<ipc:
                         allow_err!(c.send(&data).await);
                     }
                     _ = timer.tick() => {
-                        let now = time::Instant::now();
                         if last_timer.elapsed() < TIMER_OUT {
                             continue;
                         }
-                        last_timer = now;
+                        last_timer = time::Instant::now();
 
                         c.send(&ipc::Data::OnlineStatus(None)).await.ok();
                         c.send(&ipc::Data::Options(None)).await.ok();
