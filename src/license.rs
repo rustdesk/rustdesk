@@ -116,6 +116,7 @@ mod test {
                 host: "server.example.net".to_owned(),
                 key: "".to_owned(),
                 api: "".to_owned(),
+                relay: "".to_owned(),
             }
         );
         assert_eq!(
@@ -124,6 +125,7 @@ mod test {
                 host: "server.example.net".to_owned(),
                 key: "".to_owned(),
                 api: "".to_owned(),
+                relay: "".to_owned(),
             }
         );
         // key in these tests is "foobar.,2" base64 encoded
@@ -136,6 +138,7 @@ mod test {
                 host: "server.example.net".to_owned(),
                 key: "Zm9vYmFyLiwyCg==".to_owned(),
                 api: "abc".to_owned(),
+                relay: "".to_owned(),
             }
         );
         assert_eq!(
@@ -145,6 +148,7 @@ mod test {
                 host: "server.example.net".to_owned(),
                 key: "Zm9vYmFyLiwyCg==".to_owned(),
                 api: "".to_owned(),
+                relay: "".to_owned(),
             }
         );
     }
