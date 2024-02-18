@@ -527,8 +527,15 @@ handler.updateDisplays = function(v) {
     }
 }
 
-handler.setMultipleUserSession = function(usid,uname) {
-    msgbox("multiple-sessions", translate("Multiple active user sessions found"), usid+"-"+uname, "", function(res) {});
+handler.setMultipleWindowsSession = function(sessions) {
+    // It will be covered by other message box if the timer is not used, 
+    self.timer(1000ms, function() {
+        msgbox("multiple-sessions-nocancel", translate("Multiple active user sessions found"), <MultipleSessionComponent sessions={sessions} />, "", function(res) {
+            if (res && res.sid) {
+                handler.set_selected_windows_session_id("" + res.sid);
+            }
+        }, 230);
+    });
 }
 
 function updatePrivacyMode() {

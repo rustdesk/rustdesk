@@ -122,11 +122,12 @@ message PeerInfo {
   // Use JSON's key-value format which is friendly for peer to handle.
   // NOTE: Only support one-level dictionaries (for peer to update), and the key is of type string.
   string platform_additions = 12;
+  WindowsSessions windows_sessions = 13;
 }
 
-message RdpUserSession {  
-  string user_session_id = 1;  
-  string user_name = 2;  
+message WindowsSession {  
+  uint32 sid = 1;  
+  string name = 2;  
 }  
 
 message LoginResponse {
@@ -594,7 +595,7 @@ message OptionMessage {
   BoolOption disable_keyboard = 12;
 // Position 13 is used for Resolution. Remove later.
 // Resolution custom_resolution = 13;
-  string user_session = 14;
+  BoolOption support_windows_specific_session = 14;
 }
 
 message TestDelay {
@@ -709,8 +710,9 @@ message PluginFailure {
   string msg = 3;
 }
 
-message RdpUserSessions {
-  repeated RdpUserSession rdp_user_sessions = 1;
+message WindowsSessions {
+  repeated WindowsSession sessions = 1;
+  uint32 current_sid = 2;
 }
 
 message Misc {
@@ -744,7 +746,7 @@ message Misc {
     ToggleVirtualDisplay toggle_virtual_display = 32;
     TogglePrivacyMode toggle_privacy_mode = 33;
     SupportedEncoding supported_encoding = 34;
-    RdpUserSessions rdp_user_sessions = 35;
+    uint32 selected_sid = 35;
   }
 }
 

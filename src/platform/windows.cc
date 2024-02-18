@@ -434,17 +434,6 @@ extern "C"
         return nout;
     }
 
-    uint32_t get_current_process_session_id()
-    {
-        DWORD sessionId = 0;
-        HANDLE hProcess = GetCurrentProcess();
-        if (hProcess) {
-            ProcessIdToSessionId(GetCurrentProcessId(), &sessionId);
-            CloseHandle(hProcess);
-        }
-        return sessionId;
-    }
-
     uint32_t get_session_user_info(PWSTR bufin, uint32_t nin, BOOL rdp, uint32_t id)
     {
         uint32_t nout = 0;

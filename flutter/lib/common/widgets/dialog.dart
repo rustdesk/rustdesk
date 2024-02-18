@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -1862,6 +1863,7 @@ void enter2FaDialog(
   });
 }
 
+// This dialog should not be dismissed, otherwise it will be black screen, have not reproduced this.
 void showWindowsSessionsDialog(
     String type,
     String title,
@@ -1870,97 +1872,40 @@ void showWindowsSessionsDialog(
     SessionID sessionId,
     String peerId,
     String sessions) {
-  List<String> sessionsList = sessions.split(',');
-  Map<String, String> sessionMap = {};
-  for (var session in sessionsList) {
-    var sessionInfo = session.split('-');
-    if (sessionInfo.isNotEmpty) {
-      sessionMap[sessionInfo[0]] = sessionInfo[1];
-    }
+  List<dynamic> sessionsList = [];
+  try {
+    sessionsList = json.decode(sessions);
+  } catch (e) {
+    print(e);
   }
-  String selectedUserValue = sessionMap.keys.first;
+  List<String> sids = [];
+  List<String> names = [];
+  for (var session in sessionsList) {
+    sids.add(session['sid']);
+    names.add(session['name']);
+  }
+  String selectedUserValue = sids.first;
   dialogManager.dismissAll();
   dialogManager.show((setState, close, context) {
-    onConnect() {
-      bind.sessionReconnect(
-          sessionId: sessionId,
-          forceRelay: false,
-          userSessionId: selectedUserValue);
-      dialogManager.dismissAll();
-      dialogManager.showLoading(translate('Connecting...'),
-          onCancel: closeConnection);
+    submit() {
+      bind.sessionSendSelectedSessionId(
+          sessionId: sessionId, sid: selectedUserValue);
+      close();
     }
 
     return CustomAlertDialog(
       title: null,
       content: msgboxContent(type, title, text),
       actions: [
-        SessionsDropdown(peerId, sessionId, sessionMap, (value) {
-          setState(() {
-            selectedUserValue = value;
-          });
-        }),
-        dialogButton('Connect', onPressed: onConnect, isOutline: false),
+        ComboBox(
+            keys: sids,
+            values: names,
+            initialKey: selectedUserValue,
+            onChanged: (value) {
+              selectedUserValue = value;
+            }),
+        dialogButton('Connect', onPressed: submit, isOutline: false),
       ],
     );
   });
-}
-
-class SessionsDropdown extends StatefulWidget {
-  final String peerId;
-  final SessionID sessionId;
-  final Map<String, String> sessions;
-  final Function(String) onValueChanged;
-
-  SessionsDropdown(
-      this.peerId, this.sessionId, this.sessions, this.onValueChanged);
-
-  @override
-  _SessionsDropdownState createState() => _SessionsDropdownState();
-}
-
-class _SessionsDropdownState extends State<SessionsDropdown> {
-  late String selectedValue;
-  @override
-  void initState() {
-    super.initState();
-    selectedValue = widget.sessions.keys.first;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 300,
-      child: DropdownButton<String>(
-        value: selectedValue,
-        isExpanded: true,
-        borderRadius: BorderRadius.circular(8),
-        padding: EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-        items: widget.sessions.entries.map((entry) {
-          return DropdownMenuItem(
-            value: entry.key,
-            child: Text(
-              entry.value,
-              style: TextStyle(
-                color: MyTheme.currentThemeMode() == ThemeMode.dark
-                    ? Colors.white
-                    : MyTheme.dark,
-              ),
-            ),
-          );
-        }).toList(),
-        onChanged: (value) {
-          if (value != null) {
-            setState(() {
-              selectedValue = value;
-            });
-            widget.onValueChanged(value);
-          }
-        },
-        style: TextStyle(
-          fontSize: 16.0,
-        ),
-      ),
-    );
-  }
 }

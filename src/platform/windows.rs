@@ -12,9 +12,10 @@ use hbb_common::{
     bail,
     config::{self, Config},
     log,
-    message_proto::Resolution,
+    message_proto::{Resolution, WindowsSession},
     sleep, timeout, tokio,
 };
+use sha2::digest::generic_array::functional::FunctionalSequence;
 use std::process::{Command, Stdio};
 use std::{
     collections::HashMap,
@@ -38,7 +39,7 @@ use winapi::{
         minwinbase::STILL_ACTIVE,
         processthreadsapi::{
             GetCurrentProcess, GetCurrentProcessId, GetExitCodeProcess, OpenProcess,
-            OpenProcessToken, PROCESS_INFORMATION, STARTUPINFOW,
+            OpenProcessToken, ProcessIdToSessionId, PROCESS_INFORMATION, STARTUPINFOW,
         },
         securitybaseapi::GetTokenInformation,
         shellapi::ShellExecuteW,
@@ -511,8 +512,11 @@ async fn run_service(_arguments: Vec<OsString>) -> ResultType<()> {
     let mut incoming = ipc::new_listener(crate::POSTFIX_SERVICE).await?;
     let mut stored_usid = None;
     loop {
-        let sids = get_all_active_session_ids();
-        if !sids.contains(&format!("{}", session_id)) || !is_share_rdp() {
+        let sids: Vec<_> = get_available_sessions(false)
+            .iter()
+            .map(|e| e.sid)
+            .collect();
+        if !sids.contains(&session_id) || !is_share_rdp() {
             let current_active_session = unsafe { get_current_session(share_rdp()) };
             if session_id != current_active_session {
                 session_id = current_active_session;
@@ -628,16 +632,15 @@ async fn launch_server(session_id: DWORD, close_first: bool) -> ResultType<HANDL
     Ok(h)
 }
 
-pub fn run_as_user(arg: Vec<&str>, usid: Option<u32>) -> ResultType<Option<std::process::Child>> {
+pub fn run_as_user(arg: Vec<&str>) -> ResultType<Option<std::process::Child>> {
     let cmd = format!(
         "\"{}\" {}",
         std::env::current_exe()?.to_str().unwrap_or(""),
         arg.join(" "),
     );
-    let mut session_id = get_current_process_session_id();
-    if let Some(usid) = usid {
-        session_id = usid;
-    }
+    let Some(session_id) = get_current_process_session_id() else {
+        bail!("Failed to get current process session id");
+    };
     use std::os::windows::ffi::OsStrExt;
     let wstr: Vec<u16> = std::ffi::OsStr::new(&cmd)
         .encode_wide()
@@ -733,11 +736,13 @@ pub fn set_share_rdp(enable: bool) {
     run_cmds(cmd, false, "share_rdp").ok();
 }
 
-pub fn get_current_process_session_id() -> u32 {
-    extern "C" {
-        fn get_current_process_session_id() -> u32;
+pub fn get_current_process_session_id() -> Option<u32> {
+    let mut sid = 0;
+    if unsafe { ProcessIdToSessionId(GetCurrentProcessId(), &mut sid) == TRUE } {
+        Some(sid)
+    } else {
+        None
     }
-    unsafe { get_current_process_session_id() }
 }
 
 pub fn get_active_username() -> String {
@@ -762,74 +767,91 @@ pub fn get_active_username() -> String {
         .to_owned()
 }
 
-pub fn get_all_active_sessions() -> Vec<Vec<String>> {
-    let sids = get_all_active_session_ids_with_station();
-    let mut out = Vec::new();
-    for sid in sids.split(',') {
-        let username = get_session_username(sid.to_owned());
-        if !username.is_empty() {
-            let sid_split = sid.split(':').collect::<Vec<_>>()[1];
-            let v = vec![sid_split.to_owned(), username];
-            out.push(v);
-        }
-    }
-    out
-}
-
-pub fn get_session_username(session_id_with_station_name: String) -> String {
-    let mut session_id = session_id_with_station_name.split(':');
-    let station = session_id.next().unwrap_or("");
-    let session_id = session_id.next().unwrap_or("");
-    if session_id == "" {
-        return "".to_owned();
-    }
-
+fn get_session_username(session_id: u32) -> String {
     extern "C" {
         fn get_session_user_info(path: *mut u16, n: u32, rdp: bool, session_id: u32) -> u32;
     }
     let buff_size = 256;
     let mut buff: Vec<u16> = Vec::with_capacity(buff_size);
     buff.resize(buff_size, 0);
-    let n = unsafe {
-        get_session_user_info(
-            buff.as_mut_ptr(),
-            buff_size as _,
-            true,
-            session_id.parse::<u32>().unwrap(),
-        )
-    };
+    let n = unsafe { get_session_user_info(buff.as_mut_ptr(), buff_size as _, true, session_id) };
     if n == 0 {
         return "".to_owned();
     }
     let sl = unsafe { std::slice::from_raw_parts(buff.as_ptr(), n as _) };
-    let out = String::from_utf16(sl)
+    String::from_utf16(sl)
         .unwrap_or("".to_owned())
         .trim_end_matches('\0')
-        .to_owned();
-    station.to_owned() + ": " + &out
+        .to_owned()
 }
 
-pub fn get_all_active_session_ids_with_station() -> String {
+pub fn get_available_sessions(name: bool) -> Vec<WindowsSession> {
     extern "C" {
         fn get_available_session_ids(buf: *mut wchar_t, buf_size: c_int, include_rdp: bool);
     }
     const BUF_SIZE: c_int = 1024;
     let mut buf: Vec<wchar_t> = vec![0; BUF_SIZE as usize];
 
-    unsafe {
+    let station_session_id_array = unsafe {
         get_available_session_ids(buf.as_mut_ptr(), BUF_SIZE, true);
         let session_ids = String::from_utf16_lossy(&buf);
         session_ids.trim_matches(char::from(0)).trim().to_string()
+    };
+    let mut v: Vec<WindowsSession> = vec![];
+    // https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-wtsgetactiveconsolesessionid
+    let physical_console_session_id = unsafe { get_current_session(FALSE) };
+    let physical_console_username = get_session_username(physical_console_session_id);
+    let physical_console_name = if name {
+        if physical_console_username.is_empty() {
+            "Console".to_owned()
+        } else {
+            format!("Console:{physical_console_username}")
+        }
+    } else {
+        "".to_owned()
+    };
+    v.push(WindowsSession {
+        sid: physical_console_session_id,
+        name: physical_console_name,
+        ..Default::default()
+    });
+    // https://learn.microsoft.com/en-us/previous-versions//cc722458(v=technet.10)?redirectedfrom=MSDN
+    for type_session_id in station_session_id_array.split(",") {
+        let split: Vec<_> = type_session_id.split(":").collect();
+        if split.len() == 2 {
+            if let Ok(sid) = split[1].parse::<u32>() {
+                if !v.iter().any(|e| (*e).sid == sid) {
+                    let name = if name {
+                        format!("{}:{}", split[0], get_session_username(sid))
+                    } else {
+                        "".to_owned()
+                    };
+                    v.push(WindowsSession {
+                        sid,
+                        name,
+                        ..Default::default()
+                    });
+                }
+            }
+        }
     }
-}
-
-pub fn get_all_active_session_ids() -> String {
-    let out = get_all_active_session_ids_with_station()
-        .split(',')
-        .map(|x| x.split(':').nth(1).unwrap_or(""))
-        .collect::<Vec<_>>()
-        .join(",");
-    out.trim_matches(char::from(0)).trim().to_string()
+    if name {
+        let mut name_count: HashMap<String, usize> = HashMap::new();
+        for session in &v {
+            *name_count.entry(session.name.clone()).or_insert(0) += 1;
+        }
+        let current_sid = get_current_process_session_id().unwrap_or_default();
+        for e in v.iter_mut() {
+            let running = e.sid == current_sid && current_sid != 0;
+            if name_count.get(&e.name).map(|v| *v).unwrap_or_default() > 1 {
+                e.name = format!("{} (sid = {})", e.name, e.sid);
+            }
+            if running {
+                e.name = format!("{} (running)", e.name);
+            }
+        }
+    }
+    v
 }
 
 pub fn get_active_user_home() -> Option<PathBuf> {
@@ -845,7 +867,11 @@ pub fn get_active_user_home() -> Option<PathBuf> {
 }
 
 pub fn is_prelogin() -> bool {
-    let username = get_active_username();
+    let Some(sid) = get_current_process_session_id() else {
+        log::error!("get_current_process_session_id failed");
+        return false;
+    };
+    let username = get_session_username(sid);
     username.is_empty() || username == "SYSTEM"
 }
 
