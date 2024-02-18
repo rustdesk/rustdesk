@@ -1358,24 +1358,20 @@ impl ThrottledInterval {
     }
 
     pub async fn tick(&mut self) -> Instant {
-        loop {
-            let instant = poll_fn(|cx| self.poll_tick(cx));
-            if let Some(instant) = instant.await {
-                return instant;
-            }
-        }
+        let instant = poll_fn(|cx| self.poll_tick(cx));
+        instant.await
     }
 
-    pub fn poll_tick(&mut self, cx: &mut std::task::Context<'_>) -> Poll<Option<Instant>> {
+    pub fn poll_tick(&mut self, cx: &mut std::task::Context<'_>) -> Poll<Instant> {
         match self.interval.poll_tick(cx) {
             Poll::Ready(instant) => {
                 if self.last_tick.elapsed() >= self.min_interval {
                     self.last_tick = Instant::now();
-                    Poll::Ready(Some(instant))
+                    Poll::Ready(instant)
                 } else {
                     // This call is required since tokio 1.27
                     cx.waker().wake_by_ref();
-                    Poll::Ready(None)
+                    Poll::Pending
                 }
             }
             Poll::Pending => {
@@ -1453,6 +1449,7 @@ mod tests {
         assert_eq!(Duration::from_secs_f64(dur.as_secs_f64() * 0.923 * 1e-3), Duration::from_micros(923));
         assert_eq!(Duration::from_secs_f64(dur.as_secs_f64() * 0.923 * 1e-6), Duration::from_nanos(923));
         assert_eq!(Duration::from_secs_f64(dur.as_secs_f64() * 0.923 * 1e-9), Duration::from_nanos(1));
-        assert_eq!(Duration::from_secs_f64(dur.as_secs_f64() * 0.923 * 1e-10), Duration::from_nanos(0));
+        assert_eq!(Duration::from_secs_f64(dur.as_secs_f64() * 0.5 * 1e-9), Duration::from_nanos(1));
+        assert_eq!(Duration::from_secs_f64(dur.as_secs_f64() * 0.499 * 1e-9), Duration::from_nanos(0));
     }
 }
