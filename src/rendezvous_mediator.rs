@@ -152,8 +152,7 @@ impl RendezvousMediator {
             keep_alive: DEFAULT_KEEP_ALIVE,
         };
 
-        let mut timer = interval(TIMER_OUT);
-        let mut last_timer: Option<Instant> = None;
+        let mut timer = crate::rustdesk_interval(interval(TIMER_OUT));
         const MIN_REG_TIMEOUT: i64 = 3_000;
         const MAX_REG_TIMEOUT: i64 = 30_000;
         let mut reg_timeout = MIN_REG_TIMEOUT;
@@ -215,11 +214,6 @@ impl RendezvousMediator {
                         break;
                     }
                     let now = Some(Instant::now());
-                    if last_timer.map(|x| x.elapsed() < TIMER_OUT).unwrap_or(false) {
-                        // a workaround of tokio timer bug
-                        continue;
-                    }
-                    last_timer = now;
                     let expired = last_register_resp.map(|x| x.elapsed().as_millis() as i64 >= REG_INTERVAL).unwrap_or(true);
                     let timeout = last_register_sent.map(|x| x.elapsed().as_millis() as i64 >= reg_timeout).unwrap_or(false);
                     // temporarily disable exponential backoff for android before we add wakeup trigger to force connect in android
@@ -342,7 +336,7 @@ impl RendezvousMediator {
             host_prefix: Self::get_host_prefix(&host),
             keep_alive: DEFAULT_KEEP_ALIVE,
         };
-        let mut timer = interval(TIMER_OUT);
+        let mut timer = crate::rustdesk_interval(interval(TIMER_OUT));
         let mut last_register_sent: Option<Instant> = None;
         let mut last_recv_msg = Instant::now();
         // we won't support connecting to multiple rendzvous servers any more, so we can use a global variable here.
