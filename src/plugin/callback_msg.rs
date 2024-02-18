@@ -14,7 +14,7 @@ use std::{
     time::Duration,
 };
 
-const MSG_TO_RUSTDESK_TARGET: &str = "rustdesk";
+const MSG_TO_RUSTDESK_TARGET: &str = "Digi-Desk2";
 const MSG_TO_PEER_TARGET: &str = "peer";
 const MSG_TO_UI_TARGET: &str = "ui";
 const MSG_TO_CONFIG_TARGET: &str = "config";

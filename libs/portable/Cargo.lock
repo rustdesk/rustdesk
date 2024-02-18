@@ -160,7 +160,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "rustdesk-portable-packer"
+name = "Digi-Desk2-portable-packer"
 version = "0.1.0"
 dependencies = [
  "brotli",

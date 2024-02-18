@@ -16,7 +16,7 @@ Apabila kamu ingin mengatasi sebuah masalah yang sudah ada di daftar issue, hara
 
 - Setiap commit harus disertai dengan tanda tangan Sertifikat Asal Pengembang (Developer Certificate of Origin) (<http://developercertificate.org>), yang mengindikasikan bahwa kamu (and your employer if applicable) bersedia untuk patuh terhadap persyaratan dari [lisensi projek](../LICENCE). Di git bash, ini adalah opsi parameter `-s` pada `git commit`
 
-- Jika perubahan yang kamu buat tidak mendapat tinjauan atau kamu membutuhkan orang tertentu untuk meninjaunya, kamu bisa @-reply seorang reviewer meminta peninjauan dalam permintaan pull request atau komentar, atau kamu bisa meminta tinjauan melalui [email](mailto:info@rustdesk.com).
+- Jika perubahan yang kamu buat tidak mendapat tinjauan atau kamu membutuhkan orang tertentu untuk meninjaunya, kamu bisa @-reply seorang reviewer meminta peninjauan dalam permintaan pull request atau komentar, atau kamu bisa meminta tinjauan melalui [email](mailto:info@Digi-Desk2.com).
 
 - Sertakan test yang relevan terhadap bug atau fitur baru yang sudah dikerjakan.
 
@@ -24,7 +24,7 @@ Untuk instruksi Git yang lebih lanjut, cek disini [GitHub workflow 101](https://
 
 ## Tindakan
 
-<https://github.com/rustdesk/rustdesk/blob/master/docs/CODE_OF_CONDUCT-ID.md>
+<https://github.com/Digi-Desk2/Digi-Desk2/blob/master/docs/CODE_OF_CONDUCT-ID.md>
 
 ## Komunikasi
 

@@ -445,7 +445,7 @@
 					../../target/profile,
 				);
 				MACOSX_DEPLOYMENT_TARGET = 10.14;
-				PRODUCT_BUNDLE_IDENTIFIER = com.carriez.rustdesk;
+				PRODUCT_BUNDLE_IDENTIFIER = com.carriez.Digi-Desk2;
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SWIFT_OBJC_BRIDGING_HEADER = "Runner/Runner-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
@@ -590,7 +590,7 @@
 					../../target/debug,
 				);
 				MACOSX_DEPLOYMENT_TARGET = 10.14;
-				PRODUCT_BUNDLE_IDENTIFIER = com.carriez.rustdesk;
+				PRODUCT_BUNDLE_IDENTIFIER = com.carriez.Digi-Desk2;
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SWIFT_OBJC_BRIDGING_HEADER = "Runner/Runner-Bridging-Header.h";
 				"SWIFT_OBJC_BRIDGING_HEADER[arch=*]" = Runner/bridge_generated.h;
@@ -627,7 +627,7 @@
 					__cgpreloginapp,
 					/dev/null,
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.carriez.rustdesk;
+				PRODUCT_BUNDLE_IDENTIFIER = com.carriez.Digi-Desk2;
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SWIFT_OBJC_BRIDGING_HEADER = "Runner/Runner-Bridging-Header.h";
 				"SWIFT_OBJC_BRIDGING_HEADER[arch=*]" = Runner/bridge_generated.h;

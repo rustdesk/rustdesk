@@ -9,17 +9,17 @@
   <b>Necesitamos tu ayuda para traducir este README a tu idioma</b>
 </p>
 
-Chatea con nosotros: [Discord](https://discord.gg/nDceKgxnkV) | [Twitter](https://twitter.com/rustdesk) | [Reddit](https://www.reddit.com/r/rustdesk)
+Chatea con nosotros: [Discord](https://discord.gg/nDceKgxnkV) | [Twitter](https://twitter.com/Digi-Desk2) | [Reddit](https://www.reddit.com/r/Digi-Desk2)
 
 [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/I2I04VU09)
 
-Otro software de escritorio remoto, escrito en Rust. Funciona de forma inmediata, sin necesidad de configuración. Tienes el control total de tus datos, sin preocupaciones sobre la seguridad. Puedes utilizar nuestro servidor de rendezvous/relay, [instalar el tuyo](https://rustdesk.com/server), o [escribir tu propio servidor rendezvous/relay](https://github.com/rustdesk/rustdesk-server-demo).
+Otro software de escritorio remoto, escrito en Rust. Funciona de forma inmediata, sin necesidad de configuración. Tienes el control total de tus datos, sin preocupaciones sobre la seguridad. Puedes utilizar nuestro servidor de rendezvous/relay, [instalar el tuyo](https://Digi-Desk2.com/server), o [escribir tu propio servidor rendezvous/relay](https://github.com/Digi-Desk2/Digi-Desk2-server-demo).
 
 RustDesk agradece la contribución de todo el mundo. Lee [`docs/CONTRIBUTING.md`](CONTRIBUTING.md) para ayuda para empezar.
 
-[**¿Cómo funciona rustdesk?**](https://github.com/rustdesk/rustdesk/wiki/How-does-RustDesk-work%3F)
+[**¿Cómo funciona Digi-Desk2?**](https://github.com/Digi-Desk2/Digi-Desk2/wiki/How-does-RustDesk-work%3F)
 
-[**DESCARGA DE BINARIOS**](https://github.com/rustdesk/rustdesk/releases)
+[**DESCARGA DE BINARIOS**](https://github.com/Digi-Desk2/Digi-Desk2/releases)
 
 [<img src="https://fdroid.gitlab.io/artwork/badge/get-it-on.png"
     alt="Get it on F-Droid"
@@ -105,8 +105,8 @@ cd
 ```sh
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 source $HOME/.cargo/env
-git clone https://github.com/rustdesk/rustdesk
-cd rustdesk
+git clone https://github.com/Digi-Desk2/Digi-Desk2
+cd Digi-Desk2
 mkdir -p target/debug
 wget https://raw.githubusercontent.com/c-smile/sciter-sdk/master/bin.lnx/x64/libsciter-gtk.so
 mv libsciter-gtk.so target/debug
@@ -118,43 +118,43 @@ cargo run
 Empieza clonando el repositorio y compilando el contenedor de docker:
 
 ```sh
-git clone https://github.com/rustdesk/rustdesk
-cd rustdesk
-docker build -t "rustdesk-builder" .
+git clone https://github.com/Digi-Desk2/Digi-Desk2
+cd Digi-Desk2
+docker build -t "Digi-Desk2-builder" .
 ```
 
 Entonces, cada vez que necesites compilar una modificación, ejecuta el siguiente comando:
 
 ```sh
-docker run --rm -it -v $PWD:/home/user/rustdesk -v rustdesk-git-cache:/home/user/.cargo/git -v rustdesk-registry-cache:/home/user/.cargo/registry -e PUID="$(id -u)" -e PGID="$(id -g)" rustdesk-builder
+docker run --rm -it -v $PWD:/home/user/Digi-Desk2 -v Digi-Desk2-git-cache:/home/user/.cargo/git -v Digi-Desk2-registry-cache:/home/user/.cargo/registry -e PUID="$(id -u)" -e PGID="$(id -g)" Digi-Desk2-builder
 ```
 
 Ten en cuenta que la primera compilación puede tardar más tiempo antes de que las dependencias se almacenen en la caché, las siguientes compilaciones serán más rápidas. Además, si necesitas especificar diferentes argumentos al comando de compilación, puedes hacerlo al final del comando en la posición `<OPTIONAL-ARGS>`. Por ejemplo, si deseas compilar una versión optimizada para publicación, deberas ejecutar el comando anterior seguido de `--release`. El ejecutable resultante estará disponible en la carpeta de destino en tu sistema, y puede ser ejecutado con:
 
 ```sh
-target/debug/rustdesk
+target/debug/Digi-Desk2
 ```
 
 O si estas ejecutando una versión para su publicación:
 
 ```sh
-target/release/rustdesk
+target/release/Digi-Desk2
 ```
 
 Por favor, asegurate de que estás ejecutando estos comandos desde la raíz del repositorio de RustDesk, de lo contrario la aplicación puede ser incapaz de encontrar los recursos necesarios. También ten en cuenta que otros subcomandos de cargo como `install` o `run` no estan actualmente soportados usando este metodo, ya que instalarían o ejecutarían el programa dentro del contenedor en lugar del host.
 
 ## Estructura de archivos
 
-- **[libs/hbb_common](https://github.com/rustdesk/rustdesk/tree/master/libs/hbb_common)**:  codec de video, configuración, tcp/udp wrapper, protobuf, funciones para transferencia de archivos, y otras funciones de utilidad.
-- **[libs/scrap](https://github.com/rustdesk/rustdesk/tree/master/libs/scrap)**: captura de pantalla
-- **[libs/enigo](https://github.com/rustdesk/rustdesk/tree/master/libs/enigo)**: control del teclado/mouse especificos de cada plataforma
-- **[src/ui](https://github.com/rustdesk/rustdesk/tree/master/src/ui)**: GUI
-- **[src/server](https://github.com/rustdesk/rustdesk/tree/master/src/server)**: sonido/portapapeles/input/servicios de video, y conexiones de red
-- **[src/client.rs](https://github.com/rustdesk/rustdesk/tree/master/src/client.rs)**: iniciar una conexión "peer to peer"
-- **[src/rendezvous_mediator.rs](https://github.com/rustdesk/rustdesk/tree/master/src/rendezvous_mediator.rs)**: Comunicación con [rustdesk-server](https://github.com/rustdesk/rustdesk-server), esperar la conexión remota directa ("TCP hole punching") o conexión indirecta ("relayed")
-- **[src/platform](https://github.com/rustdesk/rustdesk/tree/master/src/platform)**: código específico de cada plataforma
-- **[flutter](https://github.com/rustdesk/rustdesk/tree/master/flutter)**: Flutter, código para moviles
-- **[flutter/web/js](https://github.com/rustdesk/rustdesk/tree/master/flutter/web/js)**: Javascript para el cliente web Flutter
+- **[libs/hbb_common](https://github.com/Digi-Desk2/Digi-Desk2/tree/master/libs/hbb_common)**:  codec de video, configuración, tcp/udp wrapper, protobuf, funciones para transferencia de archivos, y otras funciones de utilidad.
+- **[libs/scrap](https://github.com/Digi-Desk2/Digi-Desk2/tree/master/libs/scrap)**: captura de pantalla
+- **[libs/enigo](https://github.com/Digi-Desk2/Digi-Desk2/tree/master/libs/enigo)**: control del teclado/mouse especificos de cada plataforma
+- **[src/ui](https://github.com/Digi-Desk2/Digi-Desk2/tree/master/src/ui)**: GUI
+- **[src/server](https://github.com/Digi-Desk2/Digi-Desk2/tree/master/src/server)**: sonido/portapapeles/input/servicios de video, y conexiones de red
+- **[src/client.rs](https://github.com/Digi-Desk2/Digi-Desk2/tree/master/src/client.rs)**: iniciar una conexión "peer to peer"
+- **[src/rendezvous_mediator.rs](https://github.com/Digi-Desk2/Digi-Desk2/tree/master/src/rendezvous_mediator.rs)**: Comunicación con [Digi-Desk2-server](https://github.com/Digi-Desk2/Digi-Desk2-server), esperar la conexión remota directa ("TCP hole punching") o conexión indirecta ("relayed")
+- **[src/platform](https://github.com/Digi-Desk2/Digi-Desk2/tree/master/src/platform)**: código específico de cada plataforma
+- **[flutter](https://github.com/Digi-Desk2/Digi-Desk2/tree/master/flutter)**: Flutter, código para moviles
+- **[flutter/web/js](https://github.com/Digi-Desk2/Digi-Desk2/tree/master/flutter/web/js)**: Javascript para el cliente web Flutter
 
 ## Capturas de pantalla
 

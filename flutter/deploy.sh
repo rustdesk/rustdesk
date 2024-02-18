@@ -9,6 +9,6 @@ python3 -c 'import hashlib;x=hashlib.sha1(open("./index.js").read().encode()).he
 python3 -c 'import hashlib;x=hashlib.sha1(open("./vendor.js").read().encode()).hexdigest()[:10];y=open("index.html","rt").read().replace("js/dist/vendor.js", "vendor.js?v="+x);open("index.html","wt").write(y)'
 tar czf x *
 scp x sg:/tmp/
-ssh sg "sudo tar xzf /tmp/x -C /var/www/html/web.rustdesk.com/ && /bin/rm /tmp/x && sudo chown www-data:www-data /var/www/html/web.rustdesk.com/ -R"
+ssh sg "sudo tar xzf /tmp/x -C /var/www/html/web.Digi-Desk2.com/ && /bin/rm /tmp/x && sudo chown www-data:www-data /var/www/html/web.Digi-Desk2.com/ -R"
 /bin/rm x
 cd -

@@ -82,7 +82,7 @@ pub struct PipeWireCapturable {
 impl PipeWireCapturable {
     fn new(conn: Arc<SyncConnection>, fd: OwnedFd, stream: PwStreamInfo) -> Self {
         // alternative to get screen resolution as stream.size is not always correct ex: on fractional scaling
-        // https://github.com/rustdesk/rustdesk/issues/6116#issuecomment-1817724244
+        // https://github.com/Digi-Desk2/Digi-Desk2/issues/6116#issuecomment-1817724244
         let res = get_res(Self {
             dbus_conn: conn.clone(),
             fd: fd.clone(),
@@ -780,7 +780,7 @@ pub fn get_capturables() -> Result<Vec<PipeWireCapturable>, Box<dyn Error>> {
 fn is_server_running() -> bool {
     let output = match Command::new("sh")
         .arg("-c")
-        .arg("ps aux | grep rustdesk")
+        .arg("ps aux | grep Digi-Desk2")
         .output()
     {
         Ok(output) => output,
@@ -790,6 +790,6 @@ fn is_server_running() -> bool {
     };
 
     let output_str = String::from_utf8_lossy(&output.stdout);
-    let is_running = output_str.contains("rustdesk --server");
+    let is_running = output_str.contains("Digi-Desk2 --server");
     is_running
 }

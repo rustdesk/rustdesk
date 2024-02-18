@@ -6,26 +6,26 @@
   <a href="#file-structure">Structure</a> •
   <a href="#snapshot">Snapshot</a><br>
   [<a href="../README.md">English</a>] | [<a href="README-UA.md">Українська</a>] | [<a href="README-CS.md">česky</a>] | [<a href="README-ZH.md">中文</a>] | [<a href="README-HU.md">Magyar</a>] | [<a href="README-ES.md">Español</a>] | [<a href="README-FA.md">فارسی</a>] | [<a href="README-FR.md">Français</a>] | [<a href="README-DE.md">Deutsch</a>] | [<a href="README-PL.md">Polski</a>] | [<a href="README-FI.md">Suomi</a>] | [<a href="README-ML.md">മലയാളം</a>] | [<a href="README-JP.md">日本語</a>] | [<a href="README-NL.md">Nederlands</a>] | [<a href="README-IT.md">Italiano</a>] | [<a href="README-RU.md">Русский</a>] | [<a href="README-PTBR.md">Português (Brasil)</a>] | [<a href="README-EO.md">Esperanto</a>] | [<a href="README-KR.md">한국어</a>] | [<a href="README-AR.md">العربي</a>] | [<a href="README-VN.md">Tiếng Việt</a>] | [<a href="README-GR.md">Ελληνικά</a>]<br>
-  <b>Kami membutuhkan bantuanmu untuk menterjemahkan file README dan <a href="https://github.com/rustdesk/rustdesk/tree/master/src/lang">RustDesk UI</a> ke Bahasa Indonesia</b>
+  <b>Kami membutuhkan bantuanmu untuk menterjemahkan file README dan <a href="https://github.com/Digi-Desk2/Digi-Desk2/tree/master/src/lang">RustDesk UI</a> ke Bahasa Indonesia</b>
 </p>
 
-Mari mengobrol bersama kami: [Discord](https://discord.gg/nDceKgxnkV) | [Twitter](https://twitter.com/rustdesk) | [Reddit](https://www.reddit.com/r/rustdesk)
+Mari mengobrol bersama kami: [Discord](https://discord.gg/nDceKgxnkV) | [Twitter](https://twitter.com/Digi-Desk2) | [Reddit](https://www.reddit.com/r/Digi-Desk2)
 
 [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/I2I04VU09)
 
-[![Open Bounties](https://img.shields.io/endpoint?url=https%3A%2F%2Fconsole.algora.io%2Fapi%2Fshields%2Frustdesk%2Fbounties%3Fstatus%3Dopen)](https://console.algora.io/org/rustdesk/bounties?status=open)
+[![Open Bounties](https://img.shields.io/endpoint?url=https%3A%2F%2Fconsole.algora.io%2Fapi%2Fshields%2Frustdesk%2Fbounties%3Fstatus%3Dopen)](https://console.algora.io/org/Digi-Desk2/bounties?status=open)
 
-Merupakan perangkat lunak Remote Desktop yang baru, dan dibangun dengan Rust. Bahkan kamu bisa langsung menggunakannya tanpa perlu melakukan konfigurasi tambahan. Serta memiliki kontrol penuh terhadap semua data, tanpa perlu merasa was-was tentang isu keamanan, dan yang lebih menarik adalah memiliki opsi untuk menggunakan server rendezvous/relay milik kami, [konfigurasi server sendiri](https://rustdesk.com/server), atau [tulis rendezvous/relay server anda sendiri](https://github.com/rustdesk/rustdesk-server-demo).
+Merupakan perangkat lunak Remote Desktop yang baru, dan dibangun dengan Rust. Bahkan kamu bisa langsung menggunakannya tanpa perlu melakukan konfigurasi tambahan. Serta memiliki kontrol penuh terhadap semua data, tanpa perlu merasa was-was tentang isu keamanan, dan yang lebih menarik adalah memiliki opsi untuk menggunakan server rendezvous/relay milik kami, [konfigurasi server sendiri](https://Digi-Desk2.com/server), atau [tulis rendezvous/relay server anda sendiri](https://github.com/Digi-Desk2/Digi-Desk2-server-demo).
 
 ![image](https://user-images.githubusercontent.com/71636191/171661982-430285f0-2e12-4b1d-9957-4a58e375304d.png)
 
 RustDesk mengajak semua orang untuk ikut berkontribusi. Lihat [`docs/CONTRIBUTING-ID.md`](CONTRIBUTING-ID.md) untuk melihat panduan.
 
-[**FAQ**](https://github.com/rustdesk/rustdesk/wiki/FAQ)
+[**FAQ**](https://github.com/Digi-Desk2/Digi-Desk2/wiki/FAQ)
 
-[**UNDUH BINARY**](https://github.com/rustdesk/rustdesk/releases)
+[**UNDUH BINARY**](https://github.com/Digi-Desk2/Digi-Desk2/releases)
 
-[**NIGHTLY BUILD**](https://github.com/rustdesk/rustdesk/releases/tag/nightly)
+[**NIGHTLY BUILD**](https://github.com/Digi-Desk2/Digi-Desk2/releases/tag/nightly)
 
 [<img src="https://fdroid.gitlab.io/artwork/badge/get-it-on.png"
     alt="Get it on F-Droid"
@@ -41,7 +41,7 @@ Di bawah ini merupakan server gratis yang bisa kamu gunakan, seiring dengan wakt
 
 ## Dev Container
 
-[![Open in Dev Containers](https://img.shields.io/static/v1?label=Dev%20Container&message=Open&color=blue&logo=visualstudiocode)](https://vscode.dev/redirect?url=vscode://ms-vscode-remote.remote-containers/cloneInVolume?url=https://github.com/rustdesk/rustdesk)
+[![Open in Dev Containers](https://img.shields.io/static/v1?label=Dev%20Container&message=Open&color=blue&logo=visualstudiocode)](https://vscode.dev/redirect?url=vscode://ms-vscode-remote.remote-containers/cloneInVolume?url=https://github.com/Digi-Desk2/Digi-Desk2)
 
 Apabila PC kamu sudah terinstal VS Code dan Docker, kamu bisa mengklik badge yang ada diatas untuk memulainya. Dengan mengklik badge tersebut secara otomatis akan menginstal ekstensi pada VS Code, lakukan kloning (clone) source code kedalam container volume, dan aktifkan dev container untuk menggunakannya.
 
@@ -66,7 +66,7 @@ Kamu bisa mengunduh Sciter dynamic library disini.
 
 - jalankan `cargo run`
 
-## [Build](https://rustdesk.com/docs/en/dev/build/)
+## [Build](https://Digi-Desk2.com/docs/en/dev/build/)
 
 ## Cara Build di Linux
 
@@ -120,8 +120,8 @@ cd
 ```sh
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 source $HOME/.cargo/env
-git clone https://github.com/rustdesk/rustdesk
-cd rustdesk
+git clone https://github.com/Digi-Desk2/Digi-Desk2
+cd Digi-Desk2
 mkdir -p target/debug
 wget https://raw.githubusercontent.com/c-smile/sciter-sdk/master/bin.lnx/x64/libsciter-gtk.so
 mv libsciter-gtk.so target/debug
@@ -133,41 +133,41 @@ VCPKG_ROOT=$HOME/vcpkg cargo run
 Mulailah dengan melakukan kloning (clone) repositori dan build dengan docker container:
 
 ```sh
-git clone https://github.com/rustdesk/rustdesk
-cd rustdesk
-docker build -t "rustdesk-builder" .
+git clone https://github.com/Digi-Desk2/Digi-Desk2
+cd Digi-Desk2
+docker build -t "Digi-Desk2-builder" .
 ```
 
 Selanjutnya, setiap kali ketika kamu akan melakukan build aplikasi, jalankan perintah berikut:
 
 ```sh
-docker run --rm -it -v $PWD:/home/user/rustdesk -v rustdesk-git-cache:/home/user/.cargo/git -v rustdesk-registry-cache:/home/user/.cargo/registry -e PUID="$(id -u)" -e PGID="$(id -g)" rustdesk-builder
+docker run --rm -it -v $PWD:/home/user/Digi-Desk2 -v Digi-Desk2-git-cache:/home/user/.cargo/git -v Digi-Desk2-registry-cache:/home/user/.cargo/registry -e PUID="$(id -u)" -e PGID="$(id -g)" Digi-Desk2-builder
 ```
 
 Perlu diingat bahwa pada saat build pertama kali, mungkin memerlukan waktu lebih lama sebelum dependensi di-cache, build berikutnya akan lebih cepat. Selain itu, jika perlu menentukan argumen yang berbeda untuk perintah build, kamu dapat melakukannya di akhir perintah di posisi `<OPTIONAL-ARGS>`. Misalnya, jika ingin membangun versi rilis yang dioptimalkan, jalankan perintah di atas dan tambahkan `--release`. Hasil eksekusi perintah tersebut akan tersimpan pada target folder di sistem kamu, dan dapat dijalankan dengan:
 
 ```sh
-target/debug/rustdesk
+target/debug/Digi-Desk2
 ```
 
 Atau, jika kamu menjalankan rilis yang dapat dieksekusi:
 
 ```sh
-target/release/rustdesk
+target/release/Digi-Desk2
 ```
 
 Harap pastikan bahwa kamu menjalankan perintah ini dari repositori root RustDesk, jika tidak demikian, aplikasi mungkin tidak dapat menemukan sumber yang diperlukan. Dan juga, perintah cargo seperti `install` atau `run` saat ini tidak didukung melalui metode ini karena, proses menginstal atau menjalankan program terjadi di dalam container bukan pada host.
 
 ## Struktur File
 
-- **[libs/hbb_common](https://github.com/rustdesk/rustdesk/tree/master/libs/hbb_common)**: video codec, config, tcp/udp wrapper, protobuf, fs functions untuk transfer file, dan beberapa fungsi utilitas lainnya
-- **[libs/scrap](https://github.com/rustdesk/rustdesk/tree/master/libs/scrap)**: screen capture
-- **[libs/enigo](https://github.com/rustdesk/rustdesk/tree/master/libs/enigo)**: spesifikasi platform keyboard/mouse control
-- **[src/ui](https://github.com/rustdesk/rustdesk/tree/master/src/ui)**: GUI
-- **[src/server](https://github.com/rustdesk/rustdesk/tree/master/src/server)**: audio/clipboard/input/video services, dan network connections
-- **[src/client.rs](https://github.com/rustdesk/rustdesk/tree/master/src/client.rs)**: start a peer connection
-- **[src/rendezvous_mediator.rs](https://github.com/rustdesk/rustdesk/tree/master/src/rendezvous_mediator.rs)**: Komunikasi dengan [rustdesk-server](https://github.com/rustdesk/rustdesk-server), menunggu untuk remote direct (TCP hole punching) atau relayed connection
-- **[src/platform](https://github.com/rustdesk/rustdesk/tree/master/src/platform)**: kode khusus platform
+- **[libs/hbb_common](https://github.com/Digi-Desk2/Digi-Desk2/tree/master/libs/hbb_common)**: video codec, config, tcp/udp wrapper, protobuf, fs functions untuk transfer file, dan beberapa fungsi utilitas lainnya
+- **[libs/scrap](https://github.com/Digi-Desk2/Digi-Desk2/tree/master/libs/scrap)**: screen capture
+- **[libs/enigo](https://github.com/Digi-Desk2/Digi-Desk2/tree/master/libs/enigo)**: spesifikasi platform keyboard/mouse control
+- **[src/ui](https://github.com/Digi-Desk2/Digi-Desk2/tree/master/src/ui)**: GUI
+- **[src/server](https://github.com/Digi-Desk2/Digi-Desk2/tree/master/src/server)**: audio/clipboard/input/video services, dan network connections
+- **[src/client.rs](https://github.com/Digi-Desk2/Digi-Desk2/tree/master/src/client.rs)**: start a peer connection
+- **[src/rendezvous_mediator.rs](https://github.com/Digi-Desk2/Digi-Desk2/tree/master/src/rendezvous_mediator.rs)**: Komunikasi dengan [Digi-Desk2-server](https://github.com/Digi-Desk2/Digi-Desk2-server), menunggu untuk remote direct (TCP hole punching) atau relayed connection
+- **[src/platform](https://github.com/Digi-Desk2/Digi-Desk2/tree/master/src/platform)**: kode khusus platform
 
 ## Snapshots
 

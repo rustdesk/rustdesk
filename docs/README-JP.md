@@ -9,20 +9,20 @@
   <b>このREADMEをあなたの母国語に翻訳するために、あなたの助けが必要です。</b>
 </p>
 
-Chat with us: [Discord](https://discord.gg/nDceKgxnkV) | [Twitter](https://twitter.com/rustdesk) | [Reddit](https://www.reddit.com/r/rustdesk)
+Chat with us: [Discord](https://discord.gg/nDceKgxnkV) | [Twitter](https://twitter.com/Digi-Desk2) | [Reddit](https://www.reddit.com/r/Digi-Desk2)
 
 
 [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/I2I04VU09)
 
-Rustで書かれた、設定不要ですぐに使えるリモートデスクトップソフトウェアです。自分のデータを完全にコントロールでき、セキュリティの心配もありません。私たちのランデブー/リレーサーバを使うことも、[自分で設定する](https://rustdesk.com/server) ことも、 [自分でランデブー/リレーサーバを書くこともできます](https://github.com/rustdesk/rustdesk-server-demo)。
+Rustで書かれた、設定不要ですぐに使えるリモートデスクトップソフトウェアです。自分のデータを完全にコントロールでき、セキュリティの心配もありません。私たちのランデブー/リレーサーバを使うことも、[自分で設定する](https://Digi-Desk2.com/server) ことも、 [自分でランデブー/リレーサーバを書くこともできます](https://github.com/Digi-Desk2/Digi-Desk2-server-demo)。
 
 ![image](https://user-images.githubusercontent.com/71636191/171661982-430285f0-2e12-4b1d-9957-4a58e375304d.png)
 
 RustDeskは誰からの貢献も歓迎します。 貢献するには [`docs/CONTRIBUTING.md`](CONTRIBUTING.md) を参照してください。
 
-[**RustDeskはどの様に動くのか?**](https://github.com/rustdesk/rustdesk/wiki/How-does-RustDesk-work%3F)
+[**RustDeskはどの様に動くのか?**](https://github.com/Digi-Desk2/Digi-Desk2/wiki/How-does-RustDesk-work%3F)
 
-[**BINARY DOWNLOAD**](https://github.com/rustdesk/rustdesk/releases)
+[**BINARY DOWNLOAD**](https://github.com/Digi-Desk2/Digi-Desk2/releases)
 
 ## 無料のパブリックサーバー
 
@@ -54,7 +54,7 @@ RustDeskは誰からの貢献も歓迎します。 貢献するには [`docs/CON
 
 
 
-## [ビルド](https://rustdesk.com/docs/en/dev/build/)
+## [ビルド](https://Digi-Desk2.com/docs/en/dev/build/)
 
 ## Linuxでのビルド手順
 
@@ -106,8 +106,8 @@ cd
 ```sh
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 source $HOME/.cargo/env
-git clone https://github.com/rustdesk/rustdesk
-cd rustdesk
+git clone https://github.com/Digi-Desk2/Digi-Desk2
+cd Digi-Desk2
 mkdir -p target/debug
 wget https://raw.githubusercontent.com/c-smile/sciter-sdk/master/bin.lnx/x64/libsciter-gtk.so
 mv libsciter-gtk.so target/debug
@@ -119,42 +119,42 @@ VCPKG_ROOT=$HOME/vcpkg cargo run
 リポジトリのクローンを作成し、Dockerコンテナを構築することから始めます。
 
 ```sh
-git clone https://github.com/rustdesk/rustdesk
-cd rustdesk
-docker build -t "rustdesk-builder" .
+git clone https://github.com/Digi-Desk2/Digi-Desk2
+cd Digi-Desk2
+docker build -t "Digi-Desk2-builder" .
 ```
 
 その後、アプリケーションをビルドする必要があるたびに、以下のコマンドを実行します。
 
 ```sh
-docker run --rm -it -v $PWD:/home/user/rustdesk -v rustdesk-git-cache:/home/user/.cargo/git -v rustdesk-registry-cache:/home/user/.cargo/registry -e PUID="$(id -u)" -e PGID="$(id -g)" rustdesk-builder
+docker run --rm -it -v $PWD:/home/user/Digi-Desk2 -v Digi-Desk2-git-cache:/home/user/.cargo/git -v Digi-Desk2-registry-cache:/home/user/.cargo/registry -e PUID="$(id -u)" -e PGID="$(id -g)" Digi-Desk2-builder
 ```
 
 なお、最初のビルドでは、依存関係がキャッシュされるまで時間がかかることがありますが、その後のビルドではより速くなります。さらに、ビルドコマンドに別の引数を指定する必要がある場合は、コマンドの最後にある `<OPTIONAL-ARGS>` の位置で指定することができます。例えば、最適化されたリリースバージョンをビルドしたい場合は、上記のコマンドの後に
 `--release` を実行します。できあがった実行ファイルは、システムのターゲット・フォルダに格納され、次のコマンドで実行できます。
 
 ```sh
-target/debug/rustdesk
+target/debug/Digi-Desk2
 ```
 
 あるいは、リリース用の実行ファイルを実行している場合:
 
 ```sh
-target/release/rustdesk
+target/release/Digi-Desk2
 ```
 
 これらのコマンドをRustDeskリポジトリのルートから実行していることを確認してください。そうしないと、アプリケーションが必要なリソースを見つけられない可能性があります。また、 `install` や `run` などの他の cargo サブコマンドは、ホストではなくコンテナ内にプログラムをインストールまたは実行するため、現在この方法ではサポートされていないことに注意してください。
 
 ## ファイル構造
 
-- **[libs/hbb_common](https://github.com/rustdesk/rustdesk/tree/master/libs/hbb_common)**: ビデオコーデック、コンフィグ、tcp/udpラッパー、protobuf、ファイル転送用のfs関数、その他のユーティリティ関数
-- **[libs/scrap](https://github.com/rustdesk/rustdesk/tree/master/libs/scrap)**: スクリーンキャプチャ
-- **[libs/enigo](https://github.com/rustdesk/rustdesk/tree/master/libs/enigo)**: プラットフォーム固有のキーボード/マウスコントロール
-- **[src/ui](https://github.com/rustdesk/rustdesk/tree/master/src/ui)**: GUI
-- **[src/server](https://github.com/rustdesk/rustdesk/tree/master/src/server)**: オーディオ/クリップボード/入力/ビデオサービス、ネットワーク接続
-- **[src/client.rs](https://github.com/rustdesk/rustdesk/tree/master/src/client.rs)**: ピア接続の開始
-- **[src/rendezvous_mediator.rs](https://github.com/rustdesk/rustdesk/tree/master/src/rendezvous_mediator.rs)**: [rustdesk-server](https://github.com/rustdesk/rustdesk-server), と通信し、リモートダイレクト (TCP hole punching) または中継接続を待つ。
-- **[src/platform](https://github.com/rustdesk/rustdesk/tree/master/src/platform)**: プラットフォーム固有のコード
+- **[libs/hbb_common](https://github.com/Digi-Desk2/Digi-Desk2/tree/master/libs/hbb_common)**: ビデオコーデック、コンフィグ、tcp/udpラッパー、protobuf、ファイル転送用のfs関数、その他のユーティリティ関数
+- **[libs/scrap](https://github.com/Digi-Desk2/Digi-Desk2/tree/master/libs/scrap)**: スクリーンキャプチャ
+- **[libs/enigo](https://github.com/Digi-Desk2/Digi-Desk2/tree/master/libs/enigo)**: プラットフォーム固有のキーボード/マウスコントロール
+- **[src/ui](https://github.com/Digi-Desk2/Digi-Desk2/tree/master/src/ui)**: GUI
+- **[src/server](https://github.com/Digi-Desk2/Digi-Desk2/tree/master/src/server)**: オーディオ/クリップボード/入力/ビデオサービス、ネットワーク接続
+- **[src/client.rs](https://github.com/Digi-Desk2/Digi-Desk2/tree/master/src/client.rs)**: ピア接続の開始
+- **[src/rendezvous_mediator.rs](https://github.com/Digi-Desk2/Digi-Desk2/tree/master/src/rendezvous_mediator.rs)**: [Digi-Desk2-server](https://github.com/Digi-Desk2/Digi-Desk2-server), と通信し、リモートダイレクト (TCP hole punching) または中継接続を待つ。
+- **[src/platform](https://github.com/Digi-Desk2/Digi-Desk2/tree/master/src/platform)**: プラットフォーム固有のコード
 
 ## スナップショット
 

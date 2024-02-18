@@ -9,20 +9,20 @@
   <b>README를 모국어로 번역하기 위한 당신의 도움의 필요합니다.</b>
 </p>
 
-Chat with us: [Discord](https://discord.gg/nDceKgxnkV) | [Twitter](https://twitter.com/rustdesk) | [Reddit](https://www.reddit.com/r/rustdesk)
+Chat with us: [Discord](https://discord.gg/nDceKgxnkV) | [Twitter](https://twitter.com/Digi-Desk2) | [Reddit](https://www.reddit.com/r/Digi-Desk2)
 
 
 [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/I2I04VU09)
 
-Rust로 작성되었고, 설정없이 바로 사용할 수 있는 원격 데스트탑 소프트웨어입니다. 자신의 데이터를 완전히 컨트롤할 수 있고, 보안의 염려도 없습니다. 우리의 rendezvous/relay 서버를 사용해도, [스스로 설정](https://rustdesk.com/server)하는 것도, [스스로 rendezvous/relay 서버를 작성할 수도 있습니다](https://github.com/rustdesk/rustdesk-server-demo).
+Rust로 작성되었고, 설정없이 바로 사용할 수 있는 원격 데스트탑 소프트웨어입니다. 자신의 데이터를 완전히 컨트롤할 수 있고, 보안의 염려도 없습니다. 우리의 rendezvous/relay 서버를 사용해도, [스스로 설정](https://Digi-Desk2.com/server)하는 것도, [스스로 rendezvous/relay 서버를 작성할 수도 있습니다](https://github.com/Digi-Desk2/Digi-Desk2-server-demo).
 
 ![image](https://user-images.githubusercontent.com/71636191/171661982-430285f0-2e12-4b1d-9957-4a58e375304d.png)
 
 RustDesk는 모든 기여를 환영합니다. 기여하고자 한다면 [`docs/CONTRIBUTING.md`](CONTRIBUTING.md)를 참조해주세요.
 
-[**RustDesk는 어떻게 작동하는가?**](https://github.com/rustdesk/rustdesk/wiki/How-does-RustDesk-work%3F)
+[**RustDesk는 어떻게 작동하는가?**](https://github.com/Digi-Desk2/Digi-Desk2/wiki/How-does-RustDesk-work%3F)
 
-[**BINARY DOWNLOAD**](https://github.com/rustdesk/rustdesk/releases)
+[**BINARY DOWNLOAD**](https://github.com/Digi-Desk2/Digi-Desk2/releases)
 
 ## 무료 퍼블릭 서버
 
@@ -52,7 +52,7 @@ RustDesk는 모든 기여를 환영합니다. 기여하고자 한다면 [`docs/C
 
 - run `cargo run`
 
-## [Build](https://rustdesk.com/docs/en/dev/build/)
+## [Build](https://Digi-Desk2.com/docs/en/dev/build/)
 
 ## Linux에서 빌드 순서
 
@@ -104,8 +104,8 @@ cd
 ```sh
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 source $HOME/.cargo/env
-git clone https://github.com/rustdesk/rustdesk
-cd rustdesk
+git clone https://github.com/Digi-Desk2/Digi-Desk2
+cd Digi-Desk2
 mkdir -p target/debug
 wget https://raw.githubusercontent.com/c-smile/sciter-sdk/master/bin.lnx/x64/libsciter-gtk.so
 mv libsciter-gtk.so target/debug
@@ -117,43 +117,43 @@ VCPKG_ROOT=$HOME/vcpkg cargo run
 레포지토리를 클론하고, Docker 컨테이너 구성하는 것으로 시작합니다.
 
 ```sh
-git clone https://github.com/rustdesk/rustdesk
-cd rustdesk
-docker build -t "rustdesk-builder" .
+git clone https://github.com/Digi-Desk2/Digi-Desk2
+cd Digi-Desk2
+docker build -t "Digi-Desk2-builder" .
 ```
 
 이후, 애플리케이션을 빌드할 필요가 있을 때마다, 이하의 커맨드를 실행합니다.
 
 ```sh
-docker run --rm -it -v $PWD:/home/user/rustdesk -v rustdesk-git-cache:/home/user/.cargo/git -v rustdesk-registry-cache:/home/user/.cargo/registry -e PUID="$(id -u)" -e PGID="$(id -g)" rustdesk-builder
+docker run --rm -it -v $PWD:/home/user/Digi-Desk2 -v Digi-Desk2-git-cache:/home/user/.cargo/git -v Digi-Desk2-registry-cache:/home/user/.cargo/registry -e PUID="$(id -u)" -e PGID="$(id -g)" Digi-Desk2-builder
 ```
 
 첫 빌드에서는 의존관계가 캐시될 때까지 시간이 걸릴 수 있습니다만, 이후의 빌드때는 빨라집니다. 더불어 빌드 커맨드에 다른 인수를 지정할 필요가 있다면, 커맨드 끝에 있는 `<OPTIONAL-ARGS>` 에 지정할 수 있습니다. 예를 들어 최적화된 출시 버전을 빌드하고 싶다면 이렇게 상기한 커맨드 뒤에 `--release` 를 붙여 실행합니다. 성공했다면 실행파일은 시스템 타겟 폴더에 담겨지고, 다음 커맨드로 실행할 수 있습니다.
 
 ```sh
-target/debug/rustdesk
+target/debug/Digi-Desk2
 ```
 
 혹은 출시용 실행 파일을 실행할 수도 있습니다.
 
 ```sh
-target/release/rustdesk
+target/release/Digi-Desk2
 ```
 
 커맨드를 RustDesk 리포지토리 루트에서 실행한다는 것을 확인해주세요. 그렇게 하지 않으면 애플리케이션이 필요한 리소스를 발견하지 못 할 가능성이 있습니다. 또한 `install`, `run` 같은 cargo 서브커맨드는 호스트가 아니라 컨테이너 프로그램을 설치, 실행을 위함이므로 현재 이 방법은 지원하지 않다는 점을 유념해주시길 바랍니다.
 
 ## File Structure
 
-- **[libs/hbb_common](https://github.com/rustdesk/rustdesk/tree/master/libs/hbb_common)**: 비디오 코덱, 설정, tcp/udp 랩퍼, protobuf, 파일 전송을 위한 fs 함수, 그 외 유틸리티 함수
-- **[libs/scrap](https://github.com/rustdesk/rustdesk/tree/master/libs/scrap)**: 화면 캡처
-- **[libs/enigo](https://github.com/rustdesk/rustdesk/tree/master/libs/enigo)**: 플랫폼 고유 키보드/마우스 컨트롤
-- **[src/ui](https://github.com/rustdesk/rustdesk/tree/master/src/ui)**: GUI
-- **[src/server](https://github.com/rustdesk/rustdesk/tree/master/src/server)**: 오디오, 클립보드, 입력, 비디오 서비스 그리고 네트워크 연결
-- **[src/client.rs](https://github.com/rustdesk/rustdesk/tree/master/src/client.rs)**: 피어 접속 시작
-- **[src/rendezvous_mediator.rs](https://github.com/rustdesk/rustdesk/tree/master/src/rendezvous_mediator.rs)**: [rustdesk-server](https://github.com/rustdesk/rustdesk-server)와 통신해서 리모트 다이렉트(TCP hole punching) 혹은 relayed 접속
-- **[src/platform](https://github.com/rustdesk/rustdesk/tree/master/src/platform)**: 플랫폼 고유의 코드
-- **[flutter](https://github.com/rustdesk/rustdesk/tree/master/flutter)**: Flutter code for mobile
-- **[flutter/web/js](https://github.com/rustdesk/rustdesk/tree/master/flutter/web/js)**: Javascript for Flutter web client
+- **[libs/hbb_common](https://github.com/Digi-Desk2/Digi-Desk2/tree/master/libs/hbb_common)**: 비디오 코덱, 설정, tcp/udp 랩퍼, protobuf, 파일 전송을 위한 fs 함수, 그 외 유틸리티 함수
+- **[libs/scrap](https://github.com/Digi-Desk2/Digi-Desk2/tree/master/libs/scrap)**: 화면 캡처
+- **[libs/enigo](https://github.com/Digi-Desk2/Digi-Desk2/tree/master/libs/enigo)**: 플랫폼 고유 키보드/마우스 컨트롤
+- **[src/ui](https://github.com/Digi-Desk2/Digi-Desk2/tree/master/src/ui)**: GUI
+- **[src/server](https://github.com/Digi-Desk2/Digi-Desk2/tree/master/src/server)**: 오디오, 클립보드, 입력, 비디오 서비스 그리고 네트워크 연결
+- **[src/client.rs](https://github.com/Digi-Desk2/Digi-Desk2/tree/master/src/client.rs)**: 피어 접속 시작
+- **[src/rendezvous_mediator.rs](https://github.com/Digi-Desk2/Digi-Desk2/tree/master/src/rendezvous_mediator.rs)**: [Digi-Desk2-server](https://github.com/Digi-Desk2/Digi-Desk2-server)와 통신해서 리모트 다이렉트(TCP hole punching) 혹은 relayed 접속
+- **[src/platform](https://github.com/Digi-Desk2/Digi-Desk2/tree/master/src/platform)**: 플랫폼 고유의 코드
+- **[flutter](https://github.com/Digi-Desk2/Digi-Desk2/tree/master/flutter)**: Flutter code for mobile
+- **[flutter/web/js](https://github.com/Digi-Desk2/Digi-Desk2/tree/master/flutter/web/js)**: Javascript for Flutter web client
 
 ## Snapshot
 

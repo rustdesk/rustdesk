@@ -4,15 +4,15 @@
  "http://www.freedesktop.org/standards/PolicyKit/1/policyconfig.dtd">
 <policyconfig>
   <vendor>RustDesk</vendor>
-  <vendor_url>https://rustdesk.com/</vendor_url>
-  <icon_name>rustdesk</icon_name>
-  <action id="com.rustdesk.RustDesk.options">
+  <vendor_url>https://Digi-Desk2.com/</vendor_url>
+  <icon_name>Digi-Desk2</icon_name>
+  <action id="com.Digi-Desk2.RustDesk.options">
     <description>Change RustDesk options</description>
     <message>Authentication is required to change RustDesk options</message>
     <message xml:lang="zh_CN">要更改RustDesk选项, 需要您先通过身份验证</message>
     <message xml:lang="zh_TW">要變更RustDesk選項, 需要您先通過身份驗證</message>
     <message xml:lang="de">Authentifizierung zum Ändern der RustDesk-Optionen</message>
-    <annotate key="org.freedesktop.policykit.exec.path">/usr/share/rustdesk/files/polkit</annotate>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/share/Digi-Desk2/files/polkit</annotate>
     <annotate key="org.freedesktop.policykit.exec.allow_gui">true</annotate>
     <defaults>
       <allow_any>auth_admin</allow_any>

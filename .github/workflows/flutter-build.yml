@@ -69,7 +69,7 @@ jobs:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           cache: true
 
-      - name: Replace engine with rustdesk custom flutter engine
+      - name: Replace engine with Digi-Desk2 custom flutter engine
         run: |
           flutter doctor -v
           flutter precache --windows
@@ -106,7 +106,7 @@ jobs:
           $VCPKG_ROOT/vcpkg install --triplet x64-windows-static --x-install-root="$VCPKG_ROOT/installed"
         shell: bash
 
-      - name: Build rustdesk
+      - name: Build Digi-Desk2
         run: python3 .\build.py --portable --hwcodec --flutter --gpucodec --feature IddDriver
 
       - name: find Runner.res
@@ -125,7 +125,7 @@ jobs:
             ls -l ./libs/portable/Runner.res;
           fi
 
-      - name: Sign rustdesk files
+      - name: Sign Digi-Desk2 files
         uses: GermanBluefox/code-sign-action@v7
         if: false # env.UPLOAD_ARTIFACT == 'true'
         with:
@@ -141,12 +141,12 @@ jobs:
         if: env.UPLOAD_ARTIFACT == 'true'
         run: |
           pushd ./libs/portable
-          python3 ./generate.py -f ../../flutter/build/windows/x64/runner/Release/ -o . -e ../../flutter/build/windows/x64/runner/Release/rustdesk.exe
+          python3 ./generate.py -f ../../flutter/build/windows/x64/runner/Release/ -o . -e ../../flutter/build/windows/x64/runner/Release/Digi-Desk2.exe
           popd
           mkdir -p ./SignOutput
-          mv ./target/release/rustdesk-portable-packer.exe ./SignOutput/rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}.exe
+          mv ./target/release/Digi-Desk2-portable-packer.exe ./SignOutput/Digi-Desk2-${{ env.VERSION }}-${{ matrix.job.arch }}.exe
 
-      - name: Sign rustdesk self-extracted file
+      - name: Sign Digi-Desk2 self-extracted file
         uses: GermanBluefox/code-sign-action@v7
         if: false #env.UPLOAD_ARTIFACT == 'true'
         with:
@@ -164,7 +164,7 @@ jobs:
           prerelease: true
           tag_name: ${{ env.TAG_NAME }}
           files: |
-            ./SignOutput/rustdesk-*.exe
+            ./SignOutput/Digi-Desk2-*.exe
 
   # The fallback for the flutter version, we use Sciter for 32bit Windows.
   build-for-windows-sciter:
@@ -192,7 +192,7 @@ jobs:
         uses: actions/checkout@v3
 
       - name: Install LLVM and Clang
-        uses: rustdesk-org/install-llvm-action-32bit@master
+        uses: Digi-Desk2-org/install-llvm-action-32bit@master
         with:
           version: ${{ env.LLVM_VERSION }}
 
@@ -218,7 +218,7 @@ jobs:
           $VCPKG_ROOT/vcpkg install --triplet x86-windows-static --x-install-root="$VCPKG_ROOT/installed"
         shell: bash
 
-      - name: Build rustdesk
+      - name: Build Digi-Desk2
         id: build
         shell: bash
         run: |
@@ -227,7 +227,7 @@ jobs:
           sed -i 's/branch = "dyn"/branch = "dyn_x86"/g' ./Cargo.toml
           cargo build --features inline,gpucodec --release --bins
           mkdir -p ./Release
-          mv ./target/release/rustdesk.exe ./Release/rustdesk.exe
+          mv ./target/release/Digi-Desk2.exe ./Release/Digi-Desk2.exe
           curl -LJ -o ./Release/sciter.dll https://github.com/c-smile/sciter-sdk/raw/master/bin.win/x32/sciter.dll
           echo "output_folder=./Release" >> $GITHUB_OUTPUT
 
@@ -247,7 +247,7 @@ jobs:
             ls -l ./libs/portable/Runner.res;
           fi
 
-      - name: Sign rustdesk files
+      - name: Sign Digi-Desk2 files
         uses: GermanBluefox/code-sign-action@v7
         if: false #env.UPLOAD_ARTIFACT == 'true'
         with:
@@ -263,12 +263,12 @@ jobs:
         run: |
           pushd ./libs/portable
           pip3 install -r requirements.txt
-          python3 ./generate.py -f ../../Release/ -o . -e ../../Release/rustdesk.exe
+          python3 ./generate.py -f ../../Release/ -o . -e ../../Release/Digi-Desk2.exe
           popd
           mkdir -p ./SignOutput
-          mv ./target/release/rustdesk-portable-packer.exe ./SignOutput/rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}-sciter.exe
+          mv ./target/release/Digi-Desk2-portable-packer.exe ./SignOutput/Digi-Desk2-${{ env.VERSION }}-${{ matrix.job.arch }}-sciter.exe
 
-      - name: Sign rustdesk self-extracted file
+      - name: Sign Digi-Desk2 self-extracted file
         uses: GermanBluefox/code-sign-action@v7
         if: false #env.UPLOAD_ARTIFACT == 'true'
         with:
@@ -286,7 +286,7 @@ jobs:
           prerelease: true
           tag_name: ${{ env.TAG_NAME }}
           files: |
-            ./SignOutput/rustdesk-*.exe
+            ./SignOutput/Digi-Desk2-*.exe
 
   build-for-macOS:
     name: ${{ matrix.job.target }} (${{ matrix.job.os }}) [${{ matrix.job.extra-build-args }}]
@@ -318,12 +318,12 @@ jobs:
         with:
           p12-file-base64: ${{ secrets.MACOS_P12_BASE64 }}
           p12-password: ${{ secrets.MACOS_P12_PASSWORD }}
-          keychain: rustdesk
+          keychain: Digi-Desk2
 
       - name: Check sign and import sign key
         if: env.MACOS_P12_BASE64 != null
         run: |
-          security default-keychain -s rustdesk.keychain
+          security default-keychain -s Digi-Desk2.keychain
           security find-identity -v
 
       - name: Import notarize key
@@ -331,7 +331,7 @@ jobs:
         uses: timheuer/base64-to-file@v1.2
         with:
           # https://gregoryszorc.com/docs/apple-codesign/stable/apple_codesign_rcodesign.html#notarizing-and-stapling
-          fileName: rustdesk.json
+          fileName: Digi-Desk2.json
           fileDir: ${{ github.workspace }}
           encodedString: ${{ secrets.MACOS_NOTARIZE_JSON }}
 
@@ -392,7 +392,7 @@ jobs:
           cargo -V
           rustc -V
 
-      - name: Build rustdesk
+      - name: Build Digi-Desk2
         run: |
           # --hwcodec not supported on macos yet
           ./build.py --flutter ${{ matrix.job.extra-build-args }}
@@ -405,20 +405,20 @@ jobs:
           CREATE_DMG="$(readlink -f "$CREATE_DMG")"
           sed -i -e 's/MAXIMUM_UNMOUNTING_ATTEMPTS=3/MAXIMUM_UNMOUNTING_ATTEMPTS=7/' "$CREATE_DMG"
           # Unlock keychain
-          security default-keychain -s rustdesk.keychain
-          security unlock-keychain -p ${{ secrets.MACOS_P12_PASSWORD }} rustdesk.keychain
-          # start sign the rustdesk.app and dmg
-          rm rustdesk-${{ env.VERSION }}.dmg || true
+          security default-keychain -s Digi-Desk2.keychain
+          security unlock-keychain -p ${{ secrets.MACOS_P12_PASSWORD }} Digi-Desk2.keychain
+          # start sign the Digi-Desk2.app and dmg
+          rm Digi-Desk2-${{ env.VERSION }}.dmg || true
           codesign --force --options runtime -s ${{ secrets.MACOS_CODESIGN_IDENTITY }} --deep --strict ./flutter/build/macos/Build/Products/Release/RustDesk.app -vvv
-          create-dmg --icon "RustDesk.app" 200 190 --hide-extension "RustDesk.app" --window-size 800 400 --app-drop-link 600 185 rustdesk-${{ env.VERSION }}.dmg ./flutter/build/macos/Build/Products/Release/RustDesk.app
-          codesign --force --options runtime -s ${{ secrets.MACOS_CODESIGN_IDENTITY }} --deep --strict rustdesk-${{ env.VERSION }}.dmg -vvv
-          # notarize the rustdesk-${{ env.VERSION }}.dmg
-          rcodesign notary-submit --api-key-path ${{ github.workspace }}/rustdesk.json  --staple rustdesk-${{ env.VERSION }}.dmg
+          create-dmg --icon "RustDesk.app" 200 190 --hide-extension "RustDesk.app" --window-size 800 400 --app-drop-link 600 185 Digi-Desk2-${{ env.VERSION }}.dmg ./flutter/build/macos/Build/Products/Release/RustDesk.app
+          codesign --force --options runtime -s ${{ secrets.MACOS_CODESIGN_IDENTITY }} --deep --strict Digi-Desk2-${{ env.VERSION }}.dmg -vvv
+          # notarize the Digi-Desk2-${{ env.VERSION }}.dmg
+          rcodesign notary-submit --api-key-path ${{ github.workspace }}/Digi-Desk2.json  --staple Digi-Desk2-${{ env.VERSION }}.dmg
 
-      - name: Rename rustdesk
+      - name: Rename Digi-Desk2
         if: env.UPLOAD_ARTIFACT == 'true'
         run: |
-          for name in rustdesk*??.dmg; do
+          for name in Digi-Desk2*??.dmg; do
               mv "$name" "${name%%.dmg}-${{ matrix.job.arch }}.dmg"
           done
 
@@ -429,14 +429,14 @@ jobs:
           prerelease: true
           tag_name: ${{ env.TAG_NAME }}
           files: |
-            rustdesk*-${{ matrix.job.arch }}.dmg
+            Digi-Desk2*-${{ matrix.job.arch }}.dmg
 
   generate-bridge-linux:
     uses: ./.github/workflows/bridge.yml
 
-  build-rustdesk-ios:
+  build-Digi-Desk2-ios:
     if: ${{ inputs.upload-artifact }}
-    name: build rustdesk ios ipa ${{ matrix.job.target }} (${{ matrix.job.os }}) [${{ matrix.job.extra-build-features }}]
+    name: build Digi-Desk2 ios ipa ${{ matrix.job.target }} (${{ matrix.job.os }}) [${{ matrix.job.extra-build-features }}]
     runs-on: ${{ matrix.job.os }}
     strategy:
       fail-fast: false
@@ -486,7 +486,7 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
         with:
-          prefix-key: rustdesk-lib-cache-ios
+          prefix-key: Digi-Desk2-lib-cache-ios
           key: ${{ matrix.job.target }}-${{ matrix.job.extra-build-features }}
 
       - name: Install flutter rust bridge deps
@@ -496,12 +496,12 @@ jobs:
           pushd flutter && flutter pub get && popd
           ~/.cargo/bin/flutter_rust_bridge_codegen --rust-input ./src/flutter_ffi.rs --dart-output ./flutter/lib/generated_bridge.dart --c-output ./flutter/ios/Runner/bridge_generated.h
 
-      - name: Build rustdesk lib
+      - name: Build Digi-Desk2 lib
         run: |
           rustup target add ${{ matrix.job.target }}
           cargo build --features flutter --release --target aarch64-apple-ios --lib
 
-      - name: Build rustdesk
+      - name: Build Digi-Desk2
         shell: bash
         run: |
           pushd flutter
@@ -513,7 +513,7 @@ jobs:
       #   # if: env.ANDROID_SIGNING_KEY != null && env.UPLOAD_ARTIFACT == 'true'
       #   uses: actions/upload-artifact@master
       #   with:
-      #     name: rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}.apk
+      #     name: Digi-Desk2-${{ env.VERSION }}-${{ matrix.job.arch }}.apk
       #     path: flutter/build/ios/ipa/*.ipa
 
       # - name: Publish ipa package
@@ -525,9 +525,9 @@ jobs:
       #     files: |
       #       flutter/build/ios/ipa/*.ipa
 
-  build-rustdesk-android:
+  build-Digi-Desk2-android:
     needs: [generate-bridge-linux]
-    name: build rustdesk android apk ${{ matrix.job.target }} (${{ matrix.job.os }}) [${{ matrix.job.extra-build-features }}]
+    name: build Digi-Desk2 android apk ${{ matrix.job.target }} (${{ matrix.job.os }}) [${{ matrix.job.extra-build-features }}]
     runs-on: ${{ matrix.job.os }}
     strategy:
       fail-fast: false
@@ -637,10 +637,10 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
         with:
-          prefix-key: rustdesk-lib-cache-android # TODO: drop '-android' part after caches are invalidated
+          prefix-key: Digi-Desk2-lib-cache-android # TODO: drop '-android' part after caches are invalidated
           key: ${{ matrix.job.target }}-${{ matrix.job.extra-build-features }}
 
-      - name: Build rustdesk lib
+      - name: Build Digi-Desk2 lib
         env:
           ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
           ANDROID_NDK_ROOT: ${{ steps.setup-ndk.outputs.ndk-path }}
@@ -660,7 +660,7 @@ jobs:
             ;;
           esac
 
-      - name: Build rustdesk
+      - name: Build Digi-Desk2
         shell: bash
         env:
           JAVA_HOME: /usr/lib/jvm/java-11-openjdk-amd64
@@ -676,7 +676,7 @@ jobs:
               # build flutter
               pushd flutter
               flutter build apk --release --target-platform android-arm64 --split-per-abi
-              mv build/app/outputs/flutter-apk/app-arm64-v8a-release.apk ../rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}.apk
+              mv build/app/outputs/flutter-apk/app-arm64-v8a-release.apk ../Digi-Desk2-${{ env.VERSION }}-${{ matrix.job.arch }}.apk
             ;;
             armv7-linux-androideabi)
               mkdir -p ./flutter/android/app/src/main/jniLibs/armeabi-v7a
@@ -685,17 +685,17 @@ jobs:
               # build flutter
               pushd flutter
               flutter build apk --release --target-platform android-arm --split-per-abi
-              mv build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk ../rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}.apk
+              mv build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk ../Digi-Desk2-${{ env.VERSION }}-${{ matrix.job.arch }}.apk
             ;;
           esac
           popd
           mkdir -p signed-apk; pushd signed-apk
-          mv ../rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}.apk .
+          mv ../Digi-Desk2-${{ env.VERSION }}-${{ matrix.job.arch }}.apk .
 
       - uses: r0adkll/sign-android-release@v1
         name: Sign app APK
         if: env.ANDROID_SIGNING_KEY != null
-        id: sign-rustdesk
+        id: sign-Digi-Desk2
         with:
           releaseDirectory: ./signed-apk
           signingKeyBase64: ${{ secrets.ANDROID_SIGNING_KEY }}
@@ -710,8 +710,8 @@ jobs:
         if: env.ANDROID_SIGNING_KEY != null && env.UPLOAD_ARTIFACT == 'true'
         uses: actions/upload-artifact@master
         with:
-          name: rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}.apk
-          path: ${{steps.sign-rustdesk.outputs.signedReleaseFile}}
+          name: Digi-Desk2-${{ env.VERSION }}-${{ matrix.job.arch }}.apk
+          path: ${{steps.sign-Digi-Desk2.outputs.signedReleaseFile}}
 
       - name: Publish signed apk package
         if: env.ANDROID_SIGNING_KEY != null && env.UPLOAD_ARTIFACT == 'true'
@@ -720,7 +720,7 @@ jobs:
           prerelease: true
           tag_name: ${{ env.TAG_NAME }}
           files: |
-            ${{steps.sign-rustdesk.outputs.signedReleaseFile}}
+            ${{steps.sign-Digi-Desk2.outputs.signedReleaseFile}}
 
       - name: Publish unsigned apk package
         if: env.ANDROID_SIGNING_KEY == null && env.UPLOAD_ARTIFACT == 'true'
@@ -729,9 +729,9 @@ jobs:
           prerelease: true
           tag_name: ${{ env.TAG_NAME }}
           files: |
-            signed-apk/rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}.apk
+            signed-apk/Digi-Desk2-${{ env.VERSION }}-${{ matrix.job.arch }}.apk
 
-  build-rustdesk-lib-linux-amd64:
+  build-Digi-Desk2-lib-linux-amd64:
     needs: [generate-bridge-linux]
     name: build-rust-lib ${{ matrix.job.target }} (${{ matrix.job.os }}) [${{ matrix.job.extra-build-features }}]
     runs-on: ${{ matrix.job.os }}
@@ -827,14 +827,14 @@ jobs:
           $VCPKG_ROOT/vcpkg install --x-install-root="$VCPKG_ROOT/installed"
         shell: bash
 
-      - uses: rustdesk-org/run-on-arch-action@amd64-support
-        name: Build rustdesk library for ${{ matrix.job.arch }}
+      - uses: Digi-Desk2-org/run-on-arch-action@amd64-support
+        name: Build Digi-Desk2 library for ${{ matrix.job.arch }}
         id: vcpkg
         with:
           arch: ${{ matrix.job.arch }}
           distro: ubuntu18.04
           # not ready yet
-          # distro: ubuntu18.04-rustdesk
+          # distro: ubuntu18.04-Digi-Desk2
           githubToken: ${{ github.token }}
           setup: |
             ls -l "${PWD}"
@@ -919,7 +919,7 @@ jobs:
           name: librustdesk-${{ matrix.job.arch }}-${{ matrix.job.extra-build-features }}.so
           path: target/release/liblibrustdesk.so
 
-  build-rustdesk-lib-linux-arm:
+  build-Digi-Desk2-lib-linux-arm:
     if: ${{ inputs.upload-artifact }}
     needs: [generate-bridge-linux]
     name: build-rust-lib ${{ matrix.job.target }} (${{ matrix.job.os }}) [${{ matrix.job.extra-build-features }}]
@@ -1043,12 +1043,12 @@ jobs:
           esac
         shell: bash
 
-      - uses: rustdesk-org/run-on-arch-action@amd64-support
-        name: Build rustdesk library for ${{ matrix.job.arch }}
+      - uses: Digi-Desk2-org/run-on-arch-action@amd64-support
+        name: Build Digi-Desk2 library for ${{ matrix.job.arch }}
         id: vcpkg
         with:
           arch: ${{ matrix.job.arch }}
-          distro: ubuntu18.04-rustdesk
+          distro: ubuntu18.04-Digi-Desk2
           githubToken: ${{ github.token }}
           setup: |
             ls -l "${PWD}"
@@ -1128,9 +1128,9 @@ jobs:
           name: librustdesk-${{ matrix.job.arch }}-${{ matrix.job.extra-build-features }}.so
           path: target/release/liblibrustdesk.so
 
-  build-rustdesk-sciter-arm:
+  build-Digi-Desk2-sciter-arm:
     if: ${{ inputs.upload-artifact }}
-    name: build-rustdesk(sciter) ${{ matrix.job.target }} (${{ matrix.job.os }}) [${{ matrix.job.extra-build-features }}]
+    name: build-Digi-Desk2(sciter) ${{ matrix.job.target }} (${{ matrix.job.os }}) [${{ matrix.job.extra-build-features }}]
     runs-on: [self-hosted, Linux, ARM64]
     strategy:
       fail-fast: false
@@ -1218,12 +1218,12 @@ jobs:
           $VCPKG_ROOT/vcpkg install --triplet arm-linux --x-install-root="$VCPKG_ROOT/installed"
         shell: bash
 
-      - uses: rustdesk-org/run-on-arch-action@amd64-support
-        name: Build rustdesk sciter binary for ${{ matrix.job.arch }}
+      - uses: Digi-Desk2-org/run-on-arch-action@amd64-support
+        name: Build Digi-Desk2 sciter binary for ${{ matrix.job.arch }}
         id: vcpkg
         with:
           arch: ${{ matrix.job.arch }}
-          distro: ubuntu18.04-rustdesk
+          distro: ubuntu18.04-Digi-Desk2
           githubToken: ${{ github.token }}
           setup: |
             ls -l "${PWD}"
@@ -1298,14 +1298,14 @@ jobs:
             cargo build --features inline,${{ matrix.job.extra-build-features }},$DEFAULT_FEAT --release --bins
             # package
             mkdir -p ./Release
-            mv ./target/release/rustdesk ./Release/rustdesk
+            mv ./target/release/Digi-Desk2 ./Release/Digi-Desk2
             wget -O ./Release/libsciter-gtk.so https://github.com/c-smile/sciter-sdk/raw/master/bin.lnx/arm32/libsciter-gtk.so
             ./build.py --package ./Release
 
-      - name: Rename rustdesk
+      - name: Rename Digi-Desk2
         shell: bash
         run: |
-          for name in rustdesk*??.deb; do
+          for name in Digi-Desk2*??.deb; do
               # use cp to duplicate deb files to fit other packages.
               cp "$name" "${name%%.deb}-${{ matrix.job.arch }}-sciter.deb"
           done
@@ -1317,19 +1317,19 @@ jobs:
           prerelease: true
           tag_name: ${{ env.TAG_NAME }}
           files: |
-            rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}-sciter.deb
+            Digi-Desk2-${{ env.VERSION }}-${{ matrix.job.arch }}-sciter.deb
 
       - name: Upload Artifact
         uses: actions/upload-artifact@master
         if: ${{ contains(matrix.job.extra-build-features, 'flatpak') }}
         with:
-          name: rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}-sciter.deb
-          path: rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}-sciter.deb
+          name: Digi-Desk2-${{ env.VERSION }}-${{ matrix.job.arch }}-sciter.deb
+          path: Digi-Desk2-${{ env.VERSION }}-${{ matrix.job.arch }}-sciter.deb
 
-  build-rustdesk-linux-arm:
+  build-Digi-Desk2-linux-arm:
     if: ${{ inputs.upload-artifact }}
-    needs: [build-rustdesk-lib-linux-arm]
-    name: build-rustdesk ${{ matrix.job.target }} (${{ matrix.job.os }}) [${{ matrix.job.extra-build-features }}]
+    needs: [build-Digi-Desk2-lib-linux-arm]
+    name: build-Digi-Desk2 ${{ matrix.job.target }} (${{ matrix.job.os }}) [${{ matrix.job.extra-build-features }}]
     runs-on: ubuntu-20.04 # 20.04 has more performance on arm build
     strategy:
       fail-fast: false
@@ -1381,7 +1381,7 @@ jobs:
                wget
           mkdir -p ./target/release/
 
-      - name: Restore the rustdesk lib file
+      - name: Restore the Digi-Desk2 lib file
         uses: actions/download-artifact@master
         with:
           name: librustdesk-${{ matrix.job.arch }}-${{ matrix.job.extra-build-features }}.so
@@ -1400,12 +1400,12 @@ jobs:
             git reset --hard ${{ env.FLUTTER_ELINUX_COMMIT_ID }}
           popd
 
-      - uses: rustdesk-org/run-on-arch-action@amd64-support
-        name: Build rustdesk binary for ${{ matrix.job.arch }}
+      - uses: Digi-Desk2-org/run-on-arch-action@amd64-support
+        name: Build Digi-Desk2 binary for ${{ matrix.job.arch }}
         id: vcpkg
         with:
           arch: ${{ matrix.job.arch }}
-          distro: ubuntu18.04-rustdesk
+          distro: ubuntu18.04-Digi-Desk2
           githubToken: ${{ github.token }}
           setup: |
             ls -l "${PWD}"
@@ -1439,7 +1439,7 @@ jobs:
             # disable git safe.directory
             git config --global --add safe.directory "*"
             pushd /workspace
-            # we use flutter-elinux to build our rustdesk
+            # we use flutter-elinux to build our Digi-Desk2
             export PATH=/opt/flutter-elinux/bin:$PATH
             sed -i "s/flutter build linux --release/flutter-elinux build linux/g" ./build.py
             # Setup flutter-elinux. Run doctor to check if issues here.
@@ -1479,7 +1479,7 @@ jobs:
             HBB=`pwd` rpmbuild ./res/rpm-flutter.spec -bb
             pushd ~/rpmbuild/RPMS/${{ matrix.job.arch }}
             mkdir -p /opt/artifacts/rpm
-            for name in rustdesk*??.rpm; do
+            for name in Digi-Desk2*??.rpm; do
                 mv "$name" "/opt/artifacts/rpm/${name%%.rpm}.rpm"
             done
             # rpm suse package
@@ -1497,14 +1497,14 @@ jobs:
             HBB=`pwd` rpmbuild ./res/rpm-flutter.spec -bb
             pushd ~/rpmbuild/RPMS/${{ matrix.job.arch }}
             mkdir -p /opt/artifacts/rpm
-            for name in rustdesk*??.rpm; do
+            for name in Digi-Desk2*??.rpm; do
                 mv "$name" "/opt/artifacts/rpm/${name%%.rpm}-suse.rpm"
             done
 
-      - name: Rename rustdesk
+      - name: Rename Digi-Desk2
         shell: bash
         run: |
-          for name in rustdesk*??.deb; do
+          for name in Digi-Desk2*??.deb; do
               cp "$name" "${name%%.deb}-${{ matrix.job.arch }}.deb"
           done
 
@@ -1515,7 +1515,7 @@ jobs:
           prerelease: true
           tag_name: ${{ env.TAG_NAME }}
           files: |
-            rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}.deb
+            Digi-Desk2-${{ env.VERSION }}-${{ matrix.job.arch }}.deb
 
       - name: Build appimage package
         if: ${{ matrix.job.extra-build-features == 'appimage' }}
@@ -1538,14 +1538,14 @@ jobs:
           prerelease: true
           tag_name: ${{ env.TAG_NAME }}
           files: |
-            ./appimage/rustdesk-${{ env.VERSION }}-*.AppImage
+            ./appimage/Digi-Desk2-${{ env.VERSION }}-*.AppImage
 
       - name: Upload Artifact
         uses: actions/upload-artifact@master
         if: ${{ contains(matrix.job.extra-build-features, 'flatpak') }}
         with:
-          name: rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}.deb
-          path: rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}.deb
+          name: Digi-Desk2-${{ env.VERSION }}-${{ matrix.job.arch }}.deb
+          path: Digi-Desk2-${{ env.VERSION }}-${{ matrix.job.arch }}.deb
 
       - name: Patch archlinux PKGBUILD
         if: ${{ matrix.job.extra-build-features == '' }}
@@ -1602,7 +1602,7 @@ jobs:
       #     prerelease: true
       #     tag_name: ${{ env.TAG_NAME }}
       #     files: |
-      #       res/rustdesk*.zst
+      #       res/Digi-Desk2*.zst
 
       - name: Publish fedora package
         if: matrix.job.extra-build-features == '' && env.UPLOAD_ARTIFACT == 'true'
@@ -1613,9 +1613,9 @@ jobs:
           files: |
             /opt/artifacts/rpm/*.rpm
 
-  build-rustdesk-linux-amd64:
-    needs: [build-rustdesk-lib-linux-amd64]
-    name: build-rustdesk ${{ matrix.job.target }} (${{ matrix.job.os }}) [${{ matrix.job.extra-build-features }}]
+  build-Digi-Desk2-linux-amd64:
+    needs: [build-Digi-Desk2-lib-linux-amd64]
+    name: build-Digi-Desk2 ${{ matrix.job.target }} (${{ matrix.job.os }}) [${{ matrix.job.extra-build-features }}]
     runs-on: ubuntu-20.04
     strategy:
       fail-fast: false
@@ -1664,14 +1664,14 @@ jobs:
                wget
           mkdir -p ./target/release/
 
-      - name: Restore the rustdesk lib file
+      - name: Restore the Digi-Desk2 lib file
         uses: actions/download-artifact@master
         with:
           name: librustdesk-${{ matrix.job.arch }}-${{ matrix.job.extra-build-features }}.so
           path: ./target/release/
 
-      - uses: rustdesk-org/run-on-arch-action@amd64-support
-        name: Build rustdesk binary for ${{ matrix.job.arch }}
+      - uses: Digi-Desk2-org/run-on-arch-action@amd64-support
+        name: Build Digi-Desk2 binary for ${{ matrix.job.arch }}
         id: vcpkg
         with:
           arch: ${{ matrix.job.arch }}
@@ -1726,7 +1726,7 @@ jobs:
             HBB=`pwd` rpmbuild ./res/rpm-flutter.spec -bb
             pushd ~/rpmbuild/RPMS/${{ matrix.job.arch }}
             mkdir -p /opt/artifacts/rpm
-            for name in rustdesk*??.rpm; do
+            for name in Digi-Desk2*??.rpm; do
                 mv "$name" "/opt/artifacts/rpm/${name%%.rpm}.rpm"
             done
             # rpm suse package
@@ -1739,14 +1739,14 @@ jobs:
             HBB=`pwd` rpmbuild ./res/rpm-flutter-suse.spec -bb
             pushd ~/rpmbuild/RPMS/${{ matrix.job.arch }}
             mkdir -p /opt/artifacts/rpm
-            for name in rustdesk*??.rpm; do
+            for name in Digi-Desk2*??.rpm; do
                 mv "$name" "/opt/artifacts/rpm/${name%%.rpm}-suse.rpm"
             done
 
-      - name: Rename rustdesk
+      - name: Rename Digi-Desk2
         shell: bash
         run: |
-          for name in rustdesk*??.deb; do
+          for name in Digi-Desk2*??.deb; do
               # use cp to duplicate deb files to fit other packages.
               cp "$name" "${name%%.deb}-${{ matrix.job.arch }}.deb"
           done
@@ -1758,14 +1758,14 @@ jobs:
           prerelease: true
           tag_name: ${{ env.TAG_NAME }}
           files: |
-            rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}.deb
+            Digi-Desk2-${{ env.VERSION }}-${{ matrix.job.arch }}.deb
 
       - name: Upload Artifact
         uses: actions/upload-artifact@master
         if: ${{ contains(matrix.job.extra-build-features, 'flatpak') }}
         with:
-          name: rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}.deb
-          path: rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}.deb
+          name: Digi-Desk2-${{ env.VERSION }}-${{ matrix.job.arch }}.deb
+          path: Digi-Desk2-${{ env.VERSION }}-${{ matrix.job.arch }}.deb
 
       - name: Patch archlinux PKGBUILD
         if: ${{ matrix.job.extra-build-features == '' }}
@@ -1774,7 +1774,7 @@ jobs:
 
       - name: Build archlinux package
         if: ${{ matrix.job.extra-build-features == '' }}
-        uses: rustdesk-org/arch-makepkg-action@master
+        uses: Digi-Desk2-org/arch-makepkg-action@master
         with:
           packages: >
             llvm
@@ -1816,7 +1816,7 @@ jobs:
           prerelease: true
           tag_name: ${{ env.TAG_NAME }}
           files: |
-            res/rustdesk*.zst
+            res/Digi-Desk2*.zst
 
       - name: Build appimage package
         if: matrix.job.extra-build-features == 'appimage' && env.UPLOAD_ARTIFACT == 'true'
@@ -1839,7 +1839,7 @@ jobs:
           prerelease: true
           tag_name: ${{ env.TAG_NAME }}
           files: |
-            ./appimage/rustdesk-${{ env.VERSION }}-*.AppImage
+            ./appimage/Digi-Desk2-${{ env.VERSION }}-*.AppImage
 
       - name: Publish fedora package
         if: matrix.job.extra-build-features == '' && env.UPLOAD_ARTIFACT == 'true'
@@ -1854,7 +1854,7 @@ jobs:
   #
   # build-flatpak-arm:
   #   name: Build Flatpak
-  #   needs: [build-rustdesk-linux-arm]
+  #   needs: [build-Digi-Desk2-linux-arm]
   #   runs-on: ${{ matrix.job.os }}
   #   strategy:
   #     fail-fast: false
@@ -1869,15 +1869,15 @@ jobs:
   #     - name: Download Binary
   #       uses: actions/download-artifact@master
   #       with:
-  #         name: rustdesk-${{ env.VERSION }}-${{ matrix.job.target }}-${{ matrix.job.os }}.deb
+  #         name: Digi-Desk2-${{ env.VERSION }}-${{ matrix.job.target }}-${{ matrix.job.os }}.deb
   #         path: .
 
   #     - name: Rename Binary
   #       run: |
-  #         mv rustdesk-${{ env.VERSION }}-${{ matrix.job.target }}-${{ matrix.job.os }}.deb rustdesk-${{ env.VERSION }}.deb
+  #         mv Digi-Desk2-${{ env.VERSION }}-${{ matrix.job.target }}-${{ matrix.job.os }}.deb Digi-Desk2-${{ env.VERSION }}.deb
 
-  #     - uses: rustdesk-org/run-on-arch-action@amd64-support
-  #       name: Build rustdesk flatpak package for ${{ matrix.job.arch }}
+  #     - uses: Digi-Desk2-org/run-on-arch-action@amd64-support
+  #       name: Build Digi-Desk2 flatpak package for ${{ matrix.job.arch }}
   #       id: rpm
   #       with:
   #         arch: ${{ matrix.job.arch }}
@@ -1913,8 +1913,8 @@ jobs:
   #           # package
   #           pushd flatpak
   #           git clone https://github.com/flathub/shared-modules.git --depth=1
-  #           flatpak-builder --user --force-clean --repo=repo ./build ./rustdesk.json
-  #           flatpak build-bundle ./repo rustdesk-${{ env.VERSION }}-${{ matrix.job.target }}.flatpak org.rustdesk.rustdesk
+  #           flatpak-builder --user --force-clean --repo=repo ./build ./Digi-Desk2.json
+  #           flatpak build-bundle ./repo Digi-Desk2-${{ env.VERSION }}-${{ matrix.job.target }}.flatpak org.Digi-Desk2.Digi-Desk2
 
   #     - name: Publish flatpak package
   #       uses: softprops/action-gh-release@v1
@@ -1922,11 +1922,11 @@ jobs:
   #         prerelease: true
   #         tag_name: ${{ env.TAG_NAME }}
   #         files: |
-  #           flatpak/rustdesk-${{ env.VERSION }}-${{ matrix.job.target }}.flatpak
+  #           flatpak/Digi-Desk2-${{ env.VERSION }}-${{ matrix.job.target }}.flatpak
 
   build-flatpak-amd64:
     name: Build Flatpak
-    needs: [build-rustdesk-linux-amd64]
+    needs: [build-Digi-Desk2-linux-amd64]
     runs-on: ubuntu-20.04
     strategy:
       fail-fast: false
@@ -1940,15 +1940,15 @@ jobs:
       - name: Download Binary
         uses: actions/download-artifact@master
         with:
-          name: rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}.deb
+          name: Digi-Desk2-${{ env.VERSION }}-${{ matrix.job.arch }}.deb
           path: .
 
       - name: Rename Binary
         run: |
-          mv rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}.deb rustdesk-${{ env.VERSION }}.deb
+          mv Digi-Desk2-${{ env.VERSION }}-${{ matrix.job.arch }}.deb Digi-Desk2-${{ env.VERSION }}.deb
 
-      - uses: rustdesk-org/run-on-arch-action@amd64-support
-        name: Build rustdesk flatpak package for ${{ matrix.job.arch }}
+      - uses: Digi-Desk2-org/run-on-arch-action@amd64-support
+        name: Build Digi-Desk2 flatpak package for ${{ matrix.job.arch }}
         id: rpm
         with:
           arch: ${{ matrix.job.arch }}
@@ -1990,8 +1990,8 @@ jobs:
             # package
             pushd flatpak
             git clone https://github.com/flathub/shared-modules.git --depth=1
-            flatpak-builder --user --force-clean --repo=repo ./build ./rustdesk.json
-            flatpak build-bundle ./repo rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}.flatpak com.rustdesk.RustDesk
+            flatpak-builder --user --force-clean --repo=repo ./build ./Digi-Desk2.json
+            flatpak build-bundle ./repo Digi-Desk2-${{ env.VERSION }}-${{ matrix.job.arch }}.flatpak com.Digi-Desk2.RustDesk
 
       - name: Publish flatpak package
         uses: softprops/action-gh-release@v1
@@ -2000,4 +2000,4 @@ jobs:
           prerelease: true
           tag_name: ${{ env.TAG_NAME }}
           files: |
-            flatpak/rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}.flatpak
+            flatpak/Digi-Desk2-${{ env.VERSION }}-${{ matrix.job.arch }}.flatpak

@@ -21,7 +21,7 @@ sciter.dll
 src/bridge_generated.rs
 src/bridge_generated.io.rs
 *deb
-rustdesk
+Digi-Desk2
 *.cache
 # appimage
 appimage/AppDir

@@ -25,8 +25,8 @@ jobs:
         run: |
           UPSTREAM_VERNAME="$GITHUB_REF_NAME"
           UPSTREAM_VERCODE="$(echo "$UPSTREAM_VERNAME" | tr -d '.')"
-          echo "versionName=$UPSTREAM_VERNAME"  > rustdesk-version.txt
-          echo "versionCode=$UPSTREAM_VERCODE" >> rustdesk-version.txt
+          echo "versionName=$UPSTREAM_VERNAME"  > Digi-Desk2-version.txt
+          echo "versionCode=$UPSTREAM_VERCODE" >> Digi-Desk2-version.txt
         shell: bash
 
       - name: Publish RustDesk version file
@@ -35,4 +35,4 @@ jobs:
           prerelease: true
           tag_name: "fdroid-version"
           files: |
-            ./rustdesk-version.txt
+            ./Digi-Desk2-version.txt

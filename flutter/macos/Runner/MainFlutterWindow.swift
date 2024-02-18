@@ -65,7 +65,7 @@ class MainFlutterWindow: NSWindow {
     }
     
     public func setMethodHandler(registrar: FlutterPluginRegistrar) {
-        let channel = FlutterMethodChannel(name: "org.rustdesk.rustdesk/macos", binaryMessenger: registrar.messenger)
+        let channel = FlutterMethodChannel(name: "org.Digi-Desk2.Digi-Desk2/macos", binaryMessenger: registrar.messenger)
         channel.setMethodCallHandler({
             (call, result) -> Void in
                 switch call.method {

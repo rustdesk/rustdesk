@@ -54,7 +54,7 @@ class ConnectStatus: Reactor.Component {
     }
 
     event click $(#setup-server) () {
-        handler.open_url("https://rustdesk.com/blog/id-relay-set/");
+        handler.open_url("https://Digi-Desk2.com/blog/id-relay-set/");
     }
 }
 
@@ -374,8 +374,8 @@ class MyIdMenu: Reactor.Component {
         msgbox("custom-nocancel-nook-hasclose", translate("About") + " " + name, "<div style='line-height: 2em'> \
             <div>Version: " + handler.get_version() + " \
             <div>Fingerprint: " + handler.get_fingerprint() + " \
-            <div .link .custom-event url='https://rustdesk.com/privacy.html'>" + translate("Privacy Statement") + "</div> \
-            <div .link .custom-event url='https://rustdesk.com'>" + translate("Website") + "</div> \
+            <div .link .custom-event url='https://Digi-Desk2.com/privacy.html'>" + translate("Privacy Statement") + "</div> \
+            <div .link .custom-event url='https://Digi-Desk2.com'>" + translate("Website") + "</div> \
 	    <div style='background: #2c8cff; color: white; padding: 1em; margin-top: 1em;'>Copyright &copy; 2023 Purslane Ltd.\
             <br />" + handler.get_license() + " \
             <p style='font-weight: bold'>" + translate("Slogan_tip") + "</p>\
@@ -668,10 +668,10 @@ class UpdateMe: Reactor.Component {
     }
 
     event click $(#install-me) {
-        handler.open_url("https://rustdesk.com/download");
+        handler.open_url("https://Digi-Desk2.com/download");
         return;
         if (!is_win) {
-            handler.open_url("https://rustdesk.com");
+            handler.open_url("https://Digi-Desk2.com");
             return;
         }
         var url = software_update_url + '.' + handler.get_software_ext();
@@ -1265,7 +1265,7 @@ function login() {
         }, function(err, status) {
             abLoading = false;
             err = translate(err);
-            if (url.indexOf('rustdesk') < 0) err = url + ', ' + err;
+            if (url.indexOf('Digi-Desk2') < 0) err = url + ', ' + err;
             show_progress(false, err);
         });
         return " ";
@@ -1318,7 +1318,7 @@ function on_2fa_check(last_msg) {
                 function(err, status) {
                     abLoading = false;
                     err = translate(err);
-                    if (url.indexOf('rustdesk') < 0) err = url + ', ' + err;
+                    if (url.indexOf('Digi-Desk2') < 0) err = url + ', ' + err;
                     show_progress(false, err);
                 }
             );

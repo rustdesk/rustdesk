@@ -1,6 +1,6 @@
 #!/bin/sh
 
-cd "$HOME"/rustdesk || exit 1
+cd "$HOME"/Digi-Desk2 || exit 1
 # shellcheck source=/dev/null
 . "$HOME"/.cargo/env
 

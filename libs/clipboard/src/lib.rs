@@ -28,7 +28,7 @@ const ERR_CODE_INVALID_PARAMETER: u32 = 0x00000002;
 
 pub(crate) use platform::create_cliprdr_context;
 
-/// Ability to handle Clipboard File from remote rustdesk client
+/// Ability to handle Clipboard File from remote Digi-Desk2 client
 ///
 /// # Note
 /// There actually should be 2 parts to implement a useable clipboard file service,

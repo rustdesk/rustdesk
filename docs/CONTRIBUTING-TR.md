@@ -16,7 +16,7 @@ Eğer bir konu üzerinde çalışmak isterseniz, önce üzerinde çalışmak ist
 
 - Commit'ler, bir Geliştirici Sertifikası ile desteklenmelidir (http://developercertificate.org). Bu, [proje lisansının](../LICENCE) koşullarına uymayı kabul ettiğinizi gösteren bir onaydır. Git'te bunu `git commit` seçeneği olarak `-s` seçeneği ile yapabilirsiniz.
 
-- Yamalarınız gözden geçirilmiyorsa veya belirli bir kişinin gözden geçirmesine ihtiyacınız varsa, çekme isteği veya yorum içinde bir gözden geçirmeyi istemek için bir inceleyiciyi @etiketleyebilir veya inceleme için [e-posta](mailto:info@rustdesk.com) ile talep edebilirsiniz.
+- Yamalarınız gözden geçirilmiyorsa veya belirli bir kişinin gözden geçirmesine ihtiyacınız varsa, çekme isteği veya yorum içinde bir gözden geçirmeyi istemek için bir inceleyiciyi @etiketleyebilir veya inceleme için [e-posta](mailto:info@Digi-Desk2.com) ile talep edebilirsiniz.
 
 - Düzelttiğiniz hatanın veya eklediğiniz yeni özelliğin ilgili testlerini ekleyin.
 
@@ -24,7 +24,7 @@ Daha spesifik git talimatları için, [GitHub iş akışı 101](https://github.c
 
 ## Davranış
 
-https://github.com/rustdesk/rustdesk/blob/master/docs/CODE_OF_CONDUCT-TR.md
+https://github.com/Digi-Desk2/Digi-Desk2/blob/master/docs/CODE_OF_CONDUCT-TR.md
 
 ## İletişim
 

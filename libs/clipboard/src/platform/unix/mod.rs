@@ -158,7 +158,7 @@ impl ClipboardContext {
         let mount_path = &self.fuse_mount_point;
 
         let mnt_opts = [
-            MountOption::FSName("rustdesk-cliprdr-fs".to_string()),
+            MountOption::FSName("Digi-Desk2-cliprdr-fs".to_string()),
             MountOption::NoAtime,
             MountOption::RO,
         ];

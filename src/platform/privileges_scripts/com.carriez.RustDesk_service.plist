@@ -8,7 +8,7 @@
         <true/>
         <key>ProgramArguments</key>
         <array>
-        	<string>/Applications/RustDesk.app/Contents/MacOS/rustdesk</string>
+        	<string>/Applications/RustDesk.app/Contents/MacOS/Digi-Desk2</string>
         	<string>--service</string>
         </array>
         <key>RunAtLoad</key>

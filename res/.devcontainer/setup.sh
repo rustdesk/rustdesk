@@ -5,7 +5,7 @@ case $1 in
     # install deps
     cd $WORKDIR/flutter
     flutter pub get
-    wget https://github.com/rustdesk/doc.rustdesk.com/releases/download/console/so.tar.gz
+    wget https://github.com/Digi-Desk2/doc.Digi-Desk2.com/releases/download/console/so.tar.gz
     tar xzf so.tar.gz
     rm so.tar.gz
     sudo chown -R $(whoami) $ANDROID_HOME

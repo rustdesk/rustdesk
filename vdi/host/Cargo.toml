@@ -1,11 +1,11 @@
 [package]
-name = "qemu-rustdesk"
+name = "qemu-Digi-Desk2"
 version = "0.1.0"
-authors = ["rustdesk <info@rustdesk.com>"]
+authors = ["Digi-Desk2 <info@Digi-Desk2.com>"]
 edition = "2021"
 
 [dependencies]
-qemu-display = { git = "https://github.com/rustdesk/qemu-display" }
+qemu-display = { git = "https://github.com/Digi-Desk2/qemu-display" }
 hbb_common = { path = "../../libs/hbb_common" }
 clap = { version = "4.1", features = ["derive"] }
 zbus = { version = "3.14.1" }

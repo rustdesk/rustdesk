@@ -47,7 +47,7 @@ class Install: Reactor.Component {
     }
 
     event click $(#agreement) {
-        view.open_url("http://rustdesk.com/privacy");
+        view.open_url("http://Digi-Desk2.com/privacy");
     }
 
     event click $(#submit) {

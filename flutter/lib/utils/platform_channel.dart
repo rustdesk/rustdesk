@@ -15,7 +15,7 @@ class RdPlatformChannel {
   static RdPlatformChannel get instance => _windowUtil;
 
   final MethodChannel _osxMethodChannel =
-      MethodChannel("org.rustdesk.rustdesk/macos");
+      MethodChannel("org.Digi-Desk2.Digi-Desk2/macos");
 
   /// Change the theme of the system window
   Future<void> changeSystemWindowTheme(SystemWindowTheme theme) {

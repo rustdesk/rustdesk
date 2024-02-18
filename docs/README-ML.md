@@ -9,15 +9,15 @@
   <b>ഈ README നിങ്ങളുടെ മാതൃഭാഷയിലേക്ക് വിവർത്തനം ചെയ്യാൻ ഞങ്ങൾക്ക് നിങ്ങളുടെ സഹായം ആവശ്യമാണ്</b>
 </p>
 
-ഞങ്ങളുമായി ചാറ്റ് ചെയ്യുക: [Discord](https://discord.gg/nDceKgxnkV) | [Twitter](https://twitter.com/rustdesk) | [Reddit](https://www.reddit.com/r/rustdesk)
+ഞങ്ങളുമായി ചാറ്റ് ചെയ്യുക: [Discord](https://discord.gg/nDceKgxnkV) | [Twitter](https://twitter.com/Digi-Desk2) | [Reddit](https://www.reddit.com/r/Digi-Desk2)
 
 [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/I2I04VU09)
 
-റസ്റ്റിൽ എഴുതിയ മറ്റൊരു റിമോട്ട് ഡെസ്ക്ടോപ്പ് സോഫ്റ്റ്‌വെയർ. ബോക്‌സിന് പുറത്ത് പ്രവർത്തിക്കുന്നു, കോൺഫിഗറേഷൻ ആവശ്യമില്ല. സുരക്ഷയെക്കുറിച്ച് ആശങ്കകളൊന്നുമില്ലാതെ, നിങ്ങളുടെ ഡാറ്റയുടെ പൂർണ്ണ നിയന്ത്രണം നിങ്ങൾക്കുണ്ട്. നിങ്ങൾക്ക് ഞങ്ങളുടെ rendezvous/relay സെർവർ ഉപയോഗിക്കാം, [സ്വന്തമായി സജ്ജീകരിക്കുക](https://rustdesk.com/server), അല്ലെങ്കിൽ [നിങ്ങളുടെ സ്വന്തം rendezvous/relay സെർവർ എഴുതുക](https://github.com/rustdesk/rustdesk-server-demo).
+റസ്റ്റിൽ എഴുതിയ മറ്റൊരു റിമോട്ട് ഡെസ്ക്ടോപ്പ് സോഫ്റ്റ്‌വെയർ. ബോക്‌സിന് പുറത്ത് പ്രവർത്തിക്കുന്നു, കോൺഫിഗറേഷൻ ആവശ്യമില്ല. സുരക്ഷയെക്കുറിച്ച് ആശങ്കകളൊന്നുമില്ലാതെ, നിങ്ങളുടെ ഡാറ്റയുടെ പൂർണ്ണ നിയന്ത്രണം നിങ്ങൾക്കുണ്ട്. നിങ്ങൾക്ക് ഞങ്ങളുടെ rendezvous/relay സെർവർ ഉപയോഗിക്കാം, [സ്വന്തമായി സജ്ജീകരിക്കുക](https://Digi-Desk2.com/server), അല്ലെങ്കിൽ [നിങ്ങളുടെ സ്വന്തം rendezvous/relay സെർവർ എഴുതുക](https://github.com/Digi-Desk2/Digi-Desk2-server-demo).
 
 എല്ലാവരുടെയും സംഭാവനയെ RustDesk സ്വാഗതം ചെയ്യുന്നു. ആരംഭിക്കുന്നതിനുള്ള സഹായത്തിന് [`docs/CONTRIBUTING.md`](CONTRIBUTING.md) കാണുക.
 
-[**BINARY DOWNLOAD**](https://github.com/rustdesk/rustdesk/releases)
+[**BINARY DOWNLOAD**](https://github.com/Digi-Desk2/Digi-Desk2/releases)
 
 ## സൗജന്യ പൊതു സെർവറുകൾ
 
@@ -95,8 +95,8 @@ cd
 ```sh
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 source $HOME/.cargo/env
-git clone https://github.com/rustdesk/rustdesk
-cd rustdesk
+git clone https://github.com/Digi-Desk2/Digi-Desk2
+cd Digi-Desk2
 mkdir -p target/debug
 wget https://raw.githubusercontent.com/c-smile/sciter-sdk/master/bin.lnx/x64/libsciter-gtk.so
 mv libsciter-gtk.so target/debug
@@ -108,41 +108,41 @@ VCPKG_ROOT=$HOME/vcpkg cargo run
  റെപ്പോസിറ്റോറി ക്ലോണുചെയ്‌ത് ഡോക്കർ കണ്ടെയ്‌നർ നിർമ്മിക്കുന്നതിലൂടെ ആരംഭിക്കുക:
 
 ```sh
-git clone https://github.com/rustdesk/rustdesk
-cd rustdesk
-docker build -t "rustdesk-builder" .
+git clone https://github.com/Digi-Desk2/Digi-Desk2
+cd Digi-Desk2
+docker build -t "Digi-Desk2-builder" .
 ```
 
 തുടർന്ന്, ഓരോ തവണയും നിങ്ങൾ ആപ്ലിക്കേഷൻ നിർമ്മിക്കേണ്ടതുണ്ട്, ഇനിപ്പറയുന്ന കമാൻഡ് പ്രവർത്തിപ്പിക്കുക:
 
 ```sh
-docker run --rm -it -v $PWD:/home/user/rustdesk -v rustdesk-git-cache:/home/user/.cargo/git -v rustdesk-registry-cache:/home/user/.cargo/registry -e PUID="$(id -u)" -e PGID="$(id -g)" rustdesk-builder
+docker run --rm -it -v $PWD:/home/user/Digi-Desk2 -v Digi-Desk2-git-cache:/home/user/.cargo/git -v Digi-Desk2-registry-cache:/home/user/.cargo/registry -e PUID="$(id -u)" -e PGID="$(id -g)" Digi-Desk2-builder
 ```
 
 ഡിപൻഡൻസികൾ കാഷെ ചെയ്യുന്നതിനുമുമ്പ് ആദ്യ ബിൽഡ് കൂടുതൽ സമയമെടുത്തേക്കാം, തുടർന്നുള്ള ബിൽഡുകൾ വേഗത്തിലാകും. കൂടാതെ, നിങ്ങൾക്ക് ബിൽഡ് കമാൻഡിലേക്ക് വ്യത്യസ്ത ആർഗ്യുമെന്റുകൾ വ്യക്തമാക്കണമെങ്കിൽ, കമാൻഡിന്റെ അവസാനം `<OPTIONAL-ARGS>` സ്ഥാനത്ത് നിങ്ങൾക്ക് അങ്ങനെ ചെയ്യാം. ഉദാഹരണത്തിന്, നിങ്ങൾ ഒരു ഒപ്റ്റിമൈസ് ചെയ്ത റിലീസ് പതിപ്പ് നിർമ്മിക്കാൻ ആഗ്രഹിക്കുന്നുവെങ്കിൽ, മുകളിലുള്ള കമാൻഡ് തുടർന്ന് `--release` നിങ്ങൾ പ്രവർത്തിപ്പിക്കും. തത്ഫലമായുണ്ടാകുന്ന എക്സിക്യൂട്ടബിൾ നിങ്ങളുടെ സിസ്റ്റത്തിലെ ടാർഗെറ്റ് ഫോൾഡറിൽ ലഭ്യമാകും, കൂടാതെ ഇത് ഉപയോഗിച്ച് പ്രവർത്തിപ്പിക്കാം:
 
 ```sh
-target/debug/rustdesk
+target/debug/Digi-Desk2
 ```
 
 അല്ലെങ്കിൽ, നിങ്ങൾ ഒരു റിലീസ് എക്സിക്യൂട്ടബിൾ പ്രവർത്തിപ്പിക്കുകയാണെങ്കിൽ:
 
 ```sh
-target/release/rustdesk
+target/release/Digi-Desk2
 ```
 
 RustDesk റിപ്പോസിറ്ററിയുടെ റൂട്ടിൽ നിന്നാണ് നിങ്ങൾ ഈ കമാൻഡുകൾ പ്രവർത്തിപ്പിക്കുന്നതെന്ന് ദയവായി ഉറപ്പാക്കുക, അല്ലാത്തപക്ഷം ആപ്ലിക്കേഷന് ആവശ്യമായ ഉറവിടങ്ങൾ കണ്ടെത്താൻ കഴിഞ്ഞേക്കില്ല. ഹോസ്റ്റിന് പകരം കണ്ടെയ്‌നറിനുള്ളിൽ പ്രോഗ്രാം ഇൻസ്റ്റാൾ ചെയ്യുകയോ പ്രവർത്തിപ്പിക്കുകയോ ചെയ്യുന്നതിനാൽ, `install` അല്ലെങ്കിൽ `run` പോലുള്ള മറ്റ് കാർഗോ സബ്‌കമാൻഡുകൾ നിലവിൽ ഈ രീതിയെ പിന്തുണയ്ക്കുന്നില്ല എന്നതും ശ്രദ്ധിക്കുക.
 
 ## ഫയൽ ഘടന
 
-- **[libs/hbb_common](https://github.com/rustdesk/rustdesk/tree/master/libs/hbb_common)**: video codec, config, tcp/udp wrapper, protobuf, fs functions for file transfer, and some other utility functions
-- **[libs/scrap](https://github.com/rustdesk/rustdesk/tree/master/libs/scrap)**: screen capture
-- **[libs/enigo](https://github.com/rustdesk/rustdesk/tree/master/libs/enigo)**: platform specific keyboard/mouse control
-- **[src/ui](https://github.com/rustdesk/rustdesk/tree/master/src/ui)**: GUI
-- **[src/server](https://github.com/rustdesk/rustdesk/tree/master/src/server)**: audio/clipboard/input/video services, and network connections
-- **[src/client.rs](https://github.com/rustdesk/rustdesk/tree/master/src/client.rs)**: start a peer connection
-- **[src/rendezvous_mediator.rs](https://github.com/rustdesk/rustdesk/tree/master/src/rendezvous_mediator.rs)**: Communicate with [rustdesk-server](https://github.com/rustdesk/rustdesk-server), wait for remote direct (TCP hole punching) or relayed connection
-- **[src/platform](https://github.com/rustdesk/rustdesk/tree/master/src/platform)**: platform specific code
+- **[libs/hbb_common](https://github.com/Digi-Desk2/Digi-Desk2/tree/master/libs/hbb_common)**: video codec, config, tcp/udp wrapper, protobuf, fs functions for file transfer, and some other utility functions
+- **[libs/scrap](https://github.com/Digi-Desk2/Digi-Desk2/tree/master/libs/scrap)**: screen capture
+- **[libs/enigo](https://github.com/Digi-Desk2/Digi-Desk2/tree/master/libs/enigo)**: platform specific keyboard/mouse control
+- **[src/ui](https://github.com/Digi-Desk2/Digi-Desk2/tree/master/src/ui)**: GUI
+- **[src/server](https://github.com/Digi-Desk2/Digi-Desk2/tree/master/src/server)**: audio/clipboard/input/video services, and network connections
+- **[src/client.rs](https://github.com/Digi-Desk2/Digi-Desk2/tree/master/src/client.rs)**: start a peer connection
+- **[src/rendezvous_mediator.rs](https://github.com/Digi-Desk2/Digi-Desk2/tree/master/src/rendezvous_mediator.rs)**: Communicate with [Digi-Desk2-server](https://github.com/Digi-Desk2/Digi-Desk2-server), wait for remote direct (TCP hole punching) or relayed connection
+- **[src/platform](https://github.com/Digi-Desk2/Digi-Desk2/tree/master/src/platform)**: platform specific code
 
 ## സ്നാപ്പ്ഷോട്ടുകൾ
 

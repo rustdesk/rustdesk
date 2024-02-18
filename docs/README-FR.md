@@ -9,15 +9,15 @@
   <b>Nous avons besoin de votre aide pour traduire ce README dans votre langue maternelle</b>.
 </p>
 
-Chattez avec nous : [Discord](https://discord.gg/nDceKgxnkV) | [Twitter](https://twitter.com/rustdesk) | [Reddit](https://www.reddit.com/r/rustdesk)
+Chattez avec nous : [Discord](https://discord.gg/nDceKgxnkV) | [Twitter](https://twitter.com/Digi-Desk2) | [Reddit](https://www.reddit.com/r/Digi-Desk2)
 
 [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/I2I04VU09)
 
-Encore un autre logiciel de bureau à distance, écrit en Rust. Fonctionne directement, aucune configuration n'est nécessaire. Vous avez le contrôle total de vos données, sans aucun souci de sécurité. Vous pouvez utiliser notre serveur de rendez-vous/relais, [configurer le vôtre](https://rustdesk.com/server), ou [écrire votre propre serveur de rendez-vous/relais](https://github.com/rustdesk/rustdesk-server-demo).
+Encore un autre logiciel de bureau à distance, écrit en Rust. Fonctionne directement, aucune configuration n'est nécessaire. Vous avez le contrôle total de vos données, sans aucun souci de sécurité. Vous pouvez utiliser notre serveur de rendez-vous/relais, [configurer le vôtre](https://Digi-Desk2.com/server), ou [écrire votre propre serveur de rendez-vous/relais](https://github.com/Digi-Desk2/Digi-Desk2-server-demo).
 
 RustDesk accueille les contributions de tout le monde. Voir [`docs/CONTRIBUTING.md`](CONTRIBUTING.md) pour plus d'informations.
 
-[**TÉLÉCHARGEMENT BINAIRE**](https://github.com/rustdesk/rustdesk/releases)
+[**TÉLÉCHARGEMENT BINAIRE**](https://github.com/Digi-Desk2/Digi-Desk2/releases)
 
 ## Serveurs publics libres
 
@@ -96,8 +96,8 @@ cd
 ```sh
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 source $HOME/.cargo/env
-git clone https://github.com/rustdesk/rustdesk
-cd rustdesk
+git clone https://github.com/Digi-Desk2/Digi-Desk2
+cd Digi-Desk2
 mkdir -p target/debug
 wget https://raw.githubusercontent.com/c-smile/sciter-sdk/master/bin.lnx/x64/libsciter-gtk.so
 mv libsciter-gtk.so target/debug
@@ -109,41 +109,41 @@ Exécution du cargo
 Commencez par cloner le dépôt et construire le conteneur Docker :
 
 ```sh
-git clone https://github.com/rustdesk/rustdesk
-cd rustdesk
-docker build -t "rustdesk-builder" .
+git clone https://github.com/Digi-Desk2/Digi-Desk2
+cd Digi-Desk2
+docker build -t "Digi-Desk2-builder" .
 ```
 
 Ensuite, chaque fois que vous devez compiler le logiciel, exécutez la commande suivante :
 
 ```sh
-docker run --rm -it -v $PWD:/home/user/rustdesk -v rustdesk-git-cache:/home/user/.cargo/git -v rustdesk-registry-cache:/home/user/.cargo/registry -e PUID="$(id -u)" -e PGID="$(id -g)" rustdesk-builder
+docker run --rm -it -v $PWD:/home/user/Digi-Desk2 -v Digi-Desk2-git-cache:/home/user/.cargo/git -v Digi-Desk2-registry-cache:/home/user/.cargo/registry -e PUID="$(id -u)" -e PGID="$(id -g)" Digi-Desk2-builder
 ```
 
 Notez que la première compilation peut prendre plus de temps avant que les dépendances ne soient mises en cache, les compilations suivantes seront plus rapides. De plus, si vous devez spécifier différents arguments à la commande de compilation, vous pouvez le faire à la fin de la commande à la position `<OPTIONAL-ARGS>`. Par exemple, si vous voulez compiler une version de release optimisée, vous devez exécuter la commande ci-dessus suivie de `--release`. L'exécutable résultant sera disponible dans le dossier cible sur votre système, et peut être lancé avec :
 
 ```sh
-target/debug/rustdesk
+target/debug/Digi-Desk2
 ```
 
 Ou, si vous exécutez un exécutable provenant d'une release :
 
 ```sh
-target/release/rustdesk
+target/release/Digi-Desk2
 ```
 
 Veuillez vous assurer que vous exécutez ces commandes à partir de la racine du dépôt RustDesk, sinon l'application ne pourra pas trouver les ressources requises. Notez également que les autres sous-commandes de cargo telles que `install` ou `run` ne sont pas actuellement supportées par cette méthode car elles installeraient ou exécuteraient le programme à l'intérieur du conteneur au lieu de l'hôte.
 
 ## Structure du projet
 
-- **[libs/hbb_common](https://github.com/rustdesk/rustdesk/tree/master/libs/hbb_common)** : codec vidéo, config, wrapper tcp/udp, protobuf, fonctions fs pour le transfert de fichiers, et quelques autres fonctions utilitaires.
-- **[libs/scrap](https://github.com/rustdesk/rustdesk/tree/master/libs/scrap)** : capture d'écran
-- **[libs/enigo](https://github.com/rustdesk/rustdesk/tree/master/libs/enigo)** : contrôle clavier/souris spécifique à la plate-forme
-- **[src/ui](https://github.com/rustdesk/rustdesk/tree/master/src/ui)** : interface graphique
-- **[src/server](https://github.com/rustdesk/rustdesk/tree/master/src/server)** : services audio/clipboard/input/vidéo, et connexions réseau
-- **[src/client.rs](https://github.com/rustdesk/rustdesk/tree/master/src/client.rs)** : démarrer une connexion entre pairs
-- **[src/rendezvous_mediator.rs](https://github.com/rustdesk/rustdesk/tree/master/src/rendezvous_mediator.rs)** : Communiquer avec [rustdesk-server](https://github.com/rustdesk/rustdesk-server), attendre une connexion distante directe (TCP hole punching) ou relayée.
-- **[src/platform](https://github.com/rustdesk/rustdesk/tree/master/src/platform)** : code spécifique à la plateforme
+- **[libs/hbb_common](https://github.com/Digi-Desk2/Digi-Desk2/tree/master/libs/hbb_common)** : codec vidéo, config, wrapper tcp/udp, protobuf, fonctions fs pour le transfert de fichiers, et quelques autres fonctions utilitaires.
+- **[libs/scrap](https://github.com/Digi-Desk2/Digi-Desk2/tree/master/libs/scrap)** : capture d'écran
+- **[libs/enigo](https://github.com/Digi-Desk2/Digi-Desk2/tree/master/libs/enigo)** : contrôle clavier/souris spécifique à la plate-forme
+- **[src/ui](https://github.com/Digi-Desk2/Digi-Desk2/tree/master/src/ui)** : interface graphique
+- **[src/server](https://github.com/Digi-Desk2/Digi-Desk2/tree/master/src/server)** : services audio/clipboard/input/vidéo, et connexions réseau
+- **[src/client.rs](https://github.com/Digi-Desk2/Digi-Desk2/tree/master/src/client.rs)** : démarrer une connexion entre pairs
+- **[src/rendezvous_mediator.rs](https://github.com/Digi-Desk2/Digi-Desk2/tree/master/src/rendezvous_mediator.rs)** : Communiquer avec [Digi-Desk2-server](https://github.com/Digi-Desk2/Digi-Desk2-server), attendre une connexion distante directe (TCP hole punching) ou relayée.
+- **[src/platform](https://github.com/Digi-Desk2/Digi-Desk2/tree/master/src/platform)** : code spécifique à la plateforme
 
 ## Images
 

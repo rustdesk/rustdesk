@@ -15,9 +15,9 @@
 	<key>BUNDLE_ID</key>
 	<string>com.carriez.flutterHbb</string>
 	<key>PROJECT_ID</key>
-	<string>rustdesk</string>
+	<string>Digi-Desk2</string>
 	<key>STORAGE_BUCKET</key>
-	<string>rustdesk.appspot.com</string>
+	<string>Digi-Desk2.appspot.com</string>
 	<key>IS_ADS_ENABLED</key>
 	<false></false>
 	<key>IS_ANALYTICS_ENABLED</key>
@@ -31,6 +31,6 @@
 	<key>GOOGLE_APP_ID</key>
 	<string>1:768133699366:ios:c33078a6181b9d507993e7</string>
 	<key>DATABASE_URL</key>
-	<string>https://rustdesk.firebaseio.com</string>
+	<string>https://Digi-Desk2.firebaseio.com</string>
 </dict>
 </plist>
