@@ -2,7 +2,7 @@
 #include "my_application.h"
 
 #define RUSTDESK_LIB_PATH "librustdesk.so"
-// #define RUSTDESK_LIB_PATH "/usr/lib/Digi-Desk2/librustdesk.so"
+// #define RUSTDESK_LIB_PATH "/usr/lib/rustdesk/librustdesk.so"
 typedef bool (*RustDeskCoreMain)();
 bool gIsConnectionManager = false;
 

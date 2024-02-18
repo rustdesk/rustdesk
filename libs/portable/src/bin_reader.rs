@@ -73,13 +73,13 @@ impl BinaryReader {
         let mut parsed = vec![];
         assert!(BIN_DATA.len() > IDENTIFIER_LENGTH, "bin data invalid!");
         let mut iden = String::from_utf8_lossy(&BIN_DATA[base..base + IDENTIFIER_LENGTH]);
-        if iden != "Digi-Desk2" {
+        if iden != "rustdesk" {
             panic!("bin file is not valid!");
         }
         base += IDENTIFIER_LENGTH;
         loop {
             iden = String::from_utf8_lossy(&BIN_DATA[base..base + IDENTIFIER_LENGTH]);
-            if iden == "Digi-Desk2" {
+            if iden == "rustdesk" {
                 base += IDENTIFIER_LENGTH;
                 break;
             }

@@ -159,7 +159,7 @@ pub async fn run() -> ResultType<()> {
     let console = Console::new(&dbus.into(), 0)
         .await
         .context("Failed to get the console")?;
-    let mut server = Server::new(format!("qemu-Digi-Desk2 ({})", vm_name), console).await?;
+    let mut server = Server::new(format!("qemu-rustdesk ({})", vm_name), console).await?;
     loop {
         let (stream, addr) = listener.accept().await?;
         stream.set_nodelay(true).ok();

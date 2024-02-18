@@ -2,24 +2,24 @@
 version: 1
 script:
  - rm -rf ./AppDir || true
- - bsdtar -zxvf ../Digi-Desk2-1.2.4.deb
+ - bsdtar -zxvf ../rustdesk-1.2.4.deb
  - tar -xvf ./data.tar.xz
  - mkdir ./AppDir
  - mv ./usr ./AppDir/usr
  # 32x32 icon
- - for i in {32,64,128}; do mkdir -p ./AppDir/usr/share/icons/hicolor/$i\x$i/apps/; cp ../res/$i\x$i.png ./AppDir/usr/share/icons/hicolor/$i\x$i/apps/Digi-Desk2.png; done
- - mkdir -p ./AppDir/usr/share/icons/hicolor/scalable/apps/; cp ../res/scalable.svg ./AppDir/usr/share/icons/hicolor/scalable/apps/Digi-Desk2.svg
+ - for i in {32,64,128}; do mkdir -p ./AppDir/usr/share/icons/hicolor/$i\x$i/apps/; cp ../res/$i\x$i.png ./AppDir/usr/share/icons/hicolor/$i\x$i/apps/rustdesk.png; done
+ - mkdir -p ./AppDir/usr/share/icons/hicolor/scalable/apps/; cp ../res/scalable.svg ./AppDir/usr/share/icons/hicolor/scalable/apps/rustdesk.svg
  # desktop file
- # - sed -i "s/Icon=\/usr\/share\/Digi-Desk2\/files\/Digi-Desk2.png/Icon=Digi-Desk2/g" ./AppDir/usr/share/applications/Digi-Desk2.desktop
+ # - sed -i "s/Icon=\/usr\/share\/rustdesk\/files\/rustdesk.png/Icon=rustdesk/g" ./AppDir/usr/share/applications/rustdesk.desktop
  - rm -rf ./AppDir/usr/share/applications
 AppDir:
   path: ./AppDir
   app_info:
-    id: Digi-Desk2
-    name: Digi-Desk2
-    icon: Digi-Desk2
+    id: rustdesk
+    name: rustdesk
+    icon: rustdesk
     version: 1.2.4
-    exec: usr/lib/Digi-Desk2/Digi-Desk2
+    exec: usr/lib/rustdesk/rustdesk
     exec_args: $@
   apt:
     arch:

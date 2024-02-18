@@ -39,7 +39,7 @@ dependencies:
   toggle_switch: ^2.1.0
   dash_chat_2:
     git:
-      url: https://github.com/Digi-Desk2-org/Dash-Chat-2
+      url: https://github.com/rustdesk-org/Dash-Chat-2
   draggable_float_widget: ^0.1.0
   settings_ui: ^2.0.2
   flutter_breadcrumb: ^1.0.1
@@ -52,10 +52,10 @@ dependencies:
   flutter_rust_bridge: "1.80.1"
   window_manager:
     git:
-      url: https://github.com/Digi-Desk2-org/window_manager
+      url: https://github.com/rustdesk-org/window_manager
   desktop_multi_window:
     git:
-      url: https://github.com/Digi-Desk2-org/rustdesk_desktop_multi_window
+      url: https://github.com/rustdesk-org/rustdesk_desktop_multi_window
   freezed_annotation: ^2.0.3
   flutter_custom_cursor: ^0.0.4
   window_size:
@@ -75,13 +75,13 @@ dependencies:
     # currently, we use flutter 3.10.0+.
     #
     # for flutter 3.0.5, please use official version(just comment code below).
-    # if build Digi-Desk2 by flutter >=3.3, please use our custom pub below (uncomment code below).
+    # if build rustdesk by flutter >=3.3, please use our custom pub below (uncomment code below).
     git:
-      url: https://github.com/Digi-Desk2-org/flutter_improved_scrolling
+      url: https://github.com/rustdesk-org/flutter_improved_scrolling
   uni_links: ^0.5.1
   uni_links_desktop:
     git:
-      url: https://github.com/Digi-Desk2-org/uni_links_desktop
+      url: https://github.com/rustdesk-org/uni_links_desktop
   path: ^1.8.1
   auto_size_text: ^3.0.0
   bot_toast: ^4.0.3

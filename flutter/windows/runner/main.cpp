@@ -12,7 +12,7 @@
 
 typedef char** (*FUNC_RUSTDESK_CORE_MAIN)(int*);
 typedef void (*FUNC_RUSTDESK_FREE_ARGS)( char**, int);
-const char* uniLinksPrefix = "Digi-Desk2://";
+const char* uniLinksPrefix = "rustdesk://";
 /// Note: `--server`, `--service` are already handled in [core_main.rs].
 const std::vector<std::string> parameters_white_list = {"--install", "--cm"};
 

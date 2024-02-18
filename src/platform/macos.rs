@@ -76,7 +76,7 @@ pub fn is_can_input_monitoring(prompt: bool) -> bool {
 
 // macOS >= 10.15
 // https://stackoverflow.com/questions/56597221/detecting-screen-recording-settings-on-macos-catalina/
-// remove just one app from all the permissions: tccutil reset All com.carriez.Digi-Desk2
+// remove just one app from all the permissions: tccutil reset All com.carriez.rustdesk
 pub fn is_can_screen_recording(prompt: bool) -> bool {
     // we got some report that we show no permission even after set it, so we try to use new api for screen recording check
     // the new api is only available on macOS >= 10.15, but on stackoverflow, some people said it works on >= 10.16 (crash on 10.15),
@@ -625,7 +625,7 @@ pub fn handle_application_should_open_untitled_file() {
     let x = std::env::args().nth(1).unwrap_or_default();
     if x == "--server" || x == "--cm" || x == "--tray" {
         if crate::platform::macos::check_main_window() {
-            allow_err!(crate::ipc::send_url_scheme("Digi-Desk2:".into()));
+            allow_err!(crate::ipc::send_url_scheme("rustdesk:".into()));
         }
     }
 }

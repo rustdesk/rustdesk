@@ -67,7 +67,7 @@ lazy_static::lazy_static! {
     pub static ref TEXTURE_GPU_RENDERER_PLUGIN: Result<Library, LibError> = Library::open("flutter_gpu_texture_renderer_plugin.dll");
 }
 
-/// FFI for Digi-Desk2 core's main entry.
+/// FFI for rustdesk core's main entry.
 /// Return true if the app should continue running with UI(possibly Flutter), false if the app should exit.
 #[cfg(not(windows))]
 #[no_mangle]

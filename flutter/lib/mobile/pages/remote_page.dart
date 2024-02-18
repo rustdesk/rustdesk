@@ -243,7 +243,7 @@ class _RemotePageState extends State<RemotePage> {
         return false;
       },
       child: Scaffold(
-          // workaround for https://github.com/Digi-Desk2/Digi-Desk2/issues/3131
+          // workaround for https://github.com/rustdesk/rustdesk/issues/3131
           floatingActionButtonLocation: keyboardIsVisible
               ? FABLocation(FloatingActionButtonLocation.endFloat, 0, -35)
               : null,

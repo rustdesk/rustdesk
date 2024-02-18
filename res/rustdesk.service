@@ -5,8 +5,8 @@ After=systemd-user-sessions.service
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/Digi-Desk2 --service
-PIDFile=/run/Digi-Desk2.pid
+ExecStart=/usr/bin/rustdesk --service
+PIDFile=/run/rustdesk.pid
 KillMode=mixed
 TimeoutStopSec=30
 User=root

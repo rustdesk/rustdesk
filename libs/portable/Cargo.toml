@@ -1,5 +1,5 @@
 [package]
-name = "Digi-Desk2-portable-packer"
+name = "rustdesk-portable-packer"
 version = "0.1.0"
 edition = "2021"
 

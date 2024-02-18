@@ -89,7 +89,7 @@ pub fn get_license_from_string(s: &str) -> ResultType<License> {
         for s in strs {
             if let Ok(lic) = get_license_from_string_(s) {
                 return Ok(lic);
-            } else if s.contains("(") { // https://github.com/Digi-Desk2/Digi-Desk2/issues/4162
+            } else if s.contains("(") { // https://github.com/rustdesk/rustdesk/issues/4162
                 for s in s.split("(") {
                     if let Ok(lic) = get_license_from_string_(s) {
                         return Ok(lic);
@@ -108,10 +108,10 @@ mod test {
 
     #[test]
     fn test_filename_license_string() {
-        assert!(get_license_from_string("Digi-Desk2.exe").is_err());
-        assert!(get_license_from_string("Digi-Desk2").is_err());
+        assert!(get_license_from_string("rustdesk.exe").is_err());
+        assert!(get_license_from_string("rustdesk").is_err());
         assert_eq!(
-            get_license_from_string("Digi-Desk2-host=server.example.net.exe").unwrap(),
+            get_license_from_string("rustdesk-host=server.example.net.exe").unwrap(),
             License {
                 host: "server.example.net".to_owned(),
                 key: "".to_owned(),
@@ -120,7 +120,7 @@ mod test {
             }
         );
         assert_eq!(
-            get_license_from_string("Digi-Desk2-host=server.example.net,.exe").unwrap(),
+            get_license_from_string("rustdesk-host=server.example.net,.exe").unwrap(),
             License {
                 host: "server.example.net".to_owned(),
                 key: "".to_owned(),
@@ -131,7 +131,7 @@ mod test {
         // key in these tests is "foobar.,2" base64 encoded
         assert_eq!(
             get_license_from_string(
-                "Digi-Desk2-host=server.example.net,api=abc,key=Zm9vYmFyLiwyCg==.exe"
+                "rustdesk-host=server.example.net,api=abc,key=Zm9vYmFyLiwyCg==.exe"
             )
             .unwrap(),
             License {
@@ -142,7 +142,7 @@ mod test {
             }
         );
         assert_eq!(
-            get_license_from_string("Digi-Desk2-host=server.example.net,key=Zm9vYmFyLiwyCg==,.exe")
+            get_license_from_string("rustdesk-host=server.example.net,key=Zm9vYmFyLiwyCg==,.exe")
                 .unwrap(),
             License {
                 host: "server.example.net".to_owned(),

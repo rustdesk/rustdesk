@@ -57,8 +57,8 @@ static PLUGIN_SOURCE_LOCAL: &str = "local";
 fn get_plugin_source_list() -> Vec<PluginSource> {
     // Only one source for now.
     vec![PluginSource {
-        name: "Digi-Desk2".to_string(),
-        url: "https://raw.githubusercontent.com/fufesou/Digi-Desk2-plugins/main".to_string(),
+        name: "rustdesk".to_string(),
+        url: "https://raw.githubusercontent.com/fufesou/rustdesk-plugins/main".to_string(),
         description: "".to_string(),
     }]
 }

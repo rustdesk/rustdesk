@@ -5,43 +5,43 @@
 # arg 1:  the new package version
 post_install() {
 	# do something here
-	cp /usr/share/Digi-Desk2/files/Digi-Desk2.service /etc/systemd/system/Digi-Desk2.service
-	cp /usr/share/Digi-Desk2/files/Digi-Desk2.desktop /usr/share/applications/
-	cp /usr/share/Digi-Desk2/files/Digi-Desk2-link.desktop /usr/share/applications/
+	cp /usr/share/rustdesk/files/rustdesk.service /etc/systemd/system/rustdesk.service
+	cp /usr/share/rustdesk/files/rustdesk.desktop /usr/share/applications/
+	cp /usr/share/rustdesk/files/rustdesk-link.desktop /usr/share/applications/
 	systemctl daemon-reload
-	systemctl enable Digi-Desk2
-	systemctl start Digi-Desk2
+	systemctl enable rustdesk
+	systemctl start rustdesk
 	update-desktop-database
 }
 
 # arg 1:  the new package version
 # arg 2:  the old package version
 pre_upgrade() {
-    systemctl stop Digi-Desk2 || true
+    systemctl stop rustdesk || true
 }
 
 # arg 1:  the new package version
 # arg 2:  the old package version
 post_upgrade() {
-	cp /usr/share/Digi-Desk2/files/Digi-Desk2.service /etc/systemd/system/Digi-Desk2.service
-	cp /usr/share/Digi-Desk2/files/Digi-Desk2.desktop /usr/share/applications/
-	cp /usr/share/Digi-Desk2/files/Digi-Desk2-link.desktop /usr/share/applications/
+	cp /usr/share/rustdesk/files/rustdesk.service /etc/systemd/system/rustdesk.service
+	cp /usr/share/rustdesk/files/rustdesk.desktop /usr/share/applications/
+	cp /usr/share/rustdesk/files/rustdesk-link.desktop /usr/share/applications/
 	systemctl daemon-reload
-	systemctl enable Digi-Desk2
-	systemctl start Digi-Desk2
+	systemctl enable rustdesk
+	systemctl start rustdesk
 	update-desktop-database
 }
 
 # arg 1:  the old package version
 pre_remove() {
-	systemctl stop Digi-Desk2 || true
-	systemctl disable Digi-Desk2 || true
-	rm /etc/systemd/system/Digi-Desk2.service || true
+	systemctl stop rustdesk || true
+	systemctl disable rustdesk || true
+	rm /etc/systemd/system/rustdesk.service || true
 }
 
 # arg 1:  the old package version
 post_remove() {
-	rm /usr/share/applications/Digi-Desk2.desktop || true
-	rm /usr/share/applications/Digi-Desk2-link.desktop || true
+	rm /usr/share/applications/rustdesk.desktop || true
+	rm /usr/share/applications/rustdesk-link.desktop || true
 	update-desktop-database
 }

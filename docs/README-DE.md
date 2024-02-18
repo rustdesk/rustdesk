@@ -6,24 +6,24 @@
   <a href="#dateistruktur">Dateistruktur</a> •
   <a href="#screenshots">Screenshots</a><br>
   [<a href="../README.md">English</a>] | [<a href="README-UA.md">Українська</a>] | [<a href="README-CS.md">česky</a>] | [<a href="README-ZH.md">中文</a>] | [<a href="README-HU.md">Magyar</a>] | [<a href="README-ES.md">Español</a>] | [<a href="README-FA.md">فارسی</a>] | [<a href="README-FR.md">Français</a>] | [<a href="README-PL.md">Polski</a>] | [<a href="README-ID.md">Indonesian</a>] | [<a href="README-FI.md">Suomi</a>] | [<a href="README-ML.md">മലയാളം</a>] | [<a href="README-JP.md">日本語</a>] | [<a href="README-NL.md">Nederlands</a>] | [<a href="README-IT.md">Italiano</a>] | [<a href="README-RU.md">Русский</a>] | [<a href="README-PTBR.md">Português (Brasil)</a>] | [<a href="README-EO.md">Esperanto</a>] | [<a href="README-KR.md">한국어</a>] | [<a href="README-AR.md">العربي</a>] | [<a href="README-VN.md">Tiếng Việt</a>] | [<a href="README-DA.md">Dansk</a>] | [<a href="README-GR.md">Ελληνικά</a>]<br>
-  <b>Wir brauchen Ihre Hilfe, um dieses README, die <a href="https://github.com/Digi-Desk2/Digi-Desk2/tree/master/src/lang">RustDesk-Benutzeroberfläche</a> und die <a href="https://github.com/Digi-Desk2/doc.Digi-Desk2.com">Dokumentation</a> in Ihre Muttersprache zu übersetzen.</b>
+  <b>Wir brauchen Ihre Hilfe, um dieses README, die <a href="https://github.com/rustdesk/rustdesk/tree/master/src/lang">RustDesk-Benutzeroberfläche</a> und die <a href="https://github.com/rustdesk/doc.rustdesk.com">Dokumentation</a> in Ihre Muttersprache zu übersetzen.</b>
 </p>
 
-Reden Sie mit uns auf: [Discord](https://discord.gg/nDceKgxnkV) | [Twitter](https://twitter.com/Digi-Desk2) | [Reddit](https://www.reddit.com/r/Digi-Desk2)
+Reden Sie mit uns auf: [Discord](https://discord.gg/nDceKgxnkV) | [Twitter](https://twitter.com/rustdesk) | [Reddit](https://www.reddit.com/r/rustdesk)
 
 [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/I2I04VU09)
 
-RustDesk ist eine in Rust geschriebene Remote-Desktop-Software, die out of the box ohne besondere Konfiguration funktioniert. Sie haben die volle Kontrolle über Ihre Daten und müssen sich keine Sorgen um die Sicherheit machen. Sie können unseren Rendezvous/Relay-Server nutzen, [einen eigenen Server aufsetzen](https://Digi-Desk2.com/server) oder [einen eigenen Server programmieren](https://github.com/Digi-Desk2/Digi-Desk2-server-demo).
+RustDesk ist eine in Rust geschriebene Remote-Desktop-Software, die out of the box ohne besondere Konfiguration funktioniert. Sie haben die volle Kontrolle über Ihre Daten und müssen sich keine Sorgen um die Sicherheit machen. Sie können unseren Rendezvous/Relay-Server nutzen, [einen eigenen Server aufsetzen](https://rustdesk.com/server) oder [einen eigenen Server programmieren](https://github.com/rustdesk/rustdesk-server-demo).
 
 ![image](https://user-images.githubusercontent.com/71636191/171661982-430285f0-2e12-4b1d-9957-4a58e375304d.png)
 
 RustDesk heißt jegliche Mitarbeit willkommen. Schauen Sie sich [CONTRIBUTING-DE.md](CONTRIBUTING-DE.md) an, wenn Sie Unterstützung beim Start brauchen.
 
-[**FAQ**](https://github.com/Digi-Desk2/Digi-Desk2/wiki/FAQ)
+[**FAQ**](https://github.com/rustdesk/rustdesk/wiki/FAQ)
 
-[**Programm herunterladen**](https://github.com/Digi-Desk2/Digi-Desk2/releases)
+[**Programm herunterladen**](https://github.com/rustdesk/rustdesk/releases)
 
-[**Nächtliche Erstellung**](https://github.com/Digi-Desk2/Digi-Desk2/releases/tag/nightly)
+[**Nächtliche Erstellung**](https://github.com/rustdesk/rustdesk/releases/tag/nightly)
 
 [<img src="https://fdroid.gitlab.io/artwork/badge/get-it-on.png"
     alt="Get it on F-Droid"
@@ -39,7 +39,7 @@ Nachfolgend sind die Server gelistet, die Sie kostenlos nutzen können. Es kann 
 
 ## Dev-Container
 
-[![In Dev-Containern öffnen](https://img.shields.io/static/v1?label=Dev%20Container&message=Open&color=blue&logo=visualstudiocode)](https://vscode.dev/redirect?url=vscode://ms-vscode-remote.remote-containers/cloneInVolume?url=https://github.com/Digi-Desk2/Digi-Desk2)
+[![In Dev-Containern öffnen](https://img.shields.io/static/v1?label=Dev%20Container&message=Open&color=blue&logo=visualstudiocode)](https://vscode.dev/redirect?url=vscode://ms-vscode-remote.remote-containers/cloneInVolume?url=https://github.com/rustdesk/rustdesk)
 
 Wenn Sie VS Code und Docker bereits installiert haben, können Sie auf das Abzeichen oben klicken, um loszulegen. Wenn Sie darauf klicken, wird VS Code automatisch die Dev-Container-Erweiterung installieren, den Quellcode in ein Container-Volume klonen und einen Dev-Container für die Verwendung aufsetzen.
 
@@ -66,7 +66,7 @@ Bitte laden Sie die dynamische Bibliothek Sciter selbst herunter.
 
 - Nutzen Sie `cargo run`
 
-## [Erstellen](https://Digi-Desk2.com/docs/de/dev/build/)
+## [Erstellen](https://rustdesk.com/docs/de/dev/build/)
 
 ## Kompilieren auf Linux
 
@@ -125,8 +125,8 @@ cd
 ```sh
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 source $HOME/.cargo/env
-git clone https://github.com/Digi-Desk2/Digi-Desk2
-cd Digi-Desk2
+git clone https://github.com/rustdesk/rustdesk
+cd rustdesk
 mkdir -p target/debug
 wget https://raw.githubusercontent.com/c-smile/sciter-sdk/master/bin.lnx/x64/libsciter-gtk.so
 mv libsciter-gtk.so target/debug
@@ -138,43 +138,43 @@ VCPKG_ROOT=$HOME/vcpkg cargo run
 Beginnen Sie damit, das Repository zu klonen und den Docker-Container zu bauen:
 
 ```sh
-git clone https://github.com/Digi-Desk2/Digi-Desk2
-cd Digi-Desk2
-docker build -t "Digi-Desk2-builder" .
+git clone https://github.com/rustdesk/rustdesk
+cd rustdesk
+docker build -t "rustdesk-builder" .
 ```
 
 Führen Sie jedes Mal, wenn Sie das Programm kompilieren müssen, folgenden Befehl aus:
 
 ```sh
-docker run --rm -it -v $PWD:/home/user/Digi-Desk2 -v Digi-Desk2-git-cache:/home/user/.cargo/git -v Digi-Desk2-registry-cache:/home/user/.cargo/registry -e PUID="$(id -u)" -e PGID="$(id -g)" Digi-Desk2-builder
+docker run --rm -it -v $PWD:/home/user/rustdesk -v rustdesk-git-cache:/home/user/.cargo/git -v rustdesk-registry-cache:/home/user/.cargo/registry -e PUID="$(id -u)" -e PGID="$(id -g)" rustdesk-builder
 ```
 
 Bedenken Sie, dass das erste Kompilieren länger dauern kann, bis die Abhängigkeiten zwischengespeichert sind. Nachfolgende Kompiliervorgänge sind schneller. Wenn Sie verschiedene Argumente für den Kompilierbefehl angeben müssen, können Sie dies am Ende des Befehls an der Position `<OPTIONAL-ARGS>` tun. Wenn Sie zum Beispiel eine optimierte Releaseversion kompilieren wollen, können Sie `--release` am Ende des Befehls anhängen. Das daraus entstehende Programm finden Sie im Zielordner auf Ihrem System. Sie können es mit folgendem Befehl ausführen:
 
 ```sh
-target/debug/Digi-Desk2
+target/debug/rustdesk
 ```
 
 Oder, wenn Sie eine Releaseversion benutzen:
 
 ```sh
-target/release/Digi-Desk2
+target/release/rustdesk
 ```
 
 Bitte stellen Sie sicher, dass Sie diese Befehle im Stammverzeichnis des RustDesk-Repositorys nutzen. Ansonsten kann es passieren, dass das Programm die Ressourcen nicht finden kann. Bitte bedenken Sie auch, dass andere Cargo-Unterbefehle wie `install` oder `run` aktuell noch nicht unterstützt werden, da sie das Programm innerhalb des Containers starten oder installieren würden, anstatt auf Ihrem eigentlichen System.
 
 ## Dateistruktur
 
-- **[libs/hbb_common](https://github.com/Digi-Desk2/Digi-Desk2/tree/master/libs/hbb_common)**: Video-Codec, Konfiguration, TCP/UDP-Wrapper, Protokoll-Puffer, fs-Funktionen für Dateitransfer und ein paar andere nützliche Funktionen
-- **[libs/scrap](https://github.com/Digi-Desk2/Digi-Desk2/tree/master/libs/scrap)**: Bildschirmaufnahme
-- **[libs/enigo](https://github.com/Digi-Desk2/Digi-Desk2/tree/master/libs/enigo)**: Plattformspezifische Maus- und Tastatursteuerung
-- **[src/ui](https://github.com/Digi-Desk2/Digi-Desk2/tree/master/src/ui)**: GUI
-- **[src/server](https://github.com/Digi-Desk2/Digi-Desk2/tree/master/src/server)**: Audio/Zwischenablage/Eingabe/Videodienste und Netzwerkverbindungen
-- **[src/client.rs](https://github.com/Digi-Desk2/Digi-Desk2/tree/master/src/client.rs)**: Starten einer Peer-Verbindung
-- **[src/rendezvous_mediator.rs](https://github.com/Digi-Desk2/Digi-Desk2/tree/master/src/rendezvous_mediator.rs)**: Mit [Digi-Desk2-server](https://github.com/Digi-Desk2/Digi-Desk2-server) kommunizieren, warten auf direkte (TCP hole punching) oder weitergeleitete Verbindung
-- **[src/platform](https://github.com/Digi-Desk2/Digi-Desk2/tree/master/src/platform)**: Plattformspezifischer Code
-- **[flutter](https://github.com/Digi-Desk2/Digi-Desk2/tree/master/flutter)**: Flutter-Code für Handys
-- **[flutter/web/js](https://github.com/Digi-Desk2/Digi-Desk2/tree/master/flutter/web/js)**: JavaScript für Flutter-Webclient
+- **[libs/hbb_common](https://github.com/rustdesk/rustdesk/tree/master/libs/hbb_common)**: Video-Codec, Konfiguration, TCP/UDP-Wrapper, Protokoll-Puffer, fs-Funktionen für Dateitransfer und ein paar andere nützliche Funktionen
+- **[libs/scrap](https://github.com/rustdesk/rustdesk/tree/master/libs/scrap)**: Bildschirmaufnahme
+- **[libs/enigo](https://github.com/rustdesk/rustdesk/tree/master/libs/enigo)**: Plattformspezifische Maus- und Tastatursteuerung
+- **[src/ui](https://github.com/rustdesk/rustdesk/tree/master/src/ui)**: GUI
+- **[src/server](https://github.com/rustdesk/rustdesk/tree/master/src/server)**: Audio/Zwischenablage/Eingabe/Videodienste und Netzwerkverbindungen
+- **[src/client.rs](https://github.com/rustdesk/rustdesk/tree/master/src/client.rs)**: Starten einer Peer-Verbindung
+- **[src/rendezvous_mediator.rs](https://github.com/rustdesk/rustdesk/tree/master/src/rendezvous_mediator.rs)**: Mit [rustdesk-server](https://github.com/rustdesk/rustdesk-server) kommunizieren, warten auf direkte (TCP hole punching) oder weitergeleitete Verbindung
+- **[src/platform](https://github.com/rustdesk/rustdesk/tree/master/src/platform)**: Plattformspezifischer Code
+- **[flutter](https://github.com/rustdesk/rustdesk/tree/master/flutter)**: Flutter-Code für Handys
+- **[flutter/web/js](https://github.com/rustdesk/rustdesk/tree/master/flutter/web/js)**: JavaScript für Flutter-Webclient
 
 ## Screenshots
 

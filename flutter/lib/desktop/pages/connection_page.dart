@@ -463,7 +463,7 @@ class _ConnectionPageState extends State<ConnectionPage>
   }
 
   void onUsePublicServerGuide() {
-    const url = "https://Digi-Desk2.com/pricing.html";
+    const url = "https://rustdesk.com/pricing.html";
     canLaunchUrlString(url).then((can) {
       if (can) {
         launchUrlString(url);

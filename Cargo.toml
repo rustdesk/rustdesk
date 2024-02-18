@@ -1,11 +1,11 @@
 [package]
-name = "Digi-Desk2"
+name = "rustdesk"
 version = "1.2.4"
-authors = ["Digi-Desk2 <info@Digi-Desk2.com>"]
+authors = ["rustdesk <info@rustdesk.com>"]
 edition = "2021"
 build= "build.rs"
 description = "A remote control software."
-default-run = "Digi-Desk2"
+default-run = "rustdesk"
 rust-version = "1.75"
 
 [lib]
@@ -56,9 +56,9 @@ cfg-if = "1.0"
 lazy_static = "1.4"
 sha2 = "0.10"
 repng = "0.2"
-parity-tokio-ipc = { git = "https://github.com/Digi-Desk2-org/parity-tokio-ipc" }
+parity-tokio-ipc = { git = "https://github.com/rustdesk-org/parity-tokio-ipc" }
 runas = "=1.0" # https://github.com/mitsuhiko/rust-runas/issues/13
-magnum-opus = { git = "https://github.com/Digi-Desk2-org/magnum-opus" }
+magnum-opus = { git = "https://github.com/rustdesk-org/magnum-opus" }
 dasp = { version = "0.11", features = ["signal", "interpolate-linear", "interpolate"], optional = true }
 rubato = { version = "0.12", optional = true }
 samplerate = { version = "0.2", optional = true }
@@ -120,21 +120,21 @@ objc_id = "0.1"
 
 [target.'cfg(any(target_os = "macos", target_os = "linux", target_os = "windows"))'.dependencies]
 tray-icon = { git = "https://github.com/tauri-apps/tray-icon" }
-tao = { git = "https://github.com/Digi-Desk2-org/tao", branch = "dev" }
+tao = { git = "https://github.com/rustdesk-org/tao", branch = "dev" }
 image = "0.24"
 
 [target.'cfg(any(target_os = "macos", target_os = "linux"))'.dependencies]
-keepawake = { git = "https://github.com/Digi-Desk2-org/keepawake-rs" }
+keepawake = { git = "https://github.com/rustdesk-org/keepawake-rs" }
 
 [target.'cfg(any(target_os = "windows", target_os = "linux"))'.dependencies]
 wallpaper = { git = "https://github.com/21pages/wallpaper.rs" }
 
 [target.'cfg(any(target_os = "macos", target_os = "windows"))'.dependencies]
-# https://github.com/Digi-Desk2/Digi-Desk2-server-pro/issues/189, using native-tls for better tls support
-reqwest = { git = "https://github.com/Digi-Desk2-org/reqwest", features = ["blocking", "json", "native-tls", "gzip"], default-features=false }
+# https://github.com/rustdesk/rustdesk-server-pro/issues/189, using native-tls for better tls support
+reqwest = { git = "https://github.com/rustdesk-org/reqwest", features = ["blocking", "json", "native-tls", "gzip"], default-features=false }
 
 [target.'cfg(not(any(target_os = "macos", target_os = "windows")))'.dependencies]
-reqwest = { git = "https://github.com/Digi-Desk2-org/reqwest", features = ["blocking", "json", "rustls-tls", "rustls-tls-native-roots", "gzip"], default-features=false }
+reqwest = { git = "https://github.com/rustdesk-org/reqwest", features = ["blocking", "json", "rustls-tls", "rustls-tls-native-roots", "gzip"], default-features=false }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 psimple = { package = "libpulse-simple-binding", version = "2.27" }
@@ -180,7 +180,7 @@ hound = "3.5"
 
 [package.metadata.bundle]
 name = "RustDesk"
-identifier = "com.carriez.Digi-Desk2"
+identifier = "com.carriez.rustdesk"
 icon = ["res/32x32.png", "res/128x128.png", "res/128x128@2x.png"]
 osx_minimum_system_version = "10.14"
 

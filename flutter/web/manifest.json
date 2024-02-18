@@ -1,6 +1,6 @@
 {
-    "name": "Digi-Desk2",
-    "short_name": "Digi-Desk2",
+    "name": "rustdesk",
+    "short_name": "rustdesk",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",

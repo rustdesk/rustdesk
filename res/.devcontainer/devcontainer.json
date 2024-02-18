@@ -1,11 +1,11 @@
 {
-    "name": "Digi-Desk2",
+    "name": "rustdesk",
     "build": {
         "dockerfile": "./Dockerfile",
         "context": "."
     },
-    "workspaceMount": "source=${localWorkspaceFolder},target=/home/vscode/Digi-Desk2,type=bind,consistency=cache",
-    "workspaceFolder": "/home/vscode/Digi-Desk2",
+    "workspaceMount": "source=${localWorkspaceFolder},target=/home/vscode/rustdesk,type=bind,consistency=cache",
+    "workspaceFolder": "/home/vscode/rustdesk",
     "postStartCommand": ".devcontainer/build.sh",
     "features": {
         "ghcr.io/devcontainers/features/java:1": {},

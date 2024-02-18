@@ -91,14 +91,14 @@ pub fn make_tray() -> hbb_common::ResultType<()> {
             use std::process::Command;
             Command::new("cmd")
                 .arg("/c")
-                .arg("start Digi-Desk2://")
+                .arg("start rustdesk://")
                 .creation_flags(winapi::um::winbase::CREATE_NO_WINDOW)
                 .spawn()
                 .ok();
         }
         #[cfg(target_os = "linux")]
         if !std::process::Command::new("xdg-open")
-            .arg("Digi-Desk2://")
+            .arg("rustdesk://")
             .spawn()
             .is_ok()
         {

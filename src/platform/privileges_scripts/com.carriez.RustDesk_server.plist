@@ -20,7 +20,7 @@
         <true />
         <key>ProgramArguments</key>
         <array>
-            <string>/Applications/RustDesk.app/Contents/MacOS/Digi-Desk2</string>
+            <string>/Applications/RustDesk.app/Contents/MacOS/rustdesk</string>
             <string>--server</string>
         </array>
         <key>WorkingDirectory</key>

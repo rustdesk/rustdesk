@@ -50,9 +50,9 @@ fn main() {
         -k, --key=[KEY] ''
        -s, --server=[] 'Start server'",
     );
-    let matches = App::new("Digi-Desk2")
+    let matches = App::new("rustdesk")
         .version(crate::VERSION)
-        .author("CarrieZ Studio<info@Digi-Desk2.com>")
+        .author("CarrieZ Studio<info@rustdesk.com>")
         .about("RustDesk command line tool")
         .args_from_usage(&args)
         .get_matches();

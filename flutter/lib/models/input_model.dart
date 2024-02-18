@@ -900,7 +900,7 @@ class InputModel {
     }
 
     int minX = rect.left.toInt();
-    // https://github.com/Digi-Desk2/Digi-Desk2/issues/6678
+    // https://github.com/rustdesk/rustdesk/issues/6678
     // For Windows, [0,maxX], [0,maxY] should be set to enable window snapping.
     int maxX = (rect.left + rect.width).toInt() - (peerPlatform == kPeerPlatformWindows ? 0 : 1);
     int minY = rect.top.toInt();

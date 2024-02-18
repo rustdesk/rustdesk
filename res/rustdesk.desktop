@@ -2,8 +2,8 @@
 Name=RustDesk
 GenericName=Remote Desktop
 Comment=Remote Desktop
-Exec=Digi-Desk2 %u
-Icon=Digi-Desk2
+Exec=rustdesk %u
+Icon=rustdesk
 Terminal=false
 Type=Application
 StartupNotify=true
@@ -15,4 +15,4 @@ X-Desktop-File-Install-Version=0.23
 
 [Desktop Action new-window]
 Name=Open a New Window
-Exec=Digi-Desk2 %u
+Exec=rustdesk %u

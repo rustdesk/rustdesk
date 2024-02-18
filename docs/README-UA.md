@@ -6,26 +6,26 @@
   <a href="#структура-файлів">Структура</a> •
   <a href="#знімки">Знімки</a><br>
   [<a href="../README.md">English</a>] | [<a href="docs/README-CS.md">česky</a>] | [<a href="docs/README-ZH.md">中文</a>] | [<a href="docs/README-HU.md">Magyar</a>] | [<a href="docs/README-ES.md">Español</a>] | [<a href="docs/README-FA.md">فارسی</a>] | [<a href="docs/README-FR.md">Français</a>] | [<a href="docs/README-DE.md">Deutsch</a>] | [<a href="docs/README-PL.md">Polski</a>] | [<a href="docs/README-ID.md">Indonesian</a>] | [<a href="docs/README-FI.md">Suomi</a>] | [<a href="docs/README-ML.md">മലയാളം</a>] | [<a href="docs/README-JP.md">日本語</a>] | [<a href="docs/README-NL.md">Nederlands</a>] | [<a href="docs/README-IT.md">Italiano</a>] | [<a href="docs/README-RU.md">Русский</a>] | [<a href="docs/README-PTBR.md">Português (Brasil)</a>] | [<a href="docs/README-EO.md">Esperanto</a>] | [<a href="docs/README-KR.md">한국어</a>] | [<a href="docs/README-AR.md">العربي</a>] | [<a href="docs/README-VN.md">Tiếng Việt</a>] | [<a href="docs/README-DA.md">Dansk</a>] | [<a href="docs/README-GR.md">Ελληνικά</a>] | [<a href="docs/README-TR.md">Türkçe</a>]<br>
-  <b>Нам потрібна ваша допомога для перекладу цього README, <a href="https://github.com/Digi-Desk2/Digi-Desk2/tree/master/src/lang">інтерфейсу</a> та <a href="https://github.com/Digi-Desk2/doc.Digi-Desk2.com">документації</a> RustDesk на вашу рідну мову</B>
+  <b>Нам потрібна ваша допомога для перекладу цього README, <a href="https://github.com/rustdesk/rustdesk/tree/master/src/lang">інтерфейсу</a> та <a href="https://github.com/rustdesk/doc.rustdesk.com">документації</a> RustDesk на вашу рідну мову</B>
 </p>
 
-Спілкування з нами: [Discord](https://discord.gg/nDceKgxnkV) | [Twitter](https://twitter.com/Digi-Desk2) | [Reddit](https://www.reddit.com/r/Digi-Desk2)
+Спілкування з нами: [Discord](https://discord.gg/nDceKgxnkV) | [Twitter](https://twitter.com/rustdesk) | [Reddit](https://www.reddit.com/r/rustdesk)
 
 [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/I2I04VU09)
 
-[![Open Bounties](https://img.shields.io/endpoint?url=https%3A%2F%2Fconsole.algora.io%2Fapi%2Fshields%2Frustdesk%2Fbounties%3Fstatus%3Dopen)](https://console.algora.io/org/Digi-Desk2/bounties?status=open)
+[![Open Bounties](https://img.shields.io/endpoint?url=https%3A%2F%2Fconsole.algora.io%2Fapi%2Fshields%2Frustdesk%2Fbounties%3Fstatus%3Dopen)](https://console.algora.io/org/rustdesk/bounties?status=open)
 
-Ще один застосунок для віддаленого керування стільницею, написаний на Rust. Працює з коробки, не потребує налаштування. Ви повністю контролюєте свої дані, не турбуючись про безпеку. Ви можете використовувати наш сервер ретрансляції, [налаштувати свій власний](https://Digi-Desk2.com/server), або [написати свій власний сервер ретрансляції](https://github.com/Digi-Desk2/Digi-Desk2-server-demo).
+Ще один застосунок для віддаленого керування стільницею, написаний на Rust. Працює з коробки, не потребує налаштування. Ви повністю контролюєте свої дані, не турбуючись про безпеку. Ви можете використовувати наш сервер ретрансляції, [налаштувати свій власний](https://rustdesk.com/server), або [написати свій власний сервер ретрансляції](https://github.com/rustdesk/rustdesk-server-demo).
 
 ![image](https://user-images.githubusercontent.com/71636191/171661982-430285f0-2e12-4b1d-9957-4a58e375304d.png)
 
 RustDesk вітає внесок кожного. Ознайомтеся з [CONTRIBUTING.md](docs/CONTRIBUTING.md), щоб отримати допомогу на початковому етапі.
 
-[**ЧаПи**](https://github.com/Digi-Desk2/Digi-Desk2/wiki/FAQ)
+[**ЧаПи**](https://github.com/rustdesk/rustdesk/wiki/FAQ)
 
-[**ЗАВАНТАЖЕННЯ ЗАСТОСУНКУ**](https://github.com/Digi-Desk2/Digi-Desk2/releases)
+[**ЗАВАНТАЖЕННЯ ЗАСТОСУНКУ**](https://github.com/rustdesk/rustdesk/releases)
 
-[**НІЧНІ ЗБІРКИ**](https://github.com/Digi-Desk2/Digi-Desk2/releases/tag/nightly)
+[**НІЧНІ ЗБІРКИ**](https://github.com/rustdesk/rustdesk/releases/tag/nightly)
 
 [<img src="https://fdroid.gitlab.io/artwork/badge/get-it-on.png"
     alt="Get it on F-Droid"
@@ -41,7 +41,7 @@ RustDesk вітає внесок кожного. Ознайомтеся з [CONT
 
 ## Dev Container
 
-[![Open in Dev Containers](https://img.shields.io/static/v1?label=Dev%20Container&message=Open&color=blue&logo=visualstudiocode)](https://vscode.dev/redirect?url=vscode://ms-vscode-remote.remote-containers/cloneInVolume?url=https://github.com/Digi-Desk2/Digi-Desk2)
+[![Open in Dev Containers](https://img.shields.io/static/v1?label=Dev%20Container&message=Open&color=blue&logo=visualstudiocode)](https://vscode.dev/redirect?url=vscode://ms-vscode-remote.remote-containers/cloneInVolume?url=https://github.com/rustdesk/rustdesk)
 
 Якщо у вас уже встановлено VS Code та Docker, ви можете натиснути значок вище, щоб розпочати. Клацання призведе до того, що VS Code автоматично встановить розширення Dev Containers, якщо це необхідно, клонує вихідний код у том контейнера та розгорне контейнер dev для використання.
 
@@ -49,7 +49,7 @@ RustDesk вітає внесок кожного. Ознайомтеся з [CONT
 
 ## Залежності
 
-Стільничні версії використовують Flutter чи Sciter (застаріле) для графічного інтерфейсу. Ця інструкція лише для Sciter, оскільки він є більш простим та дружнім для початківців. Перегляньте [CI](https://github.com/Digi-Desk2/Digi-Desk2/blob/master/.github/workflows/flutter-build.yml) для збірки версії на Flutter.
+Стільничні версії використовують Flutter чи Sciter (застаріле) для графічного інтерфейсу. Ця інструкція лише для Sciter, оскільки він є більш простим та дружнім для початківців. Перегляньте [CI](https://github.com/rustdesk/rustdesk/blob/master/.github/workflows/flutter-build.yml) для збірки версії на Flutter.
 
 Будь ласка, завантажте динамічну бібліотеку Sciter самостійно.
 
@@ -68,7 +68,7 @@ RustDesk вітає внесок кожного. Ознайомтеся з [CONT
 
 - Запустіть `cargo run`
 
-## [Збирання](https://Digi-Desk2.com/docs/en/dev/build/)
+## [Збирання](https://rustdesk.com/docs/en/dev/build/)
 
 ## Як зібрати на Linux 
 
@@ -128,8 +128,8 @@ cd
 ```sh
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 source $HOME/.cargo/env
-git clone https://github.com/Digi-Desk2/Digi-Desk2
-cd Digi-Desk2
+git clone https://github.com/rustdesk/rustdesk
+cd rustdesk
 mkdir -p target/debug
 wget https://raw.githubusercontent.com/c-smile/sciter-sdk/master/bin.lnx/x64/libsciter-gtk.so
 mv libsciter-gtk.so target/debug
@@ -141,44 +141,44 @@ VCPKG_ROOT=$HOME/vcpkg cargo run
 Почніть з клонування сховища та створення docker-контейнера:
 
 ```sh
-git clone https://github.com/Digi-Desk2/Digi-Desk2
-cd Digi-Desk2
-docker build -t "Digi-Desk2-builder" .
+git clone https://github.com/rustdesk/rustdesk
+cd rustdesk
+docker build -t "rustdesk-builder" .
 ```
 
 Надалі щоразу, коли вам буде потрібно зібрати застосунок, запускайте таку команду:
 
 ```sh
-docker run --rm -it -v $PWD:/home/user/Digi-Desk2 -v Digi-Desk2-git-cache:/home/user/.cargo/git -v Digi-Desk2-registry-cache:/home/user/.cargo/registry -e PUID="$(id -u)" -e PGID="$(id -g)" Digi-Desk2-builder
+docker run --rm -it -v $PWD:/home/user/rustdesk -v rustdesk-git-cache:/home/user/.cargo/git -v rustdesk-registry-cache:/home/user/.cargo/registry -e PUID="$(id -u)" -e PGID="$(id -g)" rustdesk-builder
 ```
 
 Зверніть увагу, що перша збірка може зайняти більше часу, перш ніж залежності будуть кешовані, але наступні збірки будуть виконуватися швидше. Крім того, якщо вам потрібно вказати інші аргументи для команди збірки, ви можете зробити це в кінці команди у змінній `<OPTIONAL-ARGS>`. Наприклад, якщо ви хочете створити оптимізовану версію, ви маєте запустити наведену вище команду і в кінці рядка додати `--release`. Отриманий виконуваний файл буде доступний у цільовій папці вашої системи і може бути запущений за допомогою:
 
 ```sh
-target/debug/Digi-Desk2
+target/debug/rustdesk
 ```
 
 Або, якщо ви використовуєте виконуваний файл релізу:
 
 ```sh
-target/release/Digi-Desk2
+target/release/rustdesk
 ```
 
 Будь ласка, переконайтеся, що ви запускаєте ці команди з кореня сховища RustDesk, інакше додаток не зможе знайти необхідні ресурси. Також зверніть увагу, що інші cargo підкоманди, такі як `install` або `run`, наразі не підтримуються цим методом, оскільки вони будуть встановлювати або запускати програму всередині контейнера, а не на хості.
 
 ## Структура файлів
 
-- **[libs/hbb_common](https://github.com/Digi-Desk2/Digi-Desk2/tree/master/libs/hbb_common)**: відеокодек, конфіг, обгортка tcp/udp, protobuf, функції fs для передавання файлів і деякі інші службові функції
-- **[libs/scrap](https://github.com/Digi-Desk2/Digi-Desk2/tree/master/libs/scrap)**: захоплення екрана
-- **[libs/enigo](https://github.com/Digi-Desk2/Digi-Desk2/tree/master/libs/enigo)**: специфічне для платформи керування клавіатурою/мишею
-- **[libs/clipboard](https://github.com/Digi-Desk2/Digi-Desk2/tree/master/libs/clipboard)**: реалізація копіювання та вставлення файлів для Windows, Linux, macOS.
-- **[src/ui](https://github.com/Digi-Desk2/Digi-Desk2/tree/master/src/ui)**: графічний інтерфейс користувача
-- **[src/server](https://github.com/Digi-Desk2/Digi-Desk2/tree/master/src/server)**: сервіси аудіо/буфера обміну/вводу/відео та мережевих підключень
-- **[src/client.rs](https://github.com/Digi-Desk2/Digi-Desk2/tree/master/src/client.rs)**: однорангове з'єднання
-- **[src/rendezvous_mediator.rs](https://github.com/Digi-Desk2/Digi-Desk2/tree/master/src/rendezvous_mediator.rs)**: комунікація з [Digi-Desk2-server](https://github.com/Digi-Desk2/Digi-Desk2-server), очікування віддаленого прямого (обхід TCP NAT) або ретрансльованого з'єднання
-- **[src/platform](https://github.com/Digi-Desk2/Digi-Desk2/tree/master/src/platform)**: специфічний для платформи код
-- **[flutter](https://github.com/Digi-Desk2/Digi-Desk2/tree/master/flutter)**: код Flutter для мобільних пристроїв 
-- **[flutter/web/js](https://github.com/Digi-Desk2/Digi-Desk2/tree/master/flutter/web/js)**: JavaScript для Flutter веб клієнту
+- **[libs/hbb_common](https://github.com/rustdesk/rustdesk/tree/master/libs/hbb_common)**: відеокодек, конфіг, обгортка tcp/udp, protobuf, функції fs для передавання файлів і деякі інші службові функції
+- **[libs/scrap](https://github.com/rustdesk/rustdesk/tree/master/libs/scrap)**: захоплення екрана
+- **[libs/enigo](https://github.com/rustdesk/rustdesk/tree/master/libs/enigo)**: специфічне для платформи керування клавіатурою/мишею
+- **[libs/clipboard](https://github.com/rustdesk/rustdesk/tree/master/libs/clipboard)**: реалізація копіювання та вставлення файлів для Windows, Linux, macOS.
+- **[src/ui](https://github.com/rustdesk/rustdesk/tree/master/src/ui)**: графічний інтерфейс користувача
+- **[src/server](https://github.com/rustdesk/rustdesk/tree/master/src/server)**: сервіси аудіо/буфера обміну/вводу/відео та мережевих підключень
+- **[src/client.rs](https://github.com/rustdesk/rustdesk/tree/master/src/client.rs)**: однорангове з'єднання
+- **[src/rendezvous_mediator.rs](https://github.com/rustdesk/rustdesk/tree/master/src/rendezvous_mediator.rs)**: комунікація з [rustdesk-server](https://github.com/rustdesk/rustdesk-server), очікування віддаленого прямого (обхід TCP NAT) або ретрансльованого з'єднання
+- **[src/platform](https://github.com/rustdesk/rustdesk/tree/master/src/platform)**: специфічний для платформи код
+- **[flutter](https://github.com/rustdesk/rustdesk/tree/master/flutter)**: код Flutter для мобільних пристроїв 
+- **[flutter/web/js](https://github.com/rustdesk/rustdesk/tree/master/flutter/web/js)**: JavaScript для Flutter веб клієнту
 
 ## Знімки
 

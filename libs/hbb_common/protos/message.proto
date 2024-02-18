@@ -630,7 +630,7 @@ message MessageBox {
   string text = 3;
   // If not empty, msgbox provides a button to following the link.
   // The link here can't be directly http url.
-  // It must be the key of http url configed in peer side or "Digi-Desk2://*" (jump in app).
+  // It must be the key of http url configed in peer side or "rustdesk://*" (jump in app).
   string link = 4;
 }
 

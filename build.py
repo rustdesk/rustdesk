@@ -13,7 +13,7 @@ import sys
 windows = platform.platform().startswith('Windows')
 osx = platform.platform().startswith(
     'Darwin') or platform.platform().startswith("macOS")
-hbb_name = 'Digi-Desk2' + ('.exe' if windows else '')
+hbb_name = 'rustdesk' + ('.exe' if windows else '')
 exe_path = 'target/release/' + hbb_name
 if windows:
     flutter_build_dir = 'build/windows/x64/runner/Release/'
@@ -139,12 +139,12 @@ def make_parser():
     parser.add_argument(
         '--flatpak',
         action='store_true',
-        help='Build Digi-Desk2 libs with the flatpak feature enabled'
+        help='Build rustdesk libs with the flatpak feature enabled'
     )
     parser.add_argument(
         '--appimage',
         action='store_true',
-        help='Build Digi-Desk2 libs with the appimage feature enabled'
+        help='Build rustdesk libs with the appimage feature enabled'
     )
     parser.add_argument(
         '--skip-cargo',
@@ -187,7 +187,7 @@ def generate_build_script_for_docker():
             vcpkg/bootstrap-vcpkg.sh
             popd
             $VCPKG_ROOT/vcpkg install --x-install-root="$VCPKG_ROOT/installed"
-            # build Digi-Desk2
+            # build rustdesk
             ./build.py --flutter --hwcodec
         ''')
     system2("chmod +x /tmp/build.sh")
@@ -298,11 +298,11 @@ def generate_control_file(version):
     control_file_path = "../res/DEBIAN/control"
     system2('/bin/rm -rf %s' % control_file_path)
 
-    content = """Package: Digi-Desk2
+    content = """Package: rustdesk
 Version: %s
 Architecture: %s
-Maintainer: Digi-Desk2 <info@Digi-Desk2.com>
-Homepage: https://Digi-Desk2.com
+Maintainer: rustdesk <info@rustdesk.com>
+Homepage: https://rustdesk.com
 Depends: libgtk-3-0, libxcb-randr0, libxdo3, libxfixes3, libxcb-shape0, libxcb-xfixes0, libasound2, libsystemd0, curl, libva-drm2, libva-x11-2, libvdpau1, libgstreamer-plugins-base1.0-0, libpam0g, libappindicator3-1, gstreamer1.0-pipewire
 Description: A remote control software.
 
@@ -325,86 +325,86 @@ def build_flutter_deb(version, features):
     os.chdir('flutter')
     system2('flutter build linux --release')
     system2('mkdir -p tmpdeb/usr/bin/')
-    system2('mkdir -p tmpdeb/usr/lib/Digi-Desk2')
-    system2('mkdir -p tmpdeb/etc/Digi-Desk2/')
+    system2('mkdir -p tmpdeb/usr/lib/rustdesk')
+    system2('mkdir -p tmpdeb/etc/rustdesk/')
     system2('mkdir -p tmpdeb/etc/pam.d/')
-    system2('mkdir -p tmpdeb/usr/share/Digi-Desk2/files/systemd/')
+    system2('mkdir -p tmpdeb/usr/share/rustdesk/files/systemd/')
     system2('mkdir -p tmpdeb/usr/share/icons/hicolor/256x256/apps/')
     system2('mkdir -p tmpdeb/usr/share/icons/hicolor/scalable/apps/')
     system2('mkdir -p tmpdeb/usr/share/applications/')
     system2('mkdir -p tmpdeb/usr/share/polkit-1/actions')
-    system2('rm tmpdeb/usr/bin/Digi-Desk2 || true')
+    system2('rm tmpdeb/usr/bin/rustdesk || true')
     system2(
-        f'cp -r {flutter_build_dir}/* tmpdeb/usr/lib/Digi-Desk2/')
+        f'cp -r {flutter_build_dir}/* tmpdeb/usr/lib/rustdesk/')
     system2(
-        'cp ../res/Digi-Desk2.service tmpdeb/usr/share/Digi-Desk2/files/systemd/')
+        'cp ../res/rustdesk.service tmpdeb/usr/share/rustdesk/files/systemd/')
     system2(
-        'cp ../res/128x128@2x.png tmpdeb/usr/share/icons/hicolor/256x256/apps/Digi-Desk2.png')
+        'cp ../res/128x128@2x.png tmpdeb/usr/share/icons/hicolor/256x256/apps/rustdesk.png')
     system2(
-        'cp ../res/scalable.svg tmpdeb/usr/share/icons/hicolor/scalable/apps/Digi-Desk2.svg')
+        'cp ../res/scalable.svg tmpdeb/usr/share/icons/hicolor/scalable/apps/rustdesk.svg')
     system2(
-        'cp ../res/Digi-Desk2.desktop tmpdeb/usr/share/applications/Digi-Desk2.desktop')
+        'cp ../res/rustdesk.desktop tmpdeb/usr/share/applications/rustdesk.desktop')
     system2(
-        'cp ../res/Digi-Desk2-link.desktop tmpdeb/usr/share/applications/Digi-Desk2-link.desktop')
+        'cp ../res/rustdesk-link.desktop tmpdeb/usr/share/applications/rustdesk-link.desktop')
     system2(
-        'cp ../res/com.Digi-Desk2.RustDesk.policy tmpdeb/usr/share/polkit-1/actions/')
+        'cp ../res/com.rustdesk.RustDesk.policy tmpdeb/usr/share/polkit-1/actions/')
     system2(
-        'cp ../res/startwm.sh tmpdeb/etc/Digi-Desk2/')
+        'cp ../res/startwm.sh tmpdeb/etc/rustdesk/')
     system2(
-        'cp ../res/xorg.conf tmpdeb/etc/Digi-Desk2/')
+        'cp ../res/xorg.conf tmpdeb/etc/rustdesk/')
     system2(
-        'cp ../res/pam.d/Digi-Desk2.debian tmpdeb/etc/pam.d/Digi-Desk2')
+        'cp ../res/pam.d/rustdesk.debian tmpdeb/etc/pam.d/rustdesk')
     system2(
-        "echo \"#!/bin/sh\" >> tmpdeb/usr/share/Digi-Desk2/files/polkit && chmod a+x tmpdeb/usr/share/Digi-Desk2/files/polkit")
+        "echo \"#!/bin/sh\" >> tmpdeb/usr/share/rustdesk/files/polkit && chmod a+x tmpdeb/usr/share/rustdesk/files/polkit")
 
     system2('mkdir -p tmpdeb/DEBIAN')
     generate_control_file(version)
     system2('cp -a ../res/DEBIAN/* tmpdeb/DEBIAN/')
-    md5_file('usr/share/Digi-Desk2/files/systemd/Digi-Desk2.service')
-    system2('dpkg-deb -b tmpdeb Digi-Desk2.deb;')
+    md5_file('usr/share/rustdesk/files/systemd/rustdesk.service')
+    system2('dpkg-deb -b tmpdeb rustdesk.deb;')
 
     system2('/bin/rm -rf tmpdeb/')
     system2('/bin/rm -rf ../res/DEBIAN/control')
-    os.rename('Digi-Desk2.deb', '../Digi-Desk2-%s.deb' % version)
+    os.rename('rustdesk.deb', '../rustdesk-%s.deb' % version)
     os.chdir("..")
 
 
 def build_deb_from_folder(version, binary_folder):
     os.chdir('flutter')
     system2('mkdir -p tmpdeb/usr/bin/')
-    system2('mkdir -p tmpdeb/usr/lib/Digi-Desk2')
-    system2('mkdir -p tmpdeb/usr/share/Digi-Desk2/files/systemd/')
+    system2('mkdir -p tmpdeb/usr/lib/rustdesk')
+    system2('mkdir -p tmpdeb/usr/share/rustdesk/files/systemd/')
     system2('mkdir -p tmpdeb/usr/share/icons/hicolor/256x256/apps/')
     system2('mkdir -p tmpdeb/usr/share/icons/hicolor/scalable/apps/')
     system2('mkdir -p tmpdeb/usr/share/applications/')
     system2('mkdir -p tmpdeb/usr/share/polkit-1/actions')
-    system2('rm tmpdeb/usr/bin/Digi-Desk2 || true')
+    system2('rm tmpdeb/usr/bin/rustdesk || true')
     system2(
-        f'cp -r ../{binary_folder}/* tmpdeb/usr/lib/Digi-Desk2/')
+        f'cp -r ../{binary_folder}/* tmpdeb/usr/lib/rustdesk/')
     system2(
-        'cp ../res/Digi-Desk2.service tmpdeb/usr/share/Digi-Desk2/files/systemd/')
+        'cp ../res/rustdesk.service tmpdeb/usr/share/rustdesk/files/systemd/')
     system2(
-        'cp ../res/128x128@2x.png tmpdeb/usr/share/icons/hicolor/256x256/apps/Digi-Desk2.png')
+        'cp ../res/128x128@2x.png tmpdeb/usr/share/icons/hicolor/256x256/apps/rustdesk.png')
     system2(
-        'cp ../res/scalable.svg tmpdeb/usr/share/icons/hicolor/scalable/apps/Digi-Desk2.svg')
+        'cp ../res/scalable.svg tmpdeb/usr/share/icons/hicolor/scalable/apps/rustdesk.svg')
     system2(
-        'cp ../res/Digi-Desk2.desktop tmpdeb/usr/share/applications/Digi-Desk2.desktop')
+        'cp ../res/rustdesk.desktop tmpdeb/usr/share/applications/rustdesk.desktop')
     system2(
-        'cp ../res/Digi-Desk2-link.desktop tmpdeb/usr/share/applications/Digi-Desk2-link.desktop')
+        'cp ../res/rustdesk-link.desktop tmpdeb/usr/share/applications/rustdesk-link.desktop')
     system2(
-        'cp ../res/com.Digi-Desk2.RustDesk.policy tmpdeb/usr/share/polkit-1/actions/')
+        'cp ../res/com.rustdesk.RustDesk.policy tmpdeb/usr/share/polkit-1/actions/')
     system2(
-        "echo \"#!/bin/sh\" >> tmpdeb/usr/share/Digi-Desk2/files/polkit && chmod a+x tmpdeb/usr/share/Digi-Desk2/files/polkit")
+        "echo \"#!/bin/sh\" >> tmpdeb/usr/share/rustdesk/files/polkit && chmod a+x tmpdeb/usr/share/rustdesk/files/polkit")
 
     system2('mkdir -p tmpdeb/DEBIAN')
     generate_control_file(version)
     system2('cp -a ../res/DEBIAN/* tmpdeb/DEBIAN/')
-    md5_file('usr/share/Digi-Desk2/files/systemd/Digi-Desk2.service')
-    system2('dpkg-deb -b tmpdeb Digi-Desk2.deb;')
+    md5_file('usr/share/rustdesk/files/systemd/rustdesk.service')
+    system2('dpkg-deb -b tmpdeb rustdesk.deb;')
 
     system2('/bin/rm -rf tmpdeb/')
     system2('/bin/rm -rf ../res/DEBIAN/control')
-    os.rename('Digi-Desk2.deb', '../Digi-Desk2-%s.deb' % version)
+    os.rename('rustdesk.deb', '../rustdesk-%s.deb' % version)
     os.chdir("..")
 
 
@@ -419,8 +419,8 @@ def build_flutter_dmg(version, features):
     os.chdir('flutter')
     system2('flutter build macos --release')
     system2(
-        "create-dmg --volname \"RustDesk Installer\" --window-pos 200 120 --window-size 800 400 --icon-size 100 --app-drop-link 600 185 --icon RustDesk.app 200 190 --hide-extension RustDesk.app Digi-Desk2.dmg ./build/macos/Build/Products/Release/RustDesk.app")
-    os.rename("Digi-Desk2.dmg", f"../Digi-Desk2-{version}.dmg")
+        "create-dmg --volname \"RustDesk Installer\" --window-pos 200 120 --window-size 800 400 --icon-size 100 --app-drop-link 600 185 --icon RustDesk.app 200 190 --hide-extension RustDesk.app rustdesk.dmg ./build/macos/Build/Products/Release/RustDesk.app")
+    os.rename("rustdesk.dmg", f"../rustdesk-{version}.dmg")
     os.chdir("..")
 
 
@@ -449,19 +449,19 @@ def build_flutter_windows(version, features):
     os.chdir('libs/portable')
     system2('pip3 install -r requirements.txt')
     system2(
-        f'python3 ./generate.py -f ../../{flutter_build_dir_2} -o . -e ../../{flutter_build_dir_2}/Digi-Desk2.exe')
+        f'python3 ./generate.py -f ../../{flutter_build_dir_2} -o . -e ../../{flutter_build_dir_2}/rustdesk.exe')
     os.chdir('../..')
     if os.path.exists('./rustdesk_portable.exe'):
-        os.replace('./target/release/Digi-Desk2-portable-packer.exe',
+        os.replace('./target/release/rustdesk-portable-packer.exe',
                    './rustdesk_portable.exe')
     else:
-        os.rename('./target/release/Digi-Desk2-portable-packer.exe',
+        os.rename('./target/release/rustdesk-portable-packer.exe',
                   './rustdesk_portable.exe')
     print(
         f'output location: {os.path.abspath(os.curdir)}/rustdesk_portable.exe')
-    os.rename('./rustdesk_portable.exe', f'./Digi-Desk2-{version}-install.exe')
+    os.rename('./rustdesk_portable.exe', f'./rustdesk-{version}-install.exe')
     print(
-        f'output location: {os.path.abspath(os.curdir)}/Digi-Desk2-{version}-install.exe')
+        f'output location: {os.path.abspath(os.curdir)}/rustdesk-{version}-install.exe')
 
 
 def main():
@@ -498,13 +498,13 @@ def main():
             build_flutter_windows(version, features)
             return
         system2('cargo build --release --features ' + features)
-        # system2('upx.exe target/release/Digi-Desk2.exe')
-        system2('mv target/release/Digi-Desk2.exe target/release/RustDesk.exe')
+        # system2('upx.exe target/release/rustdesk.exe')
+        system2('mv target/release/rustdesk.exe target/release/RustDesk.exe')
         pa = os.environ.get('P')
         if pa:
             system2(
                 f'signtool sign /a /v /p {pa} /debug /f .\\cert.pfx /t http://timestamp.digicert.com  '
-                'target\\release\\Digi-Desk2.exe')
+                'target\\release\\rustdesk.exe')
         else:
             print('Not signed')
         system2(
@@ -512,8 +512,8 @@ def main():
         os.chdir('libs/portable')
         system2('pip3 install -r requirements.txt')
         system2(
-            f'python3 ./generate.py -f ../../{res_dir} -o . -e ../../{res_dir}/Digi-Desk2-{version}-win7-install.exe')
-        system2('mv ../../{res_dir}/Digi-Desk2-{version}-win7-install.exe ../..')
+            f'python3 ./generate.py -f ../../{res_dir} -o . -e ../../{res_dir}/rustdesk-{version}-win7-install.exe')
+        system2('mv ../../{res_dir}/rustdesk-{version}-win7-install.exe ../..')
     elif os.path.isfile('/usr/bin/pacman'):
         # pacman -S -needed base-devel
         system2("sed -i 's/pkgver=.*/pkgver=%s/g' res/PKGBUILD" % version)
@@ -522,32 +522,32 @@ def main():
         else:
             system2('cargo build --release --features ' + features)
             system2('git checkout src/ui/common.tis')
-            system2('strip target/release/Digi-Desk2')
+            system2('strip target/release/rustdesk')
             system2('ln -s res/pacman_install && ln -s res/PKGBUILD')
             system2('HBB=`pwd` makepkg -f')
-        system2('mv Digi-Desk2-%s-0-x86_64.pkg.tar.zst Digi-Desk2-%s-manjaro-arch.pkg.tar.zst' % (
+        system2('mv rustdesk-%s-0-x86_64.pkg.tar.zst rustdesk-%s-manjaro-arch.pkg.tar.zst' % (
             version, version))
-        # pacman -U ./Digi-Desk2.pkg.tar.zst
+        # pacman -U ./rustdesk.pkg.tar.zst
     elif os.path.isfile('/usr/bin/yum'):
         system2('cargo build --release --features ' + features)
-        system2('strip target/release/Digi-Desk2')
+        system2('strip target/release/rustdesk')
         system2(
             "sed -i 's/Version:    .*/Version:    %s/g' res/rpm.spec" % version)
         system2('HBB=`pwd` rpmbuild -ba res/rpm.spec')
         system2(
-            'mv $HOME/rpmbuild/RPMS/x86_64/Digi-Desk2-%s-0.x86_64.rpm ./Digi-Desk2-%s-fedora28-centos8.rpm' % (
+            'mv $HOME/rpmbuild/RPMS/x86_64/rustdesk-%s-0.x86_64.rpm ./rustdesk-%s-fedora28-centos8.rpm' % (
                 version, version))
-        # yum localinstall Digi-Desk2.rpm
+        # yum localinstall rustdesk.rpm
     elif os.path.isfile('/usr/bin/zypper'):
         system2('cargo build --release --features ' + features)
-        system2('strip target/release/Digi-Desk2')
+        system2('strip target/release/rustdesk')
         system2(
             "sed -i 's/Version:    .*/Version:    %s/g' res/rpm-suse.spec" % version)
         system2('HBB=`pwd` rpmbuild -ba res/rpm-suse.spec')
         system2(
-            'mv $HOME/rpmbuild/RPMS/x86_64/Digi-Desk2-%s-0.x86_64.rpm ./Digi-Desk2-%s-suse.rpm' % (
+            'mv $HOME/rpmbuild/RPMS/x86_64/rustdesk-%s-0.x86_64.rpm ./rustdesk-%s-suse.rpm' % (
                 version, version))
-        # yum localinstall Digi-Desk2.rpm
+        # yum localinstall rustdesk.rpm
     else:
         if flutter:
             if osx:
@@ -555,13 +555,13 @@ def main():
                 pass
             else:
                 # system2(
-                #     'mv target/release/bundle/deb/Digi-Desk2*.deb ./flutter/Digi-Desk2.deb')
+                #     'mv target/release/bundle/deb/rustdesk*.deb ./flutter/rustdesk.deb')
                 build_flutter_deb(version, features)
         else:
             system2('cargo bundle --release --features ' + features)
             if osx:
                 system2(
-                    'strip target/release/bundle/osx/RustDesk.app/Contents/MacOS/Digi-Desk2')
+                    'strip target/release/bundle/osx/RustDesk.app/Contents/MacOS/rustdesk')
                 system2(
                     'cp libsciter.dylib target/release/bundle/osx/RustDesk.app/Contents/MacOS/')
                 # https://github.com/sindresorhus/create-dmg
@@ -571,9 +571,9 @@ def main():
                     system2('''
     # buggy: rcodesign sign ... path/*, have to sign one by one
     # install rcodesign via cargo install apple-codesign
-    #rcodesign sign --p12-file ~/.p12/Digi-Desk2-developer-id.p12 --p12-password-file ~/.p12/.cert-pass --code-signature-flags runtime ./target/release/bundle/osx/RustDesk.app/Contents/MacOS/Digi-Desk2
-    #rcodesign sign --p12-file ~/.p12/Digi-Desk2-developer-id.p12 --p12-password-file ~/.p12/.cert-pass --code-signature-flags runtime ./target/release/bundle/osx/RustDesk.app/Contents/MacOS/libsciter.dylib
-    #rcodesign sign --p12-file ~/.p12/Digi-Desk2-developer-id.p12 --p12-password-file ~/.p12/.cert-pass --code-signature-flags runtime ./target/release/bundle/osx/RustDesk.app
+    #rcodesign sign --p12-file ~/.p12/rustdesk-developer-id.p12 --p12-password-file ~/.p12/.cert-pass --code-signature-flags runtime ./target/release/bundle/osx/RustDesk.app/Contents/MacOS/rustdesk
+    #rcodesign sign --p12-file ~/.p12/rustdesk-developer-id.p12 --p12-password-file ~/.p12/.cert-pass --code-signature-flags runtime ./target/release/bundle/osx/RustDesk.app/Contents/MacOS/libsciter.dylib
+    #rcodesign sign --p12-file ~/.p12/rustdesk-developer-id.p12 --p12-password-file ~/.p12/.cert-pass --code-signature-flags runtime ./target/release/bundle/osx/RustDesk.app
     # goto "Keychain Access" -> "My Certificates" for below id which starts with "Developer ID Application:"
     codesign -s "Developer ID Application: {0}" --force --options runtime  ./target/release/bundle/osx/RustDesk.app/Contents/MacOS/*
     codesign -s "Developer ID Application: {0}" --force --options runtime  ./target/release/bundle/osx/RustDesk.app
@@ -581,19 +581,19 @@ def main():
                 system2(
                     'create-dmg "RustDesk %s.dmg" "target/release/bundle/osx/RustDesk.app"' % version)
                 os.rename('RustDesk %s.dmg' %
-                          version, 'Digi-Desk2-%s.dmg' % version)
+                          version, 'rustdesk-%s.dmg' % version)
                 if pa:
                     system2('''
     # https://pyoxidizer.readthedocs.io/en/apple-codesign-0.14.0/apple_codesign.html
     # https://pyoxidizer.readthedocs.io/en/stable/tugger_code_signing.html
     # https://developer.apple.com/developer-id/
     # goto xcode and login with apple id, manager certificates (Developer ID Application and/or Developer ID Installer) online there (only download and double click (install) cer file can not export p12 because no private key)
-    #rcodesign sign --p12-file ~/.p12/Digi-Desk2-developer-id.p12 --p12-password-file ~/.p12/.cert-pass --code-signature-flags runtime ./Digi-Desk2-{1}.dmg
-    codesign -s "Developer ID Application: {0}" --force --options runtime ./Digi-Desk2-{1}.dmg
+    #rcodesign sign --p12-file ~/.p12/rustdesk-developer-id.p12 --p12-password-file ~/.p12/.cert-pass --code-signature-flags runtime ./rustdesk-{1}.dmg
+    codesign -s "Developer ID Application: {0}" --force --options runtime ./rustdesk-{1}.dmg
     # https://appstoreconnect.apple.com/access/api
     # https://gregoryszorc.com/docs/apple-codesign/stable/apple_codesign_getting_started.html#apple-codesign-app-store-connect-api-key
     # p8 file is generated when you generate api key (can download only once)
-    rcodesign notary-submit --api-key-path ../.p12/api-key.json  --staple Digi-Desk2-{1}.dmg
+    rcodesign notary-submit --api-key-path ../.p12/api-key.json  --staple rustdesk-{1}.dmg
     # verify:  spctl -a -t exec -v /Applications/RustDesk.app
     '''.format(pa, version))
                 else:
@@ -601,39 +601,39 @@ def main():
             else:
                 # build deb package
                 system2(
-                    'mv target/release/bundle/deb/Digi-Desk2*.deb ./Digi-Desk2.deb')
-                system2('dpkg-deb -R Digi-Desk2.deb tmpdeb')
-                system2('mkdir -p tmpdeb/usr/share/Digi-Desk2/files/systemd/')
+                    'mv target/release/bundle/deb/rustdesk*.deb ./rustdesk.deb')
+                system2('dpkg-deb -R rustdesk.deb tmpdeb')
+                system2('mkdir -p tmpdeb/usr/share/rustdesk/files/systemd/')
                 system2('mkdir -p tmpdeb/usr/share/icons/hicolor/256x256/apps/')
                 system2('mkdir -p tmpdeb/usr/share/icons/hicolor/scalable/apps/')
                 system2(
-                    'cp res/Digi-Desk2.service tmpdeb/usr/share/Digi-Desk2/files/systemd/')
+                    'cp res/rustdesk.service tmpdeb/usr/share/rustdesk/files/systemd/')
                 system2(
-                    'cp res/128x128@2x.png tmpdeb/usr/share/icons/hicolor/256x256/apps/Digi-Desk2.png')
+                    'cp res/128x128@2x.png tmpdeb/usr/share/icons/hicolor/256x256/apps/rustdesk.png')
                 system2(
-                    'cp res/scalable.svg tmpdeb/usr/share/icons/hicolor/scalable/apps/Digi-Desk2.svg')
+                    'cp res/scalable.svg tmpdeb/usr/share/icons/hicolor/scalable/apps/rustdesk.svg')
                 system2(
-                    'cp res/Digi-Desk2.desktop tmpdeb/usr/share/applications/Digi-Desk2.desktop')
+                    'cp res/rustdesk.desktop tmpdeb/usr/share/applications/rustdesk.desktop')
                 system2(
-                    'cp res/Digi-Desk2-link.desktop tmpdeb/usr/share/applications/Digi-Desk2-link.desktop')
-                os.system('mkdir -p tmpdeb/etc/Digi-Desk2/')
-                os.system('cp -a res/startwm.sh tmpdeb/etc/Digi-Desk2/')
-                os.system('mkdir -p tmpdeb/etc/X11/Digi-Desk2/')
-                os.system('cp res/xorg.conf tmpdeb/etc/X11/Digi-Desk2/')
+                    'cp res/rustdesk-link.desktop tmpdeb/usr/share/applications/rustdesk-link.desktop')
+                os.system('mkdir -p tmpdeb/etc/rustdesk/')
+                os.system('cp -a res/startwm.sh tmpdeb/etc/rustdesk/')
+                os.system('mkdir -p tmpdeb/etc/X11/rustdesk/')
+                os.system('cp res/xorg.conf tmpdeb/etc/X11/rustdesk/')
                 os.system('cp -a DEBIAN/* tmpdeb/DEBIAN/')
                 os.system('mkdir -p tmpdeb/etc/pam.d/')
-                os.system('cp pam.d/Digi-Desk2.debian tmpdeb/etc/pam.d/Digi-Desk2')
-                system2('strip tmpdeb/usr/bin/Digi-Desk2')
-                system2('mkdir -p tmpdeb/usr/lib/Digi-Desk2')
-                system2('mv tmpdeb/usr/bin/Digi-Desk2 tmpdeb/usr/lib/Digi-Desk2/')
-                system2('cp libsciter-gtk.so tmpdeb/usr/lib/Digi-Desk2/')
-                md5_file('usr/share/Digi-Desk2/files/systemd/Digi-Desk2.service')
-                md5_file('etc/Digi-Desk2/startwm.sh')
-                md5_file('etc/X11/Digi-Desk2/xorg.conf')
-                md5_file('etc/pam.d/Digi-Desk2')
-                md5_file('usr/lib/Digi-Desk2/libsciter-gtk.so')
-                system2('dpkg-deb -b tmpdeb Digi-Desk2.deb; /bin/rm -rf tmpdeb/')
-                os.rename('Digi-Desk2.deb', 'Digi-Desk2-%s.deb' % version)
+                os.system('cp pam.d/rustdesk.debian tmpdeb/etc/pam.d/rustdesk')
+                system2('strip tmpdeb/usr/bin/rustdesk')
+                system2('mkdir -p tmpdeb/usr/lib/rustdesk')
+                system2('mv tmpdeb/usr/bin/rustdesk tmpdeb/usr/lib/rustdesk/')
+                system2('cp libsciter-gtk.so tmpdeb/usr/lib/rustdesk/')
+                md5_file('usr/share/rustdesk/files/systemd/rustdesk.service')
+                md5_file('etc/rustdesk/startwm.sh')
+                md5_file('etc/X11/rustdesk/xorg.conf')
+                md5_file('etc/pam.d/rustdesk')
+                md5_file('usr/lib/rustdesk/libsciter-gtk.so')
+                system2('dpkg-deb -b tmpdeb rustdesk.deb; /bin/rm -rf tmpdeb/')
+                os.rename('rustdesk.deb', 'rustdesk-%s.deb' % version)
 
 
 def md5_file(fn):

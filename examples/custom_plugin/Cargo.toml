@@ -17,7 +17,7 @@ flutter = []
 
 [dependencies]
 lazy_static = "1.4.0"
-Digi-Desk2 = { path = "../../", version = "1.2.0", features = ["flutter"]}
+rustdesk = { path = "../../", version = "1.2.0", features = ["flutter"]}
 
 [profile.release]
 lto = true

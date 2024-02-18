@@ -264,17 +264,17 @@ fn set_x11_env(desktop: &Desktop) {
 #[inline]
 fn stop_rustdesk_servers() {
     let _ = run_cmds(&format!(
-        r##"ps -ef | grep -E 'Digi-Desk2 +--server' | awk '{{printf("kill -9 %d\n", $2)}}' | bash"##,
+        r##"ps -ef | grep -E 'rustdesk +--server' | awk '{{printf("kill -9 %d\n", $2)}}' | bash"##,
     ));
 }
 
 #[inline]
 fn stop_subprocess() {
     let _ = run_cmds(&format!(
-        r##"ps -ef | grep '/etc/Digi-Desk2/xorg.conf' | grep -v grep | awk '{{printf("kill -9 %d\n", $2)}}' | bash"##,
+        r##"ps -ef | grep '/etc/rustdesk/xorg.conf' | grep -v grep | awk '{{printf("kill -9 %d\n", $2)}}' | bash"##,
     ));
     let _ = run_cmds(&format!(
-        r##"ps -ef | grep -E 'Digi-Desk2 +--cm-no-ui' | grep -v grep | awk '{{printf("kill -9 %d\n", $2)}}' | bash"##,
+        r##"ps -ef | grep -E 'rustdesk +--cm-no-ui' | grep -v grep | awk '{{printf("kill -9 %d\n", $2)}}' | bash"##,
     ));
 }
 
@@ -427,7 +427,7 @@ pub fn start_os_service() {
         let keeps_headless = sid.is_empty() && desktop.is_headless();
         let keeps_session = sid == desktop.sid;
         if keeps_headless || keeps_session {
-            // for fixing https://github.com/Digi-Desk2/Digi-Desk2/issues/3129 to avoid too much dbus calling,
+            // for fixing https://github.com/rustdesk/rustdesk/issues/3129 to avoid too much dbus calling,
             sleep_millis(500);
         } else {
             sleep_millis(super::SERVICE_INTERVAL);
@@ -709,16 +709,16 @@ pub fn exec_privileged(args: &[&str]) -> ResultType<Child> {
 }
 
 pub fn check_super_user_permission() -> ResultType<bool> {
-    let file = "/usr/share/Digi-Desk2/files/polkit";
+    let file = "/usr/share/rustdesk/files/polkit";
     let arg;
     if Path::new(file).is_file() {
         arg = file;
     } else {
         arg = "echo";
     }
-    // https://github.com/Digi-Desk2/Digi-Desk2/issues/2756
+    // https://github.com/rustdesk/rustdesk/issues/2756
     if let Ok(status) = Command::new("pkexec").arg(arg).status() {
-        // https://github.com/Digi-Desk2/Digi-Desk2/issues/5205#issuecomment-1658059657s
+        // https://github.com/rustdesk/rustdesk/issues/5205#issuecomment-1658059657s
         Ok(status.code() != Some(126) && status.code() != Some(127))
     } else {
         Ok(true)
@@ -926,7 +926,7 @@ mod desktop {
     const IBUS_DAEMON: &str = "ibus-daemon";
     const PLASMA_KDED5: &str = "kded5";
     const GNOME_GOA_DAEMON: &str = "goa-daemon";
-    const RUSTDESK_TRAY: &str = "Digi-Desk2 +--tray";
+    const RUSTDESK_TRAY: &str = "rustdesk +--tray";
 
     #[derive(Debug, Clone, Default)]
     pub struct Desktop {
@@ -1143,7 +1143,7 @@ mod desktop {
 
         fn set_is_subprocess(&mut self) {
             self.is_rustdesk_subprocess = false;
-            let cmd = "ps -ef | grep 'Digi-Desk2/xorg.conf' | grep -v grep | wc -l";
+            let cmd = "ps -ef | grep 'rustdesk/xorg.conf' | grep -v grep | wc -l";
             if let Ok(res) = run_cmds(cmd) {
                 if res.trim() != "0" {
                     self.is_rustdesk_subprocess = true;
@@ -1252,7 +1252,7 @@ fn switch_service(stop: bool) -> String {
     let home = std::env::var("HOME").unwrap_or_default();
     Config::set_option("stop-service".into(), if stop { "Y" } else { "" }.into());
     if home != "/root" && !Config::get().is_empty() {
-        format!("cp -f {home}/.config/Digi-Desk2/RustDesk.toml /root/.config/Digi-Desk2/; cp -f {home}/.config/Digi-Desk2/RustDesk2.toml /root/.config/Digi-Desk2/;")
+        format!("cp -f {home}/.config/rustdesk/RustDesk.toml /root/.config/rustdesk/; cp -f {home}/.config/rustdesk/RustDesk2.toml /root/.config/rustdesk/;")
     } else {
         "".to_owned()
     }
@@ -1265,7 +1265,7 @@ pub fn uninstall_service(show_new_window: bool) -> bool {
     log::info!("Uninstalling service...");
     let cp = switch_service(true);
     if !run_cmds_pkexec(&format!(
-        "systemctl disable Digi-Desk2; systemctl stop Digi-Desk2; {cp}"
+        "systemctl disable rustdesk; systemctl stop rustdesk; {cp}"
     )) {
         Config::set_option("stop-service".into(), "".into());
         return true;
@@ -1284,7 +1284,7 @@ pub fn install_service() -> bool {
     log::info!("Installing service...");
     let cp = switch_service(false);
     if !run_cmds_pkexec(&format!(
-        "{cp} systemctl enable Digi-Desk2; systemctl start Digi-Desk2;"
+        "{cp} systemctl enable rustdesk; systemctl start rustdesk;"
     )) {
         Config::set_option("stop-service".into(), "Y".into());
         return true;
@@ -1296,7 +1296,7 @@ pub fn install_service() -> bool {
 fn check_if_stop_service() {
     if Config::get_option("stop-service".into()) == "Y" {
         allow_err!(run_cmds(
-            "systemctl disable Digi-Desk2; systemctl stop Digi-Desk2"
+            "systemctl disable rustdesk; systemctl stop rustdesk"
         ));
     }
 }
@@ -1304,7 +1304,7 @@ fn check_if_stop_service() {
 pub fn check_autostart_config() -> ResultType<()> {
     let home = std::env::var("HOME").unwrap_or_default();
     let path = format!("{home}/.config/autostart");
-    let file = format!("{path}/Digi-Desk2.desktop");
+    let file = format!("{path}/rustdesk.desktop");
     std::fs::create_dir_all(&path).ok();
     if !Path::new(&file).exists() {
         // write text to the desktop file
@@ -1313,7 +1313,7 @@ pub fn check_autostart_config() -> ResultType<()> {
             "
 [Desktop Entry]
 Type=Application
-Exec=Digi-Desk2 --tray
+Exec=rustdesk --tray
 NoDisplay=false
         "
             .as_bytes(),

@@ -1322,7 +1322,7 @@ impl<T: InvokeUiSession> Remote<T> {
                     }
                     Some(misc::Union::PermissionInfo(p)) => {
                         log::info!("Change permission {:?} -> {}", p.permission, p.enabled);
-                        // https://github.com/Digi-Desk2/Digi-Desk2/issues/3703#issuecomment-1474734754
+                        // https://github.com/rustdesk/rustdesk/issues/3703#issuecomment-1474734754
                         match p.permission.enum_value() {
                             Ok(Permission::Keyboard) => {
                                 #[cfg(feature = "flutter")]
@@ -1523,7 +1523,7 @@ impl<T: InvokeUiSession> Remote<T> {
                 Some(message::Union::MessageBox(msgbox)) => {
                     let mut link = msgbox.link;
                     // Links from the remote side must be verified.
-                    if !link.starts_with("Digi-Desk2://") {
+                    if !link.starts_with("rustdesk://") {
                         if let Some(v) = hbb_common::config::HELPER_URL.get(&link as &str) {
                             link = v.to_string();
                         } else {

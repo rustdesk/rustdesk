@@ -277,7 +277,7 @@ impl VideoQoS {
     }
 
     pub fn user_image_quality(&mut self, id: i32, image_quality: i32) {
-        // https://github.com/Digi-Desk2/Digi-Desk2/blob/d716e2b40c38737f1aa3f16de0dec67394a6ac68/src/server/video_service.rs#L493
+        // https://github.com/rustdesk/rustdesk/blob/d716e2b40c38737f1aa3f16de0dec67394a6ac68/src/server/video_service.rs#L493
         let convert_quality = |q: i32| {
             if q == ImageQuality::Balanced.value() {
                 Quality::Balanced

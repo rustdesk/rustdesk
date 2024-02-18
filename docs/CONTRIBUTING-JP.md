@@ -26,7 +26,7 @@ RustDesk またはその依存関係へのコントリビュートは、GitHub �
   同意していることを示すものです。git では、これは `git commit` の `-s` オプションを使います。
 
 - もしあなたのパッチがレビューされなかったり、特定の人にレビューしてもらう必要がある場合、
-  プルリクエストやコメントでレビューを依頼するレビュアーに@返信したり、[email](mailto:info@Digi-Desk2.com) でレビューを依頼することができます。
+  プルリクエストやコメントでレビューを依頼するレビュアーに@返信したり、[email](mailto:info@rustdesk.com) でレビューを依頼することができます。
 
 - 修正したバグや新機能に関連するテストを追加する。
 
@@ -34,7 +34,7 @@ RustDesk またはその依存関係へのコントリビュートは、GitHub �
 
 ## 行動規範
 
-https://github.com/Digi-Desk2/Digi-Desk2/blob/master/docs/CODE_OF_CONDUCT.md
+https://github.com/rustdesk/rustdesk/blob/master/docs/CODE_OF_CONDUCT.md
 
 ## コミュニケーション
 

@@ -1,6 +1,6 @@
 FROM mcr.microsoft.com/devcontainers/base:ubuntu-22.04
 ENV HOME=/home/vscode
-ENV WORKDIR=$HOME/Digi-Desk2
+ENV WORKDIR=$HOME/rustdesk
 
 WORKDIR $HOME
 RUN sudo apt update -y && sudo apt install -y g++ gcc git curl wget nasm yasm libgtk-3-dev clang libxcb-randr0-dev libxdo-dev libxfixes-dev libxcb-shape0-dev libxcb-xfixes0-dev libasound2-dev libpulse-dev cmake unzip zip sudo libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev
@@ -14,7 +14,7 @@ ENV VCPKG_ROOT=/vcpkg
 RUN $VCPKG_ROOT/vcpkg --disable-metrics install libvpx libyuv opus aom
 
 WORKDIR /
-RUN wget https://github.com/Digi-Desk2/doc.Digi-Desk2.com/releases/download/console/dep.tar.gz && tar xzf dep.tar.gz
+RUN wget https://github.com/rustdesk/doc.rustdesk.com/releases/download/console/dep.tar.gz && tar xzf dep.tar.gz
 
 
 USER vscode
@@ -41,10 +41,10 @@ WORKDIR $WORKDIR
 ENV ANDROID_NDK_HOME=/opt/android/ndk/22.1.7171670
 
 # Somehow try to automate flutter pub get
-# https://Digi-Desk2.com/docs/en/dev/build/android/
+# https://rustdesk.com/docs/en/dev/build/android/
 # Put below steps in entrypoint.sh
 # cd flutter
-# wget https://github.com/Digi-Desk2/doc.Digi-Desk2.com/releases/download/console/so.tar.gz
+# wget https://github.com/rustdesk/doc.rustdesk.com/releases/download/console/so.tar.gz
 # tar xzf so.tar.gz
 
 # own /opt/android

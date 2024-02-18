@@ -1599,7 +1599,7 @@ pub async fn io_loop<T: InvokeUiSession>(handler: Session<T>, round: u32) {
                 || handler.args[2].parse::<i32>().unwrap_or(0) <= 0
                 || port <= 0
             {
-                handler.on_error("Invalid arguments, usage:<br><br> Digi-Desk2 --port-forward remote-id listen-port remote-host remote-port");
+                handler.on_error("Invalid arguments, usage:<br><br> rustdesk --port-forward remote-id listen-port remote-host remote-port");
             }
             let remote_host = handler.args[1].clone();
             let remote_port = handler.args[2].parse::<i32>().unwrap_or(0);

@@ -3409,7 +3409,7 @@ dependencies = [
 [[package]]
 name = "keepawake"
 version = "0.4.3"
-source = "git+https://github.com/Digi-Desk2-org/keepawake-rs#ad94454a75cf1ff9e95e217dee9dd6a378bf625e"
+source = "git+https://github.com/rustdesk-org/keepawake-rs#ad94454a75cf1ff9e95e217dee9dd6a378bf625e"
 dependencies = [
  "anyhow",
  "apple-sys",
@@ -3706,7 +3706,7 @@ dependencies = [
 [[package]]
 name = "magnum-opus"
 version = "0.4.0"
-source = "git+https://github.com/Digi-Desk2-org/magnum-opus#5cd2bf989c148662fa3a2d9d539a71d71fd1d256"
+source = "git+https://github.com/rustdesk-org/magnum-opus#5cd2bf989c148662fa3a2d9d539a71d71fd1d256"
 dependencies = [
  "bindgen 0.59.2",
  "pkg-config",
@@ -4442,7 +4442,7 @@ dependencies = [
 [[package]]
 name = "parity-tokio-ipc"
 version = "0.7.3-3"
-source = "git+https://github.com/Digi-Desk2-org/parity-tokio-ipc#f2d1fcf8fb002335d9a62bec308559d40698694d"
+source = "git+https://github.com/rustdesk-org/parity-tokio-ipc#f2d1fcf8fb002335d9a62bec308559d40698694d"
 dependencies = [
  "futures",
  "libc",
@@ -5234,7 +5234,7 @@ dependencies = [
 [[package]]
 name = "reqwest"
 version = "0.11.23"
-source = "git+https://github.com/Digi-Desk2-org/reqwest"
+source = "git+https://github.com/rustdesk-org/reqwest"
 dependencies = [
  "async-compression",
  "base64",
@@ -5409,7 +5409,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "Digi-Desk2"
+name = "rustdesk"
 version = "1.2.4"
 dependencies = [
  "android-wakelock",
@@ -5506,7 +5506,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "Digi-Desk2-portable-packer"
+name = "rustdesk-portable-packer"
 version = "0.1.0"
 dependencies = [
  "brotli",
@@ -6117,7 +6117,7 @@ dependencies = [
 [[package]]
 name = "sysinfo"
 version = "0.29.10"
-source = "git+https://github.com/Digi-Desk2-org/sysinfo#f45dcc6510d48c3a1401c5a33eedccc8899f67b2"
+source = "git+https://github.com/rustdesk-org/sysinfo#f45dcc6510d48c3a1401c5a33eedccc8899f67b2"
 dependencies = [
  "cfg-if 1.0.0",
  "core-foundation-sys 0.8.4",
@@ -6190,7 +6190,7 @@ dependencies = [
 [[package]]
 name = "tao"
 version = "0.25.0"
-source = "git+https://github.com/Digi-Desk2-org/tao?branch=dev#1a813dc8788735ff0ad427ffa71394aa02d16709"
+source = "git+https://github.com/rustdesk-org/tao?branch=dev#1a813dc8788735ff0ad427ffa71394aa02d16709"
 dependencies = [
  "bitflags 1.3.2",
  "cc",
@@ -6230,7 +6230,7 @@ dependencies = [
 [[package]]
 name = "tao-macros"
 version = "0.1.2"
-source = "git+https://github.com/Digi-Desk2-org/tao?branch=dev#1a813dc8788735ff0ad427ffa71394aa02d16709"
+source = "git+https://github.com/rustdesk-org/tao?branch=dev#1a813dc8788735ff0ad427ffa71394aa02d16709"
 dependencies = [
  "proc-macro2 1.0.69",
  "quote 1.0.33",

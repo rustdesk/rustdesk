@@ -1003,7 +1003,7 @@ void msgBox(SessionID sessionId, String type, String title, String text,
   bool hasOk = false;
   submit() {
     dialogManager.dismissAll();
-    // https://github.com/fufesou/Digi-Desk2/blob/5e9a31340b899822090a3731769ae79c6bf5f3e5/src/ui/common.tis#L263
+    // https://github.com/fufesou/rustdesk/blob/5e9a31340b899822090a3731769ae79c6bf5f3e5/src/ui/common.tis#L263
     if (!type.contains("custom") && desktopType != DesktopType.portForward) {
       closeConnection();
     }
@@ -1888,7 +1888,7 @@ bool handleUriLink({List<String>? cmdArgs, Uri? uri, String? uriString}) {
   List<String>? args;
   if (cmdArgs != null && cmdArgs.isNotEmpty) {
     args = cmdArgs;
-    // Digi-Desk2 <uri link>
+    // rustdesk <uri link>
     if (args[0].startsWith(kUniLinksPrefix)) {
       final uri = Uri.tryParse(args[0]);
       if (uri != null) {
@@ -2038,9 +2038,9 @@ List<String>? urlLinkToCmdArgs(Uri uri) {
   } else if (uri.authority.length > 2 &&
       (uri.path.length <= 1 ||
           (uri.path == '/r' || uri.path.startsWith('/r@')))) {
-    // Digi-Desk2://<connect-id>
-    // Digi-Desk2://<connect-id>/r
-    // Digi-Desk2://<connect-id>/r@<server>
+    // rustdesk://<connect-id>
+    // rustdesk://<connect-id>/r
+    // rustdesk://<connect-id>/r@<server>
     command = '--connect';
     id = uri.authority;
     if (uri.path.length > 1) {
@@ -2340,7 +2340,7 @@ class ServerConfig {
     this.key = key?.trim() ?? '';
   }
 
-  /// decode from shared string (from user shared or Digi-Desk2-server generated)
+  /// decode from shared string (from user shared or rustdesk-server generated)
   /// also see [encode]
   /// throw when decoding failure
   ServerConfig.decode(String msg) {
@@ -2465,7 +2465,7 @@ Future<void> updateSystemWindowTheme() async {
 ///
 /// Note: not found a general solution for rust based AVFoundation bingding.
 /// [AVFoundation] crate has compile error.
-const kMacOSPermChannel = MethodChannel("org.Digi-Desk2.Digi-Desk2/macos");
+const kMacOSPermChannel = MethodChannel("org.rustdesk.rustdesk/macos");
 
 enum PermissionAuthorizeType {
   undetermined,
