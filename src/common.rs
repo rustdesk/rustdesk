@@ -1353,7 +1353,7 @@ impl ThrottledInterval {
         ThrottledInterval {
             interval: i,
             last_tick: Instant::now() - period * 2,
-            min_interval: period,
+            min_interval: Duration::from_secs_f64(period.as_secs_f64() * 0.9),
         }
     }
 
@@ -1441,5 +1441,18 @@ mod tests {
         }
         let times2: HashSet<String> = HashSet::from_iter(times.clone());
         assert_eq!(times.len(), times2.len());
+    }
+
+    #[test]
+    fn test_duration_multiplication() {
+        let dur = Duration::from_secs(1);
+
+        assert_eq!(dur * 2, Duration::from_secs(2));
+        assert_eq!(Duration::from_secs_f64(dur.as_secs_f64() * 0.9), Duration::from_millis(900));
+        assert_eq!(Duration::from_secs_f64(dur.as_secs_f64() * 0.923), Duration::from_millis(923));
+        assert_eq!(Duration::from_secs_f64(dur.as_secs_f64() * 0.923 * 1e-3), Duration::from_micros(923));
+        assert_eq!(Duration::from_secs_f64(dur.as_secs_f64() * 0.923 * 1e-6), Duration::from_nanos(923));
+        assert_eq!(Duration::from_secs_f64(dur.as_secs_f64() * 0.923 * 1e-9), Duration::from_nanos(1));
+        assert_eq!(Duration::from_secs_f64(dur.as_secs_f64() * 0.923 * 1e-10), Duration::from_nanos(0));
     }
 }
