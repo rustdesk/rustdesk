@@ -183,7 +183,7 @@ pub fn core_main() -> Option<Vec<String>> {
                 return None;
             } else if args[0] == "--silent-install" {
                 let res = platform::install_me(
-                    "desktopicon startmenu driverCert",
+                    "desktopicon startmenu",
                     "".to_owned(),
                     true,
                     args.len() > 1,
@@ -348,6 +348,7 @@ pub fn core_main() -> Option<Vec<String>> {
                                 lic.host,
                             );
                             crate::ui_interface::set_option("api-server".into(), lic.api);
+                            crate::ui_interface::set_option("relay-server".into(), lic.relay);
                         }
                     }
                 } else {

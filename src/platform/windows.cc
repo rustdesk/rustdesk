@@ -9,6 +9,7 @@
 #include <shlobj.h> // NOLINT(build/include_order)
 #include <userenv.h>
 #include <versionhelpers.h>
+#include <vector>
 
 void flog(char const *fmt, ...)
 {
@@ -431,6 +432,63 @@ extern "C"
             }
         }
         return nout;
+    }
+
+    uint32_t get_session_user_info(PWSTR bufin, uint32_t nin, BOOL rdp, uint32_t id)
+    {
+        uint32_t nout = 0;
+        PWSTR buf = NULL;
+        DWORD n = 0;
+        if (WTSQuerySessionInformationW(WTS_CURRENT_SERVER_HANDLE, id, WTSUserName, &buf, &n))
+        {
+            if (buf)
+            {
+                nout = min(nin, n);
+                memcpy(bufin, buf, nout);
+                WTSFreeMemory(buf);
+            }
+        }
+        return nout;
+    }
+
+    void get_available_session_ids(PWSTR buf, uint32_t bufSize, BOOL include_rdp) {
+        std::vector<std::wstring> sessionIds;
+        PWTS_SESSION_INFOA pInfos = NULL;
+        DWORD count;
+
+        if (WTSEnumerateSessionsA(WTS_CURRENT_SERVER_HANDLE, 0, 1, &pInfos, &count)) {
+            for (DWORD i = 0; i < count; i++) {
+                auto info = pInfos[i];
+                auto rdp = "rdp";
+                auto nrdp = strlen(rdp);
+                if (info.State == WTSActive) {
+                    if (info.pWinStationName == NULL)
+                        continue;
+                    if (info.SessionId == 65536 || info.SessionId == 655)
+                        continue;
+
+                    if (!stricmp(info.pWinStationName, "console")){
+                        sessionIds.push_back(std::wstring(L"Console:") + std::to_wstring(info.SessionId));
+                    }
+                    else if (include_rdp && !strnicmp(info.pWinStationName, rdp, nrdp)) {
+                        sessionIds.push_back(std::wstring(L"RDP:") + std::to_wstring(info.SessionId));
+                    }
+                }
+            }
+            WTSFreeMemory(pInfos);
+        }
+
+        std::wstring tmpStr;
+        for (size_t i = 0; i < sessionIds.size(); i++) {
+            if (i > 0) {
+                tmpStr += L",";
+            }
+            tmpStr += sessionIds[i];
+        }
+
+        if (buf && !tmpStr.empty() && tmpStr.size() < bufSize) {
+            wcsncpy_s(buf, bufSize, tmpStr.c_str(), tmpStr.size());
+        }
     }
 
     BOOL has_rdp_service()

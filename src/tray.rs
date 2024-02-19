@@ -18,32 +18,12 @@ pub fn make_tray() -> hbb_common::ResultType<()> {
     use tao::event_loop::{ControlFlow, EventLoopBuilder};
     use tray_icon::{
         menu::{Menu, MenuEvent, MenuItem},
-        TrayEvent, TrayIconBuilder,
+        TrayIconBuilder, TrayIconEvent as TrayEvent,
     };
     let icon;
     #[cfg(target_os = "macos")]
     {
-        const DARK: &[u8] = include_bytes!("../res/mac-tray-dark-x2.png");
-        const LIGHT: &[u8] = include_bytes!("../res/mac-tray-light-x2.png");
-        let output = std::process::Command::new("sw_vers")
-            .args(&["-productVersion"])
-            .output()
-            .map(|x| x.stdout)
-            .unwrap_or_default();
-        let version: f64 = String::from_utf8_lossy(output.as_slice())
-            .trim()
-            .parse()
-            .unwrap_or_default();
-        icon = if version >= 14. {
-            // workaround for Sonoma, always light menubar
-            DARK
-        } else {
-            let mode = dark_light::detect();
-            match mode {
-                dark_light::Mode::Dark => LIGHT,
-                _ => DARK,
-            }
-        };
+        icon = include_bytes!("../res/mac-tray-dark-x2.png"); // use as template, so color is not important
     }
     #[cfg(not(target_os = "macos"))]
     {
@@ -57,7 +37,7 @@ pub fn make_tray() -> hbb_common::ResultType<()> {
         let rgba = image.into_raw();
         (rgba, width, height)
     };
-    let icon = tray_icon::icon::Icon::from_rgba(icon_rgba, icon_width, icon_height)
+    let icon = tray_icon::Icon::from_rgba(icon_rgba, icon_width, icon_height)
         .context("Failed to open icon")?;
 
     let event_loop = EventLoopBuilder::new().build();
@@ -65,7 +45,7 @@ pub fn make_tray() -> hbb_common::ResultType<()> {
     let tray_menu = Menu::new();
     let quit_i = MenuItem::new(translate("Exit".to_owned()), true, None);
     let open_i = MenuItem::new(translate("Open".to_owned()), true, None);
-    tray_menu.append_items(&[&open_i, &quit_i]);
+    tray_menu.append_items(&[&open_i, &quit_i]).ok();
     let tooltip = |count: usize| {
         if count == 0 {
             format!(
@@ -87,6 +67,7 @@ pub fn make_tray() -> hbb_common::ResultType<()> {
             .with_menu(Box::new(tray_menu))
             .with_tooltip(tooltip(0))
             .with_icon(icon)
+            .with_icon_as_template(true) // mac only
             .build()?,
     );
     let _tray_icon = Arc::new(Mutex::new(_tray_icon));
@@ -129,6 +110,8 @@ pub fn make_tray() -> hbb_common::ResultType<()> {
     std::thread::spawn(move || {
         start_query_session_count(ipc_sender.clone());
     });
+    #[cfg(windows)]
+    let mut last_click = std::time::Instant::now();
     event_loop.run(move |_event, _, control_flow| {
         if !docker_hiden {
             #[cfg(target_os = "macos")]
@@ -157,8 +140,14 @@ pub fn make_tray() -> hbb_common::ResultType<()> {
 
         if let Ok(_event) = tray_channel.try_recv() {
             #[cfg(target_os = "windows")]
-            if _event.event == tray_icon::ClickEvent::Left {
+            if _event.click_type == tray_icon::ClickType::Left
+                || _event.click_type == tray_icon::ClickType::Double
+            {
+                if last_click.elapsed() < std::time::Duration::from_secs(1) {
+                    return;
+                }
                 open_func();
+                last_click = std::time::Instant::now();
             }
         }
 
@@ -184,7 +173,7 @@ async fn start_query_session_count(sender: std::sync::mpsc::Sender<Data>) {
     let mut last_count = 0;
     loop {
         if let Ok(mut c) = crate::ipc::connect(1000, "").await {
-            let mut timer = tokio::time::interval(Duration::from_secs(1));
+            let mut timer = crate::rustdesk_interval(tokio::time::interval(Duration::from_secs(1)));
             loop {
                 tokio::select! {
                     res = c.next() => {

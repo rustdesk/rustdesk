@@ -49,12 +49,6 @@ def get_version():
 
 def parse_rc_features(feature):
     available_features = {
-        'IddDriver': {
-            'platform': ['windows'],
-            'zip_url': 'https://github.com/fufesou/RustDeskIddDriver/releases/download/v0.3/RustDeskIddDriver_x64.zip',
-            'checksum_url': 'https://github.com/fufesou/RustDeskIddDriver/releases/download/v0.3/checksum_md5',
-            'exclude': ['README.md', 'certmgr.exe', 'install_cert_runas_admin.bat', 'RustDeskIddApp.exe'],
-        },
         'PrivacyMode': {
             'platform': ['windows'],
             'zip_url': 'https://github.com/fufesou/RustDeskTempTopMostWindow/releases/download/v0.3'
@@ -112,7 +106,7 @@ def make_parser():
         nargs='+',
         default='',
         help='Integrate features, windows only.'
-             'Available: IddDriver, PrivacyMode. Special value is "ALL" and empty "". Default is empty.')
+             'Available: PrivacyMode. Special value is "ALL" and empty "". Default is empty.')
     parser.add_argument('--flutter', action='store_true',
                         help='Build flutter package', default=False)
     parser.add_argument(
@@ -275,11 +269,9 @@ def external_resources(flutter, args, res_dir):
 
 def get_features(args):
     features = ['inline'] if not args.flutter else []
-    if windows:
-        features.append('virtual_display_driver')
     if args.hwcodec:
         features.append('hwcodec')
-    if args.gpucodec: 
+    if args.gpucodec:
         features.append('gpucodec')
     if args.flutter:
         features.append('flutter')
@@ -502,6 +494,7 @@ def main():
         system2('mv target/release/rustdesk.exe target/release/RustDesk.exe')
         pa = os.environ.get('P')
         if pa:
+            # https://certera.com/kb/tutorial-guide-for-safenet-authentication-client-for-code-signing/
             system2(
                 f'signtool sign /a /v /p {pa} /debug /f .\\cert.pfx /t http://timestamp.digicert.com  '
                 'target\\release\\rustdesk.exe')

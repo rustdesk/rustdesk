@@ -451,8 +451,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Resolution", "Độ phân giải"),
         ("No transfers in progress", "Không có tệp tin nào đang được truyền"),
         ("Set one-time password length", "Thiết lập độ dài mật khẩu một lần"),
-        ("install_cert_tip", ""),
-        ("confirm_install_cert_tip", ""),
         ("RDP Settings", "Cài đặt RDP"),
         ("Sort by", "Sắp xếp theo"),
         ("New Connection", "Kết nối mới"),
@@ -586,5 +584,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("enter-2fa-title", ""),
         ("Email verification code must be 6 characters.", ""),
         ("2FA code must be 6 digits.", ""),
+        ("Multiple Windows sessions found", ""),
+        ("Please select the session you want to connect to", ""),
     ].iter().cloned().collect();
 }

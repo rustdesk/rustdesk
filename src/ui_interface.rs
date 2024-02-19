@@ -249,12 +249,6 @@ pub fn set_peer_option(id: String, name: String, value: String) {
 }
 
 #[inline]
-pub fn using_public_server() -> bool {
-    option_env!("RENDEZVOUS_SERVER").unwrap_or("").is_empty()
-        && crate::get_custom_rendezvous_server(get_option("custom-rendezvous-server")).is_empty()
-}
-
-#[inline]
 pub fn get_options() -> String {
     let options = {
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -1044,7 +1038,7 @@ async fn check_connect_status_(reconnect: bool, rx: mpsc::UnboundedReceiver<ipc:
 
     loop {
         if let Ok(mut c) = ipc::connect(1000, "").await {
-            let mut timer = time::interval(time::Duration::from_secs(1));
+            let mut timer = crate::rustdesk_interval(time::interval(time::Duration::from_secs(1)));
             loop {
                 tokio::select! {
                     res = c.next() => {

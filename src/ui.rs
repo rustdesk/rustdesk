@@ -259,7 +259,7 @@ impl UI {
     }
 
     fn using_public_server(&self) -> bool {
-        using_public_server()
+        crate::using_public_server()
     }
 
     fn get_options(&self) -> Value {

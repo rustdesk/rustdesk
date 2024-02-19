@@ -51,7 +51,7 @@ pub struct StrategyOptions {
 #[cfg(not(any(target_os = "ios")))]
 #[tokio::main(flavor = "current_thread")]
 async fn start_hbbs_sync_async() {
-    let mut interval = tokio::time::interval_at(Instant::now() + TIME_CONN, TIME_CONN);
+    let mut interval = crate::rustdesk_interval(tokio::time::interval_at(Instant::now() + TIME_CONN, TIME_CONN));
     let mut last_sent: Option<Instant> = None;
     let mut info_uploaded: (bool, String, Option<Instant>) = (false, "".to_owned(), None);
     loop {

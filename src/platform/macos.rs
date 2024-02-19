@@ -45,8 +45,13 @@ extern "C" {
         max: u32,
         numModes: *mut u32,
     ) -> BOOL;
+    fn majorVersion() -> u32;
     fn MacGetMode(display: u32, width: *mut u32, height: *mut u32) -> BOOL;
     fn MacSetMode(display: u32, width: u32, height: u32) -> BOOL;
+}
+
+pub fn major_version() -> u32 {
+    unsafe { majorVersion() }
 }
 
 pub fn is_process_trusted(prompt: bool) -> bool {

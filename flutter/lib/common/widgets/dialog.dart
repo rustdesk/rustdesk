@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -1859,5 +1860,52 @@ void enter2FaDialog(
         ],
         onSubmit: submit,
         onCancel: cancel);
+  });
+}
+
+// This dialog should not be dismissed, otherwise it will be black screen, have not reproduced this.
+void showWindowsSessionsDialog(
+    String type,
+    String title,
+    String text,
+    OverlayDialogManager dialogManager,
+    SessionID sessionId,
+    String peerId,
+    String sessions) {
+  List<dynamic> sessionsList = [];
+  try {
+    sessionsList = json.decode(sessions);
+  } catch (e) {
+    print(e);
+  }
+  List<String> sids = [];
+  List<String> names = [];
+  for (var session in sessionsList) {
+    sids.add(session['sid']);
+    names.add(session['name']);
+  }
+  String selectedUserValue = sids.first;
+  dialogManager.dismissAll();
+  dialogManager.show((setState, close, context) {
+    submit() {
+      bind.sessionSendSelectedSessionId(
+          sessionId: sessionId, sid: selectedUserValue);
+      close();
+    }
+
+    return CustomAlertDialog(
+      title: null,
+      content: msgboxContent(type, title, text),
+      actions: [
+        ComboBox(
+            keys: sids,
+            values: names,
+            initialKey: selectedUserValue,
+            onChanged: (value) {
+              selectedUserValue = value;
+            }),
+        dialogButton('Connect', onPressed: submit, isOutline: false),
+      ],
+    );
   });
 }
