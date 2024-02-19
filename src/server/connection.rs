@@ -1194,6 +1194,7 @@ impl Connection {
         .into();
 
         let mut sub_service = false;
+        #[allow(unused_mut)]
         let mut wait_session_id_confirm = false;
         #[cfg(windows)]
         self.handle_windows_specific_session(&mut pi, &mut wait_session_id_confirm);
@@ -1303,22 +1304,22 @@ impl Connection {
         wait_session_id_confirm: &mut bool,
     ) {
         let sessions = crate::platform::get_available_sessions(true);
-        let current_sid = crate::platform::get_current_process_session_id().unwrap_or_default();
-        if crate::platform::is_installed()
-            && crate::platform::is_share_rdp()
-            && raii::AuthedConnID::remote_and_file_conn_count() == 1
-            && sessions.len() > 1
-            && current_sid != 0
-            && (get_version_number(&self.lr.version) > get_version_number("1.2.4")
-                || self.lr.option.support_windows_specific_session == BoolOption::Yes.into())
-        {
-            pi.windows_sessions = Some(WindowsSessions {
-                sessions,
-                current_sid,
-                ..Default::default()
-            })
-            .into();
-            *wait_session_id_confirm = true;
+        if let Some(current_sid) = crate::platform::get_current_process_session_id() {
+            if crate::platform::is_installed()
+                && crate::platform::is_share_rdp()
+                && raii::AuthedConnID::remote_and_file_conn_count() == 1
+                && sessions.len() > 1
+                && (get_version_number(&self.lr.version) > get_version_number("1.2.4")
+                    || self.lr.option.support_windows_specific_session == BoolOption::Yes.into())
+            {
+                pi.windows_sessions = Some(WindowsSessions {
+                    sessions,
+                    current_sid,
+                    ..Default::default()
+                })
+                .into();
+                *wait_session_id_confirm = true;
+            }
         }
     }
 
@@ -2283,28 +2284,29 @@ impl Connection {
                         .user_record(self.inner.id(), status),
                     #[cfg(windows)]
                     Some(misc::Union::SelectedSid(sid)) => {
-                        let current_process_usid =
-                            crate::platform::get_current_process_session_id().unwrap_or_default();
-                        let sessions = crate::platform::get_available_sessions(false);
-                        if crate::platform::is_installed()
-                            && crate::platform::is_share_rdp()
-                            && raii::AuthedConnID::remote_and_file_conn_count() == 1
-                            && sessions.len() > 1
-                            && current_process_usid != 0
-                            && current_process_usid != sid
-                            && sessions.iter().any(|e| e.sid == sid)
+                        if let Some(current_process_sid) =
+                            crate::platform::get_current_process_session_id()
                         {
-                            std::thread::spawn(move || {
-                                let _ = ipc::connect_to_user_session(Some(sid));
-                            });
-                            return false;
-                        }
-                        if self.file_transfer.is_some() {
-                            if let Some((dir, show_hidden)) = self.delayed_read_dir.take() {
-                                self.read_dir(&dir, show_hidden);
+                            let sessions = crate::platform::get_available_sessions(false);
+                            if crate::platform::is_installed()
+                                && crate::platform::is_share_rdp()
+                                && raii::AuthedConnID::remote_and_file_conn_count() == 1
+                                && sessions.len() > 1
+                                && current_process_sid != sid
+                                && sessions.iter().any(|e| e.sid == sid)
+                            {
+                                std::thread::spawn(move || {
+                                    let _ = ipc::connect_to_user_session(Some(sid));
+                                });
+                                return false;
                             }
-                        } else {
-                            self.try_sub_services();
+                            if self.file_transfer.is_some() {
+                                if let Some((dir, show_hidden)) = self.delayed_read_dir.take() {
+                                    self.read_dir(&dir, show_hidden);
+                                }
+                            } else {
+                                self.try_sub_services();
+                            }
                         }
                     }
                     _ => {}
