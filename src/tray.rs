@@ -15,7 +15,7 @@ pub fn make_tray() -> hbb_common::ResultType<()> {
     use tao::event_loop::{ControlFlow, EventLoopBuilder};
     use tray_icon::{
         menu::{Menu, MenuEvent, MenuItem},
-        TrayEvent, TrayIconBuilder,
+        TrayIconBuilder, TrayIconEvent as TrayEvent,
     };
     let icon;
     #[cfg(target_os = "macos")]
@@ -40,7 +40,7 @@ pub fn make_tray() -> hbb_common::ResultType<()> {
         let rgba = image.into_raw();
         (rgba, width, height)
     };
-    let icon = tray_icon::icon::Icon::from_rgba(icon_rgba, icon_width, icon_height)
+    let icon = tray_icon::Icon::from_rgba(icon_rgba, icon_width, icon_height)
         .context("Failed to open icon")?;
 
     let event_loop = EventLoopBuilder::new().build();
@@ -140,7 +140,8 @@ pub fn make_tray() -> hbb_common::ResultType<()> {
 
         if let Ok(_event) = tray_channel.try_recv() {
             #[cfg(target_os = "windows")]
-            if _event.event == tray_icon::ClickEvent::Left {
+            if _event.click_type == tray_icon::ClickType::Left
+                || _event.click_type == tray_icon::ClickType::Double {
                 open_func();
             }
         }
