@@ -152,8 +152,7 @@ impl RendezvousMediator {
             keep_alive: DEFAULT_KEEP_ALIVE,
         };
 
-        let mut timer = interval(TIMER_OUT);
-        let mut last_timer: Option<Instant> = None;
+        let mut timer = crate::rustdesk_interval(interval(TIMER_OUT));
         const MIN_REG_TIMEOUT: i64 = 3_000;
         const MAX_REG_TIMEOUT: i64 = 30_000;
         let mut reg_timeout = MIN_REG_TIMEOUT;
@@ -215,15 +214,14 @@ impl RendezvousMediator {
                         break;
                     }
                     let now = Some(Instant::now());
-                    if last_timer.map(|x| x.elapsed() < TIMER_OUT).unwrap_or(false) {
-                        // a workaround of tokio timer bug
-                        continue;
-                    }
-                    last_timer = now;
                     let expired = last_register_resp.map(|x| x.elapsed().as_millis() as i64 >= REG_INTERVAL).unwrap_or(true);
                     let timeout = last_register_sent.map(|x| x.elapsed().as_millis() as i64 >= reg_timeout).unwrap_or(false);
-                    if timeout && reg_timeout < MAX_REG_TIMEOUT {
-                        reg_timeout += MIN_REG_TIMEOUT;
+                    // temporarily disable exponential backoff for android before we add wakeup trigger to force connect in android
+                    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+                    if crate::using_public_server() { // only turn on this for public server, may help DDNS self-hosting user.
+                        if timeout && reg_timeout < MAX_REG_TIMEOUT {
+                            reg_timeout += MIN_REG_TIMEOUT;
+                        }
                     }
                     if timeout || (last_register_sent.is_none() && expired) {
                         if timeout {
@@ -338,7 +336,7 @@ impl RendezvousMediator {
             host_prefix: Self::get_host_prefix(&host),
             keep_alive: DEFAULT_KEEP_ALIVE,
         };
-        let mut timer = interval(TIMER_OUT);
+        let mut timer = crate::rustdesk_interval(interval(TIMER_OUT));
         let mut last_register_sent: Option<Instant> = None;
         let mut last_recv_msg = Instant::now();
         // we won't support connecting to multiple rendzvous servers any more, so we can use a global variable here.
@@ -748,8 +746,17 @@ async fn query_online_states_(
             return Ok((Vec::new(), Vec::new()));
         }
 
-        let mut socket = create_online_stream().await?;
-        socket.send(&msg_out).await?;
+        let mut socket = match create_online_stream().await {
+            Ok(s) => s,
+            Err(e) => {
+                log::debug!("Failed to create peers online stream, {e}");
+                return Ok((vec![], ids.clone()));
+            }
+        };
+        if let Err(e) = socket.send(&msg_out).await {
+            log::debug!("Failed to send peers online states query, {e}");
+            return Ok((vec![], ids.clone()));
+        }
         if let Some(msg_in) = crate::common::get_next_nonkeyexchange_msg(&mut socket, None).await {
             match msg_in.union {
                 Some(rendezvous_message::Union::OnlineResponse(online_response)) => {

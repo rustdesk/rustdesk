@@ -13,6 +13,11 @@ extern "C" bool CanUseNewApiForScreenCaptureCheck() {
     #endif
 }
 
+extern "C" uint32_t majorVersion() {
+    NSOperatingSystemVersion version = [[NSProcessInfo processInfo] operatingSystemVersion];
+    return version.majorVersion;
+}
+
 extern "C" bool IsCanScreenRecording(bool prompt) {
     #ifdef NO_InputMonitoringAuthStatus
     return false;
@@ -113,7 +118,7 @@ extern "C" float BackingScaleFactor() {
 // https://github.com/jhford/screenresolution/blob/master/cg_utils.c
 // https://github.com/jdoupe/screenres/blob/master/setgetscreen.m
 
-size_t bitDepth(CGDisplayModeRef mode) {	
+size_t bitDepth(CGDisplayModeRef mode) {
     size_t depth = 0;
     // Deprecated, same display same bpp? 
     // https://stackoverflow.com/questions/8210824/how-to-avoid-cgdisplaymodecopypixelencoding-to-get-bpp

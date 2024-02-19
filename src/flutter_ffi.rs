@@ -701,6 +701,12 @@ pub fn session_set_size(_session_id: SessionID, _display: usize, _width: usize, 
     super::flutter::session_set_size(_session_id, _display, _width, _height)
 }
 
+pub fn session_send_selected_session_id(session_id: SessionID, sid: String) {
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
+        session.send_selected_session_id(sid);
+    }
+}
+
 pub fn main_get_sound_inputs() -> Vec<String> {
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     return get_sound_inputs();
@@ -841,7 +847,7 @@ pub fn main_check_connect_status() {
 }
 
 pub fn main_is_using_public_server() -> bool {
-    using_public_server()
+    crate::using_public_server()
 }
 
 pub fn main_discover() {

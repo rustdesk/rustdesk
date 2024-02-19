@@ -1149,6 +1149,8 @@ pub struct LoginConfigHandler {
     pub custom_fps: Arc<Mutex<Option<usize>>>,
     pub adapter_luid: Option<i64>,
     pub mark_unsupported: Vec<CodecFormat>,
+    pub selected_windows_session_id: Option<u32>,
+    pub peer_info: Option<PeerInfo>,
 }
 
 impl Deref for LoginConfigHandler {
@@ -1235,6 +1237,7 @@ impl LoginConfigHandler {
         self.received = false;
         self.switch_uuid = switch_uuid;
         self.adapter_luid = adapter_luid;
+        self.selected_windows_session_id = None;
     }
 
     /// Check if the client should auto login.
@@ -1511,14 +1514,18 @@ impl LoginConfigHandler {
     ///
     /// * `ignore_default` - If `true`, ignore the default value of the option.
     fn get_option_message(&self, ignore_default: bool) -> Option<OptionMessage> {
-        if self.conn_type.eq(&ConnType::FILE_TRANSFER)
-            || self.conn_type.eq(&ConnType::PORT_FORWARD)
-            || self.conn_type.eq(&ConnType::RDP)
-        {
+        if self.conn_type.eq(&ConnType::PORT_FORWARD) || self.conn_type.eq(&ConnType::RDP) {
             return None;
         }
         let mut n = 0;
         let mut msg = OptionMessage::new();
+        // Version 1.2.5 can remove this, and OptionMessage is not needed for file transfer
+        msg.support_windows_specific_session = BoolOption::Yes.into();
+        n += 1;
+
+        if self.conn_type.eq(&ConnType::FILE_TRANSFER) {
+            return Some(msg);
+        }
         let q = self.image_quality.clone();
         if let Some(q) = self.get_image_quality_enum(&q, ignore_default) {
             msg.image_quality = q.into();
@@ -1526,7 +1533,7 @@ impl LoginConfigHandler {
         } else if q == "custom" {
             let config = self.load_config();
             let allow_more =
-                !crate::ui_interface::using_public_server() || self.direct == Some(true);
+                !crate::using_public_server() || self.direct == Some(true);
             let quality = if config.custom_image_quality.is_empty() {
                 50
             } else {
@@ -1581,7 +1588,6 @@ impl LoginConfigHandler {
                 &self.mark_unsupported,
             ));
         n += 1;
-
         if n > 0 {
             Some(msg)
         } else {
@@ -2591,7 +2597,7 @@ pub async fn handle_hash(
     peer: &mut Stream,
 ) {
     lc.write().unwrap().hash = hash.clone();
-    let uuid = lc.read().unwrap().switch_uuid.clone();
+    let uuid = lc.write().unwrap().switch_uuid.take();
     if let Some(uuid) = uuid {
         if let Ok(uuid) = uuid::Uuid::from_str(&uuid) {
             send_switch_login_request(lc.clone(), peer, uuid).await;
@@ -2740,6 +2746,7 @@ pub trait Interface: Send + Clone + 'static + Sized {
     fn msgbox(&self, msgtype: &str, title: &str, text: &str, link: &str);
     fn handle_login_error(&self, err: &str) -> bool;
     fn handle_peer_info(&self, pi: PeerInfo);
+    fn set_multiple_windows_session(&self, sessions: Vec<WindowsSession>);
     fn on_error(&self, err: &str) {
         self.msgbox("error", "Error", err, "");
     }

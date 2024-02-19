@@ -326,6 +326,8 @@ class MyTheme {
   );
 
   static ThemeData lightTheme = ThemeData(
+    // https://stackoverflow.com/questions/77537315/after-upgrading-to-flutter-3-16-the-app-bar-background-color-button-size-and
+    useMaterial3: false,
     brightness: Brightness.light,
     hoverColor: Color.fromARGB(255, 224, 224, 224),
     scaffoldBackgroundColor: Colors.white,
@@ -418,6 +420,7 @@ class MyTheme {
     ],
   );
   static ThemeData darkTheme = ThemeData(
+    useMaterial3: false,
     brightness: Brightness.dark,
     hoverColor: Color.fromARGB(255, 45, 46, 53),
     scaffoldBackgroundColor: Color(0xFF18191E),
@@ -2552,7 +2555,7 @@ Future<void> start_service(bool is_start) async {
   }
 }
 
-typedef Future<bool> WhetherUseRemoteBlock();
+typedef WhetherUseRemoteBlock = Future<bool> Function();
 Widget buildRemoteBlock({required Widget child, WhetherUseRemoteBlock? use}) {
   var block = false.obs;
   return Obx(() => MouseRegion(
@@ -2978,4 +2981,92 @@ Future<bool> setServerConfig(
     gFFI.userModel.logOut(apiServer: oldApiServer);
   }
   return true;
+}
+
+ColorFilter? svgColor(Color? color) {
+  if (color == null) {
+    return null;
+  } else {
+    return ColorFilter.mode(color, BlendMode.srcIn);
+  }
+}
+
+// ignore: must_be_immutable
+class ComboBox extends StatelessWidget {
+  late final List<String> keys;
+  late final List<String> values;
+  late final String initialKey;
+  late final Function(String key) onChanged;
+  late final bool enabled;
+  late String current;
+
+  ComboBox({
+    Key? key,
+    required this.keys,
+    required this.values,
+    required this.initialKey,
+    required this.onChanged,
+    this.enabled = true,
+  }) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    var index = keys.indexOf(initialKey);
+    if (index < 0) {
+      index = 0;
+    }
+    var ref = values[index].obs;
+    current = keys[index];
+    return Container(
+      decoration: BoxDecoration(
+        border: Border.all(
+          color: enabled
+              ? MyTheme.color(context).border2 ?? MyTheme.border
+              : MyTheme.border,
+        ),
+        borderRadius:
+            BorderRadius.circular(8), //border raiuds of dropdown button
+      ),
+      height: 42, // should be the height of a TextField
+      child: Obx(() => DropdownButton<String>(
+            isExpanded: true,
+            value: ref.value,
+            elevation: 16,
+            underline: Container(),
+            style: TextStyle(
+                color: enabled
+                    ? Theme.of(context).textTheme.titleMedium?.color
+                    : disabledTextColor(context, enabled)),
+            icon: const Icon(
+              Icons.expand_more_sharp,
+              size: 20,
+            ).marginOnly(right: 15),
+            onChanged: enabled
+                ? (String? newValue) {
+                    if (newValue != null && newValue != ref.value) {
+                      ref.value = newValue;
+                      current = newValue;
+                      onChanged(keys[values.indexOf(newValue)]);
+                    }
+                  }
+                : null,
+            items: values.map<DropdownMenuItem<String>>((String value) {
+              return DropdownMenuItem<String>(
+                value: value,
+                child: Text(
+                  value,
+                  style: const TextStyle(fontSize: 15),
+                  overflow: TextOverflow.ellipsis,
+                ).marginOnly(left: 15),
+              );
+            }).toList(),
+          )),
+    ).marginOnly(bottom: 5);
+  }
+}
+
+Color? disabledTextColor(BuildContext context, bool enabled) {
+  return enabled
+      ? null
+      : Theme.of(context).textTheme.titleLarge?.color?.withOpacity(0.6);
 }

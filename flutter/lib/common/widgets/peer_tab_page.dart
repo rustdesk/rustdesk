@@ -88,6 +88,9 @@ class _PeerTabPageState extends State<PeerTabPage>
 
   Future<void> handleTabSelection(int tabIndex) async {
     if (tabIndex < entries.length) {
+      if (tabIndex != gFFI.peerTabModel.currentTab) {
+        gFFI.peerTabModel.setCurrentTabCachedPeers([]);
+      }
       gFFI.peerTabModel.setCurrentTab(tabIndex);
       entries[tabIndex].load(hint: false);
     }
@@ -237,7 +240,7 @@ class _PeerTabPageState extends State<PeerTabPage>
             "assets/checkbox-outline.svg",
             width: 18,
             height: 18,
-            color: textColor,
+            colorFilter: svgColor(textColor),
           )),
     );
   }
@@ -333,15 +336,26 @@ class _PeerTabPageState extends State<PeerTabPage>
   Widget createMultiSelectionBar() {
     final model = Provider.of<PeerTabModel>(context);
     return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        deleteSelection(),
-        addSelectionToFav(),
-        addSelectionToAb(),
-        editSelectionTags(),
-        Expanded(child: Container()),
-        selectionCount(model.selectedPeers.length),
-        selectAll(),
-        closeSelection(),
+        Offstage(
+          offstage: model.selectedPeers.isEmpty,
+          child: Row(
+            children: [
+              deleteSelection(),
+              addSelectionToFav(),
+              addSelectionToAb(),
+              editSelectionTags(),
+            ],
+          ),
+        ),
+        Row(
+          children: [
+            selectionCount(model.selectedPeers.length),
+            selectAll(),
+            closeSelection(),
+          ],
+        )
       ],
     );
   }
@@ -585,7 +599,7 @@ class _PeerTabPageState extends State<PeerTabPage>
                   "assets/chevron_up_chevron_down.svg",
                   width: 18,
                   height: 18,
-                  color: textColor,
+                  colorFilter: svgColor(textColor),
                 )),
             onTap: showMenu,
           );

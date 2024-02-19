@@ -227,6 +227,7 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
           update() async {
             setState(() {});
           }
+
           change2fa(callback: update);
         },
       ),
@@ -718,7 +719,7 @@ class ScanButton extends StatelessWidget {
 }
 
 class _DisplayPage extends StatefulWidget {
-  const _DisplayPage({super.key});
+  const _DisplayPage();
 
   @override
   State<_DisplayPage> createState() => __DisplayPageState();
