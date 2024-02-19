@@ -1269,6 +1269,14 @@ impl<T: InvokeUiSession> Session<T> {
                             self.on_error(
                                 "No active console user logged on, please connect and logon first.",
                             );
+                        } else {
+                            #[cfg(not(feature = "flutter"))]
+                            {
+                                let remote_dir = self.get_option("remote_dir".to_string());
+                                let show_hidden =
+                                    !self.get_option("remote_show_hidden".to_string()).is_empty();
+                                self.read_remote_dir(remote_dir, show_hidden);
+                            }
                         }
                     } else {
                         self.msgbox(
