@@ -838,7 +838,7 @@ impl InvokeUiSession for FlutterHandler {
         self.push_event(
             "set_multiple_windows_session",
             vec![(
-                "user_sessions",
+                "windows_sessions",
                 &serde_json::ser::to_string(&msg_vec).unwrap_or("".to_owned()),
             )],
         );

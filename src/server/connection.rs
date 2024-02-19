@@ -237,8 +237,8 @@ pub struct Connection {
     file_remove_log_control: FileRemoveLogControl,
     #[cfg(feature = "gpucodec")]
     supported_encoding_flag: (bool, Option<bool>),
-    need_sub_remote_service: bool,
-    remote_service_subed: bool,
+    services_subed: bool,
+    delayed_read_dir: Option<(String, bool)>,
 }
 
 impl ConnInner {
@@ -386,8 +386,8 @@ impl Connection {
             file_remove_log_control: FileRemoveLogControl::new(id),
             #[cfg(feature = "gpucodec")]
             supported_encoding_flag: (false, None),
-            need_sub_remote_service: false,
-            remote_service_subed: false,
+            services_subed: false,
+            delayed_read_dir: None,
         };
         let addr = hbb_common::try_into_v4(addr);
         if !conn.on_open(addr).await {
@@ -1194,9 +1194,9 @@ impl Connection {
         .into();
 
         let mut sub_service = false;
-        let mut delay_sub_service = false;
+        let mut wait_session_id_confirm = false;
         #[cfg(windows)]
-        self.handle_windows_specific_session(&mut pi, &mut delay_sub_service);
+        self.handle_windows_specific_session(&mut pi, &mut wait_session_id_confirm);
         if self.file_transfer.is_some() {
             res.set_peer_info(pi);
         } else {
@@ -1256,18 +1256,22 @@ impl Connection {
             } else {
                 ""
             };
-            self.read_dir(dir, show_hidden);
+            if !wait_session_id_confirm {
+                self.read_dir(dir, show_hidden);
+            } else {
+                self.delayed_read_dir = Some((dir.to_owned(), show_hidden));
+            }
         } else if sub_service {
-            self.need_sub_remote_service = true;
-            if !delay_sub_service {
-                self.check_sub_remote_services();
+            if !wait_session_id_confirm {
+                self.try_sub_services();
             }
         }
     }
 
-    fn check_sub_remote_services(&mut self) {
-        if self.need_sub_remote_service && !self.remote_service_subed {
-            self.remote_service_subed = true;
+    fn try_sub_services(&mut self) {
+        let is_remote = self.file_transfer.is_none() && self.port_forward_socket.is_none();
+        if is_remote && !self.services_subed {
+            self.services_subed = true;
             if let Some(s) = self.server.upgrade() {
                 let mut noperms = Vec::new();
                 if !self.peer_keyboard_enabled() && !self.show_remote_cursor {
@@ -1293,7 +1297,11 @@ impl Connection {
     }
 
     #[cfg(windows)]
-    fn handle_windows_specific_session(&mut self, pi: &mut PeerInfo, delay_sub_service: &mut bool) {
+    fn handle_windows_specific_session(
+        &mut self,
+        pi: &mut PeerInfo,
+        wait_session_id_confirm: &mut bool,
+    ) {
         let sessions = crate::platform::get_available_sessions(true);
         let current_sid = crate::platform::get_current_process_session_id().unwrap_or_default();
         if crate::platform::is_installed()
@@ -1301,7 +1309,8 @@ impl Connection {
             && raii::AuthedConnID::remote_and_file_conn_count() == 1
             && sessions.len() > 1
             && current_sid != 0
-            && self.lr.option.support_windows_specific_session == BoolOption::Yes.into()
+            && (get_version_number(&self.lr.version) > get_version_number("1.2.4")
+                || self.lr.option.support_windows_specific_session == BoolOption::Yes.into())
         {
             pi.windows_sessions = Some(WindowsSessions {
                 sessions,
@@ -1309,7 +1318,7 @@ impl Connection {
                 ..Default::default()
             })
             .into();
-            *delay_sub_service = true;
+            *wait_session_id_confirm = true;
         }
     }
 
@@ -1976,6 +1985,12 @@ impl Connection {
                 }
                 Some(message::Union::FileAction(fa)) => {
                     if self.file_transfer.is_some() {
+                        if self.delayed_read_dir.is_some() {
+                            if let Some(file_action::Union::ReadDir(rd)) = fa.union {
+                                self.delayed_read_dir = Some((rd.path, rd.include_hidden));
+                            }
+                            return true;
+                        }
                         match fa.union {
                             Some(file_action::Union::ReadDir(rd)) => {
                                 self.read_dir(&rd.path, rd.include_hidden);
@@ -2284,7 +2299,13 @@ impl Connection {
                             });
                             return false;
                         }
-                        self.check_sub_remote_services();
+                        if self.file_transfer.is_some() {
+                            if let Some((dir, show_hidden)) = self.delayed_read_dir.take() {
+                                self.read_dir(&dir, show_hidden);
+                            }
+                        } else {
+                            self.try_sub_services();
+                        }
                     }
                     _ => {}
                 },
