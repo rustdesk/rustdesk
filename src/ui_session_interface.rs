@@ -1023,6 +1023,7 @@ impl<T: InvokeUiSession> Session<T> {
         if true == force_relay {
             self.lc.write().unwrap().force_relay = true;
         }
+        self.lc.write().unwrap().peer_info = None;
         let mut lock = self.thread.lock().unwrap();
         // No need to join the previous thread, because it will exit automatically.
         // And the previous thread will not change important states.
@@ -1260,6 +1261,25 @@ impl<T: InvokeUiSession> Session<T> {
             let mut msg = Message::new();
             msg.set_misc(misc);
             self.send(Data::Message(msg));
+            let pi = self.lc.read().unwrap().peer_info.clone();
+            if let Some(pi) = pi {
+                if pi.windows_sessions.current_sid == sid {
+                    if self.is_file_transfer() {
+                        if pi.username.is_empty() {
+                            self.on_error(
+                                "No active console user logged on, please connect and logon first.",
+                            );
+                        }
+                    } else {
+                        self.msgbox(
+                            "success",
+                            "Successful",
+                            "Connected, waiting for image...",
+                            "",
+                        );
+                    }
+                }
+            }
         } else {
             log::error!("selected invalid sid: {}", sid);
         }
@@ -1371,7 +1391,7 @@ impl<T: InvokeUiSession> Interface for Session<T> {
 
     fn handle_peer_info(&self, mut pi: PeerInfo) {
         log::debug!("handle_peer_info :{:?}", pi);
-        pi.username = self.lc.read().unwrap().get_username(&pi);
+        self.lc.write().unwrap().peer_info = Some(pi.clone());
         if pi.current_display as usize >= pi.displays.len() {
             pi.current_display = 0;
         }
@@ -1379,7 +1399,7 @@ impl<T: InvokeUiSession> Interface for Session<T> {
             self.set_permission("restart", false);
         }
         if self.is_file_transfer() {
-            if pi.username.is_empty() {
+            if pi.username.is_empty() && pi.windows_sessions.sessions.is_empty() {
                 self.on_error("No active console user logged on, please connect and logon first.");
                 return;
             }

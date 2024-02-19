@@ -1150,6 +1150,7 @@ pub struct LoginConfigHandler {
     pub adapter_luid: Option<i64>,
     pub mark_unsupported: Vec<CodecFormat>,
     pub selected_windows_session_id: Option<u32>,
+    pub peer_info: Option<PeerInfo>,
 }
 
 impl Deref for LoginConfigHandler {
@@ -1518,6 +1519,7 @@ impl LoginConfigHandler {
         }
         let mut n = 0;
         let mut msg = OptionMessage::new();
+        // Version 1.2.5 can remove this, and OptionMessage is not needed for file transfer
         msg.support_windows_specific_session = BoolOption::Yes.into();
         n += 1;
 

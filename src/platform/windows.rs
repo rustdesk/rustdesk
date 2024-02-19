@@ -746,6 +746,10 @@ pub fn get_current_process_session_id() -> Option<u32> {
 }
 
 pub fn get_active_username() -> String {
+    // get_active_user will give console username higher priority
+    if let Some(name) = get_current_session_username() {
+        return name;
+    }
     if !is_root() {
         return crate::username();
     }
@@ -765,6 +769,14 @@ pub fn get_active_username() -> String {
         .unwrap_or("??".to_owned())
         .trim_end_matches('\0')
         .to_owned()
+}
+
+fn get_current_session_username() -> Option<String> {
+    let Some(sid) = get_current_process_session_id() else {
+        log::error!("get_current_process_session_id failed");
+        return None;
+    };
+    Some(get_session_username(sid))
 }
 
 fn get_session_username(session_id: u32) -> String {
@@ -799,22 +811,24 @@ pub fn get_available_sessions(name: bool) -> Vec<WindowsSession> {
     };
     let mut v: Vec<WindowsSession> = vec![];
     // https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-wtsgetactiveconsolesessionid
-    let physical_console_session_id = unsafe { get_current_session(FALSE) };
-    let physical_console_username = get_session_username(physical_console_session_id);
-    let physical_console_name = if name {
-        if physical_console_username.is_empty() {
-            "Console".to_owned()
+    let physical_console_sid = unsafe { get_current_session(FALSE) };
+    if physical_console_sid != u32::MAX {
+        let physical_console_name = if name {
+            let physical_console_username = get_session_username(physical_console_sid);
+            if physical_console_username.is_empty() {
+                "Console".to_owned()
+            } else {
+                format!("Console:{physical_console_username}")
+            }
         } else {
-            format!("Console:{physical_console_username}")
-        }
-    } else {
-        "".to_owned()
-    };
-    v.push(WindowsSession {
-        sid: physical_console_session_id,
-        name: physical_console_name,
-        ..Default::default()
-    });
+            "".to_owned()
+        };
+        v.push(WindowsSession {
+            sid: physical_console_sid,
+            name: physical_console_name,
+            ..Default::default()
+        });
+    }
     // https://learn.microsoft.com/en-us/previous-versions//cc722458(v=technet.10)?redirectedfrom=MSDN
     for type_session_id in station_session_id_array.split(",") {
         let split: Vec<_> = type_session_id.split(":").collect();
@@ -867,11 +881,9 @@ pub fn get_active_user_home() -> Option<PathBuf> {
 }
 
 pub fn is_prelogin() -> bool {
-    let Some(sid) = get_current_process_session_id() else {
-        log::error!("get_current_process_session_id failed");
+    let Some(username) = get_current_session_username() else {
         return false;
     };
-    let username = get_session_username(sid);
     username.is_empty() || username == "SYSTEM"
 }
 
@@ -2565,6 +2577,9 @@ impl WallPaperRemover {
         // https://superuser.com/questions/1218413/write-to-current-users-registry-through-a-different-admin-account
         let (hkcu, sid) = if is_root() {
             let username = get_active_username();
+            if username.is_empty() {
+                bail!("failed to get username");
+            }
             let sid = get_sid_of_user(&username)?;
             log::info!("username: {username}, sid: {sid}");
             (RegKey::predef(HKEY_USERS), format!("{}\\", sid))
