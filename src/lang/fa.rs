@@ -451,8 +451,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Resolution", "وضوح"),
         ("No transfers in progress", "هیچ انتقالی در حال انجام نیست"),
         ("Set one-time password length", "طول رمز یکبار مصرف را تعیین کنید"),
-        ("install_cert_tip", "RustDesk نصب گواهی"),
-        ("confirm_install_cert_tip", "استفاده خواهد شد RustDesk است و شما می توانید به این گواهی اعتماد کنید. این گواهی برای اعتماد و نصب درایورهای RustDesk این گواهینامه یک گواهی تست"),
         ("RDP Settings", "RDP تنظیمات"),
         ("Sort by", "مرتب سازی بر اساس"),
         ("New Connection", "اتصال جدید"),

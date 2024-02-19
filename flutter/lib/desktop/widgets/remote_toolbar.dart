@@ -1048,10 +1048,11 @@ class _DisplayMenuState extends State<_DisplayMenu> {
         ffi: widget.ffi,
         screenAdjustor: _screenAdjustor,
       ),
-      _VirtualDisplayMenu(
-        id: widget.id,
-        ffi: widget.ffi,
-      ),
+      // We may add this feature if it is needed and we have an EV certificate.
+      // _VirtualDisplayMenu(
+      //   id: widget.id,
+      //   ffi: widget.ffi,
+      // ),
       Divider(),
       toggles(),
     ];
