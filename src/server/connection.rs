@@ -237,7 +237,7 @@ pub struct Connection {
     file_remove_log_control: FileRemoveLogControl,
     #[cfg(feature = "gpucodec")]
     supported_encoding_flag: (bool, Option<bool>),
-    remote_services_subed: bool,
+    services_subed: bool,
     delayed_read_dir: Option<(String, bool)>,
 }
 
@@ -386,7 +386,7 @@ impl Connection {
             file_remove_log_control: FileRemoveLogControl::new(id),
             #[cfg(feature = "gpucodec")]
             supported_encoding_flag: (false, None),
-            remote_services_subed: false,
+            services_subed: false,
             delayed_read_dir: None,
         };
         let addr = hbb_common::try_into_v4(addr);
@@ -1270,8 +1270,8 @@ impl Connection {
 
     fn try_sub_services(&mut self) {
         let is_remote = self.file_transfer.is_none() && self.port_forward_socket.is_none();
-        if is_remote && !self.remote_services_subed {
-            self.remote_services_subed = true;
+        if is_remote && !self.services_subed {
+            self.services_subed = true;
             if let Some(s) = self.server.upgrade() {
                 let mut noperms = Vec::new();
                 if !self.peer_keyboard_enabled() && !self.show_remote_cursor {
