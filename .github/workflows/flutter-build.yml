@@ -8,7 +8,7 @@ on:
         default: true
       upload-tag:
         type: string
-        default: "nightly"
+        default: "1.2.3-1"
 
 env:
   CARGO_NDK_VERSION: "3.1.2"
