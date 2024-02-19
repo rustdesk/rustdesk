@@ -5133,7 +5133,7 @@ dependencies = [
 
 [[package]]
 name = "rustdesk"
-version = "1.2.3"
+version = "1.2.3-1"
 dependencies = [
  "android_logger",
  "arboard",
