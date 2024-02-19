@@ -62,7 +62,7 @@ jobs:
       - name: Build rustdesk
         env:
           VCPKG_ROOT: C:\rustdesk_thirdpary_lib\vcpkg
-        run: python3 .\build.py --portable --hwcodec --flutter --feature IddDriver
+        run: python3 .\build.py --portable --hwcodec --flutter --feature
 
       - name: Build self-extracted executable
         shell: bash
