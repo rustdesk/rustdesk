@@ -66,7 +66,6 @@ class _InstallPageBodyState extends State<_InstallPageBody>
   late final TextEditingController controller;
   final RxBool startmenu = true.obs;
   final RxBool desktopicon = true.obs;
-  final RxBool driverCert = true.obs;
   final RxBool showProgress = false.obs;
   final RxBool btnEnabled = true.obs;
 
@@ -158,10 +157,6 @@ class _InstallPageBodyState extends State<_InstallPageBody>
               Option(startmenu, label: 'Create start menu shortcuts')
                   .marginOnly(bottom: 7),
               Option(desktopicon, label: 'Create desktop icon'),
-              Offstage(
-                offstage: !Platform.isWindows,
-                child: Option(driverCert, label: 'install_cert_tip'),
-              ).marginOnly(top: 7),
               Container(
                   padding: EdgeInsets.all(12),
                   decoration: BoxDecoration(
@@ -253,43 +248,10 @@ class _InstallPageBodyState extends State<_InstallPageBody>
       String args = '';
       if (startmenu.value) args += ' startmenu';
       if (desktopicon.value) args += ' desktopicon';
-      if (driverCert.value) args += ' driverCert';
       bind.installInstallMe(options: args, path: controller.text);
     }
 
-    if (driverCert.isTrue) {
-      final tag = 'install-info-install-cert-confirm';
-      final btns = [
-        OutlinedButton.icon(
-          icon: Icon(Icons.close_rounded, size: 16),
-          label: Text(translate('Cancel')),
-          onPressed: () => gFFI.dialogManager.dismissByTag(tag),
-          style: buttonStyle,
-        ),
-        ElevatedButton.icon(
-          icon: Icon(Icons.done_rounded, size: 16),
-          label: Text(translate('OK')),
-          onPressed: () {
-            gFFI.dialogManager.dismissByTag(tag);
-            do_install();
-          },
-          style: buttonStyle,
-        )
-      ];
-      gFFI.dialogManager.show(
-        (setState, close, context) => CustomAlertDialog(
-          title: null,
-          content: SelectionArea(
-              child:
-                  msgboxContent('info', 'Warning', 'confirm_install_cert_tip')),
-          actions: btns,
-          onCancel: close,
-        ),
-        tag: tag,
-      );
-    } else {
-      do_install();
-    }
+    do_install();
   }
 
   void selectInstallPath() async {

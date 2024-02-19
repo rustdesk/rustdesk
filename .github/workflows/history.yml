@@ -10,7 +10,7 @@ env:
   # vcpkg version: 2022.05.10
   # for multiarch gcc compatibility
   VCPKG_COMMIT_ID: "501db0f17ef6df184fcdbfbe0f87cde2313b6ab1"
-  VERSION: "1.2.3"
+  VERSION: "1.2.3-1"
 
 jobs:
   build-for-history-windows:
@@ -62,7 +62,7 @@ jobs:
       - name: Build rustdesk
         env:
           VCPKG_ROOT: C:\rustdesk_thirdpary_lib\vcpkg
-        run: python3 .\build.py --portable --hwcodec --flutter --feature IddDriver
+        run: python3 .\build.py --portable --hwcodec --flutter --feature
 
       - name: Build self-extracted executable
         shell: bash
