@@ -818,7 +818,7 @@ pub fn get_available_sessions(name: bool) -> Vec<WindowsSession> {
             if physical_console_username.is_empty() {
                 "Console".to_owned()
             } else {
-                format!("Console:{physical_console_username}")
+                format!("Console: {physical_console_username}")
             }
         } else {
             "".to_owned()
@@ -836,7 +836,12 @@ pub fn get_available_sessions(name: bool) -> Vec<WindowsSession> {
             if let Ok(sid) = split[1].parse::<u32>() {
                 if !v.iter().any(|e| (*e).sid == sid) {
                     let name = if name {
-                        format!("{}:{}", split[0], get_session_username(sid))
+                        let name = get_session_username(sid);
+                        if name.is_empty() {
+                            split[0].to_string()
+                        } else {
+                            format!("{}: {}", split[0], name)
+                        }
                     } else {
                         "".to_owned()
                     };
