@@ -494,9 +494,9 @@ class FfiModel with ChangeNotifier {
       Map<String, dynamic> evt, SessionID sessionId, String peerId) {
     if (parent.target == null) return;
     final dialogManager = parent.target!.dialogManager;
-    final sessions = evt['user_sessions'];
-    final title = translate('Multiple active user sessions found');
-    final text = translate('Please select the user you want to connect to');
+    final sessions = evt['windows_sessions'];
+    final title = translate('Multiple Windows sessions found');
+    final text = translate('Please select the session you want to connect to');
     final type = "";
 
     showWindowsSessionsDialog(

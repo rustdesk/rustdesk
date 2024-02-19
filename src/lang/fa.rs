@@ -586,7 +586,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("enter-2fa-title", "احراز هویت دو مرحله ای"),
         ("Email verification code must be 6 characters.", "کد تأیید ایمیل باید 6 کاراکتر باشد"),
         ("2FA code must be 6 digits.", "کد احراز هویت دو مرحله ای باید 6 رقم باشد"),
-        ("Multiple active user sessions found", ""),
-        ("Please select the user you want to connect to", ""),
+        ("Multiple Windows sessions found", ""),
+        ("Please select the session you want to connect to", ""),
     ].iter().cloned().collect();
 }

@@ -460,7 +460,7 @@ function awake() {
 
 class MultipleSessionComponent extends Reactor.Component {
     this var sessions = [];
-    this var messageText = translate("Please select the user you want to connect to");
+    this var messageText = translate("Please select the session you want to connect to");
 
     function this(params) {
         if (params && params.sessions) {
