@@ -1387,6 +1387,11 @@ pub fn rustdesk_interval(i: Interval) -> ThrottledInterval {
 )))]
 pub struct ClipboardContext(arboard::Clipboard);
 
+#[cfg(not(any(
+    target_os = "android",
+    target_os = "ios",
+    all(target_os = "linux", feature = "unix-file-copy-paste")
+)))]
 impl ClipboardContext {
     #[inline]
     #[cfg(any(target_os = "windows", target_os = "macos"))]
@@ -1513,6 +1518,11 @@ mod tests {
     }
 
     #[tokio::test]
+    #[cfg(not(any(
+        target_os = "android",
+        target_os = "ios",
+        all(target_os = "linux", feature = "unix-file-copy-paste")
+    )))]
     async fn test_clipboard_context() {
         #[cfg(target_os = "linux")]
         let dur = {
