@@ -402,8 +402,8 @@ class DesktopTab extends StatelessWidget {
                             offstage: !showLogo,
                             child: SvgPicture.asset(
                               'assets/logo.svg',
-                              width: 16,
-                              height: 16,
+                              width: 20,
+                              height: 20,
                             )),
                         Offstage(
                             offstage: !showTitle,
@@ -412,7 +412,7 @@ class DesktopTab extends StatelessWidget {
                               style: TextStyle(fontSize: 13),
                             ).marginOnly(left: 2))
                       ]).marginOnly(
-                        left: 5,
+                        left: 10,
                         right: 10,
                       ),
                     ),
