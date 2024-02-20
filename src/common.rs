@@ -1,4 +1,5 @@
 use std::{
+    borrow::Cow,
     future::Future,
     sync::{Arc, Mutex, RwLock},
     task::Poll,
@@ -11,13 +12,6 @@ pub enum GrabState {
     Wait,
     Exit,
 }
-
-#[cfg(not(any(
-    target_os = "android",
-    target_os = "ios",
-    all(target_os = "linux", feature = "unix-file-copy-paste")
-)))]
-pub use arboard::Clipboard as ClipboardContext;
 
 #[cfg(all(target_os = "linux", feature = "unix-file-copy-paste"))]
 static X11_CLIPBOARD: once_cell::sync::OnceCell<x11_clipboard::Clipboard> =
@@ -1374,9 +1368,7 @@ impl ThrottledInterval {
                     Poll::Pending
                 }
             }
-            Poll::Pending => {
-                Poll::Pending
-            },
+            Poll::Pending => Poll::Pending,
         }
     }
 }
@@ -1386,6 +1378,73 @@ pub type RustDeskInterval = ThrottledInterval;
 #[inline]
 pub fn rustdesk_interval(i: Interval) -> ThrottledInterval {
     ThrottledInterval::new(i)
+}
+
+#[cfg(not(any(
+    target_os = "android",
+    target_os = "ios",
+    all(target_os = "linux", feature = "unix-file-copy-paste")
+)))]
+pub struct ClipboardContext(arboard::Clipboard);
+
+impl ClipboardContext {
+    #[inline]
+    #[cfg(any(target_os = "windows", target_os = "macos"))]
+    pub fn new() -> ResultType<ClipboardContext> {
+        Ok(ClipboardContext(arboard::Clipboard::new()?))
+    }
+
+    #[cfg(target_os = "linux")]
+    pub fn new() -> ResultType<ClipboardContext> {
+        let dur = arboard::Clipboard::get_x11_server_conn_timeout();
+        let dur_bak = dur;
+        let _wayland_call_on_ret = SimpleCallOnReturn {
+            b: true,
+            f: Box::new(move || arboard::Clipboard::set_x11_server_conn_timeout(dur_bak)),
+        };
+
+        for i in 1..4 {
+            arboard::Clipboard::set_x11_server_conn_timeout(dur * i);
+            match arboard::Clipboard::new() {
+                Ok(c) => return Ok(ClipboardContext(c)),
+                Err(arboard::Error::X11ServerConnTimeout) => continue,
+                Err(err) => return Err(err.into()),
+            }
+        }
+        bail!("Failed to create clipboard context, timeout");
+    }
+
+    #[inline]
+    #[cfg(any(target_os = "windows", target_os = "macos"))]
+    pub fn get_text(&mut self) -> ResultType<String> {
+        Ok(self.0.get_text()?)
+    }
+
+    #[cfg(target_os = "linux")]
+    pub fn get_text(&mut self) -> ResultType<String> {
+        let dur = arboard::Clipboard::get_x11_server_conn_timeout();
+        let dur_bak = dur;
+        let _wayland_call_on_ret = SimpleCallOnReturn {
+            b: true,
+            f: Box::new(move || arboard::Clipboard::set_x11_server_conn_timeout(dur_bak)),
+        };
+
+        for i in 1..4 {
+            arboard::Clipboard::set_x11_server_conn_timeout(dur * i);
+            match self.0.get_text() {
+                Ok(s) => return Ok(s),
+                Err(arboard::Error::X11ServerConnTimeout) => continue,
+                Err(err) => return Err(err.into()),
+            }
+        }
+        bail!("Failed to get text, timeout");
+    }
+
+    #[inline]
+    pub fn set_text<'a, T: Into<Cow<'a, str>>>(&mut self, text: T) -> ResultType<()> {
+        self.0.set_text(text)?;
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -1451,5 +1510,25 @@ mod tests {
         assert_eq!(Duration::from_secs_f64(dur.as_secs_f64() * 0.923 * 1e-9), Duration::from_nanos(1));
         assert_eq!(Duration::from_secs_f64(dur.as_secs_f64() * 0.5 * 1e-9), Duration::from_nanos(1));
         assert_eq!(Duration::from_secs_f64(dur.as_secs_f64() * 0.499 * 1e-9), Duration::from_nanos(0));
+    }
+
+    #[tokio::test]
+    async fn test_clipboard_context() {
+        #[cfg(target_os = "linux")]
+        let dur = {
+            let dur = Duration::from_micros(500);
+            arboard::Clipboard::set_x11_server_conn_timeout(dur);
+            dur
+        };
+
+        let _ctx = ClipboardContext::new();
+        #[cfg(target_os = "linux")]
+        {
+            assert_eq!(
+                arboard::Clipboard::get_x11_server_conn_timeout(),
+                dur,
+                "Failed to restore x11 server conn timeout"
+            );
+        }
     }
 }
