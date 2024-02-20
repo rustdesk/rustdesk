@@ -45,7 +45,7 @@ Qui sotto trovi i server che possono essere usati gratuitamente, la lista potreb
 
 Se hai già installato VS Code e Docker, puoi fare clic sul badge qui sopra per iniziare. Il clic farà sì che VS Code installi automaticamente l'estensione Dev Containers se necessario, cloni il codice sorgente in un volume del container e avvii un container dev.
 
-Consulta [DEVCONTAINER.md](docs/DEVCONTAINER-IT.md) per maggiori informazioni.
+Consulta [DEVCONTAINER.md](DEVCONTAINER-IT.md) per maggiori informazioni.
 
 ## Dipendenze
 
