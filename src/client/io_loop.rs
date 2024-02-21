@@ -17,16 +17,15 @@ use hbb_common::tokio::sync::mpsc::error::TryRecvError;
 use hbb_common::{
     allow_err,
     config::{PeerConfig, TransferSerde},
-    fs,
     fs::{
-        can_enable_overwrite_detection, get_job, get_string, new_send_confirm, DigestCheckResult,
-        RemoveJobMeta,
+        self, can_enable_overwrite_detection, get_job, get_string, new_send_confirm,
+        DigestCheckResult, RemoveJobMeta,
     },
     get_time, log,
-    message_proto::permission_info::Permission,
-    message_proto::*,
+    message_proto::{permission_info::Permission, *},
     protobuf::Message as _,
     rendezvous_proto::ConnType,
+    timeout,
     tokio::{
         self,
         sync::mpsc,
@@ -170,7 +169,8 @@ impl<T: InvokeUiSession> Remote<T> {
                 #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
                 let mut rx_clip_client = rx_clip_client_lock.lock().await;
 
-                let mut status_timer = crate::rustdesk_interval(time::interval(Duration::new(1, 0)));
+                let mut status_timer =
+                    crate::rustdesk_interval(time::interval(Duration::new(1, 0)));
                 let mut fps_instant = Instant::now();
 
                 loop {
@@ -1099,15 +1099,20 @@ impl<T: InvokeUiSession> Remote<T> {
                         if !(self.handler.is_file_transfer() || self.handler.is_port_forward()) {
                             #[cfg(feature = "flutter")]
                             #[cfg(not(any(target_os = "android", target_os = "ios")))]
-                            Client::try_start_clipboard(None);
+                            let rx = Client::try_start_clipboard(None);
                             #[cfg(not(feature = "flutter"))]
                             #[cfg(not(any(target_os = "android", target_os = "ios")))]
-                            Client::try_start_clipboard(Some(
+                            let rx = Client::try_start_clipboard(Some(
                                 crate::client::ClientClipboardContext {
                                     cfg: self.handler.get_permission_config(),
                                     tx: self.sender.clone(),
                                 },
                             ));
+                            // To make sure current text clipboard data is updated.
+                            #[cfg(not(any(target_os = "android", target_os = "ios")))]
+                            if let Some(mut rx) = rx {
+                                timeout(common::CLIPBOARD_INTERVAL, rx.recv()).await.ok();
+                            }
 
                             #[cfg(not(any(target_os = "android", target_os = "ios")))]
                             if let Some(msg_out) = Client::get_current_text_clipboard_msg() {
