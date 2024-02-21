@@ -284,14 +284,18 @@ pub fn create_clipboard_msg(content: String) -> Message {
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub fn check_clipboard(
-    ctx: &mut ClipboardContext,
+    ctx: &mut Option<ClipboardContext>,
     old: Option<&Arc<Mutex<String>>>,
 ) -> Option<Message> {
+    if ctx.is_none() {
+        *ctx = ClipboardContext::new().ok();
+    }
+    let ctx2 = ctx.as_mut()?;
     let side = if old.is_none() { "host" } else { "client" };
     let old = if let Some(old) = old { old } else { &CONTENT };
     let content = {
         let _lock = ARBOARD_MTX.lock().unwrap();
-        ctx.get_text()
+        ctx2.get_text()
     };
     if let Ok(content) = content {
         if content.len() < 2_000_000 && !content.is_empty() {
@@ -1403,7 +1407,7 @@ impl ClipboardContext {
     pub fn new() -> ResultType<ClipboardContext> {
         let dur = arboard::Clipboard::get_x11_server_conn_timeout();
         let dur_bak = dur;
-        let _wayland_call_on_ret = SimpleCallOnReturn {
+        let _restore_timeout_on_ret = SimpleCallOnReturn {
             b: true,
             f: Box::new(move || arboard::Clipboard::set_x11_server_conn_timeout(dur_bak)),
         };
@@ -1429,7 +1433,7 @@ impl ClipboardContext {
     pub fn get_text(&mut self) -> ResultType<String> {
         let dur = arboard::Clipboard::get_x11_server_conn_timeout();
         let dur_bak = dur;
-        let _wayland_call_on_ret = SimpleCallOnReturn {
+        let _restore_timeout_on_ret = SimpleCallOnReturn {
             b: true,
             f: Box::new(move || arboard::Clipboard::set_x11_server_conn_timeout(dur_bak)),
         };
@@ -1508,13 +1512,34 @@ mod tests {
         let dur = Duration::from_secs(1);
 
         assert_eq!(dur * 2, Duration::from_secs(2));
-        assert_eq!(Duration::from_secs_f64(dur.as_secs_f64() * 0.9), Duration::from_millis(900));
-        assert_eq!(Duration::from_secs_f64(dur.as_secs_f64() * 0.923), Duration::from_millis(923));
-        assert_eq!(Duration::from_secs_f64(dur.as_secs_f64() * 0.923 * 1e-3), Duration::from_micros(923));
-        assert_eq!(Duration::from_secs_f64(dur.as_secs_f64() * 0.923 * 1e-6), Duration::from_nanos(923));
-        assert_eq!(Duration::from_secs_f64(dur.as_secs_f64() * 0.923 * 1e-9), Duration::from_nanos(1));
-        assert_eq!(Duration::from_secs_f64(dur.as_secs_f64() * 0.5 * 1e-9), Duration::from_nanos(1));
-        assert_eq!(Duration::from_secs_f64(dur.as_secs_f64() * 0.499 * 1e-9), Duration::from_nanos(0));
+        assert_eq!(
+            Duration::from_secs_f64(dur.as_secs_f64() * 0.9),
+            Duration::from_millis(900)
+        );
+        assert_eq!(
+            Duration::from_secs_f64(dur.as_secs_f64() * 0.923),
+            Duration::from_millis(923)
+        );
+        assert_eq!(
+            Duration::from_secs_f64(dur.as_secs_f64() * 0.923 * 1e-3),
+            Duration::from_micros(923)
+        );
+        assert_eq!(
+            Duration::from_secs_f64(dur.as_secs_f64() * 0.923 * 1e-6),
+            Duration::from_nanos(923)
+        );
+        assert_eq!(
+            Duration::from_secs_f64(dur.as_secs_f64() * 0.923 * 1e-9),
+            Duration::from_nanos(1)
+        );
+        assert_eq!(
+            Duration::from_secs_f64(dur.as_secs_f64() * 0.5 * 1e-9),
+            Duration::from_nanos(1)
+        );
+        assert_eq!(
+            Duration::from_secs_f64(dur.as_secs_f64() * 0.499 * 1e-9),
+            Duration::from_nanos(0)
+        );
     }
 
     #[tokio::test]
