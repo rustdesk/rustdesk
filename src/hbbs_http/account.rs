@@ -97,6 +97,8 @@ pub struct AuthBody {
     pub r#type: String,
     #[serde(default)]
     pub tfa_type: String,
+    #[serde(default)]
+    pub secret: String,
     pub user: UserPayload,
 }
 

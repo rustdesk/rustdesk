@@ -6,7 +6,7 @@ use std::{
 
 use crate::{
     codec::{base_bitrate, enable_gpucodec_option, EncoderApi, EncoderCfg, Quality},
-    AdapterDevice, CodecName, EncodeInput, EncodeYuvFormat, Pixfmt,
+    AdapterDevice, CodecFormat, CodecName, EncodeInput, EncodeYuvFormat, Pixfmt,
 };
 use gpucodec::gpu_common::{
     self, Available, DecodeContext, DynamicContext, EncodeContext, FeatureContext, MAX_GOP,
@@ -87,7 +87,10 @@ impl EncoderApi for GpuEncoder {
                         last_frame_len: 0,
                         same_bad_len_counter: 0,
                     }),
-                    Err(_) => Err(anyhow!(format!("Failed to create encoder"))),
+                    Err(_) => {
+                        hbb_common::config::GpucodecConfig::clear();
+                        Err(anyhow!(format!("Failed to create encoder")))
+                    }
                 }
             }
             _ => Err(anyhow!("encoder type mismatch")),
@@ -300,8 +303,8 @@ pub struct GpuDecoders {
 }
 
 impl GpuDecoder {
-    pub fn try_get(name: CodecName, luid: Option<i64>) -> Option<DecodeContext> {
-        let v: Vec<_> = Self::available(name, luid);
+    pub fn try_get(format: CodecFormat, luid: Option<i64>) -> Option<DecodeContext> {
+        let v: Vec<_> = Self::available(format, luid);
         if v.len() > 0 {
             Some(v[0].clone())
         } else {
@@ -309,11 +312,11 @@ impl GpuDecoder {
         }
     }
 
-    pub fn available(name: CodecName, luid: Option<i64>) -> Vec<DecodeContext> {
+    pub fn available(format: CodecFormat, luid: Option<i64>) -> Vec<DecodeContext> {
         let luid = luid.unwrap_or_default();
-        let data_format = match name {
-            CodecName::H264GPU => gpu_common::DataFormat::H264,
-            CodecName::H265GPU => gpu_common::DataFormat::H265,
+        let data_format = match format {
+            CodecFormat::H264 => gpu_common::DataFormat::H264,
+            CodecFormat::H265 => gpu_common::DataFormat::H265,
             _ => return vec![],
         };
         get_available_config()
@@ -337,28 +340,18 @@ impl GpuDecoder {
         )
     }
 
-    pub fn new_decoders(luid: Option<i64>) -> GpuDecoders {
-        let mut h264: Option<GpuDecoder> = None;
-        let mut h265: Option<GpuDecoder> = None;
-        if let Ok(decoder) = GpuDecoder::new(CodecName::H264GPU, luid) {
-            h264 = Some(decoder);
-        }
-        if let Ok(decoder) = GpuDecoder::new(CodecName::H265GPU, luid) {
-            h265 = Some(decoder);
-        }
-        log::info!(
-            "new gpu decoders, support h264: {}, h265: {}",
-            h264.is_some(),
-            h265.is_some()
-        );
-        GpuDecoders { h264, h265 }
-    }
-
-    pub fn new(name: CodecName, luid: Option<i64>) -> ResultType<Self> {
-        let ctx = Self::try_get(name, luid).ok_or(anyhow!("Failed to get decode context"))?;
+    pub fn new(format: CodecFormat, luid: Option<i64>) -> ResultType<Self> {
+        log::info!("try create {format:?} vram decoder, luid: {luid:?}");
+        let ctx = Self::try_get(format, luid).ok_or(anyhow!("Failed to get decode context"))?;
         match Decoder::new(ctx) {
             Ok(decoder) => Ok(Self { decoder }),
-            Err(_) => Err(anyhow!(format!("Failed to create decoder"))),
+            Err(_) => {
+                hbb_common::config::GpucodecConfig::clear();
+                Err(anyhow!(format!(
+                    "Failed to create decoder, format: {:?}",
+                    format
+                )))
+            }
         }
     }
     pub fn decode(&mut self, data: &[u8]) -> ResultType<Vec<GpuDecoderImage>> {

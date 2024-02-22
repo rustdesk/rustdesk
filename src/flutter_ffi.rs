@@ -180,6 +180,12 @@ pub fn session_login(
     }
 }
 
+pub fn session_send2fa(session_id: SessionID, code: String) {
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
+        session.send2fa(code);
+    }
+}
+
 pub fn session_close(session_id: SessionID) {
     if let Some(session) = sessions::remove_session_by_session_id(&session_id) {
         session.close_event_stream(session_id);
@@ -2014,6 +2020,18 @@ pub fn main_supported_input_source() -> SyncReturn<String> {
                 .unwrap_or_default(),
         )
     }
+}
+
+pub fn main_generate2fa() -> String {
+    generate2fa()
+}
+
+pub fn main_verify2fa(code: String) -> bool {
+    verify2fa(code)
+}
+
+pub fn main_has_valid_2fa_sync() -> SyncReturn<bool> {
+    SyncReturn(has_valid_2fa())
 }
 
 #[cfg(target_os = "android")]

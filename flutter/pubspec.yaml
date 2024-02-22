@@ -105,6 +105,7 @@ dependencies:
       ref: 24cb88413fa5181d949ddacbb30a65d5c459e7d9
   pull_down_button: ^0.9.3
   device_info_plus: ^9.1.0
+  qr_flutter: ^4.1.0
 
 dev_dependencies:
   icons_launcher: ^2.0.4

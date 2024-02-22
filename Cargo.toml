@@ -76,14 +76,13 @@ rdev = { git = "https://github.com/fufesou/rdev" }
 url = { version = "2.3", features = ["serde"] }
 crossbeam-queue = "0.3"
 hex = "0.4"
-# https://github.com/rustdesk/rustdesk-server-pro/issues/189, using native-tls for better tls support
-reqwest = { git = "https://github.com/rustdesk-org/reqwest", features = ["blocking", "json", "native-tls", "gzip"], default-features=false }
 chrono = "0.4"
 cidr-utils = "0.5"
 libloading = "0.8"
 fon = "0.6"
 zip = "0.6"
 shutdown_hooks = "0.1"
+totp-rs = { version = "5.4", default-features = false, features = ["gen_secret", "otpauth"] }
 
 [target.'cfg(not(any(target_os = "android", target_os = "linux")))'.dependencies]
 cpal = "0.15"
@@ -98,6 +97,7 @@ clipboard = { path = "libs/clipboard" }
 ctrlc = "3.2"
 arboard = { version = "3.2", features = ["wayland-data-control"] }
 system_shutdown = "4.0"
+qrcode-generator = "4.1"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 winapi = { version = "0.3", features = ["winuser", "wincrypt", "shellscalingapi", "pdh", "synchapi", "memoryapi"] }
@@ -129,6 +129,13 @@ keepawake = { git = "https://github.com/rustdesk-org/keepawake-rs" }
 
 [target.'cfg(any(target_os = "windows", target_os = "linux"))'.dependencies]
 wallpaper = { git = "https://github.com/21pages/wallpaper.rs" }
+
+[target.'cfg(any(target_os = "macos", target_os = "windows"))'.dependencies]
+# https://github.com/rustdesk/rustdesk-server-pro/issues/189, using native-tls for better tls support
+reqwest = { git = "https://github.com/rustdesk-org/reqwest", features = ["blocking", "json", "native-tls", "gzip"], default-features=false }
+
+[target.'cfg(not(any(target_os = "macos", target_os = "windows")))'.dependencies]
+reqwest = { git = "https://github.com/rustdesk-org/reqwest", features = ["blocking", "json", "rustls-tls", "gzip"], default-features=false }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 psimple = { package = "libpulse-simple-binding", version = "2.27" }

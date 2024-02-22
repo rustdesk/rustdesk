@@ -141,8 +141,9 @@ async fn connect_and_login(
                         }
                         Some(message::Union::LoginResponse(lr)) => match lr.union {
                             Some(login_response::Union::Error(err)) => {
-                                interface.handle_login_error(&err);
-                                return Ok(None);
+                                if !interface.handle_login_error(&err) {
+                                    return Ok(None);
+                                }
                             }
                             Some(login_response::Union::PeerInfo(pi)) => {
                                 interface.handle_peer_info(pi);
@@ -167,6 +168,9 @@ async fn connect_and_login(
                 match d {
                     Some(Data::Login((os_username, os_password, password, remember))) => {
                         interface.handle_login_from_ui(os_username, os_password, password, remember, &mut stream).await;
+                    }
+                    Some(Data::Message(msg)) => {
+                        allow_err!(stream.send(&msg).await);
                     }
                     _ => {}
                 }

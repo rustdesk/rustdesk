@@ -579,7 +579,12 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Swap control-command key", "Wissel controle-commando toets"),
         ("swap-left-right-mouse", "wissel-links-rechts-muis"),
         ("2FA code", "2FA-code"),
-        ("2fa_tip", "Geef je 2FA-code op in de verificatie-app."),
         ("More", "Meer"),
+        ("enable-2fa-title", "activeer-2fa-titel"),
+        ("enable-2fa-desc", "activeer-2fa-desc"),
+        ("wrong-2fa-code", "foutieve-2fa-code"),
+        ("enter-2fa-title", "geef-2fa-titel in"),
+        ("Email verification code must be 6 characters.", "E-mailverificatiecode moet 6 tekens lang zijn."),
+        ("2FA code must be 6 digits.", "2FA-code moet 6 cijfers lang zijn."),
     ].iter().cloned().collect();
 }

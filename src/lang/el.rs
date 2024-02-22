@@ -579,7 +579,12 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Swap control-command key", "Εναλλαγή κουμπιών control-command"),
         ("swap-left-right-mouse", "Εναλλαγή αριστερό-δεξί κουμπί του ποντικιού"),
         ("2FA code", "κωδικός 2FA"),
-        ("2fa_tip", "Παρακαλώ εισάγεται τον κωδικό 2FA στην εφαρμογή πιστοποίησης"),
         ("More", "Περισσότερα"),
+        ("enable-2fa-title", ""),
+        ("enable-2fa-desc", ""),
+        ("wrong-2fa-code", ""),
+        ("enter-2fa-title", ""),
+        ("Email verification code must be 6 characters.", ""),
+        ("2FA code must be 6 digits.", ""),
     ].iter().cloned().collect();
 }

@@ -121,6 +121,7 @@ class LoginRequest {
   String? type;
   String? verificationCode;
   String? tfaCode;
+  String? secret;
 
   LoginRequest(
       {this.username,
@@ -130,7 +131,8 @@ class LoginRequest {
       this.autoLogin,
       this.type,
       this.verificationCode,
-      this.tfaCode});
+      this.tfaCode,
+      this.secret});
 
   Map<String, dynamic> toJson() {
     final Map<String, dynamic> data = <String, dynamic>{};
@@ -144,6 +146,7 @@ class LoginRequest {
       data['verificationCode'] = verificationCode;
     }
     if (tfaCode != null) data['tfaCode'] = tfaCode;
+    if (secret != null) data['secret'] = secret;
 
     Map<String, dynamic> deviceInfo = {};
     try {
@@ -160,14 +163,17 @@ class LoginResponse {
   String? access_token;
   String? type;
   String? tfa_type;
+  String? secret;
   UserPayload? user;
 
-  LoginResponse({this.access_token, this.type, this.tfa_type, this.user});
+  LoginResponse(
+      {this.access_token, this.type, this.tfa_type, this.secret, this.user});
 
   LoginResponse.fromJson(Map<String, dynamic> json) {
     access_token = json['access_token'];
     type = json['type'];
     tfa_type = json['tfa_type'];
+    secret = json['secret'];
     user = json['user'] != null ? UserPayload.fromJson(json['user']) : null;
   }
 }

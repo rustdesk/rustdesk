@@ -566,7 +566,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Plug out all", "拔出所有"),
         ("True color (4:4:4)", "真彩模式（4:4:4）"),
         ("Enable blocking user input", "允许阻止用户输入"),
-        ("id_input_tip", ""),
+        ("id_input_tip", "可以输入 ID、直连 IP，或域名和端口号（<域名>:<端口号>）。\n要访问另一台服务器上的设备，请附加服务器地址（<ID>@<服务器地址>?key=<密钥>）。比如，\n9123456234@192.168.16.1:21117?key=5Qbwsde3unUcJBtrx9ZkvUmwFNoExHzpryHuPUdqlWM=。\n要访问公共服务器上的设备，请输入 \"<ID>@public\", 无需密钥。"),
         ("privacy_mode_impl_mag_tip", "模式 1"),
         ("privacy_mode_impl_virtual_display_tip", "模式 2"),
         ("Enter privacy mode", "进入隐私模式"),
@@ -579,7 +579,12 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Swap control-command key", "交换Control键和Command键"),
         ("swap-left-right-mouse", "交换鼠标左右键"),
         ("2FA code", "双重认证代码"),
-        ("2fa_tip", "请输入授权 app 中的双重认证代码"),
         ("More", "更多"),
+        ("enable-2fa-title", "启用双重认证"),
+        ("enable-2fa-desc", "现在请设置身份验证器。您可以在手机或台式电脑上使用 Authy、Microsoft 或 Google Authenticator 等验证器。用验证器扫描二维码，然后输入显示的验证码以启用双重认证。"),
+        ("wrong-2fa-code", "无法验证此验证码。请检查验证码和本地时间设置是否正确。"),
+        ("enter-2fa-title", "双重认证"),
+        ("Email verification code must be 6 characters.", "Email 验证码必须是 6 个字符。"),
+        ("2FA code must be 6 digits.", "双重认证代码必须是 6 位数字。"),
     ].iter().cloned().collect();
 }

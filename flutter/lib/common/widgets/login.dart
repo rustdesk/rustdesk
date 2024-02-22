@@ -390,8 +390,7 @@ class LoginWidgetUserPass extends StatelessWidget {
 
 const kAuthReqTypeOidc = 'oidc/';
 
-/// common login dialog for desktop
-/// call this directly
+// call this directly
 Future<bool?> loginDialog() async {
   var username =
       TextEditingController(text: UserModel.getLocalUserInfo()?['name'] ?? '');
@@ -457,11 +456,12 @@ Future<bool?> loginDialog() async {
           if (isEmailVerification != null) {
             if (isMobile) {
               if (close != null) close(false);
-              verificationCodeDialog(resp.user, isEmailVerification);
+              verificationCodeDialog(
+                  resp.user, resp.secret, isEmailVerification);
             } else {
               setState(() => isInProgress = false);
-              final res =
-                  await verificationCodeDialog(resp.user, isEmailVerification);
+              final res = await verificationCodeDialog(
+                  resp.user, resp.secret, isEmailVerification);
               if (res == true) {
                 if (close != null) close(false);
                 return;
@@ -611,33 +611,22 @@ Future<bool?> loginDialog() async {
 }
 
 Future<bool?> verificationCodeDialog(
-    UserPayload? user, bool isEmailVerification) async {
+    UserPayload? user, String? secret, bool isEmailVerification) async {
   var autoLogin = true;
   var isInProgress = false;
   String? errorText;
-  String preCode = '';
 
   final code = TextEditingController();
-  final focusNode = FocusNode()..requestFocus();
-  Timer(Duration(milliseconds: 100), () => focusNode..requestFocus());
 
   final res = await gFFI.dialogManager.show<bool>((setState, close, context) {
-    bool validate() {
-      return code.text.length >= 6;
-    }
-
     void onVerify() async {
-      if (!validate()) {
-        setState(
-            () => errorText = translate('Too short, at least 6 characters.'));
-        return;
-      }
       setState(() => isInProgress = true);
 
       try {
         final resp = await gFFI.userModel.login(LoginRequest(
             verificationCode: code.text,
             tfaCode: isEmailVerification ? null : code.text,
+            secret: secret,
             username: user?.name,
             id: await bind.mainGetMyId(),
             uuid: await bind.mainGetUuid(),
@@ -666,18 +655,21 @@ Future<bool?> verificationCodeDialog(
       setState(() => isInProgress = false);
     }
 
-    code.addListener(() {
-      if (errorText != null) {
-        setState(() => errorText = null);
-      }
-      if (preCode.length != 6 && code.text.length == 6) {
-        onVerify();
-      }
-      if (!isEmailVerification && preCode.length != 10 && code.text.length == 10) {
-        onVerify();
-      }
-      preCode = code.text;
-    });
+    final codeField = isEmailVerification
+        ? DialogEmailCodeField(
+            controller: code,
+            errorText: errorText,
+            readyCallback: onVerify,
+            onChanged: () => errorText = null,
+          )
+        : Dialog2FaField(
+            controller: code,
+            errorText: errorText,
+            readyCallback: onVerify,
+            onChanged: () => errorText = null,
+          );
+
+    getOnSubmit() => codeField.isReady ? onVerify : null;
 
     return CustomAlertDialog(
         title: Text(translate("Verification code")),
@@ -693,15 +685,7 @@ Future<bool?> verificationCodeDialog(
                   controller: TextEditingController(text: user?.email),
                 )),
             isEmailVerification ? const SizedBox(height: 8) : const Offstage(),
-            DialogTextField(
-              title:
-                  '${translate(isEmailVerification ? "Verification code" : "2FA code")}:',
-              controller: code,
-              errorText: errorText,
-              focusNode: focusNode,
-              helperText: translate(
-                  isEmailVerification ? 'verification_tip' : '2fa_tip'),
-            ),
+            codeField,
             /*
             CheckboxListTile(
               contentPadding: const EdgeInsets.all(0),
@@ -722,10 +706,10 @@ Future<bool?> verificationCodeDialog(
           ],
         ),
         onCancel: close,
-        onSubmit: onVerify,
+        onSubmit: getOnSubmit(),
         actions: [
           dialogButton("Cancel", onPressed: close, isOutline: true),
-          dialogButton("Verify", onPressed: onVerify),
+          dialogButton("Verify", onPressed: getOnSubmit()),
         ]);
   });
 

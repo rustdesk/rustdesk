@@ -603,6 +603,28 @@ impl UI {
     fn support_remove_wallpaper(&self) -> bool {
         support_remove_wallpaper()
     }
+
+    fn has_valid_2fa(&self) -> bool {
+        has_valid_2fa()
+    }
+
+    fn generate2fa(&self) -> String {
+        generate2fa()
+    }
+
+    pub fn verify2fa(&self, code: String) -> bool {
+        verify2fa(code)
+    }
+
+    fn generate_2fa_img_src(&self, data: String) -> String {
+        let v = qrcode_generator::to_png_to_vec(data, qrcode_generator::QrCodeEcc::Low, 128)
+            .unwrap_or_default();
+        let s = hbb_common::sodiumoxide::base64::encode(
+            v,
+            hbb_common::sodiumoxide::base64::Variant::Original,
+        );
+        format!("data:image/png;base64,{s}")
+    }
 }
 
 impl sciter::EventHandler for UI {
@@ -690,6 +712,10 @@ impl sciter::EventHandler for UI {
         fn handle_relay_id(String);
         fn get_login_device_info();
         fn support_remove_wallpaper();
+        fn has_valid_2fa();
+        fn generate2fa();
+        fn generate_2fa_img_src(String);
+        fn verify2fa(String);
     }
 }
 
