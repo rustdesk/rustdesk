@@ -702,12 +702,9 @@ impl Client {
     }
 
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    fn try_stop_clipboard(_self_id: &str) {
+    fn try_stop_clipboard() {
         #[cfg(feature = "flutter")]
-        if crate::flutter::sessions::other_sessions_running(
-            _self_id.to_string(),
-            ConnType::DEFAULT_CONN,
-        ) {
+        if crate::flutter::sessions::has_sessions_running(ConnType::DEFAULT_CONN) {
             return;
         }
         TEXT_CLIPBOARD_STATE.lock().unwrap().running = false;

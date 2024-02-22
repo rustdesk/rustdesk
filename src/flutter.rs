@@ -1790,13 +1790,10 @@ pub mod sessions {
 
     #[inline]
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    pub fn other_sessions_running(peer_id: String, conn_type: ConnType) -> bool {
-        SESSIONS
-            .read()
-            .unwrap()
-            .get(&(peer_id, conn_type))
-            .map(|s| s.session_handlers.read().unwrap().len() != 0)
-            .unwrap_or(false)
+    pub fn has_sessions_running(conn_type: ConnType) -> bool {
+        SESSIONS.read().unwrap().iter().any(|((_, r#type), s)| {
+            *r#type == conn_type && s.session_handlers.read().unwrap().len() != 0
+        })
     }
 }
 

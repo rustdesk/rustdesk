@@ -286,7 +286,7 @@ impl<T: InvokeUiSession> Remote<T> {
 
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
         if _set_disconnected_ok {
-            Client::try_stop_clipboard(&self.handler.get_id());
+            Client::try_stop_clipboard();
         }
 
         #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
