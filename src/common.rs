@@ -298,6 +298,7 @@ pub fn check_clipboard(
         ctx2.get_text()
     };
     if let Ok(content) = content {
+        log::info!("{} update found on {}", CLIPBOARD_NAME, side);
         if content.len() < 2_000_000 && !content.is_empty() {
             let changed = content != *old.lock().unwrap();
             if changed {

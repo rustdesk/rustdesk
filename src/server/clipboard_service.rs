@@ -35,12 +35,14 @@ pub fn new() -> GenericService {
 
 fn run(sp: EmptyExtraFieldService, state: &mut State) -> ResultType<()> {
     if let Some(msg) = check_clipboard(&mut state.ctx, None) {
+        log::trace!("Sending Clipboard data {}", msg);
         sp.send(msg);
     }
     sp.snapshot(|sps| {
         let txt = crate::CONTENT.lock().unwrap().clone();
         if !txt.is_empty() {
             let msg_out = crate::create_clipboard_msg(txt);
+            log::trace!("Sending Clipboard data {}", txt);
             sps.send_shared(Arc::new(msg_out));
         }
         Ok(())
