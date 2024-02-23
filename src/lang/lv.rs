@@ -584,7 +584,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("enter-2fa-title", "Divu faktoru autentifikācija"),
         ("Email verification code must be 6 characters.", "E-pasta verifikācijas kodam jābūt ar 6 rakstzīmēm."),
         ("2FA code must be 6 digits.", "2FA kodam ir jābūt ar 6 cipariem."),
-        ("Multiple Windows sessions found", ""),
-        ("Please select the session you want to connect to", ""),
+        ("Multiple Windows sessions found", "Atrastas vairākas Windows sesijas"),
+        ("Please select the session you want to connect to", "Lūdzu, atlasiet sesiju, ar kuru vēlaties izveidot savienojumu"),
     ].iter().cloned().collect();
 }

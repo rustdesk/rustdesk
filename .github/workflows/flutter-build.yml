@@ -133,7 +133,7 @@ jobs:
           password: '${{ secrets.WINDOWS_PFX_PASSWORD }}'
           certificatesha1: '${{ secrets.WINDOWS_PFX_SHA1_THUMBPRINT }}'
           # certificatename: '${{ secrets.CERTNAME }}'
-          folder: './flutter/build/windows/runner/Release/'
+          folder: './flutter/build/windows/x64/runner/Release/'
           recursive: true
 
       - name: Build self-extracted executable

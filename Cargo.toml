@@ -95,7 +95,7 @@ sys-locale = "0.3"
 enigo = { path = "libs/enigo", features = [ "with_serde" ] }
 clipboard = { path = "libs/clipboard" }
 ctrlc = "3.2"
-arboard = { version = "3.2", features = ["wayland-data-control"] }
+arboard = { git = "https://github.com/fufesou/arboard", branch = "feat/x11_set_conn_timeout", features = ["wayland-data-control"] }
 system_shutdown = "4.0"
 qrcode-generator = "4.1"
 
