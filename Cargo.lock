@@ -118,7 +118,7 @@ dependencies = [
 [[package]]
 name = "amf"
 version = "0.1.0"
-source = "git+https://github.com/21pages/gpucodec#90800ce41bee33cd898ec36a86c2e32a407e3f02"
+source = "git+https://github.com/21pages/gpucodec#546f7f644ce15a35b833c1531a4fead4b34a1b3b"
 dependencies = [
  "bindgen 0.59.2",
  "cc",
@@ -1728,7 +1728,7 @@ version = "0.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "330c60081dcc4c72131f8eb70510f1ac07223e5d4163db481a04a0befcffa412"
 dependencies = [
- "libloading 0.7.4",
+ "libloading 0.8.1",
 ]
 
 [[package]]
@@ -2665,7 +2665,7 @@ dependencies = [
 [[package]]
 name = "gpu_common"
 version = "0.1.0"
-source = "git+https://github.com/21pages/gpucodec#90800ce41bee33cd898ec36a86c2e32a407e3f02"
+source = "git+https://github.com/21pages/gpucodec#546f7f644ce15a35b833c1531a4fead4b34a1b3b"
 dependencies = [
  "bindgen 0.59.2",
  "cc",
@@ -2678,7 +2678,7 @@ dependencies = [
 [[package]]
 name = "gpucodec"
 version = "0.1.0"
-source = "git+https://github.com/21pages/gpucodec#90800ce41bee33cd898ec36a86c2e32a407e3f02"
+source = "git+https://github.com/21pages/gpucodec#546f7f644ce15a35b833c1531a4fead4b34a1b3b"
 dependencies = [
  "amf",
  "bindgen 0.59.2",
@@ -3079,7 +3079,7 @@ checksum = "9a3a5bfb195931eeb336b2a7b4d761daec841b97f947d34394601737a7bba5e4"
 [[package]]
 name = "hwcodec"
 version = "0.2.0"
-source = "git+https://github.com/21pages/hwcodec?branch=stable#da8aec8e8abb6a5506e027484023e6e2ad1f47eb"
+source = "git+https://github.com/21pages/hwcodec?branch=stable#52e1da2aae86acec5f374bc065f5921945b55e7b"
 dependencies = [
  "bindgen 0.59.2",
  "cc",
@@ -4150,7 +4150,7 @@ dependencies = [
 [[package]]
 name = "nv"
 version = "0.1.0"
-source = "git+https://github.com/21pages/gpucodec#90800ce41bee33cd898ec36a86c2e32a407e3f02"
+source = "git+https://github.com/21pages/gpucodec#546f7f644ce15a35b833c1531a4fead4b34a1b3b"
 dependencies = [
  "bindgen 0.59.2",
  "cc",
@@ -6913,7 +6913,7 @@ dependencies = [
 [[package]]
 name = "vpl"
 version = "0.1.0"
-source = "git+https://github.com/21pages/gpucodec#90800ce41bee33cd898ec36a86c2e32a407e3f02"
+source = "git+https://github.com/21pages/gpucodec#546f7f644ce15a35b833c1531a4fead4b34a1b3b"
 dependencies = [
  "bindgen 0.59.2",
  "cc",
