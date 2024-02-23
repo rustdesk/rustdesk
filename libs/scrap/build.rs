@@ -31,6 +31,8 @@ fn link_vcpkg(mut path: PathBuf, name: &str) -> PathBuf {
         target_arch = "x64".to_owned();
     } else if target_arch == "x86" {
         target_arch = "x86".to_owned();
+    } else if target_arch == "loongarch64" {
+        target_arch = "loongarch64".to_owned();
     } else if target_arch == "aarch64" {
         target_arch = "arm64".to_owned();
     } else {
