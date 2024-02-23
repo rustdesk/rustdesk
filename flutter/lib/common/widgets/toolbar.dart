@@ -655,7 +655,7 @@ List<TToggleMenu> toolbarKeyboardToggles(FFI ffi) {
     var optionValue =
         bind.sessionGetReverseMouseWheelSync(sessionId: sessionId) ?? '';
     if (optionValue == '') {
-      optionValue = bind.mainGetUserDefaultOption(key: 'reverse_mouse_wheel');
+      optionValue = bind.mainGetUserDefaultOption(key: kKeyReverseMouseWheel);
     }
     onChanged(bool? value) async {
       if (value == null) return;
