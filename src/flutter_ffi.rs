@@ -23,7 +23,6 @@ use hbb_common::{
     rendezvous_proto::ConnType,
     ResultType,
 };
-use serde_json::json;
 use std::{
     collections::HashMap,
     str::FromStr,
