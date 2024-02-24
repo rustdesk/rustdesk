@@ -1462,20 +1462,36 @@ mod tests {
     use chrono::{format::StrftimeItems, Local};
     use hbb_common::tokio::{
         self,
-        time::{interval, interval_at, sleep, Duration, Instant},
+        time::{interval, interval_at, sleep, Duration, Instant, Interval},
     };
     use std::collections::HashSet;
 
+    #[inline]
+    fn now_time_string() -> String {
+        let format = StrftimeItems::new("%Y-%m-%d %H:%M:%S");
+        Local::now().format_with_items(format).to_string()
+    }
+
+    fn interval_maker() -> Interval {
+        interval(Duration::from_secs(1))
+    }
+
+    fn interval_at_maker() -> Interval {
+        interval_at(
+            Instant::now() + Duration::from_secs(1),
+            Duration::from_secs(1),
+        )
+    }
+
     #[tokio::test]
     async fn test_tokio_time_interval() {
-        let mut timer = interval(Duration::from_secs(1));
+        let mut timer = interval_maker();
         let mut times = Vec::new();
         sleep(Duration::from_secs(3)).await;
         loop {
             tokio::select! {
                 _ = timer.tick() => {
-                    let format = StrftimeItems::new("%Y-%m-%d %H:%M:%S");
-                    times.push(Local::now().format_with_items(format).to_string());
+                    times.push(now_time_string());
                     if times.len() == 5 {
                         break;
                     }
@@ -1486,25 +1502,49 @@ mod tests {
         assert_eq!(times.len(), times2.len() + 3);
     }
 
+    // ThrottledInterval tick at the same time as tokio interval, if no sleeps
     #[allow(non_snake_case)]
     #[tokio::test]
     async fn test_RustDesk_interval() {
-        let base_intervals = [
-            interval(Duration::from_secs(1)),
-            interval_at(
-                Instant::now() + Duration::from_secs(1),
-                Duration::from_secs(1),
-            ),
-        ];
-        for i in base_intervals.into_iter() {
-            let mut timer = rustdesk_interval(i);
+        let base_intervals = [interval_maker, interval_at_maker];
+        for maker in base_intervals.into_iter() {
+            let mut tokio_timer = maker();
+            let mut tokio_times = Vec::new();
+            let mut timer = rustdesk_interval(maker());
+            let mut times = Vec::new();
+            loop {
+                tokio::select! {
+                    _ = timer.tick() => {
+                        if tokio_times.len() >= 10 && times.len() >= 10 {
+                            break;
+                        }
+                        times.push(now_time_string());
+                    }
+                    _ = tokio_timer.tick() => {
+                        if tokio_times.len() >= 10 && times.len() >= 10 {
+                            break;
+                        }
+                        tokio_times.push(now_time_string());
+                    }
+                }
+            }
+            assert_eq!(times, tokio_times);
+        }
+    }
+
+    // ThrottledInterval tick less times than tokio interval, if there're sleeps
+    #[allow(non_snake_case)]
+    #[tokio::test]
+    async fn test_RustDesk_interval_sleep() {
+        let base_intervals = [interval_maker, interval_at_maker];
+        for maker in base_intervals.into_iter() {
+            let mut timer = rustdesk_interval(maker());
             let mut times = Vec::new();
             sleep(Duration::from_secs(3)).await;
             loop {
                 tokio::select! {
                     _ = timer.tick() => {
-                        let format = StrftimeItems::new("%Y-%m-%d %H:%M:%S");
-                        times.push(Local::now().format_with_items(format).to_string());
+                        times.push(now_time_string());
                         if times.len() == 5 {
                             break;
                         }
