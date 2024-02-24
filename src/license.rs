@@ -14,7 +14,7 @@ pub struct License {
     pub relay: String,
 }
 
-fn get_license_from_string_(s: &str) -> ResultType<License> {
+fn get_license_from_config_string(s: &str) -> ResultType<License> {
     let tmp: String = s.chars().rev().collect();
     const PK: &[u8; 32] = &[
         88, 168, 68, 104, 60, 5, 163, 198, 165, 38, 12, 85, 114, 203, 96, 163, 70, 48, 0, 131, 57,
@@ -81,17 +81,18 @@ pub fn get_license_from_string(s: &str) -> ResultType<License> {
             relay: relay.to_owned(),
         });
     } else {
-        let strs = if s.contains("-licensed-") {
-            s.split("-licensed-")
-        } else {
-            s.split("--")
-        };
+        let s = s
+            .replace("-licensed---", "--")
+            .replace("-licensed--", "--")
+            .replace("-licensed-", "--");
+        let strs = s.split("--");
         for s in strs {
-            if let Ok(lic) = get_license_from_string_(s) {
+            if let Ok(lic) = get_license_from_config_string(s.trim()) {
                 return Ok(lic);
-            } else if s.contains("(") { // https://github.com/rustdesk/rustdesk/issues/4162
+            } else if s.contains("(") {
+                // https://github.com/rustdesk/rustdesk/issues/4162
                 for s in s.split("(") {
-                    if let Ok(lic) = get_license_from_string_(s) {
+                    if let Ok(lic) = get_license_from_config_string(s.trim()) {
                         return Ok(lic);
                     }
                 }
@@ -102,7 +103,6 @@ pub fn get_license_from_string(s: &str) -> ResultType<License> {
 }
 
 #[cfg(test)]
-#[cfg(target_os = "windows")]
 mod test {
     use super::*;
 
@@ -151,5 +151,38 @@ mod test {
                 relay: "".to_owned(),
             }
         );
+        let lic = License {
+            host: "1.1.1.1".to_owned(),
+            key: "5Qbwsde3unUcJBtrx9ZkvUmwFNoExHzpryHuPUdqlWM=".to_owned(),
+            api: "".to_owned(),
+            relay: "".to_owned(),
+        };
+        assert_eq!(
+            get_license_from_string("rustdesk-licensed-0nI900VsFHZVBVdIlncwpHS4V0bOZ0dtVldrpVO4JHdCp0YV5WdzUGZzdnYRVjI6ISeltmIsISMuEjLx4SMiojI0N3boJye.exe")
+                .unwrap(), lic);
+        assert_eq!(
+            get_license_from_string("rustdesk-licensed-0nI900VsFHZVBVdIlncwpHS4V0bOZ0dtVldrpVO4JHdCp0YV5WdzUGZzdnYRVjI6ISeltmIsISMuEjLx4SMiojI0N3boJye(1).exe")
+                .unwrap(), lic);
+        assert_eq!(
+            get_license_from_string("rustdesk--0nI900VsFHZVBVdIlncwpHS4V0bOZ0dtVldrpVO4JHdCp0YV5WdzUGZzdnYRVjI6ISeltmIsISMuEjLx4SMiojI0N3boJye(1).exe")
+                .unwrap(), lic);
+        assert_eq!(
+            get_license_from_string("rustdesk-licensed-0nI900VsFHZVBVdIlncwpHS4V0bOZ0dtVldrpVO4JHdCp0YV5WdzUGZzdnYRVjI6ISeltmIsISMuEjLx4SMiojI0N3boJye (1).exe")
+                .unwrap(), lic);
+        assert_eq!(
+            get_license_from_string("rustdesk-licensed-0nI900VsFHZVBVdIlncwpHS4V0bOZ0dtVldrpVO4JHdCp0YV5WdzUGZzdnYRVjI6ISeltmIsISMuEjLx4SMiojI0N3boJye (1) (2).exe")
+                .unwrap(), lic);
+        assert_eq!(
+            get_license_from_string("rustdesk-licensed-0nI900VsFHZVBVdIlncwpHS4V0bOZ0dtVldrpVO4JHdCp0YV5WdzUGZzdnYRVjI6ISeltmIsISMuEjLx4SMiojI0N3boJye--abc.exe")
+                .unwrap(), lic);
+        assert_eq!(
+            get_license_from_string("rustdesk-licensed--0nI900VsFHZVBVdIlncwpHS4V0bOZ0dtVldrpVO4JHdCp0YV5WdzUGZzdnYRVjI6ISeltmIsISMuEjLx4SMiojI0N3boJye--.exe")
+                .unwrap(), lic);
+        assert_eq!(
+            get_license_from_string("rustdesk-licensed---0nI900VsFHZVBVdIlncwpHS4V0bOZ0dtVldrpVO4JHdCp0YV5WdzUGZzdnYRVjI6ISeltmIsISMuEjLx4SMiojI0N3boJye--.exe")
+                .unwrap(), lic);
+        assert_eq!(
+            get_license_from_string("rustdesk-licensed--0nI900VsFHZVBVdIlncwpHS4V0bOZ0dtVldrpVO4JHdCp0YV5WdzUGZzdnYRVjI6ISeltmIsISMuEjLx4SMiojI0N3boJye--.exe")
+                .unwrap(), lic);
     }
 }
