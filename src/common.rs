@@ -1462,7 +1462,7 @@ mod tests {
     use chrono::{format::StrftimeItems, Local};
     use hbb_common::tokio::{
         self,
-        time::{interval, sleep, Duration},
+        time::{interval, interval_at, sleep, Duration, Instant},
     };
     use std::collections::HashSet;
 
@@ -1489,22 +1489,31 @@ mod tests {
     #[allow(non_snake_case)]
     #[tokio::test]
     async fn test_RustDesk_interval() {
-        let mut timer = rustdesk_interval(interval(Duration::from_secs(1)));
-        let mut times = Vec::new();
-        sleep(Duration::from_secs(3)).await;
-        loop {
-            tokio::select! {
-                _ = timer.tick() => {
-                    let format = StrftimeItems::new("%Y-%m-%d %H:%M:%S");
-                    times.push(Local::now().format_with_items(format).to_string());
-                    if times.len() == 5 {
-                        break;
+        let base_intervals = [
+            interval(Duration::from_secs(1)),
+            interval_at(
+                Instant::now() + Duration::from_secs(1),
+                Duration::from_secs(1),
+            ),
+        ];
+        for i in base_intervals.into_iter() {
+            let mut timer = rustdesk_interval(i);
+            let mut times = Vec::new();
+            sleep(Duration::from_secs(3)).await;
+            loop {
+                tokio::select! {
+                    _ = timer.tick() => {
+                        let format = StrftimeItems::new("%Y-%m-%d %H:%M:%S");
+                        times.push(Local::now().format_with_items(format).to_string());
+                        if times.len() == 5 {
+                            break;
+                        }
                     }
                 }
             }
+            let times2: HashSet<String> = HashSet::from_iter(times.clone());
+            assert_eq!(times.len(), times2.len());
         }
-        let times2: HashSet<String> = HashSet::from_iter(times.clone());
-        assert_eq!(times.len(), times2.len());
     }
 
     #[test]
