@@ -1483,25 +1483,6 @@ mod tests {
         )
     }
 
-    #[tokio::test]
-    async fn test_tokio_time_interval() {
-        let mut timer = interval_maker();
-        let mut times = Vec::new();
-        sleep(Duration::from_secs(3)).await;
-        loop {
-            tokio::select! {
-                _ = timer.tick() => {
-                    times.push(now_time_string());
-                    if times.len() == 5 {
-                        break;
-                    }
-                }
-            }
-        }
-        let times2: HashSet<String> = HashSet::from_iter(times.clone());
-        assert_eq!(times.len(), times2.len() + 3);
-    }
-
     // ThrottledInterval tick at the same time as tokio interval, if no sleeps
     #[allow(non_snake_case)]
     #[tokio::test]
@@ -1531,6 +1512,25 @@ mod tests {
             assert_eq!(times, tokio_times);
         }
     }
+    
+    #[tokio::test]
+    async fn test_tokio_time_interval_sleep() {
+        let mut timer = interval_maker();
+        let mut times = Vec::new();
+        sleep(Duration::from_secs(3)).await;
+        loop {
+            tokio::select! {
+                _ = timer.tick() => {
+                    times.push(now_time_string());
+                    if times.len() == 5 {
+                        break;
+                    }
+                }
+            }
+        }
+        let times2: HashSet<String> = HashSet::from_iter(times.clone());
+        assert_eq!(times.len(), times2.len() + 3);
+    }
 
     // ThrottledInterval tick less times than tokio interval, if there're sleeps
     #[allow(non_snake_case)]
@@ -1553,6 +1553,7 @@ mod tests {
             }
             // No mutliple ticks in the `interval` time.
             // Values in "times" are unique and are less than normal tokio interval.
+            // See previous test (test_tokio_time_interval_sleep) for comparison.
             let times2: HashSet<String> = HashSet::from_iter(times.clone());
             assert_eq!(times.len(), times2.len());
         }
