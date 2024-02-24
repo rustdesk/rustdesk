@@ -1551,6 +1551,8 @@ mod tests {
                     }
                 }
             }
+            // No mutliple ticks in the `interval` time.
+            // Values in "times" are unique and are less than normal tokio interval.
             let times2: HashSet<String> = HashSet::from_iter(times.clone());
             assert_eq!(times.len(), times2.len());
         }
