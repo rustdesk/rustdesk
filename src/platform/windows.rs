@@ -675,7 +675,7 @@ async fn send_close_async(postfix: &str) -> ResultType<()> {
 
 // https://docs.microsoft.com/en-us/windows/win32/api/sas/nf-sas-sendsas
 // https://www.cnblogs.com/doutu/p/4892726.html
-fn send_sas() {
+pub fn send_sas() {
     #[link(name = "sas")]
     extern "system" {
         pub fn SendSAS(AsUser: BOOL);
@@ -742,6 +742,17 @@ pub fn get_current_process_session_id() -> Option<u32> {
     } else {
         None
     }
+}
+
+pub fn is_physical_console_session() -> Option<bool> {
+    if let Some(sid) = get_current_process_session_id() {
+        let physical_console_session_id = unsafe { get_current_session(TRUE) };
+        if physical_console_session_id == u32::MAX {
+            return None;
+        }
+        return Some(physical_console_session_id == sid);
+    }
+    None
 }
 
 pub fn get_active_username() -> String {
