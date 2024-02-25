@@ -80,8 +80,10 @@ def parse_rc_features(feature):
         return get_all_features()
     elif isinstance(feature, list):
         if windows:
+            # download third party is deprecated, we use github ci instead.
             # force add PrivacyMode
-            feature.append('PrivacyMode')
+            # feature.append('PrivacyMode')
+            pass
         for feat in feature:
             if isinstance(feat, str) and feat.upper() == 'ALL':
                 return get_all_features()
@@ -194,6 +196,9 @@ def generate_build_script_for_docker():
     system2("bash /tmp/build.sh")
 
 
+# Downloading third party resources is deprecated.
+# We can use this function in an offline build environment.
+# Even in an online environment, we recommend building third-party resources yourself.
 def download_extract_features(features, res_dir):
     import re
 
