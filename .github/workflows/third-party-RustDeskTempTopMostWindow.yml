@@ -28,31 +28,28 @@ env:
   project_path: WindowInjection/WindowInjection.vcxproj
 
 jobs:
-  build:
+  build-RustDeskTempTopMostWindow:
     runs-on: ${{ inputs.target }}
     strategy:
         fail-fast: false
     env:
-      build_output_dir: WindowInjection/${{ inputs.platform }}/${{ inputs.configuration }}
+      build_output_dir: RustDeskTempTopMostWindow/WindowInjection/${{ inputs.platform }}/${{ inputs.configuration }}
     steps:
-      - name: Check out repository code
-        uses: actions/checkout@v4
-
       - name: Add MSBuild to PATH
         uses: microsoft/setup-msbuild@v2
 
       - name: Download the source code
         run: |
           git clone https://github.com/fufesou/RustDeskTempTopMostWindow RustDeskTempTopMostWindow
-          git checkout v0.3
 
-      - name: Build the solution
+        # Build. commit 53b548a5398624f7149a382000397993542ad796 is tag v0.3
+      - name: Build the project
         run: |
-          cd RustDeskTempTopMostWindow
+          cd RustDeskTempTopMostWindow && git checkout 53b548a5398624f7149a382000397993542ad796
           msbuild ${{ env.project_path }} -p:Configuration=${{ inputs.configuration }} -p:Platform=${{ inputs.platform }} /p:TargetVersion=${{ inputs.target_version }}
 
       - name: Archive build artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@master
         with:
             name: topmostwindow-artifacts
             path: |

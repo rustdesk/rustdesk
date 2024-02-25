@@ -36,7 +36,7 @@ env:
 
 jobs:
   build-RustDeskTempTopMostWindow:
-    uses: ./.github/workflows/third-party/RustDeskTempTopMostWindow.yml
+    uses: ./.github/workflows/third-party-RustDeskTempTopMostWindow.yml
     with:
       target: windows-2019
       configuration: Release
@@ -137,7 +137,7 @@ jobs:
           fi
 
       - name: Download RustDeskTempTopMostWindow artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@master
         with:
           name: topmostwindow-artifacts
           path: './flutter/build/windows/x64/runner/Release/'
