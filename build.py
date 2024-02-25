@@ -145,6 +145,12 @@ def make_parser():
         action='store_true',
         help='Skip cargo build process, only flutter version + Linux supported currently'
     )
+    if windows:
+        parser.add_argument(
+            '--skip-portable-pack',
+            action='store_true',
+            help='Skip packing, only flutter version + Windows supported'
+        )
     parser.add_argument(
         "--package",
         type=str
@@ -427,7 +433,7 @@ def build_flutter_arch_manjaro(version, features):
     system2('HBB=`pwd`/.. FLUTTER=1 makepkg -f')
 
 
-def build_flutter_windows(version, features):
+def build_flutter_windows(version, features, skip_portable_pack):
     if not skip_cargo:
         system2(f'cargo build --features {features} --lib --release')
         if not os.path.exists("target/release/librustdesk.dll"):
@@ -438,6 +444,8 @@ def build_flutter_windows(version, features):
     os.chdir('..')
     shutil.copy2('target/release/deps/dylib_virtual_display.dll',
                  flutter_build_dir_2)
+    if skip_portable_pack:
+        return
     os.chdir('libs/portable')
     system2('pip3 install -r requirements.txt')
     system2(
@@ -487,7 +495,7 @@ def main():
         os.chdir('../../..')
 
         if flutter:
-            build_flutter_windows(version, features)
+            build_flutter_windows(version, features, args.skip_portable_pack)
             return
         system2('cargo build --release --features ' + features)
         # system2('upx.exe target/release/rustdesk.exe')
