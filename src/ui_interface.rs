@@ -426,14 +426,6 @@ pub fn is_installed() -> bool {
 }
 
 #[inline]
-pub fn is_rdp_service_open() -> bool {
-    #[cfg(windows)]
-    return is_installed() && crate::platform::windows::is_rdp_service_open();
-    #[cfg(not(windows))]
-    return false;
-}
-
-#[inline]
 pub fn is_share_rdp() -> bool {
     #[cfg(windows)]
     return crate::platform::windows::is_share_rdp();

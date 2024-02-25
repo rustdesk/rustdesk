@@ -830,7 +830,7 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
 
     bool value = bind.mainIsShareRdp();
     return Offstage(
-      offstage: !(Platform.isWindows && bind.mainIsRdpServiceOpen()),
+      offstage: !(Platform.isWindows && bind.mainIsInstalled()),
       child: GestureDetector(
           child: Row(
             children: [
