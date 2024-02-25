@@ -318,7 +318,7 @@ class MyIdMenu: Reactor.Component {
                 <li #socks5-server>{translate('Socks5 Proxy')}</li>
                 <div .separator />
                 <li #stop-service class={service_stopped ? "line-through" : "selected"}><span>{svg_checkmark}</span>{translate("Enable service")}</li>
-                {handler.is_rdp_service_open() ? <ShareRdp /> : ""}
+                {is_win && handler.is_installed() ? <ShareRdp /> : ""}
                 <DirectServer />
                 {false && handler.using_public_server() && <li #allow-always-relay><span>{svg_checkmark}</span>{translate('Always connect via relay')}</li>}
                 {handler.is_ok_change_id() ? <div .separator /> : ""}
