@@ -2408,11 +2408,12 @@ sc start {app_name}
 
 fn run_after_run_cmds(silent: bool) {
     let (_, _, _, exe) = get_install_info();
+    let app = crate::get_app_name().to_lowercase();
     if !silent {
         log::debug!("Spawn new window");
         allow_err!(std::process::Command::new("cmd")
             .arg("/c")
-            .arg("timeout /t 2 & start rustdesk://")
+            .arg("timeout /t 2 & start {app}://")
             .creation_flags(winapi::um::winbase::CREATE_NO_WINDOW)
             .spawn());
     }

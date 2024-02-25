@@ -1889,7 +1889,7 @@ bool handleUriLink({List<String>? cmdArgs, Uri? uri, String? uriString}) {
   if (cmdArgs != null && cmdArgs.isNotEmpty) {
     args = cmdArgs;
     // rustdesk <uri link>
-    if (args[0].startsWith(kUniLinksPrefix)) {
+    if (args[0].startsWith(bind.mainUriPrefixSync())) {
       final uri = Uri.tryParse(args[0]);
       if (uri != null) {
         args = urlLinkToCmdArgs(uri);
@@ -2429,19 +2429,20 @@ int versionCmp(String v1, String v2) {
 }
 
 String getWindowName({WindowType? overrideType}) {
+  final name = bind.mainGetAppNameSync();
   switch (overrideType ?? kWindowType) {
     case WindowType.Main:
-      return "RustDesk";
+      return name;
     case WindowType.FileTransfer:
-      return "File Transfer - RustDesk";
+      return "File Transfer - $name";
     case WindowType.PortForward:
-      return "Port Forward - RustDesk";
+      return "Port Forward - $name";
     case WindowType.RemoteDesktop:
-      return "Remote Desktop - RustDesk";
+      return "Remote Desktop - $name";
     default:
       break;
   }
-  return "RustDesk";
+  return name;
 }
 
 String getWindowNameWithId(String id, {WindowType? overrideType}) {
