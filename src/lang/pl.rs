@@ -586,6 +586,5 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("2FA code must be 6 digits.", "Kod 2FA musi zawierać 6 cyfr."),
         ("Multiple Windows sessions found", ""),
         ("Please select the session you want to connect to", ""),
-        ("Quick support", ""),
     ].iter().cloned().collect();
 }

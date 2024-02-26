@@ -27,7 +27,7 @@ import '../widgets/button.dart';
 class DesktopHomePage extends StatefulWidget {
   const DesktopHomePage({Key? key}) : super(key: key);
 
-  static double get leftPaneTipHeight => 105.0;
+  static double get leftPaneTipHeight => 86.0;
   static double get leftPaneIdHeight => 57.0;
   static double get leftPanePasswordHeight => 80.0;
   static double get leftPaneDividerHeight => 16.0;
@@ -332,13 +332,6 @@ class _DesktopHomePageState extends State<DesktopHomePage>
             //     // color: MyTheme.color(context).text,
             //     fontWeight: FontWeight.normal,
             //     fontSize: 19),
-          ),
-          Offstage(
-            offstage: !bind.isQs(),
-            child: Text(
-              translate("Quick Support"),
-              style: Theme.of(context).textTheme.titleSmall,
-            ),
           ),
           SizedBox(
             height: 10.0,

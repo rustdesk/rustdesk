@@ -3102,5 +3102,5 @@ Size getDesktopQsHomeSize() {
 }
 
 Size getDesktopQsSettingsSize() {
-  return Size(800, 600);
+  return Size(768, 600);
 }
