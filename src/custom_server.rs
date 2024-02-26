@@ -3,7 +3,7 @@ use hbb_common::{bail, sodiumoxide::crypto::sign, ResultType};
 use serde_derive::{Deserialize, Serialize};
 
 #[derive(Debug, PartialEq, Default, Serialize, Deserialize, Clone)]
-pub struct License {
+pub struct CustomServer {
     #[serde(default)]
     pub key: String,
     #[serde(default)]
@@ -14,7 +14,7 @@ pub struct License {
     pub relay: String,
 }
 
-fn get_license_from_config_string(s: &str) -> ResultType<License> {
+fn get_custom_server_from_config_string(s: &str) -> ResultType<CustomServer> {
     let tmp: String = s.chars().rev().collect();
     const PK: &[u8; 32] = &[
         88, 168, 68, 104, 60, 5, 163, 198, 165, 38, 12, 85, 114, 203, 96, 163, 70, 48, 0, 131, 57,
@@ -22,17 +22,17 @@ fn get_license_from_config_string(s: &str) -> ResultType<License> {
     ];
     let pk = sign::PublicKey(*PK);
     let data = URL_SAFE_NO_PAD.decode(tmp)?;
-    if let Ok(lic) = serde_json::from_slice::<License>(&data) {
+    if let Ok(lic) = serde_json::from_slice::<CustomServer>(&data) {
         return Ok(lic);
     }
     if let Ok(data) = sign::verify(&data, &pk) {
-        Ok(serde_json::from_slice::<License>(&data)?)
+        Ok(serde_json::from_slice::<CustomServer>(&data)?)
     } else {
         bail!("sign:verify failed");
     }
 }
 
-pub fn get_license_from_string(s: &str) -> ResultType<License> {
+pub fn get_custom_server_from_string(s: &str) -> ResultType<CustomServer> {
     let s = if s.to_lowercase().ends_with(".exe.exe") {
         &s[0..s.len() - 8]
     } else if s.to_lowercase().ends_with(".exe") {
@@ -74,7 +74,7 @@ pub fn get_license_from_string(s: &str) -> ResultType<License> {
                 relay = &el[4..el.len()];
             }
         }
-        return Ok(License {
+        return Ok(CustomServer {
             host: host.to_owned(),
             key: key.to_owned(),
             api: api.to_owned(),
@@ -87,12 +87,12 @@ pub fn get_license_from_string(s: &str) -> ResultType<License> {
             .replace("-licensed-", "--");
         let strs = s.split("--");
         for s in strs {
-            if let Ok(lic) = get_license_from_config_string(s.trim()) {
+            if let Ok(lic) = get_custom_server_from_config_string(s.trim()) {
                 return Ok(lic);
             } else if s.contains("(") {
                 // https://github.com/rustdesk/rustdesk/issues/4162
                 for s in s.split("(") {
-                    if let Ok(lic) = get_license_from_config_string(s.trim()) {
+                    if let Ok(lic) = get_custom_server_from_config_string(s.trim()) {
                         return Ok(lic);
                     }
                 }
@@ -108,11 +108,11 @@ mod test {
 
     #[test]
     fn test_filename_license_string() {
-        assert!(get_license_from_string("rustdesk.exe").is_err());
-        assert!(get_license_from_string("rustdesk").is_err());
+        assert!(get_custom_server_from_string("rustdesk.exe").is_err());
+        assert!(get_custom_server_from_string("rustdesk").is_err());
         assert_eq!(
-            get_license_from_string("rustdesk-host=server.example.net.exe").unwrap(),
-            License {
+            get_custom_server_from_string("rustdesk-host=server.example.net.exe").unwrap(),
+            CustomServer {
                 host: "server.example.net".to_owned(),
                 key: "".to_owned(),
                 api: "".to_owned(),
@@ -120,8 +120,8 @@ mod test {
             }
         );
         assert_eq!(
-            get_license_from_string("rustdesk-host=server.example.net,.exe").unwrap(),
-            License {
+            get_custom_server_from_string("rustdesk-host=server.example.net,.exe").unwrap(),
+            CustomServer {
                 host: "server.example.net".to_owned(),
                 key: "".to_owned(),
                 api: "".to_owned(),
@@ -130,11 +130,11 @@ mod test {
         );
         // key in these tests is "foobar.,2" base64 encoded
         assert_eq!(
-            get_license_from_string(
+            get_custom_server_from_string(
                 "rustdesk-host=server.example.net,api=abc,key=Zm9vYmFyLiwyCg==.exe"
             )
             .unwrap(),
-            License {
+            CustomServer {
                 host: "server.example.net".to_owned(),
                 key: "Zm9vYmFyLiwyCg==".to_owned(),
                 api: "abc".to_owned(),
@@ -142,47 +142,47 @@ mod test {
             }
         );
         assert_eq!(
-            get_license_from_string("rustdesk-host=server.example.net,key=Zm9vYmFyLiwyCg==,.exe")
+            get_custom_server_from_string("rustdesk-host=server.example.net,key=Zm9vYmFyLiwyCg==,.exe")
                 .unwrap(),
-            License {
+            CustomServer {
                 host: "server.example.net".to_owned(),
                 key: "Zm9vYmFyLiwyCg==".to_owned(),
                 api: "".to_owned(),
                 relay: "".to_owned(),
             }
         );
-        let lic = License {
+        let lic = CustomServer {
             host: "1.1.1.1".to_owned(),
             key: "5Qbwsde3unUcJBtrx9ZkvUmwFNoExHzpryHuPUdqlWM=".to_owned(),
             api: "".to_owned(),
             relay: "".to_owned(),
         };
         assert_eq!(
-            get_license_from_string("rustdesk-licensed-0nI900VsFHZVBVdIlncwpHS4V0bOZ0dtVldrpVO4JHdCp0YV5WdzUGZzdnYRVjI6ISeltmIsISMuEjLx4SMiojI0N3boJye.exe")
+            get_custom_server_from_string("rustdesk-licensed-0nI900VsFHZVBVdIlncwpHS4V0bOZ0dtVldrpVO4JHdCp0YV5WdzUGZzdnYRVjI6ISeltmIsISMuEjLx4SMiojI0N3boJye.exe")
                 .unwrap(), lic);
         assert_eq!(
-            get_license_from_string("rustdesk-licensed-0nI900VsFHZVBVdIlncwpHS4V0bOZ0dtVldrpVO4JHdCp0YV5WdzUGZzdnYRVjI6ISeltmIsISMuEjLx4SMiojI0N3boJye(1).exe")
+            get_custom_server_from_string("rustdesk-licensed-0nI900VsFHZVBVdIlncwpHS4V0bOZ0dtVldrpVO4JHdCp0YV5WdzUGZzdnYRVjI6ISeltmIsISMuEjLx4SMiojI0N3boJye(1).exe")
                 .unwrap(), lic);
         assert_eq!(
-            get_license_from_string("rustdesk--0nI900VsFHZVBVdIlncwpHS4V0bOZ0dtVldrpVO4JHdCp0YV5WdzUGZzdnYRVjI6ISeltmIsISMuEjLx4SMiojI0N3boJye(1).exe")
+            get_custom_server_from_string("rustdesk--0nI900VsFHZVBVdIlncwpHS4V0bOZ0dtVldrpVO4JHdCp0YV5WdzUGZzdnYRVjI6ISeltmIsISMuEjLx4SMiojI0N3boJye(1).exe")
                 .unwrap(), lic);
         assert_eq!(
-            get_license_from_string("rustdesk-licensed-0nI900VsFHZVBVdIlncwpHS4V0bOZ0dtVldrpVO4JHdCp0YV5WdzUGZzdnYRVjI6ISeltmIsISMuEjLx4SMiojI0N3boJye (1).exe")
+            get_custom_server_from_string("rustdesk-licensed-0nI900VsFHZVBVdIlncwpHS4V0bOZ0dtVldrpVO4JHdCp0YV5WdzUGZzdnYRVjI6ISeltmIsISMuEjLx4SMiojI0N3boJye (1).exe")
                 .unwrap(), lic);
         assert_eq!(
-            get_license_from_string("rustdesk-licensed-0nI900VsFHZVBVdIlncwpHS4V0bOZ0dtVldrpVO4JHdCp0YV5WdzUGZzdnYRVjI6ISeltmIsISMuEjLx4SMiojI0N3boJye (1) (2).exe")
+            get_custom_server_from_string("rustdesk-licensed-0nI900VsFHZVBVdIlncwpHS4V0bOZ0dtVldrpVO4JHdCp0YV5WdzUGZzdnYRVjI6ISeltmIsISMuEjLx4SMiojI0N3boJye (1) (2).exe")
                 .unwrap(), lic);
         assert_eq!(
-            get_license_from_string("rustdesk-licensed-0nI900VsFHZVBVdIlncwpHS4V0bOZ0dtVldrpVO4JHdCp0YV5WdzUGZzdnYRVjI6ISeltmIsISMuEjLx4SMiojI0N3boJye--abc.exe")
+            get_custom_server_from_string("rustdesk-licensed-0nI900VsFHZVBVdIlncwpHS4V0bOZ0dtVldrpVO4JHdCp0YV5WdzUGZzdnYRVjI6ISeltmIsISMuEjLx4SMiojI0N3boJye--abc.exe")
                 .unwrap(), lic);
         assert_eq!(
-            get_license_from_string("rustdesk-licensed--0nI900VsFHZVBVdIlncwpHS4V0bOZ0dtVldrpVO4JHdCp0YV5WdzUGZzdnYRVjI6ISeltmIsISMuEjLx4SMiojI0N3boJye--.exe")
+            get_custom_server_from_string("rustdesk-licensed--0nI900VsFHZVBVdIlncwpHS4V0bOZ0dtVldrpVO4JHdCp0YV5WdzUGZzdnYRVjI6ISeltmIsISMuEjLx4SMiojI0N3boJye--.exe")
                 .unwrap(), lic);
         assert_eq!(
-            get_license_from_string("rustdesk-licensed---0nI900VsFHZVBVdIlncwpHS4V0bOZ0dtVldrpVO4JHdCp0YV5WdzUGZzdnYRVjI6ISeltmIsISMuEjLx4SMiojI0N3boJye--.exe")
+            get_custom_server_from_string("rustdesk-licensed---0nI900VsFHZVBVdIlncwpHS4V0bOZ0dtVldrpVO4JHdCp0YV5WdzUGZzdnYRVjI6ISeltmIsISMuEjLx4SMiojI0N3boJye--.exe")
                 .unwrap(), lic);
         assert_eq!(
-            get_license_from_string("rustdesk-licensed--0nI900VsFHZVBVdIlncwpHS4V0bOZ0dtVldrpVO4JHdCp0YV5WdzUGZzdnYRVjI6ISeltmIsISMuEjLx4SMiojI0N3boJye--.exe")
+            get_custom_server_from_string("rustdesk-licensed--0nI900VsFHZVBVdIlncwpHS4V0bOZ0dtVldrpVO4JHdCp0YV5WdzUGZzdnYRVjI6ISeltmIsISMuEjLx4SMiojI0N3boJye--.exe")
                 .unwrap(), lic);
     }
 }
