@@ -38,6 +38,7 @@ jobs:
   build-RustDeskTempTopMostWindow:
     uses: ./.github/workflows/third-party-RustDeskTempTopMostWindow.yml
     with:
+      upload-artifact: ${{ inputs.upload-artifact }}
       target: windows-2019
       configuration: Release
       platform: x64
@@ -138,6 +139,7 @@ jobs:
 
       - name: Download RustDeskTempTopMostWindow artifacts
         uses: actions/download-artifact@master
+        if: ${{ inputs.upload-artifact }}
         with:
           name: topmostwindow-artifacts
           path: './flutter/build/windows/x64/runner/Release/'
