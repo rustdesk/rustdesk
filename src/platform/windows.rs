@@ -746,7 +746,7 @@ pub fn get_current_process_session_id() -> Option<u32> {
 
 pub fn is_physical_console_session() -> Option<bool> {
     if let Some(sid) = get_current_process_session_id() {
-        let physical_console_session_id = unsafe { get_current_session(TRUE) };
+        let physical_console_session_id = unsafe { get_current_session(FALSE) };
         if physical_console_session_id == u32::MAX {
             return None;
         }
