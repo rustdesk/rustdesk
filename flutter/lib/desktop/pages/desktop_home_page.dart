@@ -84,26 +84,23 @@ class _DesktopHomePageState extends State<DesktopHomePage>
     final children = <Widget>[
       buildTip(context),
       buildIDBoard(context),
-      buildPasswordBoard(context)
+      buildPasswordBoard(context),
+      FutureBuilder<Widget>(
+        future: buildHelpCards(),
+        builder: (_, data) {
+          if (data.hasData) {
+            return data.data!;
+          } else {
+            return const Offstage();
+          }
+        },
+      ),
+      buildPluginEntry(),
     ];
     if (bind.isQs()) {
       children.addAll([
         Divider(),
         OnlineStatusWidget(),
-      ]);
-    } else {
-      children.addAll([
-        FutureBuilder<Widget>(
-          future: buildHelpCards(),
-          builder: (_, data) {
-            if (data.hasData) {
-              return data.data!;
-            } else {
-              return const Offstage();
-            }
-          },
-        ),
-        buildPluginEntry(),
       ]);
     }
     return ChangeNotifierProvider.value(
