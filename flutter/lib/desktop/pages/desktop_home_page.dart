@@ -27,6 +27,19 @@ import '../widgets/button.dart';
 class DesktopHomePage extends StatefulWidget {
   const DesktopHomePage({Key? key}) : super(key: key);
 
+  static double get leftPaneTipHeight => 105.0;
+  static double get leftPaneIdHeight => 57.0;
+  static double get leftPanePasswordHeight => 80.0;
+  static double get leftPaneDividerHeight => 16.0;
+  static double get onlineStatusHeight => OnlineStatusWidget.height;
+  static double get qsLeftPaneHeight =>
+      leftPaneTipHeight +
+      leftPaneIdHeight +
+      leftPanePasswordHeight +
+      leftPaneDividerHeight +
+      onlineStatusHeight;
+  static double leftPaneWidth = bind.isQs() ? 280.0 : 200.0;
+
   @override
   State<DesktopHomePage> createState() => _DesktopHomePageState();
 }
@@ -53,23 +66,50 @@ class _DesktopHomePageState extends State<DesktopHomePage>
   @override
   Widget build(BuildContext context) {
     super.build(context);
+
+    final children = [buildLeftPane(context)];
+    if (!bind.isQs()) {
+      children.addAll([
+        const VerticalDivider(width: 1),
+        Expanded(child: buildRightPane(context)),
+      ]);
+    }
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        buildLeftPane(context),
-        const VerticalDivider(width: 1),
-        Expanded(
-          child: buildRightPane(context),
-        ),
-      ],
+      children: children,
     );
   }
 
   Widget buildLeftPane(BuildContext context) {
+    final children = <Widget>[
+      buildTip(context),
+      buildIDBoard(context),
+      buildPasswordBoard(context)
+    ];
+    if (bind.isQs()) {
+      children.addAll([
+        Divider(),
+        OnlineStatusWidget(),
+      ]);
+    } else {
+      children.addAll([
+        FutureBuilder<Widget>(
+          future: buildHelpCards(),
+          builder: (_, data) {
+            if (data.hasData) {
+              return data.data!;
+            } else {
+              return const Offstage();
+            }
+          },
+        ),
+        buildPluginEntry(),
+      ]);
+    }
     return ChangeNotifierProvider.value(
       value: gFFI.serverModel,
       child: Container(
-        width: 200,
+        width: DesktopHomePage.leftPaneWidth,
         color: Theme.of(context).colorScheme.background,
         child: DesktopScrollWrapper(
           scrollController: _leftPaneScrollController,
@@ -77,22 +117,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
             controller: _leftPaneScrollController,
             physics: DraggableNeverScrollableScrollPhysics(),
             child: Column(
-              children: [
-                buildTip(context),
-                buildIDBoard(context),
-                buildPasswordBoard(context),
-                FutureBuilder<Widget>(
-                  future: buildHelpCards(),
-                  builder: (_, data) {
-                    if (data.hasData) {
-                      return data.data!;
-                    } else {
-                      return const Offstage();
-                    }
-                  },
-                ),
-                buildPluginEntry()
-              ],
+              children: children,
             ),
           ),
         ),
@@ -307,6 +332,13 @@ class _DesktopHomePageState extends State<DesktopHomePage>
             //     // color: MyTheme.color(context).text,
             //     fontWeight: FontWeight.normal,
             //     fontSize: 19),
+          ),
+          Offstage(
+            offstage: !bind.isQs(),
+            child: Text(
+              translate("Quick Support"),
+              style: Theme.of(context).textTheme.titleSmall,
+            ),
           ),
           SizedBox(
             height: 10.0,

@@ -1813,6 +1813,10 @@ pub fn main_support_remove_wallpaper() -> bool {
     support_remove_wallpaper()
 }
 
+pub fn is_qs() -> SyncReturn<bool> {
+    SyncReturn(false)
+}
+
 /// Send a url scheme throught the ipc.
 ///
 /// * macOS only

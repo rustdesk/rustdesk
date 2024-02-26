@@ -586,5 +586,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("2FA code must be 6 digits.", "کد احراز هویت دو مرحله ای باید 6 رقم باشد"),
         ("Multiple Windows sessions found", ""),
         ("Please select the session you want to connect to", ""),
+        ("Quick support", ""),
     ].iter().cloned().collect();
 }

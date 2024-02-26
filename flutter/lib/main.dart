@@ -98,9 +98,11 @@ Future<void> main(List<String> args) async {
   }
 }
 
-Future<void> initEnv(String appType) async {
+Future<bool> initEnv(String appType) async {
   // global shared preference
-  await platformFFI.init(appType);
+  if (!await platformFFI.init(appType)) {
+    return false;
+  }
   // global FFI, use this **ONLY** for global configuration
   // for convenience, use global FFI on mobile platform
   // focus on multi-ffi on desktop first
@@ -109,11 +111,14 @@ Future<void> initEnv(String appType) async {
   _registerEventHandler();
   // Update the system theme.
   updateSystemWindowTheme();
+  return true;
 }
 
 void runMainApp(bool startService) async {
   // register uni links
-  await initEnv(kAppTypeMain);
+  if (!await initEnv(kAppTypeMain)) {
+    return;
+  }
   // trigger connection status updater
   await bind.mainCheckConnectStatus();
   if (startService) {
@@ -125,7 +130,11 @@ void runMainApp(bool startService) async {
   gFFI.userModel.refreshCurrentUser();
   runApp(App());
   // Set window option.
-  WindowOptions windowOptions = getHiddenTitleBarWindowOptions();
+  Size? size;
+  if (isDesktop && bind.isQs()) {
+    size = getDesktopQsHomeSize();
+  }
+  WindowOptions windowOptions = getHiddenTitleBarWindowOptions(size: size);
   windowManager.waitUntilReadyToShow(windowOptions, () async {
     // Restore the location of the main window before window hide or show.
     await restoreWindowPosition(WindowType.Main);
@@ -142,11 +151,14 @@ void runMainApp(bool startService) async {
     }
     windowManager.setOpacity(1);
     windowManager.setTitle(getWindowName());
+    windowManager.setResizable(!bind.isQs());
   });
 }
 
 void runMobileApp() async {
-  await initEnv(kAppTypeMain);
+  if (!await initEnv(kAppTypeMain)) {
+    return;
+  }
   if (isAndroid) androidChannelInit();
   platformFFI.syncAndroidServiceAppDirConfigPath();
   await Future.wait([gFFI.abModel.loadCache(), gFFI.groupModel.loadCache()]);
@@ -159,7 +171,9 @@ void runMultiWindow(
   Map<String, dynamic> argument,
   String appType,
 ) async {
-  await initEnv(appType);
+  if (!await initEnv(appType)) {
+    return;
+  }
   final title = getWindowName();
   // set prevent close to true, we handle close event manually
   WindowController.fromWindowId(kWindowId!).setPreventClose(true);
@@ -222,7 +236,9 @@ void runMultiWindow(
 }
 
 void runConnectionManagerScreen() async {
-  await initEnv(kAppTypeConnectionManager);
+  if (!await initEnv(kAppTypeConnectionManager)) {
+    return;
+  }
   _runApp(
     '',
     const DesktopServerPage(),
@@ -325,7 +341,9 @@ void _runApp(
 
 void runInstallPage() async {
   await windowManager.ensureInitialized();
-  await initEnv(kAppTypeMain);
+  if (!await initEnv(kAppTypeMain)) {
+    return;
+  }
   _runApp('', const InstallPage(), MyTheme.currentThemeMode());
   WindowOptions windowOptions =
       getHiddenTitleBarWindowOptions(size: Size(800, 600), center: true);

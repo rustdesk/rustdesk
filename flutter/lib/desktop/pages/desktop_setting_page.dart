@@ -109,14 +109,18 @@ class _DesktopSettingPageState extends State<DesktopSettingPage>
       _TabInfo('Security', Icons.enhanced_encryption_outlined,
           Icons.enhanced_encryption),
       _TabInfo('Network', Icons.link_outlined, Icons.link),
-      _TabInfo(
-          'Display', Icons.desktop_windows_outlined, Icons.desktop_windows),
       _TabInfo('Account', Icons.person_outline, Icons.person),
       _TabInfo('About', Icons.info_outline, Icons.info)
     ];
-    if (bind.pluginFeatureIsEnabled()) {
+    if (!bind.isQs()) {
       settingTabs.insert(
-          4, _TabInfo('Plugin', Icons.extension_outlined, Icons.extension));
+          3,
+          _TabInfo('Display', Icons.desktop_windows_outlined,
+              Icons.desktop_windows));
+      if (bind.pluginFeatureIsEnabled()) {
+        settingTabs.insert(
+            4, _TabInfo('Plugin', Icons.extension_outlined, Icons.extension));
+      }
     }
     return settingTabs;
   }
@@ -126,12 +130,14 @@ class _DesktopSettingPageState extends State<DesktopSettingPage>
       _General(),
       _Safety(),
       _Network(),
-      _Display(),
       _Account(),
       _About(),
     ];
-    if (bind.pluginFeatureIsEnabled()) {
-      children.insert(4, _Plugin());
+    if (!bind.isQs()) {
+      children.insert(3, _Display());
+      if (bind.pluginFeatureIsEnabled()) {
+        children.insert(4, _Plugin());
+      }
     }
     return children;
   }
@@ -318,31 +324,38 @@ class _GeneralState extends State<_General> {
   }
 
   Widget other() {
-    final children = [
-      _OptionCheckBox(context, 'Confirm before closing multiple tabs',
-          'enable-confirm-closing-tabs',
-          isServer: false),
+    final children = <Widget>[];
+    if (!bind.isQs()) {
+      children.add(_OptionCheckBox(context,
+          'Confirm before closing multiple tabs', 'enable-confirm-closing-tabs',
+          isServer: false));
+    }
+    children.addAll([
       _OptionCheckBox(context, 'Adaptive bitrate', 'enable-abr'),
-      wallpaper(),
-      _OptionCheckBox(
-        context,
-        'Open connection in new tab',
-        kOptionOpenNewConnInTabs,
-        isServer: false,
-      ),
-    ];
-    // though this is related to GUI, but opengl problem affects all users, so put in config rather than local
-    children.add(Tooltip(
-      message: translate('software_render_tip'),
-      child: _OptionCheckBox(context, "Always use software rendering",
-          'allow-always-software-render'),
-    ));
-    children.add(_OptionCheckBox(
-      context,
-      'Check for software update on startup',
-      'enable-check-update',
-      isServer: false,
-    ));
+      wallpaper()
+    ]);
+    if (!bind.isQs()) {
+      children.addAll([
+        _OptionCheckBox(
+          context,
+          'Open connection in new tab',
+          kOptionOpenNewConnInTabs,
+          isServer: false,
+        ),
+        // though this is related to GUI, but opengl problem affects all users, so put in config rather than local
+        Tooltip(
+          message: translate('software_render_tip'),
+          child: _OptionCheckBox(context, "Always use software rendering",
+              'allow-always-software-render'),
+        ),
+        _OptionCheckBox(
+          context,
+          'Check for software update on startup',
+          'enable-check-update',
+          isServer: false,
+        )
+      ]);
+    }
     if (bind.mainShowOption(key: 'allow-linux-headless')) {
       children.add(_OptionCheckBox(
           context, 'Allow linux headless', 'allow-linux-headless'));
