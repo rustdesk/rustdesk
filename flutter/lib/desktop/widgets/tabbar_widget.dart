@@ -399,12 +399,9 @@ class DesktopTab extends StatelessWidget {
                       offstage: kUseCompatibleUiMode || Platform.isMacOS,
                       child: Row(children: [
                         Offstage(
-                            offstage: !showLogo,
-                            child: SvgPicture.asset(
-                              'assets/logo.svg',
-                              width: 16,
-                              height: 16,
-                            )),
+                          offstage: !showLogo,
+                          child: loadLogo(16),
+                        ),
                         Offstage(
                             offstage: !showTitle,
                             child: const Text(

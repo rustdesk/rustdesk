@@ -3071,3 +3071,14 @@ Color? disabledTextColor(BuildContext context, bool enabled) {
       ? null
       : Theme.of(context).textTheme.titleLarge?.color?.withOpacity(0.6);
 }
+
+Widget loadLogo(double size) {
+  return Image.asset('assets/logo.png',
+      width: size,
+      height: size,
+      errorBuilder: (ctx, error, stackTrace) => SvgPicture.asset(
+            'assets/logo.svg',
+            width: size,
+            height: size,
+          ));
+}

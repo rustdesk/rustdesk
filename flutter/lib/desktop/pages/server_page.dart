@@ -327,11 +327,7 @@ class _AppIcon extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       margin: EdgeInsets.symmetric(horizontal: 4.0),
-      child: SvgPicture.asset(
-        'assets/logo.svg',
-        width: 30,
-        height: 30,
-      ),
+      child: loadLogo(30),
     );
   }
 }
