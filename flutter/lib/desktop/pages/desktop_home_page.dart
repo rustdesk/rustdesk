@@ -79,6 +79,11 @@ class _DesktopHomePageState extends State<DesktopHomePage>
         future: buildHelpCards(),
         builder: (_, data) {
           if (data.hasData) {
+            if (bind.isQs()) {
+              Future.delayed(Duration(milliseconds: 300), () {
+                _updateWindowSize();
+              });
+            }
             return data.data!;
           } else {
             return const Offstage();
@@ -96,7 +101,6 @@ class _DesktopHomePageState extends State<DesktopHomePage>
     return ChangeNotifierProvider.value(
       value: gFFI.serverModel,
       child: Container(
-        key: _childKey,
         width: bind.isQs() ? 280.0 : 200.0,
         color: Theme.of(context).colorScheme.background,
         child: DesktopScrollWrapper(
@@ -105,6 +109,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
             controller: _leftPaneScrollController,
             physics: DraggableNeverScrollableScrollPhysics(),
             child: Column(
+              key: _childKey,
               children: children,
             ),
           ),
@@ -686,13 +691,16 @@ class _DesktopHomePageState extends State<DesktopHomePage>
 
     if (bind.isQs()) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        RenderBox renderBox =
-            _childKey.currentContext?.findRenderObject() as RenderBox;
-        desktopQsHomeLeftPaneSize = renderBox.size;
-        windowManager.setSize(getDesktopQsHomeSize());
-        windowManager.show();
+        _updateWindowSize();
       });
     }
+  }
+
+  _updateWindowSize() {
+    RenderBox renderBox =
+        _childKey.currentContext?.findRenderObject() as RenderBox;
+    desktopQsHomeLeftPaneSize = renderBox.size;
+    windowManager.setSize(getDesktopQsHomeSize());
   }
 
   @override

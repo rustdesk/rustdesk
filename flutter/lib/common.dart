@@ -3093,7 +3093,9 @@ Widget loadLogo(double size) {
 var desktopQsHomeLeftPaneSize = Size(280, 300);
 Size getDesktopQsHomeSize() {
   final magicWidth = 11.0;
-  return desktopQsHomeLeftPaneSize + Offset(magicWidth, 0);
+  final magicHeight = 8.0;
+  return desktopQsHomeLeftPaneSize +
+      Offset(magicWidth, kDesktopRemoteTabBarHeight + magicHeight);
 }
 
 Size getDesktopQsSettingsSize() {
