@@ -14,7 +14,6 @@ import 'package:flutter/services.dart';
 import 'package:flutter_hbb/common/formatter/id_formatter.dart';
 import 'package:flutter_hbb/desktop/widgets/refresh_wrapper.dart';
 import 'package:flutter_hbb/desktop/widgets/tabbar_widget.dart';
-import 'package:flutter_hbb/desktop/pages/desktop_home_page.dart';
 import 'package:flutter_hbb/main.dart';
 import 'package:flutter_hbb/models/desktop_render_texture.dart';
 import 'package:flutter_hbb/models/peer_model.dart';
@@ -3091,14 +3090,10 @@ Widget loadLogo(double size) {
           ));
 }
 
+var desktopQsHomeLeftPaneSize = Size(280, 300);
 Size getDesktopQsHomeSize() {
-  final magicWidth = 14;
-  final magicHeight = 8;
-  return Size(
-      DesktopHomePage.leftPaneWidth + magicWidth,
-      DesktopHomePage.qsLeftPaneHeight +
-          kDesktopRemoteTabBarHeight +
-          magicHeight);
+  final magicWidth = 11.0;
+  return desktopQsHomeLeftPaneSize + Offset(magicWidth, 0);
 }
 
 Size getDesktopQsSettingsSize() {

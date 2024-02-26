@@ -20,25 +20,13 @@ import 'package:flutter_hbb/utils/multi_window_manager.dart';
 import 'package:get/get.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:window_manager/window_manager.dart';
 import 'package:window_size/window_size.dart' as window_size;
 
 import '../widgets/button.dart';
 
 class DesktopHomePage extends StatefulWidget {
   const DesktopHomePage({Key? key}) : super(key: key);
-
-  static double get leftPaneTipHeight => 86.0;
-  static double get leftPaneIdHeight => 57.0;
-  static double get leftPanePasswordHeight => 80.0;
-  static double get leftPaneDividerHeight => 16.0;
-  static double get onlineStatusHeight => OnlineStatusWidget.height;
-  static double get qsLeftPaneHeight =>
-      leftPaneTipHeight +
-      leftPaneIdHeight +
-      leftPanePasswordHeight +
-      leftPaneDividerHeight +
-      onlineStatusHeight;
-  static double leftPaneWidth = bind.isQs() ? 280.0 : 200.0;
 
   @override
   State<DesktopHomePage> createState() => _DesktopHomePageState();
@@ -62,6 +50,8 @@ class _DesktopHomePageState extends State<DesktopHomePage>
   var watchIsCanRecordAudio = false;
   Timer? _updateTimer;
   bool isCardClosed = false;
+
+  final GlobalKey _childKey = GlobalKey();
 
   @override
   Widget build(BuildContext context) {
@@ -106,7 +96,8 @@ class _DesktopHomePageState extends State<DesktopHomePage>
     return ChangeNotifierProvider.value(
       value: gFFI.serverModel,
       child: Container(
-        width: DesktopHomePage.leftPaneWidth,
+        key: _childKey,
+        width: bind.isQs() ? 280.0 : 200.0,
         color: Theme.of(context).colorScheme.background,
         child: DesktopScrollWrapper(
           scrollController: _leftPaneScrollController,
@@ -692,6 +683,16 @@ class _DesktopHomePageState extends State<DesktopHomePage>
       }
     });
     _uniLinksSubscription = listenUniLinks();
+
+    if (bind.isQs()) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        RenderBox renderBox =
+            _childKey.currentContext?.findRenderObject() as RenderBox;
+        desktopQsHomeLeftPaneSize = renderBox.size;
+        windowManager.setSize(getDesktopQsHomeSize());
+        windowManager.show();
+      });
+    }
   }
 
   @override

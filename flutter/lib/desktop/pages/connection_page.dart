@@ -23,9 +23,6 @@ import '../widgets/button.dart';
 class OnlineStatusWidget extends StatefulWidget {
   const OnlineStatusWidget({Key? key}) : super(key: key);
 
-  static double get em => 14.0;
-  static double get height => em * 3; 
-
   @override
   State<OnlineStatusWidget> createState() => _OnlineStatusWidgetState();
 }
@@ -36,8 +33,8 @@ class _OnlineStatusWidgetState extends State<OnlineStatusWidget> {
   final _svcIsUsingPublicServer = true.obs;
   Timer? _updateTimer;
 
-  double get em => OnlineStatusWidget.em;
-  double get height => OnlineStatusWidget.height; 
+  double get em => 14.0;
+  double get height => em * 3; 
 
   void onUsePublicServerGuide() {
     const url = "https://rustdesk.com/pricing.html";
