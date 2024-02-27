@@ -240,11 +240,31 @@ pub fn is_valid_custom_id(id: &str) -> bool {
         .is_match(id)
 }
 
+// Support 1.1.10-1, the number after - is a patch version.
 pub fn get_version_number(v: &str) -> i64 {
+    let mut versions = v.split('-');
+
     let mut n = 0;
-    for x in v.split('.') {
-        n = n * 1000 + x.parse::<i64>().unwrap_or(0);
+
+    // The first part is the version number.
+    // 1.1.10 -> 1001100, 1.2.3 -> 1001030, multiple the last number by 10
+    // to leave space for patch version.
+    if let Some(v) = versions.next() {
+        let mut last = 0;
+        for x in v.split('.') {
+            last = x.parse::<i64>().unwrap_or(0);
+            n = n * 1000 + last;
+        }
+        n -= last;
+        n += last * 10;
     }
+
+    if let Some(v) = versions.next() {
+        n += v.parse::<i64>().unwrap_or(0);
+    }
+
+    // Ignore the rest
+
     n
 }
 
@@ -464,5 +484,13 @@ mod test {
         assert_eq!(AddrMangle::decode(&AddrMangle::encode(addr_v6)), addr_v6);
         let addr_v6 = "[::1]:8080".parse().unwrap();
         assert_eq!(AddrMangle::decode(&AddrMangle::encode(addr_v6)), addr_v6);
+    }
+
+    #[test]
+    fn test_get_version_number() {
+        assert_eq!(get_version_number("1.1.10"), 1001100);
+        assert_eq!(get_version_number("1.1.10-1"), 1001101);
+        assert_eq!(get_version_number("1.1.11-1"), 1001111);
+        assert_eq!(get_version_number("1.2.3"), 1002030);
     }
 }

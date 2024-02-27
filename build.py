@@ -80,8 +80,10 @@ def parse_rc_features(feature):
         return get_all_features()
     elif isinstance(feature, list):
         if windows:
+            # download third party is deprecated, we use github ci instead.
             # force add PrivacyMode
-            feature.append('PrivacyMode')
+            # feature.append('PrivacyMode')
+            pass
         for feat in feature:
             if isinstance(feat, str) and feat.upper() == 'ALL':
                 return get_all_features()
@@ -145,6 +147,12 @@ def make_parser():
         action='store_true',
         help='Skip cargo build process, only flutter version + Linux supported currently'
     )
+    if windows:
+        parser.add_argument(
+            '--skip-portable-pack',
+            action='store_true',
+            help='Skip packing, only flutter version + Windows supported'
+        )
     parser.add_argument(
         "--package",
         type=str
@@ -188,6 +196,9 @@ def generate_build_script_for_docker():
     system2("bash /tmp/build.sh")
 
 
+# Downloading third party resources is deprecated.
+# We can use this function in an offline build environment.
+# Even in an online environment, we recommend building third-party resources yourself.
 def download_extract_features(features, res_dir):
     import re
 
@@ -427,7 +438,7 @@ def build_flutter_arch_manjaro(version, features):
     system2('HBB=`pwd`/.. FLUTTER=1 makepkg -f')
 
 
-def build_flutter_windows(version, features):
+def build_flutter_windows(version, features, skip_portable_pack):
     if not skip_cargo:
         system2(f'cargo build --features {features} --lib --release')
         if not os.path.exists("target/release/librustdesk.dll"):
@@ -438,6 +449,8 @@ def build_flutter_windows(version, features):
     os.chdir('..')
     shutil.copy2('target/release/deps/dylib_virtual_display.dll',
                  flutter_build_dir_2)
+    if skip_portable_pack:
+        return
     os.chdir('libs/portable')
     system2('pip3 install -r requirements.txt')
     system2(
@@ -487,7 +500,7 @@ def main():
         os.chdir('../../..')
 
         if flutter:
-            build_flutter_windows(version, features)
+            build_flutter_windows(version, features, args.skip_portable_pack)
             return
         system2('cargo build --release --features ' + features)
         # system2('upx.exe target/release/rustdesk.exe')

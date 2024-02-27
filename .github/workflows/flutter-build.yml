@@ -35,8 +35,20 @@ env:
   UPLOAD_ARTIFACT: "${{ inputs.upload-artifact }}"
 
 jobs:
+  build-RustDeskTempTopMostWindow:
+    uses: ./.github/workflows/third-party-RustDeskTempTopMostWindow.yml
+    with:
+      upload-artifact: ${{ inputs.upload-artifact }}
+      target: windows-2019
+      configuration: Release
+      platform: x64
+      target_version: Windows10
+    strategy:
+        fail-fast: false
+
   build-for-windows-flutter:
     name: ${{ matrix.job.target }} (${{ matrix.job.os }})
+    needs: [build-RustDeskTempTopMostWindow]
     runs-on: ${{ matrix.job.os }}
     strategy:
       fail-fast: false
@@ -107,7 +119,7 @@ jobs:
         shell: bash
 
       - name: Build rustdesk
-        run: python3 .\build.py --portable --hwcodec --flutter --gpucodec
+        run: python3 .\build.py --portable --hwcodec --flutter --gpucodec --skip-portable-pack
 
       - name: find Runner.res
         # Windows: find Runner.res (compiled from ./flutter/windows/runner/Runner.rc), copy to ./Runner.res
@@ -125,6 +137,13 @@ jobs:
             ls -l ./libs/portable/Runner.res;
           fi
 
+      - name: Download RustDeskTempTopMostWindow artifacts
+        uses: actions/download-artifact@master
+        if: ${{ inputs.upload-artifact }}
+        with:
+          name: topmostwindow-artifacts
+          path: './flutter/build/windows/x64/runner/Release/'
+
       - name: Sign rustdesk files
         uses: GermanBluefox/code-sign-action@v7
         if: false # env.UPLOAD_ARTIFACT == 'true'
@@ -141,6 +160,7 @@ jobs:
         if: env.UPLOAD_ARTIFACT == 'true'
         run: |
           pushd ./libs/portable
+          pip3 install -r requirements.txt
           python3 ./generate.py -f ../../flutter/build/windows/x64/runner/Release/ -o . -e ../../flutter/build/windows/x64/runner/Release/rustdesk.exe
           popd
           mkdir -p ./SignOutput

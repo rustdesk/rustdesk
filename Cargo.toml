@@ -57,7 +57,6 @@ lazy_static = "1.4"
 sha2 = "0.10"
 repng = "0.2"
 parity-tokio-ipc = { git = "https://github.com/rustdesk-org/parity-tokio-ipc" }
-runas = "=1.0" # https://github.com/mitsuhiko/rust-runas/issues/13
 magnum-opus = { git = "https://github.com/rustdesk-org/magnum-opus" }
 dasp = { version = "0.11", features = ["signal", "interpolate-linear", "interpolate"], optional = true }
 rubato = { version = "0.12", optional = true }
@@ -107,6 +106,7 @@ virtual_display = { path = "libs/virtual_display", optional = true }
 impersonate_system = { git = "https://github.com/21pages/impersonate-system" }
 shared_memory = "0.12"
 tauri-winrt-notification = "0.1.2"
+runas = "1.2"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc = "0.2"

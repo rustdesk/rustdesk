@@ -490,28 +490,6 @@ extern "C"
             wcsncpy_s(buf, bufSize, tmpStr.c_str(), tmpStr.size());
         }
     }
-
-    BOOL has_rdp_service()
-    {
-        PWTS_SESSION_INFOA pInfos;
-        DWORD count;
-        auto rdp = "rdp";
-        auto nrdp = strlen(rdp);
-        auto rdp_or_console = WTSGetActiveConsoleSessionId();
-        if (WTSEnumerateSessionsA(WTS_CURRENT_SERVER_HANDLE, NULL, 1, &pInfos, &count))
-        {
-            for (DWORD i = 0; i < count; i++)
-            {
-                auto info = pInfos[i];
-                if (!strnicmp(info.pWinStationName, rdp, nrdp))
-                {
-                    return TRUE;
-                }
-            }
-            WTSFreeMemory(pInfos);
-        }
-        return FALSE;
-    }
 } // end of extern "C"
 
 // below copied from https://github.com/TigerVNC/tigervnc/blob/master/vncviewer/win32.c

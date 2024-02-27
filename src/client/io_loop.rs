@@ -1527,14 +1527,11 @@ impl<T: InvokeUiSession> Remote<T> {
                 },
                 Some(message::Union::MessageBox(msgbox)) => {
                     let mut link = msgbox.link;
-                    // Links from the remote side must be verified.
-                    if !link.starts_with("rustdesk://") {
-                        if let Some(v) = hbb_common::config::HELPER_URL.get(&link as &str) {
-                            link = v.to_string();
-                        } else {
-                            log::warn!("Message box ignore link {} for security", &link);
-                            link = "".to_string();
-                        }
+                    if let Some(v) = hbb_common::config::HELPER_URL.get(&link as &str) {
+                        link = v.to_string();
+                    } else {
+                        log::warn!("Message box ignore link {} for security", &link);
+                        link = "".to_string();
                     }
                     self.handler
                         .msgbox(&msgbox.msgtype, &msgbox.title, &msgbox.text, &link);

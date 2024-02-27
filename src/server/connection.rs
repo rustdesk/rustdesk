@@ -239,6 +239,8 @@ pub struct Connection {
     supported_encoding_flag: (bool, Option<bool>),
     services_subed: bool,
     delayed_read_dir: Option<(String, bool)>,
+    #[cfg(target_os = "macos")]
+    retina: Retina,
 }
 
 impl ConnInner {
@@ -388,6 +390,8 @@ impl Connection {
             supported_encoding_flag: (false, None),
             services_subed: false,
             delayed_read_dir: None,
+            #[cfg(target_os = "macos")]
+            retina: Retina::default(),
         };
         let addr = hbb_common::try_into_v4(addr);
         if !conn.on_open(addr).await {
@@ -629,7 +633,8 @@ impl Connection {
                 },
                 Some((instant, value)) = rx.recv() => {
                     let latency = instant.elapsed().as_millis() as i64;
-                    let msg: &Message = &value;
+                    #[allow(unused_mut)]
+                    let mut msg = value;
 
                     if latency > 1000 {
                         match &msg.union {
@@ -651,11 +656,20 @@ impl Connection {
                                 _ => {},
                             }
                         }
-                        Some(message::Union::PeerInfo(..)) => {
+                        Some(message::Union::PeerInfo(_pi)) => {
                             conn.refresh_video_display(None);
+                            #[cfg(target_os = "macos")]
+                            conn.retina.set_displays(&_pi.displays);
+                        }
+                        #[cfg(target_os = "macos")]
+                        Some(message::Union::CursorPosition(pos)) => {
+                            if let Some(new_msg) = conn.retina.on_cursor_pos(&pos, conn.display_idx) {
+                                msg = Arc::new(new_msg);
+                            }
                         }
                         _ => {}
                     }
+                    let msg: &Message = &msg;
                     if let Err(err) = conn.stream.send(msg).await {
                         conn.on_close(&err.to_string(), false).await;
                         break;
@@ -1229,6 +1243,10 @@ impl Connection {
                 Ok(displays) => {
                     // For compatibility with old versions, we need to send the displays to the peer.
                     // But the displays may be updated later, before creating the video capturer.
+                    #[cfg(target_os = "macos")]
+                    {
+                        self.retina.set_displays(&displays);
+                    }
                     pi.displays = displays;
                     pi.current_display = self.display_idx as _;
                     res.set_peer_info(pi);
@@ -1811,7 +1829,8 @@ impl Connection {
             }
         } else if self.authorized {
             match msg.union {
-                Some(message::Union::MouseEvent(me)) => {
+                #[allow(unused_mut)]
+                Some(message::Union::MouseEvent(mut me)) => {
                     #[cfg(any(target_os = "android", target_os = "ios"))]
                     if let Err(e) = call_main_service_pointer_input("mouse", me.mask, me.x, me.y) {
                         log::debug!("call_main_service_pointer_input fail:{}", e);
@@ -1823,6 +1842,8 @@ impl Connection {
                         } else {
                             MOUSE_MOVE_TIME.store(get_time(), Ordering::SeqCst);
                         }
+                        #[cfg(target_os = "macos")]
+                        self.retina.on_mouse_event(&mut me, self.display_idx);
                         self.input_mouse(me, self.inner.id());
                     }
                     self.update_auto_disconnect_timer();
@@ -3488,6 +3509,54 @@ extern "C" fn connection_shutdown_hook() {
     }
 }
 
+#[cfg(target_os = "macos")]
+#[derive(Debug, Default)]
+struct Retina {
+    displays: Vec<DisplayInfo>,
+}
+
+#[cfg(target_os = "macos")]
+impl Retina {
+    #[inline]
+    fn set_displays(&mut self, displays: &Vec<DisplayInfo>) {
+        self.displays = displays.clone();
+    }
+
+    #[inline]
+    fn on_mouse_event(&mut self, e: &mut MouseEvent, current: usize) {
+        let Some(d) = self.displays.get(current) else {
+            return;
+        };
+        let s = d.scale;
+        if s > 1.0 && e.x >= d.x && e.y >= d.y && e.x < d.x + d.width && e.y < d.y + d.height {
+            e.x = d.x + ((e.x - d.x) as f64 / s) as i32;
+            e.y = d.y + ((e.y - d.y) as f64 / s) as i32;
+        }
+    }
+
+    #[inline]
+    fn on_cursor_pos(&mut self, pos: &CursorPosition, current: usize) -> Option<Message> {
+        let Some(d) = self.displays.get(current) else {
+            return None;
+        };
+        let s = d.scale;
+        if s > 1.0
+            && pos.x >= d.x
+            && pos.y >= d.y
+            && (pos.x - d.x) as f64 * s < d.width as f64
+            && (pos.y - d.y) as f64 * s < d.height as f64
+        {
+            let mut pos = pos.clone();
+            pos.x = d.x + ((pos.x - d.x) as f64 * s) as i32;
+            pos.y = d.y + ((pos.y - d.y) as f64 * s) as i32;
+            let mut msg = Message::new();
+            msg.set_cursor_position(pos);
+            return Some(msg);
+        }
+        None
+    }
+}
+
 mod raii {
     // CONN_COUNT: remote connection count in fact
     // ALIVE_CONNS: all connections, including unauthorized connections
@@ -3576,5 +3645,42 @@ mod raii {
             }
             Self::check_wake_lock();
         }
+    }
+}
+
+mod test {
+    #[allow(unused)]
+    use super::*;
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn retina() {
+        let mut retina = Retina {
+            displays: vec![DisplayInfo {
+                x: 10,
+                y: 10,
+                width: 1000,
+                height: 1000,
+                scale: 2.0,
+                ..Default::default()
+            }],
+        };
+        let mut mouse: MouseEvent = MouseEvent {
+            x: 510,
+            y: 510,
+            ..Default::default()
+        };
+        retina.on_mouse_event(&mut mouse, 0);
+        assert_eq!(mouse.x, 260);
+        assert_eq!(mouse.y, 260);
+        let pos = CursorPosition {
+            x: 260,
+            y: 260,
+            ..Default::default()
+        };
+        let msg = retina.on_cursor_pos(&pos, 0).unwrap();
+        let pos = msg.cursor_position();
+        assert_eq!(pos.x, 510);
+        assert_eq!(pos.y, 510);
     }
 }

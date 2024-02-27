@@ -186,6 +186,7 @@ pub enum Data {
     MouseMoveTime(i64),
     Authorize,
     Close,
+    #[cfg(windows)]
     SAS,
     UserSid(Option<u32>),
     OnlineStatus(Option<(i64, bool)>),

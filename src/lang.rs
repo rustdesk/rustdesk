@@ -156,6 +156,11 @@ pub fn translate_locale(name: String, locale: &str) -> String {
         if let Some(value) = placeholder_value.as_ref() {
             s = s.replace("{}", &value);
         }
+        if !crate::is_rustdesk() {
+            if s.contains("RustDesk") && !name.starts_with("upgrade_rustdesk_server_pro") {
+                s = s.replace("RustDesk", &crate::get_app_name());
+            }
+        }
         s
     };
     if let Some(v) = m.get(&name as &str) {

@@ -325,10 +325,6 @@ impl UI {
         return false;
     }
 
-    fn is_rdp_service_open(&self) -> bool {
-        is_rdp_service_open()
-    }
-
     fn is_share_rdp(&self) -> bool {
         is_share_rdp()
     }
@@ -661,7 +657,6 @@ impl sciter::EventHandler for UI {
         fn is_release();
         fn set_socks(String, String, String);
         fn get_socks();
-        fn is_rdp_service_open();
         fn is_share_rdp();
         fn set_share_rdp(bool);
         fn is_installed_lower_version();

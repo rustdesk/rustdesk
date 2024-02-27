@@ -71,7 +71,6 @@ const String kOptionOpenInWindows = "allow-open-in-windows";
 const String kOptionForceAlwaysRelay = "force-always-relay";
 const String kOptionViewOnly = "view-only";
 
-const String kUniLinksPrefix = "rustdesk://";
 const String kUrlActionClose = "close";
 
 const String kTabLabelHomePage = "Home";

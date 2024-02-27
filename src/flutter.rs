@@ -512,6 +512,7 @@ impl FlutterHandler {
                 h.insert("original_width", original_resolution.width);
                 h.insert("original_height", original_resolution.height);
             }
+            h.insert("scale", (d.scale * 100.0f64) as i32);
             msg_vec.push(h);
         }
         serde_json::ser::to_string(&msg_vec).unwrap_or("".to_owned())

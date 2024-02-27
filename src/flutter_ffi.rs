@@ -804,6 +804,10 @@ pub fn main_get_app_name_sync() -> SyncReturn<String> {
     SyncReturn(get_app_name())
 }
 
+pub fn main_uri_prefix_sync() -> SyncReturn<String> {
+    SyncReturn(crate::get_uri_prefix())
+}
+
 pub fn main_get_license() -> String {
     get_license()
 }
@@ -1675,10 +1679,6 @@ pub fn main_is_share_rdp() -> SyncReturn<bool> {
     SyncReturn(is_share_rdp())
 }
 
-pub fn main_is_rdp_service_open() -> SyncReturn<bool> {
-    SyncReturn(is_rdp_service_open())
-}
-
 pub fn main_set_share_rdp(enable: bool) {
     set_share_rdp(enable)
 }
@@ -1811,6 +1811,10 @@ pub fn main_test_wallpaper(_second: u64) {
 
 pub fn main_support_remove_wallpaper() -> bool {
     support_remove_wallpaper()
+}
+
+pub fn is_qs() -> SyncReturn<bool> {
+    SyncReturn(false)
 }
 
 /// Send a url scheme throught the ipc.
