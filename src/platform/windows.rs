@@ -1,8 +1,8 @@
 use super::{CursorData, ResultType};
 use crate::common::PORTABLE_APPNAME_RUNTIME_ENV_KEY;
 use crate::{
-    ipc,
     custom_server::*,
+    ipc,
     privacy_mode::win_topmost_window::{self, WIN_TOPMOST_INJECTED_PROCESS_EXE},
 };
 use hbb_common::libc::{c_int, wchar_t};
@@ -15,7 +15,6 @@ use hbb_common::{
     message_proto::{Resolution, WindowsSession},
     sleep, timeout, tokio,
 };
-use sha2::digest::generic_array::functional::FunctionalSequence;
 use std::process::{Command, Stdio};
 use std::{
     collections::HashMap,
@@ -2419,7 +2418,7 @@ fn run_after_run_cmds(silent: bool) {
         log::debug!("Spawn new window");
         allow_err!(std::process::Command::new("cmd")
             .arg("/c")
-            .arg("timeout /t 2 & start {app}://")
+            .arg(format!("timeout /t 2 & start {app}://"))
             .creation_flags(winapi::um::winbase::CREATE_NO_WINDOW)
             .spawn());
     }
