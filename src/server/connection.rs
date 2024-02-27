@@ -423,7 +423,11 @@ impl Connection {
         if !conn.block_input {
             conn.send_permission(Permission::BlockInput, false).await;
         }
-        let mut test_delay_timer = crate::rustdesk_interval(time::interval(TEST_DELAY_TIMEOUT));
+        // The start parameter of interval_at needs to add TEST_DELAY_TIMEOUT, otherwise windows rdp will be affected.
+        let mut test_delay_timer = crate::rustdesk_interval(time::interval_at(
+            Instant::now() + TEST_DELAY_TIMEOUT,
+            TEST_DELAY_TIMEOUT,
+        ));
         let mut last_recv_time = Instant::now();
 
         conn.stream.set_send_timeout(
