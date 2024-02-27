@@ -130,7 +130,7 @@ class PlatformFFI {
         debugPrint('Failed to get documents directory: $e');
       }
       _ffiBind = RustdeskImpl(dylib);
-      if (_ffiBind.isQs() && !isMain) {
+      if (_ffiBind.isQs() && (_appType != kAppTypeMain && _appType != kAppTypeConnectionManager)) {
         return false;
       }
 
