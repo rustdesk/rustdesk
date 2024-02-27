@@ -284,7 +284,7 @@ impl Server {
             }
         }
         #[cfg(target_os = "macos")]
-        self.set_enable_retina();
+        self.update_enable_retina();
         self.connections.insert(conn.id(), conn);
         *CONN_COUNT.lock().unwrap() = self.connections.len();
     }
@@ -296,7 +296,7 @@ impl Server {
         self.connections.remove(&conn.id());
         *CONN_COUNT.lock().unwrap() = self.connections.len();
         #[cfg(target_os = "macos")]
-        self.set_enable_retina();
+        self.update_enable_retina();
     }
 
     pub fn close_connections(&mut self) {
@@ -330,7 +330,7 @@ impl Server {
                 s.on_unsubscribe(conn.id());
             }
             #[cfg(target_os = "macos")]
-            self.set_enable_retina();
+            self.update_enable_retina();
         }
     }
 
@@ -382,7 +382,7 @@ impl Server {
     }
 
     #[cfg(target_os = "macos")]
-    fn set_enable_retina(&self) {
+    fn update_enable_retina(&self) {
         let mut video_service_count = 0;
         for (name, service) in self.services.iter() {
             if Self::is_video_service_name(&name) && service.ok() {
