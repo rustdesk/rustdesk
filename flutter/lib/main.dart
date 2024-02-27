@@ -98,11 +98,9 @@ Future<void> main(List<String> args) async {
   }
 }
 
-Future<bool> initEnv(String appType) async {
+Future<void> initEnv(String appType) async {
   // global shared preference
-  if (!await platformFFI.init(appType)) {
-    return false;
-  }
+  await platformFFI.init(appType);
   // global FFI, use this **ONLY** for global configuration
   // for convenience, use global FFI on mobile platform
   // focus on multi-ffi on desktop first
@@ -111,14 +109,11 @@ Future<bool> initEnv(String appType) async {
   _registerEventHandler();
   // Update the system theme.
   updateSystemWindowTheme();
-  return true;
 }
 
 void runMainApp(bool startService) async {
   // register uni links
-  if (!await initEnv(kAppTypeMain)) {
-    return;
-  }
+  await initEnv(kAppTypeMain);
   // trigger connection status updater
   await bind.mainCheckConnectStatus();
   if (startService) {
@@ -152,9 +147,7 @@ void runMainApp(bool startService) async {
 }
 
 void runMobileApp() async {
-  if (!await initEnv(kAppTypeMain)) {
-    return;
-  }
+  await initEnv(kAppTypeMain);
   if (isAndroid) androidChannelInit();
   platformFFI.syncAndroidServiceAppDirConfigPath();
   await Future.wait([gFFI.abModel.loadCache(), gFFI.groupModel.loadCache()]);
@@ -167,9 +160,7 @@ void runMultiWindow(
   Map<String, dynamic> argument,
   String appType,
 ) async {
-  if (!await initEnv(appType)) {
-    return;
-  }
+  await initEnv(appType);
   final title = getWindowName();
   // set prevent close to true, we handle close event manually
   WindowController.fromWindowId(kWindowId!).setPreventClose(true);
@@ -232,9 +223,7 @@ void runMultiWindow(
 }
 
 void runConnectionManagerScreen() async {
-  if (!await initEnv(kAppTypeConnectionManager)) {
-    return;
-  }
+  await initEnv(kAppTypeConnectionManager);
   _runApp(
     '',
     const DesktopServerPage(),
@@ -337,9 +326,7 @@ void _runApp(
 
 void runInstallPage() async {
   await windowManager.ensureInitialized();
-  if (!await initEnv(kAppTypeMain)) {
-    return;
-  }
+  await initEnv(kAppTypeMain);
   _runApp('', const InstallPage(), MyTheme.currentThemeMode());
   WindowOptions windowOptions =
       getHiddenTitleBarWindowOptions(size: Size(800, 600), center: true);
