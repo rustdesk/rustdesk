@@ -14,6 +14,7 @@ pub trait Service: Send + Sync {
     fn join(&self);
     fn get_option(&self, opt: &str) -> Option<String>;
     fn set_option(&self, opt: &str, val: &str) -> Option<String>;
+    fn ok(&self) -> bool;
 }
 
 pub trait Subscriber: Default + Send + Sync + 'static {
@@ -142,6 +143,12 @@ impl<T: Subscriber + From<ConnInner>> Service for ServiceTmpl<T> {
             .options
             .insert(opt.to_string(), val.to_string())
     }
+
+    #[inline]
+    fn ok(&self) -> bool {
+        let lock = self.0.read().unwrap();
+        lock.active && lock.has_subscribes()
+    }
 }
 
 impl<T: Subscriber + From<ConnInner>> Clone for ServiceTmpl<T> {
@@ -178,12 +185,6 @@ impl<T: Subscriber + From<ConnInner>> ServiceTmpl<T> {
     #[inline]
     pub fn has_subscribes(&self) -> bool {
         self.0.read().unwrap().has_subscribes()
-    }
-
-    #[inline]
-    pub fn ok(&self) -> bool {
-        let lock = self.0.read().unwrap();
-        lock.active && lock.has_subscribes()
     }
 
     pub fn snapshot<F>(&self, callback: F) -> ResultType<()>

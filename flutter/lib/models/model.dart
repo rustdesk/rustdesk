@@ -138,21 +138,29 @@ class FfiModel with ChangeNotifier {
     sessionId = parent.target!.sessionId;
   }
 
-  Rect? globalDisplaysRect() => _getDisplaysRect(_pi.displays);
-  Rect? displaysRect() => _getDisplaysRect(_pi.getCurDisplays());
-  Rect? _getDisplaysRect(List<Display> displays) {
+  Rect? globalDisplaysRect() => _getDisplaysRect(_pi.displays, true);
+  Rect? displaysRect() => _getDisplaysRect(_pi.getCurDisplays(), false);
+  Rect? _getDisplaysRect(List<Display> displays, bool useDisplayScale) {
     if (displays.isEmpty) {
       return null;
     }
+    int scale(int len, double s) {
+      if (useDisplayScale) {
+        return len.toDouble() ~/ s;
+      } else {
+        return len;
+      }
+    }
+
     double l = displays[0].x;
     double t = displays[0].y;
-    double r = displays[0].x + displays[0].width;
-    double b = displays[0].y + displays[0].height;
+    double r = displays[0].x + scale(displays[0].width, displays[0].scale);
+    double b = displays[0].y + scale(displays[0].height, displays[0].scale);
     for (var display in displays.sublist(1)) {
       l = min(l, display.x);
       t = min(t, display.y);
-      r = max(r, display.x + display.width);
-      b = max(b, display.y + display.height);
+      r = max(r, display.x + scale(display.width, display.scale));
+      b = max(b, display.y + scale(display.height, display.scale));
     }
     return Rect.fromLTRB(l, t, r, b);
   }
@@ -476,6 +484,7 @@ class FfiModel with ChangeNotifier {
         int.tryParse(evt['original_width']) ?? kInvalidResolutionValue;
     newDisplay.originalHeight =
         int.tryParse(evt['original_height']) ?? kInvalidResolutionValue;
+    newDisplay._scale = _pi.scaleOfDisplay(display);
     _pi.displays[display] = newDisplay;
 
     if (!_pi.isSupportMultiUiSession || _pi.currentDisplay == display) {
@@ -890,6 +899,8 @@ class FfiModel with ChangeNotifier {
     d.cursorEmbedded = evt['cursor_embedded'] == 1;
     d.originalWidth = evt['original_width'] ?? kInvalidResolutionValue;
     d.originalHeight = evt['original_height'] ?? kInvalidResolutionValue;
+    double v = (evt['scale']?.toDouble() ?? 100.0) / 100;
+    d._scale = v > 1.0 ? v : 1.0;
     return d;
   }
 
@@ -2384,6 +2395,8 @@ class Display {
   bool cursorEmbedded = false;
   int originalWidth = kInvalidResolutionValue;
   int originalHeight = kInvalidResolutionValue;
+  double _scale = 1.0;
+  double get scale => _scale > 1.0 ? _scale : 1.0;
 
   Display() {
     width = (isDesktop || isWebDesktop)
@@ -2502,6 +2515,13 @@ class PeerInfo with ChangeNotifier {
         return [];
       }
     }
+  }
+
+  double scaleOfDisplay(int display) {
+    if (display >= 0 && display < displays.length) {
+      return displays[display].scale;
+    }
+    return 1.0;
   }
 }
 

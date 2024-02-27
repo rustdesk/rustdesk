@@ -49,6 +49,7 @@ message DisplayInfo {
   bool online = 6;
   bool cursor_embedded = 7;
   Resolution original_resolution = 8;
+  double scale = 9;
 }
 
 message PortForward {
