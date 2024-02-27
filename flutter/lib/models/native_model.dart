@@ -109,7 +109,7 @@ class PlatformFFI {
           sessionId: sessionId, display: display, ptr: ptr);
 
   /// Init the FFI class, loads the native Rust core library.
-  Future<void> init(String appType) async {
+  Future<bool> init(String appType) async {
     _appType = appType;
     final dylib = Platform.isAndroid
         ? DynamicLibrary.open('librustdesk.so')
@@ -130,6 +130,10 @@ class PlatformFFI {
         debugPrint('Failed to get documents directory: $e');
       }
       _ffiBind = RustdeskImpl(dylib);
+      if (_ffiBind.isQs() && (_appType != kAppTypeMain && _appType != kAppTypeConnectionManager)) {
+        return false;
+      }
+
       if (Platform.isLinux) {
         // Start a dbus service, no need to await
         _ffiBind.mainStartDbusServer();
@@ -202,6 +206,7 @@ class PlatformFFI {
       debugPrintStack(label: 'initialize failed: $e');
     }
     version = await getVersion();
+    return true;
   }
 
   Future<bool> tryHandle(Map<String, dynamic> evt) async {

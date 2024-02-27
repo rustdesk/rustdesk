@@ -1521,6 +1521,9 @@ class LastWindowPosition {
   }
 }
 
+String get windowFramePrefix =>
+    bind.isQs() ? "${kWindowPrefix}qs_" : kWindowPrefix;
+
 /// Save window position and size on exit
 /// Note that windowId must be provided if it's subwindow
 Future<void> saveWindowPosition(WindowType type, {int? windowId}) async {
@@ -1536,7 +1539,7 @@ Future<void> saveWindowPosition(WindowType type, {int? windowId}) async {
       (Platform.isMacOS && stateGlobal.closeOnFullscreen == true);
   setFrameIfMaximized() {
     if (isMaximized) {
-      final pos = bind.getLocalFlutterOption(k: kWindowPrefix + type.name);
+      final pos = bind.getLocalFlutterOption(k: windowFramePrefix + type.name);
       var lpos = LastWindowPosition.loadFromString(pos);
       position = Offset(
           lpos?.offsetWidth ?? position.dx, lpos?.offsetHeight ?? position.dy);
@@ -1584,7 +1587,7 @@ Future<void> saveWindowPosition(WindowType type, {int? windowId}) async {
       "Saving frame: $windowId: ${pos.width}/${pos.height}, offset:${pos.offsetWidth}/${pos.offsetHeight}, isMaximized:${pos.isMaximized}, isFullscreen:${pos.isFullscreen}");
 
   await bind.setLocalFlutterOption(
-      k: kWindowPrefix + type.name, v: pos.toString());
+      k: windowFramePrefix + type.name, v: pos.toString());
 
   if (type == WindowType.RemoteDesktop && windowId != null) {
     await _saveSessionWindowPosition(
@@ -1599,7 +1602,7 @@ Future _saveSessionWindowPosition(WindowType windowType, int windowId,
   getPeerPos(String peerId) {
     if (isMaximized) {
       final peerPos = bind.mainGetPeerFlutterOptionSync(
-          id: peerId, k: kWindowPrefix + windowType.name);
+          id: peerId, k: windowFramePrefix + windowType.name);
       var lpos = LastWindowPosition.loadFromString(peerPos);
       return LastWindowPosition(
               lpos?.width ?? pos.offsetWidth,
@@ -1618,7 +1621,7 @@ Future _saveSessionWindowPosition(WindowType windowType, int windowId,
     for (final peerId in remoteList.split(',')) {
       bind.mainSetPeerFlutterOptionSync(
           id: peerId,
-          k: kWindowPrefix + windowType.name,
+          k: windowFramePrefix + windowType.name,
           v: getPeerPos(peerId));
     }
   }
@@ -1736,14 +1739,14 @@ Future<bool> restoreWindowPosition(WindowType type,
     // Because the session may not be read at this time.
     if (desktopType == DesktopType.main) {
       pos = bind.mainGetPeerFlutterOptionSync(
-          id: peerId, k: kWindowPrefix + type.name);
+          id: peerId, k: windowFramePrefix + type.name);
     } else {
       pos = await bind.sessionGetFlutterOptionByPeerId(
-          id: peerId, k: kWindowPrefix + type.name);
+          id: peerId, k: windowFramePrefix + type.name);
     }
     isRemotePeerPos = pos != null;
   }
-  pos ??= bind.getLocalFlutterOption(k: kWindowPrefix + type.name);
+  pos ??= bind.getLocalFlutterOption(k: windowFramePrefix + type.name);
 
   var lpos = LastWindowPosition.loadFromString(pos);
   if (lpos == null) {
@@ -1790,9 +1793,13 @@ Future<bool> restoreWindowPosition(WindowType type,
       }
       if (lpos.isMaximized == true) {
         await restorePos();
-        await windowManager.maximize();
+        if (!bind.isQs()) {
+          await windowManager.maximize();
+        }
       } else {
-        await windowManager.setSize(size);
+        if (!bind.isQs()) {
+          await windowManager.setSize(size);
+        }
         await restorePos();
       }
       return true;
@@ -3081,4 +3088,16 @@ Widget loadLogo(double size) {
             width: size,
             height: size,
           ));
+}
+
+var desktopQsHomeLeftPaneSize = Size(280, 300);
+Size getDesktopQsHomeSize() {
+  final magicWidth = 11.0;
+  final magicHeight = 8.0;
+  return desktopQsHomeLeftPaneSize +
+      Offset(magicWidth, kDesktopRemoteTabBarHeight + magicHeight);
+}
+
+Size getDesktopQsSettingsSize() {
+  return Size(768, 600);
 }

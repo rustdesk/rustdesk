@@ -62,7 +62,11 @@ pub fn core_main() -> Option<Vec<String>> {
             ]
             .contains(&arg.as_str())
             {
-                _is_flutter_invoke_new_connection = true;
+                if crate::flutter_ffi::is_qs().0 {
+                    return None;
+                } else {
+                    _is_flutter_invoke_new_connection = true;
+                }
             }
             if arg == "--elevate" {
                 _is_elevate = true;
