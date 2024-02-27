@@ -34,7 +34,7 @@ class _OnlineStatusWidgetState extends State<OnlineStatusWidget> {
   Timer? _updateTimer;
 
   double get em => 14.0;
-  double get height => em * 3; 
+  double get height => em * 3;
 
   void onUsePublicServerGuide() {
     const url = "https://rustdesk.com/pricing.html";
@@ -134,7 +134,7 @@ class _OnlineStatusWidgetState extends State<OnlineStatusWidget> {
               )
             ],
           )),
-    );
+    ).paddingOnly(right: bind.isQs() ? 8 : 0);
   }
 
   updateStatus() async {
