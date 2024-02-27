@@ -17,20 +17,19 @@ use hbb_common::tokio::sync::mpsc::error::TryRecvError;
 use hbb_common::{
     allow_err,
     config::{PeerConfig, TransferSerde},
-    fs,
     fs::{
-        can_enable_overwrite_detection, get_job, get_string, new_send_confirm, DigestCheckResult,
-        RemoveJobMeta,
+        self, can_enable_overwrite_detection, get_job, get_string, new_send_confirm,
+        DigestCheckResult, RemoveJobMeta,
     },
     get_time, log,
-    message_proto::permission_info::Permission,
-    message_proto::*,
+    message_proto::{permission_info::Permission, *},
     protobuf::Message as _,
     rendezvous_proto::ConnType,
+    timeout,
     tokio::{
         self,
         sync::mpsc,
-        time::{self, Duration, Instant, Interval},
+        time::{self, Duration, Instant},
     },
     Stream,
 };
@@ -62,7 +61,7 @@ pub struct Remote<T: InvokeUiSession> {
     read_jobs: Vec<fs::TransferJob>,
     write_jobs: Vec<fs::TransferJob>,
     remove_jobs: HashMap<i32, RemoveJob>,
-    timer: Interval,
+    timer: crate::RustDeskInterval,
     last_update_jobs_status: (Instant, HashMap<i32, u64>),
     is_connected: bool,
     first_frame: bool,
@@ -99,7 +98,7 @@ impl<T: InvokeUiSession> Remote<T> {
             read_jobs: Vec::new(),
             write_jobs: Vec::new(),
             remove_jobs: Default::default(),
-            timer: time::interval(SEC30),
+            timer: crate::rustdesk_interval(time::interval(SEC30)),
             last_update_jobs_status: (Instant::now(), Default::default()),
             is_connected: false,
             first_frame: false,
@@ -170,7 +169,8 @@ impl<T: InvokeUiSession> Remote<T> {
                 #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
                 let mut rx_clip_client = rx_clip_client_lock.lock().await;
 
-                let mut status_timer = time::interval(Duration::new(1, 0));
+                let mut status_timer =
+                    crate::rustdesk_interval(time::interval(Duration::new(1, 0)));
                 let mut fps_instant = Instant::now();
 
                 loop {
@@ -228,7 +228,7 @@ impl<T: InvokeUiSession> Remote<T> {
                                 }
                                 self.update_jobs_status();
                             } else {
-                                self.timer = time::interval_at(Instant::now() + SEC30, SEC30);
+                                self.timer = crate::rustdesk_interval(time::interval_at(Instant::now() + SEC30, SEC30));
                             }
                         }
                         _ = status_timer.tick() => {
@@ -286,7 +286,7 @@ impl<T: InvokeUiSession> Remote<T> {
 
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
         if _set_disconnected_ok {
-            Client::try_stop_clipboard(&self.handler.get_id());
+            Client::try_stop_clipboard();
         }
 
         #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
@@ -537,7 +537,7 @@ impl<T: InvokeUiSession> Remote<T> {
                             }
                             let total_size = job.total_size();
                             self.read_jobs.push(job);
-                            self.timer = time::interval(MILLI1);
+                            self.timer = crate::rustdesk_interval(time::interval(MILLI1));
                             allow_err!(
                                 peer.send(&fs::new_receive(id, to, file_num, files, total_size))
                                     .await
@@ -597,7 +597,7 @@ impl<T: InvokeUiSession> Remote<T> {
                             );
                             job.is_last_job = true;
                             self.read_jobs.push(job);
-                            self.timer = time::interval(MILLI1);
+                            self.timer = crate::rustdesk_interval(time::interval(MILLI1));
                         }
                     }
                 }
@@ -1099,15 +1099,20 @@ impl<T: InvokeUiSession> Remote<T> {
                         if !(self.handler.is_file_transfer() || self.handler.is_port_forward()) {
                             #[cfg(feature = "flutter")]
                             #[cfg(not(any(target_os = "android", target_os = "ios")))]
-                            Client::try_start_clipboard(None);
+                            let rx = Client::try_start_clipboard(None);
                             #[cfg(not(feature = "flutter"))]
                             #[cfg(not(any(target_os = "android", target_os = "ios")))]
-                            Client::try_start_clipboard(Some(
+                            let rx = Client::try_start_clipboard(Some(
                                 crate::client::ClientClipboardContext {
                                     cfg: self.handler.get_permission_config(),
                                     tx: self.sender.clone(),
                                 },
                             ));
+                            // To make sure current text clipboard data is updated.
+                            #[cfg(not(any(target_os = "android", target_os = "ios")))]
+                            if let Some(mut rx) = rx {
+                                timeout(common::CLIPBOARD_INTERVAL, rx.recv()).await.ok();
+                            }
 
                             #[cfg(not(any(target_os = "android", target_os = "ios")))]
                             if let Some(msg_out) = Client::get_current_text_clipboard_msg() {
@@ -1522,14 +1527,11 @@ impl<T: InvokeUiSession> Remote<T> {
                 },
                 Some(message::Union::MessageBox(msgbox)) => {
                     let mut link = msgbox.link;
-                    // Links from the remote side must be verified.
-                    if !link.starts_with("rustdesk://") {
-                        if let Some(v) = hbb_common::config::HELPER_URL.get(&link as &str) {
-                            link = v.to_string();
-                        } else {
-                            log::warn!("Message box ignore link {} for security", &link);
-                            link = "".to_string();
-                        }
+                    if let Some(v) = hbb_common::config::HELPER_URL.get(&link as &str) {
+                        link = v.to_string();
+                    } else {
+                        log::warn!("Message box ignore link {} for security", &link);
+                        link = "".to_string();
                     }
                     self.handler
                         .msgbox(&msgbox.msgtype, &msgbox.title, &msgbox.text, &link);

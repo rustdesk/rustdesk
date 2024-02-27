@@ -259,7 +259,7 @@ impl UI {
     }
 
     fn using_public_server(&self) -> bool {
-        using_public_server()
+        crate::using_public_server()
     }
 
     fn get_options(&self) -> Value {
@@ -323,10 +323,6 @@ impl UI {
         return true;
         #[cfg(debug_assertions)]
         return false;
-    }
-
-    fn is_rdp_service_open(&self) -> bool {
-        is_rdp_service_open()
     }
 
     fn is_share_rdp(&self) -> bool {
@@ -661,7 +657,6 @@ impl sciter::EventHandler for UI {
         fn is_release();
         fn set_socks(String, String, String);
         fn get_socks();
-        fn is_rdp_service_open();
         fn is_share_rdp();
         fn set_share_rdp(bool);
         fn is_installed_lower_version();

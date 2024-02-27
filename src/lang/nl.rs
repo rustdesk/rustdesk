@@ -292,7 +292,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Overwrite", "Overschrijven"),
         ("This file exists, skip or overwrite this file?", "Dit bestand bestaat reeds, overslaan of overschrijven?"),
         ("Quit", "Afsluiten"),
-        ("Help", "https://rustdesk.com/docs/en/manual/linux/#x11-required"),
+        ("Help", ""),
         ("Failed", "Mislukt"),
         ("Succeeded", "Geslaagd"),
         ("Someone turns on privacy mode, exit", "Iemand schakelt privacymodus in, afsluiten"),
@@ -451,8 +451,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Resolution", "Resolutie"),
         ("No transfers in progress", "Geen overdrachten in uitvoering"),
         ("Set one-time password length", "Stel de lengte van het eenmalige wachtwoord in"),
-        ("install_cert_tip", "Installeer het RustDesk certificaat"),
-        ("confirm_install_cert_tip", "Dit is een testcertificaat van RustDesk, dat vertrouwd kan worden. Het certificaat wordt gebruikt om de stuurprogramma's van RustDesk goed te keuren en indien nodig te installeren."),
         ("RDP Settings", "RDP Instellingen"),
         ("Sort by", "Sorteren op"),
         ("New Connection", "Nieuwe Verbinding"),
@@ -586,5 +584,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("enter-2fa-title", "geef-2fa-titel in"),
         ("Email verification code must be 6 characters.", "E-mailverificatiecode moet 6 tekens lang zijn."),
         ("2FA code must be 6 digits.", "2FA-code moet 6 cijfers lang zijn."),
+        ("Multiple Windows sessions found", "Meerdere Windows-sessies gevonden"),
+        ("Please select the session you want to connect to", "Selecteer de sessie waarmee je verbinding wilt maken"),
     ].iter().cloned().collect();
 }

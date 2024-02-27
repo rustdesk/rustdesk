@@ -451,8 +451,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Resolution", "Роздільна здатність"),
         ("No transfers in progress", "Наразі нічого не пересилається"),
         ("Set one-time password length", "Вказати довжину одноразового пароля"),
-        ("install_cert_tip", "Додати сертифікат RustDesk"),
-        ("confirm_install_cert_tip", "Це сертифікат тестування RustDesk, якому можна довіряти. За потреби сертифікат буде використано для погодження та встановлення драйверів RustDesk."),
         ("RDP Settings", "Налаштування RDP"),
         ("Sort by", "Сортувати за"),
         ("New Connection", "Нове підключення"),
@@ -586,5 +584,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("enter-2fa-title", ""),
         ("Email verification code must be 6 characters.", ""),
         ("2FA code must be 6 digits.", ""),
+        ("Multiple Windows sessions found", ""),
+        ("Please select the session you want to connect to", ""),
     ].iter().cloned().collect();
 }

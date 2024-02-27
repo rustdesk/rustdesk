@@ -221,7 +221,7 @@ List<(String, String)> otherDefaultSettings() {
     ('Privacy mode', 'privacy_mode'),
     if (isMobile) ('Touch mode', 'touch-mode'),
     ('True color (4:4:4)', 'i444'),
-    ('Reverse mouse wheel', 'reverse_mouse_wheel'),
+    ('Reverse mouse wheel', kKeyReverseMouseWheel),
     ('swap-left-right-mouse', 'swap-left-right-mouse'),
     if (isDesktop && useTextureRender)
       (

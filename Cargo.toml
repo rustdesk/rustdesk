@@ -56,9 +56,8 @@ cfg-if = "1.0"
 lazy_static = "1.4"
 sha2 = "0.10"
 repng = "0.2"
-parity-tokio-ipc = { git = "https://github.com/open-trade/parity-tokio-ipc" }
-runas = "=1.0" # https://github.com/mitsuhiko/rust-runas/issues/13
-magnum-opus = { git = "https://github.com/rustdesk/magnum-opus" }
+parity-tokio-ipc = { git = "https://github.com/rustdesk-org/parity-tokio-ipc" }
+magnum-opus = { git = "https://github.com/rustdesk-org/magnum-opus" }
 dasp = { version = "0.11", features = ["signal", "interpolate-linear", "interpolate"], optional = true }
 rubato = { version = "0.12", optional = true }
 samplerate = { version = "0.2", optional = true }
@@ -95,18 +94,19 @@ sys-locale = "0.3"
 enigo = { path = "libs/enigo", features = [ "with_serde" ] }
 clipboard = { path = "libs/clipboard" }
 ctrlc = "3.2"
-arboard = { version = "3.2", features = ["wayland-data-control"] }
+arboard = { git = "https://github.com/fufesou/arboard", branch = "feat/x11_set_conn_timeout", features = ["wayland-data-control"] }
 system_shutdown = "4.0"
 qrcode-generator = "4.1"
 
 [target.'cfg(target_os = "windows")'.dependencies]
-winapi = { version = "0.3", features = ["winuser", "wincrypt", "shellscalingapi", "pdh", "synchapi", "memoryapi"] }
+winapi = { version = "0.3", features = ["winuser", "wincrypt", "shellscalingapi", "pdh", "synchapi", "memoryapi", "shellapi"] }
 winreg = "0.11"
 windows-service = "0.6"
 virtual_display = { path = "libs/virtual_display", optional = true }
 impersonate_system = { git = "https://github.com/21pages/impersonate-system" }
 shared_memory = "0.12"
 tauri-winrt-notification = "0.1.2"
+runas = "1.2"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc = "0.2"
@@ -115,12 +115,11 @@ dispatch = "0.2"
 core-foundation = "0.9"
 core-graphics = "0.22"
 include_dir = "0.7"
-dark-light = "1.0"
 fruitbasket = "0.10"
 objc_id = "0.1"
 
 [target.'cfg(any(target_os = "macos", target_os = "linux", target_os = "windows"))'.dependencies]
-tray-icon = { git = "https://github.com/rustdesk-org/tray-icon" }
+tray-icon = { git = "https://github.com/tauri-apps/tray-icon" }
 tao = { git = "https://github.com/rustdesk-org/tao", branch = "dev" }
 image = "0.24"
 

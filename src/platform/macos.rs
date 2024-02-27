@@ -45,8 +45,13 @@ extern "C" {
         max: u32,
         numModes: *mut u32,
     ) -> BOOL;
+    fn majorVersion() -> u32;
     fn MacGetMode(display: u32, width: *mut u32, height: *mut u32) -> BOOL;
     fn MacSetMode(display: u32, width: u32, height: u32) -> BOOL;
+}
+
+pub fn major_version() -> u32 {
+    unsafe { majorVersion() }
 }
 
 pub fn is_process_trusted(prompt: bool) -> bool {
@@ -153,21 +158,21 @@ pub fn is_installed_daemon(prompt: bool) -> bool {
     let Some(install_script) = PRIVILEGES_SCRIPTS_DIR.get_file("install.scpt") else {
         return false;
     };
-    let Some(install_script_body) = install_script.contents_utf8() else {
+    let Some(install_script_body) = install_script.contents_utf8().map(correct_app_name) else {
         return false;
     };
 
-    let Some(daemon_plist) = PRIVILEGES_SCRIPTS_DIR.get_file(&daemon) else {
+    let Some(daemon_plist) = PRIVILEGES_SCRIPTS_DIR.get_file("daemon.plist") else {
         return false;
     };
-    let Some(daemon_plist_body) = daemon_plist.contents_utf8() else {
+    let Some(daemon_plist_body) = daemon_plist.contents_utf8().map(correct_app_name) else {
         return false;
     };
 
-    let Some(agent_plist) = PRIVILEGES_SCRIPTS_DIR.get_file(&agent) else {
+    let Some(agent_plist) = PRIVILEGES_SCRIPTS_DIR.get_file("agent.plist") else {
         return false;
     };
-    let Some(agent_plist_body) = agent_plist.contents_utf8() else {
+    let Some(agent_plist_body) = agent_plist.contents_utf8().map(correct_app_name) else {
         return false;
     };
 
@@ -208,6 +213,12 @@ pub fn is_installed_daemon(prompt: bool) -> bool {
     false
 }
 
+fn correct_app_name(s: &str) -> String {
+    let s = s.replace("rustdesk", &crate::get_app_name().to_lowercase());
+    let s = s.replace("RustDesk", &crate::get_app_name());
+    s
+}
+
 pub fn uninstall_service(show_new_window: bool) -> bool {
     // to-do: do together with win/linux about refactory start/stop service
     if !is_installed_daemon(false) {
@@ -217,7 +228,7 @@ pub fn uninstall_service(show_new_window: bool) -> bool {
     let Some(script_file) = PRIVILEGES_SCRIPTS_DIR.get_file("uninstall.scpt") else {
         return false;
     };
-    let Some(script_body) = script_file.contents_utf8() else {
+    let Some(script_body) = script_file.contents_utf8().map(correct_app_name) else {
         return false;
     };
 
@@ -620,7 +631,7 @@ pub fn handle_application_should_open_untitled_file() {
     let x = std::env::args().nth(1).unwrap_or_default();
     if x == "--server" || x == "--cm" || x == "--tray" {
         if crate::platform::macos::check_main_window() {
-            allow_err!(crate::ipc::send_url_scheme("rustdesk:".into()));
+            allow_err!(crate::ipc::send_url_scheme(crate::get_uri_prefix()));
         }
     }
 }

@@ -451,8 +451,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Resolution", "Izšķirtspēja"),
         ("No transfers in progress", "Notiek pārsūtīšana"),
         ("Set one-time password length", "Iestatīt vienreizējās paroles garumu"),
-        ("install_cert_tip", "Instalēt RustDesk sertifikātu"),
-        ("confirm_install_cert_tip", "Šis ir RustDesk testēšanas sertifikāts, kuram var uzticēties. Sertifikāts tiks izmantots, lai uzticētos un vajadzības gadījumā instalētu RustDesk draiverus."),
         ("RDP Settings", "RDP iestatījumi"),
         ("Sort by", "Kārtot pēc"),
         ("New Connection", "Jauns savienojums"),
@@ -586,5 +584,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("enter-2fa-title", "Divu faktoru autentifikācija"),
         ("Email verification code must be 6 characters.", "E-pasta verifikācijas kodam jābūt ar 6 rakstzīmēm."),
         ("2FA code must be 6 digits.", "2FA kodam ir jābūt ar 6 cipariem."),
+        ("Multiple Windows sessions found", "Atrastas vairākas Windows sesijas"),
+        ("Please select the session you want to connect to", "Lūdzu, atlasiet sesiju, ar kuru vēlaties izveidot savienojumu"),
     ].iter().cloned().collect();
 }

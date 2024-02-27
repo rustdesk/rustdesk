@@ -49,6 +49,7 @@ message DisplayInfo {
   bool online = 6;
   bool cursor_embedded = 7;
   Resolution original_resolution = 8;
+  double scale = 9;
 }
 
 message PortForward {
@@ -122,7 +123,13 @@ message PeerInfo {
   // Use JSON's key-value format which is friendly for peer to handle.
   // NOTE: Only support one-level dictionaries (for peer to update), and the key is of type string.
   string platform_additions = 12;
+  WindowsSessions windows_sessions = 13;
 }
+
+message WindowsSession {  
+  uint32 sid = 1;  
+  string name = 2;  
+}  
 
 message LoginResponse {
   oneof union {
@@ -589,6 +596,7 @@ message OptionMessage {
   BoolOption disable_keyboard = 12;
 // Position 13 is used for Resolution. Remove later.
 // Resolution custom_resolution = 13;
+  BoolOption support_windows_specific_session = 14;
 }
 
 message TestDelay {
@@ -703,6 +711,11 @@ message PluginFailure {
   string msg = 3;
 }
 
+message WindowsSessions {
+  repeated WindowsSession sessions = 1;
+  uint32 current_sid = 2;
+}
+
 message Misc {
   oneof union {
     ChatMessage chat_message = 4;
@@ -734,6 +747,7 @@ message Misc {
     ToggleVirtualDisplay toggle_virtual_display = 32;
     TogglePrivacyMode toggle_privacy_mode = 33;
     SupportedEncoding supported_encoding = 34;
+    uint32 selected_sid = 35;
   }
 }
 

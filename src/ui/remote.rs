@@ -259,6 +259,18 @@ impl InvokeUiSession for SciterHandler {
         // Ignore for sciter version.
     }
 
+    fn set_multiple_windows_session(&self, sessions: Vec<WindowsSession>) {
+        let mut v = Value::array(0);
+        let mut sessions = sessions;
+        for s in sessions.drain(..) {
+            let mut obj = Value::map();
+            obj.set_item("sid", s.sid.to_string());
+            obj.set_item("name", s.name);
+            v.push(obj);
+        }
+        self.call("setMultipleWindowsSession", &make_args!(v));
+    }
+
     fn on_connected(&self, conn_type: ConnType) {
         match conn_type {
             ConnType::RDP => {}
@@ -477,6 +489,7 @@ impl sciter::EventHandler for SciterSession {
         fn request_voice_call();
         fn close_voice_call();
         fn version_cmp(String, String);
+        fn set_selected_windows_session_id(String);
     }
 }
 
@@ -578,6 +591,10 @@ impl SciterSession {
         }
         self.save_config(config);
         log::info!("size saved");
+    }
+
+    fn set_selected_windows_session_id(&mut self, u_sid: String) {
+        self.send_selected_session_id(u_sid);
     }
 
     fn get_port_forwards(&mut self) -> Value {

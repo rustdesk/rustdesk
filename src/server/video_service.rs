@@ -50,7 +50,7 @@ use scrap::hwcodec::{HwEncoder, HwEncoderConfig};
 use scrap::Capturer;
 use scrap::{
     aom::AomEncoderConfig,
-    codec::{Encoder, EncoderCfg, EncodingUpdate, Quality},
+    codec::{Encoder, EncoderCfg, Quality},
     record::{Recorder, RecorderContext},
     vpxcodec::{VpxEncoderConfig, VpxVideoCodecId},
     CodecName, Display, Frame, TraitCapturer,
@@ -643,7 +643,7 @@ fn get_encoder_config(
         GpuEncoder::set_not_use(_display_idx, true);
     }
     #[cfg(feature = "gpucodec")]
-    Encoder::update(EncodingUpdate::Check);
+    Encoder::update(scrap::codec::EncodingUpdate::Check);
     // https://www.wowza.com/community/t/the-correct-keyframe-interval-in-obs-studio/95162
     let keyframe_interval = if record { Some(240) } else { None };
     let negotiated_codec = Encoder::negotiated_codec();
