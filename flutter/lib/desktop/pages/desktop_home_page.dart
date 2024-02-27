@@ -470,7 +470,8 @@ class _DesktopHomePageState extends State<DesktopHomePage>
     return Stack(
       children: [
         Container(
-          margin: EdgeInsets.only(top: marginTop),
+          margin:
+              EdgeInsets.fromLTRB(0, marginTop, 0, bind.isQs() ? marginTop : 0),
           child: Container(
               decoration: BoxDecoration(
                   gradient: LinearGradient(
