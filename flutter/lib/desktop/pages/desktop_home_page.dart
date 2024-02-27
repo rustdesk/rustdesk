@@ -95,7 +95,9 @@ class _DesktopHomePageState extends State<DesktopHomePage>
     if (bind.isQs()) {
       children.addAll([
         Divider(),
-        OnlineStatusWidget(),
+        Padding(
+            padding: EdgeInsets.fromLTRB(0, 0, 8, 6),
+            child: OnlineStatusWidget()),
       ]);
     }
     return ChangeNotifierProvider.value(
