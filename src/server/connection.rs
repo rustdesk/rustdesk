@@ -423,7 +423,8 @@ impl Connection {
         if !conn.block_input {
             conn.send_permission(Permission::BlockInput, false).await;
         }
-        let mut test_delay_timer = crate::rustdesk_interval(time::interval(TEST_DELAY_TIMEOUT));
+        let mut test_delay_timer =
+            crate::rustdesk_interval(time::interval_at(Instant::now(), TEST_DELAY_TIMEOUT));
         let mut last_recv_time = Instant::now();
 
         conn.stream.set_send_timeout(
@@ -587,7 +588,11 @@ impl Connection {
                                         break;
                                     }
                                     if conn.port_forward_socket.is_some() && conn.authorized {
-                                        break;
+                                        log::info!("Port forward, last_test_delay is none: {}", conn.last_test_delay.is_none());
+                                        // Avoid TestDelay reply injection into rdp data stream
+                                        if conn.last_test_delay.is_none() {
+                                            break;
+                                        }
                                     }
                                 }
                             }
@@ -694,18 +699,18 @@ impl Connection {
                         conn.on_close("Timeout", true).await;
                         break;
                     }
-                    let mut qos = video_service::VIDEO_QOS.lock().unwrap();
-                    if conn.last_test_delay.is_none() {
+                    // The control end will jump out of the loop after receiving LoginResponse and will not reply to the TestDelay
+                    if conn.last_test_delay.is_none() && !(conn.port_forward_socket.is_some() && conn.authorized) {
                         conn.last_test_delay = Some(Instant::now());
                         let mut msg_out = Message::new();
                         msg_out.set_test_delay(TestDelay{
                             last_delay: conn.network_delay,
-                            target_bitrate: qos.bitrate(),
+                            target_bitrate: video_service::VIDEO_QOS.lock().unwrap().bitrate(),
                             ..Default::default()
                         });
-                        conn.inner.send(msg_out.into());
+                        conn.send(msg_out.into()).await;
                     }
-                    qos.user_delay_response_elapsed(conn.inner.id(), conn.delay_response_instant.elapsed().as_millis());
+                    video_service::VIDEO_QOS.lock().unwrap().user_delay_response_elapsed(conn.inner.id(), conn.delay_response_instant.elapsed().as_millis());
                 }
             }
         }
@@ -1828,6 +1833,9 @@ impl Connection {
                 }
             }
         } else if self.authorized {
+            if self.port_forward_socket.is_some() {
+                return true;
+            }
             match msg.union {
                 #[allow(unused_mut)]
                 Some(message::Union::MouseEvent(mut me)) => {
