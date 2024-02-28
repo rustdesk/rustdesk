@@ -584,7 +584,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("enter-2fa-title", "二步驟驗證"),
         ("Email verification code must be 6 characters.", "Email 驗證碼必須是 6 個字元。"),
         ("2FA code must be 6 digits.", "二步驟驗證碼必須是 6 位數字。"),
-        ("Multiple Windows sessions found", ""),
-        ("Please select the session you want to connect to", ""),
+        ("Multiple Windows sessions found", "發現多個 Windows 工作階段"),
+        ("Please select the session you want to connect to", "請選擇您想要連結的工作階段"),
     ].iter().cloned().collect();
 }
