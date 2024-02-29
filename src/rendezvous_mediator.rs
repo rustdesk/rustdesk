@@ -144,7 +144,7 @@ impl RendezvousMediator {
 
     pub async fn start_udp(server: ServerPtr, host: String) -> ResultType<()> {
         let host = check_port(&host, RENDEZVOUS_PORT);
-        let (mut socket, addr) = socket_client::new_udp_for(&host, CONNECT_TIMEOUT).await?;
+        let (mut socket, mut addr) = socket_client::new_udp_for(&host, CONNECT_TIMEOUT).await?;
         let mut rz = Self {
             addr: addr.clone(),
             host: host.clone(),
@@ -232,9 +232,10 @@ impl RendezvousMediator {
                                 if last_dns_check.elapsed().as_millis() as i64 > DNS_INTERVAL {
                                     // in some case of network reconnect (dial IP network),
                                     // old UDP socket not work any more after network recover
-                                    if let Some((s, addr)) = socket_client::rebind_udp_for(&rz.host).await? {
+                                    if let Some((s, new_addr)) = socket_client::rebind_udp_for(&rz.host).await? {
                                         socket = s;
-                                        rz.addr = addr;
+                                        rz.addr = new_addr.clone();
+                                        addr = new_addr;
                                     }
                                     last_dns_check = Instant::now();
                                 }
