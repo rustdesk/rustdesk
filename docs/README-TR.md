@@ -30,14 +30,6 @@ RustDesk, herkesten katkıyı kabul eder. Başlamak için [CONTRIBUTING.md](docs
     alt="F-Droid'de Alın"
     height="80">](https://f-droid.org/en/packages/com.carriez.flutter_hbb)
 
-## Geliştirici Konteyneri
-
-[![Open in Dev Containers](https://img.shields.io/static/v1?label=Dev%20Container&message=Open&color=blue&logo=visualstudiocode)](https://vscode.dev/redirect?url=vscode://ms-vscode-remote.remote-containers/cloneInVolume?url=https://github.com/rustdesk/rustdesk)
-
-Eğer zaten VS Code ve Docker kurulu ise yukarıdaki rozete tıklayarak başlayabilirsiniz. Tıklamak, VS Code'un gerektiğinde Dev Konteyner eklentisini otomatik olarak yüklemesine, kaynak kodunu bir konteyner hacmine klonlamasına ve kullanım için bir geliştirici konteyneri başlatmasına neden olur.
-
-Daha fazla bilgi için [DEVCONTAINER.md](docs/DEVCONTAINER-TR.md) belgesine bakabilirsiniz.
-
 ## Bağımlılıklar
 
 Masaüstü sürümleri GUI için

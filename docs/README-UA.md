@@ -31,14 +31,6 @@ RustDesk вітає внесок кожного. Ознайомтеся з [CONT
     alt="Get it on F-Droid"
     height="80">](https://f-droid.org/en/packages/com.carriez.flutter_hbb)
 
-## Dev Container
-
-[![Open in Dev Containers](https://img.shields.io/static/v1?label=Dev%20Container&message=Open&color=blue&logo=visualstudiocode)](https://vscode.dev/redirect?url=vscode://ms-vscode-remote.remote-containers/cloneInVolume?url=https://github.com/rustdesk/rustdesk)
-
-Якщо у вас уже встановлено VS Code та Docker, ви можете натиснути значок вище, щоб розпочати. Клацання призведе до того, що VS Code автоматично встановить розширення Dev Containers, якщо це необхідно, клонує вихідний код у том контейнера та розгорне контейнер dev для використання.
-
-Дивіться [DEVCONTAINER.md](docs/DEVCONTAINER.md) для додаткової інформації
-
 ## Залежності
 
 Стільничні версії використовують Flutter чи Sciter (застаріле) для графічного інтерфейсу. Ця інструкція лише для Sciter, оскільки він є більш простим та дружнім для початківців. Перегляньте [CI](https://github.com/rustdesk/rustdesk/blob/master/.github/workflows/flutter-build.yml) для збірки версії на Flutter.

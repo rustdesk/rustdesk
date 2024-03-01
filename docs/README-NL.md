@@ -27,14 +27,6 @@ RustDesk verwelkomt bijdragen van iedereen. Zie [`docs/CONTRIBUTING.md`](CONTRIB
     alt="Download het op F-Droid"
     height="80">](https://f-droid.org/en/packages/com.carriez.flutter_hbb)
 
-## Dev Container
-
-[![Open in Dev Containers](https://img.shields.io/static/v1?label=Dev%20Container&message=Open&color=blue&logo=visualstudiocode)](https://vscode.dev/redirect?url=vscode://ms-vscode-remote.remote-containers/cloneInVolume?url=https://github.com/rustdesk/rustdesk)
-
-Als u VS Code en Docker al hebt geinstalleerd, kunt u op de bovenstaande badge klikken om te beginnen. Door te klikken zal VS Code automatisch de Dev Containers-extensie installeren indien nodig, de broncode klonen naar een containervolume en een dev container opstarten voor gebruik.
-
-Bekijk [DEVCONTAINER.md](docs/DEVCONTAINER.md) voor meer informatie.
-
 ## Afhankelijkheden
 
 Desktop versies gebruiken [sciter](https://sciter.com/) of Flutter voor GUI, deze handleiding is alleen voor Sciter.
