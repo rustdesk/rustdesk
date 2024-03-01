@@ -31,14 +31,6 @@ RustDesk accoglie il contributo di tutti. Per ulteriori informazioni su come ini
     alt="Get it on F-Droid"
     height="80">](https://f-droid.org/en/packages/com.carriez.flutter_hbb)
 
-## Server pubblici gratuiti
-
-Qui sotto trovi i server che possono essere usati gratuitamente, la lista potrebbe cambiare nel tempo. Se non sei vicino a uno di questi server, la connessione potrebbe essere lenta.
-| Posizione | Venditore | Specifiche |
-| --------- | ------------- | ------------------ |
-| Germania | [Hetzner](https://www.hetzner.com) | 2 vCPU / 4GB RAM |
-| Ucraina (Kyev) | [dc.volia](https://dc.volia.com) | 2 vCPU / 4GB RAM |
-
 ## Contenitore Dev
 
 [![Apri in Dev Containers](https://img.shields.io/static/v1?label=Dev%20Container&message=Open&color=blue&logo=visualstudiocode)](https://vscode.dev/redirect?url=vscode://ms-vscode-remote.remote-containers/cloneInVolume?url=https://github.com/rustdesk/rustdesk)

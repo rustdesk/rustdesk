@@ -22,14 +22,6 @@ Projekt RustDesk vítá přiložení ruky k dílu od každého. Jak začít se d
 
 [**STAHOVÁNÍ ZKOMPILOVANÝCH APLIKACÍ**](https://github.com/rustdesk/rustdesk/releases)
 
-## Veřejné, zdarma službu nabízející servery
-
-Níže jsou uvedeny servery zdarma k vašemu použití (údaje se mohou v čase měnit). Pokud se nenacházíte v oblastech světa poblíž nich, spojení může být pomalé.
-| umístění | dodavatel | parametry |
-| --------- | ------------- | ------------------ |
-| Germany | Hetzner | 2 vCPU / 4GB RAM |
-| Ukraine (Kyiv) | [dc.volia](https://dc.volia.com) | 2 vCPU / 4 GB RAM |
-
 ## Softwarové součásti, na kterých závisí
 
 Varianta pro počítač používá pro grafické uživatelské rozhraní [sciter](https://sciter.com/) – stáhněte si potřebnou knihovnu.

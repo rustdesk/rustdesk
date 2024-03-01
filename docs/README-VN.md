@@ -27,14 +27,6 @@ Mọi người đều đuợc chào đón để đóng góp vào RustDesk. Để
     alt="Get it on F-Droid"
     height="80">](https://f-droid.org/en/packages/com.carriez.flutter_hbb)
 
-## Các Máy Chủ Công Khai Miễn Phí
-
-Dưới đây là những máy chủ mà bạn có thể sử dụng mà không mất phí, chú ý là máy chủ có thể thay đổi theo thời gian. Nếu địa điểm của bạn không gần một trong số những máy chủ này, thì kết nói có thể chậm.
-
-| Địa điểm | Nhà cung cấp | Cấu hình |
-| --------- | ------------- | ------------------ |
-| Germany | Hetzner | 2 vCPU / 4GB RAM |
-
 ## Dependencies
 
 Phiên bản cho máy tính sử dụng [sciter](https://sciter.com/) cho giao diện của phần mềm, vậy nên bạn cần tự tải về thư viện sciter.

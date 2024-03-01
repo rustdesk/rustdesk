@@ -31,14 +31,6 @@ RustDesk вітає внесок кожного. Ознайомтеся з [CONT
     alt="Get it on F-Droid"
     height="80">](https://f-droid.org/en/packages/com.carriez.flutter_hbb)
 
-## Безкоштовні загальнодоступні сервери
-
-Нижче наведені сервери, для безкоштовного використання, вони можуть змінюватися з часом. Якщо ви не перебуваєте поруч з одним із них, ваша мережа може працювати повільно.
-| Місцезнаходження | Постачальник | Технічні характеристики |
-| --------- | ------------- | ------------------ |
-| Німеччина | [Hetzner](https://www.hetzner.com) | 2 vCPU / 4GB RAM |
-| Україна (Київ) | [dc.volia](https://dc.volia.com) | 2 vCPU / 4GB RAM |
-
 ## Dev Container
 
 [![Open in Dev Containers](https://img.shields.io/static/v1?label=Dev%20Container&message=Open&color=blue&logo=visualstudiocode)](https://vscode.dev/redirect?url=vscode://ms-vscode-remote.remote-containers/cloneInVolume?url=https://github.com/rustdesk/rustdesk)

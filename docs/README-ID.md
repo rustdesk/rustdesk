@@ -31,14 +31,6 @@ RustDesk mengajak semua orang untuk ikut berkontribusi. Lihat [`docs/CONTRIBUTIN
     alt="Get it on F-Droid"
     height="80">](https://f-droid.org/en/packages/com.carriez.flutter_hbb)
 
-## Server Publik Gratis
-
-Di bawah ini merupakan server gratis yang bisa kamu gunakan, seiring dengan waktu mungkin akan terjadi perubahan spesifikasi pada setiap server yang ada. Jika lokasi kamu berada jauh dengan salah satu server yang tersedia, kemungkinan koneksi akan terasa lambat ketika melakukan proses remote.
-| Lokasi | Penyedia | Spesifikasi |
-| --------- | ------------- | ------------------ |
-| Jerman | [Hetzner](https://www.hetzner.com) | 2 vCPU / 4GB RAM |
-| Ukraina (Kyiv) | [dc.volia](https://dc.volia.com) | 2 vCPU / 4GB RAM |
-
 ## Dev Container
 
 [![Open in Dev Containers](https://img.shields.io/static/v1?label=Dev%20Container&message=Open&color=blue&logo=visualstudiocode)](https://vscode.dev/redirect?url=vscode://ms-vscode-remote.remote-containers/cloneInVolume?url=https://github.com/rustdesk/rustdesk)

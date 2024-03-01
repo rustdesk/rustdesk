@@ -29,14 +29,6 @@
     alt="Get it on F-Droid"
     height="80">](https://f-droid.org/en/packages/com.carriez.flutter_hbb)
 
-## Δωρεάν δημόσιοι διακομιστές
-
-Παρακάτω είναι οι διακομιστές που χρησιμοποιούνται δωρεάν, ενδέχεται να αλλάξουν με την πάροδο του χρόνου. Εάν δεν είστε κοντά σε ένα από αυτούς, το δίκτυό σας ίσως να είναι αργό.
-| Περιοχή | Πάροχος | Προδιαγραφές |
-| --------- | ------------- | ------------------ |
-| Γερμανία | Hetzner | 2 vCPU / 4GB RAM |
-| Ουκρανία (Κίεβο) | [dc.volia](https://dc.volia.com) | 2 vCPU / 4GB RAM |
-
 ## Dev Container
 
 [![Open in Dev Containers](https://img.shields.io/static/v1?label=Dev%20Container&message=Open&color=blue&logo=visualstudiocode)](https://vscode.dev/redirect?url=vscode://ms-vscode-remote.remote-containers/cloneInVolume?url=https://github.com/rustdesk/rustdesk)

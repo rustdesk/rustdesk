@@ -19,14 +19,6 @@ RustDesk acolhe contribuições de todos. Leia [`docs/CONTRIBUTING.md`](CONTRIBU
 
 [**DOWNLOAD DE BINÁRIOS**](https://github.com/rustdesk/rustdesk/releases)
 
-## Servidores Públicos Grátis
-
-Abaixo estão os servidores que você está utilizando de graça, ele pode mudar com o tempo. Se você não está próximo de algum deles, sua conexão pode ser lenta.
-
-| Localização | Fornecedor    | Especificações     |
-| ----------- | ------------- | ------------------ |
-| Germany | Hetzner | 2 vCPU / 4GB RAM |
-
 ## Dependências
 
 Versões de desktop utilizam [sciter](https://sciter.com/) para a GUI, por favor baixe a biblioteca dinâmica sciter por conta própria.

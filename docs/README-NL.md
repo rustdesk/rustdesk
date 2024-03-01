@@ -27,14 +27,6 @@ RustDesk verwelkomt bijdragen van iedereen. Zie [`docs/CONTRIBUTING.md`](CONTRIB
     alt="Download het op F-Droid"
     height="80">](https://f-droid.org/en/packages/com.carriez.flutter_hbb)
 
-## Gratis openbare servers
-
-Hieronder staan de servers die u gratis gebruikt, ze kunnen in de loop van de tijd veranderen. Als u niet in de buurt van een van deze servers bevindt, kan uw vervinding langzamer zijn.
-| Locatie | Aanbieder | Specificaties |
-| --------- | ------------- | ------------------ |
-| Duitsland | Hetzner | 2 vCPU / 4GB RAM |
-| Oekraine (Kyiv) | [dc.volia](https://dc.volia.com) | 2 vCPU / 4GB RAM |
-
 ## Dev Container
 
 [![Open in Dev Containers](https://img.shields.io/static/v1?label=Dev%20Container&message=Open&color=blue&logo=visualstudiocode)](https://vscode.dev/redirect?url=vscode://ms-vscode-remote.remote-containers/cloneInVolume?url=https://github.com/rustdesk/rustdesk)

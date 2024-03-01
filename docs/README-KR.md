@@ -24,13 +24,6 @@ RustDesk는 모든 기여를 환영합니다. 기여하고자 한다면 [`docs/C
 
 [**BINARY DOWNLOAD**](https://github.com/rustdesk/rustdesk/releases)
 
-## 무료 퍼블릭 서버
-
-표에 있는 서버는 무료로 사용할 수 있지만 추후 변경될 수도 있습니다. 이 서버에서 멀다면, 네트워크가 느려질 가능성도 있습니다.
-| Location | Vendor | Specification |
-| --------- | ------------- | ------------------ |
-| Germany | Hetzner | 2 vCPU / 4GB RAM |
-
 ## 의존관계
 
 데스크탑판에는 GUI에 [sciter](https://sciter.com/)가 사용되었습니다. sciter dynamic library 를 다운로드해주세요. 
