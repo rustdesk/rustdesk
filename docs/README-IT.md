@@ -31,22 +31,6 @@ RustDesk accoglie il contributo di tutti. Per ulteriori informazioni su come ini
     alt="Get it on F-Droid"
     height="80">](https://f-droid.org/en/packages/com.carriez.flutter_hbb)
 
-## Server pubblici gratuiti
-
-Qui sotto trovi i server che possono essere usati gratuitamente, la lista potrebbe cambiare nel tempo. Se non sei vicino a uno di questi server, la connessione potrebbe essere lenta.
-| Posizione | Venditore | Specifiche |
-| --------- | ------------- | ------------------ |
-| Germania | [Hetzner](https://www.hetzner.com) | 2 vCPU / 4GB RAM |
-| Ucraina (Kyev) | [dc.volia](https://dc.volia.com) | 2 vCPU / 4GB RAM |
-
-## Contenitore Dev
-
-[![Apri in Dev Containers](https://img.shields.io/static/v1?label=Dev%20Container&message=Open&color=blue&logo=visualstudiocode)](https://vscode.dev/redirect?url=vscode://ms-vscode-remote.remote-containers/cloneInVolume?url=https://github.com/rustdesk/rustdesk)
-
-Se hai già installato VS Code e Docker, puoi fare clic sul badge qui sopra per iniziare. Il clic farà sì che VS Code installi automaticamente l'estensione Dev Containers se necessario, cloni il codice sorgente in un volume del container e avvii un container dev.
-
-Consulta [DEVCONTAINER.md](DEVCONTAINER-IT.md) per maggiori informazioni.
-
 ## Dipendenze
 
 Le versioni desktop utilizzano Flutter o Sciter (deprecato) per l'interfaccia utente, questo tutorial è solo per Sciter, poiché è più facile per iniziare. Controlla il nostro [CI](https://github.com/rustdesk/rustdesk/blob/master/.github/workflows/flutter-build.yml) per la compilazione della versione Flutter.

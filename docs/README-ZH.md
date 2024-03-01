@@ -30,23 +30,6 @@ RustDesk 期待各位的贡献. 如何参与开发? 详情请看 [CONTRIBUTING.m
     alt="Get it on F-Droid"
     height="80">](https://f-droid.org/en/packages/com.carriez.flutter_hbb)
 
-## 免费的公共服务器
-
-以下是您可以使用的、免费的、会随时更新的公共服务器列表，在国内也许网速会很慢或者无法访问。
-
-| Location | Vendor | Specification |
-| --------- | ------------- | ------------------ |
-| Germany | [Hetzner](https://www.hetzner.com) | 2 vCPU / 4 GB RAM |
-| Ukraine (Kyiv) | [dc.volia](https://dc.volia.com) | 2 vCPU / 4 GB RAM |
-
-## Dev Container
-
-[![在 Dev Containers 中打开](https://img.shields.io/static/v1?label=Dev%20Container&message=Open&color=blue&logo=visualstudiocode)](https://vscode.dev/redirect?url=vscode://ms-vscode-remote.remote-containers/cloneInVolume?url=https://github.com/rustdesk/rustdesk)
-
-如果你已经安装了 VS Code 和 Docker, 你可以点击上面的徽章开始使用. 点击后, VS Code 将自动安装 Dev Containers 扩展（如果需要），将源代码克隆到容器卷中, 并启动一个 Dev 容器供使用.
-
-Go through [DEVCONTAINER.md](docs/DEVCONTAINER.md) for more info.
-
 ## 依赖
 
 桌面版本界面使用[sciter](https://sciter.com/), 请自行下载。

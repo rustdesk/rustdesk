@@ -19,14 +19,6 @@ RustDesk hilser bidrag fra alle velkommen. Se [`docs/CONTRIBUTING.md`](docs/CONT
 
 [**PROGRAM DOWNLOAD**](https://github.com/rustdesk/rustdesk/releases)
 
-## Gratis offentlige servere
-
-Nedenfor er de servere, du bruger gratis, det kan ændre sig med tiden. Hvis du ikke er tæt på en af disse, kan dit netværk være langsomt.
-
-| Beliggenhed | Udbyder | Specifikation |
-| ---------- | ------------- | ------------------ |
-| Germany | Hetzner | 2 vCPU / 4GB RAM |
-
 ## Afhængigheder
 
 Desktopversioner bruger [sciter](https://sciter.com/) eller Flutter til GUI, denne vejledning er kun for Sciter.
