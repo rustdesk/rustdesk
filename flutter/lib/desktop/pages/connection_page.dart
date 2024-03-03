@@ -418,6 +418,9 @@ class _ConnectionPageState extends State<ConnectionPage>
                           onChanged: (v) {
                             _idController.id = v;
                           },
+                          onSubmitted: (_) {
+                            onConnect();
+                          },
                         ));
                   },
                   onSelected: (option) {
