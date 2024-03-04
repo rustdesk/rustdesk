@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 import os
 import optparse
 from hashlib import md5
@@ -58,9 +60,12 @@ def write_metadata(md5_table: dict, output_folder: str, exe: str):
     print(f"metadata had written to {output_path}")
 
 
-def build_portable(output_folder: str):
+def build_portable(output_folder: str, target: str):
     os.chdir(output_folder)
-    os.system("cargo build --release")
+    if target:
+        os.system("cargo build --release --target " + target)
+    else:
+        os.system("cargo build --release")
 
 # Linux: python3 generate.py -f ../rustdesk-portable-packer/test -o . -e ./test/main.py
 # Windows: python3 .\generate.py -f ..\rustdesk\flutter\build\windows\runner\Debug\ -o . -e ..\rustdesk\flutter\build\windows\runner\Debug\rustdesk.exe
@@ -71,13 +76,19 @@ if __name__ == '__main__':
     parser.add_option("-f", "--folder", dest="folder",
                       help="folder to compress")
     parser.add_option("-o", "--output", dest="output_folder",
-                      help="the root of portable packer project")
+                      help="the root of portable packer project, default is './'")
     parser.add_option("-e", "--executable", dest="executable",
-                      help="specify startup file")
+                      help="specify startup file in --folder, default is rustdesk.exe")
+    parser.add_option("-t", "--target", dest="target",
+                      help="the target used by cargo")
     (options, args) = parser.parse_args()
-    folder = options.folder
-    output_folder = os.path.abspath(options.output_folder)
+    folder = options.folder or './rustdesk'
+    output_folder = os.path.abspath(options.output_folder or './')
 
+    if not options.executable:
+        options.executable = 'rustdesk.exe'
+    if not options.executable.startswith(folder):
+        options.executable = folder + '/' + options.executable
     exe: str = os.path.abspath(options.executable)
     if not exe.startswith(os.path.abspath(folder)):
         print("the executable must locate in source folder")
@@ -86,4 +97,4 @@ if __name__ == '__main__':
     print("executable path: " + exe)
     md5_table = generate_md5_table(folder)
     write_metadata(md5_table, output_folder, exe)
-    build_portable(output_folder)
+    build_portable(output_folder, options.target)
