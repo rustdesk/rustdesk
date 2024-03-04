@@ -162,9 +162,8 @@ members = ["libs/scrap", "libs/hbb_common", "libs/enigo", "libs/clipboard", "lib
 exclude = ["vdi/host", "examples/custom_plugin"]
 
 [package.metadata.winres]
-LegalCopyright = "Copyright © 2023 Purslane, Inc."
-# this FileDescription overrides package.description
-FileDescription = "RustDesk"
+LegalCopyright = "Copyright © 2024 Purslane, Inc."
+OriginalFilename = "rustdesk.exe"
 
 [target.'cfg(target_os="windows")'.build-dependencies]
 winres = "0.1"
