@@ -5,8 +5,6 @@ import optparse
 from hashlib import md5
 import brotli
 
-# file compress level(0-11)
-compress_level = 11
 # 4GB maximum
 length_count = 4
 # encoding
@@ -15,7 +13,7 @@ encoding = 'utf-8'
 # output: {path: (compressed_data, file_md5)}
 
 
-def generate_md5_table(folder: str) -> dict:
+def generate_md5_table(folder: str, level) -> dict:
     res: dict = dict()
     curdir = os.curdir
     os.chdir(folder)
@@ -28,7 +26,7 @@ def generate_md5_table(folder: str) -> dict:
             f = open(full_path, "rb")
             content = f.read()
             content_compressed = brotli.compress(
-                content, quality=compress_level)
+                content, quality=level)
             md5_generator.update(content)
             md5_code = md5_generator.hexdigest().encode(encoding=encoding)
             res[full_path] = (content_compressed, md5_code)
@@ -81,6 +79,8 @@ if __name__ == '__main__':
                       help="specify startup file in --folder, default is rustdesk.exe")
     parser.add_option("-t", "--target", dest="target",
                       help="the target used by cargo")
+    parser.add_option("-l", "--level", dest="level", type="int",
+                      help="compression level, default is 11, highest", default=11)
     (options, args) = parser.parse_args()
     folder = options.folder or './rustdesk'
     output_folder = os.path.abspath(options.output_folder or './')
@@ -95,6 +95,7 @@ if __name__ == '__main__':
         exit(-1)
     exe = '.' + exe[len(os.path.abspath(folder)):]
     print("executable path: " + exe)
-    md5_table = generate_md5_table(folder)
+    print("compression level: " + str(options.level))
+    md5_table = generate_md5_table(folder, options.level)
     write_metadata(md5_table, output_folder, exe)
     build_portable(output_folder, options.target)
