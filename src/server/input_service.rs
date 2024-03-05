@@ -424,7 +424,7 @@ struct VirtualInputState {
 #[cfg(target_os = "macos")]
 impl VirtualInputState {
     fn new() -> Option<Self> {
-        VirtualInput::new(CGEventSourceStateID::Private, CGEventTapLocation::Session)
+        VirtualInput::new(CGEventSourceStateID::CombinedSessionState, CGEventTapLocation::Session)
             .map(|virtual_input| Self {
                 virtual_input,
                 capslock_down: false,
