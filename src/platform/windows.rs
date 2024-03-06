@@ -1748,7 +1748,7 @@ pub fn get_double_click_time() -> u32 {
     unsafe { GetDoubleClickTime() }
 }
 
-fn wide_string(s: &str) -> Vec<u16> {
+pub fn wide_string(s: &str) -> Vec<u16> {
     use std::os::windows::prelude::OsStrExt;
     std::ffi::OsStr::new(s)
         .encode_wide()
