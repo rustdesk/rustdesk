@@ -4,7 +4,7 @@ version = "1.2.4"
 authors = ["rustdesk <info@rustdesk.com>"]
 edition = "2021"
 build= "build.rs"
-description = "A remote control software."
+description = "Open Source Remote Desktop Access Software"
 default-run = "rustdesk"
 rust-version = "1.75"
 
@@ -162,7 +162,8 @@ members = ["libs/scrap", "libs/hbb_common", "libs/enigo", "libs/clipboard", "lib
 exclude = ["vdi/host", "examples/custom_plugin"]
 
 [package.metadata.winres]
-LegalCopyright = "Copyright © 2024 Purslane, Inc."
+LegalCopyright = "Copyright © 2024 Purslane Ltd."
+ProductName = "RustDesk"
 OriginalFilename = "rustdesk.exe"
 
 [target.'cfg(target_os="windows")'.build-dependencies]

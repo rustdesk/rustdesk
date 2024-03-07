@@ -2,6 +2,7 @@
 name = "rustdesk-portable-packer"
 version = "1.2.4"
 edition = "2021"
+description = "Open Source Remote Desktop Access Software"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -14,8 +15,9 @@ md5 = "0.7"
 winapi = { version = "0.3", features = ["winbase"] }
 
 [package.metadata.winres]
-LegalCopyright = "Copyright © 2024 Purslane, Inc."
-ProductName = "rustdesk"
+LegalCopyright = "Copyright © 2024 Purslane Ltd."
+ProductName = "RustDesk"
+OriginalFilename = "rustdesk.exe"
 #ProductVersion = ""
 
 [target.'cfg(target_os="windows")'.build-dependencies]
