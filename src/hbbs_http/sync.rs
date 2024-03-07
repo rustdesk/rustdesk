@@ -150,11 +150,11 @@ fn handle_config_options(config_options: HashMap<String, String>) {
     config_options
         .iter()
         .map(|(k, v)| {
-                if v.is_empty() {
-                    options.remove(k);
-                } else {
-                    options.insert(k.to_string(), v.to_string());
-                }
+            if v.is_empty() {
+                options.remove(k);
+            } else {
+                options.insert(k.to_string(), v.to_string());
+            }
         })
         .count();
     Config::set_options(options);
