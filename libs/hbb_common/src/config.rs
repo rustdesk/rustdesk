@@ -1544,7 +1544,7 @@ impl UserDefaultConfig {
         cfg.0.get(key)
     }
 
-    fn load() -> UserDefaultConfig {
+    pub fn load() -> UserDefaultConfig {
         Config::load_::<UserDefaultConfig>("_default")
     }
 
@@ -1553,7 +1553,7 @@ impl UserDefaultConfig {
         Config::store_(self, "_default");
     }
 
-    fn get(&self, key: &str) -> String {
+    pub fn get(&self, key: &str) -> String {
         match key {
             "view_style" => self.get_string(key, "original", vec!["adaptive"]),
             "scroll_style" => self.get_string(key, "scrollauto", vec!["scrollbar"]),
