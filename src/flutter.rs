@@ -400,7 +400,6 @@ impl VideoRenderer {
             return false;
         }
 
-        // It is also Ok to skip this check.
         if info.size.0 != rgba.w || info.size.1 != rgba.h {
             log::error!(
                 "width/height mismatch: ({},{}) != ({},{})",
@@ -409,7 +408,11 @@ impl VideoRenderer {
                 rgba.w,
                 rgba.h
             );
-            return false;
+            // Peer info's handling is async and may be late than video frame's handling
+            // Allow peer info not set, but not allow wrong width/height for correct local cursor position
+            if info.size != (0, 0) {
+                return false;
+            }
         }
         if let Some(func) = &self.on_rgba_func {
             unsafe {
@@ -763,6 +766,7 @@ impl InvokeUiSession for FlutterHandler {
         } else {
             let mut rgba_data = RgbaData::default();
             std::mem::swap::<Vec<u8>>(&mut rgba.raw, &mut rgba_data.data);
+            rgba_data.valid = true;
             rgba_write_lock.insert(display, rgba_data);
         }
         drop(rgba_write_lock);
