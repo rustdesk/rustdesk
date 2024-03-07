@@ -109,6 +109,10 @@ pub fn try_start_desktop(_username: &str, _passsword: &str) -> String {
             // No need to verify password here.
             return "".to_owned();
         }
+        if !username.is_empty() {
+            // Another user is logged in. No need to start a new xsession.
+            return "".to_owned();
+        }
 
         if let Some(msg) = detect_headless() {
             return msg.to_owned();

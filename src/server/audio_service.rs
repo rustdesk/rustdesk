@@ -13,6 +13,8 @@
 // https://github.com/krruzic/pulsectl
 
 use super::*;
+#[cfg(not(any(target_os = "linux", target_os = "android")))]
+use hbb_common::anyhow::anyhow;
 use magnum_opus::{Application::*, Channels::*, Encoder};
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -22,16 +24,16 @@ static RESTARTING: AtomicBool = AtomicBool::new(false);
 
 #[cfg(not(any(target_os = "linux", target_os = "android")))]
 pub fn new() -> GenericService {
-    let sp = GenericService::new(NAME, true);
-    sp.repeat::<cpal_impl::State, _>(33, cpal_impl::run);
-    sp
+    let svc = EmptyExtraFieldService::new(NAME.to_owned(), true);
+    GenericService::repeat::<cpal_impl::State, _, _>(&svc.clone(), 33, cpal_impl::run);
+    svc.sp
 }
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 pub fn new() -> GenericService {
-    let sp = GenericService::new(NAME, true);
-    sp.run(pa_impl::run);
-    sp
+    let svc = EmptyExtraFieldService::new(NAME.to_owned(), true);
+    GenericService::run(&svc.clone(), pa_impl::run);
+    svc.sp
 }
 
 pub fn restart() {
@@ -46,7 +48,7 @@ pub fn restart() {
 mod pa_impl {
     use super::*;
     #[tokio::main(flavor = "current_thread")]
-    pub async fn run(sp: GenericService) -> ResultType<()> {
+    pub async fn run(sp: EmptyExtraFieldService) -> ResultType<()> {
         hbb_common::sleep(0.1).await; // one moment to wait for _pa ipc
         RESTARTING.store(false, Ordering::SeqCst);
         #[cfg(target_os = "linux")]
@@ -123,7 +125,7 @@ mod cpal_impl {
         }
     }
 
-    pub fn run(sp: GenericService, state: &mut State) -> ResultType<()> {
+    pub fn run(sp: EmptyExtraFieldService, state: &mut State) -> ResultType<()> {
         sp.snapshot(|sps| {
             match &state.stream {
                 None => {
@@ -204,13 +206,10 @@ mod cpal_impl {
                 }
             }
         }
-        if device.is_none() {
-            device = Some(
-                HOST.default_input_device()
-                    .with_context(|| "Failed to get default input device for loopback")?,
-            );
-        }
-        let device = device.unwrap();
+        let device = device.unwrap_or(
+            HOST.default_input_device()
+                .with_context(|| "Failed to get default input device for loopback")?,
+        );
         log::info!("Input device: {}", device.name().unwrap_or("".to_owned()));
         let format = device
             .default_input_config()

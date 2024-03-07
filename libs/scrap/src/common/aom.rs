@@ -6,13 +6,15 @@
 
 include!(concat!(env!("OUT_DIR"), "/aom_ffi.rs"));
 
+use crate::codec::{base_bitrate, codec_thread_num, Quality};
 use crate::{codec::EncoderApi, EncodeFrame, STRIDE_ALIGN};
 use crate::{common::GoogleImage, generate_call_macro, generate_call_ptr_macro, Error, Result};
+use crate::{EncodeInput, EncodeYuvFormat, Pixfmt};
 use hbb_common::{
     anyhow::{anyhow, Context},
     bytes::Bytes,
     log,
-    message_proto::{EncodedVideoFrame, EncodedVideoFrames, Message, VideoFrame},
+    message_proto::{Chroma, EncodedVideoFrame, EncodedVideoFrames, VideoFrame},
     ResultType,
 };
 use std::{ptr, slice};
@@ -43,20 +45,22 @@ impl Default for aom_image_t {
 pub struct AomEncoderConfig {
     pub width: u32,
     pub height: u32,
-    pub bitrate: u32,
+    pub quality: Quality,
+    pub keyframe_interval: Option<usize>,
 }
 
 pub struct AomEncoder {
     ctx: aom_codec_ctx_t,
     width: usize,
     height: usize,
+    i444: bool,
+    yuvfmt: EncodeYuvFormat,
 }
 
 // https://webrtc.googlesource.com/src/+/refs/heads/main/modules/video_coding/codecs/av1/libaom_av1_encoder.cc
 mod webrtc {
     use super::*;
 
-    const kQpMin: u32 = 10;
     const kUsageProfile: u32 = AOM_USAGE_REALTIME;
     const kMinQindex: u32 = 145; // Min qindex threshold for QP scaling.
     const kMaxQindex: u32 = 205; // Max qindex threshold for QP scaling.
@@ -65,26 +69,8 @@ mod webrtc {
     const kRtpTicksPerSecond: i32 = 90000;
     const kMinimumFrameRate: f64 = 1.0;
 
-    const kQpMax: u32 = 25; // to-do: webrtc use dynamic value, no more than 63
-
-    fn number_of_threads(width: u32, height: u32, number_of_cores: usize) -> u32 {
-        // Keep the number of encoder threads equal to the possible number of
-        // column/row tiles, which is (1, 2, 4, 8). See comments below for
-        // AV1E_SET_TILE_COLUMNS/ROWS.
-        if width * height >= 640 * 360 && number_of_cores > 4 {
-            return 4;
-        } else if width * height >= 320 * 180 && number_of_cores > 2 {
-            return 2;
-        } else {
-            // Use 2 threads for low res on ARM.
-            #[cfg(any(target_arch = "arm", target_arch = "aarch64", target_os = "android"))]
-            if width * height >= 320 * 180 && number_of_cores > 2 {
-                return 2;
-            }
-            // 1 thread less than VGA.
-            return 1;
-        }
-    }
+    pub const DEFAULT_Q_MAX: u32 = 56; // no more than 63
+    pub const DEFAULT_Q_MIN: u32 = 12; // no more than 63, litter than q_max
 
     // Only positive speeds, range for real-time coding currently is: 6 - 8.
     // Lower means slower/better quality, higher means fastest/lower quality.
@@ -112,6 +98,7 @@ mod webrtc {
     pub fn enc_cfg(
         i: *const aom_codec_iface,
         cfg: AomEncoderConfig,
+        i444: bool,
     ) -> ResultType<aom_codec_enc_cfg> {
         let mut c = unsafe { std::mem::MaybeUninit::zeroed().assume_init() };
         call_aom!(aom_codec_enc_config_default(i, &mut c, kUsageProfile));
@@ -119,14 +106,31 @@ mod webrtc {
         // Overwrite default config with input encoder settings & RTC-relevant values.
         c.g_w = cfg.width;
         c.g_h = cfg.height;
-        c.g_threads = number_of_threads(cfg.width, cfg.height, num_cpus::get());
+        c.g_threads = codec_thread_num(64) as _;
         c.g_timebase.num = 1;
         c.g_timebase.den = kRtpTicksPerSecond;
-        c.rc_target_bitrate = cfg.bitrate; // kilobits/sec.
         c.g_input_bit_depth = kBitDepth;
-        c.kf_mode = aom_kf_mode::AOM_KF_DISABLED;
-        c.rc_min_quantizer = kQpMin;
-        c.rc_max_quantizer = kQpMax;
+        if let Some(keyframe_interval) = cfg.keyframe_interval {
+            c.kf_min_dist = 0;
+            c.kf_max_dist = keyframe_interval as _;
+        } else {
+            c.kf_mode = aom_kf_mode::AOM_KF_DISABLED;
+        }
+        let (q_min, q_max, b) = AomEncoder::convert_quality(cfg.quality);
+        if q_min > 0 && q_min < q_max && q_max < 64 {
+            c.rc_min_quantizer = q_min;
+            c.rc_max_quantizer = q_max;
+        } else {
+            c.rc_min_quantizer = DEFAULT_Q_MIN;
+            c.rc_max_quantizer = DEFAULT_Q_MAX;
+        }
+        let base_bitrate = base_bitrate(cfg.width as _, cfg.height as _);
+        let bitrate = base_bitrate * b / 100;
+        if bitrate > 0 {
+            c.rc_target_bitrate = bitrate;
+        } else {
+            c.rc_target_bitrate = base_bitrate;
+        }
         c.rc_undershoot_pct = 50;
         c.rc_overshoot_pct = 50;
         c.rc_buf_initial_sz = 600;
@@ -138,6 +142,9 @@ mod webrtc {
         c.rc_end_usage = aom_rc_mode::AOM_CBR; // Constant Bit Rate (CBR) mode
         c.g_pass = aom_enc_pass::AOM_RC_ONE_PASS; // One-pass rate control
         c.g_lag_in_frames = kLagInFrames; // No look ahead when lag equals 0.
+
+        // https://aomedia.googlesource.com/aom/+/refs/tags/v3.6.0/av1/common/enums.h#82
+        c.g_profile = if i444 { 1 } else { 0 };
 
         Ok(c)
     }
@@ -210,14 +217,14 @@ mod webrtc {
 }
 
 impl EncoderApi for AomEncoder {
-    fn new(cfg: crate::codec::EncoderCfg) -> ResultType<Self>
+    fn new(cfg: crate::codec::EncoderCfg, i444: bool) -> ResultType<Self>
     where
         Self: Sized,
     {
         match cfg {
             crate::codec::EncoderCfg::AOM(config) => {
                 let i = call_aom_ptr!(aom_codec_av1_cx());
-                let c = webrtc::enc_cfg(i, config)?;
+                let c = webrtc::enc_cfg(i, config, i444)?;
 
                 let mut ctx = Default::default();
                 // Flag options: AOM_CODEC_USE_PSNR and AOM_CODEC_USE_HIGHBITDEPTH
@@ -234,49 +241,79 @@ impl EncoderApi for AomEncoder {
                     ctx,
                     width: config.width as _,
                     height: config.height as _,
+                    i444,
+                    yuvfmt: Self::get_yuvfmt(config.width, config.height, i444),
                 })
             }
             _ => Err(anyhow!("encoder type mismatch")),
         }
     }
 
-    fn encode_to_message(&mut self, frame: &[u8], ms: i64) -> ResultType<Message> {
+    fn encode_to_message(&mut self, input: EncodeInput, ms: i64) -> ResultType<VideoFrame> {
         let mut frames = Vec::new();
         for ref frame in self
-            .encode(ms, frame, STRIDE_ALIGN)
+            .encode(ms, input.yuv()?, STRIDE_ALIGN)
             .with_context(|| "Failed to encode")?
         {
             frames.push(Self::create_frame(frame));
         }
         if frames.len() > 0 {
-            Ok(Self::create_msg(frames))
+            Ok(Self::create_video_frame(frames))
         } else {
             Err(anyhow!("no valid frame"))
         }
     }
 
-    fn use_yuv(&self) -> bool {
-        true
+    fn yuvfmt(&self) -> crate::EncodeYuvFormat {
+        self.yuvfmt.clone()
     }
 
-    fn set_bitrate(&mut self, bitrate: u32) -> ResultType<()> {
-        let mut new_enc_cfg = unsafe { *self.ctx.config.enc.to_owned() };
-        new_enc_cfg.rc_target_bitrate = bitrate;
-        call_aom!(aom_codec_enc_config_set(&mut self.ctx, &new_enc_cfg));
-        return Ok(());
+    #[cfg(feature = "gpucodec")]
+    fn input_texture(&self) -> bool {
+        false
+    }
+
+    fn set_quality(&mut self, quality: Quality) -> ResultType<()> {
+        let mut c = unsafe { *self.ctx.config.enc.to_owned() };
+        let (q_min, q_max, b) = Self::convert_quality(quality);
+        if q_min > 0 && q_min < q_max && q_max < 64 {
+            c.rc_min_quantizer = q_min;
+            c.rc_max_quantizer = q_max;
+        }
+        let bitrate = base_bitrate(self.width as _, self.height as _) * b / 100;
+        if bitrate > 0 {
+            c.rc_target_bitrate = bitrate;
+        }
+        call_aom!(aom_codec_enc_config_set(&mut self.ctx, &c));
+        Ok(())
+    }
+
+    fn bitrate(&self) -> u32 {
+        let c = unsafe { *self.ctx.config.enc.to_owned() };
+        c.rc_target_bitrate
+    }
+
+    fn support_abr(&self) -> bool {
+        true
     }
 }
 
 impl AomEncoder {
     pub fn encode(&mut self, pts: i64, data: &[u8], stride_align: usize) -> Result<EncodeFrames> {
-        if 2 * data.len() < 3 * self.width * self.height {
+        let bpp = if self.i444 { 24 } else { 12 };
+        if data.len() < self.width * self.height * bpp / 8 {
             return Err(Error::FailedCall("len not enough".to_string()));
         }
+        let fmt = if self.i444 {
+            aom_img_fmt::AOM_IMG_FMT_I444
+        } else {
+            aom_img_fmt::AOM_IMG_FMT_I420
+        };
 
         let mut image = Default::default();
         call_aom_ptr!(aom_img_wrap(
             &mut image,
-            aom_img_fmt::AOM_IMG_FMT_I420,
+            fmt,
             self.width as _,
             self.height as _,
             stride_align as _,
@@ -298,16 +335,14 @@ impl AomEncoder {
     }
 
     #[inline]
-    pub fn create_msg(frames: Vec<EncodedVideoFrame>) -> Message {
-        let mut msg_out = Message::new();
+    pub fn create_video_frame(frames: Vec<EncodedVideoFrame>) -> VideoFrame {
         let mut vf = VideoFrame::new();
         let av1s = EncodedVideoFrames {
             frames: frames.into(),
             ..Default::default()
         };
         vf.set_av1s(av1s);
-        msg_out.set_video_frame(vf);
-        msg_out
+        vf
     }
 
     #[inline]
@@ -317,6 +352,63 @@ impl AomEncoder {
             key: frame.key,
             pts: frame.pts,
             ..Default::default()
+        }
+    }
+
+    pub fn convert_quality(quality: Quality) -> (u32, u32, u32) {
+        // we can use lower bitrate for av1
+        match quality {
+            Quality::Best => (12, 25, 100),
+            Quality::Balanced => (12, 35, 100 * 2 / 3),
+            Quality::Low => (18, 45, 50),
+            Quality::Custom(b) => {
+                let (q_min, q_max) = Self::calc_q_values(b);
+                (q_min, q_max, b)
+            }
+        }
+    }
+
+    #[inline]
+    fn calc_q_values(b: u32) -> (u32, u32) {
+        let b = std::cmp::min(b, 200);
+        let q_min1: i32 = 24;
+        let q_min2 = 5;
+        let q_max1 = 45;
+        let q_max2 = 25;
+
+        let t = b as f32 / 200.0;
+
+        let q_min: u32 = ((1.0 - t) * q_min1 as f32 + t * q_min2 as f32).round() as u32;
+        let q_max = ((1.0 - t) * q_max1 as f32 + t * q_max2 as f32).round() as u32;
+
+        (q_min, q_max)
+    }
+
+    fn get_yuvfmt(width: u32, height: u32, i444: bool) -> EncodeYuvFormat {
+        let mut img = Default::default();
+        let fmt = if i444 {
+            aom_img_fmt::AOM_IMG_FMT_I444
+        } else {
+            aom_img_fmt::AOM_IMG_FMT_I420
+        };
+        unsafe {
+            aom_img_wrap(
+                &mut img,
+                fmt,
+                width as _,
+                height as _,
+                crate::STRIDE_ALIGN as _,
+                0x1 as _,
+            );
+        }
+        let pixfmt = if i444 { Pixfmt::I444 } else { Pixfmt::I420 };
+        EncodeYuvFormat {
+            pixfmt,
+            w: img.w as _,
+            h: img.h as _,
+            stride: img.stride.map(|s| s as usize).to_vec(),
+            u: img.planes[1] as usize - img.planes[0] as usize,
+            v: img.planes[2] as usize - img.planes[0] as usize,
         }
     }
 }
@@ -360,24 +452,16 @@ impl<'a> Iterator for EncodeFrames<'a> {
     }
 }
 
-pub struct AomDecoderConfig {
-    pub num_threads: u32,
-}
-
 pub struct AomDecoder {
     ctx: aom_codec_ctx_t,
 }
 
 impl AomDecoder {
-    pub fn new(cfg: AomDecoderConfig) -> Result<Self> {
+    pub fn new() -> Result<Self> {
         let i = call_aom_ptr!(aom_codec_av1_dx());
         let mut ctx = Default::default();
         let cfg = aom_codec_dec_cfg_t {
-            threads: if cfg.num_threads == 0 {
-                num_cpus::get() as _
-            } else {
-                cfg.num_threads
-            },
+            threads: codec_thread_num(64) as _,
             w: 0,
             h: 0,
             allow_lowbitdepth: 1,
@@ -491,6 +575,13 @@ impl GoogleImage for Image {
     #[inline]
     fn planes(&self) -> Vec<*mut u8> {
         self.inner().planes.iter().map(|p| *p as *mut u8).collect()
+    }
+
+    fn chroma(&self) -> Chroma {
+        match self.inner().fmt {
+            aom_img_fmt::AOM_IMG_FMT_I444 => Chroma::I444,
+            _ => Chroma::I420,
+        }
     }
 }
 

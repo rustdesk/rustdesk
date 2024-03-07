@@ -28,7 +28,8 @@ impl InvokeUiCM for SciterHandler {
                 client.audio,
                 client.file,
                 client.restart,
-                client.recording
+                client.recording,
+                client.block_input
             ),
         );
     }
@@ -59,13 +60,11 @@ impl InvokeUiCM for SciterHandler {
     fn update_voice_call_state(&self, client: &crate::ui_cm_interface::Client) {
         self.call(
             "updateVoiceCallState",
-            &make_args!(
-                client.id,
-                client.in_voice_call,
-                client.incoming_voice_call
-            ),
+            &make_args!(client.id, client.in_voice_call, client.incoming_voice_call),
         );
     }
+
+    fn file_transfer_log(&self, _action: &str, _log: &str) {}
 }
 
 impl SciterHandler {

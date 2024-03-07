@@ -64,7 +64,7 @@ static void my_application_activate(GApplication* application) {
   int width = 800, height = 600;
   if (gIsConnectionManager) {
     width = 300;
-    height = 400;
+    height = 490;
   }
   gtk_window_set_default_size(window, width, height);   // <-- comment this line
   gtk_widget_show(GTK_WIDGET(window));

@@ -27,6 +27,10 @@ fn main() {
     if !common::global_init() {
         return;
     }
+    #[cfg(all(windows, not(feature = "inline")))]
+    unsafe {
+        winapi::um::shellscalingapi::SetProcessDpiAwareness(2);
+    }
     if let Some(args) = crate::core_main::core_main().as_mut() {
         ui::start(args);
     }

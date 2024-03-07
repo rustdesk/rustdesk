@@ -27,26 +27,6 @@ RustDesk verwelkomt bijdragen van iedereen. Zie [`docs/CONTRIBUTING.md`](CONTRIB
     alt="Download het op F-Droid"
     height="80">](https://f-droid.org/en/packages/com.carriez.flutter_hbb)
 
-## Gratis openbare servers
-
-Hieronder staan de servers die u gratis gebruikt, ze kunnen in de loop van de tijd veranderen. Als u niet in de buurt van een van deze servers bevindt, kan uw vervinding langzamer zijn.
-| Locatie | Aanbieder | Specificaties |
-| --------- | ------------- | ------------------ |
-| Seoul | AWS lightsail | 1 vCPU / 0.5GB RAM |
-| Duitsland | Hetzner | 2 vCPU / 4GB RAM |
-| Duitsland | Codext | 4 vCPU / 8GB RAM |
-| Finland (Helsinki) | [Netlock](https://netlockendpoint.com) | 4 vCPU / 8GB RAM |
-| USA (Ashburn) | [Netlock](https://netlockendpoint.com) | 4 vCPU / 8GB RAM |
-| Oekraine (Kyiv) | [dc.volia](https://dc.volia.com) | 2 vCPU / 4GB RAM |
-
-## Dev Container
-
-[![Open in Dev Containers](https://img.shields.io/static/v1?label=Dev%20Container&message=Open&color=blue&logo=visualstudiocode)](https://vscode.dev/redirect?url=vscode://ms-vscode-remote.remote-containers/cloneInVolume?url=https://github.com/rustdesk/rustdesk)
-
-Als u VS Code en Docker al hebt geinstalleerd, kunt u op de bovenstaande badge klikken om te beginnen. Door te klikken zal VS Code automatisch de Dev Containers-extensie installeren indien nodig, de broncode klonen naar een containervolume en een dev container opstarten voor gebruik.
-
-Bekijk [DEVCONTAINER.md](docs/DEVCONTAINER.md) voor meer informatie.
-
 ## Afhankelijkheden
 
 Desktop versies gebruiken [sciter](https://sciter.com/) of Flutter voor GUI, deze handleiding is alleen voor Sciter.
@@ -132,34 +112,6 @@ mkdir -p target/debug
 wget https://raw.githubusercontent.com/c-smile/sciter-sdk/master/bin.lnx/x64/libsciter-gtk.so
 mv libsciter-gtk.so target/debug
 VCPKG_ROOT=$HOME/vcpkg cargo run
-```
-
-### Wissel van Wayland naar X11 (Xorg)
-
-RustDesk ondersteunt Wayland niet. Lees [hier](https://docs.fedoraproject.org/en-US/quick-docs/configuring-xorg-as-default-gnome-session/) hoe je Xorg als standaardsessie kunt instellen voor GNOME.
-
-## Wayland support
-
-Wayland lijkt geen API te bieden voor het verzenden van toetsaanslagen naar andere vensters. Daarom gebruikt de rustdesk een API van een lager niveau, namelijk het `/dev/uinput` apparaat (Linux kernel niveau).
-
-Als wayland de gecontroleerde kant is, moet je op de volgende manier beginnen:
-```bash
-# Start uinput service
-$ sudo rustdesk --service
-$ rustdesk
-```
-**Let op**: Wayland schermopname gebruikt verschillende interfaces. RustDesk ondersteunt momenteel alleen org.freedesktop.portal.ScreenCast.
-```bash
-$ dbus-send --session --print-reply       \
-  --dest=org.freedesktop.portal.Desktop \
-  /org/freedesktop/portal/desktop       \
-  org.freedesktop.DBus.Properties.Get   \
-  string:org.freedesktop.portal.ScreenCast string:version
-# Not support
-Error org.freedesktop.DBus.Error.InvalidArgs: No such interface “org.freedesktop.portal.ScreenCast”
-# Support
-method return time=1662544486.931020 sender=:1.54 -> destination=:1.139 serial=257 reply_serial=2
-   variant       uint32 4
 ```
 
 ## Bouwen met Docker

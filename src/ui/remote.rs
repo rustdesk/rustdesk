@@ -122,12 +122,17 @@ impl InvokeUiSession for SciterHandler {
             "updateQualityStatus",
             &make_args!(
                 status.speed.map_or(Value::null(), |it| it.into()),
-                status.fps.map_or(Value::null(), |it| it.into()),
+                status
+                    .fps
+                    .iter()
+                    .next()
+                    .map_or(Value::null(), |(_, v)| (*v).into()),
                 status.delay.map_or(Value::null(), |it| it.into()),
                 status.target_bitrate.map_or(Value::null(), |it| it.into()),
                 status
                     .codec_format
-                    .map_or(Value::null(), |it| it.to_string().into())
+                    .map_or(Value::null(), |it| it.to_string().into()),
+                status.chroma.map_or(Value::null(), |it| it.into())
             ),
         );
     }
@@ -223,7 +228,7 @@ impl InvokeUiSession for SciterHandler {
         self.call("adaptSize", &make_args!());
     }
 
-    fn on_rgba(&self, rgba: &mut scrap::ImageRgb) {
+    fn on_rgba(&self, _display: usize, rgba: &mut scrap::ImageRgb) {
         VIDEO
             .lock()
             .unwrap()
@@ -239,6 +244,7 @@ impl InvokeUiSession for SciterHandler {
         pi_sciter.set_item("sas_enabled", pi.sas_enabled);
         pi_sciter.set_item("displays", Self::make_displays_array(&pi.displays));
         pi_sciter.set_item("current_display", pi.current_display);
+        pi_sciter.set_item("version", pi.version.clone());
         self.call("updatePi", &make_args!(pi_sciter));
     }
 
@@ -247,6 +253,22 @@ impl InvokeUiSession for SciterHandler {
             "updateDisplays",
             &make_args!(Self::make_displays_array(displays)),
         );
+    }
+
+    fn set_platform_additions(&self, _data: &str) {
+        // Ignore for sciter version.
+    }
+
+    fn set_multiple_windows_session(&self, sessions: Vec<WindowsSession>) {
+        let mut v = Value::array(0);
+        let mut sessions = sessions;
+        for s in sessions.drain(..) {
+            let mut obj = Value::map();
+            obj.set_item("sid", s.sid.to_string());
+            obj.set_item("name", s.name);
+            v.push(obj);
+        }
+        self.call("setMultipleWindowsSession", &make_args!(v));
     }
 
     fn on_connected(&self, conn_type: ConnType) {
@@ -304,11 +326,11 @@ impl InvokeUiSession for SciterHandler {
     }
 
     /// RGBA is directly rendered by [on_rgba]. No need to store the rgba for the sciter ui.
-    fn get_rgba(&self) -> *const u8 {
+    fn get_rgba(&self, _display: usize) -> *const u8 {
         std::ptr::null()
     }
 
-    fn next_rgba(&self) {}
+    fn next_rgba(&self, _display: usize) {}
 }
 
 pub struct SciterSession(Session<SciterHandler>);
@@ -377,7 +399,7 @@ impl sciter::EventHandler for SciterSession {
                 let source = Element::from(source);
                 use sciter::dom::ELEMENT_AREAS;
                 let flags = ELEMENT_AREAS::CONTENT_BOX as u32 | ELEMENT_AREAS::SELF_RELATIVE as u32;
-                let rc = source.get_location(flags).unwrap();
+                let rc = source.get_location(flags).unwrap_or_default();
                 log::debug!(
                     "[video] start video thread on <{}> which is about {:?} pixels",
                     source,
@@ -407,10 +429,11 @@ impl sciter::EventHandler for SciterSession {
         fn is_port_forward();
         fn is_rdp();
         fn login(String, String, String, bool);
+        fn send2fa(String);
         fn new_rdp();
         fn send_mouse(i32, i32, i32, bool, bool, bool, bool);
-        fn enter();
-        fn leave();
+        fn enter(String);
+        fn leave(String);
         fn ctrl_alt_del();
         fn transfer_file();
         fn tunnel();
@@ -449,8 +472,9 @@ impl sciter::EventHandler for SciterSession {
         fn save_view_style(String);
         fn save_image_quality(String);
         fn save_custom_image_quality(i32);
-        fn refresh_video();
-        fn record_screen(bool, i32, i32);
+        fn refresh_video(i32);
+        fn record_screen(bool, i32, i32, i32);
+        fn record_status(bool);
         fn get_toggle_option(String);
         fn is_privacy_mode_supported();
         fn toggle_option(String);
@@ -464,14 +488,15 @@ impl sciter::EventHandler for SciterSession {
         fn restart_remote_device();
         fn request_voice_call();
         fn close_voice_call();
+        fn version_cmp(String, String);
+        fn set_selected_windows_session_id(String);
     }
 }
 
 impl SciterSession {
     pub fn new(cmd: String, id: String, password: String, args: Vec<String>) -> Self {
         let force_relay = args.contains(&"--relay".to_string());
-        let session: Session<SciterHandler> = Session {
-            id: id.clone(),
+        let mut session: Session<SciterHandler> = Session {
             password: password.clone(),
             args,
             server_keyboard_enabled: Arc::new(RwLock::new(true)),
@@ -494,7 +519,7 @@ impl SciterSession {
             .lc
             .write()
             .unwrap()
-            .initialize(id, conn_type, None, force_relay);
+            .initialize(id, conn_type, None, force_relay, None);
 
         Self(session)
     }
@@ -566,6 +591,10 @@ impl SciterSession {
         }
         self.save_config(config);
         log::info!("size saved");
+    }
+
+    fn set_selected_windows_session_id(&mut self, u_sid: String) {
+        self.send_selected_session_id(u_sid);
     }
 
     fn get_port_forwards(&mut self) -> Value {
@@ -751,6 +780,10 @@ impl SciterSession {
         if let Err(err) = crate::run_me(args) {
             log::error!("Failed to spawn IP tunneling: {}", err);
         }
+    }
+
+    fn version_cmp(&self, v1: String, v2: String) -> i32 {
+        (hbb_common::get_version_number(&v1) - hbb_common::get_version_number(&v2)) as i32
     }
 }
 

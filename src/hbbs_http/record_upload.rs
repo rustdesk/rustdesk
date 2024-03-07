@@ -63,12 +63,12 @@ pub fn run(rx: Receiver<RecordState>) {
                 }
             },
             Err(e) => {
-                log::trace!("upload thread stop:{}", e);
+                log::trace!("upload thread stop: {}", e);
                 break;
             }
         } {
             uploader.running = false;
-            log::error!("upload stop:{}", e);
+            log::error!("upload stop: {}", e);
         }
     });
 }
@@ -184,7 +184,7 @@ impl RecordUploader {
                             ],
                             buf,
                         )?;
-                        log::info!("upload success, file:{}", self.filename);
+                        log::info!("upload success, file: {}", self.filename);
                         Ok(())
                     }
                     Err(e) => bail!(e.to_string()),

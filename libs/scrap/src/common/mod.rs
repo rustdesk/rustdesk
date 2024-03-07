@@ -1,6 +1,10 @@
 pub use self::vpxcodec::*;
-use hbb_common::message_proto::{video_frame, VideoFrame};
-use std::slice;
+use hbb_common::{
+    bail, log,
+    message_proto::{video_frame, Chroma, VideoFrame},
+    ResultType,
+};
+use std::{ffi::c_void, slice};
 
 cfg_if! {
     if #[cfg(quartz)] {
@@ -13,8 +17,8 @@ cfg_if! {
         mod wayland;
         mod x11;
         pub use self::linux::*;
-        pub use self::x11::Frame;
         pub use self::wayland::set_map_err;
+        pub use self::x11::PixelBuffer;
             } else {
                 mod x11;
                 pub use self::x11::*;
@@ -33,6 +37,8 @@ cfg_if! {
 
 pub mod codec;
 pub mod convert;
+#[cfg(feature = "gpucodec")]
+pub mod gpucodec;
 #[cfg(feature = "hwcodec")]
 pub mod hwcodec;
 #[cfg(feature = "mediacodec")]
@@ -96,8 +102,6 @@ pub fn would_block_if_equal(old: &mut Vec<u8>, b: &[u8]) -> std::io::Result<()> 
 }
 
 pub trait TraitCapturer {
-    fn set_use_yuv(&mut self, use_yuv: bool);
-
     // We doesn't support
     #[cfg(not(any(target_os = "ios")))]
     fn frame<'a>(&'a mut self, timeout: std::time::Duration) -> std::io::Result<Frame<'a>>;
@@ -106,6 +110,112 @@ pub trait TraitCapturer {
     fn is_gdi(&self) -> bool;
     #[cfg(windows)]
     fn set_gdi(&mut self) -> bool;
+
+    #[cfg(feature = "gpucodec")]
+    fn device(&self) -> AdapterDevice;
+
+    #[cfg(feature = "gpucodec")]
+    fn set_output_texture(&mut self, texture: bool);
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct AdapterDevice {
+    pub device: *mut c_void,
+    pub vendor_id: ::std::os::raw::c_uint,
+    pub luid: i64,
+}
+
+impl Default for AdapterDevice {
+    fn default() -> Self {
+        Self {
+            device: std::ptr::null_mut(),
+            vendor_id: Default::default(),
+            luid: Default::default(),
+        }
+    }
+}
+
+pub trait TraitPixelBuffer {
+    fn data(&self) -> &[u8];
+
+    fn width(&self) -> usize;
+
+    fn height(&self) -> usize;
+
+    fn stride(&self) -> Vec<usize>;
+
+    fn pixfmt(&self) -> Pixfmt;
+}
+
+#[cfg(not(any(target_os = "ios")))]
+pub enum Frame<'a> {
+    PixelBuffer(PixelBuffer<'a>),
+    Texture(*mut c_void),
+}
+
+#[cfg(not(any(target_os = "ios")))]
+impl Frame<'_> {
+    pub fn valid<'a>(&'a self) -> bool {
+        match self {
+            Frame::PixelBuffer(pixelbuffer) => !pixelbuffer.data().is_empty(),
+            Frame::Texture(texture) => !texture.is_null(),
+        }
+    }
+
+    pub fn to<'a>(
+        &'a self,
+        yuvfmt: EncodeYuvFormat,
+        yuv: &'a mut Vec<u8>,
+        mid_data: &mut Vec<u8>,
+    ) -> ResultType<EncodeInput> {
+        match self {
+            Frame::PixelBuffer(pixelbuffer) => {
+                convert_to_yuv(&pixelbuffer, yuvfmt, yuv, mid_data)?;
+                Ok(EncodeInput::YUV(yuv))
+            }
+            Frame::Texture(texture) => Ok(EncodeInput::Texture(*texture)),
+        }
+    }
+}
+
+pub enum EncodeInput<'a> {
+    YUV(&'a [u8]),
+    Texture(*mut c_void),
+}
+
+impl<'a> EncodeInput<'a> {
+    pub fn yuv(&self) -> ResultType<&'_ [u8]> {
+        match self {
+            Self::YUV(f) => Ok(f),
+            _ => bail!("not pixelfbuffer frame"),
+        }
+    }
+
+    pub fn texture(&self) -> ResultType<*mut c_void> {
+        match self {
+            Self::Texture(f) => Ok(*f),
+            _ => bail!("not texture frame"),
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub enum Pixfmt {
+    BGRA,
+    RGBA,
+    I420,
+    NV12,
+    I444,
+}
+
+#[derive(Debug, Clone)]
+pub struct EncodeYuvFormat {
+    pub pixfmt: Pixfmt,
+    pub w: usize,
+    pub h: usize,
+    pub stride: Vec<usize>,
+    pub u: usize,
+    pub v: usize,
 }
 
 #[cfg(x11)]
@@ -120,7 +230,7 @@ pub fn is_cursor_embedded() -> bool {
     if is_x11() {
         x11::IS_CURSOR_EMBEDDED
     } else {
-        wayland::is_cursor_embedded()
+        false
     }
 }
 
@@ -135,11 +245,13 @@ pub enum CodecName {
     VP8,
     VP9,
     AV1,
-    H264(String),
-    H265(String),
+    H264HW(String),
+    H265HW(String),
+    H264GPU,
+    H265GPU,
 }
 
-#[derive(PartialEq, Debug, Clone)]
+#[derive(PartialEq, Debug, Clone, Copy)]
 pub enum CodecFormat {
     VP8,
     VP9,
@@ -168,8 +280,8 @@ impl From<&CodecName> for CodecFormat {
             CodecName::VP8 => Self::VP8,
             CodecName::VP9 => Self::VP9,
             CodecName::AV1 => Self::AV1,
-            CodecName::H264(_) => Self::H264,
-            CodecName::H265(_) => Self::H265,
+            CodecName::H264HW(_) | CodecName::H264GPU => Self::H264,
+            CodecName::H265HW(_) | CodecName::H265GPU => Self::H265,
         }
     }
 }
@@ -260,6 +372,7 @@ pub trait GoogleImage {
     fn height(&self) -> usize;
     fn stride(&self) -> Vec<i32>;
     fn planes(&self) -> Vec<*mut u8>;
+    fn chroma(&self) -> Chroma;
     fn get_bytes_per_row(w: usize, fmt: ImageFormat, stride: usize) -> usize {
         let bytes_per_pixel = match fmt {
             ImageFormat::Raw => 3,
@@ -278,8 +391,8 @@ pub trait GoogleImage {
         let stride = self.stride();
         let planes = self.planes();
         unsafe {
-            match rgb.fmt() {
-                ImageFormat::Raw => {
+            match (self.chroma(), rgb.fmt()) {
+                (Chroma::I420, ImageFormat::Raw) => {
                     super::I420ToRAW(
                         planes[0],
                         stride[0],
@@ -293,7 +406,7 @@ pub trait GoogleImage {
                         self.height() as _,
                     );
                 }
-                ImageFormat::ARGB => {
+                (Chroma::I420, ImageFormat::ARGB) => {
                     super::I420ToARGB(
                         planes[0],
                         stride[0],
@@ -307,7 +420,7 @@ pub trait GoogleImage {
                         self.height() as _,
                     );
                 }
-                ImageFormat::ABGR => {
+                (Chroma::I420, ImageFormat::ABGR) => {
                     super::I420ToABGR(
                         planes[0],
                         stride[0],
@@ -321,6 +434,36 @@ pub trait GoogleImage {
                         self.height() as _,
                     );
                 }
+                (Chroma::I444, ImageFormat::ARGB) => {
+                    super::I444ToARGB(
+                        planes[0],
+                        stride[0],
+                        planes[1],
+                        stride[1],
+                        planes[2],
+                        stride[2],
+                        rgb.raw.as_mut_ptr(),
+                        bytes_per_row as _,
+                        self.width() as _,
+                        self.height() as _,
+                    );
+                }
+                (Chroma::I444, ImageFormat::ABGR) => {
+                    super::I444ToABGR(
+                        planes[0],
+                        stride[0],
+                        planes[1],
+                        stride[1],
+                        planes[2],
+                        stride[2],
+                        rgb.raw.as_mut_ptr(),
+                        bytes_per_row as _,
+                        self.width() as _,
+                        self.height() as _,
+                    );
+                }
+                // (Chroma::I444, ImageFormat::Raw), new version libyuv have I444ToRAW
+                _ => log::error!("unsupported pixfmt: {:?}", self.chroma()),
             }
         }
     }

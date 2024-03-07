@@ -16,10 +16,6 @@ class RdPlatformChannel {
 
   final MethodChannel _osxMethodChannel =
       MethodChannel("org.rustdesk.rustdesk/macos");
-  final MethodChannel _winMethodChannel =
-      MethodChannel("org.rustdesk.rustdesk/windows");
-  final MethodChannel _linuxMethodChannel =
-      MethodChannel("org.rustdesk.rustdesk/linux");
 
   /// Change the theme of the system window
   Future<void> changeSystemWindowTheme(SystemWindowTheme theme) {

@@ -1,123 +1,34 @@
-#[cfg(target_os = "windows")]
-use super::ui_interface::get_option_opt;
-#[cfg(target_os = "windows")]
+use crate::client::translate;
+#[cfg(windows)]
+use crate::ipc::Data;
+#[cfg(windows)]
+use hbb_common::tokio;
+use hbb_common::{allow_err, log};
 use std::sync::{Arc, Mutex};
-#[cfg(target_os = "windows")]
-use trayicon::{MenuBuilder, TrayIconBuilder};
-#[cfg(target_os = "windows")]
-use winit::{
-    event::Event,
-    event_loop::{ControlFlow, EventLoop},
-};
+#[cfg(windows)]
+use std::time::Duration;
 
-#[cfg(target_os = "windows")]
-#[derive(Clone, Eq, PartialEq, Debug)]
-enum Events {
-    DoubleClickTrayIcon,
-    StopService,
-    StartService,
-}
-
-#[cfg(target_os = "windows")]
 pub fn start_tray() {
-    let event_loop = EventLoop::<Events>::with_user_event();
-    let proxy = event_loop.create_proxy();
-    let icon = include_bytes!("../res/tray-icon.ico");
-    let mut tray_icon = TrayIconBuilder::new()
-        .sender_winit(proxy)
-        .icon_from_buffer(icon)
-        .tooltip("RustDesk")
-        .on_double_click(Events::DoubleClickTrayIcon)
-        .build()
-        .unwrap();
-    let old_state = Arc::new(Mutex::new(0));
-    let _sender = crate::ui_interface::SENDER.lock().unwrap();
-    event_loop.run(move |event, _, control_flow| {
-        if get_option_opt("ipc-closed").is_some() {
-            *control_flow = ControlFlow::Exit;
-            return;
-        } else {
-            *control_flow = ControlFlow::Wait;
-        }
-        let stopped = is_service_stopped();
-        let state = if stopped { 2 } else { 1 };
-        let old = *old_state.lock().unwrap();
-        if state != old {
-            hbb_common::log::info!("State changed");
-            let mut m = MenuBuilder::new();
-            if state == 2 {
-                m = m.item(
-                    &crate::client::translate("Start Service".to_owned()),
-                    Events::StartService,
-                );
-            } else {
-                m = m.item(
-                    &crate::client::translate("Stop service".to_owned()),
-                    Events::StopService,
-                );
-            }
-            tray_icon.set_menu(&m).ok();
-            *old_state.lock().unwrap() = state;
-        }
-
-        match event {
-            Event::UserEvent(e) => match e {
-                Events::DoubleClickTrayIcon => {
-                    crate::run_me(Vec::<&str>::new()).ok();
-                }
-                Events::StopService => {
-                    crate::ipc::set_option("stop-service", "Y");
-                }
-                Events::StartService => {
-                    crate::ipc::set_option("stop-service", "");
-                }
-            },
-            _ => (),
-        }
-    });
-}
-
-/// Check if service is stoped.
-/// Return [`true`] if service is stoped, [`false`] otherwise.
-#[inline]
-#[cfg(target_os = "windows")]
-fn is_service_stopped() -> bool {
-    if let Some(v) = get_option_opt("stop-service") {
-        v == "Y"
-    } else {
-        false
-    }
-}
-
-/// Start a tray icon in Linux
-///
-/// [Block]
-/// This function will block current execution, show the tray icon and handle events.
-#[cfg(target_os = "linux")]
-pub fn start_tray() {}
-
-#[cfg(target_os = "macos")]
-pub fn start_tray() {
-    use hbb_common::{allow_err, log};
     allow_err!(make_tray());
 }
 
-#[cfg(target_os = "macos")]
 pub fn make_tray() -> hbb_common::ResultType<()> {
     // https://github.com/tauri-apps/tray-icon/blob/dev/examples/tao.rs
     use hbb_common::anyhow::Context;
     use tao::event_loop::{ControlFlow, EventLoopBuilder};
     use tray_icon::{
         menu::{Menu, MenuEvent, MenuItem},
-        ClickEvent, TrayEvent, TrayIconBuilder,
+        TrayIconBuilder, TrayIconEvent as TrayEvent,
     };
-    let mode = dark_light::detect();
-    const LIGHT: &[u8] = include_bytes!("../res/mac-tray-light-x2.png");
-    const DARK: &[u8] = include_bytes!("../res/mac-tray-dark-x2.png");
-    let icon = match mode {
-        dark_light::Mode::Dark => LIGHT,
-        _ => DARK,
-    };
+    let icon;
+    #[cfg(target_os = "macos")]
+    {
+        icon = include_bytes!("../res/mac-tray-dark-x2.png"); // use as template, so color is not important
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        icon = include_bytes!("../res/tray-icon.ico");
+    }
     let (icon_rgba, icon_width, icon_height) = {
         let image = image::load_from_memory(icon)
             .context("Failed to open icon path")?
@@ -126,49 +37,168 @@ pub fn make_tray() -> hbb_common::ResultType<()> {
         let rgba = image.into_raw();
         (rgba, width, height)
     };
-    let icon = tray_icon::icon::Icon::from_rgba(icon_rgba, icon_width, icon_height)
+    let icon = tray_icon::Icon::from_rgba(icon_rgba, icon_width, icon_height)
         .context("Failed to open icon")?;
 
     let event_loop = EventLoopBuilder::new().build();
 
     let tray_menu = Menu::new();
-    let quit_i = MenuItem::new(crate::client::translate("Exit".to_owned()), true, None);
-    tray_menu.append_items(&[&quit_i]);
-
+    let quit_i = MenuItem::new(translate("Exit".to_owned()), true, None);
+    let open_i = MenuItem::new(translate("Open".to_owned()), true, None);
+    tray_menu.append_items(&[&open_i, &quit_i]).ok();
+    let tooltip = |count: usize| {
+        if count == 0 {
+            format!(
+                "{} {}",
+                crate::get_app_name(),
+                translate("Service is running".to_owned()),
+            )
+        } else {
+            format!(
+                "{} - {}\n{}",
+                crate::get_app_name(),
+                translate("Ready".to_owned()),
+                translate("{".to_string() + &format!("{count}") + "} sessions"),
+            )
+        }
+    };
     let _tray_icon = Some(
         TrayIconBuilder::new()
             .with_menu(Box::new(tray_menu))
-            .with_tooltip(format!(
-                "{} {}",
-                crate::get_app_name(),
-                crate::lang::translate("Service is running".to_owned())
-            ))
+            .with_tooltip(tooltip(0))
             .with_icon(icon)
+            .with_icon_as_template(true) // mac only
             .build()?,
     );
+    let _tray_icon = Arc::new(Mutex::new(_tray_icon));
 
     let menu_channel = MenuEvent::receiver();
     let tray_channel = TrayEvent::receiver();
+    #[cfg(windows)]
+    let (ipc_sender, ipc_receiver) = std::sync::mpsc::channel::<Data>();
     let mut docker_hiden = false;
 
+    let open_func = move || {
+        if cfg!(not(feature = "flutter")) {
+            crate::run_me::<&str>(vec![]).ok();
+            return;
+        }
+        #[cfg(target_os = "macos")]
+        crate::platform::macos::handle_application_should_open_untitled_file();
+        #[cfg(target_os = "windows")]
+        {
+            use std::os::windows::process::CommandExt;
+            use std::process::Command;
+            Command::new("cmd")
+                .arg("/c")
+                .arg(&format!("start {}", crate::get_uri_prefix()))
+                .creation_flags(winapi::um::winbase::CREATE_NO_WINDOW)
+                .spawn()
+                .ok();
+        }
+        #[cfg(target_os = "linux")]
+        if !std::process::Command::new("xdg-open")
+            .arg(&crate::get_uri_prefix())
+            .spawn()
+            .is_ok()
+        {
+            crate::run_me::<&str>(vec![]).ok();
+        }
+    };
+
+    #[cfg(windows)]
+    std::thread::spawn(move || {
+        start_query_session_count(ipc_sender.clone());
+    });
+    #[cfg(windows)]
+    let mut last_click = std::time::Instant::now();
     event_loop.run(move |_event, _, control_flow| {
         if !docker_hiden {
+            #[cfg(target_os = "macos")]
             crate::platform::macos::hide_dock();
             docker_hiden = true;
         }
-        *control_flow = ControlFlow::Wait;
+        *control_flow = ControlFlow::WaitUntil(
+            std::time::Instant::now() + std::time::Duration::from_millis(100),
+        );
 
         if let Ok(event) = menu_channel.try_recv() {
             if event.id == quit_i.id() {
-                crate::platform::macos::uninstall(false);
+                /* failed in windows, seems no permission to check system process
+                if !crate::check_process("--server", false) {
+                    *control_flow = ControlFlow::Exit;
+                    return;
+                }
+                */
+                if !crate::platform::uninstall_service(false) {
+                    *control_flow = ControlFlow::Exit;
+                }
+            } else if event.id == open_i.id() {
+                open_func();
             }
-            println!("{event:?}");
         }
 
-        if let Ok(event) = tray_channel.try_recv() {
-            if event.event == ClickEvent::Double {
-                crate::platform::macos::handle_application_should_open_untitled_file();
+        if let Ok(_event) = tray_channel.try_recv() {
+            #[cfg(target_os = "windows")]
+            if _event.click_type == tray_icon::ClickType::Left
+                || _event.click_type == tray_icon::ClickType::Double
+            {
+                if last_click.elapsed() < std::time::Duration::from_secs(1) {
+                    return;
+                }
+                open_func();
+                last_click = std::time::Instant::now();
+            }
+        }
+
+        #[cfg(windows)]
+        if let Ok(data) = ipc_receiver.try_recv() {
+            match data {
+                Data::ControlledSessionCount(count) => {
+                    _tray_icon
+                        .lock()
+                        .unwrap()
+                        .as_mut()
+                        .map(|t| t.set_tooltip(Some(tooltip(count))));
+                }
+                _ => {}
             }
         }
     });
+}
+
+#[cfg(windows)]
+#[tokio::main(flavor = "current_thread")]
+async fn start_query_session_count(sender: std::sync::mpsc::Sender<Data>) {
+    let mut last_count = 0;
+    loop {
+        if let Ok(mut c) = crate::ipc::connect(1000, "").await {
+            let mut timer = crate::rustdesk_interval(tokio::time::interval(Duration::from_secs(1)));
+            loop {
+                tokio::select! {
+                    res = c.next() => {
+                        match res {
+                            Err(err) => {
+                                log::error!("ipc connection closed: {}", err);
+                                break;
+                            }
+
+                            Ok(Some(Data::ControlledSessionCount(count))) => {
+                                if count != last_count {
+                                    last_count = count;
+                                    sender.send(Data::ControlledSessionCount(count)).ok();
+                                }
+                            }
+                            _ => {}
+                        }
+                    }
+
+                    _ = timer.tick() => {
+                        c.send(&Data::ControlledSessionCount(0)).await.ok();
+                    }
+                }
+            }
+        }
+        hbb_common::sleep(1.).await;
+    }
 }

@@ -73,6 +73,7 @@ message RegisterPkResponse {
     SERVER_ERROR = 7;
   }
   Result result = 1;
+  int32 keep_alive = 2;
 }
 
 message PunchHoleResponse {

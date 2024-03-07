@@ -42,8 +42,6 @@ static PLUGIN_SOURCE_LOCAL_DIR: &str = "plugins";
 
 pub use config::{ManagerConfig, PeerConfig, SharedConfig};
 
-use crate::common::is_server;
-
 /// Common plugin return.
 ///
 /// [Note]
@@ -96,8 +94,12 @@ impl PluginReturn {
     }
 }
 
+fn is_server_running() -> bool {
+    crate::common::is_server() || crate::common::is_server_running()
+}
+
 pub fn init() {
-    if !is_server() {
+    if !is_server_running() {
         std::thread::spawn(move || manager::start_ipc());
     } else {
         if let Err(e) = remove_uninstalled() {

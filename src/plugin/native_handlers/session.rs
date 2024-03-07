@@ -7,10 +7,7 @@ use std::{
 
 use flutter_rust_bridge::StreamSink;
 
-use crate::{
-    define_method_prefix, flutter::FlutterHandler, flutter_ffi::EventToUI,
-    plugin::MSG_TO_UI_TYPE_PLUGIN_EVENT, ui_session_interface::Session,
-};
+use crate::{define_method_prefix, flutter_ffi::EventToUI};
 
 const MSG_TO_UI_TYPE_SESSION_CREATED: &str = "session_created";
 
@@ -28,7 +25,7 @@ pub type OnSessionRgbaCallback = unsafe extern "C" fn(
 #[derive(Default)]
 /// Session related handler for librustdesk core.
 pub struct PluginNativeSessionHandler {
-    sessions: Arc<RwLock<Vec<Session<FlutterHandler>>>>,
+    sessions: Arc<RwLock<Vec<crate::flutter::FlutterSession>>>,
     cbs: Arc<RwLock<HashMap<String, OnSessionRgbaCallback>>>,
 }
 
@@ -61,7 +58,9 @@ impl PluginNativeHandler for PluginNativeSessionHandler {
                         let sessions = SESSION_HANDLER.sessions.read().unwrap();
                         for session in sessions.iter() {
                             if session.id == id {
-                                crate::ui_session_interface::io_loop(session.clone());
+                                let round =
+                                    session.connection_round_state.lock().unwrap().new_round();
+                                crate::ui_session_interface::io_loop(session.clone(), round);
                             }
                         }
                     }
@@ -131,6 +130,8 @@ impl PluginNativeSessionHandler {
             let mut m = HashMap::new();
             m.insert("name", MSG_TO_UI_TYPE_SESSION_CREATED);
             m.insert("session_id", &session_id);
+            // todo: APP_TYPE_DESKTOP_REMOTE is not used anymore.
+            // crate::flutter::APP_TYPE_DESKTOP_REMOTE + window id, is used for multi-window support.
             crate::flutter::push_global_event(
                 crate::flutter::APP_TYPE_DESKTOP_REMOTE,
                 serde_json::to_string(&m).unwrap_or("".to_string()),

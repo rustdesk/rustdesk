@@ -3,6 +3,20 @@ use hbb_common::message_proto::*;
 
 pub fn clip_2_msg(clip: ClipboardFile) -> Message {
     match clip {
+        ClipboardFile::NotifyCallback {
+            r#type,
+            title,
+            text,
+        } => Message {
+            union: Some(message::Union::MessageBox(MessageBox {
+                msgtype: r#type,
+                title,
+                text,
+                link: "".to_string(),
+                ..Default::default()
+            })),
+            ..Default::default()
+        },
         ClipboardFile::MonitorReady => Message {
             union: Some(message::Union::Cliprdr(Cliprdr {
                 union: Some(cliprdr::Union::Ready(CliprdrMonitorReady {

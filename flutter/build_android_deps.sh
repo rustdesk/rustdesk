@@ -1,13 +1,17 @@
 #!/bin/bash
 
-# Build libyuv / opus / libvpx / oboe for Android
+set -e -o pipefail
+
+ANDROID_ABI=$1
+
+# Build RustDesk dependencies for Android using vcpkg.json
 # Required:
 #   1. set VCPKG_ROOT / ANDROID_NDK path environment variables
 #   2. vcpkg initialized
-#   3. ndk, version: 22 (if ndk < 22 you need to change LD as `export LD=$TOOLCHAIN/bin/$NDK_LLVM_TARGET-ld`)
+#   3. ndk, version: r25c or newer
 
-if [ -z "$ANDROID_NDK" ]; then
-  echo "Failed! Please set ANDROID_NDK"
+if [ -z "$ANDROID_NDK_HOME" ]; then
+  echo "Failed! Please set ANDROID_NDK_HOME"
   exit 1
 fi
 
@@ -18,107 +22,66 @@ fi
 
 API_LEVEL="21"
 
+# Get directory of this script
+
+SCRIPTDIR="$(readlink -f "$0")"
+SCRIPTDIR="$(dirname "$SCRIPTDIR")"
+
+# Check if vcpkg.json is one level up - in root directory of RD
+
+if [ ! -f "$SCRIPTDIR/../vcpkg.json" ]; then
+  echo "Failed! Please check where vcpkg.json is!"
+  exit 1
+fi
+
 # NDK llvm toolchain
+
 HOST_TAG="linux-x86_64" # current platform, set as `ls $ANDROID_NDK/toolchains/llvm/prebuilt/`
 TOOLCHAIN=$ANDROID_NDK/toolchains/llvm/prebuilt/$HOST_TAG
 
 function build {
   ANDROID_ABI=$1
-  VCPKG_TARGET=$2
-  NDK_LLVM_TARGET=$3
-  LIBVPX_TARGET=$4
 
-  PREFIX=$VCPKG_ROOT/installed/$VCPKG_TARGET/
+  case "$ANDROID_ABI" in
+  arm64-v8a)
+     ABI=aarch64-linux-android$API_LEVEL
+     VCPKG_TARGET=arm64-android
+     ;;
+  armeabi-v7a)
+     ABI=armv7a-linux-androideabi$API_LEVEL
+     VCPKG_TARGET=arm-neon-android
+     ;;
+  x86_64)
+     ABI=x86_64-linux-android$API_LEVEL
+     VCPKG_TARGET=x64-android
+     ;;
+  x86)
+     ABI=i686-linux-android$API_LEVEL
+     VCPKG_TARGET=x86-android
+     ;;
+  *)
+     echo "ERROR: ANDROID_ABI must be one of: arm64-v8a, armeabi-v7a, x86_64, x86" >&2
+     return 1
+  esac
 
-  # 1
-  echo "*** [$ANDROID_ABI][Start] Build opus / libyuv from vcpkg"
-  export ANDROID_NDK_HOME=$ANDROID_NDK
-  pushd $VCPKG_ROOT
-  $VCPKG_ROOT/vcpkg install opus --triplet $VCPKG_TARGET
-  $VCPKG_ROOT/vcpkg install libyuv --triplet $VCPKG_TARGET
+  echo "*** [$ANDROID_ABI][Start] Build and install vcpkg dependencies"
+  pushd "$SCRIPTDIR/.."
+  $VCPKG_ROOT/vcpkg install --triplet $VCPKG_TARGET --x-install-root="$VCPKG_ROOT/installed"
   popd
-  echo "*** [$ANDROID_ABI][Finished] Build opus / libyuv from vcpkg"
+  echo "*** [$ANDROID_ABI][Finished] Build and install vcpkg dependencies"
 
-  # 2
-  echo "*** [$ANDROID_ABI][Start] Build libvpx"
-  pushd build/libvpx
-  export AR=$TOOLCHAIN/bin/${NDK_LLVM_TARGET}-ar
-  export AS=$TOOLCHAIN/bin/${NDK_LLVM_TARGET}-as
-  export LD=$TOOLCHAIN/bin/${NDK_LLVM_TARGET}-ld.gold  # if ndk < 22, use aarch64-linux-android-ld
-  export RANLIB=$TOOLCHAIN/bin/${NDK_LLVM_TARGET}-ranlib
-  export STRIP=$TOOLCHAIN/bin/${NDK_LLVM_TARGET}-strip
+if [ -d "$VCPKG_ROOT/installed/arm-neon-android" ]; then
+  echo "*** [Start] Move arm-neon-android to arm-android"
 
-  if [ $NDK_LLVM_TARGET == "arm-linux-androideabi" ]
-  then
-    export CC=$TOOLCHAIN/bin/armv7a-linux-androideabi${API_LEVEL}-clang
-    export CXX=$TOOLCHAIN/bin/armv7a-linux-androideabi${API_LEVEL}-clang++
-  else
-    export CC=$TOOLCHAIN/bin/${NDK_LLVM_TARGET}${API_LEVEL}-clang
-    export CXX=$TOOLCHAIN/bin/${NDK_LLVM_TARGET}${API_LEVEL}-clang++
-  fi
-  make clean
-  ./configure --target=$LIBVPX_TARGET \
-              --enable-pic
-              --disable-webm-io \
-              --disable-unit-tests \
-              --disable-examples \
-              --disable-libyuv \
-              --disable-postproc \
-              --disable-tools \
-              --disable-docs \
-              --prefix=$PREFIX
-  make -j5
-  make install
+  mv "$VCPKG_ROOT/installed/arm-neon-android" "$VCPKG_ROOT/installed/arm-android"
 
-  popd
-  echo "*** [$ANDROID_ABI][Finished] Build libvpx"
-
-  # 3
-  echo "*** [$ANDROID_ABI][Start] Build oboe"
-  pushd build/oboe
-  make clean
-  cmake -DBUILD_SHARED_LIBS=true \
-          -DCMAKE_BUILD_TYPE=RelWithDebInfo \
-          -DANDROID_TOOLCHAIN=clang \
-          -DANDROID_STL=c++_shared \
-          -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK/build/cmake/android.toolchain.cmake \
-          -DCMAKE_INSTALL_PREFIX=$PREFIX \
-          -DANDROID_ABI=$ANDROID_ABI \
-          -DANDROID_PLATFORM=android-$API_LEVEL
-  make -j5
-  make install
-  mv $PREFIX/lib/$ANDROID_ABI/liboboe.a $PREFIX/lib/
-  popd
-  echo "*** [$ANDROID_ABI][Finished] Build oboe"
-
-  echo "*** [$ANDROID_ABI][All Finished]"
+  echo "*** [Finished] Move arm-neon-android to arm-android"
+fi
 }
 
-git clone -b v1.11.0 --depth=1 https://github.com/webmproject/libvpx.git build/libvpx
-git clone -b 1.6.1 --depth=1 https://github.com/google/oboe build/oboe
-patch -N -d build/oboe -p1 < ../src/oboe.patch
-
-# VCPKG_TARGET	        ANDROID_ABI
-#   arm64-android	        arm64-v8a
-#   arm-android	          armeabi-v7a
-#   x64-android	          x86_64
-#   x86-android	          x86
-
-# NDK_LLVM_TARGET
-#   aarch64-linux-android
-#   arm-linux-androideabi
-#   x86_64-linux-android
-#   i686-linux-android
-
-# LIBVPX_TARGET :
-#   arm64-android-gcc
-#   armv7-android-gcc
-#   x86_64-android-gcc
-#   x86-android-gcc
-
-# args: ANDROID_ABI  VCPKG_TARGET  NDK_LLVM_TARGET  LIBVPX_TARGET
-build arm64-v8a arm64-android aarch64-linux-android arm64-android-gcc
-build armeabi-v7a arm-android arm-linux-androideabi armv7-android-gcc
-
-# rm -rf build/libvpx
-# rm -rf build/oboe
+if [ ! -z "$ANDROID_ABI" ]; then
+  build "$ANDROID_ABI"
+else
+  echo "Usage: build-android-deps.sh <ANDROID-ABI>" >&2
+  exit 1
+fi

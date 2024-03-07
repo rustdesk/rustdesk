@@ -1,43 +1,58 @@
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
-use crate::common::get_default_sound_input;
 use crate::{
     client::file_trait::FileManager,
-    common::is_keyboard_mode_supported,
-    common::make_fd_to_json,
-    flutter::{self, SESSIONS},
-    flutter::{session_add, session_start_},
+    common::{is_keyboard_mode_supported, make_fd_to_json},
+    flutter::{
+        self, session_add, session_add_existed, session_start_, sessions, try_sync_peer_option,
+    },
+    input::*,
     ui_interface::{self, *},
+};
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+use crate::{
+    common::get_default_sound_input,
+    keyboard::input_source::{change_input_source, get_cur_session_input_source},
 };
 use flutter_rust_bridge::{StreamSink, SyncReturn};
 #[cfg(feature = "plugin_framework")]
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use hbb_common::allow_err;
 use hbb_common::{
-    config::{self, LocalConfig, PeerConfig, PeerInfoSerde, ONLINE},
-    fs, log,
+    config::{self, LocalConfig, PeerConfig, PeerInfoSerde},
+    fs, lazy_static, log,
     message_proto::KeyboardMode,
+    rendezvous_proto::ConnType,
     ResultType,
 };
-use serde_json::json;
 use std::{
     collections::HashMap,
-    ffi::{CStr, CString},
-    os::raw::c_char,
     str::FromStr,
+    sync::{
+        atomic::{AtomicI32, Ordering},
+        Arc,
+    },
     time::SystemTime,
 };
 
-// use crate::hbbs_http::account::AuthResult;
+pub type SessionID = uuid::Uuid;
+
+lazy_static::lazy_static! {
+    static ref TEXTURE_RENDER_KEY: Arc<AtomicI32> = Arc::new(AtomicI32::new(0));
+}
 
 fn initialize(app_dir: &str) {
+    flutter::async_tasks::start_flutter_async_runner();
     *config::APP_DIR.write().unwrap() = app_dir.to_owned();
     #[cfg(target_os = "android")]
     {
+        // flexi_logger can't work when android_logger initialized.
+        #[cfg(debug_assertions)]
         android_logger::init_once(
             android_logger::Config::default()
                 .with_max_level(log::LevelFilter::Debug) // limit log level
                 .with_tag("ffi"), // logs will show under mytag tag
         );
+        #[cfg(not(debug_assertions))]
+        hbb_common::init_log(false, "");
         #[cfg(feature = "mediacodec")]
         scrap::mediacodec::check_mediacodec();
         crate::common::test_rendezvous_server();
@@ -62,7 +77,8 @@ pub fn stop_global_event_stream(app_type: String) {
 }
 pub enum EventToUI {
     Event(String),
-    Rgba,
+    Rgba(usize),
+    Texture(usize),
 }
 
 pub fn host_stop_system_key_propagate(_stopped: bool) {
@@ -70,9 +86,28 @@ pub fn host_stop_system_key_propagate(_stopped: bool) {
     crate::platform::windows::stop_system_key_propagate(_stopped);
 }
 
-// FIXME: -> ResultType<()> cannot be parsed by frb_codegen
-// thread 'main' panicked at 'Failed to parse function output type `ResultType<()>`', $HOME\.cargo\git\checkouts\flutter_rust_bridge-ddba876d3ebb2a1e\e5adce5\frb_codegen\src\parser\mod.rs:151:25
+// This function is only used to count the number of control sessions.
+pub fn peer_get_default_sessions_count(id: String) -> SyncReturn<usize> {
+    SyncReturn(sessions::get_session_count(id, ConnType::DEFAULT_CONN))
+}
+
+pub fn session_add_existed_sync(id: String, session_id: SessionID) -> SyncReturn<String> {
+    if let Err(e) = session_add_existed(id.clone(), session_id) {
+        SyncReturn(format!("Failed to add session with id {}, {}", &id, e))
+    } else {
+        SyncReturn("".to_owned())
+    }
+}
+
+pub fn session_try_add_display(session_id: SessionID, displays: Vec<i32>) -> SyncReturn<()> {
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
+        session.capture_displays(displays, vec![], vec![]);
+    }
+    SyncReturn(())
+}
+
 pub fn session_add_sync(
+    session_id: SessionID,
     id: String,
     is_file_transfer: bool,
     is_port_forward: bool,
@@ -82,6 +117,7 @@ pub fn session_add_sync(
     password: String,
 ) -> SyncReturn<String> {
     if let Err(e) = session_add(
+        &session_id,
         &id,
         is_file_transfer,
         is_port_forward,
@@ -96,33 +132,37 @@ pub fn session_add_sync(
     }
 }
 
-pub fn session_start(events2ui: StreamSink<EventToUI>, id: String) -> ResultType<()> {
-    session_start_(&id, events2ui)
+pub fn session_start(
+    events2ui: StreamSink<EventToUI>,
+    session_id: SessionID,
+    id: String,
+) -> ResultType<()> {
+    session_start_(&session_id, &id, events2ui)
 }
 
-pub fn session_get_remember(id: String) -> Option<bool> {
-    if let Some(session) = SESSIONS.read().unwrap().get(&id) {
+pub fn session_get_remember(session_id: SessionID) -> Option<bool> {
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
         Some(session.get_remember())
     } else {
         None
     }
 }
 
-pub fn session_get_toggle_option(id: String, arg: String) -> Option<bool> {
-    if let Some(session) = SESSIONS.read().unwrap().get(&id) {
+pub fn session_get_toggle_option(session_id: SessionID, arg: String) -> Option<bool> {
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
         Some(session.get_toggle_option(arg))
     } else {
         None
     }
 }
 
-pub fn session_get_toggle_option_sync(id: String, arg: String) -> SyncReturn<bool> {
-    let res = session_get_toggle_option(id, arg) == Some(true);
+pub fn session_get_toggle_option_sync(session_id: SessionID, arg: String) -> SyncReturn<bool> {
+    let res = session_get_toggle_option(session_id, arg) == Some(true);
     SyncReturn(res)
 }
 
-pub fn session_get_option(id: String, arg: String) -> Option<String> {
-    if let Some(session) = SESSIONS.read().unwrap().get(&id) {
+pub fn session_get_option(session_id: SessionID, arg: String) -> Option<String> {
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
         Some(session.get_option(arg))
     } else {
         None
@@ -130,73 +170,113 @@ pub fn session_get_option(id: String, arg: String) -> Option<String> {
 }
 
 pub fn session_login(
-    id: String,
+    session_id: SessionID,
     os_username: String,
     os_password: String,
     password: String,
     remember: bool,
 ) {
-    if let Some(session) = SESSIONS.read().unwrap().get(&id) {
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
         session.login(os_username, os_password, password, remember);
     }
 }
 
-pub fn session_close(id: String) {
-    if let Some(mut session) = SESSIONS.write().unwrap().remove(&id) {
-        session.close_event_stream();
+pub fn session_send2fa(session_id: SessionID, code: String) {
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
+        session.send2fa(code);
+    }
+}
+
+pub fn session_close(session_id: SessionID) {
+    if let Some(session) = sessions::remove_session_by_session_id(&session_id) {
+        session.close_event_stream(session_id);
         session.close();
     }
 }
 
-pub fn session_refresh(id: String) {
-    if let Some(session) = SESSIONS.read().unwrap().get(&id) {
-        session.refresh_video();
+pub fn session_refresh(session_id: SessionID, display: usize) {
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
+        session.refresh_video(display as _);
     }
 }
 
-pub fn session_record_screen(id: String, start: bool, width: usize, height: usize) {
-    if let Some(session) = SESSIONS.read().unwrap().get(&id) {
-        session.record_screen(start, width as _, height as _);
+pub fn session_record_screen(
+    session_id: SessionID,
+    start: bool,
+    display: usize,
+    width: usize,
+    height: usize,
+) {
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
+        session.record_screen(start, display as _, width as _, height as _);
     }
 }
 
-pub fn session_reconnect(id: String, force_relay: bool) {
-    if let Some(session) = SESSIONS.read().unwrap().get(&id) {
+pub fn session_record_status(session_id: SessionID, status: bool) {
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
+        session.record_status(status);
+    }
+}
+
+pub fn session_reconnect(session_id: SessionID, force_relay: bool) {
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
         session.reconnect(force_relay);
     }
+    session_on_waiting_for_image_dialog_show(session_id);
 }
 
-pub fn session_toggle_option(id: String, value: String) {
-    if let Some(session) = SESSIONS.write().unwrap().get_mut(&id) {
+pub fn session_toggle_option(session_id: SessionID, value: String) {
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
         log::warn!("toggle option {}", &value);
         session.toggle_option(value.clone());
+        try_sync_peer_option(&session, &session_id, &value, None);
     }
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    if SESSIONS.read().unwrap().get(&id).is_some() && value == "disable-clipboard" {
+    if sessions::get_session_by_session_id(&session_id).is_some() && value == "disable-clipboard" {
         crate::flutter::update_text_clipboard_required();
     }
 }
 
-pub fn session_get_flutter_config(id: String, k: String) -> Option<String> {
-    if let Some(session) = SESSIONS.read().unwrap().get(&id) {
-        Some(session.get_flutter_config(k))
+pub fn session_toggle_privacy_mode(session_id: SessionID, impl_key: String, on: bool) {
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
+        session.toggle_privacy_mode(impl_key, on);
+    }
+}
+
+pub fn session_get_flutter_option(session_id: SessionID, k: String) -> Option<String> {
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
+        Some(session.get_flutter_option(k))
     } else {
         None
     }
 }
 
-pub fn session_set_flutter_config(id: String, k: String, v: String) {
-    if let Some(session) = SESSIONS.write().unwrap().get_mut(&id) {
-        session.save_flutter_config(k, v);
+pub fn session_set_flutter_option(session_id: SessionID, k: String, v: String) {
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
+        session.save_flutter_option(k, v);
     }
 }
 
-pub fn get_local_flutter_config(k: String) -> SyncReturn<String> {
-    SyncReturn(ui_interface::get_local_flutter_config(k))
+// This function is only used for the default connection session.
+pub fn session_get_flutter_option_by_peer_id(id: String, k: String) -> Option<String> {
+    if let Some(session) = sessions::get_session_by_peer_id(id, ConnType::DEFAULT_CONN) {
+        Some(session.get_flutter_option(k))
+    } else {
+        None
+    }
 }
 
-pub fn set_local_flutter_config(k: String, v: String) {
-    ui_interface::set_local_flutter_config(k, v);
+pub fn get_next_texture_key() -> SyncReturn<i32> {
+    let k = TEXTURE_RENDER_KEY.fetch_add(1, Ordering::SeqCst) + 1;
+    SyncReturn(k)
+}
+
+pub fn get_local_flutter_option(k: String) -> SyncReturn<String> {
+    SyncReturn(ui_interface::get_local_flutter_option(k))
+}
+
+pub fn set_local_flutter_option(k: String, v: String) {
+    ui_interface::set_local_flutter_option(k, v);
 }
 
 pub fn get_local_kb_layout_type() -> SyncReturn<String> {
@@ -207,82 +287,136 @@ pub fn set_local_kb_layout_type(kb_layout_type: String) {
     ui_interface::set_kb_layout_type(kb_layout_type)
 }
 
-pub fn session_get_view_style(id: String) -> Option<String> {
-    if let Some(session) = SESSIONS.read().unwrap().get(&id) {
+pub fn session_get_view_style(session_id: SessionID) -> Option<String> {
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
         Some(session.get_view_style())
     } else {
         None
     }
 }
 
-pub fn session_set_view_style(id: String, value: String) {
-    if let Some(session) = SESSIONS.write().unwrap().get_mut(&id) {
+pub fn session_set_view_style(session_id: SessionID, value: String) {
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
         session.save_view_style(value);
     }
 }
 
-pub fn session_get_scroll_style(id: String) -> Option<String> {
-    if let Some(session) = SESSIONS.read().unwrap().get(&id) {
+pub fn session_get_scroll_style(session_id: SessionID) -> Option<String> {
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
         Some(session.get_scroll_style())
     } else {
         None
     }
 }
 
-pub fn session_set_scroll_style(id: String, value: String) {
-    if let Some(session) = SESSIONS.write().unwrap().get_mut(&id) {
+pub fn session_set_scroll_style(session_id: SessionID, value: String) {
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
         session.save_scroll_style(value);
     }
 }
 
-pub fn session_get_image_quality(id: String) -> Option<String> {
-    if let Some(session) = SESSIONS.read().unwrap().get(&id) {
+pub fn session_get_image_quality(session_id: SessionID) -> Option<String> {
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
         Some(session.get_image_quality())
     } else {
         None
     }
 }
 
-pub fn session_set_image_quality(id: String, value: String) {
-    if let Some(session) = SESSIONS.write().unwrap().get_mut(&id) {
+pub fn session_set_image_quality(session_id: SessionID, value: String) {
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
         session.save_image_quality(value);
     }
 }
 
-pub fn session_get_keyboard_mode(id: String) -> Option<String> {
-    if let Some(session) = SESSIONS.read().unwrap().get(&id) {
+pub fn session_get_keyboard_mode(session_id: SessionID) -> Option<String> {
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
         Some(session.get_keyboard_mode())
     } else {
         None
     }
 }
 
-pub fn session_set_keyboard_mode(id: String, value: String) {
+pub fn session_set_keyboard_mode(session_id: SessionID, value: String) {
     let mut _mode_updated = false;
-    if let Some(session) = SESSIONS.write().unwrap().get_mut(&id) {
-        session.save_keyboard_mode(value);
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
+        session.save_keyboard_mode(value.clone());
         _mode_updated = true;
+        try_sync_peer_option(&session, &session_id, "keyboard_mode", None);
     }
     #[cfg(windows)]
     if _mode_updated {
-        crate::keyboard::update_grab_get_key_name();
+        crate::keyboard::update_grab_get_key_name(&value);
     }
 }
 
-pub fn session_get_custom_image_quality(id: String) -> Option<Vec<i32>> {
-    if let Some(session) = SESSIONS.read().unwrap().get(&id) {
+pub fn session_get_reverse_mouse_wheel_sync(session_id: SessionID) -> SyncReturn<Option<String>> {
+    let res = if let Some(session) = sessions::get_session_by_session_id(&session_id) {
+        Some(session.get_reverse_mouse_wheel())
+    } else {
+        None
+    };
+    SyncReturn(res)
+}
+
+pub fn session_set_reverse_mouse_wheel(session_id: SessionID, value: String) {
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
+        session.save_reverse_mouse_wheel(value);
+    }
+}
+
+pub fn session_get_displays_as_individual_windows(
+    session_id: SessionID,
+) -> SyncReturn<Option<String>> {
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
+        SyncReturn(Some(session.get_displays_as_individual_windows()))
+    } else {
+        SyncReturn(None)
+    }
+}
+
+pub fn session_set_displays_as_individual_windows(session_id: SessionID, value: String) {
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
+        session.save_displays_as_individual_windows(value);
+    }
+}
+
+pub fn session_get_use_all_my_displays_for_the_remote_session(
+    session_id: SessionID,
+) -> SyncReturn<Option<String>> {
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
+        SyncReturn(Some(
+            session.get_use_all_my_displays_for_the_remote_session(),
+        ))
+    } else {
+        SyncReturn(None)
+    }
+}
+
+pub fn session_set_use_all_my_displays_for_the_remote_session(
+    session_id: SessionID,
+    value: String,
+) {
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
+        session.save_use_all_my_displays_for_the_remote_session(value);
+    }
+}
+
+pub fn session_get_custom_image_quality(session_id: SessionID) -> Option<Vec<i32>> {
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
         Some(session.get_custom_image_quality())
     } else {
         None
     }
 }
 
-pub fn session_is_keyboard_mode_supported(id: String, mode: String) -> SyncReturn<bool> {
-    if let Some(session) = SESSIONS.read().unwrap().get(&id) {
+pub fn session_is_keyboard_mode_supported(session_id: SessionID, mode: String) -> SyncReturn<bool> {
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
         if let Ok(mode) = KeyboardMode::from_str(&mode[..]) {
             SyncReturn(is_keyboard_mode_supported(
                 &mode,
                 session.get_peer_version(),
+                &session.peer_platform(),
             ))
         } else {
             SyncReturn(false)
@@ -292,46 +426,46 @@ pub fn session_is_keyboard_mode_supported(id: String, mode: String) -> SyncRetur
     }
 }
 
-pub fn session_set_custom_image_quality(id: String, value: i32) {
-    if let Some(session) = SESSIONS.write().unwrap().get_mut(&id) {
+pub fn session_set_custom_image_quality(session_id: SessionID, value: i32) {
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
         session.save_custom_image_quality(value);
     }
 }
 
-pub fn session_set_custom_fps(id: String, fps: i32) {
-    if let Some(session) = SESSIONS.write().unwrap().get_mut(&id) {
+pub fn session_set_custom_fps(session_id: SessionID, fps: i32) {
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
         session.set_custom_fps(fps);
     }
 }
 
-pub fn session_lock_screen(id: String) {
-    if let Some(session) = SESSIONS.read().unwrap().get(&id) {
+pub fn session_lock_screen(session_id: SessionID) {
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
         session.lock_screen();
     }
 }
 
-pub fn session_ctrl_alt_del(id: String) {
-    if let Some(session) = SESSIONS.read().unwrap().get(&id) {
+pub fn session_ctrl_alt_del(session_id: SessionID) {
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
         session.ctrl_alt_del();
     }
 }
 
-pub fn session_switch_display(id: String, value: i32) {
-    if let Some(session) = SESSIONS.read().unwrap().get(&id) {
-        session.switch_display(value);
-    }
+pub fn session_switch_display(is_desktop: bool, session_id: SessionID, value: Vec<i32>) {
+    sessions::session_switch_display(is_desktop, session_id, value);
 }
 
 pub fn session_handle_flutter_key_event(
-    id: String,
+    session_id: SessionID,
     name: String,
     platform_code: i32,
     position_code: i32,
     lock_modes: i32,
     down_or_up: bool,
 ) {
-    if let Some(session) = SESSIONS.read().unwrap().get(&id) {
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
+        let keyboard_mode = session.get_keyboard_mode();
         session.handle_flutter_key_event(
+            &keyboard_mode,
             &name,
             platform_code,
             position_code,
@@ -341,19 +475,28 @@ pub fn session_handle_flutter_key_event(
     }
 }
 
-pub fn session_enter_or_leave(_id: String, _enter: bool) {
+// SyncReturn<()> is used to make sure enter() and leave() are executed in the sequence this function is called.
+//
+// If the cursor jumps between remote page of two connections, leave view and enter view will be called.
+// session_enter_or_leave() will be called then.
+// As rust is multi-thread, it is possible that enter() is called before leave().
+// This will cause the keyboard input to take no effect.
+pub fn session_enter_or_leave(_session_id: SessionID, _enter: bool) -> SyncReturn<()> {
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    if let Some(session) = SESSIONS.read().unwrap().get(&_id) {
+    if let Some(session) = sessions::get_session_by_session_id(&_session_id) {
+        let keyboard_mode = session.get_keyboard_mode();
         if _enter {
-            session.enter();
+            set_cur_session_id_(_session_id, &keyboard_mode);
+            session.enter(keyboard_mode);
         } else {
-            session.leave();
+            session.leave(keyboard_mode);
         }
     }
+    SyncReturn(())
 }
 
 pub fn session_input_key(
-    id: String,
+    session_id: SessionID,
     name: String,
     down: bool,
     press: bool,
@@ -362,54 +505,54 @@ pub fn session_input_key(
     shift: bool,
     command: bool,
 ) {
-    if let Some(session) = SESSIONS.read().unwrap().get(&id) {
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
         // #[cfg(any(target_os = "android", target_os = "ios"))]
         session.input_key(&name, down, press, alt, ctrl, shift, command);
     }
 }
 
-pub fn session_input_string(id: String, value: String) {
-    if let Some(session) = SESSIONS.read().unwrap().get(&id) {
+pub fn session_input_string(session_id: SessionID, value: String) {
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
         // #[cfg(any(target_os = "android", target_os = "ios"))]
         session.input_string(&value);
     }
 }
 
 // chat_client_mode
-pub fn session_send_chat(id: String, text: String) {
-    if let Some(session) = SESSIONS.read().unwrap().get(&id) {
+pub fn session_send_chat(session_id: SessionID, text: String) {
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
         session.send_chat(text);
     }
 }
 
-pub fn session_peer_option(id: String, name: String, value: String) {
-    if let Some(session) = SESSIONS.read().unwrap().get(&id) {
+pub fn session_peer_option(session_id: SessionID, name: String, value: String) {
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
         session.set_option(name, value);
     }
 }
 
-pub fn session_get_peer_option(id: String, name: String) -> String {
-    if let Some(session) = SESSIONS.read().unwrap().get(&id) {
+pub fn session_get_peer_option(session_id: SessionID, name: String) -> String {
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
         return session.get_option(name);
     }
     "".to_string()
 }
 
-pub fn session_input_os_password(id: String, value: String) {
-    if let Some(session) = SESSIONS.read().unwrap().get(&id) {
+pub fn session_input_os_password(session_id: SessionID, value: String) {
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
         session.input_os_password(value, true);
     }
 }
 
 // File Action
-pub fn session_read_remote_dir(id: String, path: String, include_hidden: bool) {
-    if let Some(session) = SESSIONS.read().unwrap().get(&id) {
+pub fn session_read_remote_dir(session_id: SessionID, path: String, include_hidden: bool) {
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
         session.read_remote_dir(path, include_hidden);
     }
 }
 
 pub fn session_send_files(
-    id: String,
+    session_id: SessionID,
     act_id: i32,
     path: String,
     to: String,
@@ -417,76 +560,91 @@ pub fn session_send_files(
     include_hidden: bool,
     is_remote: bool,
 ) {
-    if let Some(session) = SESSIONS.read().unwrap().get(&id) {
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
         session.send_files(act_id, path, to, file_num, include_hidden, is_remote);
     }
 }
 
 pub fn session_set_confirm_override_file(
-    id: String,
+    session_id: SessionID,
     act_id: i32,
     file_num: i32,
     need_override: bool,
     remember: bool,
     is_upload: bool,
 ) {
-    if let Some(session) = SESSIONS.read().unwrap().get(&id) {
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
         session.set_confirm_override_file(act_id, file_num, need_override, remember, is_upload);
     }
 }
 
-pub fn session_remove_file(id: String, act_id: i32, path: String, file_num: i32, is_remote: bool) {
-    if let Some(session) = SESSIONS.read().unwrap().get(&id) {
+pub fn session_remove_file(
+    session_id: SessionID,
+    act_id: i32,
+    path: String,
+    file_num: i32,
+    is_remote: bool,
+) {
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
         session.remove_file(act_id, path, file_num, is_remote);
     }
 }
 
 pub fn session_read_dir_recursive(
-    id: String,
+    session_id: SessionID,
     act_id: i32,
     path: String,
     is_remote: bool,
     show_hidden: bool,
 ) {
-    if let Some(session) = SESSIONS.read().unwrap().get(&id) {
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
         session.remove_dir_all(act_id, path, is_remote, show_hidden);
     }
 }
 
-pub fn session_remove_all_empty_dirs(id: String, act_id: i32, path: String, is_remote: bool) {
-    if let Some(session) = SESSIONS.read().unwrap().get(&id) {
+pub fn session_remove_all_empty_dirs(
+    session_id: SessionID,
+    act_id: i32,
+    path: String,
+    is_remote: bool,
+) {
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
         session.remove_dir(act_id, path, is_remote);
     }
 }
 
-pub fn session_cancel_job(id: String, act_id: i32) {
-    if let Some(session) = SESSIONS.read().unwrap().get(&id) {
+pub fn session_cancel_job(session_id: SessionID, act_id: i32) {
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
         session.cancel_job(act_id);
     }
 }
 
-pub fn session_create_dir(id: String, act_id: i32, path: String, is_remote: bool) {
-    if let Some(session) = SESSIONS.read().unwrap().get(&id) {
+pub fn session_create_dir(session_id: SessionID, act_id: i32, path: String, is_remote: bool) {
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
         session.create_dir(act_id, path, is_remote);
     }
 }
 
-pub fn session_read_local_dir_sync(_id: String, path: String, show_hidden: bool) -> String {
+pub fn session_read_local_dir_sync(
+    _session_id: SessionID,
+    path: String,
+    show_hidden: bool,
+) -> String {
     if let Ok(fd) = fs::read_dir(&fs::get_path(&path), show_hidden) {
         return make_fd_to_json(fd.id, path, &fd.entries);
     }
     "".to_string()
 }
 
-pub fn session_get_platform(id: String, is_remote: bool) -> String {
-    if let Some(session) = SESSIONS.read().unwrap().get(&id) {
+pub fn session_get_platform(session_id: SessionID, is_remote: bool) -> String {
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
         return session.get_platform(is_remote);
     }
     "".to_string()
 }
 
-pub fn session_load_last_transfer_jobs(id: String) {
-    if let Some(session) = SESSIONS.read().unwrap().get(&id) {
+pub fn session_load_last_transfer_jobs(session_id: SessionID) {
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
         return session.load_last_jobs();
     } else {
         // a tip for flutter dev
@@ -498,7 +656,7 @@ pub fn session_load_last_transfer_jobs(id: String) {
 }
 
 pub fn session_add_job(
-    id: String,
+    session_id: SessionID,
     act_id: i32,
     path: String,
     to: String,
@@ -506,45 +664,49 @@ pub fn session_add_job(
     include_hidden: bool,
     is_remote: bool,
 ) {
-    if let Some(session) = SESSIONS.read().unwrap().get(&id) {
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
         session.add_job(act_id, path, to, file_num, include_hidden, is_remote);
     }
 }
 
-pub fn session_resume_job(id: String, act_id: i32, is_remote: bool) {
-    if let Some(session) = SESSIONS.read().unwrap().get(&id) {
+pub fn session_resume_job(session_id: SessionID, act_id: i32, is_remote: bool) {
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
         session.resume_job(act_id, is_remote);
     }
 }
 
-pub fn session_elevate_direct(id: String) {
-    if let Some(session) = SESSIONS.read().unwrap().get(&id) {
+pub fn session_elevate_direct(session_id: SessionID) {
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
         session.elevate_direct();
     }
 }
 
-pub fn session_elevate_with_logon(id: String, username: String, password: String) {
-    if let Some(session) = SESSIONS.read().unwrap().get(&id) {
+pub fn session_elevate_with_logon(session_id: SessionID, username: String, password: String) {
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
         session.elevate_with_logon(username, password);
     }
 }
 
-pub fn session_switch_sides(id: String) {
-    if let Some(session) = SESSIONS.read().unwrap().get(&id) {
+pub fn session_switch_sides(session_id: SessionID) {
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
         session.switch_sides();
     }
 }
 
-pub fn session_change_resolution(id: String, width: i32, height: i32) {
-    if let Some(session) = SESSIONS.read().unwrap().get(&id) {
-        session.change_resolution(width, height);
+pub fn session_change_resolution(session_id: SessionID, display: i32, width: i32, height: i32) {
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
+        session.change_resolution(display, width, height);
     }
 }
 
-pub fn session_set_size(_id: String, _width: usize, _height: usize) {
+pub fn session_set_size(_session_id: SessionID, _display: usize, _width: usize, _height: usize) {
     #[cfg(feature = "flutter_texture_render")]
-    if let Some(session) = SESSIONS.write().unwrap().get_mut(&_id) {
-        session.set_size(_width, _height);
+    super::flutter::session_set_size(_session_id, _display, _width, _height)
+}
+
+pub fn session_send_selected_session_id(session_id: SessionID, sid: String) {
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
+        session.send_selected_session_id(sid);
     }
 }
 
@@ -562,8 +724,8 @@ pub fn main_get_default_sound_input() -> Option<String> {
     None
 }
 
-pub fn main_get_hostname() -> SyncReturn<String> {
-    SyncReturn(crate::common::hostname())
+pub fn main_get_login_device_info() -> SyncReturn<String> {
+    SyncReturn(get_login_device_info_json())
 }
 
 pub fn main_change_id(new_id: String) {
@@ -578,8 +740,21 @@ pub fn main_get_option(key: String) -> String {
     get_option(key)
 }
 
+pub fn main_get_option_sync(key: String) -> SyncReturn<String> {
+    SyncReturn(get_option(key))
+}
+
 pub fn main_get_error() -> String {
     get_error()
+}
+
+pub fn main_show_option(_key: String) -> SyncReturn<bool> {
+    #[cfg(all(target_os = "linux", feature = "linux_headless"))]
+    #[cfg(not(any(feature = "flatpak", feature = "appimage")))]
+    if _key.eq(config::CONFIG_OPTION_ALLOW_LINUX_HEADLESS) {
+        return SyncReturn(true);
+    }
+    SyncReturn(false)
 }
 
 pub fn main_set_option(key: String, value: String) {
@@ -596,6 +771,10 @@ pub fn main_set_option(key: String, value: String) {
 
 pub fn main_get_options() -> String {
     get_options()
+}
+
+pub fn main_get_options_sync() -> SyncReturn<String> {
+    SyncReturn(get_options())
 }
 
 pub fn main_set_options(json: String) {
@@ -625,6 +804,10 @@ pub fn main_get_app_name_sync() -> SyncReturn<String> {
     SyncReturn(get_app_name())
 }
 
+pub fn main_uri_prefix_sync() -> SyncReturn<String> {
+    SyncReturn(crate::get_uri_prefix())
+}
+
 pub fn main_get_license() -> String {
     get_license()
 }
@@ -641,9 +824,9 @@ pub fn main_store_fav(favs: Vec<String>) {
     store_fav(favs)
 }
 
-pub fn main_get_peer(id: String) -> String {
+pub fn main_get_peer_sync(id: String) -> SyncReturn<String> {
     let conf = get_peer(id);
-    serde_json::to_string(&conf).unwrap_or("".to_string())
+    SyncReturn(serde_json::to_string(&conf).unwrap_or("".to_string()))
 }
 
 pub fn main_get_lan_peers() -> String {
@@ -651,14 +834,18 @@ pub fn main_get_lan_peers() -> String {
 }
 
 pub fn main_get_connect_status() -> String {
-    let status = get_connect_status();
-    // (status_num, key_confirmed, mouse_time, id)
-    let mut m = serde_json::Map::new();
-    m.insert("status_num".to_string(), json!(status.0));
-    m.insert("key_confirmed".to_string(), json!(status.1));
-    m.insert("mouse_time".to_string(), json!(status.2));
-    m.insert("id".to_string(), json!(status.3));
-    serde_json::to_string(&m).unwrap_or("".to_string())
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    {
+        serde_json::to_string(&get_connect_status()).unwrap_or("".to_string())
+    }
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    {
+        let mut state = hbb_common::config::get_online_state();
+        if state > 0 {
+            state = 1;
+        }
+        serde_json::json!({ "status_num": state }).to_string()
+    }
 }
 
 pub fn main_check_connect_status() {
@@ -667,7 +854,7 @@ pub fn main_check_connect_status() {
 }
 
 pub fn main_is_using_public_server() -> bool {
-    using_public_server()
+    crate::using_public_server()
 }
 
 pub fn main_discover() {
@@ -686,8 +873,30 @@ pub fn main_get_local_option(key: String) -> SyncReturn<String> {
     SyncReturn(get_local_option(key))
 }
 
+pub fn main_get_env(key: String) -> SyncReturn<String> {
+    SyncReturn(std::env::var(key).unwrap_or_default())
+}
+
 pub fn main_set_local_option(key: String, value: String) {
     set_local_option(key, value)
+}
+
+pub fn main_get_input_source() -> SyncReturn<String> {
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    let input_source = get_cur_session_input_source();
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    let input_source = "".to_owned();
+    SyncReturn(input_source)
+}
+
+pub fn main_set_input_source(session_id: SessionID, value: String) {
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    {
+        change_input_source(session_id, value);
+        if let Some(session) = sessions::get_session_by_session_id(&session_id) {
+            try_sync_peer_option(&session, &session_id, "input_source", None);
+        }
+    }
 }
 
 pub fn main_get_my_id() -> String {
@@ -706,6 +915,17 @@ pub fn main_get_peer_option_sync(id: String, key: String) -> SyncReturn<String> 
     SyncReturn(get_peer_option(id, key))
 }
 
+// Sometimes we need to get the flutter option of a peer by reading the file.
+// Because the session may not be established yet.
+pub fn main_get_peer_flutter_option_sync(id: String, k: String) -> SyncReturn<String> {
+    SyncReturn(get_peer_flutter_option(id, k))
+}
+
+pub fn main_set_peer_flutter_option_sync(id: String, k: String, v: String) -> SyncReturn<()> {
+    set_peer_flutter_option(id, k, v);
+    SyncReturn(())
+}
+
 pub fn main_set_peer_option(id: String, key: String, value: String) {
     set_peer_option(id, key, value)
 }
@@ -716,12 +936,16 @@ pub fn main_set_peer_option_sync(id: String, key: String, value: String) -> Sync
 }
 
 pub fn main_set_peer_alias(id: String, alias: String) {
-    main_broadcast_message(&HashMap::from([
-        ("name", "alias"),
-        ("id", &id),
-        ("alias", &alias),
-    ]));
     set_peer_option(id, "alias".to_owned(), alias)
+}
+
+pub fn main_get_new_stored_peers() -> String {
+    let peers: Vec<String> = config::NEW_STORED_PEER_CONFIG
+        .lock()
+        .unwrap()
+        .drain()
+        .collect();
+    serde_json::to_string(&peers).unwrap_or_default()
 }
 
 pub fn main_forget_password(id: String) {
@@ -732,9 +956,13 @@ pub fn main_peer_has_password(id: String) -> bool {
     peer_has_password(id)
 }
 
+pub fn main_peer_exists(id: String) -> bool {
+    peer_exists(&id)
+}
+
 pub fn main_load_recent_peers() {
     if !config::APP_DIR.read().unwrap().is_empty() {
-        let peers: Vec<HashMap<&str, String>> = PeerConfig::peers()
+        let peers: Vec<HashMap<&str, String>> = PeerConfig::peers(None)
             .drain(..)
             .map(|(id, _, p)| peer_to_map(id, p))
             .collect();
@@ -755,7 +983,7 @@ pub fn main_load_recent_peers() {
 
 pub fn main_load_recent_peers_sync() -> SyncReturn<String> {
     if !config::APP_DIR.read().unwrap().is_empty() {
-        let peers: Vec<HashMap<&str, String>> = PeerConfig::peers()
+        let peers: Vec<HashMap<&str, String>> = PeerConfig::peers(None)
             .drain(..)
             .map(|(id, _, p)| peer_to_map(id, p))
             .collect();
@@ -772,10 +1000,46 @@ pub fn main_load_recent_peers_sync() -> SyncReturn<String> {
     SyncReturn("".to_string())
 }
 
+pub fn main_load_lan_peers_sync() -> SyncReturn<String> {
+    let data = HashMap::from([
+        ("name", "load_lan_peers".to_owned()),
+        (
+            "peers",
+            serde_json::to_string(&get_lan_peers()).unwrap_or_default(),
+        ),
+    ]);
+    return SyncReturn(serde_json::ser::to_string(&data).unwrap_or("".to_owned()));
+}
+
+pub fn main_load_ab_sync() -> SyncReturn<String> {
+    return SyncReturn(serde_json::to_string(&config::Ab::load()).unwrap_or_default());
+}
+
+pub fn main_load_group_sync() -> SyncReturn<String> {
+    return SyncReturn(serde_json::to_string(&config::Group::load()).unwrap_or_default());
+}
+
+pub fn main_load_recent_peers_for_ab(filter: String) -> String {
+    let id_filters = serde_json::from_str::<Vec<String>>(&filter).unwrap_or_default();
+    let id_filters = if id_filters.is_empty() {
+        None
+    } else {
+        Some(id_filters)
+    };
+    if !config::APP_DIR.read().unwrap().is_empty() {
+        let peers: Vec<HashMap<&str, String>> = PeerConfig::peers(id_filters)
+            .drain(..)
+            .map(|(id, _, p)| peer_to_map(id, p))
+            .collect();
+        return serde_json::ser::to_string(&peers).unwrap_or("".to_owned());
+    }
+    "".to_string()
+}
+
 pub fn main_load_fav_peers() {
     if !config::APP_DIR.read().unwrap().is_empty() {
         let favs = get_fav();
-        let mut recent = PeerConfig::peers();
+        let mut recent = PeerConfig::peers(None);
         let mut lan = config::LanPeers::load()
             .peers
             .iter()
@@ -840,15 +1104,12 @@ pub fn main_remove_discovered(id: String) {
 }
 
 fn main_broadcast_message(data: &HashMap<&str, &str>) {
-    let apps = vec![
-        flutter::APP_TYPE_DESKTOP_REMOTE,
-        flutter::APP_TYPE_DESKTOP_FILE_TRANSFER,
-        flutter::APP_TYPE_DESKTOP_PORT_FORWARD,
-    ];
-
     let event = serde_json::ser::to_string(&data).unwrap_or("".to_owned());
-    for app in apps {
-        let _res = flutter::push_global_event(app, event.clone());
+    for app in flutter::get_global_event_channels() {
+        if app == flutter::APP_TYPE_MAIN || app == flutter::APP_TYPE_CM {
+            continue;
+        }
+        let _res = flutter::push_global_event(&app, event.clone());
     }
 }
 
@@ -877,55 +1138,82 @@ pub fn main_get_user_default_option(key: String) -> SyncReturn<String> {
 }
 
 pub fn main_handle_relay_id(id: String) -> String {
-    handle_relay_id(id)
+    handle_relay_id(&id).to_owned()
 }
 
-pub fn main_get_current_display() -> SyncReturn<String> {
-    #[cfg(not(target_os = "ios"))]
-    let display_info = match crate::video_service::get_current_display() {
-        Ok((_, _, display)) => serde_json::to_string(&HashMap::from([
-            ("w", display.width()),
-            ("h", display.height()),
-        ]))
-        .unwrap_or_default(),
-        Err(..) => "".to_string(),
-    };
+pub fn main_get_main_display() -> SyncReturn<String> {
     #[cfg(target_os = "ios")]
     let display_info = "".to_owned();
+    #[cfg(not(target_os = "ios"))]
+    let mut display_info = "".to_owned();
+    #[cfg(not(target_os = "ios"))]
+    if let Ok(displays) = crate::display_service::try_get_displays() {
+        // to-do: Need to detect current display index.
+        if let Some(display) = displays.iter().next() {
+            display_info = serde_json::to_string(&HashMap::from([
+                ("w", display.width()),
+                ("h", display.height()),
+            ]))
+            .unwrap_or_default();
+        }
+    }
+    SyncReturn(display_info)
+}
+
+pub fn main_get_displays() -> SyncReturn<String> {
+    #[cfg(target_os = "ios")]
+    let display_info = "".to_owned();
+    #[cfg(not(target_os = "ios"))]
+    let mut display_info = "".to_owned();
+    #[cfg(not(target_os = "ios"))]
+    if let Ok(displays) = crate::display_service::try_get_displays() {
+        let displays = displays
+            .iter()
+            .map(|d| {
+                HashMap::from([
+                    ("x", d.origin().0),
+                    ("y", d.origin().1),
+                    ("w", d.width() as i32),
+                    ("h", d.height() as i32),
+                ])
+            })
+            .collect::<Vec<_>>();
+        display_info = serde_json::to_string(&displays).unwrap_or_default();
+    }
     SyncReturn(display_info)
 }
 
 pub fn session_add_port_forward(
-    id: String,
+    session_id: SessionID,
     local_port: i32,
     remote_host: String,
     remote_port: i32,
 ) {
-    if let Some(session) = SESSIONS.write().unwrap().get_mut(&id) {
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
         session.add_port_forward(local_port, remote_host, remote_port);
     }
 }
 
-pub fn session_remove_port_forward(id: String, local_port: i32) {
-    if let Some(session) = SESSIONS.write().unwrap().get_mut(&id) {
+pub fn session_remove_port_forward(session_id: SessionID, local_port: i32) {
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
         session.remove_port_forward(local_port);
     }
 }
 
-pub fn session_new_rdp(id: String) {
-    if let Some(session) = SESSIONS.write().unwrap().get_mut(&id) {
+pub fn session_new_rdp(session_id: SessionID) {
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
         session.new_rdp();
     }
 }
 
-pub fn session_request_voice_call(id: String) {
-    if let Some(session) = SESSIONS.write().unwrap().get_mut(&id) {
+pub fn session_request_voice_call(session_id: SessionID) {
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
         session.request_voice_call();
     }
 }
 
-pub fn session_close_voice_call(id: String) {
-    if let Some(session) = SESSIONS.write().unwrap().get_mut(&id) {
+pub fn session_close_voice_call(session_id: SessionID) {
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
         session.close_voice_call();
     }
 }
@@ -943,6 +1231,9 @@ pub fn main_get_last_remote_id() -> String {
 }
 
 pub fn main_get_software_update_url() -> String {
+    if get_local_option("enable-check-update".to_string()) != "N" {
+        crate::common::check_software_update();
+    }
     crate::common::SOFTWARE_UPDATE_URL.lock().unwrap().clone()
 }
 
@@ -964,10 +1255,6 @@ pub fn main_get_permanent_password() -> String {
 
 pub fn main_get_fingerprint() -> String {
     get_fingerprint()
-}
-
-pub fn main_get_online_statue() -> i64 {
-    ONLINE.lock().unwrap().values().max().unwrap_or(&0).clone()
 }
 
 pub fn cm_get_clients_state() -> String {
@@ -1006,6 +1293,10 @@ pub fn main_has_hwcodec() -> SyncReturn<bool> {
     SyncReturn(has_hwcodec())
 }
 
+pub fn main_has_gpucodec() -> SyncReturn<bool> {
+    SyncReturn(has_gpucodec())
+}
+
 pub fn main_supported_hwdecodings() -> SyncReturn<String> {
     let decoding = supported_hwdecodings();
     let msg = HashMap::from([("h264", decoding.0), ("h265", decoding.1)]);
@@ -1037,7 +1328,47 @@ pub fn main_start_dbus_server() {
     }
 }
 
-pub fn session_send_mouse(id: String, msg: String) {
+pub fn main_save_ab(json: String) {
+    if json.len() > 1024 {
+        std::thread::spawn(|| {
+            config::Ab::store(json);
+        });
+    } else {
+        config::Ab::store(json);
+    }
+}
+
+pub fn main_clear_ab() {
+    config::Ab::remove();
+}
+
+pub fn main_load_ab() -> String {
+    serde_json::to_string(&config::Ab::load()).unwrap_or_default()
+}
+
+pub fn main_save_group(json: String) {
+    if json.len() > 1024 {
+        std::thread::spawn(|| {
+            config::Group::store(json);
+        });
+    } else {
+        config::Group::store(json);
+    }
+}
+
+pub fn main_clear_group() {
+    config::Group::remove();
+}
+
+pub fn main_load_group() -> String {
+    serde_json::to_string(&config::Group::load()).unwrap_or_default()
+}
+
+pub fn session_send_pointer(session_id: SessionID, msg: String) {
+    super::flutter::session_send_pointer(session_id, msg);
+}
+
+pub fn session_send_mouse(session_id: SessionID, msg: String) {
     if let Ok(m) = serde_json::from_str::<HashMap<String, String>>(&msg) {
         let alt = m.get("alt").is_some();
         let ctrl = m.get("ctrl").is_some();
@@ -1054,37 +1385,37 @@ pub fn session_send_mouse(id: String, msg: String) {
         let mut mask = 0;
         if let Some(_type) = m.get("type") {
             mask = match _type.as_str() {
-                "down" => 1,
-                "up" => 2,
-                "wheel" => 3,
-                "trackpad" => 4,
+                "down" => MOUSE_TYPE_DOWN,
+                "up" => MOUSE_TYPE_UP,
+                "wheel" => MOUSE_TYPE_WHEEL,
+                "trackpad" => MOUSE_TYPE_TRACKPAD,
                 _ => 0,
             };
         }
         if let Some(buttons) = m.get("buttons") {
             mask |= match buttons.as_str() {
-                "left" => 0x01,
-                "right" => 0x02,
-                "wheel" => 0x04,
-                "back" => 0x08,
-                "forward" => 0x10,
+                "left" => MOUSE_BUTTON_LEFT,
+                "right" => MOUSE_BUTTON_RIGHT,
+                "wheel" => MOUSE_BUTTON_WHEEL,
+                "back" => MOUSE_BUTTON_BACK,
+                "forward" => MOUSE_BUTTON_FORWARD,
                 _ => 0,
             } << 3;
         }
-        if let Some(session) = SESSIONS.read().unwrap().get(&id) {
+        if let Some(session) = sessions::get_session_by_session_id(&session_id) {
             session.send_mouse(mask, x, y, alt, ctrl, shift, command);
         }
     }
 }
 
-pub fn session_restart_remote_device(id: String) {
-    if let Some(session) = SESSIONS.read().unwrap().get(&id) {
+pub fn session_restart_remote_device(session_id: SessionID) {
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
         session.restart_remote_device();
     }
 }
 
-pub fn session_get_audit_server_sync(id: String, typ: String) -> SyncReturn<String> {
-    let res = if let Some(session) = SESSIONS.read().unwrap().get(&id) {
+pub fn session_get_audit_server_sync(session_id: SessionID, typ: String) -> SyncReturn<String> {
+    let res = if let Some(session) = sessions::get_session_by_session_id(&session_id) {
         session.get_audit_server(typ)
     } else {
         "".to_owned()
@@ -1092,14 +1423,14 @@ pub fn session_get_audit_server_sync(id: String, typ: String) -> SyncReturn<Stri
     SyncReturn(res)
 }
 
-pub fn session_send_note(id: String, note: String) {
-    if let Some(session) = SESSIONS.read().unwrap().get(&id) {
+pub fn session_send_note(session_id: SessionID, note: String) {
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
         session.send_note(note)
     }
 }
 
-pub fn session_alternative_codecs(id: String) -> String {
-    if let Some(session) = SESSIONS.read().unwrap().get(&id) {
+pub fn session_alternative_codecs(session_id: SessionID) -> String {
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
         let (vp8, av1, h264, h265) = session.alternative_codecs();
         let msg = HashMap::from([("vp8", vp8), ("av1", av1), ("h264", h264), ("h265", h265)]);
         serde_json::ser::to_string(&msg).unwrap_or("".to_owned())
@@ -1108,9 +1439,19 @@ pub fn session_alternative_codecs(id: String) -> String {
     }
 }
 
-pub fn session_change_prefer_codec(id: String) {
-    if let Some(session) = SESSIONS.read().unwrap().get(&id) {
+pub fn session_change_prefer_codec(session_id: SessionID) {
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
         session.change_prefer_codec();
+    }
+}
+
+pub fn session_on_waiting_for_image_dialog_show(session_id: SessionID) {
+    super::flutter::session_on_waiting_for_image_dialog_show(session_id);
+}
+
+pub fn session_toggle_virtual_display(session_id: SessionID, index: i32, on: bool) {
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
+        session.toggle_virtual_display(index, on);
     }
 }
 
@@ -1165,7 +1506,14 @@ pub fn main_check_mouse_time() {
 }
 
 pub fn main_get_mouse_time() -> f64 {
-    get_mouse_time()
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    {
+        get_mouse_time()
+    }
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    {
+        0.0
+    }
 }
 
 pub fn main_wol(id: String) {
@@ -1234,37 +1582,59 @@ pub fn cm_switch_back(conn_id: i32) {
     crate::ui_cm_interface::switch_back(conn_id);
 }
 
+pub fn cm_get_config(name: String) -> String {
+    #[cfg(not(target_os = "ios"))]
+    {
+        if let Ok(Some(v)) = crate::ipc::get_config(&name) {
+            v
+        } else {
+            "".to_string()
+        }
+    }
+    #[cfg(target_os = "ios")]
+    {
+        "".to_string()
+    }
+}
+
 pub fn main_get_build_date() -> String {
     crate::BUILD_DATE.to_string()
 }
 
-#[no_mangle]
-unsafe extern "C" fn translate(name: *const c_char, locale: *const c_char) -> *const c_char {
-    let name = CStr::from_ptr(name);
-    let locale = CStr::from_ptr(locale);
-    let res = if let (Ok(name), Ok(locale)) = (name.to_str(), locale.to_str()) {
-        crate::client::translate_locale(name.to_owned(), locale)
-    } else {
-        String::new()
-    };
-    CString::from_vec_unchecked(res.into_bytes()).into_raw()
+pub fn translate(name: String, locale: String) -> SyncReturn<String> {
+    SyncReturn(crate::client::translate_locale(name, &locale))
 }
 
-fn handle_query_onlines(onlines: Vec<String>, offlines: Vec<String>) {
-    let data = HashMap::from([
-        ("name", "callback_query_onlines".to_owned()),
-        ("onlines", onlines.join(",")),
-        ("offlines", offlines.join(",")),
-    ]);
-    let _res = flutter::push_global_event(
-        flutter::APP_TYPE_MAIN,
-        serde_json::ser::to_string(&data).unwrap_or("".to_owned()),
-    );
+pub fn session_get_rgba_size(session_id: SessionID, display: usize) -> SyncReturn<usize> {
+    SyncReturn(super::flutter::session_get_rgba_size(session_id, display))
+}
+
+pub fn session_next_rgba(session_id: SessionID, display: usize) -> SyncReturn<()> {
+    SyncReturn(super::flutter::session_next_rgba(session_id, display))
+}
+
+pub fn session_register_pixelbuffer_texture(
+    session_id: SessionID,
+    display: usize,
+    ptr: usize,
+) -> SyncReturn<()> {
+    SyncReturn(super::flutter::session_register_pixelbuffer_texture(
+        session_id, display, ptr,
+    ))
+}
+
+pub fn session_register_gpu_texture(
+    session_id: SessionID,
+    display: usize,
+    ptr: usize,
+) -> SyncReturn<()> {
+    SyncReturn(super::flutter::session_register_gpu_texture(
+        session_id, display, ptr,
+    ))
 }
 
 pub fn query_onlines(ids: Vec<String>) {
-    #[cfg(not(any(target_os = "ios")))]
-    crate::rendezvous_mediator::query_online_states(ids, handle_query_onlines)
+    let _ = flutter::async_tasks::query_onlines(ids);
 }
 
 pub fn version_to_number(v: String) -> SyncReturn<i64> {
@@ -1279,16 +1649,10 @@ pub fn main_is_installed() -> SyncReturn<bool> {
     SyncReturn(is_installed())
 }
 
-pub fn main_start_grab_keyboard() -> SyncReturn<bool> {
-    #[cfg(target_os = "linux")]
-    if !*crate::common::IS_X11 {
-        return SyncReturn(false);
-    }
-    crate::keyboard::client::start_grab_loop();
-    if !is_can_input_monitoring(false) {
-        return SyncReturn(false);
-    }
-    SyncReturn(true)
+pub fn main_init_input_source() -> SyncReturn<()> {
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    crate::keyboard::input_source::init_input_source();
+    SyncReturn(())
 }
 
 pub fn main_is_installed_lower_version() -> SyncReturn<bool> {
@@ -1315,10 +1679,6 @@ pub fn main_is_share_rdp() -> SyncReturn<bool> {
     SyncReturn(is_share_rdp())
 }
 
-pub fn main_is_rdp_service_open() -> SyncReturn<bool> {
-    SyncReturn(is_rdp_service_open())
-}
-
 pub fn main_set_share_rdp(enable: bool) {
     set_share_rdp(enable)
 }
@@ -1337,10 +1697,16 @@ pub fn main_update_me() -> SyncReturn<bool> {
     SyncReturn(true)
 }
 
-pub fn set_cur_session_id(id: String) {
-    super::flutter::set_cur_session_id(id);
+pub fn set_cur_session_id(session_id: SessionID) {
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
+        set_cur_session_id_(session_id, &session.get_keyboard_mode())
+    }
+}
+
+fn set_cur_session_id_(session_id: SessionID, _keyboard_mode: &str) {
+    super::flutter::set_cur_session_id(session_id);
     #[cfg(windows)]
-    crate::keyboard::update_grab_get_key_name();
+    crate::keyboard::update_grab_get_key_name(_keyboard_mode);
 }
 
 pub fn install_show_run_without_install() -> SyncReturn<bool> {
@@ -1398,20 +1764,28 @@ pub fn main_hide_docker() -> SyncReturn<bool> {
     SyncReturn(true)
 }
 
-pub fn main_use_texture_render() -> SyncReturn<bool> {
-    #[cfg(not(feature = "flutter_texture_render"))]
-    {
-        SyncReturn(false)
-    }
-    #[cfg(feature = "flutter_texture_render")]
-    {
-        SyncReturn(true)
-    }
+pub fn main_has_pixelbuffer_texture_render() -> SyncReturn<bool> {
+    SyncReturn(cfg!(feature = "flutter_texture_render"))
 }
 
-pub fn cm_start_listen_ipc_thread() {
+pub fn main_has_file_clipboard() -> SyncReturn<bool> {
+    let ret = cfg!(any(
+        target_os = "windows",
+        all(
+            feature = "unix-file-copy-paste",
+            any(target_os = "linux", target_os = "macos")
+        )
+    ));
+    SyncReturn(ret)
+}
+
+pub fn main_has_gpu_texture_render() -> SyncReturn<bool> {
+    SyncReturn(cfg!(feature = "gpucodec"))
+}
+
+pub fn cm_init() {
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    crate::flutter::connection_manager::start_listen_ipc_thread();
+    crate::flutter::connection_manager::cm_init();
 }
 
 /// Start an ipc server for receiving the url scheme.
@@ -1421,6 +1795,26 @@ pub fn cm_start_listen_ipc_thread() {
 pub fn main_start_ipc_url_server() {
     #[cfg(target_os = "macos")]
     std::thread::spawn(move || crate::server::start_ipc_url_server());
+}
+
+pub fn main_test_wallpaper(_second: u64) {
+    #[cfg(any(target_os = "windows", target_os = "linux"))]
+    std::thread::spawn(move || match crate::platform::WallPaperRemover::new() {
+        Ok(_remover) => {
+            std::thread::sleep(std::time::Duration::from_secs(_second));
+        }
+        Err(e) => {
+            log::info!("create wallpaper remover failed: {:?}", e);
+        }
+    });
+}
+
+pub fn main_support_remove_wallpaper() -> bool {
+    support_remove_wallpaper()
+}
+
+pub fn is_qs() -> SyncReturn<bool> {
+    SyncReturn(false)
 }
 
 /// Send a url scheme throught the ipc.
@@ -1604,6 +1998,58 @@ pub fn plugin_install(_id: String, _b: bool) {
             crate::plugin::uninstall_plugin(&_id, true);
         }
     }
+}
+
+pub fn is_support_multi_ui_session(version: String) -> SyncReturn<bool> {
+    SyncReturn(crate::common::is_support_multi_ui_session(&version))
+}
+
+pub fn is_selinux_enforcing() -> SyncReturn<bool> {
+    #[cfg(target_os = "linux")]
+    {
+        SyncReturn(crate::platform::linux::is_selinux_enforcing())
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        SyncReturn(false)
+    }
+}
+
+pub fn main_default_privacy_mode_impl() -> SyncReturn<String> {
+    SyncReturn(crate::privacy_mode::DEFAULT_PRIVACY_MODE_IMPL.to_owned())
+}
+
+pub fn main_supported_privacy_mode_impls() -> SyncReturn<String> {
+    SyncReturn(
+        serde_json::to_string(&crate::privacy_mode::get_supported_privacy_mode_impl())
+            .unwrap_or_default(),
+    )
+}
+
+pub fn main_supported_input_source() -> SyncReturn<String> {
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    {
+        SyncReturn("".to_owned())
+    }
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    {
+        SyncReturn(
+            serde_json::to_string(&crate::keyboard::input_source::get_supported_input_source())
+                .unwrap_or_default(),
+        )
+    }
+}
+
+pub fn main_generate2fa() -> String {
+    generate2fa()
+}
+
+pub fn main_verify2fa(code: String) -> bool {
+    verify2fa(code)
+}
+
+pub fn main_has_valid_2fa_sync() -> SyncReturn<bool> {
+    SyncReturn(has_valid_2fa())
 }
 
 #[cfg(target_os = "android")]

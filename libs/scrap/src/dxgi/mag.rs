@@ -129,7 +129,7 @@ impl MagInterface {
         unsafe {
             // load lib
             let lib_file_name = "Magnification.dll";
-            let lib_file_name_c = CString::new(lib_file_name).unwrap();
+            let lib_file_name_c = CString::new(lib_file_name)?;
             s.lib_handle = LoadLibraryExA(
                 lib_file_name_c.as_ptr() as _,
                 NULL,
@@ -139,9 +139,9 @@ impl MagInterface {
                 return Err(Error::new(
                     ErrorKind::Other,
                     format!(
-                        "Failed to LoadLibraryExA {}, error: {}",
+                        "Failed to LoadLibraryExA {}, error {}",
                         lib_file_name,
-                        GetLastError()
+                        Error::last_os_error()
                     ),
                 ));
             };
@@ -173,7 +173,7 @@ impl MagInterface {
                 if FALSE == init_func() {
                     return Err(Error::new(
                         ErrorKind::Other,
-                        format!("Failed to MagInitialize, error: {}", GetLastError()),
+                        format!("Failed to MagInitialize, error {}", Error::last_os_error()),
                     ));
                 } else {
                     s.init_succeeded = true;
@@ -189,15 +189,15 @@ impl MagInterface {
     }
 
     unsafe fn load_func(lib_module: HMODULE, func_name: &str) -> Result<FARPROC> {
-        let func_name_c = CString::new(func_name).unwrap();
+        let func_name_c = CString::new(func_name)?;
         let func = GetProcAddress(lib_module, func_name_c.as_ptr() as _);
         if func.is_null() {
             return Err(Error::new(
                 ErrorKind::Other,
                 format!(
-                    "Failed to GetProcAddress {}, error: {}",
+                    "Failed to GetProcAddress {}, error {}",
                     func_name,
-                    GetLastError()
+                    Error::last_os_error()
                 ),
             ));
         }
@@ -209,14 +209,14 @@ impl MagInterface {
             if let Some(uninit_func) = self.mag_uninitialize_func {
                 unsafe {
                     if FALSE == uninit_func() {
-                        println!("Failed MagUninitialize {}", GetLastError())
+                        println!("Failed MagUninitialize, error {}", Error::last_os_error())
                     }
                 }
             }
             if !self.lib_handle.is_null() {
                 unsafe {
                     if FALSE == FreeLibrary(self.lib_handle) {
-                        println!("Failed FreeLibrary {}", GetLastError())
+                        println!("Failed FreeLibrary, error {}", Error::last_os_error())
                     }
                 }
                 self.lib_handle = NULL as _;
@@ -245,9 +245,6 @@ pub struct CapturerMag {
     rect: RECT,
     width: usize,
     height: usize,
-
-    use_yuv: bool,
-    data: Vec<u8>,
 }
 
 impl Drop for CapturerMag {
@@ -262,12 +259,7 @@ impl CapturerMag {
         MagInterface::new().is_ok()
     }
 
-    pub(crate) fn new(
-        origin: (i32, i32),
-        width: usize,
-        height: usize,
-        use_yuv: bool,
-    ) -> Result<Self> {
+    pub(crate) fn new(origin: (i32, i32), width: usize, height: usize) -> Result<Self> {
         unsafe {
             let x = GetSystemMetrics(SM_XVIRTUALSCREEN);
             let y = GetSystemMetrics(SM_YVIRTUALSCREEN);
@@ -311,8 +303,6 @@ impl CapturerMag {
             },
             width,
             height,
-            use_yuv,
-            data: Vec::new(),
         };
 
         unsafe {
@@ -325,7 +315,10 @@ impl CapturerMag {
             ) {
                 return Err(Error::new(
                     ErrorKind::Other,
-                    format!("Failed to GetModuleHandleExA, error: {}", GetLastError()),
+                    format!(
+                        "Failed to GetModuleHandleExA, error {}",
+                        Error::last_os_error()
+                    ),
                 ));
             }
 
@@ -352,7 +345,10 @@ impl CapturerMag {
                 if code != ERROR_CLASS_ALREADY_EXISTS {
                     return Err(Error::new(
                         ErrorKind::Other,
-                        format!("Failed to RegisterClassExA, error: {}", code),
+                        format!(
+                            "Failed to RegisterClassExA, error {}",
+                            Error::from_raw_os_error(code as _)
+                        ),
                     ));
                 }
             }
@@ -376,8 +372,8 @@ impl CapturerMag {
                 return Err(Error::new(
                     ErrorKind::Other,
                     format!(
-                        "Failed to CreateWindowExA host_window, error: {}",
-                        GetLastError()
+                        "Failed to CreateWindowExA host_window, error {}",
+                        Error::last_os_error()
                     ),
                 ));
             }
@@ -401,8 +397,8 @@ impl CapturerMag {
                 return Err(Error::new(
                     ErrorKind::Other,
                     format!(
-                        "Failed CreateWindowA magnifier_window, error: {}",
-                        GetLastError()
+                        "Failed CreateWindowA magnifier_window, error {}",
+                        Error::last_os_error()
                     ),
                 ));
             }
@@ -421,8 +417,8 @@ impl CapturerMag {
                     return Err(Error::new(
                         ErrorKind::Other,
                         format!(
-                            "Failed to MagSetImageScalingCallback, error: {}",
-                            GetLastError()
+                            "Failed to MagSetImageScalingCallback, error {}",
+                            Error::last_os_error()
                         ),
                     ));
                 }
@@ -437,12 +433,8 @@ impl CapturerMag {
         Ok(s)
     }
 
-    pub(crate) fn set_use_yuv(&mut self, use_yuv: bool) {
-        self.use_yuv = use_yuv;
-    }
-
     pub(crate) fn exclude(&mut self, cls: &str, name: &str) -> Result<bool> {
-        let name_c = CString::new(name).unwrap();
+        let name_c = CString::new(name)?;
         unsafe {
             let mut hwnd = if cls.len() == 0 {
                 FindWindowExA(NULL as _, NULL as _, NULL as _, name_c.as_ptr())
@@ -469,10 +461,10 @@ impl CapturerMag {
                     return Err(Error::new(
                         ErrorKind::Other,
                         format!(
-                            "Failed MagSetWindowFilterList for cls {} name {}, err: {}",
+                            "Failed MagSetWindowFilterList for cls {} name {}, error {}",
                             cls,
                             name,
-                            GetLastError()
+                            Error::last_os_error()
                         ),
                     ));
                 }
@@ -549,7 +541,7 @@ impl CapturerMag {
                         self.rect.top,
                         self.rect.right - self.rect.left,
                         self.rect.bottom - self.rect.top,
-                        GetLastError()
+                        Error::last_os_error()
                     ),
                 ));
             }
@@ -560,7 +552,10 @@ impl CapturerMag {
                 if FALSE == set_window_source_func(self.magnifier_window, self.rect) {
                     return Err(Error::new(
                         ErrorKind::Other,
-                        format!("Failed to MagSetWindowSource, error: {}", GetLastError()),
+                        format!(
+                            "Failed to MagSetWindowSource, error {}",
+                            Error::last_os_error()
+                        ),
                     ));
                 }
             } else {
@@ -579,22 +574,9 @@ impl CapturerMag {
             ));
         }
 
-        if self.use_yuv {
-            self.data.resize(lock.1.len(), 0);
-            unsafe {
-                std::ptr::copy_nonoverlapping(&mut lock.1[0], &mut self.data[0], self.data.len());
-            }
-            crate::common::bgra_to_i420(
-                self.width as usize,
-                self.height as usize,
-                &self.data,
-                data,
-            );
-        } else {
-            data.resize(lock.1.len(), 0);
-            unsafe {
-                std::ptr::copy_nonoverlapping(&mut lock.1[0], &mut data[0], data.len());
-            }
+        data.resize(lock.1.len(), 0);
+        unsafe {
+            std::ptr::copy_nonoverlapping(&mut lock.1[0], &mut data[0], data.len());
         }
 
         Ok(())
@@ -605,7 +587,10 @@ impl CapturerMag {
             unsafe {
                 if FALSE == DestroyWindow(self.magnifier_window) {
                     //
-                    println!("Failed DestroyWindow magnifier window {}", GetLastError())
+                    println!(
+                        "Failed DestroyWindow magnifier window, error {}",
+                        Error::last_os_error()
+                    )
                 }
             }
         }
@@ -615,7 +600,10 @@ impl CapturerMag {
             unsafe {
                 if FALSE == DestroyWindow(self.host_window) {
                     //
-                    println!("Failed DestroyWindow host window {}", GetLastError())
+                    println!(
+                        "Failed DestroyWindow host window, error {}",
+                        Error::last_os_error()
+                    )
                 }
             }
         }
@@ -651,7 +639,7 @@ mod tests {
     use super::*;
     #[test]
     fn test() {
-        let mut capture_mag = CapturerMag::new((0, 0), 1920, 1080, false).unwrap();
+        let mut capture_mag = CapturerMag::new((0, 0), 1920, 1080).unwrap();
         capture_mag.exclude("", "RustDeskPrivacyWindow").unwrap();
         std::thread::sleep(std::time::Duration::from_millis(1000 * 10));
         let mut data = Vec::new();

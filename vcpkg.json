@@ -1,0 +1,63 @@
+{
+  "dependencies": [
+    {
+      "name": "aom",
+      "host": true
+    },
+    {
+      "name": "aom",
+      "host": false
+    },
+    {
+      "name": "cpu-features",
+      "platform": "android"
+    },
+    {
+      "name": "libjpeg-turbo",
+      "host": true
+    },
+    {
+      "name": "libjpeg-turbo",
+      "host": false
+    },
+    {
+      "name": "oboe",
+      "platform": "android"
+    },
+    {
+      "name": "oboe-wrapper",
+      "platform": "android"
+    },
+    {
+      "name": "opus",
+      "host": true
+    },
+    {
+      "name": "opus",
+      "host": false
+    },
+    {
+      "name": "libvpx",
+      "host": true
+    },
+    {
+      "name": "libvpx",
+      "host": false
+    },
+    {
+      "name": "libyuv",
+      "host": true
+    },
+    {
+      "name": "libyuv",
+      "host": false
+    }
+  ],
+  "vcpkg-configuration": {
+    "default-registry": {
+      "kind": "builtin",
+      "baseline": ""
+    },
+    "overlay-ports": [ "./res/vcpkg" ]
+  }
+}

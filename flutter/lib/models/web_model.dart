@@ -25,7 +25,7 @@ class PlatformFFI {
 
   static get localeName => window.navigator.language;
 
-  static Future<void> init(String _appType) async {
+  static Future<void> init(String appType) async {
     isWeb = true;
     isWebDesktop = !context.callMethod('isMobile');
     context.callMethod('init');

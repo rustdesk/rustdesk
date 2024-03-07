@@ -254,55 +254,104 @@ pub mod service {
             (enigo::Key::RightShift, evdev::Key::KEY_RIGHTSHIFT),
         ]);
 
-        static ref KEY_MAP_LAYOUT: HashMap<char, evdev::Key> = HashMap::from(
+        static ref KEY_MAP_LAYOUT: HashMap<char, (evdev::Key, bool)> = HashMap::from(
             [
-                ('a', evdev::Key::KEY_A),
-                ('b', evdev::Key::KEY_B),
-                ('c', evdev::Key::KEY_C),
-                ('d', evdev::Key::KEY_D),
-                ('e', evdev::Key::KEY_E),
-                ('f', evdev::Key::KEY_F),
-                ('g', evdev::Key::KEY_G),
-                ('h', evdev::Key::KEY_H),
-                ('i', evdev::Key::KEY_I),
-                ('j', evdev::Key::KEY_J),
-                ('k', evdev::Key::KEY_K),
-                ('l', evdev::Key::KEY_L),
-                ('m', evdev::Key::KEY_M),
-                ('n', evdev::Key::KEY_N),
-                ('o', evdev::Key::KEY_O),
-                ('p', evdev::Key::KEY_P),
-                ('q', evdev::Key::KEY_Q),
-                ('r', evdev::Key::KEY_R),
-                ('s', evdev::Key::KEY_S),
-                ('t', evdev::Key::KEY_T),
-                ('u', evdev::Key::KEY_U),
-                ('v', evdev::Key::KEY_V),
-                ('w', evdev::Key::KEY_W),
-                ('x', evdev::Key::KEY_X),
-                ('y', evdev::Key::KEY_Y),
-                ('z', evdev::Key::KEY_Z),
-                ('0', evdev::Key::KEY_0),
-                ('1', evdev::Key::KEY_1),
-                ('2', evdev::Key::KEY_2),
-                ('3', evdev::Key::KEY_3),
-                ('4', evdev::Key::KEY_4),
-                ('5', evdev::Key::KEY_5),
-                ('6', evdev::Key::KEY_6),
-                ('7', evdev::Key::KEY_7),
-                ('8', evdev::Key::KEY_8),
-                ('9', evdev::Key::KEY_9),
-                ('`', evdev::Key::KEY_GRAVE),
-                ('-', evdev::Key::KEY_MINUS),
-                ('=', evdev::Key::KEY_EQUAL),
-                ('[', evdev::Key::KEY_LEFTBRACE),
-                (']', evdev::Key::KEY_RIGHTBRACE),
-                ('\\', evdev::Key::KEY_BACKSLASH),
-                (',', evdev::Key::KEY_COMMA),
-                ('.', evdev::Key::KEY_DOT),
-                ('/', evdev::Key::KEY_SLASH),
-                (';', evdev::Key::KEY_SEMICOLON),
-                ('\'', evdev::Key::KEY_APOSTROPHE),
+                ('a', (evdev::Key::KEY_A, false)),
+                ('b', (evdev::Key::KEY_B, false)),
+                ('c', (evdev::Key::KEY_C, false)),
+                ('d', (evdev::Key::KEY_D, false)),
+                ('e', (evdev::Key::KEY_E, false)),
+                ('f', (evdev::Key::KEY_F, false)),
+                ('g', (evdev::Key::KEY_G, false)),
+                ('h', (evdev::Key::KEY_H, false)),
+                ('i', (evdev::Key::KEY_I, false)),
+                ('j', (evdev::Key::KEY_J, false)),
+                ('k', (evdev::Key::KEY_K, false)),
+                ('l', (evdev::Key::KEY_L, false)),
+                ('m', (evdev::Key::KEY_M, false)),
+                ('n', (evdev::Key::KEY_N, false)),
+                ('o', (evdev::Key::KEY_O, false)),
+                ('p', (evdev::Key::KEY_P, false)),
+                ('q', (evdev::Key::KEY_Q, false)),
+                ('r', (evdev::Key::KEY_R, false)),
+                ('s', (evdev::Key::KEY_S, false)),
+                ('t', (evdev::Key::KEY_T, false)),
+                ('u', (evdev::Key::KEY_U, false)),
+                ('v', (evdev::Key::KEY_V, false)),
+                ('w', (evdev::Key::KEY_W, false)),
+                ('x', (evdev::Key::KEY_X, false)),
+                ('y', (evdev::Key::KEY_Y, false)),
+                ('z', (evdev::Key::KEY_Z, false)),
+                ('0', (evdev::Key::KEY_0, false)),
+                ('1', (evdev::Key::KEY_1, false)),
+                ('2', (evdev::Key::KEY_2, false)),
+                ('3', (evdev::Key::KEY_3, false)),
+                ('4', (evdev::Key::KEY_4, false)),
+                ('5', (evdev::Key::KEY_5, false)),
+                ('6', (evdev::Key::KEY_6, false)),
+                ('7', (evdev::Key::KEY_7, false)),
+                ('8', (evdev::Key::KEY_8, false)),
+                ('9', (evdev::Key::KEY_9, false)),
+                ('`', (evdev::Key::KEY_GRAVE, false)),
+                ('-', (evdev::Key::KEY_MINUS, false)),
+                ('=', (evdev::Key::KEY_EQUAL, false)),
+                ('[', (evdev::Key::KEY_LEFTBRACE, false)),
+                (']', (evdev::Key::KEY_RIGHTBRACE, false)),
+                ('\\', (evdev::Key::KEY_BACKSLASH, false)),
+                (',', (evdev::Key::KEY_COMMA, false)),
+                ('.', (evdev::Key::KEY_DOT, false)),
+                ('/', (evdev::Key::KEY_SLASH, false)),
+                (';', (evdev::Key::KEY_SEMICOLON, false)),
+                ('\'', (evdev::Key::KEY_APOSTROPHE, false)),
+
+                // Shift + key
+                ('A', (evdev::Key::KEY_A, true)),
+                ('B', (evdev::Key::KEY_B, true)),
+                ('C', (evdev::Key::KEY_C, true)),
+                ('D', (evdev::Key::KEY_D, true)),
+                ('E', (evdev::Key::KEY_E, true)),
+                ('F', (evdev::Key::KEY_F, true)),
+                ('G', (evdev::Key::KEY_G, true)),
+                ('H', (evdev::Key::KEY_H, true)),
+                ('I', (evdev::Key::KEY_I, true)),
+                ('J', (evdev::Key::KEY_J, true)),
+                ('K', (evdev::Key::KEY_K, true)),
+                ('L', (evdev::Key::KEY_L, true)),
+                ('M', (evdev::Key::KEY_M, true)),
+                ('N', (evdev::Key::KEY_N, true)),
+                ('O', (evdev::Key::KEY_O, true)),
+                ('P', (evdev::Key::KEY_P, true)),
+                ('Q', (evdev::Key::KEY_Q, true)),
+                ('R', (evdev::Key::KEY_R, true)),
+                ('S', (evdev::Key::KEY_S, true)),
+                ('T', (evdev::Key::KEY_T, true)),
+                ('U', (evdev::Key::KEY_U, true)),
+                ('V', (evdev::Key::KEY_V, true)),
+                ('W', (evdev::Key::KEY_W, true)),
+                ('X', (evdev::Key::KEY_X, true)),
+                ('Y', (evdev::Key::KEY_Y, true)),
+                ('Z', (evdev::Key::KEY_Z, true)),
+                (')', (evdev::Key::KEY_0, true)),
+                ('!', (evdev::Key::KEY_1, true)),
+                ('@', (evdev::Key::KEY_2, true)),
+                ('#', (evdev::Key::KEY_3, true)),
+                ('$', (evdev::Key::KEY_4, true)),
+                ('%', (evdev::Key::KEY_5, true)),
+                ('^', (evdev::Key::KEY_6, true)),
+                ('&', (evdev::Key::KEY_7, true)),
+                ('*', (evdev::Key::KEY_8, true)),
+                ('(', (evdev::Key::KEY_9, true)),
+                ('~', (evdev::Key::KEY_GRAVE, true)),
+                ('_', (evdev::Key::KEY_MINUS, true)),
+                ('+', (evdev::Key::KEY_EQUAL, true)),
+                ('{', (evdev::Key::KEY_LEFTBRACE, true)),
+                ('}', (evdev::Key::KEY_RIGHTBRACE, true)),
+                ('|', (evdev::Key::KEY_BACKSLASH, true)),
+                ('<', (evdev::Key::KEY_COMMA, true)),
+                ('>', (evdev::Key::KEY_DOT, true)),
+                ('?', (evdev::Key::KEY_SLASH, true)),
+                (':', (evdev::Key::KEY_SEMICOLON, true)),
+                ('"', (evdev::Key::KEY_APOSTROPHE, true)),
             ]);
 
         // ((minx, maxx), (miny, maxy))
@@ -333,16 +382,16 @@ pub mod service {
         Ok(keyboard)
     }
 
-    fn map_key(key: &enigo::Key) -> ResultType<evdev::Key> {
+    pub fn map_key(key: &enigo::Key) -> ResultType<(evdev::Key, bool)> {
         if let Some(k) = KEY_MAP.get(&key) {
             log::trace!("mapkey {:?}, get {:?}", &key, &k);
-            return Ok(k.clone());
+            return Ok((k.clone(), false));
         } else {
             match key {
                 enigo::Key::Layout(c) => {
-                    if let Some(k) = KEY_MAP_LAYOUT.get(&c) {
+                    if let Some((k,is_shift)) = KEY_MAP_LAYOUT.get(&c) {
                         log::trace!("mapkey {:?}, get {:?}", &key, k);
-                        return Ok(k.clone());
+                        return Ok((k.clone(), is_shift.clone()));
                     }
                 }
                 // enigo::Key::Raw(c) => {
@@ -380,19 +429,23 @@ pub mod service {
                 allow_err!(keyboard.emit(&[down_event]));
             }
             DataKeyboard::KeyDown(key) => {
-                if let Ok(k) = map_key(key) {
+                if let Ok((k, is_shift)) = map_key(key) {
+                    if is_shift {
+                        let down_event = InputEvent::new(EventType::KEY, evdev::Key::KEY_LEFTSHIFT.code(), 1);
+                        allow_err!(keyboard.emit(&[down_event]));
+                    }
                     let down_event = InputEvent::new(EventType::KEY, k.code(), 1);
                     allow_err!(keyboard.emit(&[down_event]));
                 }
             }
             DataKeyboard::KeyUp(key) => {
-                if let Ok(k) = map_key(key) {
+                if let Ok((k, _)) = map_key(key) {
                     let up_event = InputEvent::new(EventType::KEY, k.code(), 0);
                     allow_err!(keyboard.emit(&[up_event]));
                 }
             }
             DataKeyboard::KeyClick(key) => {
-                if let Ok(k) = map_key(key) {
+                if let Ok((k, _)) = map_key(key) {
                     let down_event = InputEvent::new(EventType::KEY, k.code(), 1);
                     let up_event = InputEvent::new(EventType::KEY, k.code(), 0);
                     allow_err!(keyboard.emit(&[down_event, up_event]));

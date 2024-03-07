@@ -1,0 +1,38 @@
+name: Flutter Tag Build
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+      - '[0-9]+.[0-9]+.[0-9]+'
+      - 'v[0-9]+.[0-9]+.[0-9]+-[0-9]+'
+      - '[0-9]+.[0-9]+.[0-9]+-[0-9]+'
+
+jobs:
+  run-flutter-tag-build:
+    uses: ./.github/workflows/flutter-build.yml
+    secrets: inherit
+    with:
+      upload-artifact: true
+      upload-tag: ${{ env.GITHUB_REF_NAME }}
+
+  update-fdroid-version-file:
+    name: Publish RustDesk version file for F-Droid updater
+    runs-on: ubuntu-latest
+    steps:
+      - name: Generate RustDesk version file
+        run: |
+          UPSTREAM_VERNAME="$GITHUB_REF_NAME"
+          UPSTREAM_VERCODE="$(echo "$UPSTREAM_VERNAME" | tr -d '.')"
+          echo "versionName=$UPSTREAM_VERNAME"  > rustdesk-version.txt
+          echo "versionCode=$UPSTREAM_VERCODE" >> rustdesk-version.txt
+        shell: bash
+
+      - name: Publish RustDesk version file
+        uses: softprops/action-gh-release@v1
+        with:
+          prerelease: true
+          tag_name: "fdroid-version"
+          files: |
+            ./rustdesk-version.txt

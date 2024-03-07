@@ -9,8 +9,6 @@ on:
   push:
     branches:
       - master
-    tags:
-      - '*'
     paths-ignore:
       - ".github/**"
       - "docs/**"
@@ -21,4 +19,3 @@ jobs:
     uses: ./.github/workflows/flutter-build.yml
     with:
       upload-artifact: false
-  

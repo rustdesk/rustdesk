@@ -1,100 +1,79 @@
 import 'dart:convert';
+import 'dart:math';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_hbb/models/peer_model.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:get/get.dart';
-import 'package:scroll_pos/scroll_pos.dart';
 
 import '../common.dart';
 import 'model.dart';
 
-const int groupTabIndex = 4;
-const String defaultGroupTabname = 'Group';
+enum PeerTabIndex {
+  recent,
+  fav,
+  lan,
+  ab,
+  group,
+}
 
 class PeerTabModel with ChangeNotifier {
   WeakReference<FFI> parent;
   int get currentTab => _currentTab;
   int _currentTab = 0; // index in tabNames
-  List<int> get visibleOrderedTabs => _visibleOrderedTabs;
-  List<int> _visibleOrderedTabs = List.empty(growable: true);
-  List<int> get tabOrder => _tabOrder;
-  List<int> _tabOrder = List.from([0, 1, 2, 3, 4]); // constant length
-  int get tabHiddenFlag => _tabHiddenFlag;
-  int _tabHiddenFlag = 0;
-  bool get showScrollBtn => _showScrollBtn;
-  bool _showScrollBtn = false;
-  final List<bool> _fullyVisible = List.filled(5, false);
-  bool get leftFullyVisible => _leftFullyVisible;
-  bool _leftFullyVisible = false;
-  bool get rightFullyVisible => _rightFullyVisible;
-  bool _rightFullyVisible = false;
-  ScrollPosController sc = ScrollPosController();
   List<String> tabNames = [
-    'Recent Sessions',
+    'Recent sessions',
     'Favorites',
     'Discovered',
-    'Address Book',
-    defaultGroupTabname,
+    'Address book',
+    'Group',
   ];
+  final List<IconData> icons = [
+    Icons.access_time_filled,
+    Icons.star,
+    Icons.explore,
+    IconFont.addressBook,
+    Icons.group,
+  ];
+  final List<bool> _isVisible = List.filled(5, true, growable: false);
+  List<bool> get isVisible => _isVisible;
+  List<int> get indexs => List.generate(tabNames.length, (index) => index);
+  List<int> get visibleIndexs => indexs.where((e) => _isVisible[e]).toList();
+  List<Peer> _selectedPeers = List.empty(growable: true);
+  List<Peer> get selectedPeers => _selectedPeers;
+  bool _multiSelectionMode = false;
+  bool get multiSelectionMode => _multiSelectionMode;
+  List<Peer> _currentTabCachedPeers = List.empty(growable: true);
+  List<Peer> get currentTabCachedPeers => _currentTabCachedPeers;
+  bool _isShiftDown = false;
+  bool get isShiftDown => _isShiftDown;
+  String _lastId = '';
+  String get lastId => _lastId;
 
   PeerTabModel(this.parent) {
-    // init tabHiddenFlag
-    _tabHiddenFlag = int.tryParse(
-            bind.getLocalFlutterConfig(k: 'hidden-peer-card'),
-            radix: 2) ??
-        0;
-    var tabs = _notHiddenTabs();
-    // remove dynamic tabs
-    tabs.remove(groupTabIndex);
-    // init tabOrder
+    // visible
     try {
-      final conf = bind.getLocalFlutterConfig(k: 'peer-tab-order');
-      if (conf.isNotEmpty) {
-        final json = jsonDecode(conf);
-        if (json is List) {
-          final List<int> list =
-              json.map((e) => int.tryParse(e.toString()) ?? -1).toList();
-          if (list.length == _tabOrder.length &&
-              _tabOrder.every((e) => list.contains(e))) {
-            _tabOrder = list;
+      final option = bind.getLocalFlutterOption(k: 'peer-tab-visible');
+      if (option.isNotEmpty) {
+        List<dynamic> decodeList = jsonDecode(option);
+        if (decodeList.length == _isVisible.length) {
+          for (int i = 0; i < _isVisible.length; i++) {
+            if (decodeList[i] is bool) {
+              _isVisible[i] = decodeList[i];
+            }
           }
         }
       }
     } catch (e) {
-      debugPrintStack(label: '$e');
+      debugPrint("failed to get peer tab visible list:$e");
     }
-    // init visibleOrderedTabs
-    var tempList = _tabOrder.toList();
-    tempList.removeWhere((e) => !tabs.contains(e));
-    _visibleOrderedTabs = tempList;
     // init currentTab
     _currentTab =
-        int.tryParse(bind.getLocalFlutterConfig(k: 'peer-tab-index')) ?? 0;
-    if (!tabs.contains(_currentTab)) {
-      if (tabs.isNotEmpty) {
-        _currentTab = tabs[0];
-      } else {
-        _currentTab = 0;
-      }
+        int.tryParse(bind.getLocalFlutterOption(k: 'peer-tab-index')) ?? 0;
+    if (_currentTab < 0 || _currentTab >= tabNames.length) {
+      _currentTab = 0;
     }
-    sc.itemCount = _visibleOrderedTabs.length;
-  }
-
-  check_dynamic_tabs() {
-    var visible = visibleTabs();
-    _visibleOrderedTabs = _tabOrder.where((e) => visible.contains(e)).toList();
-    if (_visibleOrderedTabs.contains(groupTabIndex) &&
-        int.tryParse(bind.getLocalFlutterConfig(k: 'peer-tab-index')) ==
-            groupTabIndex) {
-      _currentTab = groupTabIndex;
-    }
-    if (gFFI.userModel.isAdmin.isFalse && gFFI.userModel.groupName.isNotEmpty) {
-      tabNames[groupTabIndex] = gFFI.userModel.groupName.value;
-    } else {
-      tabNames[groupTabIndex] = defaultGroupTabname;
-    }
-    sc.itemCount = _visibleOrderedTabs.length;
-    notifyListeners();
+    _trySetCurrentTabToFirstVisible();
   }
 
   setCurrentTab(int index) {
@@ -104,172 +83,117 @@ class PeerTabModel with ChangeNotifier {
     }
   }
 
-  setTabFullyVisible(int index, bool visible) {
-    if (index >= 0 && index < _fullyVisible.length) {
-      if (visible != _fullyVisible[index]) {
-        _fullyVisible[index] = visible;
-        bool changed = false;
-        bool show = _visibleOrderedTabs.any((e) => !_fullyVisible[e]);
-        if (show != _showScrollBtn) {
-          _showScrollBtn = show;
-          changed = true;
-        }
-        if (_visibleOrderedTabs.isNotEmpty && _visibleOrderedTabs[0] == index) {
-          if (_leftFullyVisible != visible) {
-            _leftFullyVisible = visible;
-            changed = true;
-          }
-        }
-        if (_visibleOrderedTabs.isNotEmpty &&
-            _visibleOrderedTabs.last == index) {
-          if (_rightFullyVisible != visible) {
-            _rightFullyVisible = visible;
-            changed = true;
-          }
-        }
-        if (changed) {
-          notifyListeners();
-        }
-      }
-    }
-  }
-
-  onReorder(oldIndex, newIndex) {
-    if (oldIndex < newIndex) {
-      newIndex -= 1;
-    }
-    var list = _visibleOrderedTabs.toList();
-    final int item = list.removeAt(oldIndex);
-    list.insert(newIndex, item);
-    _visibleOrderedTabs = list;
-
-    var tmpTabOrder = _visibleOrderedTabs.toList();
-    var left = _tabOrder.where((e) => !tmpTabOrder.contains(e)).toList();
-    for (var t in left) {
-      _addTabInOrder(tmpTabOrder, t);
-    }
-    _tabOrder = tmpTabOrder;
-    bind.setLocalFlutterConfig(k: 'peer-tab-order', v: jsonEncode(tmpTabOrder));
-    notifyListeners();
-  }
-
-  onHideShow(int index, bool show) async {
-    int bitMask = 1 << index;
-    if (show) {
-      _tabHiddenFlag &= ~bitMask;
-    } else {
-      _tabHiddenFlag |= bitMask;
-    }
-    await bind.setLocalFlutterConfig(
-        k: 'hidden-peer-card', v: _tabHiddenFlag.toRadixString(2));
-    var visible = visibleTabs();
-    _visibleOrderedTabs = _tabOrder.where((e) => visible.contains(e)).toList();
-    if (_visibleOrderedTabs.isNotEmpty &&
-        !_visibleOrderedTabs.contains(_currentTab)) {
-      _currentTab = _visibleOrderedTabs[0];
-    }
-    notifyListeners();
-  }
-
-  List<int> orderedNotFilteredTabs() {
-    var list = tabOrder.toList();
-    if (_filterGroupCard()) {
-      list.remove(groupTabIndex);
-    }
-    return list;
-  }
-
-  // return index array of tabNames
-  List<int> visibleTabs() {
-    var v = List<int>.empty(growable: true);
-    for (int i = 0; i < tabNames.length; i++) {
-      if (!_isTabHidden(i) && !_isTabFilter(i)) {
-        v.add(i);
-      }
-    }
-    return v;
-  }
-
-  String translatedTabname(int index) {
+  String tabTooltip(int index) {
     if (index >= 0 && index < tabNames.length) {
-      final name = tabNames[index];
-      if (index == groupTabIndex) {
-        if (name == defaultGroupTabname) {
-          return translate(name);
-        } else {
-          return name;
-        }
-      } else {
-        return translate(name);
-      }
+      return translate(tabNames[index]);
     }
     assert(false);
     return index.toString();
   }
 
-  bool _isTabHidden(int tabindex) {
-    return _tabHiddenFlag & (1 << tabindex) != 0;
-  }
-
-  bool _isTabFilter(int tabIndex) {
-    if (tabIndex == groupTabIndex) {
-      return _filterGroupCard();
+  IconData tabIcon(int index) {
+    if (index >= 0 && index < tabNames.length) {
+      return icons[index];
     }
-    return false;
+    assert(false);
+    return Icons.help;
   }
 
-  // return true if hide group card
-  bool _filterGroupCard() {
-    if (gFFI.groupModel.users.isEmpty ||
-        (gFFI.userModel.isAdmin.isFalse && gFFI.userModel.groupName.isEmpty)) {
-      return true;
+  setMultiSelectionMode(bool mode) {
+    _multiSelectionMode = mode;
+    if (!mode) {
+      _selectedPeers.clear();
+      _lastId = '';
+    }
+    notifyListeners();
+  }
+
+  select(Peer peer) {
+    if (!_multiSelectionMode) {
+      // https://github.com/flutter/flutter/issues/101275#issuecomment-1604541700
+      // After onTap, the shift key should be pressed for a while when not in multiselection mode,
+      // because onTap is delayed when onDoubleTap is not null
+      if (isDesktop && !_isShiftDown) return;
+      _multiSelectionMode = true;
+    }
+    final cached = _currentTabCachedPeers.map((e) => e.id).toList();
+    int thisIndex = cached.indexOf(peer.id);
+    int lastIndex = cached.indexOf(_lastId);
+    if (_isShiftDown && thisIndex >= 0 && lastIndex >= 0) {
+      int start = min(thisIndex, lastIndex);
+      int end = max(thisIndex, lastIndex);
+      bool remove = isPeerSelected(peer.id);
+      for (var i = start; i <= end; i++) {
+        if (remove) {
+          if (isPeerSelected(cached[i])) {
+            _selectedPeers.removeWhere((p) => p.id == cached[i]);
+          }
+        } else {
+          if (!isPeerSelected(cached[i])) {
+            _selectedPeers.add(_currentTabCachedPeers[i]);
+          }
+        }
+      }
     } else {
-      return false;
+      if (isPeerSelected(peer.id)) {
+        _selectedPeers.removeWhere((p) => p.id == peer.id);
+      } else {
+        _selectedPeers.add(peer);
+      }
+    }
+    _lastId = peer.id;
+    notifyListeners();
+  }
+
+  setCurrentTabCachedPeers(List<Peer> peers) {
+    Future.delayed(Duration.zero, () {
+      _currentTabCachedPeers = peers;
+      notifyListeners();
+    });
+  }
+
+  selectAll() {
+    _selectedPeers = _currentTabCachedPeers.toList();
+    notifyListeners();
+  }
+
+  bool isPeerSelected(String id) {
+    return selectedPeers.firstWhereOrNull((p) => p.id == id) != null;
+  }
+
+  setShiftDown(bool v) {
+    if (_isShiftDown != v) {
+      _isShiftDown = v;
+      if (_multiSelectionMode) {
+        notifyListeners();
+      }
     }
   }
 
-  List<int> _notHiddenTabs() {
-    var v = List<int>.empty(growable: true);
-    for (int i = 0; i < tabNames.length; i++) {
-      if (!_isTabHidden(i)) {
-        v.add(i);
+  setTabVisible(int index, bool visible) {
+    if (index >= 0 && index < _isVisible.length) {
+      if (_isVisible[index] != visible) {
+        _isVisible[index] = visible;
+        if (index == _currentTab && !visible) {
+          _trySetCurrentTabToFirstVisible();
+        } else if (visible && visibleIndexs.length == 1) {
+          _currentTab = index;
+        }
+        try {
+          bind.setLocalFlutterOption(
+              k: 'peer-tab-visible', v: jsonEncode(_isVisible));
+        } catch (_) {}
+        notifyListeners();
       }
     }
-    return v;
   }
 
-  // add tabIndex to list
-  _addTabInOrder(List<int> list, int tabIndex) {
-    if (!_tabOrder.contains(tabIndex) || list.contains(tabIndex)) {
-      return;
-    }
-    bool sameOrder = true;
-    int lastIndex = -1;
-    for (int i = 0; i < list.length; i++) {
-      var index = _tabOrder.lastIndexOf(list[i]);
-      if (index > lastIndex) {
-        lastIndex = index;
-        continue;
-      } else {
-        sameOrder = false;
-        break;
+  _trySetCurrentTabToFirstVisible() {
+    if (!_isVisible[_currentTab]) {
+      int firstVisible = _isVisible.indexWhere((e) => e);
+      if (firstVisible >= 0) {
+        _currentTab = firstVisible;
       }
-    }
-    if (sameOrder) {
-      var indexInTabOrder = _tabOrder.indexOf(tabIndex);
-      var left = List.empty(growable: true);
-      for (int i = 0; i < indexInTabOrder; i++) {
-        left.add(_tabOrder[i]);
-      }
-      int insertIndex = list.lastIndexWhere((e) => left.contains(e));
-      if (insertIndex < 0) {
-        insertIndex = 0;
-      } else {
-        insertIndex += 1;
-      }
-      list.insert(insertIndex, tabIndex);
-    } else {
-      list.add(tabIndex);
     }
   }
 }

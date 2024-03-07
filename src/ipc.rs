@@ -1,7 +1,11 @@
-use std::{collections::HashMap, sync::atomic::Ordering};
+use std::{
+    collections::HashMap,
+    sync::atomic::{AtomicBool, Ordering},
+};
 #[cfg(not(windows))]
 use std::{fs::File, io::prelude::*};
 
+use crate::privacy_mode::PrivacyModeState;
 use bytes::Bytes;
 use parity_tokio_ipc::{
     Connection as Conn, ConnectionClient as ConnClient, Endpoint, Incoming, SecurityAttributes,
@@ -25,19 +29,11 @@ use hbb_common::{
     ResultType,
 };
 
-use crate::rendezvous_mediator::RendezvousMediator;
+use crate::{common::is_server, privacy_mode, rendezvous_mediator::RendezvousMediator};
 
-// State with timestamp, because std::time::Instant cannot be serialized
-#[derive(Debug, Serialize, Deserialize, Copy, Clone)]
-#[serde(tag = "t", content = "c")]
-pub enum PrivacyModeState {
-    OffSucceeded,
-    OffFailed,
-    OffByPeer,
-    OffUnknown,
-}
 // IPC actions here.
 pub const IPC_ACTION_CLOSE: &str = "close";
+pub static EXIT_RECV_CLOSE: AtomicBool = AtomicBool::new(true);
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(tag = "t", content = "c")]
@@ -66,6 +62,8 @@ pub enum FS {
         file_num: i32,
         files: Vec<(String, u64)>,
         overwrite_detection: bool,
+        total_size: u64,
+        conn_id: i32,
     },
     CancelWrite {
         id: i32,
@@ -148,6 +146,7 @@ pub enum DataPortableService {
     Pong,
     ConnCount(Option<usize>),
     Mouse((Vec<u8>, i32)),
+    Pointer((Vec<u8>, i32)),
     Key(Vec<u8>),
     RequestStart,
     WillClose,
@@ -171,6 +170,7 @@ pub enum Data {
         file_transfer_enabled: bool,
         restart: bool,
         recording: bool,
+        block_input: bool,
         from_switch: bool,
     },
     ChatMessage {
@@ -182,10 +182,13 @@ pub enum Data {
     },
     SystemInfo(Option<String>),
     ClickTime(i64),
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     MouseMoveTime(i64),
     Authorize,
     Close,
+    #[cfg(windows)]
     SAS,
+    UserSid(Option<u32>),
     OnlineStatus(Option<(i64, bool)>),
     Config((String, Option<String>)),
     Options(Option<HashMap<String, String>>),
@@ -199,7 +202,7 @@ pub enum Data {
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     ClipboardFile(ClipboardFile),
     ClipboardFileEnabled(bool),
-    PrivacyModeState((i32, PrivacyModeState)),
+    PrivacyModeState((i32, PrivacyModeState, String)),
     TestRendezvousServer,
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     Keyboard(DataKeyboard),
@@ -223,6 +226,12 @@ pub enum Data {
     #[cfg(all(feature = "flutter", feature = "plugin_framework"))]
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     Plugin(Plugin),
+    #[cfg(windows)]
+    SyncWinCpuUsage(Option<f64>),
+    FileTransferLog((String, String)),
+    #[cfg(windows)]
+    ControlledSessionCount(usize),
+    CmErr(String),
 }
 
 #[tokio::main(flavor = "current_thread")]
@@ -238,7 +247,7 @@ pub async fn start(postfix: &str) -> ResultType<()> {
                         loop {
                             match stream.next().await {
                                 Err(err) => {
-                                    log::trace!("ipc{} connection closed: {}", postfix, err);
+                                    log::trace!("ipc '{}' connection closed: {}", postfix, err);
                                     break;
                                 }
                                 Ok(Some(data)) => {
@@ -328,24 +337,24 @@ async fn handle(data: Data, stream: &mut Connection) {
             let t = crate::server::CLICK_TIME.load(Ordering::SeqCst);
             allow_err!(stream.send(&Data::ClickTime(t)).await);
         }
+        #[cfg(not(any(target_os = "android", target_os = "ios")))]
         Data::MouseMoveTime(_) => {
             let t = crate::server::MOUSE_MOVE_TIME.load(Ordering::SeqCst);
             allow_err!(stream.send(&Data::MouseMoveTime(t)).await);
         }
         Data::Close => {
             log::info!("Receive close message");
-            #[cfg(not(target_os = "android"))]
-            crate::server::input_service::fix_key_down_timeout_at_exit();
-            std::process::exit(0);
+            if EXIT_RECV_CLOSE.load(Ordering::SeqCst) {
+                #[cfg(not(target_os = "android"))]
+                crate::server::input_service::fix_key_down_timeout_at_exit();
+                if is_server() {
+                    let _ = privacy_mode::turn_off_privacy(0, Some(PrivacyModeState::OffByPeer));
+                }
+                std::process::exit(0);
+            }
         }
         Data::OnlineStatus(_) => {
-            let x = config::ONLINE
-                .lock()
-                .unwrap()
-                .values()
-                .max()
-                .unwrap_or(&0)
-                .clone();
+            let x = config::get_online_state();
             let confirmed = Config::get_key_confirmed();
             allow_err!(stream.send(&Data::OnlineStatus(Some((x, confirmed)))).await);
         }
@@ -397,6 +406,12 @@ async fn handle(data: Data, stream: &mut Connection) {
                     } else {
                         None
                     };
+                } else if name == "hide_cm" {
+                    value = if crate::hbbs_http::sync::is_pro() {
+                        Some(hbb_common::password_security::hide_cm().to_string())
+                    } else {
+                        None
+                    };
                 } else {
                     value = None;
                 }
@@ -425,6 +440,9 @@ async fn handle(data: Data, stream: &mut Connection) {
             }
             Some(value) => {
                 let _chk = CheckIfRestart::new();
+                if let Some(v) = value.get("privacy-mode-impl-key") {
+                    crate::privacy_mode::switch(v);
+                }
                 Config::set_options(value);
                 allow_err!(stream.send(&Data::Options(None)).await);
             }
@@ -449,6 +467,16 @@ async fn handle(data: Data, stream: &mut Connection) {
                     .await
             );
         }
+        #[cfg(windows)]
+        Data::SyncWinCpuUsage(None) => {
+            allow_err!(
+                stream
+                    .send(&Data::SyncWinCpuUsage(
+                        hbb_common::platform::windows::cpu_uage_one_minute()
+                    ))
+                    .await
+            );
+        }
         Data::TestRendezvousServer => {
             crate::test_rendezvous_server();
         }
@@ -464,6 +492,16 @@ async fn handle(data: Data, stream: &mut Connection) {
         #[cfg(all(feature = "flutter", feature = "plugin_framework"))]
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
         Data::Plugin(plugin) => crate::plugin::ipc::handle_plugin(plugin, stream).await,
+        #[cfg(windows)]
+        Data::ControlledSessionCount(_) => {
+            allow_err!(
+                stream
+                    .send(&Data::ControlledSessionCount(
+                        crate::Connection::alive_conns().len()
+                    ))
+                    .await
+            );
+        }
         _ => {}
     }
 }
@@ -566,7 +604,7 @@ async fn check_pid(postfix: &str) {
         file.read_to_string(&mut content).ok();
         let pid = content.parse::<usize>().unwrap_or(0);
         if pid > 0 {
-            use hbb_common::sysinfo::{ProcessExt, System, SystemExt};
+            use hbb_common::sysinfo::System;
             let mut sys = System::new();
             sys.refresh_processes();
             if let Some(p) = sys.process(pid.into()) {
@@ -668,7 +706,7 @@ where
 }
 
 #[tokio::main(flavor = "current_thread")]
-async fn get_config(name: &str) -> ResultType<Option<String>> {
+pub async fn get_config(name: &str) -> ResultType<Option<String>> {
     get_config_async(name, 1_000).await
 }
 
@@ -879,6 +917,13 @@ pub fn close_all_instances() -> ResultType<bool> {
         Ok(_) => Ok(true),
         Err(err) => Err(err),
     }
+}
+
+#[tokio::main(flavor = "current_thread")]
+pub async fn connect_to_user_session(usid: Option<u32>) -> ResultType<()> {
+    let mut stream = crate::ipc::connect(1000, crate::POSTFIX_SERVICE).await?;
+    timeout(1000, stream.send(&crate::ipc::Data::UserSid(usid))).await??;
+    Ok(())
 }
 
 #[cfg(test)]

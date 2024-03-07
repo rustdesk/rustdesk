@@ -11,18 +11,20 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_hbb/common/formatter/id_formatter.dart';
 import 'package:flutter_hbb/desktop/widgets/refresh_wrapper.dart';
 import 'package:flutter_hbb/desktop/widgets/tabbar_widget.dart';
 import 'package:flutter_hbb/main.dart';
+import 'package:flutter_hbb/models/desktop_render_texture.dart';
 import 'package:flutter_hbb/models/peer_model.dart';
+import 'package:flutter_hbb/models/state_model.dart';
 import 'package:flutter_hbb/utils/multi_window_manager.dart';
 import 'package:flutter_hbb/utils/platform_channel.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:get/get.dart';
-import 'package:texture_rgba_renderer/texture_rgba_renderer.dart';
 import 'package:uni_links/uni_links.dart';
-import 'package:uni_links_desktop/uni_links_desktop.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:uuid/uuid.dart';
 import 'package:win32/win32.dart' as win32;
 import 'package:window_manager/window_manager.dart';
 import 'package:window_size/window_size.dart' as window_size;
@@ -47,14 +49,12 @@ var isMobile = isAndroid || isIOS;
 var version = "";
 int androidVersion = 0;
 
-/// Incriment count for textureId.
-int _textureId = 0;
-int get newTextureId => _textureId++;
-final textureRenderer = TextureRgbaRenderer();
-
 /// only available for Windows target
 int windowsBuildNumber = 0;
 DesktopType? desktopType;
+
+bool get isMainDesktopWindow =>
+    desktopType == DesktopType.main || desktopType == DesktopType.cm;
 
 /// Check if the app is running with single view mode.
 bool isSingleViewApp() {
@@ -68,6 +68,7 @@ typedef F = String Function(String);
 typedef FMethod = String Function(String, dynamic);
 
 typedef StreamEventHandler = Future<void> Function(Map<String, dynamic>);
+typedef SessionID = UuidValue;
 final iconHardDrive = MemoryImage(Uint8List.fromList(base64Decode(
     'iVBORw0KGgoAAAANSUhEUgAAAMgAAADICAMAAACahl6sAAAAmVBMVEUAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAjHWqVAAAAMnRSTlMAv0BmzLJNXlhiUu2fxXDgu7WuSUUe29LJvpqUjX53VTstD7ilNujCqTEk5IYH+vEoFjKvAagAAAPpSURBVHja7d0JbhpBEIXhB3jYzb5vBgzYgO04df/DJXGUKMwU9ECmZ6pQfSfw028LCXW3YYwxxhhjjDHGGGOM0eZ9VV1MckdKWLM1bRQ/35GW/WxHHu1me6ShuyHvNl34VhlTKsYVeDWj1EzgUZ1S1DrAk/UDparZgxd9Sl0BHnxSBhpI3jfKQG2FpLUpE69I2ILikv1nsvygjBwPSNKYMlNHggqUoSKS80AZCnwHqQ1zCRvW+CRegwRFeFAMKKrtM8gTPJlzSfwFgT9dJom3IDN4VGaSeAryAK8m0SSeghTg1ZYiql6CjBDhO8mzlyAVhKhIwgXxrh5NojGIhyRckEdwpCdhgpSQgiWTRGMQNonGIGySp0SDvMDBX5KWxiB8Eo1BgE00SYJBykhNnkmSWJAcLpGaJNMgfJKyxiDAK4WNEwryhMtkJsk8CJtEYxA+icYgQIfCcgkEqcJNXhIRQdgkGoPwSTQG+e8khdu/7JOVREwQIKCwF41B2CQljUH4JLcH6SI+OUlEBQHa0SQag/BJNAbhkjxqDMIn0RgEeI4muSlID9eSkERgEKAVTaIxCJ9EYxA2ydVB8hCASVLRGAQYR5NoDMIn0RgEyFHYSGMQPonGII4kziCNvBgNJonEk4u3GAk8Sprk6eYaqbMDY0oKvUm5jfC/viGiSypV7+M3i2iDsAGpNEDYjlTa3W8RdR/r544g50ilnA0RxoZIE2NIXqQbhkAkGyKNDZHGhkhjQ6SxIdLYEGlsiDQ2JGTVeD0264U9zipPh7XOooffpA6pfNCXjxl4/c3pUzlChwzor53zwYYVfpI5pOV6LWFF/2jiJ5FDSs5jdY/0rwUAkUMeXWdBqnSqD0DikBqdqCHsjTvELm9In0IOri/0pwAEDtlSyNaRjAIAAoesKWTtuusxByBwCJp0oomwBXcYUuCQgE50ENajE4OvZAKHLB1/68Br5NqiyCGYOY8YRd77kTkEb64n7lZN+mOIX4QOwb5FX0ZVx3uOxwW+SB0CbBubemWP8/rlaaeRX+M3uUOuZENsiA25zIbYkPsZElBIHwL13U/PTjJ/cyOOEoVM3I+hziDQlELm7pPxw3eI8/7gPh1fpLA6xGnEeDDgO0UcIAzzM35HxLPIq5SXe9BLzOsj9eUaQqyXzxS1QFSfWM2cCANiHcAISJ0AnCKpUwTuIkkA3EeSInAXSQKcs1V18e24wlllUmQp9v9zXKeHi+akRAMOPVKhAqdPBZeUmnnEsO6QcJ0+4qmOSbBxFfGVRiTUqITrdKcCbyYO3/K4wX4+aQ+FfNjXhu3JfAVjjDHGGGOMMcYYY4xIPwCgfqT6TbhCLAAAAABJRU5ErkJggg==')));
 
@@ -92,53 +93,91 @@ class IconFont {
   static const IconData menu = IconData(0xe628, fontFamily: _family1);
   static const IconData search = IconData(0xe6a4, fontFamily: _family2);
   static const IconData roundClose = IconData(0xe6ed, fontFamily: _family2);
+  static const IconData addressBook =
+      IconData(0xe602, fontFamily: "AddressBook");
 }
 
 class ColorThemeExtension extends ThemeExtension<ColorThemeExtension> {
   const ColorThemeExtension({
     required this.border,
     required this.border2,
+    required this.border3,
     required this.highlight,
     required this.drag_indicator,
     required this.shadow,
+    required this.errorBannerBg,
+    required this.me,
+    required this.toastBg,
+    required this.toastText,
+    required this.divider,
   });
 
   final Color? border;
   final Color? border2;
+  final Color? border3;
   final Color? highlight;
   final Color? drag_indicator;
   final Color? shadow;
+  final Color? errorBannerBg;
+  final Color? me;
+  final Color? toastBg;
+  final Color? toastText;
+  final Color? divider;
 
   static final light = ColorThemeExtension(
     border: Color(0xFFCCCCCC),
     border2: Color(0xFFBBBBBB),
+    border3: Colors.black26,
     highlight: Color(0xFFE5E5E5),
     drag_indicator: Colors.grey[800],
     shadow: Colors.black,
+    errorBannerBg: Color(0xFFFDEEEB),
+    me: Colors.green,
+    toastBg: Colors.black.withOpacity(0.6),
+    toastText: Colors.white,
+    divider: Colors.black38,
   );
 
   static final dark = ColorThemeExtension(
     border: Color(0xFF555555),
     border2: Color(0xFFE5E5E5),
+    border3: Colors.white24,
     highlight: Color(0xFF3F3F3F),
     drag_indicator: Colors.grey,
     shadow: Colors.grey,
+    errorBannerBg: Color(0xFF470F2D),
+    me: Colors.greenAccent,
+    toastBg: Colors.white.withOpacity(0.6),
+    toastText: Colors.black,
+    divider: Colors.white38,
   );
 
   @override
   ThemeExtension<ColorThemeExtension> copyWith({
     Color? border,
     Color? border2,
+    Color? border3,
     Color? highlight,
     Color? drag_indicator,
     Color? shadow,
+    Color? errorBannerBg,
+    Color? me,
+    Color? toastBg,
+    Color? toastText,
+    Color? divider,
   }) {
     return ColorThemeExtension(
       border: border ?? this.border,
       border2: border2 ?? this.border2,
+      border3: border3 ?? this.border3,
       highlight: highlight ?? this.highlight,
       drag_indicator: drag_indicator ?? this.drag_indicator,
       shadow: shadow ?? this.shadow,
+      errorBannerBg: errorBannerBg ?? this.errorBannerBg,
+      me: me ?? this.me,
+      toastBg: toastBg ?? this.toastBg,
+      toastText: toastText ?? this.toastText,
+      divider: divider ?? this.divider,
     );
   }
 
@@ -151,9 +190,15 @@ class ColorThemeExtension extends ThemeExtension<ColorThemeExtension> {
     return ColorThemeExtension(
       border: Color.lerp(border, other.border, t),
       border2: Color.lerp(border2, other.border2, t),
+      border3: Color.lerp(border3, other.border3, t),
       highlight: Color.lerp(highlight, other.highlight, t),
       drag_indicator: Color.lerp(drag_indicator, other.drag_indicator, t),
       shadow: Color.lerp(shadow, other.shadow, t),
+      errorBannerBg: Color.lerp(shadow, other.errorBannerBg, t),
+      me: Color.lerp(shadow, other.me, t),
+      toastBg: Color.lerp(shadow, other.toastBg, t),
+      toastText: Color.lerp(shadow, other.toastText, t),
+      divider: Color.lerp(shadow, other.divider, t),
     );
   }
 }
@@ -183,7 +228,13 @@ class MyTheme {
     ),
   );
 
-  static const SwitchThemeData switchTheme = SwitchThemeData(splashRadius: 0);
+  static SwitchThemeData switchTheme() {
+    return SwitchThemeData(splashRadius: isDesktop ? 0 : kRadialReactionRadius);
+  }
+
+  static RadioThemeData radioTheme() {
+    return RadioThemeData(splashRadius: isDesktop ? 0 : kRadialReactionRadius);
+  }
 
   // Checkbox
   static const CheckboxThemeData checkboxTheme = CheckboxThemeData(
@@ -209,6 +260,13 @@ class MyTheme {
       ),
     ),
   );
+
+  //tooltip
+  static TooltipThemeData tooltipTheme() {
+    return TooltipThemeData(
+      waitDuration: Duration(seconds: 1, milliseconds: 500),
+    );
+  }
 
   // Dialogs
   static const double dialogPadding = 24;
@@ -241,7 +299,35 @@ class MyTheme {
       ? EdgeInsets.only(left: dialogPadding)
       : EdgeInsets.only(left: dialogPadding / 3);
 
+  static ScrollbarThemeData scrollbarTheme = ScrollbarThemeData(
+    thickness: MaterialStateProperty.all(6),
+    thumbColor: MaterialStateProperty.resolveWith<Color?>((states) {
+      if (states.contains(MaterialState.dragged)) {
+        return Colors.grey[900];
+      } else if (states.contains(MaterialState.hovered)) {
+        return Colors.grey[700];
+      } else {
+        return Colors.grey[500];
+      }
+    }),
+    crossAxisMargin: 4,
+  );
+
+  static ScrollbarThemeData scrollbarThemeDark = scrollbarTheme.copyWith(
+    thumbColor: MaterialStateProperty.resolveWith<Color?>((states) {
+      if (states.contains(MaterialState.dragged)) {
+        return Colors.grey[100];
+      } else if (states.contains(MaterialState.hovered)) {
+        return Colors.grey[300];
+      } else {
+        return Colors.grey[500];
+      }
+    }),
+  );
+
   static ThemeData lightTheme = ThemeData(
+    // https://stackoverflow.com/questions/77537315/after-upgrading-to-flutter-3-16-the-app-bar-background-color-button-size-and
+    useMaterial3: false,
     brightness: Brightness.light,
     hoverColor: Color.fromARGB(255, 224, 224, 224),
     scaffoldBackgroundColor: Colors.white,
@@ -256,6 +342,7 @@ class MyTheme {
         ),
       ),
     ),
+    scrollbarTheme: scrollbarTheme,
     inputDecorationTheme: isDesktop
         ? InputDecorationTheme(
             fillColor: grayBg,
@@ -279,8 +366,9 @@ class MyTheme {
     tabBarTheme: const TabBarTheme(
       labelColor: Colors.black87,
     ),
-    splashColor: Colors.transparent,
-    highlightColor: Colors.transparent,
+    tooltipTheme: tooltipTheme(),
+    splashColor: isDesktop ? Colors.transparent : null,
+    highlightColor: isDesktop ? Colors.transparent : null,
     splashFactory: isDesktop ? NoSplash.splashFactory : null,
     textButtonTheme: isDesktop
         ? TextButtonThemeData(
@@ -309,7 +397,8 @@ class MyTheme {
         ),
       ),
     ),
-    switchTheme: switchTheme,
+    switchTheme: switchTheme(),
+    radioTheme: radioTheme(),
     checkboxTheme: checkboxTheme,
     listTileTheme: listTileTheme,
     menuBarTheme: MenuBarThemeData(
@@ -317,6 +406,13 @@ class MyTheme {
             MenuStyle(backgroundColor: MaterialStatePropertyAll(Colors.white))),
     colorScheme: ColorScheme.light(
         primary: Colors.blue, secondary: accent, background: grayBg),
+    popupMenuTheme: PopupMenuThemeData(
+        color: Colors.white,
+        shape: RoundedRectangleBorder(
+          side: BorderSide(
+              color: isDesktop ? Color(0xFFECECEC) : Colors.transparent),
+          borderRadius: BorderRadius.all(Radius.circular(8.0)),
+        )),
   ).copyWith(
     extensions: <ThemeExtension<dynamic>>[
       ColorThemeExtension.light,
@@ -324,6 +420,7 @@ class MyTheme {
     ],
   );
   static ThemeData darkTheme = ThemeData(
+    useMaterial3: false,
     brightness: Brightness.dark,
     hoverColor: Color.fromARGB(255, 45, 46, 53),
     scaffoldBackgroundColor: Color(0xFF18191E),
@@ -338,6 +435,7 @@ class MyTheme {
         ),
       ),
     ),
+    scrollbarTheme: scrollbarThemeDark,
     inputDecorationTheme: isDesktop
         ? InputDecorationTheme(
             fillColor: Color(0xFF24252B),
@@ -364,11 +462,9 @@ class MyTheme {
     tabBarTheme: const TabBarTheme(
       labelColor: Colors.white70,
     ),
-    scrollbarTheme: ScrollbarThemeData(
-      thumbColor: MaterialStateProperty.all(Colors.grey[500]),
-    ),
-    splashColor: Colors.transparent,
-    highlightColor: Colors.transparent,
+    tooltipTheme: tooltipTheme(),
+    splashColor: isDesktop ? Colors.transparent : null,
+    highlightColor: isDesktop ? Colors.transparent : null,
     splashFactory: isDesktop ? NoSplash.splashFactory : null,
     textButtonTheme: isDesktop
         ? TextButtonThemeData(
@@ -404,7 +500,8 @@ class MyTheme {
         ),
       ),
     ),
-    switchTheme: switchTheme,
+    switchTheme: switchTheme(),
+    radioTheme: radioTheme(),
     checkboxTheme: checkboxTheme,
     listTileTheme: listTileTheme,
     menuBarTheme: MenuBarThemeData(
@@ -415,6 +512,11 @@ class MyTheme {
       secondary: accent,
       background: Color(0xFF24252B),
     ),
+    popupMenuTheme: PopupMenuThemeData(
+        shape: RoundedRectangleBorder(
+      side: BorderSide(color: Colors.white24),
+      borderRadius: BorderRadius.all(Radius.circular(8.0)),
+    )),
   ).copyWith(
     extensions: <ThemeExtension<dynamic>>[
       ColorThemeExtension.dark,
@@ -534,16 +636,19 @@ closeConnection({String? id}) {
   }
 }
 
-void window_on_top(int? id) {
+Future<void> windowOnTop(int? id) async {
   if (!isDesktop) {
     return;
   }
+  print("Bring window '$id' on top");
   if (id == null) {
     // main window
-    windowManager.restore();
-    windowManager.show();
-    windowManager.focus();
-    rustDeskWinManager.registerActiveWindow(kWindowMainId);
+    if (stateGlobal.isMinimized) {
+      await windowManager.restore();
+    }
+    await windowManager.show();
+    await windowManager.focus();
+    await rustDeskWinManager.registerActiveWindow(kWindowMainId);
   } else {
     WindowController.fromWindowId(id)
       ..focus()
@@ -590,6 +695,7 @@ class OverlayDialogManager {
   int _tagCount = 0;
 
   OverlayEntry? _mobileActionsOverlayEntry;
+  RxBool mobileActionsOverlayVisible = false.obs;
 
   void setOverlayState(OverlayKeyState overlayKeyState) {
     _overlayKeyState = overlayKeyState;
@@ -673,9 +779,12 @@ class OverlayDialogManager {
   String showLoading(String text,
       {bool clickMaskDismiss = false,
       bool showCancel = true,
-      VoidCallback? onCancel}) {
-    final tag = _tagCount.toString();
-    _tagCount++;
+      VoidCallback? onCancel,
+      String? tag}) {
+    if (tag == null) {
+      tag = _tagCount.toString();
+      _tagCount++;
+    }
     show((setState, close, context) {
       cancel() {
         dismissAll();
@@ -753,12 +862,14 @@ class OverlayDialogManager {
     });
     overlayState.insert(overlay);
     _mobileActionsOverlayEntry = overlay;
+    mobileActionsOverlayVisible.value = true;
   }
 
   void hideMobileActionsOverlay() {
     if (_mobileActionsOverlayEntry != null) {
       _mobileActionsOverlayEntry!.remove();
       _mobileActionsOverlayEntry = null;
+      mobileActionsOverlayVisible.value = false;
       return;
     }
   }
@@ -776,16 +887,16 @@ class OverlayDialogManager {
   }
 }
 
-void showToast(String text, {Duration timeout = const Duration(seconds: 2)}) {
+void showToast(String text, {Duration timeout = const Duration(seconds: 3)}) {
   final overlayState = globalKey.currentState?.overlay;
   if (overlayState == null) return;
-  final entry = OverlayEntry(builder: (_) {
+  final entry = OverlayEntry(builder: (context) {
     return IgnorePointer(
         child: Align(
             alignment: const Alignment(0.0, 0.8),
             child: Container(
               decoration: BoxDecoration(
-                color: Colors.black.withOpacity(0.6),
+                color: MyTheme.color(context).toastBg,
                 borderRadius: const BorderRadius.all(
                   Radius.circular(20),
                 ),
@@ -794,11 +905,11 @@ void showToast(String text, {Duration timeout = const Duration(seconds: 2)}) {
               child: Text(
                 text,
                 textAlign: TextAlign.center,
-                style: const TextStyle(
+                style: TextStyle(
                     decoration: TextDecoration.none,
                     fontWeight: FontWeight.w300,
                     fontSize: 18,
-                    color: Colors.white),
+                    color: MyTheme.color(context).toastText),
               ),
             )));
   });
@@ -816,6 +927,7 @@ class CustomAlertDialog extends StatelessWidget {
   const CustomAlertDialog(
       {Key? key,
       this.title,
+      this.titlePadding,
       required this.content,
       this.actions,
       this.contentPadding,
@@ -825,6 +937,7 @@ class CustomAlertDialog extends StatelessWidget {
       : super(key: key);
 
   final Widget? title;
+  final EdgeInsetsGeometry? titlePadding;
   final Widget content;
   final List<Widget>? actions;
   final double? contentPadding;
@@ -840,6 +953,7 @@ class CustomAlertDialog extends StatelessWidget {
       if (!scopeNode.hasFocus) scopeNode.requestFocus();
     });
     bool tabTapped = false;
+    if (isAndroid) gFFI.invokeMethod("enable_soft_keyboard", true);
 
     return FocusScope(
       node: scopeNode,
@@ -872,7 +986,7 @@ class CustomAlertDialog extends StatelessWidget {
             child: content,
           ),
           actions: actions,
-          titlePadding: MyTheme.dialogTitlePadding(content: content != null),
+          titlePadding: titlePadding ?? MyTheme.dialogTitlePadding(),
           contentPadding:
               MyTheme.dialogContentPadding(actions: actions is List),
           actionsPadding: MyTheme.dialogActionsPadding(),
@@ -881,9 +995,9 @@ class CustomAlertDialog extends StatelessWidget {
   }
 }
 
-void msgBox(String id, String type, String title, String text, String link,
-    OverlayDialogManager dialogManager,
-    {bool? hasCancel, ReconnectHandle? reconnect}) {
+void msgBox(SessionID sessionId, String type, String title, String text,
+    String link, OverlayDialogManager dialogManager,
+    {bool? hasCancel, ReconnectHandle? reconnect, int? reconnectTimeout}) {
   dialogManager.dismissAll();
   List<Widget> buttons = [];
   bool hasOk = false;
@@ -923,12 +1037,22 @@ void msgBox(String id, String type, String title, String text, String link,
           dialogManager.dismissAll();
         }));
   }
-  if (reconnect != null && title == "Connection Error") {
-    buttons.insert(
-        0,
-        dialogButton('Reconnect', isOutline: true, onPressed: () {
-          reconnect(dialogManager, id, false);
-        }));
+  if (reconnect != null &&
+      title == "Connection Error" &&
+      reconnectTimeout != null) {
+    // `enabled` is used to disable the dialog button once the button is clicked.
+    final enabled = true.obs;
+    final button = Obx(() => _ReconnectCountDownButton(
+          second: reconnectTimeout,
+          onPressed: enabled.isTrue
+              ? () {
+                  // Disable the button
+                  enabled.value = false;
+                  reconnect(dialogManager, sessionId, false);
+                }
+              : null,
+        ));
+    buttons.insert(0, button);
   }
   if (link.isNotEmpty) {
     buttons.insert(0, dialogButton('JumpLink', onPressed: jumplink));
@@ -941,7 +1065,7 @@ void msgBox(String id, String type, String title, String text, String link,
       onSubmit: hasOk ? submit : null,
       onCancel: hasCancel == true ? cancel : null,
     ),
-    tag: '$id-$type-$title-$text-$link',
+    tag: '$sessionId-$type-$title-$text-$link',
   );
 }
 
@@ -972,7 +1096,7 @@ Widget msgboxIcon(String type) {
   if (type == 'on-uac' || type == 'on-foreground-elevated') {
     iconData = Icons.admin_panel_settings;
   }
-  if (type == "info") {
+  if (type.contains('info')) {
     iconData = Icons.info;
   }
   if (iconData != null) {
@@ -985,6 +1109,26 @@ Widget msgboxIcon(String type) {
 
 // title should be null
 Widget msgboxContent(String type, String title, String text) {
+  String translateText(String text) {
+    if (text.indexOf('Failed') == 0 && text.indexOf(': ') > 0) {
+      List<String> words = text.split(': ');
+      for (var i = 0; i < words.length; ++i) {
+        words[i] = translate(words[i]);
+      }
+      text = words.join(': ');
+    } else {
+      List<String> words = text.split(' ');
+      if (words.length > 1 && words[0].endsWith('_tip')) {
+        words[0] = translate(words[0]);
+        final rest = text.substring(words[0].length + 1);
+        text = '${words[0]} ${translate(rest)}';
+      } else {
+        text = translate(text);
+      }
+    }
+    return text;
+  }
+
   return Row(
     children: [
       msgboxIcon(type),
@@ -996,7 +1140,7 @@ Widget msgboxContent(String type, String title, String text) {
               translate(title),
               style: TextStyle(fontSize: 21),
             ).marginOnly(bottom: 10),
-            Text(translate(text), style: const TextStyle(fontSize: 15)),
+            Text(translateText(text), style: const TextStyle(fontSize: 15)),
           ],
         ),
       ),
@@ -1025,6 +1169,45 @@ Color str2color(String str, [alpha = 0xFF]) {
   }
   hash = hash % 16777216;
   return Color((hash & 0xFF7FFF) | (alpha << 24));
+}
+
+Color str2color2(String str, {List<int> existing = const []}) {
+  Map<String, Color> colorMap = {
+    "red": Colors.red,
+    "green": Colors.green,
+    "blue": Colors.blue,
+    "orange": Colors.orange,
+    "purple": Colors.purple,
+    "grey": Colors.grey,
+    "cyan": Colors.cyan,
+    "lime": Colors.lime,
+    "teal": Colors.teal,
+    "pink": Colors.pink[200]!,
+    "indigo": Colors.indigo,
+    "brown": Colors.brown,
+  };
+  final color = colorMap[str.toLowerCase()];
+  if (color != null) {
+    return color.withAlpha(0xFF);
+  }
+  if (str.toLowerCase() == 'yellow') {
+    return Colors.yellow.withAlpha(0xFF);
+  }
+  var hash = 0;
+  for (var i = 0; i < str.length; i++) {
+    hash += str.codeUnitAt(i);
+  }
+  List<Color> colorList = colorMap.values.toList();
+  hash = hash % colorList.length;
+  var result = colorList[hash].withAlpha(0xFF);
+  if (existing.contains(result.value)) {
+    Color? notUsed =
+        colorList.firstWhereOrNull((e) => !existing.contains(e.value));
+    if (notUsed != null) {
+      result = notUsed;
+    }
+  }
+  return result;
 }
 
 const K = 1024;
@@ -1157,7 +1340,7 @@ class AndroidPermissionManager {
 // TODO remove argument contentPadding, it’s not used, getToggle() has not
 RadioListTile<T> getRadio<T>(
     Widget title, T toValue, T curValue, ValueChanged<T?>? onChange,
-    {EdgeInsetsGeometry? contentPadding}) {
+    {EdgeInsetsGeometry? contentPadding, bool? dense}) {
   return RadioListTile<T>(
     contentPadding: contentPadding ?? EdgeInsets.zero,
     visualDensity: VisualDensity.compact,
@@ -1166,6 +1349,7 @@ RadioListTile<T> getRadio<T>(
     value: toValue,
     groupValue: curValue,
     onChanged: onChange,
+    dense: dense,
   );
 }
 
@@ -1182,7 +1366,7 @@ FFI get gFFI => _globalFFI;
 
 Future<void> initGlobalFFI() async {
   debugPrint("_globalFFI init");
-  _globalFFI = FFI();
+  _globalFFI = FFI(null);
   debugPrint("_globalFFI init end");
   // after `put`, can also be globally found by Get.find<FFI>();
   Get.put(_globalFFI, permanent: true);
@@ -1203,7 +1387,7 @@ bool option2bool(String option, String value) {
       option == "stop-service" ||
       option == "direct-server" ||
       option == "stop-rendezvous-service" ||
-      option == "force-always-relay") {
+      option == kOptionForceAlwaysRelay) {
     res = value == "Y";
   } else {
     assert(false);
@@ -1220,13 +1404,43 @@ String bool2option(String option, bool b) {
       option == "stop-service" ||
       option == "direct-server" ||
       option == "stop-rendezvous-service" ||
-      option == "force-always-relay") {
+      option == kOptionForceAlwaysRelay) {
     res = b ? 'Y' : '';
   } else {
     assert(false);
     res = b ? 'Y' : 'N';
   }
   return res;
+}
+
+mainSetBoolOption(String key, bool value) async {
+  String v = bool2option(key, value);
+  await bind.mainSetOption(key: key, value: v);
+}
+
+Future<bool> mainGetBoolOption(String key) async {
+  return option2bool(key, await bind.mainGetOption(key: key));
+}
+
+bool mainGetBoolOptionSync(String key) {
+  return option2bool(key, bind.mainGetOptionSync(key: key));
+}
+
+mainSetLocalBoolOption(String key, bool value) async {
+  String v = bool2option(key, value);
+  await bind.mainSetLocalOption(key: key, value: v);
+}
+
+bool mainGetLocalBoolOptionSync(String key) {
+  return option2bool(key, bind.mainGetLocalOption(key: key));
+}
+
+bool mainGetPeerBoolOptionSync(String id, String key) {
+  return option2bool(key, bind.mainGetPeerOptionSync(id: id, key: key));
+}
+
+mainSetPeerBoolOptionSync(String id, String key, bool v) {
+  bind.mainSetPeerOptionSync(id: id, key: key, value: bool2option(key, v));
 }
 
 Future<bool> matchPeer(String searchText, Peer peer) async {
@@ -1240,7 +1454,7 @@ Future<bool> matchPeer(String searchText, Peer peer) async {
       peer.username.toLowerCase().contains(searchText)) {
     return true;
   }
-  final alias = await bind.mainGetPeerOption(id: peer.id, key: 'alias');
+  final alias = peer.alias;
   if (alias.isEmpty) {
     return false;
   }
@@ -1249,6 +1463,9 @@ Future<bool> matchPeer(String searchText, Peer peer) async {
 
 /// Get the image for the current [platform].
 Widget getPlatformImage(String platform, {double size = 50}) {
+  if (platform.isEmpty) {
+    return Container(width: size, height: size);
+  }
   if (platform == kPeerPlatformMacOS) {
     platform = 'mac';
   } else if (platform != kPeerPlatformLinux &&
@@ -1266,9 +1483,10 @@ class LastWindowPosition {
   double? offsetWidth;
   double? offsetHeight;
   bool? isMaximized;
+  bool? isFullscreen;
 
   LastWindowPosition(this.width, this.height, this.offsetWidth,
-      this.offsetHeight, this.isMaximized);
+      this.offsetHeight, this.isMaximized, this.isFullscreen);
 
   Map<String, dynamic> toJson() {
     return <String, dynamic>{
@@ -1277,6 +1495,7 @@ class LastWindowPosition {
       "offsetWidth": offsetWidth,
       "offsetHeight": offsetHeight,
       "isMaximized": isMaximized,
+      "isFullscreen": isFullscreen,
     };
   }
 
@@ -1292,13 +1511,18 @@ class LastWindowPosition {
     try {
       final m = jsonDecode(content);
       return LastWindowPosition(m["width"], m["height"], m["offsetWidth"],
-          m["offsetHeight"], m["isMaximized"]);
+          m["offsetHeight"], m["isMaximized"], m["isFullscreen"]);
     } catch (e) {
-      debugPrintStack(label: e.toString());
+      debugPrintStack(
+          label:
+              'Failed to load LastWindowPosition "$content" ${e.toString()}');
       return null;
     }
   }
 }
+
+String get windowFramePrefix =>
+    bind.isQs() ? "${kWindowPrefix}qs_" : kWindowPrefix;
 
 /// Save window position and size on exit
 /// Note that windowId must be provided if it's subwindow
@@ -1307,51 +1531,107 @@ Future<void> saveWindowPosition(WindowType type, {int? windowId}) async {
     debugPrint(
         "Error: windowId cannot be null when saving positions for sub window");
   }
+
+  late Offset position;
+  late Size sz;
+  late bool isMaximized;
+  bool isFullscreen = stateGlobal.fullscreen.isTrue ||
+      (Platform.isMacOS && stateGlobal.closeOnFullscreen == true);
+  setFrameIfMaximized() {
+    if (isMaximized) {
+      final pos = bind.getLocalFlutterOption(k: windowFramePrefix + type.name);
+      var lpos = LastWindowPosition.loadFromString(pos);
+      position = Offset(
+          lpos?.offsetWidth ?? position.dx, lpos?.offsetHeight ?? position.dy);
+      sz = Size(lpos?.width ?? sz.width, lpos?.height ?? sz.height);
+    }
+  }
+
   switch (type) {
     case WindowType.Main:
-      final position = await windowManager.getPosition();
-      final sz = await windowManager.getSize();
-      final isMaximized = await windowManager.isMaximized();
-      final pos = LastWindowPosition(
-          sz.width, sz.height, position.dx, position.dy, isMaximized);
-      await bind.setLocalFlutterConfig(
-          k: kWindowPrefix + type.name, v: pos.toString());
+      isMaximized = await windowManager.isMaximized();
+      position = await windowManager.getPosition();
+      sz = await windowManager.getSize();
+      setFrameIfMaximized();
       break;
     default:
       final wc = WindowController.fromWindowId(windowId!);
-      final frame = await wc.getFrame();
-      final position = frame.topLeft;
-      final sz = frame.size;
-      final isMaximized = await wc.isMaximized();
-      final pos = LastWindowPosition(
-          sz.width, sz.height, position.dx, position.dy, isMaximized);
-      debugPrint(
-          "saving frame: $windowId: ${pos.width}/${pos.height}, offset:${pos.offsetWidth}/${pos.offsetHeight}");
-      await bind.setLocalFlutterConfig(
-          k: kWindowPrefix + type.name, v: pos.toString());
+      isMaximized = await wc.isMaximized();
+      final Rect frame;
+      try {
+        frame = await wc.getFrame();
+      } catch (e) {
+        debugPrint("Failed to get frame of window $windowId, it may be hidden");
+        return;
+      }
+      position = frame.topLeft;
+      sz = frame.size;
+      setFrameIfMaximized();
       break;
+  }
+  if (Platform.isWindows) {
+    const kMinOffset = -10000;
+    const kMaxOffset = 10000;
+    if (position.dx < kMinOffset ||
+        position.dy < kMinOffset ||
+        position.dx > kMaxOffset ||
+        position.dy > kMaxOffset) {
+      debugPrint("Invalid position: $position, ignore saving position");
+      return;
+    }
+  }
+
+  final pos = LastWindowPosition(
+      sz.width, sz.height, position.dx, position.dy, isMaximized, isFullscreen);
+  debugPrint(
+      "Saving frame: $windowId: ${pos.width}/${pos.height}, offset:${pos.offsetWidth}/${pos.offsetHeight}, isMaximized:${pos.isMaximized}, isFullscreen:${pos.isFullscreen}");
+
+  await bind.setLocalFlutterOption(
+      k: windowFramePrefix + type.name, v: pos.toString());
+
+  if (type == WindowType.RemoteDesktop && windowId != null) {
+    await _saveSessionWindowPosition(
+        type, windowId, isMaximized, isFullscreen, pos);
+  }
+}
+
+Future _saveSessionWindowPosition(WindowType windowType, int windowId,
+    bool isMaximized, bool isFullscreen, LastWindowPosition pos) async {
+  final remoteList = await DesktopMultiWindow.invokeMethod(
+      windowId, kWindowEventGetRemoteList, null);
+  getPeerPos(String peerId) {
+    if (isMaximized) {
+      final peerPos = bind.mainGetPeerFlutterOptionSync(
+          id: peerId, k: windowFramePrefix + windowType.name);
+      var lpos = LastWindowPosition.loadFromString(peerPos);
+      return LastWindowPosition(
+              lpos?.width ?? pos.offsetWidth,
+              lpos?.height ?? pos.offsetHeight,
+              lpos?.offsetWidth ?? pos.offsetWidth,
+              lpos?.offsetHeight ?? pos.offsetHeight,
+              isMaximized,
+              isFullscreen)
+          .toString();
+    } else {
+      return pos.toString();
+    }
+  }
+
+  if (remoteList != null) {
+    for (final peerId in remoteList.split(',')) {
+      bind.mainSetPeerFlutterOptionSync(
+          id: peerId,
+          k: windowFramePrefix + windowType.name,
+          v: getPeerPos(peerId));
+    }
   }
 }
 
 Future<Size> _adjustRestoreMainWindowSize(double? width, double? height) async {
-  const double minWidth = 600;
-  const double minHeight = 100;
-  double maxWidth = (((isDesktop || isWebDesktop)
-          ? kDesktopMaxDisplayWidth
-          : kMobileMaxDisplayWidth))
-      .toDouble();
-  double maxHeight = ((isDesktop || isWebDesktop)
-          ? kDesktopMaxDisplayHeight
-          : kMobileMaxDisplayHeight)
-      .toDouble();
-
-  if (isDesktop || isWebDesktop) {
-    final screen = (await window_size.getWindowInfo()).screen;
-    if (screen != null) {
-      maxWidth = screen.visibleFrame.width;
-      maxHeight = screen.visibleFrame.height;
-    }
-  }
+  const double minWidth = 1;
+  const double minHeight = 1;
+  const double maxWidth = 6480;
+  const double maxHeight = 6480;
 
   final defaultWidth =
       ((isDesktop || isWebDesktop) ? 1280 : kMobileDefaultDisplayWidth)
@@ -1363,103 +1643,169 @@ Future<Size> _adjustRestoreMainWindowSize(double? width, double? height) async {
   double restoreHeight = height ?? defaultHeight;
 
   if (restoreWidth < minWidth) {
-    restoreWidth = minWidth;
+    restoreWidth = defaultWidth;
   }
   if (restoreHeight < minHeight) {
-    restoreHeight = minHeight;
+    restoreHeight = defaultHeight;
   }
   if (restoreWidth > maxWidth) {
-    restoreWidth = maxWidth;
+    restoreWidth = defaultWidth;
   }
   if (restoreHeight > maxHeight) {
-    restoreHeight = maxHeight;
+    restoreHeight = defaultHeight;
   }
   return Size(restoreWidth, restoreHeight);
 }
 
 /// return null means center
 Future<Offset?> _adjustRestoreMainWindowOffset(
-    double? left, double? top) async {
-  if (left == null || top == null) {
-    await windowManager.center();
-  } else {
-    double windowLeft = max(0.0, left);
-    double windowTop = max(0.0, top);
+  double? left,
+  double? top,
+  double? width,
+  double? height,
+) async {
+  if (left == null || top == null || width == null || height == null) {
+    return null;
+  }
 
-    double frameLeft = double.infinity;
-    double frameTop = double.infinity;
-    double frameRight = ((isDesktop || isWebDesktop)
-            ? kDesktopMaxDisplayWidth
-            : kMobileMaxDisplayWidth)
-        .toDouble();
-    double frameBottom = ((isDesktop || isWebDesktop)
-            ? kDesktopMaxDisplayHeight
-            : kMobileMaxDisplayHeight)
-        .toDouble();
+  double? frameLeft;
+  double? frameTop;
+  double? frameRight;
+  double? frameBottom;
 
-    if (isDesktop || isWebDesktop) {
-      for (final screen in await window_size.getScreenList()) {
-        frameLeft = min(screen.visibleFrame.left, frameLeft);
-        frameTop = min(screen.visibleFrame.top, frameTop);
-        frameRight = max(screen.visibleFrame.right, frameRight);
-        frameBottom = max(screen.visibleFrame.bottom, frameBottom);
-      }
-    }
-
-    if (windowLeft < frameLeft ||
-        windowLeft > frameRight ||
-        windowTop < frameTop ||
-        windowTop > frameBottom) {
-      return null;
-    } else {
-      return Offset(windowLeft, windowTop);
+  if (isDesktop || isWebDesktop) {
+    for (final screen in await window_size.getScreenList()) {
+      frameLeft = frameLeft == null
+          ? screen.visibleFrame.left
+          : min(screen.visibleFrame.left, frameLeft);
+      frameTop = frameTop == null
+          ? screen.visibleFrame.top
+          : min(screen.visibleFrame.top, frameTop);
+      frameRight = frameRight == null
+          ? screen.visibleFrame.right
+          : max(screen.visibleFrame.right, frameRight);
+      frameBottom = frameBottom == null
+          ? screen.visibleFrame.bottom
+          : max(screen.visibleFrame.bottom, frameBottom);
     }
   }
-  return null;
+  if (frameLeft == null) {
+    frameLeft = 0.0;
+    frameTop = 0.0;
+    frameRight = ((isDesktop || isWebDesktop)
+            ? kDesktopMaxDisplaySize
+            : kMobileMaxDisplaySize)
+        .toDouble();
+    frameBottom = ((isDesktop || isWebDesktop)
+            ? kDesktopMaxDisplaySize
+            : kMobileMaxDisplaySize)
+        .toDouble();
+  }
+  final minWidth = 10.0;
+  if ((left + minWidth) > frameRight! ||
+      (top + minWidth) > frameBottom! ||
+      (left + width - minWidth) < frameLeft ||
+      top < frameTop!) {
+    return null;
+  } else {
+    return Offset(left, top);
+  }
 }
 
 /// Restore window position and size on start
 /// Note that windowId must be provided if it's subwindow
-Future<bool> restoreWindowPosition(WindowType type, {int? windowId}) async {
+//
+// display is used to set the offset of the window in individual display mode.
+Future<bool> restoreWindowPosition(WindowType type,
+    {int? windowId, String? peerId, int? display}) async {
+  if (bind
+      .mainGetEnv(key: "DISABLE_RUSTDESK_RESTORE_WINDOW_POSITION")
+      .isNotEmpty) {
+    return false;
+  }
   if (type != WindowType.Main && windowId == null) {
     debugPrint(
         "Error: windowId cannot be null when saving positions for sub window");
+    return false;
   }
-  final pos = bind.getLocalFlutterConfig(k: kWindowPrefix + type.name);
+
+  bool isRemotePeerPos = false;
+  String? pos;
+  // No need to check mainGetLocalBoolOptionSync(kOptionOpenNewConnInTabs)
+  // Though "open in tabs" is true and the new window restore peer position, it's ok.
+  if (type == WindowType.RemoteDesktop && windowId != null && peerId != null) {
+    // If the restore position is called by main window, and the peer id is not null
+    // then we may need to get the position by reading the peer config.
+    // Because the session may not be read at this time.
+    if (desktopType == DesktopType.main) {
+      pos = bind.mainGetPeerFlutterOptionSync(
+          id: peerId, k: windowFramePrefix + type.name);
+    } else {
+      pos = await bind.sessionGetFlutterOptionByPeerId(
+          id: peerId, k: windowFramePrefix + type.name);
+    }
+    isRemotePeerPos = pos != null;
+  }
+  pos ??= bind.getLocalFlutterOption(k: windowFramePrefix + type.name);
+
   var lpos = LastWindowPosition.loadFromString(pos);
   if (lpos == null) {
     debugPrint("no window position saved, ignoring position restoration");
     return false;
   }
+  if (type == WindowType.RemoteDesktop) {
+    if (!isRemotePeerPos && windowId != null) {
+      if (lpos.offsetWidth != null) {
+        lpos.offsetWidth = lpos.offsetWidth! + windowId * kNewWindowOffset;
+      }
+      if (lpos.offsetHeight != null) {
+        lpos.offsetHeight = lpos.offsetHeight! + windowId * kNewWindowOffset;
+      }
+    }
+    if (display != null) {
+      if (lpos.offsetWidth != null) {
+        lpos.offsetWidth = lpos.offsetWidth! + display * kNewWindowOffset;
+      }
+      if (lpos.offsetHeight != null) {
+        lpos.offsetHeight = lpos.offsetHeight! + display * kNewWindowOffset;
+      }
+    }
+  }
+
+  final size = await _adjustRestoreMainWindowSize(lpos.width, lpos.height);
+  final offset = await _adjustRestoreMainWindowOffset(
+    lpos.offsetWidth,
+    lpos.offsetHeight,
+    size.width,
+    size.height,
+  );
+  debugPrint(
+      "restore lpos: ${size.width}/${size.height}, offset:${offset?.dx}/${offset?.dy}");
 
   switch (type) {
     case WindowType.Main:
-      if (lpos.isMaximized == true) {
-        await windowManager.maximize();
-      } else {
-        final size =
-            await _adjustRestoreMainWindowSize(lpos.width, lpos.height);
-        final offset = await _adjustRestoreMainWindowOffset(
-            lpos.offsetWidth, lpos.offsetHeight);
-        await windowManager.setSize(size);
+      restorePos() async {
         if (offset == null) {
           await windowManager.center();
         } else {
           await windowManager.setPosition(offset);
         }
       }
+      if (lpos.isMaximized == true) {
+        await restorePos();
+        if (!bind.isQs()) {
+          await windowManager.maximize();
+        }
+      } else {
+        if (!bind.isQs()) {
+          await windowManager.setSize(size);
+        }
+        await restorePos();
+      }
       return true;
     default:
       final wc = WindowController.fromWindowId(windowId!);
-      if (lpos.isMaximized == true) {
-        await wc.maximize();
-      } else {
-        final size =
-            await _adjustRestoreMainWindowSize(lpos.width, lpos.height);
-        final offset = await _adjustRestoreMainWindowOffset(
-            lpos.offsetWidth, lpos.offsetHeight);
-        debugPrint(
-            "restore lpos: ${size.width}/${size.height}, offset:${offset?.dx}/${offset?.dy}");
+      restoreFrame() async {
         if (offset == null) {
           await wc.center();
         } else {
@@ -1467,6 +1813,21 @@ Future<bool> restoreWindowPosition(WindowType type, {int? windowId}) async {
               Rect.fromLTWH(offset.dx, offset.dy, size.width, size.height);
           await wc.setFrame(frame);
         }
+      }
+      if (lpos.isFullscreen == true) {
+        await restoreFrame();
+        // An duration is needed to avoid the window being restored after fullscreen.
+        Future.delayed(Duration(milliseconds: 300), () async {
+          stateGlobal.setFullscreen(true);
+        });
+      } else if (lpos.isMaximized == true) {
+        await restoreFrame();
+        // An duration is needed to avoid the window being restored after maximized.
+        Future.delayed(Duration(milliseconds: 300), () async {
+          await wc.maximize();
+        });
+      } else {
+        await restoreFrame();
       }
       break;
   }
@@ -1482,18 +1843,13 @@ Future<bool> initUniLinks() async {
   if (Platform.isLinux) {
     return false;
   }
-  // Register uni links for Windows. The required info of url scheme is already
-  // declared in `Info.plist` for macOS.
-  if (Platform.isWindows) {
-    registerProtocol('rustdesk');
-  }
   // check cold boot
   try {
     final initialLink = await getInitialLink();
     if (initialLink == null) {
       return false;
     }
-    return parseRustdeskUri(initialLink);
+    return handleUriLink(uriString: initialLink);
   } catch (err) {
     debugPrintStack(label: "$err");
     return false;
@@ -1511,10 +1867,10 @@ StreamSubscription? listenUniLinks({handleByFlutter = true}) {
   }
 
   final sub = uriLinkStream.listen((Uri? uri) {
-    debugPrint("A uri was received: $uri.");
+    debugPrint("A uri was received: $uri. handleByFlutter $handleByFlutter");
     if (uri != null) {
       if (handleByFlutter) {
-        callUniLinksUriHandler(uri);
+        handleUriLink(uri: uri);
       } else {
         bind.sendUrlScheme(url: uri.toString());
       }
@@ -1527,90 +1883,216 @@ StreamSubscription? listenUniLinks({handleByFlutter = true}) {
   return sub;
 }
 
-/// Handle command line arguments
-///
-/// * Returns true if we successfully handle the startup arguments.
-bool checkArguments() {
-  if (kBootArgs.isNotEmpty) {
-    final ret = parseRustdeskUri(kBootArgs.first);
-    if (ret) {
-      return true;
-    }
-  }
-  // bootArgs:[--connect, 362587269, --switch_uuid, e3d531cc-5dce-41e0-bd06-5d4a2b1eec05]
-  // check connect args
-  var connectIndex = kBootArgs.indexOf("--connect");
-  if (connectIndex == -1) {
-    return false;
-  }
-  String? id =
-      kBootArgs.length <= connectIndex + 1 ? null : kBootArgs[connectIndex + 1];
-  String? password =
-      kBootArgs.length <= connectIndex + 2 ? null : kBootArgs[connectIndex + 2];
-  if (password != null && password.startsWith("--")) {
-    password = null;
-  }
-  final switchUuidIndex = kBootArgs.indexOf("--switch_uuid");
-  String? switchUuid = kBootArgs.length <= switchUuidIndex + 1
-      ? null
-      : kBootArgs[switchUuidIndex + 1];
-  if (id != null) {
-    if (id.startsWith(kUniLinksPrefix)) {
-      return parseRustdeskUri(id);
-    } else {
-      // remove "--connect xxx" in the `bootArgs` array
-      kBootArgs.removeAt(connectIndex);
-      kBootArgs.removeAt(connectIndex);
-      // fallback to peer id
-      Future.delayed(Duration.zero, () {
-        rustDeskWinManager.newRemoteDesktop(id,
-            password: password, switch_uuid: switchUuid);
-      });
-      return true;
-    }
-  }
-  return false;
+enum UriLinkType {
+  remoteDesktop,
+  fileTransfer,
+  portForward,
+  rdp,
 }
 
-/// Parse `rustdesk://` unilinks
-///
-/// Returns true if we successfully handle the uri provided.
-/// [Functions]
-/// 1. New Connection: rustdesk://connection/new/your_peer_id
-bool parseRustdeskUri(String uriPath) {
-  final uri = Uri.tryParse(uriPath);
-  if (uri == null) {
-    debugPrint("uri is not valid: $uriPath");
+// uri link handler
+bool handleUriLink({List<String>? cmdArgs, Uri? uri, String? uriString}) {
+  List<String>? args;
+  if (cmdArgs != null && cmdArgs.isNotEmpty) {
+    args = cmdArgs;
+    // rustdesk <uri link>
+    if (args[0].startsWith(bind.mainUriPrefixSync())) {
+      final uri = Uri.tryParse(args[0]);
+      if (uri != null) {
+        args = urlLinkToCmdArgs(uri);
+      }
+    }
+  } else if (uri != null) {
+    args = urlLinkToCmdArgs(uri);
+  } else if (uriString != null) {
+    final uri = Uri.tryParse(uriString);
+    if (uri != null) {
+      args = urlLinkToCmdArgs(uri);
+    }
+  }
+  if (args == null) {
     return false;
   }
-  return callUniLinksUriHandler(uri);
-}
 
-/// uri handler
-///
-/// Returns true if we successfully handle the uri provided.
-bool callUniLinksUriHandler(Uri uri) {
-  debugPrint("uni links called: $uri");
-  // new connection
-  if (uri.authority == "connection" && uri.path.startsWith("/new/")) {
-    final peerId = uri.path.substring("/new/".length);
-    var param = uri.queryParameters;
-    String? switch_uuid = param["switch_uuid"];
-    String? password = param["password"];
-    Future.delayed(Duration.zero, () {
-      rustDeskWinManager.newRemoteDesktop(peerId,
-          password: password, switch_uuid: switch_uuid);
-    });
+  if (args.isEmpty) {
+    windowOnTop(null);
     return true;
   }
+
+  UriLinkType? type;
+  String? id;
+  String? password;
+  String? switchUuid;
+  bool? forceRelay;
+  for (int i = 0; i < args.length; i++) {
+    switch (args[i]) {
+      case '--connect':
+      case '--play':
+        type = UriLinkType.remoteDesktop;
+        id = args[i + 1];
+        i++;
+        break;
+      case '--file-transfer':
+        type = UriLinkType.fileTransfer;
+        id = args[i + 1];
+        i++;
+        break;
+      case '--port-forward':
+        type = UriLinkType.portForward;
+        id = args[i + 1];
+        i++;
+        break;
+      case '--rdp':
+        type = UriLinkType.rdp;
+        id = args[i + 1];
+        i++;
+        break;
+      case '--password':
+        password = args[i + 1];
+        i++;
+        break;
+      case '--switch_uuid':
+        switchUuid = args[i + 1];
+        i++;
+        break;
+      case '--relay':
+        forceRelay = true;
+        break;
+      default:
+        break;
+    }
+  }
+  if (type != null && id != null) {
+    switch (type) {
+      case UriLinkType.remoteDesktop:
+        Future.delayed(Duration.zero, () {
+          rustDeskWinManager.newRemoteDesktop(id!,
+              password: password,
+              switchUuid: switchUuid,
+              forceRelay: forceRelay);
+        });
+        break;
+      case UriLinkType.fileTransfer:
+        Future.delayed(Duration.zero, () {
+          rustDeskWinManager.newFileTransfer(id!,
+              password: password, forceRelay: forceRelay);
+        });
+        break;
+      case UriLinkType.portForward:
+        Future.delayed(Duration.zero, () {
+          rustDeskWinManager.newPortForward(id!, false,
+              password: password, forceRelay: forceRelay);
+        });
+        break;
+      case UriLinkType.rdp:
+        Future.delayed(Duration.zero, () {
+          rustDeskWinManager.newPortForward(id!, true,
+              password: password, forceRelay: forceRelay);
+        });
+        break;
+    }
+
+    return true;
+  }
+
   return false;
 }
 
-connectMainDesktop(String id,
-    {required bool isFileTransfer,
-    required bool isTcpTunneling,
-    required bool isRDP,
-    bool? forceRelay}) async {
+List<String>? urlLinkToCmdArgs(Uri uri) {
+  String? command;
+  String? id;
+  final options = ["connect", "play", "file-transfer", "port-forward", "rdp"];
+  if (uri.authority.isEmpty &&
+      uri.path.split('').every((char) => char == '/')) {
+    return [];
+  } else if (uri.authority == "connection" && uri.path.startsWith("/new/")) {
+    // For compatibility
+    command = '--connect';
+    id = uri.path.substring("/new/".length);
+  } else if (uri.authority == "config") {
+    if (Platform.isAndroid || Platform.isIOS) {
+      final config = uri.path.substring("/".length);
+      // add a timer to make showToast work
+      Timer(Duration(seconds: 1), () {
+        importConfig(null, null, config);
+      });
+    }
+    return null;
+  } else if (uri.authority == "password") {
+    if (Platform.isAndroid || Platform.isIOS) {
+      final password = uri.path.substring("/".length);
+      if (password.isNotEmpty) {
+        Timer(Duration(seconds: 1), () async {
+          await bind.mainSetPermanentPassword(password: password);
+          showToast(translate('Successful'));
+        });
+      }
+    }
+  } else if (options.contains(uri.authority)) {
+    final optionIndex = options.indexOf(uri.authority);
+    command = '--${uri.authority}';
+    if (uri.path.length > 1) {
+      id = uri.path.substring(1);
+    }
+    if (isMobile && id != null) {
+      if (optionIndex == 0 || optionIndex == 1) {
+        connect(Get.context!, id);
+      } else if (optionIndex == 2) {
+        connect(Get.context!, id, isFileTransfer: true);
+      }
+      return null;
+    }
+  } else if (uri.authority.length > 2 &&
+      (uri.path.length <= 1 ||
+          (uri.path == '/r' || uri.path.startsWith('/r@')))) {
+    // rustdesk://<connect-id>
+    // rustdesk://<connect-id>/r
+    // rustdesk://<connect-id>/r@<server>
+    command = '--connect';
+    id = uri.authority;
+    if (uri.path.length > 1) {
+      id = id + uri.path;
+    }
+  }
+
+  var key = uri.queryParameters["key"];
+  if (id != null) {
+    if (key != null) {
+      id = "$id?key=$key";
+    }
+  }
+
+  if (isMobile) {
+    if (id != null) {
+      final forceRelay = uri.queryParameters["relay"] != null;
+      connect(Get.context!, id, forceRelay: forceRelay);
+      return null;
+    }
+  }
+
+  List<String> args = List.empty(growable: true);
+  if (command != null && id != null) {
+    args.add(command);
+    args.add(id);
+    var param = uri.queryParameters;
+    String? password = param["password"];
+    if (password != null) args.addAll(['--password', password]);
+    String? switch_uuid = param["switch_uuid"];
+    if (switch_uuid != null) args.addAll(['--switch_uuid', switch_uuid]);
+    if (param["relay"] != null) args.add("--relay");
+    return args;
+  }
+
+  return null;
+}
+
+connectMainDesktop(
+  String id, {
+  required bool isFileTransfer,
+  required bool isTcpTunneling,
+  required bool isRDP,
+  bool? forceRelay,
+}) async {
   if (isFileTransfer) {
     await rustDeskWinManager.newFileTransfer(id, forceRelay: forceRelay);
   } else if (isTcpTunneling || isRDP) {
@@ -1624,32 +2106,50 @@ connectMainDesktop(String id,
 /// If [isFileTransfer], starts a session only for file transfer.
 /// If [isTcpTunneling], starts a session only for tcp tunneling.
 /// If [isRDP], starts a session only for rdp.
-connect(BuildContext context, String id,
-    {bool isFileTransfer = false,
-    bool isTcpTunneling = false,
-    bool isRDP = false}) async {
+connect(
+  BuildContext context,
+  String id, {
+  bool isFileTransfer = false,
+  bool isTcpTunneling = false,
+  bool isRDP = false,
+  bool forceRelay = false,
+}) async {
   if (id == '') return;
+  if (!isDesktop || desktopType == DesktopType.main) {
+    try {
+      if (Get.isRegistered<IDTextEditingController>()) {
+        final idController = Get.find<IDTextEditingController>();
+        idController.text = formatID(id);
+      }
+      if (Get.isRegistered<TextEditingController>()) {
+        final fieldTextEditingController = Get.find<TextEditingController>();
+        fieldTextEditingController.text = formatID(id);
+      }
+    } catch (_) {}
+  }
   id = id.replaceAll(' ', '');
   final oldId = id;
   id = await bind.mainHandleRelayId(id: id);
-  final forceRelay = id != oldId;
+  final forceRelay2 = id != oldId || forceRelay;
   assert(!(isFileTransfer && isTcpTunneling && isRDP),
       "more than one connect type");
 
   if (isDesktop) {
     if (desktopType == DesktopType.main) {
-      await connectMainDesktop(id,
-          isFileTransfer: isFileTransfer,
-          isTcpTunneling: isTcpTunneling,
-          isRDP: isRDP,
-          forceRelay: forceRelay);
+      await connectMainDesktop(
+        id,
+        isFileTransfer: isFileTransfer,
+        isTcpTunneling: isTcpTunneling,
+        isRDP: isRDP,
+        forceRelay: forceRelay2,
+      );
     } else {
       await rustDeskWinManager.call(WindowType.Main, kWindowConnect, {
         'id': id,
         'isFileTransfer': isFileTransfer,
         'isTcpTunneling': isTcpTunneling,
         'isRDP': isRDP,
-        "forceRelay": forceRelay,
+        'forceRelay': forceRelay,
       });
     }
   } else {
@@ -1738,10 +2238,14 @@ Future<void> onActiveWindowChanged() async {
   if (rustDeskWinManager.getActiveWindows().isEmpty) {
     // close all sub windows
     try {
-      await Future.wait([
-        saveWindowPosition(WindowType.Main),
-        rustDeskWinManager.closeAllSubWindows()
-      ]);
+      if (Platform.isLinux) {
+        await Future.wait([
+          saveWindowPosition(WindowType.Main),
+          rustDeskWinManager.closeAllSubWindows()
+        ]);
+      } else {
+        await rustDeskWinManager.closeAllSubWindows();
+      }
     } catch (err) {
       debugPrintStack(label: "$err");
     } finally {
@@ -1927,28 +2431,29 @@ Widget dialogButton(String text,
   }
 }
 
-int version_cmp(String v1, String v2) {
+int versionCmp(String v1, String v2) {
   return bind.versionToNumber(v: v1) - bind.versionToNumber(v: v2);
 }
 
 String getWindowName({WindowType? overrideType}) {
+  final name = bind.mainGetAppNameSync();
   switch (overrideType ?? kWindowType) {
     case WindowType.Main:
-      return "RustDesk";
+      return name;
     case WindowType.FileTransfer:
-      return "File Transfer - RustDesk";
+      return "File Transfer - $name";
     case WindowType.PortForward:
-      return "Port Forward - RustDesk";
+      return "Port Forward - $name";
     case WindowType.RemoteDesktop:
-      return "Remote Desktop - RustDesk";
+      return "Remote Desktop - $name";
     default:
       break;
   }
-  return "RustDesk";
+  return name;
 }
 
 String getWindowNameWithId(String id, {WindowType? overrideType}) {
-  return "${DesktopTab.labelGetterAlias(id).value} - ${getWindowName(overrideType: overrideType)}";
+  return "${DesktopTab.tablabelGetter(id).value} - ${getWindowName(overrideType: overrideType)}";
 }
 
 Future<void> updateSystemWindowTheme() async {
@@ -2039,4 +2544,560 @@ void onCopyFingerprint(String value) {
   } else {
     showToast(translate("no fingerprints"));
   }
+}
+
+Future<bool> callMainCheckSuperUserPermission() async {
+  bool checked = await bind.mainCheckSuperUserPermission();
+  if (Platform.isMacOS) {
+    await windowManager.show();
+  }
+  return checked;
+}
+
+Future<void> start_service(bool is_start) async {
+  bool checked = !bind.mainIsInstalled() ||
+      !Platform.isMacOS ||
+      await callMainCheckSuperUserPermission();
+  if (checked) {
+    bind.mainSetOption(key: "stop-service", value: is_start ? "" : "Y");
+  }
+}
+
+typedef WhetherUseRemoteBlock = Future<bool> Function();
+Widget buildRemoteBlock({required Widget child, WhetherUseRemoteBlock? use}) {
+  var block = false.obs;
+  return Obx(() => MouseRegion(
+        onEnter: (_) async {
+          if (use != null && !await use()) {
+            block.value = false;
+            return;
+          }
+          var time0 = DateTime.now().millisecondsSinceEpoch;
+          await bind.mainCheckMouseTime();
+          Timer(const Duration(milliseconds: 120), () async {
+            var d = time0 - await bind.mainGetMouseTime();
+            if (d < 120) {
+              block.value = true;
+            }
+          });
+        },
+        onExit: (event) => block.value = false,
+        child: Stack(children: [
+          child,
+          Offstage(
+              offstage: !block.value,
+              child: Container(
+                color: Colors.black.withOpacity(0.5),
+              )),
+        ]),
+      ));
+}
+
+Widget unreadMessageCountBuilder(RxInt? count,
+    {double? size, double? fontSize}) {
+  return Obx(() => Offstage(
+      offstage: !((count?.value ?? 0) > 0),
+      child: Container(
+        width: size ?? 16,
+        height: size ?? 16,
+        decoration: BoxDecoration(
+          color: Colors.red,
+          shape: BoxShape.circle,
+        ),
+        child: Center(
+          child: Text("${count?.value ?? 0}",
+              maxLines: 1,
+              style: TextStyle(color: Colors.white, fontSize: fontSize ?? 10)),
+        ),
+      )));
+}
+
+Widget unreadTopRightBuilder(RxInt? count, {Widget? icon}) {
+  return Stack(
+    children: [
+      icon ?? Icon(Icons.chat),
+      Positioned(
+          top: 0,
+          right: 0,
+          child: unreadMessageCountBuilder(count, size: 12, fontSize: 8))
+    ],
+  );
+}
+
+String toCapitalized(String s) {
+  if (s.isEmpty) {
+    return s;
+  }
+  return s.substring(0, 1).toUpperCase() + s.substring(1);
+}
+
+Widget buildErrorBanner(BuildContext context,
+    {required RxBool loading,
+    required RxString err,
+    required Function? retry,
+    required Function close}) {
+  const double height = 25;
+  return Obx(() => Offstage(
+        offstage: !(!loading.value && err.value.isNotEmpty),
+        child: Center(
+            child: Container(
+          height: height,
+          color: MyTheme.color(context).errorBannerBg,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              FittedBox(
+                child: Icon(
+                  Icons.info,
+                  color: Color.fromARGB(255, 249, 81, 81),
+                ),
+              ).marginAll(4),
+              Flexible(
+                child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: Tooltip(
+                      message: translate(err.value),
+                      child: Text(
+                        translate(err.value),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    )).marginSymmetric(vertical: 2),
+              ),
+              if (retry != null)
+                InkWell(
+                    onTap: () {
+                      retry.call();
+                    },
+                    child: Text(
+                      translate("Retry"),
+                      style: TextStyle(color: MyTheme.accent),
+                    )).marginSymmetric(horizontal: 5),
+              FittedBox(
+                child: InkWell(
+                  onTap: () {
+                    close.call();
+                  },
+                  child: Icon(Icons.close).marginSymmetric(horizontal: 5),
+                ),
+              ).marginAll(4)
+            ],
+          ),
+        )).marginOnly(bottom: 14),
+      ));
+}
+
+String getDesktopTabLabel(String peerId, String alias) {
+  String label = alias.isEmpty ? peerId : alias;
+  try {
+    String peer = bind.mainGetPeerSync(id: peerId);
+    Map<String, dynamic> config = jsonDecode(peer);
+    if (config['info']['hostname'] is String) {
+      String hostname = config['info']['hostname'];
+      if (hostname.isNotEmpty &&
+          !label.toLowerCase().contains(hostname.toLowerCase())) {
+        label += "@$hostname";
+      }
+    }
+  } catch (e) {
+    debugPrint("Failed to get hostname:$e");
+  }
+  return label;
+}
+
+sessionRefreshVideo(SessionID sessionId, PeerInfo pi) async {
+  if (pi.currentDisplay == kAllDisplayValue) {
+    for (int i = 0; i < pi.displays.length; i++) {
+      await bind.sessionRefresh(sessionId: sessionId, display: i);
+    }
+  } else {
+    await bind.sessionRefresh(sessionId: sessionId, display: pi.currentDisplay);
+  }
+}
+
+bool isChooseDisplayToOpenInNewWindow(PeerInfo pi, SessionID sessionId) =>
+    pi.isSupportMultiDisplay &&
+    useTextureRender &&
+    bind.sessionGetDisplaysAsIndividualWindows(sessionId: sessionId) == 'Y';
+
+Future<List<Rect>> getScreenListWayland() async {
+  final screenRectList = <Rect>[];
+  if (isMainDesktopWindow) {
+    for (var screen in await window_size.getScreenList()) {
+      final scale = kIgnoreDpi ? 1.0 : screen.scaleFactor;
+      double l = screen.frame.left;
+      double t = screen.frame.top;
+      double r = screen.frame.right;
+      double b = screen.frame.bottom;
+      final rect = Rect.fromLTRB(l / scale, t / scale, r / scale, b / scale);
+      screenRectList.add(rect);
+    }
+  } else {
+    final screenList = await rustDeskWinManager.call(
+        WindowType.Main, kWindowGetScreenList, '');
+    try {
+      for (var screen in jsonDecode(screenList.result) as List<dynamic>) {
+        final scale = kIgnoreDpi ? 1.0 : screen['scaleFactor'];
+        double l = screen['frame']['l'];
+        double t = screen['frame']['t'];
+        double r = screen['frame']['r'];
+        double b = screen['frame']['b'];
+        final rect = Rect.fromLTRB(l / scale, t / scale, r / scale, b / scale);
+        screenRectList.add(rect);
+      }
+    } catch (e) {
+      debugPrint('Failed to parse screenList: $e');
+    }
+  }
+  return screenRectList;
+}
+
+Future<List<Rect>> getScreenListNotWayland() async {
+  final screenRectList = <Rect>[];
+  final displays = bind.mainGetDisplays();
+  if (displays.isEmpty) {
+    return screenRectList;
+  }
+  try {
+    for (var display in jsonDecode(displays) as List<dynamic>) {
+      // to-do: scale factor ?
+      // final scale = kIgnoreDpi ? 1.0 : screen.scaleFactor;
+      double l = display['x'].toDouble();
+      double t = display['y'].toDouble();
+      double r = (display['x'] + display['w']).toDouble();
+      double b = (display['y'] + display['h']).toDouble();
+      screenRectList.add(Rect.fromLTRB(l, t, r, b));
+    }
+  } catch (e) {
+    debugPrint('Failed to parse displays: $e');
+  }
+  return screenRectList;
+}
+
+Future<List<Rect>> getScreenRectList() async {
+  return bind.mainCurrentIsWayland()
+      ? await getScreenListWayland()
+      : await getScreenListNotWayland();
+}
+
+openMonitorInTheSameTab(int i, FFI ffi, PeerInfo pi,
+    {bool updateCursorPos = true}) {
+  final displays = i == kAllDisplayValue
+      ? List.generate(pi.displays.length, (index) => index)
+      : [i];
+  bind.sessionSwitchDisplay(
+    isDesktop: isDesktop,
+    sessionId: ffi.sessionId,
+    value: Int32List.fromList(displays),
+  );
+  ffi.ffiModel.switchToNewDisplay(i, ffi.sessionId, ffi.id,
+      updateCursorPos: updateCursorPos);
+}
+
+// Open new tab or window to show this monitor.
+// For now just open new window.
+//
+// screenRect is used to move the new window to the specified screen and set fullscreen.
+openMonitorInNewTabOrWindow(int i, String peerId, PeerInfo pi,
+    {Rect? screenRect}) {
+  final args = {
+    'window_id': stateGlobal.windowId,
+    'peer_id': peerId,
+    'display': i,
+    'display_count': pi.displays.length,
+  };
+  if (screenRect != null) {
+    args['screen_rect'] = {
+      'l': screenRect.left,
+      't': screenRect.top,
+      'r': screenRect.right,
+      'b': screenRect.bottom,
+    };
+  }
+  DesktopMultiWindow.invokeMethod(
+      kMainWindowId, kWindowEventOpenMonitorSession, jsonEncode(args));
+}
+
+tryMoveToScreenAndSetFullscreen(Rect? screenRect) async {
+  if (screenRect == null) {
+    return;
+  }
+  final wc = WindowController.fromWindowId(stateGlobal.windowId);
+  final curFrame = await wc.getFrame();
+  final frame =
+      Rect.fromLTWH(screenRect.left + 30, screenRect.top + 30, 600, 400);
+  if (stateGlobal.fullscreen.isTrue &&
+      curFrame.left <= frame.left &&
+      curFrame.top <= frame.top &&
+      curFrame.width >= frame.width &&
+      curFrame.height >= frame.height) {
+    return;
+  }
+  await wc.setFrame(frame);
+  // An duration is needed to avoid the window being restored after fullscreen.
+  Future.delayed(Duration(milliseconds: 300), () async {
+    stateGlobal.setFullscreen(true);
+  });
+}
+
+parseParamScreenRect(Map<String, dynamic> params) {
+  Rect? screenRect;
+  if (params['screen_rect'] != null) {
+    double l = params['screen_rect']['l'];
+    double t = params['screen_rect']['t'];
+    double r = params['screen_rect']['r'];
+    double b = params['screen_rect']['b'];
+    screenRect = Rect.fromLTRB(l, t, r, b);
+  }
+  return screenRect;
+}
+
+get isInputSourceFlutter => stateGlobal.getInputSource() == "Input source 2";
+
+class _ReconnectCountDownButton extends StatefulWidget {
+  _ReconnectCountDownButton({
+    Key? key,
+    required this.second,
+    required this.onPressed,
+  }) : super(key: key);
+  final VoidCallback? onPressed;
+  final int second;
+
+  @override
+  State<_ReconnectCountDownButton> createState() =>
+      _ReconnectCountDownButtonState();
+}
+
+class _ReconnectCountDownButtonState extends State<_ReconnectCountDownButton> {
+  late int _countdownSeconds = widget.second;
+
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _startCountdownTimer();
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  void _startCountdownTimer() {
+    _timer = Timer.periodic(Duration(seconds: 1), (timer) {
+      if (_countdownSeconds <= 0) {
+        timer.cancel();
+      } else {
+        setState(() {
+          _countdownSeconds--;
+        });
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return dialogButton(
+      '${translate('Reconnect')} (${_countdownSeconds}s)',
+      onPressed: widget.onPressed,
+      isOutline: true,
+    );
+  }
+}
+
+importConfig(List<TextEditingController>? controllers, List<RxString>? errMsgs,
+    String? text) {
+  if (text != null && text.isNotEmpty) {
+    try {
+      final sc = ServerConfig.decode(text);
+      if (sc.idServer.isNotEmpty) {
+        Future<bool> success = setServerConfig(controllers, errMsgs, sc);
+        success.then((value) {
+          if (value) {
+            showToast(translate('Import server configuration successfully'));
+          } else {
+            showToast(translate('Invalid server configuration'));
+          }
+        });
+      } else {
+        showToast(translate('Invalid server configuration'));
+      }
+      return sc;
+    } catch (e) {
+      showToast(translate('Invalid server configuration'));
+    }
+  } else {
+    showToast(translate('Clipboard is empty'));
+  }
+}
+
+Future<bool> setServerConfig(
+  List<TextEditingController>? controllers,
+  List<RxString>? errMsgs,
+  ServerConfig config,
+) async {
+  config.idServer = config.idServer.trim();
+  config.relayServer = config.relayServer.trim();
+  config.apiServer = config.apiServer.trim();
+  config.key = config.key.trim();
+  if (controllers != null) {
+    controllers[0].text = config.idServer;
+    controllers[1].text = config.relayServer;
+    controllers[2].text = config.apiServer;
+    controllers[3].text = config.key;
+  }
+  // id
+  if (config.idServer.isNotEmpty && errMsgs != null) {
+    errMsgs[0].value =
+        translate(await bind.mainTestIfValidServer(server: config.idServer));
+    if (errMsgs[0].isNotEmpty) {
+      return false;
+    }
+  }
+  // relay
+  if (config.relayServer.isNotEmpty && errMsgs != null) {
+    errMsgs[1].value =
+        translate(await bind.mainTestIfValidServer(server: config.relayServer));
+    if (errMsgs[1].isNotEmpty) {
+      return false;
+    }
+  }
+  // api
+  if (config.apiServer.isNotEmpty && errMsgs != null) {
+    if (!config.apiServer.startsWith('http://') &&
+        !config.apiServer.startsWith('https://')) {
+      errMsgs[2].value =
+          '${translate("API Server")}: ${translate("invalid_http")}';
+      return false;
+    }
+  }
+  final oldApiServer = await bind.mainGetApiServer();
+
+  // should set one by one
+  await bind.mainSetOption(
+      key: 'custom-rendezvous-server', value: config.idServer);
+  await bind.mainSetOption(key: 'relay-server', value: config.relayServer);
+  await bind.mainSetOption(key: 'api-server', value: config.apiServer);
+  await bind.mainSetOption(key: 'key', value: config.key);
+
+  final newApiServer = await bind.mainGetApiServer();
+  if (oldApiServer.isNotEmpty &&
+      oldApiServer != newApiServer &&
+      gFFI.userModel.isLogin) {
+    gFFI.userModel.logOut(apiServer: oldApiServer);
+  }
+  return true;
+}
+
+ColorFilter? svgColor(Color? color) {
+  if (color == null) {
+    return null;
+  } else {
+    return ColorFilter.mode(color, BlendMode.srcIn);
+  }
+}
+
+// ignore: must_be_immutable
+class ComboBox extends StatelessWidget {
+  late final List<String> keys;
+  late final List<String> values;
+  late final String initialKey;
+  late final Function(String key) onChanged;
+  late final bool enabled;
+  late String current;
+
+  ComboBox({
+    Key? key,
+    required this.keys,
+    required this.values,
+    required this.initialKey,
+    required this.onChanged,
+    this.enabled = true,
+  }) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    var index = keys.indexOf(initialKey);
+    if (index < 0) {
+      index = 0;
+    }
+    var ref = values[index].obs;
+    current = keys[index];
+    return Container(
+      decoration: BoxDecoration(
+        border: Border.all(
+          color: enabled
+              ? MyTheme.color(context).border2 ?? MyTheme.border
+              : MyTheme.border,
+        ),
+        borderRadius:
+            BorderRadius.circular(8), //border raiuds of dropdown button
+      ),
+      height: 42, // should be the height of a TextField
+      child: Obx(() => DropdownButton<String>(
+            isExpanded: true,
+            value: ref.value,
+            elevation: 16,
+            underline: Container(),
+            style: TextStyle(
+                color: enabled
+                    ? Theme.of(context).textTheme.titleMedium?.color
+                    : disabledTextColor(context, enabled)),
+            icon: const Icon(
+              Icons.expand_more_sharp,
+              size: 20,
+            ).marginOnly(right: 15),
+            onChanged: enabled
+                ? (String? newValue) {
+                    if (newValue != null && newValue != ref.value) {
+                      ref.value = newValue;
+                      current = newValue;
+                      onChanged(keys[values.indexOf(newValue)]);
+                    }
+                  }
+                : null,
+            items: values.map<DropdownMenuItem<String>>((String value) {
+              return DropdownMenuItem<String>(
+                value: value,
+                child: Text(
+                  value,
+                  style: const TextStyle(fontSize: 15),
+                  overflow: TextOverflow.ellipsis,
+                ).marginOnly(left: 15),
+              );
+            }).toList(),
+          )),
+    ).marginOnly(bottom: 5);
+  }
+}
+
+Color? disabledTextColor(BuildContext context, bool enabled) {
+  return enabled
+      ? null
+      : Theme.of(context).textTheme.titleLarge?.color?.withOpacity(0.6);
+}
+
+Widget loadLogo(double size) {
+  return Image.asset('assets/logo.png',
+      width: size,
+      height: size,
+      errorBuilder: (ctx, error, stackTrace) => SvgPicture.asset(
+            'assets/logo.svg',
+            width: size,
+            height: size,
+          ));
+}
+
+var desktopQsHomeLeftPaneSize = Size(280, 300);
+Size getDesktopQsHomeSize() {
+  final magicWidth = 11.0;
+  final magicHeight = 8.0;
+  return desktopQsHomeLeftPaneSize +
+      Offset(magicWidth, kDesktopRemoteTabBarHeight + magicHeight);
+}
+
+Size getDesktopQsSettingsSize() {
+  return Size(768, 600);
 }

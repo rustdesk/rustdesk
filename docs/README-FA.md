@@ -25,17 +25,6 @@
 
 [دریافت نرم‌افزار](https://github.com/rustdesk/rustdesk/releases)
 
-## سرورهای عمومی رایگان
-
-شما مي‌توانید از سرورهای زیر به رایگان استفاده کنید. این لیست ممکن است به مرور زمان تغییر می‌کند. اگر به این سرورها نزدیک نیستید، ممکن است اتصال شما کند باشد.
-| موقعیت | سرویس دهنده | مشخصات |
-| --------- | ------------- | ------------------ |
-| کره‌ی جنوبی، سئول | AWS lightsail | 1 vCPU / 0.5GB RAM |
-| آلمان | Hetzner | 2 vCPU / 4GB RAM |
-| آلمان | Codext | 4 vCPU / 8GB RAM |
-| فنلاند، هلسینکی | 0x101 Cyber Security | 4 vCPU / 8GB RAM |
-| ایالات متحده، اَشبرن | 0x101 Cyber Security | 4 vCPU / 8GB RAM |
-
 ## وابستگی ها
 
 نسخه‌های رومیزی از [sciter](https://sciter.com/) برای رابط کاربری گرافیکی استفاده می‌کنند. خواهشمندیم کتابخانه‌ی پویای sciter را خودتان دانلود کنید از این منابع دریافت کنید.
@@ -115,10 +104,6 @@ wget https://raw.githubusercontent.com/c-smile/sciter-sdk/master/bin.lnx/x64/lib
 mv libsciter-gtk.so target/debug
 VCPKG_ROOT=$HOME/vcpkg cargo run
 ```
-
-### تغییر Wayland به (X11 (Xorg
-
-راست‌دسک از Wayland پشتیبانی نمی کند. برای جایگزنی Xorg به عنوان پیش‌فرض GNOM، [اینجا](https://docs.fedoraproject.org/en-US/quick-docs/configuring-xorg-as-default-gnome-session/) را کلیک کنید.
 
 ## نحوه ساخت با داکر
 

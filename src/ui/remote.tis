@@ -23,7 +23,7 @@ handler.setDisplay = function(x, y, w, h, cursor_embedded) {
     display_origin_y = y;
     display_cursor_embedded = cursor_embedded;
     adaptDisplay();
-    if (recording) handler.record_screen(true, w, h);
+    if (recording) handler.record_screen(true, 0, w, h);
 }
 
 // in case toolbar not shown correctly
@@ -273,12 +273,12 @@ function handler.onMouse(evt)
       case Event.MOUSE_ENTER:
         entered = true;
         stdout.println("enter");
-        handler.enter();
+        handler.enter(handler.get_keyboard_mode());
         return keyboard_enabled;
       case Event.MOUSE_LEAVE:
         entered = false;
         stdout.println("leave");
-        handler.leave();
+        handler.leave(handler.get_keyboard_mode());
         if (is_left_down && handler.peer_platform() == "Android") {
             is_left_down = false;
             handler.send_mouse((1 << 3) | 2, 0, 0, evt.altKey,
@@ -478,7 +478,7 @@ function self.closing() {
     var (x, y, w, h) = view.box(#rectw, #border, #screen);
     if (is_file_transfer) save_file_transfer_close_state();
     if (is_file_transfer || is_port_forward || size_adapted) handler.save_size(x, y, w, h);
-    if (recording) handler.record_screen(false, display_width, display_height);
+    if (recording) handler.record_screen(false, 0, display_width, display_height);
 }
 
 var qualityMonitor;
@@ -510,17 +510,21 @@ class QualityMonitor: Reactor.Component
             <div>
                 Codec: {qualityMonitorData[4]}
             </div>
+            <div>
+                Chroma: {qualityMonitorData[5]}
+            </div>
         </div>;
     }
 }
 
 $(#quality-monitor).content(<QualityMonitor />);
-handler.updateQualityStatus = function(speed, fps, delay, bitrate, codec_format) {
+handler.updateQualityStatus = function(speed, fps, delay, bitrate, codec_format, chroma) {
     speed ? qualityMonitorData[0] = speed:null;
     fps ? qualityMonitorData[1] = fps:null;
     delay ? qualityMonitorData[2] = delay:null;
     bitrate ? qualityMonitorData[3] = bitrate:null;
     codec_format ? qualityMonitorData[4] = codec_format:null;
+    chroma ? qualityMonitorData[5] = chroma:null;
     qualityMonitor.update();
 }
 

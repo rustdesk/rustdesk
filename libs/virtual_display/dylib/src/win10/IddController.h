@@ -59,9 +59,26 @@ BOOL IsDeviceCreated(PBOOL created);
 BOOL DeviceCreate(PHSWDEVICE hSwDevice);
 
 /**
+ * @brief Create device and set the lifetime.
+ *        Only one device should be created.
+ *        If device is installed ealier, this function returns FALSE.
+ *
+ * @param lifetime [in] The lifetime to set after creating the device. NULL means do not set the lifetime.
+ *                      https://learn.microsoft.com/en-us/windows/win32/api/swdevice/nf-swdevice-swdevicesetlifetime
+ * @param hSwDevice [out] Handler of software device, used by DeviceCreate(). Should be **NULL**.
+ *
+ * @return TRUE/FALSE. If FALSE returned, error message can be retrieved by GetLastMsg()
+ *
+ * @see GetLastMsg#GetLastMsg
+ *
+ */
+BOOL DeviceCreateWithLifetime(SW_DEVICE_LIFETIME * lifetime, PHSWDEVICE hSwDevice);
+
+/**
  * @brief Close device.
  *
  * @param hSwDevice Handler of software device, used by SwDeviceClose().
+ *                  If hSwDevice is INVALID_HANDLE_VALUE or NULL, try find and close the device.
  *
  */
 VOID DeviceClose(HSWDEVICE hSwDevice);

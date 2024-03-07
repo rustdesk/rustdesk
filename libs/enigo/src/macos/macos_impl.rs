@@ -37,6 +37,9 @@ const kUCKeyActionDisplay: u16 = 3;
 const kUCKeyTranslateDeadKeysBit: OptionBits = 1 << 31;
 const BUF_LEN: usize = 4;
 
+/// The event source user data value of cgevent.
+pub const ENIGO_INPUT_EXTRA_VALUE: i64 = 100;
+
 #[allow(improper_ctypes)]
 #[allow(non_snake_case)]
 #[link(name = "ApplicationServices", kind = "framework")]
@@ -131,6 +134,7 @@ impl Enigo {
 
     fn post(&self, event: CGEvent) {
         event.set_flags(self.flags);
+        event.set_integer_value_field(EventField::EVENT_SOURCE_USER_DATA, ENIGO_INPUT_EXTRA_VALUE);
         event.post(CGEventTapLocation::HID);
     }
 }
@@ -612,11 +616,6 @@ impl Enigo {
         if length < 0 {
             length *= -1;
             scroll_direction *= -1;
-        }
-
-        // fix scroll distance for track pad
-        if is_track_pad {
-            length *= 3;
         }
 
         if let Some(src) = self.event_source.as_ref() {

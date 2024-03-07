@@ -321,7 +321,7 @@ pub fn uninstall_plugin(id: &str, called_by_ui: bool) {
         }
     }
 
-    if is_server() {
+    if super::is_server_running() {
         super::plugins::unload_plugin(&id);
     }
 }

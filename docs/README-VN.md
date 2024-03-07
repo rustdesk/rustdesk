@@ -27,18 +27,6 @@ Mọi người đều đuợc chào đón để đóng góp vào RustDesk. Để
     alt="Get it on F-Droid"
     height="80">](https://f-droid.org/en/packages/com.carriez.flutter_hbb)
 
-## Các Máy Chủ Công Khai Miễn Phí
-
-Dưới đây là những máy chủ mà bạn có thể sử dụng mà không mất phí, chú ý là máy chủ có thể thay đổi theo thời gian. Nếu địa điểm của bạn không gần một trong số những máy chủ này, thì kết nói có thể chậm.
-
-| Địa điểm | Nhà cung cấp | Cấu hình |
-| --------- | ------------- | ------------------ |
-| Seoul | AWS lightsail | 1 vCPU / 0.5GB RAM |
-| Germany | Hetzner | 2 vCPU / 4GB RAM |
-| Germany | Codext | 4 vCPU / 8GB RAM |
-| Finland (Helsinki) | 0x101 Cyber Security | 4 vCPU / 8GB RAM |
-| USA (Ashburn) | 0x101 Cyber Security | 4 vCPU / 8GB RAM |
-
 ## Dependencies
 
 Phiên bản cho máy tính sử dụng [sciter](https://sciter.com/) cho giao diện của phần mềm, vậy nên bạn cần tự tải về thư viện sciter.
@@ -119,10 +107,6 @@ wget https://raw.githubusercontent.com/c-smile/sciter-sdk/master/bin.lnx/x64/lib
 mv libsciter-gtk.so target/debug
 VCPKG_ROOT=$HOME/vcpkg cargo run
 ```
-
-### Chuyển từ Wayland sang X11 (Xorg)
-
-RustDesk hiện không hỗ trợ Wayland. Hãy xem [đường linh ở đây](https://docs.fedoraproject.org/en-US/quick-docs/configuring-xorg-as-default-gnome-session/) cách để cài đặt Xorg làm session mặc định của GNOME.
 
 ## Cách để build sử dụng Docker
 

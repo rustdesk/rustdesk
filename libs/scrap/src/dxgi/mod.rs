@@ -20,6 +20,11 @@ use winapi::{
     },
 };
 
+use crate::RotationMode::*;
+
+use crate::{AdapterDevice, Frame, PixelBuffer};
+use std::ffi::c_void;
+
 pub struct ComPtr<T>(*mut T);
 impl<T> ComPtr<T> {
     fn is_null(&self) -> bool {
@@ -43,29 +48,32 @@ pub struct Capturer {
     duplication: ComPtr<IDXGIOutputDuplication>,
     fastlane: bool,
     surface: ComPtr<IDXGISurface>,
+    texture: ComPtr<ID3D11Texture2D>,
     width: usize,
     height: usize,
-    use_yuv: bool,
-    yuv: Vec<u8>,
     rotated: Vec<u8>,
     gdi_capturer: Option<CapturerGDI>,
     gdi_buffer: Vec<u8>,
     saved_raw_data: Vec<u8>, // for faster compare and copy
+    output_texture: bool,
+    adapter_desc1: DXGI_ADAPTER_DESC1,
 }
 
 impl Capturer {
-    pub fn new(display: Display, use_yuv: bool) -> io::Result<Capturer> {
+    pub fn new(display: Display) -> io::Result<Capturer> {
         let mut device = ptr::null_mut();
         let mut context = ptr::null_mut();
         let mut duplication = ptr::null_mut();
         #[allow(invalid_value)]
         let mut desc = unsafe { mem::MaybeUninit::uninit().assume_init() };
+        #[allow(invalid_value)]
+        let mut adapter_desc1 = unsafe { mem::MaybeUninit::uninit().assume_init() };
         let mut gdi_capturer = None;
 
         let mut res = if display.gdi {
             wrap_hresult(1)
         } else {
-            wrap_hresult(unsafe {
+            let res = wrap_hresult(unsafe {
                 D3D11CreateDevice(
                     display.adapter.0 as *mut _,
                     D3D_DRIVER_TYPE_UNKNOWN,
@@ -78,7 +86,12 @@ impl Capturer {
                     ptr::null_mut(),
                     &mut context,
                 )
-            })
+            });
+            if res.is_ok() {
+                wrap_hresult(unsafe { (*display.adapter.0).GetDesc1(&mut adapter_desc1) })
+            } else {
+                res
+            }
         };
         let device = ComPtr(device);
         let context = ComPtr(context);
@@ -145,20 +158,17 @@ impl Capturer {
             duplication: ComPtr(duplication),
             fastlane: desc.DesktopImageInSystemMemory == TRUE,
             surface: ComPtr(ptr::null_mut()),
+            texture: ComPtr(ptr::null_mut()),
             width: display.width() as usize,
             height: display.height() as usize,
             display,
-            use_yuv,
-            yuv: Vec::new(),
             rotated: Vec::new(),
             gdi_capturer,
             gdi_buffer: Vec::new(),
             saved_raw_data: Vec::new(),
+            output_texture: false,
+            adapter_desc1,
         })
-    }
-
-    pub fn set_use_yuv(&mut self, use_yuv: bool) {
-        self.use_yuv = use_yuv;
     }
 
     pub fn is_gdi(&self) -> bool {
@@ -173,6 +183,11 @@ impl Capturer {
     pub fn cancel_gdi(&mut self) {
         self.gdi_buffer = Vec::new();
         self.gdi_capturer.take();
+    }
+
+    #[cfg(feature = "gpucodec")]
+    pub fn set_output_texture(&mut self, texture: bool) {
+        self.output_texture = texture;
     }
 
     unsafe fn load_frame(&mut self, timeout: UINT) -> io::Result<(*const u8, i32)> {
@@ -236,7 +251,21 @@ impl Capturer {
         Ok(surface)
     }
 
-    pub fn frame<'a>(&'a mut self, timeout: UINT) -> io::Result<&'a [u8]> {
+    pub fn frame<'a>(&'a mut self, timeout: UINT) -> io::Result<Frame<'a>> {
+        if self.output_texture {
+            Ok(Frame::Texture(self.get_texture(timeout)?))
+        } else {
+            let width = self.width;
+            let height = self.height;
+            Ok(Frame::PixelBuffer(PixelBuffer::new(
+                self.get_pixelbuffer(timeout)?,
+                width,
+                height,
+            )))
+        }
+    }
+
+    fn get_pixelbuffer<'a>(&'a mut self, timeout: UINT) -> io::Result<&'a [u8]> {
         unsafe {
             // Release last frame.
             // No error checking needed because we don't care.
@@ -259,10 +288,10 @@ impl Capturer {
                     self.unmap();
                     let r = self.load_frame(timeout)?;
                     let rotate = match self.display.rotation() {
-                        DXGI_MODE_ROTATION_IDENTITY | DXGI_MODE_ROTATION_UNSPECIFIED => 0,
-                        DXGI_MODE_ROTATION_ROTATE90 => 90,
-                        DXGI_MODE_ROTATION_ROTATE180 => 180,
-                        DXGI_MODE_ROTATION_ROTATE270 => 270,
+                        DXGI_MODE_ROTATION_IDENTITY | DXGI_MODE_ROTATION_UNSPECIFIED => kRotate0,
+                        DXGI_MODE_ROTATION_ROTATE90 => kRotate90,
+                        DXGI_MODE_ROTATION_ROTATE180 => kRotate180,
+                        DXGI_MODE_ROTATION_ROTATE270 => kRotate270,
                         _ => {
                             return Err(io::Error::new(
                                 io::ErrorKind::Other,
@@ -270,7 +299,7 @@ impl Capturer {
                             ));
                         }
                     };
-                    if rotate == 0 {
+                    if rotate == kRotate0 {
                         slice::from_raw_parts(r.0, r.1 as usize * self.height)
                     } else {
                         self.rotated.resize(self.width * self.height * 4, 0);
@@ -279,12 +308,12 @@ impl Capturer {
                             r.1,
                             self.rotated.as_mut_ptr(),
                             4 * self.width as i32,
-                            if rotate == 180 {
+                            if rotate == kRotate180 {
                                 self.width
                             } else {
                                 self.height
                             } as _,
-                            if rotate != 180 {
+                            if rotate != kRotate180 {
                                 self.width
                             } else {
                                 self.height
@@ -295,19 +324,35 @@ impl Capturer {
                     }
                 }
             };
-            Ok({
-                if self.use_yuv {
-                    crate::common::bgra_to_i420(
-                        self.width as usize,
-                        self.height as usize,
-                        &result,
-                        &mut self.yuv,
-                    );
-                    &self.yuv[..]
-                } else {
-                    result
-                }
-            })
+            Ok(result)
+        }
+    }
+
+    fn get_texture(&mut self, timeout: UINT) -> io::Result<*mut c_void> {
+        unsafe {
+            if self.duplication.0.is_null() {
+                return Err(std::io::ErrorKind::AddrNotAvailable.into());
+            }
+            (*self.duplication.0).ReleaseFrame();
+            let mut frame = ptr::null_mut();
+            #[allow(invalid_value)]
+            let mut info = mem::MaybeUninit::uninit().assume_init();
+
+            wrap_hresult((*self.duplication.0).AcquireNextFrame(timeout, &mut info, &mut frame))?;
+            let frame = ComPtr(frame);
+
+            if info.AccumulatedFrames == 0 || *info.LastPresentTime.QuadPart() == 0 {
+                return Err(std::io::ErrorKind::WouldBlock.into());
+            }
+
+            let mut texture: *mut ID3D11Texture2D = ptr::null_mut();
+            (*frame.0).QueryInterface(
+                &IID_ID3D11Texture2D,
+                &mut texture as *mut *mut _ as *mut *mut _,
+            );
+            let texture = ComPtr(texture);
+            self.texture = texture;
+            Ok(self.texture.0 as *mut c_void)
         }
     }
 
@@ -321,6 +366,15 @@ impl Capturer {
                     (*self.surface.0).Unmap();
                 }
             }
+        }
+    }
+
+    pub fn device(&self) -> AdapterDevice {
+        AdapterDevice {
+            device: self.device.0 as _,
+            vendor_id: self.adapter_desc1.VendorId,
+            luid: ((self.adapter_desc1.AdapterLuid.HighPart as i64) << 32)
+                | self.adapter_desc1.AdapterLuid.LowPart as i64,
         }
     }
 }
@@ -564,6 +618,22 @@ impl Display {
             self.desc.DesktopCoordinates.left,
             self.desc.DesktopCoordinates.top,
         )
+    }
+
+    #[cfg(feature = "gpucodec")]
+    pub fn adapter_luid(&self) -> Option<i64> {
+        unsafe {
+            if !self.adapter.is_null() {
+                #[allow(invalid_value)]
+                let mut adapter_desc1 = mem::MaybeUninit::uninit().assume_init();
+                if wrap_hresult((*self.adapter.0).GetDesc1(&mut adapter_desc1)).is_ok() {
+                    let luid = ((adapter_desc1.AdapterLuid.HighPart as i64) << 32)
+                        | adapter_desc1.AdapterLuid.LowPart as i64;
+                    return Some(luid);
+                }
+            }
+            None
+        }
     }
 }
 

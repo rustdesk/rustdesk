@@ -24,17 +24,6 @@ RustDeskは誰からの貢献も歓迎します。 貢献するには [`docs/CON
 
 [**BINARY DOWNLOAD**](https://github.com/rustdesk/rustdesk/releases)
 
-## 無料のパブリックサーバー
-
-下記のサーバーは、無料で使用できますが、後々変更されることがあります。これらのサーバーから遠い場合、接続が遅い可能性があります。
-| Location | Vendor | Specification |
-| --------- | ------------- | ------------------ |
-| Seoul | AWS lightsail | 1 vCPU / 0.5GB RAM |
-| Germany | Hetzner | 2 vCPU / 4GB RAM |
-| Germany | Codext | 4 vCPU / 8GB RAM |
-| Finland (Helsinki) | 0x101 Cyber Security | 4 vCPU / 8GB RAM |
-| USA (Ashburn) | 0x101 Cyber Security | 4 vCPU / 8GB RAM |
-
 ## 依存関係
 
 デスクトップ版ではGUIに [sciter](https://sciter.com/) が使われています。 sciter dynamic library をダウンロードしてください。
@@ -117,11 +106,6 @@ wget https://raw.githubusercontent.com/c-smile/sciter-sdk/master/bin.lnx/x64/lib
 mv libsciter-gtk.so target/debug
 VCPKG_ROOT=$HOME/vcpkg cargo run
 ```
-
-### Wayland の場合、X11（Xorg）に変更します
-
-RustDeskはWaylandをサポートしていません。
- [こちら](https://docs.fedoraproject.org/en-US/quick-docs/configuring-xorg-as-default-gnome-session/) を確認して、XorgをデフォルトのGNOMEセッションとして構成します。
 
 ## Dockerでビルドする方法
 

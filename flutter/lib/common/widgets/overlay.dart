@@ -26,25 +26,45 @@ class DraggableChatWindow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Draggable(
-        checkKeyboard: true,
-        position: position,
-        width: width,
-        height: height,
-        builder: (context, onPanUpdate) {
-          return isIOS
-              ? ChatPage(chatModel: chatModel)
-              : Scaffold(
-                  resizeToAvoidBottomInset: false,
-                  appBar: CustomAppBar(
-                    onPanUpdate: onPanUpdate,
-                    appBar: isDesktop
-                        ? _buildDesktopAppBar(context)
-                        : _buildMobileAppBar(context),
+    return isIOS
+        ? IOSDraggable(
+            position: position,
+            chatModel: chatModel,
+            width: width,
+            height: height,
+            builder: (context) {
+              return Column(
+                children: [
+                  _buildMobileAppBar(context),
+                  Expanded(
+                    child: ChatPage(chatModel: chatModel),
                   ),
-                  body: ChatPage(chatModel: chatModel),
-                );
-        });
+                ],
+              );
+            },
+          )
+        : Draggable(
+            checkKeyboard: true,
+            position: position,
+            width: width,
+            height: height,
+            chatModel: chatModel,
+            builder: (context, onPanUpdate) {
+              final child = Scaffold(
+                resizeToAvoidBottomInset: false,
+                appBar: CustomAppBar(
+                  onPanUpdate: onPanUpdate,
+                  appBar: isDesktop
+                      ? _buildDesktopAppBar(context)
+                      : _buildMobileAppBar(context),
+                ),
+                body: ChatPage(chatModel: chatModel),
+              );
+              return Container(
+                  decoration:
+                      BoxDecoration(border: Border.all(color: MyTheme.border)),
+                  child: child);
+            });
   }
 
   Widget _buildMobileAppBar(BuildContext context) {
@@ -222,6 +242,7 @@ class Draggable extends StatefulWidget {
       this.position = Offset.zero,
       required this.width,
       required this.height,
+      this.chatModel,
       required this.builder})
       : super(key: key);
 
@@ -230,6 +251,7 @@ class Draggable extends StatefulWidget {
   final Offset position;
   final double width;
   final double height;
+  final ChatModel? chatModel;
   final Widget Function(BuildContext, GestureDragUpdateCallback) builder;
 
   @override
@@ -238,6 +260,7 @@ class Draggable extends StatefulWidget {
 
 class _DraggableState extends State<Draggable> {
   late Offset _position;
+  late ChatModel? _chatModel;
   bool _keyboardVisible = false;
   double _saveHeight = 0;
   double _lastBottomHeight = 0;
@@ -246,6 +269,7 @@ class _DraggableState extends State<Draggable> {
   void initState() {
     super.initState();
     _position = widget.position;
+    _chatModel = widget.chatModel;
   }
 
   void onPanUpdate(DragUpdateDetails d) {
@@ -272,6 +296,7 @@ class _DraggableState extends State<Draggable> {
     setState(() {
       _position = Offset(x, y);
     });
+    _chatModel?.setChatWindowPosition(_position);
   }
 
   checkScreenSize() {}
@@ -327,6 +352,107 @@ class _DraggableState extends State<Draggable> {
   }
 }
 
+class IOSDraggable extends StatefulWidget {
+  const IOSDraggable(
+      {Key? key,
+      this.position = Offset.zero,
+      this.chatModel,
+      required this.width,
+      required this.height,
+      required this.builder})
+      : super(key: key);
+
+  final Offset position;
+  final ChatModel? chatModel;
+  final double width;
+  final double height;
+  final Widget Function(BuildContext) builder;
+
+  @override
+  IOSDraggableState createState() => IOSDraggableState();
+}
+
+class IOSDraggableState extends State<IOSDraggable> {
+  late Offset _position;
+  late ChatModel? _chatModel;
+  late double _width;
+  late double _height;
+  bool _keyboardVisible = false;
+  double _saveHeight = 0;
+  double _lastBottomHeight = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _position = widget.position;
+    _chatModel = widget.chatModel;
+    _width = widget.width;
+    _height = widget.height;
+  }
+
+  checkKeyboard() {
+    final bottomHeight = MediaQuery.of(context).viewInsets.bottom;
+    final currentVisible = bottomHeight != 0;
+
+    // save
+    if (!_keyboardVisible && currentVisible) {
+      _saveHeight = _position.dy;
+    }
+
+    // reset
+    if (_lastBottomHeight > 0 && bottomHeight == 0) {
+      setState(() {
+        _position = Offset(_position.dx, _saveHeight);
+      });
+    }
+
+    // onKeyboardVisible
+    if (_keyboardVisible && currentVisible) {
+      final sumHeight = bottomHeight + _height;
+      final contextHeight = MediaQuery.of(context).size.height;
+      if (sumHeight + _position.dy > contextHeight) {
+        final y = contextHeight - sumHeight;
+        setState(() {
+          _position = Offset(_position.dx, y);
+        });
+      }
+    }
+
+    _keyboardVisible = currentVisible;
+    _lastBottomHeight = bottomHeight;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    checkKeyboard();
+    return Stack(
+      children: [
+        Positioned(
+          left: _position.dx,
+          top: _position.dy,
+          child: GestureDetector(
+            onPanUpdate: (details) {
+              setState(() {
+                _position += details.delta;
+              });
+              _chatModel?.setChatWindowPosition(_position);
+            },
+            child: Material(
+              child: Container(
+                width: _width,
+                height: _height,
+                decoration:
+                    BoxDecoration(border: Border.all(color: MyTheme.border)),
+                child: widget.builder(context),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 class QualityMonitor extends StatelessWidget {
   final QualityMonitorModel qualityMonitorModel;
   QualityMonitor(this.qualityMonitorModel);
@@ -372,6 +498,7 @@ class QualityMonitor extends StatelessWidget {
                           "${qualityMonitorModel.data.targetBitrate ?? '-'}kb"),
                       _row(
                           "Codec", qualityMonitorModel.data.codecFormat ?? '-'),
+                      _row("Chroma", qualityMonitorModel.data.chroma ?? '-'),
                     ],
                   ),
                 )

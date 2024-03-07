@@ -80,6 +80,14 @@ extern "C" {
     pub fn xcb_get_atom_name_name(reply: *const xcb_get_atom_name_request_t) -> *const u8;
 
     pub fn xcb_get_atom_name_name_length(reply: *const xcb_get_atom_name_reply_t) -> i32;
+
+    pub fn xcb_shm_query_version(c: *mut xcb_connection_t) -> xcb_shm_query_version_cookie_t;
+    
+    pub fn xcb_shm_query_version_reply(
+        c: *mut xcb_connection_t,
+        cookie: xcb_shm_query_version_cookie_t,
+        e: *mut *mut xcb_generic_error_t,
+    ) -> *const xcb_shm_query_version_reply_t;
 }
 
 pub const XCB_IMAGE_FORMAT_Z_PIXMAP: u8 = 2;
@@ -220,4 +228,23 @@ pub struct xcb_randr_get_monitors_reply_t {
     pub n_monitors: u32,
     pub n_outputs: u32,
     pub pad1: [u8; 12],
+}
+
+#[repr(C)]
+pub struct xcb_shm_query_version_cookie_t {
+    pub sequence: u32,
+}
+
+#[repr(C)]
+pub struct xcb_shm_query_version_reply_t {
+    pub response_type: u8,
+    pub shared_pixmaps: u8,
+    pub sequence: u16,
+    pub length: u32,
+    pub major_version: u16,
+    pub minor_version: u16,
+    pub uid: u16,
+    pub gid: u16,
+    pub pixmap_format: u8,
+    pub pad0: [u8; 15],
 }

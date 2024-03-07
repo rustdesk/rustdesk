@@ -371,7 +371,7 @@ fn load_plugin_path(path: &str) -> ResultType<()> {
     PLUGIN_INFO.write().unwrap().insert(id.clone(), plugin_info);
 
     let init_info = serde_json::to_string(&InitInfo {
-        is_server: crate::common::is_server(),
+        is_server: super::is_server_running(),
     })?;
     let init_data = InitData {
         version: str_to_cstr_ret(crate::VERSION),
@@ -389,7 +389,7 @@ fn load_plugin_path(path: &str) -> ResultType<()> {
         log::error!("Failed to init plugin '{}', {}", desc.meta().id, e);
     }
 
-    if is_server() {
+    if super::is_server_running() {
         super::config::ManagerConfig::add_plugin(&desc.meta().id)?;
     }
 
@@ -628,13 +628,7 @@ fn reload_ui(desc: &Desc, sync_to: Option<&str>) {
                     // The first element is the "client" or "host".
                     // The second element is the "main", "remote", "cm", "file transfer", "port forward".
                     if v.len() >= 2 {
-                        let available_channels = vec![
-                            flutter::APP_TYPE_MAIN,
-                            flutter::APP_TYPE_DESKTOP_REMOTE,
-                            flutter::APP_TYPE_CM,
-                            flutter::APP_TYPE_DESKTOP_FILE_TRANSFER,
-                            flutter::APP_TYPE_DESKTOP_PORT_FORWARD,
-                        ];
+                        let available_channels = flutter::get_global_event_channels();
                         if available_channels.contains(&v[1]) {
                             let _res = flutter::push_global_event(v[1], make_event(&ui));
                         }
