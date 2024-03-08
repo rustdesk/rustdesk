@@ -42,25 +42,21 @@ class ServerPage extends StatefulWidget implements PageShape {
           return [
             PopupMenuItem(
               enabled: gFFI.serverModel.connectStatus > 0,
-              padding: const EdgeInsets.symmetric(horizontal: 16.0),
               value: "changeID",
               child: Text(translate("Change ID")),
             ),
             const PopupMenuDivider(),
             PopupMenuItem(
-              padding: const EdgeInsets.symmetric(horizontal: 0.0),
               value: 'AcceptSessionsViaPassword',
               child: listTile(
                   'Accept sessions via password', approveMode == 'password'),
             ),
             PopupMenuItem(
-              padding: const EdgeInsets.symmetric(horizontal: 0.0),
               value: 'AcceptSessionsViaClick',
               child:
                   listTile('Accept sessions via click', approveMode == 'click'),
             ),
             PopupMenuItem(
-              padding: const EdgeInsets.symmetric(horizontal: 0.0),
               value: "AcceptSessionsViaBoth",
               child: listTile("Accept sessions via both",
                   approveMode != 'password' && approveMode != 'click'),
@@ -69,35 +65,30 @@ class ServerPage extends StatefulWidget implements PageShape {
             if (showPasswordOption &&
                 verificationMethod != kUseTemporaryPassword)
               PopupMenuItem(
-                padding: const EdgeInsets.symmetric(horizontal: 16.0),
                 value: "setPermanentPassword",
                 child: Text(translate("Set permanent password")),
               ),
             if (showPasswordOption &&
                 verificationMethod != kUsePermanentPassword)
               PopupMenuItem(
-                padding: const EdgeInsets.symmetric(horizontal: 16.0),
                 value: "setTemporaryPasswordLength",
                 child: Text(translate("One-time password length")),
               ),
             if (showPasswordOption) const PopupMenuDivider(),
             if (showPasswordOption)
               PopupMenuItem(
-                padding: const EdgeInsets.symmetric(horizontal: 0.0),
                 value: kUseTemporaryPassword,
                 child: listTile('Use one-time password',
                     verificationMethod == kUseTemporaryPassword),
               ),
             if (showPasswordOption)
               PopupMenuItem(
-                padding: const EdgeInsets.symmetric(horizontal: 0.0),
                 value: kUsePermanentPassword,
                 child: listTile('Use permanent password',
                     verificationMethod == kUsePermanentPassword),
               ),
             if (showPasswordOption)
               PopupMenuItem(
-                padding: const EdgeInsets.symmetric(horizontal: 0.0),
                 value: kUseBothPasswords,
                 child: listTile(
                     'Use both passwords',
