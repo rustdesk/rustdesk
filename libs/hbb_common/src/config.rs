@@ -66,6 +66,12 @@ lazy_static::lazy_static! {
     static ref KEY_PAIR: Arc<Mutex<Option<KeyPair>>> = Default::default();
     static ref USER_DEFAULT_CONFIG: Arc<RwLock<(UserDefaultConfig, Instant)>> = Arc::new(RwLock::new((UserDefaultConfig::load(), Instant::now())));
     pub static ref NEW_STORED_PEER_CONFIG: Arc<Mutex<HashSet<String>>> = Default::default();
+    pub static ref DEFAULT_SETTINGS: Arc<RwLock<HashMap<String, String>>> = Default::default();
+    pub static ref OVERWRITE_SETTINGS: Arc<RwLock<HashMap<String, String>>> = Default::default();
+    pub static ref DEFAULT_DISPLAY_SETTINGS: Arc<RwLock<HashMap<String, String>>> = Default::default();
+    pub static ref OVERWRITE_DISPLAY_SETTINGS: Arc<RwLock<HashMap<String, String>>> = Default::default();
+    pub static ref DEFAULT_LOCAL_SETTINGS: Arc<RwLock<HashMap<String, String>>> = Default::default();
+    pub static ref OVERWRITE_LOCAL_SETTINGS: Arc<RwLock<HashMap<String, String>>> = Default::default();
 }
 
 lazy_static::lazy_static! {
@@ -139,7 +145,7 @@ macro_rules! serde_field_bool {
         }
         impl $struct_name {
             pub fn $func() -> bool {
-                UserDefaultConfig::read().get($field_name) == "Y"
+                UserDefaultConfig::read($field_name) == "Y"
             }
         }
         impl Deref for $struct_name {
@@ -900,7 +906,10 @@ impl Config {
     }
 
     pub fn get_options() -> HashMap<String, String> {
-        CONFIG2.read().unwrap().options.clone()
+        let mut res = DEFAULT_SETTINGS.read().unwrap().clone();
+        res.extend(CONFIG2.read().unwrap().options.clone());
+        res.extend(OVERWRITE_SETTINGS.read().unwrap().clone());
+        res
     }
 
     pub fn set_options(v: HashMap<String, String>) {
@@ -913,9 +922,15 @@ impl Config {
     }
 
     pub fn get_option(k: &str) -> String {
+        if let Some(v) = OVERWRITE_SETTINGS.read().unwrap().get(k) {
+            return v.clone();
+        }
         if let Some(v) = CONFIG2.read().unwrap().options.get(k) {
             v.clone()
         } else {
+            if let Some(v) = DEFAULT_SETTINGS.read().unwrap().get(k) {
+                return v.clone();
+            }
             "".to_owned()
         }
     }
@@ -1153,37 +1168,36 @@ impl PeerConfig {
     serde_field_string!(
         default_view_style,
         deserialize_view_style,
-        UserDefaultConfig::read().get("view_style")
+        UserDefaultConfig::read("view_style")
     );
     serde_field_string!(
         default_scroll_style,
         deserialize_scroll_style,
-        UserDefaultConfig::read().get("scroll_style")
+        UserDefaultConfig::read("scroll_style")
     );
     serde_field_string!(
         default_image_quality,
         deserialize_image_quality,
-        UserDefaultConfig::read().get("image_quality")
+        UserDefaultConfig::read("image_quality")
     );
     serde_field_string!(
         default_reverse_mouse_wheel,
         deserialize_reverse_mouse_wheel,
-        UserDefaultConfig::read().get("reverse_mouse_wheel")
+        UserDefaultConfig::read("reverse_mouse_wheel")
     );
     serde_field_string!(
         default_displays_as_individual_windows,
         deserialize_displays_as_individual_windows,
-        UserDefaultConfig::read().get("displays_as_individual_windows")
+        UserDefaultConfig::read("displays_as_individual_windows")
     );
     serde_field_string!(
         default_use_all_my_displays_for_the_remote_session,
         deserialize_use_all_my_displays_for_the_remote_session,
-        UserDefaultConfig::read().get("use_all_my_displays_for_the_remote_session")
+        UserDefaultConfig::read("use_all_my_displays_for_the_remote_session")
     );
 
     fn default_custom_image_quality() -> Vec<i32> {
-        let f: f64 = UserDefaultConfig::read()
-            .get("custom_image_quality")
+        let f: f64 = UserDefaultConfig::read("custom_image_quality")
             .parse()
             .unwrap_or(50.0);
         vec![f as _]
@@ -1227,7 +1241,7 @@ impl PeerConfig {
         ]
         .map(|key| {
             if !mp.contains_key(key) {
-                mp.insert(key.to_owned(), UserDefaultConfig::read().get(key));
+                mp.insert(key.to_owned(), UserDefaultConfig::read(key));
             }
         });
     }
@@ -1367,9 +1381,15 @@ impl LocalConfig {
     }
 
     pub fn get_option(k: &str) -> String {
+        if let Some(v) = OVERWRITE_LOCAL_SETTINGS.read().unwrap().get(k) {
+            return v.clone();
+        }
         if let Some(v) = LOCAL_CONFIG.read().unwrap().options.get(k) {
             v.clone()
         } else {
+            if let Some(v) = DEFAULT_LOCAL_SETTINGS.read().unwrap().get(k) {
+                return v.clone();
+            }
             "".to_owned()
         }
     }
@@ -1514,12 +1534,14 @@ pub struct UserDefaultConfig {
 }
 
 impl UserDefaultConfig {
-    pub fn read() -> UserDefaultConfig {
+    fn read(key: &str) -> String {
         let mut cfg = USER_DEFAULT_CONFIG.write().unwrap();
+        // we do so, because default config may changed in another process, but we don't sync it
+        // but no need to read every time, give a small interval to avoid too many redundant read waste
         if cfg.1.elapsed() > Duration::from_secs(1) {
             *cfg = (Self::load(), Instant::now());
         }
-        cfg.0.clone()
+        cfg.0.get(key)
     }
 
     pub fn load() -> UserDefaultConfig {
@@ -1542,8 +1564,7 @@ impl UserDefaultConfig {
             "custom_image_quality" => self.get_double_string(key, 50.0, 10.0, 0xFFF as f64),
             "custom-fps" => self.get_double_string(key, 30.0, 5.0, 120.0),
             _ => self
-                .options
-                .get(key)
+                .get_after(key)
                 .map(|v| v.to_string())
                 .unwrap_or_default(),
         }
@@ -1560,7 +1581,7 @@ impl UserDefaultConfig {
 
     #[inline]
     fn get_string(&self, key: &str, default: &str, others: Vec<&str>) -> String {
-        match self.options.get(key) {
+        match self.get_after(key) {
             Some(option) => {
                 if others.contains(&option.as_str()) {
                     option.to_owned()
@@ -1574,7 +1595,7 @@ impl UserDefaultConfig {
 
     #[inline]
     fn get_double_string(&self, key: &str, default: f64, min: f64, max: f64) -> String {
-        match self.options.get(key) {
+        match self.get_after(key) {
             Some(option) => {
                 let v: f64 = option.parse().unwrap_or(default);
                 if v >= min && v <= max {
@@ -1584,6 +1605,20 @@ impl UserDefaultConfig {
                 }
             }
             None => default.to_string(),
+        }
+    }
+
+    fn get_after(&self, key: &str) -> Option<String> {
+        if let Some(v) = OVERWRITE_DISPLAY_SETTINGS.read().unwrap().get(key) {
+            return Some(v.clone());
+        }
+        if let Some(v) = self.options.get(key) {
+            Some(v.clone())
+        } else {
+            if let Some(v) = DEFAULT_DISPLAY_SETTINGS.read().unwrap().get(key) {
+                return Some(v.clone());
+            }
+            None
         }
     }
 }
@@ -1831,6 +1866,118 @@ mod tests {
         let cfg: PeerConfig = Default::default();
         let res = toml::to_string_pretty(&cfg);
         assert!(res.is_ok());
+    }
+
+    #[test]
+    fn test_overwrite_settings() {
+        DEFAULT_SETTINGS
+            .write()
+            .unwrap()
+            .insert("b".to_string(), "a".to_string());
+        DEFAULT_SETTINGS
+            .write()
+            .unwrap()
+            .insert("c".to_string(), "a".to_string());
+        CONFIG2
+            .write()
+            .unwrap()
+            .options
+            .insert("a".to_string(), "b".to_string());
+        CONFIG2
+            .write()
+            .unwrap()
+            .options
+            .insert("b".to_string(), "b".to_string());
+        OVERWRITE_SETTINGS
+            .write()
+            .unwrap()
+            .insert("b".to_string(), "c".to_string());
+        OVERWRITE_SETTINGS
+            .write()
+            .unwrap()
+            .insert("d".to_string(), "c".to_string());
+        let res = Config::get_options();
+        assert!(res["a"] == "b");
+        assert!(res["c"] == "a");
+        assert!(res["b"] == "c");
+        assert!(res["d"] == "c");
+        assert!(Config::get_option("a") == "b");
+        assert!(Config::get_option("c") == "a");
+        assert!(Config::get_option("b") == "c");
+        assert!(Config::get_option("d") == "c");
+        DEFAULT_SETTINGS.write().unwrap().clear();
+        OVERWRITE_SETTINGS.write().unwrap().clear();
+        CONFIG2.write().unwrap().options.clear();
+
+        DEFAULT_LOCAL_SETTINGS
+            .write()
+            .unwrap()
+            .insert("b".to_string(), "a".to_string());
+        DEFAULT_LOCAL_SETTINGS
+            .write()
+            .unwrap()
+            .insert("c".to_string(), "a".to_string());
+        LOCAL_CONFIG
+            .write()
+            .unwrap()
+            .options
+            .insert("a".to_string(), "b".to_string());
+        LOCAL_CONFIG
+            .write()
+            .unwrap()
+            .options
+            .insert("b".to_string(), "b".to_string());
+        OVERWRITE_LOCAL_SETTINGS
+            .write()
+            .unwrap()
+            .insert("b".to_string(), "c".to_string());
+        OVERWRITE_LOCAL_SETTINGS
+            .write()
+            .unwrap()
+            .insert("d".to_string(), "c".to_string());
+        assert!(LocalConfig::get_option("a") == "b");
+        assert!(LocalConfig::get_option("c") == "a");
+        assert!(LocalConfig::get_option("b") == "c");
+        assert!(LocalConfig::get_option("d") == "c");
+        DEFAULT_LOCAL_SETTINGS.write().unwrap().clear();
+        OVERWRITE_LOCAL_SETTINGS.write().unwrap().clear();
+        LOCAL_CONFIG.write().unwrap().options.clear();
+
+        DEFAULT_DISPLAY_SETTINGS
+            .write()
+            .unwrap()
+            .insert("b".to_string(), "a".to_string());
+        DEFAULT_DISPLAY_SETTINGS
+            .write()
+            .unwrap()
+            .insert("c".to_string(), "a".to_string());
+        USER_DEFAULT_CONFIG
+            .write()
+            .unwrap()
+            .0
+            .options
+            .insert("a".to_string(), "b".to_string());
+        USER_DEFAULT_CONFIG
+            .write()
+            .unwrap()
+            .0
+            .options
+            .insert("b".to_string(), "b".to_string());
+        OVERWRITE_DISPLAY_SETTINGS
+            .write()
+            .unwrap()
+            .insert("b".to_string(), "c".to_string());
+        OVERWRITE_DISPLAY_SETTINGS
+            .write()
+            .unwrap()
+            .insert("d".to_string(), "c".to_string());
+        assert!(UserDefaultConfig::read("a") == "b");
+        assert!(UserDefaultConfig::read("c") == "a");
+        assert!(UserDefaultConfig::read("b") == "c");
+        assert!(UserDefaultConfig::read("d") == "c");
+        DEFAULT_DISPLAY_SETTINGS.write().unwrap().clear();
+        OVERWRITE_DISPLAY_SETTINGS.write().unwrap().clear();
+        LOCAL_CONFIG.write().unwrap().options.clear();
     }
 
     #[test]
