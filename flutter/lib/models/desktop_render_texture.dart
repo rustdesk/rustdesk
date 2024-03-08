@@ -8,6 +8,7 @@ import 'package:texture_rgba_renderer/texture_rgba_renderer.dart';
 import '../../common.dart';
 import './platform_model.dart';
 
+// Feature flutter_texture_render need to be enabled if feature gpucodec is enabled.
 final useTextureRender =
     bind.mainHasPixelbufferTextureRender() || bind.mainHasGpuTextureRender();
 
