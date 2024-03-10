@@ -3,8 +3,9 @@ use hbb_common::password_security;
 use hbb_common::{
     allow_err,
     bytes::Bytes,
-    config::{self, Config, LocalConfig, PeerConfig},
-    config::{CONNECT_TIMEOUT, RENDEZVOUS_PORT},
+    config::{
+        self, Config, LocalConfig, PeerConfig, CONNECT_TIMEOUT, HARD_SETTINGS, RENDEZVOUS_PORT,
+    },
     directories_next,
     futures::future::join_all,
     log,
@@ -169,6 +170,16 @@ pub fn get_option<T: AsRef<str>>(key: T) -> String {
 #[inline]
 pub fn get_local_option(key: String) -> String {
     LocalConfig::get_option(&key)
+}
+
+#[inline]
+pub fn get_hard_option(key: String) -> String {
+    config::HARD_SETTINGS
+        .read()
+        .unwrap()
+        .get(&key)
+        .cloned()
+        .unwrap_or_default()
 }
 
 #[inline]

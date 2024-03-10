@@ -1814,7 +1814,7 @@ pub fn main_support_remove_wallpaper() -> bool {
 }
 
 pub fn is_qs() -> SyncReturn<bool> {
-    SyncReturn(false)
+    SyncReturn(get_hard_option("connection-type") == "incoming");
 }
 
 /// Send a url scheme throught the ipc.
@@ -2050,6 +2050,10 @@ pub fn main_verify2fa(code: String) -> bool {
 
 pub fn main_has_valid_2fa_sync() -> SyncReturn<bool> {
     SyncReturn(has_valid_2fa())
+}
+
+pub fn main_get_hard_option(key: String) -> SyncReturn<String> {
+    SyncReturn(get_hard_option(key))
 }
 
 #[cfg(target_os = "android")]

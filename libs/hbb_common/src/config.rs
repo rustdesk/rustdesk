@@ -5,7 +5,7 @@ use std::{
     net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
     ops::{Deref, DerefMut},
     path::{Path, PathBuf},
-    sync::{Arc, Mutex, RwLock},
+    sync::{Mutex, RwLock},
     time::{Duration, Instant, SystemTime},
 };
 
@@ -46,41 +46,42 @@ pub const CONFIG_OPTION_ALLOW_LINUX_HEADLESS: &str = "allow-linux-headless";
 
 #[cfg(target_os = "macos")]
 lazy_static::lazy_static! {
-    pub static ref ORG: Arc<RwLock<String>> = Arc::new(RwLock::new("com.carriez".to_owned()));
+    pub static ref ORG: RwLock<String> = RwLock::new("com.carriez".to_owned());
 }
 
 type Size = (i32, i32, i32, i32);
 type KeyPair = (Vec<u8>, Vec<u8>);
 
 lazy_static::lazy_static! {
-    static ref CONFIG: Arc<RwLock<Config>> = Arc::new(RwLock::new(Config::load()));
-    static ref CONFIG2: Arc<RwLock<Config2>> = Arc::new(RwLock::new(Config2::load()));
-    static ref LOCAL_CONFIG: Arc<RwLock<LocalConfig>> = Arc::new(RwLock::new(LocalConfig::load()));
-    static ref ONLINE: Arc<Mutex<HashMap<String, i64>>> = Default::default();
-    pub static ref PROD_RENDEZVOUS_SERVER: Arc<RwLock<String>> = Arc::new(RwLock::new(match option_env!("RENDEZVOUS_SERVER") {
+    static ref CONFIG: RwLock<Config> = RwLock::new(Config::load());
+    static ref CONFIG2: RwLock<Config2> = RwLock::new(Config2::load());
+    static ref LOCAL_CONFIG: RwLock<LocalConfig> = RwLock::new(LocalConfig::load());
+    static ref ONLINE: Mutex<HashMap<String, i64>> = Default::default();
+    pub static ref PROD_RENDEZVOUS_SERVER: RwLock<String> = RwLock::new(match option_env!("RENDEZVOUS_SERVER") {
         Some(key) if !key.is_empty() => key,
         _ => "",
-    }.to_owned()));
-    pub static ref EXE_RENDEZVOUS_SERVER: Arc<RwLock<String>> = Default::default();
-    pub static ref APP_NAME: Arc<RwLock<String>> = Arc::new(RwLock::new("RustDesk".to_owned()));
-    static ref KEY_PAIR: Arc<Mutex<Option<KeyPair>>> = Default::default();
-    static ref USER_DEFAULT_CONFIG: Arc<RwLock<(UserDefaultConfig, Instant)>> = Arc::new(RwLock::new((UserDefaultConfig::load(), Instant::now())));
-    pub static ref NEW_STORED_PEER_CONFIG: Arc<Mutex<HashSet<String>>> = Default::default();
-    pub static ref DEFAULT_SETTINGS: Arc<RwLock<HashMap<String, String>>> = Default::default();
-    pub static ref OVERWRITE_SETTINGS: Arc<RwLock<HashMap<String, String>>> = Default::default();
-    pub static ref DEFAULT_DISPLAY_SETTINGS: Arc<RwLock<HashMap<String, String>>> = Default::default();
-    pub static ref OVERWRITE_DISPLAY_SETTINGS: Arc<RwLock<HashMap<String, String>>> = Default::default();
-    pub static ref DEFAULT_LOCAL_SETTINGS: Arc<RwLock<HashMap<String, String>>> = Default::default();
-    pub static ref OVERWRITE_LOCAL_SETTINGS: Arc<RwLock<HashMap<String, String>>> = Default::default();
+    }.to_owned());
+    pub static ref EXE_RENDEZVOUS_SERVER: RwLock<String> = Default::default();
+    pub static ref APP_NAME: RwLock<String> = RwLock::new("RustDesk".to_owned());
+    static ref KEY_PAIR: Mutex<Option<KeyPair>> = Default::default();
+    static ref USER_DEFAULT_CONFIG: RwLock<(UserDefaultConfig, Instant)> = RwLock::new((UserDefaultConfig::load(), Instant::now()));
+    pub static ref NEW_STORED_PEER_CONFIG: Mutex<HashSet<String>> = Default::default();
+    pub static ref DEFAULT_SETTINGS: RwLock<HashMap<String, String>> = Default::default();
+    pub static ref OVERWRITE_SETTINGS: RwLock<HashMap<String, String>> = Default::default();
+    pub static ref DEFAULT_DISPLAY_SETTINGS: RwLock<HashMap<String, String>> = Default::default();
+    pub static ref OVERWRITE_DISPLAY_SETTINGS: RwLock<HashMap<String, String>> = Default::default();
+    pub static ref DEFAULT_LOCAL_SETTINGS: RwLock<HashMap<String, String>> = Default::default();
+    pub static ref OVERWRITE_LOCAL_SETTINGS: RwLock<HashMap<String, String>> = Default::default();
+    pub static ref HARD_SETTINGS: RwLock<HashMap<String, String>> = Default::default();
 }
 
 lazy_static::lazy_static! {
-    pub static ref APP_DIR: Arc<RwLock<String>> = Default::default();
+    pub static ref APP_DIR: RwLock<String> = Default::default();
 }
 
 #[cfg(any(target_os = "android", target_os = "ios"))]
 lazy_static::lazy_static! {
-    pub static ref APP_HOME_DIR: Arc<RwLock<String>> = Default::default();
+    pub static ref APP_HOME_DIR: RwLock<String> = Default::default();
 }
 
 pub const LINK_DOCS_HOME: &str = "https://rustdesk.com/docs/en/";
@@ -922,17 +923,13 @@ impl Config {
     }
 
     pub fn get_option(k: &str) -> String {
-        if let Some(v) = OVERWRITE_SETTINGS.read().unwrap().get(k) {
-            return v.clone();
-        }
-        if let Some(v) = CONFIG2.read().unwrap().options.get(k) {
-            v.clone()
-        } else {
-            if let Some(v) = DEFAULT_SETTINGS.read().unwrap().get(k) {
-                return v.clone();
-            }
-            "".to_owned()
-        }
+        get_or(
+            &OVERWRITE_SETTINGS,
+            &CONFIG2.read().unwrap().options,
+            &DEFAULT_SETTINGS,
+            k,
+        )
+        .unwrap_or_default()
     }
 
     pub fn set_option(k: String, v: String) {
@@ -1381,17 +1378,13 @@ impl LocalConfig {
     }
 
     pub fn get_option(k: &str) -> String {
-        if let Some(v) = OVERWRITE_LOCAL_SETTINGS.read().unwrap().get(k) {
-            return v.clone();
-        }
-        if let Some(v) = LOCAL_CONFIG.read().unwrap().options.get(k) {
-            v.clone()
-        } else {
-            if let Some(v) = DEFAULT_LOCAL_SETTINGS.read().unwrap().get(k) {
-                return v.clone();
-            }
-            "".to_owned()
-        }
+        get_or(
+            &OVERWRITE_LOCAL_SETTINGS,
+            &LOCAL_CONFIG.read().unwrap().options,
+            &DEFAULT_LOCAL_SETTINGS,
+            k,
+        )
+        .unwrap_or_default()
     }
 
     pub fn set_option(k: String, v: String) {
@@ -1608,18 +1601,13 @@ impl UserDefaultConfig {
         }
     }
 
-    fn get_after(&self, key: &str) -> Option<String> {
-        if let Some(v) = OVERWRITE_DISPLAY_SETTINGS.read().unwrap().get(key) {
-            return Some(v.clone());
-        }
-        if let Some(v) = self.options.get(key) {
-            Some(v.clone())
-        } else {
-            if let Some(v) = DEFAULT_DISPLAY_SETTINGS.read().unwrap().get(key) {
-                return Some(v.clone());
-            }
-            None
-        }
+    fn get_after(&self, k: &str) -> Option<String> {
+        get_or(
+            &OVERWRITE_DISPLAY_SETTINGS,
+            &self.options,
+            &DEFAULT_DISPLAY_SETTINGS,
+            k,
+        )
     }
 }
 
@@ -1853,6 +1841,21 @@ deserialize_default!(deserialize_size, Size);
 deserialize_default!(deserialize_hashmap_string_string, HashMap<String, String>);
 deserialize_default!(deserialize_hashmap_string_bool,  HashMap<String, bool>);
 deserialize_default!(deserialize_hashmap_resolutions, HashMap<String, Resolution>);
+
+#[inline]
+fn get_or(
+    a: &RwLock<HashMap<String, String>>,
+    b: &HashMap<String, String>,
+    c: &RwLock<HashMap<String, String>>,
+    k: &str,
+) -> Option<String> {
+    a.read()
+        .unwrap()
+        .get(k)
+        .or(b.get(k))
+        .or(c.read().unwrap().get(k))
+        .cloned()
+}
 
 #[cfg(test)]
 mod tests {

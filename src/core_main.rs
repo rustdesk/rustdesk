@@ -38,6 +38,7 @@ fn is_empty_uni_link(arg: &str) -> bool {
 /// If it returns [`Some`], then the process will continue, and flutter gui will be started.
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub fn core_main() -> Option<Vec<String>> {
+    crate::load_custom_client();
     #[cfg(windows)]
     crate::platform::windows::bootstrap();
     let mut args = Vec::new();
