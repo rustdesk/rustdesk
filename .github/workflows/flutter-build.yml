@@ -145,6 +145,7 @@ jobs:
           path: './flutter/build/windows/x64/runner/Release/'
 
       - name: Sign rustdesk files
+        if: env.UPLOAD_ARTIFACT == 'true'
         shell: bash
         run: |
           pip3 install requests argparse
@@ -164,6 +165,7 @@ jobs:
           tar czf rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}.tar.gz rustdesk
 
       - name: Sign rustdesk self-extracted file
+        if: env.UPLOAD_ARTIFACT == 'true'
         shell: bash
         run: |
           BASE_URL=${{ secrets.SIGN_BASE_URL }} SECRET_KEY=${{ secrets.SIGN_SECRET_KEY }} python3 res/job.py sign_files ./SignOutput
@@ -260,6 +262,7 @@ jobs:
           fi
 
       - name: Sign rustdesk files
+        if: env.UPLOAD_ARTIFACT == 'true'
         shell: bash
         run: |
           pip3 install requests argparse
@@ -278,6 +281,7 @@ jobs:
           tar czf rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}.tar.gz rustdesk
 
       - name: Sign rustdesk self-extracted file
+        if: env.UPLOAD_ARTIFACT == 'true'
         shell: bash
         run: |
           BASE_URL=${{ secrets.SIGN_BASE_URL }} SECRET_KEY=${{ secrets.SIGN_SECRET_KEY }} python3 res/job.py sign_files ./SignOutput/
