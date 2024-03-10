@@ -1820,7 +1820,7 @@ jobs:
           prerelease: true
           tag_name: ${{ env.TAG_NAME }}
           files: |
-            res/rustdesk*.zst
+            res/rustdesk-${{ env.VERSION }}*.zst
 
       - name: Build appimage package
         if: matrix.job.extra-build-features == 'appimage' && env.UPLOAD_ARTIFACT == 'true'
