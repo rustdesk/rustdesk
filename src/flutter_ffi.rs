@@ -1814,7 +1814,7 @@ pub fn main_support_remove_wallpaper() -> bool {
 }
 
 pub fn is_qs() -> SyncReturn<bool> {
-    SyncReturn(get_hard_option("connection-type") == "incoming");
+    SyncReturn(get_hard_option("connection-type".to_owned()) == "incoming")
 }
 
 /// Send a url scheme throught the ipc.
