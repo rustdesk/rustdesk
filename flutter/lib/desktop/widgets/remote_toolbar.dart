@@ -759,15 +759,18 @@ class _MonitorMenu extends StatelessWidget {
       final children = <Widget>[];
       for (var i = 0; i < pi.displays.length; i++) {
         final d = pi.displays[i];
-        final fontSize = (d.width * scale < d.height * scale
-                ? d.width * scale
-                : d.height * scale) *
+        double s = d.scale;
+        int dWidth = d.width.toDouble() ~/ s;
+        int dHeight = d.height.toDouble() ~/ s;
+        final fontSize = (dWidth * scale < dHeight * scale
+                ? dWidth * scale
+                : dHeight * scale) *
             0.65;
         children.add(Positioned(
           left: (d.x - rect.left) * scale + startX,
           top: (d.y - rect.top) * scale + startY,
-          width: d.width * scale,
-          height: d.height * scale,
+          width: dWidth * scale,
+          height: dHeight * scale,
           child: Container(
             decoration: BoxDecoration(
               border: Border.all(
@@ -1048,10 +1051,11 @@ class _DisplayMenuState extends State<_DisplayMenu> {
         ffi: widget.ffi,
         screenAdjustor: _screenAdjustor,
       ),
-      _VirtualDisplayMenu(
-        id: widget.id,
-        ffi: widget.ffi,
-      ),
+      // We may add this feature if it is needed and we have an EV certificate.
+      // _VirtualDisplayMenu(
+      //   id: widget.id,
+      //   ffi: widget.ffi,
+      // ),
       Divider(),
       toggles(),
     ];
@@ -1286,7 +1290,9 @@ class _ResolutionsMenuState extends State<_ResolutionsMenu> {
     if (lastGroupValue == _kCustomResolutionValue) {
       _groupValue = _kCustomResolutionValue;
     } else {
-      _groupValue = '${rect?.width.toInt()}x${rect?.height.toInt()}';
+      var scale = pi.scaleOfDisplay(pi.currentDisplay);
+      _groupValue =
+          '${(rect?.width ?? 0) ~/ scale}x${(rect?.height ?? 0) ~/ scale}';
     }
   }
 
@@ -1327,7 +1333,8 @@ class _ResolutionsMenuState extends State<_ResolutionsMenu> {
     }
   }
 
-  _onChanged(BuildContext context, String? value) async {
+  // This widget has been unmounted, so the State no longer has a context
+  _onChanged(String? value) async {
     if (pi.currentDisplay == kAllDisplayValue) {
       return;
     }
@@ -1350,12 +1357,12 @@ class _ResolutionsMenuState extends State<_ResolutionsMenu> {
 
     if (w != null && h != null) {
       if (w != rect?.width.toInt() || h != rect?.height.toInt()) {
-        await _changeResolution(context, w, h);
+        await _changeResolution(w, h);
       }
     }
   }
 
-  _changeResolution(BuildContext context, int w, int h) async {
+  _changeResolution(int w, int h) async {
     if (pi.currentDisplay == kAllDisplayValue) {
       return;
     }
@@ -1384,11 +1391,16 @@ class _ResolutionsMenuState extends State<_ResolutionsMenu> {
     if (display == null) {
       return Offstage();
     }
+    if (!resolutions.any((e) =>
+        e.width == display.originalWidth &&
+        e.height == display.originalHeight)) {
+      return Offstage();
+    }
     return Offstage(
       offstage: !showOriginalBtn,
       child: MenuButton(
-        onPressed: () => _changeResolution(
-            context, display.originalWidth, display.originalHeight),
+        onPressed: () =>
+            _changeResolution(display.originalWidth, display.originalHeight),
         ffi: widget.ffi,
         child: Text(
             '${translate('resolution_original_tip')} ${display.originalWidth}x${display.originalHeight}'),
@@ -1404,7 +1416,7 @@ class _ResolutionsMenuState extends State<_ResolutionsMenu> {
         onPressed: () {
           final resolution = _getBestFitResolution();
           if (resolution != null) {
-            _changeResolution(context, resolution.width, resolution.height);
+            _changeResolution(resolution.width, resolution.height);
           }
         },
         ffi: widget.ffi,
@@ -1420,7 +1432,7 @@ class _ResolutionsMenuState extends State<_ResolutionsMenu> {
       child: RdoMenuButton(
         value: _kCustomResolutionValue,
         groupValue: _groupValue,
-        onChanged: (String? value) => _onChanged(context, value),
+        onChanged: (String? value) => _onChanged(value),
         ffi: widget.ffi,
         child: Row(
           children: [
@@ -1461,7 +1473,7 @@ class _ResolutionsMenuState extends State<_ResolutionsMenu> {
       .map((e) => RdoMenuButton(
           value: '${e.width}x${e.height}',
           groupValue: _groupValue,
-          onChanged: (String? value) => _onChanged(context, value),
+          onChanged: (String? value) => _onChanged(value),
           ffi: widget.ffi,
           child: Text('${e.width}x${e.height}')))
       .toList();
@@ -1730,7 +1742,7 @@ class _KeyboardMenu extends StatelessWidget {
             ? (value) async {
                 if (value == null) return;
                 await bind.sessionToggleOption(
-                    sessionId: ffi.sessionId, value: 'view-only');
+                    sessionId: ffi.sessionId, value: kOptionViewOnly);
                 ffiModel.setViewOnly(id, value);
               }
             : null,

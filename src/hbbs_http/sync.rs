@@ -51,7 +51,10 @@ pub struct StrategyOptions {
 #[cfg(not(any(target_os = "ios")))]
 #[tokio::main(flavor = "current_thread")]
 async fn start_hbbs_sync_async() {
-    let mut interval = tokio::time::interval_at(Instant::now() + TIME_CONN, TIME_CONN);
+    let mut interval = crate::rustdesk_interval(tokio::time::interval_at(
+        Instant::now() + TIME_CONN,
+        TIME_CONN,
+    ));
     let mut last_sent: Option<Instant> = None;
     let mut info_uploaded: (bool, String, Option<Instant>) = (false, "".to_owned(), None);
     loop {
@@ -147,22 +150,10 @@ fn handle_config_options(config_options: HashMap<String, String>) {
     config_options
         .iter()
         .map(|(k, v)| {
-            if k == "allow-share-rdp" {
-                // only changes made after installation take effect.
-                #[cfg(windows)]
-                if crate::ui_interface::is_rdp_service_open() {
-                    let current = crate::ui_interface::is_share_rdp();
-                    let set = v == "Y";
-                    if current != set {
-                        crate::platform::windows::set_share_rdp(set);
-                    }
-                }
+            if v.is_empty() {
+                options.remove(k);
             } else {
-                if v.is_empty() {
-                    options.remove(k);
-                } else {
-                    options.insert(k.to_string(), v.to_string());
-                }
+                options.insert(k.to_string(), v.to_string());
             }
         })
         .count();

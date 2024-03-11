@@ -20,6 +20,7 @@ import 'package:flutter_hbb/utils/multi_window_manager.dart';
 import 'package:get/get.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:window_manager/window_manager.dart';
 import 'package:window_size/window_size.dart' as window_size;
 
 import '../widgets/button.dart';
@@ -50,26 +51,60 @@ class _DesktopHomePageState extends State<DesktopHomePage>
   Timer? _updateTimer;
   bool isCardClosed = false;
 
+  final GlobalKey _childKey = GlobalKey();
+
   @override
   Widget build(BuildContext context) {
     super.build(context);
+
+    final children = [buildLeftPane(context)];
+    if (!bind.isQs()) {
+      children.addAll([
+        const VerticalDivider(width: 1),
+        Expanded(child: buildRightPane(context)),
+      ]);
+    }
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        buildLeftPane(context),
-        const VerticalDivider(width: 1),
-        Expanded(
-          child: buildRightPane(context),
-        ),
-      ],
+      children: children,
     );
   }
 
   Widget buildLeftPane(BuildContext context) {
+    final children = <Widget>[
+      buildTip(context),
+      buildIDBoard(context),
+      buildPasswordBoard(context),
+      FutureBuilder<Widget>(
+        future: buildHelpCards(),
+        builder: (_, data) {
+          if (data.hasData) {
+            if (bind.isQs()) {
+              Future.delayed(Duration(milliseconds: 300), () {
+                _updateWindowSize();
+              });
+            }
+            return data.data!;
+          } else {
+            return const Offstage();
+          }
+        },
+      ),
+      buildPluginEntry(),
+    ];
+    if (bind.isQs()) {
+      children.addAll([
+        Divider(),
+        Container(
+          margin: EdgeInsets.fromLTRB(0, 0, 8, 6),
+          child: OnlineStatusWidget(),
+        ),
+      ]);
+    }
     return ChangeNotifierProvider.value(
       value: gFFI.serverModel,
       child: Container(
-        width: 200,
+        width: bind.isQs() ? 280.0 : 200.0,
         color: Theme.of(context).colorScheme.background,
         child: DesktopScrollWrapper(
           scrollController: _leftPaneScrollController,
@@ -77,22 +112,8 @@ class _DesktopHomePageState extends State<DesktopHomePage>
             controller: _leftPaneScrollController,
             physics: DraggableNeverScrollableScrollPhysics(),
             child: Column(
-              children: [
-                buildTip(context),
-                buildIDBoard(context),
-                buildPasswordBoard(context),
-                FutureBuilder<Widget>(
-                  future: buildHelpCards(),
-                  builder: (_, data) {
-                    if (data.hasData) {
-                      return data.data!;
-                    } else {
-                      return const Offstage();
-                    }
-                  },
-                ),
-                buildPluginEntry()
-              ],
+              key: _childKey,
+              children: children,
             ),
           ),
         ),
@@ -322,7 +343,9 @@ class _DesktopHomePageState extends State<DesktopHomePage>
   }
 
   Future<Widget> buildHelpCards() async {
-    if (updateUrl.isNotEmpty && !isCardClosed) {
+    if (updateUrl.isNotEmpty &&
+        !isCardClosed &&
+        bind.mainUriPrefixSync().contains('rustdesk')) {
       return buildInstallCard(
           "Status",
           "There is a newer version of ${bind.mainGetAppNameSync()} ${bind.mainGetNewVersion()} available.",
@@ -408,13 +431,13 @@ class _DesktopHomePageState extends State<DesktopHomePage>
             "Warning", "wayland_experiment_tip", "", () async {},
             marginTop: LinuxCards.isEmpty ? 20.0 : 5.0,
             help: 'Help',
-            link: 'https://rustdesk.com/docs/en/manual/linux/#x11-required'));
+            link: 'https://rustdesk.com/docs/en/client/linux/#x11-required'));
       } else if (bind.mainIsLoginWayland()) {
         LinuxCards.add(buildInstallCard("Warning",
             "Login screen using Wayland is not supported", "", () async {},
             marginTop: LinuxCards.isEmpty ? 20.0 : 5.0,
             help: 'Help',
-            link: 'https://rustdesk.com/docs/en/manual/linux/#login-screen'));
+            link: 'https://rustdesk.com/docs/en/client/linux/#login-screen'));
       }
       if (LinuxCards.isNotEmpty) {
         return Column(
@@ -450,7 +473,8 @@ class _DesktopHomePageState extends State<DesktopHomePage>
     return Stack(
       children: [
         Container(
-          margin: EdgeInsets.only(top: marginTop),
+          margin:
+              EdgeInsets.fromLTRB(0, marginTop, 0, bind.isQs() ? marginTop : 0),
           child: Container(
               decoration: BoxDecoration(
                   gradient: LinearGradient(
@@ -668,6 +692,19 @@ class _DesktopHomePageState extends State<DesktopHomePage>
       }
     });
     _uniLinksSubscription = listenUniLinks();
+
+    if (bind.isQs()) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _updateWindowSize();
+      });
+    }
+  }
+
+  _updateWindowSize() {
+    RenderBox renderBox =
+        _childKey.currentContext?.findRenderObject() as RenderBox;
+    desktopQsHomeLeftPaneSize = renderBox.size;
+    windowManager.setSize(getDesktopQsHomeSize());
   }
 
   @override

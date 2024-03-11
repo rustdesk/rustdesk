@@ -144,7 +144,7 @@ impl RendezvousMediator {
 
     pub async fn start_udp(server: ServerPtr, host: String) -> ResultType<()> {
         let host = check_port(&host, RENDEZVOUS_PORT);
-        let (mut socket, addr) = socket_client::new_udp_for(&host, CONNECT_TIMEOUT).await?;
+        let (mut socket, mut addr) = socket_client::new_udp_for(&host, CONNECT_TIMEOUT).await?;
         let mut rz = Self {
             addr: addr.clone(),
             host: host.clone(),
@@ -152,11 +152,12 @@ impl RendezvousMediator {
             keep_alive: DEFAULT_KEEP_ALIVE,
         };
 
-        let mut timer = interval(TIMER_OUT);
-        let mut last_timer: Option<Instant> = None;
-        const REG_TIMEOUT: i64 = 3_000;
-        const MAX_FAILS1: i64 = 3;
-        const MAX_FAILS2: i64 = 6;
+        let mut timer = crate::rustdesk_interval(interval(TIMER_OUT));
+        const MIN_REG_TIMEOUT: i64 = 3_000;
+        const MAX_REG_TIMEOUT: i64 = 30_000;
+        let mut reg_timeout = MIN_REG_TIMEOUT;
+        const MAX_FAILS1: i64 = 2;
+        const MAX_FAILS2: i64 = 4;
         const DNS_INTERVAL: i64 = 60_000;
         let mut fails = 0;
         let mut last_register_resp: Option<Instant> = None;
@@ -168,9 +169,11 @@ impl RendezvousMediator {
             let mut update_latency = || {
                 last_register_resp = Some(Instant::now());
                 fails = 0;
+                reg_timeout = MIN_REG_TIMEOUT;
                 let mut latency = last_register_sent
                     .map(|x| x.elapsed().as_micros() as i64)
                     .unwrap_or(0);
+                last_register_sent = None;
                 if latency < 0 || latency > 1_000_000 {
                     return;
                 }
@@ -211,35 +214,38 @@ impl RendezvousMediator {
                         break;
                     }
                     let now = Some(Instant::now());
-                    if last_timer.map(|x| x.elapsed() < TIMER_OUT).unwrap_or(false) {
-                        // a workaround of tokio timer bug
-                        continue;
+                    let expired = last_register_resp.map(|x| x.elapsed().as_millis() as i64 >= REG_INTERVAL).unwrap_or(true);
+                    let timeout = last_register_sent.map(|x| x.elapsed().as_millis() as i64 >= reg_timeout).unwrap_or(false);
+                    // temporarily disable exponential backoff for android before we add wakeup trigger to force connect in android
+                    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+                    if crate::using_public_server() { // only turn on this for public server, may help DDNS self-hosting user.
+                        if timeout && reg_timeout < MAX_REG_TIMEOUT {
+                            reg_timeout += MIN_REG_TIMEOUT;
+                        }
                     }
-                    last_timer = now;
-                    let elapsed_resp = last_register_resp.map(|x| x.elapsed().as_millis() as i64).unwrap_or(REG_INTERVAL);
-                    let timeout = (elapsed_resp - last_register_sent.map(|x| x.elapsed().as_millis() as i64).unwrap_or(REG_INTERVAL)) > REG_TIMEOUT;
-                    if timeout || elapsed_resp >= REG_INTERVAL {
-                        rz.register_peer(Sink::Framed(&mut socket, &addr)).await?;
-                        last_register_sent = now;
+                    if timeout || (last_register_sent.is_none() && expired) {
                         if timeout {
                             fails += 1;
-                            if fails > MAX_FAILS2 {
+                            if fails >= MAX_FAILS2 {
                                 Config::update_latency(&host, -1);
                                 old_latency = 0;
                                 if last_dns_check.elapsed().as_millis() as i64 > DNS_INTERVAL {
                                     // in some case of network reconnect (dial IP network),
                                     // old UDP socket not work any more after network recover
-                                    if let Some((s, addr)) = socket_client::rebind_udp_for(&rz.host).await? {
+                                    if let Some((s, new_addr)) = socket_client::rebind_udp_for(&rz.host).await? {
                                         socket = s;
-                                        rz.addr = addr;
+                                        rz.addr = new_addr.clone();
+                                        addr = new_addr;
                                     }
                                     last_dns_check = Instant::now();
                                 }
-                            } else if fails > MAX_FAILS1 {
+                            } else if fails >= MAX_FAILS1 {
                                 Config::update_latency(&host, 0);
                                 old_latency = 0;
                             }
                         }
+                        rz.register_peer(Sink::Framed(&mut socket, &addr)).await?;
+                        last_register_sent = now;
                     }
                 }
             }
@@ -331,7 +337,7 @@ impl RendezvousMediator {
             host_prefix: Self::get_host_prefix(&host),
             keep_alive: DEFAULT_KEEP_ALIVE,
         };
-        let mut timer = interval(TIMER_OUT);
+        let mut timer = crate::rustdesk_interval(interval(TIMER_OUT));
         let mut last_register_sent: Option<Instant> = None;
         let mut last_recv_msg = Instant::now();
         // we won't support connecting to multiple rendzvous servers any more, so we can use a global variable here.
@@ -741,8 +747,17 @@ async fn query_online_states_(
             return Ok((Vec::new(), Vec::new()));
         }
 
-        let mut socket = create_online_stream().await?;
-        socket.send(&msg_out).await?;
+        let mut socket = match create_online_stream().await {
+            Ok(s) => s,
+            Err(e) => {
+                log::debug!("Failed to create peers online stream, {e}");
+                return Ok((vec![], ids.clone()));
+            }
+        };
+        if let Err(e) = socket.send(&msg_out).await {
+            log::debug!("Failed to send peers online states query, {e}");
+            return Ok((vec![], ids.clone()));
+        }
         if let Some(msg_in) = crate::common::get_next_nonkeyexchange_msg(&mut socket, None).await {
             match msg_in.union {
                 Some(rendezvous_message::Union::OnlineResponse(online_response)) => {

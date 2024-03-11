@@ -1,10 +1,10 @@
+#!/usr/bin/env python3
+
 import os
 import optparse
 from hashlib import md5
 import brotli
 
-# file compress level(0-11)
-compress_level = 11
 # 4GB maximum
 length_count = 4
 # encoding
@@ -13,7 +13,7 @@ encoding = 'utf-8'
 # output: {path: (compressed_data, file_md5)}
 
 
-def generate_md5_table(folder: str) -> dict:
+def generate_md5_table(folder: str, level) -> dict:
     res: dict = dict()
     curdir = os.curdir
     os.chdir(folder)
@@ -26,7 +26,7 @@ def generate_md5_table(folder: str) -> dict:
             f = open(full_path, "rb")
             content = f.read()
             content_compressed = brotli.compress(
-                content, quality=compress_level)
+                content, quality=level)
             md5_generator.update(content)
             md5_code = md5_generator.hexdigest().encode(encoding=encoding)
             res[full_path] = (content_compressed, md5_code)
@@ -58,9 +58,12 @@ def write_metadata(md5_table: dict, output_folder: str, exe: str):
     print(f"metadata had written to {output_path}")
 
 
-def build_portable(output_folder: str):
+def build_portable(output_folder: str, target: str):
     os.chdir(output_folder)
-    os.system("cargo build --release")
+    if target:
+        os.system("cargo build --release --target " + target)
+    else:
+        os.system("cargo build --release")
 
 # Linux: python3 generate.py -f ../rustdesk-portable-packer/test -o . -e ./test/main.py
 # Windows: python3 .\generate.py -f ..\rustdesk\flutter\build\windows\runner\Debug\ -o . -e ..\rustdesk\flutter\build\windows\runner\Debug\rustdesk.exe
@@ -71,19 +74,28 @@ if __name__ == '__main__':
     parser.add_option("-f", "--folder", dest="folder",
                       help="folder to compress")
     parser.add_option("-o", "--output", dest="output_folder",
-                      help="the root of portable packer project")
+                      help="the root of portable packer project, default is './'")
     parser.add_option("-e", "--executable", dest="executable",
-                      help="specify startup file")
+                      help="specify startup file in --folder, default is rustdesk.exe")
+    parser.add_option("-t", "--target", dest="target",
+                      help="the target used by cargo")
+    parser.add_option("-l", "--level", dest="level", type="int",
+                      help="compression level, default is 11, highest", default=11)
     (options, args) = parser.parse_args()
-    folder = options.folder
-    output_folder = os.path.abspath(options.output_folder)
+    folder = options.folder or './rustdesk'
+    output_folder = os.path.abspath(options.output_folder or './')
 
+    if not options.executable:
+        options.executable = 'rustdesk.exe'
+    if not options.executable.startswith(folder):
+        options.executable = folder + '/' + options.executable
     exe: str = os.path.abspath(options.executable)
     if not exe.startswith(os.path.abspath(folder)):
         print("the executable must locate in source folder")
         exit(-1)
     exe = '.' + exe[len(os.path.abspath(folder)):]
     print("executable path: " + exe)
-    md5_table = generate_md5_table(folder)
+    print("compression level: " + str(options.level))
+    md5_table = generate_md5_table(folder, options.level)
     write_metadata(md5_table, output_folder, exe)
-    build_portable(output_folder)
+    build_portable(output_folder, options.target)

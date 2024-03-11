@@ -42,25 +42,21 @@ class ServerPage extends StatefulWidget implements PageShape {
           return [
             PopupMenuItem(
               enabled: gFFI.serverModel.connectStatus > 0,
-              padding: const EdgeInsets.symmetric(horizontal: 16.0),
               value: "changeID",
               child: Text(translate("Change ID")),
             ),
             const PopupMenuDivider(),
             PopupMenuItem(
-              padding: const EdgeInsets.symmetric(horizontal: 0.0),
               value: 'AcceptSessionsViaPassword',
               child: listTile(
                   'Accept sessions via password', approveMode == 'password'),
             ),
             PopupMenuItem(
-              padding: const EdgeInsets.symmetric(horizontal: 0.0),
               value: 'AcceptSessionsViaClick',
               child:
                   listTile('Accept sessions via click', approveMode == 'click'),
             ),
             PopupMenuItem(
-              padding: const EdgeInsets.symmetric(horizontal: 0.0),
               value: "AcceptSessionsViaBoth",
               child: listTile("Accept sessions via both",
                   approveMode != 'password' && approveMode != 'click'),
@@ -69,35 +65,30 @@ class ServerPage extends StatefulWidget implements PageShape {
             if (showPasswordOption &&
                 verificationMethod != kUseTemporaryPassword)
               PopupMenuItem(
-                padding: const EdgeInsets.symmetric(horizontal: 16.0),
                 value: "setPermanentPassword",
                 child: Text(translate("Set permanent password")),
               ),
             if (showPasswordOption &&
                 verificationMethod != kUsePermanentPassword)
               PopupMenuItem(
-                padding: const EdgeInsets.symmetric(horizontal: 16.0),
                 value: "setTemporaryPasswordLength",
                 child: Text(translate("One-time password length")),
               ),
             if (showPasswordOption) const PopupMenuDivider(),
             if (showPasswordOption)
               PopupMenuItem(
-                padding: const EdgeInsets.symmetric(horizontal: 0.0),
                 value: kUseTemporaryPassword,
                 child: listTile('Use one-time password',
                     verificationMethod == kUseTemporaryPassword),
               ),
             if (showPasswordOption)
               PopupMenuItem(
-                padding: const EdgeInsets.symmetric(horizontal: 0.0),
                 value: kUsePermanentPassword,
                 child: listTile('Use permanent password',
                     verificationMethod == kUsePermanentPassword),
               ),
             if (showPasswordOption)
               PopupMenuItem(
-                padding: const EdgeInsets.symmetric(horizontal: 0.0),
                 value: kUseBothPasswords,
                 child: listTile(
                     'Use both passwords',
@@ -211,7 +202,9 @@ class ServiceNotRunningNotification extends StatelessWidget {
             ElevatedButton.icon(
                 icon: const Icon(Icons.play_arrow),
                 onPressed: () {
-                  if (gFFI.userModel.userName.value.isEmpty && bind.mainGetLocalOption(key: "show-scam-warning") != "N") {
+                  if (gFFI.userModel.userName.value.isEmpty &&
+                      bind.mainGetLocalOption(key: "show-scam-warning") !=
+                          "N") {
                     showScamWarning(context, serverModel);
                   } else {
                     serverModel.toggleService();
@@ -229,10 +222,10 @@ class ScamWarningDialog extends StatefulWidget {
   ScamWarningDialog({required this.serverModel});
 
   @override
-  _ScamWarningDialogState createState() => _ScamWarningDialogState();
+  ScamWarningDialogState createState() => ScamWarningDialogState();
 }
 
-class _ScamWarningDialogState extends State<ScamWarningDialog> {
+class ScamWarningDialogState extends State<ScamWarningDialog> {
   int _countdown = 12;
   bool show_warning = false;
   late Timer _timer;
@@ -323,10 +316,7 @@ class _ScamWarningDialogState extends State<ScamWarningDialog> {
                 ),
                 SizedBox(height: 18),
                 Text(
-                  translate("scam_text1") +
-                      "\n\n" +
-                      translate("scam_text2") +
-                      "\n",
+                  "${translate("scam_text1")}\n\n${translate("scam_text2")}\n",
                   style: TextStyle(
                     color: Colors.white,
                     fontWeight: FontWeight.bold,
@@ -370,11 +360,11 @@ class _ScamWarningDialogState extends State<ScamWarningDialog> {
                                 }
                               },
                         style: ElevatedButton.styleFrom(
-                          primary: Colors.blueAccent,
+                          backgroundColor: Colors.blueAccent,
                         ),
                         child: Text(
                           isButtonLocked
-                              ? translate("I Agree") + " (${_countdown}s)"
+                              ? "${translate("I Agree")} (${_countdown}s)"
                               : translate("I Agree"),
                           style: TextStyle(
                             fontWeight: FontWeight.bold,

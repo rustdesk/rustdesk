@@ -1,17 +1,18 @@
 use super::{CursorData, ResultType};
 use crate::common::PORTABLE_APPNAME_RUNTIME_ENV_KEY;
 use crate::{
+    custom_server::*,
     ipc,
-    license::*,
     privacy_mode::win_topmost_window::{self, WIN_TOPMOST_INJECTED_PROCESS_EXE},
 };
+use hbb_common::libc::{c_int, wchar_t};
 use hbb_common::{
     allow_err,
     anyhow::anyhow,
     bail,
     config::{self, Config},
     log,
-    message_proto::Resolution,
+    message_proto::{Resolution, WindowsSession},
     sleep, timeout, tokio,
 };
 use std::process::{Command, Stdio};
@@ -37,7 +38,7 @@ use winapi::{
         minwinbase::STILL_ACTIVE,
         processthreadsapi::{
             GetCurrentProcess, GetCurrentProcessId, GetExitCodeProcess, OpenProcess,
-            OpenProcessToken, PROCESS_INFORMATION, STARTUPINFOW,
+            OpenProcessToken, ProcessIdToSessionId, PROCESS_INFORMATION, STARTUPINFOW,
         },
         securitybaseapi::GetTokenInformation,
         shellapi::ShellExecuteW,
@@ -438,7 +439,6 @@ pub fn start_os_service() {
 const SERVICE_TYPE: ServiceType = ServiceType::OWN_PROCESS;
 
 extern "C" {
-    fn has_rdp_service() -> BOOL;
     fn get_current_session(rdp: BOOL) -> DWORD;
     fn LaunchProcessWin(cmd: *const u16, session_id: DWORD, as_user: BOOL) -> HANDLE;
     fn GetSessionUserTokenWin(lphUserToken: LPHANDLE, dwSessionId: DWORD, as_user: BOOL) -> BOOL;
@@ -508,7 +508,19 @@ async fn run_service(_arguments: Vec<OsString>) -> ResultType<()> {
     log::info!("session id {}", session_id);
     let mut h_process = launch_server(session_id, true).await.unwrap_or(NULL);
     let mut incoming = ipc::new_listener(crate::POSTFIX_SERVICE).await?;
+    let mut stored_usid = None;
     loop {
+        let sids: Vec<_> = get_available_sessions(false)
+            .iter()
+            .map(|e| e.sid)
+            .collect();
+        if !sids.contains(&session_id) || !is_share_rdp() {
+            let current_active_session = unsafe { get_current_session(share_rdp()) };
+            if session_id != current_active_session {
+                session_id = current_active_session;
+                h_process = launch_server(session_id, true).await.unwrap_or(NULL);
+            }
+        }
         let res = timeout(super::SERVICE_INTERVAL, incoming.next()).await;
         match res {
             Ok(res) => match res {
@@ -522,6 +534,21 @@ async fn run_service(_arguments: Vec<OsString>) -> ResultType<()> {
                             }
                             ipc::Data::SAS => {
                                 send_sas();
+                            }
+                            ipc::Data::UserSid(usid) => {
+                                if let Some(usid) = usid {
+                                    if session_id != usid {
+                                        log::info!(
+                                            "session changed from {} to {}",
+                                            session_id,
+                                            usid
+                                        );
+                                        session_id = usid;
+                                        stored_usid = Some(session_id);
+                                        h_process =
+                                            launch_server(session_id, true).await.unwrap_or(NULL);
+                                    }
+                                }
                             }
                             _ => {}
                         }
@@ -537,7 +564,7 @@ async fn run_service(_arguments: Vec<OsString>) -> ResultType<()> {
                         continue;
                     }
                     let mut close_sent = false;
-                    if tmp != session_id {
+                    if tmp != session_id && stored_usid != Some(session_id) {
                         log::info!("session changed from {} to {}", session_id, tmp);
                         session_id = tmp;
                         send_close_async("").await.ok();
@@ -609,7 +636,9 @@ pub fn run_as_user(arg: Vec<&str>) -> ResultType<Option<std::process::Child>> {
         std::env::current_exe()?.to_str().unwrap_or(""),
         arg.join(" "),
     );
-    let session_id = unsafe { get_current_session(share_rdp()) };
+    let Some(session_id) = get_current_process_session_id() else {
+        bail!("Failed to get current process session id");
+    };
     use std::os::windows::ffi::OsStrExt;
     let wstr: Vec<u16> = std::ffi::OsStr::new(&cmd)
         .encode_wide()
@@ -645,7 +674,7 @@ async fn send_close_async(postfix: &str) -> ResultType<()> {
 
 // https://docs.microsoft.com/en-us/windows/win32/api/sas/nf-sas-sendsas
 // https://www.cnblogs.com/doutu/p/4892726.html
-fn send_sas() {
+pub fn send_sas() {
     #[link(name = "sas")]
     extern "system" {
         pub fn SendSAS(AsUser: BOOL);
@@ -684,10 +713,10 @@ pub fn try_change_desktop() -> bool {
 }
 
 fn share_rdp() -> BOOL {
-    if get_reg("share_rdp") != "true" {
-        FALSE
-    } else {
+    if get_reg("share_rdp") != "false" {
         TRUE
+    } else {
+        FALSE
     }
 }
 
@@ -705,7 +734,31 @@ pub fn set_share_rdp(enable: bool) {
     run_cmds(cmd, false, "share_rdp").ok();
 }
 
+pub fn get_current_process_session_id() -> Option<u32> {
+    let mut sid = 0;
+    if unsafe { ProcessIdToSessionId(GetCurrentProcessId(), &mut sid) == TRUE } {
+        Some(sid)
+    } else {
+        None
+    }
+}
+
+pub fn is_physical_console_session() -> Option<bool> {
+    if let Some(sid) = get_current_process_session_id() {
+        let physical_console_session_id = unsafe { get_current_session(FALSE) };
+        if physical_console_session_id == u32::MAX {
+            return None;
+        }
+        return Some(physical_console_session_id == sid);
+    }
+    None
+}
+
 pub fn get_active_username() -> String {
+    // get_active_user will give console username higher priority
+    if let Some(name) = get_current_session_username() {
+        return name;
+    }
     if !is_root() {
         return crate::username();
     }
@@ -727,6 +780,108 @@ pub fn get_active_username() -> String {
         .to_owned()
 }
 
+fn get_current_session_username() -> Option<String> {
+    let Some(sid) = get_current_process_session_id() else {
+        log::error!("get_current_process_session_id failed");
+        return None;
+    };
+    Some(get_session_username(sid))
+}
+
+fn get_session_username(session_id: u32) -> String {
+    extern "C" {
+        fn get_session_user_info(path: *mut u16, n: u32, rdp: bool, session_id: u32) -> u32;
+    }
+    let buff_size = 256;
+    let mut buff: Vec<u16> = Vec::with_capacity(buff_size);
+    buff.resize(buff_size, 0);
+    let n = unsafe { get_session_user_info(buff.as_mut_ptr(), buff_size as _, true, session_id) };
+    if n == 0 {
+        return "".to_owned();
+    }
+    let sl = unsafe { std::slice::from_raw_parts(buff.as_ptr(), n as _) };
+    String::from_utf16(sl)
+        .unwrap_or("".to_owned())
+        .trim_end_matches('\0')
+        .to_owned()
+}
+
+pub fn get_available_sessions(name: bool) -> Vec<WindowsSession> {
+    extern "C" {
+        fn get_available_session_ids(buf: *mut wchar_t, buf_size: c_int, include_rdp: bool);
+    }
+    const BUF_SIZE: c_int = 1024;
+    let mut buf: Vec<wchar_t> = vec![0; BUF_SIZE as usize];
+
+    let station_session_id_array = unsafe {
+        get_available_session_ids(buf.as_mut_ptr(), BUF_SIZE, true);
+        let session_ids = String::from_utf16_lossy(&buf);
+        session_ids.trim_matches(char::from(0)).trim().to_string()
+    };
+    let mut v: Vec<WindowsSession> = vec![];
+    // https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-wtsgetactiveconsolesessionid
+    let physical_console_sid = unsafe { get_current_session(FALSE) };
+    if physical_console_sid != u32::MAX {
+        let physical_console_name = if name {
+            let physical_console_username = get_session_username(physical_console_sid);
+            if physical_console_username.is_empty() {
+                "Console".to_owned()
+            } else {
+                format!("Console: {physical_console_username}")
+            }
+        } else {
+            "".to_owned()
+        };
+        v.push(WindowsSession {
+            sid: physical_console_sid,
+            name: physical_console_name,
+            ..Default::default()
+        });
+    }
+    // https://learn.microsoft.com/en-us/previous-versions//cc722458(v=technet.10)?redirectedfrom=MSDN
+    for type_session_id in station_session_id_array.split(",") {
+        let split: Vec<_> = type_session_id.split(":").collect();
+        if split.len() == 2 {
+            if let Ok(sid) = split[1].parse::<u32>() {
+                if !v.iter().any(|e| (*e).sid == sid) {
+                    let name = if name {
+                        let name = get_session_username(sid);
+                        if name.is_empty() {
+                            split[0].to_string()
+                        } else {
+                            format!("{}: {}", split[0], name)
+                        }
+                    } else {
+                        "".to_owned()
+                    };
+                    v.push(WindowsSession {
+                        sid,
+                        name,
+                        ..Default::default()
+                    });
+                }
+            }
+        }
+    }
+    if name {
+        let mut name_count: HashMap<String, usize> = HashMap::new();
+        for session in &v {
+            *name_count.entry(session.name.clone()).or_insert(0) += 1;
+        }
+        let current_sid = get_current_process_session_id().unwrap_or_default();
+        for e in v.iter_mut() {
+            let running = e.sid == current_sid && current_sid != 0;
+            if name_count.get(&e.name).map(|v| *v).unwrap_or_default() > 1 {
+                e.name = format!("{} (sid = {})", e.name, e.sid);
+            }
+            if running {
+                e.name = format!("{} (running)", e.name);
+            }
+        }
+    }
+    v
+}
+
 pub fn get_active_user_home() -> Option<PathBuf> {
     let username = get_active_username();
     if !username.is_empty() {
@@ -740,7 +895,9 @@ pub fn get_active_user_home() -> Option<PathBuf> {
 }
 
 pub fn is_prelogin() -> bool {
-    let username = get_active_username();
+    let Some(username) = get_current_session_username() else {
+        return false;
+    };
     username.is_empty() || username == "SYSTEM"
 }
 
@@ -1310,13 +1467,13 @@ fn get_reg_of(subkey: &str, name: &str) -> String {
     "".to_owned()
 }
 
-pub fn get_license_from_exe_name() -> ResultType<License> {
+pub fn get_license_from_exe_name() -> ResultType<CustomServer> {
     let mut exe = std::env::current_exe()?.to_str().unwrap_or("").to_owned();
     // if defined portable appname entry, replace original executable name with it.
     if let Ok(portable_exe) = std::env::var(PORTABLE_APPNAME_RUNTIME_ENV_KEY) {
         exe = portable_exe;
     }
-    get_license_from_string(&exe)
+    get_custom_server_from_string(&exe)
 }
 
 #[inline]
@@ -1328,10 +1485,6 @@ pub fn bootstrap() {
     if let Ok(lic) = get_license_from_exe_name() {
         *config::EXE_RENDEZVOUS_SERVER.write().unwrap() = lic.host.clone();
     }
-}
-
-pub fn is_rdp_service_open() -> bool {
-    unsafe { has_rdp_service() == TRUE }
 }
 
 pub fn create_shortcut(id: &str) -> ResultType<()> {
@@ -1595,7 +1748,7 @@ pub fn get_double_click_time() -> u32 {
     unsafe { GetDoubleClickTime() }
 }
 
-fn wide_string(s: &str) -> Vec<u16> {
+pub fn wide_string(s: &str) -> Vec<u16> {
     use std::os::windows::prelude::OsStrExt;
     std::ffi::OsStr::new(s)
         .encode_wide()
@@ -2260,11 +2413,12 @@ sc start {app_name}
 
 fn run_after_run_cmds(silent: bool) {
     let (_, _, _, exe) = get_install_info();
+    let app = crate::get_app_name().to_lowercase();
     if !silent {
         log::debug!("Spawn new window");
         allow_err!(std::process::Command::new("cmd")
             .arg("/c")
-            .arg("timeout /t 2 & start rustdesk://")
+            .arg(format!("timeout /t 2 & start {app}://"))
             .creation_flags(winapi::um::winbase::CREATE_NO_WINDOW)
             .spawn());
     }
@@ -2354,8 +2508,8 @@ pub fn alloc_console() {
     }
 }
 
-fn get_license() -> Option<License> {
-    let mut lic: License = Default::default();
+fn get_license() -> Option<CustomServer> {
+    let mut lic: CustomServer = Default::default();
     if let Ok(tmp) = get_license_from_exe_name() {
         lic = tmp;
     } else {
@@ -2434,6 +2588,9 @@ impl WallPaperRemover {
         // https://superuser.com/questions/1218413/write-to-current-users-registry-through-a-different-admin-account
         let (hkcu, sid) = if is_root() {
             let username = get_active_username();
+            if username.is_empty() {
+                bail!("failed to get username");
+            }
             let sid = get_sid_of_user(&username)?;
             log::info!("username: {username}, sid: {sid}");
             (RegKey::predef(HKEY_USERS), format!("{}\\", sid))

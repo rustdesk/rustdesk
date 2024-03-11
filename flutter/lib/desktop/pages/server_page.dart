@@ -327,11 +327,7 @@ class _AppIcon extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       margin: EdgeInsets.symmetric(horizontal: 4.0),
-      child: SvgPicture.asset(
-        'assets/logo.svg',
-        width: 30,
-        height: 30,
-      ),
+      child: loadLogo(30),
     );
   }
 }
@@ -1006,7 +1002,7 @@ class __FileTransferLogPageState extends State<_FileTransferLogPage> {
               angle: item.action == CmFileAction.remoteToLocal ? 0 : pi,
               child: SvgPicture.asset(
                 "assets/arrow.svg",
-                color: Theme.of(context).tabBarTheme.labelColor,
+                colorFilter: svgColor(Theme.of(context).tabBarTheme.labelColor),
               ),
             ),
             Text(item.action == CmFileAction.remoteToLocal
@@ -1154,13 +1150,14 @@ class __FileTransferLogPageState extends State<_FileTransferLogPage> {
                           children: [
                             SvgPicture.asset(
                               "assets/transfer.svg",
-                              color: Theme.of(context).tabBarTheme.labelColor,
+                              colorFilter: svgColor(
+                                  Theme.of(context).tabBarTheme.labelColor),
                               height: 40,
                             ).paddingOnly(bottom: 10),
                             Text(
                               translate("No transfers in progress"),
                               textAlign: TextAlign.center,
-                              textScaleFactor: 1.20,
+                              textScaler: TextScaler.linear(1.20),
                               style: TextStyle(
                                   color:
                                       Theme.of(context).tabBarTheme.labelColor),

@@ -79,9 +79,7 @@ dependencies:
     git:
       url: https://github.com/rustdesk-org/flutter_improved_scrolling
   uni_links: ^0.5.1
-  uni_links_desktop:
-    git:
-      url: https://github.com/rustdesk-org/uni_links_desktop
+  uni_links_desktop: ^0.1.7
   path: ^1.8.1
   auto_size_text: ^3.0.0
   bot_toast: ^4.0.3
@@ -95,7 +93,7 @@ dependencies:
   flutter_gpu_texture_renderer:
     git:
       url: https://github.com/21pages/flutter_gpu_texture_renderer
-      ref: 3865a99f60a92bea4d95bb5d55cf524b1bcbbf5a
+      ref: 38951317afe79d953ab25733667bd96e172a80d3
   uuid: ^3.0.7
   auto_size_text_field: ^2.2.1
   flex_color_picker: ^3.3.0

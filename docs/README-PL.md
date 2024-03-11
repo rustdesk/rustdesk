@@ -29,22 +29,6 @@ RustDesk zaprasza do współpracy każdego. Zobacz [`docs/CONTRIBUTING-PL.md`](C
     alt="Get it on F-Droid"
     height="80">](https://f-droid.org/en/packages/com.carriez.flutter_hbb)
 
-## Darmowe Serwery Publiczne
-
-Poniżej znajdują się serwery, z których można korzystać za darmo, może się to zmienić z upływem czasu. Jeśli nie znajdujesz się w pobliżu jednego z nich, Twoja prędkość połączenia może być niska.
-| Lokalizacja | Dostawca | Specyfikacja |
-| --------- | ------------- | ------------------ |
-| Niemcy | Hetzner | 2 vCPU / 4GB RAM |
-| Ukraina (Kijów) | [dc.volia](https://dc.volia.com) | 2 vCPU / 4GB RAM |
-
-## Konterner Programisty (Dev Container)
-
-[![Otwórz w Kontenerze programisty](https://img.shields.io/static/v1?label=Dev%20Container&message=Open&color=blue&logo=visualstudiocode)](https://vscode.dev/redirect?url=vscode://ms-vscode-remote.remote-containers/cloneInVolume?url=https://github.com/rustdesk/rustdesk)
-
-Jeżeli masz zainstalowany VS Code i Docker, możesz kliknąć w powyższy link, aby rozpocząć. Kliknięcie spowoduje automatyczną instalację rozszrzenia Kontenera Programisty w VS Code (jeżeli wymagany), sklonuje kod źródłowy do kontenera, i przygotuje kontener do użycia.
-
-Więcej informacji w pliku [DEVCONTAINER-PL.md](docs/DEVCONTAINER-PL.md) for more info.
-
 ## Zależności
 
 Wersje desktopowe używają [sciter](https://sciter.com/) dla GUI, proszę pobrać samodzielnie bibliotekę sciter.

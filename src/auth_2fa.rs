@@ -73,7 +73,11 @@ impl TOTPInfo {
 }
 
 pub fn generate2fa() -> String {
-    if let Ok(info) = TOTPInfo::gen_totp_info(crate::ipc::get_id(), 6) {
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    let id = crate::ipc::get_id();
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    let id = Config::get_id();
+    if let Ok(info) = TOTPInfo::gen_totp_info(id, 6) {
         if let Ok(totp) = info.new_totp() {
             let code = totp.get_url();
             *CURRENT_2FA.lock().unwrap() = Some((info, totp));
@@ -89,7 +93,10 @@ pub fn verify2fa(code: String) -> bool {
             let res = code == cur;
             if res {
                 if let Ok(v) = info.into_string() {
+                    #[cfg(not(any(target_os = "android", target_os = "ios")))]
                     crate::ipc::set_option("2fa", &v);
+                    #[cfg(any(target_os = "android", target_os = "ios"))]
+                    Config::set_option("2fa".to_owned(), v);
                     return res;
                 }
             }

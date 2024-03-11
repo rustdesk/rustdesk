@@ -3,8 +3,9 @@ use hbb_common::password_security;
 use hbb_common::{
     allow_err,
     bytes::Bytes,
-    config::{self, Config, LocalConfig, PeerConfig},
-    config::{CONNECT_TIMEOUT, RENDEZVOUS_PORT},
+    config::{
+        self, Config, LocalConfig, PeerConfig, CONNECT_TIMEOUT, HARD_SETTINGS, RENDEZVOUS_PORT,
+    },
     directories_next,
     futures::future::join_all,
     log,
@@ -172,6 +173,16 @@ pub fn get_local_option(key: String) -> String {
 }
 
 #[inline]
+pub fn get_hard_option(key: String) -> String {
+    config::HARD_SETTINGS
+        .read()
+        .unwrap()
+        .get(&key)
+        .cloned()
+        .unwrap_or_default()
+}
+
+#[inline]
 pub fn set_local_option(key: String, value: String) {
     LocalConfig::set_option(key, value);
 }
@@ -246,12 +257,6 @@ pub fn set_peer_option(id: String, name: String, value: String) {
         c.options.insert(name, value);
     }
     c.store(&id);
-}
-
-#[inline]
-pub fn using_public_server() -> bool {
-    option_env!("RENDEZVOUS_SERVER").unwrap_or("").is_empty()
-        && crate::get_custom_rendezvous_server(get_option("custom-rendezvous-server")).is_empty()
 }
 
 #[inline]
@@ -429,14 +434,6 @@ pub fn is_installed() -> bool {
 #[inline]
 pub fn is_installed() -> bool {
     false
-}
-
-#[inline]
-pub fn is_rdp_service_open() -> bool {
-    #[cfg(windows)]
-    return is_installed() && crate::platform::windows::is_rdp_service_open();
-    #[cfg(not(windows))]
-    return false;
 }
 
 #[inline]
@@ -1044,7 +1041,7 @@ async fn check_connect_status_(reconnect: bool, rx: mpsc::UnboundedReceiver<ipc:
 
     loop {
         if let Ok(mut c) = ipc::connect(1000, "").await {
-            let mut timer = time::interval(time::Duration::from_secs(1));
+            let mut timer = crate::rustdesk_interval(time::interval(time::Duration::from_secs(1)));
             loop {
                 tokio::select! {
                     res = c.next() => {

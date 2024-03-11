@@ -50,7 +50,7 @@ use scrap::hwcodec::{HwEncoder, HwEncoderConfig};
 use scrap::Capturer;
 use scrap::{
     aom::AomEncoderConfig,
-    codec::{Encoder, EncoderCfg, EncodingUpdate, Quality},
+    codec::{Encoder, EncoderCfg, Quality},
     record::{Recorder, RecorderContext},
     vpxcodec::{VpxEncoderConfig, VpxVideoCodecId},
     CodecName, Display, Frame, TraitCapturer,
@@ -193,17 +193,22 @@ fn create_capturer(
     match c {
         Some(c1) => return Ok(c1),
         None => {
-            log::debug!("Create capturer dxgi|gdi");
             #[cfg(windows)]
-            return crate::portable_service::client::create_capturer(
-                _current,
-                display,
-                _portable_service_running,
-            );
+            {
+                log::debug!("Create capturer dxgi|gdi");
+                return crate::portable_service::client::create_capturer(
+                    _current,
+                    display,
+                    _portable_service_running,
+                );
+            }
             #[cfg(not(windows))]
-            return Ok(Box::new(
-                Capturer::new(display).with_context(|| "Failed to create capturer")?,
-            ));
+            {
+                log::debug!("Create capturer from scrap");
+                return Ok(Box::new(
+                    Capturer::new(display).with_context(|| "Failed to create capturer")?,
+                ));
+            }
         }
     };
 }
@@ -304,6 +309,17 @@ fn get_capturer(current: usize, portable_service_running: bool) -> ResultType<Ca
         );
     }
     let display = displays.remove(current);
+
+    #[cfg(target_os = "linux")]
+    if let Display::X11(inner) = &display {
+        if let Err(err) = inner.get_shm_status() {
+            log::warn!(
+                "MIT-SHM extension not working properly on select X11 server: {:?}",
+                err
+            );
+        }
+    }
+
     let (origin, width, height) = (display.origin(), display.width(), display.height());
     let name = display.name();
     log::debug!(
@@ -627,7 +643,7 @@ fn get_encoder_config(
         GpuEncoder::set_not_use(_display_idx, true);
     }
     #[cfg(feature = "gpucodec")]
-    Encoder::update(EncodingUpdate::Check);
+    Encoder::update(scrap::codec::EncodingUpdate::Check);
     // https://www.wowza.com/community/t/the-correct-keyframe-interval-in-obs-studio/95162
     let keyframe_interval = if record { Some(240) } else { None };
     let negotiated_codec = Encoder::negotiated_codec();

@@ -323,7 +323,7 @@ impl GpuDecoder {
             .map(|c| c.d)
             .unwrap_or_default()
             .drain(..)
-            .filter(|c| c.data_format == data_format && c.luid == luid)
+            .filter(|c| c.data_format == data_format && c.luid == luid && luid != 0)
             .collect()
     }
 

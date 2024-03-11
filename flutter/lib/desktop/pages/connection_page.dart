@@ -20,6 +20,144 @@ import '../../common/widgets/autocomplete.dart';
 import '../../models/platform_model.dart';
 import '../widgets/button.dart';
 
+class OnlineStatusWidget extends StatefulWidget {
+  const OnlineStatusWidget({Key? key}) : super(key: key);
+
+  @override
+  State<OnlineStatusWidget> createState() => _OnlineStatusWidgetState();
+}
+
+/// State for the connection page.
+class _OnlineStatusWidgetState extends State<OnlineStatusWidget> {
+  final _svcStopped = Get.find<RxBool>(tag: 'stop-service');
+  final _svcIsUsingPublicServer = true.obs;
+  Timer? _updateTimer;
+
+  double get em => 14.0;
+  double get height => em * 3;
+
+  void onUsePublicServerGuide() {
+    const url = "https://rustdesk.com/pricing.html";
+    canLaunchUrlString(url).then((can) {
+      if (can) {
+        launchUrlString(url);
+      }
+    });
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _updateTimer = periodic_immediate(Duration(seconds: 1), () async {
+      updateStatus();
+    });
+  }
+
+  @override
+  void dispose() {
+    _updateTimer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: height,
+      child: Obx(() => Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Container(
+                height: 8,
+                width: 8,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(4),
+                  color: _svcStopped.value ||
+                          stateGlobal.svcStatus.value == SvcStatus.connecting
+                      ? kColorWarn
+                      : (stateGlobal.svcStatus.value == SvcStatus.ready
+                          ? Color.fromARGB(255, 50, 190, 166)
+                          : Color.fromARGB(255, 224, 79, 95)),
+                ),
+              ).marginSymmetric(horizontal: em),
+              Text(
+                  _svcStopped.value
+                      ? translate("Service is not running")
+                      : stateGlobal.svcStatus.value == SvcStatus.connecting
+                          ? translate("connecting_status")
+                          : stateGlobal.svcStatus.value == SvcStatus.notReady
+                              ? translate("not_ready_status")
+                              : translate('Ready'),
+                  style: TextStyle(fontSize: em)),
+              // stop
+              Offstage(
+                offstage: !_svcStopped.value,
+                child: InkWell(
+                        onTap: () async {
+                          await start_service(true);
+                        },
+                        child: Text(translate("Start service"),
+                            style: TextStyle(
+                                decoration: TextDecoration.underline,
+                                fontSize: em)))
+                    .marginOnly(left: em),
+              ),
+              // ready && public
+              Flexible(
+                child: Offstage(
+                  offstage: !(!_svcStopped.value &&
+                      stateGlobal.svcStatus.value == SvcStatus.ready &&
+                      _svcIsUsingPublicServer.value),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Text(', ', style: TextStyle(fontSize: em)),
+                      Flexible(
+                        child: InkWell(
+                          onTap: onUsePublicServerGuide,
+                          child: Row(
+                            children: [
+                              Flexible(
+                                child: Text(
+                                  translate('setup_server_tip'),
+                                  style: TextStyle(
+                                      decoration: TextDecoration.underline,
+                                      fontSize: em),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      )
+                    ],
+                  ),
+                ),
+              )
+            ],
+          )),
+    ).paddingOnly(right: bind.isQs() ? 8 : 0);
+  }
+
+  updateStatus() async {
+    final status =
+        jsonDecode(await bind.mainGetConnectStatus()) as Map<String, dynamic>;
+    final statusNum = status['status_num'] as int;
+    final preStatus = stateGlobal.svcStatus.value;
+    if (statusNum == 0) {
+      stateGlobal.svcStatus.value = SvcStatus.connecting;
+    } else if (statusNum == -1) {
+      stateGlobal.svcStatus.value = SvcStatus.notReady;
+    } else if (statusNum == 1) {
+      stateGlobal.svcStatus.value = SvcStatus.ready;
+      if (preStatus != SvcStatus.ready) {
+        gFFI.userModel.refreshCurrentUser();
+      }
+    } else {
+      stateGlobal.svcStatus.value = SvcStatus.notReady;
+    }
+    _svcIsUsingPublicServer.value = await bind.mainIsUsingPublicServer();
+  }
+}
+
 /// Connection page for connecting to a remote peer.
 class ConnectionPage extends StatefulWidget {
   const ConnectionPage({Key? key}) : super(key: key);
@@ -34,22 +172,10 @@ class _ConnectionPageState extends State<ConnectionPage>
   /// Controller for the id input bar.
   final _idController = IDTextEditingController();
 
-  Timer? _updateTimer;
-
   final RxBool _idInputFocused = false.obs;
-
-  var svcStopped = Get.find<RxBool>(tag: 'stop-service');
-  var svcIsUsingPublicServer = true.obs;
 
   bool isWindowMinimized = false;
   List<Peer> peers = [];
-  List _frontN<T>(List list, int n) {
-    if (list.length <= n) {
-      return list;
-    } else {
-      return list.sublist(0, n);
-    }
-  }
 
   bool isPeersLoading = false;
   bool isPeersLoaded = false;
@@ -67,9 +193,6 @@ class _ConnectionPageState extends State<ConnectionPage>
         }
       }();
     }
-    _updateTimer = periodic_immediate(Duration(seconds: 1), () async {
-      updateStatus();
-    });
     Get.put<IDTextEditingController>(_idController);
     windowManager.addListener(this);
   }
@@ -77,7 +200,6 @@ class _ConnectionPageState extends State<ConnectionPage>
   @override
   void dispose() {
     _idController.dispose();
-    _updateTimer?.cancel();
     windowManager.removeListener(this);
     if (Get.isRegistered<IDTextEditingController>()) {
       Get.delete<IDTextEditingController>();
@@ -139,7 +261,7 @@ class _ConnectionPageState extends State<ConnectionPage>
           ],
         ).paddingOnly(left: 12.0)),
         const Divider(height: 1),
-        buildStatus()
+        OnlineStatusWidget()
       ],
     );
   }
@@ -296,6 +418,9 @@ class _ConnectionPageState extends State<ConnectionPage>
                           onChanged: (v) {
                             _idController.id = v;
                           },
+                          onSubmitted: (_) {
+                            onConnect();
+                          },
                         ));
                   },
                   onSelected: (option) {
@@ -389,112 +514,5 @@ class _ConnectionPageState extends State<ConnectionPage>
     );
     return Container(
         constraints: const BoxConstraints(maxWidth: 600), child: w);
-  }
-
-  Widget buildStatus() {
-    final em = 14.0;
-    return Container(
-      height: 3 * em,
-      child: Obx(() => Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Container(
-                height: 8,
-                width: 8,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(4),
-                  color: svcStopped.value ||
-                          stateGlobal.svcStatus.value == SvcStatus.connecting
-                      ? kColorWarn
-                      : (stateGlobal.svcStatus.value == SvcStatus.ready
-                          ? Color.fromARGB(255, 50, 190, 166)
-                          : Color.fromARGB(255, 224, 79, 95)),
-                ),
-              ).marginSymmetric(horizontal: em),
-              Text(
-                  svcStopped.value
-                      ? translate("Service is not running")
-                      : stateGlobal.svcStatus.value == SvcStatus.connecting
-                          ? translate("connecting_status")
-                          : stateGlobal.svcStatus.value == SvcStatus.notReady
-                              ? translate("not_ready_status")
-                              : translate('Ready'),
-                  style: TextStyle(fontSize: em)),
-              // stop
-              Offstage(
-                offstage: !svcStopped.value,
-                child: InkWell(
-                        onTap: () async {
-                          await start_service(true);
-                        },
-                        child: Text(translate("Start service"),
-                            style: TextStyle(
-                                decoration: TextDecoration.underline,
-                                fontSize: em)))
-                    .marginOnly(left: em),
-              ),
-              // ready && public
-              Flexible(
-                child: Offstage(
-                  offstage: !(!svcStopped.value &&
-                      stateGlobal.svcStatus.value == SvcStatus.ready &&
-                      svcIsUsingPublicServer.value),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      Text(', ', style: TextStyle(fontSize: em)),
-                      Flexible(
-                        child: InkWell(
-                          onTap: onUsePublicServerGuide,
-                          child: Row(
-                            children: [
-                              Flexible(
-                                child: Text(
-                                  translate('setup_server_tip'),
-                                  style: TextStyle(
-                                      decoration: TextDecoration.underline,
-                                      fontSize: em),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      )
-                    ],
-                  ),
-                ),
-              )
-            ],
-          )),
-    );
-  }
-
-  void onUsePublicServerGuide() {
-    const url = "https://rustdesk.com/blog/id-relay-set/";
-    canLaunchUrlString(url).then((can) {
-      if (can) {
-        launchUrlString(url);
-      }
-    });
-  }
-
-  updateStatus() async {
-    final status =
-        jsonDecode(await bind.mainGetConnectStatus()) as Map<String, dynamic>;
-    final statusNum = status['status_num'] as int;
-    final preStatus = stateGlobal.svcStatus.value;
-    if (statusNum == 0) {
-      stateGlobal.svcStatus.value = SvcStatus.connecting;
-    } else if (statusNum == -1) {
-      stateGlobal.svcStatus.value = SvcStatus.notReady;
-    } else if (statusNum == 1) {
-      stateGlobal.svcStatus.value = SvcStatus.ready;
-      if (preStatus != SvcStatus.ready) {
-        gFFI.userModel.refreshCurrentUser();
-      }
-    } else {
-      stateGlobal.svcStatus.value = SvcStatus.notReady;
-    }
-    svcIsUsingPublicServer.value = await bind.mainIsUsingPublicServer();
   }
 }

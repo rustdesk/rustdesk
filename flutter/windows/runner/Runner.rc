@@ -93,7 +93,7 @@ BEGIN
             VALUE "FileDescription", "rustdeskfl" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
             VALUE "InternalName", "rustdesk" "\0"
-            VALUE "LegalCopyright", "Copyright (C) 2023. All rights reserved." "\0"
+            VALUE "LegalCopyright", "Copyright (C) 2024 FL from PursLane Base." "\0"
             VALUE "OriginalFilename", "rustdeskfl.exe" "\0"
             VALUE "ProductName", "rustdeskfl" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
