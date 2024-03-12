@@ -964,7 +964,13 @@ impl Config {
     }
 
     pub fn get_permanent_password() -> String {
-        CONFIG.read().unwrap().password.clone()
+        let mut password = CONFIG.read().unwrap().password.clone();
+        if password.is_empty() {
+            if let Some(v) = HARD_SETTINGS.read().unwrap().get("password") {
+                password = v.to_owned();
+            }
+        }
+        password
     }
 
     pub fn set_salt(salt: &str) {
@@ -1855,6 +1861,58 @@ fn get_or(
         .or(b.get(k))
         .or(c.read().unwrap().get(k))
         .cloned()
+}
+
+#[inline]
+pub fn is_incoming_only() -> bool {
+    HARD_SETTINGS
+        .read()
+        .unwrap()
+        .get("conn-type")
+        .map_or(false, |x| x == ("incoming"))
+}
+
+#[inline]
+pub fn is_outgoing_only() -> bool {
+    HARD_SETTINGS
+        .read()
+        .unwrap()
+        .get("conn-type")
+        .map_or(false, |x| x == ("outgoing"))
+}
+
+#[inline]
+fn is_some_hard_opton(name: &str) -> bool {
+    HARD_SETTINGS
+        .read()
+        .unwrap()
+        .get(name)
+        .map_or(false, |x| x == ("Y"))
+}
+
+#[inline]
+pub fn is_disable_tcp_listen() -> bool {
+    is_some_hard_opton("disable-tcp-listen")
+}
+
+#[inline]
+pub fn is_disable_settings() -> bool {
+    is_some_hard_opton("disable-settings")
+}
+
+#[inline]
+pub fn is_disable_ab() -> bool {
+    is_some_hard_opton("disable-ab")
+}
+
+#[inline]
+pub fn is_disable_account() -> bool {
+    is_some_hard_opton("disable-account")
+}
+
+#[inline]
+pub fn is_disable_installation() -> bool {
+    is_some_hard_opton("disable-installation")
 }
 
 #[cfg(test)]

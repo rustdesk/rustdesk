@@ -42,6 +42,8 @@ lazy_static::lazy_static! {
 fn initialize(app_dir: &str) {
     flutter::async_tasks::start_flutter_async_runner();
     *config::APP_DIR.write().unwrap() = app_dir.to_owned();
+    // core_main's load_custom_client does not work for flutter since it is only applied to its load_library in main.c
+    crate::load_custom_client();
     #[cfg(target_os = "android")]
     {
         // flexi_logger can't work when android_logger initialized.
@@ -62,7 +64,12 @@ fn initialize(app_dir: &str) {
     #[cfg(target_os = "ios")]
     {
         use hbb_common::env_logger::*;
-        init_from_env(Env::default().filter_or(DEFAULT_FILTER_ENV, "debug"));
+        init_fro_env(Env::default().filter_or(DEFAULT_FILTER_ENV, "debug"));
+    }
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    {
+        // core_main's init_log does not work for flutter since it is only applied to its load_library in main.c
+        hbb_common::init_log(false, "flutter_ffi");
     }
 }
 
@@ -1813,8 +1820,29 @@ pub fn main_support_remove_wallpaper() -> bool {
     support_remove_wallpaper()
 }
 
-pub fn is_qs() -> SyncReturn<bool> {
-    SyncReturn(get_hard_option("connection-type".to_owned()) == "incoming")
+pub fn is_incoming_only() -> SyncReturn<bool> {
+    SyncReturn(config::is_incoming_only())
+}
+
+pub fn is_outgoing_only() -> SyncReturn<bool> {
+    SyncReturn(config::is_outgoing_only())
+}
+
+pub fn is_disable_settings() -> SyncReturn<bool> {
+    SyncReturn(config::is_disable_settings())
+}
+
+pub fn is_disable_ab() -> SyncReturn<bool> {
+    SyncReturn(config::is_disable_ab())
+}
+
+pub fn is_disable_account() -> SyncReturn<bool> {
+    SyncReturn(config::is_disable_account())
+}
+
+// windows only
+pub fn is_disable_installation() -> SyncReturn<bool> {
+    SyncReturn(config::is_disable_installation())
 }
 
 /// Send a url scheme throught the ipc.

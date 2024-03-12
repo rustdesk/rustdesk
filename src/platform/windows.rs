@@ -1205,6 +1205,15 @@ if exist \"{tmp_path}\\{app_name} Tray.lnk\" del /f /q \"{tmp_path}\\{app_name} 
         Config::set_option("api-server".into(), lic.api);
     }
 
+    let tray_shortcuts = if config::is_outgoing_only() {
+        "".to_owned()
+    } else {
+        format!("
+cscript \"{tray_shortcut}\"
+copy /Y \"{tmp_path}\\{app_name} Tray.lnk\" \"%PROGRAMDATA%\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\\"
+")
+    };
+
     let cmds = format!(
         "
 {uninstall_str}
@@ -1227,8 +1236,7 @@ reg add {subkey} /f /v EstimatedSize /t REG_DWORD /d {size}
 reg add {subkey} /f /v WindowsInstaller /t REG_DWORD /d 0
 cscript \"{mk_shortcut}\"
 cscript \"{uninstall_shortcut}\"
-cscript \"{tray_shortcut}\"
-copy /Y \"{tmp_path}\\{app_name} Tray.lnk\" \"%PROGRAMDATA%\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\\"
+{tray_shortcuts}
 {shortcuts}
 copy /Y \"{tmp_path}\\Uninstall {app_name}.lnk\" \"{path}\\\"
 {dels}
@@ -1237,19 +1245,11 @@ copy /Y \"{tmp_path}\\Uninstall {app_name}.lnk\" \"{path}\\\"
 {after_install}
 {sleep}
     ",
-        version=crate::VERSION,
-        build_date=crate::BUILD_DATE,
-        after_install=get_after_install(&exe),
-        sleep=if debug {
-            "timeout 300"
-        } else {
-            ""
-        },
-        dels=if debug {
-            ""
-        } else {
-            &dels
-        },
+        version = crate::VERSION,
+        build_date = crate::BUILD_DATE,
+        after_install = get_after_install(&exe),
+        sleep = if debug { "timeout 300" } else { "" },
+        dels = if debug { "" } else { &dels },
         copy_exe = copy_exe_cmd(&src_exe, &exe, &path)?,
         import_config = get_import_config(&exe),
     );
@@ -2383,6 +2383,9 @@ oLink.Save
 }
 
 fn get_import_config(exe: &str) -> String {
+    if config::is_outgoing_only() {
+        return "".to_string();
+    }
     format!("
 sc stop {app_name}
 sc delete {app_name}
@@ -2397,6 +2400,9 @@ sc delete {app_name}
 }
 
 fn get_create_service(exe: &str) -> String {
+    if config::is_outgoing_only() {
+        return "".to_string();
+    }
     let stop = Config::get_option("stop-service") == "Y";
     if stop {
         format!("

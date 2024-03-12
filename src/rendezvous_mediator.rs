@@ -12,7 +12,7 @@ use uuid::Uuid;
 use hbb_common::{
     allow_err,
     anyhow::{self, bail},
-    config::{Config, CONNECT_TIMEOUT, READ_TIMEOUT, REG_INTERVAL, RENDEZVOUS_PORT},
+    config::{self, Config, CONNECT_TIMEOUT, READ_TIMEOUT, REG_INTERVAL, RENDEZVOUS_PORT},
     futures::future::join_all,
     log,
     protobuf::Message as _,
@@ -61,6 +61,11 @@ impl RendezvousMediator {
     }
 
     pub async fn start_all() {
+        if config::is_outgoing_only() {
+            loop {
+                sleep(1.).await;
+            }
+        }
         crate::hbbs_http::sync::start();
         let mut nat_tested = false;
         check_zombie();
@@ -449,7 +454,7 @@ impl RendezvousMediator {
 
     async fn handle_intranet(&self, fla: FetchLocalAddr, server: ServerPtr) -> ResultType<()> {
         let relay_server = self.get_relay_server(fla.relay_server);
-        if !is_ipv4(&self.addr) {
+        if !is_ipv4(&self.addr) || config::is_disable_tcp_listen() {
             // nat64, go relay directly, because current hbbs will crash if demangle ipv6 address
             let uuid = Uuid::new_v4().to_string();
             return self
@@ -488,6 +493,7 @@ impl RendezvousMediator {
         let relay_server = self.get_relay_server(ph.relay_server);
         if ph.nat_type.enum_value() == Ok(NatType::SYMMETRIC)
             || Config::get_nat_type() == NatType::SYMMETRIC as i32
+            || config::is_disable_tcp_listen()
         {
             let uuid = Uuid::new_v4().to_string();
             return self

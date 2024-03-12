@@ -112,7 +112,7 @@ class _DesktopSettingPageState extends State<DesktopSettingPage>
       _TabInfo('Account', Icons.person_outline, Icons.person),
       _TabInfo('About', Icons.info_outline, Icons.info)
     ];
-    if (!bind.isQs()) {
+    if (!bind.isIncomingOnly()) {
       settingTabs.insert(
           3,
           _TabInfo('Display', Icons.desktop_windows_outlined,
@@ -133,7 +133,7 @@ class _DesktopSettingPageState extends State<DesktopSettingPage>
       _Account(),
       _About(),
     ];
-    if (!bind.isQs()) {
+    if (!bind.isIncomingOnly()) {
       children.insert(3, _Display());
       if (bind.pluginFeatureIsEnabled()) {
         children.insert(4, _Plugin());
@@ -325,7 +325,7 @@ class _GeneralState extends State<_General> {
 
   Widget other() {
     final children = <Widget>[];
-    if (!bind.isQs()) {
+    if (!bind.isIncomingOnly()) {
       children.add(_OptionCheckBox(context,
           'Confirm before closing multiple tabs', 'enable-confirm-closing-tabs',
           isServer: false));
@@ -334,7 +334,7 @@ class _GeneralState extends State<_General> {
       _OptionCheckBox(context, 'Adaptive bitrate', 'enable-abr'),
       wallpaper()
     ]);
-    if (!bind.isQs()) {
+    if (!bind.isIncomingOnly()) {
       children.addAll([
         _OptionCheckBox(
           context,

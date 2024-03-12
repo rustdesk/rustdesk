@@ -165,7 +165,7 @@ class DesktopTabController {
         }));
       }
     });
-    if ((isDesktop && bind.isQs()) || callOnSelected) {
+    if ((isDesktop && bind.isIncomingOnly()) || callOnSelected) {
       if (state.value.tabs.length > index) {
         final key = state.value.tabs[index].key;
         onSelected?.call(key);

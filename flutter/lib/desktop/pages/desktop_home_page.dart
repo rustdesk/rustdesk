@@ -58,7 +58,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
     super.build(context);
 
     final children = [buildLeftPane(context)];
-    if (!bind.isQs()) {
+    if (!bind.isIncomingOnly()) {
       children.addAll([
         const VerticalDivider(width: 1),
         Expanded(child: buildRightPane(context)),
@@ -79,7 +79,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
         future: buildHelpCards(),
         builder: (_, data) {
           if (data.hasData) {
-            if (bind.isQs()) {
+            if (bind.isIncomingOnly()) {
               Future.delayed(Duration(milliseconds: 300), () {
                 _updateWindowSize();
               });
@@ -92,7 +92,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
       ),
       buildPluginEntry(),
     ];
-    if (bind.isQs()) {
+    if (bind.isIncomingOnly()) {
       children.addAll([
         Divider(),
         Container(
@@ -104,7 +104,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
     return ChangeNotifierProvider.value(
       value: gFFI.serverModel,
       child: Container(
-        width: bind.isQs() ? 280.0 : 200.0,
+        width: bind.isIncomingOnly() ? 280.0 : 200.0,
         color: Theme.of(context).colorScheme.background,
         child: DesktopScrollWrapper(
           scrollController: _leftPaneScrollController,
@@ -474,7 +474,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
       children: [
         Container(
           margin:
-              EdgeInsets.fromLTRB(0, marginTop, 0, bind.isQs() ? marginTop : 0),
+              EdgeInsets.fromLTRB(0, marginTop, 0, bind.isIncomingOnly() ? marginTop : 0),
           child: Container(
               decoration: BoxDecoration(
                   gradient: LinearGradient(
@@ -693,7 +693,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
     });
     _uniLinksSubscription = listenUniLinks();
 
-    if (bind.isQs()) {
+    if (bind.isIncomingOnly()) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         _updateWindowSize();
       });
