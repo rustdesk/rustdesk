@@ -51,6 +51,8 @@ class _DesktopHomePageState extends State<DesktopHomePage>
   Timer? _updateTimer;
   bool isCardClosed = false;
 
+  static bool _isUpdatedSizeHelpCards = false;
+
   final GlobalKey _childKey = GlobalKey();
 
   @override
@@ -80,9 +82,12 @@ class _DesktopHomePageState extends State<DesktopHomePage>
         builder: (_, data) {
           if (data.hasData) {
             if (bind.isIncomingOnly()) {
-              Future.delayed(Duration(milliseconds: 300), () {
-                _updateWindowSize();
-              });
+              if (!_isUpdatedSizeHelpCards) {
+                Future.delayed(Duration(milliseconds: 300), () {
+                  _updateWindowSize();
+                });
+                _isUpdatedSizeHelpCards = true;
+              }
             }
             return data.data!;
           } else {
@@ -97,7 +102,12 @@ class _DesktopHomePageState extends State<DesktopHomePage>
         Divider(),
         Container(
           margin: EdgeInsets.fromLTRB(0, 0, 8, 6),
-          child: OnlineStatusWidget(),
+          child: OnlineStatusWidget(
+            onSvcStatusChanged: () =>
+                Future.delayed(Duration(milliseconds: 300), () {
+              _updateWindowSize();
+            }),
+          ),
         ),
       ]);
     }
@@ -473,8 +483,8 @@ class _DesktopHomePageState extends State<DesktopHomePage>
     return Stack(
       children: [
         Container(
-          margin:
-              EdgeInsets.fromLTRB(0, marginTop, 0, bind.isIncomingOnly() ? marginTop : 0),
+          margin: EdgeInsets.fromLTRB(
+              0, marginTop, 0, bind.isIncomingOnly() ? marginTop : 0),
           child: Container(
               decoration: BoxDecoration(
                   gradient: LinearGradient(
