@@ -58,17 +58,14 @@ class _DesktopHomePageState extends State<DesktopHomePage>
   @override
   Widget build(BuildContext context) {
     super.build(context);
-
-    final children = [buildLeftPane(context)];
-    if (!bind.isIncomingOnly()) {
-      children.addAll([
-        const VerticalDivider(width: 1),
-        Expanded(child: buildRightPane(context)),
-      ]);
-    }
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
-      children: children,
+      children: [
+        if (!bind.isOutgoingOnly()) buildLeftPane(context),
+        if (!(bind.isIncomingOnly() || bind.isOutgoingOnly()))
+          const VerticalDivider(width: 1),
+        if (!bind.isIncomingOnly()) Expanded(child: buildRightPane(context)),
+      ],
     );
   }
 
@@ -207,6 +204,10 @@ class _DesktopHomePageState extends State<DesktopHomePage>
   }
 
   Widget buildPopupMenu(BuildContext context) {
+    if (bind.isDisableSettings()) {
+      return Offstage();
+    }
+
     final textColor = Theme.of(context).textTheme.titleLarge?.color;
     RxBool hover = false.obs;
     return InkWell(
@@ -324,6 +325,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
   }
 
   buildTip(BuildContext context) {
+    final logo = loadLogo();
     return Padding(
       padding:
           const EdgeInsets.only(left: 20.0, right: 16, top: 16.0, bottom: 5),
@@ -331,6 +333,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
         mainAxisAlignment: MainAxisAlignment.start,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          logo == null ? Offstage() : logo.marginOnly(bottom: 0.0),
           Text(
             translate("Your Desktop"),
             style: Theme.of(context).textTheme.titleLarge,
@@ -367,7 +370,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
     if (systemError.isNotEmpty) {
       return buildInstallCard("", systemError, "", () {});
     }
-    if (Platform.isWindows) {
+    if (Platform.isWindows && !bind.isDisableInstallation()) {
       if (!bind.mainIsInstalled()) {
         return buildInstallCard("", "install_tip", "Install", () async {
           await rustDeskWinManager.closeAllSubWindows();
@@ -711,10 +714,17 @@ class _DesktopHomePageState extends State<DesktopHomePage>
   }
 
   _updateWindowSize() {
-    RenderBox renderBox =
-        _childKey.currentContext?.findRenderObject() as RenderBox;
-    desktopQsHomeLeftPaneSize = renderBox.size;
-    windowManager.setSize(getDesktopQsHomeSize());
+    RenderObject? renderObject = _childKey.currentContext?.findRenderObject();
+    if (renderObject == null) {
+      return;
+    }
+    if (renderObject is RenderBox) {
+      final size = renderObject.size;
+      if (size != imcomingOnlyHomeSize) {
+        imcomingOnlyHomeSize = size;
+        windowManager.setSize(getIncomingOnlyHomeSize());
+      }
+    }
   }
 
   @override

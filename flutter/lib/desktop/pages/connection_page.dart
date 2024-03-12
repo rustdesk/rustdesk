@@ -21,7 +21,8 @@ import '../../models/platform_model.dart';
 import '../widgets/button.dart';
 
 class OnlineStatusWidget extends StatefulWidget {
-  const OnlineStatusWidget({Key? key, this.onSvcStatusChanged}) : super(key: key);
+  const OnlineStatusWidget({Key? key, this.onSvcStatusChanged})
+      : super(key: key);
 
   final VoidCallback? onSvcStatusChanged;
 
@@ -271,8 +272,8 @@ class _ConnectionPageState extends State<ConnectionPage>
             Expanded(child: PeerTabPage()),
           ],
         ).paddingOnly(left: 12.0)),
-        const Divider(height: 1),
-        OnlineStatusWidget()
+        if (!bind.isOutgoingOnly()) const Divider(height: 1),
+        if (!bind.isOutgoingOnly()) OnlineStatusWidget()
       ],
     );
   }

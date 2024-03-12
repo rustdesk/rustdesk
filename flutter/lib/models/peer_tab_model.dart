@@ -25,8 +25,6 @@ class PeerTabModel with ChangeNotifier {
     'Recent sessions',
     'Favorites',
     'Discovered',
-    'Address book',
-    'Group',
   ];
   final List<IconData> icons = [
     Icons.access_time_filled,
@@ -51,6 +49,13 @@ class PeerTabModel with ChangeNotifier {
   String get lastId => _lastId;
 
   PeerTabModel(this.parent) {
+    if (!(bind.isDisableAb() || bind.isDisableAccount())) {
+      tabNames.add('Address book');
+    }
+    if (!bind.isDisableAccount()) {
+      tabNames.add('Group');
+    }
+
     // visible
     try {
       final option = bind.getLocalFlutterOption(k: 'peer-tab-visible');

@@ -57,11 +57,20 @@ class _DesktopTabPageState extends State<DesktopTabPage> {
     if (bind.isIncomingOnly()) {
       tabController.onSelected = (key) {
         if (key == kTabLabelHomePage) {
-          windowManager.setSize(getDesktopQsHomeSize());
+          windowManager.setSize(getIncomingOnlyHomeSize());
           windowManager.setResizable(false);
         } else {
-          windowManager.setSize(getDesktopQsSettingsSize());
+          windowManager.setSize(getInOrOutOnlySettingsSize());
           windowManager.setResizable(true);
+        }
+      };
+    }
+    if (bind.isOutgoingOnly()) {
+      tabController.onSelected = (key) {
+        if (key == kTabLabelHomePage) {
+          windowManager.setSize(outgoingOnlyHomeSize);
+        } else {
+          windowManager.setSize(getInOrOutOnlySettingsSize());
         }
       };
     }
@@ -81,7 +90,7 @@ class _DesktopTabPageState extends State<DesktopTabPage> {
             body: DesktopTab(
               controller: tabController,
               tail: Offstage(
-                offstage: bind.isIncomingOnly(),
+                offstage: bind.isIncomingOnly() || bind.isDisableSettings(),
                 child: ActionIcon(
                   message: 'Settings',
                   icon: IconFont.menu,

@@ -125,7 +125,8 @@ void runMainApp(bool startService) async {
   gFFI.userModel.refreshCurrentUser();
   runApp(App());
   // Set window option.
-  WindowOptions windowOptions = getHiddenTitleBarWindowOptions();
+  WindowOptions windowOptions = getHiddenTitleBarWindowOptions(
+      size: bind.isOutgoingOnly() ? outgoingOnlyHomeSize : null);
   windowManager.waitUntilReadyToShow(windowOptions, () async {
     // Restore the location of the main window before window hide or show.
     await restoreWindowPosition(WindowType.Main);
@@ -142,7 +143,8 @@ void runMainApp(bool startService) async {
     }
     windowManager.setOpacity(1);
     windowManager.setTitle(getWindowName());
-    windowManager.setResizable(!bind.isIncomingOnly());
+    windowManager
+        .setResizable(!(bind.isIncomingOnly() || bind.isOutgoingOnly()));
   });
 }
 
