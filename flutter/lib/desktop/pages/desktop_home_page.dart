@@ -391,8 +391,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
                   //     fontSize: 19),
                 ),
               ),
-              if (bind.isCustomClient()) ...[
-                const SizedBox(width: 5),
+              if (bind.isCustomClient())
                 Align(
                   alignment: Alignment.centerRight,
                   child: MouseRegion(
@@ -412,7 +411,6 @@ class _DesktopHomePageState extends State<DesktopHomePage>
                     ),
                   ),
                 ),
-              ]
             ],
           ),
           SizedBox(
