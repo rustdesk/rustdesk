@@ -1820,6 +1820,10 @@ pub fn main_support_remove_wallpaper() -> bool {
     support_remove_wallpaper()
 }
 
+pub fn is_custom_client() -> SyncReturn<bool> {
+    SyncReturn(config::is_custom_client())
+}
+
 pub fn is_incoming_only() -> SyncReturn<bool> {
     SyncReturn(config::is_incoming_only())
 }

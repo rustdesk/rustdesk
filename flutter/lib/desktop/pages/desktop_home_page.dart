@@ -52,6 +52,8 @@ class _DesktopHomePageState extends State<DesktopHomePage>
   Timer? _updateTimer;
   bool isCardClosed = false;
 
+  RxBool _editHover = false.obs;
+
   final GlobalKey _childKey = GlobalKey();
 
   bool _isInHomePage() {
@@ -113,6 +115,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
         ),
       ]);
     }
+    final textColor = Theme.of(context).textTheme.titleLarge?.color;
     return ChangeNotifierProvider.value(
       value: gFFI.serverModel,
       child: Container(
@@ -120,13 +123,45 @@ class _DesktopHomePageState extends State<DesktopHomePage>
         color: Theme.of(context).colorScheme.background,
         child: DesktopScrollWrapper(
           scrollController: _leftPaneScrollController,
-          child: SingleChildScrollView(
-            controller: _leftPaneScrollController,
-            physics: DraggableNeverScrollableScrollPhysics(),
-            child: Column(
-              key: _childKey,
-              children: children,
-            ),
+          child: Stack(
+            children: [
+              SingleChildScrollView(
+                controller: _leftPaneScrollController,
+                physics: DraggableNeverScrollableScrollPhysics(),
+                child: Column(
+                  key: _childKey,
+                  children: children,
+                ),
+              ),
+              if (bind.isOutgoingOnly() && !bind.isDisableSettings())
+                Positioned(
+                  child: Divider(),
+                  bottom: 26,
+                  left: 0,
+                  right: 0,
+                ),
+              if (bind.isOutgoingOnly() && !bind.isDisableSettings())
+                Positioned(
+                  bottom: 6,
+                  left: 12,
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: InkWell(
+                      child: Obx(
+                        () => Icon(
+                          Icons.settings,
+                          color: _editHover.value
+                              ? textColor
+                              : Colors.grey.withOpacity(0.5),
+                          size: 22,
+                        ),
+                      ),
+                      onTap: () => DesktopSettingPage.switch2page(1),
+                      onHover: (value) => _editHover.value = value,
+                    ),
+                  ),
+                )
+            ],
           ),
         ),
       ),
@@ -360,14 +395,20 @@ class _DesktopHomePageState extends State<DesktopHomePage>
               overflow: TextOverflow.clip,
               style: Theme.of(context).textTheme.bodySmall,
             ),
-          if (bind.isOutgoingOnly()) Text(translate("outgoing_only_desk_tip")),
+          if (bind.isOutgoingOnly())
+            Text(
+              translate("outgoing_only_desk_tip"),
+              overflow: TextOverflow.clip,
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
         ],
       ),
     );
   }
 
   Future<Widget> buildHelpCards() async {
-    if (updateUrl.isNotEmpty &&
+    if (!bind.isCustomClient() &&
+        updateUrl.isNotEmpty &&
         !isCardClosed &&
         bind.mainUriPrefixSync().contains('rustdesk')) {
       return buildInstallCard(
@@ -396,7 +437,8 @@ class _DesktopHomePageState extends State<DesktopHomePage>
         });
       }
     } else if (Platform.isMacOS) {
-      if (!(bind.isOutgoingOnly() || bind.mainIsCanScreenRecording(prompt: false))) {
+      if (!(bind.isOutgoingOnly() ||
+          bind.mainIsCanScreenRecording(prompt: false))) {
         return buildInstallCard("Permissions", "config_screen", "Configure",
             () async {
           bind.mainIsCanScreenRecording(prompt: true);
