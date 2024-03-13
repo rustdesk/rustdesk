@@ -339,7 +339,10 @@ class _DesktopHomePageState extends State<DesktopHomePage>
         mainAxisAlignment: MainAxisAlignment.start,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          logo == null ? Offstage() : logo.marginOnly(bottom: 0.0),
+          Align(
+            alignment: Alignment.center,
+            child: logo == null ? Offstage() : logo.marginOnly(bottom: 0.0),
+          ),
           Text(
             translate("Your Desktop"),
             style: Theme.of(context).textTheme.titleLarge,
