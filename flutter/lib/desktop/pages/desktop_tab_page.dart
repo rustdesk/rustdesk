@@ -54,7 +54,7 @@ class _DesktopTabPageState extends State<DesktopTabPage> {
         page: DesktopHomePage(
           key: const ValueKey(kTabLabelHomePage),
         )));
-    if (bind.isQs()) {
+    if (bind.isIncomingOnly()) {
       tabController.onSelected = (key) {
         if (key == kTabLabelHomePage) {
           windowManager.setSize(getDesktopQsHomeSize());
@@ -81,7 +81,7 @@ class _DesktopTabPageState extends State<DesktopTabPage> {
             body: DesktopTab(
               controller: tabController,
               tail: Offstage(
-                offstage: bind.isQs(),
+                offstage: bind.isIncomingOnly(),
                 child: ActionIcon(
                   message: 'Settings',
                   icon: IconFont.menu,

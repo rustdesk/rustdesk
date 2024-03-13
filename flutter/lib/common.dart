@@ -1522,7 +1522,7 @@ class LastWindowPosition {
 }
 
 String get windowFramePrefix =>
-    bind.isQs() ? "${kWindowPrefix}qs_" : kWindowPrefix;
+    bind.isIncomingOnly() ? "${kWindowPrefix}qs_" : kWindowPrefix;
 
 /// Save window position and size on exit
 /// Note that windowId must be provided if it's subwindow
@@ -1793,11 +1793,11 @@ Future<bool> restoreWindowPosition(WindowType type,
       }
       if (lpos.isMaximized == true) {
         await restorePos();
-        if (!bind.isQs()) {
+        if (!bind.isIncomingOnly()) {
           await windowManager.maximize();
         }
       } else {
-        if (!bind.isQs()) {
+        if (!bind.isIncomingOnly()) {
           await windowManager.setSize(size);
         }
         await restorePos();
