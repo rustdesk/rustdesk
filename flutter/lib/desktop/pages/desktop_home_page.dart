@@ -378,13 +378,42 @@ class _DesktopHomePageState extends State<DesktopHomePage>
             alignment: Alignment.center,
             child: logo == null ? Offstage() : logo.marginOnly(bottom: 0.0),
           ),
-          Text(
-            translate("Your Desktop"),
-            style: Theme.of(context).textTheme.titleLarge,
-            // style: TextStyle(
-            //     // color: MyTheme.color(context).text,
-            //     fontWeight: FontWeight.normal,
-            //     fontSize: 19),
+          Column(
+            children: [
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  translate("Your Desktop"),
+                  style: Theme.of(context).textTheme.titleLarge,
+                  // style: TextStyle(
+                  //     // color: MyTheme.color(context).text,
+                  //     fontWeight: FontWeight.normal,
+                  //     fontSize: 19),
+                ),
+              ),
+              if (bind.isCustomClient()) ...[
+                const SizedBox(width: 5),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: MouseRegion(
+                    cursor: SystemMouseCursors.click,
+                    child: GestureDetector(
+                      onTap: () {
+                        launchUrl(Uri.parse('https://rustdesk.com'));
+                      },
+                      child: Text(
+                        translate("powered by RustDesk"),
+                        overflow: TextOverflow.clip,
+                        style: Theme.of(context)
+                            .textTheme
+                            .bodySmall
+                            ?.copyWith(color: Colors.grey.withOpacity(0.7)),
+                      ),
+                    ),
+                  ),
+                ),
+              ]
+            ],
           ),
           SizedBox(
             height: 10.0,
