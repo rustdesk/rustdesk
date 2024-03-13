@@ -64,7 +64,7 @@ fn initialize(app_dir: &str) {
     #[cfg(target_os = "ios")]
     {
         use hbb_common::env_logger::*;
-        init_fro_env(Env::default().filter_or(DEFAULT_FILTER_ENV, "debug"));
+        init_from_env(Env::default().filter_or(DEFAULT_FILTER_ENV, "debug"));
     }
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     {
