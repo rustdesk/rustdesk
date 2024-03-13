@@ -23,7 +23,7 @@ SECRET_KEY = os.getenv("SECRET_KEY") or "worldpeace2024"
 # The headers for API requests
 HEADERS = {"Authorization": f"Bearer {SECRET_KEY}"}
 
-TIMEOUT = int(os.getenv("TIMEOUT") or '30')
+TIMEOUT = int(os.getenv("TIMEOUT") or "30")
 
 
 def create(task_name, file_path=None):
@@ -142,7 +142,7 @@ def sign_one_file(file_path):
         time.sleep(6)
         n += 1
         status = get_status(task_id)
-        if status and status["state"] == "done":
+        if status and status.get("state") == "done":
             download_one_file(
                 task_id, os.path.basename(file_path), os.path.dirname(file_path)
             )
