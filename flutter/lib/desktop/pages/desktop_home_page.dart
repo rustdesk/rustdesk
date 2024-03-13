@@ -304,7 +304,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
                                 )))),
                         onHover: (value) => refreshHover.value = value,
                       ).marginOnly(right: 8, top: 4),
-                      InkWell(
+                      if (!bind.isDisableSettings()) InkWell(
                         child: Obx(
                           () => Tooltip(
                               message: translate('Change Password'),
