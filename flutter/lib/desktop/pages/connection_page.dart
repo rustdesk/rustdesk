@@ -100,7 +100,8 @@ class _OnlineStatusWidgetState extends State<OnlineStatusWidget> {
                     .marginOnly(left: em),
               ),
               // ready && public
-              Flexible(
+              // No need to show the guide if is custom client.
+              if (!bind.isIncomingOnly()) Flexible(
                 child: Offstage(
                   offstage: !(!_svcStopped.value &&
                       stateGlobal.svcStatus.value == SvcStatus.ready &&
