@@ -4,6 +4,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Status", "Statusi"),
         ("Your Desktop", "Desktopi juaj"),
         ("desk_tip", "Desktopi juaj mund të aksesohet me këtë ID dhe fjalëkalim."),
+        ("outgoing_only_desk_tip", ""),
         ("Password", "fjalëkalimi"),
         ("Ready", "Gati"),
         ("Established", "I themeluar"),

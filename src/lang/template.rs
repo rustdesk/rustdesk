@@ -4,6 +4,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Status", ""),
         ("Your Desktop", ""),
         ("desk_tip", ""),
+        ("outgoing_only_desk_tip", ""),
         ("Password", ""),
         ("Ready", ""),
         ("Established", ""),

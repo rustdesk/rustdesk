@@ -65,9 +65,8 @@ class _DesktopHomePageState extends State<DesktopHomePage>
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        if (!bind.isOutgoingOnly()) buildLeftPane(context),
-        if (!(bind.isIncomingOnly() || bind.isOutgoingOnly()))
-          const VerticalDivider(width: 1),
+        buildLeftPane(context),
+        if (!bind.isIncomingOnly()) const VerticalDivider(width: 1),
         if (!bind.isIncomingOnly()) Expanded(child: buildRightPane(context)),
       ],
     );
@@ -76,8 +75,8 @@ class _DesktopHomePageState extends State<DesktopHomePage>
   Widget buildLeftPane(BuildContext context) {
     final children = <Widget>[
       buildTip(context),
-      buildIDBoard(context),
-      buildPasswordBoard(context),
+      if (!bind.isOutgoingOnly()) buildIDBoard(context),
+      if (!bind.isOutgoingOnly()) buildPasswordBoard(context),
       FutureBuilder<Widget>(
         future: buildHelpCards(),
         builder: (_, data) {
@@ -304,21 +303,22 @@ class _DesktopHomePageState extends State<DesktopHomePage>
                                 )))),
                         onHover: (value) => refreshHover.value = value,
                       ).marginOnly(right: 8, top: 4),
-                      if (!bind.isDisableSettings()) InkWell(
-                        child: Obx(
-                          () => Tooltip(
-                              message: translate('Change Password'),
-                              child: Icon(
-                                Icons.edit,
-                                color: editHover.value
-                                    ? textColor
-                                    : Color(0xFFDDDDDD),
-                                size: 22,
-                              )).marginOnly(right: 8, top: 4),
+                      if (!bind.isDisableSettings())
+                        InkWell(
+                          child: Obx(
+                            () => Tooltip(
+                                message: translate('Change Password'),
+                                child: Icon(
+                                  Icons.edit,
+                                  color: editHover.value
+                                      ? textColor
+                                      : Color(0xFFDDDDDD),
+                                  size: 22,
+                                )).marginOnly(right: 8, top: 4),
+                          ),
+                          onTap: () => DesktopSettingPage.switch2page(1),
+                          onHover: (value) => editHover.value = value,
                         ),
-                        onTap: () => DesktopSettingPage.switch2page(1),
-                        onHover: (value) => editHover.value = value,
-                      ),
                     ],
                   ),
                 ],
@@ -354,11 +354,13 @@ class _DesktopHomePageState extends State<DesktopHomePage>
           SizedBox(
             height: 10.0,
           ),
-          Text(
-            translate("desk_tip"),
-            overflow: TextOverflow.clip,
-            style: Theme.of(context).textTheme.bodySmall,
-          )
+          if (!bind.isOutgoingOnly())
+            Text(
+              translate("desk_tip"),
+              overflow: TextOverflow.clip,
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          if (bind.isOutgoingOnly()) Text(translate("outgoing_only_desk_tip")),
         ],
       ),
     );
@@ -394,7 +396,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
         });
       }
     } else if (Platform.isMacOS) {
-      if (!bind.mainIsCanScreenRecording(prompt: false)) {
+      if (!(bind.isOutgoingOnly() || bind.mainIsCanScreenRecording(prompt: false))) {
         return buildInstallCard("Permissions", "config_screen", "Configure",
             () async {
           bind.mainIsCanScreenRecording(prompt: true);
@@ -429,6 +431,9 @@ class _DesktopHomePageState extends State<DesktopHomePage>
       //   });
       // }
     } else if (Platform.isLinux) {
+      if (bind.isOutgoingOnly()) {
+        return Container();
+      }
       final LinuxCards = <Widget>[];
       if (bind.isSelinuxEnforcing()) {
         // Check is SELinux enforcing, but show user a tip of is SELinux enabled for simple.

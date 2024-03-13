@@ -125,8 +125,7 @@ void runMainApp(bool startService) async {
   gFFI.userModel.refreshCurrentUser();
   runApp(App());
   // Set window option.
-  WindowOptions windowOptions = getHiddenTitleBarWindowOptions(
-      size: bind.isOutgoingOnly() ? outgoingOnlyHomeSize : null);
+  WindowOptions windowOptions = getHiddenTitleBarWindowOptions();
   windowManager.waitUntilReadyToShow(windowOptions, () async {
     // Restore the location of the main window before window hide or show.
     await restoreWindowPosition(WindowType.Main);

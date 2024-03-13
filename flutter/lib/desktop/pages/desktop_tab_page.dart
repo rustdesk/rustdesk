@@ -60,17 +60,8 @@ class _DesktopTabPageState extends State<DesktopTabPage> {
           windowManager.setSize(getIncomingOnlyHomeSize());
           windowManager.setResizable(false);
         } else {
-          windowManager.setSize(getInOrOutOnlySettingsSize());
+          windowManager.setSize(getIncomingOnlySettingsSize());
           windowManager.setResizable(true);
-        }
-      };
-    }
-    if (bind.isOutgoingOnly()) {
-      tabController.onSelected = (key) {
-        if (key == kTabLabelHomePage) {
-          windowManager.setSize(outgoingOnlyHomeSize);
-        } else {
-          windowManager.setSize(getInOrOutOnlySettingsSize());
         }
       };
     }

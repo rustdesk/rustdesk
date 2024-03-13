@@ -3122,8 +3122,6 @@ Size getIncomingOnlyHomeSize() {
       Offset(magicWidth, kDesktopRemoteTabBarHeight + magicHeight);
 }
 
-var outgoingOnlyHomeSize = Size(500, 550);
-
-Size getInOrOutOnlySettingsSize() {
+Size getIncomingOnlySettingsSize() {
   return Size(768, 600);
 }
