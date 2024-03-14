@@ -4,6 +4,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Status", "Būsena"),
         ("Your Desktop", "Jūsų darbalaukis"),
         ("desk_tip", "Jūsų darbalaukis pasiekiamas naudojant šį ID ir slaptažodį"),
+        ("outgoing_only_desk_tip", ""),
         ("Password", "Slaptažodis"),
         ("Ready", "Pasiruošęs"),
         ("Established", "Įsteigta"),
@@ -586,5 +587,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("2FA code must be 6 digits.", ""),
         ("Multiple Windows sessions found", ""),
         ("Please select the session you want to connect to", ""),
+        ("powered by RustDesk", ""),
     ].iter().cloned().collect();
 }

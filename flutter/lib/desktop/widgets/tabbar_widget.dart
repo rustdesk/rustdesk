@@ -165,7 +165,8 @@ class DesktopTabController {
         }));
       }
     });
-    if ((isDesktop && bind.isIncomingOnly()) || callOnSelected) {
+    if ((isDesktop && (bind.isIncomingOnly() || bind.isOutgoingOnly())) ||
+        callOnSelected) {
       if (state.value.tabs.length > index) {
         final key = state.value.tabs[index].key;
         onSelected?.call(key);
@@ -399,7 +400,7 @@ class DesktopTab extends StatelessWidget {
                       child: Row(children: [
                         Offstage(
                           offstage: !showLogo,
-                          child: loadLogo(16),
+                          child: loadIcon(16),
                         ),
                         Offstage(
                             offstage: !showTitle,

@@ -4,6 +4,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Status", "Status"),
         ("Your Desktop", "Desktop Anda"),
         ("desk_tip", "Desktop Anda dapat diakses dengan ID dan kata sandi ini."),
+        ("outgoing_only_desk_tip", ""),
         ("Password", "Kata sandi"),
         ("Ready", "Sudah siap"),
         ("Established", "Didirikan"),
@@ -586,5 +587,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("2FA code must be 6 digits.", ""),
         ("Multiple Windows sessions found", ""),
         ("Please select the session you want to connect to", ""),
+        ("powered by RustDesk", ""),
     ].iter().cloned().collect();
 }

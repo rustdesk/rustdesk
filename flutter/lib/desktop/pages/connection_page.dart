@@ -21,7 +21,10 @@ import '../../models/platform_model.dart';
 import '../widgets/button.dart';
 
 class OnlineStatusWidget extends StatefulWidget {
-  const OnlineStatusWidget({Key? key}) : super(key: key);
+  const OnlineStatusWidget({Key? key, this.onSvcStatusChanged})
+      : super(key: key);
+
+  final VoidCallback? onSvcStatusChanged;
 
   @override
   State<OnlineStatusWidget> createState() => _OnlineStatusWidgetState();
@@ -34,7 +37,7 @@ class _OnlineStatusWidgetState extends State<OnlineStatusWidget> {
   Timer? _updateTimer;
 
   double get em => 14.0;
-  double get height => em * 3;
+  double? get height => bind.isIncomingOnly() ? null : em * 3;
 
   void onUsePublicServerGuide() {
     const url = "https://rustdesk.com/pricing.html";
@@ -79,15 +82,10 @@ class _OnlineStatusWidgetState extends State<OnlineStatusWidget> {
                           : Color.fromARGB(255, 224, 79, 95)),
                 ),
               ).marginSymmetric(horizontal: em),
-              Text(
-                  _svcStopped.value
-                      ? translate("Service is not running")
-                      : stateGlobal.svcStatus.value == SvcStatus.connecting
-                          ? translate("connecting_status")
-                          : stateGlobal.svcStatus.value == SvcStatus.notReady
-                              ? translate("not_ready_status")
-                              : translate('Ready'),
-                  style: TextStyle(fontSize: em)),
+              Container(
+                width: bind.isIncomingOnly() ? 240 : null,
+                child: _buildConnStatusMsg(),
+              ),
               // stop
               Offstage(
                 offstage: !_svcStopped.value,
@@ -102,7 +100,8 @@ class _OnlineStatusWidgetState extends State<OnlineStatusWidget> {
                     .marginOnly(left: em),
               ),
               // ready && public
-              Flexible(
+              // No need to show the guide if is custom client.
+              if (!bind.isIncomingOnly()) Flexible(
                 child: Offstage(
                   offstage: !(!_svcStopped.value &&
                       stateGlobal.svcStatus.value == SvcStatus.ready &&
@@ -135,6 +134,20 @@ class _OnlineStatusWidgetState extends State<OnlineStatusWidget> {
             ],
           )),
     ).paddingOnly(right: bind.isIncomingOnly() ? 8 : 0);
+  }
+
+  _buildConnStatusMsg() {
+    widget.onSvcStatusChanged?.call();
+    return Text(
+      _svcStopped.value
+          ? translate("Service is not running")
+          : stateGlobal.svcStatus.value == SvcStatus.connecting
+              ? translate("connecting_status")
+              : stateGlobal.svcStatus.value == SvcStatus.notReady
+                  ? translate("not_ready_status")
+                  : translate('Ready'),
+      style: TextStyle(fontSize: em),
+    );
   }
 
   updateStatus() async {
@@ -260,8 +273,8 @@ class _ConnectionPageState extends State<ConnectionPage>
             Expanded(child: PeerTabPage()),
           ],
         ).paddingOnly(left: 12.0)),
-        const Divider(height: 1),
-        OnlineStatusWidget()
+        if (!bind.isOutgoingOnly()) const Divider(height: 1),
+        if (!bind.isOutgoingOnly()) OnlineStatusWidget()
       ],
     );
   }

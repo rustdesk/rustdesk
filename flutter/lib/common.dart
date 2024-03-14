@@ -1522,7 +1522,10 @@ class LastWindowPosition {
 }
 
 String get windowFramePrefix =>
-    bind.isIncomingOnly() ? "${kWindowPrefix}qs_" : kWindowPrefix;
+    kWindowPrefix +
+    (bind.isIncomingOnly()
+        ? "incoming_"
+        : (bind.isOutgoingOnly() ? "outgoing_" : ""));
 
 /// Save window position and size on exit
 /// Note that windowId must be provided if it's subwindow
@@ -1793,11 +1796,11 @@ Future<bool> restoreWindowPosition(WindowType type,
       }
       if (lpos.isMaximized == true) {
         await restorePos();
-        if (!bind.isIncomingOnly()) {
+        if (!(bind.isIncomingOnly() || bind.isOutgoingOnly())) {
           await windowManager.maximize();
         }
       } else {
-        if (!bind.isIncomingOnly()) {
+        if (!bind.isIncomingOnly() || bind.isOutgoingOnly()) {
           await windowManager.setSize(size);
         }
         await restorePos();
@@ -3079,25 +3082,46 @@ Color? disabledTextColor(BuildContext context, bool enabled) {
       : Theme.of(context).textTheme.titleLarge?.color?.withOpacity(0.6);
 }
 
-Widget loadLogo(double size) {
-  return Image.asset('assets/logo.png',
+// max 200 x 40
+Widget? loadLogo() {
+  bool isFound = true;
+  final image = Image.asset(
+    'assets/logo.png',
+    fit: BoxFit.contain,
+    errorBuilder: (ctx, error, stackTrace) {
+      isFound = false;
+      return Container();
+    },
+  );
+  if (isFound) {
+    return Container(
+      constraints: BoxConstraints(maxWidth: 200, maxHeight: 40),
+      child: image,
+    ).marginOnly(bottom: 10);
+  } else {
+    return null;
+  }
+}
+
+Widget loadIcon(double size) {
+  return Image.asset('assets/icon.png',
       width: size,
       height: size,
       errorBuilder: (ctx, error, stackTrace) => SvgPicture.asset(
-            'assets/logo.svg',
+            'assets/icon.svg',
             width: size,
             height: size,
           ));
 }
 
-var desktopQsHomeLeftPaneSize = Size(280, 300);
-Size getDesktopQsHomeSize() {
-  final magicWidth = 11.0;
+var imcomingOnlyHomeSize = Size(280, 300);
+Size getIncomingOnlyHomeSize() {
+  final magicWidth = Platform.isWindows ? 11.0 : 0.0;
   final magicHeight = 8.0;
-  return desktopQsHomeLeftPaneSize +
+  return imcomingOnlyHomeSize +
       Offset(magicWidth, kDesktopRemoteTabBarHeight + magicHeight);
 }
 
-Size getDesktopQsSettingsSize() {
+Size getIncomingOnlySettingsSize() {
   return Size(768, 600);
 }
