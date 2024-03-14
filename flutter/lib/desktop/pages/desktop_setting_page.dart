@@ -106,10 +106,11 @@ class _DesktopSettingPageState extends State<DesktopSettingPage>
   List<_TabInfo> _settingTabs() {
     final List<_TabInfo> settingTabs = <_TabInfo>[
       _TabInfo('General', Icons.settings_outlined, Icons.settings),
-      if (!bind.isOutgoingOnly())
+      if (!bind.isOutgoingOnly() && !bind.isDisableSettings())
         _TabInfo('Security', Icons.enhanced_encryption_outlined,
             Icons.enhanced_encryption),
-      _TabInfo('Network', Icons.link_outlined, Icons.link),
+      if (!bind.isDisableSettings())
+        _TabInfo('Network', Icons.link_outlined, Icons.link),
       if (!bind.isIncomingOnly())
         _TabInfo(
             'Display', Icons.desktop_windows_outlined, Icons.desktop_windows),
@@ -125,8 +126,8 @@ class _DesktopSettingPageState extends State<DesktopSettingPage>
   List<Widget> _children() {
     final children = [
       _General(),
-      if (!bind.isOutgoingOnly()) _Safety(),
-      _Network(),
+      if (!bind.isOutgoingOnly() && !bind.isDisableSettings()) _Safety(),
+      if (!bind.isDisableSettings()) _Network(),
       if (!bind.isIncomingOnly()) _Display(),
       if (!bind.isIncomingOnly() && bind.pluginFeatureIsEnabled()) _Plugin(),
       if (!bind.isDisableAccount()) _Account(),

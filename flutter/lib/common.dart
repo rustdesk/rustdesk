@@ -3082,7 +3082,7 @@ Color? disabledTextColor(BuildContext context, bool enabled) {
       : Theme.of(context).textTheme.titleLarge?.color?.withOpacity(0.6);
 }
 
-// max 200 x 40
+// max 300 x 60
 Widget? loadLogo() {
   bool isFound = true;
   final image = Image.asset(
@@ -3095,9 +3095,9 @@ Widget? loadLogo() {
   );
   if (isFound) {
     return Container(
-      constraints: BoxConstraints(maxWidth: 200, maxHeight: 40),
+      constraints: BoxConstraints(maxWidth: 300, maxHeight: 60),
       child: image,
-    ).marginOnly(bottom: 10);
+    ).marginOnly(bottom: 16);
   } else {
     return null;
   }

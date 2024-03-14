@@ -64,26 +64,49 @@ class _DesktopHomePageState extends State<DesktopHomePage>
   @override
   Widget build(BuildContext context) {
     super.build(context);
+    final isIncomingOnly = bind.isIncomingOnly();
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         buildLeftPane(context),
-        if (!bind.isIncomingOnly()) const VerticalDivider(width: 1),
-        if (!bind.isIncomingOnly()) Expanded(child: buildRightPane(context)),
+        if (!isIncomingOnly) const VerticalDivider(width: 1),
+        if (!isIncomingOnly) Expanded(child: buildRightPane(context)),
       ],
     );
   }
 
   Widget buildLeftPane(BuildContext context) {
+    final isIncomingOnly = bind.isIncomingOnly();
+    final isOutgoingOnly = bind.isOutgoingOnly();
     final children = <Widget>[
+      if (bind.isCustomClient())
+        Align(
+          alignment: Alignment.center,
+          child: MouseRegion(
+            cursor: SystemMouseCursors.click,
+            child: GestureDetector(
+              onTap: () {
+                launchUrl(Uri.parse('https://rustdesk.com'));
+              },
+              child: Opacity(
+                  opacity: 0.5,
+                  child: Text(
+                    translate("powered_by_me"),
+                    overflow: TextOverflow.clip,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        fontSize: 9, decoration: TextDecoration.underline),
+                  )),
+            ),
+          ).marginOnly(top: 6),
+        ),
       buildTip(context),
-      if (!bind.isOutgoingOnly()) buildIDBoard(context),
-      if (!bind.isOutgoingOnly()) buildPasswordBoard(context),
+      if (!isOutgoingOnly) buildIDBoard(context),
+      if (!isOutgoingOnly) buildPasswordBoard(context),
       FutureBuilder<Widget>(
         future: buildHelpCards(),
         builder: (_, data) {
           if (data.hasData) {
-            if (bind.isIncomingOnly()) {
+            if (isIncomingOnly) {
               if (_isInHomePage()) {
                 Future.delayed(Duration(milliseconds: 300), () {
                   _updateWindowSize();
@@ -98,7 +121,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
       ),
       buildPluginEntry(),
     ];
-    if (bind.isIncomingOnly()) {
+    if (isIncomingOnly) {
       children.addAll([
         Divider(),
         Container(
@@ -119,7 +142,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
     return ChangeNotifierProvider.value(
       value: gFFI.serverModel,
       child: Container(
-        width: bind.isIncomingOnly() ? 280.0 : 200.0,
+        width: isIncomingOnly ? 280.0 : 200.0,
         color: Theme.of(context).colorScheme.background,
         child: DesktopScrollWrapper(
           scrollController: _leftPaneScrollController,
@@ -133,14 +156,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
                   children: children,
                 ),
               ),
-              if (bind.isOutgoingOnly() && !bind.isDisableSettings())
-                Positioned(
-                  child: Divider(),
-                  bottom: 26,
-                  left: 0,
-                  right: 0,
-                ),
-              if (bind.isOutgoingOnly() && !bind.isDisableSettings())
+              if (isOutgoingOnly)
                 Positioned(
                   bottom: 6,
                   left: 12,
@@ -156,7 +172,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
                           size: 22,
                         ),
                       ),
-                      onTap: () => DesktopSettingPage.switch2page(1),
+                      onTap: () => DesktopSettingPage.switch2page(0),
                       onHover: (value) => _editHover.value = value,
                     ),
                   ),
@@ -244,10 +260,6 @@ class _DesktopHomePageState extends State<DesktopHomePage>
   }
 
   Widget buildPopupMenu(BuildContext context) {
-    if (bind.isDisableSettings()) {
-      return Offstage();
-    }
-
     final textColor = Theme.of(context).textTheme.titleLarge?.color;
     RxBool hover = false.obs;
     return InkWell(
@@ -351,7 +363,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
                                   size: 22,
                                 )).marginOnly(right: 8, top: 4),
                           ),
-                          onTap: () => DesktopSettingPage.switch2page(1),
+                          onTap: () => DesktopSettingPage.switch2page(0),
                           onHover: (value) => editHover.value = value,
                         ),
                     ],
@@ -366,6 +378,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
   }
 
   buildTip(BuildContext context) {
+    final isOutgoingOnly = bind.isOutgoingOnly();
     final logo = loadLogo();
     return Padding(
       padding:
@@ -380,35 +393,12 @@ class _DesktopHomePageState extends State<DesktopHomePage>
           ),
           Column(
             children: [
-              Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  translate("Your Desktop"),
-                  style: Theme.of(context).textTheme.titleLarge,
-                  // style: TextStyle(
-                  //     // color: MyTheme.color(context).text,
-                  //     fontWeight: FontWeight.normal,
-                  //     fontSize: 19),
-                ),
-              ),
-              if (bind.isCustomClient())
+              if (!isOutgoingOnly)
                 Align(
-                  alignment: Alignment.centerRight,
-                  child: MouseRegion(
-                    cursor: SystemMouseCursors.click,
-                    child: GestureDetector(
-                      onTap: () {
-                        launchUrl(Uri.parse('https://rustdesk.com'));
-                      },
-                      child: Text(
-                        translate("powered_by_me"),
-                        overflow: TextOverflow.clip,
-                        style: Theme.of(context)
-                            .textTheme
-                            .bodySmall
-                            ?.copyWith(color: Colors.grey.withOpacity(0.7)),
-                      ),
-                    ),
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    translate("Your Desktop"),
+                    style: Theme.of(context).textTheme.titleLarge,
                   ),
                 ),
             ],
@@ -416,13 +406,13 @@ class _DesktopHomePageState extends State<DesktopHomePage>
           SizedBox(
             height: 10.0,
           ),
-          if (!bind.isOutgoingOnly())
+          if (!isOutgoingOnly)
             Text(
               translate("desk_tip"),
               overflow: TextOverflow.clip,
               style: Theme.of(context).textTheme.bodySmall,
             ),
-          if (bind.isOutgoingOnly())
+          if (isOutgoingOnly)
             Text(
               translate("outgoing_only_desk_tip"),
               overflow: TextOverflow.clip,
@@ -449,9 +439,12 @@ class _DesktopHomePageState extends State<DesktopHomePage>
     if (systemError.isNotEmpty) {
       return buildInstallCard("", systemError, "", () {});
     }
+
     if (Platform.isWindows && !bind.isDisableInstallation()) {
       if (!bind.mainIsInstalled()) {
-        return buildInstallCard("", "install_tip", "Install", () async {
+        return buildInstallCard(
+            "", bind.isOutgoingOnly() ? "" : "install_tip", "Install",
+            () async {
           await rustDeskWinManager.closeAllSubWindows();
           bind.mainGotoInstall();
         });
@@ -598,14 +591,15 @@ class _DesktopHomePageState extends State<DesktopHomePage>
                             ]
                           : <Widget>[]) +
                       <Widget>[
-                        Text(
-                          translate(content),
-                          style: TextStyle(
-                              height: 1.5,
-                              color: Colors.white,
-                              fontWeight: FontWeight.normal,
-                              fontSize: 13),
-                        ).marginOnly(bottom: 20)
+                        if (content.isNotEmpty)
+                          Text(
+                            translate(content),
+                            style: TextStyle(
+                                height: 1.5,
+                                color: Colors.white,
+                                fontWeight: FontWeight.normal,
+                                fontSize: 13),
+                          ).marginOnly(bottom: 20)
                       ] +
                       (btnText.isNotEmpty
                           ? <Widget>[
