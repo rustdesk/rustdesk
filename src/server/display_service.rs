@@ -24,7 +24,7 @@ lazy_static::lazy_static! {
     static ref IS_CAPTURER_MAGNIFIER_SUPPORTED: bool = is_capturer_mag_supported();
     static ref CHANGED_RESOLUTIONS: Arc<RwLock<HashMap<String, ChangedResolution>>> = Default::default();
     // Initial primary display index.
-    // It should should not be updated when displays changed.
+    // It should not be updated when displays changed.
     pub static ref PRIMARY_DISPLAY_IDX: usize = get_primary();
     static ref SYNC_DISPLAYS: Arc<Mutex<SyncDisplaysInfo>> = Default::default();
 }
