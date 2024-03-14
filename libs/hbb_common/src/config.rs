@@ -1864,11 +1864,6 @@ fn get_or(
 }
 
 #[inline]
-pub fn is_custom_client() -> bool {
-    !HARD_SETTINGS.read().unwrap().is_empty()
-}
-
-#[inline]
 pub fn is_incoming_only() -> bool {
     HARD_SETTINGS
         .read()
