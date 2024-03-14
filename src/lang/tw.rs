@@ -4,7 +4,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Status", "狀態"),
         ("Your Desktop", "您的桌面"),
         ("desk_tip", "您可以透過此 ID 及密碼存取您的桌面"),
-        ("outgoing_only_desk_tip", ""),
+        ("outgoing_only_desk_tip", "目前版本的軟體是自定義版本。\n您可以連接至其他設備，但是其他設備無法連接至您的設備。"),
         ("Password", "密碼"),
         ("Ready", "就緒"),
         ("Established", "已建立"),
@@ -587,6 +587,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("2FA code must be 6 digits.", "二步驟驗證碼必須是 6 位數字。"),
         ("Multiple Windows sessions found", "發現多個 Windows 工作階段"),
         ("Please select the session you want to connect to", "請選擇您想要連結的工作階段"),
-        ("powered_by_me", ""),
+        ("powered_by_me", "由 RustDesk 提供支援"),
     ].iter().cloned().collect();
 }
