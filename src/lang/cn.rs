@@ -4,7 +4,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Status", "状态"),
         ("Your Desktop", "你的桌面"),
         ("desk_tip", "你的桌面可以通过下面的 ID 和密码访问。"),
-        ("outgoing_only_desk_tip", "当前版本的软件是定制版本。\n您可以连接其他设备，但是其他设备无法连接您的设备。"),
+        ("outgoing_only_desk_tip", "当前版本的软件是定制版本。\n您可以连接至其他设备，但是其他设备无法连接至您的设备。"),
         ("Password", "密码"),
         ("Ready", "就绪"),
         ("Established", "已建立"),
