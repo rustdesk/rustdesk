@@ -587,6 +587,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("2FA code must be 6 digits.", "Il codice 2FA deve essere composto da 6 cifre."),
         ("Multiple Windows sessions found", "Rilevate sessioni Windows multiple"),
         ("Please select the session you want to connect to", "Seleziona la sessione a cui connetterti"),
-        ("powered by RustDesk", ""),
+        ("powered_by_me", ""),
     ].iter().cloned().collect();
 }

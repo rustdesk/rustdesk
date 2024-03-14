@@ -401,7 +401,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
                         launchUrl(Uri.parse('https://rustdesk.com'));
                       },
                       child: Text(
-                        translate("powered by RustDesk"),
+                        translate("powered_by_me"),
                         overflow: TextOverflow.clip,
                         style: Theme.of(context)
                             .textTheme

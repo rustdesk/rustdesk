@@ -1828,6 +1828,10 @@ pub fn is_outgoing_only() -> SyncReturn<bool> {
     SyncReturn(config::is_outgoing_only())
 }
 
+pub fn is_custom_client() -> SyncReturn<bool> {
+    SyncReturn(get_app_name() != "RustDesk")
+}
+
 pub fn is_disable_settings() -> SyncReturn<bool> {
     SyncReturn(config::is_disable_settings())
 }
