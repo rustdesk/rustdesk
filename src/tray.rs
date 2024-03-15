@@ -207,7 +207,7 @@ async fn start_query_session_count(sender: std::sync::mpsc::Sender<Data>) {
 fn load_icon_from_asset() -> Option<image::DynamicImage> {
     #[cfg(windows)]
     if let Ok(cmd) = std::env::current_exe() {
-        let path = r".\data\flutter_assets\assets\icon.ico";
+        let path = r".\data\flutter_assets\assets\icon.png";
         if let Some(path) = cmd.parent().map(|x| x.join(path)) {
             if path.exists() {
                 if let Ok(image) = image::open(path) {

@@ -1552,7 +1552,13 @@ Future<void> saveWindowPosition(WindowType type, {int? windowId}) async {
 
   switch (type) {
     case WindowType.Main:
-      isMaximized = await windowManager.isMaximized();
+      // Checking `bind.isIncomingOnly()` is a simple workaround for MacOS.
+      // `await windowManager.isMaximized()` will always return true
+      // if is not resizable. The reason is unknown.
+      //
+      // `windowManager.setResizable(!bind.isIncomingOnly());` in main.dart
+      isMaximized =
+          bind.isIncomingOnly() ? false : await windowManager.isMaximized();
       position = await windowManager.getPosition();
       sz = await windowManager.getSize();
       setFrameIfMaximized();
@@ -3082,7 +3088,7 @@ Color? disabledTextColor(BuildContext context, bool enabled) {
       : Theme.of(context).textTheme.titleLarge?.color?.withOpacity(0.6);
 }
 
-// max 200 x 40
+// max 300 x 60
 Widget? loadLogo() {
   bool isFound = true;
   final image = Image.asset(
@@ -3095,9 +3101,9 @@ Widget? loadLogo() {
   );
   if (isFound) {
     return Container(
-      constraints: BoxConstraints(maxWidth: 200, maxHeight: 40),
+      constraints: BoxConstraints(maxWidth: 300, maxHeight: 60),
       child: image,
-    ).marginOnly(bottom: 10);
+    ).marginOnly(left: 12, right: 12, top: 12);
   } else {
     return null;
   }

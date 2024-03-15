@@ -64,6 +64,7 @@ class _OnlineStatusWidgetState extends State<OnlineStatusWidget> {
 
   @override
   Widget build(BuildContext context) {
+    final isIncomingOnly = bind.isIncomingOnly();
     return Container(
       height: height,
       child: Obx(() => Row(
@@ -83,7 +84,7 @@ class _OnlineStatusWidgetState extends State<OnlineStatusWidget> {
                 ),
               ).marginSymmetric(horizontal: em),
               Container(
-                width: bind.isIncomingOnly() ? 240 : null,
+                width: isIncomingOnly ? 226 : null,
                 child: _buildConnStatusMsg(),
               ),
               // stop
@@ -101,39 +102,40 @@ class _OnlineStatusWidgetState extends State<OnlineStatusWidget> {
               ),
               // ready && public
               // No need to show the guide if is custom client.
-              if (!bind.isIncomingOnly()) Flexible(
-                child: Offstage(
-                  offstage: !(!_svcStopped.value &&
-                      stateGlobal.svcStatus.value == SvcStatus.ready &&
-                      _svcIsUsingPublicServer.value),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      Text(', ', style: TextStyle(fontSize: em)),
-                      Flexible(
-                        child: InkWell(
-                          onTap: onUsePublicServerGuide,
-                          child: Row(
-                            children: [
-                              Flexible(
-                                child: Text(
-                                  translate('setup_server_tip'),
-                                  style: TextStyle(
-                                      decoration: TextDecoration.underline,
-                                      fontSize: em),
+              if (!isIncomingOnly)
+                Flexible(
+                  child: Offstage(
+                    offstage: !(!_svcStopped.value &&
+                        stateGlobal.svcStatus.value == SvcStatus.ready &&
+                        _svcIsUsingPublicServer.value),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        Text(', ', style: TextStyle(fontSize: em)),
+                        Flexible(
+                          child: InkWell(
+                            onTap: onUsePublicServerGuide,
+                            child: Row(
+                              children: [
+                                Flexible(
+                                  child: Text(
+                                    translate('setup_server_tip'),
+                                    style: TextStyle(
+                                        decoration: TextDecoration.underline,
+                                        fontSize: em),
+                                  ),
                                 ),
-                              ),
-                            ],
+                              ],
+                            ),
                           ),
-                        ),
-                      )
-                    ],
+                        )
+                      ],
+                    ),
                   ),
-                ),
-              )
+                )
             ],
           )),
-    ).paddingOnly(right: bind.isIncomingOnly() ? 8 : 0);
+    ).paddingOnly(right: isIncomingOnly ? 8 : 0);
   }
 
   _buildConnStatusMsg() {
@@ -258,6 +260,7 @@ class _ConnectionPageState extends State<ConnectionPage>
 
   @override
   Widget build(BuildContext context) {
+    final isOutgoingOnly = bind.isOutgoingOnly();
     return Column(
       children: [
         Expanded(
@@ -273,8 +276,8 @@ class _ConnectionPageState extends State<ConnectionPage>
             Expanded(child: PeerTabPage()),
           ],
         ).paddingOnly(left: 12.0)),
-        if (!bind.isOutgoingOnly()) const Divider(height: 1),
-        if (!bind.isOutgoingOnly()) OnlineStatusWidget()
+        if (!isOutgoingOnly) const Divider(height: 1),
+        if (!isOutgoingOnly) OnlineStatusWidget()
       ],
     );
   }
