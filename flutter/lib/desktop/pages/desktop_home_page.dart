@@ -52,7 +52,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
   Timer? _updateTimer;
   bool isCardClosed = false;
 
-  RxBool _editHover = false.obs;
+  final RxBool _editHover = false.obs;
 
   final GlobalKey _childKey = GlobalKey();
 
@@ -129,6 +129,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
     ];
     if (isIncomingOnly) {
       children.addAll([
+        Divider(),
         OnlineStatusWidget(
           onSvcStatusChanged: () {
             if (_isInHomePage()) {
@@ -530,6 +531,17 @@ class _DesktopHomePageState extends State<DesktopHomePage>
           children: LinuxCards,
         );
       }
+    }
+    if (bind.isIncomingOnly()) {
+      return Align(
+        alignment: Alignment.centerRight,
+        child: OutlinedButton(
+          onPressed: () {
+            SystemNavigator.pop(); // Close the application
+          },
+          child: Text(translate('Quit')),
+        ),
+      ).marginAll(14);
     }
     return Container();
   }
