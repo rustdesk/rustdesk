@@ -3103,7 +3103,7 @@ Widget? loadLogo() {
     return Container(
       constraints: BoxConstraints(maxWidth: 300, maxHeight: 60),
       child: image,
-    ).marginOnly(bottom: 16);
+    ).marginOnly(left: 12, right: 12, top: 12);
   } else {
     return null;
   }

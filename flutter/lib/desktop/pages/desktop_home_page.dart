@@ -78,6 +78,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
   Widget buildLeftPane(BuildContext context) {
     final isIncomingOnly = bind.isIncomingOnly();
     final isOutgoingOnly = bind.isOutgoingOnly();
+    final logo = loadLogo();
     final children = <Widget>[
       if (bind.isCustomClient())
         Align(
@@ -99,7 +100,12 @@ class _DesktopHomePageState extends State<DesktopHomePage>
             ),
           ).marginOnly(top: 6),
         ),
-      buildTip(context),
+      if (logo != null)
+        Align(
+          alignment: Alignment.center,
+          child: logo.marginOnly(bottom: 0.0),
+        ),
+      buildTip(context, logo),
       if (!isOutgoingOnly) buildIDBoard(context),
       if (!isOutgoingOnly) buildPasswordBoard(context),
       FutureBuilder<Widget>(
@@ -123,19 +129,15 @@ class _DesktopHomePageState extends State<DesktopHomePage>
     ];
     if (isIncomingOnly) {
       children.addAll([
-        Divider(),
-        Container(
-          margin: EdgeInsets.fromLTRB(0, 0, 8, 6),
-          child: OnlineStatusWidget(
-            onSvcStatusChanged: () {
-              if (_isInHomePage()) {
-                Future.delayed(Duration(milliseconds: 300), () {
-                  _updateWindowSize();
-                });
-              }
-            },
-          ),
-        ),
+        OnlineStatusWidget(
+          onSvcStatusChanged: () {
+            if (_isInHomePage()) {
+              Future.delayed(Duration(milliseconds: 300), () {
+                _updateWindowSize();
+              });
+            }
+          },
+        ).marginOnly(bottom: 6, right: 6)
       ]);
     }
     final textColor = Theme.of(context).textTheme.titleLarge?.color;
@@ -377,9 +379,8 @@ class _DesktopHomePageState extends State<DesktopHomePage>
     );
   }
 
-  buildTip(BuildContext context) {
+  buildTip(BuildContext context, Widget? logo) {
     final isOutgoingOnly = bind.isOutgoingOnly();
-    final logo = loadLogo();
     return Padding(
       padding:
           const EdgeInsets.only(left: 20.0, right: 16, top: 16.0, bottom: 5),
@@ -387,10 +388,6 @@ class _DesktopHomePageState extends State<DesktopHomePage>
         mainAxisAlignment: MainAxisAlignment.start,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Align(
-            alignment: Alignment.center,
-            child: logo == null ? Offstage() : logo.marginOnly(bottom: 0.0),
-          ),
           Column(
             children: [
               if (!isOutgoingOnly)
