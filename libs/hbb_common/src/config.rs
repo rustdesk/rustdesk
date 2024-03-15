@@ -24,7 +24,7 @@ use crate::{
     password_security::{
         decrypt_str_or_original, decrypt_vec_or_original, encrypt_str_or_original,
         encrypt_vec_or_original, symmetric_crypt,
-    }
+    },
 };
 
 pub const RENDEZVOUS_TIMEOUT: u64 = 12_000;
