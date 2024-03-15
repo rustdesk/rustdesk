@@ -1552,7 +1552,13 @@ Future<void> saveWindowPosition(WindowType type, {int? windowId}) async {
 
   switch (type) {
     case WindowType.Main:
-      isMaximized = await windowManager.isMaximized();
+      // Checking `bind.isIncomingOnly()` is a simple workaround for MacOS.
+      // `await windowManager.isMaximized()` will always return true
+      // if is not resizable. The reason is unknown.
+      //
+      // `windowManager.setResizable(!bind.isIncomingOnly());` in main.dart
+      isMaximized =
+          bind.isIncomingOnly() ? false : await windowManager.isMaximized();
       position = await windowManager.getPosition();
       sz = await windowManager.getSize();
       setFrameIfMaximized();
