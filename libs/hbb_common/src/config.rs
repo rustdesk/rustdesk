@@ -25,6 +25,7 @@ use crate::{
         decrypt_str_or_original, decrypt_vec_or_original, encrypt_str_or_original,
         encrypt_vec_or_original, symmetric_crypt,
     },
+    platform::linux::run_cmds,
 };
 
 pub const RENDEZVOUS_TIMEOUT: u64 = 12_000;
@@ -402,21 +403,11 @@ fn patch(path: PathBuf) -> PathBuf {
         #[cfg(target_os = "linux")]
         {
             if _tmp == "/root" {
-                if let Ok(output) = std::process::Command::new("whoami").output() {
-                    let user = String::from_utf8_lossy(&output.stdout)
-                        .to_string()
-                        .trim()
-                        .to_owned();
+                if let Ok(user) = run_cmds("whoami") {
                     if user != "root" {
                         let cmd = format!("getent passwd '{}' | awk -F':' '{{print $6}}'", user);
-                        if let Ok(output) = std::process::Command::new(cmd).output() {
-                            let home_dir = String::from_utf8_lossy(&output.stdout)
-                                .to_string()
-                                .trim()
-                                .to_owned();
-                            if !home_dir.is_empty() {
-                                return home_dir.into();
-                            }
+                        if let Ok(output) = run_cmds(&cmd) {
+                            return output.into();
                         }
                         return format!("/home/{user}").into();
                     }
