@@ -4,7 +4,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Status", "Státusz"),
         ("Your Desktop", "Saját asztal"),
         ("desk_tip", "A számítógép ezzel a jelszóval és azonosítóval érhető el távolról."),
-        ("outgoing_only_desk_tip", ""),
         ("Password", "Jelszó"),
         ("Ready", "Kész"),
         ("Established", "Létrejött"),
@@ -588,5 +587,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Multiple Windows sessions found", ""),
         ("Please select the session you want to connect to", ""),
         ("powered_by_me", ""),
+        ("outgoing_only_desk_tip", ""),
     ].iter().cloned().collect();
 }
