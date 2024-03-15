@@ -4,7 +4,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Status", "Estat"),
         ("Your Desktop", "EL teu escriptori"),
         ("desk_tip", "Pots accedir al teu escriptori amb aquest ID i contrasenya."),
-        ("outgoing_only_desk_tip", ""),
         ("Password", "Contrasenya"),
         ("Ready", "Llest"),
         ("Established", "Establert"),
@@ -588,5 +587,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Multiple Windows sessions found", ""),
         ("Please select the session you want to connect to", ""),
         ("powered_by_me", ""),
+        ("outgoing_only_desk_tip", ""),
     ].iter().cloned().collect();
 }

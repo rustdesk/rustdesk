@@ -4,7 +4,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Status", "Trạng thái hiện tại"),
         ("Your Desktop", "Desktop của bạn"),
         ("desk_tip", "Desktop của bạn có thể đuợc truy cập bằng ID và mật khẩu này."),
-        ("outgoing_only_desk_tip", ""),
         ("Password", "Mật khẩu"),
         ("Ready", "Sẵn sàng"),
         ("Established", "Đã đuợc thiết lập"),
@@ -588,5 +587,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Multiple Windows sessions found", ""),
         ("Please select the session you want to connect to", ""),
         ("powered_by_me", ""),
+        ("outgoing_only_desk_tip", ""),
     ].iter().cloned().collect();
 }

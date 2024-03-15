@@ -4,7 +4,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Status", "Statuss"),
         ("Your Desktop", "Jūsu darbvirsma"),
         ("desk_tip", "Jūsu darbvirsmai var piekļūt ar šo ID un paroli."),
-        ("outgoing_only_desk_tip", ""),
         ("Password", "Parole"),
         ("Ready", "Gatavs"),
         ("Established", "Izveidots"),
@@ -588,5 +587,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Multiple Windows sessions found", "Atrastas vairākas Windows sesijas"),
         ("Please select the session you want to connect to", "Lūdzu, atlasiet sesiju, ar kuru vēlaties izveidot savienojumu"),
         ("powered_by_me", ""),
+        ("outgoing_only_desk_tip", ""),
     ].iter().cloned().collect();
 }
