@@ -25,7 +25,6 @@ use crate::{
         decrypt_str_or_original, decrypt_vec_or_original, encrypt_str_or_original,
         encrypt_vec_or_original, symmetric_crypt,
     },
-    platform::linux::run_cmds,
 };
 
 pub const RENDEZVOUS_TIMEOUT: u64 = 12_000;
@@ -403,10 +402,10 @@ fn patch(path: PathBuf) -> PathBuf {
         #[cfg(target_os = "linux")]
         {
             if _tmp == "/root" {
-                if let Ok(user) = run_cmds("whoami") {
+                if let Ok(user) = crate::platform::linux::run_cmds("whoami") {
                     if user != "root" {
                         let cmd = format!("getent passwd '{}' | awk -F':' '{{print $6}}'", user);
-                        if let Ok(output) = run_cmds(&cmd) {
+                        if let Ok(output) = crate::platform::linux::run_cmds(&cmd) {
                             return output.into();
                         }
                         return format!("/home/{user}").into();
