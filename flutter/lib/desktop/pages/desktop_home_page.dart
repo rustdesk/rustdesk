@@ -110,7 +110,6 @@ class _DesktopHomePageState extends State<DesktopHomePage>
   Widget buildLeftPane(BuildContext context) {
     final isIncomingOnly = bind.isIncomingOnly();
     final isOutgoingOnly = bind.isOutgoingOnly();
-    final logo = loadLogo();
     final children = <Widget>[
       if (!isOutgoingOnly) buildPresetPasswordWarning(),
       if (bind.isCustomClient())
@@ -133,12 +132,11 @@ class _DesktopHomePageState extends State<DesktopHomePage>
             ),
           ).marginOnly(top: 6),
         ),
-      if (logo != null)
-        Align(
-          alignment: Alignment.center,
-          child: logo.marginOnly(bottom: 0.0),
-        ),
-      buildTip(context, logo),
+      Align(
+        alignment: Alignment.center,
+        child: loadLogo(),
+      ),
+      buildTip(context),
       if (!isOutgoingOnly) buildIDBoard(context),
       if (!isOutgoingOnly) buildPasswordBoard(context),
       FutureBuilder<Widget>(
@@ -413,7 +411,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
     );
   }
 
-  buildTip(BuildContext context, Widget? logo) {
+  buildTip(BuildContext context) {
     final isOutgoingOnly = bind.isOutgoingOnly();
     return Padding(
       padding:
