@@ -3122,8 +3122,8 @@ Widget loadIcon(double size) {
 
 var imcomingOnlyHomeSize = Size(280, 300);
 Size getIncomingOnlyHomeSize() {
-  final magicWidth = Platform.isWindows ? 11.0 : 0.0;
-  final magicHeight = 8.0;
+  final magicWidth = Platform.isWindows ? 11.0 : 2.0;
+  final magicHeight = 10.0;
   return imcomingOnlyHomeSize +
       Offset(magicWidth, kDesktopRemoteTabBarHeight + magicHeight);
 }

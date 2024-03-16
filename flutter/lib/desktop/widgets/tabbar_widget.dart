@@ -375,7 +375,7 @@ class DesktopTab extends StatelessWidget {
         Expanded(
             child: GestureDetector(
                 // custom double tap handler
-                onTap: showMaximize
+                onTap: !bind.isIncomingOnly() && showMaximize
                     ? () {
                         final current = DateTime.now().millisecondsSinceEpoch;
                         final elapsed = current - _lastClickTime;

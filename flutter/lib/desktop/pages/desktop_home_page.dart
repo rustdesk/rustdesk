@@ -577,6 +577,10 @@ class _DesktopHomePageState extends State<DesktopHomePage>
         child: OutlinedButton(
           onPressed: () {
             SystemNavigator.pop(); // Close the application
+            // https://github.com/flutter/flutter/issues/66631
+            if (Platform.isWindows) {
+              exit(0);
+            }
           },
           child: Text(translate('Quit')),
         ),
