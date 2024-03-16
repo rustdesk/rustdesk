@@ -587,6 +587,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Multiple Windows sessions found", "Bylo nalezeno více relací Windows"),
         ("Please select the session you want to connect to", "Vyberte relaci, ke které se chcete připojit"),
         ("powered_by_me", "Poháněno společností RustDesk"),
-        ("outgoing_only_desk_tip", ""),
+        ("outgoing_only_desk_tip", "Toto je přizpůsobená edice.\nMůžete se připojit k jiným zařízením, ale jiná zařízení se k vašemu zařízení připojit nemohou."),
     ].iter().cloned().collect();
 }
