@@ -215,6 +215,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("enter-2fa-title", "Two-factor authentication"),
         ("powered_by_me", "Powered by RustDesk"),
         ("outgoing_only_desk_tip", "This is a customized edition.\nYou can connect to other devices, but other devices cannot connect to your device."),
-        ("preset_password_warning", "This software uses a default password. Anyone knowing this password can gain full control of your device. If you did not expect this, uninstall the software immediately."),
+        ("preset_password_warning", "This customized edition comes with a preset password. Anyone knowing this password could gain full control of your device. If you did not expect this, uninstall the software immediately."),
     ].iter().cloned().collect();
 }
