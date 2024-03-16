@@ -1854,7 +1854,12 @@ pub fn is_preset_password() -> bool {
         .read()
         .unwrap()
         .get("password")
-        .map_or(false, |p| p == &crate::ipc::get_permanent_password())
+        .map_or(false, |p| {
+            #[cfg(not(any(target_os = "android", target_os = "ios")))]
+            return p == &crate::ipc::get_permanent_password();
+            #[cfg(any(target_os = "android", target_os = "ios"))]
+            return p == &config::Config::get_permanent_password();
+        })
 }
 
 /// Send a url scheme throught the ipc.
