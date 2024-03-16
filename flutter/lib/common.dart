@@ -3131,3 +3131,8 @@ Size getIncomingOnlyHomeSize() {
 Size getIncomingOnlySettingsSize() {
   return Size(768, 600);
 }
+
+bool isInHomePage() {
+  final controller = Get.find<DesktopTabController>();
+  return controller.state.value.selected == 0;
+}
