@@ -1849,6 +1849,14 @@ pub fn is_disable_installation() -> SyncReturn<bool> {
     SyncReturn(config::is_disable_installation())
 }
 
+pub fn is_preset_password() -> bool {
+    config::HARD_SETTINGS
+        .read()
+        .unwrap()
+        .get("password")
+        .map_or(false, |p| p == &crate::ipc::get_permanent_password())
+}
+
 /// Send a url scheme throught the ipc.
 ///
 /// * macOS only

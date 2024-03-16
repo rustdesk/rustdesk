@@ -954,6 +954,14 @@ impl Config {
     }
 
     pub fn set_permanent_password(password: &str) {
+        if HARD_SETTINGS
+            .read()
+            .unwrap()
+            .get("password")
+            .map_or(false, |v| v == password)
+        {
+            return;
+        }
         let mut config = CONFIG.write().unwrap();
         if password == config.password {
             return;
