@@ -16,7 +16,7 @@
 
     <application
         android:icon="@mipmap/ic_launcher"
-        android:label="RustDesk"
+        android:label="云会议"
         android:requestLegacyExternalStorage="true"
         android:roundIcon="@mipmap/ic_launcher"
         android:supportsRtl="true">
