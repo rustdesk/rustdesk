@@ -1,12 +1,7 @@
+name: Flutter Nightly MacOS Arm64 Build
+
 on:
-  workflow_call:
-    inputs:
-      upload-artifact:
-        type: boolean
-        default: true
-      upload-tag:
-        type: string
-        default: "nightly"
+  workflow_dispatch:
 
 env:
   CARGO_NDK_VERSION: "3.1.2"
@@ -16,7 +11,7 @@ env:
   # for arm64 linux because official Dart SDK does not work
   FLUTTER_ELINUX_VERSION: "3.16.9"
   FLUTTER_ELINUX_COMMIT_ID: "c02bd16e1630f5bd690b85c5c2456ac1920e25af"
-  TAG_NAME: "${{ inputs.upload-tag }}"
+  TAG_NAME: "nightly"
   VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
   # vcpkg version: 2023.10.19
   # for multiarch gcc compatibility
@@ -30,7 +25,7 @@ env:
   RS_PUB_KEY: '${{ secrets.RS_PUB_KEY }}'
   RENDEZVOUS_SERVER: '${{ secrets.RENDEZVOUS_SERVER }}'
   API_SERVER: '${{ secrets.API_SERVER }}'
-  UPLOAD_ARTIFACT: "${{ inputs.upload-artifact }}"
+  UPLOAD_ARTIFACT: false
   SIGN_BASE_URL: "${{ secrets.SIGN_BASE_URL }}"
 
 jobs:
