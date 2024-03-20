@@ -166,6 +166,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
                           platform: '',
                           tags: [],
                           hash: '',
+                          password: '',
                           forceAlwaysRelay: false,
                           rdpPort: '',
                           rdpUsername: '',

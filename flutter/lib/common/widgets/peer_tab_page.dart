@@ -13,6 +13,7 @@ import 'package:flutter_hbb/desktop/widgets/material_mod_popup_menu.dart'
     as mod_menu;
 import 'package:flutter_hbb/desktop/widgets/tabbar_widget.dart';
 import 'package:flutter_hbb/models/ab_model.dart';
+import 'package:flutter_hbb/models/peer_model.dart';
 
 import 'package:flutter_hbb/models/peer_tab_model.dart';
 import 'package:flutter_svg/flutter_svg.dart';
@@ -392,21 +393,7 @@ class _PeerTabPageState extends State<PeerTabPage>
                 await bind.mainLoadLanPeers();
                 break;
               case 3:
-                {
-                  bool hasSynced = false;
-                  if (shouldSyncAb()) {
-                    for (var p in peers) {
-                      if (await bind.mainPeerExists(id: p.id)) {
-                        hasSynced = true;
-                      }
-                    }
-                  }
-                  gFFI.abModel.deletePeers(peers.map((p) => p.id).toList());
-                  final future = gFFI.abModel.pushAb();
-                  if (hasSynced) {
-                    gFFI.abModel.reSyncToast(future);
-                  }
-                }
+                await gFFI.abModel.deletePeers(peers.map((p) => p.id).toList());
                 break;
               default:
                 break;
@@ -415,7 +402,7 @@ class _PeerTabPageState extends State<PeerTabPage>
             if (model.currentTab != 3) showToast(translate('Successful'));
           }
 
-          deletePeerConfirmDialog(onSubmit, translate('Delete'));
+          deleteConfirmDialog(onSubmit, translate('Delete'));
         },
         child: Tooltip(
             message: translate('Delete'),
@@ -450,24 +437,18 @@ class _PeerTabPageState extends State<PeerTabPage>
 
   Widget addSelectionToAb() {
     final model = Provider.of<PeerTabModel>(context);
+    final addressbooks = gFFI.abModel.addressBooksCanWrite();
+    if (model.currentTab == PeerTabIndex.ab.index) {
+      addressbooks.remove(gFFI.abModel.currentName.value);
+    }
     return Offstage(
-      offstage:
-          !gFFI.userModel.isLogin || model.currentTab == PeerTabIndex.ab.index,
+      offstage: !gFFI.userModel.isLogin || addressbooks.isEmpty,
       child: _hoverAction(
         context: context,
         onTap: () {
-          if (gFFI.abModel.isFull(true)) {
-            return;
-          }
-          final peers = model.selectedPeers;
-          gFFI.abModel.addPeers(peers);
-          final future = gFFI.abModel.pushAb();
+          final peers = model.selectedPeers.map((e) => Peer.copy(e)).toList();
+          addPeersToAbDialog(peers);
           model.setMultiSelectionMode(false);
-          Future.delayed(Duration.zero, () async {
-            await future;
-            await Future.delayed(Duration(seconds: 2)); // toast
-            gFFI.abModel.isFull(true);
-          });
         },
         child: Tooltip(
             message: translate('Add to address book'),
@@ -481,15 +462,14 @@ class _PeerTabPageState extends State<PeerTabPage>
     return Offstage(
       offstage: !gFFI.userModel.isLogin ||
           model.currentTab != PeerTabIndex.ab.index ||
-          gFFI.abModel.tags.isEmpty,
+          gFFI.abModel.currentAbTags.isEmpty,
       child: _hoverAction(
               context: context,
               onTap: () {
                 editAbTagDialog(List.empty(), (selectedTags) async {
                   final peers = model.selectedPeers;
-                  gFFI.abModel.changeTagForPeers(
+                  await gFFI.abModel.changeTagForPeers(
                       peers.map((p) => p.id).toList(), selectedTags);
-                  gFFI.abModel.pushAb();
                   model.setMultiSelectionMode(false);
                   showToast(translate('Successful'));
                 });
@@ -556,7 +536,8 @@ class _PeerTabPageState extends State<PeerTabPage>
     final model = Provider.of<PeerTabModel>(context);
     return [
       const PeerSearchBar().marginOnly(right: isMobile ? 0 : 13),
-      _createRefresh(index: PeerTabIndex.ab, loading: gFFI.abModel.abLoading),
+      _createRefresh(
+          index: PeerTabIndex.ab, loading: gFFI.abModel.currentAbLoading),
       _createRefresh(
           index: PeerTabIndex.group, loading: gFFI.groupModel.groupLoading),
       Offstage(
@@ -624,7 +605,8 @@ class _PeerTabPageState extends State<PeerTabPage>
     List<Widget> actions = [
       const PeerSearchBar(),
       if (model.currentTab == PeerTabIndex.ab.index)
-        _createRefresh(index: PeerTabIndex.ab, loading: gFFI.abModel.abLoading),
+        _createRefresh(
+            index: PeerTabIndex.ab, loading: gFFI.abModel.currentAbLoading),
       if (model.currentTab == PeerTabIndex.group.index)
         _createRefresh(
             index: PeerTabIndex.group, loading: gFFI.groupModel.groupLoading),

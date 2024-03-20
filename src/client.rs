@@ -1151,6 +1151,7 @@ pub struct LoginConfigHandler {
     pub mark_unsupported: Vec<CodecFormat>,
     pub selected_windows_session_id: Option<u32>,
     pub peer_info: Option<PeerInfo>,
+    shared_password: Option<String>, // used to distinguish whether it is connected with a shared password
 }
 
 impl Deref for LoginConfigHandler {
@@ -1175,6 +1176,7 @@ impl LoginConfigHandler {
         switch_uuid: Option<String>,
         mut force_relay: bool,
         adapter_luid: Option<i64>,
+        shared_password: Option<String>,
     ) {
         let mut id = id;
         if id.contains("@") {
@@ -1238,6 +1240,7 @@ impl LoginConfigHandler {
         self.switch_uuid = switch_uuid;
         self.adapter_luid = adapter_luid;
         self.selected_windows_session_id = None;
+        self.shared_password = shared_password;
     }
 
     /// Check if the client should auto login.
@@ -1827,6 +1830,8 @@ impl LoginConfigHandler {
             platform: pi.platform.clone(),
         };
         let mut config = self.load_config();
+        let connected_with_shared_password = self.is_connected_with_shared_password();
+        let old_config_password = config.password.clone();
         config.info = serde;
         let password = self.password.clone();
         let password0 = config.password.clone();
@@ -1859,15 +1864,17 @@ impl LoginConfigHandler {
         }
         #[cfg(feature = "flutter")]
         {
-            // sync ab password with PeerConfig password
-            let password = base64::encode(config.password.clone(), base64::Variant::Original);
-            let evt: HashMap<&str, String> = HashMap::from([
-                ("name", "sync_peer_password_to_ab".to_string()),
-                ("id", self.id.clone()),
-                ("password", password),
-            ]);
-            let evt = serde_json::ser::to_string(&evt).unwrap_or("".to_owned());
-            crate::flutter::push_global_event(crate::flutter::APP_TYPE_MAIN, evt);
+            if !connected_with_shared_password && remember && !config.password.is_empty() {
+                // sync ab password with PeerConfig password
+                let password = base64::encode(config.password.clone(), base64::Variant::Original);
+                let evt: HashMap<&str, String> = HashMap::from([
+                    ("name", "sync_peer_password_to_ab".to_string()),
+                    ("id", self.id.clone()),
+                    ("password", password),
+                ]);
+                let evt = serde_json::ser::to_string(&evt).unwrap_or("".to_owned());
+                crate::flutter::push_global_event(crate::flutter::APP_TYPE_MAIN, evt);
+            }
         }
         if config.keyboard_mode.is_empty() {
             if is_keyboard_mode_supported(
@@ -1887,10 +1894,25 @@ impl LoginConfigHandler {
                 config.keyboard_mode = KeyboardMode::Legacy.to_string();
             }
         }
+        // keep hash password unchanged if connected with shared password
+        if connected_with_shared_password {
+            config.password = old_config_password;
+        }
         // no matter if change, for update file time
         self.save_config(config);
         self.supported_encoding = pi.encoding.clone().unwrap_or_default();
         log::info!("peer info supported_encoding:{:?}", self.supported_encoding);
+    }
+
+    fn is_connected_with_shared_password(&self) -> bool {
+        if let Some(shared_password) = self.shared_password.as_ref() {
+            let mut hasher = Sha256::new();
+            hasher.update(shared_password);
+            hasher.update(&self.hash.salt);
+            let res = hasher.finalize();
+            return self.password.clone()[..] == res[..];
+        }
+        false
     }
 
     pub fn get_remote_dir(&self) -> String {
@@ -2621,15 +2643,17 @@ pub async fn handle_hash(
         let ab = hbb_common::config::Ab::load();
         if !access_token.is_empty() && access_token == ab.access_token {
             let id = lc.read().unwrap().id.clone();
-            if let Some(p) = ab
-                .peers
-                .iter()
-                .find_map(|p| if p.id == id { Some(p) } else { None })
-            {
-                if let Ok(hash) = base64::decode(p.hash.clone(), base64::Variant::Original) {
-                    if !hash.is_empty() {
-                        password = hash;
-                        lc.write().unwrap().save_ab_password_to_recent = true;
+            if let Some(ab) = ab.ab_entries.iter().find(|a| a.personal()) {
+                if let Some(p) = ab
+                    .peers
+                    .iter()
+                    .find_map(|p| if p.id == id { Some(p) } else { None })
+                {
+                    if let Ok(hash) = base64::decode(p.hash.clone(), base64::Variant::Original) {
+                        if !hash.is_empty() {
+                            password = hash;
+                            lc.write().unwrap().save_ab_password_to_recent = true;
+                        }
                     }
                 }
             }
