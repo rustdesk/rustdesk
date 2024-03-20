@@ -1029,13 +1029,12 @@ class __RuleTreeState extends State<_RuleTree> {
         if (!match(user)) {
           continue;
         }
-        final userRuleIndex = rules.indexWhere(
-            (e) => e.level == ShareLevel.user.value && e.name == user);
+        final userRuleIndex = rules.indexWhere((e) => e.user == user);
         if (userRuleIndex < 0) {
           if (!onlyShowExisting) {
             userNodes.add(TreeNode(
-                content: _buildEmptyNodeContent(
-                    ShareLevel.user, user, totalWidth, indent * 2),
+                content:
+                    _buildEmptyNodeContent(user, null, totalWidth, indent * 2),
                 key: ValueKey(keyIndex++),
                 children: []));
           }
@@ -1052,8 +1051,7 @@ class __RuleTreeState extends State<_RuleTree> {
 
     List<TreeNode> groupNodes = [];
     map.forEach((group, users) {
-      final groupRuleIndex = rules.indexWhere(
-          (e) => e.level == ShareLevel.group.value && e.name == group);
+      final groupRuleIndex = rules.indexWhere((e) => e.group == group);
       final children = buildUserNodes(users);
       if (!match(group) && children.isEmpty) {
         return;
@@ -1061,8 +1059,7 @@ class __RuleTreeState extends State<_RuleTree> {
       if (groupRuleIndex < 0) {
         if (!onlyShowExisting || children.isNotEmpty) {
           groupNodes.add(TreeNode(
-              content: _buildEmptyNodeContent(
-                  ShareLevel.group, group, totalWidth, indent),
+              content: _buildEmptyNodeContent(null, group, totalWidth, indent),
               key: ValueKey(keyIndex++),
               children: children));
         }
@@ -1077,15 +1074,14 @@ class __RuleTreeState extends State<_RuleTree> {
 
     List<TreeNode> totalNodes = [];
     final teamRuleIndex =
-        rules.indexWhere((e) => e.level == ShareLevel.team.value);
-    if (!match(ShareLevel.teamName) && groupNodes.isEmpty) {
+        rules.indexWhere((e) => e.user == null && e.group == null);
+    if (!match(AbRulePayload.teamName) && groupNodes.isEmpty) {
       return [];
     }
     if (teamRuleIndex < 0) {
       if (!onlyShowExisting || groupNodes.isNotEmpty) {
         totalNodes.add(TreeNode(
-            content: _buildEmptyNodeContent(
-                ShareLevel.team, ShareLevel.teamName, totalWidth, 0),
+            content: _buildEmptyNodeContent(null, null, totalWidth, 0),
             key: ValueKey(keyIndex++),
             children: groupNodes));
       }
@@ -1093,10 +1089,7 @@ class __RuleTreeState extends State<_RuleTree> {
       final rule = rules[teamRuleIndex];
       totalNodes.add(TreeNode(
           content: _buildRuleNodeContent(
-              AbRulePayload(
-                  rule.guid, rule.level, ShareLevel.teamName, rule.rule),
-              totalWidth,
-              0),
+              AbRulePayload(rule.guid, null, null, rule.rule), totalWidth, 0),
           key: ValueKey(keyIndex++),
           children: groupNodes));
     }
@@ -1170,7 +1163,8 @@ class __RuleTreeState extends State<_RuleTree> {
   }
 
   Widget _buildEmptyNodeContent(
-      ShareLevel level, String name, double totalWidth, double indent) {
+      String? user, String? group, double totalWidth, double indent) {
+    String name = AbRulePayload.buildName(user, group);
     return SizedBox(
       width: totalWidth - indent,
       child: Row(
@@ -1191,8 +1185,7 @@ class __RuleTreeState extends State<_RuleTree> {
                   setState(() {
                     isInProgress = true;
                   });
-                  final errMsg =
-                      await gFFI.abModel.addRule(name, level.value, rule);
+                  final errMsg = await gFFI.abModel.addRule(user, group, rule);
                   setState(() {
                     isInProgress = false;
                   });
@@ -1217,7 +1210,7 @@ class __RuleTreeState extends State<_RuleTree> {
       width: totalWidth - indent,
       child: Row(
         children: [
-          SizedBox(width: col1Width - indent, child: _text(rule.name)),
+          SizedBox(width: col1Width - indent, child: _text(rule.getName())),
           SizedBox(
               width: col2Width, child: _text(ShareRule.shortDesc(rule.rule))),
           const Spacer(),
@@ -1248,7 +1241,7 @@ class __RuleTreeState extends State<_RuleTree> {
                         text: "Invalid rule: ${rule.rule}");
                     return;
                   }
-                  _addOrUpdateRuleDialog(onSubmit, rule.rule, rule.name);
+                  _addOrUpdateRuleDialog(onSubmit, rule.rule, rule.getName());
                 },
               ),
               _iconButton(
