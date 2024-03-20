@@ -391,7 +391,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Elevate", "Повысить"),
         ("Zoom cursor", "Масштабировать курсор"),
         ("Accept sessions via password", "Принимать сеансы по паролю"),
-        ("Accept sessions via click", "Принимать сеансы нажатем кнопки"),
+        ("Accept sessions via click", "Принимать сеансы нажатием кнопки"),
         ("Accept sessions via both", "Принимать сеансы по паролю и нажатию кнопки"),
         ("Please wait for the remote side to accept your session request...", "Подождите, пока удалённая сторона примет ваш запрос на сеанс..."),
         ("One-time Password", "Одноразовый пароль"),
@@ -586,7 +586,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("2FA code must be 6 digits.", "Код двухфакторной аутентификации должен состоять из 6 цифр."),
         ("Multiple Windows sessions found", "Обнаружено несколько сеансов Windows"),
         ("Please select the session you want to connect to", "Выберите сеанс, к которому хотите подключиться"),
-        ("powered_by_me", ""),
-        ("outgoing_only_desk_tip", ""),
+        ("powered_by_me", "Основано на RustDesk"),
+        ("outgoing_only_desk_tip", "Это специализированная версия.\nВы можете подключаться к другим устройствам, но другие устройства не могут подключиться к вашему."),
+        ("preset_password_warning", "Это специализированная версия с предустановленным паролем. Любой, кто знает этот пароль, может получить полный контроль над вашим устройством. Если это для вас неожиданно, немедленно удалите данное программное обеспечение."),
+        ("Security Alert", "Предупреждение о безопасности"),
     ].iter().cloned().collect();
 }
