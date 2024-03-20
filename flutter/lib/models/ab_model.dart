@@ -402,7 +402,7 @@ class AbModel {
     return [];
   }
 
-  Future<String?> addRule(String name, int level, int rule) async {
+  Future<String?> addRule(String? user, String? group, int rule) async {
     try {
       final abGuid = current.sharedProfile()?.guid;
       if (abGuid == null) {
@@ -412,9 +412,9 @@ class AbModel {
       var headers = getHttpHeaders();
       headers['Content-Type'] = "application/json";
       final body = jsonEncode({
-        'ab': abGuid,
-        'name': name,
-        'level': level,
+        'guid': abGuid,
+        'user': user,
+        'group': group,
         'rule': rule,
       });
       final resp =
