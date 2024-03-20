@@ -601,7 +601,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Set shared password", "Geteiltes Passwort setzen"),
         ("Exist in", "Existiert in...?"),
         ("Read-only", "Nur lesen"),
-        ("Read/Write", "Schreiben/Lesen"),
+        ("Read/Write", "Lesen/Schreiben"),
         ("Full Control", "Voller Zugriff"),
         ("full_control_tip", "Voller Zugriff gibt anderen Benutzern die gleichen Berechtigungen wie der Adressbuch-Besitzer."),
         ("share_warning_tip", "Die obigen Felder sind geteilt und sichtbar für andere."),
