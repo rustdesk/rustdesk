@@ -89,16 +89,14 @@ pub fn generate2fa() -> String {
 
 pub fn verify2fa(code: String) -> bool {
     if let Some((info, totp)) = CURRENT_2FA.lock().unwrap().as_ref() {
-        if let Ok(cur) = totp.generate_current() {
-            let res = code == cur;
-            if res {
-                if let Ok(v) = info.into_string() {
-                    #[cfg(not(any(target_os = "android", target_os = "ios")))]
-                    crate::ipc::set_option("2fa", &v);
-                    #[cfg(any(target_os = "android", target_os = "ios"))]
-                    Config::set_option("2fa".to_owned(), v);
-                    return res;
-                }
+        let is_valid = totp.check_current(&code).unwrap_or(false);
+        if is_valid {
+            if let Ok(v) = info.into_string() {
+                #[cfg(not(any(target_os = "android", target_os = "ios")))]
+                crate::ipc::set_option("2fa", &v);
+                #[cfg(any(target_os = "android", target_os = "ios"))]
+                Config::set_option("2fa".to_owned(), v);
+                return is_valid;
             }
         }
     }
