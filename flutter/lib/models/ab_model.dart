@@ -54,16 +54,12 @@ class AbModel {
   final sortTags = shouldSortTags().obs;
   final filterByIntersection = filterAbTagByIntersection().obs;
 
-  // licensedDevices is obtained from personal ab, shared ab restrict it in server
-  var licensedDevices = 0;
-
   var _syncAllFromRecent = true;
   var _syncFromRecentLock = false;
   var _allInitialized = false;
   var _timerCounter = 0;
   var _cacheLoadOnceFlag = false;
   var _everPulledProfiles = false;
-  // ignore: unused_field
   var _maxPeerOneAb = 0;
 
   WeakReference<FFI> parent;
@@ -88,7 +84,6 @@ class AbModel {
     addressbooks.clear();
     setCurrentName('');
     await bind.mainClearAb();
-    licensedDevices = 0;
     _everPulledProfiles = false;
   }
 
@@ -630,7 +625,12 @@ class AbModel {
   }
 
   bool isCurrentAbFull(bool warn) {
-    return current.isFull(warn);
+    final res = current.isFull();
+    if (res && warn) {
+      BotToast.showText(
+          contentColor: Colors.red, text: translate('exceed_max_devices'));
+    }
+    return res;
   }
 
   void _refreshTab() {
@@ -748,24 +748,13 @@ abstract class BaseAb {
 
   Future<bool> deleteTag(String tag);
 
-  bool isFull(bool warn) {
-    bool res;
-    res = gFFI.abModel.licensedDevices > 0 &&
-        peers.length >= gFFI.abModel.licensedDevices;
-    if (res && warn) {
-      BotToast.showText(
-          contentColor: Colors.red, text: translate("exceed_max_devices"));
-    }
-    return res;
-  }
+  bool isFull();
 
   AbProfile? sharedProfile();
 
   bool canWrite();
 
   bool fullControl();
-
-  bool allowUpdateSettingsOrDelete();
 
   Future<void> syncFromRecent(List<Peer> recents);
 }
@@ -774,6 +763,8 @@ class LegacyAb extends BaseAb {
   final sortTags = shouldSortTags().obs;
   final filterByIntersection = filterAbTagByIntersection().obs;
   bool get emtpy => peers.isEmpty && tags.isEmpty;
+  // licensedDevices is obtained from personal ab, shared ab restrict it in server
+  var licensedDevices = 0;
 
   LegacyAb();
 
@@ -793,8 +784,8 @@ class LegacyAb extends BaseAb {
   }
 
   @override
-  bool allowUpdateSettingsOrDelete() {
-    return false;
+  bool isFull() {
+    return licensedDevices > 0 && peers.length >= licensedDevices;
   }
 
   @override
@@ -824,7 +815,7 @@ class LegacyAb extends BaseAb {
           throw json['error'];
         } else if (json.containsKey('data')) {
           try {
-            gFFI.abModel.licensedDevices = json['licensed_devices'];
+            licensedDevices = json['licensed_devices'];
             // ignore: empty_catches
           } catch (e) {}
           final data = jsonDecode(json['data']);
@@ -862,7 +853,7 @@ class LegacyAb extends BaseAb {
       final body = jsonEncode({"data": jsonEncode(_serialize())});
       http.Response resp;
       // support compression
-      if (gFFI.abModel.licensedDevices > 0 && body.length > 1024) {
+      if (licensedDevices > 0 && body.length > 1024) {
         authHeaders['Content-Encoding'] = "gzip";
         resp = await http.post(Uri.parse(api),
             headers: authHeaders, body: GZipCodec().encode(utf8.encode(body)));
@@ -903,7 +894,7 @@ class LegacyAb extends BaseAb {
   Future<String?> addPeers(List<Map<String, dynamic>> ps) async {
     bool full = false;
     for (var p in ps) {
-      if (!isFull(false)) {
+      if (!isFull()) {
         p.remove('password'); // legacy ab ignore password
         final index = peers.indexWhere((e) => e.id == p['id']);
         if (index >= 0) {
@@ -981,7 +972,7 @@ class LegacyAb extends BaseAb {
       var r = recents[i];
       var index = peers.indexWhere((e) => e.id == r.id);
       if (index < 0) {
-        if (!isFull(false)) {
+        if (!isFull()) {
           peers.add(r);
           needSync = true;
         }
@@ -1128,8 +1119,8 @@ class LegacyAb extends BaseAb {
         peers.add(Peer.fromJson(peer));
       }
     }
-    if (isFull(false)) {
-      peers.removeRange(gFFI.abModel.licensedDevices, peers.length);
+    if (isFull()) {
+      peers.removeRange(licensedDevices, peers.length);
     }
     // restore online
     peers
@@ -1172,9 +1163,10 @@ class Ab extends BaseAb {
     return profile;
   }
 
-  bool creatorOrAdmin() {
-    return profile.owner == gFFI.userModel.userName.value ||
-        gFFI.userModel.isAdmin.value;
+  @override
+  bool isFull() {
+    return gFFI.abModel._maxPeerOneAb > 0 &&
+        peers.length >= gFFI.abModel._maxPeerOneAb;
   }
 
   @override
@@ -1193,15 +1185,6 @@ class Ab extends BaseAb {
       return true;
     } else {
       return profile.rule == ShareRule.fullControl.value;
-    }
-  }
-
-  @override
-  bool allowUpdateSettingsOrDelete() {
-    if (personal) {
-      return false;
-    } else {
-      return creatorOrAdmin();
     }
   }
 
@@ -1322,7 +1305,7 @@ class Ab extends BaseAb {
         if (peers.firstWhereOrNull((e) => e.id == p['id']) != null) {
           continue;
         }
-        if (isFull(false)) {
+        if (isFull()) {
           return translate("exceed_max_devices");
         }
         if (personal) {
@@ -1625,6 +1608,11 @@ class Ab extends BaseAb {
 // DummyAb is for current ab is null
 class DummyAb extends BaseAb {
   @override
+  bool isFull() {
+    return false;
+  }
+
+  @override
   Future<String?> addPeers(List<Map<String, dynamic>> ps) async {
     return "Unreachable";
   }
@@ -1642,11 +1630,6 @@ class DummyAb extends BaseAb {
 
   @override
   bool fullControl() {
-    return false;
-  }
-
-  @override
-  bool allowUpdateSettingsOrDelete() {
     return false;
   }
 
