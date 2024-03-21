@@ -600,6 +600,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Full Control", "Voller Zugriff"),
         ("share_warning_tip", "Die obigen Felder sind geteilt und sichtbar für andere."),
         ("Everyone", "Jeder"),
-        ("Web Console", ""),
+        ("ab_web_console_tip", ""),
     ].iter().cloned().collect();
 }

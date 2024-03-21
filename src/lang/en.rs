@@ -217,5 +217,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("outgoing_only_desk_tip", "This is a customized edition.\nYou can connect to other devices, but other devices cannot connect to your device."),
         ("preset_password_warning", "This customized edition comes with a preset password. Anyone knowing this password could gain full control of your device. If you did not expect this, uninstall the software immediately."),
         ("share_warning_tip", "The fields above are shared and visible to others."),
+        ("ab_web_console_tip", "More on web console"),
     ].iter().cloned().collect();
 }

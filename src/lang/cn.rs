@@ -600,6 +600,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Full Control", "完全控制"),
         ("share_warning_tip", "上述字段是共享的并且对其他人可见。"),
         ("Everyone", "所有人"),
-        ("Web Console", "Web控制台"),
+        ("ab_web_console_tip", "打开 Web 控制台以执行更多操作"),
     ].iter().cloned().collect();
 }

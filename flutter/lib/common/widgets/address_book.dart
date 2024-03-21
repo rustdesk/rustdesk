@@ -377,7 +377,7 @@ class _AddressBookState extends State<AddressBook> {
       syncMenuItem(),
       filterMenuItem(),
       MenuEntryDivider<String>(),
-      getEntry(translate("Web Console"), () async {
+      getEntry(translate("ab_web_console_tip"), () async {
         final url = await bind.mainGetApiServer();
         if (await canLaunchUrlString(url)) {
           launchUrlString(url);
