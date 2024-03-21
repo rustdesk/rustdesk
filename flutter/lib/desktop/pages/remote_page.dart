@@ -12,6 +12,8 @@ import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:flutter_custom_cursor/flutter_custom_cursor.dart';
 import 'package:flutter_improved_scrolling/flutter_improved_scrolling.dart';
 
+import 'package:flutter_hbb/native/bind.dart';
+
 import '../../consts.dart';
 import '../../common/widgets/overlay.dart';
 import '../../common/widgets/remote_input.dart';
@@ -20,7 +22,6 @@ import '../../common/widgets/dialog.dart';
 import '../../common/widgets/toolbar.dart';
 import '../../models/model.dart';
 import '../../models/desktop_render_texture.dart';
-import '../../models/platform_model.dart';
 import '../../common/shared_state.dart';
 import '../../utils/image.dart';
 import '../widgets/remote_toolbar.dart';

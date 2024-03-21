@@ -10,6 +10,8 @@ import 'package:flutter_hbb/desktop/widgets/tabbar_widget.dart';
 import 'package:flutter_hbb/models/chat_model.dart';
 import 'package:flutter_hbb/models/cm_file_model.dart';
 import 'package:flutter_hbb/utils/platform_channel.dart';
+import 'package:flutter_hbb/common/theme.dart';
+import 'package:flutter_hbb/native/bind.dart';
 import 'package:get/get.dart';
 import 'package:percent_indicator/linear_percent_indicator.dart';
 import 'package:provider/provider.dart';
@@ -19,7 +21,6 @@ import 'package:flutter_svg/flutter_svg.dart';
 import '../../common.dart';
 import '../../common/widgets/chat_page.dart';
 import '../../models/file_model.dart';
-import '../../models/platform_model.dart';
 import '../../models/server_model.dart';
 
 class DesktopServerPage extends StatefulWidget {

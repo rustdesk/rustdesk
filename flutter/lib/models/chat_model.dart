@@ -8,7 +8,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_hbb/common/shared_state.dart';
 import 'package:flutter_hbb/desktop/widgets/tabbar_widget.dart';
 import 'package:flutter_hbb/mobile/pages/home_page.dart';
-import 'package:flutter_hbb/models/platform_model.dart';
+import 'package:flutter_hbb/native/bind.dart';
 import 'package:flutter_hbb/models/state_model.dart';
 import 'package:get/get.dart';
 import 'package:uuid/uuid.dart';
@@ -18,7 +18,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import '../consts.dart';
 import '../common.dart';
 import '../common/widgets/overlay.dart';
-import '../main.dart';
+import '../native/main.dart' as native_main;
 import 'model.dart';
 
 class MessageKey {
@@ -351,7 +351,7 @@ class ChatModel with ChangeNotifier {
     }
     if (text.isEmpty) return;
     if (desktopType == DesktopType.cm) {
-      await showCmWindow();
+      await native_main.showCmWindow();
     }
     String? peerId;
     if (id == clientModeID) {

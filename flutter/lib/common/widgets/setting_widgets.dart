@@ -4,7 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/models/desktop_render_texture.dart';
-import 'package:flutter_hbb/models/platform_model.dart';
+import 'package:flutter_hbb/native/bind.dart';
 import 'package:get/get.dart';
 
 customImageQualityWidget(

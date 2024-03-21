@@ -1,11 +1,13 @@
 import 'dart:convert';
+
 import 'package:flutter/material.dart';
-import 'package:flutter_hbb/common.dart';
+
 import 'package:flutter_hbb/consts.dart';
-
 import 'package:flutter_hbb/models/peer_model.dart';
-
-import '../../models/platform_model.dart';
+import 'package:flutter_hbb/native/bind.dart'
+    if (dart.library.html) 'package:flutter_hbb/web/bind.dart';
+import 'package:flutter_hbb/common.dart'
+    if (dart.library.html) 'package:flutter_hbb/web/common.dart';
 
 class HttpType {
   static const kAuthReqTypeAccount = "account";
@@ -151,7 +153,7 @@ class LoginRequest {
 
     Map<String, dynamic> deviceInfo = {};
     try {
-      deviceInfo = jsonDecode(bind.mainGetLoginDeviceInfo());
+      deviceInfo = jsonDecode(mainGetLoginDeviceInfo());
     } catch (e) {
       debugPrint('Failed to decode get device info: $e');
     }

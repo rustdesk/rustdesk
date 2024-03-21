@@ -1,9 +1,6 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:flutter_hbb/common.dart';
-import 'package:flutter_hbb/models/state_model.dart';
-import 'package:get/get.dart';
 
 const int kMaxVirtualDisplayCount = 4;
 const int kAllVirtualDisplay = -1;
@@ -123,12 +120,6 @@ double kNewWindowOffset = Platform.isWindows
             ? 30.0
             : 50.0;
 
-EdgeInsets get kDragToResizeAreaPadding =>
-    !kUseCompatibleUiMode && Platform.isLinux
-        ? stateGlobal.fullscreen.isTrue || stateGlobal.isMaximized.value
-            ? EdgeInsets.zero
-            : EdgeInsets.all(5.0)
-        : EdgeInsets.zero;
 // https://en.wikipedia.org/wiki/Non-breaking_space
 const int $nbsp = 0x00A0;
 
@@ -462,20 +453,3 @@ const Map<int, String> physicalKeyMap = <int, String>{
   0x000c019e: 'LOCK_SCREEN',
   0x000c0208: 'VK_PRINT',
 };
-
-/// The windows targets in the publish time order.
-enum WindowsTarget {
-  naw, // not a windows target
-  xp,
-  vista,
-  w7,
-  w8,
-  w8_1,
-  w10,
-  w11
-}
-
-/// A convenient method to transform a build number to the corresponding windows version.
-extension WindowsTargetExt on int {
-  WindowsTarget get windowsVersion => getWindowsTarget(this);
-}

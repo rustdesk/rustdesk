@@ -2,7 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common.dart';
-import 'package:flutter_hbb/models/platform_model.dart';
+import 'package:flutter_hbb/native/bind.dart';
 
 void showPeerSelectionDialog(
     {bool singleSelection = false,

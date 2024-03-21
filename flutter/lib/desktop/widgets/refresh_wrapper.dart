@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_hbb/common.dart';
-import 'package:flutter_hbb/main.dart';
+
 import 'package:get/get.dart';
+
+import 'package:flutter_hbb/common.dart'
+    if (dart.library.html) 'package:flutter_hbb/web/common.dart';
 
 class RefreshWrapper extends StatefulWidget {
   final Widget Function(BuildContext context) builder;

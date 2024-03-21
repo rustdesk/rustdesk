@@ -5,12 +5,12 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/utils/event_loop.dart';
+import 'package:flutter_hbb/native/bind.dart';
 import 'package:get/get.dart';
 import 'package:path/path.dart' as path;
 
 import '../consts.dart';
 import 'model.dart';
-import 'platform_model.dart';
 
 enum SortBy {
   name,

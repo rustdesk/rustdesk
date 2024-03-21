@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_svg/flutter_svg.dart';
-import 'package:flutter_hbb/models/platform_model.dart';
+import 'package:flutter_hbb/native/bind.dart';
 
 import '../../common.dart';
 

@@ -3,14 +3,19 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_hbb/common.dart';
+
+import 'package:get/get.dart';
+
 import 'package:flutter_hbb/common/shared_state.dart';
 import 'package:flutter_hbb/common/widgets/dialog.dart';
+import 'package:flutter_hbb/common/theme.dart';
 import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/models/model.dart';
-import 'package:flutter_hbb/models/platform_model.dart';
+import 'package:flutter_hbb/native/bind.dart';
 import 'package:flutter_hbb/models/desktop_render_texture.dart';
-import 'package:get/get.dart';
+
+import 'package:flutter_hbb/common.dart'
+    if (dart.library.html) 'package:flutter_hbb/web/common.dart';
 
 bool isEditOsPassword = false;
 

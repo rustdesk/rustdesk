@@ -7,6 +7,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
+import 'package:flutter_hbb/native/bind.dart';
 import 'package:get/get.dart';
 
 import '../../models/model.dart';

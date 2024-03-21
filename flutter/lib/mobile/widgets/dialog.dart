@@ -2,10 +2,13 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common/widgets/setting_widgets.dart';
 import 'package:flutter_hbb/common/widgets/toolbar.dart';
+import 'package:flutter_hbb/common/theme.dart';
+import 'package:flutter_hbb/consts.dart';
+import 'package:flutter_hbb/native/bind.dart';
+import 'package:flutter_hbb/web/models/model.dart';
 import 'package:get/get.dart';
 
 import '../../common.dart';
-import '../../models/platform_model.dart';
 
 void _showSuccess() {
   showToast(translate("Successful"));

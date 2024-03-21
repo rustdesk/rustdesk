@@ -3,13 +3,17 @@ import 'dart:convert';
 
 import 'package:bot_toast/bot_toast.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_hbb/common/hbbs/hbbs.dart';
 import 'package:get/get.dart';
 import 'package:http/http.dart' as http;
 
-import '../common.dart';
-import 'model.dart';
-import 'platform_model.dart';
+import 'package:flutter_hbb/common/hbbs/hbbs.dart';
+
+import 'package:flutter_hbb/common.dart'
+    if (dart.library.html) 'package:flutter_hbb/web/common.dart';
+import 'package:flutter_hbb/native/bind.dart'
+    if (dart.library.html) 'package:flutter_hbb/web/bind.dart';
+import 'package:flutter_hbb/models/model.dart'
+    if (dart.library.html) 'package:flutter_hbb/web/models/model.dart';
 
 bool refreshingUser = false;
 
@@ -22,16 +26,16 @@ class UserModel {
   UserModel(this.parent);
 
   void refreshCurrentUser() async {
-    final token = bind.mainGetLocalOption(key: 'access_token');
+    final token = mainGetLocalOption(key: 'access_token');
     if (token == '') {
       await updateOtherModels();
       return;
     }
     _updateLocalUserInfo();
-    final url = await bind.mainGetApiServer();
+    final url = await mainGetApiServer();
     final body = {
-      'id': await bind.mainGetMyId(),
-      'uuid': await bind.mainGetUuid()
+      'id': await mainGetMyId(),
+      'uuid': await mainGetUuid()
     };
     if (refreshingUser) return;
     try {
@@ -65,7 +69,7 @@ class UserModel {
   }
 
   static Map<String, dynamic>? getLocalUserInfo() {
-    final userInfo = bind.mainGetLocalOption(key: 'user_info');
+    final userInfo = mainGetLocalOption(key: 'user_info');
     if (userInfo == '') {
       return null;
     }
@@ -85,8 +89,8 @@ class UserModel {
   }
 
   Future<void> reset({bool resetOther = false}) async {
-    await bind.mainSetLocalOption(key: 'access_token', value: '');
-    await bind.mainSetLocalOption(key: 'user_info', value: '');
+    await mainSetLocalOption(key: 'access_token', value: '');
+    await mainSetLocalOption(key: 'user_info', value: '');
     if (resetOther) {
       await gFFI.abModel.reset();
       await gFFI.groupModel.reset();
@@ -97,7 +101,7 @@ class UserModel {
   _parseAndUpdateUser(UserPayload user) {
     userName.value = user.name;
     isAdmin.value = user.isAdmin;
-    bind.mainSetLocalOption(key: 'user_info', value: jsonEncode(user));
+    mainSetLocalOption(key: 'user_info', value: jsonEncode(user));
   }
 
   // update ab and group status
@@ -108,14 +112,14 @@ class UserModel {
   Future<void> logOut({String? apiServer}) async {
     final tag = gFFI.dialogManager.showLoading(translate('Waiting'));
     try {
-      final url = apiServer ?? await bind.mainGetApiServer();
+      final url = apiServer ?? await mainGetApiServer();
       final authHeaders = getHttpHeaders();
       authHeaders['Content-Type'] = "application/json";
       await http
           .post(Uri.parse('$url/api/logout'),
               body: jsonEncode({
-                'id': await bind.mainGetMyId(),
-                'uuid': await bind.mainGetUuid(),
+                'id': await mainGetMyId(),
+                'uuid': await mainGetUuid(),
               }),
               headers: authHeaders)
           .timeout(Duration(seconds: 2));
@@ -129,7 +133,7 @@ class UserModel {
 
   /// throw [RequestException]
   Future<LoginResponse> login(LoginRequest loginRequest) async {
-    final url = await bind.mainGetApiServer();
+    final url = await mainGetApiServer();
     final resp = await http.post(Uri.parse('$url/api/login'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode(loginRequest.toJson()));
@@ -173,7 +177,7 @@ class UserModel {
 
   static Future<List<dynamic>> queryOidcLoginOptions() async {
     try {
-      final url = await bind.mainGetApiServer();
+      final url = await mainGetApiServer();
       if (url.trim().isEmpty) return [];
       final resp = await http.get(Uri.parse('$url/api/login-options'));
       final List<String> ops = [];

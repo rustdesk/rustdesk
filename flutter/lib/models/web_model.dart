@@ -3,15 +3,21 @@
 import 'dart:convert';
 import 'dart:typed_data';
 import 'dart:js';
-
-import '../common.dart';
 import 'dart:html';
 import 'dart:async';
+
+import 'package:flutter/material.dart';
+
+import 'package:flutter_hbb/web/common.dart';
 
 final List<StreamSubscription<MouseEvent>> mouseListeners = [];
 final List<StreamSubscription<KeyboardEvent>> keyListeners = [];
 
+typedef HandleEvent = Future<void> Function(Map<String, dynamic> evt);
+
 class PlatformFFI {
+  final _eventHandlers = <String, Map<String, HandleEvent>>{};
+
   static String getByName(String name, [String arg = '']) {
     return context.callMethod('getByName', [name, arg]);
   }
@@ -71,5 +77,46 @@ class PlatformFFI {
 
   static Future<bool> invokeMethod(String method, [dynamic arguments]) async {
     return true;
+  }
+
+  bool registerEventHandler(
+      String eventName, String handlerName, HandleEvent handler) {
+    debugPrint('registerEventHandler $eventName $handlerName');
+    var handlers = _eventHandlers[eventName];
+    if (handlers == null) {
+      _eventHandlers[eventName] = {handlerName: handler};
+      return true;
+    } else {
+      if (handlers.containsKey(handlerName)) {
+        return false;
+      } else {
+        handlers[handlerName] = handler;
+        return true;
+      }
+    }
+  }
+
+  void unregisterEventHandler(String eventName, String handlerName) {
+    debugPrint('unregisterEventHandler $eventName $handlerName');
+    var handlers = _eventHandlers[eventName];
+    if (handlers != null) {
+      handlers.remove(handlerName);
+    }
+  }
+
+  Future<bool> tryHandle(Map<String, dynamic> evt) async {
+    final name = evt['name'];
+    if (name != null) {
+      final handlers = _eventHandlers[name];
+      if (handlers != null) {
+        if (handlers.isNotEmpty) {
+          for (var handler in handlers.values) {
+            await handler(evt);
+          }
+          return true;
+        }
+      }
+    }
+    return false;
   }
 }

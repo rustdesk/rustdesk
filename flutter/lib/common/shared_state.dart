@@ -1,7 +1,8 @@
-import 'package:flutter_hbb/common.dart';
 import 'package:get/get.dart';
 
 import '../consts.dart';
+
+import 'package:flutter_hbb/common.dart' if (dart.library.html) 'package:flutter_hbb/web/common.dart';
 
 // TODO: A lot of dup code.
 

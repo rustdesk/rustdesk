@@ -8,7 +8,7 @@ import 'package:provider/provider.dart';
 import 'package:get/get.dart';
 // to-do: do not depend on desktop
 import 'package:flutter_hbb/desktop/widgets/remote_toolbar.dart';
-import 'package:flutter_hbb/models/platform_model.dart';
+import 'package:flutter_hbb/native/bind.dart';
 
 import '../manager.dart';
 import '../model.dart';
