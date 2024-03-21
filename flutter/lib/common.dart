@@ -1522,7 +1522,10 @@ class LastWindowPosition {
 }
 
 String get windowFramePrefix =>
-    bind.isIncomingOnly() ? "${kWindowPrefix}qs_" : kWindowPrefix;
+    kWindowPrefix +
+    (bind.isIncomingOnly()
+        ? "incoming_"
+        : (bind.isOutgoingOnly() ? "outgoing_" : ""));
 
 /// Save window position and size on exit
 /// Note that windowId must be provided if it's subwindow
@@ -1549,7 +1552,13 @@ Future<void> saveWindowPosition(WindowType type, {int? windowId}) async {
 
   switch (type) {
     case WindowType.Main:
-      isMaximized = await windowManager.isMaximized();
+      // Checking `bind.isIncomingOnly()` is a simple workaround for MacOS.
+      // `await windowManager.isMaximized()` will always return true
+      // if is not resizable. The reason is unknown.
+      //
+      // `windowManager.setResizable(!bind.isIncomingOnly());` in main.dart
+      isMaximized =
+          bind.isIncomingOnly() ? false : await windowManager.isMaximized();
       position = await windowManager.getPosition();
       sz = await windowManager.getSize();
       setFrameIfMaximized();
@@ -1793,11 +1802,11 @@ Future<bool> restoreWindowPosition(WindowType type,
       }
       if (lpos.isMaximized == true) {
         await restorePos();
-        if (!bind.isIncomingOnly()) {
+        if (!(bind.isIncomingOnly() || bind.isOutgoingOnly())) {
           await windowManager.maximize();
         }
       } else {
-        if (!bind.isIncomingOnly()) {
+        if (!bind.isIncomingOnly() || bind.isOutgoingOnly()) {
           await windowManager.setSize(size);
         }
         await restorePos();
@@ -2086,19 +2095,28 @@ List<String>? urlLinkToCmdArgs(Uri uri) {
   return null;
 }
 
-connectMainDesktop(
-  String id, {
-  required bool isFileTransfer,
-  required bool isTcpTunneling,
-  required bool isRDP,
-  bool? forceRelay,
-}) async {
+connectMainDesktop(String id,
+    {required bool isFileTransfer,
+    required bool isTcpTunneling,
+    required bool isRDP,
+    bool? forceRelay,
+    String? password,
+    bool? isSharedPassword}) async {
   if (isFileTransfer) {
-    await rustDeskWinManager.newFileTransfer(id, forceRelay: forceRelay);
+    await rustDeskWinManager.newFileTransfer(id,
+        password: password,
+        isSharedPassword: isSharedPassword,
+        forceRelay: forceRelay);
   } else if (isTcpTunneling || isRDP) {
-    await rustDeskWinManager.newPortForward(id, isRDP, forceRelay: forceRelay);
+    await rustDeskWinManager.newPortForward(id, isRDP,
+        password: password,
+        isSharedPassword: isSharedPassword,
+        forceRelay: forceRelay);
   } else {
-    await rustDeskWinManager.newRemoteDesktop(id, forceRelay: forceRelay);
+    await rustDeskWinManager.newRemoteDesktop(id,
+        password: password,
+        isSharedPassword: isSharedPassword,
+        forceRelay: forceRelay);
   }
 }
 
@@ -2106,14 +2124,13 @@ connectMainDesktop(
 /// If [isFileTransfer], starts a session only for file transfer.
 /// If [isTcpTunneling], starts a session only for tcp tunneling.
 /// If [isRDP], starts a session only for rdp.
-connect(
-  BuildContext context,
-  String id, {
-  bool isFileTransfer = false,
-  bool isTcpTunneling = false,
-  bool isRDP = false,
-  bool forceRelay = false,
-}) async {
+connect(BuildContext context, String id,
+    {bool isFileTransfer = false,
+    bool isTcpTunneling = false,
+    bool isRDP = false,
+    bool forceRelay = false,
+    String? password,
+    bool? isSharedPassword}) async {
   if (id == '') return;
   if (!isDesktop || desktopType == DesktopType.main) {
     try {
@@ -2141,6 +2158,8 @@ connect(
         isFileTransfer: isFileTransfer,
         isTcpTunneling: isTcpTunneling,
         isRDP: isRDP,
+        password: password,
+        isSharedPassword: isSharedPassword,
         forceRelay: forceRelay2,
       );
     } else {
@@ -2149,6 +2168,8 @@ connect(
         'isFileTransfer': isFileTransfer,
         'isTcpTunneling': isTcpTunneling,
         'isRDP': isRDP,
+        'password': password,
+        'isSharedPassword': isSharedPassword,
         'forceRelay': forceRelay,
       });
     }
@@ -2162,14 +2183,16 @@ connect(
       Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (BuildContext context) => FileManagerPage(id: id),
+          builder: (BuildContext context) => FileManagerPage(
+              id: id, password: password, isSharedPassword: isSharedPassword),
         ),
       );
     } else {
       Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (BuildContext context) => RemotePage(id: id),
+          builder: (BuildContext context) => RemotePage(
+              id: id, password: password, isSharedPassword: isSharedPassword),
         ),
       );
     }
@@ -3079,25 +3102,52 @@ Color? disabledTextColor(BuildContext context, bool enabled) {
       : Theme.of(context).textTheme.titleLarge?.color?.withOpacity(0.6);
 }
 
-Widget loadLogo(double size) {
-  return Image.asset('assets/logo.png',
+// max 300 x 60
+Widget loadLogo() {
+  return FutureBuilder<ByteData>(
+      future: rootBundle.load('assets/logo.png'),
+      builder: (BuildContext context, AsyncSnapshot<ByteData> snapshot) {
+        if (snapshot.hasData) {
+          final image = Image.asset(
+            'assets/logo.png',
+            fit: BoxFit.contain,
+            errorBuilder: (ctx, error, stackTrace) {
+              return Container();
+            },
+          );
+          return Container(
+            constraints: BoxConstraints(maxWidth: 300, maxHeight: 60),
+            child: image,
+          ).marginOnly(left: 12, right: 12, top: 12);
+        }
+        return const Offstage();
+      });
+}
+
+Widget loadIcon(double size) {
+  return Image.asset('assets/icon.png',
       width: size,
       height: size,
       errorBuilder: (ctx, error, stackTrace) => SvgPicture.asset(
-            'assets/logo.svg',
+            'assets/icon.svg',
             width: size,
             height: size,
           ));
 }
 
-var desktopQsHomeLeftPaneSize = Size(280, 300);
-Size getDesktopQsHomeSize() {
-  final magicWidth = 11.0;
-  final magicHeight = 8.0;
-  return desktopQsHomeLeftPaneSize +
+var imcomingOnlyHomeSize = Size(280, 300);
+Size getIncomingOnlyHomeSize() {
+  final magicWidth = Platform.isWindows ? 11.0 : 2.0;
+  final magicHeight = 10.0;
+  return imcomingOnlyHomeSize +
       Offset(magicWidth, kDesktopRemoteTabBarHeight + magicHeight);
 }
 
-Size getDesktopQsSettingsSize() {
+Size getIncomingOnlySettingsSize() {
   return Size(768, 600);
+}
+
+bool isInHomePage() {
+  final controller = Get.find<DesktopTabController>();
+  return controller.state.value.selected == 0;
 }

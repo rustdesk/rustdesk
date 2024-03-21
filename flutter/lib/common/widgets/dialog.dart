@@ -2,11 +2,14 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:bot_toast/bot_toast.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hbb/common/shared_state.dart';
 import 'package:flutter_hbb/common/widgets/setting_widgets.dart';
 import 'package:flutter_hbb/consts.dart';
+import 'package:flutter_hbb/models/peer_model.dart';
+import 'package:flutter_hbb/models/peer_tab_model.dart';
 import 'package:get/get.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
@@ -1583,7 +1586,7 @@ customImageQualityDialog(SessionID sessionId, String id, FFI ffi) async {
   msgBoxCommon(ffi.dialogManager, 'Custom Image Quality', content, [btnClose]);
 }
 
-void deletePeerConfirmDialog(Function onSubmit, String title) async {
+void deleteConfirmDialog(Function onSubmit, String title) async {
   gFFI.dialogManager.show(
     (setState, close, context) {
       submit() async {
@@ -1631,7 +1634,7 @@ void editAbTagDialog(
     List<dynamic> currentTags, Function(List<dynamic>) onSubmit) {
   var isInProgress = false;
 
-  final tags = List.of(gFFI.abModel.tags);
+  final tags = List.of(gFFI.abModel.currentAbTags);
   var selectedTag = currentTags.obs;
 
   gFFI.dialogManager.show((setState, close, context) {
@@ -1906,6 +1909,181 @@ void showWindowsSessionsDialog(
             }),
         dialogButton('Connect', onPressed: submit, isOutline: false),
       ],
+    );
+  });
+}
+
+void addPeersToAbDialog(
+  List<Peer> peers,
+) async {
+  Future<bool> addTo(String abname) async {
+    final mapList = peers.map((e) {
+      var json = e.toJson();
+      // remove shared password when add to other address book
+      json.remove('password');
+      if (gFFI.abModel.addressbooks[abname]?.isPersonal() != true) {
+        json.remove('hash');
+      }
+      return json;
+    }).toList();
+    final errMsg = await gFFI.abModel.addPeersTo(mapList, abname);
+    if (errMsg == null) {
+      showToast(translate('Successful'));
+      return true;
+    } else {
+      BotToast.showText(text: errMsg, contentColor: Colors.red);
+      return false;
+    }
+  }
+
+  // if only one address book and it is personal, add to it directly
+  if (gFFI.abModel.addressbooks.length == 1 &&
+      gFFI.abModel.current.isPersonal()) {
+    await addTo(gFFI.abModel.currentName.value);
+    return;
+  }
+
+  RxBool isInProgress = false.obs;
+  final names = gFFI.abModel.addressBooksCanWrite();
+  RxString currentName = gFFI.abModel.currentName.value.obs;
+  TextEditingController controller = TextEditingController();
+  if (gFFI.peerTabModel.currentTab == PeerTabIndex.ab.index) {
+    names.remove(currentName.value);
+  }
+  if (names.isEmpty) {
+    debugPrint('no address book to add peers to, should not happen');
+    return;
+  }
+  if (!names.contains(currentName.value)) {
+    currentName.value = names[0];
+  }
+  gFFI.dialogManager.show((setState, close, context) {
+    submit() async {
+      if (controller.text != gFFI.abModel.translatedName(currentName.value)) {
+        BotToast.showText(
+            text: 'illegal address book name: ${controller.text}',
+            contentColor: Colors.red);
+        return;
+      }
+      isInProgress.value = true;
+      if (await addTo(currentName.value)) {
+        close();
+      }
+      isInProgress.value = false;
+    }
+
+    cancel() {
+      close();
+    }
+
+    return CustomAlertDialog(
+      title: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(IconFont.addressBook, color: MyTheme.accent),
+          Text(translate('Add to address book')).paddingOnly(left: 10),
+        ],
+      ),
+      content: Obx(() => Column(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              DropdownMenu(
+                initialSelection: currentName.value,
+                onSelected: (value) {
+                  if (value != null) {
+                    currentName.value = value;
+                  }
+                },
+                dropdownMenuEntries: names
+                    .map((e) => DropdownMenuEntry(
+                        value: e, label: gFFI.abModel.translatedName(e)))
+                    .toList(),
+                inputDecorationTheme: InputDecorationTheme(
+                    isDense: true, border: UnderlineInputBorder()),
+                enableFilter: true,
+                controller: controller,
+              ),
+              // NOT use Offstage to wrap LinearProgressIndicator
+              isInProgress.value ? const LinearProgressIndicator() : Offstage()
+            ],
+          )),
+      actions: [
+        dialogButton(
+          "Cancel",
+          icon: Icon(Icons.close_rounded),
+          onPressed: cancel,
+          isOutline: true,
+        ),
+        dialogButton(
+          "OK",
+          icon: Icon(Icons.done_rounded),
+          onPressed: submit,
+        ),
+      ],
+      onSubmit: submit,
+      onCancel: cancel,
+    );
+  });
+}
+
+void setSharedAbPasswordDialog(String abName, Peer peer) {
+  TextEditingController controller = TextEditingController(text: peer.password);
+  RxBool isInProgress = false.obs;
+  gFFI.dialogManager.show((setState, close, context) {
+    submit() async {
+      isInProgress.value = true;
+      bool res = await gFFI.abModel
+          .changeSharedPassword(abName, peer.id, controller.text);
+      close();
+      isInProgress.value = false;
+      if (res) {
+        showToast(translate('Successful'));
+      }
+    }
+
+    cancel() {
+      close();
+    }
+
+    return CustomAlertDialog(
+      title: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.key, color: MyTheme.accent),
+          Text(translate('Set shared password')).paddingOnly(left: 10),
+        ],
+      ),
+      content: Obx(() => Column(children: [
+            TextField(
+              controller: controller,
+              obscureText: true,
+              autofocus: true,
+            ),
+            Row(children: [
+              Icon(Icons.info, color: Colors.amber).marginOnly(right: 4),
+              Text(
+                translate('share_warning_tip'),
+                style: TextStyle(fontSize: 12),
+              )
+            ]).marginSymmetric(vertical: 10),
+            // NOT use Offstage to wrap LinearProgressIndicator
+            isInProgress.value ? const LinearProgressIndicator() : Offstage()
+          ])),
+      actions: [
+        dialogButton(
+          "Cancel",
+          icon: Icon(Icons.close_rounded),
+          onPressed: cancel,
+          isOutline: true,
+        ),
+        dialogButton(
+          "OK",
+          icon: Icon(Icons.done_rounded),
+          onPressed: submit,
+        ),
+      ],
+      onSubmit: submit,
+      onCancel: cancel,
     );
   });
 }

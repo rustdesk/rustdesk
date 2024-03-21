@@ -355,10 +355,8 @@ class FfiModel with ChangeNotifier {
           final id = evt['id'];
           final password = evt['password'];
           if (id != null && password != null) {
-            if (gFFI.abModel
-                .changePassword(id.toString(), password.toString())) {
-              gFFI.abModel.pushAb(toastIfFail: false, toastIfSucc: false);
-            }
+            gFFI.abModel
+                .changePersonalHashPassword(id.toString(), password.toString());
           }
         }
       } else if (name == "cm_file_transfer_log") {
@@ -2179,6 +2177,7 @@ class FFI {
     bool isRdp = false,
     String? switchUuid,
     String? password,
+    bool? isSharedPassword,
     bool? forceRelay,
     int? tabWindowId,
     int? display,
@@ -2212,6 +2211,7 @@ class FFI {
         switchUuid: switchUuid ?? '',
         forceRelay: forceRelay ?? false,
         password: password ?? '',
+        isSharedPassword: isSharedPassword ?? false,
       );
     } else if (display != null) {
       if (displays == null) {

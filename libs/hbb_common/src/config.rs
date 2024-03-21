@@ -402,21 +402,11 @@ fn patch(path: PathBuf) -> PathBuf {
         #[cfg(target_os = "linux")]
         {
             if _tmp == "/root" {
-                if let Ok(output) = std::process::Command::new("whoami").output() {
-                    let user = String::from_utf8_lossy(&output.stdout)
-                        .to_string()
-                        .trim()
-                        .to_owned();
+                if let Ok(user) = crate::platform::linux::run_cmds("whoami") {
                     if user != "root" {
                         let cmd = format!("getent passwd '{}' | awk -F':' '{{print $6}}'", user);
-                        if let Ok(output) = std::process::Command::new(cmd).output() {
-                            let home_dir = String::from_utf8_lossy(&output.stdout)
-                                .to_string()
-                                .trim()
-                                .to_owned();
-                            if !home_dir.is_empty() {
-                                return home_dir.into();
-                            }
+                        if let Ok(output) = crate::platform::linux::run_cmds(&cmd) {
+                            return output.into();
                         }
                         return format!("/home/{user}").into();
                     }
@@ -913,7 +903,13 @@ impl Config {
         res
     }
 
-    pub fn set_options(v: HashMap<String, String>) {
+    #[inline]
+    fn purify_options(v: &mut HashMap<String, String>) {
+        v.retain(|k, v| is_option_can_save(&OVERWRITE_SETTINGS, &DEFAULT_SETTINGS, k, v));
+    }
+
+    pub fn set_options(mut v: HashMap<String, String>) {
+        Self::purify_options(&mut v);
         let mut config = CONFIG2.write().unwrap();
         if config.options == v {
             return;
@@ -933,6 +929,9 @@ impl Config {
     }
 
     pub fn set_option(k: String, v: String) {
+        if !is_option_can_save(&OVERWRITE_SETTINGS, &DEFAULT_SETTINGS, &k, &v) {
+            return;
+        }
         let mut config = CONFIG2.write().unwrap();
         let v2 = if v.is_empty() { None } else { Some(&v) };
         if v2 != config.options.get(&k) {
@@ -955,6 +954,14 @@ impl Config {
     }
 
     pub fn set_permanent_password(password: &str) {
+        if HARD_SETTINGS
+            .read()
+            .unwrap()
+            .get("password")
+            .map_or(false, |v| v == password)
+        {
+            return;
+        }
         let mut config = CONFIG.write().unwrap();
         if password == config.password {
             return;
@@ -1394,6 +1401,9 @@ impl LocalConfig {
     }
 
     pub fn set_option(k: String, v: String) {
+        if !is_option_can_save(&OVERWRITE_LOCAL_SETTINGS, &DEFAULT_LOCAL_SETTINGS, &k, &v) {
+            return;
+        }
         let mut config = LOCAL_CONFIG.write().unwrap();
         let v2 = if v.is_empty() { None } else { Some(&v) };
         if v2 != config.options.get(&k) {
@@ -1570,6 +1580,14 @@ impl UserDefaultConfig {
     }
 
     pub fn set(&mut self, key: String, value: String) {
+        if !is_option_can_save(
+            &OVERWRITE_DISPLAY_SETTINGS,
+            &DEFAULT_DISPLAY_SETTINGS,
+            &key,
+            &value,
+        ) {
+            return;
+        }
         if value.is_empty() {
             self.options.remove(&key);
         } else {
@@ -1660,13 +1678,19 @@ pub struct AbPeer {
 }
 
 #[derive(Debug, Default, Serialize, Deserialize, Clone)]
-pub struct Ab {
+pub struct AbEntry {
     #[serde(
         default,
         deserialize_with = "deserialize_string",
         skip_serializing_if = "String::is_empty"
     )]
-    pub access_token: String,
+    pub guid: String,
+    #[serde(
+        default,
+        deserialize_with = "deserialize_string",
+        skip_serializing_if = "String::is_empty"
+    )]
+    pub name: String,
     #[serde(default, deserialize_with = "deserialize_vec_abpeer")]
     pub peers: Vec<AbPeer>,
     #[serde(default, deserialize_with = "deserialize_vec_string")]
@@ -1677,6 +1701,24 @@ pub struct Ab {
         skip_serializing_if = "String::is_empty"
     )]
     pub tag_colors: String,
+}
+
+impl AbEntry {
+    pub fn personal(&self) -> bool {
+        self.name == "My address book" || self.name == "Legacy address book"
+    }
+}
+
+#[derive(Debug, Default, Serialize, Deserialize, Clone)]
+pub struct Ab {
+    #[serde(
+        default,
+        deserialize_with = "deserialize_string",
+        skip_serializing_if = "String::is_empty"
+    )]
+    pub access_token: String,
+    #[serde(default, deserialize_with = "deserialize_vec_abentry")]
+    pub ab_entries: Vec<AbEntry>,
 }
 
 impl Ab {
@@ -1691,6 +1733,7 @@ impl Ab {
             let max_len = 64 * 1024 * 1024;
             if data.len() > max_len {
                 // maxlen of function decompress
+                log::error!("ab data too large, {} > {}", data.len(), max_len);
                 return;
             }
             if let Ok(data) = symmetric_crypt(&data, true) {
@@ -1840,6 +1883,7 @@ deserialize_default!(deserialize_vec_string, Vec<String>);
 deserialize_default!(deserialize_vec_i32_string_i32, Vec<(i32, String, i32)>);
 deserialize_default!(deserialize_vec_discoverypeer, Vec<DiscoveryPeer>);
 deserialize_default!(deserialize_vec_abpeer, Vec<AbPeer>);
+deserialize_default!(deserialize_vec_abentry, Vec<AbEntry>);
 deserialize_default!(deserialize_vec_groupuser, Vec<GroupUser>);
 deserialize_default!(deserialize_vec_grouppeer, Vec<GroupPeer>);
 deserialize_default!(deserialize_keypair, KeyPair);
@@ -1861,6 +1905,22 @@ fn get_or(
         .or(b.get(k))
         .or(c.read().unwrap().get(k))
         .cloned()
+}
+
+#[inline]
+fn is_option_can_save(
+    overwrite: &RwLock<HashMap<String, String>>,
+    defaults: &RwLock<HashMap<String, String>>,
+    k: &str,
+    v: &str,
+) -> bool {
+    if overwrite.read().unwrap().contains_key(k) {
+        return false;
+    }
+    if defaults.read().unwrap().get(k).map_or(false, |x| x == v) {
+        return false;
+    }
+    true
 }
 
 #[inline]
@@ -1957,6 +2017,33 @@ mod tests {
             .write()
             .unwrap()
             .insert("d".to_string(), "c".to_string());
+        let mut res: HashMap<String, String> = Default::default();
+        res.insert("b".to_owned(), "c".to_string());
+        res.insert("d".to_owned(), "c".to_string());
+        res.insert("c".to_owned(), "a".to_string());
+        Config::purify_options(&mut res);
+        assert!(res.len() == 0);
+        res.insert("b".to_owned(), "c".to_string());
+        res.insert("d".to_owned(), "c".to_string());
+        res.insert("c".to_owned(), "a".to_string());
+        res.insert("f".to_owned(), "a".to_string());
+        Config::purify_options(&mut res);
+        assert!(res.len() == 1);
+        res.insert("b".to_owned(), "c".to_string());
+        res.insert("d".to_owned(), "c".to_string());
+        res.insert("c".to_owned(), "a".to_string());
+        res.insert("f".to_owned(), "a".to_string());
+        res.insert("c".to_owned(), "d".to_string());
+        Config::purify_options(&mut res);
+        assert!(res.len() == 2);
+        res.insert("b".to_owned(), "c".to_string());
+        res.insert("d".to_owned(), "c".to_string());
+        res.insert("c".to_owned(), "a".to_string());
+        res.insert("f".to_owned(), "a".to_string());
+        res.insert("c".to_owned(), "d".to_string());
+        res.insert("d".to_owned(), "cc".to_string());
+        Config::purify_options(&mut res);
+        assert!(res.len() == 2);
         let res = Config::get_options();
         assert!(res["a"] == "b");
         assert!(res["c"] == "a");

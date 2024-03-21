@@ -350,45 +350,48 @@ pub fn is_domain_port_str(id: &str) -> bool {
 }
 
 pub fn init_log(_is_async: bool, _name: &str) -> Option<flexi_logger::LoggerHandle> {
-    #[cfg(debug_assertions)]
-    {
-        use env_logger::*;
-        init_from_env(Env::default().filter_or(DEFAULT_FILTER_ENV, "info"));
-        None
-    }
-    #[cfg(not(debug_assertions))]
-    {
-        // https://docs.rs/flexi_logger/latest/flexi_logger/error_info/index.html#write
-        // though async logger more efficient, but it also causes more problems, disable it for now
-        let mut logger_holder: Option<flexi_logger::LoggerHandle> = None;
-        let mut path = config::Config::log_path();
-        #[cfg(target_os = "android")]
-        if !config::Config::get_home().exists() {
-            return None;
+    static INIT: std::sync::Once = std::sync::Once::new();
+    #[allow(unused_mut)]
+    let mut logger_holder: Option<flexi_logger::LoggerHandle> = None;
+    INIT.call_once(|| {
+        #[cfg(debug_assertions)]
+        {
+            use env_logger::*;
+            init_from_env(Env::default().filter_or(DEFAULT_FILTER_ENV, "info"));
         }
-        if !_name.is_empty() {
-            path.push(_name);
+        #[cfg(not(debug_assertions))]
+        {
+            // https://docs.rs/flexi_logger/latest/flexi_logger/error_info/index.html#write
+            // though async logger more efficient, but it also causes more problems, disable it for now
+            let mut path = config::Config::log_path();
+            #[cfg(target_os = "android")]
+            if !config::Config::get_home().exists() {
+                return;
+            }
+            if !_name.is_empty() {
+                path.push(_name);
+            }
+            use flexi_logger::*;
+            if let Ok(x) = Logger::try_with_env_or_str("debug") {
+                logger_holder = x
+                    .log_to_file(FileSpec::default().directory(path))
+                    .write_mode(if _is_async {
+                        WriteMode::Async
+                    } else {
+                        WriteMode::Direct
+                    })
+                    .format(opt_format)
+                    .rotate(
+                        Criterion::Age(Age::Day),
+                        Naming::Timestamps,
+                        Cleanup::KeepLogFiles(6),
+                    )
+                    .start()
+                    .ok();
+            }
         }
-        use flexi_logger::*;
-        if let Ok(x) = Logger::try_with_env_or_str("debug") {
-            logger_holder = x
-                .log_to_file(FileSpec::default().directory(path))
-                .write_mode(if _is_async {
-                    WriteMode::Async
-                } else {
-                    WriteMode::Direct
-                })
-                .format(opt_format)
-                .rotate(
-                    Criterion::Age(Age::Day),
-                    Naming::Timestamps,
-                    Cleanup::KeepLogFiles(6),
-                )
-                .start()
-                .ok();
-        }
-        logger_holder
-    }
+    });
+    logger_holder
 }
 
 #[cfg(test)]

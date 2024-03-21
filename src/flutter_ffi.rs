@@ -122,6 +122,7 @@ pub fn session_add_sync(
     switch_uuid: String,
     force_relay: bool,
     password: String,
+    is_shared_password: bool,
 ) -> SyncReturn<String> {
     if let Err(e) = session_add(
         &session_id,
@@ -132,6 +133,7 @@ pub fn session_add_sync(
         &switch_uuid,
         force_relay,
         password,
+        is_shared_password,
     ) {
         SyncReturn(format!("Failed to add session with id {}, {}", &id, e))
     } else {
@@ -1018,14 +1020,6 @@ pub fn main_load_lan_peers_sync() -> SyncReturn<String> {
     return SyncReturn(serde_json::ser::to_string(&data).unwrap_or("".to_owned()));
 }
 
-pub fn main_load_ab_sync() -> SyncReturn<String> {
-    return SyncReturn(serde_json::to_string(&config::Ab::load()).unwrap_or_default());
-}
-
-pub fn main_load_group_sync() -> SyncReturn<String> {
-    return SyncReturn(serde_json::to_string(&config::Group::load()).unwrap_or_default());
-}
-
 pub fn main_load_recent_peers_for_ab(filter: String) -> String {
     let id_filters = serde_json::from_str::<Vec<String>>(&filter).unwrap_or_default();
     let id_filters = if id_filters.is_empty() {
@@ -1828,6 +1822,10 @@ pub fn is_outgoing_only() -> SyncReturn<bool> {
     SyncReturn(config::is_outgoing_only())
 }
 
+pub fn is_custom_client() -> SyncReturn<bool> {
+    SyncReturn(get_app_name() != "RustDesk")
+}
+
 pub fn is_disable_settings() -> SyncReturn<bool> {
     SyncReturn(config::is_disable_settings())
 }
@@ -1843,6 +1841,19 @@ pub fn is_disable_account() -> SyncReturn<bool> {
 // windows only
 pub fn is_disable_installation() -> SyncReturn<bool> {
     SyncReturn(config::is_disable_installation())
+}
+
+pub fn is_preset_password() -> bool {
+    config::HARD_SETTINGS
+        .read()
+        .unwrap()
+        .get("password")
+        .map_or(false, |p| {
+            #[cfg(not(any(target_os = "android", target_os = "ios")))]
+            return p == &crate::ipc::get_permanent_password();
+            #[cfg(any(target_os = "android", target_os = "ios"))]
+            return p == &config::Config::get_permanent_password();
+        })
 }
 
 /// Send a url scheme throught the ipc.

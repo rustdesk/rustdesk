@@ -106,39 +106,33 @@ class _DesktopSettingPageState extends State<DesktopSettingPage>
   List<_TabInfo> _settingTabs() {
     final List<_TabInfo> settingTabs = <_TabInfo>[
       _TabInfo('General', Icons.settings_outlined, Icons.settings),
-      _TabInfo('Security', Icons.enhanced_encryption_outlined,
-          Icons.enhanced_encryption),
-      _TabInfo('Network', Icons.link_outlined, Icons.link),
-      _TabInfo('Account', Icons.person_outline, Icons.person),
+      if (!bind.isOutgoingOnly() && !bind.isDisableSettings())
+        _TabInfo('Security', Icons.enhanced_encryption_outlined,
+            Icons.enhanced_encryption),
+      if (!bind.isDisableSettings())
+        _TabInfo('Network', Icons.link_outlined, Icons.link),
+      if (!bind.isIncomingOnly())
+        _TabInfo(
+            'Display', Icons.desktop_windows_outlined, Icons.desktop_windows),
+      if (!bind.isIncomingOnly() && bind.pluginFeatureIsEnabled())
+        _TabInfo('Plugin', Icons.extension_outlined, Icons.extension),
+      if (!bind.isDisableAccount())
+        _TabInfo('Account', Icons.person_outline, Icons.person),
       _TabInfo('About', Icons.info_outline, Icons.info)
     ];
-    if (!bind.isIncomingOnly()) {
-      settingTabs.insert(
-          3,
-          _TabInfo('Display', Icons.desktop_windows_outlined,
-              Icons.desktop_windows));
-      if (bind.pluginFeatureIsEnabled()) {
-        settingTabs.insert(
-            4, _TabInfo('Plugin', Icons.extension_outlined, Icons.extension));
-      }
-    }
     return settingTabs;
   }
 
   List<Widget> _children() {
     final children = [
       _General(),
-      _Safety(),
-      _Network(),
-      _Account(),
+      if (!bind.isOutgoingOnly() && !bind.isDisableSettings()) _Safety(),
+      if (!bind.isDisableSettings()) _Network(),
+      if (!bind.isIncomingOnly()) _Display(),
+      if (!bind.isIncomingOnly() && bind.pluginFeatureIsEnabled()) _Plugin(),
+      if (!bind.isDisableAccount()) _Account(),
       _About(),
     ];
-    if (!bind.isIncomingOnly()) {
-      children.insert(3, _Display());
-      if (bind.pluginFeatureIsEnabled()) {
-        children.insert(4, _Plugin());
-      }
-    }
     return children;
   }
 
@@ -309,6 +303,10 @@ class _GeneralState extends State<_General> {
   }
 
   Widget service() {
+    if (bind.isOutgoingOnly()) {
+      return const Offstage();
+    }
+
     return _Card(title: 'Service', children: [
       Obx(() => _Button(serviceStop.value ? 'Start' : 'Stop', () {
             () async {
@@ -324,18 +322,14 @@ class _GeneralState extends State<_General> {
   }
 
   Widget other() {
-    final children = <Widget>[];
-    if (!bind.isIncomingOnly()) {
-      children.add(_OptionCheckBox(context,
-          'Confirm before closing multiple tabs', 'enable-confirm-closing-tabs',
-          isServer: false));
-    }
-    children.addAll([
+    final children = <Widget>[
+      if (!bind.isIncomingOnly())
+        _OptionCheckBox(context, 'Confirm before closing multiple tabs',
+            'enable-confirm-closing-tabs',
+            isServer: false),
       _OptionCheckBox(context, 'Adaptive bitrate', 'enable-abr'),
-      wallpaper()
-    ]);
-    if (!bind.isIncomingOnly()) {
-      children.addAll([
+      wallpaper(),
+      if (!bind.isIncomingOnly()) ...[
         _OptionCheckBox(
           context,
           'Open connection in new tab',
@@ -354,8 +348,8 @@ class _GeneralState extends State<_General> {
           'enable-check-update',
           isServer: false,
         )
-      ]);
-    }
+      ],
+    ];
     if (bind.mainShowOption(key: 'allow-linux-headless')) {
       children.add(_OptionCheckBox(
           context, 'Allow linux headless', 'allow-linux-headless'));
@@ -364,6 +358,10 @@ class _GeneralState extends State<_General> {
   }
 
   Widget wallpaper() {
+    if (bind.isOutgoingOnly()) {
+      return const Offstage();
+    }
+
     return futureBuilder(future: () async {
       final support = await bind.mainSupportRemoveWallpaper();
       return support;
@@ -411,6 +409,10 @@ class _GeneralState extends State<_General> {
   }
 
   Widget audio(BuildContext context) {
+    if (bind.isOutgoingOnly()) {
+      return const Offstage();
+    }
+
     String getDefault() {
       if (Platform.isWindows) return translate('System Sound');
       return '';

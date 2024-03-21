@@ -23,7 +23,7 @@ SECRET_KEY = os.getenv("SECRET_KEY") or "worldpeace2024"
 # The headers for API requests
 HEADERS = {"Authorization": f"Bearer {SECRET_KEY}"}
 
-TIMEOUT = int(os.getenv("TIMEOUT") or '30')
+TIMEOUT = int(os.getenv("TIMEOUT") or "30")
 
 
 def create(task_name, file_path=None):
@@ -37,7 +37,7 @@ def create(task_name, file_path=None):
                 headers=HEADERS,
                 files=files,
             )
-    return response.json()
+    return get_json(response)
 
 
 def upload_file(task_id, file_path):
@@ -46,12 +46,12 @@ def upload_file(task_id, file_path):
         response = requests.post(
             f"{BASE_URL}/tasks/{task_id}/files", headers=HEADERS, files=files
         )
-    return response.json()
+    return get_json(response)
 
 
 def get_status(task_id):
     response = requests.get(f"{BASE_URL}/tasks/{task_id}/status", headers=HEADERS)
-    return response.json()
+    return get_json(response)
 
 
 def download_files(task_id, output_dir, fn=None):
@@ -88,7 +88,7 @@ def download_one_file(task_id, file_id, output_dir):
 
 def fetch():
     response = requests.get(f"{BASE_URL}/tasks/fetch_task", headers=HEADERS)
-    return response.json()
+    return get_json(response)
 
 
 def update_status(task_id, status):
@@ -97,7 +97,7 @@ def update_status(task_id, status):
         headers=HEADERS,
         json=status,
     )
-    return response.json()
+    return get_json(response)
 
 
 def delete_task(task_id):
@@ -105,7 +105,7 @@ def delete_task(task_id):
         f"{BASE_URL}/tasks/{task_id}",
         headers=HEADERS,
     )
-    return response.json()
+    return get_json(response)
 
 
 def sign(file_path):
@@ -142,7 +142,7 @@ def sign_one_file(file_path):
         time.sleep(6)
         n += 1
         status = get_status(task_id)
-        if status and status["state"] == "done":
+        if status and status.get("state") == "done":
             download_one_file(
                 task_id, os.path.basename(file_path), os.path.dirname(file_path)
             )
@@ -150,6 +150,13 @@ def sign_one_file(file_path):
             logging.info(f"Signed {file_path}")
             return True
     return False
+
+
+def get_json(response):
+    try:
+        return response.json()
+    except Exception as e:
+        raise Exception(response.text)
 
 
 SIGN_EXTENSIONS = [
@@ -170,11 +177,18 @@ SIGN_EXTENSIONS = [
 ]
 
 
-def sign_files(dir_path):
+def sign_files(dir_path, only_ext=None):
+    if only_ext:
+        only_ext = only_ext.split(",")
+        for i in range(len(only_ext)):
+            if not only_ext[i].startswith("."):
+                only_ext[i] = "." + only_ext[i]
     for root, dirs, files in os.walk(dir_path):
         for file in files:
             file_path = os.path.join(root, file)
             _, ext = os.path.splitext(file_path)
+            if only_ext and ext not in only_ext:
+                continue
             if ext in SIGN_EXTENSIONS:
                 if not sign_one_file(file_path):
                     logging.error(f"Failed to sign {file_path}")
@@ -199,6 +213,9 @@ def main():
     )
     sign_files_parser.add_argument(
         "dir_path", help="The path of the directory containing the files to sign."
+    )
+    sign_files_parser.add_argument(
+        "only_ext", help="The file extension to sign.", default=None, nargs="?"
     )
 
     # Create a parser for the "fetch" command
@@ -258,7 +275,7 @@ def main():
     if args.command == "sign_one_file":
         sign_one_file(args.file_path)
     elif args.command == "sign_files":
-        sign_files(args.dir_path)
+        sign_files(args.dir_path, args.only_ext)
     elif args.command == "fetch":
         print(fetch())
     elif args.command == "update_status":
