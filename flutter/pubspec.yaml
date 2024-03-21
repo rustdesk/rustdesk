@@ -104,7 +104,6 @@ dependencies:
   pull_down_button: ^0.9.3
   device_info_plus: ^9.1.0
   qr_flutter: ^4.1.0
-  flutter_simple_treeview: ^3.0.2
 
 dev_dependencies:
   icons_launcher: ^2.0.4
