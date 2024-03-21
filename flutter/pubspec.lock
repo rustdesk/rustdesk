@@ -616,14 +616,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.80.1"
-  flutter_simple_treeview:
-    dependency: "direct main"
-    description:
-      name: flutter_simple_treeview
-      sha256: ad4978d2668dd078d3a09966832da111bef9102dd636e572c50c80133b7ff4d9
-      url: "https://pub.dev"
-    source: hosted
-    version: "3.0.2"
   flutter_svg:
     dependency: "direct main"
     description:

@@ -590,11 +590,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("outgoing_only_desk_tip", "Šis ir pielāgots izdevums.\nVarat izveidot savienojumu ar citām ierīcēm, taču citas ierīces nevar izveidot savienojumu ar jūsu ierīci."),
         ("preset_password_warning", "Šim pielāgotajam izdevumam ir iepriekš iestatīta parole. Ikviens, kurš zina šo paroli, var pilnībā kontrolēt jūsu ierīci. Ja jūs to negaidījāt, nekavējoties atinstalējiet programmatūru."),
         ("Security Alert", "Drošības brīdinājums"),
-        ("Add shared address book", "Pievienot koplietotu adrešu grāmatu"),
-        ("Update this address book", "Atjaunināt šo adrešu grāmatu"),
-        ("Delete this address book", "Dzēst šo adrešu grāmatu"),
-        ("Share this address book", "Kopīgot šo adrešu grāmatu"),
-        ("Are you sure you want to delete address book {}?", "Vai tiešām vēlaties dzēst adrešu grāmatu {}?"),
         ("My address book", "Mana adrešu grāmata"),
         ("Personal", "Personīga"),
         ("Owner", "Īpašnieks"),
@@ -603,10 +598,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Read-only", "Tikai lasīt"),
         ("Read/Write", "Lasīt/Rakstīt"),
         ("Full Control", "Pilnīga kontrole"),
-        ("full_control_tip", "Pilnīga kontrole citiem piešķir tādas pašas atļaujas kā adrešu grāmatas īpašniekam."),
         ("share_warning_tip", "Iepriekš minētie lauki ir koplietoti un redzami citiem."),
-        ("Only show existing", "Rādīt tikai esošos"),
         ("Everyone", "Visi"),
-        ("permission_priority_tip", "Prioritāte: Lietotājs > Grupa > Visi"),
+        ("Web Console", ""),
     ].iter().cloned().collect();
 }

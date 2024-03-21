@@ -590,11 +590,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("outgoing_only_desk_tip", "Dies ist eine benutzerdefinierte Ausgabe von RustDesk.\nSie können eine Verbindung zu anderen Geräten herstellen, aber andere Geräte können keine Verbindung zu Ihrem Gerät herstellen."),
         ("preset_password_warning", "Dies ist eine benutzerdefinierte Ausgabe von RustDesk mit einem voreingestellten Passwort. Jeder, der dieses Passwort kennt, kann vollen Zugriff auf dieses Gerät erlangen. Wenn Sie dies nicht beabsichtigen, installieren Sie diese Software bitte umgehend."),
         ("Security Alert", "Sicherheits-Warnung"),
-        ("Add shared address book", "Neues geteiltes Adressbuch hinzufügen"),
-        ("Update this address book", "Dieses Adressbuch ändern"),
-        ("Delete this address book", "Dieses Adressbuch löschen"),
-        ("Share this address book", "Dieses Adressbuch teilen"),
-        ("Are you sure you want to delete address book {}?", "Sind Sie sicher, dass Sie das Adressbuch {} löschen möchten?"),
         ("My address book", "Mein Adressbuch"),
         ("Personal", "Persönlich"),
         ("Owner", "Eigentümer"),
@@ -603,10 +598,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Read-only", "Nur lesen"),
         ("Read/Write", "Lesen/Schreiben"),
         ("Full Control", "Voller Zugriff"),
-        ("full_control_tip", "Voller Zugriff gibt anderen Benutzern die gleichen Berechtigungen wie der Adressbuch-Besitzer."),
         ("share_warning_tip", "Die obigen Felder sind geteilt und sichtbar für andere."),
-        ("Only show existing", "Nur existierende anzeigen"),
         ("Everyone", "Jeder"),
-        ("permission_priority_tip", "Priorität: Benutzer > Gruppe > Jeder"),
+        ("Web Console", ""),
     ].iter().cloned().collect();
 }

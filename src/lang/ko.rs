@@ -590,11 +590,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("outgoing_only_desk_tip", "이것은 맞춤형 버전입니다.\n다른 장치에 연결할 수 있지만 다른 장치는 귀하의 장치에 연결할 수 없습니다."),
         ("preset_password_warning", ""),
         ("Security Alert", ""),
-        ("Add shared address book", ""),
-        ("Update this address book", ""),
-        ("Delete this address book", ""),
-        ("Share this address book", ""),
-        ("Are you sure you want to delete address book {}?", ""),
         ("My address book", ""),
         ("Personal", ""),
         ("Owner", ""),
@@ -603,10 +598,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Read-only", ""),
         ("Read/Write", ""),
         ("Full Control", ""),
-        ("full_control_tip", ""),
         ("share_warning_tip", ""),
-        ("Only show existing", ""),
         ("Everyone", ""),
-        ("permission_priority_tip", ""),
+        ("Web Console", ""),
     ].iter().cloned().collect();
 }
