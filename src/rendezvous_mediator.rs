@@ -453,25 +453,41 @@ impl RendezvousMediator {
     }
 
     async fn handle_intranet(&self, fla: FetchLocalAddr, server: ServerPtr) -> ResultType<()> {
-        let relay_server = self.get_relay_server(fla.relay_server);
-        if !is_ipv4(&self.addr) || config::is_disable_tcp_listen() {
-            // nat64, go relay directly, because current hbbs will crash if demangle ipv6 address
-            let uuid = Uuid::new_v4().to_string();
-            return self
-                .create_relay(
-                    fla.socket_addr.into(),
-                    relay_server,
-                    uuid,
-                    server,
-                    true,
-                    true,
-                )
-                .await;
+        let relay_server = self.get_relay_server(fla.relay_server.clone());
+        // nat64, go relay directly, because current hbbs will crash if demangle ipv6 address
+        if is_ipv4(&self.addr) && !config::is_disable_tcp_listen() && !Config::is_proxy() {
+            if let Err(err) = self
+                .handle_intranet_(fla.clone(), server.clone(), relay_server.clone())
+                .await
+            {
+                log::debug!("Failed to handle intranet: {:?}, will try relay", err);
+            } else {
+                return Ok(());
+            }
         }
+        let uuid = Uuid::new_v4().to_string();
+        self.create_relay(
+            fla.socket_addr.into(),
+            relay_server,
+            uuid,
+            server,
+            true,
+            true,
+        )
+        .await
+    }
+
+    async fn handle_intranet_(
+        &self,
+        fla: FetchLocalAddr,
+        server: ServerPtr,
+        relay_server: String,
+    ) -> ResultType<()> {
         let peer_addr = AddrMangle::decode(&fla.socket_addr);
         log::debug!("Handle intranet from {:?}", peer_addr);
         let mut socket = connect_tcp(&*self.host, CONNECT_TIMEOUT).await?;
         let local_addr = socket.local_addr();
+        // we saw invalid local_addr while using proxy, local_addr.ip() == "::1"
         let local_addr: SocketAddr =
             format!("{}:{}", local_addr.ip(), local_addr.port()).parse()?;
         let mut msg_out = Message::new();
