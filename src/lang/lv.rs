@@ -600,6 +600,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Full Control", "Pilnīga kontrole"),
         ("share_warning_tip", "Iepriekš minētie lauki ir koplietoti un redzami citiem."),
         ("Everyone", "Visi"),
-        ("ab_web_console_tip", ""),
+        ("ab_web_console_tip", "Vairāk par tīmekļa konsoli"),
     ].iter().cloned().collect();
 }

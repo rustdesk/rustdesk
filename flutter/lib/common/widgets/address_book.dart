@@ -376,13 +376,14 @@ class _AddressBookState extends State<AddressBook> {
       sortMenuItem(),
       syncMenuItem(),
       filterMenuItem(),
-      MenuEntryDivider<String>(),
-      getEntry(translate("ab_web_console_tip"), () async {
-        final url = await bind.mainGetApiServer();
-        if (await canLaunchUrlString(url)) {
-          launchUrlString(url);
-        }
-      }),
+      if (!gFFI.abModel.legacyMode.value) MenuEntryDivider<String>(),
+      if (!gFFI.abModel.legacyMode.value)
+        getEntry(translate("ab_web_console_tip"), () async {
+          final url = await bind.mainGetApiServer();
+          if (await canLaunchUrlString(url)) {
+            launchUrlString(url);
+          }
+        }),
     ];
 
     mod_menu.showMenu(

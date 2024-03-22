@@ -3,10 +3,12 @@ import 'package:flutter_gpu_texture_renderer/flutter_gpu_texture_renderer.dart';
 import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/models/model.dart';
 import 'package:get/get.dart';
-import 'package:texture_rgba_renderer/texture_rgba_renderer.dart';
 
 import '../../common.dart';
 import './platform_model.dart';
+
+import 'package:texture_rgba_renderer/texture_rgba_renderer.dart'
+    if (dart.library.html) 'package:flutter_hbb/web/texture_rgba_renderer.dart';
 
 // Feature flutter_texture_render need to be enabled if feature gpucodec is enabled.
 final useTextureRender =
