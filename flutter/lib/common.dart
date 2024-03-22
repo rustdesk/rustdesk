@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 import 'dart:math';
 
 import 'package:back_button_interceptor/back_button_interceptor.dart';
@@ -1544,7 +1543,7 @@ Future<void> saveWindowPosition(WindowType type, {int? windowId}) async {
   late Size sz;
   late bool isMaximized;
   bool isFullscreen = stateGlobal.fullscreen.isTrue ||
-      (Platform.isMacOS && stateGlobal.closeOnFullscreen == true);
+      (isMacOS && stateGlobal.closeOnFullscreen == true);
   setFrameIfMaximized() {
     if (isMaximized) {
       final pos = bind.getLocalFlutterOption(k: windowFramePrefix + type.name);
@@ -1583,7 +1582,7 @@ Future<void> saveWindowPosition(WindowType type, {int? windowId}) async {
       setFrameIfMaximized();
       break;
   }
-  if (Platform.isWindows) {
+  if (isWindows) {
     const kMinOffset = -10000;
     const kMaxOffset = 10000;
     if (position.dx < kMinOffset ||
@@ -1854,7 +1853,7 @@ Future<bool> restoreWindowPosition(WindowType type,
 /// initUniLinks should only be used on macos/windows.
 /// we use dbus for linux currently.
 Future<bool> initUniLinks() async {
-  if (Platform.isLinux) {
+  if (isLinux) {
     return false;
   }
   // check cold boot
@@ -1876,7 +1875,7 @@ Future<bool> initUniLinks() async {
 ///
 /// Returns a [StreamSubscription] which can listen the uni links.
 StreamSubscription? listenUniLinks({handleByFlutter = true}) {
-  if (Platform.isLinux) {
+  if (isLinux) {
     return null;
   }
 
@@ -2024,7 +2023,7 @@ List<String>? urlLinkToCmdArgs(Uri uri) {
     command = '--connect';
     id = uri.path.substring("/new/".length);
   } else if (uri.authority == "config") {
-    if (Platform.isAndroid || Platform.isIOS) {
+    if (isAndroid || isIOS) {
       final config = uri.path.substring("/".length);
       // add a timer to make showToast work
       Timer(Duration(seconds: 1), () {
@@ -2033,7 +2032,7 @@ List<String>? urlLinkToCmdArgs(Uri uri) {
     }
     return null;
   } else if (uri.authority == "password") {
-    if (Platform.isAndroid || Platform.isIOS) {
+    if (isAndroid || isIOS) {
       final password = uri.path.substring("/".length);
       if (password.isNotEmpty) {
         Timer(Duration(seconds: 1), () async {
@@ -2253,7 +2252,7 @@ Future<void> reloadAllWindows() async {
 /// [Note]
 /// Portable build is only available on Windows.
 bool isRunningInPortableMode() {
-  if (!Platform.isWindows) {
+  if (!isWindows) {
     return false;
   }
   return bool.hasEnvironment(kEnvPortableExecutable);
@@ -2266,7 +2265,7 @@ Future<void> onActiveWindowChanged() async {
   if (rustDeskWinManager.getActiveWindows().isEmpty) {
     // close all sub windows
     try {
-      if (Platform.isLinux) {
+      if (isLinux) {
         await Future.wait([
           saveWindowPosition(WindowType.Main),
           rustDeskWinManager.closeAllSubWindows()
@@ -2280,7 +2279,7 @@ Future<void> onActiveWindowChanged() async {
       debugPrint("Start closing RustDesk...");
       await windowManager.setPreventClose(false);
       await windowManager.close();
-      if (Platform.isMacOS) {
+      if (isMacOS) {
         RdPlatformChannel.instance.terminate();
       }
     }
@@ -2296,7 +2295,7 @@ Timer periodic_immediate(Duration duration, Future<void> Function() callback) {
 
 /// return a human readable windows version
 WindowsTarget getWindowsTarget(int buildNumber) {
-  if (!Platform.isWindows) {
+  if (!isWindows) {
     return WindowsTarget.naw;
   }
   if (buildNumber >= 22000) {
@@ -2330,7 +2329,7 @@ int getWindowsTargetBuildNumber() {
 /// [Conditions]
 /// - Windows 7, window will overflow when we use frameless ui.
 bool get kUseCompatibleUiMode =>
-    Platform.isWindows &&
+    isWindows &&
     const [WindowsTarget.w7].contains(windowsBuildNumber.windowsVersion);
 
 class ServerConfig {
@@ -2460,7 +2459,7 @@ Future<void> updateSystemWindowTheme() async {
   // Set system window theme for macOS.
   final userPreference = MyTheme.getThemeModePreference();
   if (userPreference != ThemeMode.system) {
-    if (Platform.isMacOS) {
+    if (isMacOS) {
       await RdPlatformChannel.instance.changeSystemWindowTheme(
           userPreference == ThemeMode.light
               ? SystemWindowTheme.light
@@ -2548,7 +2547,7 @@ void onCopyFingerprint(String value) {
 
 Future<bool> callMainCheckSuperUserPermission() async {
   bool checked = await bind.mainCheckSuperUserPermission();
-  if (Platform.isMacOS) {
+  if (isMacOS) {
     await windowManager.show();
   }
   return checked;
@@ -2556,7 +2555,7 @@ Future<bool> callMainCheckSuperUserPermission() async {
 
 Future<void> start_service(bool is_start) async {
   bool checked = !bind.mainIsInstalled() ||
-      !Platform.isMacOS ||
+      !isMacOS ||
       await callMainCheckSuperUserPermission();
   if (checked) {
     bind.mainSetOption(key: "stop-service", value: is_start ? "" : "Y");
@@ -3114,7 +3113,7 @@ Widget loadIcon(double size) {
 
 var imcomingOnlyHomeSize = Size(280, 300);
 Size getIncomingOnlyHomeSize() {
-  final magicWidth = Platform.isWindows ? 11.0 : 2.0;
+  final magicWidth = isWindows ? 11.0 : 2.0;
   final magicHeight = 10.0;
   return imcomingOnlyHomeSize +
       Offset(magicWidth, kDesktopRemoteTabBarHeight + magicHeight);

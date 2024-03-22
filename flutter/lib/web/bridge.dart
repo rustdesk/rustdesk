@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:js' as js;
+import 'dart:convert';
 import 'dart:typed_data';
 import 'package:uuid/uuid.dart';
 
@@ -176,29 +178,35 @@ class RustdeskImpl {
 
   Future<String?> sessionGetFlutterOptionByPeerId(
       {required String id, required String k, dynamic hint}) {
-    throw UnimplementedError();
+    return Future.value(null);
   }
 
   int getNextTextureKey({dynamic hint}) {
-    throw UnimplementedError();
+    return 0;
   }
 
   String getLocalFlutterOption({required String k, dynamic hint}) {
-    throw UnimplementedError();
+    return js.context.callMethod('getByName', ['option:flutter:local', k]);
   }
 
   Future<void> setLocalFlutterOption(
       {required String k, required String v, dynamic hint}) {
-    throw UnimplementedError();
+    return Future(() => js.context.callMethod('setByName', [
+          'option:flutter:local',
+          jsonEncode({'name': k, 'value': v})
+        ]));
   }
 
   String getLocalKbLayoutType({dynamic hint}) {
-    throw UnimplementedError();
+    throw js.context.callMethod('getByName', ['option:local', 'kb_layout']);
   }
 
   Future<void> setLocalKbLayoutType(
       {required String kbLayoutType, dynamic hint}) {
-    throw UnimplementedError();
+    return Future(() => js.context.callMethod('setByName', [
+          'option:local',
+          jsonEncode({'name': 'kb_layout', 'value': kbLayoutType})
+        ]));
   }
 
   Future<String?> sessionGetViewStyle(
@@ -538,11 +546,11 @@ class RustdeskImpl {
   }
 
   Future<String> mainGetOption({required String key, dynamic hint}) {
-    throw UnimplementedError();
+    return Future.value(mainGetOptionSync(key: key));
   }
 
   String mainGetOptionSync({required String key, dynamic hint}) {
-    throw UnimplementedError();
+    return js.context.callMethod('getByName', ['option', key]);
   }
 
   Future<String> mainGetError({dynamic hint}) {
@@ -555,7 +563,10 @@ class RustdeskImpl {
 
   Future<void> mainSetOption(
       {required String key, required String value, dynamic hint}) {
-    throw UnimplementedError();
+    return js.context.callMethod('setByName', [
+      'option',
+      jsonEncode({'name': key, 'value': value})
+    ]);
   }
 
   Future<String> mainGetOptions({dynamic hint}) {
@@ -623,11 +634,13 @@ class RustdeskImpl {
   }
 
   Future<String> mainGetConnectStatus({dynamic hint}) {
-    throw UnimplementedError();
+    return Future(
+        () => js.context.callMethod('getByName', ["get_conn_status"]));
   }
 
   Future<void> mainCheckConnectStatus({dynamic hint}) {
-    throw UnimplementedError();
+    return Future(
+        () => js.context.callMethod('setByName', ["check_conn_status"]));
   }
 
   Future<bool> mainIsUsingPublicServer({dynamic hint}) {
@@ -635,7 +648,7 @@ class RustdeskImpl {
   }
 
   Future<void> mainDiscover({dynamic hint}) {
-    throw UnimplementedError();
+    return Future(() => js.context.callMethod('setByName', ['discover']));
   }
 
   Future<String> mainGetApiServer({dynamic hint}) {
@@ -651,7 +664,7 @@ class RustdeskImpl {
   }
 
   String mainGetLocalOption({required String key, dynamic hint}) {
-    throw UnimplementedError();
+    return js.context.callMethod('getByName', ['option:local', key]);
   }
 
   String mainGetEnv({required String key, dynamic hint}) {
@@ -660,7 +673,10 @@ class RustdeskImpl {
 
   Future<void> mainSetLocalOption(
       {required String key, required String value, dynamic hint}) {
-    throw UnimplementedError();
+    return Future(() => js.context.callMethod('setByName', [
+          'option:local',
+          jsonEncode({'name': key, 'value': value})
+        ]));
   }
 
   String mainGetInputSource({dynamic hint}) {
@@ -741,15 +757,16 @@ class RustdeskImpl {
   }
 
   Future<void> mainLoadRecentPeers({dynamic hint}) {
-    throw UnimplementedError();
+    return Future(
+        () => js.context.callMethod('getByName', ['load_recent_peers']));
   }
 
   String mainLoadRecentPeersSync({dynamic hint}) {
-    throw UnimplementedError();
+    return js.context.callMethod('getByName', ['load_recent_peers_sync']);
   }
 
   String mainLoadLanPeersSync({dynamic hint}) {
-    throw UnimplementedError();
+    return js.context.callMethod('getByName', ['load_lan_peers_sync']);
   }
 
   Future<String> mainLoadRecentPeersForAb(
@@ -758,15 +775,16 @@ class RustdeskImpl {
   }
 
   Future<void> mainLoadFavPeers({dynamic hint}) {
-    throw UnimplementedError();
+    return Future(() => js.context.callMethod('getByName', ['load_fav_peers']));
   }
 
   Future<void> mainLoadLanPeers({dynamic hint}) {
-    throw UnimplementedError();
+    return Future(() => js.context.callMethod('getByName', ['load_lan_peers']));
   }
 
   Future<void> mainRemoveDiscovered({required String id, dynamic hint}) {
-    throw UnimplementedError();
+    return Future(
+        () => js.context.callMethod('getByName', ['remove_discovered']));
   }
 
   Future<void> mainChangeTheme({required String dark, dynamic hint}) {
@@ -840,7 +858,8 @@ class RustdeskImpl {
   }
 
   Future<String> mainGetLastRemoteId({dynamic hint}) {
-    throw UnimplementedError();
+    return Future(
+        () => js.context.callMethod('getByName', ['option', 'last_remote_id']));
   }
 
   Future<String> mainGetSoftwareUpdateUrl({dynamic hint}) {
@@ -848,7 +867,7 @@ class RustdeskImpl {
   }
 
   Future<String> mainGetHomeDir({dynamic hint}) {
-    throw UnimplementedError();
+    return Future.value('');
   }
 
   Future<String> mainGetLangs({dynamic hint}) {
@@ -856,11 +875,11 @@ class RustdeskImpl {
   }
 
   Future<String> mainGetTemporaryPassword({dynamic hint}) {
-    throw UnimplementedError();
+    return Future.value('');
   }
 
   Future<String> mainGetPermanentPassword({dynamic hint}) {
-    throw UnimplementedError();
+    return Future.value('');
   }
 
   Future<String> mainGetFingerprint({dynamic hint}) {
@@ -880,7 +899,7 @@ class RustdeskImpl {
   }
 
   Future<void> mainInit({required String appDir, dynamic hint}) {
-    throw UnimplementedError();
+    return Future.value();
   }
 
   Future<void> mainDeviceId({required String id, dynamic hint}) {
@@ -1093,7 +1112,10 @@ class RustdeskImpl {
 
   String translate(
       {required String name, required String locale, dynamic hint}) {
-    throw UnimplementedError();
+    return js.context.callMethod('getByName', [
+      'translate',
+      jsonEncode({'locale': locale, 'text': name})
+    ]);
   }
 
   int sessionGetRgbaSize(
@@ -1131,7 +1153,7 @@ class RustdeskImpl {
   }
 
   Future<bool> optionSynced({dynamic hint}) {
-    throw UnimplementedError();
+    return Future.value(true);
   }
 
   bool mainIsInstalled({dynamic hint}) {
@@ -1257,43 +1279,45 @@ class RustdeskImpl {
   }
 
   Future<void> mainTestWallpaper({required int second, dynamic hint}) {
-    throw UnimplementedError();
+    // TODO: implement mainTestWallpaper
+    return Future.value();
   }
 
   Future<bool> mainSupportRemoveWallpaper({dynamic hint}) {
-    throw UnimplementedError();
+    // TODO: implement mainSupportRemoveWallpaper
+    return Future.value(false);
   }
 
   bool isIncomingOnly({dynamic hint}) {
-    throw UnimplementedError();
+    return false;
   }
 
   bool isOutgoingOnly({dynamic hint}) {
-    throw UnimplementedError();
+    return false;
   }
 
   bool isCustomClient({dynamic hint}) {
-    throw UnimplementedError();
+    return false;
   }
 
   bool isDisableSettings({dynamic hint}) {
-    throw UnimplementedError();
+    return false;
   }
 
   bool isDisableAb({dynamic hint}) {
-    throw UnimplementedError();
+    return false;
   }
 
   bool isDisableAccount({dynamic hint}) {
-    throw UnimplementedError();
+    return false;
   }
 
   bool isDisableInstallation({dynamic hint}) {
-    throw UnimplementedError();
+    return false;
   }
 
   Future<bool> isPresetPassword({dynamic hint}) {
-    throw UnimplementedError();
+    return Future.value(false);
   }
 
   Future<void> sendUrlScheme({required String url, dynamic hint}) {

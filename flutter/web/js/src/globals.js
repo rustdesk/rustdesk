@@ -257,12 +257,29 @@ window.setByName = (name, value) => {
       value = JSON.parse(value);
       localStorage.setItem(value.name, value.value);
       break;
+    case 'option:local':
+      value = JSON.parse(value);
+      localStorage.setItem('option:local:' + value.name, value.value);
+      break;
+    case 'option:flutter:local':
+      value = JSON.parse(value);
+      localStorage.setItem('option:flutter:local:' + value.name, value.value);
+      break;
     case 'peer_option':
       value = JSON.parse(value);
       curConn.setOption(value.name, value.value);
       break;
     case 'input_os_password':
       curConn.inputOsPassword(value);
+      break;
+    case 'check_conn_status':
+      curConn.checkConnStatus();
+      break;
+    case 'remove_discovered':
+      removeDiscovered(value);
+      break;
+    case 'discover':
+      // TODO: discover
       break;
     default:
       break;
@@ -300,6 +317,10 @@ function _getByName(name, arg) {
       return curConn.getOption(arg) || false;
     case 'option':
       return localStorage.getItem(arg);
+    case 'option:local':
+      return localStorage.getItem('option:local:' + arg);
+    case 'option:flutter:local':
+      return localStorage.getItem('option:flutter:local:' + arg);
     case 'image_quality':
       return curConn.getImageQuality();
     case 'translate':
@@ -307,10 +328,38 @@ function _getByName(name, arg) {
       return translate(arg.locale, arg.text);
     case 'peer_option':
       return curConn.getOption(arg);
+    case 'get_conn_status':
+      if (curConn) {
+        return curConn.getStatus();
+      } else {
+        return JSON.stringify({ status_num: 0 });
+      }
     case 'test_if_valid_server':
       break;
     case 'version':
       return version;
+    case 'load_recent_peers':
+      const peersRecent = localStorage.getItem('peers-recent');
+      if (peersRecent) {
+        onRegisteredEvent(JSON.stringify({ name: 'load_recent_peers', peers: peersRecent }));
+      }
+      break;
+    case 'load_fav_peers':
+      const peersFav = localStorage.getItem('peers-fav');
+      if (peersFav) {
+        onRegisteredEvent(JSON.stringify({ name: 'load_fav_peers', peers: peersFav }));
+      }
+      break;
+    case 'load_lan_peers':
+      const peersLan = localStorage.getItem('peers-lan');
+      if (peersLan) {
+        onRegisteredEvent(JSON.stringify({ name: 'load_lan_peers', peers: peersLan }));
+      }
+      break;
+    case 'load_recent_peers_sync':
+      return localStorage.getItem('peers-recent') ?? '{}';
+    case 'load_lan_peers_sync':
+      return localStorage.getItem('peers-lan') ?? '{}';
   }
   return '';
 }
@@ -342,8 +391,20 @@ window.init = async () => {
 }
 
 export function getPeers() {
+  return _getJsonObj('peers');
+}
+
+export function getRecentPeers() {
+  return _getJsonObj('peers-recent');
+}
+
+export function getLanPeers() {
+  return _getJsonObj('peers-lan');
+}
+
+export function getJsonObj(key) {
   try {
-    return JSON.parse(localStorage.getItem('peers')) || {};
+    return JSON.parse(localStorage.getItem(key)) || {};
   } catch (e) {
     return {};
   }
@@ -381,3 +442,17 @@ export function copyToClipboard(text) {
     }
   }
 }
+
+// ========================== peers begin ==========================
+function removeDiscovered(id) {
+  try {
+    const v = localStorage.getItem('discovered');
+    if (!v) return;
+    const discovered = JSON.parse(localStorage.getItem('discovered'));
+    delete discovered[id];
+    localStorage.setItem('discovered', JSON.stringify(discovered));
+  } catch (e) {
+    console.error(e);
+  }
+}
+// ========================== peers end ===========================
