@@ -99,6 +99,7 @@ class AbModel {
     if (!force && _allInitialized) return;
     _allInitialized = false;
     try {
+      final tmpAddressbooks = Map<String, BaseAb>.fromEntries([]).obs;
       // Get personal address book guid
       _personalAbGuid = null;
       await _getPersonalAbGuid();
@@ -112,16 +113,21 @@ class AbModel {
         // get all address book name
         await _getSharedAbProfiles(tmpAbProfiles);
         abProfiles = tmpAbProfiles;
-        addressbooks.clear();
         for (int i = 0; i < abProfiles.length; i++) {
           AbProfile p = abProfiles[i];
-          addressbooks[p.name] = Ab(p, p.guid == _personalAbGuid);
+          tmpAddressbooks[p.name] = Ab(p, p.guid == _personalAbGuid);
         }
       } else {
         // only legacy address book
-        addressbooks.clear();
-        addressbooks[_legacyAddressBookName] = LegacyAb();
+        tmpAddressbooks[_legacyAddressBookName] = LegacyAb();
       }
+      addressbooks
+          .removeWhere((key, value) => !tmpAddressbooks.containsKey(key));
+      tmpAddressbooks.forEach((key, value) {
+        if (!addressbooks.containsKey(key)) {
+          addressbooks[key] = value;
+        }
+      });
       // set current address book name
       if (!_everPulledProfiles) {
         _everPulledProfiles = true;
@@ -646,7 +652,7 @@ class AbModel {
     } else if (name != _legacyAddressBookName) {
       final ab = addressbooks[name];
       if (ab != null) {
-        return ab.pullAb(force: true, quiet: true);
+        return await ab.pullAb(force: true, quiet: true);
       }
     }
   }
@@ -710,7 +716,7 @@ abstract class BaseAb {
       abLoading.value = true;
       pullError.value = "";
     }
-    final ret = pullAbImpl(force: force, quiet: quiet);
+    final ret = await pullAbImpl(force: force, quiet: quiet);
     abLoading.value = false;
     return ret;
   }
