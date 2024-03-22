@@ -36,17 +36,22 @@ import 'models/platform_model.dart';
 
 import 'package:flutter_hbb/native/win32.dart'
     if (dart.library.html) 'package:flutter_hbb/web/win32.dart';
+import 'package:flutter_hbb/native/common.dart'
+    if (dart.library.html) 'package:flutter_hbb/web/common.dart';
 
 final globalKey = GlobalKey<NavigatorState>();
 final navigationBarKey = GlobalKey();
 
-final isAndroid = Platform.isAndroid;
-final isIOS = Platform.isIOS;
-final isDesktop = Platform.isWindows || Platform.isMacOS || Platform.isLinux;
-var isWeb = false;
+final isAndroid = isAndroid_;
+final isIOS = isIOS_;
+final isWindows = isWindows_;
+final isMacOS = isMacOS_;
+final isLinux = isLinux_;
+final isDesktop = isDesktop_;
+final isWeb = isWeb_;
 var isWebDesktop = false;
 var isMobile = isAndroid || isIOS;
-var version = "";
+var version = '';
 int androidVersion = 0;
 
 /// only available for Windows target

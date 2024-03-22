@@ -98,7 +98,6 @@ class PlatformFFI {
           sessionId: sessionId, display: display, ptr: ptr);
 
   Future<void> init(String appType) async {
-    isWeb = true;
     isWebDesktop = !context.callMethod('isMobile');
     context.callMethod('init');
     version = getByName('version');
