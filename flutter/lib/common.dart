@@ -1,12 +1,10 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:ffi' hide Size;
 import 'dart:io';
 import 'dart:math';
 
 import 'package:back_button_interceptor/back_button_interceptor.dart';
 import 'package:desktop_multi_window/desktop_multi_window.dart';
-import 'package:ffi/ffi.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -25,7 +23,6 @@ import 'package:get/get.dart';
 import 'package:uni_links/uni_links.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:uuid/uuid.dart';
-import 'package:win32/win32.dart' as win32;
 import 'package:window_manager/window_manager.dart';
 import 'package:window_size/window_size.dart' as window_size;
 
@@ -36,6 +33,9 @@ import 'mobile/pages/remote_page.dart';
 import 'models/input_model.dart';
 import 'models/model.dart';
 import 'models/platform_model.dart';
+
+import 'package:flutter_hbb/native/win32.dart'
+    if (dart.library.html) 'package:flutter_hbb/web/win32.dart';
 
 final globalKey = GlobalKey<NavigatorState>();
 final navigationBarKey = GlobalKey();
@@ -2317,35 +2317,7 @@ WindowsTarget getWindowsTarget(int buildNumber) {
 /// [Note]
 /// Please use this function wrapped with `Platform.isWindows`.
 int getWindowsTargetBuildNumber() {
-  final rtlGetVersion = DynamicLibrary.open('ntdll.dll').lookupFunction<
-      Void Function(Pointer<win32.OSVERSIONINFOEX>),
-      void Function(Pointer<win32.OSVERSIONINFOEX>)>('RtlGetVersion');
-  final osVersionInfo = getOSVERSIONINFOEXPointer();
-  rtlGetVersion(osVersionInfo);
-  int buildNumber = osVersionInfo.ref.dwBuildNumber;
-  calloc.free(osVersionInfo);
-  return buildNumber;
-}
-
-/// Get Windows OS version pointer
-///
-/// [Note]
-/// Please use this function wrapped with `Platform.isWindows`.
-Pointer<win32.OSVERSIONINFOEX> getOSVERSIONINFOEXPointer() {
-  final pointer = calloc<win32.OSVERSIONINFOEX>();
-  pointer.ref
-    ..dwOSVersionInfoSize = sizeOf<win32.OSVERSIONINFOEX>()
-    ..dwBuildNumber = 0
-    ..dwMajorVersion = 0
-    ..dwMinorVersion = 0
-    ..dwPlatformId = 0
-    ..szCSDVersion = ''
-    ..wServicePackMajor = 0
-    ..wServicePackMinor = 0
-    ..wSuiteMask = 0
-    ..wProductType = 0
-    ..wReserved = 0;
-  return pointer;
+  return getWindowsTargetBuildNumber_();
 }
 
 /// Indicating we need to use compatible ui mode.
