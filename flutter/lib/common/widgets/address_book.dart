@@ -1,5 +1,6 @@
 import 'dart:math';
 
+import 'package:auto_size_text/auto_size_text.dart';
 import 'package:dropdown_button2/dropdown_button2.dart';
 import 'package:dynamic_layouts/dynamic_layouts.dart';
 import 'package:flutter/material.dart';
@@ -84,7 +85,7 @@ class _AddressBookState extends State<AddressBook> {
                   border: Border.all(
                       color: Theme.of(context).colorScheme.background)),
               child: Container(
-                width: 180,
+                width: 200,
                 height: double.infinity,
                 padding: const EdgeInsets.all(8.0),
                 child: Column(
@@ -206,9 +207,12 @@ class _AddressBookState extends State<AddressBook> {
                 children: [
                   Expanded(
                     child: Tooltip(
-                        message: e,
-                        child: Text(gFFI.abModel.translatedName(e),
-                            style: TextStyle(fontSize: 14))),
+                        waitDuration: Duration(milliseconds: 500),
+                        message: gFFI.abModel.translatedName(e),
+                        child: AutoSizeText(
+                          gFFI.abModel.translatedName(e),
+                          maxFontSize: 14,
+                        )),
                   ),
                 ],
               )))
