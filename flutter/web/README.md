@@ -4,12 +4,12 @@
 
 ### Current and planned
 
-- [x] Incoming
-- [ ] LAN
+- [x] Outgoing
 - [ ] Address book
 
 ### Unsupported
 
-1. Outgoing
+1. Incoming
+2. LAN
 
 ### No plans
