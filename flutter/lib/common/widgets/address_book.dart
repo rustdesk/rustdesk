@@ -1,6 +1,5 @@
 import 'dart:math';
 
-import 'package:auto_size_text/auto_size_text.dart';
 import 'package:dropdown_button2/dropdown_button2.dart';
 import 'package:dynamic_layouts/dynamic_layouts.dart';
 import 'package:flutter/material.dart';
@@ -200,6 +199,12 @@ class _AddressBookState extends State<AddressBook> {
           bind.setLocalFlutterOption(k: 'current-ab-name', v: value);
         }
       },
+      underline: Container(
+        height: 0.7,
+        color: Theme.of(context).dividerColor.withOpacity(0.1),
+      ),
+      buttonStyleData: ButtonStyleData(height: 48),
+      menuItemStyleData: MenuItemStyleData(height: 36),
       items: names
           .map((e) => DropdownMenuItem(
               value: e,
@@ -209,9 +214,11 @@ class _AddressBookState extends State<AddressBook> {
                     child: Tooltip(
                         waitDuration: Duration(milliseconds: 500),
                         message: gFFI.abModel.translatedName(e),
-                        child: AutoSizeText(
+                        child: Text(
                           gFFI.abModel.translatedName(e),
-                          maxFontSize: 14,
+                          style: TextStyle(fontSize: 14.0),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         )),
                   ),
                 ],
