@@ -25,13 +25,15 @@ class PeerTabModel with ChangeNotifier {
     'Recent sessions',
     'Favorites',
     if (!isWeb) 'Discovered',
+    if (!(bind.isDisableAb() || bind.isDisableAccount())) 'Address book',
+    if (!bind.isDisableAccount()) 'Group',
   ];
   final List<IconData> icons = [
     Icons.access_time_filled,
     Icons.star,
-    Icons.explore,
-    IconFont.addressBook,
-    Icons.group,
+    if (!isWeb) Icons.explore,
+    if (!(bind.isDisableAb() || bind.isDisableAccount())) IconFont.addressBook,
+    if (!bind.isDisableAccount()) Icons.group,
   ];
   final List<bool> _isVisible = List.filled(5, true, growable: false);
   List<bool> get isVisible => _isVisible;
@@ -49,13 +51,6 @@ class PeerTabModel with ChangeNotifier {
   String get lastId => _lastId;
 
   PeerTabModel(this.parent) {
-    if (!(bind.isDisableAb() || bind.isDisableAccount())) {
-      tabNames.add('Address book');
-    }
-    if (!bind.isDisableAccount()) {
-      tabNames.add('Group');
-    }
-
     // visible
     try {
       final option = bind.getLocalFlutterOption(k: 'peer-tab-visible');
