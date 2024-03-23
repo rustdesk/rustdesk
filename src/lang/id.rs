@@ -239,7 +239,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Empty", "Kosong"),
         ("Invalid folder name", "Nama folder tidak valid"),
         ("Socks5 Proxy", "Proksi Socks5"),
-        ("Hostname", "Hostname"),
         ("Discovered", "Telah ditemukan"),
         ("install_daemon_tip", "Untuk memulai saat boot, Anda perlu menginstal system service."),
         ("Remote ID", "ID Remote"),

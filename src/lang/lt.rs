@@ -239,7 +239,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Empty", "Tuščia"),
         ("Invalid folder name", "Neteisingas aplanko pavadinimas"),
         ("Socks5 Proxy", "Socks5 Proxy"),
-        ("Hostname", "Pagrindinio kompiuterio pavadinimas"),
         ("Discovered", "Aptikta tinkle"),
         ("install_daemon_tip", "Norėdami, kad RustDesk startuotų automatiškai, turite ją įdiegti"),
         ("Remote ID", "Nuotolinis ID"),

@@ -239,7 +239,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Empty", "Üres"),
         ("Invalid folder name", "Helytelen mappa név"),
         ("Socks5 Proxy", "Socks5 Proxy"),
-        ("Hostname", "Kiszolgáló név"),
         ("Discovered", "Felfedezett"),
         ("install_daemon_tip", "Az automatikus indításhoz szükséges a szolgáltatás telepítése"),
         ("Remote ID", "Távoli azonosító"),

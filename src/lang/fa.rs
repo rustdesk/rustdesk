@@ -239,7 +239,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Empty", "موردی وجود ندارد"),
         ("Invalid folder name", "نام پوشه نامعتبر است"),
         ("Socks5 Proxy", "Socks5 پروکسی"),
-        ("Hostname", "نام هاست"),
         ("Discovered", "پیدا شده"),
         ("install_daemon_tip", "برای شروع در هنگام راه اندازی، باید سرویس سیستم را نصب کنید"),
         ("Remote ID", "شناسه راه دور"),

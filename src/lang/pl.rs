@@ -239,7 +239,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Empty", "Pusto"),
         ("Invalid folder name", "Nieprawidłowa nazwa folderu"),
         ("Socks5 Proxy", "Proxy Socks5"),
-        ("Hostname", "Nazwa hosta"),
         ("Discovered", "Wykryte"),
         ("install_daemon_tip", "By uruchomić RustDesk przy starcie systemu, musisz zainstalować usługę systemową."),
         ("Remote ID", "Zdalne ID"),

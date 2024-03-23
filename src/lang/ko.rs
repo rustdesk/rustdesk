@@ -239,7 +239,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Empty", "비어 있음"),
         ("Invalid folder name", "유효하지 않은 폴더명"),
         ("Socks5 Proxy", "Socks5 프록시"),
-        ("Hostname", "호스트명"),
         ("Discovered", "찾음"),
         ("install_daemon_tip", "부팅된 이후 시스템 서비스에 설치해야 합니다."),
         ("Remote ID", "원격 ID"),

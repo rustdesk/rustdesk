@@ -2044,7 +2044,7 @@ void changeSocks5Proxy() async {
                 ConstrainedBox(
                     constraints: const BoxConstraints(minWidth: 140),
                     child: Text(
-                      '${translate("Hostname")}:',
+                      '${translate("Server")}:',
                       textAlign: TextAlign.right,
                     ).marginOnly(right: 10)),
                 Expanded(

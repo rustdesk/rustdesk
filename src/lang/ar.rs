@@ -239,7 +239,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Empty", "فارغ"),
         ("Invalid folder name", "اسم المجلد غير صحيح"),
         ("Socks5 Proxy", "وكيل Socks5"),
-        ("Hostname", "اسم المستضيف"),
         ("Discovered", "المكتشفة"),
         ("install_daemon_tip", "للبدء مع بدء تشغيل النظام. تحتاج الى تثبيت خدمة النظام."),
         ("Remote ID", "المعرف البعيد"),

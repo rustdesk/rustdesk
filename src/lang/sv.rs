@@ -239,7 +239,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Empty", "Tom"),
         ("Invalid folder name", "Ogiltigt mappnamn"),
         ("Socks5 Proxy", "Socks5 Proxy"),
-        ("Hostname", "Hostname"),
         ("Discovered", "Upptäckt"),
         ("install_daemon_tip", "För att starta efter boot måste du installera systemtjänsten."),
         ("Remote ID", "Fjärr ID"),

@@ -239,7 +239,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Empty", "Prázdné"),
         ("Invalid folder name", "Neplatný název složky"),
         ("Socks5 Proxy", "Socks5 proxy"),
-        ("Hostname", "Název hostitele"),
         ("Discovered", "Objeveno"),
         ("install_daemon_tip", "Pokud má být spouštěno při startu systému, je třeba nainstalovat systémovou službu."),
         ("Remote ID", "Vzdálené ID"),
