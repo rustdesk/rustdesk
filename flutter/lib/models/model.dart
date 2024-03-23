@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 import 'dart:math';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
@@ -1537,7 +1536,7 @@ class CursorData {
     }
 
     if (_doubleToInt(oldScale) != _doubleToInt(scale)) {
-      if (Platform.isWindows) {
+      if (isWindows) {
         data = img2
             .copyResize(
               image,
@@ -1616,7 +1615,7 @@ class PredefinedCursor {
             data, defaultImg.width, defaultImg.height, ui.PixelFormat.rgba8888);
 
         double scale = 1.0;
-        if (Platform.isWindows) {
+        if (isWindows) {
           data = _image2!.getBytes(order: img2.ChannelOrder.bgra);
         } else {
           data = Uint8List.fromList(img2.encodePng(_image2!));
@@ -1841,7 +1840,7 @@ class CursorModel with ChangeNotifier {
     Uint8List? data;
     img2.Image imgOrigin = img2.Image.fromBytes(
         width: w, height: h, bytes: rgba.buffer, order: img2.ChannelOrder.rgba);
-    if (Platform.isWindows) {
+    if (isWindows) {
       data = imgOrigin.getBytes(order: img2.ChannelOrder.bgra);
     } else {
       ByteData? imgBytes =
@@ -2200,6 +2199,7 @@ class FFI {
       imageModel.id = id;
       cursorModel.peerId = id;
     }
+
     // If tabWindowId != null, this session is a "tab -> window" one.
     // Else this session is a new one.
     if (tabWindowId == null) {
@@ -2235,6 +2235,10 @@ class FFI {
       textureModel.updateCurrentDisplay(display ?? 0);
     }
     final stream = bind.sessionStart(sessionId: sessionId, id: id);
+    if (isWeb) {
+      return;
+    }
+
     final cb = ffiModel.startEventListener(sessionId, id);
 
     // Force refresh displays.

@@ -1,6 +1,5 @@
 import 'dart:convert';
 import 'dart:async';
-import 'dart:io';
 import 'dart:ui' as ui;
 
 import 'package:desktop_multi_window/desktop_multi_window.dart';
@@ -127,7 +126,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
         tryMoveToScreenAndSetFullscreen(screenRect);
         if (tabController.length == 0) {
           // Show the hidden window.
-          if (Platform.isMacOS && stateGlobal.closeOnFullscreen == true) {
+          if (isMacOS && stateGlobal.closeOnFullscreen == true) {
             stateGlobal.setFullscreen(true);
           }
           // Reset the state
@@ -328,7 +327,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
         ),
       ),
     );
-    return Platform.isMacOS || kUseCompatibleUiMode
+    return isMacOS || kUseCompatibleUiMode
         ? tabWidget
         : Obx(() => SubWindowDragToResizeArea(
               key: contentKey,

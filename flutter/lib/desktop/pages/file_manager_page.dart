@@ -93,7 +93,7 @@ class _FileManagerPageState extends State<FileManagerPage>
           .showLoading(translate('Connecting...'), onCancel: closeConnection);
     });
     Get.put(_ffi, tag: 'ft_${widget.id}');
-    if (!Platform.isLinux) {
+    if (!isLinux) {
       WakelockPlus.enable();
     }
     debugPrint("File manager page init success with id ${widget.id}");
@@ -106,7 +106,7 @@ class _FileManagerPageState extends State<FileManagerPage>
     model.close().whenComplete(() {
       _ffi.close();
       _ffi.dialogManager.dismissAll();
-      if (!Platform.isLinux) {
+      if (!isLinux) {
         WakelockPlus.disable();
       }
       Get.delete<FFI>(tag: 'ft_${widget.id}');
@@ -1298,7 +1298,7 @@ class _FileManagerViewState extends State<FileManagerView> {
                     onPointerSignal: (e) {
                       if (e is PointerScrollEvent) {
                         final sc = _breadCrumbScroller;
-                        final scale = Platform.isWindows ? 2 : 4;
+                        final scale = isWindows ? 2 : 4;
                         sc.jumpTo(sc.offset + e.scrollDelta.dy / scale);
                       }
                     },
