@@ -84,7 +84,7 @@ class _AddressBookState extends State<AddressBook> {
                   border: Border.all(
                       color: Theme.of(context).colorScheme.background)),
               child: Container(
-                width: 180,
+                width: 200,
                 height: double.infinity,
                 padding: const EdgeInsets.all(8.0),
                 child: Column(
@@ -199,6 +199,12 @@ class _AddressBookState extends State<AddressBook> {
           bind.setLocalFlutterOption(k: 'current-ab-name', v: value);
         }
       },
+      underline: Container(
+        height: 0.7,
+        color: Theme.of(context).dividerColor.withOpacity(0.1),
+      ),
+      buttonStyleData: ButtonStyleData(height: 48),
+      menuItemStyleData: MenuItemStyleData(height: 36),
       items: names
           .map((e) => DropdownMenuItem(
               value: e,
@@ -206,9 +212,14 @@ class _AddressBookState extends State<AddressBook> {
                 children: [
                   Expanded(
                     child: Tooltip(
-                        message: e,
-                        child: Text(gFFI.abModel.translatedName(e),
-                            style: TextStyle(fontSize: 14))),
+                        waitDuration: Duration(milliseconds: 500),
+                        message: gFFI.abModel.translatedName(e),
+                        child: Text(
+                          gFFI.abModel.translatedName(e),
+                          style: TextStyle(fontSize: 14.0),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        )),
                   ),
                 ],
               )))

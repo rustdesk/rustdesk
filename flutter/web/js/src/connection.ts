@@ -443,9 +443,9 @@ export default class Connection {
             if (this._videoTestSpeed[0] >= 30) {
               console.log(
                 "video decoder: " +
-                  parseInt(
-                    "" + this._videoTestSpeed[1] / this._videoTestSpeed[0]
-                  )
+                parseInt(
+                  "" + this._videoTestSpeed[1] / this._videoTestSpeed[0]
+                )
               );
               this._videoTestSpeed = [0, 0];
             }
@@ -456,6 +456,7 @@ export default class Connection {
   }
 
   handlePeerInfo(pi: message.PeerInfo) {
+    localStorage.setItem('last_remote_id', this._id);
     this._peerInfo = pi;
     if (pi.displays.length == 0) {
       this.msgbox("error", "Remote Error", "No Display");
@@ -538,6 +539,15 @@ export default class Connection {
 
   getOption(name: string): any {
     return this._options[name];
+  }
+
+  // TODO:
+  getStatus(): String {
+    return JSON.stringify({status_num: 10});
+  }
+
+  // TODO:
+  checkConnStatus() {
   }
 
   setOption(name: string, value: any) {

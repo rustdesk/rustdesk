@@ -1011,6 +1011,11 @@ impl Config {
         CONFIG2.read().unwrap().socks.clone()
     }
 
+    #[inline]
+    pub fn is_proxy() -> bool {
+        Self::get_network_type() != NetworkType::Direct
+    }
+
     pub fn get_network_type() -> NetworkType {
         match &CONFIG2.read().unwrap().socks {
             None => NetworkType::Direct,

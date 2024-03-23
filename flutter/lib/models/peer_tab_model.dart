@@ -24,7 +24,7 @@ class PeerTabModel with ChangeNotifier {
   List<String> tabNames = [
     'Recent sessions',
     'Favorites',
-    'Discovered',
+    if (!isWeb) 'Discovered',
   ];
   final List<IconData> icons = [
     Icons.access_time_filled,

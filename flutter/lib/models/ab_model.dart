@@ -99,7 +99,6 @@ class AbModel {
     if (!force && _allInitialized) return;
     _allInitialized = false;
     try {
-      final tmpAddressbooks = Map<String, BaseAb>.fromEntries([]).obs;
       // Get personal address book guid
       _personalAbGuid = null;
       await _getPersonalAbGuid();
@@ -113,21 +112,23 @@ class AbModel {
         // get all address book name
         await _getSharedAbProfiles(tmpAbProfiles);
         abProfiles = tmpAbProfiles;
+        addressbooks.removeWhere((key, value) =>
+            abProfiles.firstWhereOrNull((e) => e.name == key) == null);
         for (int i = 0; i < abProfiles.length; i++) {
           AbProfile p = abProfiles[i];
-          tmpAddressbooks[p.name] = Ab(p, p.guid == _personalAbGuid);
+          if (addressbooks.containsKey(p.name)) {
+            addressbooks[p.name]?.setSharedProfile(p);
+          } else {
+            addressbooks[p.name] = Ab(p, p.guid == _personalAbGuid);
+          }
         }
       } else {
         // only legacy address book
-        tmpAddressbooks[_legacyAddressBookName] = LegacyAb();
-      }
-      addressbooks
-          .removeWhere((key, value) => !tmpAddressbooks.containsKey(key));
-      tmpAddressbooks.forEach((key, value) {
-        if (!addressbooks.containsKey(key)) {
-          addressbooks[key] = value;
+        addressbooks.removeWhere((key, value) => key != _legacyAddressBookName);
+        if (!addressbooks.containsKey(_legacyAddressBookName)) {
+          addressbooks[_legacyAddressBookName] = LegacyAb();
         }
-      });
+      }
       // set current address book name
       if (!_everPulledProfiles) {
         _everPulledProfiles = true;
@@ -756,6 +757,8 @@ abstract class BaseAb {
 
   bool isFull();
 
+  void setSharedProfile(AbProfile profile);
+
   AbProfile? sharedProfile();
 
   bool canWrite();
@@ -778,6 +781,9 @@ class LegacyAb extends BaseAb {
   AbProfile? sharedProfile() {
     return null;
   }
+
+  @override
+  void setSharedProfile(AbProfile? profile) {}
 
   @override
   bool canWrite() {
@@ -1039,6 +1045,9 @@ class LegacyAb extends BaseAb {
       if (!tagContainBy(e)) {
         tags.add(e);
       }
+      if (tagColors[e] == null) {
+        tagColors[e] = str2color2(e, existing: tagColors.values.toList()).value;
+      }
     }
     return await pushAb();
   }
@@ -1103,6 +1112,11 @@ class LegacyAb extends BaseAb {
   Map<String, dynamic> _serialize() {
     final peersJsonData =
         peers.map((e) => e.toPersonalAbUploadJson(true)).toList();
+    for (var e in tags) {
+      if (tagColors[e] == null) {
+        tagColors[e] = str2color2(e, existing: tagColors.values.toList()).value;
+      }
+    }
     final tagColorJsonData = jsonEncode(tagColors);
     return {
       "tags": tags,
@@ -1147,7 +1161,7 @@ class LegacyAb extends BaseAb {
 }
 
 class Ab extends BaseAb {
-  late final AbProfile profile;
+  AbProfile profile;
   late final bool personal;
   final sortTags = shouldSortTags().obs;
   final filterByIntersection = filterAbTagByIntersection().obs;
@@ -1167,6 +1181,11 @@ class Ab extends BaseAb {
   @override
   AbProfile? sharedProfile() {
     return profile;
+  }
+
+  @override
+  void setSharedProfile(AbProfile profile) {
+    this.profile = profile;
   }
 
   @override
@@ -1691,6 +1710,9 @@ class DummyAb extends BaseAb {
   AbProfile? sharedProfile() {
     return null;
   }
+
+  @override
+  void setSharedProfile(AbProfile profile) {}
 
   @override
   Future<void> syncFromRecent(List<Peer> recents) async {}
