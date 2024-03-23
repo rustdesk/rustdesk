@@ -1481,12 +1481,7 @@ impl LoginConfigHandler {
                 .map(|o| !o.is_empty())
                 .unwrap_or(false);
             if is_set {
-                if name == "zoom-cursor" {
-                    self.config.options.insert(name, "".to_owned());
-                } else {
-                    // Notice: When PeerConfig loads, the default value is taken when the option key does not exist.
-                    self.config.options.remove(&name);
-                }
+                self.config.options.remove(&name);
             } else {
                 self.config.options.insert(name, "Y".to_owned());
             }
