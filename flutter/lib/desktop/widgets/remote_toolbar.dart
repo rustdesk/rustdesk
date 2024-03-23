@@ -1,6 +1,5 @@
 import 'dart:convert';
 import 'dart:async';
-import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -112,10 +111,10 @@ class _ToolbarTheme {
   static const double iconRadius = 8;
   static const double elevation = 3;
 
-  static double dividerSpaceToAction = Platform.isWindows ? 8 : 14;
+  static double dividerSpaceToAction = isWindows ? 8 : 14;
 
-  static double menuBorderRadius = Platform.isWindows ? 5.0 : 7.0;
-  static EdgeInsets menuPadding = Platform.isWindows
+  static double menuBorderRadius = isWindows ? 5.0 : 7.0;
+  static EdgeInsets menuPadding = isWindows
       ? EdgeInsets.fromLTRB(4, 12, 4, 12)
       : EdgeInsets.fromLTRB(6, 14, 6, 14);
   static const double menuButtonBorderRadius = 3.0;

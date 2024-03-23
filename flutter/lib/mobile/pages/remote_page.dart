@@ -57,6 +57,7 @@ class _RemotePageState extends State<RemotePage> {
   @override
   void initState() {
     super.initState();
+    gFFI.ffiModel.updateEventListener(sessionId, widget.id);
     gFFI.start(
       widget.id,
       password: widget.password,
@@ -69,7 +70,6 @@ class _RemotePageState extends State<RemotePage> {
     });
     WakelockPlus.enable();
     _physicalFocusNode.requestFocus();
-    gFFI.ffiModel.updateEventListener(sessionId, widget.id);
     gFFI.inputModel.listenToMouse(true);
     gFFI.qualityMonitorModel.checkShowQualityMonitor(sessionId);
     keyboardSubscription =

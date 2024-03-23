@@ -635,8 +635,12 @@ closeConnection({String? id}) {
     gFFI.chatModel.hideChatOverlay();
     Navigator.popUntil(globalKey.currentContext!, ModalRoute.withName("/"));
   } else {
-    final controller = Get.find<DesktopTabController>();
-    controller.closeBy(id);
+    if (isWeb) {
+      Navigator.popUntil(globalKey.currentContext!, ModalRoute.withName("/"));
+    } else {
+      final controller = Get.find<DesktopTabController>();
+      controller.closeBy(id);
+    }
   }
 }
 
@@ -2980,7 +2984,6 @@ Future<bool> setServerConfig(
   await bind.mainSetOption(key: 'relay-server', value: config.relayServer);
   await bind.mainSetOption(key: 'api-server', value: config.apiServer);
   await bind.mainSetOption(key: 'key', value: config.key);
-
   final newApiServer = await bind.mainGetApiServer();
   if (oldApiServer.isNotEmpty &&
       oldApiServer != newApiServer &&
