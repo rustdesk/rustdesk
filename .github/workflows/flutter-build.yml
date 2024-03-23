@@ -2071,3 +2071,73 @@ jobs:
           tag_name: ${{ env.TAG_NAME }}
           files: |
             flatpak/rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}.flatpak
+
+  build-rustdesk-web:
+    name: build-rustdesk-web
+    runs-on: ubuntu-20.04
+    strategy:
+      fail-fast: false
+      matrix:
+        job:
+          - {
+              arch: x86_64,
+              target: x86_64-unknown-linux-gnu,
+              os: ubuntu-18.04,
+            }
+    env:
+      RELEASE_NAME: web-basic
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v3
+
+      - name: Prepare env
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y wget npm
+  
+      - name: Install flutter
+        uses: subosito/flutter-action@v2.12.0 #https://github.com/subosito/flutter-action/issues/277
+        with:
+          channel: "stable"
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+
+      # https://rustdesk.com/docs/en/dev/build/web/
+      - name: Build web
+        shell: bash
+        run: |
+          pushd flutter/web/js
+          npm install yarn -g
+          npm install typescript -g
+          npm install protoc -g
+          # Install protoc first, see: https://google.github.io/proto-lens/installing-protoc.html
+          npm install ts-proto
+          # Only works with vite <= 2.8, see: https://github.com/vitejs/vite/blob/main/docs/guide/build.md#chunking-strategy
+          npm install vite@2.8
+          yarn install && yarn build
+          popd
+
+          pushd flutter/web
+          wget https://github.com/rustdesk/doc.rustdesk.com/releases/download/console/web_deps.tar.gz
+          tar xzf web_deps.tar.gz
+          popd
+
+          pushd flutter
+          flutter build web --release
+          cd build
+          cp ../web/README.md web
+          # TODO: Remove the following line when the web is almost complete.
+          echo -e "\n\nThis build is for preview and not full functionality." >> web/README.md
+          dir_name="rustdesk-${{ env.VERSION }}-${{ env.RELEASE_NAME }}"
+          mv web "${dir_name}" && tar czf "${dir_name}".tar.gz "${dir_name}"
+          sha256sum "${dir_name}".tar.gz
+          popd
+
+      - name: Publish web
+        if: env.UPLOAD_ARTIFACT == 'true'
+        uses: softprops/action-gh-release@v1
+        with:
+          prerelease: true
+          tag_name: ${{ env.TAG_NAME }}
+          files: |
+            flutter/build/rustdesk-${{ env.VERSION }}-${{ env.RELEASE_NAME }}.tar.gz
