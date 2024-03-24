@@ -564,7 +564,7 @@ class App: Reactor.Component
                         </div>
                         <PasswordArea />
                     </div>
-                    {!is_win || handler.is_installed() ? "": <InstallMe />}
+                    {!is_win || handler.is_installed() ? "": <InstallMe1 />}
                     {software_update_url ? <UpdateMe /> : ""}
                     {is_win && handler.is_installed() && !software_update_url && handler.is_installed_lower_version() ? <UpgradeMe /> : ""}
                     {is_can_screen_recording ? "": <CanScreenRecording />}
@@ -607,11 +607,11 @@ class App: Reactor.Component
 
 class InstallMe: Reactor.Component {
     function render() {
-        return <div .install-me>
+        return <!<div .install-me>
             <span />
             <div>{translate('install_tip')}</div>
             <div><button #install-me .button>{translate('Install')}</button></div>
-        </div>;
+        </div>!>;
     }
 
     event click $(#install-me) {
