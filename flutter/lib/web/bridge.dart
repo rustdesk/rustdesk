@@ -52,20 +52,18 @@ class RustdeskImpl {
   }
 
   int peerGetDefaultSessionsCount({required String id, dynamic hint}) {
-    throw UnimplementedError();
+    return 0;
   }
 
   String sessionAddExistedSync(
       {required String id, required UuidValue sessionId, dynamic hint}) {
-    throw UnimplementedError();
+    return '';
   }
 
   void sessionTryAddDisplay(
       {required UuidValue sessionId,
       required Int32List displays,
-      dynamic hint}) {
-    throw UnimplementedError();
-  }
+      dynamic hint}) {}
 
   String sessionAddSync(
       {required UuidValue sessionId,
@@ -95,7 +93,8 @@ class RustdeskImpl {
 
   Future<bool?> sessionGetRemember(
       {required UuidValue sessionId, dynamic hint}) {
-    throw UnimplementedError();
+    return Future(
+        () => js.context.callMethod('getByName', ['remember']) == 'true');
   }
 
   Future<bool?> sessionGetToggleOption(
@@ -122,7 +121,15 @@ class RustdeskImpl {
       required String password,
       required bool remember,
       dynamic hint}) {
-    throw UnimplementedError();
+    return Future(() => js.context.callMethod('setByName', [
+          'login',
+          jsonEncode({
+            'os_username': osUsername,
+            'os_password': osPassword,
+            'password': password,
+            'remember': remember
+          })
+        ]));
   }
 
   Future<void> sessionSend2Fa(
@@ -156,7 +163,7 @@ class RustdeskImpl {
 
   Future<void> sessionReconnect(
       {required UuidValue sessionId, required bool forceRelay, dynamic hint}) {
-    throw UnimplementedError();
+    return Future(() => js.context.callMethod('setByName', ['reconnect']));
   }
 
   Future<void> sessionToggleOption(
@@ -225,77 +232,110 @@ class RustdeskImpl {
 
   Future<String?> sessionGetViewStyle(
       {required UuidValue sessionId, dynamic hint}) {
-    throw UnimplementedError();
+    // TODO: default values
+    return Future(() =>
+        js.context.callMethod('getByName', ['option:peer', 'view_style']));
   }
 
   Future<void> sessionSetViewStyle(
       {required UuidValue sessionId, required String value, dynamic hint}) {
-    throw UnimplementedError();
+    return Future(() => js.context.callMethod('setByName', [
+          'option:peer',
+          jsonEncode({'name': 'view_style', 'value': value})
+        ]));
   }
 
   Future<String?> sessionGetScrollStyle(
       {required UuidValue sessionId, dynamic hint}) {
-    throw UnimplementedError();
+    // TODO: default values
+    return Future(() =>
+        js.context.callMethod('getByName', ['option:peer', 'scroll_style']));
   }
 
   Future<void> sessionSetScrollStyle(
       {required UuidValue sessionId, required String value, dynamic hint}) {
-    throw UnimplementedError();
+    return Future(() => js.context.callMethod('setByName', [
+          'option:peer',
+          jsonEncode({'name': 'scroll_style', 'value': value})
+        ]));
   }
 
   Future<String?> sessionGetImageQuality(
-      {required UuidValue sessionId, dynamic hint}) {
-    throw UnimplementedError();
+      // TODO: default values
+      {required UuidValue sessionId,
+      dynamic hint}) {
+    return Future(() =>
+        js.context.callMethod('getByName', ['option:peer', 'image_quality']));
   }
 
   Future<void> sessionSetImageQuality(
       {required UuidValue sessionId, required String value, dynamic hint}) {
-    throw UnimplementedError();
+    return Future(() => js.context.callMethod('setByName', [
+          'option:peer',
+          jsonEncode({'name': 'image_quality', 'value': value})
+        ]));
   }
 
   Future<String?> sessionGetKeyboardMode(
       {required UuidValue sessionId, dynamic hint}) {
-    throw UnimplementedError();
+    // TODO: default values
+    return Future(() =>
+        js.context.callMethod('getByName', ['option:peer', 'keyboard_mode']));
   }
 
   Future<void> sessionSetKeyboardMode(
       {required UuidValue sessionId, required String value, dynamic hint}) {
-    throw UnimplementedError();
+    return Future(() => js.context.callMethod('setByName', [
+          'option:peer',
+          jsonEncode({'name': 'keyboard_mode', 'value': value})
+        ]));
   }
 
   String? sessionGetReverseMouseWheelSync(
       {required UuidValue sessionId, dynamic hint}) {
-    throw UnimplementedError();
+    return js.context
+        .callMethod('getByName', ['option:peer', 'reverse_mouse_wheel']);
   }
 
   Future<void> sessionSetReverseMouseWheel(
       {required UuidValue sessionId, required String value, dynamic hint}) {
-    throw UnimplementedError();
+    return Future(() => js.context.callMethod('setByName', [
+          'option:peer',
+          jsonEncode({'name': 'reverse_mouse_wheel', 'value': value})
+        ]));
   }
 
   String? sessionGetDisplaysAsIndividualWindows(
       {required UuidValue sessionId, dynamic hint}) {
-    throw UnimplementedError();
+    return js.context.callMethod(
+        'getByName', ['option:peer', 'displays_as_individual_windows']);
   }
 
   Future<void> sessionSetDisplaysAsIndividualWindows(
       {required UuidValue sessionId, required String value, dynamic hint}) {
-    throw UnimplementedError();
+    return Future.value();
   }
 
   String? sessionGetUseAllMyDisplaysForTheRemoteSession(
       {required UuidValue sessionId, dynamic hint}) {
-    throw UnimplementedError();
+    return '';
   }
 
   Future<void> sessionSetUseAllMyDisplaysForTheRemoteSession(
       {required UuidValue sessionId, required String value, dynamic hint}) {
-    throw UnimplementedError();
+    return Future.value();
   }
 
   Future<Int32List?> sessionGetCustomImageQuality(
       {required UuidValue sessionId, dynamic hint}) {
-    throw UnimplementedError();
+    try {
+      return Future(() => Int32List.fromList([
+            int.parse(js.context.callMethod(
+                'getByName', ['option:peer', 'custom_image_quality']))
+          ]));
+    } catch (e) {
+      return Future.value(null);
+    }
   }
 
   bool sessionIsKeyboardModeSupported(
@@ -305,12 +345,18 @@ class RustdeskImpl {
 
   Future<void> sessionSetCustomImageQuality(
       {required UuidValue sessionId, required int value, dynamic hint}) {
-    throw UnimplementedError();
+    return Future(() => js.context.callMethod('setByName', [
+          'option:peer',
+          jsonEncode({'name': 'custom_image_quality', 'value': value})
+        ]));
   }
 
   Future<void> sessionSetCustomFps(
       {required UuidValue sessionId, required int fps, dynamic hint}) {
-    throw UnimplementedError();
+    return Future(() => js.context.callMethod('setByName', [
+          'option:peer',
+          jsonEncode({'name': 'custom_fps', 'value': fps})
+        ]));
   }
 
   Future<void> sessionLockScreen({required UuidValue sessionId, dynamic hint}) {
@@ -373,17 +419,22 @@ class RustdeskImpl {
       required String name,
       required String value,
       dynamic hint}) {
-    throw UnimplementedError();
+    return Future(() => js.context.callMethod('SetByName', [
+          'option:peer',
+          jsonEncode({'name': name, 'value': value})
+        ]));
   }
 
   Future<String> sessionGetPeerOption(
       {required UuidValue sessionId, required String name, dynamic hint}) {
-    throw UnimplementedError();
+    return Future(
+        () => js.context.callMethod('getByName', ['option:peer', name]));
   }
 
   Future<void> sessionInputOsPassword(
       {required UuidValue sessionId, required String value, dynamic hint}) {
-    throw UnimplementedError();
+    return Future(
+        () => js.context.callMethod('setByName', ['input_os_password', value]));
   }
 
   Future<void> sessionReadRemoteDir(
@@ -531,7 +582,7 @@ class RustdeskImpl {
       required int width,
       required int height,
       dynamic hint}) {
-    throw UnimplementedError();
+    return Future.value();
   }
 
   Future<void> sessionSendSelectedSessionId(
@@ -991,7 +1042,8 @@ class RustdeskImpl {
 
   Future<void> sessionSendMouse(
       {required UuidValue sessionId, required String msg, dynamic hint}) {
-    throw UnimplementedError();
+    return Future(
+        () => js.context.callMethod('setByName', ['send_mouse', msg]));
   }
 
   Future<void> sessionRestartRemoteDevice(
@@ -1021,7 +1073,7 @@ class RustdeskImpl {
 
   Future<void> sessionOnWaitingForImageDialogShow(
       {required UuidValue sessionId, dynamic hint}) {
-    throw UnimplementedError();
+    return Future.value();
   }
 
   Future<void> sessionToggleVirtualDisplay(
@@ -1142,36 +1194,55 @@ class RustdeskImpl {
 
   int sessionGetRgbaSize(
       {required UuidValue sessionId, required int display, dynamic hint}) {
-    throw UnimplementedError();
+    return 0;
   }
 
   void sessionNextRgba(
-      {required UuidValue sessionId, required int display, dynamic hint}) {
-    throw UnimplementedError();
-  }
+      {required UuidValue sessionId, required int display, dynamic hint}) {}
 
   void sessionRegisterPixelbufferTexture(
       {required UuidValue sessionId,
       required int display,
       required int ptr,
-      dynamic hint}) {
-    throw UnimplementedError();
-  }
+      dynamic hint}) {}
 
   void sessionRegisterGpuTexture(
       {required UuidValue sessionId,
       required int display,
       required int ptr,
-      dynamic hint}) {
-    throw UnimplementedError();
-  }
+      dynamic hint}) {}
 
   Future<void> queryOnlines({required List<String> ids, dynamic hint}) {
     throw UnimplementedError();
   }
 
+  // Dup to the function in hbb_common, lib.rs
+  // Maybe we need to move this function to js part.
   int versionToNumber({required String v, dynamic hint}) {
-    throw UnimplementedError();
+    List<String> versions = v.split('-');
+
+    int n = 0;
+
+    // The first part is the version number.
+    // 1.1.10 -> 1001100, 1.2.3 -> 1001030, multiple the last number by 10
+    // to leave space for patch version.
+    if (versions.isNotEmpty) {
+      int last = 0;
+      for (var x in versions[0].split('.')) {
+        last = int.tryParse(x) ?? 0;
+        n = n * 1000 + last;
+      }
+      n -= last;
+      n += last * 10;
+    }
+
+    if (versions.length > 1) {
+      n += int.tryParse(versions[1]) ?? 0;
+    }
+
+    // Ignore the rest
+
+    return n;
   }
 
   Future<bool> optionSynced({dynamic hint}) {
@@ -1419,7 +1490,7 @@ class RustdeskImpl {
   }
 
   bool isSupportMultiUiSession({required String version, dynamic hint}) {
-    throw UnimplementedError();
+    return versionToNumber(v: version) > versionToNumber(v: '1.2.4');
   }
 
   bool isSelinuxEnforcing({dynamic hint}) {
