@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common.dart';
@@ -292,7 +291,7 @@ class FileController {
             name: isLocal ? "local_show_hidden" : "remote_show_hidden"))
         .isNotEmpty;
     options.value.isWindows = isLocal
-        ? Platform.isWindows
+        ? isWindows
         : rootState.target?.ffiModel.pi.platform == kPeerPlatformWindows;
 
     await Future.delayed(Duration(milliseconds: 100));

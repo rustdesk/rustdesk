@@ -414,7 +414,7 @@ class _GeneralState extends State<_General> {
     }
 
     String getDefault() {
-      if (Platform.isWindows) return translate('System Sound');
+      if (isWindows) return translate('System Sound');
       return '';
     }
 
@@ -434,7 +434,7 @@ class _GeneralState extends State<_General> {
 
     return futureBuilder(future: () async {
       List<String> devices = (await bind.mainGetSoundInputs()).toList();
-      if (Platform.isWindows) {
+      if (isWindows) {
         devices.insert(0, translate('System Sound'));
       }
       String current = await getValue();
@@ -705,7 +705,7 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
             _OptionCheckBox(
                 context, 'Enable recording session', 'enable-record-session',
                 enabled: enabled, fakeValue: fakeValue),
-            if (Platform.isWindows)
+            if (isWindows)
               _OptionCheckBox(
                   context, 'Enable blocking user input', 'enable-block-input',
                   enabled: enabled, fakeValue: fakeValue),
@@ -845,7 +845,7 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
 
     bool value = bind.mainIsShareRdp();
     return Offstage(
-      offstage: !(Platform.isWindows && bind.mainIsInstalled()),
+      offstage: !(isWindows && bind.mainIsInstalled()),
       child: GestureDetector(
           child: Row(
             children: [

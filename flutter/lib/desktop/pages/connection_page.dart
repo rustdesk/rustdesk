@@ -2,7 +2,6 @@
 
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:auto_size_text/auto_size_text.dart';
 import 'package:flutter/material.dart';
@@ -231,7 +230,7 @@ class _ConnectionPageState extends State<ConnectionPage>
     if (eventName == 'minimize') {
       isWindowMinimized = true;
     } else if (eventName == 'maximize' || eventName == 'restore') {
-      if (isWindowMinimized && Platform.isWindows) {
+      if (isWindowMinimized && isWindows) {
         // windows can't update when minimized.
         Get.forceAppUpdate();
       }

@@ -78,12 +78,19 @@ class RustdeskImpl {
       required String password,
       required bool isSharedPassword,
       dynamic hint}) {
-    throw UnimplementedError();
+    return js.context.callMethod('setByName', [
+      'session_add_sync',
+      jsonEncode({'id': id, 'password': password})
+    ]);
   }
 
   Stream<EventToUI> sessionStart(
       {required UuidValue sessionId, required String id, dynamic hint}) {
-    throw UnimplementedError();
+    js.context.callMethod('setByName', [
+      'session_start',
+      jsonEncode({'id': id})
+    ]);
+    return Stream.empty();
   }
 
   Future<bool?> sessionGetRemember(
@@ -93,17 +100,19 @@ class RustdeskImpl {
 
   Future<bool?> sessionGetToggleOption(
       {required UuidValue sessionId, required String arg, dynamic hint}) {
-    throw UnimplementedError();
+    return Future(
+        () => sessionGetToggleOptionSync(sessionId: sessionId, arg: arg));
   }
 
   bool sessionGetToggleOptionSync(
       {required UuidValue sessionId, required String arg, dynamic hint}) {
-    throw UnimplementedError();
+    return 'true' == js.context.callMethod('getByName', ['option:toggle', arg]);
   }
 
   Future<String?> sessionGetOption(
       {required UuidValue sessionId, required String arg, dynamic hint}) {
-    throw UnimplementedError();
+    return Future(
+        () => js.context.callMethod('getByName', ['option:peer', arg]));
   }
 
   Future<void> sessionLogin(
@@ -122,7 +131,7 @@ class RustdeskImpl {
   }
 
   Future<void> sessionClose({required UuidValue sessionId, dynamic hint}) {
-    throw UnimplementedError();
+    return Future(() => js.context.callMethod('setByName', ['session_close']));
   }
 
   Future<void> sessionRefresh(
@@ -165,7 +174,8 @@ class RustdeskImpl {
 
   Future<String?> sessionGetFlutterOption(
       {required UuidValue sessionId, required String k, dynamic hint}) {
-    throw UnimplementedError();
+    return Future(
+        () => js.context.callMethod('getByName', ['option:flutter:peer', k]));
   }
 
   Future<void> sessionSetFlutterOption(
@@ -173,12 +183,16 @@ class RustdeskImpl {
       required String k,
       required String v,
       dynamic hint}) {
-    throw UnimplementedError();
+    return Future(() => js.context.callMethod('setByName', [
+          'option:flutter:peer',
+          jsonEncode({'name': k, 'value': v})
+        ]));
   }
 
   Future<String?> sessionGetFlutterOptionByPeerId(
       {required String id, required String k, dynamic hint}) {
-    return Future.value(null);
+    return Future(
+        () => js.context.callMethod('getByName', ['option:flutter:peer', k]));
   }
 
   int getNextTextureKey({dynamic hint}) {
@@ -563,26 +577,30 @@ class RustdeskImpl {
 
   Future<void> mainSetOption(
       {required String key, required String value, dynamic hint}) {
-    return js.context.callMethod('setByName', [
+    js.context.callMethod('setByName', [
       'option',
       jsonEncode({'name': key, 'value': value})
     ]);
+    return Future.value();
   }
 
+  // get server settings
   Future<String> mainGetOptions({dynamic hint}) {
-    throw UnimplementedError();
+    return Future(() => mainGetOptionsSync());
   }
 
+  // get server settings
   String mainGetOptionsSync({dynamic hint}) {
-    throw UnimplementedError();
+    return js.context.callMethod('getByName', ['options']);
   }
 
   Future<void> mainSetOptions({required String json, dynamic hint}) {
-    throw UnimplementedError();
+    return Future(() => js.context.callMethod('setByName', ['options', json]));
   }
 
   Future<String> mainTestIfValidServer({required String server, dynamic hint}) {
-    throw UnimplementedError();
+    // TODO: implement
+    return Future.value('');
   }
 
   Future<void> mainSetSocks(
@@ -652,7 +670,7 @@ class RustdeskImpl {
   }
 
   Future<String> mainGetApiServer({dynamic hint}) {
-    throw UnimplementedError();
+    return Future(() => js.context.callMethod('getByName', ['api_server']));
   }
 
   Future<void> mainPostRequest(
@@ -809,7 +827,11 @@ class RustdeskImpl {
   }
 
   Future<String> mainHandleRelayId({required String id, dynamic hint}) {
-    throw UnimplementedError();
+    var newId = id;
+    if (id.endsWith("\\r") || id.endsWith("/r")) {
+      newId = id.substring(0, id.length - 2);
+    }
+    return Future.value(newId);
   }
 
   String mainGetMainDisplay({dynamic hint}) {

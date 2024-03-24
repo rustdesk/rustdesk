@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:flutter/foundation.dart';
@@ -139,7 +138,7 @@ class RustDeskMultiWindowManager {
         overrideType: type,
       ));
     }
-    if (Platform.isMacOS) {
+    if (isMacOS) {
       Future.microtask(() => windowController.show());
     }
     registerActiveWindow(windowId);
