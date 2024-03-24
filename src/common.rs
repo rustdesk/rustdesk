@@ -1482,12 +1482,13 @@ pub fn load_custom_client() {
         read_custom_client(data.trim());
         return;
     }
-    let Ok(cmd) = std::env::current_exe() else {
+    let Some(path) = std::env::current_exe().map_or(None, |x| x.parent().map(|x| x.to_path_buf()))
+    else {
         return;
     };
-    let Some(path) = cmd.parent().map(|x| x.join("custom.txt")) else {
-        return;
-    };
+    #[cfg(target_os = "macos")]
+    let path = path.join("../Resources");
+    let path = path.join("custom.txt");
     if path.is_file() {
         let Ok(data) = std::fs::read_to_string(&path) else {
             log::error!("Failed to read custom client config");
