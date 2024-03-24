@@ -317,7 +317,11 @@ pub struct PeerConfig {
     pub custom_resolutions: HashMap<String, Resolution>,
 
     // The other scalar value must before this
-    #[serde(default, deserialize_with = "PeerConfig::deserialize_options")]
+    #[serde(
+        default,
+        deserialize_with = "deserialize_hashmap_string_string",
+        skip_serializing_if = "HashMap::is_empty"
+    )]
     pub options: HashMap<String, String>, // not use delete to represent default values
     // Various data for flutter ui
     #[serde(default, deserialize_with = "deserialize_hashmap_string_string")]
@@ -1230,22 +1234,8 @@ impl PeerConfig {
         }
     }
 
-    fn deserialize_options<'de, D>(deserializer: D) -> Result<HashMap<String, String>, D::Error>
-    where
-        D: de::Deserializer<'de>,
-    {
-        let mut mp: HashMap<String, String> = de::Deserialize::deserialize(deserializer)?;
-        Self::insert_default_options(&mut mp);
-        Ok(mp)
-    }
-
     fn default_options() -> HashMap<String, String> {
         let mut mp: HashMap<String, String> = Default::default();
-        Self::insert_default_options(&mut mp);
-        return mp;
-    }
-
-    fn insert_default_options(mp: &mut HashMap<String, String>) {
         [
             "codec-preference",
             "custom-fps",
@@ -1255,10 +1245,9 @@ impl PeerConfig {
             "swap-left-right-mouse",
         ]
         .map(|key| {
-            if !mp.contains_key(key) {
-                mp.insert(key.to_owned(), UserDefaultConfig::read(key));
-            }
+            mp.insert(key.to_owned(), UserDefaultConfig::read(key));
         });
+        mp
     }
 }
 
