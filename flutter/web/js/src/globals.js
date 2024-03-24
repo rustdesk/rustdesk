@@ -195,7 +195,7 @@ window.setByName = (name, value) => {
       break;
     case 'login':
       value = JSON.parse(value);
-      curConn.setRemember(value.remember == 'true');
+      curConn.setRemember(value.remember);
       curConn.login({
         os_login: {
           username: value.os_username,
@@ -505,12 +505,6 @@ function sessionAdd(value) {
     const data = JSON.parse(value);
     window.curConn?.close();
     const conn = new Connection();
-    if (data['password']) {
-      // TODO: encrypt password
-      conn.setOption('password', data['password'])
-    } else {
-      conn.setOption('password', undefined);
-    }
     setConn(conn);
     return '';
   } catch (e) {

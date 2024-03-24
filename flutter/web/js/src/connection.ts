@@ -41,7 +41,6 @@ export default class Connection {
     this._msgs = [];
     this._id = "";
     this._videoTestSpeed = [0, 0];
-    this._options = {};
     //this._cursors = {};
   }
 
@@ -577,10 +576,8 @@ export default class Connection {
     }
     this._options["tm"] = new Date().getTime();
     const peers = globals.getPeers();
-    if (peers) {
-      peers[this._id] = this._options;
-      localStorage.setItem("peers", JSON.stringify(peers));
-    }
+    peers[this._id] = this._options;
+    localStorage.setItem("peers", JSON.stringify(peers));
   }
 
   inputKey(
