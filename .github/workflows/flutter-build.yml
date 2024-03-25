@@ -26,12 +26,12 @@ env:
   VERSION: "1.2.4"
   NDK_VERSION: "r26b"
   #signing keys env variable checks
-  ANDROID_SIGNING_KEY: '${{ secrets.ANDROID_SIGNING_KEY }}'
-  MACOS_P12_BASE64: '${{ secrets.MACOS_P12_BASE64 }}'
+  ANDROID_SIGNING_KEY: "${{ secrets.ANDROID_SIGNING_KEY }}"
+  MACOS_P12_BASE64: "${{ secrets.MACOS_P12_BASE64 }}"
   # To make a custom build with your own servers set the below secret values
-  RS_PUB_KEY: '${{ secrets.RS_PUB_KEY }}'
-  RENDEZVOUS_SERVER: '${{ secrets.RENDEZVOUS_SERVER }}'
-  API_SERVER: '${{ secrets.API_SERVER }}'
+  RS_PUB_KEY: "${{ secrets.RS_PUB_KEY }}"
+  RENDEZVOUS_SERVER: "${{ secrets.RENDEZVOUS_SERVER }}"
+  API_SERVER: "${{ secrets.API_SERVER }}"
   UPLOAD_ARTIFACT: "${{ inputs.upload-artifact }}"
   SIGN_BASE_URL: "${{ secrets.SIGN_BASE_URL }}"
 
@@ -45,7 +45,7 @@ jobs:
       platform: x64
       target_version: Windows10
     strategy:
-        fail-fast: false
+      fail-fast: false
 
   build-for-windows-flutter:
     name: ${{ matrix.job.target }} (${{ matrix.job.os }})
@@ -95,7 +95,7 @@ jobs:
         with:
           toolchain: stable
           targets: ${{ matrix.job.target }}
-          components: ''
+          components: ""
 
       - uses: Swatinem/rust-cache@v2
         with:
@@ -143,7 +143,7 @@ jobs:
         if: ${{ inputs.upload-artifact }}
         with:
           name: topmostwindow-artifacts
-          path: './flutter/build/windows/x64/runner/Release/'
+          path: "./flutter/build/windows/x64/runner/Release/"
 
       - name: Compress unsigned
         shell: bash
@@ -190,7 +190,7 @@ jobs:
     name: ${{ matrix.job.target }} (${{ matrix.job.os }})
     runs-on: ${{ matrix.job.os }}
     # Temporarily disable this action due to additional test is needed.
-    # if: false 
+    # if: false
     strategy:
       fail-fast: false
       matrix:
@@ -220,7 +220,7 @@ jobs:
         with:
           toolchain: nightly-${{ matrix.job.target }}
           targets: ${{ matrix.job.target }}
-          components: ''
+          components: ""
 
       - uses: Swatinem/rust-cache@v2
         with:
@@ -327,6 +327,13 @@ jobs:
           # --hwcodec not supported on macos yet
           ./build.py --flutter
 
+      - name: Upload unsigned macOS app
+        if: env.UPLOAD_ARTIFACT == 'true'
+        uses: actions/upload-artifact@master
+        with:
+          name: rustdesk-unsigned-macos-arm64
+          path: ./flutter/build/macos/Build/Products/Release/RustDesk.app
+
       - name: Codesign app and create signed dmg
         if: env.MACOS_P12_BASE64 != null && env.UPLOAD_ARTIFACT == 'true'
         run: |
@@ -369,7 +376,7 @@ jobs:
               target: x86_64-apple-darwin,
               os: macos-latest,
               extra-build-args: "",
-              arch: x86_64
+              arch: x86_64,
             }
     steps:
       - name: Export GitHub Actions cache environment variables
@@ -430,7 +437,7 @@ jobs:
         with:
           toolchain: stable
           targets: ${{ matrix.job.target }}
-          components: ''
+          components: ""
 
       - uses: Swatinem/rust-cache@v2
         with:
@@ -467,6 +474,13 @@ jobs:
           # --hwcodec not supported on macos yet
           ./build.py --flutter ${{ matrix.job.extra-build-args }}
 
+      - name: Upload unsigned macOS app
+        if: env.UPLOAD_ARTIFACT == 'true'
+        uses: actions/upload-artifact@master
+        with:
+          name: rustdesk-unsigned-macos-x64
+          path: ./flutter/build/macos/Build/Products/Release/RustDesk.app
+
       - name: Codesign app and create signed dmg
         if: env.MACOS_P12_BASE64 != null && env.UPLOAD_ARTIFACT == 'true'
         run: |
@@ -500,6 +514,36 @@ jobs:
           tag_name: ${{ env.TAG_NAME }}
           files: |
             rustdesk*-${{ matrix.job.arch }}.dmg
+
+  publish_unsigned_mac:
+    needs:
+      - build-for-macOS
+      - build-for-macOS-arm64
+    runs-on: ubuntu-latest
+    if: ${{ inputs.upload-artifact }}
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@master
+        with:
+          name: rustdesk-unsigned-macos-x64
+          path: ./x64
+
+      - name: Download Artifacts
+        uses: actions/download-artifact@master
+        with:
+          name: rustdesk-unsigned-macos-arm64
+          path: ./arm64
+
+      - name: Combine unsigned macos app
+        run: |
+          tar czf rustdesk-${{ env.FLUTTER_VERSION }}-macos-unsigned.tar.gz ./arm64 ./x64
+
+      - name: Publish unsigned macos app
+        uses: softprops/action-gh-release@v1
+        with:
+          prerelease: true
+          tag_name: ${{ env.TAG_NAME }}
+          files: rustdesk-${{ env.FLUTTER_VERSION }}-macos-unsigned.tar.gz
 
   generate-bridge-linux:
     uses: ./.github/workflows/bridge.yml
@@ -552,7 +596,7 @@ jobs:
         with:
           toolchain: stable
           targets: ${{ matrix.job.target }}
-          components: ''
+          components: ""
 
       - uses: Swatinem/rust-cache@v2
         with:
@@ -608,14 +652,14 @@ jobs:
               target: aarch64-linux-android,
               os: ubuntu-20.04,
               extra-build-features: "",
-              openssl-arch: android-arm64
+              openssl-arch: android-arm64,
             }
           - {
               arch: armv7,
               target: armv7-linux-androideabi,
               os: ubuntu-20.04,
               extra-build-features: "",
-              openssl-arch: android-arm
+              openssl-arch: android-arm,
             }
     steps:
       - name: Export GitHub Actions cache environment variables
@@ -703,7 +747,7 @@ jobs:
         uses: dtolnay/rust-toolchain@v1
         with:
           toolchain: stable
-          components: ''
+          components: ""
 
       - uses: Swatinem/rust-cache@v2
         with:
@@ -817,21 +861,21 @@ jobs:
               target: x86_64-unknown-linux-gnu,
               os: ubuntu-20.04,
               extra-build-features: "",
-              enable-headless: true
+              enable-headless: true,
             }
           - {
               arch: x86_64,
               target: x86_64-unknown-linux-gnu,
               os: ubuntu-20.04,
               extra-build-features: "flatpak",
-              enable-headless: false
+              enable-headless: false,
             }
           - {
               arch: x86_64,
               target: x86_64-unknown-linux-gnu,
               os: ubuntu-20.04,
               extra-build-features: "appimage",
-              enable-headless: false
+              enable-headless: false,
             }
           # - { target: x86_64-unknown-linux-musl   , os: ubuntu-20.04, use-cross: true }
     steps:
@@ -868,7 +912,7 @@ jobs:
         with:
           toolchain: stable
           targets: ${{ matrix.job.target }}
-          components: ''
+          components: ""
 
       - name: Save Rust toolchain version
         run: |
@@ -1005,7 +1049,7 @@ jobs:
               os: ubuntu-20.04, # just for naming package, not running host
               use-cross: true,
               extra-build-features: "",
-              enable-headless: true
+              enable-headless: true,
             }
           - {
               arch: aarch64,
@@ -1013,7 +1057,7 @@ jobs:
               os: ubuntu-20.04, # just for naming package, not running host
               use-cross: true,
               extra-build-features: "appimage",
-              enable-headless: false
+              enable-headless: false,
             }
           # - { arch: aarch64, target: aarch64-unknown-linux-gnu   , os: ubuntu-20.04, use-cross: true, extra-build-features: "flatpak" }
           # - {
@@ -1077,7 +1121,7 @@ jobs:
         with:
           toolchain: stable
           targets: ${{ matrix.job.target }}
-          components: ''
+          components: ""
 
       - name: Save Rust toolchain version
         run: |
@@ -1214,7 +1258,7 @@ jobs:
               os: ubuntu-latest,
               use-cross: true,
               extra-build-features: "",
-              enable-headless: true
+              enable-headless: true,
             }
           # - { arch: armv7, target: armv7-unknown-linux-gnueabihf , os: ubuntu-20.04, use-cross: true, extra-build-features: "appimage" }
           # - { target: arm-unknown-linux-musleabihf, os: ubuntu-20.04, use-cross: true }
@@ -1269,7 +1313,7 @@ jobs:
         with:
           toolchain: stable
           targets: ${{ matrix.job.target }}
-          components: ''
+          components: ""
 
       - name: Save Rust toolchain version
         run: |
@@ -2079,11 +2123,7 @@ jobs:
       fail-fast: false
       matrix:
         job:
-          - {
-              arch: x86_64,
-              target: x86_64-unknown-linux-gnu,
-              os: ubuntu-18.04,
-            }
+          - { arch: x86_64, target: x86_64-unknown-linux-gnu, os: ubuntu-18.04 }
     env:
       RELEASE_NAME: web-basic
     steps:
@@ -2094,7 +2134,7 @@ jobs:
         run: |
           sudo apt-get update -y
           sudo apt-get install -y wget npm
-  
+
       - name: Install flutter
         uses: subosito/flutter-action@v2.12.0 #https://github.com/subosito/flutter-action/issues/277
         with:
