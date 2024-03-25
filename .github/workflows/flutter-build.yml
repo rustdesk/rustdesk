@@ -536,14 +536,14 @@ jobs:
 
       - name: Combine unsigned macos app
         run: |
-          tar czf rustdesk-${{ env.FLUTTER_VERSION }}-macos-unsigned.tar.gz ./arm64 ./x64
+          tar czf rustdesk-${{ env.VERSION }}-macos-unsigned.tar.gz ./arm64 ./x64
 
       - name: Publish unsigned macos app
         uses: softprops/action-gh-release@v1
         with:
           prerelease: true
           tag_name: ${{ env.TAG_NAME }}
-          files: rustdesk-${{ env.FLUTTER_VERSION }}-macos-unsigned.tar.gz
+          files: rustdesk-${{ env.VERSION }}-macos-unsigned.tar.gz
 
   generate-bridge-linux:
     uses: ./.github/workflows/bridge.yml
