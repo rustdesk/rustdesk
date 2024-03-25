@@ -874,6 +874,7 @@ pub fn main_get_api_server() -> String {
     get_api_server()
 }
 
+// This function doesn't seem to be used.
 pub fn main_post_request(url: String, body: String, header: String) {
     post_request(url, body, header)
 }
