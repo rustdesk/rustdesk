@@ -16,7 +16,7 @@ let HOST = localStorage.getItem("rendezvous-server") || HOSTS[0];
 const SCHEMA = "ws://";
 
 type MsgboxCallback = (type: string, title: string, text: string, link: string) => void;
-type DrawCallback = (data: Uint8Array) => void;
+type DrawCallback = (display: number, data: Uint8Array) => void;
 //const cursorCanvas = document.createElement("canvas");
 
 export default class Connection {
@@ -41,7 +41,6 @@ export default class Connection {
     this._msgs = [];
     this._id = "";
     this._videoTestSpeed = [0, 0];
-    this._options = {};
     //this._cursors = {};
   }
 
@@ -67,7 +66,7 @@ export default class Connection {
         try {
           this._password = Uint8Array.from(JSON.parse("[" + p + "]"));
         } catch (e) {
-          console.error(e);
+          console.error('Failed to get password, ' + e);
         }
       }
     }
@@ -171,7 +170,7 @@ export default class Connection {
           pk = undefined;
         }
       } catch (e) {
-        console.error(e);
+        console.error('Failed to verify id pk, ', e);
         pk = undefined;
       }
       if (!pk)
@@ -196,7 +195,7 @@ export default class Connection {
     try {
       signedId = await globals.verify(signedId.id, Uint8Array.from(pk!));
     } catch (e) {
-      console.error(e);
+      console.error('Failed to verify signed id pk, ', e);
       // fall back to non-secure connection in case pk mismatch
       console.error("pk mismatch, fall back to non-secure");
       const public_key = message.PublicKey.fromPartial({});
@@ -243,7 +242,7 @@ export default class Connection {
         this.login();
       } else if (msg?.test_delay) {
         const test_delay = msg?.test_delay;
-        console.log(test_delay);
+        console.log('test delay: ', test_delay);
         if (!test_delay.from_client) {
           this._ws?.sendMessage({ test_delay });
         }
@@ -275,7 +274,7 @@ export default class Connection {
         try {
           globals.copyToClipboard(new TextDecoder().decode(cb.content));
         } catch (e) {
-          console.error(e);
+          console.error('Failed to copy to clipboard, ', e);
         }
         // globals.pushEvent("clipboard", cb);
       } else if (msg?.cursor_data) {
@@ -323,9 +322,9 @@ export default class Connection {
     this._msgbox?.(type_, title, text, link);
   }
 
-  draw(frame: any) {
-    this._draw?.(frame);
-    globals.draw(frame);
+  draw(display: number, frame: any) {
+    this._draw?.(display, frame);
+    globals.draw(display, frame);
   }
 
   close() {
@@ -348,22 +347,25 @@ export default class Connection {
     this._draw = callback;
   }
 
-  login(password: string | undefined = undefined) {
-    if (password) {
+  login(info?: {
+    os_login?: message.OSLogin,
+    password?: Uint8Array
+  }) {
+    if (info?.password) {
       const salt = this._hash?.salt;
-      let p = hash([password, salt!]);
+      let p = hash([info.password, salt!]);
       this._password = p;
       const challenge = this._hash?.challenge;
       p = hash([p, challenge!]);
       this.msgbox("connecting", "Connecting...", "Logging in...");
-      this._sendLoginMessage(p);
+      this._sendLoginMessage({ os_login: info.os_login, password: p });
     } else {
       let p = this._password;
       if (p) {
         const challenge = this._hash?.challenge;
         p = hash([p, challenge!]);
       }
-      this._sendLoginMessage(p);
+      this._sendLoginMessage({ os_login: info?.os_login, password: p });
     }
   }
 
@@ -372,14 +374,18 @@ export default class Connection {
     await this.start(this._id);
   }
 
-  _sendLoginMessage(password: Uint8Array | undefined = undefined) {
+  _sendLoginMessage(login: {
+    os_login?: message.OSLogin,
+    password?: Uint8Array,
+  }) {
     const login_request = message.LoginRequest.fromPartial({
       username: this._id!,
       my_id: "web", // to-do
       my_name: "web", // to-do
-      password,
+      password: login.password,
       option: this.getOptionMessage(),
       video_ack_required: true,
+      os_login: login.os_login,
     });
     this._ws?.sendMessage({ login_request });
   }
@@ -436,7 +442,7 @@ export default class Connection {
           i++;
           if (i == n) this.sendVideoReceived();
           if (ok && dec.frameBuffer && n == i) {
-            this.draw(dec.frameBuffer);
+            this.draw(vf.display, dec.frameBuffer);
             const now = new Date().getTime();
             var elapsed = now - tm;
             this._videoTestSpeed[1] += elapsed;
@@ -570,10 +576,8 @@ export default class Connection {
     }
     this._options["tm"] = new Date().getTime();
     const peers = globals.getPeers();
-    if (peers) {
-      peers[this._id] = this._options;
-      localStorage.setItem("peers", JSON.stringify(peers));
-    }
+    peers[this._id] = this._options;
+    localStorage.setItem("peers", JSON.stringify(peers));
   }
 
   inputKey(
@@ -744,7 +748,7 @@ export default class Connection {
     loadVp9((decoder: any) => {
       this._videoDecoder = decoder;
       console.log("vp9 loaded");
-      console.log(decoder);
+      console.log('The decoder: ', decoder);
     });
   }
 }

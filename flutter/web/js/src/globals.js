@@ -28,7 +28,13 @@ function jsonfyForDart(payload) {
   var tmp = {};
   for (const [key, value] of Object.entries(payload)) {
     if (!key) continue;
-    tmp[key] = value instanceof Uint8Array ? '[' + value.toString() + ']' : JSON.stringify(value);
+    if (value instanceof String || typeof value == 'string') {
+      tmp[key] = value;
+    } else if (value instanceof Uint8Array) {
+      tmp[key] = '[' + value.toString() + ']';
+    } else {
+      tmp[key] = JSON.stringify(value);
+    }
   }
   return tmp;
 }
@@ -54,10 +60,10 @@ if (YUVCanvas.WebGLFrameSink.isAvailable()) {
 }
 let testSpeed = [0, 0];
 
-export function draw(frame) {
+export function draw(display, frame) {
   if (yuvWorker) {
     // frame's (y/u/v).bytes already detached, can not transferrable any more.
-    yuvWorker.postMessage(frame);
+    yuvWorker.postMessage({display, frame});
   } else {
     var tm0 = new Date().getTime();
     yuvCanvas.drawFrame(frame);
@@ -75,7 +81,7 @@ export function draw(frame) {
     for (let i = 0; i < size; i += row) {
       flipPixels.set(pixels.subarray(i, i + row), end - i);
     }
-    onRgba(flipPixels);
+    onRgba(display, flipPixels);
     testSpeed[1] += new Date().getTime() - tm0;
     testSpeed[0] += 1;
     if (testSpeed[0] > 30) {
@@ -189,8 +195,14 @@ window.setByName = (name, value) => {
       break;
     case 'login':
       value = JSON.parse(value);
-      curConn.setRemember(value.remember == 'true');
-      curConn.login(value.password);
+      curConn.setRemember(value.remember);
+      curConn.login({
+        os_login: {
+          username: value.os_username,
+          password: value.os_password,
+        },
+        password: value.password,
+      });
       break;
     case 'close':
       close();
@@ -270,7 +282,7 @@ window.setByName = (name, value) => {
       value = JSON.parse(value);
       localStorage.setItem(name + ':' + value.name, value.value);
       break;
-    case 'peer_option':
+    case 'option:peer':
       value = JSON.parse(value);
       curConn.setOption(value.name, value.value);
       break;
@@ -409,7 +421,7 @@ export function playAudio(packet) {
 window.init = async () => {
   if (yuvWorker) {
     yuvWorker.onmessage = (e) => {
-      onRgba(e.data);
+      onRgba(e.data.display, e.data.frame);
     }
   }
   opusWorker.onmessage = (e) => {
@@ -493,12 +505,6 @@ function sessionAdd(value) {
     const data = JSON.parse(value);
     window.curConn?.close();
     const conn = new Connection();
-    if (data['password']) {
-      // TODO: encrypt password
-      conn.setOption('password', data['password'])
-    } else {
-      conn.setOption('password', undefined);
-    }
     setConn(conn);
     return '';
   } catch (e) {

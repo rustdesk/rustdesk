@@ -123,10 +123,10 @@ class PlatformFFI {
     };
   }
 
-  void setRgbaCallback(void Function(Uint8List) fun) {
-    context["onRgba"] = (Uint8List? rgba) {
+  void setRgbaCallback(void Function(int, Uint8List) fun) {
+    context["onRgba"] = (int display, Uint8List? rgba) {
       if (rgba != null) {
-        fun(rgba);
+        fun(display, rgba);
       }
     };
   }
