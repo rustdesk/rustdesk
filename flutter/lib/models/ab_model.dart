@@ -110,6 +110,7 @@ class AbModel {
 
   Future<void> _pullAb(
       {required ForcePullAb? force, required bool quiet}) async {
+    if (bind.isDisableAb()) return;
     debugPrint("pullAb, force: $force, quiet: $quiet");
     if (!gFFI.userModel.isLogin) return;
     if (force == null && listInitialized && current.initialized) return;

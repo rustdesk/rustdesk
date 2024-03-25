@@ -23,6 +23,7 @@ class UserModel {
   UserModel(this.parent);
 
   void refreshCurrentUser() async {
+    if (bind.isDisableAccount()) return;
     final token = bind.mainGetLocalOption(key: 'access_token');
     if (token == '') {
       await updateOtherModels();
