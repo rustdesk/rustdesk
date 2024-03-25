@@ -46,12 +46,6 @@ class _AddressBookState extends State<AddressBook> {
               child: ElevatedButton(
                   onPressed: loginDialog, child: Text(translate("Login"))));
         } else {
-          if (gFFI.abModel.currentAbLoading.value &&
-              gFFI.abModel.currentAbEmtpy) {
-            return const Center(
-              child: CircularProgressIndicator(),
-            );
-          }
           return Column(
             children: [
               buildErrorBanner(context,

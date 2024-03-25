@@ -62,7 +62,9 @@ class _PeerTabPageState extends State<PeerTabPage>
         AddressBook(
           menuPadding: _menuPadding(),
         ),
-        ({dynamic hint}) => gFFI.abModel.pullAb(force: hint == null)),
+        ({dynamic hint}) => gFFI.abModel.pullAb(
+            force: hint == null ? ForcePullAb.listAndCurrent : null,
+            quiet: false)),
     _TabEntry(
       MyGroup(
         menuPadding: _menuPadding(),
