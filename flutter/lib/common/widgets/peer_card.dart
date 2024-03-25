@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hbb/common/widgets/dialog.dart';
 import 'package:flutter_hbb/consts.dart';
+import 'package:flutter_hbb/models/ab_model.dart';
 import 'package:flutter_hbb/models/peer_tab_model.dart';
 import 'package:get/get.dart';
 import 'package:provider/provider.dart';
@@ -1059,9 +1060,11 @@ class AddressBookPeerCard extends BasePeerCard {
     return menuItems;
   }
 
+  // address book does not need to update
   @protected
   @override
-  void _update() => gFFI.abModel.pullAb(quiet: true);
+  void _update() =>
+      {}; //gFFI.abModel.pullAb(force: ForcePullAb.current, quiet: true);
 
   @protected
   MenuEntryBase<String> _editTagAction(String id) {
