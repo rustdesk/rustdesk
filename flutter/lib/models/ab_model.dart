@@ -114,17 +114,23 @@ class AbModel {
     debugPrint("pullAb, force: $force, quiet: $quiet");
     if (!gFFI.userModel.isLogin) return;
     if (force == null && listInitialized && current.initialized) return;
+    try {
+      if (!_modeTested) {
+        // Get personal address book guid
+        _personalAbGuid = null;
+        await _getPersonalAbGuid();
+        // Determine legacy mode based on whether _personalAbGuid is null
+        legacyMode.value = _personalAbGuid == null;
+        _modeTested = true;
+        if (!legacyMode.value) {
+          await _getAbSettings();
+        }
+      }
+    } catch (e) {
+      debugPrint("test ab mode error: $e");
+    }
     if (!listInitialized || force == ForcePullAb.listAndCurrent) {
       try {
-        if (!_modeTested) {
-          // Get personal address book guid
-          _personalAbGuid = null;
-          await _getPersonalAbGuid();
-          await _getAbSettings();
-          // Determine legacy mode based on whether _personalAbGuid is null
-          legacyMode.value = _personalAbGuid == null;
-          _modeTested = true;
-        }
         if (_personalAbGuid != null) {
           debugPrint("pull ab list");
           List<AbProfile> abProfiles = List.empty(growable: true);
@@ -175,7 +181,8 @@ class AbModel {
       } catch (e) {
         debugPrint("pull ab list error: $e");
       }
-    } else if (!current.initialized || force == ForcePullAb.current) {
+    } else if (listInitialized &&
+        (!current.initialized || force == ForcePullAb.current)) {
       try {
         await current.pullAb(quiet: quiet);
       } catch (e) {
