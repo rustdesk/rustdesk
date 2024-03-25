@@ -326,13 +326,16 @@ jobs:
         run: |
           # --hwcodec not supported on macos yet
           ./build.py --flutter
+          cp -rf ./flutter/build/macos/Build/Products/Release/RustDesk.app ./
+          mv RustDesk.app arm64
+          tar czf unsigned.tar.gz arm64
 
       - name: Upload unsigned macOS app
         if: env.UPLOAD_ARTIFACT == 'true'
         uses: actions/upload-artifact@master
         with:
           name: rustdesk-unsigned-macos-arm64
-          path: ./flutter/build/macos/Build/Products/Release/RustDesk.app
+          path: unsigned.tar.gz # can not upload the directory directly, which destroy the link structure, causing the codesign failed
 
       - name: Codesign app and create signed dmg
         if: env.MACOS_P12_BASE64 != null && env.UPLOAD_ARTIFACT == 'true'
@@ -473,13 +476,16 @@ jobs:
         run: |
           # --hwcodec not supported on macos yet
           ./build.py --flutter ${{ matrix.job.extra-build-args }}
+          cp -rf ./flutter/build/macos/Build/Products/Release/RustDesk.app ./
+          mv RustDesk.app x64
+          tar czf unsigned.tar.gz x64
 
       - name: Upload unsigned macOS app
         if: env.UPLOAD_ARTIFACT == 'true'
         uses: actions/upload-artifact@master
         with:
           name: rustdesk-unsigned-macos-x64
-          path: ./flutter/build/macos/Build/Products/Release/RustDesk.app
+          path: unsigned.tar.gz # can not upload the directory directly, which destroy the link structure, causing the codesign failed
 
       - name: Codesign app and create signed dmg
         if: env.MACOS_P12_BASE64 != null && env.UPLOAD_ARTIFACT == 'true'
@@ -526,13 +532,21 @@ jobs:
         uses: actions/download-artifact@master
         with:
           name: rustdesk-unsigned-macos-x64
-          path: ./x64
+          path: ./
+
+      - name: uncompress
+        run: |
+          tar xzf unsigned.tar.gz
 
       - name: Download Artifacts
         uses: actions/download-artifact@master
         with:
           name: rustdesk-unsigned-macos-arm64
-          path: ./arm64
+          path: ./
+
+      - name: uncompress
+        run: |
+          tar xzf unsigned.tar.gz
 
       - name: Combine unsigned macos app
         run: |
