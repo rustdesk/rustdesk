@@ -348,7 +348,7 @@ pub fn set_option(key: String, value: String) {
         #[cfg(target_os = "macos")]
         {
             let is_stop = value == "Y";
-            if is_stop && crate::platform::macos::uninstall_service(true) {
+            if is_stop && crate::platform::uninstall_service(true, false) {
                 return;
             }
         }
@@ -356,7 +356,7 @@ pub fn set_option(key: String, value: String) {
         {
             if crate::platform::is_installed() {
                 if value == "Y" {
-                    if crate::platform::uninstall_service(true) {
+                    if crate::platform::uninstall_service(true, false) {
                         return;
                     }
                 } else {

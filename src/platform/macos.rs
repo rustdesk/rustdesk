@@ -219,7 +219,7 @@ fn correct_app_name(s: &str) -> String {
     s
 }
 
-pub fn uninstall_service(show_new_window: bool) -> bool {
+pub fn uninstall_service(show_new_window: bool, sync: bool) -> bool {
     // to-do: do together with win/linux about refactory start/stop service
     if !is_installed_daemon(false) {
         return false;
@@ -232,7 +232,7 @@ pub fn uninstall_service(show_new_window: bool) -> bool {
         return false;
     };
 
-    std::thread::spawn(move || {
+    let func = move || {
         match std::process::Command::new("osascript")
             .arg("-e")
             .arg(script_body)
@@ -275,7 +275,12 @@ pub fn uninstall_service(show_new_window: bool) -> bool {
                 }
             }
         }
-    });
+    };
+    if sync {
+        func();
+    } else {
+        std::thread::spawn(func);
+    }
     true
 }
 
@@ -515,7 +520,7 @@ pub fn start_os_service() {
                 // https://emorydunn.github.io/LaunchAgent/Classes/LaunchAgent.html#/s:11LaunchAgentAAC16throttleIntervalSiSgvp,
                 // by default, ThrottleInterval = 10, we changed it to 1
                 if dt >= 0 {
-                    std::thread::sleep(std::time::Duration::from_secs(dt.clamp(3, 30) as _));
+                    std::thread::sleep(std::time::Duration::from_secs(dt.clamp(0, 15) as _));
                 }
                 log::info!("The others killed");
                 std::process::exit(0);

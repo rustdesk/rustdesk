@@ -1275,7 +1275,7 @@ fn switch_service(stop: bool) -> String {
     }
 }
 
-pub fn uninstall_service(show_new_window: bool) -> bool {
+pub fn uninstall_service(show_new_window: bool, _: bool) -> bool {
     if !has_cmd("systemctl") {
         return false;
     }
