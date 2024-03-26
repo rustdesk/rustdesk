@@ -89,8 +89,7 @@ pub fn generate2fa() -> String {
 
 pub fn verify2fa(code: String) -> bool {
     if let Some((info, totp)) = CURRENT_2FA.lock().unwrap().as_ref() {
-        if let Ok(cur) = totp.generate_current() {
-            let res = code == cur;
+        if let Ok(res) = totp.check_current(&code) {
             if res {
                 if let Ok(v) = info.into_string() {
                     #[cfg(not(any(target_os = "android", target_os = "ios")))]

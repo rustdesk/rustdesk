@@ -1025,6 +1025,7 @@ pub fn session_add(
     switch_uuid: &str,
     force_relay: bool,
     password: String,
+    is_shared_password: bool,
 ) -> ResultType<FlutterSession> {
     let conn_type = if is_file_transfer {
         ConnType::FILE_TRANSFER
@@ -1050,7 +1051,7 @@ pub fn session_add(
     LocalConfig::set_remote_id(&id);
 
     let session: Session<FlutterHandler> = Session {
-        password,
+        password: password.clone(),
         server_keyboard_enabled: Arc::new(RwLock::new(true)),
         server_file_transfer_enabled: Arc::new(RwLock::new(true)),
         server_clipboard_enabled: Arc::new(RwLock::new(true)),
@@ -1068,12 +1069,18 @@ pub fn session_add(
     #[cfg(not(feature = "gpucodec"))]
     let adapter_luid = None;
 
+    let shared_password = if is_shared_password {
+        Some(password)
+    } else {
+        None
+    };
     session.lc.write().unwrap().initialize(
         id.to_owned(),
         conn_type,
         switch_uuid,
         force_relay,
         adapter_luid,
+        shared_password,
     );
 
     let session = Arc::new(session.clone());

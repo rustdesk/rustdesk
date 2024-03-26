@@ -1750,8 +1750,8 @@ impl Connection {
                 return true;
             }
             if let Some(totp) = self.require_2fa.as_ref() {
-                if let Ok(code) = totp.generate_current() {
-                    if tfa.code == code {
+                if let Ok(res) = totp.check_current(&tfa.code) {
+                    if res {
                         self.update_failure(failure, true, 1);
                         self.require_2fa.take();
                         self.send_logon_response().await;

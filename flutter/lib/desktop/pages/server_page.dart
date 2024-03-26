@@ -1,7 +1,6 @@
 // original cm window in Sciter version.
 
 import 'dart:async';
-import 'dart:io';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
@@ -52,7 +51,7 @@ class _DesktopServerPageState extends State<DesktopServerPage>
   @override
   void onWindowClose() {
     Future.wait([gFFI.serverModel.closeAll(), gFFI.close()]).then((_) {
-      if (Platform.isMacOS) {
+      if (isMacOS) {
         RdPlatformChannel.instance.terminate();
       } else {
         windowManager.setPreventClose(false);
@@ -327,7 +326,7 @@ class _AppIcon extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       margin: EdgeInsets.symmetric(horizontal: 4.0),
-      child: loadLogo(30),
+      child: loadIcon(30),
     );
   }
 }
@@ -651,7 +650,7 @@ class _PrivilegeBoardState extends State<_PrivilegeBoard> {
                   translate('Enable recording session'),
                 ),
                 // only windows support block input
-                if (Platform.isWindows)
+                if (isWindows)
                   buildPermissionIcon(
                     client.blockInput,
                     Icons.block,

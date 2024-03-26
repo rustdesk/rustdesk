@@ -1,12 +1,9 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:ffi' hide Size;
-import 'dart:io';
 import 'dart:math';
 
 import 'package:back_button_interceptor/back_button_interceptor.dart';
 import 'package:desktop_multi_window/desktop_multi_window.dart';
-import 'package:ffi/ffi.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -25,7 +22,6 @@ import 'package:get/get.dart';
 import 'package:uni_links/uni_links.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:uuid/uuid.dart';
-import 'package:win32/win32.dart' as win32;
 import 'package:window_manager/window_manager.dart';
 import 'package:window_size/window_size.dart' as window_size;
 
@@ -37,16 +33,24 @@ import 'models/input_model.dart';
 import 'models/model.dart';
 import 'models/platform_model.dart';
 
+import 'package:flutter_hbb/native/win32.dart'
+    if (dart.library.html) 'package:flutter_hbb/web/win32.dart';
+import 'package:flutter_hbb/native/common.dart'
+    if (dart.library.html) 'package:flutter_hbb/web/common.dart';
+
 final globalKey = GlobalKey<NavigatorState>();
 final navigationBarKey = GlobalKey();
 
-final isAndroid = Platform.isAndroid;
-final isIOS = Platform.isIOS;
-final isDesktop = Platform.isWindows || Platform.isMacOS || Platform.isLinux;
-var isWeb = false;
+final isAndroid = isAndroid_;
+final isIOS = isIOS_;
+final isWindows = isWindows_;
+final isMacOS = isMacOS_;
+final isLinux = isLinux_;
+final isDesktop = isDesktop_;
+final isWeb = isWeb_;
 var isWebDesktop = false;
 var isMobile = isAndroid || isIOS;
-var version = "";
+var version = '';
 int androidVersion = 0;
 
 /// only available for Windows target
@@ -631,8 +635,12 @@ closeConnection({String? id}) {
     gFFI.chatModel.hideChatOverlay();
     Navigator.popUntil(globalKey.currentContext!, ModalRoute.withName("/"));
   } else {
-    final controller = Get.find<DesktopTabController>();
-    controller.closeBy(id);
+    if (isWeb) {
+      Navigator.popUntil(globalKey.currentContext!, ModalRoute.withName("/"));
+    } else {
+      final controller = Get.find<DesktopTabController>();
+      controller.closeBy(id);
+    }
   }
 }
 
@@ -1522,7 +1530,10 @@ class LastWindowPosition {
 }
 
 String get windowFramePrefix =>
-    bind.isQs() ? "${kWindowPrefix}qs_" : kWindowPrefix;
+    kWindowPrefix +
+    (bind.isIncomingOnly()
+        ? "incoming_"
+        : (bind.isOutgoingOnly() ? "outgoing_" : ""));
 
 /// Save window position and size on exit
 /// Note that windowId must be provided if it's subwindow
@@ -1536,7 +1547,7 @@ Future<void> saveWindowPosition(WindowType type, {int? windowId}) async {
   late Size sz;
   late bool isMaximized;
   bool isFullscreen = stateGlobal.fullscreen.isTrue ||
-      (Platform.isMacOS && stateGlobal.closeOnFullscreen == true);
+      (isMacOS && stateGlobal.closeOnFullscreen == true);
   setFrameIfMaximized() {
     if (isMaximized) {
       final pos = bind.getLocalFlutterOption(k: windowFramePrefix + type.name);
@@ -1549,7 +1560,13 @@ Future<void> saveWindowPosition(WindowType type, {int? windowId}) async {
 
   switch (type) {
     case WindowType.Main:
-      isMaximized = await windowManager.isMaximized();
+      // Checking `bind.isIncomingOnly()` is a simple workaround for MacOS.
+      // `await windowManager.isMaximized()` will always return true
+      // if is not resizable. The reason is unknown.
+      //
+      // `windowManager.setResizable(!bind.isIncomingOnly());` in main.dart
+      isMaximized =
+          bind.isIncomingOnly() ? false : await windowManager.isMaximized();
       position = await windowManager.getPosition();
       sz = await windowManager.getSize();
       setFrameIfMaximized();
@@ -1569,7 +1586,7 @@ Future<void> saveWindowPosition(WindowType type, {int? windowId}) async {
       setFrameIfMaximized();
       break;
   }
-  if (Platform.isWindows) {
+  if (isWindows) {
     const kMinOffset = -10000;
     const kMaxOffset = 10000;
     if (position.dx < kMinOffset ||
@@ -1793,11 +1810,11 @@ Future<bool> restoreWindowPosition(WindowType type,
       }
       if (lpos.isMaximized == true) {
         await restorePos();
-        if (!bind.isQs()) {
+        if (!(bind.isIncomingOnly() || bind.isOutgoingOnly())) {
           await windowManager.maximize();
         }
       } else {
-        if (!bind.isQs()) {
+        if (!bind.isIncomingOnly() || bind.isOutgoingOnly()) {
           await windowManager.setSize(size);
         }
         await restorePos();
@@ -1840,7 +1857,7 @@ Future<bool> restoreWindowPosition(WindowType type,
 /// initUniLinks should only be used on macos/windows.
 /// we use dbus for linux currently.
 Future<bool> initUniLinks() async {
-  if (Platform.isLinux) {
+  if (isLinux) {
     return false;
   }
   // check cold boot
@@ -1862,7 +1879,7 @@ Future<bool> initUniLinks() async {
 ///
 /// Returns a [StreamSubscription] which can listen the uni links.
 StreamSubscription? listenUniLinks({handleByFlutter = true}) {
-  if (Platform.isLinux) {
+  if (isLinux) {
     return null;
   }
 
@@ -2010,7 +2027,7 @@ List<String>? urlLinkToCmdArgs(Uri uri) {
     command = '--connect';
     id = uri.path.substring("/new/".length);
   } else if (uri.authority == "config") {
-    if (Platform.isAndroid || Platform.isIOS) {
+    if (isAndroid || isIOS) {
       final config = uri.path.substring("/".length);
       // add a timer to make showToast work
       Timer(Duration(seconds: 1), () {
@@ -2019,7 +2036,7 @@ List<String>? urlLinkToCmdArgs(Uri uri) {
     }
     return null;
   } else if (uri.authority == "password") {
-    if (Platform.isAndroid || Platform.isIOS) {
+    if (isAndroid || isIOS) {
       final password = uri.path.substring("/".length);
       if (password.isNotEmpty) {
         Timer(Duration(seconds: 1), () async {
@@ -2086,19 +2103,28 @@ List<String>? urlLinkToCmdArgs(Uri uri) {
   return null;
 }
 
-connectMainDesktop(
-  String id, {
-  required bool isFileTransfer,
-  required bool isTcpTunneling,
-  required bool isRDP,
-  bool? forceRelay,
-}) async {
+connectMainDesktop(String id,
+    {required bool isFileTransfer,
+    required bool isTcpTunneling,
+    required bool isRDP,
+    bool? forceRelay,
+    String? password,
+    bool? isSharedPassword}) async {
   if (isFileTransfer) {
-    await rustDeskWinManager.newFileTransfer(id, forceRelay: forceRelay);
+    await rustDeskWinManager.newFileTransfer(id,
+        password: password,
+        isSharedPassword: isSharedPassword,
+        forceRelay: forceRelay);
   } else if (isTcpTunneling || isRDP) {
-    await rustDeskWinManager.newPortForward(id, isRDP, forceRelay: forceRelay);
+    await rustDeskWinManager.newPortForward(id, isRDP,
+        password: password,
+        isSharedPassword: isSharedPassword,
+        forceRelay: forceRelay);
   } else {
-    await rustDeskWinManager.newRemoteDesktop(id, forceRelay: forceRelay);
+    await rustDeskWinManager.newRemoteDesktop(id,
+        password: password,
+        isSharedPassword: isSharedPassword,
+        forceRelay: forceRelay);
   }
 }
 
@@ -2106,14 +2132,13 @@ connectMainDesktop(
 /// If [isFileTransfer], starts a session only for file transfer.
 /// If [isTcpTunneling], starts a session only for tcp tunneling.
 /// If [isRDP], starts a session only for rdp.
-connect(
-  BuildContext context,
-  String id, {
-  bool isFileTransfer = false,
-  bool isTcpTunneling = false,
-  bool isRDP = false,
-  bool forceRelay = false,
-}) async {
+connect(BuildContext context, String id,
+    {bool isFileTransfer = false,
+    bool isTcpTunneling = false,
+    bool isRDP = false,
+    bool forceRelay = false,
+    String? password,
+    bool? isSharedPassword}) async {
   if (id == '') return;
   if (!isDesktop || desktopType == DesktopType.main) {
     try {
@@ -2141,6 +2166,8 @@ connect(
         isFileTransfer: isFileTransfer,
         isTcpTunneling: isTcpTunneling,
         isRDP: isRDP,
+        password: password,
+        isSharedPassword: isSharedPassword,
         forceRelay: forceRelay2,
       );
     } else {
@@ -2149,6 +2176,8 @@ connect(
         'isFileTransfer': isFileTransfer,
         'isTcpTunneling': isTcpTunneling,
         'isRDP': isRDP,
+        'password': password,
+        'isSharedPassword': isSharedPassword,
         'forceRelay': forceRelay,
       });
     }
@@ -2162,14 +2191,16 @@ connect(
       Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (BuildContext context) => FileManagerPage(id: id),
+          builder: (BuildContext context) => FileManagerPage(
+              id: id, password: password, isSharedPassword: isSharedPassword),
         ),
       );
     } else {
       Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (BuildContext context) => RemotePage(id: id),
+          builder: (BuildContext context) => RemotePage(
+              id: id, password: password, isSharedPassword: isSharedPassword),
         ),
       );
     }
@@ -2225,7 +2256,7 @@ Future<void> reloadAllWindows() async {
 /// [Note]
 /// Portable build is only available on Windows.
 bool isRunningInPortableMode() {
-  if (!Platform.isWindows) {
+  if (!isWindows) {
     return false;
   }
   return bool.hasEnvironment(kEnvPortableExecutable);
@@ -2238,7 +2269,7 @@ Future<void> onActiveWindowChanged() async {
   if (rustDeskWinManager.getActiveWindows().isEmpty) {
     // close all sub windows
     try {
-      if (Platform.isLinux) {
+      if (isLinux) {
         await Future.wait([
           saveWindowPosition(WindowType.Main),
           rustDeskWinManager.closeAllSubWindows()
@@ -2252,7 +2283,7 @@ Future<void> onActiveWindowChanged() async {
       debugPrint("Start closing RustDesk...");
       await windowManager.setPreventClose(false);
       await windowManager.close();
-      if (Platform.isMacOS) {
+      if (isMacOS) {
         RdPlatformChannel.instance.terminate();
       }
     }
@@ -2268,7 +2299,7 @@ Timer periodic_immediate(Duration duration, Future<void> Function() callback) {
 
 /// return a human readable windows version
 WindowsTarget getWindowsTarget(int buildNumber) {
-  if (!Platform.isWindows) {
+  if (!isWindows) {
     return WindowsTarget.naw;
   }
   if (buildNumber >= 22000) {
@@ -2294,35 +2325,7 @@ WindowsTarget getWindowsTarget(int buildNumber) {
 /// [Note]
 /// Please use this function wrapped with `Platform.isWindows`.
 int getWindowsTargetBuildNumber() {
-  final rtlGetVersion = DynamicLibrary.open('ntdll.dll').lookupFunction<
-      Void Function(Pointer<win32.OSVERSIONINFOEX>),
-      void Function(Pointer<win32.OSVERSIONINFOEX>)>('RtlGetVersion');
-  final osVersionInfo = getOSVERSIONINFOEXPointer();
-  rtlGetVersion(osVersionInfo);
-  int buildNumber = osVersionInfo.ref.dwBuildNumber;
-  calloc.free(osVersionInfo);
-  return buildNumber;
-}
-
-/// Get Windows OS version pointer
-///
-/// [Note]
-/// Please use this function wrapped with `Platform.isWindows`.
-Pointer<win32.OSVERSIONINFOEX> getOSVERSIONINFOEXPointer() {
-  final pointer = calloc<win32.OSVERSIONINFOEX>();
-  pointer.ref
-    ..dwOSVersionInfoSize = sizeOf<win32.OSVERSIONINFOEX>()
-    ..dwBuildNumber = 0
-    ..dwMajorVersion = 0
-    ..dwMinorVersion = 0
-    ..dwPlatformId = 0
-    ..szCSDVersion = ''
-    ..wServicePackMajor = 0
-    ..wServicePackMinor = 0
-    ..wSuiteMask = 0
-    ..wProductType = 0
-    ..wReserved = 0;
-  return pointer;
+  return getWindowsTargetBuildNumber_();
 }
 
 /// Indicating we need to use compatible ui mode.
@@ -2330,7 +2333,7 @@ Pointer<win32.OSVERSIONINFOEX> getOSVERSIONINFOEXPointer() {
 /// [Conditions]
 /// - Windows 7, window will overflow when we use frameless ui.
 bool get kUseCompatibleUiMode =>
-    Platform.isWindows &&
+    isWindows &&
     const [WindowsTarget.w7].contains(windowsBuildNumber.windowsVersion);
 
 class ServerConfig {
@@ -2460,7 +2463,7 @@ Future<void> updateSystemWindowTheme() async {
   // Set system window theme for macOS.
   final userPreference = MyTheme.getThemeModePreference();
   if (userPreference != ThemeMode.system) {
-    if (Platform.isMacOS) {
+    if (isMacOS) {
       await RdPlatformChannel.instance.changeSystemWindowTheme(
           userPreference == ThemeMode.light
               ? SystemWindowTheme.light
@@ -2548,7 +2551,7 @@ void onCopyFingerprint(String value) {
 
 Future<bool> callMainCheckSuperUserPermission() async {
   bool checked = await bind.mainCheckSuperUserPermission();
-  if (Platform.isMacOS) {
+  if (isMacOS) {
     await windowManager.show();
   }
   return checked;
@@ -2556,7 +2559,7 @@ Future<bool> callMainCheckSuperUserPermission() async {
 
 Future<void> start_service(bool is_start) async {
   bool checked = !bind.mainIsInstalled() ||
-      !Platform.isMacOS ||
+      !isMacOS ||
       await callMainCheckSuperUserPermission();
   if (checked) {
     bind.mainSetOption(key: "stop-service", value: is_start ? "" : "Y");
@@ -2981,7 +2984,6 @@ Future<bool> setServerConfig(
   await bind.mainSetOption(key: 'relay-server', value: config.relayServer);
   await bind.mainSetOption(key: 'api-server', value: config.apiServer);
   await bind.mainSetOption(key: 'key', value: config.key);
-
   final newApiServer = await bind.mainGetApiServer();
   if (oldApiServer.isNotEmpty &&
       oldApiServer != newApiServer &&
@@ -3079,25 +3081,52 @@ Color? disabledTextColor(BuildContext context, bool enabled) {
       : Theme.of(context).textTheme.titleLarge?.color?.withOpacity(0.6);
 }
 
-Widget loadLogo(double size) {
-  return Image.asset('assets/logo.png',
+// max 300 x 60
+Widget loadLogo() {
+  return FutureBuilder<ByteData>(
+      future: rootBundle.load('assets/logo.png'),
+      builder: (BuildContext context, AsyncSnapshot<ByteData> snapshot) {
+        if (snapshot.hasData) {
+          final image = Image.asset(
+            'assets/logo.png',
+            fit: BoxFit.contain,
+            errorBuilder: (ctx, error, stackTrace) {
+              return Container();
+            },
+          );
+          return Container(
+            constraints: BoxConstraints(maxWidth: 300, maxHeight: 60),
+            child: image,
+          ).marginOnly(left: 12, right: 12, top: 12);
+        }
+        return const Offstage();
+      });
+}
+
+Widget loadIcon(double size) {
+  return Image.asset('assets/icon.png',
       width: size,
       height: size,
       errorBuilder: (ctx, error, stackTrace) => SvgPicture.asset(
-            'assets/logo.svg',
+            'assets/icon.svg',
             width: size,
             height: size,
           ));
 }
 
-var desktopQsHomeLeftPaneSize = Size(280, 300);
-Size getDesktopQsHomeSize() {
-  final magicWidth = 11.0;
-  final magicHeight = 8.0;
-  return desktopQsHomeLeftPaneSize +
+var imcomingOnlyHomeSize = Size(280, 300);
+Size getIncomingOnlyHomeSize() {
+  final magicWidth = isWindows ? 11.0 : 2.0;
+  final magicHeight = 10.0;
+  return imcomingOnlyHomeSize +
       Offset(magicWidth, kDesktopRemoteTabBarHeight + magicHeight);
 }
 
-Size getDesktopQsSettingsSize() {
+Size getIncomingOnlySettingsSize() {
   return Size(768, 600);
+}
+
+bool isInHomePage() {
+  final controller = Get.find<DesktopTabController>();
+  return controller.state.value.selected == 0;
 }

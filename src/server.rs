@@ -550,12 +550,8 @@ async fn sync_and_watch_config_dir() {
 
     let mut cfg0 = (Config::get(), Config2::get());
     let mut synced = false;
-    let tries =
-        if std::env::args().len() == 2 && std::env::args().nth(1) == Some("--server".to_owned()) {
-            30
-        } else {
-            3
-        };
+    let is_server = std::env::args().nth(1) == Some("--server".to_owned());
+    let tries = if is_server { 30 } else { 3 };
     log::debug!("#tries of ipc service connection: {}", tries);
     use hbb_common::sleep;
     for i in 1..=tries {
@@ -597,7 +593,14 @@ async fn sync_and_watch_config_dir() {
                         match conn.send(&Data::SyncConfig(Some(cfg.clone().into()))).await {
                             Err(e) => {
                                 log::error!("sync config to root failed: {}", e);
-                                break;
+                                match crate::ipc::connect(1000, "_service").await {
+                                    Ok(mut _conn) => {
+                                        conn = _conn;
+                                        log::info!("reconnected to ipc_service");
+                                        break;
+                                    }
+                                    _ => {}
+                                }
                             }
                             _ => {
                                 cfg0 = cfg;

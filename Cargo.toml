@@ -4,7 +4,7 @@ version = "1.2.4"
 authors = ["rustdesk <info@rustdesk.com>"]
 edition = "2021"
 build= "build.rs"
-description = "Open Source Remote Desktop Access Software"
+description = "RustDesk Remote Desktop"
 default-run = "rustdesk"
 rust-version = "1.75"
 
@@ -45,7 +45,7 @@ unix-file-copy-paste = [
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-whoami = "1.4"
+whoami = "1.5.0"
 scrap = { path = "libs/scrap", features = ["wayland"] }
 hbb_common = { path = "libs/hbb_common" }
 serde_derive = "1.0"
@@ -162,8 +162,9 @@ members = ["libs/scrap", "libs/hbb_common", "libs/enigo", "libs/clipboard", "lib
 exclude = ["vdi/host", "examples/custom_plugin"]
 
 [package.metadata.winres]
-LegalCopyright = "Copyright © 2024 Purslane Ltd."
+LegalCopyright = "Copyright © 2024 Purslane Ltd. All rights reserved."
 ProductName = "RustDesk"
+FileDescription = "RustDesk Remote Desktop"
 OriginalFilename = "rustdesk.exe"
 
 [target.'cfg(target_os="windows")'.build-dependencies]

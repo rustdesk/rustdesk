@@ -1,4 +1,5 @@
 import Connection from "./connection";
+import PORT from "./connection";
 import _sodium from "libsodium-wrappers";
 import { CursorData } from "./message";
 import { loadVp9 } from "./codec";
@@ -16,18 +17,24 @@ export function isDesktop() {
   return !isMobile();
 }
 
-export function msgbox(type, title, text) {
+export function msgbox(type, title, text, link) {
   if (!type || (type == 'error' && !text)) return;
   const text2 = text.toLowerCase();
   var hasRetry = checkIfRetry(type, title, text) ? 'true' : '';
-  onGlobalEvent(JSON.stringify({ name: 'msgbox', type, title, text, hasRetry }));
+  onGlobalEvent(JSON.stringify({ name: 'msgbox', type, title, text, link: link ?? '', hasRetry }));
 }
 
 function jsonfyForDart(payload) {
   var tmp = {};
   for (const [key, value] of Object.entries(payload)) {
     if (!key) continue;
-    tmp[key] = value instanceof Uint8Array ? '[' + value.toString() + ']' : JSON.stringify(value);
+    if (value instanceof String || typeof value == 'string') {
+      tmp[key] = value;
+    } else if (value instanceof Uint8Array) {
+      tmp[key] = '[' + value.toString() + ']';
+    } else {
+      tmp[key] = JSON.stringify(value);
+    }
   }
   return tmp;
 }
@@ -53,10 +60,10 @@ if (YUVCanvas.WebGLFrameSink.isAvailable()) {
 }
 let testSpeed = [0, 0];
 
-export function draw(frame) {
+export function draw(display, frame) {
   if (yuvWorker) {
     // frame's (y/u/v).bytes already detached, can not transferrable any more.
-    yuvWorker.postMessage(frame);
+    yuvWorker.postMessage({ display, frame });
   } else {
     var tm0 = new Date().getTime();
     yuvCanvas.drawFrame(frame);
@@ -74,7 +81,7 @@ export function draw(frame) {
     for (let i = 0; i < size; i += row) {
       flipPixels.set(pixels.subarray(i, i + row), end - i);
     }
-    onRgba(flipPixels);
+    onRgba(display, flipPixels);
     testSpeed[1] += new Date().getTime() - tm0;
     testSpeed[0] += 1;
     if (testSpeed[0] > 30) {
@@ -188,8 +195,14 @@ window.setByName = (name, value) => {
       break;
     case 'login':
       value = JSON.parse(value);
-      curConn.setRemember(value.remember == 'true');
-      curConn.login(value.password);
+      curConn.setRemember(value.remember);
+      curConn.login({
+        os_login: {
+          username: value.os_username,
+          password: value.os_password,
+        },
+        password: value.password,
+      });
       break;
     case 'close':
       close();
@@ -202,6 +215,9 @@ window.setByName = (name, value) => {
       break;
     case 'toggle_option':
       curConn.toggleOption(value);
+      break;
+    case 'toggle_privacy_mode':
+      curConn.togglePrivacyMode(value);
       break;
     case 'image_quality':
       curConn.setImageQuality(value);
@@ -253,16 +269,62 @@ window.setByName = (name, value) => {
       }
       curConn.inputMouse(mask, parseInt(value.x || '0'), parseInt(value.y || '0'), value.alt == 'true', value.ctrl == 'true', value.shift == 'true', value.command == 'true');
       break;
+    case 'send_2fa':
+      curConn.send2fa(value);
+      break;
     case 'option':
       value = JSON.parse(value);
       localStorage.setItem(value.name, value.value);
       break;
-    case 'peer_option':
+    case 'options':
+      value = JSON.parse(value);
+      for (const [key, value] of Object.entries(value)) {
+        localStorage.setItem(key, value);
+      }
+      break;
+    case 'option:local':
+    case 'option:flutter:local':
+    case 'option:flutter:peer':
+      value = JSON.parse(value);
+      localStorage.setItem(name + ':' + value.name, value.value);
+      break;
+    case 'option:peer':
       value = JSON.parse(value);
       curConn.setOption(value.name, value.value);
       break;
     case 'input_os_password':
       curConn.inputOsPassword(value);
+      break;
+    case 'check_conn_status':
+      curConn.checkConnStatus();
+      break;
+    case 'remove_discovered':
+      removeDiscovered(value);
+      break;
+    case 'discover':
+      // TODO: discover
+      break;
+    case 'session_add_sync':
+      return sessionAdd(value);
+    case 'session_start':
+      sessionStart(value);
+      break;
+    case 'session_close':
+      sessionClose(value);
+      break;
+    case 'elevate_with_logon':
+      curConn.elevateWithLogon(value);
+      break;
+    case 'forget':
+      curConn.setRemember(false);
+      break;
+    case 'peer_has_password':
+      const options = getPeers()[value] || {};
+      return (options['password'] ?? '') !== '';
+    case 'peer_exists':
+      return !(!getPeers()[value]);
+    case 'restart':
+      curConn.restart();
       break;
     default:
       break;
@@ -300,17 +362,68 @@ function _getByName(name, arg) {
       return curConn.getOption(arg) || false;
     case 'option':
       return localStorage.getItem(arg);
+    case 'options':
+      const keys = [
+        'custom-rendezvous-server',
+        'relay-server',
+        'api-server',
+        'key'
+      ];
+      const obj = {};
+      keys.forEach(key => {
+        const v = localStorage.getItem(key);
+        if (v) obj[key] = v;
+      });
+      return JSON.stringify(obj);
+    case 'option:local':
+    case 'option:flutter:local':
+    case 'option:flutter:peer':
+      return localStorage.getItem(name + ':' + arg);
     case 'image_quality':
       return curConn.getImageQuality();
     case 'translate':
       arg = JSON.parse(arg);
       return translate(arg.locale, arg.text);
-    case 'peer_option':
+    case 'option:peer':
       return curConn.getOption(arg);
+    case 'option:toggle':
+      return curConn.getToggleOption(arg);
+    case 'get_conn_status':
+      if (curConn) {
+        return curConn.getStatus();
+      } else {
+        return JSON.stringify({ status_num: 0 });
+      }
     case 'test_if_valid_server':
       break;
     case 'version':
       return version;
+    case 'load_recent_peers':
+      const peersRecent = localStorage.getItem('peers-recent');
+      if (peersRecent) {
+        onRegisteredEvent(JSON.stringify({ name: 'load_recent_peers', peers: peersRecent }));
+      }
+      break;
+    case 'load_fav_peers':
+      const peersFav = localStorage.getItem('peers-fav');
+      if (peersFav) {
+        onRegisteredEvent(JSON.stringify({ name: 'load_fav_peers', peers: peersFav }));
+      }
+      break;
+    case 'load_lan_peers':
+      const peersLan = localStorage.getItem('peers-lan');
+      if (peersLan) {
+        onRegisteredEvent(JSON.stringify({ name: 'load_lan_peers', peers: peersLan }));
+      }
+      break;
+    case 'load_recent_peers_sync':
+      return localStorage.getItem('peers-recent') ?? '{}';
+    case 'load_lan_peers_sync':
+      return localStorage.getItem('peers-lan') ?? '{}';
+    case 'api_server':
+      return getApiServer();
+    case 'is_using_public_server':
+      return !localStorage.getItem('custom-rendezvous-server');
   }
   return '';
 }
@@ -330,7 +443,7 @@ export function playAudio(packet) {
 window.init = async () => {
   if (yuvWorker) {
     yuvWorker.onmessage = (e) => {
-      onRgba(e.data);
+      onRgba(e.data.display, e.data.frame);
     }
   }
   opusWorker.onmessage = (e) => {
@@ -342,8 +455,20 @@ window.init = async () => {
 }
 
 export function getPeers() {
+  return getJsonObj('peers');
+}
+
+export function getRecentPeers() {
+  return getJsonObj('peers-recent');
+}
+
+export function getLanPeers() {
+  return getJsonObj('peers-lan');
+}
+
+export function getJsonObj(key) {
   try {
-    return JSON.parse(localStorage.getItem('peers')) || {};
+    return JSON.parse(localStorage.getItem(key)) || {};
   } catch (e) {
     return {};
   }
@@ -381,3 +506,102 @@ export function copyToClipboard(text) {
     }
   }
 }
+
+// ========================== peers begin ==========================
+function removeDiscovered(id) {
+  try {
+    const v = localStorage.getItem('discovered');
+    if (!v) return;
+    const discovered = JSON.parse(localStorage.getItem('discovered'));
+    delete discovered[id];
+    localStorage.setItem('discovered', JSON.stringify(discovered));
+  } catch (e) {
+    console.error(e);
+  }
+}
+// ========================== peers end ===========================
+
+// ========================== session begin ==========================
+function sessionAdd(value) {
+  try {
+    const data = JSON.parse(value);
+    window.curConn?.close();
+    const conn = new Connection();
+    setConn(conn);
+    return '';
+  } catch (e) {
+    return e.message;
+  }
+}
+
+function sessionStart(value) {
+  try {
+    const conn = getConn();
+    if (!conn) {
+      return;
+    }
+
+    const data = JSON.parse(value);
+    if (data['id']) {
+      startConn(data['id']);
+    } else {
+      msgbox('error', 'Error', 'No id found in session data ' + value, '');
+    }
+  } catch (e) {
+    // TODO: better error handling
+    msgbox('error', 'Error', e.message, '');
+  }
+}
+
+function sessionClose(value) {
+  close();
+}
+// ========================== session end ===========================
+
+// ========================== settings begin ==========================
+function increasePort(host, offset) {
+  function isIPv6(str) {
+    const ipv6Pattern = /^([0-9a-fA-F]{0,4}:){1,7}[0-9a-fA-F]{0,4}$/;
+    return ipv6Pattern.test(str);
+  }
+
+  if (isIPv6(host)) {
+    if (host.startsWith('[')) {
+      let tmp = host.split(']:');
+      if (tmp.length === 2) {
+        let port = parseInt(tmp[1]) || 0;
+        if (port > 0) {
+          return `${tmp[0]}]:${port + offset}`;
+        }
+      }
+    }
+  } else if (host.includes(':')) {
+    let tmp = host.split(':');
+    if (tmp.length === 2) {
+      let port = parseInt(tmp[1]) || 0;
+      if (port > 0) {
+        return `${tmp[0]}:${port + offset}`;
+      }
+    }
+  }
+  return host;
+}
+
+function getApiServer() {
+  const api_server = localStorage.getItem('api-server');
+  if (api_server) {
+    return api_server;
+  }
+
+  const custom_rendezvous_server = localStorage.getItem('custom-rendezvous-server');
+  if (custom_rendezvous_server) {
+    let s = increasePort(custom_rendezvous_server, -2);
+    if (s == custom_rendezvous_server) {
+      return `http://${s}:${PORT - 2}`;
+    } else {
+      return `http://${s}`;
+    }
+  }
+  return 'https://admin.rustdesk.com';
+}
+// ========================== settings end ===========================

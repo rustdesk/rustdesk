@@ -29,9 +29,10 @@ pub fn make_tray() -> hbb_common::ResultType<()> {
     {
         icon = include_bytes!("../res/tray-icon.ico");
     }
+
     let (icon_rgba, icon_width, icon_height) = {
-        let image = image::load_from_memory(icon)
-            .context("Failed to open icon path")?
+        let image = load_icon_from_asset()
+            .unwrap_or(image::load_from_memory(icon).context("Failed to open icon path")?)
             .into_rgba8();
         let (width, height) = image.dimensions();
         let rgba = image.into_raw();
@@ -201,4 +202,21 @@ async fn start_query_session_count(sender: std::sync::mpsc::Sender<Data>) {
         }
         hbb_common::sleep(1.).await;
     }
+}
+
+fn load_icon_from_asset() -> Option<image::DynamicImage> {
+    let Some(path) = std::env::current_exe().map_or(None, |x| x.parent().map(|x| x.to_path_buf()))
+    else {
+        return None;
+    };
+    #[cfg(target_os = "macos")]
+    let path = path.join("../Frameworks/App.framework/Resources/flutter_assets/assets/icon.png");
+    #[cfg(windows)]
+    let path = path.join(r"data\flutter_assets\assets\icon.png");
+    if path.exists() {
+        if let Ok(image) = image::open(path) {
+            return Some(image);
+        }
+    }
+    None
 }

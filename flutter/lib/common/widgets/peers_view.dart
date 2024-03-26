@@ -196,18 +196,25 @@ class _PeersViewState extends State<_PeersView> with WindowListener {
               // No need to listen the currentTab change event.
               // Because the currentTab change event will trigger the peers change event,
               // and the peers change event will trigger _buildPeersView().
-              final currentTab = Provider.of<PeerTabModel>(context, listen: false).currentTab;
-              final hideAbTagsPanel = bind.mainGetLocalOption(key: "hideAbTagsPanel").isNotEmpty;
+              final currentTab =
+                  Provider.of<PeerTabModel>(context, listen: false).currentTab;
+              final hideAbTagsPanel =
+                  bind.mainGetLocalOption(key: "hideAbTagsPanel").isNotEmpty;
               return isDesktop
                   ? Obx(
                       () => SizedBox(
                         width: peerCardUiType.value != PeerUiType.list
                             ? 220
-                            : currentTab == PeerTabIndex.group.index || (currentTab == PeerTabIndex.ab.index && !hideAbTagsPanel)
-                              ? windowWidth - 390 :
-                                windowWidth - 227,
-                        height:
-                            peerCardUiType.value == PeerUiType.grid ? 140 : peerCardUiType.value != PeerUiType.list ? 42 : 45,
+                            : currentTab == PeerTabIndex.group.index ||
+                                    (currentTab == PeerTabIndex.ab.index &&
+                                        !hideAbTagsPanel)
+                                ? windowWidth - 390
+                                : windowWidth - 227,
+                        height: peerCardUiType.value == PeerUiType.grid
+                            ? 140
+                            : peerCardUiType.value != PeerUiType.list
+                                ? 42
+                                : 45,
                         child: visibilityChild,
                       ),
                     )
@@ -354,7 +361,7 @@ abstract class BasePeersView extends StatelessWidget {
   final String loadEvent;
   final PeerFilter? peerFilter;
   final PeerCardBuilder peerCardBuilder;
-  final RxList<Peer>? initPeers;
+  final GetInitPeers? getInitPeers;
 
   const BasePeersView({
     Key? key,
@@ -362,13 +369,14 @@ abstract class BasePeersView extends StatelessWidget {
     required this.loadEvent,
     this.peerFilter,
     required this.peerCardBuilder,
-    required this.initPeers,
+    required this.getInitPeers,
   }) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
     return _PeersView(
-        peers: Peers(name: name, loadEvent: loadEvent, initPeers: initPeers),
+        peers:
+            Peers(name: name, loadEvent: loadEvent, getInitPeers: getInitPeers),
         peerFilter: peerFilter,
         peerCardBuilder: peerCardBuilder);
   }
@@ -385,7 +393,7 @@ class RecentPeersView extends BasePeersView {
             peer: peer,
             menuPadding: menuPadding,
           ),
-          initPeers: null,
+          getInitPeers: null,
         );
 
   @override
@@ -407,7 +415,7 @@ class FavoritePeersView extends BasePeersView {
             peer: peer,
             menuPadding: menuPadding,
           ),
-          initPeers: null,
+          getInitPeers: null,
         );
 
   @override
@@ -429,7 +437,7 @@ class DiscoveredPeersView extends BasePeersView {
             peer: peer,
             menuPadding: menuPadding,
           ),
-          initPeers: null,
+          getInitPeers: null,
         );
 
   @override
@@ -445,7 +453,7 @@ class AddressBookPeersView extends BasePeersView {
       {Key? key,
       EdgeInsets? menuPadding,
       ScrollController? scrollController,
-      required RxList<Peer> initPeers})
+      required GetInitPeers getInitPeers})
       : super(
           key: key,
           name: 'address book peer',
@@ -456,7 +464,7 @@ class AddressBookPeersView extends BasePeersView {
             peer: peer,
             menuPadding: menuPadding,
           ),
-          initPeers: initPeers,
+          getInitPeers: getInitPeers,
         );
 
   static bool _hitTag(List<dynamic> selectedTags, List<dynamic> idents) {
@@ -486,7 +494,7 @@ class MyGroupPeerView extends BasePeersView {
       {Key? key,
       EdgeInsets? menuPadding,
       ScrollController? scrollController,
-      required RxList<Peer> initPeers})
+      required GetInitPeers getInitPeers})
       : super(
           key: key,
           name: 'group peer',
@@ -496,7 +504,7 @@ class MyGroupPeerView extends BasePeersView {
             peer: peer,
             menuPadding: menuPadding,
           ),
-          initPeers: initPeers,
+          getInitPeers: getInitPeers,
         );
 
   static bool filter(Peer peer) {

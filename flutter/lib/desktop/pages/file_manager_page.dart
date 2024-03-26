@@ -53,11 +53,13 @@ class FileManagerPage extends StatefulWidget {
       {Key? key,
       required this.id,
       required this.password,
+      required this.isSharedPassword,
       required this.tabController,
       this.forceRelay})
       : super(key: key);
   final String id;
   final String? password;
+  final bool? isSharedPassword;
   final bool? forceRelay;
   final DesktopTabController tabController;
 
@@ -84,13 +86,14 @@ class _FileManagerPageState extends State<FileManagerPage>
     _ffi.start(widget.id,
         isFileTransfer: true,
         password: widget.password,
+        isSharedPassword: widget.isSharedPassword,
         forceRelay: widget.forceRelay);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _ffi.dialogManager
           .showLoading(translate('Connecting...'), onCancel: closeConnection);
     });
     Get.put(_ffi, tag: 'ft_${widget.id}');
-    if (!Platform.isLinux) {
+    if (!isLinux) {
       WakelockPlus.enable();
     }
     debugPrint("File manager page init success with id ${widget.id}");
@@ -103,7 +106,7 @@ class _FileManagerPageState extends State<FileManagerPage>
     model.close().whenComplete(() {
       _ffi.close();
       _ffi.dialogManager.dismissAll();
-      if (!Platform.isLinux) {
+      if (!isLinux) {
         WakelockPlus.disable();
       }
       Get.delete<FFI>(tag: 'ft_${widget.id}');
@@ -1295,7 +1298,7 @@ class _FileManagerViewState extends State<FileManagerView> {
                     onPointerSignal: (e) {
                       if (e is PointerScrollEvent) {
                         final sc = _breadCrumbScroller;
-                        final scale = Platform.isWindows ? 2 : 4;
+                        final scale = isWindows ? 2 : 4;
                         sc.jumpTo(sc.offset + e.scrollDelta.dy / scale);
                       }
                     },

@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:flutter/material.dart';
@@ -44,6 +43,7 @@ class _PortForwardTabPageState extends State<PortForwardTabPage> {
           key: ValueKey(params['id']),
           id: params['id'],
           password: params['password'],
+          isSharedPassword: params['isSharedPassword'],
           tabController: tabController,
           isRDP: isRDP,
           forceRelay: params['forceRelay'],
@@ -79,6 +79,7 @@ class _PortForwardTabPageState extends State<PortForwardTabPage> {
               key: ValueKey(args['id']),
               id: id,
               password: args['password'],
+              isSharedPassword: args['isSharedPassword'],
               isRDP: isRDP,
               tabController: tabController,
               forceRelay: args['forceRelay'],
@@ -111,7 +112,7 @@ class _PortForwardTabPageState extends State<PortForwardTabPage> {
             labelGetter: DesktopTab.tablabelGetter,
           )),
     );
-    return Platform.isMacOS || kUseCompatibleUiMode
+    return isMacOS || kUseCompatibleUiMode
         ? tabWidget
         : Obx(
             () => SubWindowDragToResizeArea(

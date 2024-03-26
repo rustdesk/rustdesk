@@ -865,7 +865,16 @@ pub fn username() -> String {
 #[inline]
 pub fn hostname() -> String {
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    return whoami::hostname();
+    {
+        #[allow(unused_mut)]
+        let mut name = whoami::hostname();
+        // some time, there is .local, some time not, so remove it for osx
+        #[cfg(target_os = "macos")]
+        if name.ends_with(".local") {
+            name = name.trim_end_matches(".local").to_owned();
+        }
+        name
+    }
     #[cfg(any(target_os = "android", target_os = "ios"))]
     return DEVICE_NAME.lock().unwrap().clone();
 }
@@ -1467,10 +1476,117 @@ impl ClipboardContext {
     }
 }
 
+pub fn load_custom_client() {
+    #[cfg(debug_assertions)]
+    if let Ok(data) = std::fs::read_to_string("./custom.txt") {
+        read_custom_client(data.trim());
+        return;
+    }
+    let Some(path) = std::env::current_exe().map_or(None, |x| x.parent().map(|x| x.to_path_buf()))
+    else {
+        return;
+    };
+    #[cfg(target_os = "macos")]
+    let path = path.join("../Resources");
+    let path = path.join("custom.txt");
+    if path.is_file() {
+        let Ok(data) = std::fs::read_to_string(&path) else {
+            log::error!("Failed to read custom client config");
+            return;
+        };
+        read_custom_client(&data.trim());
+    }
+}
+
+pub fn read_custom_client(config: &str) {
+    let Ok(data) = decode64(config) else {
+        log::error!("Failed to decode custom client config");
+        return;
+    };
+    const KEY: &str = "5Qbwsde3unUcJBtrx9ZkvUmwFNoExHzpryHuPUdqlWM=";
+    let Some(pk) = get_rs_pk(KEY) else {
+        log::error!("Failed to parse public key of custom client");
+        return;
+    };
+    let Ok(data) = sign::verify(&data, &pk) else {
+        log::error!("Failed to dec custom client config");
+        return;
+    };
+    let Ok(mut data) =
+        serde_json::from_slice::<std::collections::HashMap<String, serde_json::Value>>(&data)
+    else {
+        log::error!("Failed to parse custom client config");
+        return;
+    };
+
+    if let Some(app_name) = data.remove("app-name") {
+        if let Some(app_name) = app_name.as_str() {
+            *config::APP_NAME.write().unwrap() = app_name.to_owned();
+        }
+    }
+    if let Some(default_settings) = data.remove("default-settings") {
+        if let Some(default_settings) = default_settings.as_object() {
+            for (k, v) in default_settings {
+                let Some(v) = v.as_str() else {
+                    continue;
+                };
+                if k.starts_with("$$") {
+                    config::DEFAULT_DISPLAY_SETTINGS
+                        .write()
+                        .unwrap()
+                        .insert(k.clone(), v[2..].to_owned());
+                } else if k.starts_with("$") {
+                    config::DEFAULT_LOCAL_SETTINGS
+                        .write()
+                        .unwrap()
+                        .insert(k.clone(), v[1..].to_owned());
+                } else {
+                    config::DEFAULT_SETTINGS
+                        .write()
+                        .unwrap()
+                        .insert(k.clone(), v.to_owned());
+                }
+            }
+        }
+    }
+    if let Some(overwrite_settings) = data.remove("override-settings") {
+        if let Some(overwrite_settings) = overwrite_settings.as_object() {
+            for (k, v) in overwrite_settings {
+                let Some(v) = v.as_str() else {
+                    continue;
+                };
+                if k.starts_with("$$") {
+                    config::OVERWRITE_DISPLAY_SETTINGS
+                        .write()
+                        .unwrap()
+                        .insert(k.clone(), v[2..].to_owned());
+                } else if k.starts_with("$") {
+                    config::OVERWRITE_LOCAL_SETTINGS
+                        .write()
+                        .unwrap()
+                        .insert(k.clone(), v[1..].to_owned());
+                } else {
+                    config::OVERWRITE_SETTINGS
+                        .write()
+                        .unwrap()
+                        .insert(k.clone(), v.to_owned());
+                }
+            }
+        }
+    }
+    for (k, v) in data {
+        if let Some(v) = v.as_str() {
+            config::HARD_SETTINGS
+                .write()
+                .unwrap()
+                .insert(k, v.to_owned());
+        };
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use chrono::{format::StrftimeItems, Local};
     use hbb_common::tokio::{
         self,
         time::{interval, interval_at, sleep, Duration, Instant, Interval},
@@ -1478,9 +1594,13 @@ mod tests {
     use std::collections::HashSet;
 
     #[inline]
-    fn now_time_string() -> String {
-        let format = StrftimeItems::new("%Y-%m-%d %H:%M:%S");
-        Local::now().format_with_items(format).to_string()
+    fn get_timestamp_secs() -> u128 {
+        (std::time::SystemTime::UNIX_EPOCH
+            .elapsed()
+            .unwrap()
+            .as_millis()
+            + 500)
+            / 1000
     }
 
     fn interval_maker() -> Interval {
@@ -1510,13 +1630,13 @@ mod tests {
                         if tokio_times.len() >= 10 && times.len() >= 10 {
                             break;
                         }
-                        times.push(now_time_string());
+                        times.push(get_timestamp_secs());
                     }
                     _ = tokio_timer.tick() => {
                         if tokio_times.len() >= 10 && times.len() >= 10 {
                             break;
                         }
-                        tokio_times.push(now_time_string());
+                        tokio_times.push(get_timestamp_secs());
                     }
                 }
             }
@@ -1532,14 +1652,14 @@ mod tests {
         loop {
             tokio::select! {
                 _ = timer.tick() => {
-                    times.push(now_time_string());
+                    times.push(get_timestamp_secs());
                     if times.len() == 5 {
                         break;
                     }
                 }
             }
         }
-        let times2: HashSet<String> = HashSet::from_iter(times.clone());
+        let times2: HashSet<u128> = HashSet::from_iter(times.clone());
         assert_eq!(times.len(), times2.len() + 3);
     }
 
@@ -1548,14 +1668,14 @@ mod tests {
     #[tokio::test]
     async fn test_RustDesk_interval_sleep() {
         let base_intervals = [interval_maker, interval_at_maker];
-        for maker in base_intervals.into_iter() {
+        for (i, maker) in base_intervals.into_iter().enumerate() {
             let mut timer = rustdesk_interval(maker());
             let mut times = Vec::new();
             sleep(Duration::from_secs(3)).await;
             loop {
                 tokio::select! {
                     _ = timer.tick() => {
-                        times.push(now_time_string());
+                        times.push(get_timestamp_secs());
                         if times.len() == 5 {
                             break;
                         }
@@ -1565,8 +1685,8 @@ mod tests {
             // No mutliple ticks in the `interval` time.
             // Values in "times" are unique and are less than normal tokio interval.
             // See previous test (test_tokio_time_interval_sleep) for comparison.
-            let times2: HashSet<String> = HashSet::from_iter(times.clone());
-            assert_eq!(times.len(), times2.len());
+            let times2: HashSet<u128> = HashSet::from_iter(times.clone());
+            assert_eq!(times.len(), times2.len(), "test: {}", i);
         }
     }
 

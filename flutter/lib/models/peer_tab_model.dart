@@ -24,16 +24,16 @@ class PeerTabModel with ChangeNotifier {
   List<String> tabNames = [
     'Recent sessions',
     'Favorites',
-    'Discovered',
-    'Address book',
-    'Group',
+    if (!isWeb) 'Discovered',
+    if (!(bind.isDisableAb() || bind.isDisableAccount())) 'Address book',
+    if (!bind.isDisableAccount()) 'Group',
   ];
   final List<IconData> icons = [
     Icons.access_time_filled,
     Icons.star,
-    Icons.explore,
-    IconFont.addressBook,
-    Icons.group,
+    if (!isWeb) Icons.explore,
+    if (!(bind.isDisableAb() || bind.isDisableAccount())) IconFont.addressBook,
+    if (!bind.isDisableAccount()) Icons.group,
   ];
   final List<bool> _isVisible = List.filled(5, true, growable: false);
   List<bool> get isVisible => _isVisible;
