@@ -17,7 +17,7 @@ use core_graphics::{
     display::{kCGNullWindowID, kCGWindowListOptionOnScreenOnly, CGWindowListCopyWindowInfo},
     window::{kCGWindowName, kCGWindowOwnerPID},
 };
-use hbb_common::{allow_err, anyhow::anyhow, bail, libc, log, message_proto::Resolution};
+use hbb_common::{anyhow::anyhow, bail, log, message_proto::Resolution};
 use include_dir::{include_dir, Dir};
 use objc::{class, msg_send, sel, sel_impl};
 use scrap::{libc::c_void, quartz::ffi::*};

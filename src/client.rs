@@ -7,6 +7,7 @@ use std::{
     sync::{mpsc, Arc, Mutex, RwLock},
 };
 
+use async_trait::async_trait;
 use bytes::Bytes;
 #[cfg(not(any(target_os = "android", target_os = "linux")))]
 use cpal::{
@@ -2761,6 +2762,7 @@ async fn send_switch_login_request(
 }
 
 /// Interface for client to send data and commands.
+#[async_trait]
 pub trait Interface: Send + Clone + 'static + Sized {
     /// Send message data to remote peer.
     fn send(&self, data: Data);
