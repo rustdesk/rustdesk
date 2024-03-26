@@ -96,7 +96,7 @@ jobs:
         with:
           toolchain: ${{ env.RUST_VERSION }}
           targets: ${{ matrix.job.target }}
-          components: ""
+          components: "rustfmt"
 
       - uses: Swatinem/rust-cache@v2
         with:
@@ -221,7 +221,7 @@ jobs:
         with:
           toolchain: ${{ env.RUST_VERSION }}-${{ matrix.job.target }}
           targets: ${{ matrix.job.target }}
-          components: ""
+          components: "rustfmt"
 
       - uses: Swatinem/rust-cache@v2
         with:
@@ -446,7 +446,7 @@ jobs:
         with:
           toolchain: ${{ env.RUST_VERSION }}
           targets: ${{ matrix.job.target }}
-          components: ""
+          components: "rustfmt"
 
       - uses: Swatinem/rust-cache@v2
         with:
@@ -613,7 +613,7 @@ jobs:
         with:
           toolchain: ${{ env.RUST_VERSION }}
           targets: ${{ matrix.job.target }}
-          components: ""
+          components: "rustfmt"
 
       - uses: Swatinem/rust-cache@v2
         with:
@@ -764,7 +764,7 @@ jobs:
         uses: dtolnay/rust-toolchain@v1
         with:
           toolchain: ${{ env.RUST_VERSION }}
-          components: ""
+          components: "rustfmt"
 
       - uses: Swatinem/rust-cache@v2
         with:
@@ -929,7 +929,7 @@ jobs:
         with:
           toolchain: ${{ env.RUST_VERSION }}
           targets: ${{ matrix.job.target }}
-          components: ""
+          components: "rustfmt"
 
       - name: Save Rust toolchain version
         run: |
@@ -1138,7 +1138,7 @@ jobs:
         with:
           toolchain: ${{ env.RUST_VERSION }}
           targets: ${{ matrix.job.target }}
-          components: ""
+          components: "rustfmt"
 
       - name: Save Rust toolchain version
         run: |
@@ -1330,7 +1330,7 @@ jobs:
         with:
           toolchain: ${{ env.RUST_VERSION }}
           targets: ${{ matrix.job.target }}
-          components: ""
+          components: "rustfmt"
 
       - name: Save Rust toolchain version
         run: |
