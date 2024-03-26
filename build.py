@@ -426,7 +426,6 @@ def build_flutter_dmg(version, features):
         "create-dmg --volname \"RustDesk Installer\" --window-pos 200 120 --window-size 800 400 --icon-size 100 --app-drop-link 600 185 --icon RustDesk.app 200 190 --hide-extension RustDesk.app rustdesk.dmg ./build/macos/Build/Products/Release/RustDesk.app")
     os.rename("rustdesk.dmg", f"../rustdesk-{version}.dmg")
     '''
-    #system2("g++ main.cc -O3 && mv a.out flutter/build/macos/Build/Products/Release/RustDesk.app/Contents/MacOS/serve")
     os.chdir("..")
 
 
