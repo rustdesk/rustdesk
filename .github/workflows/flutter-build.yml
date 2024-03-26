@@ -219,7 +219,7 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@v1
         with:
-          toolchain: nightly-${{ matrix.job.target }}
+          toolchain: ${{ env.RUST_VERSION }}-${{ matrix.job.target }}
           targets: ${{ matrix.job.target }}
           components: ""
 
