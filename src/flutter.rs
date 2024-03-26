@@ -93,14 +93,9 @@ pub extern "C" fn handle_applicationShouldOpenUntitledFile() {
 #[no_mangle]
 pub extern "C" fn rustdesk_core_main_args(args_len: *mut c_int) -> *mut *mut c_char {
     unsafe { std::ptr::write(args_len, 0) };
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    {
-        if let Some(args) = crate::core_main::core_main() {
-            return rust_args_to_c_args(args, args_len);
-        }
-        return std::ptr::null_mut() as _;
+    if let Some(args) = crate::core_main::core_main() {
+        return rust_args_to_c_args(args, args_len);
     }
-    #[cfg(any(target_os = "android", target_os = "ios"))]
     return std::ptr::null_mut() as _;
 }
 
