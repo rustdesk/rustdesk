@@ -6,6 +6,8 @@
         <string>com.carriez.RustDesk_service</string>
         <key>KeepAlive</key>
         <true/>
+        <key>ThrottleInterval</key>
+        <integer>1</integer>
         <key>ProgramArguments</key>
         <array>
         <string>/bin/sh</string>
