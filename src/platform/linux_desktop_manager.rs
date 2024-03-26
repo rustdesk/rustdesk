@@ -286,7 +286,7 @@ impl DesktopManager {
             }
             return Ok(i);
         }
-        bail!("No avaliable display found in range {:?}", display_range)
+        bail!("No available display found in range {:?}", display_range)
     }
 
     #[inline]
