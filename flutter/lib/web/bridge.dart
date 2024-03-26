@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:js' as js;
 import 'dart:convert';
 import 'dart:typed_data';
+import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 
 final _privateConstructorUsedError = UnsupportedError(
@@ -111,7 +112,7 @@ class RustdeskImpl {
   Future<String?> sessionGetOption(
       {required UuidValue sessionId, required String arg, dynamic hint}) {
     return Future(
-        () => js.context.callMethod('getByName', ['option:peer', arg]));
+        () => js.context.callMethod('getByName', ['option:session', arg]));
   }
 
   Future<void> sessionLogin(
@@ -238,13 +239,13 @@ class RustdeskImpl {
       {required UuidValue sessionId, dynamic hint}) {
     // TODO: default values
     return Future(() =>
-        js.context.callMethod('getByName', ['option:peer', 'view_style']));
+        js.context.callMethod('getByName', ['option:session', 'view_style']));
   }
 
   Future<void> sessionSetViewStyle(
       {required UuidValue sessionId, required String value, dynamic hint}) {
     return Future(() => js.context.callMethod('setByName', [
-          'option:peer',
+          'option:session',
           jsonEncode({'name': 'view_style', 'value': value})
         ]));
   }
@@ -253,13 +254,13 @@ class RustdeskImpl {
       {required UuidValue sessionId, dynamic hint}) {
     // TODO: default values
     return Future(() =>
-        js.context.callMethod('getByName', ['option:peer', 'scroll_style']));
+        js.context.callMethod('getByName', ['option:session', 'scroll_style']));
   }
 
   Future<void> sessionSetScrollStyle(
       {required UuidValue sessionId, required String value, dynamic hint}) {
     return Future(() => js.context.callMethod('setByName', [
-          'option:peer',
+          'option:session',
           jsonEncode({'name': 'scroll_style', 'value': value})
         ]));
   }
@@ -268,14 +269,14 @@ class RustdeskImpl {
       // TODO: default values
       {required UuidValue sessionId,
       dynamic hint}) {
-    return Future(() =>
-        js.context.callMethod('getByName', ['option:peer', 'image_quality']));
+    return Future(() => js.context
+        .callMethod('getByName', ['option:session', 'image_quality']));
   }
 
   Future<void> sessionSetImageQuality(
       {required UuidValue sessionId, required String value, dynamic hint}) {
     return Future(() => js.context.callMethod('setByName', [
-          'option:peer',
+          'option:session',
           jsonEncode({'name': 'image_quality', 'value': value})
         ]));
   }
@@ -283,14 +284,14 @@ class RustdeskImpl {
   Future<String?> sessionGetKeyboardMode(
       {required UuidValue sessionId, dynamic hint}) {
     // TODO: default values
-    return Future(() =>
-        js.context.callMethod('getByName', ['option:peer', 'keyboard_mode']));
+    return Future(() => js.context
+        .callMethod('getByName', ['option:session', 'keyboard_mode']));
   }
 
   Future<void> sessionSetKeyboardMode(
       {required UuidValue sessionId, required String value, dynamic hint}) {
     return Future(() => js.context.callMethod('setByName', [
-          'option:peer',
+          'option:session',
           jsonEncode({'name': 'keyboard_mode', 'value': value})
         ]));
   }
@@ -298,13 +299,13 @@ class RustdeskImpl {
   String? sessionGetReverseMouseWheelSync(
       {required UuidValue sessionId, dynamic hint}) {
     return js.context
-        .callMethod('getByName', ['option:peer', 'reverse_mouse_wheel']);
+        .callMethod('getByName', ['option:session', 'reverse_mouse_wheel']);
   }
 
   Future<void> sessionSetReverseMouseWheel(
       {required UuidValue sessionId, required String value, dynamic hint}) {
     return Future(() => js.context.callMethod('setByName', [
-          'option:peer',
+          'option:session',
           jsonEncode({'name': 'reverse_mouse_wheel', 'value': value})
         ]));
   }
@@ -312,7 +313,7 @@ class RustdeskImpl {
   String? sessionGetDisplaysAsIndividualWindows(
       {required UuidValue sessionId, dynamic hint}) {
     return js.context.callMethod(
-        'getByName', ['option:peer', 'displays_as_individual_windows']);
+        'getByName', ['option:session', 'displays_as_individual_windows']);
   }
 
   Future<void> sessionSetDisplaysAsIndividualWindows(
@@ -335,7 +336,7 @@ class RustdeskImpl {
     try {
       return Future(() => Int32List.fromList([
             int.parse(js.context.callMethod(
-                'getByName', ['option:peer', 'custom_image_quality']))
+                'getByName', ['option:session', 'custom_image_quality']))
           ]));
     } catch (e) {
       return Future.value(null);
@@ -350,7 +351,7 @@ class RustdeskImpl {
   Future<void> sessionSetCustomImageQuality(
       {required UuidValue sessionId, required int value, dynamic hint}) {
     return Future(() => js.context.callMethod('setByName', [
-          'option:peer',
+          'option:session',
           jsonEncode({'name': 'custom_image_quality', 'value': value})
         ]));
   }
@@ -358,7 +359,7 @@ class RustdeskImpl {
   Future<void> sessionSetCustomFps(
       {required UuidValue sessionId, required int fps, dynamic hint}) {
     return Future(() => js.context.callMethod('setByName', [
-          'option:peer',
+          'option:session',
           jsonEncode({'name': 'custom_fps', 'value': fps})
         ]));
   }
@@ -444,7 +445,7 @@ class RustdeskImpl {
       required String value,
       dynamic hint}) {
     return Future(() => js.context.callMethod('SetByName', [
-          'option:peer',
+          'option:session',
           jsonEncode({'name': name, 'value': value})
         ]));
   }
@@ -452,7 +453,7 @@ class RustdeskImpl {
   Future<String> sessionGetPeerOption(
       {required UuidValue sessionId, required String name, dynamic hint}) {
     return Future(
-        () => js.context.callMethod('getByName', ['option:peer', name]));
+        () => js.context.callMethod('getByName', ['option:session', name]));
   }
 
   Future<void> sessionInputOsPassword(
@@ -715,12 +716,21 @@ class RustdeskImpl {
   }
 
   Future<List<String>> mainGetFav({dynamic hint}) {
-    throw UnimplementedError();
+    List<String> favs = [];
+    try {
+      favs = (jsonDecode(js.context.callMethod('getByName', ['fav']))
+              as List<dynamic>)
+          .map((e) => e.toString())
+          .toList();
+    } catch (e) {
+      debugPrint('Failed to load favs: $e');
+    }
+    return Future.value(favs);
   }
 
   Future<void> mainStoreFav({required List<String> favs, dynamic hint}) {
-    // TODO:
-    throw UnimplementedError();
+    return Future(
+        () => js.context.callMethod('setByName', ['fav', jsonEncode(favs)]));
   }
 
   String mainGetPeerSync({required String id, dynamic hint}) {
@@ -748,7 +758,7 @@ class RustdeskImpl {
   }
 
   Future<void> mainDiscover({dynamic hint}) {
-    return Future(() => js.context.callMethod('setByName', ['discover']));
+    throw UnimplementedError();
   }
 
   Future<String> mainGetApiServer({dynamic hint}) {
@@ -807,7 +817,10 @@ class RustdeskImpl {
 
   String mainGetPeerOptionSync(
       {required String id, required String key, dynamic hint}) {
-    return js.context.callMethod('getByName', ['option:peer', key]);
+    return js.context.callMethod('getByName', [
+      'option:peer',
+      jsonEncode({'id': id, 'name': key})
+    ]);
   }
 
   String mainGetPeerFlutterOptionSync(
@@ -842,7 +855,7 @@ class RustdeskImpl {
       dynamic hint}) {
     js.context.callMethod('setByName', [
       'option:peer',
-      jsonEncode({'name': key, 'value': value})
+      jsonEncode({'id': id, 'name': key, 'value': value})
     ]);
     return true;
   }
@@ -862,8 +875,9 @@ class RustdeskImpl {
   }
 
   Future<bool> mainPeerHasPassword({required String id, dynamic hint}) {
-    return Future(
-        () => js.context.callMethod('getByName', ['peer_has_password', id]));
+    return Future(() =>
+        js.context.callMethod('getByName', ['peer_has_password', id]) ==
+        'true');
   }
 
   Future<bool> mainPeerExists({required String id, dynamic hint}) {
@@ -881,7 +895,7 @@ class RustdeskImpl {
   }
 
   String mainLoadLanPeersSync({dynamic hint}) {
-    return js.context.callMethod('getByName', ['load_lan_peers_sync']);
+    return '{}';
   }
 
   Future<String> mainLoadRecentPeersForAb(
@@ -894,12 +908,11 @@ class RustdeskImpl {
   }
 
   Future<void> mainLoadLanPeers({dynamic hint}) {
-    return Future(() => js.context.callMethod('getByName', ['load_lan_peers']));
+    throw UnimplementedError();
   }
 
   Future<void> mainRemoveDiscovered({required String id, dynamic hint}) {
-    return Future(
-        () => js.context.callMethod('getByName', ['remove_discovered']));
+    throw UnimplementedError();
   }
 
   Future<void> mainChangeTheme({required String dark, dynamic hint}) {
@@ -1102,7 +1115,7 @@ class RustdeskImpl {
 
   String sessionGetAuditServerSync(
       {required UuidValue sessionId, required String typ, dynamic hint}) {
-    throw UnimplementedError();
+    return js.context.callMethod('getByName', ['audit_server', typ]);
   }
 
   Future<void> sessionSendNote(
@@ -1112,12 +1125,14 @@ class RustdeskImpl {
 
   Future<String> sessionAlternativeCodecs(
       {required UuidValue sessionId, dynamic hint}) {
-    throw UnimplementedError();
+    return Future(
+        () => js.context.callMethod('getByName', ['alternative_codecs']));
   }
 
   Future<void> sessionChangePreferCodec(
       {required UuidValue sessionId, dynamic hint}) {
-    throw UnimplementedError();
+    return Future(
+        () => js.context.callMethod('setByName', ['change_prefer_codec']));
   }
 
   Future<void> sessionOnWaitingForImageDialogShow(
@@ -1265,37 +1280,16 @@ class RustdeskImpl {
       dynamic hint}) {}
 
   Future<void> queryOnlines({required List<String> ids, dynamic hint}) {
-    // TODO:
-    throw UnimplementedError();
+    return Future(() =>
+        js.context.callMethod('setByName', ['query_onlines', jsonEncode(ids)]));
   }
 
   // Dup to the function in hbb_common, lib.rs
   // Maybe we need to move this function to js part.
   int versionToNumber({required String v, dynamic hint}) {
-    List<String> versions = v.split('-');
-
-    int n = 0;
-
-    // The first part is the version number.
-    // 1.1.10 -> 1001100, 1.2.3 -> 1001030, multiple the last number by 10
-    // to leave space for patch version.
-    if (versions.isNotEmpty) {
-      int last = 0;
-      for (var x in versions[0].split('.')) {
-        last = int.tryParse(x) ?? 0;
-        n = n * 1000 + last;
-      }
-      n -= last;
-      n += last * 10;
-    }
-
-    if (versions.length > 1) {
-      n += int.tryParse(versions[1]) ?? 0;
-    }
-
-    // Ignore the rest
-
-    return n;
+    return int.tryParse(
+            js.context.callMethod('getByName', ['get_version_number', v])) ??
+        0;
   }
 
   Future<bool> optionSynced({dynamic hint}) {
@@ -1409,11 +1403,11 @@ class RustdeskImpl {
   }
 
   bool mainHasFileClipboard({dynamic hint}) {
-    throw UnimplementedError();
+    return false;
   }
 
   bool mainHasGpuTextureRender({dynamic hint}) {
-    throw UnimplementedError();
+    return false;
   }
 
   Future<void> cmInit({dynamic hint}) {
