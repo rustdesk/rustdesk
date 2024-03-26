@@ -80,8 +80,8 @@ pub(super) fn check_display_changed(
     let lock = SYNC_DISPLAYS.lock().unwrap();
     // If plugging out a monitor && lock.displays.get(idx) is None.
     //  1. The client version < 1.2.4. The client side has to reconnect.
-    //  2. The client version > 1.2.4, The client side can handle the case becuase sync peer info message will be sent.
-    // But it is acceptable to for the user to reconnect manually, becuase the monitor is unplugged.
+    //  2. The client version > 1.2.4, The client side can handle the case because sync peer info message will be sent.
+    // But it is acceptable to for the user to reconnect manually, because the monitor is unplugged.
     let d = lock.displays.get(idx)?;
     if ndisplay != lock.displays.len() {
         return Some(d.clone());
