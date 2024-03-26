@@ -80,7 +80,6 @@ class _AddressBookState extends State<AddressBook> {
               child: Container(
                 width: 200,
                 height: double.infinity,
-                padding: const EdgeInsets.all(8.0),
                 child: Column(
                   children: [
                     _buildAbDropdown(),
