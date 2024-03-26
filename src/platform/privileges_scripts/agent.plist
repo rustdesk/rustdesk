@@ -16,6 +16,8 @@
             <key>AfterInitialDemand</key>
             <false />
         </dict>
+        <key>ThrottleInterval</key>
+        <integer>1</integer>
         <key>RunAtLoad</key>
         <true />
         <key>ProgramArguments</key>
