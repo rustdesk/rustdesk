@@ -63,7 +63,7 @@ let testSpeed = [0, 0];
 export function draw(display, frame) {
   if (yuvWorker) {
     // frame's (y/u/v).bytes already detached, can not transferrable any more.
-    yuvWorker.postMessage({display, frame});
+    yuvWorker.postMessage({ display, frame });
   } else {
     var tm0 = new Date().getTime();
     yuvCanvas.drawFrame(frame);
@@ -216,6 +216,9 @@ window.setByName = (name, value) => {
     case 'toggle_option':
       curConn.toggleOption(value);
       break;
+    case 'toggle_privacy_mode':
+      curConn.togglePrivacyMode(value);
+      break;
     case 'image_quality':
       curConn.setImageQuality(value);
       break;
@@ -266,6 +269,9 @@ window.setByName = (name, value) => {
       }
       curConn.inputMouse(mask, parseInt(value.x || '0'), parseInt(value.y || '0'), value.alt == 'true', value.ctrl == 'true', value.shift == 'true', value.command == 'true');
       break;
+    case 'send_2fa':
+      curConn.send2fa(value);
+      break;
     case 'option':
       value = JSON.parse(value);
       localStorage.setItem(value.name, value.value);
@@ -305,6 +311,20 @@ window.setByName = (name, value) => {
       break;
     case 'session_close':
       sessionClose(value);
+      break;
+    case 'elevate_with_logon':
+      curConn.elevateWithLogon(value);
+      break;
+    case 'forget':
+      curConn.setRemember(false);
+      break;
+    case 'peer_has_password':
+      const options = getPeers()[value] || {};
+      return (options['password'] ?? '') !== '';
+    case 'peer_exists':
+      return !(!getPeers()[value]);
+    case 'restart':
+      curConn.restart();
       break;
     default:
       break;
@@ -402,6 +422,8 @@ function _getByName(name, arg) {
       return localStorage.getItem('peers-lan') ?? '{}';
     case 'api_server':
       return getApiServer();
+    case 'is_using_public_server':
+      return !localStorage.getItem('custom-rendezvous-server');
   }
   return '';
 }

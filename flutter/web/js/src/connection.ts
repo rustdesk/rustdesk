@@ -4,6 +4,7 @@ import * as rendezvous from "./rendezvous.js";
 import { loadVp9 } from "./codec";
 import * as sha256 from "fast-sha256";
 import * as globals from "./globals";
+import * as consts from "./consts";
 import { decompress, mapKey, sleep } from "./common";
 
 export const PORT = 21116;
@@ -247,21 +248,7 @@ export default class Connection {
           this._ws?.sendMessage({ test_delay });
         }
       } else if (msg?.login_response) {
-        const r = msg?.login_response;
-        if (r.error) {
-          if (r.error == "Wrong Password") {
-            this._password = undefined;
-            this.msgbox(
-              "re-input-password",
-              r.error,
-              "Do you want to enter again?"
-            );
-          } else {
-            this.msgbox("error", "Login Error", r.error);
-          }
-        } else if (r.peer_info) {
-          this.handlePeerInfo(r.peer_info);
-        }
+        this.handleLoginResponse(msg?.login_response);
       } else if (msg?.video_frame) {
         this.handleVideoFrame(msg?.video_frame!);
       } else if (msg?.clipboard) {
@@ -315,6 +302,103 @@ export default class Connection {
       } else if (msg?.audio_frame) {
         globals.playAudio(msg?.audio_frame.data);
       }
+    }
+  }
+
+  handleLoginResponse(response: message.LoginResponse) {
+    const loginErrorMap: Record<string, any> = {
+      [consts.LOGIN_SCREEN_WAYLAND]: {
+        msgtype: "error",
+        title: "Login Error",
+        text: "Login screen using Wayland is not supported",
+        link: "https://rustdesk.com/docs/en/manual/linux/#login-screen",
+        try_again: true,
+      },
+      [consts.LOGIN_MSG_DESKTOP_SESSION_NOT_READY]: {
+        msgtype: "session-login",
+        title: "",
+        text: "",
+        link: "",
+        try_again: true,
+      },
+      [consts.LOGIN_MSG_DESKTOP_XSESSION_FAILED]: {
+        msgtype: "session-re-login",
+        title: "",
+        text: "",
+        link: "",
+        try_again: true,
+      },
+      [consts.LOGIN_MSG_DESKTOP_SESSION_ANOTHER_USER]: {
+        msgtype: "info-nocancel",
+        title: "another_user_login_title_tip",
+        text: "another_user_login_text_tip",
+        link: "",
+        try_again: false,
+      },
+      [consts.LOGIN_MSG_DESKTOP_XORG_NOT_FOUND]: {
+        msgtype: "info-nocancel",
+        title: "xorg_not_found_title_tip",
+        text: "xorg_not_found_text_tip",
+        link: "https://rustdesk.com/docs/en/manual/linux/#login-screen",
+        try_again: true,
+      },
+      [consts.LOGIN_MSG_DESKTOP_NO_DESKTOP]: {
+        msgtype: "info-nocancel",
+        title: "no_desktop_title_tip",
+        text: "no_desktop_text_tip",
+        link: "https://rustdesk.com/docs/en/manual/linux/#login-screen",
+        try_again: true,
+      },
+      [consts.LOGIN_MSG_DESKTOP_SESSION_NOT_READY_PASSWORD_EMPTY]: {
+        msgtype: "session-login-password",
+        title: "",
+        text: "",
+        link: "",
+        try_again: true,
+      },
+      [consts.LOGIN_MSG_DESKTOP_SESSION_NOT_READY_PASSWORD_WRONG]: {
+        msgtype: "session-login-re-password",
+        title: "",
+        text: "",
+        link: "",
+        try_again: true,
+      },
+      [consts.LOGIN_MSG_NO_PASSWORD_ACCESS]: {
+        msgtype: "wait-remote-accept-nook",
+        title: "Prompt",
+        text: "Please wait for the remote side to accept your session request...",
+        link: "",
+        try_again: true,
+      },
+    };
+
+    const err = response.error;
+    if (err) {
+      if (err == consts.LOGIN_MSG_PASSWORD_EMPTY) {
+        this._password = undefined;
+        this.msgbox("input-password", "Password Required", "", "");
+      }
+      if (err == consts.LOGIN_MSG_PASSWORD_WRONG) {
+        this._password = undefined;
+        this.msgbox(
+          "re-input-password",
+          err,
+          "Do you want to enter again?"
+        );
+      } else if (err == consts.LOGIN_MSG_2FA_WRONG || err == consts.REQUIRE_2FA) {
+        this.msgbox("input-2fa", err, "");
+      } else if (err in loginErrorMap) {
+        const m = loginErrorMap[err];
+        this.msgbox(m.msgtype, m.title, m.text, m.link);
+      } else {
+        if (err.includes(consts.SCRAP_X11_REQUIRED)) {
+          this.msgbox("error", "Login Error", err, consts.SCRAP_X11_REF_URL);
+        } else {
+          this.msgbox("error", "Login Error", err);
+        }
+      }
+    } else if (response.peer_info) {
+      this.handlePeerInfo(response.peer_info);
     }
   }
 
@@ -620,15 +704,68 @@ export default class Connection {
     this._ws?.sendMessage({ key_event });
   }
 
+  restart() {
+    const misc = message.Misc.fromPartial({});
+    misc.restart_remote_device = true;
+    this._ws?.sendMessage({ misc });
+  }
+
   inputString(seq: string) {
     const key_event = message.KeyEvent.fromPartial({ seq });
     this._ws?.sendMessage({ key_event });
   }
 
-  switchDisplay(display: number) {
-    const switch_display = message.SwitchDisplay.fromPartial({ display });
-    const misc = message.Misc.fromPartial({ switch_display });
+  send2fa(code: string) {
+    const auth_2fa = message.Auth2FA.fromPartial({ code });
+    this._ws?.sendMessage({ auth_2fa });
+  }
+
+  _captureDisplays({ add, sub, set }: {
+    add?: number[], sub?: number[], set?: number[]
+  }) {
+    const capture_displays = message.CaptureDisplays.fromPartial({ add, sub, set });
+    const misc = message.Misc.fromPartial({ capture_displays });
     this._ws?.sendMessage({ misc });
+  }
+
+  switchDisplay(v: string) {
+    try {
+      const obj = JSON.parse(v);
+      const value = obj.value;
+      const isDesktop = obj.isDesktop;
+      if (value.length == 1) {
+        const switch_display = message.SwitchDisplay.fromPartial({ display: value[0] });
+        const misc = message.Misc.fromPartial({ switch_display });
+        this._ws?.sendMessage({ misc });
+
+        if (!isDesktop) {
+          this._captureDisplays({ set: value });
+        } else {
+          // If support merging images, check_remove_unused_displays() in ui_session_interface.rs
+        }
+      } else {
+        this._captureDisplays({ set: value });
+      }
+    }
+    catch (e) {
+      console.log('Failed to switch display, invalid param "' + v + '"');
+    }
+  }
+
+  elevateWithLogon(value: string) {
+    try {
+      const obj = JSON.parse(value);
+      const logon = message.ElevationRequestWithLogon.fromPartial({
+        username: obj.username,
+        password: obj.password
+      });
+      const elevation_request = message.ElevationRequest.fromPartial({ logon });
+      const misc = message.Misc.fromPartial({ elevation_request });
+      this._ws?.sendMessage({ misc });
+    }
+    catch (e) {
+      console.log('Failed to elevate with logon, invalid param "' + value + '"');
+    }
   }
 
   async inputOsPassword(seq: string) {
@@ -712,6 +849,20 @@ export default class Connection {
     if (name.indexOf("block-input") < 0) this.setOption(name, v);
     const misc = message.Misc.fromPartial({ option });
     this._ws?.sendMessage({ misc });
+  }
+
+  togglePrivacyMode(value: string) {
+    try {
+      const obj = JSON.parse(value);
+      const toggle_privacy_mode = message.TogglePrivacyMode.fromPartial({
+        impl_key: obj.impl_key,
+        on: obj.on,
+      });
+      const misc = message.Misc.fromPartial({ toggle_privacy_mode });
+      this._ws?.sendMessage({ misc });
+    } catch (e) {
+      console.log('Failed to toggle privacy mode, invalid param "' + value + '"')
+    }
   }
 
   getImageQuality() {
