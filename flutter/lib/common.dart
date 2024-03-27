@@ -1863,7 +1863,8 @@ Future<bool> initUniLinks() async {
   // check cold boot
   try {
     final initialLink = await getInitialLink();
-    if (initialLink == null) {
+    print("initialLink: $initialLink");
+    if (initialLink == null || initialLink.isEmpty) {
       return false;
     }
     return handleUriLink(uriString: initialLink);
