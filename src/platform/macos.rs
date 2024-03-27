@@ -19,7 +19,7 @@ use core_graphics::{
 };
 use hbb_common::{anyhow::anyhow, bail, log, message_proto::Resolution};
 use include_dir::{include_dir, Dir};
-use objc::{class, msg_send, runtime::Object, sel, sel_impl};
+use objc::{class, msg_send, sel, sel_impl};
 use scrap::{libc::c_void, quartz::ffi::*};
 use std::path::PathBuf;
 
@@ -760,23 +760,5 @@ impl WakeLock {
             .as_mut()
             .map(|h| h.set_display(display))
             .ok_or(anyhow!("no AwakeHandle"))?
-    }
-}
-
-pub fn send_url_to_system(uni_links: &str) -> Result<(), &'static str> {
-    unsafe {
-        let ns_string = NSString::alloc(nil);
-        let url_str = ns_string.init_str(uni_links);
-        let url: *mut Object = msg_send![class!(NSURL), URLWithString: url_str];
-        if url.is_null() {
-            return Err("Failed to create NSURL");
-        }
-        let workspace: *mut Object = msg_send![class!(NSWorkspace), sharedWorkspace];
-        let success: bool = msg_send![workspace, openURL: url];
-        if success {
-            Ok(())
-        } else {
-            Err("Failed to open URL")
-        }
     }
 }

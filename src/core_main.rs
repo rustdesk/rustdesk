@@ -31,12 +31,6 @@ fn is_empty_uni_link(arg: &str) -> bool {
     arg[prefix.len()..].chars().all(|c| c == '/')
 }
 
-#[inline]
-fn is_valid_non_empty_uni_link(arg: &str) -> bool {
-    let prefix = crate::get_uri_prefix();
-    arg.starts_with(&prefix) && arg[prefix.len()..].chars().any(|c| c != '/')
-}
-
 /// shared by flutter and sciter main function
 ///
 /// [Note]
@@ -70,9 +64,8 @@ pub fn core_main() -> Option<Vec<String>> {
             .contains(&arg.as_str())
             {
                 _is_flutter_invoke_new_connection = true;
-            } else if i == 1 && is_valid_non_empty_uni_link(&arg) {
-                return handle_uni_links(arg);
-            } else if arg == "--elevate" {
+            }
+            if arg == "--elevate" {
                 _is_elevate = true;
             } else if arg == "--run-as-system" {
                 _is_run_as_system = true;
@@ -111,7 +104,7 @@ pub fn core_main() -> Option<Vec<String>> {
     }
     #[cfg(feature = "flutter")]
     if _is_flutter_invoke_new_connection {
-        return handle_uni_links(cmd_to_uni_link(std::env::args()));
+        return core_main_invoke_new_connection(std::env::args());
     }
     let click_setup = cfg!(windows) && args.is_empty() && crate::common::is_setup(&arg_exe);
     if click_setup && !config::is_disable_installation() {
@@ -518,8 +511,14 @@ fn import_config(path: &str) {
     }
 }
 
+/// invoke a new connection
+///
+/// [Note]
+/// this is for invoke new connection from dbus.
+/// If it returns [`None`], then the process will terminate, and flutter gui will not be started.
+/// If it returns [`Some`], then the process will continue, and flutter gui will be started.
 #[cfg(feature = "flutter")]
-fn cmd_to_uni_link(mut args: std::env::Args) -> String {
+fn core_main_invoke_new_connection(mut args: std::env::Args) -> Option<Vec<String>> {
     let mut authority = None;
     let mut id = None;
     let mut param_array = vec![];
@@ -566,17 +565,6 @@ fn cmd_to_uni_link(mut args: std::env::Args) -> String {
             );
         }
     }
-    return uni_links;
-}
-
-/// invoke a new connection
-///
-/// [Note]
-/// this is for invoke new connection.
-/// If it returns [`None`], then the process will terminate, and flutter gui will not be started.
-/// If it returns [`Some`], then the process will continue, and flutter gui will be started.
-#[cfg(feature = "flutter")]
-fn handle_uni_links(uni_links: String) -> Option<Vec<String>> {
     if uni_links.is_empty() {
         return None;
     }
@@ -598,9 +586,7 @@ fn handle_uni_links(uni_links: String) -> Option<Vec<String>> {
     }
     #[cfg(target_os = "macos")]
     {
-        return if let Err(_) = crate::ipc::send_url_scheme(uni_links.clone()) {
-            let res = crate::platform::send_url_to_system(&uni_links); // if exit, can't invoke this url successfully
-            println!("open_url result: {res:?}");
+        return if let Err(_) = crate::ipc::send_url_scheme(uni_links) {
             Some(Vec::new())
         } else {
             None
