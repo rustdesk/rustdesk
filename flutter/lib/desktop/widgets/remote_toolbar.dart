@@ -491,7 +491,7 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
       toolbarItems.add(_ChatMenu(id: widget.id, ffi: widget.ffi));
       toolbarItems.add(_VoiceCallMenu(id: widget.id, ffi: widget.ffi));
     }
-    toolbarItems.add(_RecordMenu());
+    if (!isWeb) toolbarItems.add(_RecordMenu());
     toolbarItems.add(_CloseMenu(id: widget.id, ffi: widget.ffi));
     final toolbarBorderRadius = BorderRadius.all(Radius.circular(4.0));
     return Column(
@@ -940,13 +940,12 @@ class ScreenAdjustor {
   }
 
   updateScreen() async {
-    final v = await rustDeskWinManager.call(
-        WindowType.Main, kWindowGetWindowInfo, '');
-    final String valueStr = v.result;
-    if (valueStr.isEmpty) {
+    final String info =
+        isWeb ? screenInfo : await _getScreenInfoDesktop() ?? '';
+    if (info.isEmpty) {
       _screen = null;
     } else {
-      final screenMap = jsonDecode(valueStr);
+      final screenMap = jsonDecode(info);
       _screen = window_size.Screen(
           Rect.fromLTRB(screenMap['frame']['l'], screenMap['frame']['t'],
               screenMap['frame']['r'], screenMap['frame']['b']),
@@ -959,15 +958,23 @@ class ScreenAdjustor {
     }
   }
 
+  _getScreenInfoDesktop() async {
+    final v = await rustDeskWinManager.call(
+        WindowType.Main, kWindowGetWindowInfo, '');
+    return v.result;
+  }
+
   Future<bool> isWindowCanBeAdjusted() async {
     final viewStyle =
         await bind.sessionGetViewStyle(sessionId: ffi.sessionId) ?? '';
     if (viewStyle != kRemoteViewStyleOriginal) {
       return false;
     }
-    final remoteCount = RemoteCountState.find().value;
-    if (remoteCount != 1) {
-      return false;
+    if (!isWeb) {
+      final remoteCount = RemoteCountState.find().value;
+      if (remoteCount != 1) {
+        return false;
+      }
     }
     if (_screen == null) {
       return false;
@@ -1325,6 +1332,14 @@ class _ResolutionsMenuState extends State<_ResolutionsMenu> {
         final display = json.decode(mainDisplay);
         if (display['w'] != null && display['h'] != null) {
           _localResolution = Resolution(display['w'], display['h']);
+          if (isWeb) {
+            if (display['scaleFactor'] != null) {
+              _localResolution = Resolution(
+                (display['w'] / display['scaleFactor']).toInt(),
+                (display['h'] / display['scaleFactor']).toInt(),
+              );
+            }
+          }
         }
       } catch (e) {
         debugPrint('Failed to decode $mainDisplay, $e');

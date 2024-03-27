@@ -35,13 +35,13 @@ class RemotePage extends StatefulWidget {
   RemotePage({
     Key? key,
     required this.id,
-    required this.sessionId,
-    required this.tabWindowId,
-    required this.display,
-    required this.displays,
-    required this.password,
     required this.toolbarState,
-    required this.tabController,
+    this.sessionId,
+    this.tabWindowId,
+    this.password,
+    this.display,
+    this.displays,
+    this.tabController,
     this.switchUuid,
     this.forceRelay,
     this.isSharedPassword,
@@ -58,7 +58,7 @@ class RemotePage extends StatefulWidget {
   final bool? forceRelay;
   final bool? isSharedPassword;
   final SimpleWrapper<State<RemotePage>?> _lastState = SimpleWrapper(null);
-  final DesktopTabController tabController;
+  final DesktopTabController? tabController;
 
   FFI get ffi => (_lastState.value! as _RemotePageState)._ffi;
 
@@ -129,7 +129,7 @@ class _RemotePageState extends State<RemotePage>
     }
 
     _ffi.ffiModel.updateEventListener(sessionId, widget.id);
-    bind.pluginSyncUi(syncTo: kAppTypeDesktopRemote);
+    if (!isWeb) bind.pluginSyncUi(syncTo: kAppTypeDesktopRemote);
     _ffi.qualityMonitorModel.checkShowQualityMonitor(sessionId);
     // Session option should be set after models.dart/FFI.start
     _showRemoteCursor.value = bind.sessionGetToggleOptionSync(
@@ -150,7 +150,7 @@ class _RemotePageState extends State<RemotePage>
     // }
 
     _blockableOverlayState.applyFfi(_ffi);
-    widget.tabController.onSelected?.call(widget.id);
+    widget.tabController?.onSelected?.call(widget.id);
   }
 
   @override
@@ -431,9 +431,9 @@ class _RemotePageState extends State<RemotePage>
   Widget getBodyForDesktop(BuildContext context) {
     var paints = <Widget>[
       MouseRegion(onEnter: (evt) {
-        bind.hostStopSystemKeyPropagate(stopped: false);
+        if (!isWeb) bind.hostStopSystemKeyPropagate(stopped: false);
       }, onExit: (evt) {
-        bind.hostStopSystemKeyPropagate(stopped: true);
+        if (!isWeb) bind.hostStopSystemKeyPropagate(stopped: true);
       }, child: LayoutBuilder(builder: (context, constraints) {
         Future.delayed(Duration.zero, () {
           Provider.of<CanvasModel>(context, listen: false).updateViewStyle();
@@ -669,6 +669,11 @@ class _ImagePaintState extends State<ImagePaint> {
 
   MouseCursor _buildCursorOfCache(
       CursorModel cursor, double scale, CursorData? cache) {
+    // TODO: web cursor
+    if (isWeb) {
+      return MouseCursor.defer;
+    }
+
     if (cache == null) {
       return MouseCursor.defer;
     } else {

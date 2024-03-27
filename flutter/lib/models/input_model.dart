@@ -193,6 +193,7 @@ class InputModel {
   bool get keyboardPerm => parent.target!.ffiModel.keyboard;
   String get id => parent.target?.id ?? '';
   String? get peerPlatform => parent.target?.ffiModel.pi.platform;
+  bool get isViewOnly => parent.target!.ffiModel.viewOnly;
 
   InputModel(this.parent) {
     sessionId = parent.target!.sessionId;
@@ -207,7 +208,7 @@ class InputModel {
 
   updateKeyboardMode() async {
     // * Currently mobile does not enable map mode
-    if (isDesktop) {
+    if (isDesktop || isWebDesktop) {
       if (keyboardMode.isEmpty) {
         keyboardMode =
             await bind.sessionGetKeyboardMode(sessionId: sessionId) ??
@@ -217,7 +218,8 @@ class InputModel {
   }
 
   KeyEventResult handleRawKeyEvent(RawKeyEvent e) {
-    if (isDesktop && !isInputSourceFlutter) {
+    if (isViewOnly) return KeyEventResult.handled;
+    if ((isDesktop || isWebDesktop) && !isInputSourceFlutter) {
       return KeyEventResult.handled;
     }
 
@@ -256,7 +258,7 @@ class InputModel {
     }
 
     // * Currently mobile does not enable map mode
-    if (isDesktop && keyboardMode == 'map') {
+    if ((isDesktop || isWebDesktop) && keyboardMode == 'map') {
       mapKeyboardMode(e);
     } else {
       legacyKeyboardMode(e);
@@ -467,6 +469,7 @@ class InputModel {
 
   void onPointHoverImage(PointerHoverEvent e) {
     _stopFling = true;
+    if (isViewOnly) return;
     if (e.kind != ui.PointerDeviceKind.mouse) return;
     if (!isPhysicalMouse.value) {
       isPhysicalMouse.value = true;
@@ -479,7 +482,7 @@ class InputModel {
   void onPointerPanZoomStart(PointerPanZoomStartEvent e) {
     _lastScale = 1.0;
     _stopFling = true;
-
+    if (isViewOnly) return;
     if (peerPlatform == kPeerPlatformAndroid) {
       handlePointerEvent('touch', 'pan_start', e.position);
     }
@@ -487,6 +490,7 @@ class InputModel {
 
   // https://docs.flutter.dev/release/breaking-changes/trackpad-gestures
   void onPointerPanZoomUpdate(PointerPanZoomUpdateEvent e) {
+    if (isViewOnly) return;
     if (peerPlatform != kPeerPlatformAndroid) {
       final scale = ((e.scale - _lastScale) * 1000).toInt();
       _lastScale = e.scale;
@@ -612,6 +616,7 @@ class InputModel {
   void onPointDownImage(PointerDownEvent e) {
     debugPrint("onPointDownImage ${e.kind}");
     _stopFling = true;
+    if (isViewOnly) return;
     if (e.kind != ui.PointerDeviceKind.mouse) {
       if (isPhysicalMouse.value) {
         isPhysicalMouse.value = false;
@@ -623,6 +628,7 @@ class InputModel {
   }
 
   void onPointUpImage(PointerUpEvent e) {
+    if (isViewOnly) return;
     if (e.kind != ui.PointerDeviceKind.mouse) return;
     if (isPhysicalMouse.value) {
       handleMouse(_getMouseEvent(e, _kMouseEventUp), e.position);
@@ -630,6 +636,7 @@ class InputModel {
   }
 
   void onPointMoveImage(PointerMoveEvent e) {
+    if (isViewOnly) return;
     if (e.kind != ui.PointerDeviceKind.mouse) return;
     if (isPhysicalMouse.value) {
       handleMouse(_getMouseEvent(e, _kMouseEventMove), e.position);
@@ -637,6 +644,7 @@ class InputModel {
   }
 
   void onPointerSignalImage(PointerSignalEvent e) {
+    if (isViewOnly) return;
     if (e is PointerScrollEvent) {
       var dx = e.scrollDelta.dx.toInt();
       var dy = e.scrollDelta.dy.toInt();
@@ -902,9 +910,11 @@ class InputModel {
     int minX = rect.left.toInt();
     // https://github.com/rustdesk/rustdesk/issues/6678
     // For Windows, [0,maxX], [0,maxY] should be set to enable window snapping.
-    int maxX = (rect.left + rect.width).toInt() - (peerPlatform == kPeerPlatformWindows ? 0 : 1);
+    int maxX = (rect.left + rect.width).toInt() -
+        (peerPlatform == kPeerPlatformWindows ? 0 : 1);
     int minY = rect.top.toInt();
-    int maxY = (rect.top + rect.height).toInt() - (peerPlatform == kPeerPlatformWindows ? 0 : 1);
+    int maxY = (rect.top + rect.height).toInt() -
+        (peerPlatform == kPeerPlatformWindows ? 0 : 1);
     evtX = trySetNearestRange(evtX, minX, maxX, 5);
     evtY = trySetNearestRange(evtY, minY, maxY, 5);
     if (kind == kPointerEventKindMouse) {

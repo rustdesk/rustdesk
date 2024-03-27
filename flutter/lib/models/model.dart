@@ -429,7 +429,7 @@ class FfiModel with ChangeNotifier {
   }
 
   handleAliasChanged(Map<String, dynamic> evt) {
-    if (!isDesktop) return;
+    if (!(isDesktop || isWebDesktop)) return;
     final String peerId = evt['id'];
     final String alias = evt['alias'];
     String label = getDesktopTabLabel(peerId, alias);
@@ -767,7 +767,7 @@ class FfiModel with ChangeNotifier {
     _pi.isSet.value = true;
     stateGlobal.resetLastResolutionGroupValues(peerId);
 
-    if (isDesktop) {
+    if (isDesktop || isWebDesktop) {
       checkDesktopKeyboardMode();
     }
 
@@ -1114,7 +1114,7 @@ class ImageModel with ChangeNotifier {
 
   update(ui.Image? image) async {
     if (_image == null && image != null) {
-      if (isWebDesktop || isDesktop) {
+      if (isDesktop || isWebDesktop) {
         await parent.target?.canvasModel.updateViewStyle();
         await parent.target?.canvasModel.updateScrollStyle();
       } else {
@@ -1288,18 +1288,15 @@ class CanvasModel with ChangeNotifier {
   double get scrollX => _scrollX;
   double get scrollY => _scrollY;
 
-  static double get leftToEdge => (isDesktop || isWebDesktop)
-      ? windowBorderWidth + kDragToResizeAreaPadding.left
-      : 0;
-  static double get rightToEdge => (isDesktop || isWebDesktop)
-      ? windowBorderWidth + kDragToResizeAreaPadding.right
-      : 0;
-  static double get topToEdge => (isDesktop || isWebDesktop)
+  static double get leftToEdge =>
+      isDesktop ? windowBorderWidth + kDragToResizeAreaPadding.left : 0;
+  static double get rightToEdge =>
+      isDesktop ? windowBorderWidth + kDragToResizeAreaPadding.right : 0;
+  static double get topToEdge => isDesktop
       ? tabBarHeight + windowBorderWidth + kDragToResizeAreaPadding.top
       : 0;
-  static double get bottomToEdge => (isDesktop || isWebDesktop)
-      ? windowBorderWidth + kDragToResizeAreaPadding.bottom
-      : 0;
+  static double get bottomToEdge =>
+      isDesktop ? windowBorderWidth + kDragToResizeAreaPadding.bottom : 0;
 
   updateViewStyle({refreshMousePos = true}) async {
     Size getSize() {
@@ -1422,7 +1419,7 @@ class CanvasModel with ChangeNotifier {
     // If keyboard is not permitted, do not move cursor when mouse is moving.
     if (parent.target != null && parent.target!.ffiModel.keyboard) {
       // Draw cursor if is not desktop.
-      if (!isDesktop) {
+      if (!(isDesktop || isWebDesktop)) {
         parent.target!.cursorModel.moveLocal(x, y);
       } else {
         try {
@@ -2495,7 +2492,8 @@ class PeerInfo with ChangeNotifier {
   List<int> get virtualDisplays => List<int>.from(
       platformAdditions[kPlatformAdditionsVirtualDisplays] ?? []);
 
-  bool get isSupportMultiDisplay => isDesktop && isSupportMultiUiSession;
+  bool get isSupportMultiDisplay =>
+      (isDesktop || isWebDesktop) && isSupportMultiUiSession;
 
   bool get cursorEmbedded => tryGetDisplay()?.cursorEmbedded ?? false;
 

@@ -211,7 +211,7 @@ window.setByName = (name, value) => {
       curConn.refresh();
       break;
     case 'reconnect':
-      curConn.reconnect();
+      curConn?.reconnect();
       break;
     case 'toggle_option':
       curConn.toggleOption(value);
@@ -244,6 +244,7 @@ window.setByName = (name, value) => {
       curConn.inputString(value);
       break;
     case 'send_mouse':
+      if (!curConn) return;
       let mask = 0;
       value = JSON.parse(value);
       switch (value.type) {
@@ -288,6 +289,9 @@ window.setByName = (name, value) => {
       value = JSON.parse(value);
       localStorage.setItem(name + ':' + value.name, value.value);
       break;
+    case 'option:user:default':
+      setUserDefaultOption(value);
+      break;
     case 'option:session':
       value = JSON.parse(value);
       curConn.setOption(value.name, value.value);
@@ -295,11 +299,10 @@ window.setByName = (name, value) => {
     case 'option:peer':
       setPeerOption(value);
       break;
+    case 'option:toggle':
+      return curConn.toggleOption(value);
     case 'input_os_password':
       curConn.inputOsPassword(value);
-      break;
-    case 'check_conn_status':
-      curConn.checkConnStatus();
       break;
     case 'session_add_sync':
       return sessionAdd(value);
@@ -374,8 +377,14 @@ function _getByName(name, arg) {
     case 'translate':
       arg = JSON.parse(arg);
       return translate(arg.locale, arg.text);
+    case 'option:user:default':
+      return getUserDefaultOption(arg);
     case 'option:session':
-      return curConn.getOption(arg);
+      if (curConn) {
+        return curConn.getOption(arg);
+      } else {
+        return getUserDefaultOption(arg);
+      }
     case 'option:peer':
       return getPeerOption(arg);
     case 'option:toggle':
@@ -412,6 +421,28 @@ function _getByName(name, arg) {
       return getAuditServer(arg);
     case 'alternative_codecs':
       return getAlternativeCodecs();
+    case 'screen_info':
+      return JSON.stringify({
+        frame: {
+          l: window.screenX,
+          t: window.screenY,
+          r: window.screenX + window.innerWidth,
+          b: window.screenY + window.innerHeight,
+        },
+        visibleFrame: {
+          l: window.screen.availLeft,
+          t: window.screen.availTop,
+          r: window.screen.availLeft + window.screen.availWidth,
+          b: window.screen.availTop + window.screen.availHeight,
+        },
+        scaleFactor: window.devicePixelRatio,
+      });
+    case 'main_display':
+      return JSON.stringify({
+        w: window.screen.availWidth,
+        h: window.screen.availHeight,
+        scaleFactor: window.devicePixelRatio,
+      });
   }
   return '';
 }
@@ -521,20 +552,52 @@ export function getVersionNumber(v) {
   }
 }
 
+// ========================== options begin ==========================
+function setUserDefaultOption(value) {
+  try {
+    const ojb = JSON.parse(value);
+    const userDefaultOptions = JSON.parse(localStorage.getItem('user-default-options')) || {};
+    userDefaultOptions[ojb.name] = ojb.value;
+    localStorage.setItem('user-default-options', JSON.stringify(userDefaultOptions));
+  }
+  catch (e) {
+    console.error('Failed to set user default options: ' + e.message);
+  }
+}
+
+export function getUserDefaultOption(value) {
+  const defaultOptions = {
+    'view_style': 'original',
+    'scroll_style': 'scrollauto',
+    'image_quality': 'balanced',
+    'codec-preference': 'auto',
+    'custom_image_quality': '50',
+    'custom-fps': '30',
+  };
+  try {
+    const userDefaultOptions = JSON.parse(localStorage.getItem('user-default-options')) || {};
+    return userDefaultOptions[value] || defaultOptions[value] || '';
+  }
+  catch (e) {
+    console.error('Failed to get user default options: ' + e.message);
+    return defaultOptions[value] || '';
+  }
+}
+
 function getPeerOption(value) {
   try {
     const obj = JSON.parse(value);
     const options = getPeers()[obj.id] || {};
-    return options[obj.name] || '';
+    return options[obj.name] ?? getUserDefaultOption(obj.name);
   }
   catch (e) {
     console.error('Failed to get peer option: "' + value + '", ' + e.message);
   }
 }
 
-function setPeerOption(value) {
+function setPeerOption(param) {
   try {
-    const obj = JSON.parse(value);
+    const obj = JSON.parse(param);
     const id = obj.id;
     const name = obj.name;
     const value = obj.value;
@@ -554,6 +617,7 @@ function setPeerOption(value) {
     console.error('Failed to set peer option: "' + value + '", ' + e.message);
   }
 }
+// ========================= options end ===========================
 
 // ========================== peers begin ==========================
 function getRecentPeers() {
@@ -668,10 +732,10 @@ function increasePort(host, offset) {
 
 function getAlternativeCodecs() {
   return JSON.stringify({
-    vp8: 1,
-    av1: 0,
-    h264: 1,
-    h265: 1,
+    vp8: true,
+    av1: false,
+    h264: false,
+    h265: false,
   });
 }
 // ========================== settings end ===========================

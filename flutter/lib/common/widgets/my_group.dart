@@ -47,7 +47,10 @@ class _MyGroupState extends State<MyGroup> {
               err: gFFI.groupModel.groupLoadError,
               retry: null,
               close: () => gFFI.groupModel.groupLoadError.value = ''),
-          Expanded(child: isDesktop ? _buildDesktop() : _buildMobile())
+          Expanded(
+              child: (isDesktop || isWebDesktop)
+                  ? _buildDesktop()
+                  : _buildMobile())
         ],
       );
     });
@@ -164,7 +167,7 @@ class _MyGroupState extends State<MyGroup> {
           itemCount: items.length,
           itemBuilder: (context, index) => _buildUserItem(items[index]));
       var maxHeight = max(MediaQuery.of(context).size.height / 6, 100.0);
-      return isDesktop
+      return (isDesktop || isWebDesktop)
           ? listView
           : LimitedBox(maxHeight: maxHeight, child: listView);
     });
