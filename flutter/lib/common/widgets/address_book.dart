@@ -48,6 +48,10 @@ class _AddressBookState extends State<AddressBook> {
         } else {
           return Column(
             children: [
+              // NOT use Offstage to wrap LinearProgressIndicator
+              if (gFFI.abModel.currentAbLoading.value &&
+                  gFFI.abModel.currentAbEmpty)
+                const LinearProgressIndicator(),
               buildErrorBanner(context,
                   loading: gFFI.abModel.currentAbLoading,
                   err: gFFI.abModel.currentAbPullError,
