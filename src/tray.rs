@@ -96,6 +96,13 @@ pub fn make_tray() -> hbb_common::ResultType<()> {
                 .creation_flags(winapi::um::winbase::CREATE_NO_WINDOW)
                 .spawn()
                 .ok();
+            // Try fix the issue that the app can't be opened by the above command on some machines.
+            // It is ok to run "start [app]://" and "run_me" at the same time.
+            // `allow_multiple_instances` in `flutter/windows/runner/main.cpp` allows only one instance without args.
+            std::thread::spawn(move || {
+                std::thread::sleep(std::time::Duration::from_millis(1000));
+                crate::run_me::<&str>(vec![]).ok();
+            });
         }
         #[cfg(target_os = "linux")]
         if !std::process::Command::new("xdg-open")
