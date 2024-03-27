@@ -864,7 +864,7 @@ class RecentPeerCard extends BasePeerCard {
       BuildContext context) async {
     final List<MenuEntryBase<String>> menuItems = [
       _connectAction(context),
-      _transferFileAction(context),
+      if (!isWeb) _transferFileAction(context),
     ];
 
     final List favs = (await bind.mainGetFav()).toList();
@@ -873,7 +873,9 @@ class RecentPeerCard extends BasePeerCard {
       menuItems.add(_tcpTunnelingAction(context));
     }
     // menuItems.add(await _openNewConnInOptAction(peer.id));
-    menuItems.add(await _forceAlwaysRelayAction(peer.id));
+    if (!isWeb) {
+      menuItems.add(await _forceAlwaysRelayAction(peer.id));
+    }
     if (isWindows && peer.platform == kPeerPlatformWindows) {
       menuItems.add(_rdpAction(context, peer.id));
     }
@@ -881,7 +883,10 @@ class RecentPeerCard extends BasePeerCard {
       menuItems.add(_createShortCutAction(peer.id));
     }
     menuItems.add(MenuEntryDivider());
-    menuItems.add(_renameAction(peer.id));
+    if (!isWeb) {
+      // TODO: support web version
+      menuItems.add(_renameAction(peer.id));
+    }
     if (await bind.mainPeerHasPassword(id: peer.id)) {
       menuItems.add(_unrememberPasswordAction(peer.id));
     }
@@ -919,13 +924,15 @@ class FavoritePeerCard extends BasePeerCard {
       BuildContext context) async {
     final List<MenuEntryBase<String>> menuItems = [
       _connectAction(context),
-      _transferFileAction(context),
+      if (!isWeb) _transferFileAction(context),
     ];
     if (isDesktop && peer.platform != kPeerPlatformAndroid) {
       menuItems.add(_tcpTunnelingAction(context));
     }
     // menuItems.add(await _openNewConnInOptAction(peer.id));
-    menuItems.add(await _forceAlwaysRelayAction(peer.id));
+    if (!isWeb) {
+      menuItems.add(await _forceAlwaysRelayAction(peer.id));
+    }
     if (isWindows && peer.platform == kPeerPlatformWindows) {
       menuItems.add(_rdpAction(context, peer.id));
     }
@@ -933,7 +940,10 @@ class FavoritePeerCard extends BasePeerCard {
       menuItems.add(_createShortCutAction(peer.id));
     }
     menuItems.add(MenuEntryDivider());
-    menuItems.add(_renameAction(peer.id));
+    if (!isWeb) {
+      // TODO: support web version
+      menuItems.add(_renameAction(peer.id));
+    }
     if (await bind.mainPeerHasPassword(id: peer.id)) {
       menuItems.add(_unrememberPasswordAction(peer.id));
     }
@@ -968,7 +978,7 @@ class DiscoveredPeerCard extends BasePeerCard {
       BuildContext context) async {
     final List<MenuEntryBase<String>> menuItems = [
       _connectAction(context),
-      _transferFileAction(context),
+      if (!isWeb) _transferFileAction(context),
     ];
 
     final List favs = (await bind.mainGetFav()).toList();
@@ -977,7 +987,9 @@ class DiscoveredPeerCard extends BasePeerCard {
       menuItems.add(_tcpTunnelingAction(context));
     }
     // menuItems.add(await _openNewConnInOptAction(peer.id));
-    menuItems.add(await _forceAlwaysRelayAction(peer.id));
+    if (!isWeb) {
+      menuItems.add(await _forceAlwaysRelayAction(peer.id));
+    }
     if (isWindows && peer.platform == kPeerPlatformWindows) {
       menuItems.add(_rdpAction(context, peer.id));
     }
@@ -1019,7 +1031,7 @@ class AddressBookPeerCard extends BasePeerCard {
       BuildContext context) async {
     final List<MenuEntryBase<String>> menuItems = [
       _connectAction(context),
-      _transferFileAction(context),
+      if (!isWeb) _transferFileAction(context),
     ];
     if (isDesktop && peer.platform != kPeerPlatformAndroid) {
       menuItems.add(_tcpTunnelingAction(context));
@@ -1034,7 +1046,10 @@ class AddressBookPeerCard extends BasePeerCard {
     }
     if (gFFI.abModel.current.canWrite()) {
       menuItems.add(MenuEntryDivider());
-      menuItems.add(_renameAction(peer.id));
+      if (!isWeb) {
+        // TODO: support web version
+        menuItems.add(_renameAction(peer.id));
+      }
       if (gFFI.abModel.current.isPersonal() && peer.hash.isNotEmpty) {
         menuItems.add(_unrememberPasswordAction(peer.id));
       }
@@ -1148,7 +1163,7 @@ class MyGroupPeerCard extends BasePeerCard {
       BuildContext context) async {
     final List<MenuEntryBase<String>> menuItems = [
       _connectAction(context),
-      _transferFileAction(context),
+      if (!isWeb) _transferFileAction(context),
     ];
     if (isDesktop && peer.platform != kPeerPlatformAndroid) {
       menuItems.add(_tcpTunnelingAction(context));
