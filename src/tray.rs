@@ -88,21 +88,20 @@ pub fn make_tray() -> hbb_common::ResultType<()> {
         crate::platform::macos::handle_application_should_open_untitled_file();
         #[cfg(target_os = "windows")]
         {
-            use std::os::windows::process::CommandExt;
-            use std::process::Command;
-            Command::new("cmd")
-                .arg("/c")
-                .arg(&format!("start {}", crate::get_uri_prefix()))
-                .creation_flags(winapi::um::winbase::CREATE_NO_WINDOW)
-                .spawn()
-                .ok();
-            // Try fix the issue that the app can't be opened by the above command on some machines.
-            // It is ok to run "start [app]://" and "run_me" at the same time.
+            // Do not use the follwoing code (start uni link).
+            // It may be unable to open the app on some machines.
+            // eg. crate::get_uri_prefix() has some special characters or non-ascii characters.
+            //
+            // Command::new("cmd")
+            //     .arg("/c")
+            //     .arg(&format!("start {}", crate::get_uri_prefix()))
+            //     .creation_flags(winapi::um::winbase::CREATE_NO_WINDOW)
+            //     .spawn()
+            //     .ok();
+
+            // Use `run_me` instead.
             // `allow_multiple_instances` in `flutter/windows/runner/main.cpp` allows only one instance without args.
-            std::thread::spawn(move || {
-                std::thread::sleep(std::time::Duration::from_millis(1000));
-                crate::run_me::<&str>(vec![]).ok();
-            });
+            crate::run_me::<&str>(vec![]).ok();
         }
         #[cfg(target_os = "linux")]
         if !std::process::Command::new("xdg-open")
