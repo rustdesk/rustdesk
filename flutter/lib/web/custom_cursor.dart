@@ -96,12 +96,16 @@ deleteCustomCursor(String key) => CursorManager.instance.deleteCursor(key);
 
 MouseCursor buildCursorOfCache(
     model.CursorModel cursor, double scale, model.CursorData? cache) {
-  final data = cache?.data;
-  if (cache == null || data == null) {
+  if (cache == null) {
     return MouseCursor.defer;
   } else {
     final key = cache.updateGetKey(scale);
     if (!cursor.cachedKeys.contains(key)) {
+      // data should be checked here, because it may be changed after `updateGetKey()`
+      final data = cache.data;
+      if (data == null) {
+        return MouseCursor.defer;
+      }
       debugPrint(
           "Register custom cursor with key $key (${cache.hotx},${cache.hoty})");
       CursorManager.instance.registerCursor(CursorData(
