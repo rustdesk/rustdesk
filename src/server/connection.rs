@@ -241,6 +241,7 @@ pub struct Connection {
     delayed_read_dir: Option<(String, bool)>,
     #[cfg(target_os = "macos")]
     retina: Retina,
+    follow_remote_cursor: bool,
 }
 
 impl ConnInner {
@@ -348,6 +349,7 @@ impl Connection {
             network_delay: 0,
             lock_after_session_end: false,
             show_remote_cursor: false,
+            follow_remote_cursor: false,
             ip: "".to_owned(),
             disable_audio: false,
             #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
@@ -666,8 +668,11 @@ impl Connection {
                             #[cfg(target_os = "macos")]
                             conn.retina.set_displays(&_pi.displays);
                         }
-                        #[cfg(target_os = "macos")]
                         Some(message::Union::CursorPosition(pos)) => {
+                            if conn.follow_remote_cursor {
+                                conn.handle_cursor_switch_display(pos.clone()).await;
+                            }
+                            #[cfg(target_os = "macos")]
                             if let Some(new_msg) = conn.retina.on_cursor_pos(&pos, conn.display_idx) {
                                 msg = Arc::new(new_msg);
                             }
@@ -2747,6 +2752,12 @@ impl Connection {
                 }
             }
         }
+        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+        if let Ok(q) = o.follow_remote_cursor.enum_value() {
+            if q != BoolOption::NotSet {
+                self.follow_remote_cursor = q == BoolOption::Yes;
+            }
+        }
         if let Ok(q) = o.disable_audio.enum_value() {
             if q != BoolOption::NotSet {
                 self.disable_audio = q == BoolOption::Yes;
@@ -3106,6 +3117,31 @@ impl Connection {
         msg.set_misc(misc);
         self.inner.send(msg.into());
         self.supported_encoding_flag = (true, not_use);
+    }
+
+    async fn handle_cursor_switch_display(&mut self, pos: CursorPosition) {
+        if let Ok(displays) = super::display_service::update_get_sync_displays().await {
+            let d_index = displays
+                .iter()
+                .enumerate()
+                .find(|(_, d)| {
+                    let scale = d.scale;
+                    pos.x >= d.x
+                        && pos.y >= d.y
+                        && (pos.x - d.x) as f64 * scale < d.width as f64
+                        && (pos.y - d.y) as f64 * scale < d.height as f64
+                })
+                .map(|(i, _)| i);
+            if let Some(d_index) = d_index {
+                if self.display_idx != d_index {
+                    let mut pi = PeerInfo::default();
+                    pi.current_display = d_index as i32;
+                    let mut msg_out = Message::new();
+                    msg_out.set_peer_info(pi);
+                    self.send(msg_out).await;
+                }
+            }
+        }
     }
 }
 

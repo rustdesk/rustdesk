@@ -1565,8 +1565,12 @@ impl<T: InvokeUiSession> Remote<T> {
                     }
                 }
                 Some(message::Union::PeerInfo(pi)) => {
-                    self.handler.set_displays(&pi.displays);
-                    self.handler.set_platform_additions(&pi.platform_additions);
+                    if (pi.displays.is_empty() && pi.platform_additions.is_empty()) {
+                        self.handler.set_current_display(pi.current_display);
+                    } else {
+                        self.handler.set_displays(&pi.displays);
+                        self.handler.set_platform_additions(&pi.platform_additions);
+                    }
                 }
                 _ => {}
             }

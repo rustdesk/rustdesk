@@ -1407,6 +1407,14 @@ impl LoginConfigHandler {
                 BoolOption::No
             })
             .into();
+        } else if name == "follow-remote-cursor" {
+            config.follow_remote_cursor.v = !config.follow_remote_cursor.v;
+            option.follow_remote_cursor = (if config.follow_remote_cursor.v {
+                BoolOption::Yes
+            } else {
+                BoolOption::No
+            })
+            .into();
         } else if name == "disable-audio" {
             config.disable_audio.v = !config.disable_audio.v;
             option.disable_audio = (if config.disable_audio.v {
@@ -1474,6 +1482,7 @@ impl LoginConfigHandler {
                 option.disable_keyboard = f(false);
                 option.disable_clipboard = f(self.get_toggle_option("disable-clipboard"));
                 option.show_remote_cursor = f(self.get_toggle_option("show-remote-cursor"));
+                option.follow_remote_cursor = f(self.get_toggle_option("follow-remote-cursor"));
                 option.enable_file_transfer = f(self.config.enable_file_transfer.v);
                 option.lock_after_session_end = f(self.config.lock_after_session_end.v);
             }
@@ -1664,6 +1673,8 @@ impl LoginConfigHandler {
             self.config.allow_swap_key.v
         } else if name == "view-only" {
             self.config.view_only.v
+        } else if name == "follow-remote-cursor" {
+            self.config.follow_remote_cursor.v
         } else {
             !self.get_option(name).is_empty()
         }

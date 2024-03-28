@@ -882,6 +882,15 @@ impl InvokeUiSession for FlutterHandler {
         );
     }
 
+    fn set_current_display(&self, disp_idx: i32) {
+        self.peer_info.write().unwrap().current_display = disp_idx;
+        self.push_event(
+            "sync_peer_info",
+            &[("current_display", &disp_idx.to_string())],
+            &[],
+        );
+    }
+
     fn on_connected(&self, _conn_type: ConnType) {}
 
     fn msgbox(&self, msgtype: &str, title: &str, text: &str, link: &str, retry: bool) {

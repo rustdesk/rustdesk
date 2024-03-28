@@ -597,6 +597,7 @@ message OptionMessage {
 // Position 13 is used for Resolution. Remove later.
 // Resolution custom_resolution = 13;
   BoolOption support_windows_specific_session = 14;
+  BoolOption follow_remote_cursor = 15;
 }
 
 message TestDelay {

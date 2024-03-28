@@ -1352,6 +1352,7 @@ pub trait InvokeUiSession: Send + Sync + Clone + 'static + Sized + Default {
     #[cfg(all(feature = "gpucodec", feature = "flutter"))]
     fn on_texture(&self, display: usize, texture: *mut c_void);
     fn set_multiple_windows_session(&self, sessions: Vec<WindowsSession>);
+    fn set_current_display(&self, disp_idx: i32);
 }
 
 impl<T: InvokeUiSession> Deref for Session<T> {

@@ -330,6 +330,8 @@ pub struct PeerConfig {
     pub info: PeerInfoSerde,
     #[serde(default)]
     pub transfer: TransferSerde,
+    #[serde(flatten)]
+    pub follow_remote_cursor: FollowRemoteCursor,
 }
 
 impl Default for PeerConfig {
@@ -364,6 +366,7 @@ impl Default for PeerConfig {
             ui_flutter: Default::default(),
             info: Default::default(),
             transfer: Default::default(),
+            follow_remote_cursor: Default::default(),
         }
     }
 }
@@ -384,6 +387,12 @@ pub struct TransferSerde {
     pub write_jobs: Vec<String>,
     #[serde(default, deserialize_with = "deserialize_vec_string")]
     pub read_jobs: Vec<String>,
+}
+
+#[derive(Debug, Default, Serialize, Deserialize, Clone, PartialEq)]
+pub struct FollowRemoteCursor {
+    #[serde(default, deserialize_with = "deserialize_bool")]
+    pub v: bool,
 }
 
 #[inline]

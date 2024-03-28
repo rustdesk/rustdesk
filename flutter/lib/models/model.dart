@@ -974,6 +974,19 @@ class FfiModel with ChangeNotifier {
         }
       }
     }
+    if (evt['current_display'] != null) {
+      _pi.currentDisplay = int.parse(evt['current_display']);
+      try {
+        CurrentDisplayState.find(peerId).value = _pi.currentDisplay;
+      } catch (e) {
+        //
+      }
+      bind.sessionSwitchDisplay(
+        isDesktop: isDesktop,
+        sessionId: sessionId,
+        value: Int32List.fromList([_pi.currentDisplay]),
+      );
+    }
     notifyListeners();
   }
 
