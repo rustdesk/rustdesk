@@ -53,7 +53,7 @@ class AbModel {
   RxString get currentAbPullError => current.pullError;
   RxString get currentAbPushError => current.pushError;
   String? _personalAbGuid;
-  RxBool legacyMode = true.obs;
+  RxBool legacyMode = false.obs;
 
   final sortTags = shouldSortTags().obs;
   final filterByIntersection = filterAbTagByIntersection().obs;
@@ -151,10 +151,7 @@ class AbModel {
         // set current address book name
         if (!listInitialized) {
           listInitialized = true;
-          final name = bind.getLocalFlutterOption(k: 'current-ab-name');
-          if (addressbooks.containsKey(name)) {
-            _currentName.value = name;
-          }
+          trySetCurrentToLast();
         }
         if (!addressbooks.containsKey(_currentName.value)) {
           setCurrentName(legacyMode.value
@@ -551,6 +548,13 @@ class AbModel {
     return res;
   }
 
+  trySetCurrentToLast() {
+    final name = bind.getLocalFlutterOption(k: 'current-ab-name');
+    if (addressbooks.containsKey(name)) {
+      _currentName.value = name;
+    }
+  }
+
   Future<void> loadCache() async {
     try {
       if (_cacheLoadOnceFlag || currentAbLoading.value) return;
@@ -562,10 +566,8 @@ class AbModel {
       final data = jsonDecode(cache);
       if (data == null || data['access_token'] != access_token) return;
       _deserializeCache(data);
-      final name = bind.getLocalFlutterOption(k: 'current-ab-name');
-      if (addressbooks.containsKey(name)) {
-        _currentName.value = name;
-      }
+      legacyMode.value = addressbooks.containsKey(_legacyAddressBookName);
+      trySetCurrentToLast();
     } catch (e) {
       debugPrint("load ab cache: $e");
     }
@@ -661,11 +663,11 @@ class AbModel {
     }
     if (!current.initialized) {
       await current.pullAb(quiet: false);
-      _saveCache();
     }
     _refreshTab();
     if (oldName != _currentName.value) {
       _syncAllFromRecent = true;
+      _saveCache();
     }
   }
 
