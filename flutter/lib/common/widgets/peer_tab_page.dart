@@ -37,7 +37,7 @@ class _TabEntry {
 }
 
 EdgeInsets? _menuPadding() {
-  return isDesktop ? kDesktopMenuPadding : null;
+  return (isDesktop || isWebDesktop) ? kDesktopMenuPadding : null;
 }
 
 class _PeerTabPageState extends State<PeerTabPage>
@@ -113,7 +113,9 @@ class _PeerTabPageState extends State<PeerTabPage>
         SizedBox(
           height: 32,
           child: Container(
-            padding: isDesktop ? null : EdgeInsets.symmetric(horizontal: 2),
+            padding: (isDesktop || isWebDesktop)
+                ? null
+                : EdgeInsets.symmetric(horizontal: 2),
             child: selectionWrap(Row(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
@@ -127,7 +129,7 @@ class _PeerTabPageState extends State<PeerTabPage>
               ],
             )),
           ),
-        ).paddingOnly(right: isDesktop ? 12 : 0),
+        ).paddingOnly(right: (isDesktop || isWebDesktop) ? 12 : 0),
         _createPeersView(),
       ],
     );
@@ -195,7 +197,8 @@ class _PeerTabPageState extends State<PeerTabPage>
       }
     }
     return Expanded(
-        child: child.marginSymmetric(vertical: isDesktop ? 12.0 : 6.0));
+        child: child.marginSymmetric(
+            vertical: (isDesktop || isWebDesktop) ? 12.0 : 6.0));
   }
 
   Widget _createRefresh(

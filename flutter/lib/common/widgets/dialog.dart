@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:bot_toast/bot_toast.dart';
 import 'package:flutter/material.dart';
@@ -81,7 +80,7 @@ void changeIdDialog() {
       final Iterable violations = rules.where((r) => !r.validate(newId));
       if (violations.isNotEmpty) {
         setState(() {
-          msg = isDesktop
+          msg = (isDesktop || isWebDesktop)
               ? '${translate('Prompt')}:  ${violations.map((r) => r.name).join(', ')}'
               : violations.map((r) => r.name).join(', ');
         });
@@ -106,7 +105,7 @@ void changeIdDialog() {
       }
       setState(() {
         isInProgress = false;
-        msg = isDesktop
+        msg = (isDesktop || isWebDesktop)
             ? '${translate('Prompt')}: ${translate(status)}'
             : translate(status);
       });
@@ -143,7 +142,7 @@ void changeIdDialog() {
           const SizedBox(
             height: 8.0,
           ),
-          isDesktop
+          (isDesktop || isWebDesktop)
               ? Obx(() => Wrap(
                     runSpacing: 8,
                     spacing: 4,
@@ -1109,7 +1108,7 @@ void showRequestElevationDialog(
                 errorText: errPwd.isEmpty ? null : errPwd.value,
               ),
             ],
-          ).marginOnly(left: isDesktop ? 35 : 0),
+          ).marginOnly(left: (isDesktop || isWebDesktop) ? 35 : 0),
         ).marginOnly(top: 10),
       ],
     ),

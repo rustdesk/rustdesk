@@ -652,7 +652,7 @@ export default class Connection {
   }
 
   getOption(name: string): any {
-    return this._options[name];
+    return this._options[name] ?? globals.getUserDefaultOption(name);
   }
 
   getToggleOption(name: string): Boolean {
@@ -839,6 +839,52 @@ export default class Connection {
   }
 
   toggleOption(name: string) {
+
+    //   } else if name == "block-input" {
+    //     option.block_input = BoolOption::Yes.into();
+    // } else if name == "unblock-input" {
+    //     option.block_input = BoolOption::No.into();
+    // } else if name == "show-quality-monitor" {
+    //     config.show_quality_monitor.v = !config.show_quality_monitor.v;
+    // } else if name == "allow_swap_key" {
+    //     config.allow_swap_key.v = !config.allow_swap_key.v;
+    // } else if name == "view-only" {
+    //     config.view_only.v = !config.view_only.v;
+    //     let f = |b: bool| {
+    //         if b {
+    //             BoolOption::Yes.into()
+    //         } else {
+    //             BoolOption::No.into()
+    //         }
+    //     };
+    //     if config.view_only.v {
+    //         option.disable_keyboard = f(true);
+    //         option.disable_clipboard = f(true);
+    //         option.show_remote_cursor = f(true);
+    //         option.enable_file_transfer = f(false);
+    //         option.lock_after_session_end = f(false);
+    //     } else {
+    //         option.disable_keyboard = f(false);
+    //         option.disable_clipboard = f(self.get_toggle_option("disable-clipboard"));
+    //         option.show_remote_cursor = f(self.get_toggle_option("show-remote-cursor"));
+    //         option.enable_file_transfer = f(self.config.enable_file_transfer.v);
+    //         option.lock_after_session_end = f(self.config.lock_after_session_end.v);
+    //     }
+    // } else {
+    //     let is_set = self
+    //         .options
+    //         .get(&name)
+    //         .map(|o| !o.is_empty())
+    //         .unwrap_or(false);
+    //     if is_set {
+    //         self.config.options.remove(&name);
+    //     } else {
+    //         self.config.options.insert(name, "Y".to_owned());
+    //     }
+    //     self.config.store(&self.id);
+    //     return None;
+    // }
+
     const v = !this._options[name];
     const option = message.OptionMessage.fromPartial({});
     const v2 = v
@@ -860,13 +906,43 @@ export default class Connection {
       case "privacy-mode":
         option.privacy_mode = v2;
         break;
+      case "enable-file-transfer":
+        option.enable_file_transfer = v2;
+        break;
       case "block-input":
         option.block_input = message.OptionMessage_BoolOption.Yes;
         break;
       case "unblock-input":
         option.block_input = message.OptionMessage_BoolOption.No;
         break;
+      case "show-quality-monitor":
+      case "allow-swap-key":
+        break;
+      case "view-only":
+        if (v) {
+          option.disable_keyboard = message.OptionMessage_BoolOption.Yes;
+          option.disable_clipboard = message.OptionMessage_BoolOption.Yes;
+          option.show_remote_cursor = message.OptionMessage_BoolOption.Yes;
+          option.enable_file_transfer = message.OptionMessage_BoolOption.No;
+          option.lock_after_session_end = message.OptionMessage_BoolOption.No;
+        } else {
+          option.disable_keyboard = message.OptionMessage_BoolOption.No;
+          option.disable_clipboard = this.getToggleOption("disable-clipboard")
+            ? message.OptionMessage_BoolOption.Yes
+            : message.OptionMessage_BoolOption.No;
+          option.show_remote_cursor = this.getToggleOption("show-remote-cursor")
+            ? message.OptionMessage_BoolOption.Yes
+            : message.OptionMessage_BoolOption.No;
+          option.enable_file_transfer = this.getToggleOption("enable-file-transfer")
+            ? message.OptionMessage_BoolOption.Yes
+            : message.OptionMessage_BoolOption.No;
+          option.lock_after_session_end = this.getToggleOption("lock-after-session-end")
+            ? message.OptionMessage_BoolOption.Yes
+            : message.OptionMessage_BoolOption.No;
+        }
+        break;
       default:
+        this.setOption(name, this._options[name] ? undefined : "Y");
         return;
     }
     if (name.indexOf("block-input") < 0) this.setOption(name, v);

@@ -209,10 +209,10 @@ List<Widget> ServerConfigImportExportWidgets(
 List<(String, String)> otherDefaultSettings() {
   List<(String, String)> v = [
     ('View Mode', 'view_only'),
-    if (isDesktop) ('show_monitors_tip', kKeyShowMonitorsToolbar),
-    if (isDesktop) ('Collapse toolbar', 'collapse_toolbar'),
+    if ((isDesktop || isWebDesktop)) ('show_monitors_tip', kKeyShowMonitorsToolbar),
+    if ((isDesktop || isWebDesktop)) ('Collapse toolbar', 'collapse_toolbar'),
     ('Show remote cursor', 'show_remote_cursor'),
-    if (isDesktop) ('Zoom cursor', 'zoom-cursor'),
+    if ((isDesktop || isWebDesktop)) ('Zoom cursor', 'zoom-cursor'),
     ('Show quality monitor', 'show_quality_monitor'),
     ('Mute', 'disable_audio'),
     if (isDesktop) ('Enable file copy and paste', 'enable_file_transfer'),

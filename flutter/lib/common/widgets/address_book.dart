@@ -63,7 +63,7 @@ class _AddressBookState extends State<AddressBook> {
                   retry: null, // remove retry
                   close: () => gFFI.abModel.currentAbPushError.value = ''),
               Expanded(
-                  child: isDesktop
+                  child: (isDesktop || isWebDesktop)
                       ? _buildAddressBookDesktop()
                       : _buildAddressBookMobile())
             ],
@@ -311,7 +311,7 @@ class _AddressBookState extends State<AddressBook> {
             return tagBuilder(e);
           });
       final maxHeight = max(MediaQuery.of(context).size.height / 6, 100.0);
-      return isDesktop
+      return (isDesktop || isWebDesktop)
           ? gridView
           : LimitedBox(maxHeight: maxHeight, child: gridView);
     });

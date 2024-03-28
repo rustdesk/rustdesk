@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hbb/common/widgets/dialog.dart';
 import 'package:flutter_hbb/consts.dart';
-import 'package:flutter_hbb/models/ab_model.dart';
 import 'package:flutter_hbb/models/peer_tab_model.dart';
 import 'package:get/get.dart';
 import 'package:provider/provider.dart';
@@ -52,7 +51,7 @@ class _PeerCardState extends State<_PeerCard>
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    if (isDesktop) {
+    if (isDesktop || isWebDesktop) {
       return _buildDesktop();
     } else {
       return _buildMobile();
@@ -883,8 +882,7 @@ class RecentPeerCard extends BasePeerCard {
       menuItems.add(_createShortCutAction(peer.id));
     }
     menuItems.add(MenuEntryDivider());
-    if (!isWeb) {
-      // TODO: support web version
+    if (isDesktop || isWebDesktop) {
       menuItems.add(_renameAction(peer.id));
     }
     if (await bind.mainPeerHasPassword(id: peer.id)) {
@@ -940,8 +938,7 @@ class FavoritePeerCard extends BasePeerCard {
       menuItems.add(_createShortCutAction(peer.id));
     }
     menuItems.add(MenuEntryDivider());
-    if (!isWeb) {
-      // TODO: support web version
+    if (isDesktop || isWebDesktop) {
       menuItems.add(_renameAction(peer.id));
     }
     if (await bind.mainPeerHasPassword(id: peer.id)) {
@@ -1046,8 +1043,7 @@ class AddressBookPeerCard extends BasePeerCard {
     }
     if (gFFI.abModel.current.canWrite()) {
       menuItems.add(MenuEntryDivider());
-      if (!isWeb) {
-        // TODO: support web version
+      if (isDesktop || isWebDesktop) {
         menuItems.add(_renameAction(peer.id));
       }
       if (gFFI.abModel.current.isPersonal() && peer.hash.isNotEmpty) {
@@ -1249,7 +1245,7 @@ void _rdpDialog(String id) async {
             ).marginOnly(bottom: isDesktop ? 8 : 0),
             Row(
               children: [
-                isDesktop
+                (isDesktop || isWebDesktop)
                     ? ConstrainedBox(
                         constraints: const BoxConstraints(minWidth: 140),
                         child: Text(
@@ -1260,15 +1256,17 @@ void _rdpDialog(String id) async {
                 Expanded(
                   child: TextField(
                     decoration: InputDecoration(
-                        labelText: isDesktop ? null : translate('Username')),
+                        labelText: (isDesktop || isWebDesktop)
+                            ? null
+                            : translate('Username')),
                     controller: userController,
                   ),
                 ),
               ],
-            ).marginOnly(bottom: isDesktop ? 8 : 0),
+            ).marginOnly(bottom: (isDesktop || isWebDesktop) ? 8 : 0),
             Row(
               children: [
-                isDesktop
+                (isDesktop || isWebDesktop)
                     ? ConstrainedBox(
                         constraints: const BoxConstraints(minWidth: 140),
                         child: Text(
@@ -1280,7 +1278,9 @@ void _rdpDialog(String id) async {
                   child: Obx(() => TextField(
                         obscureText: secure.value,
                         decoration: InputDecoration(
-                            labelText: isDesktop ? null : translate('Password'),
+                            labelText: (isDesktop || isWebDesktop)
+                                ? null
+                                : translate('Password'),
                             suffixIcon: IconButton(
                                 onPressed: () => secure.value = !secure.value,
                                 icon: Icon(secure.value
