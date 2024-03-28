@@ -100,6 +100,9 @@ class PlatformFFI {
   Future<void> init(String appType) async {
     context.callMethod('init');
     version = getByName('version');
+    window.onContextMenu.listen((event) {
+      event.preventDefault();
+    });
 
     context['onRegisteredEvent'] = (String message) {
       try {
