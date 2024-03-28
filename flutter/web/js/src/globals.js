@@ -333,6 +333,9 @@ window.setByName = (name, value) => {
       break;
     case 'change_prefer_codec':
       curConn.changePreferCodec(value);
+    case 'cursor':
+      setCustomCursor(value);
+      break;
     default:
       break;
   }
@@ -549,6 +552,23 @@ export function getVersionNumber(v) {
   catch (e) {
     console.error('Failed to parse version number: "' + v + '" ' + e.message);
     return 0;
+  }
+}
+
+// Set the cursor for the flutter-view element
+function setCustomCursor(value) {
+  try {
+    const obj = JSON.parse(value);
+    // document querySelector or evaluate can not find the custom element
+    var body = document.body;
+    for (var i = 0; i < body.children.length; i++) {
+      var child = body.children[i];
+      if (child.tagName == 'FLUTTER-VIEW') {
+        child.style.cursor = `url(${obj.url}) ${obj.hotx} ${obj.hoty}, auto`;
+      }
+    }
+  } catch (e) {
+    console.error('Failed to set custom cursor: ' + e.message);
   }
 }
 
