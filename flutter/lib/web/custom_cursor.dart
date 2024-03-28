@@ -109,8 +109,8 @@ MouseCursor buildCursorOfCache(
           url: 'data:image/rgba;base64,${base64Encode(data)}',
           hotX: cache.hotx,
           hotY: cache.hoty,
-          width: cache.width,
-          height: cache.height));
+          width: (cache.width * cache.scale).toInt(),
+          height: (cache.height * cache.scale).toInt()));
       cursor.addKey(key);
     }
     return FlutterCustomMemoryImageCursor(key: key);
