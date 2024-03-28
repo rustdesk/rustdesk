@@ -562,6 +562,10 @@ class AbModel {
       final data = jsonDecode(cache);
       if (data == null || data['access_token'] != access_token) return;
       _deserializeCache(data);
+      final name = bind.getLocalFlutterOption(k: 'current-ab-name');
+      if (addressbooks.containsKey(name)) {
+        _currentName.value = name;
+      }
     } catch (e) {
       debugPrint("load ab cache: $e");
     }
