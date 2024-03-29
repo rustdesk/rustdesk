@@ -587,7 +587,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Please select the session you want to connect to", "Selecteer de sessie waarmee je verbinding wilt maken"),
         ("powered_by_me", "Werkt met Rustdesk"),
         ("outgoing_only_desk_tip", "Je kan verbinding maken met andere apparaten, maar andere apparaten kunnen geen verbinding maken met dit apparaat."),
-        ("preset_password_warning", ""),
+        ("preset_password_warning", "Dit is een aangepaste editie en wordt geleverd met een vooraf ingesteld wachtwoord. Iedereen die dit wachtwoord kent, kan de volledige controle over het apparaat krijgen."),
         ("Security Alert", "Beveiligingswaarschuwing"),
         ("My address book", "Mijn adresboek"),
         ("Personal", "Persoonijk"),
