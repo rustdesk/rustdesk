@@ -416,7 +416,7 @@ class _PeerCardState extends State<_PeerCard>
 
   bool _shouldBuildPasswordIcon(Peer peer) {
     if (gFFI.peerTabModel.currentTab != PeerTabIndex.ab.index) return false;
-    if (gFFI.abModel.current.isPersonal()) return false;
+    if (gFFI.abModel.current.isLegacy()) return false;
     return peer.password.isNotEmpty;
   }
 
@@ -735,6 +735,16 @@ abstract class BasePeerCard extends StatelessWidget {
   }
 
   @protected
+  Future<bool> _showUnrememberPasswordAction(String id) async {
+    if (tab == PeerTabIndex.ab) {
+      return gFFI.abModel.current.isPersonal() &&
+          (peer.hash.isNotEmpty || peer.password.isNotEmpty);
+    } else {
+      return await bind.mainPeerHasPassword(id: id);
+    }
+  }
+
+  @protected
   MenuEntryBase<String> _unrememberPasswordAction(String id) {
     return MenuEntryButton<String>(
       childBuilder: (TextStyle? style) => Text(
@@ -742,7 +752,8 @@ abstract class BasePeerCard extends StatelessWidget {
         style: style,
       ),
       proc: () async {
-        bool succ = await gFFI.abModel.changePersonalHashPassword(id, '');
+        bool succ = await gFFI.abModel.changePersonalHashPassword(id, '') &&
+            await gFFI.abModel.changePersonalPassword(id, '');
         await bind.mainForgetPassword(id: id);
         if (succ) {
           showToast(translate('Successful'));
@@ -885,7 +896,7 @@ class RecentPeerCard extends BasePeerCard {
     if (isDesktop || isWebDesktop) {
       menuItems.add(_renameAction(peer.id));
     }
-    if (await bind.mainPeerHasPassword(id: peer.id)) {
+    if (await _showUnrememberPasswordAction(peer.id)) {
       menuItems.add(_unrememberPasswordAction(peer.id));
     }
 
@@ -941,7 +952,7 @@ class FavoritePeerCard extends BasePeerCard {
     if (isDesktop || isWebDesktop) {
       menuItems.add(_renameAction(peer.id));
     }
-    if (await bind.mainPeerHasPassword(id: peer.id)) {
+    if (await _showUnrememberPasswordAction(peer.id)) {
       menuItems.add(_unrememberPasswordAction(peer.id));
     }
     menuItems.add(_rmFavAction(peer.id, () async {
@@ -1046,11 +1057,11 @@ class AddressBookPeerCard extends BasePeerCard {
       if (isDesktop || isWebDesktop) {
         menuItems.add(_renameAction(peer.id));
       }
-      if (gFFI.abModel.current.isPersonal() && peer.hash.isNotEmpty) {
-        menuItems.add(_unrememberPasswordAction(peer.id));
+      if (!gFFI.abModel.current.isLegacy()) {
+        menuItems.add(_changeAbPassword());
       }
-      if (!gFFI.abModel.current.isPersonal()) {
-        menuItems.add(_changeSharedAbPassword());
+      if (await _showUnrememberPasswordAction(peer.id)) {
+        menuItems.add(_unrememberPasswordAction(peer.id));
       }
       if (gFFI.abModel.currentAbTags.isNotEmpty) {
         menuItems.add(_editTagAction(peer.id));
@@ -1099,14 +1110,16 @@ class AddressBookPeerCard extends BasePeerCard {
   Future<String> _getAlias(String id) async =>
       gFFI.abModel.find(id)?.alias ?? '';
 
-  MenuEntryBase<String> _changeSharedAbPassword() {
+  MenuEntryBase<String> _changeAbPassword() {
     return MenuEntryButton<String>(
       childBuilder: (TextStyle? style) => Text(
-        translate('Set shared password'),
+        translate(gFFI.abModel.current.isPersonal()
+            ? 'Set Password'
+            : 'Set shared password'),
         style: style,
       ),
       proc: () {
-        setSharedAbPasswordDialog(gFFI.abModel.currentName.value, peer);
+        setAbPasswordDialog(gFFI.abModel.currentName.value, peer);
       },
       padding: super.menuPadding,
       dismissOnClicked: true,

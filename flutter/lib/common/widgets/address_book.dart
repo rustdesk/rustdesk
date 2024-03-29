@@ -87,7 +87,10 @@ class _AddressBookState extends State<AddressBook> {
                 child: Column(
                   children: [
                     _buildAbDropdown(),
-                    _buildTagHeader().marginOnly(left: 8.0, right: 0),
+                    _buildTagHeader().marginOnly(
+                        left: 8.0,
+                        right: gFFI.abModel.legacyMode.value ? 8.0 : 0,
+                        top: gFFI.abModel.legacyMode.value ? 8.0 : 0),
                     Expanded(
                       child: Container(
                         width: double.infinity,
@@ -422,7 +425,7 @@ class _AddressBookState extends State<AddressBook> {
     var selectedTag = List<dynamic>.empty(growable: true).obs;
     final style = TextStyle(fontSize: 14.0);
     String? errorMsg;
-    final isCurrentAbShared = !gFFI.abModel.current.isPersonal();
+    final isLegacy = gFFI.abModel.current.isLegacy();
 
     gFFI.dialogManager.show((setState, close, context) {
       submit() async {
@@ -442,7 +445,7 @@ class _AddressBookState extends State<AddressBook> {
             return;
           }
           var password = '';
-          if (isCurrentAbShared) {
+          if (!isLegacy) {
             password = passwordController.text;
           }
           String? errMsg2 = await gFFI.abModel.addIdToCurrent(
@@ -498,7 +501,7 @@ class _AddressBookState extends State<AddressBook> {
                 TextField(
                   controller: aliasController,
                 ),
-                if (isCurrentAbShared)
+                if (!isLegacy)
                   Align(
                     alignment: Alignment.centerLeft,
                     child: Text(
@@ -506,7 +509,7 @@ class _AddressBookState extends State<AddressBook> {
                       style: style,
                     ),
                   ).marginOnly(top: 8, bottom: marginBottom),
-                if (isCurrentAbShared)
+                if (!isLegacy)
                   TextField(
                     controller: passwordController,
                     obscureText: true,

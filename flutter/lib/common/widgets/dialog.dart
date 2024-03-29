@@ -1918,11 +1918,9 @@ void addPeersToAbDialog(
   Future<bool> addTo(String abname) async {
     final mapList = peers.map((e) {
       var json = e.toJson();
-      // remove shared password when add to other address book
+      // remove password when add to another address book to avoid re-share
       json.remove('password');
-      if (gFFI.abModel.addressbooks[abname]?.isPersonal() != true) {
-        json.remove('hash');
-      }
+      json.remove('hash');
       return json;
     }).toList();
     final errMsg = await gFFI.abModel.addPeersTo(mapList, abname);
@@ -2025,19 +2023,19 @@ void addPeersToAbDialog(
   });
 }
 
-void setSharedAbPasswordDialog(String abName, Peer peer) {
+void setAbPasswordDialog(String abName, Peer peer) {
   TextEditingController controller = TextEditingController(text: peer.password);
   RxBool isInProgress = false.obs;
   gFFI.dialogManager.show((setState, close, context) {
     submit() async {
       isInProgress.value = true;
-      bool res = await gFFI.abModel
-          .changeSharedPassword(abName, peer.id, controller.text);
-      close();
+      bool res =
+          await gFFI.abModel.changePassword(abName, peer.id, controller.text);
       isInProgress.value = false;
       if (res) {
         showToast(translate('Successful'));
       }
+      close();
     }
 
     cancel() {
@@ -2049,7 +2047,10 @@ void setSharedAbPasswordDialog(String abName, Peer peer) {
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Icon(Icons.key, color: MyTheme.accent),
-          Text(translate('Set shared password')).paddingOnly(left: 10),
+          Text(translate(gFFI.abModel.current.isPersonal()
+                  ? 'Set Password'
+                  : 'Set shared password'))
+              .paddingOnly(left: 10),
         ],
       ),
       content: Obx(() => Column(children: [
@@ -2058,13 +2059,14 @@ void setSharedAbPasswordDialog(String abName, Peer peer) {
               obscureText: true,
               autofocus: true,
             ),
-            Row(children: [
-              Icon(Icons.info, color: Colors.amber).marginOnly(right: 4),
-              Text(
-                translate('share_warning_tip'),
-                style: TextStyle(fontSize: 12),
-              )
-            ]).marginSymmetric(vertical: 10),
+            if (!gFFI.abModel.current.isPersonal())
+              Row(children: [
+                Icon(Icons.info, color: Colors.amber).marginOnly(right: 4),
+                Text(
+                  translate('share_warning_tip'),
+                  style: TextStyle(fontSize: 12),
+                )
+              ]).marginSymmetric(vertical: 10),
             // NOT use Offstage to wrap LinearProgressIndicator
             isInProgress.value ? const LinearProgressIndicator() : Offstage()
           ])),
