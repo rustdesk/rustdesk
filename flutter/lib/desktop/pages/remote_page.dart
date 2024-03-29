@@ -3,12 +3,9 @@ import 'dart:async';
 import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_custom_cursor/cursor_manager.dart'
-    as custom_cursor_manager;
 import 'package:get/get.dart';
 import 'package:provider/provider.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
-import 'package:flutter_custom_cursor/flutter_custom_cursor.dart';
 import 'package:flutter_improved_scrolling/flutter_improved_scrolling.dart';
 
 import '../../consts.dart';
@@ -25,6 +22,9 @@ import '../../utils/image.dart';
 import '../widgets/remote_toolbar.dart';
 import '../widgets/kb_layout_type_chooser.dart';
 import '../widgets/tabbar_widget.dart';
+
+import 'package:flutter_hbb/native/custom_cursor.dart'
+    if (dart.library.html) 'package:flutter_hbb/web/custom_cursor.dart';
 
 final SimpleWrapper<bool> _firstEnterImage = SimpleWrapper(false);
 
@@ -667,48 +667,16 @@ class _ImagePaintState extends State<ImagePaint> {
     );
   }
 
-  MouseCursor _buildCursorOfCache(
-      CursorModel cursor, double scale, CursorData? cache) {
-    // TODO: web cursor
-    if (isWeb) {
-      return MouseCursor.defer;
-    }
-
-    if (cache == null) {
-      return MouseCursor.defer;
-    } else {
-      final key = cache.updateGetKey(scale);
-      if (!cursor.cachedKeys.contains(key)) {
-        debugPrint(
-            "Register custom cursor with key $key (${cache.hotx},${cache.hoty})");
-        // [Safety]
-        // It's ok to call async registerCursor in current synchronous context,
-        // because activating the cursor is also an async call and will always
-        // be executed after this.
-        custom_cursor_manager.CursorManager.instance
-            .registerCursor(custom_cursor_manager.CursorData()
-              ..buffer = cache.data!
-              ..height = (cache.height * cache.scale).toInt()
-              ..width = (cache.width * cache.scale).toInt()
-              ..hotX = cache.hotx
-              ..hotY = cache.hoty
-              ..name = key);
-        cursor.addKey(key);
-      }
-      return FlutterCustomMemoryImageCursor(key: key);
-    }
-  }
-
   MouseCursor _buildCustomCursor(BuildContext context, double scale) {
     final cursor = Provider.of<CursorModel>(context);
     final cache = cursor.cache ?? preDefaultCursor.cache;
-    return _buildCursorOfCache(cursor, scale, cache);
+    return buildCursorOfCache(cursor, scale, cache);
   }
 
   MouseCursor _buildDisabledCursor(BuildContext context, double scale) {
     final cursor = Provider.of<CursorModel>(context);
     final cache = preForbiddenCursor.cache;
-    return _buildCursorOfCache(cursor, scale, cache);
+    return buildCursorOfCache(cursor, scale, cache);
   }
 
   Widget _buildCrossScrollbarFromLayout(
