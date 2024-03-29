@@ -17,6 +17,11 @@ MouseCursor buildCursorOfCache(
   } else {
     final key = cache.updateGetKey(scale);
     if (!cursor.cachedKeys.contains(key)) {
+      // data should be checked here, because it may be changed after `updateGetKey()`
+      final data = cache.data;
+      if (data == null) {
+        return MouseCursor.defer;
+      }
       debugPrint(
           "Register custom cursor with key $key (${cache.hotx},${cache.hoty})");
       // [Safety]
@@ -25,12 +30,12 @@ MouseCursor buildCursorOfCache(
       // be executed after this.
       custom_cursor_manager.CursorManager.instance
           .registerCursor(custom_cursor_manager.CursorData()
-            ..buffer = cache.data!
-            ..height = (cache.height * cache.scale).toInt()
+            ..name = key
+            ..buffer = data
             ..width = (cache.width * cache.scale).toInt()
+            ..height = (cache.height * cache.scale).toInt()
             ..hotX = cache.hotx
-            ..hotY = cache.hoty
-            ..name = key);
+            ..hotY = cache.hoty);
       cursor.addKey(key);
     }
     return FlutterCustomMemoryImageCursor(key: key);

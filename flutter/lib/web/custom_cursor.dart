@@ -61,9 +61,8 @@ class CursorManager {
 }
 
 class FlutterCustomMemoryImageCursor extends MouseCursor {
-  final String? key;
-  const FlutterCustomMemoryImageCursor({this.key})
-      : assert((key != null && key != ""));
+  final String key;
+  const FlutterCustomMemoryImageCursor({required this.key});
 
   @override
   MouseCursorSession createSession(int device) =>
@@ -85,7 +84,7 @@ class _FlutterCustomMemoryImageCursorSession extends MouseCursorSession {
 
   @override
   Future<void> activate() async {
-    await CursorManager.instance.setSystemCursor(cursor.key.toString());
+    await CursorManager.instance.setSystemCursor(cursor.key);
   }
 
   @override
@@ -111,10 +110,10 @@ MouseCursor buildCursorOfCache(
       CursorManager.instance.registerCursor(CursorData(
           key: key,
           url: 'data:image/rgba;base64,${base64Encode(data)}',
-          hotX: cache.hotx,
-          hotY: cache.hoty,
           width: (cache.width * cache.scale).toInt(),
-          height: (cache.height * cache.scale).toInt()));
+          height: (cache.height * cache.scale).toInt(),
+          hotX: cache.hotx,
+          hotY: cache.hoty));
       cursor.addKey(key);
     }
     return FlutterCustomMemoryImageCursor(key: key);
