@@ -1,9 +1,9 @@
 name: Flutter Nightly MacOS Arm64 Build
 
 on:
-  schedule:
+  #schedule:
     # schedule build every night
-    - cron: "0/6 * * * *"
+  #  - cron: "0/6 * * * *"
   workflow_dispatch:
 
 env:
