@@ -592,7 +592,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("My address book", "Mi directorio"),
         ("Personal", "Personal"),
         ("Owner", "Propietario"),
-        ("Set shared password", "Establecer contraseña compartida"),
         ("Exist in", "Existe en"),
         ("Read-only", "Solo-lectura"),
         ("Read/Write", "Lectura/Escritura"),

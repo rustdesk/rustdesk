@@ -1113,9 +1113,7 @@ class AddressBookPeerCard extends BasePeerCard {
   MenuEntryBase<String> _changeAbPassword() {
     return MenuEntryButton<String>(
       childBuilder: (TextStyle? style) => Text(
-        translate(gFFI.abModel.current.isPersonal()
-            ? 'Set Password'
-            : 'Set shared password'),
+        translate(peer.password.isEmpty ? 'Set Password' : 'Change Password'),
         style: style,
       ),
       proc: () {

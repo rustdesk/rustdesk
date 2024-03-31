@@ -592,7 +592,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("My address book", "我的通訊錄"),
         ("Personal", "個人的"),
         ("Owner", "擁有者"),
-        ("Set shared password", "設定共享密碼"),
         ("Exist in", "存在於"),
         ("Read-only", "唯讀"),
         ("Read/Write", "讀寫"),

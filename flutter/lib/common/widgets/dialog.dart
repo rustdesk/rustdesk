@@ -2024,13 +2024,17 @@ void addPeersToAbDialog(
 }
 
 void setAbPasswordDialog(String abName, Peer peer) {
-  TextEditingController controller = TextEditingController(text: peer.password);
+  TextEditingController controller = TextEditingController(text: '');
   RxBool isInProgress = false.obs;
+  RxBool isInputEmpty = true.obs;
+  bool passwordVisible = false;
+  controller.addListener(() {
+    isInputEmpty.value = controller.text.isEmpty;
+  });
   gFFI.dialogManager.show((setState, close, context) {
-    submit() async {
+    change(String password) async {
       isInProgress.value = true;
-      bool res =
-          await gFFI.abModel.changePassword(abName, peer.id, controller.text);
+      bool res = await gFFI.abModel.changePassword(abName, peer.id, password);
       isInProgress.value = false;
       if (res) {
         showToast(translate('Successful'));
@@ -2047,17 +2051,28 @@ void setAbPasswordDialog(String abName, Peer peer) {
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Icon(Icons.key, color: MyTheme.accent),
-          Text(translate(gFFI.abModel.current.isPersonal()
-                  ? 'Set Password'
-                  : 'Set shared password'))
+          Text(translate(
+                  peer.password.isEmpty ? 'Set Password' : 'Change Password'))
               .paddingOnly(left: 10),
         ],
       ),
       content: Obx(() => Column(children: [
             TextField(
               controller: controller,
-              obscureText: true,
               autofocus: true,
+              obscureText: !passwordVisible,
+              decoration: InputDecoration(
+                suffixIcon: IconButton(
+                  icon: Icon(
+                      passwordVisible ? Icons.visibility : Icons.visibility_off,
+                      color: MyTheme.lightTheme.primaryColor),
+                  onPressed: () {
+                    setState(() {
+                      passwordVisible = !passwordVisible;
+                    });
+                  },
+                ),
+              ),
             ),
             if (!gFFI.abModel.current.isPersonal())
               Row(children: [
@@ -2077,13 +2092,22 @@ void setAbPasswordDialog(String abName, Peer peer) {
           onPressed: cancel,
           isOutline: true,
         ),
-        dialogButton(
-          "OK",
-          icon: Icon(Icons.done_rounded),
-          onPressed: submit,
-        ),
+        if (peer.password.isNotEmpty)
+          dialogButton(
+            "Remove",
+            icon: Icon(Icons.delete_outline_rounded),
+            onPressed: () => change(''),
+            buttonStyle: ButtonStyle(
+                backgroundColor: MaterialStatePropertyAll(Colors.red)),
+          ),
+        Obx(() => dialogButton(
+              "OK",
+              icon: Icon(Icons.done_rounded),
+              onPressed:
+                  isInputEmpty.value ? null : () => change(controller.text),
+            )),
       ],
-      onSubmit: submit,
+      onSubmit: isInputEmpty.value ? null : () => change(controller.text),
       onCancel: cancel,
     );
   });

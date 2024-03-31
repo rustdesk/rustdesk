@@ -592,7 +592,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("My address book", ""),
         ("Personal", ""),
         ("Owner", ""),
-        ("Set shared password", ""),
         ("Exist in", ""),
         ("Read-only", ""),
         ("Read/Write", ""),

@@ -592,7 +592,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("My address book", "Môj adresár"),
         ("Personal", "Osobné"),
         ("Owner", "Vlastník"),
-        ("Set shared password", "Nastaviť zdieľané heslo"),
         ("Exist in", "Existovať v"),
         ("Read-only", "len na čítanie"),
         ("Read/Write", "Režim čítania/zápisu"),

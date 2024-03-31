@@ -592,7 +592,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("My address book", "Mana adrešu grāmata"),
         ("Personal", "Personīga"),
         ("Owner", "Īpašnieks"),
-        ("Set shared password", "Iestatīt koplietojamo paroli"),
         ("Exist in", "Pastāv iekš"),
         ("Read-only", "Tikai lasīt"),
         ("Read/Write", "Lasīt/Rakstīt"),

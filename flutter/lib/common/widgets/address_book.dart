@@ -418,6 +418,7 @@ class _AddressBookState extends State<AddressBook> {
       return;
     }
     var isInProgress = false;
+    var passwordVisible = false;
     IDTextEditingController idController = IDTextEditingController(text: '');
     TextEditingController aliasController = TextEditingController(text: '');
     TextEditingController passwordController = TextEditingController(text: '');
@@ -512,7 +513,21 @@ class _AddressBookState extends State<AddressBook> {
                 if (!isLegacy)
                   TextField(
                     controller: passwordController,
-                    obscureText: true,
+                    obscureText: !passwordVisible,
+                    decoration: InputDecoration(
+                      suffixIcon: IconButton(
+                        icon: Icon(
+                            passwordVisible
+                                ? Icons.visibility
+                                : Icons.visibility_off,
+                            color: MyTheme.lightTheme.primaryColor),
+                        onPressed: () {
+                          setState(() {
+                            passwordVisible = !passwordVisible;
+                          });
+                        },
+                      ),
+                    ),
                   ),
                 Align(
                   alignment: Alignment.centerLeft,
