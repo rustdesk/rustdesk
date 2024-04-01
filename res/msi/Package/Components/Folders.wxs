@@ -1,0 +1,20 @@
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+	xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util">
+	<?include ../Includes.wxi?>
+
+	<Fragment>
+		<StandardDirectory Id="ProgramFiles6432Folder">
+			<Directory Id="INSTALLFOLDER" Name="$(var.Product)" />
+		</StandardDirectory>
+
+		<StandardDirectory Id="CommonAppDataFolder">
+			<Directory Id="App.Data.Folder" Name="$(var.Product)" />
+		</StandardDirectory>
+
+		<StandardDirectory Id="ProgramMenuFolder">
+			<Directory Id="App.StartMenu" Name="$(var.Product)" />
+		</StandardDirectory>
+
+		<StandardDirectory Id="DesktopFolder" />
+	</Fragment>
+</Wix>

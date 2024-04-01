@@ -1,0 +1,96 @@
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+	xmlns:fire="http://wixtoolset.org/schemas/v4/wxs/firewall">
+	<Fragment>
+
+		<?include ../Includes.wxi?>
+
+		<DirectoryRef Id="INSTALLFOLDER" FileSource="$(var.BuildDir)">
+			<Component Id="RustDesk.exe" Guid="620F0F69-4C17-4320-A619-495E329712A4">
+				<File Id="$(var.Product).exe" Name="$(var.Product).exe" KeyPath="yes" Checksum="yes">
+					<fire:FirewallException Id="RustDeskExTCPDom" Name="$(var.Product) TCP Domain" Profile="domain" Protocol="tcp" Scope="any" IgnoreFailure="yes" />
+					<fire:FirewallException Id="RustDeskExTCPPriv" Name="$(var.Product) TCP Private" Profile="private" Protocol="tcp" Scope="any" IgnoreFailure="yes" />
+					<fire:FirewallException Id="RustDeskExUDPDom" Name="$(var.Product) UDP Domain" Profile="domain" Protocol="udp" Scope="any" IgnoreFailure="yes" />
+					<fire:FirewallException Id="RustDeskExUDPPriv" Name="$(var.Product) UDP Private" Profile="private" Protocol="udp" Scope="any" IgnoreFailure="yes" />
+				</File>
+				<ServiceInstall Id="ServiceInstaller" Type="ownProcess" Vital="yes" Name="$(var.Product)" DisplayName="!(loc.Service_DisplayName)" Description="!(loc.Service_Description)" Start="auto" Account="LocalSystem" ErrorControl="ignore" Interactive="no" Arguments="--service" />
+				<ServiceControl Id="StartService" Start="install" Stop="both" Remove="uninstall" Name="$(var.Product)" Wait="yes" />
+			</Component>
+		</DirectoryRef>
+
+		<SetProperty Id="RestartService" Value="&quot;net&quot; start $(var.Product)" Before="RestartService" Sequence="execute" />
+		<CustomAction Id="RestartService" DllEntry="WixQuietExec" Execute="deferred" Return="asyncWait" BinaryRef="Wix4UtilCA_$(sys.BUILDARCHSHORT)" />
+
+		<InstallExecuteSequence>
+
+			<!--The ServiceControl element above handles starting/stopping the server on install/uninstall,
+           however it also needs to be restarted after a modify or repair install. This action does
+           that provided the server feature is already installed and not being uninstalled.-->
+
+			<Custom Action="RestartService" Before="InstallFinalize" />
+			
+			<Custom Action="CustomActionHello" Before="InstallFinalize" />
+
+			<Custom Action="SetCmdRemoveDir" After="RemoveFiles"/>
+			<Custom Action="RunCommandAsSystem" After="SetCmdRemoveDir"/>
+		</InstallExecuteSequence>
+
+		<!-- Shortcuts -->
+		<DirectoryRef Id="App.StartMenu">
+			<Component Id="App.StartMenu" Guid="30F6D57A-B805-4DA4-A071-05A3B22400CA">
+				<RegistryValue Root="HKCU" Key="$(var.RegKeyInstall)" Name="App.StartMenu" Type="string" Value="1" KeyPath="yes" />
+				<RemoveFolder Id="Remove.App.StartMenu" On="uninstall" />
+			</Component>
+		</DirectoryRef>
+
+		<DirectoryRef Id="App.StartMenu">
+			<Component Id="App.StartMenu.Shortcut" Guid="43ABCAC7-E47D-42D8-A408-25EC70DBB993" Condition="STARTMENUSHORTCUTS = 1">
+
+				<Shortcut Id="App.StartMenu.Shortcut" Name="!(loc.SC_Client)" Description="!(loc.SC_Client_Desc)" Target="[!RustDesk.exe]" Icon="AppIcon" WorkingDirectory="INSTALLFOLDER" />
+				<!--
+        Fix ICE 38 by adding a dummy registry key that is the key for this shortcut.
+        http://msdn.microsoft.com/library/en-us/msi/setup/ice38.asp
+        -->
+				<RegistryValue Root="HKCU" Key="$(var.RegKeyInstall)" Name="App.StartMenu.Shortcut" Type="string" Value="1" KeyPath="yes" />
+			</Component>
+			<Component Id="App.StartMenu.ShortcutTray" Guid="9362C316-40BB-41C1-859C-08182AA47E8D" Condition="STARTMENUSHORTCUTS = 1">
+
+				<Shortcut Id="App.StartMenu.ShortcutTray" Name="!(loc.SC_Client_Tray)" Description="!(loc.SC_Client_Tray_Desc)" Target="[!RustDesk.exe]" Arguments="--tray" Icon="AppIcon" WorkingDirectory="INSTALLFOLDER" />
+				<!--
+        Fix ICE 38 by adding a dummy registry key that is the key for this shortcut.
+        http://msdn.microsoft.com/library/en-us/msi/setup/ice38.asp
+        -->
+				<RegistryValue Root="HKCU" Key="$(var.RegKeyInstall)" Name="App.StartMenu.Shortcut" Type="string" Value="1" KeyPath="yes" />
+			</Component>
+		</DirectoryRef>
+		<StandardDirectory Id="DesktopFolder">
+			<Component Id="App.Desktop.Shortcut" Guid="CA8FB7AA-17F7-4E36-A58A-5A016A303709" Condition="DESKTOPSHORTCUTS = 1">
+
+				<Shortcut Id="App.Desktop.Shortcut" Name="!(loc.SC_Client)" Description="!(loc.SC_Client_Desc)" Target="[!RustDesk.exe]" Icon="AppIcon" WorkingDirectory="INSTALLFOLDER" />
+				<!--
+        Fix ICE 38 by adding a dummy registry key that is the key for this shortcut.
+        http://msdn.microsoft.com/library/en-us/msi/setup/ice38.asp
+        -->
+				<RegistryValue Root="HKCU" Key="$(var.RegKeyInstall)" Name="App.Desktop.Shortcut" Type="string" Value="1" KeyPath="yes" />
+			</Component>
+		</StandardDirectory>
+
+		<DirectoryRef Id="INSTALLFOLDER">
+			<Component Id="App.UninstallShortcut" Guid="FB0F2AC7-2AE5-4C54-B860-5E472620B6B1">
+				<Shortcut Id="App.UninstallShortcut" Name="!(loc.SC_Uninstall)" Description="!(loc.SC_Uninstall_Desc)" Target="[System64Folder]msiexec.exe" Arguments="/x [ProductCode]" IconIndex="0" />
+			</Component>
+		</DirectoryRef>
+
+		<ComponentGroup Id="Components" Directory="INSTALLFOLDER">
+			<ComponentRef Id="RustDesk.exe" />
+			<ComponentRef Id="App.Desktop.Shortcut" />
+			<ComponentRef Id="App.UninstallShortcut" />
+			<ComponentRef Id="App.StartMenu.Shortcut" />
+			<ComponentRef Id="App.StartMenu.ShortcutTray" />
+
+			<!--$AutoComonentStart$-->
+			<!--$AutoComponentEnd$-->
+
+		</ComponentGroup>
+
+	</Fragment>
+</Wix>
