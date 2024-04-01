@@ -81,6 +81,7 @@ case "$1" in
     rm /usr/share/applications/rustdesk.desktop || true
     rm /usr/share/applications/rustdesk-link.desktop || true
     rm /usr/bin/rustdesk || true
+    pkill -f "rustdesk --tray" || true
     update-desktop-database
   ;;
   1)

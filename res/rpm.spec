@@ -84,6 +84,7 @@ case "$1" in
     # for uninstall
     rm /usr/share/applications/rustdesk.desktop || true
     rm /usr/share/applications/rustdesk-link.desktop || true
+    pkill -f "rustdesk --tray" || true
     update-desktop-database
   ;;
   1)

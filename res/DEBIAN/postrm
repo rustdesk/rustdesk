@@ -2,6 +2,8 @@
 
 set -e
 
+pkill -f "rustdesk --tray" || true
+
 case $1 in
     purge)
 		rm -rf /root/.config/rustdesk || true
