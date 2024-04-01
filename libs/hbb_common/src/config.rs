@@ -407,10 +407,11 @@ fn patch(path: PathBuf) -> PathBuf {
         {
             if _tmp == "/root" {
                 if let Ok(user) = crate::platform::linux::run_cmds("whoami") {
+                    let user = user.trim();
                     if user != "root" {
                         let cmd = format!("getent passwd '{}' | awk -F':' '{{print $6}}'", user);
                         if let Ok(output) = crate::platform::linux::run_cmds(&cmd) {
-                            return output.into();
+                            return output.trim().into();
                         }
                         return format!("/home/{user}").into();
                     }
@@ -578,6 +579,9 @@ impl Config {
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
         {
             if let Some(path) = dirs_next::home_dir() {
+                // Workaround for linux, last char is '\n'
+                #[cfg(target_os = "linux")]
+                let path: PathBuf = path.to_string_lossy().trim_end().into();
                 patch(path)
             } else if let Ok(path) = std::env::current_dir() {
                 path
