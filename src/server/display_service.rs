@@ -122,6 +122,8 @@ pub fn reset_resolutions() {
             );
         }
     }
+    // Can be cleared because reset resolutions is called when there is no client connected.
+    CHANGED_RESOLUTIONS.write().unwrap().clear();
 }
 
 #[inline]
@@ -235,9 +237,13 @@ pub(super) fn get_original_resolution(
             ..Default::default()
         }
     } else {
-        let mut changed_resolutions = CHANGED_RESOLUTIONS.write().unwrap();
+        let changed_resolutions = CHANGED_RESOLUTIONS.write().unwrap();
         let (width, height) = match changed_resolutions.get(display_name) {
             Some(res) => {
+                res.original
+                /*
+                The resolution change may not happen immediately, `changed` has been updated,
+                but the actual resolution is old, it will be mistaken for a third-party change.
                 if res.changed.0 != w as i32 || res.changed.1 != h as i32 {
                     // If the resolution is changed by third process, remove the record in changed_resolutions.
                     changed_resolutions.remove(display_name);
@@ -245,6 +251,7 @@ pub(super) fn get_original_resolution(
                 } else {
                     res.original
                 }
+                */
             }
             None => (w as _, h as _),
         };
