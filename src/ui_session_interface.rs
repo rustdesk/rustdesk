@@ -1228,7 +1228,7 @@ impl<T: InvokeUiSession> Session<T> {
     #[inline]
     fn try_change_init_resolution(&self, display: i32) {
         if let Some((w, h)) = self.lc.read().unwrap().get_custom_resolution(display) {
-            self.do_change_resolution(w, h);
+            self.change_resolution(display, w, h);
         }
     }
 
