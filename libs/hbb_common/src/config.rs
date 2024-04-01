@@ -579,9 +579,6 @@ impl Config {
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
         {
             if let Some(path) = dirs_next::home_dir() {
-                // Workaround for linux, last char is '\n'
-                #[cfg(target_os = "linux")]
-                let path: PathBuf = path.to_string_lossy().trim_end().into();
                 patch(path)
             } else if let Ok(path) = std::env::current_dir() {
                 path

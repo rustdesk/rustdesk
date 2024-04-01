@@ -567,7 +567,7 @@ pub fn is_root() -> bool {
 
 fn is_opensuse() -> bool {
     if let Ok(res) = run_cmds("cat /etc/os-release | grep opensuse") {
-        if !res.is_empty() {
+        if !res.trim().is_empty() {
             return true;
         }
     }
@@ -1020,7 +1020,9 @@ mod desktop {
                 "getent passwd '{}' | awk -F':' '{{print $6}}'",
                 &self.username
             );
-            self.home = run_cmds(&cmd).unwrap_or(format!("/home/{}", &self.username));
+            self.home = run_cmds(&cmd).map_or(format!("/home/{}", &self.username), |x| {
+                x.trim().to_string()
+            });
         }
 
         fn get_xauth_from_xorg(&mut self) {

@@ -57,7 +57,8 @@ pub fn get_display_server() -> String {
             session = sid;
         }
         if session.is_empty() {
-            session = run_cmds("cat /proc/self/sessionid").unwrap_or_default();
+            session = run_cmds("cat /proc/self/sessionid")
+                .map_or_else(|_| "".to_owned(), |v| v.trim_end().to_owned());
             if session == INVALID_SESSION {
                 session = "".to_owned();
             }
