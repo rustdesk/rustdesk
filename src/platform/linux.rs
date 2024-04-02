@@ -1020,7 +1020,7 @@ mod desktop {
                 "getent passwd '{}' | awk -F':' '{{print $6}}'",
                 &self.username
             );
-            self.home = run_cmds(&cmd).unwrap_or(format!("/home/{}", &self.username));
+            self.home = run_cmds_trim_newline(&cmd).unwrap_or(format!("/home/{}", &self.username));
         }
 
         fn get_xauth_from_xorg(&mut self) {
