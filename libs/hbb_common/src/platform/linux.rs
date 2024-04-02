@@ -271,3 +271,15 @@ pub fn system_message(title: &str, msg: &str, forever: bool) -> ResultType<()> {
     }
     crate::bail!("failed to post system message");
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_run_cmds_trim_newline() {
+        assert_eq!(run_cmds_trim_newline("echo -n 123").unwrap(), "123");
+        assert_eq!(run_cmds_trim_newline("echo 123").unwrap(), "123");
+        assert_eq!(run_cmds_trim_newline("whoami").unwrap() + "\n", run_cmds("whoami").unwrap());
+    }
+}
