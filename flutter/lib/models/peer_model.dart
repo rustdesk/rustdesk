@@ -61,7 +61,7 @@ class Peer {
     };
   }
 
-  Map<String, dynamic> toPersonalAbUploadJson(bool includingHash) {
+  Map<String, dynamic> toCustomJson({required bool includingHash}) {
     var res = <String, dynamic>{
       "id": id,
       "username": username,
@@ -74,32 +74,6 @@ class Peer {
       res['hash'] = hash;
     }
     return res;
-  }
-
-  Map<String, dynamic> toSharedAbUploadJson(bool includingPassword) {
-    var res = <String, dynamic>{
-      "id": id,
-      "username": username,
-      "hostname": hostname,
-      "platform": platform,
-      "alias": alias,
-      "tags": tags,
-    };
-    if (includingPassword) {
-      res['password'] = password;
-    }
-    return res;
-  }
-
-  Map<String, dynamic> toSharedAbCacheJson() {
-    return <String, dynamic>{
-      "id": id,
-      "username": username,
-      "hostname": hostname,
-      "platform": platform,
-      "alias": alias,
-      "tags": tags,
-    };
   }
 
   Map<String, dynamic> toGroupCacheJson() {
