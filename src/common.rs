@@ -1682,7 +1682,7 @@ mod tests {
                     }
                 }
             }
-            // No mutliple ticks in the `interval` time.
+            // No multiple ticks in the `interval` time.
             // Values in "times" are unique and are less than normal tokio interval.
             // See previous test (test_tokio_time_interval_sleep) for comparison.
             let times2: HashSet<u128> = HashSet::from_iter(times.clone());

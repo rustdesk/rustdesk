@@ -854,7 +854,7 @@ class LegacyAb extends BaseAb {
       final resp = await http.get(Uri.parse(api), headers: authHeaders);
       statusCode = resp.statusCode;
       if (resp.body.toLowerCase() == "null") {
-        // normal reply, emtpy ab return null
+        // normal reply, empty ab return null
         tags.clear();
         tagColors.clear();
         peers.clear();
