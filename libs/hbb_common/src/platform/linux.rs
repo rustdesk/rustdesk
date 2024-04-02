@@ -192,11 +192,25 @@ pub fn is_active_and_seat0(sid: &str) -> bool {
     }
 }
 
+// **Note** that the return value here, the last character is '\n'.
+// Use `run_cmds_trim_newline()` if you want to remove '\n' at the end.
 pub fn run_cmds(cmds: &str) -> ResultType<String> {
     let output = std::process::Command::new("sh")
         .args(vec!["-c", cmds])
         .output()?;
     Ok(String::from_utf8_lossy(&output.stdout).to_string())
+}
+
+pub fn run_cmds_trim_newline(cmds: &str) -> ResultType<String> {
+    let output = std::process::Command::new("sh")
+        .args(vec!["-c", cmds])
+        .output()?;
+    let out = String::from_utf8_lossy(&output.stdout);
+    Ok(if out.ends_with('\n') {
+        out[..out.len() - 1].to_string()
+    } else {
+        out.to_string()
+    })
 }
 
 #[cfg(not(feature = "flatpak"))]
@@ -256,4 +270,16 @@ pub fn system_message(title: &str, msg: &str, forever: bool) -> ResultType<()> {
         }
     }
     crate::bail!("failed to post system message");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_run_cmds_trim_newline() {
+        assert_eq!(run_cmds_trim_newline("echo -n 123").unwrap(), "123");
+        assert_eq!(run_cmds_trim_newline("echo 123").unwrap(), "123");
+        assert_eq!(run_cmds_trim_newline("whoami").unwrap() + "\n", run_cmds("whoami").unwrap());
+    }
 }
