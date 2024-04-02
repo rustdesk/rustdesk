@@ -750,8 +750,10 @@ abstract class BasePeerCard extends StatelessWidget {
         if (succ) {
           showToast(translate('Successful'));
         } else {
-          BotToast.showText(
-              contentColor: Colors.red, text: translate("Failed"));
+          if (tab.index == PeerTabIndex.ab.index) {
+            BotToast.showText(
+                contentColor: Colors.red, text: translate("Failed"));
+          }
         }
       },
       padding: menuPadding,
