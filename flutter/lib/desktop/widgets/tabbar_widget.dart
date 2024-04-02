@@ -583,7 +583,7 @@ class WindowActionPanelState extends State<WindowActionPanel>
     mainWindowClose() async => await windowManager.hide();
     notMainWindowClose(WindowController controller) async {
       if (widget.tabController.length != 0) {
-        debugPrint("close not emtpy multiwindow from taskbar");
+        debugPrint("close not empty multiwindow from taskbar");
         if (isWindows) {
           await controller.show();
           await controller.focus();
