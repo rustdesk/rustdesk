@@ -87,7 +87,10 @@ class _AddressBookState extends State<AddressBook> {
                 child: Column(
                   children: [
                     _buildAbDropdown(),
-                    _buildTagHeader().marginOnly(left: 8.0, right: 0),
+                    _buildTagHeader().marginOnly(
+                        left: 8.0,
+                        right: gFFI.abModel.legacyMode.value ? 8.0 : 0,
+                        top: gFFI.abModel.legacyMode.value ? 8.0 : 0),
                     Expanded(
                       child: Container(
                         width: double.infinity,
@@ -415,6 +418,7 @@ class _AddressBookState extends State<AddressBook> {
       return;
     }
     var isInProgress = false;
+    var passwordVisible = false;
     IDTextEditingController idController = IDTextEditingController(text: '');
     TextEditingController aliasController = TextEditingController(text: '');
     TextEditingController passwordController = TextEditingController(text: '');
@@ -460,6 +464,24 @@ class _AddressBookState extends State<AddressBook> {
       }
 
       double marginBottom = 4;
+
+      row({required Widget lable, required Widget input}) {
+        return Row(
+          children: [
+            !isMobile
+                ? ConstrainedBox(
+                    constraints: const BoxConstraints(minWidth: 100),
+                    child: lable.marginOnly(right: 10))
+                : SizedBox.shrink(),
+            Expanded(
+              child: ConstrainedBox(
+                  constraints: const BoxConstraints(minWidth: 200),
+                  child: input),
+            ),
+          ],
+        ).marginOnly(bottom: !isMobile ? 8 : 0);
+      }
+
       return CustomAlertDialog(
         title: Text(translate("Add ID")),
         content: Column(
@@ -467,75 +489,90 @@ class _AddressBookState extends State<AddressBook> {
           children: [
             Column(
               children: [
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: Row(
-                    children: [
-                      Text(
-                        '*',
-                        style: TextStyle(color: Colors.red, fontSize: 14),
-                      ),
-                      Text(
-                        'ID',
-                        style: style,
-                      ),
-                    ],
-                  ),
-                ).marginOnly(bottom: marginBottom),
-                TextField(
-                  controller: idController,
-                  inputFormatters: [IDTextInputFormatter()],
-                  decoration:
-                      InputDecoration(errorText: errorMsg, errorMaxLines: 5),
-                ),
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text(
+                row(
+                    lable: Row(
+                      children: [
+                        Text(
+                          '*',
+                          style: TextStyle(color: Colors.red, fontSize: 14),
+                        ),
+                        Text(
+                          'ID',
+                          style: style,
+                        ),
+                      ],
+                    ),
+                    input: TextField(
+                      controller: idController,
+                      inputFormatters: [IDTextInputFormatter()],
+                      decoration: InputDecoration(
+                          labelText: !isMobile ? null : translate('ID'),
+                          errorText: errorMsg,
+                          errorMaxLines: 5),
+                    )),
+                row(
+                  lable: Text(
                     translate('Alias'),
                     style: style,
                   ),
-                ).marginOnly(top: 8, bottom: marginBottom),
-                TextField(
-                  controller: aliasController,
+                  input: TextField(
+                      controller: aliasController,
+                      decoration: InputDecoration(
+                        labelText: !isMobile ? null : translate('Alias'),
+                      )),
                 ),
                 if (isCurrentAbShared)
+                  row(
+                      lable: Text(
+                        translate('Password'),
+                        style: style,
+                      ),
+                      input: TextField(
+                        controller: passwordController,
+                        obscureText: !passwordVisible,
+                        decoration: InputDecoration(
+                          labelText: !isMobile ? null : translate('Password'),
+                          suffixIcon: IconButton(
+                            icon: Icon(
+                                passwordVisible
+                                    ? Icons.visibility
+                                    : Icons.visibility_off,
+                                color: MyTheme.lightTheme.primaryColor),
+                            onPressed: () {
+                              setState(() {
+                                passwordVisible = !passwordVisible;
+                              });
+                            },
+                          ),
+                        ),
+                      )),
+                if (gFFI.abModel.currentAbTags.isNotEmpty)
                   Align(
                     alignment: Alignment.centerLeft,
                     child: Text(
-                      translate('Password'),
+                      translate('Tags'),
                       style: style,
                     ),
                   ).marginOnly(top: 8, bottom: marginBottom),
-                if (isCurrentAbShared)
-                  TextField(
-                    controller: passwordController,
-                    obscureText: true,
+                if (gFFI.abModel.currentAbTags.isNotEmpty)
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Wrap(
+                      children: tags
+                          .map((e) => AddressBookTag(
+                              name: e,
+                              tags: selectedTag,
+                              onTap: () {
+                                if (selectedTag.contains(e)) {
+                                  selectedTag.remove(e);
+                                } else {
+                                  selectedTag.add(e);
+                                }
+                              },
+                              showActionMenu: false))
+                          .toList(growable: false),
+                    ),
                   ),
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    translate('Tags'),
-                    style: style,
-                  ),
-                ).marginOnly(top: 8, bottom: marginBottom),
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: Wrap(
-                    children: tags
-                        .map((e) => AddressBookTag(
-                            name: e,
-                            tags: selectedTag,
-                            onTap: () {
-                              if (selectedTag.contains(e)) {
-                                selectedTag.remove(e);
-                              } else {
-                                selectedTag.add(e);
-                              }
-                            },
-                            showActionMenu: false))
-                        .toList(growable: false),
-                  ),
-                ),
               ],
             ),
             const SizedBox(

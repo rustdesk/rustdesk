@@ -352,13 +352,13 @@ class FfiModel with ChangeNotifier {
         handleReloading(evt);
       } else if (name == 'plugin_option') {
         handleOption(evt);
-      } else if (name == "sync_peer_password_to_ab") {
+      } else if (name == "sync_peer_hash_password_to_personal_ab") {
         if (desktopType == DesktopType.main) {
           final id = evt['id'];
-          final password = evt['password'];
-          if (id != null && password != null) {
+          final hash = evt['hash'];
+          if (id != null && hash != null) {
             gFFI.abModel
-                .changePersonalHashPassword(id.toString(), password.toString());
+                .changePersonalHashPassword(id.toString(), hash.toString());
           }
         }
       } else if (name == "cm_file_transfer_log") {

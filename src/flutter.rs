@@ -1050,8 +1050,17 @@ pub fn session_add(
 
     LocalConfig::set_remote_id(&id);
 
+    let mut preset_password = password.clone();
+    let shared_password = if is_shared_password {
+        // To achieve a flexible password application order, we dont' treat shared password as a preset password.
+        preset_password = Default::default();
+        Some(password)
+    } else {
+        None
+    };
+
     let session: Session<FlutterHandler> = Session {
-        password: password.clone(),
+        password: preset_password,
         server_keyboard_enabled: Arc::new(RwLock::new(true)),
         server_file_transfer_enabled: Arc::new(RwLock::new(true)),
         server_clipboard_enabled: Arc::new(RwLock::new(true)),
@@ -1069,11 +1078,6 @@ pub fn session_add(
     #[cfg(not(feature = "gpucodec"))]
     let adapter_luid = None;
 
-    let shared_password = if is_shared_password {
-        Some(password)
-    } else {
-        None
-    };
     session.lc.write().unwrap().initialize(
         id.to_owned(),
         conn_type,

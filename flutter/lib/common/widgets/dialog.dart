@@ -1918,11 +1918,9 @@ void addPeersToAbDialog(
   Future<bool> addTo(String abname) async {
     final mapList = peers.map((e) {
       var json = e.toJson();
-      // remove shared password when add to other address book
+      // remove password when add to another address book to avoid re-share
       json.remove('password');
-      if (gFFI.abModel.addressbooks[abname]?.isPersonal() != true) {
-        json.remove('hash');
-      }
+      json.remove('hash');
       return json;
     }).toList();
     final errMsg = await gFFI.abModel.addPeersTo(mapList, abname);
@@ -1986,6 +1984,7 @@ void addPeersToAbDialog(
       content: Obx(() => Column(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
+              // https://github.com/flutter/flutter/issues/145081
               DropdownMenu(
                 initialSelection: currentName.value,
                 onSelected: (value) {
@@ -2026,18 +2025,23 @@ void addPeersToAbDialog(
 }
 
 void setSharedAbPasswordDialog(String abName, Peer peer) {
-  TextEditingController controller = TextEditingController(text: peer.password);
+  TextEditingController controller = TextEditingController(text: '');
   RxBool isInProgress = false.obs;
+  RxBool isInputEmpty = true.obs;
+  bool passwordVisible = false;
+  controller.addListener(() {
+    isInputEmpty.value = controller.text.isEmpty;
+  });
   gFFI.dialogManager.show((setState, close, context) {
-    submit() async {
+    change(String password) async {
       isInProgress.value = true;
-      bool res = await gFFI.abModel
-          .changeSharedPassword(abName, peer.id, controller.text);
-      close();
+      bool res =
+          await gFFI.abModel.changeSharedPassword(abName, peer.id, password);
       isInProgress.value = false;
       if (res) {
         showToast(translate('Successful'));
       }
+      close();
     }
 
     cancel() {
@@ -2049,22 +2053,38 @@ void setSharedAbPasswordDialog(String abName, Peer peer) {
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Icon(Icons.key, color: MyTheme.accent),
-          Text(translate('Set shared password')).paddingOnly(left: 10),
+          Text(translate(peer.password.isEmpty
+                  ? 'Set shared password'
+                  : 'Change Password'))
+              .paddingOnly(left: 10),
         ],
       ),
       content: Obx(() => Column(children: [
             TextField(
               controller: controller,
-              obscureText: true,
               autofocus: true,
+              obscureText: !passwordVisible,
+              decoration: InputDecoration(
+                suffixIcon: IconButton(
+                  icon: Icon(
+                      passwordVisible ? Icons.visibility : Icons.visibility_off,
+                      color: MyTheme.lightTheme.primaryColor),
+                  onPressed: () {
+                    setState(() {
+                      passwordVisible = !passwordVisible;
+                    });
+                  },
+                ),
+              ),
             ),
-            Row(children: [
-              Icon(Icons.info, color: Colors.amber).marginOnly(right: 4),
-              Text(
-                translate('share_warning_tip'),
-                style: TextStyle(fontSize: 12),
-              )
-            ]).marginSymmetric(vertical: 10),
+            if (!gFFI.abModel.current.isPersonal())
+              Row(children: [
+                Icon(Icons.info, color: Colors.amber).marginOnly(right: 4),
+                Text(
+                  translate('share_warning_tip'),
+                  style: TextStyle(fontSize: 12),
+                )
+              ]).marginSymmetric(vertical: 10),
             // NOT use Offstage to wrap LinearProgressIndicator
             isInProgress.value ? const LinearProgressIndicator() : Offstage()
           ])),
@@ -2075,13 +2095,22 @@ void setSharedAbPasswordDialog(String abName, Peer peer) {
           onPressed: cancel,
           isOutline: true,
         ),
-        dialogButton(
-          "OK",
-          icon: Icon(Icons.done_rounded),
-          onPressed: submit,
-        ),
+        if (peer.password.isNotEmpty)
+          dialogButton(
+            "Remove",
+            icon: Icon(Icons.delete_outline_rounded),
+            onPressed: () => change(''),
+            buttonStyle: ButtonStyle(
+                backgroundColor: MaterialStatePropertyAll(Colors.red)),
+          ),
+        Obx(() => dialogButton(
+              "OK",
+              icon: Icon(Icons.done_rounded),
+              onPressed:
+                  isInputEmpty.value ? null : () => change(controller.text),
+            )),
       ],
-      onSubmit: submit,
+      onSubmit: isInputEmpty.value ? null : () => change(controller.text),
       onCancel: cancel,
     );
   });
