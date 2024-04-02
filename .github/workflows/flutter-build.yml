@@ -175,7 +175,6 @@ jobs:
         shell: bash
         run: |
           BASE_URL=${{ secrets.SIGN_BASE_URL }} SECRET_KEY=${{ secrets.SIGN_SECRET_KEY }} python3 res/job.py sign_files ./SignOutput
-          sha256sum ./SignOutput/rustdesk-*.exe ./rustdesk-*.tar.gz
 
       - name: Publish Release
         uses: softprops/action-gh-release@v1
@@ -286,7 +285,6 @@ jobs:
           mv ./target/release/rustdesk-portable-packer.exe ./SignOutput/rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}-sciter.exe
           mv ./Release ./rustdesk
           tar czf rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}.tar.gz rustdesk
-          sha256sum ./SignOutput/rustdesk-*.exe ./rustdesk-*.tar.gz
 
       - name: Sign rustdesk self-extracted file
         if: env.UPLOAD_ARTIFACT == 'true' && env.SIGN_BASE_URL != ''
@@ -359,7 +357,6 @@ jobs:
           codesign --force --options runtime -s ${{ secrets.MACOS_CODESIGN_IDENTITY }} --deep --strict rustdesk-${{ env.VERSION }}.dmg -vvv
           # notarize the rustdesk-${{ env.VERSION }}.dmg
           rcodesign notary-submit --api-key-path ~/.p12/api-key.json  --staple rustdesk-${{ env.VERSION }}.dmg
-          sha256sum rustdesk*-aarch64.dmg
 
       - name: Rename rustdesk
         if: env.UPLOAD_ARTIFACT == 'true'
@@ -518,7 +515,6 @@ jobs:
           codesign --force --options runtime -s ${{ secrets.MACOS_CODESIGN_IDENTITY }} --deep --strict rustdesk-${{ env.VERSION }}.dmg -vvv
           # notarize the rustdesk-${{ env.VERSION }}.dmg
           rcodesign notary-submit --api-key-path ${{ github.workspace }}/rustdesk.json  --staple rustdesk-${{ env.VERSION }}.dmg
-          sha256sum rustdesk*-${{ matrix.job.arch }}.dmg
 
       - name: Rename rustdesk
         if: env.UPLOAD_ARTIFACT == 'true'
@@ -558,7 +554,6 @@ jobs:
       - name: Combine unsigned macos app
         run: |
           tar czf rustdesk-${{ env.VERSION }}-macos-unsigned.tar.gz *.dmg
-          sha256sum rustdesk-${{ env.VERSION }}-macos-unsigned.tar.gz
 
       - name: Publish unsigned macos app
         uses: softprops/action-gh-release@v1
@@ -841,11 +836,6 @@ jobs:
         env:
           # override default build-tools version (29.0.3) -- optional
           BUILD_TOOLS_VERSION: "30.0.2"
-
-      - name: Print sha256sum
-        shell: bash
-        run: |
-          sha256sum ${{steps.sign-rustdesk.outputs.signedReleaseFile}} signed-apk/rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}.apk
 
       - name: Upload Artifacts
         if: env.ANDROID_SIGNING_KEY != null && env.UPLOAD_ARTIFACT == 'true'
@@ -1450,7 +1440,6 @@ jobs:
               # use cp to duplicate deb files to fit other packages.
               cp "$name" "${name%%.deb}-${{ matrix.job.arch }}-sciter.deb"
           done
-          sha256sum rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}-sciter.deb
 
       - name: Publish debian package
         if: matrix.job.extra-build-features == '' && env.UPLOAD_ARTIFACT == 'true'
@@ -1642,7 +1631,6 @@ jobs:
             for name in rustdesk*??.rpm; do
                 mv "$name" "/opt/artifacts/rpm/${name%%.rpm}-suse.rpm"
             done
-            sha256sum /opt/artifacts/rpm/*.rpm
 
       - name: Rename rustdesk
         shell: bash
@@ -1650,7 +1638,6 @@ jobs:
           for name in rustdesk*??.deb; do
               cp "$name" "${name%%.deb}-${{ matrix.job.arch }}.deb"
           done
-          sha256sum rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}.deb
 
       - name: Publish debian package
         if: matrix.job.extra-build-features == '' && env.UPLOAD_ARTIFACT == 'true'
@@ -1674,7 +1661,6 @@ jobs:
           # run appimage-builder
           pushd appimage
           sudo appimage-builder --skip-tests --recipe ./AppImageBuilder-${{ matrix.job.arch }}.yml
-          sha256sum ./rustdesk-${{ env.VERSION }}-*.AppImage
 
       - name: Publish appimage package
         if: matrix.job.extra-build-features == 'appimage' && env.UPLOAD_ARTIFACT == 'true'
@@ -1887,7 +1873,6 @@ jobs:
             for name in rustdesk*??.rpm; do
                 mv "$name" "/opt/artifacts/rpm/${name%%.rpm}-suse.rpm"
             done
-            sha256sum /opt/artifacts/rpm/*.rpm
 
       - name: Rename rustdesk
         shell: bash
@@ -1896,7 +1881,6 @@ jobs:
               # use cp to duplicate deb files to fit other packages.
               cp "$name" "${name%%.deb}-${{ matrix.job.arch }}.deb"
           done
-          sha256sum rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}.deb
 
       - name: Publish debian package
         if: matrix.job.extra-build-features == '' && env.UPLOAD_ARTIFACT == 'true'
@@ -1955,7 +1939,6 @@ jobs:
             gst-plugin-pipewire
           scripts: |
             cd res && HBB=`pwd`/.. FLUTTER=1 makepkg -f
-            sha256sum rustdesk-${{ env.VERSION }}*.zst
 
       - name: Publish archlinux package
         if: matrix.job.extra-build-features == '' && env.UPLOAD_ARTIFACT == 'true'
@@ -1979,7 +1962,6 @@ jobs:
           # run appimage-builder
           pushd appimage
           sudo appimage-builder --skip-tests --recipe ./AppImageBuilder-x86_64.yml
-          sha256sum ./rustdesk-${{ env.VERSION }}-*.AppImage
 
       - name: Publish appimage package
         if: matrix.job.extra-build-features == 'appimage' && env.UPLOAD_ARTIFACT == 'true'
@@ -2141,7 +2123,6 @@ jobs:
             git clone https://github.com/flathub/shared-modules.git --depth=1
             flatpak-builder --user --force-clean --repo=repo ./build ./rustdesk.json
             flatpak build-bundle ./repo rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}.flatpak com.rustdesk.RustDesk
-            sha256sum rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}.flatpak
 
       - name: Publish flatpak package
         uses: softprops/action-gh-release@v1
