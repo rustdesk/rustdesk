@@ -1490,7 +1490,7 @@ class Ab extends BaseAb {
   @override
   Future<bool> changePersonalHashPassword(String id, String hash) async {
     if (!personal) return false;
-    if (!peers.any((e) => e.id == id)) return false;
+    if (!peers.any((e) => e.id == id)) return true;
     return await _setPassword({"id": id, "hash": hash});
   }
 
