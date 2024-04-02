@@ -28,6 +28,8 @@ use hbb_common::{
     udp::FramedSocket,
     AddrMangle, IntoTargetAddr, ResultType, TargetAddr,
 };
+use hbb_common::log::info;
+use hbb_common::proxy::Proxy;
 
 use crate::{
     check_port,
@@ -387,8 +389,15 @@ impl RendezvousMediator {
     }
 
     pub async fn start(server: ServerPtr, host: String) -> ResultType<()> {
-        log::info!("start rendezvous mediator of {}", host);
-        if cfg!(debug_assertions) && option_env!("TEST_TCP").is_some() {
+        info!("start rendezvous mediator of {}", host);
+        //If the investment agent type is http or https, then tcp forwarding is enabled.
+        let is_http_proxy = if let Some(conf) = Config::get_socks() {
+            let proxy = Proxy::form_conf(&conf, None)?;
+            proxy.is_http_or_https()
+        } else {
+            false
+        };
+        if (cfg!(debug_assertions) && option_env!("TEST_TCP").is_some()) || is_http_proxy  {
             Self::start_tcp(server, host).await
         } else {
             Self::start_udp(server, host).await

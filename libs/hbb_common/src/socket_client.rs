@@ -108,11 +108,9 @@ pub async fn connect_tcp_local<
 ) -> ResultType<FramedStream> {
     if let Some(conf) = Config::get_socks() {
         return FramedStream::connect(
-            conf.proxy.as_str(),
             target,
             local,
-            conf.username.as_str(),
-            conf.password.as_str(),
+            &conf,
             ms_timeout,
         )
         .await;
