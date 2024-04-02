@@ -15,16 +15,17 @@ pub struct Distro {
 
 impl Distro {
     fn new() -> Self {
-        let name = run_cmds("awk -F'=' '/^NAME=/ {print $2}' /etc/os-release")
+        let name = run_cmds_trim_newline("awk -F'=' '/^NAME=/ {print $2}' /etc/os-release")
             .unwrap_or_default()
             .trim()
             .trim_matches('"')
             .to_string();
-        let version_id = run_cmds("awk -F'=' '/^VERSION_ID=/ {print $2}' /etc/os-release")
-            .unwrap_or_default()
-            .trim()
-            .trim_matches('"')
-            .to_string();
+        let version_id =
+            run_cmds_trim_newline("awk -F'=' '/^VERSION_ID=/ {print $2}' /etc/os-release")
+                .unwrap_or_default()
+                .trim()
+                .trim_matches('"')
+                .to_string();
         Self { name, version_id }
     }
 }
@@ -57,8 +58,7 @@ pub fn get_display_server() -> String {
             session = sid;
         }
         if session.is_empty() {
-            session = run_cmds("cat /proc/self/sessionid")
-                .map_or_else(|_| "".to_owned(), |v| v.trim_end().to_owned());
+            session = run_cmds_trim_newline("cat /proc/self/sessionid").unwrap_or_default();
             if session == INVALID_SESSION {
                 session = "".to_owned();
             }
@@ -89,7 +89,8 @@ pub fn get_display_server_of_session(session: &str) -> String {
                     .replace("TTY=", "")
                     .trim_end()
                     .into();
-                if let Ok(xorg_results) = run_cmds(&format!("ps -e | grep \"{tty}.\\\\+Xorg\""))
+                if let Ok(xorg_results) =
+                    run_cmds_trim_newline(&format!("ps -e | grep \"{tty}.\\\\+Xorg\""))
                 // And check if Xorg is running on that tty
                 {
                     if xorg_results.trim_end() != "" {
@@ -199,6 +200,18 @@ pub fn run_cmds(cmds: &str) -> ResultType<String> {
         .args(vec!["-c", cmds])
         .output()?;
     Ok(String::from_utf8_lossy(&output.stdout).to_string())
+}
+
+pub fn run_cmds_trim_newline(cmds: &str) -> ResultType<String> {
+    let output = std::process::Command::new("sh")
+        .args(vec!["-c", cmds])
+        .output()?;
+    let out = String::from_utf8_lossy(&output.stdout);
+    Ok(if out.ends_with('\n') {
+        out[..out.len() - 1].to_string()
+    } else {
+        out.to_string()
+    })
 }
 
 #[cfg(not(feature = "flatpak"))]

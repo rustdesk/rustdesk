@@ -267,17 +267,17 @@ fn set_x11_env(desktop: &Desktop) {
 
 #[inline]
 fn stop_rustdesk_servers() {
-    let _ = run_cmds(&format!(
+    let _ = run_cmds_trim_newline(&format!(
         r##"ps -ef | grep -E 'rustdesk +--server' | awk '{{printf("kill -9 %d\n", $2)}}' | bash"##,
     ));
 }
 
 #[inline]
 fn stop_subprocess() {
-    let _ = run_cmds(&format!(
+    let _ = run_cmds_trim_newline(&format!(
         r##"ps -ef | grep '/etc/rustdesk/xorg.conf' | grep -v grep | awk '{{printf("kill -9 %d\n", $2)}}' | bash"##,
     ));
-    let _ = run_cmds(&format!(
+    let _ = run_cmds_trim_newline(&format!(
         r##"ps -ef | grep -E 'rustdesk +--cm-no-ui' | grep -v grep | awk '{{printf("kill -9 %d\n", $2)}}' | bash"##,
     ));
 }
@@ -566,7 +566,7 @@ pub fn is_root() -> bool {
 }
 
 fn is_opensuse() -> bool {
-    if let Ok(res) = run_cmds("cat /etc/os-release | grep opensuse") {
+    if let Ok(res) = run_cmds_trim_newline("cat /etc/os-release | grep opensuse") {
         if !res.trim().is_empty() {
             return true;
         }
@@ -682,7 +682,7 @@ pub fn is_installed() -> bool {
 #[inline]
 fn get_env(name: &str, uid: &str, process: &str) -> String {
     let cmd = format!("ps -u {} -f | grep -E '{}' | grep -v 'grep' | tail -1 | awk '{{print $2}}' | xargs -I__ cat /proc/__/environ 2>/dev/null | tr '\\0' '\\n' | grep '^{}=' | tail -1 | sed 's/{}=//g'", uid, process, name, name);
-    if let Ok(x) = run_cmds(&cmd) {
+    if let Ok(x) = run_cmds_trim_newline(&cmd) {
         x.trim_end().to_string()
     } else {
         "".to_owned()
@@ -692,7 +692,7 @@ fn get_env(name: &str, uid: &str, process: &str) -> String {
 #[inline]
 fn get_env_from_pid(name: &str, pid: &str) -> String {
     let cmd = format!("cat /proc/{}/environ 2>/dev/null | tr '\\0' '\\n' | grep '^{}=' | tail -1 | sed 's/{}=//g'", pid, name, name);
-    if let Ok(x) = run_cmds(&cmd) {
+    if let Ok(x) = run_cmds_trim_newline(&cmd) {
         x.trim_end().to_string()
     } else {
         "".to_owned()
@@ -914,7 +914,7 @@ pub fn change_resolution_directly(name: &str, width: usize, height: usize) -> Re
 
 #[inline]
 pub fn is_xwayland_running() -> bool {
-    if let Ok(output) = run_cmds("pgrep -a Xwayland") {
+    if let Ok(output) = run_cmds_trim_newline("pgrep -a Xwayland") {
         return output.contains("Xwayland");
     }
     false
@@ -1020,13 +1020,11 @@ mod desktop {
                 "getent passwd '{}' | awk -F':' '{{print $6}}'",
                 &self.username
             );
-            self.home = run_cmds(&cmd).map_or(format!("/home/{}", &self.username), |x| {
-                x.trim().to_string()
-            });
+            self.home = run_cmds_trim_newline(&cmd).unwrap_or_default();
         }
 
         fn get_xauth_from_xorg(&mut self) {
-            if let Ok(output) = run_cmds(&format!(
+            if let Ok(output) = run_cmds_trim_newline(&format!(
                 "ps -u {} -f | grep 'Xorg' | grep -v 'grep'",
                 &self.uid
             )) {
@@ -1162,7 +1160,7 @@ mod desktop {
         fn set_is_subprocess(&mut self) {
             self.is_rustdesk_subprocess = false;
             let cmd = "ps -ef | grep 'rustdesk/xorg.conf' | grep -v grep | wc -l";
-            if let Ok(res) = run_cmds(cmd) {
+            if let Ok(res) = run_cmds_trim_newline(cmd) {
                 if res.trim() != "0" {
                     self.is_rustdesk_subprocess = true;
                 }
@@ -1314,7 +1312,7 @@ pub fn install_service() -> bool {
 
 fn check_if_stop_service() {
     if Config::get_option("stop-service".into()) == "Y" {
-        allow_err!(run_cmds(
+        allow_err!(run_cmds_trim_newline(
             "systemctl disable rustdesk; systemctl stop rustdesk"
         ));
     }
@@ -1394,9 +1392,9 @@ pub fn is_x11() -> bool {
 
 #[inline]
 pub fn is_selinux_enforcing() -> bool {
-    match run_cmds("getenforce") {
+    match run_cmds_trim_newline("getenforce") {
         Ok(output) => output.trim() == "Enforcing",
-        Err(_) => match run_cmds("sestatus") {
+        Err(_) => match run_cmds_trim_newline("sestatus") {
             Ok(output) => {
                 for line in output.lines() {
                     if line.contains("Current mode:") {
