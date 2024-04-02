@@ -567,7 +567,7 @@ pub fn is_root() -> bool {
 
 fn is_opensuse() -> bool {
     if let Ok(res) = run_cmds_trim_newline("cat /etc/os-release | grep opensuse") {
-        if !res.trim().is_empty() {
+        if !res.is_empty() {
             return true;
         }
     }
