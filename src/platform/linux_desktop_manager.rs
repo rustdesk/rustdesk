@@ -65,7 +65,7 @@ pub fn stop_xdesktop() {
 }
 
 fn detect_headless() -> Option<&'static str> {
-    match run_cmds(&format!("which {}", DesktopManager::get_xorg())) {
+    match run_cmds_trim_newline(&format!("which {}", DesktopManager::get_xorg())) {
         Ok(output) => {
             if output.trim().is_empty() {
                 return Some(LOGIN_MSG_DESKTOP_XORG_NOT_FOUND);
@@ -76,7 +76,7 @@ fn detect_headless() -> Option<&'static str> {
         }
     }
 
-    match run_cmds("ls /usr/share/xsessions/") {
+    match run_cmds_trim_newline("ls /usr/share/xsessions/") {
         Ok(output) => {
             if output.trim().is_empty() {
                 return Some(LOGIN_MSG_DESKTOP_NO_DESKTOP);
@@ -452,7 +452,7 @@ impl DesktopManager {
     fn wait_x_server_running(pid: u32, display_num: u32, max_wait_secs: u64) -> ResultType<()> {
         let wait_begin = Instant::now();
         loop {
-            if run_cmds(&format!("ls /proc/{}", pid))?.trim().is_empty() {
+            if run_cmds_trim_newline(&format!("ls /proc/{}", pid))?.is_empty() {
                 bail!("X server exit");
             }
 
