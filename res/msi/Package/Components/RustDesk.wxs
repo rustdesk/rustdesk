@@ -30,8 +30,8 @@
 			
 			<Custom Action="CustomActionHello" Before="InstallFinalize" />
 
-			<Custom Action="SetCmdRemoveDir" After="RemoveFiles"/>
-			<Custom Action="RunCommandAsSystem" After="SetCmdRemoveDir"/>
+			<Custom Action="SetInstallFolder" After="RemoveFiles"/>
+			<Custom Action="RemoveInstallFolder" After="SetInstallFolder"/>
 		</InstallExecuteSequence>
 
 		<!-- Shortcuts -->

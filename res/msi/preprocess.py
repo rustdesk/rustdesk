@@ -33,24 +33,27 @@ def make_parser():
     return parser
 
 
-def read_lines_and_start_index(file_path, start_tag, end_tag):
+def read_lines_and_start_index(file_path, tag_start, tag_end):
     with open(file_path, "r") as f:
         lines = f.readlines()
-    start_index = -1
-    end_index = -1
+    index_start = -1
+    index_end = -1
     for i, line in enumerate(lines):
-        if start_tag in line:
-            start_index = i
-        if end_tag in line:
-            end_index = i
+        if tag_start in line:
+            index_start = i
+        if tag_end in line:
+            index_end = i
 
-    if start_index == -1 or end_index == -1:
-        print("Error: start or end tag not found")
+    if index_start == -1:
+        print(f'Error: start tag "{tag_start}" not found')
         return None, None
-    return lines, start_index
+    if index_end == -1:
+        print(f'Error: end tag "{tag_end}" not found')
+        return None, None
+    return lines, index_start
 
 
-def insert_components_between_tags(lines, start_index, app_name, build_dir):
+def insert_components_between_tags(lines, index_start, app_name, build_dir):
     indent = g_indent_unit * 3
     path = Path(build_dir)
     idx = 1
@@ -77,58 +80,48 @@ def insert_components_between_tags(lines, start_index, app_name, build_dir):
 {indent}{g_indent_unit}<File Source="{file_path.as_posix()}" KeyPath="yes" Checksum="yes" />
 {indent}</Component>
 """
-            lines.insert(start_index + 1, to_insert_lines[1:])
-            start_index += 1
+            lines.insert(index_start + 1, to_insert_lines[1:])
+            index_start += 1
             idx += 1
     return True
 
 
 def gen_auto_component(app_name, build_dir):
-    target_file = Path(sys.argv[0]).parent.joinpath("Package/Components/RustDesk.wxs")
-    start_tag = "<!--$AutoComonentStart$-->"
-    end_tag = "<!--$AutoComponentEnd$-->"
-
-    lines, start_index = read_lines_and_start_index(target_file, start_tag, end_tag)
-    if lines is None:
-        return False
-
-    if not insert_components_between_tags(lines, start_index, app_name, build_dir):
-        return False
-
-    with open(target_file, "w") as f:
-        f.writelines(lines)
-
-    return True
+    return gen_content_between_tags(
+        "Package/Components/RustDesk.wxs",
+        "<!--$AutoComonentStart$-->",
+        "<!--$AutoComponentEnd$-->",
+        lambda lines, index_start: insert_components_between_tags(
+            lines, index_start, app_name, build_dir
+        ),
+    )
 
 
 def gen_pre_vars(args, build_dir):
-    target_file = Path(sys.argv[0]).parent.joinpath("Package/Includes.wxi")
-    start_tag = "<!--$PreVarsStart$-->"
-    end_tag = "<!--$PreVarsEnd$-->"
+    def func(lines, index_start):
+        upgrade_code = uuid.uuid5(uuid.NAMESPACE_OID, app_name + ".exe")
 
-    lines, start_index = read_lines_and_start_index(target_file, start_tag, end_tag)
-    if lines is None:
-        return False
+        indent = g_indent_unit * 1
+        to_insert_lines = [
+            f'{indent}<?define Version="{args.version}" ?>\n',
+            f'{indent}<?define Manufacturer="{args.manufacturer}" ?>\n',
+            f'{indent}<?define Product="{args.app_name}" ?>\n',
+            f'{indent}<?define Description="{args.app_name} Installer" ?>\n',
+            f'{indent}<?define ProductLower="{args.app_name.lower()}" ?>\n',
+            f'{indent}<?define RegKeyRoot=".$(var.ProductLower)" ?>\n',
+            f'{indent}<?define RegKeyInstall="$(var.RegKeyRoot)\Install" ?>\n',
+            f'{indent}<?define BuildDir="{build_dir}" ?>\n',
+            "\n",
+            f"{indent}<!-- The UpgradeCode must be consistent for each product. ! -->\n"
+            f'{indent}<?define UpgradeCode = "{upgrade_code}" ?>\n',
+        ]
 
-    indent = g_indent_unit * 1
-    to_insert_lines = [
-        f'{indent}<?define Version="{args.version}" ?>\n',
-        f'{indent}<?define Manufacturer="{args.manufacturer}" ?>\n',
-        f'{indent}<?define Product="{args.app_name}" ?>\n',
-        f'{indent}<?define Description="{args.app_name} Installer" ?>\n',
-        f'{indent}<?define ProductLower="{args.app_name.lower()}" ?>\n',
-        f'{indent}<?define RegKeyRoot=".$(var.ProductLower)" ?>\n',
-        f'{indent}<?define RegKeyInstall="$(var.RegKeyRoot)\Install" ?>\n',
-        f'{indent}<?define BuildDir="{build_dir}" ?>\n',
-    ]
+        for i, line in enumerate(to_insert_lines):
+            lines.insert(index_start + i + 1, line)
 
-    for i, line in enumerate(to_insert_lines):
-        lines.insert(start_index + i + 1, line)
-
-    with open(target_file, "w") as f:
-        f.writelines(lines)
-
-    return True
+    return gen_content_between_tags(
+        "Package/Includes.wxi", "<!--$PreVarsStart$-->", "<!--$PreVarsEnd$-->", func
+    )
 
 
 def replace_app_name_in_lans(app_name):
@@ -140,6 +133,44 @@ def replace_app_name_in_lans(app_name):
             lines[i] = line.replace("RustDesk", app_name)
         with open(file_path, "w") as f:
             f.writelines(lines)
+
+
+def gen_upgrade_info(version):
+    def func(lines, index_start):
+        indent = g_indent_unit * 3
+
+        major, _, _ = version.split(".")
+        upgrade_id = uuid.uuid4()
+        to_insert_lines = [
+            f'{indent}<Upgrade Id="{upgrade_id}">\n',
+            f'{indent}<UpgradeVersion Property="OLD_VERSION_FOUND" Minimum="{major}.0.0.0" Maximum="{major}.99.99" IncludeMinimum="yes" IncludeMaximum="yes" OnlyDetect="no" IgnoreRemoveFailure="yes" MigrateFeatures="yes" />" ?>\n',
+            f"{indent}</Upgrade>\n",
+        ]
+
+        for i, line in enumerate(to_insert_lines):
+            lines.insert(index_start + i + 1, line)
+        return lines
+
+    return gen_content_between_tags(
+        "Package/Fragments/Upgrades.wxs",
+        "<!--$UpgradeStart$-->",
+        "<!--$UpgradeEnd$-->",
+        func,
+    )
+
+
+def gen_content_between_tags(filename, tag_start, tag_end, func):
+    target_file = Path(sys.argv[0]).parent.joinpath(filename)
+    lines, index_start = read_lines_and_start_index(target_file, tag_start, tag_end)
+    if lines is None:
+        return False
+
+    func(lines, index_start)
+
+    with open(target_file, "w") as f:
+        f.writelines(lines)
+
+    return True
 
 
 if __name__ == "__main__":
@@ -156,6 +187,9 @@ if __name__ == "__main__":
     )
 
     if not gen_pre_vars(args, build_dir):
+        sys.exit(-1)
+
+    if not gen_upgrade_info(args.version):
         sys.exit(-1)
 
     if not gen_auto_component(app_name, build_dir):

@@ -17,6 +17,6 @@
     <PackageReference Include="WixToolset.Util.wixext" Version="4.0.5" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\CustomActions\CustomActions.csproj" />
+    <ProjectReference Include="..\CustomActions\CustomActions.vcxproj" />
   </ItemGroup>
 </Project>

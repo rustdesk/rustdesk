@@ -4,6 +4,13 @@ Use Visual Studio 2022 to compile this project.
 
 This project is mainly derived from <https://github.com/MediaPortal/MediaPortal-2.git> .
 
+## Steps
+
+1. `python preprocess.py`
+2. Build the .sln solution.
+
+Run `msiexec /i package.msi /l*v install.log` to record the log.
+
 ## TODOs
 
 1. tray, uninstall shortcut

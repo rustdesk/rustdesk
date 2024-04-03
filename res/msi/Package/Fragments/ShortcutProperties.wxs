@@ -4,18 +4,18 @@
     <?include ..\Includes.wxi?>
 
     <!--
-    Properties and related actions for specifying whether to install start menu/desktop shortcuts.
-    -->
+		Properties and related actions for specifying whether to install start menu/desktop shortcuts.
+		-->
 
     <!-- These are the actual properties that get used in conditions to determine whether to
-         install start menu shortcuts, they are initialized with a default value to install shortcuts.
-         They should not be set directly from the command line or registry, instead the CREATE* properties
-         below should be set, then they will update these properties with their values only if set. -->
+				 install start menu shortcuts, they are initialized with a default value to install shortcuts.
+				 They should not be set directly from the command line or registry, instead the CREATE* properties
+				 below should be set, then they will update these properties with their values only if set. -->
     <Property Id="STARTMENUSHORTCUTS" Value="1" Secure="yes"></Property>
     <Property Id="DESKTOPSHORTCUTS" Value="1" Secure="yes"></Property>
 
     <!-- These properties get set from either the command line, bundle or registry value,
-         if set they update the properties above with their value. -->
+				 if set they update the properties above with their value. -->
     <Property Id="CREATESTARTMENUSHORTCUTS" Secure="yes">
       <RegistrySearch Id="CreateStartMenuShortcutsSearch" Root="HKCR" Key="$(var.RegKeyRoot)" Name="STARTMENUSHORTCUTS" Type="raw" />
     </Property>
@@ -34,8 +34,8 @@
     </DirectoryRef>
 
     <!-- If a property value has been passed via the command line (which includes when set from the bundle), the registry search will
-         overwrite the command line value, these actions temporarily store the command line value before the registry search
-         is performed so they can be restored after the registry search is complete -->
+				 overwrite the command line value, these actions temporarily store the command line value before the registry search
+				 is performed so they can be restored after the registry search is complete -->
     <SetProperty Id="SavedStartMenuShortcutsCmdLineValue" Value="[CREATESTARTMENUSHORTCUTS]" Before="AppSearch" Sequence="first" Condition="CREATESTARTMENUSHORTCUTS" />
     <SetProperty Id="SavedDesktopShortcutsCmdLineValue" Value="[CREATEDESKTOPSHORTCUTS]" Before="AppSearch" Sequence="first" Condition="CREATEDESKTOPSHORTCUTS" />
 

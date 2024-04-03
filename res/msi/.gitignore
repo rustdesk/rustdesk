@@ -2,3 +2,10 @@
 
 **/bin
 **/obj
+
+x64
+packages
+
+CustomActions/x64
+CustomActions/*.user
+CustomActions/*.filters
