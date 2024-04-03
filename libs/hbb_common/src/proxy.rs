@@ -1,4 +1,3 @@
-
 use std::io::{Error as IoError};
 
 use std::net::{SocketAddr, ToSocketAddrs};
@@ -16,7 +15,7 @@ use tokio_socks::tcp::Socks5Stream;
 use tokio_util::codec::Framed;
 use url::Url;
 use crate::config::Socks5Server;
-use crate::{ ResultType};
+use crate::{ResultType};
 use crate::bytes_codec::BytesCodec;
 use crate::tcp::{DynTcpStream, FramedStream};
 
@@ -263,6 +262,7 @@ impl<S: IntoUrl> IntoProxyScheme for S {
             Ok(ok) => ok,
             Err(e) => {
                 match e {
+                    // If the string does not contain protocol headers, try to parse it using the socks5 protocol
                     ProxyError::UrlParseScheme(_source) => {
                         let try_this = format!("socks5://{}", self.as_str());
                         try_this.into_url()?
@@ -298,17 +298,17 @@ impl Proxy {
     }
 
     pub fn is_http_or_https(&self) -> bool {
-       return match self.intercept {
-            ProxyScheme::Socks5 {..} => false,
-            _=> true
-        }
+        return match self.intercept {
+            ProxyScheme::Socks5 { .. } => false,
+            _ => true
+        };
     }
 
     pub fn form_conf(conf: &Socks5Server, ms_timeout: Option<u64>) -> Result<Self, ProxyError> {
         let mut proxy;
         match ms_timeout {
-            None => {proxy= Self::new(&conf.proxy, DEFINE_TIME_OUT)?;}
-            Some(time_out) => {proxy= Self::new(&conf.proxy, time_out)?;}
+            None => { proxy = Self::new(&conf.proxy, DEFINE_TIME_OUT)?; }
+            Some(time_out) => { proxy = Self::new(&conf.proxy, time_out)?; }
         }
 
         if !conf.password.is_empty() && !conf.username.is_empty() {
@@ -326,8 +326,8 @@ impl Proxy {
         self
     }
 
-    pub async fn connect<'t, T>(self,target: T,
-        local_addr: Option<SocketAddr>) -> ResultType<FramedStream>
+    pub async fn connect<'t, T>(self, target: T,
+                                local_addr: Option<SocketAddr>) -> ResultType<FramedStream>
         where T: IntoTargetAddr<'t>,
     {
         info!("Connect to proxy server");
@@ -341,7 +341,7 @@ impl Proxy {
 
 
         let stream = super::timeout(self.ms_timeout,
-                                        crate::tcp::new_socket(local, true)?.connect(proxy)).await??;
+                                    crate::tcp::new_socket(local, true)?.connect(proxy)).await??;
         stream.set_nodelay(true).ok();
 
         let addr = stream.local_addr()?;
@@ -354,8 +354,8 @@ impl Proxy {
                     self.http_connect(stream, target),
                 ).await??;
                 Ok(FramedStream(
-                        Framed::new(DynTcpStream(Box::new(stream)), BytesCodec::new()),
-                        addr, None, 0,
+                    Framed::new(DynTcpStream(Box::new(stream)), BytesCodec::new()),
+                    addr, None, 0,
                 ))
             }
             ProxyScheme::Https { .. } => {
@@ -403,7 +403,7 @@ impl Proxy {
 
     pub async fn http_connect<'a, Input, T>(self, io: Input, target: T) -> Result<BufStream<Input>, ProxyError>
         where
-            Input: AsyncRead + AsyncWrite + Unpin,  T: IntoTargetAddr<'a> {
+            Input: AsyncRead + AsyncWrite + Unpin, T: IntoTargetAddr<'a> {
         let mut stream = BufStream::new(io);
         let (domain, port) = get_domain_and_port(target)?;
 
@@ -461,9 +461,7 @@ async fn get_response<IO>(stream: &mut BufStream<IO>) -> Result<String, ProxyErr
 }
 
 
-async fn recv_and_check_response<IO>(
-    stream: &mut BufStream<IO>
-) -> Result<(), ProxyError>
+async fn recv_and_check_response<IO>(stream: &mut BufStream<IO>) -> Result<(), ProxyError>
     where
         IO: AsyncRead + AsyncWrite + Unpin,
 {

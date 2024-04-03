@@ -60,6 +60,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Add to Favorites", "Add to favorites"),
         ("Remove from Favorites", "Remove from favorites"),
         ("Socks5 Proxy", "Socks5 proxy"),
+        ("Socks5/Http(s) Proxy", "Socks5/Http(s) proxy"),
         ("install_daemon_tip", "For starting on boot, you need to install system service."),
         ("Are you sure to close the connection?", "Are you sure you want to close the connection?"),
         ("One-Finger Tap", "One-finger tap"),
