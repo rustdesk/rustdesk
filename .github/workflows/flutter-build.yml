@@ -14,7 +14,7 @@ env:
   RUST_VERSION: "1.75" # https://github.com/rustdesk/rustdesk/discussions/7503
   CARGO_NDK_VERSION: "3.1.2"
   LLVM_VERSION: "15.0.6"
-  FLUTTER_VERSION: "3.16.9"
+  FLUTTER_VERSION: "3.19.5"
   FLUTTER_RUST_BRIDGE_VERSION: "1.80.1"
   # for arm64 linux because official Dart SDK does not work
   FLUTTER_ELINUX_VERSION: "3.16.9"
@@ -82,14 +82,6 @@ jobs:
           channel: "stable"
           flutter-version: ${{ env.FLUTTER_VERSION }}
           cache: true
-
-      - name: Replace engine with rustdesk custom flutter engine
-        run: |
-          flutter doctor -v
-          flutter precache --windows
-          Invoke-WebRequest -Uri https://github.com/fufesou/flutter-engine/releases/download/bugfix-subwindow-crash-3.16.9-apply-pull-47787/windows-x64-release.zip -OutFile windows-x64-flutter-release.zip
-          Expand-Archive windows-x64-flutter-release.zip -DestinationPath .
-          mv -Force windows-x64-release/*  C:/hostedtoolcache/windows/flutter/stable-${{ env.FLUTTER_VERSION }}-x64/bin/cache/artifacts/engine/windows-x64-release/
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@v1
