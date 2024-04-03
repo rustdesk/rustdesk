@@ -35,6 +35,8 @@ env:
   API_SERVER: "${{ secrets.API_SERVER }}"
   UPLOAD_ARTIFACT: "${{ inputs.upload-artifact }}"
   SIGN_BASE_URL: "${{ secrets.SIGN_BASE_URL }}"
+  # Editor name for metadata
+  EDITOR_NAME: MediosAvanzados
 
 jobs:
   build-RustDeskTempTopMostWindow:
