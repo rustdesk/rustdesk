@@ -383,7 +383,7 @@ class ScamWarningDialogState extends State<ScamWarningDialog> {
                           Navigator.of(context).pop();
                         },
                         style: ElevatedButton.styleFrom(
-                          primary: Colors.blueAccent,
+                          backgroundColor: Colors.blueAccent,
                         ),
                         child: Text(
                           translate("Decline"),
