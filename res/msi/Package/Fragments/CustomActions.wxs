@@ -5,18 +5,15 @@
     <Binary Id="Custom_Actions_Dll" SourceFile="$(var.CustomActions.TargetDir)$(var.CustomActions.TargetName).dll" />
 
     <CustomAction Id="CustomActionHello" DllEntry="CustomActionHello" Impersonate="yes" Execute="immediate" Return="ignore" BinaryRef="Custom_Actions_Dll"/>
-    <CustomAction Id="RemoveInstallFolder" DllEntry="RemoveInstallFolder" Impersonate="no" Execute="immediate" Return="ignore" BinaryRef="Custom_Actions_Dll"/>
-
-    <Property Id="InstallFolder" Value="C:\Programe Files\$(var.Product)" />
-    <CustomAction Id="SetInstallFolder" Property="InstallFolder" Value="[INSTALLFOLDER]" />
+    <CustomAction Id="RemoveInstallFolder" DllEntry="RemoveInstallFolder" Impersonate="no" Execute="deferred" Return="ignore" BinaryRef="Custom_Actions_Dll"/>
 
     <!-- Use WixQuietExec to run the commands to avoid the command window popping up. The command line to run needs to be stored
 				 in a property with the same id as the WixQuietExec custom action and the path to the exe needs to be quoted.
 				 A SetProperty action is used to allow the [SystemFolder] reference to be resolved and needs to be scheduled to run before the action.-->
 
-    <SetProperty Id="FirewallPortOutAdd" Value="&quot;[SystemFolder]netsh.exe&quot; advfirewall firewall add rule name=&quot;$(var.Product) Service&quot; dir=out action=allow programe=$(var.ProductLower) enable=yes" Before="FirewallPortOutAdd" Sequence="execute" />
+    <SetProperty Id="FirewallPortOutAdd" Value="&quot;[SystemFolder]netsh.exe&quot; advfirewall firewall add rule name=&quot;$(var.Product) Service&quot; dir=out action=allow program=$(var.ProductLower) enable=yes" Before="FirewallPortOutAdd" Sequence="execute" />
     <CustomAction Id="FirewallPortOutAdd" DllEntry="WixQuietExec" Execute="deferred" Return="asyncWait" BinaryRef="Wix4UtilCA_$(sys.BUILDARCHSHORT)" />
-    <SetProperty Id="FirewallPortInAdd" Value="&quot;[SystemFolder]netsh.exe&quot; advfirewall firewall add rule name=&quot;$(var.Product) Service&quot; dir=in action=allow programe=$(var.ProductLower) enable=yes" Before="FirewallPortInAdd" Sequence="execute" />
+    <SetProperty Id="FirewallPortInAdd" Value="&quot;[SystemFolder]netsh.exe&quot; advfirewall firewall add rule name=&quot;$(var.Product) Service&quot; dir=in action=allow program=$(var.ProductLower) enable=yes" Before="FirewallPortInAdd" Sequence="execute" />
     <CustomAction Id="FirewallPortInAdd" DllEntry="WixQuietExec" Execute="deferred" Return="asyncWait" BinaryRef="Wix4UtilCA_$(sys.BUILDARCHSHORT)" />
 
     <SetProperty Id="FirewallPortRemove" Value="&quot;[SystemFolder]netsh.exe&quot; advfirewall firewall delete rule name=&quot;$(var.Product) Service&quot;" Before="FirewallPortRemove" Sequence="execute" />
