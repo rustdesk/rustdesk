@@ -1,11 +1,11 @@
 [package]
-name = "rustdesk"
+name = "IT-Breitenstein-Fernwartung"
 version = "1.2.4"
-authors = ["rustdesk <info@rustdesk.com>"]
+authors = ["IT-Breitenstein <info@breitenstein.it>"]
 edition = "2021"
 build= "build.rs"
-description = "IT-Breitenstein Fernwartung Remote Desktop"
-default-run = "rustdesk"
+description = "IT-Breitenstein-Fernwartung"
+default-run = "IT-Breitenstein-Fernwartung"
 rust-version = "1.75"
 
 [lib]
@@ -26,7 +26,7 @@ use_samplerate = ["samplerate"]
 use_rubato = ["rubato"]
 use_dasp = ["dasp"]
 flutter = ["flutter_rust_bridge"]
-default = ["use_dasp"]
+default = ["use_dasp", "inline"]
 hwcodec = ["scrap/hwcodec"]
 gpucodec = ["scrap/gpucodec"]
 mediacodec = ["scrap/mediacodec"]
@@ -45,7 +45,6 @@ unix-file-copy-paste = [
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-async-trait = "0.1"
 whoami = "1.5.0"
 scrap = { path = "libs/scrap", features = ["wayland"] }
 hbb_common = { path = "libs/hbb_common" }
@@ -163,10 +162,10 @@ members = ["libs/scrap", "libs/hbb_common", "libs/enigo", "libs/clipboard", "lib
 exclude = ["vdi/host", "examples/custom_plugin"]
 
 [package.metadata.winres]
-LegalCopyright = "Copyright © 2024 Purslane Ltd. All rights reserved."
-ProductName = "IT-Breitenstein Fernwartung"
-FileDescription = "IT-Breitenstein Fernwartung Remote Desktop"
-OriginalFilename = "rustdesk.exe"
+LegalCopyright = "Copyright © 2024 IT-Breitenstein. All rights reserved."
+ProductName = "IT-Breitenstein-Fernwartung"
+FileDescription = "IT-Breitenstein-Fernwartung"
+OriginalFilename = "It-Breitenstein-Fernwartung.exe"
 
 [target.'cfg(target_os="windows")'.build-dependencies]
 winres = "0.1"
@@ -181,7 +180,7 @@ os-version = "0.2"
 hound = "3.5"
 
 [package.metadata.bundle]
-name = "IT-Breitenstein Fernwartung"
+name = "RustDesk"
 identifier = "com.carriez.rustdesk"
 icon = ["res/32x32.png", "res/128x128.png", "res/128x128@2x.png"]
 osx_minimum_system_version = "10.14"
