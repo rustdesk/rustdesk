@@ -7,6 +7,7 @@ import 'package:auto_size_text/auto_size_text.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/models/state_model.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:get/get.dart';
 import 'package:url_launcher/url_launcher_string.dart';
 import 'package:window_manager/window_manager.dart';
@@ -273,25 +274,34 @@ class _ConnectionPageState extends State<ConnectionPage>
 
   @override
   Widget build(BuildContext context) {
+    
     final isOutgoingOnly = bind.isOutgoingOnly();
-    return Column(
+
+    return ConstrainedBox(
+        constraints: const BoxConstraints(minWidth: 300, minHeight: 300, maxHeight: 300, maxWidth: 300),
+        child: Column(
+      
       children: [
         Expanded(
             child: Column(
           children: [
+
             Row(
               children: [
+                
                 Flexible(child: _buildRemoteIDTextField(context)),
               ],
             ).marginOnly(top: 22),
+            
             SizedBox(height: 12),
-            Divider().paddingOnly(right: 12),
-            Expanded(child: PeerTabPage()),
+            // Divider().paddingOnly(right: 12),
+            // Expanded(child: PeerTabPage()),
           ],
         ).paddingOnly(left: 12.0)),
         if (!isOutgoingOnly) const Divider(height: 1),
         if (!isOutgoingOnly) OnlineStatusWidget()
       ],
+    )
     );
   }
 
@@ -327,10 +337,14 @@ class _ConnectionPageState extends State<ConnectionPage>
         child: Column(
           children: [
             Row(
+                      children: [SvgPicture.asset('assets/test.svg', height: 40, width: 80, fit: BoxFit.fill,).marginOnly(right: 40)],
+            ).marginOnly(bottom: 15),
+            Row(
               children: [
                 Expanded(
                     child: Row(
                   children: [
+                    // Image(image: NetworkImage('https://flutter.github.io/assets-for-api-docs/assets/widgets/owl.jpg'),),
                     AutoSizeText(
                       translate('Control Remote Desktop'),
                       maxLines: 1,

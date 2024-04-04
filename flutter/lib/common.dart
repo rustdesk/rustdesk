@@ -78,7 +78,7 @@ typedef FMethod = String Function(String, dynamic);
 typedef StreamEventHandler = Future<void> Function(Map<String, dynamic>);
 typedef SessionID = UuidValue;
 final iconHardDrive = MemoryImage(Uint8List.fromList(base64Decode(
-    'iVBORw0KGgoAAAANSUhEUgAAAMgAAADICAMAAACahl6sAAAAmVBMVEUAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAjHWqVAAAAMnRSTlMAv0BmzLJNXlhiUu2fxXDgu7WuSUUe29LJvpqUjX53VTstD7ilNujCqTEk5IYH+vEoFjKvAagAAAPpSURBVHja7d0JbhpBEIXhB3jYzb5vBgzYgO04df/DJXGUKMwU9ECmZ6pQfSfw028LCXW3YYwxxhhjjDHGGGOM0eZ9VV1MckdKWLM1bRQ/35GW/WxHHu1me6ShuyHvNl34VhlTKsYVeDWj1EzgUZ1S1DrAk/UDparZgxd9Sl0BHnxSBhpI3jfKQG2FpLUpE69I2ILikv1nsvygjBwPSNKYMlNHggqUoSKS80AZCnwHqQ1zCRvW+CRegwRFeFAMKKrtM8gTPJlzSfwFgT9dJom3IDN4VGaSeAryAK8m0SSeghTg1ZYiql6CjBDhO8mzlyAVhKhIwgXxrh5NojGIhyRckEdwpCdhgpSQgiWTRGMQNonGIGySp0SDvMDBX5KWxiB8Eo1BgE00SYJBykhNnkmSWJAcLpGaJNMgfJKyxiDAK4WNEwryhMtkJsk8CJtEYxA+icYgQIfCcgkEqcJNXhIRQdgkGoPwSTQG+e8khdu/7JOVREwQIKCwF41B2CQljUH4JLcH6SI+OUlEBQHa0SQag/BJNAbhkjxqDMIn0RgEeI4muSlID9eSkERgEKAVTaIxCJ9EYxA2ydVB8hCASVLRGAQYR5NoDMIn0RgEyFHYSGMQPonGII4kziCNvBgNJonEk4u3GAk8Sprk6eYaqbMDY0oKvUm5jfC/viGiSypV7+M3i2iDsAGpNEDYjlTa3W8RdR/r544g50ilnA0RxoZIE2NIXqQbhkAkGyKNDZHGhkhjQ6SxIdLYEGlsiDQ2JGTVeD0264U9zipPh7XOooffpA6pfNCXjxl4/c3pUzlChwzor53zwYYVfpI5pOV6LWFF/2jiJ5FDSs5jdY/0rwUAkUMeXWdBqnSqD0DikBqdqCHsjTvELm9In0IOri/0pwAEDtlSyNaRjAIAAoesKWTtuusxByBwCJp0oomwBXcYUuCQgE50ENajE4OvZAKHLB1/68Br5NqiyCGYOY8YRd77kTkEb64n7lZN+mOIX4QOwb5FX0ZVx3uOxwW+SB0CbBubemWP8/rlaaeRX+M3uUOuZENsiA25zIbYkPsZElBIHwL13U/PTjJ/cyOOEoVM3I+hziDQlELm7pPxw3eI8/7gPh1fpLA6xGnEeDDgO0UcIAzzM35HxLPIq5SXe9BLzOsj9eUaQqyXzxS1QFSfWM2cCANiHcAISJ0AnCKpUwTuIkkA3EeSInAXSQKcs1V18e24wlllUmQp9v9zXKeHi+akRAMOPVKhAqdPBZeUmnnEsO6QcJ0+4qmOSbBxFfGVRiTUqITrdKcCbyYO3/K4wX4+aQ+FfNjXhu3JfAVjjDHGGGOMMcYYY4xIPwCgfqT6TbhCLAAAAABJRU5ErkJggg==')));
+    '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')));
 
 enum DesktopType {
   main,
@@ -215,16 +215,16 @@ class MyTheme {
   MyTheme._();
 
   static const Color grayBg = Color(0xFFEFEFF2);
-  static const Color accent = Color(0xFF0071FF);
-  static const Color accent50 = Color(0x770071FF);
-  static const Color accent80 = Color(0xAA0071FF);
+  static const Color accent = Color(0xffffc800);
+  static const Color accent50 = Color(0xffffc800);
+  static const Color accent80 = Color(0xffffc800);
   static const Color canvasColor = Color(0xFF212121);
   static const Color border = Color(0xFFCCCCCC);
-  static const Color idColor = Color(0xFF00B6F0);
+  static const Color idColor = Color(0xffffc800);
   static const Color darkGray = Color.fromARGB(255, 148, 148, 148);
   static const Color cmIdColor = Color(0xFF21790B);
   static const Color dark = Colors.black87;
-  static const Color button = Color(0xFF2C8CFF);
+  static const Color button = Color(0xffffc800);
   static const Color hoverBorder = Color(0xFF999999);
 
   // ListTile
@@ -415,7 +415,7 @@ class MyTheme {
         style:
             MenuStyle(backgroundColor: MaterialStatePropertyAll(Colors.white))),
     colorScheme: ColorScheme.light(
-        primary: Colors.blue, secondary: accent, background: grayBg),
+        primary: Colors.yellow, secondary: accent, background: grayBg),
     popupMenuTheme: PopupMenuThemeData(
         color: Colors.white,
         shape: RoundedRectangleBorder(
@@ -520,7 +520,7 @@ class MyTheme {
         style: MenuStyle(
             backgroundColor: MaterialStatePropertyAll(Color(0xFF121212)))),
     colorScheme: ColorScheme.dark(
-      primary: Colors.blue,
+      primary: Colors.yellow,
       secondary: accent,
       background: Color(0xFF24252B),
     ),
@@ -1095,7 +1095,7 @@ Color? _msgboxColor(String type) {
   if (type.contains("error") || type == "re-input-password") {
     return Color(0xFFE04F5F);
   }
-  return Color(0xFF2C8CFF);
+  return Color(0xffffc800);
 }
 
 Widget msgboxIcon(String type) {
@@ -1191,15 +1191,15 @@ Color str2color2(String str, {List<int> existing = const []}) {
   Map<String, Color> colorMap = {
     "red": Colors.red,
     "green": Colors.green,
-    "blue": Colors.blue,
+    "blue": Colors.yellow,
     "orange": Colors.orange,
     "purple": Colors.purple,
     "grey": Colors.grey,
-    "cyan": Colors.cyan,
+    "cyan": Colors.yellow,
     "lime": Colors.lime,
     "teal": Colors.teal,
     "pink": Colors.pink[200]!,
-    "indigo": Colors.indigo,
+    "indigo": Colors.yellow[900]!,
     "brown": Colors.brown,
   };
   final color = colorMap[str.toLowerCase()];
@@ -1726,7 +1726,7 @@ Future<Offset?> _adjustRestoreMainWindowOffset(
             : kMobileMaxDisplaySize)
         .toDouble();
   }
-  final minWidth = 10.0;
+  final minWidth = 100.0;
   if ((left + minWidth) > frameRight! ||
       (top + minWidth) > frameBottom! ||
       (left + width - minWidth) < frameLeft ||
