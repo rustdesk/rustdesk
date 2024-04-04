@@ -169,6 +169,7 @@ span.clear-input:hover {
 .card-connect {
     @CARD;
     width: 320px;
+    height: 300px;
 }
 
 .right-buttons {
@@ -399,6 +400,11 @@ div.remote-session svg#menu {
     border: 1px;
     background: none;
     color: white;
+}
+
+.version {
+    padding-top: 40px;
+    text-align: end;
 }
 
 svg#refresh-password {
