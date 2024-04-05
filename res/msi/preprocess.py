@@ -27,7 +27,7 @@ def make_parser():
         "-m",
         "--manufacturer",
         type=str,
-        default="Purslane Ltd",
+        default="Breitenstein IT",
         help="The app manufacturer.",
     )
     return parser

@@ -19,6 +19,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:get/get.dart';
 import 'package:provider/provider.dart';
 import 'package:window_manager/window_manager.dart';
+import 'package:window_size/window_size.dart';
 
 import 'common.dart';
 import 'consts.dart';
@@ -44,6 +45,9 @@ Future<void> main(List<String> args) async {
     runMobileApp();
     return;
   }
+
+  setWindowMaxSize(const Size(605, 475));
+  setWindowMinSize(const Size(605, 475));
   // main window
   if (args.isNotEmpty && args.first == 'multi_window') {
     kWindowId = int.parse(args[1]);

@@ -40,7 +40,7 @@ class _OnlineStatusWidgetState extends State<OnlineStatusWidget> {
   double? get height => bind.isIncomingOnly() ? null : em * 3;
 
   void onUsePublicServerGuide() {
-    const url = "https://rustdesk.com/pricing.html";
+    const url = "https://breitenstein.it/";
     canLaunchUrlString(url).then((can) {
       if (can) {
         launchUrlString(url);
@@ -278,7 +278,7 @@ class _ConnectionPageState extends State<ConnectionPage>
     final isOutgoingOnly = bind.isOutgoingOnly();
 
     return ConstrainedBox(
-        constraints: const BoxConstraints(minWidth: 300, minHeight: 300, maxHeight: 300, maxWidth: 300),
+        constraints: const BoxConstraints(minWidth: 300, minHeight: 445, maxHeight: 445, maxWidth: 300),
         child: Column(
       
       children: [
@@ -332,7 +332,7 @@ class _ConnectionPageState extends State<ConnectionPage>
       padding: const EdgeInsets.fromLTRB(20, 24, 20, 22),
       decoration: BoxDecoration(
           borderRadius: const BorderRadius.all(Radius.circular(13)),
-          border: Border.all(color: Theme.of(context).colorScheme.background)),
+          border: Border.all(color: Theme.of(context).colorScheme.onPrimary)),
       child: Ink(
         child: Column(
           children: [

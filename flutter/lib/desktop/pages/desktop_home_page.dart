@@ -119,7 +119,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
             cursor: SystemMouseCursors.click,
             child: GestureDetector(
               onTap: () {
-                launchUrl(Uri.parse('https://rustdesk.com'));
+                launchUrl(Uri.parse('https://breitenstein.it/'));
               },
               child: Opacity(
                   opacity: 0.5,

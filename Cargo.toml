@@ -1,11 +1,11 @@
 [package]
-name = "rustdesk"
+name = "IT-Breitenstein-Fernwartung"
 version = "1.2.4"
-authors = ["rustdesk <info@rustdesk.com>"]
+authors = ["IT-Breitenstein-Fernwartung <support@breitenstein.it>"]
 edition = "2021"
 build= "build.rs"
 description = "IT-Breitenstein Fernwartung Remote Desktop"
-default-run = "rustdesk"
+default-run = "IT-Breitenstein-Fernwartung"
 rust-version = "1.75"
 
 [lib]
@@ -163,10 +163,10 @@ members = ["libs/scrap", "libs/hbb_common", "libs/enigo", "libs/clipboard", "lib
 exclude = ["vdi/host", "examples/custom_plugin"]
 
 [package.metadata.winres]
-LegalCopyright = "Copyright © 2024 Purslane Ltd. All rights reserved."
+LegalCopyright = "Copyright © 2024 Breitenstein IT. All rights reserved."
 ProductName = "IT-Breitenstein Fernwartung"
 FileDescription = "IT-Breitenstein Fernwartung Remote Desktop"
-OriginalFilename = "rustdesk.exe"
+OriginalFilename = "IT-Breitenstein-Fernwartung.exe"
 
 [target.'cfg(target_os="windows")'.build-dependencies]
 winres = "0.1"
