@@ -190,7 +190,7 @@ jobs:
         job:
           # - { target: i686-pc-windows-msvc        , os: windows-2019                  }
           # - { target: x86_64-pc-windows-gnu       , os: windows-2019                  }
-          # - { target: i686-pc-windows-msvc, os: windows-2019, arch: x86 }
+          - { target: i686-pc-windows-msvc, os: windows-2019, arch: x86 }
           # - { target: aarch64-pc-windows-msvc, os: windows-2019 }
     steps:
       - name: Export GitHub Actions cache environment variables
