@@ -13,7 +13,6 @@ src/version.rs
 *tgz
 cert.pfx
 *.bak
-*svg
 **pdb
 src/bridge_generated.rs
 src/bridge_generated.io.rs
