@@ -1627,7 +1627,7 @@ class _AboutState extends State<_About> {
                         style: linkStyle,
                       ).marginSymmetric(vertical: 4.0)),
                   Container(
-                    decoration: const BoxDecoration(color: Color(0xFF2c8cff)),
+                    decoration: const BoxDecoration(color: Color(0xffffc800)),
                     padding:
                         const EdgeInsets.symmetric(vertical: 24, horizontal: 8),
                     child: SelectionArea(
@@ -1639,13 +1639,13 @@ class _AboutState extends State<_About> {
                             children: [
                               Text(
                                 'Copyright © ${DateTime.now().toString().substring(0, 4)} Breitenstein IT.\n$license',
-                                style: const TextStyle(color: Colors.white),
+                                style: const TextStyle(color: Colors.black),
                               ),
                               Text(
                                 translate('Slogan_tip'),
                                 style: TextStyle(
                                     fontWeight: FontWeight.w800,
-                                    color: Colors.white),
+                                    color: Colors.black),
                               )
                             ],
                           ),

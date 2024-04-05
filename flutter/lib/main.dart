@@ -46,10 +46,12 @@ Future<void> main(List<String> args) async {
     return;
   }
 
-  setWindowMaxSize(const Size(605, 475));
-  setWindowMinSize(const Size(605, 475));
+  
   // main window
   if (args.isNotEmpty && args.first == 'multi_window') {
+
+    
+
     kWindowId = int.parse(args[1]);
     stateGlobal.setWindowId(kWindowId!);
     if (!isMacOS) {
@@ -89,6 +91,10 @@ Future<void> main(List<String> args) async {
         break;
     }
   } else if (args.isNotEmpty && args.first == '--cm') {
+
+    setWindowMaxSize(const Size(605, 475));
+    setWindowMinSize(const Size(605, 475));
+
     debugPrint("--cm started");
     desktopType = DesktopType.cm;
     await windowManager.ensureInitialized();
@@ -96,6 +102,8 @@ Future<void> main(List<String> args) async {
   } else if (args.contains('--install')) {
     runInstallPage();
   } else {
+    setWindowMaxSize(const Size(605, 475));
+    setWindowMinSize(const Size(605, 475));
     desktopType = DesktopType.main;
     await windowManager.ensureInitialized();
     windowManager.setPreventClose(true);
@@ -148,7 +156,7 @@ void runMainApp(bool startService) async {
     }
     windowManager.setOpacity(1);
     windowManager.setTitle(getWindowName());
-    windowManager.setResizable(!bind.isIncomingOnly());
+    windowManager.setResizable(false);
   });
 }
 

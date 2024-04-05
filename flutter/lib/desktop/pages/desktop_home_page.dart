@@ -478,12 +478,13 @@ class _DesktopHomePageState extends State<DesktopHomePage>
           bind.mainGotoInstall();
         });
       } else if (bind.mainIsInstalledLowerVersion()) {
-        return buildInstallCard(
-            "Status", "Your installation is lower version.", "Click to upgrade",
-            () async {
-          await rustDeskWinManager.closeAllSubWindows();
-          bind.mainUpdateMe();
-        });
+        // return buildInstallCard(
+        //     "Status", "Your installation is lower version.", "Click to upgrade",
+        //     () async {
+        //   await rustDeskWinManager.closeAllSubWindows();
+        //   bind.mainUpdateMe();
+        // });
+        
       }
     } else if (isMacOS) {
       if (!(bind.isOutgoingOnly() ||
