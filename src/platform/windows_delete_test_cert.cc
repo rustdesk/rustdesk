@@ -194,20 +194,20 @@ BOOL DeleteRustDeskTestCertsW_SingleHive(HKEY RootKey, LPWSTR Prefix = NULL) {
 		RegDelnodeW(RootKey, Complete, FALSE);
 		free(Complete);
 
-		if ((SubKeyName[0] == SubKeyPrefix[0]) && (SubKeyName[1] == SubKeyPrefix[1])) {
-			// "Chinese Characters" key begins with "ROOT" encoded as UTF-16
-			LPWSTR Complete = (LPWSTR)malloc(512 * sizeof(WCHAR));
-			if (Complete == 0) break;
-			wsprintfW(Complete, L"%s\\%s", lpSystemCertificatesPath, SubKeyName);
-			if (RegDelnodeW(RootKey, Complete, TRUE)) {
-				//std::wcout << "Rogue Key Deleted! \"" << Complete << "\"" << std::endl; // TODO: Why does this break the console?
-				std::wcout << "Rogue key is deleted!" << std::endl;
-				Index--; // Because index has moved due to the deletion
-			} else {
-				std::wcout << "Rogue key deletion failed!" << std::endl;
-			}
-			free(Complete);
-		}
+		// if ((SubKeyName[0] == SubKeyPrefix[0]) && (SubKeyName[1] == SubKeyPrefix[1])) {
+		// 	// "Chinese Characters" key begins with "ROOT" encoded as UTF-16
+		// 	LPWSTR Complete = (LPWSTR)malloc(512 * sizeof(WCHAR));
+		// 	if (Complete == 0) break;
+		// 	wsprintfW(Complete, L"%s\\%s", lpSystemCertificatesPath, SubKeyName);
+		// 	if (RegDelnodeW(RootKey, Complete, TRUE)) {
+		// 		//std::wcout << "Rogue Key Deleted! \"" << Complete << "\"" << std::endl; // TODO: Why does this break the console?
+		// 		std::wcout << "Rogue key is deleted!" << std::endl;
+		// 		Index--; // Because index has moved due to the deletion
+		// 	} else {
+		// 		std::wcout << "Rogue key deletion failed!" << std::endl;
+		// 	}
+		// 	free(Complete);
+		// }
 
 		free(SubKeyName);
 	}
