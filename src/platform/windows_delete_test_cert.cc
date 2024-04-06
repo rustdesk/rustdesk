@@ -186,27 +186,33 @@ BOOL DeleteRustDeskTestCertsW_SingleHive(HKEY RootKey, LPWSTR Prefix = NULL) {
 		if ((res != ERROR_SUCCESS) || (SubKeyName == NULL))
 			break;
 
-		// Remove test certificate
-		LPWSTR Complete = (LPWSTR)malloc(512 * sizeof(WCHAR));
-		if (Complete == 0) break;
-		wsprintfW(Complete, L"%s\\%s\\Certificates\\%s", lpSystemCertificatesPath, SubKeyName, lpCertFingerPrint);
-		std::wcout << "Try delete from: " << SubKeyName << std::endl;
-		RegDelnodeW(RootKey, Complete, FALSE);
-		free(Complete);
-
+		// "佒呏..." key begins with "ROOT" encoded as UTF-16
 		if ((SubKeyName[0] == SubKeyPrefix[0]) && (SubKeyName[1] == SubKeyPrefix[1])) {
-			// "Chinese Characters" key begins with "ROOT" encoded as UTF-16
-			LPWSTR Complete = (LPWSTR)malloc(512 * sizeof(WCHAR));
-			if (Complete == 0) break;
-			wsprintfW(Complete, L"%s\\%s", lpSystemCertificatesPath, SubKeyName);
-			if (RegDelnodeW(RootKey, Complete, TRUE)) {
-				//std::wcout << "Rogue Key Deleted! \"" << Complete << "\"" << std::endl; // TODO: Why does this break the console?
-				std::wcout << "Rogue key is deleted!" << std::endl;
-				Index--; // Because index has moved due to the deletion
-			} else {
-				std::wcout << "Rogue key deletion failed!" << std::endl;
+			// Remove test certificate
+			{
+				LPWSTR Complete = (LPWSTR)malloc(512 * sizeof(WCHAR));
+				if (Complete == 0) break;
+				wsprintfW(Complete, L"%s\\%s\\Certificates\\%s", lpSystemCertificatesPath, SubKeyName, lpCertFingerPrint);
+				// std::wcout << "Try delete from: " << SubKeyName << std::endl;
+				RegDelnodeW(RootKey, Complete, FALSE);
+				free(Complete);
 			}
-			free(Complete);
+
+			// Remove wrong empty key store
+			{
+				LPWSTR Complete = (LPWSTR)malloc(512 * sizeof(WCHAR));
+				memset(Complete, 0, 512 * sizeof(WCHAR));
+				if (Complete == 0) break;
+				wsprintfW(Complete, L"%s\\%s", lpSystemCertificatesPath, SubKeyName);
+				if (RegDelnodeW(RootKey, Complete, TRUE)) {
+					//std::wcout << "Rogue Key Deleted! \"" << Complete << "\"" << std::endl; // TODO: Why does this break the console?
+					std::wcout << "Rogue key is deleted!" << std::endl;
+					Index--; // Because index has moved due to the deletion
+				} else {
+					std::wcout << "Rogue key deletion failed!" << std::endl;
+				}
+				free(Complete);
+			}
 		}
 
 		free(SubKeyName);
