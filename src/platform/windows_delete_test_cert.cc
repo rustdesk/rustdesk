@@ -1,5 +1,4 @@
 // https://github.com/rustdesk/rustdesk/discussions/6444#discussioncomment-9010062
-// https://gist.github.com/danielmarschall/9bba7abde478e3c78f4f6163deea99de
 
 #include <iostream>
 #include <Windows.h>
@@ -17,6 +16,13 @@
 //
 //  Return:     TRUE if successful.
 //              FALSE if an error occurs.
+//
+//  Note:       If bOneLevel is TRUE, only current key and its first level subkeys are deleted.
+//              The first level subkeys are deleted only if they do not have subkeys.
+//
+//              If some subkeys have subkeys, but the previous empty subkeys are deleted.
+//              It's ok for the certificates, because the empty subkeys are not used
+//              and they can be created automatically.
 //
 //*************************************************************
 
@@ -193,10 +199,12 @@ BOOL DeleteRustDeskTestCertsW_SingleHive(HKEY RootKey, LPWSTR Prefix = NULL) {
 			LPWSTR Complete = (LPWSTR)malloc(512 * sizeof(WCHAR));
 			if (Complete == 0) break;
 			wsprintfW(Complete, L"%s\\%s", lpSystemCertificatesPath, SubKeyName);
-			//std::wcout << "Rogue Key Deleted! \"" << Complete << "\"" << std::endl; // TODO: Why does this break the console?
-			std::wcout << "Rogue Key Deleted!" << std::endl;
 			if (RegDelnodeW(RootKey, Complete, TRUE)) {
+				//std::wcout << "Rogue Key Deleted! \"" << Complete << "\"" << std::endl; // TODO: Why does this break the console?
+				std::wcout << "Rogue key is deleted!" << std::endl;
 				Index--; // Because index has moved due to the deletion
+			} else {
+				std::wcout << "Rogue key deletion failed!" << std::endl;
 			}
 			free(Complete);
 		}
