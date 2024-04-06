@@ -71,7 +71,7 @@ jobs:
       - name: Install Rust toolchain
         uses: actions-rs/toolchain@v1
         with:
-          toolchain: stable
+          toolchain: "1.75"
           target: ${{ matrix.job.target }}
           override: true
           profile: minimal # minimal component installation (ie, no documentation)
@@ -180,7 +180,7 @@ jobs:
       - name: Install Rust toolchain
         uses: actions-rs/toolchain@v1
         with:
-          toolchain: nightly-${{ matrix.job.target }}
+          toolchain: nightly-2023-10-13-${{ matrix.job.target }}
           target: ${{ matrix.job.target }}
           override: true
           profile: minimal # minimal component installation (ie, no documentation)
