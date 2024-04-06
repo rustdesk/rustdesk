@@ -20,6 +20,7 @@
 		<SetProperty Id="RestartService" Value="&quot;net&quot; start $(var.Product)" Before="RestartService" Sequence="execute" />
 		<CustomAction Id="RestartService" DllEntry="WixQuietExec" Execute="deferred" Return="asyncWait" BinaryRef="Wix4UtilCA_$(sys.BUILDARCHSHORT)" />
 
+		<CustomAction Id="RemoveInstallFolder.SetParam" Return="check" Property="RemoveInstallFolder" Value="[INSTALLFOLDER]" />
 		<InstallExecuteSequence>
 
 			<!--The ServiceControl element above handles starting/stopping the server on install/uninstall,
@@ -30,8 +31,8 @@
 			
 			<Custom Action="CustomActionHello" Before="InstallFinalize" />
 
-			<Custom Action="SetInstallFolder" After="RemoveFiles"/>
-			<Custom Action="RemoveInstallFolder" After="SetInstallFolder"/>
+			<Custom Action="RemoveInstallFolder.SetParam" After="RemoveFiles"/>
+			<Custom Action="RemoveInstallFolder" After="RemoveInstallFolder.SetParam"/>
 		</InstallExecuteSequence>
 
 		<!-- Shortcuts -->
