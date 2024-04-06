@@ -321,17 +321,15 @@ class _PeerTabPageState extends State<PeerTabPage>
 
   Widget visibleContextMenu(CancelFunc cancelFunc) {
     final model = Provider.of<PeerTabModel>(context);
-    final menu = List<MenuEntrySwitch>.empty(growable: true);
+    final menu = List<MenuEntrySwitchSync>.empty(growable: true);
     for (int i = 0; i < model.orders.length; i++) {
       int tabIndex = model.orders[i];
       if (tabIndex < 0 || tabIndex >= PeerTabModel.maxTabCount) continue;
       if (!model.isEnabled[tabIndex]) continue;
-      menu.add(MenuEntrySwitch(
+      menu.add(MenuEntrySwitchSync(
           switchType: SwitchType.scheckbox,
           text: model.tabTooltip(tabIndex),
-          getter: () async {
-            return model.isVisibleEnabled[tabIndex];
-          },
+          currentValue: model.isVisibleEnabled[tabIndex],
           setter: (show) async {
             model.setTabVisible(tabIndex, show);
             cancelFunc();
