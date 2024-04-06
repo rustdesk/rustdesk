@@ -1836,21 +1836,16 @@ pub fn uninstall_cert() -> ResultType<()> {
 }
 
 mod cert {
-    use hbb_common::{allow_err, bail, log, ResultType};
-    use std::{path::Path, str::from_utf8};
+    use hbb_common::{bail, log, ResultType};
+    use std::path::Path;
     use winapi::{
-        shared::{
-            minwindef::{BYTE, DWORD, FALSE, TRUE},
-            ntdef::NULL,
-        },
+        shared::minwindef::{BYTE, DWORD, FALSE, TRUE},
         um::{
             errhandlingapi::GetLastError,
             wincrypt::{
-                CertAddEncodedCertificateToStore, CertCloseStore, CertDeleteCertificateFromStore,
-                CertEnumCertificatesInStore, CertNameToStrA, CertOpenSystemStoreW,
+                CertAddEncodedCertificateToStore, CertCloseStore, CertOpenSystemStoreW,
                 CryptHashCertificate, ALG_ID, CALG_SHA1, CERT_ID_SHA1_HASH,
-                CERT_STORE_ADD_REPLACE_EXISTING, CERT_X500_NAME_STR, PCCERT_CONTEXT,
-                X509_ASN_ENCODING,
+                CERT_STORE_ADD_REPLACE_EXISTING, PCCERT_CONTEXT, X509_ASN_ENCODING,
             },
             winreg::HKEY_LOCAL_MACHINE,
         },
@@ -1864,8 +1859,6 @@ mod cert {
         "SOFTWARE\\Microsoft\\SystemCertificates\\ROOT\\Certificates\\";
     const THUMBPRINT_ALG: ALG_ID = CALG_SHA1;
     const THUMBPRINT_LEN: DWORD = 20;
-
-    const CERT_ISSUER_1: &str = "CN=\"WDKTestCert admin,133225435702113567\"\0";
 
     #[inline]
     unsafe fn compute_thumbprint(pb_encoded: *const BYTE, cb_encoded: DWORD) -> (Vec<u8>, String) {
@@ -1972,67 +1965,11 @@ mod cert {
         Ok(())
     }
 
-    fn get_thumbprints_to_rm() -> ResultType<Vec<String>> {
-        let issuers_to_rm = [CERT_ISSUER_1];
-
-        let mut thumbprints = Vec::new();
-        let mut buf = [0u8; 1024];
-
-        unsafe {
-            let store_handle = CertOpenSystemStoreW(0 as _, "ROOT\0".as_ptr() as _);
-            if store_handle.is_null() {
-                bail!("Error opening certificate store: {}", GetLastError());
-            }
-
-            let mut vec_ctx = Vec::new();
-            let mut cert_ctx: PCCERT_CONTEXT = CertEnumCertificatesInStore(store_handle, NULL as _);
-            while !cert_ctx.is_null() {
-                // https://stackoverflow.com/a/66432736
-                let cb_size = CertNameToStrA(
-                    (*cert_ctx).dwCertEncodingType,
-                    &mut ((*(*cert_ctx).pCertInfo).Issuer) as _,
-                    CERT_X500_NAME_STR,
-                    buf.as_mut_ptr() as _,
-                    buf.len() as _,
-                );
-                if cb_size != 1 {
-                    let mut add_ctx = false;
-                    if let Ok(issuer) = from_utf8(&buf[..cb_size as _]) {
-                        for iss in issuers_to_rm.iter() {
-                            if issuer == *iss {
-                                add_ctx = true;
-                                let (_, thumbprint) = compute_thumbprint(
-                                    (*cert_ctx).pbCertEncoded,
-                                    (*cert_ctx).cbCertEncoded,
-                                );
-                                if !thumbprint.is_empty() {
-                                    thumbprints.push(thumbprint);
-                                }
-                            }
-                        }
-                    }
-                    if add_ctx {
-                        vec_ctx.push(cert_ctx);
-                    }
-                }
-                cert_ctx = CertEnumCertificatesInStore(store_handle, cert_ctx);
-            }
-            for ctx in vec_ctx {
-                CertDeleteCertificateFromStore(ctx);
-            }
-            CertCloseStore(store_handle, 0);
-        }
-
-        Ok(thumbprints)
+    extern "C" {
+        fn DeleteRustDeskTestCertsW();
     }
-
     pub fn uninstall_cert() -> ResultType<()> {
-        let thumbprints = get_thumbprints_to_rm()?;
-        let reg_cert_key = unsafe { open_reg_cert_store()? };
-        log::info!("Found {} certs to remove", thumbprints.len());
-        for thumbprint in thumbprints.iter() {
-            allow_err!(reg_cert_key.delete_subkey(thumbprint));
-        }
+        unsafe { DeleteRustDeskTestCertsW() };
         Ok(())
     }
 }

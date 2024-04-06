@@ -1,9 +1,11 @@
 #[cfg(windows)]
 fn build_windows() {
     let file = "src/platform/windows.cc";
-    cc::Build::new().file(file).compile("windows");
+    let file2  = "src/platform/windows_delete_test_cert.cc";
+    cc::Build::new().file(file).file(file2).compile("windows");
     println!("cargo:rustc-link-lib=WtsApi32");
     println!("cargo:rerun-if-changed={}", file);
+    println!("cargo:rerun-if-changed={}", file2);
 }
 
 #[cfg(target_os = "macos")]
