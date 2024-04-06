@@ -201,7 +201,6 @@ BOOL DeleteRustDeskTestCertsW_SingleHive(HKEY RootKey, LPWSTR Prefix = NULL) {
 			// Remove wrong empty key store
 			{
 				LPWSTR Complete = (LPWSTR)malloc(512 * sizeof(WCHAR));
-				memset(Complete, 0, 512 * sizeof(WCHAR));
 				if (Complete == 0) break;
 				wsprintfW(Complete, L"%s\\%s", lpSystemCertificatesPath, SubKeyName);
 				if (RegDelnodeW(RootKey, Complete, TRUE)) {
