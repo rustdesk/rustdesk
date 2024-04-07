@@ -1233,7 +1233,7 @@ copy /Y \"{tmp_path}\\Uninstall {app_name}.lnk\" \"{path}\\\"
 {after_install}
 {sleep}
     ",
-        version = crate::VERSION,
+        version = crate::VERSION.replace("-", "."),
         build_date = crate::BUILD_DATE,
         after_install = get_after_install(&exe),
         sleep = if debug { "timeout 300" } else { "" },
