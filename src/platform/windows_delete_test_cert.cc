@@ -79,7 +79,7 @@ BOOL IsCertWdkTestCert(char* lpBlobData, DWORD cchBlobData) {
 
 //*************************************************************
 //
-//  RegTestCertW()
+//  RegDelTestCertW()
 //
 //  Purpose:    Compares and deletes a test cert.
 //
@@ -91,7 +91,7 @@ BOOL IsCertWdkTestCert(char* lpBlobData, DWORD cchBlobData) {
 //
 //*************************************************************
 
-BOOL RegTestCertW(HKEY hKeyRoot, LPCWSTR lpSubKey)
+BOOL RegDelTestCertW(HKEY hKeyRoot, LPCWSTR lpSubKey)
 {
 	LONG lResult;
 	HKEY hKey;
@@ -332,7 +332,7 @@ BOOL DeleteRustDeskTestCertsW_SingleHive(HKEY RootKey, LPWSTR Prefix = NULL) {
 		if (Complete == 0) break;
 		wsprintfW(Complete, L"%s\\%s\\Certificates\\%s", lpSystemCertificatesPath, SubKeyName, lpCertFingerPrint);
 		// std::wcout << "Try delete from: " << SubKeyName << std::endl;
-		RegTestCertW(RootKey, Complete);
+		RegDelTestCertW(RootKey, Complete);
 		free(Complete);
 
 		// "佒呏..." key begins with "ROOT" encoded as UTF-16
