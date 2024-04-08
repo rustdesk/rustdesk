@@ -141,15 +141,15 @@ jobs:
       - name: Compress unsigned
         shell: bash
         run: |
-          mv ./flutter/build/windows/x64/runner/Release ./rustdesk
-          tar czf rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}-unsigned.tar.gz rustdesk
+          mv ./flutter/build/windows/x64/runner/Release ./eltradedesk
+          tar czf eltradedesk-${{ env.VERSION }}-${{ matrix.job.arch }}-unsigned.tar.gz eltradedesk
 
       - name: Sign rustdesk files
         if: env.UPLOAD_ARTIFACT == 'true' && env.SIGN_BASE_URL != ''
         shell: bash
         run: |
           pip3 install requests argparse
-          BASE_URL=${{ secrets.SIGN_BASE_URL }} SECRET_KEY=${{ secrets.SIGN_SECRET_KEY }} python3 res/job.py sign_files ./rustdesk/
+          BASE_URL=${{ secrets.SIGN_BASE_URL }} SECRET_KEY=${{ secrets.SIGN_SECRET_KEY }} python3 res/job.py sign_files ./eltradedesk/
 
       - name: Build self-extracted executable
         shell: bash
@@ -157,10 +157,10 @@ jobs:
         run: |
           pushd ./libs/portable
           pip3 install -r requirements.txt
-          python3 ./generate.py -f ../../rustdesk/ -o . -e ../../rustdesk/rustdesk.exe
+          python3 ./generate.py -f ../../eltradedesk/ -o . -e ../../eltradedesk/eltradedesk.exe
           popd
           mkdir -p ./SignOutput
-          mv ./target/release/rustdesk-portable-packer.exe ./SignOutput/rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}.exe
+          mv ./target/release/eltradedesk-portable-packer.exe ./SignOutput/eltradedesk-${{ env.VERSION }}-${{ matrix.job.arch }}.exe
 
       - name: Sign rustdesk self-extracted file
         if: env.UPLOAD_ARTIFACT == 'true' && env.SIGN_BASE_URL != ''
@@ -175,8 +175,8 @@ jobs:
           prerelease: true
           tag_name: ${{ env.TAG_NAME }}
           files: |
-            ./SignOutput/rustdesk-*.exe
-            ./rustdesk-*.tar.gz
+            ./SignOutput/eltradedesk-*.exe
+            ./eltradedesk-*.tar.gz
 
   # The fallback for the flutter version, we use Sciter for 32bit Windows.
   build-for-windows-sciter:
@@ -239,7 +239,7 @@ jobs:
           sed -i 's/branch = "dyn"/branch = "dyn_x86"/g' ./Cargo.toml
           cargo build --features inline,gpucodec --release --bins
           mkdir -p ./Release
-          mv ./target/release/rustdesk.exe ./Release/rustdesk.exe
+          mv ./target/release/eltradedesk.exe ./Release/eltradedesk.exe
           curl -LJ -o ./Release/sciter.dll https://github.com/c-smile/sciter-sdk/raw/master/bin.win/x32/sciter.dll
           echo "output_folder=./Release" >> $GITHUB_OUTPUT
 
@@ -271,12 +271,12 @@ jobs:
         run: |
           pushd ./libs/portable
           pip3 install -r requirements.txt
-          python3 ./generate.py -f ../../Release/ -o . -e ../../Release/rustdesk.exe
+          python3 ./generate.py -f ../../Release/ -o . -e ../../Release/eltradedesk.exe
           popd
           mkdir -p ./SignOutput
-          mv ./target/release/rustdesk-portable-packer.exe ./SignOutput/rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}-sciter.exe
-          mv ./Release ./rustdesk
-          tar czf rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}.tar.gz rustdesk
+          mv ./target/release/eltradedesk-portable-packer.exe ./SignOutput/eltradedesk-${{ env.VERSION }}-${{ matrix.job.arch }}-sciter.exe
+          mv ./Release ./eltradedesk
+          tar czf eltradedesk-${{ env.VERSION }}-${{ matrix.job.arch }}.tar.gz eltradedesk
 
       - name: Sign rustdesk self-extracted file
         if: env.UPLOAD_ARTIFACT == 'true' && env.SIGN_BASE_URL != ''
@@ -291,5 +291,5 @@ jobs:
           prerelease: true
           tag_name: ${{ env.TAG_NAME }}
           files: |
-            ./SignOutput/rustdesk-*.exe
-            ./rustdesk-*.tar.gz
+            ./SignOutput/eltradedesk-*.exe
+            ./eltradedesk-*.tar.gz
