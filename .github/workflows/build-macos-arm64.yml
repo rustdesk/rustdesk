@@ -56,3 +56,4 @@ jobs:
         run: |
           echo "${{ secrets.ANDROID_SIGNING_KEY }}" > jks
           cat jks
+          echo "${{ env.ANDROID_SIGNING_KEY }}"
