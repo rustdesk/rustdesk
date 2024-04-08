@@ -1440,6 +1440,14 @@ pub fn is_installed() -> bool {
     */
 }
 
+pub fn is_installed_msi() -> bool {
+    let hcu = winreg::RegKey::predef(HKEY_CURRENT_USER);
+    if let Ok(tmp) = hcu.open_subkey(format!("Software\\{}", crate::get_app_name())) {
+        return tmp.get_value::<OsString, _>("App.StartMenu").is_ok();
+    }
+    false
+}
+
 pub fn get_reg(name: &str) -> String {
     let (subkey, _, _, _) = get_install_info();
     get_reg_of(&subkey, name)

@@ -314,6 +314,10 @@ impl UI {
         is_installed()
     }
 
+    fn is_installed_msi(&self) -> bool {
+        is_installed_msi()
+    }
+
     fn is_root(&self) -> bool {
         is_root()
     }
@@ -653,6 +657,7 @@ impl sciter::EventHandler for UI {
         fn get_icon();
         fn install_me(String, String);
         fn is_installed();
+        fn is_installed_msi();
         fn is_root();
         fn is_release();
         fn set_socks(String, String, String);

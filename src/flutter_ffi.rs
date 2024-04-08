@@ -1651,6 +1651,10 @@ pub fn main_is_installed() -> SyncReturn<bool> {
     SyncReturn(is_installed())
 }
 
+pub fn main_is_installed_msi() -> SyncReturn<bool> {
+    SyncReturn(is_installed_msi())
+}
+
 pub fn main_init_input_source() -> SyncReturn<()> {
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     crate::keyboard::input_source::init_input_source();

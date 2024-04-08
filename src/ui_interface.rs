@@ -436,6 +436,16 @@ pub fn is_installed() -> bool {
     false
 }
 
+#[cfg(target_os = "windows")]
+pub fn is_installed_msi() -> bool {
+    crate::platform::windows::is_installed_msi()
+}
+
+#[cfg(not(target_os = "windows"))]
+pub fn is_installed_msi() -> bool {
+    false
+}
+
 #[inline]
 pub fn is_share_rdp() -> bool {
     #[cfg(windows)]
