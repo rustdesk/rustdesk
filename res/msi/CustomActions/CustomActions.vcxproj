@@ -10,7 +10,7 @@
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <Keyword>Win32Proj</Keyword>
-    <ProjectGuid>{87e7c13b-ae0e-4048-95cf-4523d510a3cd}</ProjectGuid>
+    <ProjectGuid>{6b3647e0-b4a3-46ae-8757-a22ee51c1dac}</ProjectGuid>
     <RootNamespace>CustomActions</RootNamespace>
     <PlatformToolset>v143</PlatformToolset>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>

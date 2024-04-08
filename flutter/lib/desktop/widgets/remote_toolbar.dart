@@ -1626,19 +1626,7 @@ class _KeyboardMenu extends StatelessWidget {
   Widget build(BuildContext context) {
     var ffiModel = Provider.of<FfiModel>(context);
     if (!ffiModel.keyboard) return Offstage();
-    // If use flutter to grab keys, we can only use one mode.
-    // Map mode and Legacy mode, at least one of them is supported.
-    String? modeOnly;
-    if (isInputSourceFlutter) {
-      if (bind.sessionIsKeyboardModeSupported(
-          sessionId: ffi.sessionId, mode: kKeyMapMode)) {
-        modeOnly = kKeyMapMode;
-      } else if (bind.sessionIsKeyboardModeSupported(
-          sessionId: ffi.sessionId, mode: kKeyLegacyMode)) {
-        modeOnly = kKeyLegacyMode;
-      }
-    }
-    final toolbarToggles = toolbarKeyboardToggles(ffi)
+    toolbarToggles() => toolbarKeyboardToggles(ffi)
         .map((e) => CkbMenuButton(
             value: e.value, onChanged: e.onChanged, child: e.child, ffi: ffi))
         .toList();
@@ -1649,17 +1637,17 @@ class _KeyboardMenu extends StatelessWidget {
         color: _ToolbarTheme.blueColor,
         hoverColor: _ToolbarTheme.hoverBlueColor,
         menuChildrenGetter: () => [
-              keyboardMode(modeOnly),
+              keyboardMode(),
               localKeyboardType(),
               inputSource(),
               Divider(),
               viewMode(),
               Divider(),
-              ...toolbarToggles,
+              ...toolbarToggles(),
             ]);
   }
 
-  keyboardMode(String? modeOnly) {
+  keyboardMode() {
     return futureBuilder(future: () async {
       return await bind.sessionGetKeyboardMode(sessionId: ffi.sessionId) ??
           kKeyLegacyMode;
@@ -1677,6 +1665,19 @@ class _KeyboardMenu extends StatelessWidget {
         await bind.sessionSetKeyboardMode(
             sessionId: ffi.sessionId, value: value);
         await ffi.inputModel.updateKeyboardMode();
+      }
+
+      // If use flutter to grab keys, we can only use one mode.
+      // Map mode and Legacy mode, at least one of them is supported.
+      String? modeOnly;
+      if (isInputSourceFlutter) {
+        if (bind.sessionIsKeyboardModeSupported(
+            sessionId: ffi.sessionId, mode: kKeyMapMode)) {
+          modeOnly = kKeyMapMode;
+        } else if (bind.sessionIsKeyboardModeSupported(
+            sessionId: ffi.sessionId, mode: kKeyLegacyMode)) {
+          modeOnly = kKeyLegacyMode;
+        }
       }
 
       for (InputModeMenu mode in modes) {
