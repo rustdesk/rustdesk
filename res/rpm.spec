@@ -3,7 +3,7 @@ Version:    1.2.4
 Release:    0
 Summary:    RPM package
 License:    GPL-3.0
-Requires:   gtk3 libxcb libxdo libXfixes alsa-lib libappindicator libvdpau1 libva2 pam gstreamer1-plugins-base
+Requires:   gtk3 libxcb libxdo libXfixes alsa-lib libappindicator libvdpau libva pam gstreamer1-plugins-base
 
 %description
 The best open-source remote desktop client software, written in Rust.
@@ -38,7 +38,6 @@ install $HBB/res/rustdesk-link.desktop %{buildroot}/usr/share/rustdesk/files/
 /usr/share/icons/hicolor/scalable/apps/rustdesk.svg
 /usr/share/rustdesk/files/rustdesk.desktop
 /usr/share/rustdesk/files/rustdesk-link.desktop
-/usr/share/rustdesk/files/__pycache__/*
 
 %changelog
 # let's skip this for now
