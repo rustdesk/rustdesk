@@ -11,6 +11,19 @@ This project is mainly derived from <https://github.com/MediaPortal/MediaPortal-
 
 Run `msiexec /i package.msi /l*v install.log` to record the log.
 
+## Knowledge
+
+### properties
+
+https://www.advancedinstaller.com/versus/wix-toolset/wix-toolset-set-custom-action-run-only-on-uninstall.html
+
+| Property Name | Install | Uninstall | Change | Repair | Upgrade |
+| ------ | ------ | ------ | ------ | ------ | ------ |
+| Installed | False | True | True | True | True |
+| REINSTALL | False | False | False | True | False |
+| UPGRADINGPRODUCTCODE | False | False | False | False | True |
+| REMOVE | False | True | False | False | True |
+
 ## TODOs
 
 1. tray, uninstall shortcut
@@ -22,3 +35,7 @@ Run `msiexec /i package.msi /l*v install.log` to record the log.
     1. Custom icon. Current `Resources/icon.ico`.
     1. Show license ?
     1. Do create service. Outgoing.
+
+## Refs
+
+1. https://wixtoolset.org/docs/schema/wxs/

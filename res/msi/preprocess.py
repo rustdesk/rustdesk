@@ -143,7 +143,7 @@ def gen_upgrade_info(version):
         upgrade_id = uuid.uuid4()
         to_insert_lines = [
             f'{indent}<Upgrade Id="{upgrade_id}">\n',
-            f'{indent}{g_indent_unit}<UpgradeVersion Property="OLD_VERSION_FOUND" Minimum="{major}.0.0.0" Maximum="{major}.99.99" IncludeMinimum="yes" IncludeMaximum="yes" OnlyDetect="no" IgnoreRemoveFailure="yes" MigrateFeatures="yes" />\n',
+            f'{indent}{g_indent_unit}<UpgradeVersion Property="OLD_VERSION_FOUND" Minimum="{major}.0.0" Maximum="{major}.99.99" IncludeMinimum="yes" IncludeMaximum="yes" OnlyDetect="no" IgnoreRemoveFailure="yes" MigrateFeatures="yes" />\n',
             f"{indent}</Upgrade>\n",
         ]
 
@@ -155,6 +155,27 @@ def gen_upgrade_info(version):
         "Package/Fragments/Upgrades.wxs",
         "<!--$UpgradeStart$-->",
         "<!--$UpgradeEnd$-->",
+        func,
+    )
+
+def gen_custom_dialog_bitmaps():
+    def func(lines, index_start):
+        indent = g_indent_unit * 2
+
+        vars = ['WixUIBannerBmp', 'WixUIDialogBmp', 'WixUIExclamationIco', 'WixUIInfoIco', 'WixUINewIco', 'WixUIUpIco']
+        to_insert_lines = []
+        for var in vars:
+            if Path(f"Package/Resources/{var}.bmp").exists():
+                to_insert_lines.append(f'{indent}<WixVariable Id="{var}" Value="Resources\\{var}.bmp" />\n')
+
+        for i, line in enumerate(to_insert_lines):
+            lines.insert(index_start + i + 1, line)
+        return lines
+
+    return gen_content_between_tags(
+        "Package/Package.wxs",
+        "<!--$CustomBitmapsStart$-->",
+        "<!--$CustomBitmapsEnd$-->",
         func,
     )
 
@@ -193,6 +214,9 @@ if __name__ == "__main__":
         sys.exit(-1)
 
     if not gen_auto_component(app_name, build_dir):
+        sys.exit(-1)
+
+    if not gen_custom_dialog_bitmaps():
         sys.exit(-1)
 
     replace_app_name_in_lans(args.app_name)
