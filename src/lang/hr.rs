@@ -178,7 +178,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Permissions", "Dopuštenja"),
         ("Accept", "Prihvati"),
         ("Dismiss", "Odbaci"),
-        ("Disconnect", "Prekini vezu),
+        ("Disconnect", "Prekini vezu"),
         ("Enable file copy and paste", "Dopusti kopiranje i lijepljenje datoteka"),
         ("Connected", "Spojeno"),
         ("Direct and encrypted connection", "Izravna i kriptirana veza"),
