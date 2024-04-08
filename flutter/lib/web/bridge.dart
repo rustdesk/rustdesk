@@ -1299,6 +1299,10 @@ class RustdeskImpl {
     throw UnimplementedError();
   }
 
+  bool mainIsInstalledMsi({dynamic hint}) {
+    throw UnimplementedError();
+  }
+
   void mainInitInputSource({dynamic hint}) {
     throw UnimplementedError();
   }

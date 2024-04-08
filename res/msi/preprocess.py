@@ -15,6 +15,9 @@ def make_parser():
         "-d", "--debug", action="store_true", help="Is debug", default=False
     )
     parser.add_argument(
+        "-ci", "--github-ci", action="store_true", help="Is github ci", default=False
+    )
+    parser.add_argument(
         "-c", "--custom", action="store_true", help="Is custom client", default=False
     )
     parser.add_argument(
@@ -97,13 +100,13 @@ def gen_auto_component(app_name, build_dir):
     )
 
 
-def gen_pre_vars(args, build_dir):
+def gen_pre_vars(args, version, build_dir):
     def func(lines, index_start):
         upgrade_code = uuid.uuid5(uuid.NAMESPACE_OID, app_name + ".exe")
 
         indent = g_indent_unit * 1
         to_insert_lines = [
-            f'{indent}<?define Version="{args.version}" ?>\n',
+            f'{indent}<?define Version="{version}" ?>\n',
             f'{indent}<?define Manufacturer="{args.manufacturer}" ?>\n',
             f'{indent}<?define Product="{args.app_name}" ?>\n',
             f'{indent}<?define Description="{args.app_name} Installer" ?>\n',
@@ -162,6 +165,7 @@ def gen_custom_dialog_bitmaps():
     def func(lines, index_start):
         indent = g_indent_unit * 2
 
+        # https://wixtoolset.org/docs/tools/wixext/wixui/#customizing-a-dialog-set
         vars = ['WixUIBannerBmp', 'WixUIDialogBmp', 'WixUIExclamationIco', 'WixUIInfoIco', 'WixUINewIco', 'WixUIUpIco']
         to_insert_lines = []
         for var in vars:
@@ -199,18 +203,17 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     app_name = args.app_name
-    build_dir = (
-        Path(sys.argv[0])
-        .parent.joinpath(
-            f'../../flutter/build/windows/x64/runner/{"Debug" if args.debug else "Release"}'
-        )
-        .resolve()
-    )
+    build_dir = f'../../flutter/build/windows/x64/runner/{"Debug" if args.debug else "Release"}'
+    if args.github_ci:
+        build_dir = '../../rustdesk'
+    build_dir = Path(sys.argv[0]).parent.joinpath(build_dir).resolve()
 
-    if not gen_pre_vars(args, build_dir):
+    version = args.version.replace("-", ".")
+
+    if not gen_pre_vars(args, version, build_dir):
         sys.exit(-1)
 
-    if not gen_upgrade_info(args.version):
+    if not gen_upgrade_info(version):
         sys.exit(-1)
 
     if not gen_auto_component(app_name, build_dir):

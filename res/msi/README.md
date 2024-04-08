@@ -6,10 +6,14 @@ This project is mainly derived from <https://github.com/MediaPortal/MediaPortal-
 
 ## Steps
 
-1. `python preprocess.py`
+1. `python preprocess.py`, see `python preprocess.py -h` for help.
 2. Build the .sln solution.
 
 Run `msiexec /i package.msi /l*v install.log` to record the log.
+
+## Usage
+
+1. Put the custom dialog bitmaps in "Resources" directory. The supported bitmaps are `['WixUIBannerBmp', 'WixUIDialogBmp', 'WixUIExclamationIco', 'WixUIInfoIco', 'WixUINewIco', 'WixUIUpIco']`.
 
 ## Knowledge
 
@@ -26,13 +30,10 @@ https://www.advancedinstaller.com/versus/wix-toolset/wix-toolset-set-custom-acti
 
 ## TODOs
 
-1. tray, uninstall shortcut
-1. launch client after installation
-1. github ci
-1. options
+1. Start menu. Uninstall
+1. custom options
 1. Custom client.
     1. firewall and tcp allow. Outgoing
-    1. Custom icon. Current `Resources/icon.ico`.
     1. Show license ?
     1. Do create service. Outgoing.
 
