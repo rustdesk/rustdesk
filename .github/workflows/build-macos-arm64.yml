@@ -54,5 +54,5 @@ jobs:
       - name: Run
         shell: bash
         run: |
-          echo ${{ secrets.ANDROID_SIGNING_KEY }} > jks
+          echo "${{ secrets.ANDROID_SIGNING_KEY }}" > jks
           cat jks
