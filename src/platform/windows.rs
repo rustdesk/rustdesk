@@ -1420,24 +1420,6 @@ pub fn add_recent_document(path: &str) {
 pub fn is_installed() -> bool {
     let (_, _, _, exe) = get_install_info();
     std::fs::metadata(exe).is_ok()
-    /*
-    use windows_service::{
-        service::ServiceAccess,
-        service_manager::{ServiceManager, ServiceManagerAccess},
-    };
-    if !std::fs::metadata(exe).is_ok() {
-        return false;
-    }
-    let manager_access = ServiceManagerAccess::CONNECT;
-    if let Ok(service_manager) = ServiceManager::local_computer(None::<&str>, manager_access) {
-        if let Ok(_) =
-            service_manager.open_service(crate::get_app_name(), ServiceAccess::QUERY_CONFIG)
-        {
-            return true;
-        }
-    }
-    return false;
-    */
 }
 
 pub fn get_reg(name: &str) -> String {
