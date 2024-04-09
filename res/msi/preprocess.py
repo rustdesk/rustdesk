@@ -4,10 +4,13 @@
 import sys
 import uuid
 import argparse
+import datetime
+import re
 from pathlib import Path
 
-g_indent_unit = "\t"
-
+g_indent_unit = '\t'
+g_version = ''
+g_build_date = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
 
 def make_parser():
     parser = argparse.ArgumentParser(description="Msi preprocess script.")
@@ -24,7 +27,7 @@ def make_parser():
         "-an", "--app-name", type=str, default="RustDesk", help="The app name."
     )
     parser.add_argument(
-        "-v", "--version", type=str, default="1.2.4", help="The app version."
+        "-v", "--version", type=str, default="", help="The app version."
     )
     parser.add_argument(
         "-m",
@@ -100,13 +103,13 @@ def gen_auto_component(app_name, build_dir):
     )
 
 
-def gen_pre_vars(args, version, build_dir):
+def gen_pre_vars(args, build_dir):
     def func(lines, index_start):
         upgrade_code = uuid.uuid5(uuid.NAMESPACE_OID, app_name + ".exe")
 
         indent = g_indent_unit * 1
         to_insert_lines = [
-            f'{indent}<?define Version="{version}" ?>\n',
+            f'{indent}<?define Version="{g_version}" ?>\n',
             f'{indent}<?define Manufacturer="{args.manufacturer}" ?>\n',
             f'{indent}<?define Product="{args.app_name}" ?>\n',
             f'{indent}<?define Description="{args.app_name} Installer" ?>\n',
@@ -114,6 +117,7 @@ def gen_pre_vars(args, version, build_dir):
             f'{indent}<?define RegKeyRoot=".$(var.ProductLower)" ?>\n',
             f'{indent}<?define RegKeyInstall="$(var.RegKeyRoot)\Install" ?>\n',
             f'{indent}<?define BuildDir="{build_dir}" ?>\n',
+            f'{indent}<?define BuildDate="{g_build_date}" ?>\n',
             "\n",
             f"{indent}<!-- The UpgradeCode must be consistent for each product. ! -->\n"
             f'{indent}<?define UpgradeCode = "{upgrade_code}" ?>\n',
@@ -138,11 +142,11 @@ def replace_app_name_in_lans(app_name):
             f.writelines(lines)
 
 
-def gen_upgrade_info(version):
+def gen_upgrade_info():
     def func(lines, index_start):
         indent = g_indent_unit * 3
 
-        major, _, _ = version.split(".")
+        major, _, _ = g_version.split(".")
         upgrade_id = uuid.uuid4()
         to_insert_lines = [
             f'{indent}<Upgrade Id="{upgrade_id}">\n',
@@ -197,6 +201,40 @@ def gen_content_between_tags(filename, tag_start, tag_end, func):
 
     return True
 
+def init_global_vars(args):
+    var_file = '../../src/version.rs'
+    if not Path(var_file).exists():
+        print(f'Error: {var_file} not found')
+        return False
+
+    with open(var_file, 'r') as f:
+        content = f.readlines()
+
+    global g_version
+    global g_build_date
+    g_version = args.version.replace("-", ".")
+    if g_version == '':
+        # pub const VERSION: &str = "1.2.4";
+        version_pattern = re.compile(r'.*VERSION: &str = "(.*)";.*')
+        for line in content:
+            match = version_pattern.match(line)
+            if match:
+                g_version = match.group(1)
+                break
+    if g_version == '':
+        print(f'Error: version not found in {var_file}')
+        return False
+    
+    # pub const BUILD_DATE: &str = "2024-04-08 23:11";
+    build_date_pattern = re.compile(r'BUILD_DATE: &str = "(.*)";')
+    for line in content:
+        match = build_date_pattern.match(line)
+        if match:
+            g_build_date = match.group(1)
+            break
+
+    return True
+
 
 if __name__ == "__main__":
     parser = make_parser()
@@ -208,12 +246,13 @@ if __name__ == "__main__":
         build_dir = '../../rustdesk'
     build_dir = Path(sys.argv[0]).parent.joinpath(build_dir).resolve()
 
-    version = args.version.replace("-", ".")
-
-    if not gen_pre_vars(args, version, build_dir):
+    if not init_global_vars(args):
         sys.exit(-1)
 
-    if not gen_upgrade_info(version):
+    if not gen_pre_vars(args, build_dir):
+        sys.exit(-1)
+
+    if not gen_upgrade_info():
         sys.exit(-1)
 
     if not gen_auto_component(app_name, build_dir):

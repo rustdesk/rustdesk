@@ -19,7 +19,7 @@ Run `msiexec /i package.msi /l*v install.log` to record the log.
 
 ### properties
 
-https://www.advancedinstaller.com/versus/wix-toolset/wix-toolset-set-custom-action-run-only-on-uninstall.html
+[wix-toolset-set-custom-action-run-only-on-uninstall](https://www.advancedinstaller.com/versus/wix-toolset/wix-toolset-set-custom-action-run-only-on-uninstall.html)
 
 | Property Name | Install | Uninstall | Change | Repair | Upgrade |
 | ------ | ------ | ------ | ------ | ------ | ------ |
@@ -39,4 +39,5 @@ https://www.advancedinstaller.com/versus/wix-toolset/wix-toolset-set-custom-acti
 
 ## Refs
 
-1. https://wixtoolset.org/docs/schema/wxs/
+1. [wxs](https://wixtoolset.org/docs/schema/wxs/)
+1. [wxs github](https://github.com/wixtoolset/wix)

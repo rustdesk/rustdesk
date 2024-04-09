@@ -45,6 +45,9 @@
 				<RegistryKey Root="HKLM" Key="Software\Microsoft\Windows\CurrentVersion\Uninstall\$(var.Product)" >
 					<RegistryValue Type="string" Name="share_rdp" Value="" />
 				</RegistryKey>
+				<RegistryKey Root="HKLM" Key="Software\Microsoft\Windows\CurrentVersion\Uninstall\$(var.Product)" >
+					<RegistryValue Type="string" Name="BuildDate" Value="$(var.BuildDate)" />
+				</RegistryKey>
 			</Component>
 		</DirectoryRef>
 
