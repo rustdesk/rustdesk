@@ -1244,7 +1244,7 @@ pub async fn get_next_nonkeyexchange_msg(
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub fn check_process(arg: &str, mut same_uid: bool) -> bool {
     #[cfg(target_os = "macos")]
-    if !crate::platform::is_root() {
+    if !crate::platform::is_root() && !same_uid {
         log::warn!("Can not get other process's command line arguments on macos without root");
         same_uid = true;
     }
