@@ -1240,8 +1240,14 @@ pub async fn get_next_nonkeyexchange_msg(
     None
 }
 
+#[allow(unused_mut)]
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
-pub fn check_process(arg: &str, same_uid: bool) -> bool {
+pub fn check_process(arg: &str, mut same_uid: bool) -> bool {
+    #[cfg(target_os = "macos")]
+    if !crate::platform::is_root() {
+        log::warn!("Can not get other process's command line arguments on macos without root");
+        same_uid = true;
+    }
     use hbb_common::sysinfo::System;
     let mut sys = System::new();
     sys.refresh_processes();
