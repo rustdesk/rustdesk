@@ -600,5 +600,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("share_warning_tip", "De bovenstaande velden worden gedeeld en zijn zichtbaar voor anderen."),
         ("Everyone", "Iedereen"),
         ("ab_web_console_tip", "Meer over de webconsole"),
+        ("allow-only-conn-window-open-tip", ""),
     ].iter().cloned().collect();
 }

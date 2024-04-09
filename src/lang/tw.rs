@@ -600,5 +600,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("share_warning_tip", "上述的欄位為共享且對其他人可見。"),
         ("Everyone", "所有人"),
         ("ab_web_console_tip", "打開 Web 控制台以進行更多操作"),
+        ("allow-only-conn-window-open-tip", ""),
     ].iter().cloned().collect();
 }
