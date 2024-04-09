@@ -171,7 +171,7 @@ jobs:
           python preprocess.py -ci -v ${{ env.VERSION }}
           nuget restore msi.sln
           msbuild msi.sln -p:Configuration=Release -p:Platform=x64 /p:TargetVersion=Windows10
-          mv ./bin/x64/Release/en-us/*.msi ../../rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}.msi
+          mv ./Package/bin/x64/Release/en-us/Package.msi ../../rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}.msi
           sha256sum ../../rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}.msi
 
       - name: Sign rustdesk self-extracted file
@@ -187,7 +187,7 @@ jobs:
           prerelease: true
           tag_name: ${{ env.TAG_NAME }}
           files: |
-            # ./rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}.msi
+            ./rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}.msi
             ./SignOutput/rustdesk-*.exe
             ./rustdesk-*.tar.gz
 

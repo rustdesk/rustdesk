@@ -55,6 +55,7 @@
 			<ComponentRef Id="Product.Registry.CommandPlay" />
 			<ComponentRef Id="Product.Registry.URLProtocol" />
 			<ComponentRef Id="Product.Registry.Command" />
+			<ComponentRef Id="Product.Registry.UninstallRustDesk" />
 			<ComponentRef Id="App.StartMenu" />
 			<ComponentRef Id="Product.Registry.PersistedShortcutProperties" />
 		</Feature>
