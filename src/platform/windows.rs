@@ -1089,6 +1089,10 @@ fn get_after_install(exe: &str) -> String {
 }
 
 pub fn install_me(options: &str, path: String, silent: bool, debug: bool) -> ResultType<()> {
+    if is_installed_msi() {
+        bail!("Already installed by MSI");
+    }
+
     let uninstall_str = get_uninstall(false);
     let mut path = path.trim_end_matches('\\').to_owned();
     let (subkey, _path, start_menu, exe) = get_default_install_info();
@@ -1247,11 +1251,17 @@ copy /Y \"{tmp_path}\\Uninstall {app_name}.lnk\" \"{path}\\\"
 }
 
 pub fn run_after_install() -> ResultType<()> {
+    if is_installed_msi() {
+        bail!("Installed by MSI");
+    }
     let (_, _, _, exe) = get_install_info();
     run_cmds(get_after_install(&exe), true, "after_install")
 }
 
 pub fn run_before_uninstall() -> ResultType<()> {
+    if is_installed_msi() {
+        bail!("Already installed by MSI");
+    }
     run_cmds(get_before_uninstall(true), true, "before_install")
 }
 
@@ -1302,6 +1312,9 @@ fn get_uninstall(kill_self: bool) -> String {
 }
 
 pub fn uninstall_me(kill_self: bool) -> ResultType<()> {
+    if is_installed_msi() {
+        bail!("Installed by MSI");
+    }
     run_cmds(get_uninstall(kill_self), true, "uninstall")
 }
 
