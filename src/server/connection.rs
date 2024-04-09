@@ -958,7 +958,7 @@ impl Connection {
         }
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
         if crate::is_server() && Config::get_option("allow-only-conn-window-open") == "Y" {
-            if crate::check_process("", false) {
+            if !crate::check_process("", false) {
                 self.send_login_error("The main window is not open").await;
                 return false;
             }
