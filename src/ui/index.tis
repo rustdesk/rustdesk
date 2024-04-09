@@ -556,7 +556,7 @@ class App: Reactor.Component
             <div .app>
                     <div .left-pane>
                     <div>
-                        <div .title>{translate('Your Desktop')}</div>
+                        <div .title>{translate('Your 2 Desktop')}</div>
                         <div .lighter-text>{translate('desk_tip')}</div>
                         <div .your-desktop>
                             <MyIdMenu />
