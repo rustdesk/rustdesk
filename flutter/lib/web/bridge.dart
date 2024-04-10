@@ -1052,7 +1052,7 @@ class RustdeskImpl {
     throw UnimplementedError();
   }
 
-  bool mainHasGpucodec({dynamic hint}) {
+  bool mainHasVram({dynamic hint}) {
     throw UnimplementedError();
   }
 

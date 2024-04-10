@@ -37,13 +37,13 @@ cfg_if! {
 
 pub mod codec;
 pub mod convert;
-#[cfg(feature = "gpucodec")]
-pub mod gpucodec;
 #[cfg(feature = "hwcodec")]
 pub mod hwcodec;
 #[cfg(feature = "mediacodec")]
 pub mod mediacodec;
 pub mod vpxcodec;
+#[cfg(feature = "vram")]
+pub mod vram;
 pub use self::convert::*;
 pub const STRIDE_ALIGN: usize = 64; // commonly used in libvpx vpx_img_alloc caller
 pub const HW_STRIDE_ALIGN: usize = 0; // recommended by av_frame_get_buffer
@@ -111,10 +111,10 @@ pub trait TraitCapturer {
     #[cfg(windows)]
     fn set_gdi(&mut self) -> bool;
 
-    #[cfg(feature = "gpucodec")]
+    #[cfg(feature = "vram")]
     fn device(&self) -> AdapterDevice;
 
-    #[cfg(feature = "gpucodec")]
+    #[cfg(feature = "vram")]
     fn set_output_texture(&mut self, texture: bool);
 }
 
@@ -245,10 +245,10 @@ pub enum CodecName {
     VP8,
     VP9,
     AV1,
-    H264HW(String),
-    H265HW(String),
-    H264GPU,
-    H265GPU,
+    H264RAM(String),
+    H265RAM(String),
+    H264VRAM,
+    H265VRAM,
 }
 
 #[derive(PartialEq, Debug, Clone, Copy)]
@@ -280,8 +280,8 @@ impl From<&CodecName> for CodecFormat {
             CodecName::VP8 => Self::VP8,
             CodecName::VP9 => Self::VP9,
             CodecName::AV1 => Self::AV1,
-            CodecName::H264HW(_) | CodecName::H264GPU => Self::H264,
-            CodecName::H265HW(_) | CodecName::H265GPU => Self::H265,
+            CodecName::H264RAM(_) | CodecName::H264VRAM => Self::H264,
+            CodecName::H265RAM(_) | CodecName::H265VRAM => Self::H265,
         }
     }
 }

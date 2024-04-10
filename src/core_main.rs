@@ -410,9 +410,9 @@ pub fn core_main() -> Option<Vec<String>> {
             #[cfg(feature = "hwcodec")]
             scrap::hwcodec::check_available_hwcodec();
             return None;
-        } else if args[0] == "--check-gpucodec-config" {
-            #[cfg(feature = "gpucodec")]
-            scrap::gpucodec::check_available_gpucodec();
+        } else if args[0] == "--check-vram-config" {
+            #[cfg(feature = "vram")]
+            scrap::vram::check_available_vram();
             return None;
         } else if args[0] == "--cm" {
             // call connection manager to establish connections

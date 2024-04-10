@@ -5,7 +5,7 @@ use std::{
 };
 
 use crate::{
-    codec::{base_bitrate, enable_gpucodec_option, EncoderApi, EncoderCfg, Quality},
+    codec::{base_bitrate, enable_vram_option, EncoderApi, EncoderCfg, Quality},
     AdapterDevice, CodecFormat, CodecName, EncodeInput, EncodeYuvFormat, Pixfmt,
 };
 use hbb_common::{
@@ -36,7 +36,7 @@ lazy_static::lazy_static! {
 }
 
 #[derive(Debug, Clone)]
-pub struct GpuEncoderConfig {
+pub struct VRamEncoderConfig {
     pub device: AdapterDevice,
     pub width: usize,
     pub height: usize,
@@ -45,7 +45,7 @@ pub struct GpuEncoderConfig {
     pub keyframe_interval: Option<usize>,
 }
 
-pub struct GpuEncoder {
+pub struct VRamEncoder {
     encoder: Encoder,
     pub format: DataFormat,
     ctx: EncodeContext,
@@ -54,13 +54,13 @@ pub struct GpuEncoder {
     same_bad_len_counter: usize,
 }
 
-impl EncoderApi for GpuEncoder {
+impl EncoderApi for VRamEncoder {
     fn new(cfg: EncoderCfg, _i444: bool) -> ResultType<Self>
     where
         Self: Sized,
     {
         match cfg {
-            EncoderCfg::GPU(config) => {
+            EncoderCfg::VRAM(config) => {
                 let b = Self::convert_quality(config.quality, &config.feature);
                 let base_bitrate = base_bitrate(config.width as _, config.height as _);
                 let mut bitrate = base_bitrate * b / 100;
@@ -80,7 +80,7 @@ impl EncoderApi for GpuEncoder {
                     },
                 };
                 match Encoder::new(ctx.clone()) {
-                    Ok(encoder) => Ok(GpuEncoder {
+                    Ok(encoder) => Ok(VRamEncoder {
                         encoder,
                         ctx,
                         format: config.feature.data_format,
@@ -89,7 +89,7 @@ impl EncoderApi for GpuEncoder {
                         same_bad_len_counter: 0,
                     }),
                     Err(_) => {
-                        hbb_common::config::GpucodecConfig::clear();
+                        hbb_common::config::VRamConfig::clear();
                         Err(anyhow!(format!("Failed to create encoder")))
                     }
                 }
@@ -161,7 +161,7 @@ impl EncoderApi for GpuEncoder {
         }
     }
 
-    #[cfg(feature = "gpucodec")]
+    #[cfg(feature = "vram")]
     fn input_texture(&self) -> bool {
         true
     }
@@ -186,7 +186,7 @@ impl EncoderApi for GpuEncoder {
     }
 }
 
-impl GpuEncoder {
+impl VRamEncoder {
     pub fn try_get(device: &AdapterDevice, name: CodecName) -> Option<FeatureContext> {
         let v: Vec<_> = Self::available(name)
             .drain(..)
@@ -202,12 +202,12 @@ impl GpuEncoder {
     pub fn available(name: CodecName) -> Vec<FeatureContext> {
         let not_use = ENOCDE_NOT_USE.lock().unwrap().clone();
         if not_use.values().any(|not_use| *not_use) {
-            log::info!("currently not use gpucodec encoders: {not_use:?}");
+            log::info!("currently not use vram encoders: {not_use:?}");
             return vec![];
         }
         let data_format = match name {
-            CodecName::H264GPU => DataFormat::H264,
-            CodecName::H265GPU => DataFormat::H265,
+            CodecName::H264VRAM => DataFormat::H264,
+            CodecName::H265VRAM => DataFormat::H265,
             _ => return vec![],
         };
         let Ok(displays) = crate::Display::all() else {
@@ -278,7 +278,7 @@ impl GpuEncoder {
     }
 
     pub fn set_not_use(display: usize, not_use: bool) {
-        log::info!("set display#{display} not use gpucodec encode to {not_use}");
+        log::info!("set display#{display} not use vram encode to {not_use}");
         ENOCDE_NOT_USE.lock().unwrap().insert(display, not_use);
     }
 
@@ -287,17 +287,11 @@ impl GpuEncoder {
     }
 }
 
-pub struct GpuDecoder {
+pub struct VRamDecoder {
     decoder: Decoder,
 }
 
-#[derive(Default)]
-pub struct GpuDecoders {
-    pub h264: Option<GpuDecoder>,
-    pub h265: Option<GpuDecoder>,
-}
-
-impl GpuDecoder {
+impl VRamDecoder {
     pub fn try_get(format: CodecFormat, luid: Option<i64>) -> Option<DecodeContext> {
         let v: Vec<_> = Self::available(format, luid);
         if v.len() > 0 {
@@ -323,7 +317,7 @@ impl GpuDecoder {
     }
 
     pub fn possible_available_without_check() -> (bool, bool) {
-        if !enable_gpucodec_option() {
+        if !enable_vram_option() {
             return (false, false);
         }
         let v = get_available_config().map(|c| c.d).unwrap_or_default();
@@ -339,7 +333,7 @@ impl GpuDecoder {
         match Decoder::new(ctx) {
             Ok(decoder) => Ok(Self { decoder }),
             Err(_) => {
-                hbb_common::config::GpucodecConfig::clear();
+                hbb_common::config::VRamConfig::clear();
                 Err(anyhow!(format!(
                     "Failed to create decoder, format: {:?}",
                     format
@@ -347,29 +341,29 @@ impl GpuDecoder {
             }
         }
     }
-    pub fn decode(&mut self, data: &[u8]) -> ResultType<Vec<GpuDecoderImage>> {
+    pub fn decode(&mut self, data: &[u8]) -> ResultType<Vec<VRamDecoderImage>> {
         match self.decoder.decode(data) {
-            Ok(v) => Ok(v.iter().map(|f| GpuDecoderImage { frame: f }).collect()),
+            Ok(v) => Ok(v.iter().map(|f| VRamDecoderImage { frame: f }).collect()),
             Err(e) => Err(anyhow!(e)),
         }
     }
 }
 
-pub struct GpuDecoderImage<'a> {
+pub struct VRamDecoderImage<'a> {
     pub frame: &'a DecodeFrame,
 }
 
-impl GpuDecoderImage<'_> {}
+impl VRamDecoderImage<'_> {}
 
 fn get_available_config() -> ResultType<Available> {
-    let available = hbb_common::config::GpucodecConfig::load().available;
+    let available = hbb_common::config::VRamConfig::load().available;
     match Available::deserialize(&available) {
         Ok(v) => Ok(v),
         Err(_) => Err(anyhow!("Failed to deserialize:{}", available)),
     }
 }
 
-pub fn check_available_gpucodec() {
+pub fn check_available_vram() {
     let d = DynamicContext {
         device: None,
         width: 1920,
@@ -386,15 +380,15 @@ pub fn check_available_gpucodec() {
     };
 
     if let Ok(available) = available.serialize() {
-        let mut config = hbb_common::config::GpucodecConfig::load();
+        let mut config = hbb_common::config::VRamConfig::load();
         config.available = available;
         config.store();
         return;
     }
-    log::error!("Failed to serialize gpucodec");
+    log::error!("Failed to serialize vram");
 }
 
-pub fn gpucodec_new_check_process() {
+pub fn vram_new_check_process() {
     use std::sync::Once;
 
     static ONCE: Once = Once::new();
@@ -402,9 +396,9 @@ pub fn gpucodec_new_check_process() {
         std::thread::spawn(move || {
             // Remove to avoid checking process errors
             // But when the program is just started, the configuration file has not been updated, and the new connection will read an empty configuration
-            hbb_common::config::GpucodecConfig::clear();
+            hbb_common::config::VRamConfig::clear();
             if let Ok(exe) = std::env::current_exe() {
-                let arg = "--check-gpucodec-config";
+                let arg = "--check-vram-config";
                 if let Ok(mut child) = std::process::Command::new(exe).arg(arg).spawn() {
                     // wait up to 30 seconds
                     for _ in 0..30 {
@@ -417,17 +411,17 @@ pub fn gpucodec_new_check_process() {
                     std::thread::sleep(std::time::Duration::from_millis(30));
                     match child.try_wait() {
                         Ok(Some(status)) => {
-                            log::info!("Check gpucodec config, exit with: {status}")
+                            log::info!("Check vram config, exit with: {status}")
                         }
                         Ok(None) => {
                             log::info!(
-                                "Check gpucodec config, status not ready yet, let's really wait"
+                                "Check vram config, status not ready yet, let's really wait"
                             );
                             let res = child.wait();
-                            log::info!("Check gpucodec config, wait result: {res:?}");
+                            log::info!("Check vram config, wait result: {res:?}");
                         }
                         Err(e) => {
-                            log::error!("Check gpucodec config, error attempting to wait: {e}")
+                            log::error!("Check vram config, error attempting to wait: {e}")
                         }
                     }
                 }

@@ -185,7 +185,7 @@ impl Capturer {
         self.gdi_capturer.take();
     }
 
-    #[cfg(feature = "gpucodec")]
+    #[cfg(feature = "vram")]
     pub fn set_output_texture(&mut self, texture: bool) {
         self.output_texture = texture;
     }
@@ -620,7 +620,7 @@ impl Display {
         )
     }
 
-    #[cfg(feature = "gpucodec")]
+    #[cfg(feature = "vram")]
     pub fn adapter_luid(&self) -> Option<i64> {
         unsafe {
             if !self.adapter.is_null() {

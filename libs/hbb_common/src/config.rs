@@ -409,9 +409,7 @@ fn patch(path: PathBuf) -> PathBuf {
                 if let Ok(user) = crate::platform::linux::run_cmds_trim_newline("whoami") {
                     if user != "root" {
                         let cmd = format!("getent passwd '{}' | awk -F':' '{{print $6}}'", user);
-                        if let Ok(output) =
-                            crate::platform::linux::run_cmds_trim_newline(&cmd)
-                        {
+                        if let Ok(output) = crate::platform::linux::run_cmds_trim_newline(&cmd) {
                             return output.into();
                         }
                         return format!("/home/{user}").into();
@@ -1514,22 +1512,22 @@ impl HwCodecConfig {
 }
 
 #[derive(Debug, Default, Serialize, Deserialize, Clone)]
-pub struct GpucodecConfig {
+pub struct VRamConfig {
     #[serde(default, deserialize_with = "deserialize_string")]
     pub available: String,
 }
 
-impl GpucodecConfig {
-    pub fn load() -> GpucodecConfig {
-        Config::load_::<GpucodecConfig>("_gpucodec")
+impl VRamConfig {
+    pub fn load() -> VRamConfig {
+        Config::load_::<VRamConfig>("_vram")
     }
 
     pub fn store(&self) {
-        Config::store_(self, "_gpucodec");
+        Config::store_(self, "_vram");
     }
 
     pub fn clear() {
-        GpucodecConfig::default().store();
+        VRamConfig::default().store();
     }
 }
 

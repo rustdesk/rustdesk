@@ -33,7 +33,7 @@ const DEFAULT_HW_QUALITY: Quality = Quality_Default;
 const DEFAULT_RC: RateControl = RC_DEFAULT;
 
 #[derive(Debug, Clone)]
-pub struct HwEncoderConfig {
+pub struct HwRamEncoderConfig {
     pub name: String,
     pub width: usize,
     pub height: usize,
@@ -41,7 +41,7 @@ pub struct HwEncoderConfig {
     pub keyframe_interval: Option<usize>,
 }
 
-pub struct HwEncoder {
+pub struct HwRamEncoder {
     encoder: Encoder,
     name: String,
     pub format: DataFormat,
@@ -51,13 +51,13 @@ pub struct HwEncoder {
     bitrate: u32, //kbs
 }
 
-impl EncoderApi for HwEncoder {
+impl EncoderApi for HwRamEncoder {
     fn new(cfg: EncoderCfg, _i444: bool) -> ResultType<Self>
     where
         Self: Sized,
     {
         match cfg {
-            EncoderCfg::HW(config) => {
+            EncoderCfg::HWRAM(config) => {
                 let b = Self::convert_quality(config.quality);
                 let base_bitrate = base_bitrate(config.width as _, config.height as _);
                 let mut bitrate = base_bitrate * b / 100;
@@ -88,7 +88,7 @@ impl EncoderApi for HwEncoder {
                     }
                 };
                 match Encoder::new(ctx.clone()) {
-                    Ok(encoder) => Ok(HwEncoder {
+                    Ok(encoder) => Ok(HwRamEncoder {
                         encoder,
                         name: config.name,
                         format,
@@ -164,7 +164,7 @@ impl EncoderApi for HwEncoder {
         }
     }
 
-    #[cfg(feature = "gpucodec")]
+    #[cfg(feature = "vram")]
     fn input_texture(&self) -> bool {
         false
     }
@@ -188,7 +188,7 @@ impl EncoderApi for HwEncoder {
     }
 }
 
-impl HwEncoder {
+impl HwRamEncoder {
     pub fn best() -> CodecInfos {
         get_config(CFG_KEY_ENCODER).unwrap_or(CodecInfos {
             h264: None,
@@ -218,18 +218,12 @@ impl HwEncoder {
     }
 }
 
-pub struct HwDecoder {
+pub struct HwRamDecoder {
     decoder: Decoder,
     pub info: CodecInfo,
 }
 
-#[derive(Default)]
-pub struct HwDecoders {
-    pub h264: Option<HwDecoder>,
-    pub h265: Option<HwDecoder>,
-}
-
-impl HwDecoder {
+impl HwRamDecoder {
     pub fn best() -> CodecInfos {
         get_config(CFG_KEY_DECODER).unwrap_or(CodecInfos {
             h264: None,
@@ -239,7 +233,7 @@ impl HwDecoder {
 
     pub fn new(format: CodecFormat) -> ResultType<Self> {
         log::info!("try create {format:?} ram decoder");
-        let best = HwDecoder::best();
+        let best = HwRamDecoder::best();
         let info = match format {
             CodecFormat::H264 => {
                 if let Some(info) = best.h264 {
@@ -263,26 +257,26 @@ impl HwDecoder {
             thread_count: codec_thread_num(16) as _,
         };
         match Decoder::new(ctx) {
-            Ok(decoder) => Ok(HwDecoder { decoder, info }),
+            Ok(decoder) => Ok(HwRamDecoder { decoder, info }),
             Err(_) => {
                 HwCodecConfig::clear();
                 Err(anyhow!(format!("Failed to create decoder")))
             }
         }
     }
-    pub fn decode(&mut self, data: &[u8]) -> ResultType<Vec<HwDecoderImage>> {
+    pub fn decode(&mut self, data: &[u8]) -> ResultType<Vec<HwRamDecoderImage>> {
         match self.decoder.decode(data) {
-            Ok(v) => Ok(v.iter().map(|f| HwDecoderImage { frame: f }).collect()),
+            Ok(v) => Ok(v.iter().map(|f| HwRamDecoderImage { frame: f }).collect()),
             Err(e) => Err(anyhow!(e)),
         }
     }
 }
 
-pub struct HwDecoderImage<'a> {
+pub struct HwRamDecoderImage<'a> {
     frame: &'a DecodeFrame,
 }
 
-impl HwDecoderImage<'_> {
+impl HwRamDecoderImage<'_> {
     // rgb [in/out] fmt and stride must be set in ImageRgb
     pub fn to_fmt(&self, rgb: &mut ImageRgb, i420: &mut Vec<u8>) -> ResultType<()> {
         let frame = self.frame;

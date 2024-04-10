@@ -1295,8 +1295,8 @@ pub fn main_has_hwcodec() -> SyncReturn<bool> {
     SyncReturn(has_hwcodec())
 }
 
-pub fn main_has_gpucodec() -> SyncReturn<bool> {
-    SyncReturn(has_gpucodec())
+pub fn main_has_vram() -> SyncReturn<bool> {
+    SyncReturn(has_vram())
 }
 
 pub fn main_supported_hwdecodings() -> SyncReturn<String> {
@@ -1782,7 +1782,7 @@ pub fn main_has_file_clipboard() -> SyncReturn<bool> {
 }
 
 pub fn main_has_gpu_texture_render() -> SyncReturn<bool> {
-    SyncReturn(cfg!(feature = "gpucodec"))
+    SyncReturn(cfg!(feature = "vram"))
 }
 
 pub fn cm_init() {
