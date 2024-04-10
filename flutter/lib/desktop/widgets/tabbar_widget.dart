@@ -865,6 +865,7 @@ class _ListView extends StatelessWidget {
                   label: labelGetter == null
                       ? Rx<String>(tab.label)
                       : labelGetter!(tab.label),
+                  tabType: controller.tabType,
                   selectedIcon: tab.selectedIcon,
                   unselectedIcon: tab.unselectedIcon,
                   closable: tab.closable,
@@ -896,6 +897,7 @@ class _Tab extends StatefulWidget {
   final int index;
   final String tabInfoKey;
   final Rx<String> label;
+  final DesktopTabType tabType;
   final IconData? selectedIcon;
   final IconData? unselectedIcon;
   final bool closable;
@@ -914,6 +916,7 @@ class _Tab extends StatefulWidget {
     required this.index,
     required this.tabInfoKey,
     required this.label,
+    required this.tabType,
     this.selectedIcon,
     this.unselectedIcon,
     this.tabBuilder,
@@ -953,7 +956,9 @@ class _TabState extends State<_Tab> with RestorationMixin {
       return ConstrainedBox(
           constraints: BoxConstraints(maxWidth: widget.maxLabelWidth ?? 200),
           child: Tooltip(
-            message: translate(widget.label.value),
+            message: widget.tabType == DesktopTabType.main
+                ? ''
+                : translate(widget.label.value),
             child: Text(
               translate(widget.label.value),
               textAlign: TextAlign.center,
