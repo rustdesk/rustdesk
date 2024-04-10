@@ -68,7 +68,7 @@ class _RemotePageState extends State<RemotePage> {
       gFFI.dialogManager
           .showLoading(translate('Connecting...'), onCancel: closeConnection);
     });
-    if (isMobile) { // == !isWeb
+    if (!isWeb) {
       WakelockPlus.enable();
     }
     _physicalFocusNode.requestFocus();
@@ -97,7 +97,7 @@ class _RemotePageState extends State<RemotePage> {
     gFFI.dialogManager.dismissAll();
     await SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual,
         overlays: SystemUiOverlay.values);
-    if (isMobile) { // == !isWeb
+    if (!isWeb) {
       await WakelockPlus.disable();
     }
     await keyboardSubscription.cancel();
