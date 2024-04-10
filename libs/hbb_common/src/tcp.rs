@@ -14,12 +14,11 @@ use std::{
     pin::Pin,
     task::{Context, Poll},
 };
-use log::info;
 use tokio::{
     io::{AsyncRead, AsyncWrite, ReadBuf},
     net::{lookup_host, TcpListener, TcpSocket, ToSocketAddrs},
 };
-use tokio_socks::{tcp::Socks5Stream, IntoTargetAddr, ToProxyAddrs};
+use tokio_socks::IntoTargetAddr;
 use tokio_util::codec::Framed;
 use crate::config::Socks5Server;
 use crate::proxy::Proxy;

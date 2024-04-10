@@ -1,15 +1,13 @@
+use std::convert::TryFrom;
 use std::io::{Error as IoError};
-
 use std::net::{SocketAddr, ToSocketAddrs};
-
+use std::sync::Arc;
 use base64::Engine;
 use base64::engine::general_purpose;
-
 use httparse::{EMPTY_HEADER, Error as HttpParseError, Response};
 use log::{info};
 use thiserror::Error as ThisError;
 use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt, BufStream};
-use tokio_native_tls::{native_tls, TlsConnector, TlsStream};
 use tokio_socks::{IntoTargetAddr};
 use tokio_socks::tcp::Socks5Stream;
 use tokio_util::codec::Framed;
@@ -18,6 +16,11 @@ use crate::config::Socks5Server;
 use crate::{ResultType};
 use crate::bytes_codec::BytesCodec;
 use crate::tcp::{DynTcpStream, FramedStream};
+#[cfg(any(target_os = "windows", target_os = "macos"))]
+use tokio_native_tls::{native_tls, TlsConnector, TlsStream};
+#[cfg(not(any(target_os = "windows", target_os = "macos")))]
+use tokio_rustls::{rustls, TlsConnector, client::TlsStream };
+use rustls_pki_types;
 
 #[derive(Debug, ThisError)]
 pub enum ProxyError {
@@ -389,15 +392,36 @@ impl Proxy {
         };
     }
 
-
+    #[cfg(any(target_os = "windows", target_os = "macos"))]
     pub async fn https_connect<'a, Input, T>(self, io: Input, target: T) -> Result<BufStream<TlsStream<Input>>, ProxyError>
         where
             Input: AsyncRead + AsyncWrite + Unpin,
             T: IntoTargetAddr<'a> {
+        let tls_connector = TlsConnector::from(native_tls::TlsConnector::new()?);
+        let stream = tls_connector.connect(&self.intercept.get_domain()?, io).await?;
+        self.http_connect(stream, target).await
+    }
 
-        // tls 进行握手
-        let tls_connector = TlsConnector::from(native_tls::TlsConnector::new().unwrap());
-        let stream = tls_connector.connect(&self.intercept.get_domain()?, io).await.unwrap();
+    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
+    pub async fn https_connect<'a, Input, T>(self, io: Input, target: T) -> Result<BufStream<TlsStream<Input>>, ProxyError>
+        where
+            Input: AsyncRead + AsyncWrite + Unpin,
+            T: IntoTargetAddr<'a> {
+        let root_store = rustls::RootCertStore {
+            roots: webpki_roots::TLS_SERVER_ROOTS.into(),
+        };
+
+        let config = rustls::ClientConfig::builder()
+            .with_root_certificates(root_store)
+            .with_no_client_auth();
+        let url_domain = self.intercept.get_domain()?;
+
+        let domain = rustls_pki_types::ServerName::try_from(url_domain.as_str())
+            .map_err(|e| ProxyError::AddressResolutionFailed(e.to_string()))?
+            .to_owned();
+
+        let tls_connector = TlsConnector::from(Arc::new(config));
+        let stream = tls_connector.connect(domain, io).await?;
         self.http_connect(stream, target).await
     }
 
