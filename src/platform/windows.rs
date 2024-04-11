@@ -1279,6 +1279,11 @@ fn get_before_uninstall(kill_self: bool) -> String {
 }
 
 fn get_uninstall(kill_self: bool) -> String {
+    let reg_uninstall_string = get_reg("UninstallString");
+    if reg_uninstall_string.to_lowercase().contains("msiexec.exe") {
+        return reg_uninstall_string;
+    }
+
     let mut uninstall_cert_cmd = "".to_string();
     if let Ok(exe) = std::env::current_exe() {
         if let Some(exe_path) = exe.to_str() {

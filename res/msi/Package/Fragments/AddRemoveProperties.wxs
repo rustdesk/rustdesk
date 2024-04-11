@@ -8,16 +8,19 @@
 
 		<!--
 		Support entries shown when clicking "Click here for support information"
-		in Control Panel's Add/Remove Programs http://msdn.microsoft.com/library/default.asp?url=/library/en-us/msi/setup/configuration_properties.asp
+		in Control Panel's Add/Remove Programs https://learn.microsoft.com/en-us/windows/win32/msi/property-reference
 		-->
-		<Property Id="ARPCOMMENTS" Value="!(loc.AR_Comment)" />
+		<!--<Property Id="ARPCOMMENTS" Value="!(loc.AR_Comment)" />
 		<Property Id="ARPCONTACT" Value="https://github.com/rustdesk/rustdesk" />
 		<Property Id="ARPHELPLINK" Value="https://github.com/rustdesk/rustdesk" />
 		<Property Id="ARPREADME" Value="https://github.com/rustdesk/rustdesk" />
 		<Property Id="ARPURLINFOABOUT" Value="https://github.com/rustdesk/rustdesk" />
-		<Property Id="ARPURLUPDATEINFO" Value="https://github.com/rustdesk/rustdesk" />
+		<Property Id="ARPURLUPDATEINFO" Value="https://github.com/rustdesk/rustdesk" />-->
 
 		<Property Id="ARPPRODUCTICON" Value="AppIcon" />
+		
+		<!--$ArpStart$-->
+		<!--$ArpEnd$-->
 
 		<Property Id="RUSTDESKNATIVEINSTALL">
 			<RegistrySearch Id="RustDeskNativeInstallSearch" Root="HKCR" Key="$(var.RegKeyRoot)\DefaultIcon" Type="raw" />
