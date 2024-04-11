@@ -166,12 +166,12 @@ jobs:
         uses: microsoft/setup-msbuild@v2
       
       - name: Build msi
+        if: env.UPLOAD_ARTIFACT == 'true'
         run: |
           pushd ./res/msi
           python preprocess.py -arp -d ../../rustdesk
           nuget restore msi.sln
           msbuild msi.sln -p:Configuration=Release -p:Platform=x64 /p:TargetVersion=Windows10
-          mkdir -p ../../SignOutput
           mv ./Package/bin/x64/Release/en-us/Package.msi ../../SignOutput/rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}-beta.msi
           sha256sum ../../SignOutput/rustdesk-*.msi
 
