@@ -168,7 +168,7 @@ jobs:
       - name: Build msi
         run: |
           pushd ./res/msi
-          python preprocess.py -ci -arp
+          python preprocess.py -arp -d ../../rustdesk
           nuget restore msi.sln
           msbuild msi.sln -p:Configuration=Release -p:Platform=x64 /p:TargetVersion=Windows10
           mv ./Package/bin/x64/Release/en-us/Package.msi ../../SignOutput/rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}-beta.msi
