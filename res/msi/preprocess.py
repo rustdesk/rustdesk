@@ -93,9 +93,9 @@ def read_lines_and_start_index(file_path, tag_start, tag_end):
     return lines, index_start
 
 
-def insert_components_between_tags(lines, index_start, app_name, build_dir):
+def insert_components_between_tags(lines, index_start, app_name, dist_dir):
     indent = g_indent_unit * 3
-    path = Path(build_dir)
+    path = Path(dist_dir)
     idx = 1
     for file_path in path.glob("**/*"):
         if file_path.is_file():
@@ -126,13 +126,13 @@ def insert_components_between_tags(lines, index_start, app_name, build_dir):
     return True
 
 
-def gen_auto_component(app_name, build_dir):
+def gen_auto_component(app_name, dist_dir):
     return gen_content_between_tags(
         "Package/Components/RustDesk.wxs",
         "<!--$AutoComonentStart$-->",
         "<!--$AutoComponentEnd$-->",
         lambda lines, index_start: insert_components_between_tags(
-            lines, index_start, app_name, build_dir
+            lines, index_start, app_name, dist_dir
         ),
     )
 
