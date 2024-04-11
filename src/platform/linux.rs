@@ -120,15 +120,9 @@ pub fn get_cursor_pos() -> Option<(i32, i32)> {
 pub fn reset_input_cache() {}
 
 pub fn get_focused_window_id() -> Option<i32> {
-    if let Ok(focused_window_pos) = run_cmds("xdotool getactivewindow --shell") {
-        for i in focused_window_pos.split("\n") {
-            if i.contains("WINDOW=") {
-                return Some(
-                    i.split("=").collect::<Vec<&str>>()[1]
-                        .parse::<i32>()
-                        .unwrap(),
-                );
-            }
+    if let Ok(focused_window_id) = run_cmds("xdotool getactivewindow") {
+        if let Ok(id) = focused_window_id.trim().parse::<i32>() {
+            return Some(id);
         }
     }
     None
