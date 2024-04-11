@@ -12,7 +12,7 @@ use hbb_common::{
     bail,
     config::{self, Config},
     log,
-    message_proto::{Resolution, WindowsSession},
+    message_proto::{DisplayInfo, Resolution, WindowsSession},
     sleep, timeout, tokio,
 };
 use std::process::{Command, Stdio};
