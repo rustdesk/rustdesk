@@ -22,8 +22,7 @@
 		<UIRef Id="WixUI_ErrorProgressText" />
 
 		<InstallUISequence>
-			<!--<Custom Action="ReadCustomPathsFromExistingPathsFile" Before="CostFinalize" Condition="NOT Installed" />-->
-			<!--<Show Dialog="AnotherAppDialog" Before="WelcomeDlg" Condition="Not installed AND RUSTDESKNATIVEINSTALL AND Not RUSTDESKNATIVEINSTALLFOLDER"/>-->
+			<Show Dialog="AnotherAppDialog" Before="WelcomeDlg" Condition="Not installed AND RUSTDESK_WINDOWS_INSTALLER=&quot;#0&quot;"/>
 		</InstallUISequence>
 
 		<InstallExecuteSequence>
