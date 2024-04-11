@@ -66,6 +66,38 @@ use winreg::RegKey;
 
 pub const DRIVER_CERT_FILE: &str = "RustDeskIddDriver.cer";
 
+pub fn get_focused_window_id() -> Option<i32> {
+    unsafe {
+        let hWnd = GetForegroundWindow();
+        let mut dwProcessId = 0;
+        GetWindowThreadProcessId(hWnd, &mut dwProcessId);
+        if dwProcessId == 0 {
+            return None;
+        }
+        Some(dwProcessId as i32)
+    }
+}
+
+pub fn get_focused_display(displays: Vec<DisplayInfo>) -> Option<usize> {
+    unsafe {
+        let hWnd = GetForegroundWindow();
+        let mut rect: RECT = mem::zeroed();
+        if GetWindowRect(hWnd, &mut rect as *mut RECT) == 0 {
+            return None;
+        }
+        for (i, display) in displays.iter().enumerate() {
+            if rect.left >= display.x
+                && rect.left <= display.x + display.width
+                && rect.top >= display.y
+                && rect.top <= display.y + display.height
+            {
+                return Some(i);
+            }
+        }
+        None
+    }
+}
+
 pub fn get_cursor_pos() -> Option<(i32, i32)> {
     unsafe {
         #[allow(invalid_value)]

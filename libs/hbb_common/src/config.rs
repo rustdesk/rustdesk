@@ -332,6 +332,8 @@ pub struct PeerConfig {
     pub transfer: TransferSerde,
     #[serde(flatten)]
     pub follow_remote_cursor: FollowRemoteCursor,
+    #[serde(flatten)]
+    pub follow_remote_window: FollowRemoteWindow,
 }
 
 impl Default for PeerConfig {
@@ -367,6 +369,7 @@ impl Default for PeerConfig {
             info: Default::default(),
             transfer: Default::default(),
             follow_remote_cursor: Default::default(),
+            follow_remote_window: Default::default(),
         }
     }
 }
@@ -391,6 +394,12 @@ pub struct TransferSerde {
 
 #[derive(Debug, Default, Serialize, Deserialize, Clone, PartialEq)]
 pub struct FollowRemoteCursor {
+    #[serde(default, deserialize_with = "deserialize_bool")]
+    pub v: bool,
+}
+
+#[derive(Debug, Default, Serialize, Deserialize, Clone, PartialEq)]
+pub struct FollowRemoteWindow {
     #[serde(default, deserialize_with = "deserialize_bool")]
     pub v: bool,
 }

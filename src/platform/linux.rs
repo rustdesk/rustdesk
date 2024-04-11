@@ -11,7 +11,7 @@ use hbb_common::{
     config::Config,
     libc::{c_char, c_int, c_long, c_void},
     log,
-    message_proto::Resolution,
+    message_proto::{DisplayInfo, Resolution},
     regex::{Captures, Regex},
 };
 use std::{
@@ -118,6 +118,51 @@ pub fn get_cursor_pos() -> Option<(i32, i32)> {
 }
 
 pub fn reset_input_cache() {}
+
+pub fn get_focused_window_id() -> Option<i32> {
+    if let Ok(focused_window_pos) = run_cmds("xdotool getactivewindow --shell") {
+        for i in focused_window_pos.split("\n") {
+            if i.contains("WINDOW=") {
+                return Some(
+                    i.split("=").collect::<Vec<&str>>()[1]
+                        .parse::<i32>()
+                        .unwrap(),
+                );
+            }
+        }
+    }
+    None
+}
+
+pub fn get_focused_display(displays: Vec<DisplayInfo>) -> Option<usize> {
+    if let Ok(focused_window_pos) = run_cmds("xdotool getactivewindow getwindowgeometry --shell") {
+        let mut focused_window_pos = focused_window_pos.split("\n").collect::<Vec<&str>>();
+        let mut x = 0;
+        let mut y = 0;
+        for i in 0..focused_window_pos.len() {
+            if focused_window_pos[i].contains("X=") {
+                x = focused_window_pos[i].split("=").collect::<Vec<&str>>()[1]
+                    .parse::<i32>()
+                    .unwrap();
+            } else if focused_window_pos[i].contains("Y=") {
+                y = focused_window_pos[i].split("=").collect::<Vec<&str>>()[1]
+                    .parse::<i32>()
+                    .unwrap();
+            }
+        }
+        return displays.iter().position(|display| {
+            if x >= display.x
+                && x <= display.x + display.width
+                && y >= display.y
+                && y <= display.y + display.height
+            {
+                return true;
+            }
+            false
+        });
+    };
+    None
+}
 
 pub fn get_cursor() -> ResultType<Option<u64>> {
     let mut res = None;

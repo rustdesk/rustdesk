@@ -213,7 +213,7 @@ List<(String, String)> otherDefaultSettings() {
     if (isDesktop) ('Collapse toolbar', 'collapse_toolbar'),
     ('Show remote cursor', 'show_remote_cursor'),
     ('Follow remote cursor', 'follow_remote_cursor'),
-    ('Follow remote window focus', 'follow_remote_window_focus'),
+    ('Follow remote window focus', 'follow_remote_window'),
     if (isDesktop) ('Zoom cursor', 'zoom-cursor'),
     ('Show quality monitor', 'show_quality_monitor'),
     ('Mute', 'disable_audio'),

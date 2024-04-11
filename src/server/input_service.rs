@@ -28,6 +28,7 @@ use std::{
 use winapi::um::winuser::WHEEL_DELTA;
 
 const INVALID_CURSOR_POS: i32 = i32::MIN;
+const INVALID_WINDOW_ID: i32 = 0;
 
 #[derive(Default)]
 struct StateCursor {
@@ -71,6 +72,29 @@ impl StatePos {
     #[inline]
     fn is_moved(&self, x: i32, y: i32) -> bool {
         self.is_valid() && (self.cursor_pos.0 != x || self.cursor_pos.1 != y)
+    }
+}
+
+#[derive(Default)]
+struct StateWindowFocus {
+    window_id: i32,
+}
+
+impl super::service::Reset for StateWindowFocus {
+    fn reset(&mut self) {
+        self.window_id = INVALID_WINDOW_ID;
+    }
+}
+
+impl StateWindowFocus {
+    #[inline]
+    fn is_valid(&self) -> bool {
+        self.window_id != INVALID_WINDOW_ID
+    }
+
+    #[inline]
+    fn is_changed(&self, window_id: i32) -> bool {
+        self.is_valid() && self.window_id != window_id
     }
 }
 
@@ -277,6 +301,12 @@ pub fn new_pos() -> GenericService {
     svc.sp
 }
 
+pub fn new_window_focus() -> GenericService {
+    let svc = EmptyExtraFieldService::new("window_focus".to_owned(), false);
+    GenericService::repeat::<StateWindowFocus, _, _>(&svc.clone(), 33, run_window_focus);
+    svc.sp
+}
+
 #[inline]
 fn update_last_cursor_pos(x: i32, y: i32) {
     let mut lock = LATEST_SYS_CURSOR_POS.lock().unwrap();
@@ -352,6 +382,21 @@ fn run_cursor(sp: MouseCursorService, state: &mut StateCursor) -> ResultType<()>
     Ok(())
 }
 
+fn run_window_focus(sp: EmptyExtraFieldService, state: &mut StateWindowFocus) -> ResultType<()> {
+    let window_id = crate::get_focused_window_id();
+    if let Some(window_id) = window_id {
+        if state.is_changed(window_id) {
+            let mut misc = Misc::new();
+            misc.set_window_focus(window_id as _);
+            let mut msg_out = Message::new();
+            msg_out.set_misc(misc);
+            sp.send(msg_out);
+        }
+        state.window_id = window_id;
+    }
+    Ok(())
+}
+
 #[derive(Copy, Clone, PartialEq, Eq, Hash)]
 enum KeysDown {
     RdevKey(RawKey),
@@ -424,12 +469,15 @@ struct VirtualInputState {
 #[cfg(target_os = "macos")]
 impl VirtualInputState {
     fn new() -> Option<Self> {
-        VirtualInput::new(CGEventSourceStateID::CombinedSessionState, CGEventTapLocation::Session)
-            .map(|virtual_input| Self {
-                virtual_input,
-                capslock_down: false,
-            })
-            .ok()
+        VirtualInput::new(
+            CGEventSourceStateID::CombinedSessionState,
+            CGEventTapLocation::Session,
+        )
+        .map(|virtual_input| Self {
+            virtual_input,
+            capslock_down: false,
+        })
+        .ok()
     }
 
     #[inline]

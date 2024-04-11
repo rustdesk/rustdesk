@@ -6,7 +6,7 @@ use super::{CursorData, ResultType};
 use cocoa::{
     appkit::{NSApp, NSApplication, NSApplicationActivationPolicy::*},
     base::{id, nil, BOOL, NO, YES},
-    foundation::{NSDictionary, NSPoint, NSSize, NSString},
+    foundation::{NSArray, NSDictionary, NSPoint, NSSize, NSString},
 };
 use core_foundation::{
     array::{CFArrayGetCount, CFArrayGetValueAtIndex},
@@ -14,13 +14,24 @@ use core_foundation::{
     string::CFStringRef,
 };
 use core_graphics::{
-    display::{kCGNullWindowID, kCGWindowListOptionOnScreenOnly, CGWindowListCopyWindowInfo},
-    window::{kCGWindowName, kCGWindowOwnerPID},
+    display::{
+        kCGNullWindowID, kCGWindowListExcludeDesktopElements, kCGWindowListOptionOnScreenOnly,
+        CGWindowID, CGWindowListCopyWindowInfo, CGWindowListOption,
+    },
+    window::{kCGWindowLayer, kCGWindowName, kCGWindowNumber, kCGWindowOwnerPID},
 };
-use hbb_common::{allow_err, anyhow::anyhow, bail, log, message_proto::Resolution};
+use hbb_common::{
+    allow_err,
+    anyhow::anyhow,
+    bail, log,
+    message_proto::{DisplayInfo, Resolution},
+};
 use include_dir::{include_dir, Dir};
-use objc::{class, msg_send, sel, sel_impl};
-use scrap::{libc::c_void, quartz::ffi::*};
+use objc::{class, msg_send, runtime::Object, sel, sel_impl};
+use scrap::{
+    libc::c_void,
+    quartz::{ffi::*, Display},
+};
 use std::path::PathBuf;
 
 static PRIVILEGES_SCRIPTS_DIR: Dir =
@@ -294,6 +305,43 @@ pub fn get_cursor_pos() -> Option<(i32, i32)> {
     pt.y -= frame.origin.y;
     Some((pt.x as _, pt.y as _))
     */
+}
+
+pub fn get_focused_window_id() -> Option<i32> {
+    unsafe {
+        let window_list =
+            CGWindowListCopyWindowInfo(kCGWindowListOptionOnScreenOnly, kCGNullWindowID);
+        let n = CFArrayGetCount(window_list);
+
+        for i in 0..n {
+            let window: id = CFArrayGetValueAtIndex(window_list, i) as _;
+            let layer: id = msg_send![window, valueForKey: kCGWindowLayer];
+            let layer: i32 = msg_send![layer, intValue];
+            if layer == 0 {
+                let number: id = msg_send![window, valueForKey: kCGWindowNumber];
+                if number == nil {
+                    continue;
+                }
+                let id: i32 = msg_send![number, intValue];
+                return Some(id);
+            }
+        }
+        None
+    }
+}
+
+pub fn get_focused_display(displays: Vec<DisplayInfo>) -> Option<usize> {
+    unsafe {
+        let main_screen: id = msg_send![class!(NSScreen), mainScreen];
+        let screen: id = msg_send![main_screen, deviceDescription];
+        let id: id =
+            msg_send![screen, objectForKey: NSString::alloc(nil).init_str("NSScreenNumber")];
+        let display_name: u32 = msg_send![id, unsignedIntValue];
+
+        displays
+            .iter()
+            .position(|d| d.name == display_name.to_string())
+    }
 }
 
 pub fn get_cursor() -> ResultType<Option<u64>> {

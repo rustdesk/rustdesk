@@ -598,6 +598,7 @@ message OptionMessage {
 // Resolution custom_resolution = 13;
   BoolOption support_windows_specific_session = 14;
   BoolOption follow_remote_cursor = 15;
+  BoolOption follow_remote_window = 16;
 }
 
 message TestDelay {
@@ -749,6 +750,7 @@ message Misc {
     TogglePrivacyMode toggle_privacy_mode = 33;
     SupportedEncoding supported_encoding = 34;
     uint32 selected_sid = 35;
+    uint32 window_focus = 36;
   }
 }
 

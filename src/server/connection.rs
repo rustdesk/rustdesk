@@ -3,6 +3,7 @@ use super::{input_service::*, *};
 use crate::clipboard_file::*;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use crate::common::update_clipboard;
+use crate::display_service::get_display_idx_from_name;
 #[cfg(target_os = "android")]
 use crate::keyboard::client::map_key_to_control_key;
 #[cfg(target_os = "linux")]
@@ -30,12 +31,13 @@ use hbb_common::platform::linux::run_cmds;
 #[cfg(target_os = "android")]
 use hbb_common::protobuf::EnumOrUnknown;
 use hbb_common::{
-    config::Config,
-    fs,
-    fs::can_enable_overwrite_detection,
+    config::{Config, PeerConfig},
+    fs::{self, can_enable_overwrite_detection},
     futures::{SinkExt, StreamExt},
     get_time, get_version_number,
-    message_proto::{option_message::BoolOption, permission_info::Permission},
+    message_proto::{
+        misc::Union::WindowFocus, option_message::BoolOption, permission_info::Permission,
+    },
     password_security::{self as password, ApproveMode},
     sleep, timeout,
     tokio::{
@@ -242,6 +244,7 @@ pub struct Connection {
     #[cfg(target_os = "macos")]
     retina: Retina,
     follow_remote_cursor: bool,
+    follow_remote_window: bool,
 }
 
 impl ConnInner {
@@ -350,6 +353,7 @@ impl Connection {
             lock_after_session_end: false,
             show_remote_cursor: false,
             follow_remote_cursor: false,
+            follow_remote_window: false,
             ip: "".to_owned(),
             disable_audio: false,
             #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
@@ -659,6 +663,11 @@ impl Connection {
                                     conn.send_close_reason_no_retry("").await;
                                     conn.on_close("stop service", false).await;
                                     break;
+                                }
+                                Some(misc::Union::WindowFocus(id)) => {
+                                    if conn.follow_remote_window {
+                                        conn.handle_window_focus(id).await;
+                                    }
                                 }
                                 _ => {},
                             }
@@ -2758,6 +2767,11 @@ impl Connection {
                 self.follow_remote_cursor = q == BoolOption::Yes;
             }
         }
+        if let Ok(q) = o.follow_remote_window.enum_value() {
+            if q != BoolOption::NotSet {
+                self.follow_remote_window = q == BoolOption::Yes;
+            }
+        }
         if let Ok(q) = o.disable_audio.enum_value() {
             if q != BoolOption::NotSet {
                 self.disable_audio = q == BoolOption::Yes;
@@ -3117,6 +3131,20 @@ impl Connection {
         msg.set_misc(misc);
         self.inner.send(msg.into());
         self.supported_encoding_flag = (true, not_use);
+    }
+
+    async fn handle_window_focus(&mut self, id: &u32) {
+        let displays = super::display_service::update_get_sync_displays()
+            .await
+            .unwrap();
+        let current_display = crate::get_focused_display(displays);
+        if let Some(idx) = current_display {
+            let mut pi = PeerInfo::default();
+            pi.current_display = idx as i32;
+            let mut msg_out = Message::new();
+            msg_out.set_peer_info(pi);
+            self.send(msg_out).await;
+        }
     }
 
     async fn handle_cursor_switch_display(&mut self, pos: CursorPosition) {

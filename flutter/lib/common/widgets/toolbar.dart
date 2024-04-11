@@ -430,25 +430,25 @@ Future<List<TToggleMenu>> toolbarCursor(
             : null));
   }
   // follow remote window focus
-  // if (pi.platform != kPeerPlatformAndroid &&
-  //     !ffi.canvasModel.cursorEmbedded &&
-  //     !pi.isWayland) {
-  //   final state = FollowRemoteWindowState.find(id);
-  //   final enabled = !ffiModel.viewOnly;
-  //   final option = 'follow-remote-window-focus';
-  //   v.add(TToggleMenu(
-  //       child: Text(translate('Follow remote window focus')),
-  //       value: state.value,
-  //       onChanged: enabled
-  //           ? (value) async {
-  //               if (value == null) return;
-  //               await bind.sessionToggleOption(
-  //                   sessionId: sessionId, value: option);
-  //               state.value = bind.sessionGetToggleOptionSync(
-  //                   sessionId: sessionId, arg: option);
-  //             }
-  //           : null));
-  // }
+  if (pi.platform != kPeerPlatformAndroid &&
+      !ffi.canvasModel.cursorEmbedded &&
+      !pi.isWayland) {
+    final state = FollowRemoteWindowState.find(id);
+    final enabled = !ffiModel.viewOnly;
+    final option = 'follow-remote-window';
+    v.add(TToggleMenu(
+        child: Text(translate('Follow remote window focus')),
+        value: state.value,
+        onChanged: enabled
+            ? (value) async {
+                if (value == null) return;
+                await bind.sessionToggleOption(
+                    sessionId: sessionId, value: option);
+                state.value = bind.sessionGetToggleOptionSync(
+                    sessionId: sessionId, arg: option);
+              }
+            : null));
+  }
   // zoom cursor
   final viewStyle = await bind.sessionGetViewStyle(sessionId: sessionId) ?? '';
   if (!isMobile &&

@@ -941,12 +941,12 @@ class FfiModel with ChangeNotifier {
       _pi.displaysCount.value = _pi.displays.length;
 
       if (_pi.currentDisplay == kAllDisplayValue) {
-        updateCurDisplay(sessionId);
+        updateCurDisplay(sessionId, updateCursorPos: false);
         // to-do: What if the displays are changed?
       } else {
         if (_pi.currentDisplay >= 0 &&
             _pi.currentDisplay < _pi.displays.length) {
-          updateCurDisplay(sessionId);
+          updateCurDisplay(sessionId, updateCursorPos: false);
         } else {
           if (_pi.displays.isNotEmpty) {
             // Notify to switch display

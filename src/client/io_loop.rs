@@ -1565,6 +1565,7 @@ impl<T: InvokeUiSession> Remote<T> {
                     }
                 }
                 Some(message::Union::PeerInfo(pi)) => {
+                    // For follow cursor, follow window focus
                     if (pi.displays.is_empty() && pi.platform_additions.is_empty()) {
                         self.handler.set_current_display(pi.current_display);
                     } else {
