@@ -73,11 +73,6 @@
 				<RegistryValue Root="HKCU" Key="Software\$(var.Product)" Name="App.StartMenu.Shortcut" Type="string" Value="1" KeyPath="yes" />
 			</Component>
 
-			<Component Id="App.StartMenu.ShortcutTray" Guid="9362C316-40BB-41C1-859C-08182AA47E8D" Condition="STARTMENUSHORTCUTS = 1">
-				<Shortcut Id="App.StartMenu.ShortcutTray" Name="!(loc.SC_Client_Tray)" Description="!(loc.SC_Client_Tray_Desc)" Target="[!RustDesk.exe]" Arguments="--tray" Icon="AppIcon" WorkingDirectory="INSTALLFOLDER" />
-				<RegistryValue Root="HKCU" Key="Software\$(var.Product)" Name="App.StartMenu.ShortcutTray" Type="string" Value="1" KeyPath="yes" />
-			</Component>
-
 			<Component Id="App.StartMenu.ShortcutUninstall" Guid="E100D7F8-D607-4513-28DA-2C95E5EA698E" Condition="STARTMENUSHORTCUTS = 1">
 				<Shortcut Id="App.StartMenu.ShortcutUninstall" Name="!(loc.SC_Uninstall)" Description="!(loc.SC_Uninstall_Desc)" Target="[System6432Folder]msiexec.exe" Arguments="/x [ProductCode]" Icon="AppIcon" />
 				<RegistryValue Root="HKCU" Key="Software\$(var.Product)" Name="App.StartMenu.ShortcutUninstall" Type="string" Value="1" KeyPath="yes" />
@@ -107,7 +102,6 @@
 			<ComponentRef Id="App.Desktop.Shortcut" />
 			<!--<ComponentRef Id="App.UninstallShortcut" />-->
 			<ComponentRef Id="App.StartMenu.Shortcut" />
-			<ComponentRef Id="App.StartMenu.ShortcutTray" />
 			<ComponentRef Id="App.StartMenu.ShortcutUninstall" />
 			<ComponentRef Id="App.StartupFolder.ShortcutTray" />
 
