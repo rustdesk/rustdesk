@@ -30,7 +30,6 @@
 
 			<Custom Action="RemoveInstallFolder.SetParam" After="RemoveFiles"/>
 			<Custom Action="RemoveInstallFolder" After="RemoveInstallFolder.SetParam"/>
-			<Custom Action="DeleteTestCerts" After="RemoveFiles"/>
 		</InstallExecuteSequence>
 
 		<!-- Shortcuts -->

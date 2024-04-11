@@ -1,6 +1,6 @@
 // CustomAction.cpp : Defines the entry point for the custom action.
 #include "pch.h"
-
+#include <stdlib.h>
 #include <strutil.h>
 #include <shellapi.h>
 #include <tlhelp32.h>
@@ -66,26 +66,6 @@ UINT __stdcall RemoveInstallFolder(
 LExit:
     ReleaseStr(installFolder);
 
-    er = SUCCEEDED(hr) ? ERROR_SUCCESS : ERROR_INSTALL_FAILURE;
-    return WcaFinalize(er);
-}
-
-#include "../../../src/platform/windows_delete_test_cert.cc";
-UINT __stdcall DeleteTestCerts(
-    __in MSIHANDLE hInstall)
-{
-    HRESULT hr = S_OK;
-    DWORD er = ERROR_SUCCESS;
-
-    hr = WcaInitialize(hInstall, "DeleteTestCerts");
-    ExitOnFailure(hr, "Failed to initialize");
-
-    WcaLog(LOGMSG_STANDARD, "Initialized.");
-
-    DeleteRustDeskTestCertsW();
-    WcaLog(LOGMSG_STANDARD, "DeleteRustDeskTestCertsW finished.");
-
-LExit:
     er = SUCCEEDED(hr) ? ERROR_SUCCESS : ERROR_INSTALL_FAILURE;
     return WcaFinalize(er);
 }
