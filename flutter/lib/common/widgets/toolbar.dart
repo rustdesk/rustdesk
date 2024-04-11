@@ -384,12 +384,13 @@ Future<List<TToggleMenu>> toolbarCursor(
       !ffi.canvasModel.cursorEmbedded &&
       !pi.isWayland) {
     final state = ShowRemoteCursorState.find(id);
+    final lockState = ShowRemoteCursorLockState.find(id);
     final enabled = !ffiModel.viewOnly;
     final option = 'show-remote-cursor';
     v.add(TToggleMenu(
         child: Text(translate('Show remote cursor')),
-        value: state.value,
-        onChanged: enabled
+        value: state.value || lockState.value,
+        onChanged: enabled && !lockState.value
             ? (value) async {
                 if (value == null) return;
                 await bind.sessionToggleOption(
@@ -408,6 +409,7 @@ Future<List<TToggleMenu>> toolbarCursor(
     final option = 'follow-remote-cursor';
     final showCursorOption = 'show-remote-cursor';
     final showCursorState = ShowRemoteCursorState.find(id);
+    final showCursorLockState = ShowRemoteCursorLockState.find(id);
     final showCursorEnabled = bind.sessionGetToggleOptionSync(
         sessionId: sessionId, arg: showCursorOption);
     v.add(TToggleMenu(
@@ -420,6 +422,7 @@ Future<List<TToggleMenu>> toolbarCursor(
                     sessionId: sessionId, value: option);
                 state.value = bind.sessionGetToggleOptionSync(
                     sessionId: sessionId, arg: option);
+                showCursorLockState.value = value;
                 if (!showCursorEnabled) {
                   await bind.sessionToggleOption(
                       sessionId: sessionId, value: showCursorOption);
