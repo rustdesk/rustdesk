@@ -34,7 +34,7 @@
 			<Custom Action="AddFirewallRules.SetParam" Before="InstallFinalize" Condition="NOT Installed"/>
 			<Custom Action="AddFirewallRules" After="AddFirewallRules.SetParam"/>
 
-			<Custom Action="RemoveInstallFolder.SetParam" After="RemoveFiles"/>
+			<Custom Action="RemoveInstallFolder.SetParam" After="RemoveFiles" Condition="Installed AND UPGRADINGPRODUCTCODE" />
 			<Custom Action="RemoveInstallFolder" After="RemoveInstallFolder.SetParam"/>
 			<Custom Action="RemoveFirewallRules.SetParam" Before="RemoveFiles"/>
 			<Custom Action="RemoveFirewallRules" After="RemoveFirewallRules.SetParam"/>
@@ -75,16 +75,16 @@
 			</Component>
 		</StandardDirectory>
 
-		<DirectoryRef Id="INSTALLFOLDER">
+		<!--<DirectoryRef Id="INSTALLFOLDER">
 			<Component Id="App.UninstallShortcut" Guid="FB0F2AC7-2AE5-4C54-B860-5E472620B6B1">
-				<Shortcut Id="App.UninstallShortcut" Name="!(loc.SC_Uninstall)" Description="!(loc.SC_Uninstall_Desc)" Target="[System6432Folder]msiexec.exe" Arguments="/x [ProductCode]" IconIndex="0" />
+				<Shortcut Id="App.UninstallShortcut" Name="!(loc.SC_Uninstall)" Description="!(loc.SC_Uninstall_Desc)" Target="[System6432Folder]msiexec.exe" Arguments="/x [ProductCode]" Icon="AppIcon" />
 			</Component>
-		</DirectoryRef>
+		</DirectoryRef>-->
 
 		<ComponentGroup Id="Components" Directory="INSTALLFOLDER">
 			<ComponentRef Id="RustDesk.exe" />
 			<ComponentRef Id="App.Desktop.Shortcut" />
-			<ComponentRef Id="App.UninstallShortcut" />
+			<!--<ComponentRef Id="App.UninstallShortcut" />-->
 			<ComponentRef Id="App.StartMenu.Shortcut" />
 			<ComponentRef Id="App.StartMenu.ShortcutTray" />
 			<ComponentRef Id="App.StartMenu.ShortcutUninstall" />
