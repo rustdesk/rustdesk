@@ -9,7 +9,6 @@ use crate::{
     AdapterDevice, CodecFormat, CodecName, EncodeInput, EncodeYuvFormat, Pixfmt,
 };
 use hbb_common::{
-    allow_err,
     anyhow::{anyhow, bail, Context},
     bytes::Bytes,
     log,
@@ -17,11 +16,11 @@ use hbb_common::{
     ResultType,
 };
 use hwcodec::{
-    common::{DataFormat, MAX_GOP},
+    common::{DataFormat, Driver, MAX_GOP},
     native::{
         decode::{self, DecodeFrame, Decoder},
         encode::{self, EncodeFrame, Encoder},
-        Available, DecodeContext, DynamicContext, EncodeContext, EncodeDriver, FeatureContext,
+        Available, DecodeContext, DynamicContext, EncodeContext, FeatureContext,
     },
 };
 
@@ -89,7 +88,7 @@ impl EncoderApi for VRamEncoder {
                         same_bad_len_counter: 0,
                     }),
                     Err(_) => {
-                        hbb_common::config::VRamConfig::clear();
+                        hbb_common::config::HwCodecConfig::clear_vram();
                         Err(anyhow!(format!("Failed to create encoder")))
                     }
                 }
@@ -182,7 +181,7 @@ impl EncoderApi for VRamEncoder {
     }
 
     fn support_abr(&self) -> bool {
-        self.ctx.f.driver != EncodeDriver::VPL
+        self.ctx.f.driver != Driver::VPL
     }
 }
 
@@ -253,21 +252,21 @@ impl VRamEncoder {
     pub fn convert_quality(quality: Quality, f: &FeatureContext) -> u32 {
         match quality {
             Quality::Best => {
-                if f.driver == EncodeDriver::VPL && f.data_format == DataFormat::H264 {
+                if f.driver == Driver::VPL && f.data_format == DataFormat::H264 {
                     200
                 } else {
                     150
                 }
             }
             Quality::Balanced => {
-                if f.driver == EncodeDriver::VPL && f.data_format == DataFormat::H264 {
+                if f.driver == Driver::VPL && f.data_format == DataFormat::H264 {
                     150
                 } else {
                     100
                 }
             }
             Quality::Low => {
-                if f.driver == EncodeDriver::VPL && f.data_format == DataFormat::H264 {
+                if f.driver == Driver::VPL && f.data_format == DataFormat::H264 {
                     75
                 } else {
                     50
@@ -333,7 +332,7 @@ impl VRamDecoder {
         match Decoder::new(ctx) {
             Ok(decoder) => Ok(Self { decoder }),
             Err(_) => {
-                hbb_common::config::VRamConfig::clear();
+                hbb_common::config::HwCodecConfig::clear_vram();
                 Err(anyhow!(format!(
                     "Failed to create decoder, format: {:?}",
                     format
@@ -356,18 +355,18 @@ pub struct VRamDecoderImage<'a> {
 impl VRamDecoderImage<'_> {}
 
 fn get_available_config() -> ResultType<Available> {
-    let available = hbb_common::config::VRamConfig::load().available;
+    let available = hbb_common::config::HwCodecConfig::load().vram;
     match Available::deserialize(&available) {
         Ok(v) => Ok(v),
         Err(_) => Err(anyhow!("Failed to deserialize:{}", available)),
     }
 }
 
-pub fn check_available_vram() {
+pub(crate) fn check_available_vram() -> String {
     let d = DynamicContext {
         device: None,
-        width: 1920,
-        height: 1080,
+        width: 1280,
+        height: 720,
         kbitrate: 5000,
         framerate: 60,
         gop: MAX_GOP as _,
@@ -378,54 +377,5 @@ pub fn check_available_vram() {
         e: encoders,
         d: decoders,
     };
-
-    if let Ok(available) = available.serialize() {
-        let mut config = hbb_common::config::VRamConfig::load();
-        config.available = available;
-        config.store();
-        return;
-    }
-    log::error!("Failed to serialize vram");
-}
-
-pub fn vram_new_check_process() {
-    use std::sync::Once;
-
-    static ONCE: Once = Once::new();
-    ONCE.call_once(|| {
-        std::thread::spawn(move || {
-            // Remove to avoid checking process errors
-            // But when the program is just started, the configuration file has not been updated, and the new connection will read an empty configuration
-            hbb_common::config::VRamConfig::clear();
-            if let Ok(exe) = std::env::current_exe() {
-                let arg = "--check-vram-config";
-                if let Ok(mut child) = std::process::Command::new(exe).arg(arg).spawn() {
-                    // wait up to 30 seconds
-                    for _ in 0..30 {
-                        std::thread::sleep(std::time::Duration::from_secs(1));
-                        if let Ok(Some(_)) = child.try_wait() {
-                            break;
-                        }
-                    }
-                    allow_err!(child.kill());
-                    std::thread::sleep(std::time::Duration::from_millis(30));
-                    match child.try_wait() {
-                        Ok(Some(status)) => {
-                            log::info!("Check vram config, exit with: {status}")
-                        }
-                        Ok(None) => {
-                            log::info!(
-                                "Check vram config, status not ready yet, let's really wait"
-                            );
-                            let res = child.wait();
-                            log::info!("Check vram config, wait result: {res:?}");
-                        }
-                        Err(e) => {
-                            log::error!("Check vram config, error attempting to wait: {e}")
-                        }
-                    }
-                }
-            };
-        });
-    });
+    available.serialize().unwrap_or_default()
 }

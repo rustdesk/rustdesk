@@ -14,7 +14,7 @@ wayland = ["gstreamer", "gstreamer-app", "gstreamer-video", "dbus", "tracing"]
 mediacodec = ["ndk"]
 linux-pkg-config = ["dep:pkg-config"]
 hwcodec = ["dep:hwcodec"]
-vram = ["hwcodec/sdk"]
+vram = ["hwcodec/vram"]
 
 [dependencies]
 cfg-if = "1.0"
@@ -22,6 +22,7 @@ num_cpus = "1.15"
 lazy_static = "1.4"
 hbb_common = { path = "../hbb_common" }
 webm = { git = "https://github.com/21pages/rust-webm" }
+serde = {version="1.0", features=["derive"]}
 
 [dependencies.winapi]
 version = "0.3"
@@ -43,7 +44,6 @@ ndk-context = "0.1"
 [target.'cfg(not(target_os = "android"))'.dev-dependencies]
 repng = "0.2"
 docopt = "1.1"
-serde = {version="1.0", features=["derive"]}
 quest = "0.3"
 
 [build-dependencies]

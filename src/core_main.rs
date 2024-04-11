@@ -410,10 +410,6 @@ pub fn core_main() -> Option<Vec<String>> {
             #[cfg(feature = "hwcodec")]
             scrap::hwcodec::check_available_hwcodec();
             return None;
-        } else if args[0] == "--check-vram-config" {
-            #[cfg(feature = "vram")]
-            scrap::vram::check_available_vram();
-            return None;
         } else if args[0] == "--cm" {
             // call connection manager to establish connections
             // meanwhile, return true to call flutter window to show control panel

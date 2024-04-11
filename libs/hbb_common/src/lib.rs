@@ -46,6 +46,8 @@ pub mod keyboard;
 pub use dlopen;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub use machine_uid;
+pub use serde_derive;
+pub use serde_json;
 pub use sysinfo;
 pub use toml;
 pub use uuid;

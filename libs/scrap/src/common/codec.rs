@@ -137,7 +137,7 @@ impl Encoder {
                 }),
                 Err(e) => {
                     log::error!("new hw encoder failed: {e:?}, clear config");
-                    hbb_common::config::HwCodecConfig::clear();
+                    hbb_common::config::HwCodecConfig::clear_ram();
                     *ENCODE_CODEC_NAME.lock().unwrap() = CodecName::VP9;
                     Err(e)
                 }
@@ -149,7 +149,7 @@ impl Encoder {
                 }),
                 Err(e) => {
                     log::error!("new vram encoder failed: {e:?}, clear config");
-                    hbb_common::config::VRamConfig::clear();
+                    hbb_common::config::HwCodecConfig::clear_vram();
                     *ENCODE_CODEC_NAME.lock().unwrap() = CodecName::VP9;
                     Err(e)
                 }

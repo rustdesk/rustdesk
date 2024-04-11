@@ -503,7 +503,7 @@ impl Config {
     fn store_<T: serde::Serialize>(config: &T, suffix: &str) {
         let file = Self::file_(suffix);
         if let Err(err) = store_path(file, config) {
-            log::error!("Failed to store config: {}", err);
+            log::error!("Failed to store {suffix} config: {err}");
         }
     }
 
@@ -1493,8 +1493,10 @@ impl LanPeers {
 
 #[derive(Debug, Default, Serialize, Deserialize, Clone)]
 pub struct HwCodecConfig {
-    #[serde(default, deserialize_with = "deserialize_hashmap_string_string")]
-    pub options: HashMap<String, String>,
+    #[serde(default, deserialize_with = "deserialize_string")]
+    pub ram: String,
+    #[serde(default, deserialize_with = "deserialize_string")]
+    pub vram: String,
 }
 
 impl HwCodecConfig {
@@ -1509,25 +1511,17 @@ impl HwCodecConfig {
     pub fn clear() {
         HwCodecConfig::default().store();
     }
-}
 
-#[derive(Debug, Default, Serialize, Deserialize, Clone)]
-pub struct VRamConfig {
-    #[serde(default, deserialize_with = "deserialize_string")]
-    pub available: String,
-}
-
-impl VRamConfig {
-    pub fn load() -> VRamConfig {
-        Config::load_::<VRamConfig>("_vram")
+    pub fn clear_ram() {
+        let mut c = Self::load();
+        c.ram = Default::default();
+        c.store();
     }
 
-    pub fn store(&self) {
-        Config::store_(self, "_vram");
-    }
-
-    pub fn clear() {
-        VRamConfig::default().store();
+    pub fn clear_vram() {
+        let mut c = Self::load();
+        c.vram = Default::default();
+        c.store();
     }
 }
 
