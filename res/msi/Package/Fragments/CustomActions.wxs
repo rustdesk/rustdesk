@@ -6,7 +6,6 @@
 
     <CustomAction Id="CustomActionHello" DllEntry="CustomActionHello" Impersonate="yes" Execute="immediate" Return="ignore" BinaryRef="Custom_Actions_Dll"/>
     <CustomAction Id="RemoveInstallFolder" DllEntry="RemoveInstallFolder" Impersonate="no" Execute="deferred" Return="ignore" BinaryRef="Custom_Actions_Dll"/>
-    <CustomAction Id="DeleteTestCerts" DllEntry="DeleteTestCerts" Impersonate="no" Execute="deferred" Return="ignore" BinaryRef="Custom_Actions_Dll"/>
     <CustomAction Id="TerminateProcesses" DllEntry="TerminateProcesses" Impersonate="yes" Execute="immediate" Return="ignore" BinaryRef="Custom_Actions_Dll"/>
   </Fragment>
 </Wix>
