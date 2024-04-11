@@ -137,7 +137,7 @@ def gen_auto_component(app_name, build_dir):
     )
 
 
-def gen_pre_vars(args):
+def gen_pre_vars(args, dist_dir):
     def func(lines, index_start):
         upgrade_code = uuid.uuid5(uuid.NAMESPACE_OID, app_name + ".exe")
 
@@ -150,7 +150,7 @@ def gen_pre_vars(args):
             f'{indent}<?define ProductLower="{args.app_name.lower()}" ?>\n',
             f'{indent}<?define RegKeyRoot=".$(var.ProductLower)" ?>\n',
             f'{indent}<?define RegKeyInstall="$(var.RegKeyRoot)\Install" ?>\n',
-            f'{indent}<?define BuildDir="{args.dist_dir}" ?>\n',
+            f'{indent}<?define BuildDir="{dist_dir}" ?>\n',
             f'{indent}<?define BuildDate="{g_build_date}" ?>\n',
             "\n",
             f"{indent}<!-- The UpgradeCode must be consistent for each product. ! -->\n"
@@ -275,7 +275,7 @@ def get_folder_size(folder_path):
     return total_size
 
 
-def gen_custom_ARPSYSTEMCOMPONENT_True(args):
+def gen_custom_ARPSYSTEMCOMPONENT_True(args, dist_dir):
     def func(lines, index_start):
         indent = g_indent_unit * 5
 
@@ -309,7 +309,7 @@ def gen_custom_ARPSYSTEMCOMPONENT_True(args):
             f'{indent}<RegistryValue Type="integer" Name="Language" Value="[ProductLanguage]" />\n'
         )
 
-        estimated_size = get_folder_size(args.dist_dir)
+        estimated_size = get_folder_size(dist_dir)
         lines_new.append(
             f'{indent}<RegistryValue Type="integer" Name="EstimatedSize" Value="{estimated_size}" />\n'
         )
@@ -356,7 +356,7 @@ def gen_custom_ARPSYSTEMCOMPONENT_True(args):
     )
 
 
-def gen_custom_ARPSYSTEMCOMPONENT(args):
+def gen_custom_ARPSYSTEMCOMPONENT(args, dist_dir):
     try:
         custom_arp = json.loads(args.custom_arp)
         g_arpsystemcomponent.update(custom_arp)
@@ -365,7 +365,7 @@ def gen_custom_ARPSYSTEMCOMPONENT(args):
         return False
 
     if args.arp:
-        return gen_custom_ARPSYSTEMCOMPONENT_True(args)
+        return gen_custom_ARPSYSTEMCOMPONENT_True(args, dist_dir)
     else:
         return gen_custom_ARPSYSTEMCOMPONENT_False(args)
 
@@ -424,20 +424,21 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     app_name = args.app_name
+    dist_dir = Path(sys.argv[0]).parent.joinpath(args.dist_dir).resolve()
 
     if not init_global_vars(args):
         sys.exit(-1)
 
-    if not gen_pre_vars(args):
+    if not gen_pre_vars(args, dist_dir):
         sys.exit(-1)
 
     if not gen_upgrade_info():
         sys.exit(-1)
 
-    if not gen_custom_ARPSYSTEMCOMPONENT(args):
+    if not gen_custom_ARPSYSTEMCOMPONENT(args, dist_dir):
         sys.exit(-1)
 
-    if not gen_auto_component(app_name, args.dist_dir):
+    if not gen_auto_component(app_name, dist_dir):
         sys.exit(-1)
 
     if not gen_custom_dialog_bitmaps():
