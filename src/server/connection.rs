@@ -3,7 +3,6 @@ use super::{input_service::*, *};
 use crate::clipboard_file::*;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use crate::common::update_clipboard;
-use crate::display_service::get_display_idx_from_name;
 #[cfg(target_os = "android")]
 use crate::keyboard::client::map_key_to_control_key;
 #[cfg(target_os = "linux")]
@@ -31,13 +30,11 @@ use hbb_common::platform::linux::run_cmds;
 #[cfg(target_os = "android")]
 use hbb_common::protobuf::EnumOrUnknown;
 use hbb_common::{
-    config::{Config, PeerConfig},
+    config::Config,
     fs::{self, can_enable_overwrite_detection},
     futures::{SinkExt, StreamExt},
     get_time, get_version_number,
-    message_proto::{
-        misc::Union::WindowFocus, option_message::BoolOption, permission_info::Permission,
-    },
+    message_proto::{option_message::BoolOption, permission_info::Permission},
     password_security::{self as password, ApproveMode},
     sleep, timeout,
     tokio::{
@@ -664,9 +661,12 @@ impl Connection {
                                     conn.on_close("stop service", false).await;
                                     break;
                                 }
-                                Some(misc::Union::WindowFocus(id)) => {
-                                    if conn.follow_remote_window {
-                                        conn.handle_window_focus(id).await;
+                                Some(misc::Union::WindowFocus(_)) => {
+                                    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+                                    {
+                                        if conn.follow_remote_window {
+                                            conn.handle_window_focus().await;
+                                        }
                                     }
                                 }
                                 _ => {},
@@ -678,8 +678,11 @@ impl Connection {
                             conn.retina.set_displays(&_pi.displays);
                         }
                         Some(message::Union::CursorPosition(pos)) => {
-                            if conn.follow_remote_cursor {
-                                conn.handle_cursor_switch_display(pos.clone()).await;
+                            #[cfg(not(any(target_os = "android", target_os = "ios")))]
+                            {
+                                if conn.follow_remote_cursor {
+                                    conn.handle_cursor_switch_display(pos.clone()).await;
+                                }
                             }
                             #[cfg(target_os = "macos")]
                             if let Some(new_msg) = conn.retina.on_cursor_pos(&pos, conn.display_idx) {
@@ -3133,7 +3136,8 @@ impl Connection {
         self.supported_encoding_flag = (true, not_use);
     }
 
-    async fn handle_window_focus(&mut self, id: &u32) {
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    async fn handle_window_focus(&mut self) {
         let displays = super::display_service::update_get_sync_displays()
             .await
             .unwrap();
@@ -3147,6 +3151,7 @@ impl Connection {
         }
     }
 
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     async fn handle_cursor_switch_display(&mut self, pos: CursorPosition) {
         if let Ok(displays) = super::display_service::update_get_sync_displays().await {
             let d_index = displays

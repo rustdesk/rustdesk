@@ -6,7 +6,7 @@ use super::{CursorData, ResultType};
 use cocoa::{
     appkit::{NSApp, NSApplication, NSApplicationActivationPolicy::*},
     base::{id, nil, BOOL, NO, YES},
-    foundation::{NSArray, NSDictionary, NSPoint, NSSize, NSString},
+    foundation::{NSDictionary, NSPoint, NSSize, NSString},
 };
 use core_foundation::{
     array::{CFArrayGetCount, CFArrayGetValueAtIndex},
@@ -14,10 +14,7 @@ use core_foundation::{
     string::CFStringRef,
 };
 use core_graphics::{
-    display::{
-        kCGNullWindowID, kCGWindowListExcludeDesktopElements, kCGWindowListOptionOnScreenOnly,
-        CGWindowID, CGWindowListCopyWindowInfo, CGWindowListOption,
-    },
+    display::{kCGNullWindowID, kCGWindowListOptionOnScreenOnly, CGWindowListCopyWindowInfo},
     window::{kCGWindowLayer, kCGWindowName, kCGWindowNumber, kCGWindowOwnerPID},
 };
 use hbb_common::{
@@ -27,11 +24,8 @@ use hbb_common::{
     message_proto::{DisplayInfo, Resolution},
 };
 use include_dir::{include_dir, Dir};
-use objc::{class, msg_send, runtime::Object, sel, sel_impl};
-use scrap::{
-    libc::c_void,
-    quartz::{ffi::*, Display},
-};
+use objc::{class, msg_send, sel, sel_impl};
+use scrap::{libc::c_void, quartz::ffi::*};
 use std::path::PathBuf;
 
 static PRIVILEGES_SCRIPTS_DIR: Dir =
