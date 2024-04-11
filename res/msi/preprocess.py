@@ -38,10 +38,7 @@ g_arpsystemcomponent = {
 def make_parser():
     parser = argparse.ArgumentParser(description="Msi preprocess script.")
     parser.add_argument(
-        "-d", "--debug", action="store_true", help="Is debug", default=False
-    )
-    parser.add_argument(
-        "-ci", "--github-ci", action="store_true", help="Is github ci", default=False
+        "-d", "--dist-dir", type=str, default="../../rustdesk", help="The dist direcotry to install."
     )
     parser.add_argument(
         "-arp",
@@ -96,9 +93,9 @@ def read_lines_and_start_index(file_path, tag_start, tag_end):
     return lines, index_start
 
 
-def insert_components_between_tags(lines, index_start, app_name, build_dir):
+def insert_components_between_tags(lines, index_start, app_name, dist_dir):
     indent = g_indent_unit * 3
-    path = Path(build_dir)
+    path = Path(dist_dir)
     idx = 1
     for file_path in path.glob("**/*"):
         if file_path.is_file():
@@ -129,18 +126,18 @@ def insert_components_between_tags(lines, index_start, app_name, build_dir):
     return True
 
 
-def gen_auto_component(app_name, build_dir):
+def gen_auto_component(app_name, dist_dir):
     return gen_content_between_tags(
         "Package/Components/RustDesk.wxs",
         "<!--$AutoComonentStart$-->",
         "<!--$AutoComponentEnd$-->",
         lambda lines, index_start: insert_components_between_tags(
-            lines, index_start, app_name, build_dir
+            lines, index_start, app_name, dist_dir
         ),
     )
 
 
-def gen_pre_vars(args, build_dir):
+def gen_pre_vars(args, dist_dir):
     def func(lines, index_start):
         upgrade_code = uuid.uuid5(uuid.NAMESPACE_OID, app_name + ".exe")
 
@@ -153,7 +150,7 @@ def gen_pre_vars(args, build_dir):
             f'{indent}<?define ProductLower="{args.app_name.lower()}" ?>\n',
             f'{indent}<?define RegKeyRoot=".$(var.ProductLower)" ?>\n',
             f'{indent}<?define RegKeyInstall="$(var.RegKeyRoot)\Install" ?>\n',
-            f'{indent}<?define BuildDir="{build_dir}" ?>\n',
+            f'{indent}<?define BuildDir="{dist_dir}" ?>\n',
             f'{indent}<?define BuildDate="{g_build_date}" ?>\n',
             "\n",
             f"{indent}<!-- The UpgradeCode must be consistent for each product. ! -->\n"
@@ -278,7 +275,7 @@ def get_folder_size(folder_path):
     return total_size
 
 
-def gen_custom_ARPSYSTEMCOMPONENT_True(args, build_dir):
+def gen_custom_ARPSYSTEMCOMPONENT_True(args, dist_dir):
     def func(lines, index_start):
         indent = g_indent_unit * 5
 
@@ -312,7 +309,7 @@ def gen_custom_ARPSYSTEMCOMPONENT_True(args, build_dir):
             f'{indent}<RegistryValue Type="integer" Name="Language" Value="[ProductLanguage]" />\n'
         )
 
-        estimated_size = get_folder_size(build_dir)
+        estimated_size = get_folder_size(dist_dir)
         lines_new.append(
             f'{indent}<RegistryValue Type="integer" Name="EstimatedSize" Value="{estimated_size}" />\n'
         )
@@ -359,7 +356,7 @@ def gen_custom_ARPSYSTEMCOMPONENT_True(args, build_dir):
     )
 
 
-def gen_custom_ARPSYSTEMCOMPONENT(args, build_dir):
+def gen_custom_ARPSYSTEMCOMPONENT(args, dist_dir):
     try:
         custom_arp = json.loads(args.custom_arp)
         g_arpsystemcomponent.update(custom_arp)
@@ -368,7 +365,7 @@ def gen_custom_ARPSYSTEMCOMPONENT(args, build_dir):
         return False
 
     if args.arp:
-        return gen_custom_ARPSYSTEMCOMPONENT_True(args, build_dir)
+        return gen_custom_ARPSYSTEMCOMPONENT_True(args, dist_dir)
     else:
         return gen_custom_ARPSYSTEMCOMPONENT_False(args)
 
@@ -427,26 +424,21 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     app_name = args.app_name
-    build_dir = (
-        f'../../flutter/build/windows/x64/runner/{"Debug" if args.debug else "Release"}'
-    )
-    if args.github_ci:
-        build_dir = "../../rustdesk"
-    build_dir = Path(sys.argv[0]).parent.joinpath(build_dir).resolve()
+    dist_dir = Path(sys.argv[0]).parent.joinpath(args.dist_dir).resolve()
 
     if not init_global_vars(args):
         sys.exit(-1)
 
-    if not gen_pre_vars(args, build_dir):
+    if not gen_pre_vars(args, dist_dir):
         sys.exit(-1)
 
     if not gen_upgrade_info():
         sys.exit(-1)
 
-    if not gen_custom_ARPSYSTEMCOMPONENT(args, build_dir):
+    if not gen_custom_ARPSYSTEMCOMPONENT(args, dist_dir):
         sys.exit(-1)
 
-    if not gen_auto_component(app_name, build_dir):
+    if not gen_auto_component(app_name, dist_dir):
         sys.exit(-1)
 
     if not gen_custom_dialog_bitmaps():

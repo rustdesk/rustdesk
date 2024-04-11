@@ -22,12 +22,8 @@
 		<!--$ArpStart$-->
 		<!--$ArpEnd$-->
 
-		<Property Id="RUSTDESKNATIVEINSTALL">
-			<RegistrySearch Id="RustDeskNativeInstallSearch" Root="HKCR" Key="$(var.RegKeyRoot)\DefaultIcon" Type="raw" />
+		<Property Id="RUSTDESK_WINDOWS_INSTALLER">
+			<RegistrySearch Id="RustDeskWindowsInstallerFolderSearch" Root="HKLM" Key="Software\Microsoft\Windows\CurrentVersion\Uninstall\$(var.Product)" Name="WindowsInstaller" Type="raw" />
 		</Property>
-		<Property Id="RUSTDESKNATIVEINSTALLFOLDER">
-			<RegistrySearch Id="RustDeskNativeInstallFolderSearch" Root="HKCR" Key="$(var.RegKeyRoot)" Name="INSTALLFOLDER" Type="raw" />
-		</Property>
-
 	</Fragment>
 </Wix>

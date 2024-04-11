@@ -4,3 +4,4 @@ EXPORTS
     CustomActionHello
     RemoveInstallFolder
     TerminateProcesses
+    AddFirewallRules

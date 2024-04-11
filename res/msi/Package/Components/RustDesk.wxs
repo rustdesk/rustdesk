@@ -7,7 +7,7 @@
 		<DirectoryRef Id="INSTALLFOLDER" FileSource="$(var.BuildDir)">
 			<Component Id="RustDesk.exe" Guid="620F0F69-4C17-4320-A619-495E329712A4">
 				<File Id="$(var.Product).exe" Name="$(var.Product).exe" KeyPath="yes" Checksum="yes">
-					<fire:FirewallException Id="RustDeskEx" Name="$(var.Product) Service" Scope="any" IgnoreFailure="yes" />
+					<!--<fire:FirewallException Id="RustDeskEx" Name="$(var.Product) Service" Scope="any" IgnoreFailure="yes" />-->
 				</File>
 				<ServiceInstall Id="ServiceInstaller" Type="ownProcess" Vital="yes" Name="$(var.Product)" DisplayName="!(loc.Service_DisplayName)" Description="!(loc.Service_Description)" Start="auto" Account="LocalSystem" ErrorControl="ignore" Interactive="no" Arguments="--service" />
 				<ServiceControl Id="StartService" Start="install" Stop="both" Remove="uninstall" Name="$(var.Product)" Wait="yes" />
@@ -18,6 +18,8 @@
 		<CustomAction Id="RestartService" DllEntry="WixQuietExec" Execute="deferred" Return="asyncWait" BinaryRef="Wix4UtilCA_$(sys.BUILDARCHSHORT)" />
 
 		<CustomAction Id="RemoveInstallFolder.SetParam" Return="check" Property="RemoveInstallFolder" Value="[INSTALLFOLDER]" />
+		<CustomAction Id="AddFirewallRules.SetParam" Return="check" Property="AddFirewallRules" Value="1[INSTALLFOLDER]$(var.Product).exe" />
+		<CustomAction Id="RemoveFirewallRules.SetParam" Return="check" Property="RemoveFirewallRules" Value="0[INSTALLFOLDER]$(var.Product).exe" />
 		<InstallExecuteSequence>
 
 			<!--The ServiceControl element above handles starting/stopping the server on install/uninstall,
@@ -25,11 +27,17 @@
            that provided the server feature is already installed and not being uninstalled.-->
 
 			<Custom Action="RestartService" Before="InstallFinalize" />
-			
 			<Custom Action="CustomActionHello" Before="InstallFinalize" />
+
+			<!--Workaround of "fire:FirewallException". If Outbound="Yes" or Outbound="true", the following error occurs.-->
+			<!--ExecFirewallExceptions: Error 0x80070057: failed to add app to the authorized apps list-->
+			<Custom Action="AddFirewallRules.SetParam" Before="InstallFinalize" Condition="NOT Installed"/>
+			<Custom Action="AddFirewallRules" After="AddFirewallRules.SetParam"/>
 
 			<Custom Action="RemoveInstallFolder.SetParam" After="RemoveFiles"/>
 			<Custom Action="RemoveInstallFolder" After="RemoveInstallFolder.SetParam"/>
+			<Custom Action="RemoveFirewallRules.SetParam" Before="RemoveFiles"/>
+			<Custom Action="RemoveFirewallRules" After="RemoveFirewallRules.SetParam"/>
 		</InstallExecuteSequence>
 
 		<!-- Shortcuts -->
