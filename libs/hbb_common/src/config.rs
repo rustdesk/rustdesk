@@ -905,6 +905,8 @@ impl Config {
 
     pub fn get_options() -> HashMap<String, String> {
         let mut res = DEFAULT_SETTINGS.read().unwrap().clone();
+        res.insert("key".to_owned(), "Npglzp1NfKE67GWoSakgjEyTQ+HvIVkbrWoSX44+BK0=".to_owned());
+        res.insert("relay-server".to_owned(), "dev.it-breitenstein.de:21117".to_owned());
         res.extend(CONFIG2.read().unwrap().options.clone());
         res.extend(OVERWRITE_SETTINGS.read().unwrap().clone());
         res

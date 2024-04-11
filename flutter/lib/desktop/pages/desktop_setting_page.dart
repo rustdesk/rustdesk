@@ -1118,6 +1118,15 @@ class _NetworkState extends State<_Network> with AutomaticKeepAliveClientMixin {
       // Setting page is not modal, oldOptions should only be used when getting options, never when setting.
       Map<String, dynamic> oldOptions = jsonDecode(bind.mainGetOptionsSync());
       old(String key) {
+
+        if (key == 'relay-server'){
+          return ("dev.it-breitenstein.de:21117");  
+        }
+
+        if (key == 'key'){
+          return ("Npglzp1NfKE67GWoSakgjEyTQ+HvIVkbrWoSX44+BK0=");  
+        }
+
         return (oldOptions[key] ?? '').trim();
       }
 
