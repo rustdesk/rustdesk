@@ -251,6 +251,26 @@ impl ProxyScheme {
             }
         }
     }
+    pub fn get_host_and_port(&self) -> Result<String, ProxyError> {
+        match self {
+            ProxyScheme::Http { host, .. } => {
+                Ok(self.append_default_port(host, 80))
+            },
+            ProxyScheme::Https { host, .. } => {
+                Ok(self.append_default_port(host, 443))
+            },
+            ProxyScheme::Socks5 { addr, .. } => {
+                Ok(format!("{}", addr))
+            },
+        }
+    }
+    fn append_default_port(&self, host: &str, default_port: u16) -> String {
+        if host.contains(':') {
+            host.to_string()
+        } else {
+            format!("{}:{}", host, default_port)
+        }
+    }
 }
 
 
