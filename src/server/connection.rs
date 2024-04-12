@@ -235,7 +235,7 @@ pub struct Connection {
     auto_disconnect_timer: Option<(Instant, u64)>,
     authed_conn_id: Option<self::raii::AuthedConnID>,
     file_remove_log_control: FileRemoveLogControl,
-    #[cfg(feature = "gpucodec")]
+    #[cfg(feature = "vram")]
     supported_encoding_flag: (bool, Option<bool>),
     services_subed: bool,
     delayed_read_dir: Option<(String, bool)>,
@@ -386,7 +386,7 @@ impl Connection {
             auto_disconnect_timer: None,
             authed_conn_id: None,
             file_remove_log_control: FileRemoveLogControl::new(id),
-            #[cfg(feature = "gpucodec")]
+            #[cfg(feature = "vram")]
             supported_encoding_flag: (false, None),
             services_subed: false,
             delayed_read_dir: None,
@@ -691,7 +691,7 @@ impl Connection {
                         }
                     }
                     conn.file_remove_log_control.on_timer().drain(..).map(|x| conn.send_to_cm(x)).count();
-                    #[cfg(feature = "gpucodec")]
+                    #[cfg(feature = "vram")]
                     conn.update_supported_encoding();
                 }
                 _ = test_delay_timer.tick() => {
@@ -3097,9 +3097,9 @@ impl Connection {
             .map(|t| t.0 = Instant::now());
     }
 
-    #[cfg(feature = "gpucodec")]
+    #[cfg(feature = "vram")]
     fn update_supported_encoding(&mut self) {
-        let not_use = Some(scrap::gpucodec::GpuEncoder::not_use());
+        let not_use = Some(scrap::vram::VRamEncoder::not_use());
         if !self.authorized
             || self.supported_encoding_flag.0 && self.supported_encoding_flag.1 == not_use
         {

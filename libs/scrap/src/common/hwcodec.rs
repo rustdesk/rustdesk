@@ -9,19 +9,20 @@ use hbb_common::{
     config::HwCodecConfig,
     log,
     message_proto::{EncodedVideoFrame, EncodedVideoFrames, VideoFrame},
-    ResultType,
+    serde_derive::{Deserialize, Serialize},
+    serde_json, ResultType,
 };
 use hwcodec::{
-    decode::{DecodeContext, DecodeFrame, Decoder},
-    encode::{EncodeContext, EncodeFrame, Encoder},
-    ffmpeg::{CodecInfo, CodecInfos, DataFormat},
-    AVPixelFormat,
-    Quality::{self, *},
-    RateControl::{self, *},
+    common::DataFormat,
+    ffmpeg::AVPixelFormat,
+    ffmpeg_ram::{
+        decode::{DecodeContext, DecodeFrame, Decoder},
+        encode::{EncodeContext, EncodeFrame, Encoder},
+        CodecInfo, CodecInfos,
+        Quality::{self, *},
+        RateControl::{self, *},
+    },
 };
-
-const CFG_KEY_ENCODER: &str = "bestHwEncoders";
-const CFG_KEY_DECODER: &str = "bestHwDecoders";
 
 const DEFAULT_PIXFMT: AVPixelFormat = AVPixelFormat::AV_PIX_FMT_NV12;
 pub const DEFAULT_TIME_BASE: [i32; 2] = [1, 30];
@@ -30,7 +31,7 @@ const DEFAULT_HW_QUALITY: Quality = Quality_Default;
 const DEFAULT_RC: RateControl = RC_DEFAULT;
 
 #[derive(Debug, Clone)]
-pub struct HwEncoderConfig {
+pub struct HwRamEncoderConfig {
     pub name: String,
     pub width: usize,
     pub height: usize,
@@ -38,7 +39,7 @@ pub struct HwEncoderConfig {
     pub keyframe_interval: Option<usize>,
 }
 
-pub struct HwEncoder {
+pub struct HwRamEncoder {
     encoder: Encoder,
     name: String,
     pub format: DataFormat,
@@ -48,13 +49,13 @@ pub struct HwEncoder {
     bitrate: u32, //kbs
 }
 
-impl EncoderApi for HwEncoder {
+impl EncoderApi for HwRamEncoder {
     fn new(cfg: EncoderCfg, _i444: bool) -> ResultType<Self>
     where
         Self: Sized,
     {
         match cfg {
-            EncoderCfg::HW(config) => {
+            EncoderCfg::HWRAM(config) => {
                 let b = Self::convert_quality(config.quality);
                 let base_bitrate = base_bitrate(config.width as _, config.height as _);
                 let mut bitrate = base_bitrate * b / 100;
@@ -85,7 +86,7 @@ impl EncoderApi for HwEncoder {
                     }
                 };
                 match Encoder::new(ctx.clone()) {
-                    Ok(encoder) => Ok(HwEncoder {
+                    Ok(encoder) => Ok(HwRamEncoder {
                         encoder,
                         name: config.name,
                         format,
@@ -95,7 +96,7 @@ impl EncoderApi for HwEncoder {
                         bitrate,
                     }),
                     Err(_) => {
-                        HwCodecConfig::clear();
+                        HwCodecConfig::clear_ram();
                         Err(anyhow!(format!("Failed to create encoder")))
                     }
                 }
@@ -126,6 +127,7 @@ impl EncoderApi for HwEncoder {
             match self.format {
                 DataFormat::H264 => vf.set_h264s(frames),
                 DataFormat::H265 => vf.set_h265s(frames),
+                _ => bail!("unsupported format: {:?}", self.format),
             }
             Ok(vf)
         } else {
@@ -160,7 +162,7 @@ impl EncoderApi for HwEncoder {
         }
     }
 
-    #[cfg(feature = "gpucodec")]
+    #[cfg(feature = "vram")]
     fn input_texture(&self) -> bool {
         false
     }
@@ -184,9 +186,9 @@ impl EncoderApi for HwEncoder {
     }
 }
 
-impl HwEncoder {
+impl HwRamEncoder {
     pub fn best() -> CodecInfos {
-        get_config(CFG_KEY_ENCODER).unwrap_or(CodecInfos {
+        get_config().map(|c| c.e).unwrap_or(CodecInfos {
             h264: None,
             h265: None,
         })
@@ -214,20 +216,14 @@ impl HwEncoder {
     }
 }
 
-pub struct HwDecoder {
+pub struct HwRamDecoder {
     decoder: Decoder,
     pub info: CodecInfo,
 }
 
-#[derive(Default)]
-pub struct HwDecoders {
-    pub h264: Option<HwDecoder>,
-    pub h265: Option<HwDecoder>,
-}
-
-impl HwDecoder {
+impl HwRamDecoder {
     pub fn best() -> CodecInfos {
-        get_config(CFG_KEY_DECODER).unwrap_or(CodecInfos {
+        get_config().map(|c| c.d).unwrap_or(CodecInfos {
             h264: None,
             h265: None,
         })
@@ -235,7 +231,7 @@ impl HwDecoder {
 
     pub fn new(format: CodecFormat) -> ResultType<Self> {
         log::info!("try create {format:?} ram decoder");
-        let best = HwDecoder::best();
+        let best = HwRamDecoder::best();
         let info = match format {
             CodecFormat::H264 => {
                 if let Some(info) = best.h264 {
@@ -259,26 +255,26 @@ impl HwDecoder {
             thread_count: codec_thread_num(16) as _,
         };
         match Decoder::new(ctx) {
-            Ok(decoder) => Ok(HwDecoder { decoder, info }),
+            Ok(decoder) => Ok(HwRamDecoder { decoder, info }),
             Err(_) => {
-                HwCodecConfig::clear();
+                HwCodecConfig::clear_ram();
                 Err(anyhow!(format!("Failed to create decoder")))
             }
         }
     }
-    pub fn decode(&mut self, data: &[u8]) -> ResultType<Vec<HwDecoderImage>> {
+    pub fn decode(&mut self, data: &[u8]) -> ResultType<Vec<HwRamDecoderImage>> {
         match self.decoder.decode(data) {
-            Ok(v) => Ok(v.iter().map(|f| HwDecoderImage { frame: f }).collect()),
+            Ok(v) => Ok(v.iter().map(|f| HwRamDecoderImage { frame: f }).collect()),
             Err(e) => Err(anyhow!(e)),
         }
     }
 }
 
-pub struct HwDecoderImage<'a> {
+pub struct HwRamDecoderImage<'a> {
     frame: &'a DecodeFrame,
 }
 
-impl HwDecoderImage<'_> {
+impl HwRamDecoderImage<'_> {
     // rgb [in/out] fmt and stride must be set in ImageRgb
     pub fn to_fmt(&self, rgb: &mut ImageRgb, i420: &mut Vec<u8>) -> ResultType<()> {
         let frame = self.frame;
@@ -332,23 +328,24 @@ impl HwDecoderImage<'_> {
     }
 }
 
-fn get_config(k: &str) -> ResultType<CodecInfos> {
-    let v = HwCodecConfig::load()
-        .options
-        .get(k)
-        .unwrap_or(&"".to_owned())
-        .to_owned();
-    match CodecInfos::deserialize(&v) {
+#[derive(Debug, Eq, PartialEq, Clone, Serialize, Deserialize)]
+struct Available {
+    e: CodecInfos,
+    d: CodecInfos,
+}
+
+fn get_config() -> ResultType<Available> {
+    match serde_json::from_str(&HwCodecConfig::load().ram) {
         Ok(v) => Ok(v),
-        Err(_) => Err(anyhow!("Failed to get config:{}", k)),
+        Err(e) => Err(anyhow!("Failed to get config:{e:?}")),
     }
 }
 
 pub fn check_available_hwcodec() {
     let ctx = EncodeContext {
         name: String::from(""),
-        width: 1920,
-        height: 1080,
+        width: 1280,
+        height: 720,
         pixfmt: DEFAULT_PIXFMT,
         align: HW_STRIDE_ALIGN as _,
         bitrate: 0,
@@ -358,27 +355,19 @@ pub fn check_available_hwcodec() {
         rc: DEFAULT_RC,
         thread_count: 4,
     };
-    let encoders = CodecInfo::score(Encoder::available_encoders(ctx));
-    let decoders = CodecInfo::score(Decoder::available_decoders());
-
-    if let Ok(old_encoders) = get_config(CFG_KEY_ENCODER) {
-        if let Ok(old_decoders) = get_config(CFG_KEY_DECODER) {
-            if encoders == old_encoders && decoders == old_decoders {
-                return;
-            }
-        }
+    #[cfg(feature = "vram")]
+    let vram = crate::vram::check_available_vram();
+    #[cfg(not(feature = "vram"))]
+    let vram = "".to_owned();
+    let encoders = CodecInfo::score(Encoder::available_encoders(ctx, Some(vram.clone())));
+    let decoders = CodecInfo::score(Decoder::available_decoders(Some(vram.clone())));
+    let ram = Available {
+        e: encoders,
+        d: decoders,
+    };
+    if let Ok(ram) = serde_json::to_string_pretty(&ram) {
+        HwCodecConfig { ram, vram }.store();
     }
-
-    if let Ok(encoders) = encoders.serialize() {
-        if let Ok(decoders) = decoders.serialize() {
-            let mut config = HwCodecConfig::load();
-            config.options.insert(CFG_KEY_ENCODER.to_owned(), encoders);
-            config.options.insert(CFG_KEY_DECODER.to_owned(), decoders);
-            config.store();
-            return;
-        }
-    }
-    log::error!("Failed to serialize codec info");
 }
 
 pub fn hwcodec_new_check_process() {

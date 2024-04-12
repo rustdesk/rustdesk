@@ -268,7 +268,7 @@ impl EncoderApi for AomEncoder {
         self.yuvfmt.clone()
     }
 
-    #[cfg(feature = "gpucodec")]
+    #[cfg(feature = "vram")]
     fn input_texture(&self) -> bool {
         false
     }

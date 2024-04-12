@@ -1038,9 +1038,9 @@ pub struct VideoHandler {
 impl VideoHandler {
     /// Create a new video handler.
     pub fn new(format: CodecFormat, _display: usize) -> Self {
-        #[cfg(all(feature = "gpucodec", feature = "flutter"))]
+        #[cfg(all(feature = "vram", feature = "flutter"))]
         let luid = crate::flutter::get_adapter_luid();
-        #[cfg(not(all(feature = "gpucodec", feature = "flutter")))]
+        #[cfg(not(all(feature = "vram", feature = "flutter")))]
         let luid = Default::default();
         log::info!("new video handler for display #{_display}, format: {format:?}, luid: {luid:?}");
         VideoHandler {
@@ -1097,9 +1097,9 @@ impl VideoHandler {
 
     /// Reset the decoder, change format if it is Some
     pub fn reset(&mut self, format: Option<CodecFormat>) {
-        #[cfg(all(feature = "flutter", feature = "gpucodec"))]
+        #[cfg(all(feature = "flutter", feature = "vram"))]
         let luid = crate::flutter::get_adapter_luid();
-        #[cfg(not(all(feature = "flutter", feature = "gpucodec")))]
+        #[cfg(not(all(feature = "flutter", feature = "vram")))]
         let luid = None;
         let format = format.unwrap_or(self.decoder.format());
         self.decoder = Decoder::new(format, luid);

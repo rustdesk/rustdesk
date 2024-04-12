@@ -10,7 +10,7 @@ import './platform_model.dart';
 import 'package:texture_rgba_renderer/texture_rgba_renderer.dart'
     if (dart.library.html) 'package:flutter_hbb/web/texture_rgba_renderer.dart';
 
-// Feature flutter_texture_render need to be enabled if feature gpucodec is enabled.
+// Feature flutter_texture_render need to be enabled if feature vram is enabled.
 final useTextureRender = !isWeb &&
     (bind.mainHasPixelbufferTextureRender() || bind.mainHasGpuTextureRender());
 
