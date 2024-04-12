@@ -5,3 +5,8 @@ EXPORTS
     RemoveInstallFolder
     TerminateProcesses
     AddFirewallRules
+    SetPropertyIsServiceRunning
+    TryStopDeleteService
+    CreateStartService
+    TryDeleteStartupShortcut
+    SetPropertyFromConfig

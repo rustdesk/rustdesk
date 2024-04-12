@@ -1,10 +1,10 @@
 ﻿<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
-  <Fragment>
+	<Fragment>
 
-    <Property Id="UpgradesFile" Value="1" />
+		<Property Id="UpgradesFile" Value="1" />
 
-    <!--$UpgradeStart$-->
-    <!--$UpgradeEnd$-->
+		<!--$UpgradeStart$-->
+		<!--$UpgradeEnd$-->
 
-  </Fragment>
+	</Fragment>
 </Wix>

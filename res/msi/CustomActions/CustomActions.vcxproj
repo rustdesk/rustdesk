@@ -54,6 +54,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="Common.h" />
     <ClInclude Include="framework.h" />
     <ClInclude Include="pch.h" />
   </ItemGroup>
@@ -64,6 +65,8 @@
     <ClCompile Include="pch.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Create</PrecompiledHeader>
     </ClCompile>
+    <ClCompile Include="ReadConfig.cpp" />
+    <ClCompile Include="ServiceUtils.cpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include="CustomActions.def" />

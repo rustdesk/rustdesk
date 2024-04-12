@@ -39,5 +39,6 @@ Run `msiexec /i package.msi /l*v install.log` to record the log.
 
 ## Refs
 
+1. [windows-installer-portal](https://learn.microsoft.com/en-us/windows/win32/Msi/windows-installer-portal)
 1. [wxs](https://wixtoolset.org/docs/schema/wxs/)
 1. [wxs github](https://github.com/wixtoolset/wix)

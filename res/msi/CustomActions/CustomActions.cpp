@@ -8,6 +8,8 @@
 #include <netfw.h>
 #include <shlwapi.h>
 
+#include "./Common.h"
+
 #pragma comment(lib, "Shlwapi.lib")
 
 UINT __stdcall CustomActionHello(
@@ -271,7 +273,6 @@ void RemoveFirewallRuleCmdline(LPWSTR exeName)
     }
 }
 
-bool AddFirewallRule(bool add, LPWSTR exeName, LPWSTR exeFile);
 UINT __stdcall AddFirewallRules(
     __in MSIHANDLE hInstall)
 {
@@ -320,6 +321,223 @@ LExit:
         ReleaseStr(pwzData);
     }
 
+    er = SUCCEEDED(hr) ? ERROR_SUCCESS : ERROR_INSTALL_FAILURE;
+    return WcaFinalize(er);
+}
+
+UINT __stdcall SetPropertyIsServiceRunning(__in MSIHANDLE hInstall)
+{
+    HRESULT hr = S_OK;
+    DWORD er = ERROR_SUCCESS;
+
+    wchar_t szAppName[500] = { 0 };
+    DWORD cchAppName = sizeof(szAppName) / sizeof(szAppName[0]);
+    wchar_t szPropertyName[500] = { 0 };
+    DWORD cchPropertyName = sizeof(szPropertyName) / sizeof(szPropertyName[0]);
+    bool isRunning = false;
+
+    hr = WcaInitialize(hInstall, "SetPropertyIsServiceRunning");
+    ExitOnFailure(hr, "Failed to initialize");
+
+    MsiGetPropertyW(hInstall, L"AppName", szAppName, &cchAppName);
+    WcaLog(LOGMSG_STANDARD, "Try query service of : \"%ls\"", szAppName);
+
+    MsiGetPropertyW(hInstall, L"PropertyName", szPropertyName, &cchPropertyName);
+    WcaLog(LOGMSG_STANDARD, "Try set is service running, property name : \"%ls\"", szPropertyName);
+
+    isRunning = IsServiceRunningW(szAppName);
+    MsiSetPropertyW(hInstall, szPropertyName, isRunning ? L"'N'" : L"'Y'");
+
+LExit:
+    er = SUCCEEDED(hr) ? ERROR_SUCCESS : ERROR_INSTALL_FAILURE;
+    return WcaFinalize(er);
+}
+
+UINT __stdcall CreateStartService(__in MSIHANDLE hInstall)
+{
+    HRESULT hr = S_OK;
+    DWORD er = ERROR_SUCCESS;
+
+    LPWSTR svcParams = NULL;
+    LPWSTR pwz = NULL;
+    LPWSTR pwzData = NULL;
+    LPWSTR svcName = NULL;
+    LPWSTR svcBinary = NULL;
+    wchar_t szSvcDisplayName[500] = { 0 };
+    DWORD cchSvcDisplayName = sizeof(szSvcDisplayName) / sizeof(szSvcDisplayName[0]);
+
+    hr = WcaInitialize(hInstall, "CreateStartService");
+    ExitOnFailure(hr, "Failed to initialize");
+
+    hr = WcaGetProperty(L"CustomActionData", &pwzData);
+    ExitOnFailure(hr, "failed to get CustomActionData");
+
+    pwz = pwzData;
+    hr = WcaReadStringFromCaData(&pwz, &svcParams);
+    ExitOnFailure(hr, "failed to read database key from custom action data: %ls", pwz);
+
+    WcaLog(LOGMSG_STANDARD, "Try create start service : %ls", svcParams);
+
+    svcName = svcParams;
+    svcBinary = wcschr(svcParams, L';');
+    if (svcBinary == NULL) {
+        WcaLog(LOGMSG_STANDARD, "Failed to find binary : %ls", svcParams);
+        goto LExit;
+    }
+    svcBinary[0] = L'\0';
+    svcBinary += 1;
+
+    hr = StringCchPrintfW(szSvcDisplayName, cchSvcDisplayName, L"%ls Service", svcName);
+    ExitOnFailure(hr, "Failed to compose a resource identifier string");
+    if (MyCreateServiceW(svcName, szSvcDisplayName, svcBinary)) {
+        WcaLog(LOGMSG_STANDARD, "Service \"%ls\" is created.", svcName);
+        if (MyStartServiceW(svcName)) {
+            WcaLog(LOGMSG_STANDARD, "Service \"%ls\" is started.", svcName);
+        }
+        else {
+            WcaLog(LOGMSG_STANDARD, "Failed to start service: \"%ls\"", svcName);
+        }
+    }
+    else {
+        WcaLog(LOGMSG_STANDARD, "Failed to create service: \"%ls\"", svcName);
+    }
+
+LExit:
+    if (pwzData) {
+        ReleaseStr(pwzData);
+    }
+
+    er = SUCCEEDED(hr) ? ERROR_SUCCESS : ERROR_INSTALL_FAILURE;
+    return WcaFinalize(er);
+}
+
+UINT __stdcall TryStopDeleteService(__in MSIHANDLE hInstall)
+{
+    HRESULT hr = S_OK;
+    DWORD er = ERROR_SUCCESS;
+
+    int nResult = 0;
+    LPWSTR svcName = NULL;
+    LPWSTR pwz = NULL;
+    LPWSTR pwzData = NULL;
+    wchar_t szExeFile[500] = { 0 };
+    DWORD cchExeFile = sizeof(szExeFile) / sizeof(szExeFile[0]);
+
+    hr = WcaInitialize(hInstall, "TryStopDeleteService");
+    ExitOnFailure(hr, "Failed to initialize");
+
+    hr = WcaGetProperty(L"CustomActionData", &pwzData);
+    ExitOnFailure(hr, "failed to get CustomActionData");
+
+    pwz = pwzData;
+    hr = WcaReadStringFromCaData(&pwz, &svcName);
+    ExitOnFailure(hr, "failed to read database key from custom action data: %ls", pwz);
+    WcaLog(LOGMSG_STANDARD, "Try stop and delete service : %ls", svcName);
+
+    if (MyStopServiceW(svcName)) {
+        for (int i = 0; i < 10; i++) {
+            if (IsServiceRunningW(svcName)) {
+                Sleep(100);
+            }
+            else {
+                break;
+            }
+        }
+        WcaLog(LOGMSG_STANDARD, "Service \"%ls\" is stopped", svcName);
+    }
+    else {
+        WcaLog(LOGMSG_STANDARD, "Failed to stop service: \"%ls\"", svcName);
+    }
+
+    if (MyDeleteServiceW(svcName)) {
+        WcaLog(LOGMSG_STANDARD, "Service \"%ls\" is deleted", svcName);
+    }
+    else {
+        WcaLog(LOGMSG_STANDARD, "Failed to delete service: \"%ls\"", svcName);
+    }
+
+    // It's really strange that we need sleep here.
+    // But the upgrading may be stucked at "copying new files" because the file is in using.
+    // Steps to reproduce: Install -> stop service in tray --> start service -> upgrade
+    // Sleep(300);
+
+    // Or we can terminate the process
+    hr = StringCchPrintfW(szExeFile, cchExeFile, L"%ls.exe", svcName);
+    ExitOnFailure(hr, "Failed to compose a resource identifier string");
+    TerminateProcessesByNameW(szExeFile, L"--not-in-use");
+
+LExit:
+    if (pwzData) {
+        ReleaseStr(pwzData);
+    }
+
+    er = SUCCEEDED(hr) ? ERROR_SUCCESS : ERROR_INSTALL_FAILURE;
+    return WcaFinalize(er);
+}
+
+UINT __stdcall TryDeleteStartupShortcut(__in MSIHANDLE hInstall)
+{
+    HRESULT hr = S_OK;
+    DWORD er = ERROR_SUCCESS;
+
+    wchar_t szShortcut[500] = { 0 };
+    DWORD cchShortcut = sizeof(szShortcut) / sizeof(szShortcut[0]);
+    wchar_t szStartupDir[500] = { 0 };
+    DWORD cchStartupDir = sizeof(szStartupDir) / sizeof(szStartupDir[0]);
+    WCHAR pwszTemp[1024] = L"";
+
+    hr = WcaInitialize(hInstall, "DeleteStartupShortcut");
+    ExitOnFailure(hr, "Failed to initialize");
+
+    MsiGetPropertyW(hInstall, L"StartupFolder", szStartupDir, &cchStartupDir);
+
+    MsiGetPropertyW(hInstall, L"ShortcutName", szShortcut, &cchShortcut);
+    WcaLog(LOGMSG_STANDARD, "Try delete startup shortcut of : \"%ls\"", szShortcut);
+
+    hr = StringCchPrintfW(pwszTemp, 1024, L"%ls%ls.lnk", szStartupDir, szShortcut);
+    ExitOnFailure(hr, "Failed to compose a resource identifier string");
+
+    if (DeleteFile(pwszTemp)) {
+        WcaLog(LOGMSG_STANDARD, "Failed to delete startup shortcut of : \"%ls\"", pwszTemp);
+    }
+    else {
+        WcaLog(LOGMSG_STANDARD, "Startup shortcut is deleted : \"%ls\"", pwszTemp);
+    }
+
+LExit:
+    er = SUCCEEDED(hr) ? ERROR_SUCCESS : ERROR_INSTALL_FAILURE;
+    return WcaFinalize(er);
+}
+
+UINT __stdcall SetPropertyFromConfig(__in MSIHANDLE hInstall)
+{
+    HRESULT hr = S_OK;
+    DWORD er = ERROR_SUCCESS;
+
+    wchar_t szConfigFile[1024] = { 0 };
+    DWORD cchConfigFile = sizeof(szConfigFile) / sizeof(szConfigFile[0]);
+    wchar_t szConfigKey[500] = { 0 };
+    DWORD cchConfigKey = sizeof(szConfigKey) / sizeof(szConfigKey[0]);
+    wchar_t szPropertyName[500] = { 0 };
+    DWORD cchPropertyName = sizeof(szPropertyName) / sizeof(szPropertyName[0]);
+    std::wstring configValue;
+
+    hr = WcaInitialize(hInstall, "SetPropertyFromConfig");
+    ExitOnFailure(hr, "Failed to initialize");
+
+    MsiGetPropertyW(hInstall, L"ConfigFile", szConfigFile, &cchConfigFile);
+    WcaLog(LOGMSG_STANDARD, "Try read config file of : \"%ls\"", szConfigFile);
+
+    MsiGetPropertyW(hInstall, L"ConfigKey", szConfigKey, &cchConfigKey);
+    WcaLog(LOGMSG_STANDARD, "Try read configuration, config key : \"%ls\"", szConfigKey);
+
+    MsiGetPropertyW(hInstall, L"PropertyName", szPropertyName, &cchPropertyName);
+    WcaLog(LOGMSG_STANDARD, "Try read configuration, property name : \"%ls\"", szPropertyName);
+
+    configValue = ReadConfig(szConfigFile, szConfigKey);
+    MsiSetPropertyW(hInstall, szPropertyName, configValue.c_str());
+
+LExit:
     er = SUCCEEDED(hr) ? ERROR_SUCCESS : ERROR_INSTALL_FAILURE;
     return WcaFinalize(er);
 }

@@ -9,35 +9,67 @@
 				<File Id="$(var.Product).exe" Name="$(var.Product).exe" KeyPath="yes" Checksum="yes">
 					<!--<fire:FirewallException Id="RustDeskEx" Name="$(var.Product) Service" Scope="any" IgnoreFailure="yes" />-->
 				</File>
-				<ServiceInstall Id="ServiceInstaller" Type="ownProcess" Vital="yes" Name="$(var.Product)" DisplayName="!(loc.Service_DisplayName)" Description="!(loc.Service_Description)" Start="auto" Account="LocalSystem" ErrorControl="ignore" Interactive="no" Arguments="--service" />
-				<ServiceControl Id="StartService" Start="install" Stop="both" Remove="uninstall" Name="$(var.Product)" Wait="yes" />
 			</Component>
 		</DirectoryRef>
-
-		<SetProperty Id="RestartService" Value="&quot;net&quot; start $(var.Product)" Before="RestartService" Sequence="execute" />
-		<CustomAction Id="RestartService" DllEntry="WixQuietExec" Execute="deferred" Return="asyncWait" BinaryRef="Wix4UtilCA_$(sys.BUILDARCHSHORT)" />
 
 		<CustomAction Id="RemoveInstallFolder.SetParam" Return="check" Property="RemoveInstallFolder" Value="[INSTALLFOLDER]" />
 		<CustomAction Id="AddFirewallRules.SetParam" Return="check" Property="AddFirewallRules" Value="1[INSTALLFOLDER]$(var.Product).exe" />
 		<CustomAction Id="RemoveFirewallRules.SetParam" Return="check" Property="RemoveFirewallRules" Value="0[INSTALLFOLDER]$(var.Product).exe" />
+		<CustomAction Id="CreateStartService.SetParam" Return="check" Property="CreateStartService" Value="$(var.Product);&quot;[INSTALLFOLDER]$(var.Product).exe&quot; --service" />
+		<CustomAction Id="TryStopDeleteService.SetParam" Return="check" Property="TryStopDeleteService" Value="$(var.Product)" />
+		
+		<CustomAction Id="LaunchApp" ExeCommand="" Return="asyncNoWait" FileRef="RustDesk.exe" />
+		<CustomAction Id="LaunchAppTray" ExeCommand=" --tray" Return="asyncNoWait" FileRef="RustDesk.exe" />
+		<Property Id="TerminateProcesses" Value="RustDeskTest.exe" />
+		<CustomAction Id="TerminateProcesses.SetParam" Return="check" Property="TerminateProcesses" Value="$(var.Product).exe" />
+		<CustomAction Id="TerminateBrokers.SetParam" Return="check" Property="TerminateProcesses" Value="RuntimeBroker_rustdesk.exe" />
+		<CustomAction Id="SetPropertyIsServiceRunning.SetParam.AppName" Return="check" Property="AppName" Value="$(var.Product)" />
+		<CustomAction Id="SetPropertyIsServiceRunning.SetParam.PropertyName" Return="check" Property="PropertyName" Value="STOP_SERVICE" />
+		<CustomAction Id="SetPropertyServiceStop.SetParam.ConfigFile" Return="check" Property="ConfigFile" Value="[AppDataFolder]rustdesk\config\rustdesk2.toml" />
+		<CustomAction Id="SetPropertyServiceStop.SetParam.ConfigKey" Return="check" Property="ConfigKey" Value="stop-service" />
+		<CustomAction Id="SetPropertyServiceStop.SetParam.PropertyName" Return="check" Property="PropertyName" Value="STOP_SERVICE" />
+		<CustomAction Id="TryDeleteStartupShortcut.SetParam" Return="check" Property="ShortcutName" Value="$(var.Product) Tray" />
 		<InstallExecuteSequence>
 
-			<!--The ServiceControl element above handles starting/stopping the server on install/uninstall,
-           however it also needs to be restarted after a modify or repair install. This action does
-           that provided the server feature is already installed and not being uninstalled.-->
+			<Custom Action="SetPropertyIsServiceRunning" After="InstallInitialize" Condition="Installed" />
+			<Custom Action="SetPropertyIsServiceRunning.SetParam.AppName" Before="SetPropertyIsServiceRunning" Condition="Installed" />
+			<Custom Action="SetPropertyIsServiceRunning.SetParam.PropertyName" Before="SetPropertyIsServiceRunning" Condition="Installed" />
 
-			<Custom Action="RestartService" Before="InstallFinalize" />
+			<Custom Action="SetPropertyServiceStop" After="InstallInitialize" Condition="NOT Installed" />
+			<Custom Action="SetPropertyServiceStop.SetParam.ConfigFile" Before="SetPropertyServiceStop" Condition="NOT Installed" />
+			<Custom Action="SetPropertyServiceStop.SetParam.ConfigKey" Before="SetPropertyServiceStop" Condition="NOT Installed" />
+			<Custom Action="SetPropertyServiceStop.SetParam.PropertyName" Before="SetPropertyServiceStop" Condition="NOT Installed" />
+			
+			<Custom Action="CreateStartService" Before="InstallFinalize" Condition="NOT STOP_SERVICE=&quot;&apos;Y&apos;&quot;" />
+			<Custom Action="CreateStartService.SetParam" Before="CreateStartService" Condition="NOT STOP_SERVICE=&quot;&apos;Y&apos;&quot;" />
+
 			<Custom Action="CustomActionHello" Before="InstallFinalize" />
+
+			<!--Shortcut is in InstallValidate section. So we just let it be created, then try delete if stopping service.-->
+			<Custom Action="TryDeleteStartupShortcut" After="InstallFinalize" Condition="STOP_SERVICE=&quot;&apos;Y&apos;&quot;" />
+			<Custom Action="TryDeleteStartupShortcut.SetParam" Before="SetPropertyIsServiceRunning" Condition="STOP_SERVICE=&quot;&apos;Y&apos;&quot;" />
+
+			<!-- Launch ClientLauncher if installing or already installed and not uninstalling -->
+			<Custom Action="LaunchApp" After="InstallFinalize" />
+			<Custom Action="LaunchAppTray" After="InstallFinalize" Condition="NOT STOP_SERVICE=&quot;&apos;Y&apos;&quot;"/>
 
 			<!--Workaround of "fire:FirewallException". If Outbound="Yes" or Outbound="true", the following error occurs.-->
 			<!--ExecFirewallExceptions: Error 0x80070057: failed to add app to the authorized apps list-->
-			<Custom Action="AddFirewallRules.SetParam" Before="InstallFinalize" Condition="NOT Installed"/>
-			<Custom Action="AddFirewallRules" After="AddFirewallRules.SetParam"/>
+			<Custom Action="AddFirewallRules" Before="InstallFinalize"/>
+			<Custom Action="AddFirewallRules.SetParam" Before="AddFirewallRules" Condition="NOT Installed"/>
 
-			<Custom Action="RemoveInstallFolder.SetParam" After="RemoveFiles" Condition="Installed AND UPGRADINGPRODUCTCODE" />
-			<Custom Action="RemoveInstallFolder" After="RemoveInstallFolder.SetParam"/>
-			<Custom Action="RemoveFirewallRules.SetParam" Before="RemoveFiles"/>
-			<Custom Action="RemoveFirewallRules" After="RemoveFirewallRules.SetParam"/>
+			<Custom Action="RemoveInstallFolder" Before="RemoveFiles" Condition="Installed AND NOT UPGRADINGPRODUCTCODE AND REMOVE"/>
+			<Custom Action="RemoveInstallFolder.SetParam" Before="RemoveInstallFolder" Condition="Installed AND NOT UPGRADINGPRODUCTCODE AND REMOVE"/>
+			<Custom Action="TryStopDeleteService" Before="RemoveInstallFolder.SetParam" />
+			<Custom Action="TryStopDeleteService.SetParam" Before="TryStopDeleteService" />
+
+			<Custom Action="RemoveFirewallRules" Before="RemoveFiles"/>
+			<Custom Action="RemoveFirewallRules.SetParam" Before="RemoveFirewallRules"/>
+
+			<Custom Action="TerminateProcesses" Before="RemoveFiles"/>
+			<Custom Action="TerminateProcesses.SetParam" Before="TerminateProcesses"/>
+			<Custom Action="TerminateBrokers" Before="RemoveFiles"/>
+			<Custom Action="TerminateBrokers.SetParam" Before="TerminateBrokers"/>
 		</InstallExecuteSequence>
 
 		<!-- Shortcuts -->
@@ -58,11 +90,6 @@
 				<RegistryValue Root="HKCU" Key="Software\$(var.Product)" Name="App.StartMenu.Shortcut" Type="string" Value="1" KeyPath="yes" />
 			</Component>
 
-			<Component Id="App.StartMenu.ShortcutTray" Guid="9362C316-40BB-41C1-859C-08182AA47E8D" Condition="STARTMENUSHORTCUTS = 1">
-				<Shortcut Id="App.StartMenu.ShortcutTray" Name="!(loc.SC_Client_Tray)" Description="!(loc.SC_Client_Tray_Desc)" Target="[!RustDesk.exe]" Arguments="--tray" Icon="AppIcon" WorkingDirectory="INSTALLFOLDER" />
-				<RegistryValue Root="HKCU" Key="Software\$(var.Product)" Name="App.StartMenu.ShortcutTray" Type="string" Value="1" KeyPath="yes" />
-			</Component>
-
 			<Component Id="App.StartMenu.ShortcutUninstall" Guid="E100D7F8-D607-4513-28DA-2C95E5EA698E" Condition="STARTMENUSHORTCUTS = 1">
 				<Shortcut Id="App.StartMenu.ShortcutUninstall" Name="!(loc.SC_Uninstall)" Description="!(loc.SC_Uninstall_Desc)" Target="[System6432Folder]msiexec.exe" Arguments="/x [ProductCode]" Icon="AppIcon" />
 				<RegistryValue Root="HKCU" Key="Software\$(var.Product)" Name="App.StartMenu.ShortcutUninstall" Type="string" Value="1" KeyPath="yes" />
@@ -72,6 +99,12 @@
 			<Component Id="App.Desktop.Shortcut" Guid="CA8FB7AA-17F7-4E36-A58A-5A016A303709" Condition="DESKTOPSHORTCUTS = 1">
 				<Shortcut Id="App.Desktop.Shortcut" Name="!(loc.SC_Client)" Description="!(loc.SC_Client_Desc)" Target="[!RustDesk.exe]" Icon="AppIcon" WorkingDirectory="INSTALLFOLDER" />
 				<RegistryValue Root="HKCU" Key="Software\$(var.Product)" Name="App.Desktop.Shortcut" Type="string" Value="1" KeyPath="yes" />
+			</Component>
+		</StandardDirectory>
+		<StandardDirectory Id="StartupFolder">
+			<Component Id="App.StartupFolder.ShortcutTray" Guid="B1D1E2BB-E53E-E159-DB7C-744D5C726A8C" Condition="STARTUPSHORTCUTS = 1">
+				<Shortcut Id="App.StartupFolder.ShortcutTray" Name="!(loc.SC_Client_Tray)" Description="!(loc.SC_Client_Tray_Desc)" Target="[!RustDesk.exe]" Arguments="--tray" Icon="AppIcon" WorkingDirectory="INSTALLFOLDER" />
+				<RegistryValue Root="HKCU" Key="Software\$(var.Product)" Name="App.StartupFolder.ShortcutTray" Type="string" Value="1" KeyPath="yes" />
 			</Component>
 		</StandardDirectory>
 
@@ -86,8 +119,8 @@
 			<ComponentRef Id="App.Desktop.Shortcut" />
 			<!--<ComponentRef Id="App.UninstallShortcut" />-->
 			<ComponentRef Id="App.StartMenu.Shortcut" />
-			<ComponentRef Id="App.StartMenu.ShortcutTray" />
 			<ComponentRef Id="App.StartMenu.ShortcutUninstall" />
+			<ComponentRef Id="App.StartupFolder.ShortcutTray" />
 
 			<!--$AutoComonentStart$-->
 			<!--$AutoComponentEnd$-->
