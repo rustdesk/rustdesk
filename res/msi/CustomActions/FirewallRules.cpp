@@ -272,26 +272,9 @@ HRESULT    AddFirewallRuleWithEdgeTraversal(
         goto Cleanup;
     }
 
-    if (in) {
-        CurrentProfilesBitMask = NET_FW_PROFILE2_ALL;
-    }
-    else {
-        // Retrieve Current Profiles bitmask
-        hr = pNetFwPolicy2->get_CurrentProfileTypes(&CurrentProfilesBitMask);
-        if (FAILED(hr))
-        {
-            printf("get_CurrentProfileTypes failed: 0x%08lx\n", hr);
-            goto Cleanup;
-        }
-
-        // When possible we avoid adding firewall rules to the Public profile.
-        // If Public is currently active and it is not the only active profile, we remove it from the bitmask
-        if ((CurrentProfilesBitMask & NET_FW_PROFILE2_PUBLIC) &&
-            (CurrentProfilesBitMask != NET_FW_PROFILE2_PUBLIC))
-        {
-            CurrentProfilesBitMask ^= NET_FW_PROFILE2_PUBLIC;
-        }
-    }
+    // If you want the rule to avoid public, you can refer to
+    // https://learn.microsoft.com/en-us/previous-versions/windows/desktop/ics/c-adding-an-outbound-rule
+    CurrentProfilesBitMask = NET_FW_PROFILE2_ALL;
 
     hr = pNetFwRule->put_Direction(in ? NET_FW_RULE_DIR_IN : NET_FW_RULE_DIR_OUT);
     if (FAILED(hr))
