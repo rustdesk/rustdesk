@@ -58,6 +58,8 @@
 			<Custom Action="AddFirewallRules" Before="InstallFinalize"/>
 			<Custom Action="AddFirewallRules.SetParam" Before="AddFirewallRules" Condition="NOT Installed"/>
 
+			<Custom Action="AddRegSoftwareSASGeneration" Before="InstallFinalize" />
+
 			<Custom Action="RemoveInstallFolder" Before="RemoveFiles" Condition="Installed AND NOT UPGRADINGPRODUCTCODE AND REMOVE"/>
 			<Custom Action="RemoveInstallFolder.SetParam" Before="RemoveInstallFolder" Condition="Installed AND NOT UPGRADINGPRODUCTCODE AND REMOVE"/>
 			<Custom Action="TryStopDeleteService" Before="RemoveInstallFolder.SetParam" />

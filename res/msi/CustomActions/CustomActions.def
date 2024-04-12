@@ -10,3 +10,4 @@ EXPORTS
     CreateStartService
     TryDeleteStartupShortcut
     SetPropertyFromConfig
+    AddRegSoftwareSASGeneration
