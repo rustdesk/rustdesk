@@ -2785,9 +2785,11 @@ Future<List<Rect>> getScreenRectList() async {
 
 openMonitorInTheSameTab(int i, FFI ffi, PeerInfo pi,
     {bool updateCursorPos = true}) {
-  final displays = i == kAllDisplayValue
-      ? List.generate(pi.displays.length, (index) => index)
-      : [i];
+  final isAllDisplay = i == kAllDisplayValue;
+  bind.sessionSetShowAllDisplays(
+      sessionId: ffi.sessionId, value: isAllDisplay ? 'Y' : '');
+  final displays =
+      isAllDisplay ? List.generate(pi.displays.length, (index) => index) : [i];
   bind.sessionSwitchDisplay(
     isDesktop: isDesktop,
     sessionId: ffi.sessionId,

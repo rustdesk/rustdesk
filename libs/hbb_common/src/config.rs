@@ -307,6 +307,12 @@ pub struct PeerConfig {
     )]
     pub displays_as_individual_windows: String,
     #[serde(
+        default = "PeerConfig::default_show_all_displays",
+        deserialize_with = "PeerConfig::deserialize_show_all_displays",
+        skip_serializing_if = "String::is_empty"
+    )]
+    pub show_all_displays: String,
+    #[serde(
         default = "PeerConfig::default_use_all_my_displays_for_the_remote_session",
         deserialize_with = "PeerConfig::deserialize_use_all_my_displays_for_the_remote_session",
         skip_serializing_if = "String::is_empty"
@@ -363,6 +369,7 @@ impl Default for PeerConfig {
             view_only: Default::default(),
             reverse_mouse_wheel: Self::default_reverse_mouse_wheel(),
             displays_as_individual_windows: Self::default_displays_as_individual_windows(),
+            show_all_displays: Self::default_show_all_displays(),
             use_all_my_displays_for_the_remote_session:
                 Self::default_use_all_my_displays_for_the_remote_session(),
             custom_resolutions: Default::default(),
@@ -1214,6 +1221,11 @@ impl PeerConfig {
         default_displays_as_individual_windows,
         deserialize_displays_as_individual_windows,
         UserDefaultConfig::read("displays_as_individual_windows")
+    );
+    serde_field_string!(
+        default_show_all_displays,
+        deserialize_show_all_displays,
+        UserDefaultConfig::read("show_all_displays")
     );
     serde_field_string!(
         default_use_all_my_displays_for_the_remote_session,
