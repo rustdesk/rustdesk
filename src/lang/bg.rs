@@ -600,5 +600,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("share_warning_tip", ""),
         ("Everyone", ""),
         ("ab_web_console_tip", ""),
+        ("allow-only-conn-window-open-tip", ""),
     ].iter().cloned().collect();
 }

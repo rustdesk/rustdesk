@@ -118,9 +118,9 @@ def make_parser():
             '' if windows or osx else ', need libva-dev, libvdpau-dev.')
     )
     parser.add_argument(
-        '--gpucodec',
+        '--vram',
         action='store_true',
-        help='Enable feature gpucodec, only available on windows now.'
+        help='Enable feature vram, only available on windows now.'
     )
     parser.add_argument(
         '--portable',
@@ -282,8 +282,8 @@ def get_features(args):
     features = ['inline'] if not args.flutter else []
     if args.hwcodec:
         features.append('hwcodec')
-    if args.gpucodec:
-        features.append('gpucodec')
+    if args.vram:
+        features.append('vram')
     if args.flutter:
         features.append('flutter')
         features.append('flutter_texture_render')

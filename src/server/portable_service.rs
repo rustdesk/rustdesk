@@ -8,7 +8,7 @@ use hbb_common::{
     tokio::{self, sync::mpsc},
     ResultType,
 };
-#[cfg(feature = "gpucodec")]
+#[cfg(feature = "vram")]
 use scrap::AdapterDevice;
 use scrap::{Capturer, Frame, TraitCapturer, TraitPixelBuffer};
 use shared_memory::*;
@@ -744,12 +744,12 @@ pub mod client {
             true
         }
 
-        #[cfg(feature = "gpucodec")]
+        #[cfg(feature = "vram")]
         fn device(&self) -> AdapterDevice {
             AdapterDevice::default()
         }
 
-        #[cfg(feature = "gpucodec")]
+        #[cfg(feature = "vram")]
         fn set_output_texture(&mut self, _texture: bool) {}
     }
 

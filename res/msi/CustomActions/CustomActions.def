@@ -3,3 +3,10 @@ LIBRARY "CustomActions"
 EXPORTS
     CustomActionHello
     RemoveInstallFolder
+    TerminateProcesses
+    AddFirewallRules
+    SetPropertyIsServiceRunning
+    TryStopDeleteService
+    CreateStartService
+    TryDeleteStartupShortcut
+    SetPropertyFromConfig

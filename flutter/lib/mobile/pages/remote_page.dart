@@ -68,7 +68,9 @@ class _RemotePageState extends State<RemotePage> {
       gFFI.dialogManager
           .showLoading(translate('Connecting...'), onCancel: closeConnection);
     });
-    WakelockPlus.enable();
+    if (!isWeb) {
+      WakelockPlus.enable();
+    }
     _physicalFocusNode.requestFocus();
     gFFI.inputModel.listenToMouse(true);
     gFFI.qualityMonitorModel.checkShowQualityMonitor(sessionId);
@@ -95,7 +97,9 @@ class _RemotePageState extends State<RemotePage> {
     gFFI.dialogManager.dismissAll();
     await SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual,
         overlays: SystemUiOverlay.values);
-    await WakelockPlus.disable();
+    if (!isWeb) {
+      await WakelockPlus.disable();
+    }
     await keyboardSubscription.cancel();
     removeSharedStates(widget.id);
   }

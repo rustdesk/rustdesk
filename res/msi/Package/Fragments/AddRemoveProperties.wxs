@@ -6,25 +6,27 @@
 
 		<Property Id="AddRemovePropertiesFile" Value="1" />
 
+		<!--STOP_SERVICE is set to 'Y'. Because the cofig value may be empty or 'Y'-->
+		<Property Id="STOP_SERVICE" Value="&apos;Y&apos;" />
+
 		<!--
 		Support entries shown when clicking "Click here for support information"
-		in Control Panel's Add/Remove Programs http://msdn.microsoft.com/library/default.asp?url=/library/en-us/msi/setup/configuration_properties.asp
+		in Control Panel's Add/Remove Programs https://learn.microsoft.com/en-us/windows/win32/msi/property-reference
 		-->
-		<Property Id="ARPCOMMENTS" Value="!(loc.AR_Comment)" />
+		<!--<Property Id="ARPCOMMENTS" Value="!(loc.AR_Comment)" />
 		<Property Id="ARPCONTACT" Value="https://github.com/rustdesk/rustdesk" />
 		<Property Id="ARPHELPLINK" Value="https://github.com/rustdesk/rustdesk" />
 		<Property Id="ARPREADME" Value="https://github.com/rustdesk/rustdesk" />
 		<Property Id="ARPURLINFOABOUT" Value="https://github.com/rustdesk/rustdesk" />
-		<Property Id="ARPURLUPDATEINFO" Value="https://github.com/rustdesk/rustdesk" />
+		<Property Id="ARPURLUPDATEINFO" Value="https://github.com/rustdesk/rustdesk" />-->
 
 		<Property Id="ARPPRODUCTICON" Value="AppIcon" />
 
-		<Property Id="RUSTDESKNATIVEINSTALL">
-			<RegistrySearch Id="RustDeskNativeInstallSearch" Root="HKCR" Key="$(var.RegKeyRoot)\DefaultIcon" Type="raw" />
-		</Property>
-		<Property Id="RUSTDESKNATIVEINSTALLFOLDER">
-			<RegistrySearch Id="RustDeskNativeInstallFolderSearch" Root="HKCR" Key="$(var.RegKeyRoot)" Name="INSTALLFOLDER" Type="raw" />
-		</Property>
+		<!--$ArpStart$-->
+		<!--$ArpEnd$-->
 
+		<Property Id="RUSTDESK_WINDOWS_INSTALLER">
+			<RegistrySearch Id="RustDeskWindowsInstallerFolderSearch" Root="HKLM" Key="Software\Microsoft\Windows\CurrentVersion\Uninstall\$(var.Product)" Name="WindowsInstaller" Type="raw" />
+		</Property>
 	</Fragment>
 </Wix>

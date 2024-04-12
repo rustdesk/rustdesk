@@ -4,12 +4,12 @@
 
 	<?include Includes.wxi?>
 
-	<Package Name="$(var.Product)" Version="$(var.Version)" Manufacturer="$(var.Manufacturer)" Language="!(loc.ProductLanguage)" Codepage="0" UpgradeCode="$(var.UpgradeCode)" Scope="perMachine">
+	<Package Name="$(var.Product)" Version="$(var.Version)" Manufacturer="$(var.Manufacturer)" Language="!(loc.ProductLanguage)" UpgradeCode="$(var.UpgradeCode)" Scope="perMachine">
 
 		<SummaryInformation Keywords="Installer" Description="$(var.Description)" Codepage="!(loc.SummaryCodepage)" />
 
 		<!--<PropertyRef Id="UpgradesFile" />-->
-		
+
 		<PropertyRef Id="AddRemovePropertiesFile" />
 
 		<Media Id="1" Cabinet="cab1.cab" EmbedCab="yes" CompressionLevel="high" />
@@ -22,39 +22,20 @@
 		<UIRef Id="WixUI_ErrorProgressText" />
 
 		<InstallUISequence>
-			<!--<Custom Action="ReadCustomPathsFromExistingPathsFile" Before="CostFinalize" Condition="NOT Installed" />-->
-			<Show Dialog="AnotherAppDialog" Before="WelcomeDlg" Condition="Not installed AND RUSTDESKNATIVEINSTALL AND Not RUSTDESKNATIVEINSTALLFOLDER"/>
-
+			<Show Dialog="AnotherAppDialog" Before="WelcomeDlg" Condition="Not installed AND RUSTDESK_WINDOWS_INSTALLER=&quot;#0&quot;"/>
 		</InstallUISequence>
 
 		<InstallExecuteSequence>
-			<!-- Stop all MP2 processes -->
-			<!--<Custom Action="StopProcesses" Before="ReadCustomPathsFromExistingPathsFile" />-->
-
-			<!-- Reads custom paths which maybe have been changed by the user in a former installation -->
-			<!--<Custom Action="ReadCustomPathsFromExistingPathsFile" Before="PrepareXmlPathVariables" Condition="(NOT Installed) AND (INSTALLTYPE_CUSTOM = 0)" />-->
-
-			<!--<Custom Action="PrepareXmlPathVariables" Before="FileCost" Condition="NOT Installed" />-->
-			<!--<Custom Action="AttachClientToServer" After="InstallFinalize" Condition="NOT Installed" />-->
-
-			<Custom Action="FirewallPortRemove" Before="InstallFinalize" Condition="REMOVE~=&quot;ALL&quot;" />
-			<Custom Action="FirewallPortOutAdd" Before="InstallFinalize" Condition="NOT Installed" />
-			<Custom Action="FirewallPortInAdd" Before="InstallFinalize" Condition="NOT Installed" />
-
-			<!-- Launch ClientLauncher if installing or already installed and not uninstalling -->
-			<Custom Action="LaunchApp" After="InstallFinalize" />
-			<Custom Action="LaunchAppTray" After="InstallFinalize" />
-
 			<InstallExecute After="RemoveExistingProducts" />
 
-			<Custom Action="CloseProcesses" Before="RemoveFiles" />
+			<!--Only do InstallValidate if is not Uninstall-->
+			<!--<InstallValidate Condition="NOT (Installed AND REMOVE AND NOT UPGRADINGPRODUCTCODE )" />-->
+			<!--Only do InstallValidate if is Install-->
+			<InstallValidate Condition="NOT Installed" />
 
 		</InstallExecuteSequence>
-		<CustomAction Id="LaunchApp" ExeCommand="" Return="asyncNoWait" FileRef="RustDesk.exe" />
-		<CustomAction Id="LaunchAppTray" ExeCommand=" --tray" Return="asyncNoWait" FileRef="RustDesk.exe" />
-		<CustomAction Id="CloseProcesses" ExeCommand='taskkill /F /IM "$(var.Product).exe"' Return="asyncNoWait" Directory="INSTALLFOLDER" />
 
-		<MajorUpgrade DowngradeErrorMessage="!(loc.DowngradeError)" Schedule="afterInstallInitialize" />
+		<MajorUpgrade DowngradeErrorMessage="!(loc.DowngradeError)" Schedule="afterInstallInitialize" AllowSameVersionUpgrades="yes" />
 
 		<Feature Id="App" Level="1" AllowAdvertise="no" Display="expand" Title="!(loc.F_App)" Description="!(loc.F_App_Desc)" AllowAbsent="no">
 			<ComponentGroupRef Id="Components" />
@@ -64,8 +45,13 @@
 			<ComponentRef Id="Product.Registry.CommandPlay" />
 			<ComponentRef Id="Product.Registry.URLProtocol" />
 			<ComponentRef Id="Product.Registry.Command" />
+			<ComponentRef Id="Product.Registry.UninstallRustDesk" />
 			<ComponentRef Id="App.StartMenu" />
 			<ComponentRef Id="Product.Registry.PersistedShortcutProperties" />
 		</Feature>
+
+		<!--https://wixtoolset.org/docs/tools/wixext/wixui/#customizing-a-dialog-set-->
+		<!--$CustomBitmapsStart$-->
+		<!--$CustomBitmapsEnd$-->
 	</Package>
 </Wix>

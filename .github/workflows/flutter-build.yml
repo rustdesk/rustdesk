@@ -113,7 +113,7 @@ jobs:
         shell: bash
 
       - name: Build rustdesk
-        run: python3 .\build.py --portable --hwcodec --flutter --gpucodec --skip-portable-pack
+        run: python3 .\build.py --portable --hwcodec --flutter --vram --skip-portable-pack
 
       - name: find Runner.res
         # Windows: find Runner.res (compiled from ./flutter/windows/runner/Runner.rc), copy to ./Runner.res
@@ -162,6 +162,19 @@ jobs:
           mkdir -p ./SignOutput
           mv ./target/release/rustdesk-portable-packer.exe ./SignOutput/rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}.exe
 
+      - name: Add MSBuild to PATH
+        uses: microsoft/setup-msbuild@v2
+      
+      - name: Build msi
+        if: env.UPLOAD_ARTIFACT == 'true'
+        run: |
+          pushd ./res/msi
+          python preprocess.py -arp -d ../../rustdesk
+          nuget restore msi.sln
+          msbuild msi.sln -p:Configuration=Release -p:Platform=x64 /p:TargetVersion=Windows10
+          mv ./Package/bin/x64/Release/en-us/Package.msi ../../SignOutput/rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}-beta.msi
+          sha256sum ../../SignOutput/rustdesk-*.msi
+
       - name: Sign rustdesk self-extracted file
         if: env.UPLOAD_ARTIFACT == 'true' && env.SIGN_BASE_URL != ''
         shell: bash
@@ -175,6 +188,7 @@ jobs:
           prerelease: true
           tag_name: ${{ env.TAG_NAME }}
           files: |
+            ./SignOutput/rustdesk-*.msi
             ./SignOutput/rustdesk-*.exe
             ./rustdesk-*.tar.gz
 
@@ -237,7 +251,7 @@ jobs:
           python3 res/inline-sciter.py
           # Patch sciter x86
           sed -i 's/branch = "dyn"/branch = "dyn_x86"/g' ./Cargo.toml
-          cargo build --features inline,gpucodec --release --bins
+          cargo build --features inline,vram,hwcodec --release --bins
           mkdir -p ./Release
           mv ./target/release/rustdesk.exe ./Release/rustdesk.exe
           curl -LJ -o ./Release/sciter.dll https://github.com/c-smile/sciter-sdk/raw/master/bin.win/x32/sciter.dll
@@ -1586,7 +1600,7 @@ jobs:
               ;;
             esac
             export CARGO_INCREMENTAL=0
-            python3 ./build.py --flutter --hwcodec --skip-cargo
+            python3 ./build.py --flutter --skip-cargo
             # rpm package
             echo -e "start packaging fedora package"
             pushd /workspace

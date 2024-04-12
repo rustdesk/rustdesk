@@ -1240,8 +1240,14 @@ pub async fn get_next_nonkeyexchange_msg(
     None
 }
 
+#[allow(unused_mut)]
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
-pub fn check_process(arg: &str, same_uid: bool) -> bool {
+pub fn check_process(arg: &str, mut same_uid: bool) -> bool {
+    #[cfg(target_os = "macos")]
+    if !crate::platform::is_root() && !same_uid {
+        log::warn!("Can not get other process's command line arguments on macos without root");
+        same_uid = true;
+    }
     use hbb_common::sysinfo::System;
     let mut sys = System::new();
     sys.refresh_processes();
@@ -1268,8 +1274,13 @@ pub fn check_process(arg: &str, same_uid: bool) -> bool {
         if same_uid && p.user_id() != my_uid {
             continue;
         }
+        // on mac, p.cmd() get "/Applications/RustDesk.app/Contents/MacOS/RustDesk", "XPC_SERVICE_NAME=com.carriez.RustDesk_server"
         let parg = if p.cmd().len() <= 1 { "" } else { &p.cmd()[1] };
-        if arg == parg {
+        if arg.is_empty() {
+            if !parg.starts_with("--") {
+                return true;
+            }
+        } else if arg == parg {
             return true;
         }
     }
