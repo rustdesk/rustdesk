@@ -30,7 +30,8 @@
 
 			<!--Only do InstallValidate if is not Uninstall-->
 			<!--Do InstallValidate if is Install, Change, Repair, Upgrade-->
-			<InstallValidate Condition="NOT (Installed AND REMOVE AND NOT UPGRADINGPRODUCTCODE )" />
+			<!--<InstallValidate Condition="NOT (Installed AND REMOVE AND NOT UPGRADINGPRODUCTCODE )" />-->
+			<InstallValidate Condition="NOT Installed" />
 
 		</InstallExecuteSequence>
 

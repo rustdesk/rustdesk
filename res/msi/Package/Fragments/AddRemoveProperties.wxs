@@ -5,7 +5,9 @@
 	<Fragment>
 
 		<Property Id="AddRemovePropertiesFile" Value="1" />
-		<Property Id="StopService" Value="0" />
+
+		<!--STOP_SERVICE is set to 'Y'. Because the cofig value may be empty or 'Y'-->
+		<Property Id="STOP_SERVICE" Value="&apos;Y&apos;" />
 
 		<!--
 		Support entries shown when clicking "Click here for support information"

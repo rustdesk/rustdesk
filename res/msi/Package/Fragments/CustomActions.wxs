@@ -10,6 +10,10 @@
 		<CustomAction Id="TerminateBrokers" DllEntry="TerminateProcesses" Impersonate="yes" Execute="immediate" Return="ignore" BinaryRef="Custom_Actions_Dll"/>
 		<CustomAction Id="AddFirewallRules" DllEntry="AddFirewallRules" Impersonate="no" Execute="deferred" Return="ignore" BinaryRef="Custom_Actions_Dll"/>
 		<CustomAction Id="RemoveFirewallRules" DllEntry="AddFirewallRules" Impersonate="no" Execute="deferred" Return="ignore" BinaryRef="Custom_Actions_Dll"/>
-		<CustomAction Id="SetPropertyStopService" DllEntry="SetPropertyFromUserConfig" Impersonate="yes" Execute="immediate" Return="ignore" BinaryRef="Custom_Actions_Dll"/>
+		<CustomAction Id="SetPropertyIsServiceRunning" DllEntry="SetPropertyIsServiceRunning" Impersonate="yes" Execute="immediate" Return="ignore" BinaryRef="Custom_Actions_Dll"/>
+		<CustomAction Id="CreateStartService" DllEntry="CreateStartService" Impersonate="no" Execute="deferred" Return="ignore" BinaryRef="Custom_Actions_Dll"/>
+		<CustomAction Id="TryStopDeleteService" DllEntry="TryStopDeleteService" Impersonate="no" Execute="deferred" Return="ignore" BinaryRef="Custom_Actions_Dll"/>
+		<CustomAction Id="TryDeleteStartupShortcut" DllEntry="TryDeleteStartupShortcut" Impersonate="yes" Execute="immediate" Return="ignore" BinaryRef="Custom_Actions_Dll"/>
+		<CustomAction Id="SetPropertyServiceStop" DllEntry="SetPropertyFromConfig" Impersonate="yes" Execute="immediate" Return="ignore" BinaryRef="Custom_Actions_Dll"/>
 	</Fragment>
 </Wix>
