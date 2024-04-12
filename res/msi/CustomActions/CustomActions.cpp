@@ -323,3 +323,36 @@ LExit:
     er = SUCCEEDED(hr) ? ERROR_SUCCESS : ERROR_INSTALL_FAILURE;
     return WcaFinalize(er);
 }
+
+UINT __stdcall SetPropertyFromUserConfig(
+    __in MSIHANDLE hInstall)
+{
+    HRESULT hr = S_OK;
+    DWORD er = ERROR_SUCCESS;
+
+    int nResult = 0;
+    wchar_t szAppDataFolder[500] = { 0 };
+    DWORD cchAppDataFolder = sizeof(szAppDataFolder) / sizeof(szAppDataFolder[0]);
+    wchar_t szUserConfigKey[500] = { 0 };
+    DWORD cchUserConfigKey = sizeof(szUserConfigKey) / sizeof(szUserConfigKey[0]);
+    wchar_t szPropertyName[500] = { 0 };
+    DWORD cchPropertyName = sizeof(szPropertyName) / sizeof(szPropertyName[0]);
+
+    hr = WcaInitialize(hInstall, "SetPropertyFromUserConfig");
+    ExitOnFailure(hr, "Failed to initialize");
+
+    MsiGetPropertyW(hInstall, L"AppDataFolder", szAppDataFolder, &cchAppDataFolder);
+    WcaLog(LOGMSG_STANDARD, "Try read configuration from : \"%ls\"", szAppDataFolder);
+
+    MsiGetPropertyW(hInstall, L"UserConfigKey", szUserConfigKey, &cchUserConfigKey);
+    WcaLog(LOGMSG_STANDARD, "Try read configuration, user config key : \"%ls\"", szUserConfigKey);
+
+    MsiGetPropertyW(hInstall, L"PropertyName", szPropertyName, &cchPropertyName);
+    WcaLog(LOGMSG_STANDARD, "Try read configuration, user config key : \"%ls\"", szPropertyName);
+
+    MsiSetPropertyW(hInstall, szPropertyName, L"aa");
+
+LExit:
+    er = SUCCEEDED(hr) ? ERROR_SUCCESS : ERROR_INSTALL_FAILURE;
+    return WcaFinalize(er);
+}

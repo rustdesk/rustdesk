@@ -5,3 +5,4 @@ EXPORTS
     RemoveInstallFolder
     TerminateProcesses
     AddFirewallRules
+    SetPropertyFromUserConfig

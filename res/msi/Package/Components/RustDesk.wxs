@@ -26,11 +26,13 @@
 		<Property Id="TerminateProcesses" Value="RustDeskTest.exe" />
 		<CustomAction Id="TerminateProcesses.SetParam" Return="check" Property="TerminateProcesses" Value="$(var.Product).exe" />
 		<CustomAction Id="TerminateBrokers.SetParam" Return="check" Property="TerminateProcesses" Value="RuntimeBroker_rustdesk.exe" />
+		
+		
 		<InstallExecuteSequence>
 
 			<!--The ServiceControl element above handles starting/stopping the server on install/uninstall,
-           however it also needs to be restarted after a modify or repair install. This action does
-           that provided the server feature is already installed and not being uninstalled.-->
+			however it also needs to be restarted after a modify or repair install. This action does
+			that provided the server feature is already installed and not being uninstalled.-->
 			<Custom Action="RestartService" Before="InstallFinalize" />
 
 			<!-- Launch ClientLauncher if installing or already installed and not uninstalling -->

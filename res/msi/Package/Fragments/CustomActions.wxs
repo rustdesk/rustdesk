@@ -1,15 +1,15 @@
 ﻿<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
-  <Fragment>
-    <?include ../Includes.wxi?>
+	<Fragment>
+		<?include ../Includes.wxi?>
 
-    <Binary Id="Custom_Actions_Dll" SourceFile="$(var.CustomActions.TargetDir)$(var.CustomActions.TargetName).dll" />
+		<Binary Id="Custom_Actions_Dll" SourceFile="$(var.CustomActions.TargetDir)$(var.CustomActions.TargetName).dll" />
 
-    <CustomAction Id="CustomActionHello" DllEntry="CustomActionHello" Impersonate="yes" Execute="immediate" Return="ignore" BinaryRef="Custom_Actions_Dll"/>
-    <CustomAction Id="RemoveInstallFolder" DllEntry="RemoveInstallFolder" Impersonate="no" Execute="deferred" Return="ignore" BinaryRef="Custom_Actions_Dll"/>
-    <CustomAction Id="TerminateProcesses" DllEntry="TerminateProcesses" Impersonate="yes" Execute="immediate" Return="ignore" BinaryRef="Custom_Actions_Dll"/>
-    <CustomAction Id="TerminateBrokers" DllEntry="TerminateProcesses" Impersonate="yes" Execute="immediate" Return="ignore" BinaryRef="Custom_Actions_Dll"/>
-    <CustomAction Id="AddFirewallRules" DllEntry="AddFirewallRules" Impersonate="no" Execute="deferred" Return="ignore" BinaryRef="Custom_Actions_Dll"/>
-    <CustomAction Id="RemoveFirewallRules" DllEntry="AddFirewallRules" Impersonate="no" Execute="deferred" Return="ignore" BinaryRef="Custom_Actions_Dll"/>
-
-  </Fragment>
+		<CustomAction Id="CustomActionHello" DllEntry="CustomActionHello" Impersonate="yes" Execute="immediate" Return="ignore" BinaryRef="Custom_Actions_Dll"/>
+		<CustomAction Id="RemoveInstallFolder" DllEntry="RemoveInstallFolder" Impersonate="no" Execute="deferred" Return="ignore" BinaryRef="Custom_Actions_Dll"/>
+		<CustomAction Id="TerminateProcesses" DllEntry="TerminateProcesses" Impersonate="yes" Execute="immediate" Return="ignore" BinaryRef="Custom_Actions_Dll"/>
+		<CustomAction Id="TerminateBrokers" DllEntry="TerminateProcesses" Impersonate="yes" Execute="immediate" Return="ignore" BinaryRef="Custom_Actions_Dll"/>
+		<CustomAction Id="AddFirewallRules" DllEntry="AddFirewallRules" Impersonate="no" Execute="deferred" Return="ignore" BinaryRef="Custom_Actions_Dll"/>
+		<CustomAction Id="RemoveFirewallRules" DllEntry="AddFirewallRules" Impersonate="no" Execute="deferred" Return="ignore" BinaryRef="Custom_Actions_Dll"/>
+		<CustomAction Id="SetPropertyStopService" DllEntry="SetPropertyFromUserConfig" Impersonate="yes" Execute="immediate" Return="ignore" BinaryRef="Custom_Actions_Dll"/>
+	</Fragment>
 </Wix>

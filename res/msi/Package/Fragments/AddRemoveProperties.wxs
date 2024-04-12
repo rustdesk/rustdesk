@@ -5,6 +5,7 @@
 	<Fragment>
 
 		<Property Id="AddRemovePropertiesFile" Value="1" />
+		<Property Id="StopService" Value="0" />
 
 		<!--
 		Support entries shown when clicking "Click here for support information"
@@ -18,7 +19,7 @@
 		<Property Id="ARPURLUPDATEINFO" Value="https://github.com/rustdesk/rustdesk" />-->
 
 		<Property Id="ARPPRODUCTICON" Value="AppIcon" />
-		
+
 		<!--$ArpStart$-->
 		<!--$ArpEnd$-->
 
