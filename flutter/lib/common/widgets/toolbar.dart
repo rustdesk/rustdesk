@@ -412,6 +412,7 @@ Future<List<TToggleMenu>> toolbarCursor(
     final showCursorLockState = ShowRemoteCursorLockState.find(id);
     final showCursorEnabled = bind.sessionGetToggleOptionSync(
         sessionId: sessionId, arg: showCursorOption);
+    showCursorLockState.value = state.value;
     v.add(TToggleMenu(
         child: Text(translate('Follow remote cursor')),
         value: state.value,
