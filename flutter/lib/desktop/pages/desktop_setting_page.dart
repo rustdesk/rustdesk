@@ -2051,7 +2051,9 @@ void changeSocks5Proxy() async {
                 Expanded(
                   child: TextField(
                     decoration: InputDecoration(
-                        errorText: proxyMsg.isNotEmpty ? proxyMsg : null),
+                        errorText: proxyMsg.isNotEmpty ? proxyMsg : null,
+                        hintText: translate("Default proxy protocol is socks5"),
+                    ),
                     controller: proxyController,
                     autofocus: true,
                   ),
