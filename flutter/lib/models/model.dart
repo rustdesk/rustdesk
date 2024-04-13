@@ -439,7 +439,7 @@ class FfiModel with ChangeNotifier {
     }
   }
 
-  updateCurDisplay(SessionID sessionId, {updateCursorPos = true}) {
+  updateCurDisplay(SessionID sessionId, {updateCursorPos = false}) {
     final newRect = displaysRect();
     if (newRect == null) {
       return;
@@ -941,12 +941,12 @@ class FfiModel with ChangeNotifier {
       _pi.displaysCount.value = _pi.displays.length;
 
       if (_pi.currentDisplay == kAllDisplayValue) {
-        updateCurDisplay(sessionId, updateCursorPos: false);
+        updateCurDisplay(sessionId);
         // to-do: What if the displays are changed?
       } else {
         if (_pi.currentDisplay >= 0 &&
             _pi.currentDisplay < _pi.displays.length) {
-          updateCurDisplay(sessionId, updateCursorPos: false);
+          updateCurDisplay(sessionId);
         } else {
           if (_pi.displays.isNotEmpty) {
             // Notify to switch display
@@ -1019,7 +1019,7 @@ class FfiModel with ChangeNotifier {
 
   // Directly switch to the new display without waiting for the response.
   switchToNewDisplay(int display, SessionID sessionId, String peerId,
-      {bool updateCursorPos = true}) {
+      {bool updateCursorPos = false}) {
     // VideoHandler creation is upon when video frames are received, so either caching commands(don't know next width/height) or stopping recording when switching displays.
     parent.target?.recordingModel.onClose();
     // no need to wait for the response
