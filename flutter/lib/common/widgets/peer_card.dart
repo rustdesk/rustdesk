@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hbb/common/widgets/dialog.dart';
 import 'package:flutter_hbb/consts.dart';
-import 'package:flutter_hbb/models/ab_model.dart';
 import 'package:flutter_hbb/models/peer_tab_model.dart';
 import 'package:get/get.dart';
 import 'package:provider/provider.dart';
@@ -52,7 +51,7 @@ class _PeerCardState extends State<_PeerCard>
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    if (isDesktop) {
+    if (isDesktop || isWebDesktop) {
       return _buildDesktop();
     } else {
       return _buildMobile();
@@ -140,21 +139,30 @@ class _PeerCardState extends State<_PeerCard>
       mainAxisSize: MainAxisSize.max,
       children: [
         Container(
-          decoration: BoxDecoration(
-            color: str2color('${peer.id}${peer.platform}', 0x7f),
-            borderRadius: isMobile
-                ? BorderRadius.circular(_tileRadius)
-                : BorderRadius.only(
-                    topLeft: Radius.circular(_tileRadius),
-                    bottomLeft: Radius.circular(_tileRadius),
+            decoration: BoxDecoration(
+              color: str2color('${peer.id}${peer.platform}', 0x7f),
+              borderRadius: isMobile
+                  ? BorderRadius.circular(_tileRadius)
+                  : BorderRadius.only(
+                      topLeft: Radius.circular(_tileRadius),
+                      bottomLeft: Radius.circular(_tileRadius),
+                    ),
+            ),
+            alignment: Alignment.center,
+            width: isMobile ? 50 : 42,
+            height: isMobile ? 50 : null,
+            child: Stack(
+              children: [
+                getPlatformImage(peer.platform, size: isMobile ? 38 : 30)
+                    .paddingAll(6),
+                if (_shouldBuildPasswordIcon(peer))
+                  Positioned(
+                    top: 1,
+                    left: 1,
+                    child: Icon(Icons.key, size: 6, color: Colors.white),
                   ),
-          ),
-          alignment: Alignment.center,
-          width: isMobile ? 50 : 42,
-          height: isMobile ? 50 : null,
-          child: getPlatformImage(peer.platform, size: isMobile ? 38 : 30)
-              .paddingAll(6),
-        ),
+              ],
+            )),
         Expanded(
           child: Container(
             decoration: BoxDecoration(
@@ -217,12 +225,6 @@ class _PeerCardState extends State<_PeerCard>
                   child: child,
                 ),
               ),
-        if (_shouldBuildPasswordIcon(peer))
-          Positioned(
-            top: 2,
-            left: isMobile ? 60 : 50,
-            child: Icon(Icons.key, size: 12),
-          ),
         if (colors.isNotEmpty)
           Positioned(
             top: 2,
@@ -330,7 +332,7 @@ class _PeerCardState extends State<_PeerCard>
           Positioned(
             top: 4,
             left: 12,
-            child: Icon(Icons.key, size: 12),
+            child: Icon(Icons.key, size: 12, color: Colors.white),
           ),
         if (colors.isNotEmpty)
           Positioned(
@@ -748,8 +750,10 @@ abstract class BasePeerCard extends StatelessWidget {
         if (succ) {
           showToast(translate('Successful'));
         } else {
-          BotToast.showText(
-              contentColor: Colors.red, text: translate("Failed"));
+          if (tab.index == PeerTabIndex.ab.index) {
+            BotToast.showText(
+                contentColor: Colors.red, text: translate("Failed"));
+          }
         }
       },
       padding: menuPadding,
@@ -864,7 +868,7 @@ class RecentPeerCard extends BasePeerCard {
       BuildContext context) async {
     final List<MenuEntryBase<String>> menuItems = [
       _connectAction(context),
-      _transferFileAction(context),
+      if (!isWeb) _transferFileAction(context),
     ];
 
     final List favs = (await bind.mainGetFav()).toList();
@@ -873,7 +877,9 @@ class RecentPeerCard extends BasePeerCard {
       menuItems.add(_tcpTunnelingAction(context));
     }
     // menuItems.add(await _openNewConnInOptAction(peer.id));
-    menuItems.add(await _forceAlwaysRelayAction(peer.id));
+    if (!isWeb) {
+      menuItems.add(await _forceAlwaysRelayAction(peer.id));
+    }
     if (isWindows && peer.platform == kPeerPlatformWindows) {
       menuItems.add(_rdpAction(context, peer.id));
     }
@@ -881,7 +887,9 @@ class RecentPeerCard extends BasePeerCard {
       menuItems.add(_createShortCutAction(peer.id));
     }
     menuItems.add(MenuEntryDivider());
-    menuItems.add(_renameAction(peer.id));
+    if (isDesktop || isWebDesktop) {
+      menuItems.add(_renameAction(peer.id));
+    }
     if (await bind.mainPeerHasPassword(id: peer.id)) {
       menuItems.add(_unrememberPasswordAction(peer.id));
     }
@@ -919,13 +927,15 @@ class FavoritePeerCard extends BasePeerCard {
       BuildContext context) async {
     final List<MenuEntryBase<String>> menuItems = [
       _connectAction(context),
-      _transferFileAction(context),
+      if (!isWeb) _transferFileAction(context),
     ];
     if (isDesktop && peer.platform != kPeerPlatformAndroid) {
       menuItems.add(_tcpTunnelingAction(context));
     }
     // menuItems.add(await _openNewConnInOptAction(peer.id));
-    menuItems.add(await _forceAlwaysRelayAction(peer.id));
+    if (!isWeb) {
+      menuItems.add(await _forceAlwaysRelayAction(peer.id));
+    }
     if (isWindows && peer.platform == kPeerPlatformWindows) {
       menuItems.add(_rdpAction(context, peer.id));
     }
@@ -933,7 +943,9 @@ class FavoritePeerCard extends BasePeerCard {
       menuItems.add(_createShortCutAction(peer.id));
     }
     menuItems.add(MenuEntryDivider());
-    menuItems.add(_renameAction(peer.id));
+    if (isDesktop || isWebDesktop) {
+      menuItems.add(_renameAction(peer.id));
+    }
     if (await bind.mainPeerHasPassword(id: peer.id)) {
       menuItems.add(_unrememberPasswordAction(peer.id));
     }
@@ -968,7 +980,7 @@ class DiscoveredPeerCard extends BasePeerCard {
       BuildContext context) async {
     final List<MenuEntryBase<String>> menuItems = [
       _connectAction(context),
-      _transferFileAction(context),
+      if (!isWeb) _transferFileAction(context),
     ];
 
     final List favs = (await bind.mainGetFav()).toList();
@@ -977,7 +989,9 @@ class DiscoveredPeerCard extends BasePeerCard {
       menuItems.add(_tcpTunnelingAction(context));
     }
     // menuItems.add(await _openNewConnInOptAction(peer.id));
-    menuItems.add(await _forceAlwaysRelayAction(peer.id));
+    if (!isWeb) {
+      menuItems.add(await _forceAlwaysRelayAction(peer.id));
+    }
     if (isWindows && peer.platform == kPeerPlatformWindows) {
       menuItems.add(_rdpAction(context, peer.id));
     }
@@ -1019,7 +1033,7 @@ class AddressBookPeerCard extends BasePeerCard {
       BuildContext context) async {
     final List<MenuEntryBase<String>> menuItems = [
       _connectAction(context),
-      _transferFileAction(context),
+      if (!isWeb) _transferFileAction(context),
     ];
     if (isDesktop && peer.platform != kPeerPlatformAndroid) {
       menuItems.add(_tcpTunnelingAction(context));
@@ -1034,7 +1048,9 @@ class AddressBookPeerCard extends BasePeerCard {
     }
     if (gFFI.abModel.current.canWrite()) {
       menuItems.add(MenuEntryDivider());
-      menuItems.add(_renameAction(peer.id));
+      if (isDesktop || isWebDesktop) {
+        menuItems.add(_renameAction(peer.id));
+      }
       if (gFFI.abModel.current.isPersonal() && peer.hash.isNotEmpty) {
         menuItems.add(_unrememberPasswordAction(peer.id));
       }
@@ -1091,7 +1107,8 @@ class AddressBookPeerCard extends BasePeerCard {
   MenuEntryBase<String> _changeSharedAbPassword() {
     return MenuEntryButton<String>(
       childBuilder: (TextStyle? style) => Text(
-        translate('Set shared password'),
+        translate(
+            peer.password.isEmpty ? 'Set shared password' : 'Change Password'),
         style: style,
       ),
       proc: () {
@@ -1148,7 +1165,7 @@ class MyGroupPeerCard extends BasePeerCard {
       BuildContext context) async {
     final List<MenuEntryBase<String>> menuItems = [
       _connectAction(context),
-      _transferFileAction(context),
+      if (!isWeb) _transferFileAction(context),
     ];
     if (isDesktop && peer.platform != kPeerPlatformAndroid) {
       menuItems.add(_tcpTunnelingAction(context));
@@ -1234,7 +1251,7 @@ void _rdpDialog(String id) async {
             ).marginOnly(bottom: isDesktop ? 8 : 0),
             Row(
               children: [
-                isDesktop
+                (isDesktop || isWebDesktop)
                     ? ConstrainedBox(
                         constraints: const BoxConstraints(minWidth: 140),
                         child: Text(
@@ -1245,15 +1262,17 @@ void _rdpDialog(String id) async {
                 Expanded(
                   child: TextField(
                     decoration: InputDecoration(
-                        labelText: isDesktop ? null : translate('Username')),
+                        labelText: (isDesktop || isWebDesktop)
+                            ? null
+                            : translate('Username')),
                     controller: userController,
                   ),
                 ),
               ],
-            ).marginOnly(bottom: isDesktop ? 8 : 0),
+            ).marginOnly(bottom: (isDesktop || isWebDesktop) ? 8 : 0),
             Row(
               children: [
-                isDesktop
+                (isDesktop || isWebDesktop)
                     ? ConstrainedBox(
                         constraints: const BoxConstraints(minWidth: 140),
                         child: Text(
@@ -1265,7 +1284,9 @@ void _rdpDialog(String id) async {
                   child: Obx(() => TextField(
                         obscureText: secure.value,
                         decoration: InputDecoration(
-                            labelText: isDesktop ? null : translate('Password'),
+                            labelText: (isDesktop || isWebDesktop)
+                                ? null
+                                : translate('Password'),
                             suffixIcon: IconButton(
                                 onPressed: () => secure.value = !secure.value,
                                 icon: Icon(secure.value

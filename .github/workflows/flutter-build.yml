@@ -11,9 +11,10 @@ on:
         default: "nightly"
 
 env:
+  RUST_VERSION: "1.75" # https://github.com/rustdesk/rustdesk/discussions/7503
   CARGO_NDK_VERSION: "3.1.2"
   LLVM_VERSION: "15.0.6"
-  FLUTTER_VERSION: "3.16.9"
+  FLUTTER_VERSION: "3.19.5"
   FLUTTER_RUST_BRIDGE_VERSION: "1.80.1"
   # for arm64 linux because official Dart SDK does not work
   FLUTTER_ELINUX_VERSION: "3.16.9"
@@ -82,20 +83,12 @@ jobs:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           cache: true
 
-      - name: Replace engine with rustdesk custom flutter engine
-        run: |
-          flutter doctor -v
-          flutter precache --windows
-          Invoke-WebRequest -Uri https://github.com/fufesou/flutter-engine/releases/download/bugfix-subwindow-crash-3.16.9-apply-pull-47787/windows-x64-release.zip -OutFile windows-x64-flutter-release.zip
-          Expand-Archive windows-x64-flutter-release.zip -DestinationPath .
-          mv -Force windows-x64-release/*  C:/hostedtoolcache/windows/flutter/stable-${{ env.FLUTTER_VERSION }}-x64/bin/cache/artifacts/engine/windows-x64-release/
-
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@v1
         with:
-          toolchain: stable
+          toolchain: ${{ env.RUST_VERSION }}
           targets: ${{ matrix.job.target }}
-          components: ""
+          components: "rustfmt"
 
       - uses: Swatinem/rust-cache@v2
         with:
@@ -120,7 +113,7 @@ jobs:
         shell: bash
 
       - name: Build rustdesk
-        run: python3 .\build.py --portable --hwcodec --flutter --gpucodec --skip-portable-pack
+        run: python3 .\build.py --portable --hwcodec --flutter --vram --skip-portable-pack
 
       - name: find Runner.res
         # Windows: find Runner.res (compiled from ./flutter/windows/runner/Runner.rc), copy to ./Runner.res
@@ -169,6 +162,19 @@ jobs:
           mkdir -p ./SignOutput
           mv ./target/release/rustdesk-portable-packer.exe ./SignOutput/rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}.exe
 
+      - name: Add MSBuild to PATH
+        uses: microsoft/setup-msbuild@v2
+      
+      - name: Build msi
+        if: env.UPLOAD_ARTIFACT == 'true'
+        run: |
+          pushd ./res/msi
+          python preprocess.py -arp -d ../../rustdesk
+          nuget restore msi.sln
+          msbuild msi.sln -p:Configuration=Release -p:Platform=x64 /p:TargetVersion=Windows10
+          mv ./Package/bin/x64/Release/en-us/Package.msi ../../SignOutput/rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}-beta.msi
+          sha256sum ../../SignOutput/rustdesk-*.msi
+
       - name: Sign rustdesk self-extracted file
         if: env.UPLOAD_ARTIFACT == 'true' && env.SIGN_BASE_URL != ''
         shell: bash
@@ -182,6 +188,7 @@ jobs:
           prerelease: true
           tag_name: ${{ env.TAG_NAME }}
           files: |
+            ./SignOutput/rustdesk-*.msi
             ./SignOutput/rustdesk-*.exe
             ./rustdesk-*.tar.gz
 
@@ -218,9 +225,9 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@v1
         with:
-          toolchain: nightly-${{ matrix.job.target }}
+          toolchain: nightly-2023-10-13-${{ matrix.job.target }} # must use nightly here, because of abi_thiscall feature required
           targets: ${{ matrix.job.target }}
-          components: ""
+          components: "rustfmt"
 
       - uses: Swatinem/rust-cache@v2
         with:
@@ -244,7 +251,7 @@ jobs:
           python3 res/inline-sciter.py
           # Patch sciter x86
           sed -i 's/branch = "dyn"/branch = "dyn_x86"/g' ./Cargo.toml
-          cargo build --features inline,gpucodec --release --bins
+          cargo build --features inline,vram,hwcodec --release --bins
           mkdir -p ./Release
           mv ./target/release/rustdesk.exe ./Release/rustdesk.exe
           curl -LJ -o ./Release/sciter.dll https://github.com/c-smile/sciter-sdk/raw/master/bin.win/x32/sciter.dll
@@ -443,9 +450,9 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@v1
         with:
-          toolchain: stable
+          toolchain: ${{ env.RUST_VERSION }}
           targets: ${{ matrix.job.target }}
-          components: ""
+          components: "rustfmt"
 
       - uses: Swatinem/rust-cache@v2
         with:
@@ -610,9 +617,9 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@v1
         with:
-          toolchain: stable
+          toolchain: ${{ env.RUST_VERSION }}
           targets: ${{ matrix.job.target }}
-          components: ""
+          components: "rustfmt"
 
       - uses: Swatinem/rust-cache@v2
         with:
@@ -762,8 +769,8 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@v1
         with:
-          toolchain: stable
-          components: ""
+          toolchain: ${{ env.RUST_VERSION }}
+          components: "rustfmt"
 
       - uses: Swatinem/rust-cache@v2
         with:
@@ -926,9 +933,9 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@v1
         with:
-          toolchain: stable
+          toolchain: ${{ env.RUST_VERSION }}
           targets: ${{ matrix.job.target }}
-          components: ""
+          components: "rustfmt"
 
       - name: Save Rust toolchain version
         run: |
@@ -1135,9 +1142,9 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@v1
         with:
-          toolchain: stable
+          toolchain: ${{ env.RUST_VERSION }}
           targets: ${{ matrix.job.target }}
-          components: ""
+          components: "rustfmt"
 
       - name: Save Rust toolchain version
         run: |
@@ -1327,9 +1334,9 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@v1
         with:
-          toolchain: stable
+          toolchain: ${{ env.RUST_VERSION }}
           targets: ${{ matrix.job.target }}
-          components: ""
+          components: "rustfmt"
 
       - name: Save Rust toolchain version
         run: |
@@ -1593,7 +1600,7 @@ jobs:
               ;;
             esac
             export CARGO_INCREMENTAL=0
-            python3 ./build.py --flutter --hwcodec --skip-cargo
+            python3 ./build.py --flutter --skip-cargo
             # rpm package
             echo -e "start packaging fedora package"
             pushd /workspace

@@ -131,11 +131,11 @@ pub fn get_license() -> String {
     #[cfg(windows)]
     if let Ok(lic) = crate::platform::windows::get_license_from_exe_name() {
         #[cfg(feature = "flutter")]
-        return format!("Key: {}\nHost: {}\nApi: {}", lic.key, lic.host, lic.api);
+        return format!("Key: {}\nHost: {}\nAPI: {}", lic.key, lic.host, lic.api);
         // default license format is html formed (sciter)
         #[cfg(not(feature = "flutter"))]
         return format!(
-            "<br /> Key: {} <br /> Host: {} Api: {}",
+            "<br /> Key: {} <br /> Host: {} API: {}",
             lic.key, lic.host, lic.api
         );
     }
@@ -348,7 +348,7 @@ pub fn set_option(key: String, value: String) {
         #[cfg(target_os = "macos")]
         {
             let is_stop = value == "Y";
-            if is_stop && crate::platform::macos::uninstall_service(true) {
+            if is_stop && crate::platform::uninstall_service(true, false) {
                 return;
             }
         }
@@ -356,7 +356,7 @@ pub fn set_option(key: String, value: String) {
         {
             if crate::platform::is_installed() {
                 if value == "Y" {
-                    if crate::platform::uninstall_service(true) {
+                    if crate::platform::uninstall_service(true, false) {
                         return;
                     }
                 } else {
@@ -836,8 +836,8 @@ pub fn has_hwcodec() -> bool {
 }
 
 #[inline]
-pub fn has_gpucodec() -> bool {
-    cfg!(feature = "gpucodec")
+pub fn has_vram() -> bool {
+    cfg!(feature = "vram")
 }
 
 #[cfg(feature = "flutter")]
@@ -846,14 +846,14 @@ pub fn supported_hwdecodings() -> (bool, bool) {
     let decoding = scrap::codec::Decoder::supported_decodings(None, true, None, &vec![]);
     #[allow(unused_mut)]
     let (mut h264, mut h265) = (decoding.ability_h264 > 0, decoding.ability_h265 > 0);
-    #[cfg(feature = "gpucodec")]
+    #[cfg(feature = "vram")]
     {
         // supported_decodings check runtime luid
-        let gpu = scrap::gpucodec::GpuDecoder::possible_available_without_check();
-        if gpu.0 {
+        let vram = scrap::vram::VRamDecoder::possible_available_without_check();
+        if vram.0 {
             h264 = true;
         }
-        if gpu.1 {
+        if vram.1 {
             h265 = true;
         }
     }

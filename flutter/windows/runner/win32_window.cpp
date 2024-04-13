@@ -257,3 +257,7 @@ bool Win32Window::OnCreate() {
 void Win32Window::OnDestroy() {
   // No-op; provided for subclasses.
 }
+
+const wchar_t* getWindowClassName() {
+  return kWindowClassName;
+}

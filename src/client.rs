@@ -7,6 +7,7 @@ use std::{
     sync::{mpsc, Arc, Mutex, RwLock},
 };
 
+use async_trait::async_trait;
 use bytes::Bytes;
 #[cfg(not(any(target_os = "android", target_os = "linux")))]
 use cpal::{
@@ -1037,9 +1038,9 @@ pub struct VideoHandler {
 impl VideoHandler {
     /// Create a new video handler.
     pub fn new(format: CodecFormat, _display: usize) -> Self {
-        #[cfg(all(feature = "gpucodec", feature = "flutter"))]
+        #[cfg(all(feature = "vram", feature = "flutter"))]
         let luid = crate::flutter::get_adapter_luid();
-        #[cfg(not(all(feature = "gpucodec", feature = "flutter")))]
+        #[cfg(not(all(feature = "vram", feature = "flutter")))]
         let luid = Default::default();
         log::info!("new video handler for display #{_display}, format: {format:?}, luid: {luid:?}");
         VideoHandler {
@@ -1096,9 +1097,9 @@ impl VideoHandler {
 
     /// Reset the decoder, change format if it is Some
     pub fn reset(&mut self, format: Option<CodecFormat>) {
-        #[cfg(all(feature = "flutter", feature = "gpucodec"))]
+        #[cfg(all(feature = "flutter", feature = "vram"))]
         let luid = crate::flutter::get_adapter_luid();
-        #[cfg(not(all(feature = "flutter", feature = "gpucodec")))]
+        #[cfg(not(all(feature = "flutter", feature = "vram")))]
         let luid = None;
         let format = format.unwrap_or(self.decoder.format());
         self.decoder = Decoder::new(format, luid);
@@ -1128,6 +1129,53 @@ impl VideoHandler {
     }
 }
 
+// The source of sent password
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum PasswordSource {
+    PersonalAb(Vec<u8>),
+    SharedAb(String),
+    Undefined,
+}
+
+impl Default for PasswordSource {
+    fn default() -> Self {
+        PasswordSource::Undefined
+    }
+}
+
+impl PasswordSource {
+    // Whether the password is personal ab password
+    pub fn is_personal_ab(&self, password: &[u8]) -> bool {
+        if password.is_empty() {
+            return false;
+        }
+        match self {
+            PasswordSource::PersonalAb(p) => p == password,
+            _ => false,
+        }
+    }
+
+    // Whether the password is shared ab password
+    pub fn is_shared_ab(&self, password: &[u8], hash: &Hash) -> bool {
+        if password.is_empty() {
+            return false;
+        }
+        match self {
+            PasswordSource::SharedAb(p) => Self::equal(p, password, hash),
+            _ => false,
+        }
+    }
+
+    //  Whether the password equals to the connected password
+    fn equal(password: &str, connected_password: &[u8], hash: &Hash) -> bool {
+        let mut hasher = Sha256::new();
+        hasher.update(password);
+        hasher.update(&hash.salt);
+        let res = hasher.finalize();
+        connected_password[..] == res[..]
+    }
+}
+
 /// Login config handler for [`Client`].
 #[derive(Default)]
 pub struct LoginConfigHandler {
@@ -1154,7 +1202,8 @@ pub struct LoginConfigHandler {
     pub mark_unsupported: Vec<CodecFormat>,
     pub selected_windows_session_id: Option<u32>,
     pub peer_info: Option<PeerInfo>,
-    shared_password: Option<String>, // used to distinguish whether it is connected with a shared password
+    password_source: PasswordSource, // where the sent password comes from
+    shared_password: Option<String>, // Store the shared password
 }
 
 impl Deref for LoginConfigHandler {
@@ -1869,20 +1918,25 @@ impl LoginConfigHandler {
             platform: pi.platform.clone(),
         };
         let mut config = self.load_config();
-        let connected_with_shared_password = self.is_connected_with_shared_password();
-        let old_config_password = config.password.clone();
         config.info = serde;
         let password = self.password.clone();
         let password0 = config.password.clone();
         let remember = self.remember;
+        let hash = self.hash.clone();
         if remember {
-            if !password.is_empty() && password != password0 {
-                config.password = password;
+            // remember is true: use PeerConfig password or ui login
+            // not sync shared password to recent
+            if !password.is_empty()
+                && password != password0
+                && !self.password_source.is_shared_ab(&password, &hash)
+            {
+                config.password = password.clone();
                 log::debug!("remember password of {}", self.id);
             }
         } else {
-            if self.save_ab_password_to_recent {
-                config.password = password;
+            if self.password_source.is_personal_ab(&password) {
+                // sync personal ab password to recent automatically
+                config.password = password.clone();
                 log::debug!("save ab password of {} to recent", self.id);
             } else if !password0.is_empty() {
                 config.password = Default::default();
@@ -1903,13 +1957,16 @@ impl LoginConfigHandler {
         }
         #[cfg(feature = "flutter")]
         {
-            if !connected_with_shared_password && remember && !config.password.is_empty() {
-                // sync ab password with PeerConfig password
-                let password = base64::encode(config.password.clone(), base64::Variant::Original);
+            // sync connected password to personal ab automatically if it is not shared password
+            if !config.password.is_empty()
+                && !self.password_source.is_shared_ab(&password, &hash)
+                && !self.password_source.is_personal_ab(&password)
+            {
+                let hash = base64::encode(config.password.clone(), base64::Variant::Original);
                 let evt: HashMap<&str, String> = HashMap::from([
-                    ("name", "sync_peer_password_to_ab".to_string()),
+                    ("name", "sync_peer_hash_password_to_personal_ab".to_string()),
                     ("id", self.id.clone()),
-                    ("password", password),
+                    ("hash", hash),
                 ]);
                 let evt = serde_json::ser::to_string(&evt).unwrap_or("".to_owned());
                 crate::flutter::push_global_event(crate::flutter::APP_TYPE_MAIN, evt);
@@ -1933,25 +1990,10 @@ impl LoginConfigHandler {
                 config.keyboard_mode = KeyboardMode::Legacy.to_string();
             }
         }
-        // keep hash password unchanged if connected with shared password
-        if connected_with_shared_password {
-            config.password = old_config_password;
-        }
         // no matter if change, for update file time
         self.save_config(config);
         self.supported_encoding = pi.encoding.clone().unwrap_or_default();
         log::info!("peer info supported_encoding:{:?}", self.supported_encoding);
-    }
-
-    fn is_connected_with_shared_password(&self) -> bool {
-        if let Some(shared_password) = self.shared_password.as_ref() {
-            let mut hasher = Sha256::new();
-            hasher.update(shared_password);
-            hasher.update(&self.hash.salt);
-            let res = hasher.finalize();
-            return self.password.clone()[..] == res[..];
-        }
-        false
     }
 
     pub fn get_remote_dir(&self) -> String {
@@ -2605,7 +2647,6 @@ pub fn handle_login_error(
     err: &str,
     interface: &impl Interface,
 ) -> bool {
-    lc.write().unwrap().save_ab_password_to_recent = false;
     if err == LOGIN_MSG_PASSWORD_EMPTY {
         lc.write().unwrap().password = Default::default();
         interface.msgbox("input-password", "Password Required", "", "");
@@ -2657,14 +2698,20 @@ pub async fn handle_hash(
     peer: &mut Stream,
 ) {
     lc.write().unwrap().hash = hash.clone();
+    // Take care of password application order
+
+    // switch_uuid
     let uuid = lc.write().unwrap().switch_uuid.take();
     if let Some(uuid) = uuid {
         if let Ok(uuid) = uuid::Uuid::from_str(&uuid) {
             send_switch_login_request(lc.clone(), peer, uuid).await;
+            lc.write().unwrap().password_source = Default::default();
             return;
         }
     }
+    // last password
     let mut password = lc.read().unwrap().password.clone();
+    // preset password
     if password.is_empty() {
         if !password_preset.is_empty() {
             let mut hasher = Sha256::new();
@@ -2672,31 +2719,32 @@ pub async fn handle_hash(
             hasher.update(&hash.salt);
             let res = hasher.finalize();
             password = res[..].into();
+            lc.write().unwrap().password_source = Default::default();
         }
     }
+    // shared password
+    // Currently it's used only when click shared ab peer card
+    let shared_password = lc.write().unwrap().shared_password.take();
+    if let Some(shared_password) = shared_password {
+        if !shared_password.is_empty() {
+            let mut hasher = Sha256::new();
+            hasher.update(shared_password.clone());
+            hasher.update(&hash.salt);
+            let res = hasher.finalize();
+            password = res[..].into();
+            lc.write().unwrap().password_source = PasswordSource::SharedAb(shared_password);
+        }
+    }
+    // peer config password
     if password.is_empty() {
         password = lc.read().unwrap().config.password.clone();
-    }
-    if password.is_empty() {
-        let access_token = LocalConfig::get_option("access_token");
-        let ab = hbb_common::config::Ab::load();
-        if !access_token.is_empty() && access_token == ab.access_token {
-            let id = lc.read().unwrap().id.clone();
-            if let Some(ab) = ab.ab_entries.iter().find(|a| a.personal()) {
-                if let Some(p) = ab
-                    .peers
-                    .iter()
-                    .find_map(|p| if p.id == id { Some(p) } else { None })
-                {
-                    if let Ok(hash) = base64::decode(p.hash.clone(), base64::Variant::Original) {
-                        if !hash.is_empty() {
-                            password = hash;
-                            lc.write().unwrap().save_ab_password_to_recent = true;
-                        }
-                    }
-                }
-            }
+        if !password.is_empty() {
+            lc.write().unwrap().password_source = Default::default();
         }
+    }
+    // personal ab password
+    if password.is_empty() {
+        try_get_password_from_personal_ab(lc.clone(), &mut password);
     }
     lc.write().unwrap().password = password.clone();
     let password = if password.is_empty() {
@@ -2715,6 +2763,31 @@ pub async fn handle_hash(
 
     send_login(lc.clone(), os_username, os_password, password, peer).await;
     lc.write().unwrap().hash = hash;
+}
+
+#[inline]
+fn try_get_password_from_personal_ab(lc: Arc<RwLock<LoginConfigHandler>>, password: &mut Vec<u8>) {
+    let access_token = LocalConfig::get_option("access_token");
+    let ab = hbb_common::config::Ab::load();
+    if !access_token.is_empty() && access_token == ab.access_token {
+        let id = lc.read().unwrap().id.clone();
+        if let Some(ab) = ab.ab_entries.iter().find(|a| a.personal()) {
+            if let Some(p) = ab
+                .peers
+                .iter()
+                .find_map(|p| if p.id == id { Some(p) } else { None })
+            {
+                if let Ok(hash_password) = base64::decode(p.hash.clone(), base64::Variant::Original)
+                {
+                    if !hash_password.is_empty() {
+                        *password = hash_password.clone();
+                        lc.write().unwrap().password_source =
+                            PasswordSource::PersonalAb(hash_password);
+                    }
+                }
+            }
+        }
+    }
 }
 
 /// Send login message to peer.
@@ -2762,9 +2835,13 @@ pub async fn handle_login_from_ui(
         let mut password2 = lc.read().unwrap().password.clone();
         if password2.is_empty() {
             password2 = lc.read().unwrap().config.password.clone();
+            if !password2.is_empty() {
+                lc.write().unwrap().password_source = Default::default();
+            }
         }
         password2
     } else {
+        lc.write().unwrap().password_source = Default::default();
         let mut hasher = Sha256::new();
         hasher.update(password);
         hasher.update(&lc.read().unwrap().hash.salt);
@@ -2802,6 +2879,7 @@ async fn send_switch_login_request(
 }
 
 /// Interface for client to send data and commands.
+#[async_trait]
 pub trait Interface: Send + Clone + 'static + Sized {
     /// Send message data to remote peer.
     fn send(&self, data: Data);

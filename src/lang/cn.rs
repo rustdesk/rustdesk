@@ -588,7 +588,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("powered_by_me", "由 RustDesk 提供支持"),
         ("outgoing_only_desk_tip", "当前版本的软件是定制版本。\n您可以连接至其他设备，但是其他设备无法连接至您的设备。"),
         ("preset_password_warning", "此定制版本附有预设密码。 任何知晓此密码的人都能完全控制您的设备。如果这不是您所预期的，请立即卸载此软件。"),
-        ("Security Alert", ""),
+        ("Security Alert", "安全警告"),
         ("My address book", "我的地址簿"),
         ("Personal", "个人的"),
         ("Owner", "所有者"),
@@ -600,5 +600,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("share_warning_tip", "上述的字段為共享且对其他人可见。"),
         ("Everyone", "所有人"),
         ("ab_web_console_tip", "打开 Web 控制台以执行更多操作"),
+        ("allow-only-conn-window-open-tip", "仅当 RustDesk 窗口打开时允许连接"),
     ].iter().cloned().collect();
 }

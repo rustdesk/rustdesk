@@ -419,10 +419,10 @@ fn patch(path: PathBuf) -> PathBuf {
         #[cfg(target_os = "linux")]
         {
             if _tmp == "/root" {
-                if let Ok(user) = crate::platform::linux::run_cmds("whoami") {
+                if let Ok(user) = crate::platform::linux::run_cmds_trim_newline("whoami") {
                     if user != "root" {
                         let cmd = format!("getent passwd '{}' | awk -F':' '{{print $6}}'", user);
-                        if let Ok(output) = crate::platform::linux::run_cmds(&cmd) {
+                        if let Ok(output) = crate::platform::linux::run_cmds_trim_newline(&cmd) {
                             return output.into();
                         }
                         return format!("/home/{user}").into();
@@ -516,7 +516,7 @@ impl Config {
     fn store_<T: serde::Serialize>(config: &T, suffix: &str) {
         let file = Self::file_(suffix);
         if let Err(err) = store_path(file, config) {
-            log::error!("Failed to store config: {}", err);
+            log::error!("Failed to store {suffix} config: {err}");
         }
     }
 
@@ -880,6 +880,7 @@ impl Config {
         }
         let mut config = Config::load_::<Config>("");
         if config.key_pair.0.is_empty() {
+            log::info!("Generated new keypair for id: {}", config.id);
             let (pk, sk) = sign::gen_keypair();
             let key_pair = (sk.0.to_vec(), pk.0.into());
             config.key_pair = key_pair.clone();
@@ -1523,8 +1524,10 @@ impl LanPeers {
 
 #[derive(Debug, Default, Serialize, Deserialize, Clone)]
 pub struct HwCodecConfig {
-    #[serde(default, deserialize_with = "deserialize_hashmap_string_string")]
-    pub options: HashMap<String, String>,
+    #[serde(default, deserialize_with = "deserialize_string")]
+    pub ram: String,
+    #[serde(default, deserialize_with = "deserialize_string")]
+    pub vram: String,
 }
 
 impl HwCodecConfig {
@@ -1539,25 +1542,17 @@ impl HwCodecConfig {
     pub fn clear() {
         HwCodecConfig::default().store();
     }
-}
 
-#[derive(Debug, Default, Serialize, Deserialize, Clone)]
-pub struct GpucodecConfig {
-    #[serde(default, deserialize_with = "deserialize_string")]
-    pub available: String,
-}
-
-impl GpucodecConfig {
-    pub fn load() -> GpucodecConfig {
-        Config::load_::<GpucodecConfig>("_gpucodec")
+    pub fn clear_ram() {
+        let mut c = Self::load();
+        c.ram = Default::default();
+        c.store();
     }
 
-    pub fn store(&self) {
-        Config::store_(self, "_gpucodec");
-    }
-
-    pub fn clear() {
-        GpucodecConfig::default().store();
+    pub fn clear_vram() {
+        let mut c = Self::load();
+        c.vram = Default::default();
+        c.store();
     }
 }
 

@@ -208,31 +208,11 @@ pub fn core_main() -> Option<Vec<String>> {
                     .show()
                     .ok();
                 return None;
-            } else if args[0] == "--install-cert" {
-                #[cfg(windows)]
-                hbb_common::allow_err!(crate::platform::windows::install_cert(
-                    crate::platform::windows::DRIVER_CERT_FILE
-                ));
-                if args.len() > 1 && args[1] == "silent" {
-                    return None;
-                }
-                #[cfg(all(windows, feature = "virtual_display_driver"))]
-                if crate::virtual_display_manager::is_virtual_display_supported() {
-                    hbb_common::allow_err!(crate::virtual_display_manager::install_update_driver());
-                }
-                return None;
             } else if args[0] == "--uninstall-cert" {
                 #[cfg(windows)]
                 hbb_common::allow_err!(crate::platform::windows::uninstall_cert());
                 return None;
             } else if args[0] == "--install-idd" {
-                #[cfg(windows)]
-                {
-                    // It's ok to install cert multiple times.
-                    hbb_common::allow_err!(crate::platform::windows::install_cert(
-                        crate::platform::windows::DRIVER_CERT_FILE
-                    ));
-                }
                 #[cfg(all(windows, feature = "virtual_display_driver"))]
                 if crate::virtual_display_manager::is_virtual_display_supported() {
                     hbb_common::allow_err!(crate::virtual_display_manager::install_update_driver());
@@ -265,10 +245,9 @@ pub fn core_main() -> Option<Vec<String>> {
             return None;
         } else if args[0] == "--uninstall-service" {
             log::info!("start --uninstall-service");
-            crate::platform::uninstall_service(false);
+            crate::platform::uninstall_service(false, true);
+            return None;
         } else if args[0] == "--service" {
-            #[cfg(target_os = "macos")]
-            crate::platform::macos::hide_dock();
             log::info!("start --service");
             crate::start_os_service();
             return None;
@@ -279,7 +258,6 @@ pub fn core_main() -> Option<Vec<String>> {
             #[cfg(any(target_os = "linux", target_os = "windows"))]
             {
                 crate::start_server(true);
-                return None;
             }
             #[cfg(target_os = "macos")]
             {
@@ -288,6 +266,7 @@ pub fn core_main() -> Option<Vec<String>> {
                 // prevent server exit when encountering errors from tray
                 hbb_common::allow_err!(handler.join());
             }
+            return None;
         } else if args[0] == "--import-config" {
             if args.len() == 2 {
                 let filepath;
@@ -430,10 +409,6 @@ pub fn core_main() -> Option<Vec<String>> {
         } else if args[0] == "--check-hwcodec-config" {
             #[cfg(feature = "hwcodec")]
             scrap::hwcodec::check_available_hwcodec();
-            return None;
-        } else if args[0] == "--check-gpucodec-config" {
-            #[cfg(feature = "gpucodec")]
-            scrap::gpucodec::check_available_gpucodec();
             return None;
         } else if args[0] == "--cm" {
             // call connection manager to establish connections

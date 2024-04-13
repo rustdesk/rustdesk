@@ -1,4 +1,5 @@
 use crate::client::*;
+use async_trait::async_trait;
 use hbb_common::{
     config::PeerConfig,
     config::READ_TIMEOUT,
@@ -44,6 +45,7 @@ impl Session {
     }
 }
 
+#[async_trait]
 impl Interface for Session {
     fn get_login_config_handler(&self) -> Arc<RwLock<LoginConfigHandler>> {
         return self.lc.clone();

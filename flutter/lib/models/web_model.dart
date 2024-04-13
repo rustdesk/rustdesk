@@ -98,9 +98,11 @@ class PlatformFFI {
           sessionId: sessionId, display: display, ptr: ptr);
 
   Future<void> init(String appType) async {
-    isWebDesktop = !context.callMethod('isMobile');
     context.callMethod('init');
     version = getByName('version');
+    window.onContextMenu.listen((event) {
+      event.preventDefault();
+    });
 
     context['onRegisteredEvent'] = (String message) {
       try {

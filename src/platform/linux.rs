@@ -1055,7 +1055,7 @@ mod desktop {
                 "getent passwd '{}' | awk -F':' '{{print $6}}'",
                 &self.username
             );
-            self.home = run_cmds(&cmd).unwrap_or(format!("/home/{}", &self.username));
+            self.home = run_cmds_trim_newline(&cmd).unwrap_or(format!("/home/{}", &self.username));
         }
 
         fn get_xauth_from_xorg(&mut self) {
@@ -1246,6 +1246,29 @@ mod desktop {
             }
         }
     }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        #[test]
+        fn test_desktop_env() {
+            let mut d = Desktop::default();
+            d.refresh();
+            if d.username == "root" {
+                assert_eq!(d.home, "/root");
+            } else {
+                if !d.username.is_empty() {
+                    let home = super::super::get_env_var("HOME");
+                    if !home.is_empty() {
+                        assert_eq!(d.home, home);
+                    } else {
+                        // 
+                    }
+                }
+            }
+        }
+    }
 }
 
 pub struct WakeLock(Option<keepawake::AwakeHandle>);
@@ -1310,7 +1333,7 @@ fn switch_service(stop: bool) -> String {
     }
 }
 
-pub fn uninstall_service(show_new_window: bool) -> bool {
+pub fn uninstall_service(show_new_window: bool, _: bool) -> bool {
     if !has_cmd("systemctl") {
         return false;
     }

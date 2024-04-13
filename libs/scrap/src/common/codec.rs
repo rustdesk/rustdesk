@@ -5,12 +5,12 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-#[cfg(feature = "gpucodec")]
-use crate::gpucodec::*;
 #[cfg(feature = "hwcodec")]
 use crate::hwcodec::*;
 #[cfg(feature = "mediacodec")]
 use crate::mediacodec::{MediaCodecDecoder, H264_DECODER_SUPPORT, H265_DECODER_SUPPORT};
+#[cfg(feature = "vram")]
+use crate::vram::*;
 use crate::{
     aom::{self, AomDecoder, AomEncoder, AomEncoderConfig},
     common::GoogleImage,
@@ -31,7 +31,7 @@ use hbb_common::{
     tokio::time::Instant,
     ResultType,
 };
-#[cfg(any(feature = "hwcodec", feature = "mediacodec", feature = "gpucodec"))]
+#[cfg(any(feature = "hwcodec", feature = "mediacodec", feature = "vram"))]
 use hbb_common::{config::Config2, lazy_static};
 
 lazy_static::lazy_static! {
@@ -47,9 +47,9 @@ pub enum EncoderCfg {
     VPX(VpxEncoderConfig),
     AOM(AomEncoderConfig),
     #[cfg(feature = "hwcodec")]
-    HW(HwEncoderConfig),
-    #[cfg(feature = "gpucodec")]
-    GPU(GpuEncoderConfig),
+    HWRAM(HwRamEncoderConfig),
+    #[cfg(feature = "vram")]
+    VRAM(VRamEncoderConfig),
 }
 
 pub trait EncoderApi {
@@ -61,7 +61,7 @@ pub trait EncoderApi {
 
     fn yuvfmt(&self) -> EncodeYuvFormat;
 
-    #[cfg(feature = "gpucodec")]
+    #[cfg(feature = "vram")]
     fn input_texture(&self) -> bool;
 
     fn set_quality(&mut self, quality: Quality) -> ResultType<()>;
@@ -94,13 +94,13 @@ pub struct Decoder {
     vp9: Option<VpxDecoder>,
     av1: Option<AomDecoder>,
     #[cfg(feature = "hwcodec")]
-    h264_ram: Option<HwDecoder>,
+    h264_ram: Option<HwRamDecoder>,
     #[cfg(feature = "hwcodec")]
-    h265_ram: Option<HwDecoder>,
-    #[cfg(feature = "gpucodec")]
-    h264_vram: Option<GpuDecoder>,
-    #[cfg(feature = "gpucodec")]
-    h265_vram: Option<GpuDecoder>,
+    h265_ram: Option<HwRamDecoder>,
+    #[cfg(feature = "vram")]
+    h264_vram: Option<VRamDecoder>,
+    #[cfg(feature = "vram")]
+    h265_vram: Option<VRamDecoder>,
     #[cfg(feature = "mediacodec")]
     h264_media_codec: MediaCodecDecoder,
     #[cfg(feature = "mediacodec")]
@@ -131,25 +131,25 @@ impl Encoder {
             }),
 
             #[cfg(feature = "hwcodec")]
-            EncoderCfg::HW(_) => match HwEncoder::new(config, i444) {
+            EncoderCfg::HWRAM(_) => match HwRamEncoder::new(config, i444) {
                 Ok(hw) => Ok(Encoder {
                     codec: Box::new(hw),
                 }),
                 Err(e) => {
                     log::error!("new hw encoder failed: {e:?}, clear config");
-                    hbb_common::config::HwCodecConfig::clear();
+                    hbb_common::config::HwCodecConfig::clear_ram();
                     *ENCODE_CODEC_NAME.lock().unwrap() = CodecName::VP9;
                     Err(e)
                 }
             },
-            #[cfg(feature = "gpucodec")]
-            EncoderCfg::GPU(_) => match GpuEncoder::new(config, i444) {
+            #[cfg(feature = "vram")]
+            EncoderCfg::VRAM(_) => match VRamEncoder::new(config, i444) {
                 Ok(tex) => Ok(Encoder {
                     codec: Box::new(tex),
                 }),
                 Err(e) => {
-                    log::error!("new gpu encoder failed: {e:?}, clear config");
-                    hbb_common::config::GpucodecConfig::clear();
+                    log::error!("new vram encoder failed: {e:?}, clear config");
+                    hbb_common::config::HwCodecConfig::clear_vram();
                     *ENCODE_CODEC_NAME.lock().unwrap() = CodecName::VP9;
                     Err(e)
                 }
@@ -186,19 +186,19 @@ impl Encoder {
         let _all_support_h265_decoding =
             decodings.len() > 0 && decodings.iter().all(|(_, s)| s.ability_h265 > 0);
         #[allow(unused_mut)]
-        let mut h264gpu_encoding = false;
+        let mut h264vram_encoding = false;
         #[allow(unused_mut)]
-        let mut h265gpu_encoding = false;
-        #[cfg(feature = "gpucodec")]
-        if enable_gpucodec_option() {
+        let mut h265vram_encoding = false;
+        #[cfg(feature = "vram")]
+        if enable_vram_option() {
             if _all_support_h264_decoding {
-                if GpuEncoder::available(CodecName::H264GPU).len() > 0 {
-                    h264gpu_encoding = true;
+                if VRamEncoder::available(CodecName::H264VRAM).len() > 0 {
+                    h264vram_encoding = true;
                 }
             }
             if _all_support_h265_decoding {
-                if GpuEncoder::available(CodecName::H265GPU).len() > 0 {
-                    h265gpu_encoding = true;
+                if VRamEncoder::available(CodecName::H265VRAM).len() > 0 {
+                    h265vram_encoding = true;
                 }
             }
         }
@@ -208,7 +208,7 @@ impl Encoder {
         let mut h265hw_encoding = None;
         #[cfg(feature = "hwcodec")]
         if enable_hwcodec_option() {
-            let best = HwEncoder::best();
+            let best = HwRamEncoder::best();
             if _all_support_h264_decoding {
                 h264hw_encoding = best.h264.map_or(None, |c| Some(c.name));
             }
@@ -217,9 +217,9 @@ impl Encoder {
             }
         }
         let h264_useable =
-            _all_support_h264_decoding && (h264gpu_encoding || h264hw_encoding.is_some());
+            _all_support_h264_decoding && (h264vram_encoding || h264hw_encoding.is_some());
         let h265_useable =
-            _all_support_h265_decoding && (h265gpu_encoding || h265hw_encoding.is_some());
+            _all_support_h265_decoding && (h265vram_encoding || h265hw_encoding.is_some());
         let mut name = ENCODE_CODEC_NAME.lock().unwrap();
         let mut preference = PreferCodec::Auto;
         let preferences: Vec<_> = decodings
@@ -239,7 +239,8 @@ impl Encoder {
 
         #[allow(unused_mut)]
         let mut auto_codec = CodecName::VP9;
-        if av1_useable {
+        // aom is very slow for x86 sciter version on windows x64
+        if av1_useable && !(cfg!(windows) && std::env::consts::ARCH == "x86") {
             auto_codec = CodecName::AV1;
         }
         let mut system = System::new();
@@ -254,19 +255,19 @@ impl Encoder {
             PreferCodec::VP9 => CodecName::VP9,
             PreferCodec::AV1 => CodecName::AV1,
             PreferCodec::H264 => {
-                if h264gpu_encoding {
-                    CodecName::H264GPU
+                if h264vram_encoding {
+                    CodecName::H264VRAM
                 } else if let Some(v) = h264hw_encoding {
-                    CodecName::H264HW(v)
+                    CodecName::H264RAM(v)
                 } else {
                     auto_codec
                 }
             }
             PreferCodec::H265 => {
-                if h265gpu_encoding {
-                    CodecName::H265GPU
+                if h265vram_encoding {
+                    CodecName::H265VRAM
                 } else if let Some(v) = h265hw_encoding {
-                    CodecName::H265HW(v)
+                    CodecName::H265RAM(v)
                 } else {
                     auto_codec
                 }
@@ -306,14 +307,14 @@ impl Encoder {
         };
         #[cfg(feature = "hwcodec")]
         if enable_hwcodec_option() {
-            let best = HwEncoder::best();
+            let best = HwRamEncoder::best();
             encoding.h264 |= best.h264.is_some();
             encoding.h265 |= best.h265.is_some();
         }
-        #[cfg(feature = "gpucodec")]
-        if enable_gpucodec_option() {
-            encoding.h264 |= GpuEncoder::available(CodecName::H264GPU).len() > 0;
-            encoding.h265 |= GpuEncoder::available(CodecName::H265GPU).len() > 0;
+        #[cfg(feature = "vram")]
+        if enable_vram_option() {
+            encoding.h264 |= VRamEncoder::available(CodecName::H264VRAM).len() > 0;
+            encoding.h265 |= VRamEncoder::available(CodecName::H265VRAM).len() > 0;
         }
         encoding
     }
@@ -326,21 +327,21 @@ impl Encoder {
             },
             EncoderCfg::AOM(_) => CodecName::AV1,
             #[cfg(feature = "hwcodec")]
-            EncoderCfg::HW(hw) => {
+            EncoderCfg::HWRAM(hw) => {
                 if hw.name.to_lowercase().contains("h264") {
-                    CodecName::H264HW(hw.name.clone())
+                    CodecName::H264RAM(hw.name.clone())
                 } else {
-                    CodecName::H265HW(hw.name.clone())
+                    CodecName::H265RAM(hw.name.clone())
                 }
             }
-            #[cfg(feature = "gpucodec")]
-            EncoderCfg::GPU(gpu) => match gpu.feature.data_format {
-                gpucodec::gpu_common::DataFormat::H264 => CodecName::H264GPU,
-                gpucodec::gpu_common::DataFormat::H265 => CodecName::H265GPU,
+            #[cfg(feature = "vram")]
+            EncoderCfg::VRAM(vram) => match vram.feature.data_format {
+                hwcodec::common::DataFormat::H264 => CodecName::H264VRAM,
+                hwcodec::common::DataFormat::H265 => CodecName::H265VRAM,
                 _ => {
                     log::error!(
-                        "should not reach here, gpucodec not support {:?}",
-                        gpu.feature.data_format
+                        "should not reach here, vram not support {:?}",
+                        vram.feature.data_format
                     );
                     return;
                 }
@@ -365,9 +366,9 @@ impl Encoder {
             },
             EncoderCfg::AOM(_) => decodings.iter().all(|d| d.1.i444.av1),
             #[cfg(feature = "hwcodec")]
-            EncoderCfg::HW(_) => false,
-            #[cfg(feature = "gpucodec")]
-            EncoderCfg::GPU(_) => false,
+            EncoderCfg::HWRAM(_) => false,
+            #[cfg(feature = "vram")]
+            EncoderCfg::VRAM(_) => false,
         };
         prefer_i444 && i444_useable && !decodings.is_empty()
     }
@@ -399,18 +400,18 @@ impl Decoder {
         };
         #[cfg(feature = "hwcodec")]
         if enable_hwcodec_option() {
-            let best = HwDecoder::best();
+            let best = HwRamDecoder::best();
             decoding.ability_h264 |= if best.h264.is_some() { 1 } else { 0 };
             decoding.ability_h265 |= if best.h265.is_some() { 1 } else { 0 };
         }
-        #[cfg(feature = "gpucodec")]
-        if enable_gpucodec_option() && _flutter {
-            decoding.ability_h264 |= if GpuDecoder::available(CodecFormat::H264, _luid).len() > 0 {
+        #[cfg(feature = "vram")]
+        if enable_vram_option() && _flutter {
+            decoding.ability_h264 |= if VRamDecoder::available(CodecFormat::H264, _luid).len() > 0 {
                 1
             } else {
                 0
             };
-            decoding.ability_h265 |= if GpuDecoder::available(CodecFormat::H265, _luid).len() > 0 {
+            decoding.ability_h265 |= if VRamDecoder::available(CodecFormat::H265, _luid).len() > 0 {
                 1
             } else {
                 0
@@ -449,7 +450,7 @@ impl Decoder {
         let (mut vp8, mut vp9, mut av1) = (None, None, None);
         #[cfg(feature = "hwcodec")]
         let (mut h264_ram, mut h265_ram) = (None, None);
-        #[cfg(feature = "gpucodec")]
+        #[cfg(feature = "vram")]
         let (mut h264_vram, mut h265_vram) = (None, None);
         #[cfg(feature = "mediacodec")]
         let (mut h264_media_codec, mut h265_media_codec) = (None, None);
@@ -482,9 +483,9 @@ impl Decoder {
                 valid = av1.is_some();
             }
             CodecFormat::H264 => {
-                #[cfg(feature = "gpucodec")]
-                if !valid && enable_gpucodec_option() && _luid.clone().unwrap_or_default() != 0 {
-                    match GpuDecoder::new(format, _luid) {
+                #[cfg(feature = "vram")]
+                if !valid && enable_vram_option() && _luid.clone().unwrap_or_default() != 0 {
+                    match VRamDecoder::new(format, _luid) {
                         Ok(v) => h264_vram = Some(v),
                         Err(e) => log::error!("create H264 vram decoder failed: {}", e),
                     }
@@ -492,7 +493,7 @@ impl Decoder {
                 }
                 #[cfg(feature = "hwcodec")]
                 if !valid && enable_hwcodec_option() {
-                    match HwDecoder::new(format) {
+                    match HwRamDecoder::new(format) {
                         Ok(v) => h264_ram = Some(v),
                         Err(e) => log::error!("create H264 ram decoder failed: {}", e),
                     }
@@ -508,9 +509,9 @@ impl Decoder {
                 }
             }
             CodecFormat::H265 => {
-                #[cfg(feature = "gpucodec")]
-                if !valid && enable_gpucodec_option() && _luid.clone().unwrap_or_default() != 0 {
-                    match GpuDecoder::new(format, _luid) {
+                #[cfg(feature = "vram")]
+                if !valid && enable_vram_option() && _luid.clone().unwrap_or_default() != 0 {
+                    match VRamDecoder::new(format, _luid) {
                         Ok(v) => h265_vram = Some(v),
                         Err(e) => log::error!("create H265 vram decoder failed: {}", e),
                     }
@@ -518,7 +519,7 @@ impl Decoder {
                 }
                 #[cfg(feature = "hwcodec")]
                 if !valid && enable_hwcodec_option() {
-                    match HwDecoder::new(format) {
+                    match HwRamDecoder::new(format) {
                         Ok(v) => h265_ram = Some(v),
                         Err(e) => log::error!("create H265 ram decoder failed: {}", e),
                     }
@@ -550,9 +551,9 @@ impl Decoder {
             h264_ram,
             #[cfg(feature = "hwcodec")]
             h265_ram,
-            #[cfg(feature = "gpucodec")]
+            #[cfg(feature = "vram")]
             h264_vram,
-            #[cfg(feature = "gpucodec")]
+            #[cfg(feature = "vram")]
             h265_vram,
             #[cfg(feature = "mediacodec")]
             h264_media_codec,
@@ -604,31 +605,31 @@ impl Decoder {
                     bail!("av1 decoder not available");
                 }
             }
-            #[cfg(any(feature = "hwcodec", feature = "gpucodec"))]
+            #[cfg(any(feature = "hwcodec", feature = "vram"))]
             video_frame::Union::H264s(h264s) => {
                 *chroma = Some(Chroma::I420);
-                #[cfg(feature = "gpucodec")]
+                #[cfg(feature = "vram")]
                 if let Some(decoder) = &mut self.h264_vram {
                     *_pixelbuffer = false;
-                    return Decoder::handle_gpu_video_frame(decoder, h264s, _texture);
+                    return Decoder::handle_vram_video_frame(decoder, h264s, _texture);
                 }
                 #[cfg(feature = "hwcodec")]
                 if let Some(decoder) = &mut self.h264_ram {
-                    return Decoder::handle_hw_video_frame(decoder, h264s, rgb, &mut self.i420);
+                    return Decoder::handle_hwram_video_frame(decoder, h264s, rgb, &mut self.i420);
                 }
                 Err(anyhow!("don't support h264!"))
             }
-            #[cfg(any(feature = "hwcodec", feature = "gpucodec"))]
+            #[cfg(any(feature = "hwcodec", feature = "vram"))]
             video_frame::Union::H265s(h265s) => {
                 *chroma = Some(Chroma::I420);
-                #[cfg(feature = "gpucodec")]
+                #[cfg(feature = "vram")]
                 if let Some(decoder) = &mut self.h265_vram {
                     *_pixelbuffer = false;
-                    return Decoder::handle_gpu_video_frame(decoder, h265s, _texture);
+                    return Decoder::handle_vram_video_frame(decoder, h265s, _texture);
                 }
                 #[cfg(feature = "hwcodec")]
                 if let Some(decoder) = &mut self.h265_ram {
-                    return Decoder::handle_hw_video_frame(decoder, h265s, rgb, &mut self.i420);
+                    return Decoder::handle_hwram_video_frame(decoder, h265s, rgb, &mut self.i420);
                 }
                 Err(anyhow!("don't support h265!"))
             }
@@ -710,8 +711,8 @@ impl Decoder {
 
     // rgb [in/out] fmt and stride must be set in ImageRgb
     #[cfg(feature = "hwcodec")]
-    fn handle_hw_video_frame(
-        decoder: &mut HwDecoder,
+    fn handle_hwram_video_frame(
+        decoder: &mut HwRamDecoder,
         frames: &EncodedVideoFrames,
         rgb: &mut ImageRgb,
         i420: &mut Vec<u8>,
@@ -728,9 +729,9 @@ impl Decoder {
         return Ok(ret);
     }
 
-    #[cfg(feature = "gpucodec")]
-    fn handle_gpu_video_frame(
-        decoder: &mut GpuDecoder,
+    #[cfg(feature = "vram")]
+    fn handle_vram_video_frame(
+        decoder: &mut VRamDecoder,
         frames: &EncodedVideoFrames,
         texture: &mut *mut c_void,
     ) -> ResultType<bool> {
@@ -796,8 +797,8 @@ pub fn enable_hwcodec_option() -> bool {
     }
     return true; // default is true
 }
-#[cfg(feature = "gpucodec")]
-pub fn enable_gpucodec_option() -> bool {
+#[cfg(feature = "vram")]
+pub fn enable_vram_option() -> bool {
     if let Some(v) = Config2::get().options.get("enable-hwcodec") {
         return v != "N";
     }

@@ -1,0 +1,52 @@
+﻿<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+	<Fragment>
+
+		<?include ..\Includes.wxi?>
+
+		<!--
+		Properties and related actions for specifying whether to install start menu/desktop shortcuts.
+		-->
+
+		<!-- These are the actual properties that get used in conditions to determine whether to
+				 install start menu shortcuts, they are initialized with a default value to install shortcuts.
+				 They should not be set directly from the command line or registry, instead the CREATE* properties
+				 below should be set, then they will update these properties with their values only if set. -->
+		<Property Id="STARTMENUSHORTCUTS" Value="1" Secure="yes"></Property>
+		<Property Id="DESKTOPSHORTCUTS" Value="1" Secure="yes"></Property>
+		<Property Id="STARTUPSHORTCUTS" Value="1" Secure="yes"></Property>
+
+		<!-- These properties get set from either the command line, bundle or registry value,
+				 if set they update the properties above with their value. -->
+		<Property Id="CREATESTARTMENUSHORTCUTS" Secure="yes">
+			<RegistrySearch Id="CreateStartMenuShortcutsSearch" Root="HKCR" Key="$(var.RegKeyRoot)" Name="STARTMENUSHORTCUTS" Type="raw" />
+		</Property>
+		<Property Id="CREATEDESKTOPSHORTCUTS" Secure="yes">
+			<RegistrySearch Id="CreateDesktopShortcutsSearch" Root="HKCR" Key="$(var.RegKeyRoot)" Name="DESKTOPSHORTCUTS" Type="raw" />
+		</Property>
+
+		<!-- Component that persists the property values to the registry so they are available during an upgrade/modify -->
+		<DirectoryRef Id="INSTALLFOLDER">
+			<Component Id="Product.Registry.PersistedShortcutProperties" Guid="1BBAD054-6EC2-4362-BF1B-E8BDE988B597">
+				<RegistryKey Root="HKCR" Key="$(var.RegKeyRoot)">
+					<RegistryValue Type="string" Name="STARTMENUSHORTCUTS" Value="[STARTMENUSHORTCUTS]" KeyPath="yes" />
+					<RegistryValue Type="string" Name="DESKTOPSHORTCUTS" Value="[DESKTOPSHORTCUTS]" />
+				</RegistryKey>
+			</Component>
+		</DirectoryRef>
+
+		<!-- If a property value has been passed via the command line (which includes when set from the bundle), the registry search will
+				 overwrite the command line value, these actions temporarily store the command line value before the registry search
+				 is performed so they can be restored after the registry search is complete -->
+		<SetProperty Id="SavedStartMenuShortcutsCmdLineValue" Value="[CREATESTARTMENUSHORTCUTS]" Before="AppSearch" Sequence="first" Condition="CREATESTARTMENUSHORTCUTS" />
+		<SetProperty Id="SavedDesktopShortcutsCmdLineValue" Value="[CREATEDESKTOPSHORTCUTS]" Before="AppSearch" Sequence="first" Condition="CREATEDESKTOPSHORTCUTS" />
+
+		<!-- If a command line value was stored, restore it after the registry search has been performed -->
+		<SetProperty Action="RestoreSavedStartMenuShortcutsValue" Id="CREATESTARTMENUSHORTCUTS" Value="[SavedStartMenuShortcutsCmdLineValue]" After="AppSearch" Sequence="first" Condition="SavedStartMenuShortcutsCmdLineValue" />
+		<SetProperty Action="RestoreSavedDesktopShortcutsValue" Id="CREATEDESKTOPSHORTCUTS" Value="[SavedDesktopShortcutsCmdLineValue]" After="AppSearch" Sequence="first" Condition="SavedDesktopShortcutsCmdLineValue" />
+
+		<!-- If a command line value or registry value was set, update the main properties with the value -->
+		<SetProperty Id="STARTMENUSHORTCUTS" Value="[CREATESTARTMENUSHORTCUTS]" After="RestoreSavedStartMenuShortcutsValue" Sequence="first" Condition="CREATESTARTMENUSHORTCUTS" />
+		<SetProperty Id="DESKTOPSHORTCUTS" Value="[CREATEDESKTOPSHORTCUTS]" After="RestoreSavedDesktopShortcutsValue" Sequence="first" Condition="CREATEDESKTOPSHORTCUTS" />
+
+	</Fragment>
+</Wix>

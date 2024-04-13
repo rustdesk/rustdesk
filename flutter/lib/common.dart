@@ -29,6 +29,8 @@ import '../consts.dart';
 import 'common/widgets/overlay.dart';
 import 'mobile/pages/file_manager_page.dart';
 import 'mobile/pages/remote_page.dart';
+import 'desktop/pages/remote_page.dart' as desktop_remote;
+import 'package:flutter_hbb/desktop/widgets/remote_toolbar.dart';
 import 'models/input_model.dart';
 import 'models/model.dart';
 import 'models/platform_model.dart';
@@ -48,7 +50,7 @@ final isMacOS = isMacOS_;
 final isLinux = isLinux_;
 final isDesktop = isDesktop_;
 final isWeb = isWeb_;
-var isWebDesktop = false;
+final isWebDesktop = isWebDesktop_;
 var isMobile = isAndroid || isIOS;
 var version = '';
 int androidVersion = 0;
@@ -59,6 +61,8 @@ DesktopType? desktopType;
 
 bool get isMainDesktopWindow =>
     desktopType == DesktopType.main || desktopType == DesktopType.cm;
+
+String get screenInfo => screenInfo_;
 
 /// Check if the app is running with single view mode.
 bool isSingleViewApp() {
@@ -233,11 +237,13 @@ class MyTheme {
   );
 
   static SwitchThemeData switchTheme() {
-    return SwitchThemeData(splashRadius: isDesktop ? 0 : kRadialReactionRadius);
+    return SwitchThemeData(
+        splashRadius: (isDesktop || isWebDesktop) ? 0 : kRadialReactionRadius);
   }
 
   static RadioThemeData radioTheme() {
-    return RadioThemeData(splashRadius: isDesktop ? 0 : kRadialReactionRadius);
+    return RadioThemeData(
+        splashRadius: (isDesktop || isWebDesktop) ? 0 : kRadialReactionRadius);
   }
 
   // Checkbox
@@ -286,7 +292,7 @@ class MyTheme {
   static EdgeInsets dialogContentPadding({bool actions = true}) {
     final double p = dialogPadding;
 
-    return isDesktop
+    return (isDesktop || isWebDesktop)
         ? EdgeInsets.fromLTRB(p, p, p, actions ? (p - 4) : p)
         : EdgeInsets.fromLTRB(p, p, p, actions ? (p / 2) : p);
   }
@@ -294,12 +300,12 @@ class MyTheme {
   static EdgeInsets dialogActionsPadding() {
     final double p = dialogPadding;
 
-    return isDesktop
+    return (isDesktop || isWebDesktop)
         ? EdgeInsets.fromLTRB(p, 0, p, (p - 4))
         : EdgeInsets.fromLTRB(p, 0, (p - mobileTextButtonPaddingLR), (p / 2));
   }
 
-  static EdgeInsets dialogButtonPadding = isDesktop
+  static EdgeInsets dialogButtonPadding = (isDesktop || isWebDesktop)
       ? EdgeInsets.only(left: dialogPadding)
       : EdgeInsets.only(left: dialogPadding / 3);
 
@@ -371,10 +377,10 @@ class MyTheme {
       labelColor: Colors.black87,
     ),
     tooltipTheme: tooltipTheme(),
-    splashColor: isDesktop ? Colors.transparent : null,
-    highlightColor: isDesktop ? Colors.transparent : null,
-    splashFactory: isDesktop ? NoSplash.splashFactory : null,
-    textButtonTheme: isDesktop
+    splashColor: (isDesktop || isWebDesktop) ? Colors.transparent : null,
+    highlightColor: (isDesktop || isWebDesktop) ? Colors.transparent : null,
+    splashFactory: (isDesktop || isWebDesktop) ? NoSplash.splashFactory : null,
+    textButtonTheme: (isDesktop || isWebDesktop)
         ? TextButtonThemeData(
             style: TextButton.styleFrom(
               splashFactory: NoSplash.splashFactory,
@@ -414,7 +420,9 @@ class MyTheme {
         color: Colors.white,
         shape: RoundedRectangleBorder(
           side: BorderSide(
-              color: isDesktop ? Color(0xFFECECEC) : Colors.transparent),
+              color: (isDesktop || isWebDesktop)
+                  ? Color(0xFFECECEC)
+                  : Colors.transparent),
           borderRadius: BorderRadius.all(Radius.circular(8.0)),
         )),
   ).copyWith(
@@ -440,7 +448,7 @@ class MyTheme {
       ),
     ),
     scrollbarTheme: scrollbarThemeDark,
-    inputDecorationTheme: isDesktop
+    inputDecorationTheme: (isDesktop || isWebDesktop)
         ? InputDecorationTheme(
             fillColor: Color(0xFF24252B),
             filled: true,
@@ -467,10 +475,10 @@ class MyTheme {
       labelColor: Colors.white70,
     ),
     tooltipTheme: tooltipTheme(),
-    splashColor: isDesktop ? Colors.transparent : null,
-    highlightColor: isDesktop ? Colors.transparent : null,
-    splashFactory: isDesktop ? NoSplash.splashFactory : null,
-    textButtonTheme: isDesktop
+    splashColor: (isDesktop || isWebDesktop) ? Colors.transparent : null,
+    highlightColor: (isDesktop || isWebDesktop) ? Colors.transparent : null,
+    splashFactory: (isDesktop || isWebDesktop) ? NoSplash.splashFactory : null,
+    textButtonTheme: (isDesktop || isWebDesktop)
         ? TextButtonThemeData(
             style: TextButton.styleFrom(
               splashFactory: NoSplash.splashFactory,
@@ -818,7 +826,7 @@ class OverlayDialogManager {
                   Offstage(
                       offstage: !showCancel,
                       child: Center(
-                          child: isDesktop
+                          child: (isDesktop || isWebDesktop)
                               ? dialogButton('Cancel', onPressed: cancel)
                               : TextButton(
                                   style: flatButtonStyle,
@@ -1293,7 +1301,7 @@ class AndroidPermissionManager {
   }
 
   static Future<bool> check(String type) {
-    if (isDesktop) {
+    if (isDesktop || isWeb) {
       return Future.value(true);
     }
     return gFFI.invokeMethod("check_permission", type);
@@ -1307,7 +1315,7 @@ class AndroidPermissionManager {
   /// We use XXPermissions to request permissions,
   /// for supported types, see https://github.com/getActivity/XXPermissions/blob/e46caea32a64ad7819df62d448fb1c825481cd28/library/src/main/java/com/hjq/permissions/Permission.java
   static Future<bool> request(String type) {
-    if (isDesktop) {
+    if (isDesktop || isWeb) {
       return Future.value(true);
     }
 
@@ -1863,7 +1871,8 @@ Future<bool> initUniLinks() async {
   // check cold boot
   try {
     final initialLink = await getInitialLink();
-    if (initialLink == null) {
+    print("initialLink: $initialLink");
+    if (initialLink == null || initialLink.isEmpty) {
       return false;
     }
     return handleUriLink(uriString: initialLink);
@@ -2196,13 +2205,29 @@ connect(BuildContext context, String id,
         ),
       );
     } else {
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (BuildContext context) => RemotePage(
-              id: id, password: password, isSharedPassword: isSharedPassword),
-        ),
-      );
+      if (isWebDesktop) {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (BuildContext context) => desktop_remote.RemotePage(
+              key: ValueKey(id),
+              id: id,
+              toolbarState: ToolbarState(),
+              password: password,
+              forceRelay: forceRelay,
+              isSharedPassword: isSharedPassword,
+            ),
+          ),
+        );
+      } else {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (BuildContext context) => RemotePage(
+                id: id, password: password, isSharedPassword: isSharedPassword),
+          ),
+        );
+      }
     }
   }
 
@@ -2397,7 +2422,7 @@ Widget dialogButton(String text,
     Widget? icon,
     TextStyle? style,
     ButtonStyle? buttonStyle}) {
-  if (isDesktop) {
+  if (isDesktop || isWebDesktop) {
     if (isOutline) {
       return icon == null
           ? OutlinedButton(
