@@ -9,6 +9,7 @@ use std::{
     time::{Duration, Instant},
 };
 use url::Url;
+use crate::hbbs_http::create_client;
 
 lazy_static::lazy_static! {
     static ref OIDC_SESSION: Arc<RwLock<OidcSession>> = Arc::new(RwLock::new(OidcSession::new()));
@@ -130,7 +131,7 @@ impl Default for UserStatus {
 impl OidcSession {
     fn new() -> Self {
         Self {
-            client: Client::new(),
+            client: create_client().unwrap_or(Client::new()),
             state_msg: REQUESTING_ACCOUNT_AUTH,
             failed_msg: "".to_owned(),
             code_url: None,

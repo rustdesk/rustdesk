@@ -111,9 +111,12 @@ pub struct Auth {
 
 impl Auth {
     fn get_proxy_authorization(&self) -> String {
+        format!("Proxy-Authorization: Basic {}\r\n", self.get_basic_authorization())
+    }
+
+    pub fn get_basic_authorization(&self) -> String {
         let authorization = format!("{}:{}", &self.user_name, &self.password);
-        let authorization = general_purpose::STANDARD.encode(authorization.as_bytes());
-        format!("Proxy-Authorization: Basic {}\r\n", authorization)
+        general_purpose::STANDARD.encode(authorization.as_bytes())
     }
 }
 
@@ -135,7 +138,7 @@ pub enum ProxyScheme {
 }
 
 impl ProxyScheme {
-    fn maybe_auth(&self) -> Option<&Auth> {
+    pub fn maybe_auth(&self) -> Option<&Auth> {
         match self {
             ProxyScheme::Http { auth, .. } |
             ProxyScheme::Https { auth, .. } |
@@ -308,7 +311,7 @@ impl IntoProxyScheme for ProxyScheme {
 
 #[derive(Clone)]
 pub struct Proxy {
-    intercept: ProxyScheme,
+    pub intercept: ProxyScheme,
     ms_timeout: u64,
 }
 

@@ -6,6 +6,8 @@ use serde_json::{Map, Value};
 pub mod account;
 pub mod record_upload;
 pub mod sync;
+mod http_client;
+pub use http_client::create_client;
 
 #[derive(Debug)]
 pub enum HbbHttpResponse<T> {
