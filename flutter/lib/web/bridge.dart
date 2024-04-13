@@ -319,6 +319,17 @@ class RustdeskImpl {
     return Future.value();
   }
 
+  String? sessionGetShowAllDisplays(
+      {required UuidValue sessionId, dynamic hint}) {
+    return js.context
+        .callMethod('getByName', ['option:session', 'show_all_displays']);
+  }
+
+  Future<void> sessionSetShowAllDisplays(
+      {required UuidValue sessionId, required String value, dynamic hint}) {
+    return Future.value();
+  }
+
   String? sessionGetUseAllMyDisplaysForTheRemoteSession(
       {required UuidValue sessionId, dynamic hint}) {
     return '';
