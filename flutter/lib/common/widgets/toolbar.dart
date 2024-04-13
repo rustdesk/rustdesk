@@ -404,24 +404,25 @@ Future<List<TToggleMenu>> toolbarCursor(
   if (pi.platform != kPeerPlatformAndroid &&
       !ffi.canvasModel.cursorEmbedded &&
       !pi.isWayland) {
-    final state = FollowRemoteCursorState.find(id);
     final enabled = !ffiModel.viewOnly;
     final option = 'follow-remote-cursor';
+    final value =
+        bind.sessionGetToggleOptionSync(sessionId: sessionId, arg: option);
     final showCursorOption = 'show-remote-cursor';
     final showCursorState = ShowRemoteCursorState.find(id);
     final showCursorLockState = ShowRemoteCursorLockState.find(id);
     final showCursorEnabled = bind.sessionGetToggleOptionSync(
         sessionId: sessionId, arg: showCursorOption);
-    showCursorLockState.value = state.value;
+    showCursorLockState.value = value;
     v.add(TToggleMenu(
         child: Text(translate('Follow remote cursor')),
-        value: state.value,
+        value: value,
         onChanged: enabled
             ? (value) async {
                 if (value == null) return;
                 await bind.sessionToggleOption(
                     sessionId: sessionId, value: option);
-                state.value = bind.sessionGetToggleOptionSync(
+                value = bind.sessionGetToggleOptionSync(
                     sessionId: sessionId, arg: option);
                 showCursorLockState.value = value;
                 if (!showCursorEnabled) {
@@ -437,18 +438,19 @@ Future<List<TToggleMenu>> toolbarCursor(
   if (pi.platform != kPeerPlatformAndroid &&
       !ffi.canvasModel.cursorEmbedded &&
       !pi.isWayland) {
-    final state = FollowRemoteWindowState.find(id);
     final enabled = !ffiModel.viewOnly;
     final option = 'follow-remote-window';
+    final value =
+        bind.sessionGetToggleOptionSync(sessionId: sessionId, arg: option);
     v.add(TToggleMenu(
         child: Text(translate('Follow remote window focus')),
-        value: state.value,
+        value: value,
         onChanged: enabled
             ? (value) async {
                 if (value == null) return;
                 await bind.sessionToggleOption(
                     sessionId: sessionId, value: option);
-                state.value = bind.sessionGetToggleOptionSync(
+                value = bind.sessionGetToggleOptionSync(
                     sessionId: sessionId, arg: option);
               }
             : null));
