@@ -137,22 +137,18 @@ pub fn get_focused_display(displays: Vec<DisplayInfo>) -> Option<usize> {
             if focused_window_pos[i].contains("X=") {
                 x = focused_window_pos[i].split("=").collect::<Vec<&str>>()[1]
                     .parse::<i32>()
-                    .unwrap();
+                    .unwrap_or(0);
             } else if focused_window_pos[i].contains("Y=") {
                 y = focused_window_pos[i].split("=").collect::<Vec<&str>>()[1]
                     .parse::<i32>()
-                    .unwrap();
+                    .unwrap_or(0);
             }
         }
         return displays.iter().position(|display| {
-            if x >= display.x
+            x >= display.x
                 && x <= display.x + display.width
                 && y >= display.y
                 && y <= display.y + display.height
-            {
-                return true;
-            }
-            false
         });
     };
     None

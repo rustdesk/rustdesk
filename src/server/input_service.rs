@@ -28,7 +28,7 @@ use std::{
 use winapi::um::winuser::WHEEL_DELTA;
 
 const INVALID_CURSOR_POS: i32 = i32::MIN;
-const INVALID_WINDOW_ID: i32 = 0;
+const INVALID_WINDOW_ID: i32 = -1;
 
 #[derive(Default)]
 struct StateCursor {

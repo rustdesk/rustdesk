@@ -85,16 +85,12 @@ pub fn get_focused_display(displays: Vec<DisplayInfo>) -> Option<usize> {
         if GetWindowRect(hWnd, &mut rect as *mut RECT) == 0 {
             return None;
         }
-        for (i, display) in displays.iter().enumerate() {
-            if rect.left >= display.x
+        displays.iter().position(|display| {
+            rect.left >= display.x
                 && rect.left <= display.x + display.width
                 && rect.top >= display.y
                 && rect.top <= display.y + display.height
-            {
-                return Some(i);
-            }
-        }
-        None
+        })
     }
 }
 
