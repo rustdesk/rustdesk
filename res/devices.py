@@ -67,7 +67,7 @@ def check(response):
         except ValueError:
             return response.text or "Success"
     else:
-        return "Failed", res.status_code, response.text
+        return "Failed", response.status_code, response.text
 
 
 def disable(url, token, guid, id):
