@@ -601,5 +601,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Everyone", "Visi"),
         ("ab_web_console_tip", "Vairāk par tīmekļa konsoli"),
         ("allow-only-conn-window-open-tip", ""),
+        ("Follow remote cursor", ""),
+        ("Follow remote window focus", ""),
     ].iter().cloned().collect();
 }
