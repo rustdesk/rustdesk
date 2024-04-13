@@ -239,7 +239,8 @@ impl Encoder {
 
         #[allow(unused_mut)]
         let mut auto_codec = CodecName::VP9;
-        if av1_useable {
+        // aom is very slow for x86 sciter version on windows x64
+        if av1_useable && !(cfg!(windows) && std::env::consts::ARCH == "x86") {
             auto_codec = CodecName::AV1;
         }
         let mut system = System::new();
