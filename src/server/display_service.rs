@@ -388,12 +388,3 @@ pub fn try_get_displays() -> ResultType<Vec<Display>> {
     }
     Ok(displays)
 }
-
-pub fn get_display_idx_from_name(name: &str) -> Option<usize> {
-    SYNC_DISPLAYS
-        .lock()
-        .unwrap()
-        .displays
-        .iter()
-        .position(|d| d.name == name)
-}
