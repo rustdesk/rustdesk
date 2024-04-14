@@ -86,6 +86,25 @@ class ShareRdp: Reactor.Component {
     }
 }
 
+class Sas: Reactor.Component {
+    function render() {
+        var sas_string = translate("config-sas-tip");
+        var cls = handler.is_sas_enabled()  ? "selected" : "line-through";
+        return <li class={cls}><span>{svg_checkmark}</span>{sas_string}</li>;
+    }
+    
+    function onClick() {
+        var v = !handler.is_sas_enabled();
+        var res = handler.enable_sas(v);
+        if (res == '') {
+            msgbox('custom-info-nocancel', translate('Info'), translate(v ? 'sas-enabled-tip' : 'sas-disabled-tip'));
+            app.update();
+        } else {
+            msgbox('custom-error', translate('Error'), res);
+        }
+    }
+}
+
 var direct_server;
 class DirectServer: Reactor.Component {
     function this() {
@@ -319,6 +338,7 @@ class MyIdMenu: Reactor.Component {
                 <div .separator />
                 <li #stop-service class={service_stopped ? "line-through" : "selected"}><span>{svg_checkmark}</span>{translate("Enable service")}</li>
                 {is_win && handler.is_installed() ? <ShareRdp /> : ""}
+                {is_win && handler.is_installed() ? <Sas /> : ""}
                 <DirectServer />
                 {false && handler.using_public_server() && <li #allow-always-relay><span>{svg_checkmark}</span>{translate('Always connect via relay')}</li>}
                 {handler.is_ok_change_id() ? <div .separator /> : ""}
@@ -567,6 +587,7 @@ class App: Reactor.Component
                     {!is_win || handler.is_installed() ? "": <InstallMe />}
                     {software_update_url ? <UpdateMe /> : ""}
                     {is_win && handler.is_installed() && !software_update_url && handler.is_installed_lower_version() ? <UpgradeMe /> : ""}
+                    {is_win && handler.is_installed() && !handler.is_sas_enabled() ? <SasCard /> : ""}
                     {is_can_screen_recording ? "": <CanScreenRecording />}
                     {is_can_screen_recording && !handler.is_process_trusted(false) ? <TrustMe /> : ""}
                     {!service_stopped && is_can_screen_recording && handler.is_process_trusted(false) && handler.is_installed() && !handler.is_installed_daemon(false) ? <InstallDaemon /> : ""}
@@ -694,6 +715,26 @@ class UpdateMe: Reactor.Component {
             url,
             self.url(path),
             onsuccess, onerror, onprogress);
+    }
+}
+
+class SasCard: Reactor.Component {
+    function render() {
+        return <div .install-me>
+            <div>{translate('Permissions')}</div>
+            <div>{translate('config-sas-tip')}</div>
+            <div #install-me.link>{translate('Enable')}</div>
+        </div>;
+    }
+
+    event click $(#install-me) {
+        var res = handler.enable_sas(true);
+        if (res == '') {
+            msgbox('custom-info-nocancel', translate('Info'), translate('sas-enabled-tip'));
+            app.update();
+        } else {
+            msgbox('custom-error', translate('Error'), res);
+        }
     }
 }
 

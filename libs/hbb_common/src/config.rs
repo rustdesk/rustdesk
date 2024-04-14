@@ -84,6 +84,7 @@ lazy_static::lazy_static! {
     pub static ref APP_HOME_DIR: RwLock<String> = Default::default();
 }
 
+pub const LINK_DOCS_PREFIX: &str = "https://rustdesk.com/docs";
 pub const LINK_DOCS_HOME: &str = "https://rustdesk.com/docs/en/";
 pub const LINK_DOCS_X11_REQUIRED: &str = "https://rustdesk.com/docs/en/manual/linux/#x11-required";
 pub const LINK_HEADLESS_LINUX_SUPPORT: &str =

@@ -2096,6 +2096,14 @@ pub fn main_get_hard_option(key: String) -> SyncReturn<String> {
     SyncReturn(get_hard_option(key))
 }
 
+pub fn main_is_sas_enabled() -> SyncReturn<bool> {
+    SyncReturn(is_sas_enabled())
+}
+
+pub fn main_enable_sas(v: bool) -> SyncReturn<String> {
+    SyncReturn(enable_sas(v))
+}
+
 #[cfg(target_os = "android")]
 pub mod server_side {
     use hbb_common::{config, log};

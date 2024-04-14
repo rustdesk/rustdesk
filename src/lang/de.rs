@@ -601,5 +601,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Everyone", "Jeder"),
         ("ab_web_console_tip", "Mehr über Webkonsole"),
         ("allow-only-conn-window-open-tip", "Verbindung nur zulassen, wenn das RustDesk-Fenster geöffnet ist"),
+        ("config-sas-tip", ""),
+        ("sas-enabled-tip", ""),
+        ("sas-disabled-tip", ""),
     ].iter().cloned().collect();
 }

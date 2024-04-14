@@ -2116,6 +2116,10 @@ class ElevationModel with ChangeNotifier {
   onPortableServiceRunning(bool running) => _running = running;
 }
 
+class SasModel with ChangeNotifier {
+  notify() => notifyListeners();
+}
+
 enum ConnType { defaultConn, fileTransfer, portForward, rdp }
 
 /// Flutter state manager and data communication with the Rust core.

@@ -601,5 +601,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Everyone", "Всі"),
         ("ab_web_console_tip", "Детальніше про веб-консоль"),
         ("allow-only-conn-window-open-tip", ""),
+        ("config-sas-tip", ""),
+        ("sas-enabled-tip", ""),
+        ("sas-disabled-tip", ""),
     ].iter().cloned().collect();
 }

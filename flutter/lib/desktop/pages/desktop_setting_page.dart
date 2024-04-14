@@ -10,6 +10,7 @@ import 'package:flutter_hbb/common/widgets/setting_widgets.dart';
 import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/desktop/pages/desktop_home_page.dart';
 import 'package:flutter_hbb/desktop/pages/desktop_tab_page.dart';
+import 'package:flutter_hbb/models/model.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:flutter_hbb/models/server_model.dart';
 import 'package:flutter_hbb/plugin/manager.dart';
@@ -830,6 +831,7 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
     bool enabled = !locked;
     return _Card(title: 'Security', children: [
       shareRdp(context, enabled),
+      sas(context, enabled),
       _OptionCheckBox(context, 'Deny LAN discovery', 'enable-lan-discovery',
           reverse: true, enabled: enabled),
       ...directIp(context),
@@ -866,6 +868,51 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
             ],
           ).marginOnly(left: _kCheckBoxLeftMargin),
           onTap: enabled ? () => onChanged(!value) : null),
+    );
+  }
+
+  sas(BuildContext context, bool enabled) {
+    return Consumer<SasModel>(
+      builder: (context, model, child) {
+        onChanged(bool b) async {
+          final res = bind.mainEnableSas(v: b);
+          if (res.isNotEmpty) {
+            msgBoxMainWindow(
+                'Permissions', 'error', res, '', gFFI.dialogManager,
+                hasCancel: false);
+          } else {
+            msgBoxMainWindow(
+              'Permissions',
+              'custom-info-nocancel',
+              b ? 'sas-enabled-tip' : 'sas-disabled-tip',
+              '',
+              gFFI.dialogManager,
+              hasCancel: false,
+            );
+            model.notify();
+          }
+        }
+
+        bool value = bind.mainIsSasEnabled();
+        return Offstage(
+          offstage: !(isWindows && bind.mainIsInstalled()),
+          child: GestureDetector(
+              child: Row(
+                children: [
+                  Checkbox(
+                          value: value,
+                          onChanged: enabled ? (_) => onChanged(!value) : null)
+                      .marginOnly(right: 5),
+                  Expanded(
+                    child: Text(translate('config-sas-tip'),
+                        style: TextStyle(
+                            color: disabledTextColor(context, enabled))),
+                  )
+                ],
+              ).marginOnly(left: _kCheckBoxLeftMargin),
+              onTap: enabled ? () => onChanged(!value) : null),
+        );
+      },
     );
   }
 

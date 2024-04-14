@@ -314,6 +314,14 @@ impl UI {
         is_installed()
     }
 
+    fn is_sas_enabled(&self) -> bool {
+        is_sas_enabled()
+    }
+
+    fn enable_sas(&self, v: bool) -> String {
+        enable_sas(v)
+    }
+
     fn is_root(&self) -> bool {
         is_root()
     }
@@ -653,6 +661,8 @@ impl sciter::EventHandler for UI {
         fn get_icon();
         fn install_me(String, String);
         fn is_installed();
+        fn is_sas_enabled();
+        fn enable_sas(bool);
         fn is_root();
         fn is_release();
         fn set_socks(String, String, String);

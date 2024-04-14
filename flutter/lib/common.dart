@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
 
+import 'package:uuid/uuid.dart';
 import 'package:back_button_interceptor/back_button_interceptor.dart';
 import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:flutter/foundation.dart';
@@ -1009,6 +1010,14 @@ class CustomAlertDialog extends StatelessWidget {
           buttonPadding: MyTheme.dialogButtonPadding),
     );
   }
+}
+
+void msgBoxMainWindow(String title, String type, String text, String link,
+    OverlayDialogManager dialogManager,
+    {bool? hasCancel}) {
+  msgBox(UuidValue('00000000-0000-0000-0000-000000000000'), 'custom-$type', title, text,
+      link, dialogManager,
+      hasCancel: hasCancel);
 }
 
 void msgBox(SessionID sessionId, String type, String title, String text,

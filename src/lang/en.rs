@@ -219,5 +219,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("share_warning_tip", "The fields above are shared and visible to others."),
         ("ab_web_console_tip", "More on web console"),
         ("allow-only-conn-window-open-tip", "Only allow connection if RustDesk window is open"),
+        ("config-sas-tip", "Enable SAS to accept Ctrl+Alt+Del."),
+        ("sas-enabled-tip", "SAS is enabled, Ctrl+Alt+Del can be accepted."),
+        ("sas-disabled-tip", "SAS is disabled, Ctrl+Alt+Del cannot be accepted."),
     ].iter().cloned().collect();
 }

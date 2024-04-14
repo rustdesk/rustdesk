@@ -601,5 +601,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Everyone", "所有人"),
         ("ab_web_console_tip", "打开 Web 控制台以执行更多操作"),
         ("allow-only-conn-window-open-tip", "仅当 RustDesk 窗口打开时允许连接"),
+        ("config-sas-tip", "允许 SAS ，以接收 Ctrl+Alt+Del"),
+        ("sas-enabled-tip", "SAS 已启用，可以接收 Ctrl+Alt+Del"),
+        ("sas-disabled-tip", "SAS 已禁用，不再接收 Ctrl+Alt+Del"),
     ].iter().cloned().collect();
 }

@@ -4,15 +4,18 @@ import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/desktop/pages/desktop_home_page.dart';
 import 'package:flutter_hbb/desktop/pages/desktop_setting_page.dart';
 import 'package:flutter_hbb/desktop/widgets/tabbar_widget.dart';
+import 'package:flutter_hbb/models/model.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:flutter_hbb/models/state_model.dart';
 import 'package:get/get.dart';
+import 'package:provider/provider.dart';
 import 'package:window_manager/window_manager.dart';
 
 import '../../common/shared_state.dart';
 
 class DesktopTabPage extends StatefulWidget {
   const DesktopTabPage({Key? key}) : super(key: key);
+  static SasModel sasModel = SasModel();
 
   @override
   State<DesktopTabPage> createState() => _DesktopTabPageState();
@@ -25,9 +28,12 @@ class DesktopTabPage extends StatefulWidget {
           label: kTabLabelSettingPage,
           selectedIcon: Icons.build_sharp,
           unselectedIcon: Icons.build_outlined,
-          page: DesktopSettingPage(
-            key: const ValueKey(kTabLabelSettingPage),
-            initialPage: initialPage,
+          page: ChangeNotifierProvider.value(
+            value: DesktopTabPage.sasModel,
+            child: DesktopSettingPage(
+              key: const ValueKey(kTabLabelSettingPage),
+              initialPage: initialPage,
+            ),
           )));
     } catch (e) {
       debugPrintStack(label: '$e');
@@ -49,8 +55,11 @@ class _DesktopTabPageState extends State<DesktopTabPage> {
         selectedIcon: Icons.home_sharp,
         unselectedIcon: Icons.home_outlined,
         closable: false,
-        page: DesktopHomePage(
-          key: const ValueKey(kTabLabelHomePage),
+        page: ChangeNotifierProvider.value(
+          value: DesktopTabPage.sasModel,
+          child: DesktopHomePage(
+            key: const ValueKey(kTabLabelHomePage),
+          ),
         )));
     if (bind.isIncomingOnly()) {
       tabController.onSelected = (key) {

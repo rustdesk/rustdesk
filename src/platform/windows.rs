@@ -64,7 +64,8 @@ use windows_service::{
 use winreg::enums::*;
 use winreg::RegKey;
 
-pub const DRIVER_CERT_FILE: &str = "RustDeskIddDriver.cer";
+const REG_SUB_KEY_POLICIES_SYSTEM: &str =
+    "Software\\Microsoft\\Windows\\CurrentVersion\\Policies\\System";
 
 pub fn get_cursor_pos() -> Option<(i32, i32)> {
     unsafe {
@@ -1084,7 +1085,6 @@ fn get_after_install(exe: &str) -> String {
     netsh advfirewall firewall add rule name=\"{app_name} Service\" dir=out action=allow program=\"{exe}\" enable=yes
     netsh advfirewall firewall add rule name=\"{app_name} Service\" dir=in action=allow program=\"{exe}\" enable=yes
     {create_service}
-    reg add HKEY_LOCAL_MACHINE\\Software\\Microsoft\\Windows\\CurrentVersion\\Policies\\System /f /v SoftwareSASGeneration /t REG_DWORD /d 1
     ", create_service=get_create_service(&exe))
 }
 
@@ -2188,6 +2188,43 @@ pub fn try_kill_broker() {
         ))
         .creation_flags(winapi::um::winbase::CREATE_NO_WINDOW)
         .spawn());
+}
+
+// https://learn.microsoft.com/en-us/windows/win32/api/sas/nf-sas-sendsas
+// We only take the service case into account here.
+pub fn is_sas_enabled() -> bool {
+    let mut value = 0u32;
+    let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
+    if let Ok(tmp) = hklm.open_subkey(REG_SUB_KEY_POLICIES_SYSTEM) {
+        if let Ok(v) = tmp.get_value("SoftwareSASGeneration") {
+            value = v;
+        }
+    }
+    value & 1 != 0
+}
+
+pub fn enable_sas(enable: bool) -> String {
+    let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
+    match hklm.open_subkey_with_flags(REG_SUB_KEY_POLICIES_SYSTEM, KEY_READ | KEY_WRITE) {
+        Ok(tmp) => {
+            let v = match tmp.get_value::<u32, _>("SoftwareSASGeneration") {
+                Ok(v) => v,
+                Err(e) => {
+                    if e.kind() == std::io::ErrorKind::NotFound {
+                        0
+                    } else {
+                        return format!("Failed to get value of SoftwareSASGeneration: {:?}", e);
+                    }
+                }
+            };
+            let v = if enable { v | 1 } else { v & !1 };
+            if let Err(e) = tmp.set_value("SoftwareSASGeneration", &v) {
+                return format!("Failed to enable SAS: {:?}", e);
+            }
+            return "".to_string();
+        }
+        Err(e) => format!("Failed to open subkey: {:?}", e),
+    }
 }
 
 #[cfg(test)]

@@ -1529,7 +1529,7 @@ impl<T: InvokeUiSession> Remote<T> {
                     let mut link = msgbox.link;
                     if let Some(v) = hbb_common::config::HELPER_URL.get(&link as &str) {
                         link = v.to_string();
-                    } else {
+                    } else if !link.starts_with(hbb_common::config::LINK_DOCS_PREFIX) {
                         log::warn!("Message box ignore link {} for security", &link);
                         link = "".to_string();
                     }

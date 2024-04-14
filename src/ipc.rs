@@ -188,6 +188,8 @@ pub enum Data {
     Close,
     #[cfg(windows)]
     SAS,
+    #[cfg(windows)]
+    EnableSAS((bool, String)),
     UserSid(Option<u32>),
     OnlineStatus(Option<(i64, bool)>),
     Config((String, Option<String>)),
@@ -501,6 +503,11 @@ async fn handle(data: Data, stream: &mut Connection) {
                     ))
                     .await
             );
+        }
+        #[cfg(target_os = "windows")]
+        Data::EnableSAS((v, _)) => {
+            let res = crate::platform::windows::enable_sas(v);
+            allow_err!(stream.send(&Data::EnableSAS((v, res))).await);
         }
         _ => {}
     }
@@ -924,6 +931,17 @@ pub async fn connect_to_user_session(usid: Option<u32>) -> ResultType<()> {
     let mut stream = crate::ipc::connect(1000, crate::POSTFIX_SERVICE).await?;
     timeout(1000, stream.send(&crate::ipc::Data::UserSid(usid))).await??;
     Ok(())
+}
+
+#[cfg(target_os = "windows")]
+#[tokio::main(flavor = "current_thread")]
+pub async fn enable_sas(v: bool, ms_timeout: u64) -> ResultType<String> {
+    let mut c = connect(ms_timeout, "").await?;
+    c.send(&Data::EnableSAS((v, "".to_owned()))).await?;
+    if let Some(Data::EnableSAS((_, res))) = c.next_timeout(ms_timeout).await? {
+        return Ok(res);
+    }
+    bail!("Failed to enable sas");
 }
 
 #[cfg(test)]

@@ -436,6 +436,26 @@ pub fn is_installed() -> bool {
     false
 }
 
+#[cfg(target_os = "windows")]
+pub fn is_sas_enabled() -> bool {
+    crate::platform::windows::is_sas_enabled()
+}
+
+#[cfg(not(target_os = "windows"))]
+pub fn is_sas_enabled() -> bool {
+    false
+}
+
+#[cfg(target_os = "windows")]
+pub fn enable_sas(v: bool) -> String {
+    ipc::enable_sas(v, 1000).unwrap_or_else(|e| e.to_string())
+}
+
+#[cfg(not(target_os = "windows"))]
+pub fn enable_sas() -> String {
+    "".to_owned()
+}
+
 #[inline]
 pub fn is_share_rdp() -> bool {
     #[cfg(windows)]

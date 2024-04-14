@@ -13,6 +13,7 @@ import 'package:flutter_hbb/desktop/pages/connection_page.dart';
 import 'package:flutter_hbb/desktop/pages/desktop_setting_page.dart';
 import 'package:flutter_hbb/desktop/pages/desktop_tab_page.dart';
 import 'package:flutter_hbb/desktop/widgets/scroll_wrapper.dart';
+import 'package:flutter_hbb/models/model.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:flutter_hbb/models/server_model.dart';
 import 'package:flutter_hbb/plugin/ui_manager.dart';
@@ -140,7 +141,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
       if (!isOutgoingOnly) buildIDBoard(context),
       if (!isOutgoingOnly) buildPasswordBoard(context),
       FutureBuilder<Widget>(
-        future: buildHelpCards(),
+        future: buildHelpCards(context),
         builder: (_, data) {
           if (data.hasData) {
             if (isIncomingOnly) {
@@ -455,7 +456,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
     );
   }
 
-  Future<Widget> buildHelpCards() async {
+  Future<Widget> buildHelpCards(BuildContext context) async {
     if (!bind.isCustomClient() &&
         updateUrl.isNotEmpty &&
         !isCardClosed &&
@@ -480,13 +481,25 @@ class _DesktopHomePageState extends State<DesktopHomePage>
           await rustDeskWinManager.closeAllSubWindows();
           bind.mainGotoInstall();
         });
-      } else if (bind.mainIsInstalledLowerVersion()) {
-        return buildInstallCard(
-            "Status", "Your installation is lower version.", "Click to upgrade",
-            () async {
-          await rustDeskWinManager.closeAllSubWindows();
-          bind.mainUpdateMe();
-        });
+      } else {
+        final WindowsCards = <Widget>[];
+        if (bind.mainIsInstalledLowerVersion()) {
+          WindowsCards.add(buildInstallCard(
+              "Status",
+              "Your installation is lower version.",
+              "Click to upgrade", () async {
+            await rustDeskWinManager.closeAllSubWindows();
+            bind.mainUpdateMe();
+          }));
+        }
+        WindowsCards.add(Consumer<SasModel>(
+          builder: (context, model, child) => _buildSasCard(context, model),
+        ));
+        if (WindowsCards.isNotEmpty) {
+          return Column(
+            children: WindowsCards,
+          );
+        }
       }
     } else if (isMacOS) {
       if (!(bind.isOutgoingOnly() ||
@@ -584,13 +597,55 @@ class _DesktopHomePageState extends State<DesktopHomePage>
     return Container();
   }
 
+  Widget _buildSasCard(BuildContext context, SasModel model) {
+    if (bind.mainIsSasEnabled()) {
+      return Offstage();
+    }
+    final keyShowSasHelpTip = "show-sas-help-tip";
+    return buildInstallCard(
+      "Permissions",
+      "config-sas-tip",
+      "Enable",
+      () async {
+        final res = bind.mainEnableSas(v: true);
+        if (res.isNotEmpty) {
+          msgBoxMainWindow('Permissions', 'error', res, '', gFFI.dialogManager,
+              hasCancel: false);
+        } else {
+          model.notify();
+          msgBoxMainWindow(
+            'Permissions',
+            'custom-info-nocancel',
+            'sas-enabled-tip',
+            '',
+            gFFI.dialogManager,
+            hasCancel: false,
+          );
+        }
+      },
+      help: 'Help',
+      link:
+          'https://rustdesk.com/docs/en/client/windows/#sas-secure-attention-sequence',
+      closeButton: true,
+      closeOption: keyShowSasHelpTip,
+      textSize: 14.0,
+    );
+  }
+
   Widget buildInstallCard(String title, String content, String btnText,
       GestureTapCallback onPressed,
       {double marginTop = 20.0,
       String? help,
       String? link,
       bool? closeButton,
-      String? closeOption}) {
+      String? closeOption,
+      double? textSize}) {
+    if (closeOption != null) {
+      if (bind.mainGetLocalOption(key: closeOption) == 'N') {
+        return Offstage();
+      }
+    }
+
     void closeCard() async {
       if (closeOption != null) {
         await bind.mainSetLocalOption(key: closeOption, value: 'N');
@@ -660,7 +715,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
                                       text: translate(btnText),
                                       textColor: Colors.white,
                                       borderColor: Colors.white,
-                                      textSize: 20,
+                                      textSize: textSize ?? 20,
                                       radius: 10,
                                       onTap: onPressed,
                                     )

@@ -424,12 +424,15 @@ struct VirtualInputState {
 #[cfg(target_os = "macos")]
 impl VirtualInputState {
     fn new() -> Option<Self> {
-        VirtualInput::new(CGEventSourceStateID::CombinedSessionState, CGEventTapLocation::Session)
-            .map(|virtual_input| Self {
-                virtual_input,
-                capslock_down: false,
-            })
-            .ok()
+        VirtualInput::new(
+            CGEventSourceStateID::CombinedSessionState,
+            CGEventTapLocation::Session,
+        )
+        .map(|virtual_input| Self {
+            virtual_input,
+            capslock_down: false,
+        })
+        .ok()
     }
 
     #[inline]
@@ -1314,20 +1317,37 @@ fn record_pressed_key(record_key: KeysDown, down: bool) {
 
 fn is_function_key(ck: &EnumOrUnknown<ControlKey>) -> bool {
     let mut res = false;
-    if ck.value() == ControlKey::CtrlAltDel.value() {
-        // have to spawn new thread because send_sas is tokio_main, the caller can not be tokio_main.
-        #[cfg(windows)]
-        std::thread::spawn(|| {
-            allow_err!(send_sas());
-        });
-        res = true;
-    } else if ck.value() == ControlKey::LockScreen.value() {
+    if ck.value() == ControlKey::LockScreen.value() {
         std::thread::spawn(|| {
             lock_screen_2();
         });
         res = true;
     }
     return res;
+}
+
+pub fn try_handle_ctrl_alt_del(evt: &KeyEvent, tx: &Sender) -> bool {
+    if let Some(key_event::Union::ControlKey(ck)) = evt.union {
+        if ck.value() == ControlKey::CtrlAltDel.value() {
+            #[cfg(target_os = "windows")]
+            let res = send_sas();
+            #[cfg(not(target_os = "windows"))]
+            let res = Ok(());
+            if let Err(e) = res {
+                let mut msg_out = Message::new();
+                msg_out.set_message_box(MessageBox {
+                    msgtype: "custom-error-nocancel".to_owned(),
+                    title: "Permissions".to_owned(),
+                    text: e.to_string(),
+                    link: "https://rustdesk.com/docs/en/client/windows/#sas-secure-attention-sequence".to_owned(),
+                    ..Default::default()
+                });
+                tx.send((Instant::now().into(), Arc::new(msg_out))).ok();
+            }
+            return true;
+        }
+    }
+    false
 }
 
 fn legacy_keyboard_mode(evt: &KeyEvent) {
@@ -1566,8 +1586,22 @@ async fn lock_screen_2() {
 }
 
 #[cfg(windows)]
+fn send_sas() -> ResultType<()> {
+    if !crate::platform::is_root() {
+        bail!("Please install");
+    }
+    if !crate::platform::windows::is_sas_enabled() {
+        bail!("Please enable SAS on the server side");
+    }
+    std::thread::spawn(|| {
+        allow_err!(do_send_sas());
+    });
+    Ok(())
+}
+
+#[cfg(windows)]
 #[tokio::main(flavor = "current_thread")]
-async fn send_sas() -> ResultType<()> {
+async fn do_send_sas() -> ResultType<()> {
     if crate::platform::is_physical_console_session().unwrap_or(true) {
         let mut stream = crate::ipc::connect(1000, crate::POSTFIX_SERVICE).await?;
         timeout(1000, stream.send(&crate::ipc::Data::SAS)).await??;
