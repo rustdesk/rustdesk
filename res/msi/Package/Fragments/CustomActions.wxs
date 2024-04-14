@@ -15,5 +15,6 @@
 		<CustomAction Id="TryStopDeleteService" DllEntry="TryStopDeleteService" Impersonate="no" Execute="deferred" Return="ignore" BinaryRef="Custom_Actions_Dll"/>
 		<CustomAction Id="TryDeleteStartupShortcut" DllEntry="TryDeleteStartupShortcut" Impersonate="yes" Execute="immediate" Return="ignore" BinaryRef="Custom_Actions_Dll"/>
 		<CustomAction Id="SetPropertyServiceStop" DllEntry="SetPropertyFromConfig" Impersonate="yes" Execute="immediate" Return="ignore" BinaryRef="Custom_Actions_Dll"/>
+		<CustomAction Id="AddRegSoftwareSASGeneration" DllEntry="AddRegSoftwareSASGeneration" Impersonate="no" Execute="deferred" Return="ignore" BinaryRef="Custom_Actions_Dll"/>
 	</Fragment>
 </Wix>
