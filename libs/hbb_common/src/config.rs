@@ -1561,6 +1561,7 @@ impl UserDefaultConfig {
             }
             "custom_image_quality" => self.get_double_string(key, 50.0, 10.0, 0xFFF as f64),
             "custom-fps" => self.get_double_string(key, 30.0, 5.0, 120.0),
+            "enable_file_transfer" => self.get_string(key, "Y", vec![""]),
             _ => self
                 .get_after(key)
                 .map(|v| v.to_string())
