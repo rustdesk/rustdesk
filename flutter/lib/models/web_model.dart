@@ -157,12 +157,4 @@ class PlatformFFI {
 
   // just for compilation
   void syncAndroidServiceAppDirConfigPath() {}
-
-  bool mainIsSasEnabled({dynamic hint}) {
-    throw UnimplementedError();
-  }
-
-  String mainEnableSas({required bool v, dynamic hint}) {
-    throw UnimplementedError();
-  }
 }

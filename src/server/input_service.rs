@@ -1330,16 +1330,15 @@ pub fn try_handle_ctrl_alt_del(evt: &KeyEvent, tx: &Sender) -> bool {
     if let Some(key_event::Union::ControlKey(ck)) = evt.union {
         if ck.value() == ControlKey::CtrlAltDel.value() {
             #[cfg(target_os = "windows")]
-            let res = send_sas();
-            #[cfg(not(target_os = "windows"))]
-            let res = Ok(());
-            if let Err(e) = res {
+            if let Err(e) = send_sas() {
                 let mut msg_out = Message::new();
                 msg_out.set_message_box(MessageBox {
                     msgtype: "custom-error-nocancel".to_owned(),
                     title: "Permissions".to_owned(),
                     text: e.to_string(),
-                    link: "https://rustdesk.com/docs/en/client/windows/#sas-secure-attention-sequence".to_owned(),
+                    link:
+                        "https://rustdesk.com/docs/en/client/windows/#sas-secure-attention-sequence"
+                            .to_owned(),
                     ..Default::default()
                 });
                 tx.send((Instant::now().into(), Arc::new(msg_out))).ok();

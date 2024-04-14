@@ -452,7 +452,7 @@ pub fn enable_sas(v: bool) -> String {
 }
 
 #[cfg(not(target_os = "windows"))]
-pub fn enable_sas() -> String {
+pub fn enable_sas(_v: bool) -> String {
     "".to_owned()
 }
 

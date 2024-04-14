@@ -1573,5 +1573,13 @@ class RustdeskImpl {
     throw UnimplementedError();
   }
 
+  bool mainIsSasEnabled({dynamic hint}) {
+    throw UnimplementedError();
+  }
+
+  String mainEnableSas({required bool v, dynamic hint}) {
+    throw UnimplementedError();
+  }
+
   void dispose() {}
 }
