@@ -441,10 +441,12 @@ Future<List<TToggleMenu>> toolbarDisplayToggle(
         child: Text(translate('Mute'))));
   }
   // file copy and paste
+  final peerHasFileClipboard = versionCmp(pi.version, '1.2.4') < 0 ||
+      pi.platformAdditions.containsKey(kPlatformAdditionsHasFileClipboard);
   if (ffiModel.keyboard &&
       perms['file'] != false &&
       bind.mainHasFileClipboard() &&
-      pi.platformAdditions.containsKey(kPlatformAdditionsHasFileClipboard)) {
+      peerHasFileClipboard) {
     final enabled = !ffiModel.viewOnly;
     final option = 'enable-file-transfer';
     final value =
