@@ -33,9 +33,9 @@ def get_arch() -> str:
 
 
 def system2(cmd):
-    err = os.system(cmd)
-    if err != 0:
-        print(f"Error occurred when executing: {cmd}. Exiting.")
+    exit_code = os.system(cmd)
+    if exit_code != 0:
+        sys.stderr.write(f"Error occurred when executing: `{cmd}`. Exiting.\n")
         sys.exit(-1)
 
 
