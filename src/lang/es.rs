@@ -600,6 +600,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("share_warning_tip", "Los campos mostrados arriba son compartidos y visibles por otros."),
         ("Everyone", "Todos"),
         ("ab_web_console_tip", "Más en consola web"),
-        ("allow-only-conn-window-open-tip", ""),
+        ("allow-only-conn-window-open-tip", "Permitir la conexión solo si la ventana RusDesk está abierta"),
     ].iter().cloned().collect();
 }
