@@ -156,7 +156,7 @@ class MainService : Service() {
 
     private fun translate(input: String): String {
         Log.d(logTag, "translate:$LOCAL_NAME")
-        return translateLocale(LOCAL_NAME, input)
+        return FFI.translateLocale(LOCAL_NAME, input)
     }
 
     companion object {
