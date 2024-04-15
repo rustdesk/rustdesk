@@ -1,5 +1,7 @@
 package com.carriez.flutter_hbb
 
+import ffi.*
+
 /**
  * Capture screen,get video and audio,send to rust.
  * Dispatch notifications
@@ -63,10 +65,6 @@ const val AUDIO_SAMPLE_RATE = 48000
 const val AUDIO_CHANNEL_MASK = AudioFormat.CHANNEL_IN_STEREO
 
 class MainService : Service() {
-
-    init {
-        System.loadLibrary("rustdesk")
-    }
 
     @Keep
     @RequiresApi(Build.VERSION_CODES.N)
@@ -155,20 +153,6 @@ class MainService : Service() {
 
     private val powerManager: PowerManager by lazy { applicationContext.getSystemService(Context.POWER_SERVICE) as PowerManager }
     private val wakeLock: PowerManager.WakeLock by lazy { powerManager.newWakeLock(PowerManager.ACQUIRE_CAUSES_WAKEUP or PowerManager.SCREEN_BRIGHT_WAKE_LOCK, "rustdesk:wakelock")}
-
-    // jvm call rust
-    private external fun init(ctx: Context)
-
-    /// When app start on boot, app_dir will not be passed from flutter
-    /// so pass a app_dir here to rust server
-    private external fun startServer(app_dir: String)
-    private external fun startService()
-    private external fun onVideoFrameUpdate(buf: ByteBuffer)
-    private external fun onAudioFrameUpdate(buf: ByteBuffer)
-    private external fun translateLocale(localeName: String, input: String): String
-    private external fun refreshScreen()
-    private external fun setFrameRawEnable(name: String, value: Boolean)
-    // private external fun sendVp9(data: ByteArray)
 
     private fun translate(input: String): String {
         Log.d(logTag, "translate:$LOCAL_NAME")
