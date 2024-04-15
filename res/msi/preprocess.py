@@ -67,7 +67,7 @@ def make_parser():
         "-m",
         "--manufacturer",
         type=str,
-        default="RustDesk",
+        default="PURSLANE",
         help="The app manufacturer.",
     )
     return parser
@@ -166,7 +166,7 @@ def gen_pre_vars(args, dist_dir):
     )
 
 
-def replace_app_name_in_lans(app_name):
+def replace_app_name_in_langs(app_name):
     langs_dir = Path(sys.argv[0]).parent.joinpath("Package/Language")
     for file_path in langs_dir.glob("*.wxs"):
         with open(file_path, "r") as f:
@@ -444,4 +444,4 @@ if __name__ == "__main__":
     if not gen_custom_dialog_bitmaps():
         sys.exit(-1)
 
-    replace_app_name_in_lans(args.app_name)
+    replace_app_name_in_langs(args.app_name)
