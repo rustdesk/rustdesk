@@ -169,7 +169,7 @@ def gen_pre_vars(args, dist_dir):
 
 def replace_app_name_in_langs(app_name):
     langs_dir = Path(sys.argv[0]).parent.joinpath("Package/Language")
-    for file_path in langs_dir.glob("*.wxs"):
+    for file_path in langs_dir.glob("*.wxl"):
         with open(file_path, "r") as f:
             lines = f.readlines()
         for i, line in enumerate(lines):
