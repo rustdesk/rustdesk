@@ -1,3 +1,4 @@
+use crate::hbbs_http::create_http_client;
 use bytes::Bytes;
 use hbb_common::{bail, config::Config, lazy_static, log, ResultType};
 use reqwest::blocking::{Body, Client};
@@ -10,7 +11,6 @@ use std::{
     sync::{mpsc::Receiver, Arc, Mutex},
     time::{Duration, Instant},
 };
-use crate::hbbs_http::create_client;
 
 const MAX_HEADER_LEN: usize = 1024;
 const SHOULD_SEND_TIME: Duration = Duration::from_secs(1);
@@ -26,7 +26,7 @@ pub fn is_enable() -> bool {
 
 pub fn run(rx: Receiver<RecordState>) {
     let mut uploader = RecordUploader {
-        client: create_client().unwrap_or(Client::new()),
+        client: create_http_client(),
         api_server: crate::get_api_server(
             Config::get_option("api-server"),
             Config::get_option("custom-rendezvous-server"),

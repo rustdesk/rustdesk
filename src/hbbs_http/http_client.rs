@@ -1,43 +1,74 @@
-use reqwest::blocking::Client;
 use hbb_common::config::Config;
 use hbb_common::log::info;
 use hbb_common::proxy::{Proxy, ProxyScheme};
-use hbb_common::ResultType;
+use reqwest::blocking::Client as SyncClient;
+use reqwest::Client as AsyncClient;
 
-pub fn create_client() -> ResultType<Client> {
-    let mut builder = Client::builder();
-    if let Some(conf) = Config::get_socks() {
-        info!("Create an http request client with proxy forwarding");
-        let proxy = Proxy::form_conf(&conf, None)?;
-        // 根据不同的代理类型设置代理
-        match &proxy.intercept {
-            ProxyScheme::Http {  host, .. } => {
-                let proxy = reqwest::Proxy::http(host)?;
-                builder = builder.proxy(proxy);
-            }
-            ProxyScheme::Https {  host, .. } => {
-                let proxy = reqwest::Proxy::https(host)?;
-                builder = builder.proxy(proxy);
-            }
-            ProxyScheme::Socks5 { addr, .. } => {
-                // 使用socks5代理
-                let proxy = reqwest::Proxy::all(&format!("socks5://{}", addr))?;
-                builder = builder.proxy(proxy);
-            }
-        }
+macro_rules! configure_http_client {
+    ($builder:expr, $Client: ty) => {{
+        let mut builder = $builder;
+        let client = if let Some(conf) = Config::get_socks() {
+            info!("Create an http request client with proxy forwarding");
+            let proxy_result = Proxy::from_conf(&conf, None);
 
-        // 如果有认证信息，添加Basic认证头
-        if let Some(auth) = proxy.intercept.maybe_auth() {
-            let basic_auth = format!(
-                "Basic {}",
-                auth.get_basic_authorization()
-            );
-            builder = builder.default_headers(vec![(
-                reqwest::header::PROXY_AUTHORIZATION,
-                basic_auth.parse().unwrap(),
-            )].into_iter().collect());
-        }
-    }
+            match proxy_result {
+                Ok(proxy) => {
+                    let proxy_setup = match &proxy.intercept {
+                        ProxyScheme::Http { host, .. } => reqwest::Proxy::http(host),
+                        ProxyScheme::Https { host, .. } => reqwest::Proxy::https(host),
+                        ProxyScheme::Socks5 { addr, .. } => {
+                            reqwest::Proxy::all(&format!("socks5://{}", addr))
+                        }
+                    };
 
-    Ok(builder.build()?)
+                    match proxy_setup {
+                        Ok(p) => {
+                            builder = builder.proxy(p);
+                            if let Some(auth) = proxy.intercept.maybe_auth() {
+                                let basic_auth =
+                                    format!("Basic {}", auth.get_basic_authorization());
+                                builder = builder.default_headers(
+                                    vec![(
+                                        reqwest::header::PROXY_AUTHORIZATION,
+                                        basic_auth.parse().unwrap(),
+                                    )]
+                                    .into_iter()
+                                    .collect(),
+                                );
+                            }
+                            builder.build().unwrap_or_else(|e| {
+                                info!("Failed to create a proxied client: {}", e);
+                                <$Client>::new()
+                            })
+                        }
+                        Err(e) => {
+                            info!("Failed to set up proxy: {}", e);
+                            <$Client>::new()
+                        }
+                    }
+                }
+                Err(e) => {
+                    info!("Failed to configure proxy: {}", e);
+                    <$Client>::new()
+                }
+            }
+        } else {
+            builder.build().unwrap_or_else(|e| {
+                info!("Failed to create a client: {}", e);
+                <$Client>::new()
+            })
+        };
+
+        client
+    }};
+}
+
+pub fn create_http_client() -> SyncClient {
+    let builder = SyncClient::builder();
+    configure_http_client!(builder, SyncClient)
+}
+
+pub fn create_http_client_async() -> AsyncClient {
+    let builder = AsyncClient::builder();
+    configure_http_client!(builder, AsyncClient)
 }

@@ -145,6 +145,7 @@ use hbb_common::{
 // #[cfg(any(target_os = "android", target_os = "ios", feature = "cli"))]
 use hbb_common::{config::RENDEZVOUS_PORT, futures::future::join_all};
 
+use crate::hbbs_http::create_http_client_async;
 use crate::ui_interface::{get_option, set_option};
 
 pub type NotifyMessageBox = fn(String, String, String, String) -> dyn Future<Output = ()>;
@@ -972,7 +973,7 @@ pub fn check_software_update() {
 #[tokio::main(flavor = "current_thread")]
 async fn check_software_update_() -> hbb_common::ResultType<()> {
     let url = "https://github.com/rustdesk/rustdesk/releases/latest";
-    let latest_release_response = reqwest::get(url).await?;
+    let latest_release_response = create_http_client_async().get(url).send().await?;
     let latest_release_version = latest_release_response
         .url()
         .path()
@@ -1067,7 +1068,7 @@ pub fn get_audit_server(api: String, custom: String, typ: String) -> String {
 }
 
 pub async fn post_request(url: String, body: String, header: &str) -> ResultType<String> {
-    let mut req = reqwest::Client::new().post(url);
+    let mut req = create_http_client_async().post(url);
     if !header.is_empty() {
         let tmp: Vec<&str> = header.split(": ").collect();
         if tmp.len() == 2 {

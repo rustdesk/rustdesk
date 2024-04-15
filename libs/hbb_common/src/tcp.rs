@@ -1,3 +1,5 @@
+use crate::config::Socks5Server;
+use crate::proxy::Proxy;
 use crate::{bail, bytes_codec::BytesCodec, ResultType};
 use anyhow::Context as AnyhowCtx;
 use bytes::{BufMut, Bytes, BytesMut};
@@ -20,8 +22,6 @@ use tokio::{
 };
 use tokio_socks::IntoTargetAddr;
 use tokio_util::codec::Framed;
-use crate::config::Socks5Server;
-use crate::proxy::Proxy;
 
 pub trait TcpStreamTrait: AsyncRead + AsyncWrite + Unpin {}
 pub struct DynTcpStream(pub(crate) Box<dyn TcpStreamTrait + Send + Sync>);
@@ -117,10 +117,10 @@ impl FramedStream {
         proxy_conf: &Socks5Server,
         ms_timeout: u64,
     ) -> ResultType<Self>
-        where
-            T: IntoTargetAddr<'t>,
+    where
+        T: IntoTargetAddr<'t>,
     {
-        let proxy = Proxy::form_conf(proxy_conf, Some(ms_timeout))?;
+        let proxy = Proxy::from_conf(proxy_conf, Some(ms_timeout))?;
         proxy.connect::<T>(target, local_addr).await
     }
 

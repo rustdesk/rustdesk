@@ -1,3 +1,4 @@
+use crate::proxy::IntoProxyScheme;
 use crate::{
     config::{Config, NetworkType},
     tcp::FramedStream,
@@ -9,7 +10,6 @@ use std::net::SocketAddr;
 use log::info;
 use tokio::net::ToSocketAddrs;
 use tokio_socks::{IntoTargetAddr, TargetAddr};
-use crate::proxy::IntoProxyScheme;
 
 #[inline]
 pub fn check_port<T: std::string::ToString>(host: T, port: i32) -> String {
@@ -105,13 +105,7 @@ pub async fn connect_tcp_local<
     ms_timeout: u64,
 ) -> ResultType<FramedStream> {
     if let Some(conf) = Config::get_socks() {
-        return FramedStream::connect(
-            target,
-            local,
-            &conf,
-            ms_timeout,
-        )
-        .await;
+        return FramedStream::connect(target, local, &conf, ms_timeout).await;
     }
     if let Some(target) = target.resolve() {
         if let Some(local) = local {
