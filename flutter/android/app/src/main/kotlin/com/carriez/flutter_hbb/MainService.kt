@@ -1,6 +1,6 @@
 package com.carriez.flutter_hbb
 
-import ffi.*
+import ffi.RustDesk
 
 /**
  * Capture screen,get video and audio,send to rust.
@@ -195,7 +195,7 @@ class MainService : Service() {
     override fun onCreate() {
         super.onCreate()
         Log.d(logTag,"MainService onCreate")
-        init(this)
+        RustDesk.init(this)
         HandlerThread("Service", Process.THREAD_PRIORITY_BACKGROUND).apply {
             start()
             serviceLooper = looper
@@ -207,7 +207,7 @@ class MainService : Service() {
         // keep the config dir same with flutter
         val prefs = applicationContext.getSharedPreferences(KEY_SHARED_PREFERENCES, FlutterActivity.MODE_PRIVATE)
         val configPath = prefs.getString(KEY_APP_DIR_CONFIG_PATH, "") ?: ""
-        startServer(configPath)
+        RustDesk.startServer(configPath)
 
         createForegroundNotification()
     }
@@ -262,7 +262,7 @@ class MainService : Service() {
                 SCREEN_INFO.dpi = dpi
                 if (isStart) {
                     stopCapture()
-                    refreshScreen()
+                    RustDesk.refreshScreen()
                     startCapture()
                 }
             }
@@ -290,7 +290,7 @@ class MainService : Service() {
             createForegroundNotification()
 
             if (intent.getBooleanExtra(EXT_INIT_FROM_BOOT, false)) {
-                startService()
+                RustDesk.startService()
             }
             Log.d(logTag, "service starting: ${startId}:${Thread.currentThread()}")
             val mediaProjectionManager =
@@ -343,7 +343,7 @@ class MainService : Service() {
                                 val planes = image.planes
                                 val buffer = planes[0].buffer
                                 buffer.rewind()
-                                onVideoFrameUpdate(buffer)
+                                RustDesk.onVideoFrameUpdate(buffer)
                             }
                         } catch (ignored: java.lang.Exception) {
                         }
@@ -377,16 +377,16 @@ class MainService : Service() {
         }
         checkMediaPermission()
         _isStart = true
-        setFrameRawEnable("video",true)
-        setFrameRawEnable("audio",true)
+        RustDesk.setFrameRawEnable("video",true)
+        RustDesk.setFrameRawEnable("audio",true)
         return true
     }
 
     @Synchronized
     fun stopCapture() {
         Log.d(logTag, "Stop Capture")
-        setFrameRawEnable("video",false)
-        setFrameRawEnable("audio",false)
+        RustDesk.setFrameRawEnable("video",false)
+        RustDesk.setFrameRawEnable("audio",false)
         _isStart = false
         // release video
         virtualDisplay?.release()
@@ -521,7 +521,7 @@ class MainService : Service() {
                 thread {
                     while (audioRecordStat) {
                         audioReader!!.readSync(audioRecorder!!)?.let {
-                            onAudioFrameUpdate(it)
+                            RustDesk.onAudioFrameUpdate(it)
                         }
                     }
                     Log.d(logTag, "Exit audio thread")
