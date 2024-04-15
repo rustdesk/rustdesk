@@ -15,7 +15,7 @@ use core_foundation::{
 };
 use core_graphics::{
     display::{kCGNullWindowID, kCGWindowListOptionOnScreenOnly, CGWindowListCopyWindowInfo},
-    window::{kCGWindowLayer, kCGWindowName, kCGWindowNumber, kCGWindowOwnerPID},
+    window::{kCGWindowName, kCGWindowOwnerPID},
 };
 use hbb_common::{
     allow_err,
