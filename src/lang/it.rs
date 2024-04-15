@@ -239,7 +239,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Empty", "Vuoto"),
         ("Invalid folder name", "Nome della cartella non valido"),
         ("Socks5 Proxy", "Proxy Socks5"),
-        ("Hostname", "Nome host"),
         ("Discovered", "Rilevate"),
         ("install_daemon_tip", "Per avviare il programma all'accensione, è necessario installarlo come servizio di sistema."),
         ("Remote ID", "ID remoto"),
@@ -601,5 +600,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("share_warning_tip", "I campi sopra indicati sono condivisi e visibili ad altri."),
         ("Everyone", "Everyone"),
         ("ab_web_console_tip", "Altre info sulla console web"),
+        ("allow-only-conn-window-open-tip", "Consenti la connessione solo se la finestra RustDesk è aperta"),
     ].iter().cloned().collect();
 }

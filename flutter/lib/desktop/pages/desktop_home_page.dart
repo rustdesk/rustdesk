@@ -298,19 +298,20 @@ class _DesktopHomePageState extends State<DesktopHomePage>
     RxBool hover = false.obs;
     return InkWell(
       onTap: DesktopTabPage.onAddSetting,
-      child: Obx(
-        () => CircleAvatar(
-          radius: 15,
-          backgroundColor: hover.value
-              ? Theme.of(context).scaffoldBackgroundColor
-              : Theme.of(context).colorScheme.background,
-          child: Tooltip(
-              message: translate('Settings'),
-              child: Icon(
-                Icons.more_vert_outlined,
-                size: 20,
-                color: hover.value ? textColor : textColor?.withOpacity(0.5),
-              )),
+      child: Tooltip(
+        message: translate('Settings'),
+        child: Obx(
+          () => CircleAvatar(
+            radius: 15,
+            backgroundColor: hover.value
+                ? Theme.of(context).scaffoldBackgroundColor
+                : Theme.of(context).colorScheme.background,
+            child: Icon(
+              Icons.more_vert_outlined,
+              size: 20,
+              color: hover.value ? textColor : textColor?.withOpacity(0.5),
+            ),
+          ),
         ),
       ),
       onHover: (value) => hover.value = value,
@@ -371,31 +372,33 @@ class _DesktopHomePageState extends State<DesktopHomePage>
                       ),
                       AnimatedRotationWidget(
                         onPressed: () => bind.mainUpdateTemporaryPassword(),
-                        child: Obx(() => RotatedBox(
-                            quarterTurns: 2,
-                            child: Tooltip(
-                                message: translate('Refresh Password'),
-                                child: Icon(
-                                  Icons.refresh,
-                                  color: refreshHover.value
-                                      ? textColor
-                                      : Color(0xFFDDDDDD),
-                                  size: 22,
-                                )))),
+                        child: Tooltip(
+                          message: translate('Refresh Password'),
+                          child: Obx(() => RotatedBox(
+                              quarterTurns: 2,
+                              child: Icon(
+                                Icons.refresh,
+                                color: refreshHover.value
+                                    ? textColor
+                                    : Color(0xFFDDDDDD),
+                                size: 22,
+                              ))),
+                        ),
                         onHover: (value) => refreshHover.value = value,
                       ).marginOnly(right: 8, top: 4),
                       if (!bind.isDisableSettings())
                         InkWell(
-                          child: Obx(
-                            () => Tooltip(
-                                message: translate('Change Password'),
-                                child: Icon(
-                                  Icons.edit,
-                                  color: editHover.value
-                                      ? textColor
-                                      : Color(0xFFDDDDDD),
-                                  size: 22,
-                                )).marginOnly(right: 8, top: 4),
+                          child: Tooltip(
+                            message: translate('Change Password'),
+                            child: Obx(
+                              () => Icon(
+                                Icons.edit,
+                                color: editHover.value
+                                    ? textColor
+                                    : Color(0xFFDDDDDD),
+                                size: 22,
+                              ).marginOnly(right: 8, top: 4),
+                            ),
                           ),
                           onTap: () => DesktopSettingPage.switch2page(0),
                           onHover: (value) => editHover.value = value,
@@ -469,7 +472,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
       return buildInstallCard("", systemError, "", () {});
     }
 
-    if (Platform.isWindows && !bind.isDisableInstallation()) {
+    if (isWindows && !bind.isDisableInstallation()) {
       if (!bind.mainIsInstalled()) {
         return buildInstallCard(
             "", bind.isOutgoingOnly() ? "" : "install_tip", "Install",
@@ -485,7 +488,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
           bind.mainUpdateMe();
         });
       }
-    } else if (Platform.isMacOS) {
+    } else if (isMacOS) {
       if (!(bind.isOutgoingOnly() ||
           bind.mainIsCanScreenRecording(prompt: false))) {
         return buildInstallCard("Permissions", "config_screen", "Configure",
@@ -521,7 +524,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
       //     watchIsCanRecordAudio = true;
       //   });
       // }
-    } else if (Platform.isLinux) {
+    } else if (isLinux) {
       if (bind.isOutgoingOnly()) {
         return Container();
       }
@@ -570,7 +573,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
           onPressed: () {
             SystemNavigator.pop(); // Close the application
             // https://github.com/flutter/flutter/issues/66631
-            if (Platform.isWindows) {
+            if (isWindows) {
               exit(0);
             }
           },
@@ -740,7 +743,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
         }
       }
       if (watchIsCanRecordAudio) {
-        if (Platform.isMacOS) {
+        if (isMacOS) {
           Future.microtask(() async {
             if ((await osxCanRecordAudio() ==
                 PermissionAuthorizeType.authorized)) {

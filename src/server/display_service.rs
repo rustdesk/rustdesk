@@ -80,8 +80,8 @@ pub(super) fn check_display_changed(
     let lock = SYNC_DISPLAYS.lock().unwrap();
     // If plugging out a monitor && lock.displays.get(idx) is None.
     //  1. The client version < 1.2.4. The client side has to reconnect.
-    //  2. The client version > 1.2.4, The client side can handle the case becuase sync peer info message will be sent.
-    // But it is acceptable to for the user to reconnect manually, becuase the monitor is unplugged.
+    //  2. The client version > 1.2.4, The client side can handle the case because sync peer info message will be sent.
+    // But it is acceptable to for the user to reconnect manually, because the monitor is unplugged.
     let d = lock.displays.get(idx)?;
     if ndisplay != lock.displays.len() {
         return Some(d.clone());
@@ -122,6 +122,8 @@ pub fn reset_resolutions() {
             );
         }
     }
+    // Can be cleared because reset resolutions is called when there is no client connected.
+    CHANGED_RESOLUTIONS.write().unwrap().clear();
 }
 
 #[inline]
@@ -235,9 +237,13 @@ pub(super) fn get_original_resolution(
             ..Default::default()
         }
     } else {
-        let mut changed_resolutions = CHANGED_RESOLUTIONS.write().unwrap();
+        let changed_resolutions = CHANGED_RESOLUTIONS.write().unwrap();
         let (width, height) = match changed_resolutions.get(display_name) {
             Some(res) => {
+                res.original
+                /*
+                The resolution change may not happen immediately, `changed` has been updated,
+                but the actual resolution is old, it will be mistaken for a third-party change.
                 if res.changed.0 != w as i32 || res.changed.1 != h as i32 {
                     // If the resolution is changed by third process, remove the record in changed_resolutions.
                     changed_resolutions.remove(display_name);
@@ -245,6 +251,7 @@ pub(super) fn get_original_resolution(
                 } else {
                     res.original
                 }
+                */
             }
             None => (w as _, h as _),
         };

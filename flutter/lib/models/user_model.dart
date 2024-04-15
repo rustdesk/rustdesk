@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:bot_toast/bot_toast.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common/hbbs/hbbs.dart';
+import 'package:flutter_hbb/models/ab_model.dart';
 import 'package:get/get.dart';
 import 'package:http/http.dart' as http;
 
@@ -22,6 +23,7 @@ class UserModel {
   UserModel(this.parent);
 
   void refreshCurrentUser() async {
+    if (bind.isDisableAccount()) return;
     final token = bind.mainGetLocalOption(key: 'access_token');
     if (token == '') {
       await updateOtherModels();
@@ -102,7 +104,10 @@ class UserModel {
 
   // update ab and group status
   static Future<void> updateOtherModels() async {
-    await Future.wait([gFFI.abModel.pullAb(), gFFI.groupModel.pull()]);
+    await Future.wait([
+      gFFI.abModel.pullAb(force: ForcePullAb.listAndCurrent, quiet: false),
+      gFFI.groupModel.pull()
+    ]);
   }
 
   Future<void> logOut({String? apiServer}) async {

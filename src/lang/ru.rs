@@ -239,7 +239,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Empty", "Пусто"),
         ("Invalid folder name", "Недопустимое имя папки"),
         ("Socks5 Proxy", "SOCKS5-прокси"),
-        ("Hostname", "Узел"),
         ("Discovered", "Найдено"),
         ("install_daemon_tip", "Для запуска при загрузке необходимо установить системную службу"),
         ("Remote ID", "Удалённый ID"),
@@ -600,6 +599,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Full Control", "Полный доступ"),
         ("share_warning_tip", "Поля выше являются общими и видны другим."),
         ("Everyone", "Все"),
-        ("ab_web_console_tip", ""),
+        ("ab_web_console_tip", "Больше в веб-консоли"),
+        ("allow-only-conn-window-open-tip", "Разрешать подключение только при открытом окне RustDesk"),
     ].iter().cloned().collect();
 }

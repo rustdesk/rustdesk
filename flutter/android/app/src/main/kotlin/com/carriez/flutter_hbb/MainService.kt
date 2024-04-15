@@ -1,5 +1,7 @@
 package com.carriez.flutter_hbb
 
+import ffi.FFI
+
 /**
  * Capture screen,get video and audio,send to rust.
  * Dispatch notifications
@@ -63,10 +65,6 @@ const val AUDIO_SAMPLE_RATE = 48000
 const val AUDIO_CHANNEL_MASK = AudioFormat.CHANNEL_IN_STEREO
 
 class MainService : Service() {
-
-    init {
-        System.loadLibrary("rustdesk")
-    }
 
     @Keep
     @RequiresApi(Build.VERSION_CODES.N)
@@ -156,23 +154,9 @@ class MainService : Service() {
     private val powerManager: PowerManager by lazy { applicationContext.getSystemService(Context.POWER_SERVICE) as PowerManager }
     private val wakeLock: PowerManager.WakeLock by lazy { powerManager.newWakeLock(PowerManager.ACQUIRE_CAUSES_WAKEUP or PowerManager.SCREEN_BRIGHT_WAKE_LOCK, "rustdesk:wakelock")}
 
-    // jvm call rust
-    private external fun init(ctx: Context)
-
-    /// When app start on boot, app_dir will not be passed from flutter
-    /// so pass a app_dir here to rust server
-    private external fun startServer(app_dir: String)
-    private external fun startService()
-    private external fun onVideoFrameUpdate(buf: ByteBuffer)
-    private external fun onAudioFrameUpdate(buf: ByteBuffer)
-    private external fun translateLocale(localeName: String, input: String): String
-    private external fun refreshScreen()
-    private external fun setFrameRawEnable(name: String, value: Boolean)
-    // private external fun sendVp9(data: ByteArray)
-
     private fun translate(input: String): String {
         Log.d(logTag, "translate:$LOCAL_NAME")
-        return translateLocale(LOCAL_NAME, input)
+        return FFI.translateLocale(LOCAL_NAME, input)
     }
 
     companion object {
@@ -211,7 +195,7 @@ class MainService : Service() {
     override fun onCreate() {
         super.onCreate()
         Log.d(logTag,"MainService onCreate")
-        init(this)
+        FFI.init(this)
         HandlerThread("Service", Process.THREAD_PRIORITY_BACKGROUND).apply {
             start()
             serviceLooper = looper
@@ -223,7 +207,7 @@ class MainService : Service() {
         // keep the config dir same with flutter
         val prefs = applicationContext.getSharedPreferences(KEY_SHARED_PREFERENCES, FlutterActivity.MODE_PRIVATE)
         val configPath = prefs.getString(KEY_APP_DIR_CONFIG_PATH, "") ?: ""
-        startServer(configPath)
+        FFI.startServer(configPath)
 
         createForegroundNotification()
     }
@@ -278,7 +262,7 @@ class MainService : Service() {
                 SCREEN_INFO.dpi = dpi
                 if (isStart) {
                     stopCapture()
-                    refreshScreen()
+                    FFI.refreshScreen()
                     startCapture()
                 }
             }
@@ -306,7 +290,7 @@ class MainService : Service() {
             createForegroundNotification()
 
             if (intent.getBooleanExtra(EXT_INIT_FROM_BOOT, false)) {
-                startService()
+                FFI.startService()
             }
             Log.d(logTag, "service starting: ${startId}:${Thread.currentThread()}")
             val mediaProjectionManager =
@@ -359,7 +343,7 @@ class MainService : Service() {
                                 val planes = image.planes
                                 val buffer = planes[0].buffer
                                 buffer.rewind()
-                                onVideoFrameUpdate(buffer)
+                                FFI.onVideoFrameUpdate(buffer)
                             }
                         } catch (ignored: java.lang.Exception) {
                         }
@@ -393,16 +377,16 @@ class MainService : Service() {
         }
         checkMediaPermission()
         _isStart = true
-        setFrameRawEnable("video",true)
-        setFrameRawEnable("audio",true)
+        FFI.setFrameRawEnable("video",true)
+        FFI.setFrameRawEnable("audio",true)
         return true
     }
 
     @Synchronized
     fun stopCapture() {
         Log.d(logTag, "Stop Capture")
-        setFrameRawEnable("video",false)
-        setFrameRawEnable("audio",false)
+        FFI.setFrameRawEnable("video",false)
+        FFI.setFrameRawEnable("audio",false)
         _isStart = false
         // release video
         virtualDisplay?.release()
@@ -537,7 +521,7 @@ class MainService : Service() {
                 thread {
                     while (audioRecordStat) {
                         audioReader!!.readSync(audioRecorder!!)?.let {
-                            onAudioFrameUpdate(it)
+                            FFI.onAudioFrameUpdate(it)
                         }
                     }
                     Log.d(logTag, "Exit audio thread")

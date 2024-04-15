@@ -1,0 +1,26 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.7.34003.232
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{B7DD6F7E-DEF8-4E67-B5B7-07EF123DB6F0}") = "Package", "Package\Package.wixproj", "{F403A403-CEFF-4399-B51C-CC646C8E98CF}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "CustomActions", "CustomActions\CustomActions.vcxproj", "{6B3647E0-B4A3-46AE-8757-A22EE51C1DAC}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Release|x64 = Release|x64
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{F403A403-CEFF-4399-B51C-CC646C8E98CF}.Release|x64.ActiveCfg = Release|x64
+		{F403A403-CEFF-4399-B51C-CC646C8E98CF}.Release|x64.Build.0 = Release|x64
+		{6B3647E0-B4A3-46AE-8757-A22EE51C1DAC}.Release|x64.ActiveCfg = Release|x64
+		{6B3647E0-B4A3-46AE-8757-A22EE51C1DAC}.Release|x64.Build.0 = Release|x64
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {95277884-55F2-4A1F-BFFB-E82EFE847DC2}
+	EndGlobalSection
+EndGlobal

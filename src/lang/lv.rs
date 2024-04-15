@@ -239,7 +239,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Empty", "Tukšs"),
         ("Invalid folder name", "Nederīgs mapes nosaukums"),
         ("Socks5 Proxy", "Socks5 starpniekserveris"),
-        ("Hostname", "Resursdatora nosaukums"),
         ("Discovered", "Atklāts"),
         ("install_daemon_tip", "Lai palaistu pie startēšanas, ir jāinstalē sistēmas serviss."),
         ("Remote ID", "Attālais ID"),
@@ -601,5 +600,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("share_warning_tip", "Iepriekš minētie lauki ir koplietoti un redzami citiem."),
         ("Everyone", "Visi"),
         ("ab_web_console_tip", "Vairāk par tīmekļa konsoli"),
+        ("allow-only-conn-window-open-tip", ""),
     ].iter().cloned().collect();
 }

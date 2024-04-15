@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/consts.dart';
@@ -90,7 +88,7 @@ class _DesktopTabPageState extends State<DesktopTabPage> {
                 ),
               ),
             )));
-    return Platform.isMacOS || kUseCompatibleUiMode
+    return isMacOS || kUseCompatibleUiMode
         ? tabWidget
         : Obx(
             () => DragToResizeArea(

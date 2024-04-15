@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -95,7 +94,7 @@ List<TTextMenu> toolbarControls(BuildContext context, String id, FFI ffi) {
           Text(translate(pi.isHeadless ? 'OS Account' : 'OS Password')),
         ]),
         trailingIcon: Transform.scale(
-          scale: isDesktop ? 0.8 : 1,
+          scale: (isDesktop || isWebDesktop) ? 0.8 : 1,
           child: IconButton(
             onPressed: () {
               if (isMobile && Navigator.canPop(context)) {
@@ -161,7 +160,7 @@ List<TTextMenu> toolbarControls(BuildContext context, String id, FFI ffi) {
     );
   }
   // divider
-  if (isDesktop) {
+  if (isDesktop || isWebDesktop) {
     v.add(TTextMenu(child: Offstage(), onPressed: () {}, divider: true));
   }
   // ctrlAltDel
@@ -230,7 +229,7 @@ List<TTextMenu> toolbarControls(BuildContext context, String id, FFI ffi) {
     ));
   }
   // record
-  if (!isDesktop &&
+  if (!(isDesktop || isWeb) &&
       (ffi.recordingModel.start || (perms["recording"] != false))) {
     v.add(TTextMenu(
         child: Row(
@@ -251,7 +250,7 @@ List<TTextMenu> toolbarControls(BuildContext context, String id, FFI ffi) {
         onPressed: () => ffi.recordingModel.toggle()));
   }
   // fingerprint
-  if (!isDesktop) {
+  if (!(isDesktop || isWebDesktop)) {
     v.add(TTextMenu(
       child: Text(translate('Copy Fingerprint')),
       onPressed: () => onCopyFingerprint(FingerprintState.find(id).value),
@@ -442,10 +441,17 @@ Future<List<TToggleMenu>> toolbarDisplayToggle(
         child: Text(translate('Mute'))));
   }
   // file copy and paste
+  // If the version is less than 1.2.4, file copy and paste is supported on Windows only.
+  final isSupportIfPeer_1_2_3 = versionCmp(pi.version, '1.2.4') < 0 &&
+      isWindows &&
+      pi.platform == kPeerPlatformWindows;
+  // If the version is 1.2.4 or later, file copy and paste is supported when kPlatformAdditionsHasFileClipboard is set.
+  final isSupportIfPeer_1_2_4 = versionCmp(pi.version, '1.2.4') >= 0 &&
+      bind.mainHasFileClipboard() &&
+      pi.platformAdditions.containsKey(kPlatformAdditionsHasFileClipboard);
   if (ffiModel.keyboard &&
       perms['file'] != false &&
-      bind.mainHasFileClipboard() &&
-      pi.platformAdditions.containsKey(kPlatformAdditionsHasFileClipboard)) {
+      (isSupportIfPeer_1_2_3 || isSupportIfPeer_1_2_4)) {
     final enabled = !ffiModel.viewOnly;
     final option = 'enable-file-transfer';
     final value =
@@ -512,8 +518,8 @@ Future<List<TToggleMenu>> toolbarDisplayToggle(
         child: Text(translate('Show displays as individual windows'))));
   }
 
-  final screenList = await getScreenRectList();
-  if (useTextureRender && pi.isSupportMultiDisplay && screenList.length > 1) {
+  final isMultiScreens = !isWeb && (await getScreenRectList()).length > 1;
+  if (useTextureRender && pi.isSupportMultiDisplay && isMultiScreens) {
     final value = bind.sessionGetUseAllMyDisplaysForTheRemoteSession(
             sessionId: ffi.sessionId) ==
         'Y';
@@ -633,8 +639,8 @@ List<TToggleMenu> toolbarKeyboardToggles(FFI ffi) {
 
   // swap key
   if (ffiModel.keyboard &&
-      ((Platform.isMacOS && pi.platform != kPeerPlatformMacOS) ||
-          (!Platform.isMacOS && pi.platform == kPeerPlatformMacOS))) {
+      ((isMacOS && pi.platform != kPeerPlatformMacOS) ||
+          (!isMacOS && pi.platform == kPeerPlatformMacOS))) {
     final option = 'allow_swap_key';
     final value =
         bind.sessionGetToggleOptionSync(sessionId: sessionId, arg: option);

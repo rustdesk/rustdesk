@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/models/state_model.dart';
@@ -115,16 +113,16 @@ const double kDefaultQuality = 50;
 const double kMaxQuality = 100;
 const double kMaxMoreQuality = 2000;
 
-double kNewWindowOffset = Platform.isWindows
+double kNewWindowOffset = isWindows
     ? 56.0
-    : Platform.isLinux
+    : isLinux
         ? 50.0
-        : Platform.isMacOS
+        : isMacOS
             ? 30.0
             : 50.0;
 
 EdgeInsets get kDragToResizeAreaPadding =>
-    !kUseCompatibleUiMode && Platform.isLinux
+    !kUseCompatibleUiMode && isLinux
         ? stateGlobal.fullscreen.isTrue || stateGlobal.isMaximized.value
             ? EdgeInsets.zero
             : EdgeInsets.all(5.0)
@@ -152,7 +150,7 @@ const kDefaultScrollDuration = Duration(milliseconds: 50);
 const kDefaultMouseWheelThrottleDuration = Duration(milliseconds: 50);
 const kFullScreenEdgeSize = 0.0;
 const kMaximizeEdgeSize = 0.0;
-var kWindowEdgeSize = Platform.isWindows ? 1.0 : 5.0;
+var kWindowEdgeSize = isWindows ? 1.0 : 5.0;
 const kWindowBorderWidth = 1.0;
 const kDesktopMenuPadding = EdgeInsets.only(left: 12.0, right: 3.0);
 

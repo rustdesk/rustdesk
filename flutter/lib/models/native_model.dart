@@ -111,13 +111,13 @@ class PlatformFFI {
   /// Init the FFI class, loads the native Rust core library.
   Future<void> init(String appType) async {
     _appType = appType;
-    final dylib = Platform.isAndroid
+    final dylib = isAndroid
         ? DynamicLibrary.open('librustdesk.so')
-        : Platform.isLinux
+        : isLinux
             ? DynamicLibrary.open('librustdesk.so')
-            : Platform.isWindows
+            : isWindows
                 ? DynamicLibrary.open('librustdesk.dll')
-                : Platform.isMacOS
+                : isMacOS
                     ? DynamicLibrary.open("liblibrustdesk.dylib")
                     : DynamicLibrary.process();
     debugPrint('initializing FFI $_appType');
@@ -131,11 +131,11 @@ class PlatformFFI {
       }
       _ffiBind = RustdeskImpl(dylib);
 
-      if (Platform.isLinux) {
+      if (isLinux) {
         // Start a dbus service, no need to await
         _ffiBind.mainStartDbusServer();
         _ffiBind.mainStartPa();
-      } else if (Platform.isMacOS && isMain) {
+      } else if (isMacOS && isMain) {
         // Start ipc service for uri links.
         _ffiBind.mainStartIpcUrlServer();
       }
@@ -155,20 +155,20 @@ class PlatformFFI {
       String id = 'NA';
       String name = 'Flutter';
       DeviceInfoPlugin deviceInfo = DeviceInfoPlugin();
-      if (Platform.isAndroid) {
+      if (isAndroid) {
         AndroidDeviceInfo androidInfo = await deviceInfo.androidInfo;
         name = '${androidInfo.brand}-${androidInfo.model}';
         id = androidInfo.id.hashCode.toString();
         androidVersion = androidInfo.version.sdkInt;
-      } else if (Platform.isIOS) {
+      } else if (isIOS) {
         IosDeviceInfo iosInfo = await deviceInfo.iosInfo;
         name = iosInfo.utsname.machine;
         id = iosInfo.identifierForVendor.hashCode.toString();
-      } else if (Platform.isLinux) {
+      } else if (isLinux) {
         LinuxDeviceInfo linuxInfo = await deviceInfo.linuxInfo;
         name = linuxInfo.name;
         id = linuxInfo.machineId ?? linuxInfo.id;
-      } else if (Platform.isWindows) {
+      } else if (isWindows) {
         try {
           // request windows build number to fix overflow on win7
           windowsBuildNumber = getWindowsTargetBuildNumber();
@@ -180,7 +180,7 @@ class PlatformFFI {
           name = "unknown";
           id = "unknown";
         }
-      } else if (Platform.isMacOS) {
+      } else if (isMacOS) {
         MacOsDeviceInfo macOsInfo = await deviceInfo.macOsInfo;
         name = macOsInfo.computerName;
         id = macOsInfo.systemGUID ?? '';
@@ -247,7 +247,7 @@ class PlatformFFI {
     _eventCallback = fun;
   }
 
-  void setRgbaCallback(void Function(Uint8List) fun) async {}
+  void setRgbaCallback(void Function(int, Uint8List) fun) async {}
 
   void startDesktopWebListener() {}
 

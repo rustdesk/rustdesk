@@ -114,7 +114,7 @@ class _DesktopSettingPageState extends State<DesktopSettingPage>
       if (!bind.isIncomingOnly())
         _TabInfo(
             'Display', Icons.desktop_windows_outlined, Icons.desktop_windows),
-      if (!bind.isIncomingOnly() && bind.pluginFeatureIsEnabled())
+      if (!isWeb && !bind.isIncomingOnly() && bind.pluginFeatureIsEnabled())
         _TabInfo('Plugin', Icons.extension_outlined, Icons.extension),
       if (!bind.isDisableAccount())
         _TabInfo('Account', Icons.person_outline, Icons.person),
@@ -129,7 +129,8 @@ class _DesktopSettingPageState extends State<DesktopSettingPage>
       if (!bind.isOutgoingOnly() && !bind.isDisableSettings()) _Safety(),
       if (!bind.isDisableSettings()) _Network(),
       if (!bind.isIncomingOnly()) _Display(),
-      if (!bind.isIncomingOnly() && bind.pluginFeatureIsEnabled()) _Plugin(),
+      if (!isWeb && !bind.isIncomingOnly() && bind.pluginFeatureIsEnabled())
+        _Plugin(),
       if (!bind.isDisableAccount()) _Account(),
       _About(),
     ];
@@ -399,9 +400,9 @@ class _GeneralState extends State<_General> {
 
   Widget hwcodec() {
     final hwcodec = bind.mainHasHwcodec();
-    final gpucodec = bind.mainHasGpucodec();
+    final vram = bind.mainHasVram();
     return Offstage(
-      offstage: !(hwcodec || gpucodec),
+      offstage: !(hwcodec || vram),
       child: _Card(title: 'Hardware Codec', children: [
         _OptionCheckBox(context, 'Enable hardware codec', 'enable-hwcodec')
       ]),
@@ -414,7 +415,7 @@ class _GeneralState extends State<_General> {
     }
 
     String getDefault() {
-      if (Platform.isWindows) return translate('System Sound');
+      if (isWindows) return translate('System Sound');
       return '';
     }
 
@@ -434,7 +435,7 @@ class _GeneralState extends State<_General> {
 
     return futureBuilder(future: () async {
       List<String> devices = (await bind.mainGetSoundInputs()).toList();
-      if (Platform.isWindows) {
+      if (isWindows) {
         devices.insert(0, translate('System Sound'));
       }
       String current = await getValue();
@@ -705,7 +706,7 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
             _OptionCheckBox(
                 context, 'Enable recording session', 'enable-record-session',
                 enabled: enabled, fakeValue: fakeValue),
-            if (Platform.isWindows)
+            if (isWindows)
               _OptionCheckBox(
                   context, 'Enable blocking user input', 'enable-block-input',
                   enabled: enabled, fakeValue: fakeValue),
@@ -834,6 +835,10 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
       ...directIp(context),
       whitelist(),
       ...autoDisconnect(context),
+      if (bind.mainIsInstalled())
+        _OptionCheckBox(context, 'allow-only-conn-window-open-tip',
+            'allow-only-conn-window-open',
+            reverse: false, enabled: enabled),
     ]);
   }
 
@@ -845,7 +850,7 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
 
     bool value = bind.mainIsShareRdp();
     return Offstage(
-      offstage: !(Platform.isWindows && bind.mainIsInstalled()),
+      offstage: !(isWindows && bind.mainIsInstalled()),
       child: GestureDetector(
           child: Row(
             children: [
@@ -2044,7 +2049,7 @@ void changeSocks5Proxy() async {
                 ConstrainedBox(
                     constraints: const BoxConstraints(minWidth: 140),
                     child: Text(
-                      '${translate("Hostname")}:',
+                      '${translate("Server")}:',
                       textAlign: TextAlign.right,
                     ).marginOnly(right: 10)),
                 Expanded(

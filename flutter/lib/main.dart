@@ -48,7 +48,7 @@ Future<void> main(List<String> args) async {
   if (args.isNotEmpty && args.first == 'multi_window') {
     kWindowId = int.parse(args[1]);
     stateGlobal.setWindowId(kWindowId!);
-    if (!Platform.isMacOS) {
+    if (!isMacOS) {
       WindowController.fromWindowId(kWindowId!).showTitleBar(false);
     }
     final argument = args[2].isEmpty
@@ -125,10 +125,7 @@ void runMainApp(bool startService) async {
   await Future.wait([gFFI.abModel.loadCache(), gFFI.groupModel.loadCache()]);
   gFFI.userModel.refreshCurrentUser();
   runApp(App());
-  if (isWeb) {
-    // Web does not support window manager.
-    return;
-  }
+
   // Set window option.
   WindowOptions windowOptions = getHiddenTitleBarWindowOptions();
   windowManager.waitUntilReadyToShow(windowOptions, () async {

@@ -42,10 +42,10 @@ use hbb_common::{
         Mutex as TokioMutex,
     },
 };
-#[cfg(feature = "gpucodec")]
-use scrap::gpucodec::{GpuEncoder, GpuEncoderConfig};
 #[cfg(feature = "hwcodec")]
-use scrap::hwcodec::{HwEncoder, HwEncoderConfig};
+use scrap::hwcodec::{HwRamEncoder, HwRamEncoderConfig};
+#[cfg(feature = "vram")]
+use scrap::vram::{VRamEncoder, VRamEncoderConfig};
 #[cfg(not(windows))]
 use scrap::Capturer;
 use scrap::{
@@ -430,7 +430,7 @@ fn run(vs: VideoService) -> ResultType<()> {
         Ok(x) => encoder = x,
         Err(err) => bail!("Failed to create encoder: {}", err),
     }
-    #[cfg(feature = "gpucodec")]
+    #[cfg(feature = "vram")]
     c.set_output_texture(encoder.input_texture());
     VIDEO_QOS.lock().unwrap().store_bitrate(encoder.bitrate());
     VIDEO_QOS
@@ -490,9 +490,9 @@ fn run(vs: VideoService) -> ResultType<()> {
         if Encoder::use_i444(&encoder_cfg) != use_i444 {
             bail!("SWITCH");
         }
-        #[cfg(all(windows, feature = "gpucodec"))]
-        if c.is_gdi() && (codec_name == CodecName::H264GPU || codec_name == CodecName::H265GPU) {
-            log::info!("changed to gdi when using gpucodec");
+        #[cfg(all(windows, feature = "vram"))]
+        if c.is_gdi() && (codec_name == CodecName::H264VRAM || codec_name == CodecName::H265VRAM) {
+            log::info!("changed to gdi when using vram");
             bail!("SWITCH");
         }
         check_privacy_mode_changed(&sp, c.privacy_mode_id)?;
@@ -624,8 +624,8 @@ impl Raii {
 
 impl Drop for Raii {
     fn drop(&mut self) {
-        #[cfg(feature = "gpucodec")]
-        GpuEncoder::set_not_use(self.0, false);
+        #[cfg(feature = "vram")]
+        VRamEncoder::set_not_use(self.0, false);
         VIDEO_QOS.lock().unwrap().set_support_abr(self.0, true);
     }
 }
@@ -637,21 +637,21 @@ fn get_encoder_config(
     record: bool,
     _portable_service: bool,
 ) -> EncoderCfg {
-    #[cfg(all(windows, feature = "gpucodec"))]
+    #[cfg(all(windows, feature = "vram"))]
     if _portable_service || c.is_gdi() {
         log::info!("gdi:{}, portable:{}", c.is_gdi(), _portable_service);
-        GpuEncoder::set_not_use(_display_idx, true);
+        VRamEncoder::set_not_use(_display_idx, true);
     }
-    #[cfg(feature = "gpucodec")]
+    #[cfg(feature = "vram")]
     Encoder::update(scrap::codec::EncodingUpdate::Check);
     // https://www.wowza.com/community/t/the-correct-keyframe-interval-in-obs-studio/95162
     let keyframe_interval = if record { Some(240) } else { None };
     let negotiated_codec = Encoder::negotiated_codec();
     match negotiated_codec.clone() {
-        CodecName::H264GPU | CodecName::H265GPU => {
-            #[cfg(feature = "gpucodec")]
-            if let Some(feature) = GpuEncoder::try_get(&c.device(), negotiated_codec.clone()) {
-                EncoderCfg::GPU(GpuEncoderConfig {
+        CodecName::H264VRAM | CodecName::H265VRAM => {
+            #[cfg(feature = "vram")]
+            if let Some(feature) = VRamEncoder::try_get(&c.device(), negotiated_codec.clone()) {
+                EncoderCfg::VRAM(VRamEncoderConfig {
                     device: c.device(),
                     width: c.width,
                     height: c.height,
@@ -668,7 +668,7 @@ fn get_encoder_config(
                     keyframe_interval,
                 )
             }
-            #[cfg(not(feature = "gpucodec"))]
+            #[cfg(not(feature = "vram"))]
             handle_hw_encoder(
                 negotiated_codec.clone(),
                 c.width,
@@ -677,7 +677,7 @@ fn get_encoder_config(
                 keyframe_interval,
             )
         }
-        CodecName::H264HW(_name) | CodecName::H265HW(_name) => handle_hw_encoder(
+        CodecName::H264RAM(_name) | CodecName::H265RAM(_name) => handle_hw_encoder(
             negotiated_codec.clone(),
             c.width,
             c.height,
@@ -714,15 +714,15 @@ fn handle_hw_encoder(
     let f = || {
         #[cfg(feature = "hwcodec")]
         match _name {
-            CodecName::H264GPU | CodecName::H265GPU => {
+            CodecName::H264VRAM | CodecName::H265VRAM => {
                 if !scrap::codec::enable_hwcodec_option() {
                     return Err(());
                 }
-                let is_h265 = _name == CodecName::H265GPU;
-                let best = HwEncoder::best();
+                let is_h265 = _name == CodecName::H265VRAM;
+                let best = HwRamEncoder::best();
                 if let Some(h264) = best.h264 {
                     if !is_h265 {
-                        return Ok(EncoderCfg::HW(HwEncoderConfig {
+                        return Ok(EncoderCfg::HWRAM(HwRamEncoderConfig {
                             name: h264.name,
                             width,
                             height,
@@ -733,7 +733,7 @@ fn handle_hw_encoder(
                 }
                 if let Some(h265) = best.h265 {
                     if is_h265 {
-                        return Ok(EncoderCfg::HW(HwEncoderConfig {
+                        return Ok(EncoderCfg::HWRAM(HwRamEncoderConfig {
                             name: h265.name,
                             width,
                             height,
@@ -743,8 +743,8 @@ fn handle_hw_encoder(
                     }
                 }
             }
-            CodecName::H264HW(name) | CodecName::H265HW(name) => {
-                return Ok(EncoderCfg::HW(HwEncoderConfig {
+            CodecName::H264RAM(name) | CodecName::H265RAM(name) => {
+                return Ok(EncoderCfg::HWRAM(HwRamEncoderConfig {
                     name,
                     width,
                     height,

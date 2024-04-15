@@ -98,9 +98,11 @@ class PlatformFFI {
           sessionId: sessionId, display: display, ptr: ptr);
 
   Future<void> init(String appType) async {
-    isWebDesktop = !context.callMethod('isMobile');
     context.callMethod('init');
     version = getByName('version');
+    window.onContextMenu.listen((event) {
+      event.preventDefault();
+    });
 
     context['onRegisteredEvent'] = (String message) {
       try {
@@ -123,10 +125,10 @@ class PlatformFFI {
     };
   }
 
-  void setRgbaCallback(void Function(Uint8List) fun) {
-    context["onRgba"] = (Uint8List? rgba) {
+  void setRgbaCallback(void Function(int, Uint8List) fun) {
+    context["onRgba"] = (int display, Uint8List? rgba) {
       if (rgba != null) {
-        fun(rgba);
+        fun(display, rgba);
       }
     };
   }

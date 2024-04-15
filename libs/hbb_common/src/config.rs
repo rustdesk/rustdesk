@@ -317,7 +317,11 @@ pub struct PeerConfig {
     pub custom_resolutions: HashMap<String, Resolution>,
 
     // The other scalar value must before this
-    #[serde(default, deserialize_with = "PeerConfig::deserialize_options")]
+    #[serde(
+        default,
+        deserialize_with = "deserialize_hashmap_string_string",
+        skip_serializing_if = "HashMap::is_empty"
+    )]
     pub options: HashMap<String, String>, // not use delete to represent default values
     // Various data for flutter ui
     #[serde(default, deserialize_with = "deserialize_hashmap_string_string")]
@@ -402,10 +406,10 @@ fn patch(path: PathBuf) -> PathBuf {
         #[cfg(target_os = "linux")]
         {
             if _tmp == "/root" {
-                if let Ok(user) = crate::platform::linux::run_cmds("whoami") {
+                if let Ok(user) = crate::platform::linux::run_cmds_trim_newline("whoami") {
                     if user != "root" {
                         let cmd = format!("getent passwd '{}' | awk -F':' '{{print $6}}'", user);
-                        if let Ok(output) = crate::platform::linux::run_cmds(&cmd) {
+                        if let Ok(output) = crate::platform::linux::run_cmds_trim_newline(&cmd) {
                             return output.into();
                         }
                         return format!("/home/{user}").into();
@@ -499,7 +503,7 @@ impl Config {
     fn store_<T: serde::Serialize>(config: &T, suffix: &str) {
         let file = Self::file_(suffix);
         if let Err(err) = store_path(file, config) {
-            log::error!("Failed to store config: {}", err);
+            log::error!("Failed to store {suffix} config: {err}");
         }
     }
 
@@ -863,6 +867,7 @@ impl Config {
         }
         let mut config = Config::load_::<Config>("");
         if config.key_pair.0.is_empty() {
+            log::info!("Generated new keypair for id: {}", config.id);
             let (pk, sk) = sign::gen_keypair();
             let key_pair = (sk.0.to_vec(), pk.0.into());
             config.key_pair = key_pair.clone();
@@ -1230,22 +1235,8 @@ impl PeerConfig {
         }
     }
 
-    fn deserialize_options<'de, D>(deserializer: D) -> Result<HashMap<String, String>, D::Error>
-    where
-        D: de::Deserializer<'de>,
-    {
-        let mut mp: HashMap<String, String> = de::Deserialize::deserialize(deserializer)?;
-        Self::insert_default_options(&mut mp);
-        Ok(mp)
-    }
-
     fn default_options() -> HashMap<String, String> {
         let mut mp: HashMap<String, String> = Default::default();
-        Self::insert_default_options(&mut mp);
-        return mp;
-    }
-
-    fn insert_default_options(mp: &mut HashMap<String, String>) {
         [
             "codec-preference",
             "custom-fps",
@@ -1255,10 +1246,9 @@ impl PeerConfig {
             "swap-left-right-mouse",
         ]
         .map(|key| {
-            if !mp.contains_key(key) {
-                mp.insert(key.to_owned(), UserDefaultConfig::read(key));
-            }
+            mp.insert(key.to_owned(), UserDefaultConfig::read(key));
         });
+        mp
     }
 }
 
@@ -1503,8 +1493,10 @@ impl LanPeers {
 
 #[derive(Debug, Default, Serialize, Deserialize, Clone)]
 pub struct HwCodecConfig {
-    #[serde(default, deserialize_with = "deserialize_hashmap_string_string")]
-    pub options: HashMap<String, String>,
+    #[serde(default, deserialize_with = "deserialize_string")]
+    pub ram: String,
+    #[serde(default, deserialize_with = "deserialize_string")]
+    pub vram: String,
 }
 
 impl HwCodecConfig {
@@ -1519,25 +1511,17 @@ impl HwCodecConfig {
     pub fn clear() {
         HwCodecConfig::default().store();
     }
-}
 
-#[derive(Debug, Default, Serialize, Deserialize, Clone)]
-pub struct GpucodecConfig {
-    #[serde(default, deserialize_with = "deserialize_string")]
-    pub available: String,
-}
-
-impl GpucodecConfig {
-    pub fn load() -> GpucodecConfig {
-        Config::load_::<GpucodecConfig>("_gpucodec")
+    pub fn clear_ram() {
+        let mut c = Self::load();
+        c.ram = Default::default();
+        c.store();
     }
 
-    pub fn store(&self) {
-        Config::store_(self, "_gpucodec");
-    }
-
-    pub fn clear() {
-        GpucodecConfig::default().store();
+    pub fn clear_vram() {
+        let mut c = Self::load();
+        c.vram = Default::default();
+        c.store();
     }
 }
 
@@ -1577,6 +1561,7 @@ impl UserDefaultConfig {
             }
             "custom_image_quality" => self.get_double_string(key, 50.0, 10.0, 0xFFF as f64),
             "custom-fps" => self.get_double_string(key, 30.0, 5.0, 120.0),
+            "enable_file_transfer" => self.get_string(key, "Y", vec![""]),
             _ => self
                 .get_after(key)
                 .map(|v| v.to_string())

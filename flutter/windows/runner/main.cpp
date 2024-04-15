@@ -16,6 +16,8 @@ typedef int (*FUNC_RUSTDESK_GET_APP_NAME)(wchar_t*, int);
 /// Note: `--server`, `--service` are already handled in [core_main.rs].
 const std::vector<std::string> parameters_white_list = {"--install", "--cm"};
 
+const wchar_t* getWindowClassName();
+
 int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
                       _In_ wchar_t *command_line, _In_ int show_command)
 {
@@ -39,14 +41,6 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
     std::cout << "Failed to get free_c_args." << std::endl;
     return EXIT_FAILURE;
   }
-  std::wstring app_name = L"RustDesk";
-  FUNC_RUSTDESK_GET_APP_NAME get_rustdesk_app_name = (FUNC_RUSTDESK_GET_APP_NAME)GetProcAddress(hInstance, "get_rustdesk_app_name");
-  if (get_rustdesk_app_name) {
-    wchar_t app_name_buffer[512] = {0};
-    if (get_rustdesk_app_name(app_name_buffer, 512) == 0) {
-      app_name = std::wstring(app_name_buffer);
-    }
-  }
   std::vector<std::string> command_line_arguments =
       GetCommandLineArguments();
   // Remove possible trailing whitespace from command line arguments
@@ -68,8 +62,17 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   std::vector<std::string> rust_args(c_args, c_args + args_len);
   free_c_args(c_args, args_len);
 
+  std::wstring app_name = L"RustDesk";
+  FUNC_RUSTDESK_GET_APP_NAME get_rustdesk_app_name = (FUNC_RUSTDESK_GET_APP_NAME)GetProcAddress(hInstance, "get_rustdesk_app_name");
+  if (get_rustdesk_app_name) {
+    wchar_t app_name_buffer[512] = {0};
+    if (get_rustdesk_app_name(app_name_buffer, 512) == 0) {
+      app_name = std::wstring(app_name_buffer);
+    }
+  }
+
   // Uri links dispatch
-  HWND hwnd = ::FindWindow(_T("FLUTTER_RUNNER_WIN32_WINDOW"), app_name.c_str());
+  HWND hwnd = ::FindWindowW(getWindowClassName(), app_name.c_str());
   if (hwnd != NULL) {
     // Allow multiple flutter instances when being executed by parameters
     // contained in whitelists.

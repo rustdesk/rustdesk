@@ -210,13 +210,13 @@ class Enhancements: Reactor.Component {
 
     function render() {
         var has_hwcodec = handler.has_hwcodec();
-        var has_gpucodec = handler.has_gpucodec();
+        var has_vram = handler.has_vram();
         var support_remove_wallpaper = handler.support_remove_wallpaper();
         var me = this;
         self.timer(1ms, function() { me.toggleMenuState() });
         return <li>{translate('Enhancements')}
             <menu #enhancements-menu>
-                {(has_hwcodec || has_gpucodec) ? <li #enable-hwcodec><span>{svg_checkmark}</span>{translate("Enable hardware codec")}</li> : ""}
+                {(has_hwcodec || has_vram) ? <li #enable-hwcodec><span>{svg_checkmark}</span>{translate("Enable hardware codec")}</li> : ""}
                 <li #enable-abr><span>{svg_checkmark}</span>{translate("Adaptive bitrate")} (beta)</li>
                 <li #screen-recording>{translate("Recording")}</li>
                 {support_remove_wallpaper ? <li #allow-remove-wallpaper><span>{svg_checkmark}</span>{translate("Remove wallpaper during incoming sessions")}</li> : ""}
@@ -461,7 +461,7 @@ class MyIdMenu: Reactor.Component {
             var old_username = socks5[1] || "";
             var old_password = socks5[2] || "";
             msgbox("custom-server", "Socks5 Proxy", <div .form .set-password> 
-            <div><span>{translate("Hostname")}:</span><input|text .outline-focus name='proxy' value={old_proxy} /></div>
+            <div><span>{translate("Server")}:</span><input|text .outline-focus name='proxy' value={old_proxy} /></div>
             <div><span>{translate("Username")}:</span><input|text name='username' value={old_username} /></div>
             <div><span>{translate("Password")}:</span><PasswordComponent value={old_password} /></div>
             </div>

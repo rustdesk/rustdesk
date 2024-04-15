@@ -239,7 +239,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Empty", "Gol"),
         ("Invalid folder name", "Denumire folder nevalidă"),
         ("Socks5 Proxy", "Proxy Socks5"),
-        ("Hostname", "Nume gazdă"),
         ("Discovered", "Descoperite"),
         ("install_daemon_tip", "Pentru executare la pornirea sistemului, instalează serviciul de sistem."),
         ("Remote ID", "ID dispozitiv la distanță"),
@@ -601,5 +600,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("share_warning_tip", ""),
         ("Everyone", ""),
         ("ab_web_console_tip", ""),
+        ("allow-only-conn-window-open-tip", ""),
     ].iter().cloned().collect();
 }
