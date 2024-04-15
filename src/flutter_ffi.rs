@@ -2108,7 +2108,7 @@ pub mod server_side {
     use crate::start_server;
 
     #[no_mangle]
-    pub unsafe extern "system" fn Java_ffi_RustDesk_startServer(
+    pub unsafe extern "system" fn Java_ffi_FFI_startServer(
         env: JNIEnv,
         _class: JClass,
         app_dir: JString,
@@ -2122,7 +2122,7 @@ pub mod server_side {
     }
 
     #[no_mangle]
-    pub unsafe extern "system" fn Java_ffi_RustDesk_startService(
+    pub unsafe extern "system" fn Java_ffi_FFI_startService(
         _env: JNIEnv,
         _class: JClass,
     ) {
@@ -2132,7 +2132,7 @@ pub mod server_side {
     }
 
     #[no_mangle]
-    pub unsafe extern "system" fn Java_ffi_RustDesk_translateLocale(
+    pub unsafe extern "system" fn Java_ffi_FFI_translateLocale(
         env: JNIEnv,
         _class: JClass,
         locale: JString,
@@ -2151,7 +2151,7 @@ pub mod server_side {
     }
 
     #[no_mangle]
-    pub unsafe extern "system" fn Java_ffi_RustDesk_refreshScreen(
+    pub unsafe extern "system" fn Java_ffi_FFI_refreshScreen(
         _env: JNIEnv,
         _class: JClass,
     ) {

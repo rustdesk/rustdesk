@@ -5,7 +5,7 @@ package ffi
 import android.content.Context
 import java.nio.ByteBuffer
 
-object RustDesk {
+object FFI {
     init {
         System.loadLibrary("rustdesk")
     }
