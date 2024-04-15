@@ -401,10 +401,13 @@ Future<List<TToggleMenu>> toolbarCursor(
             : null));
   }
   // follow remote cursor
+  final isMultiScreens = !isWeb && (await getScreenRectList()).length > 1;
   if (pi.platform != kPeerPlatformAndroid &&
       !ffi.canvasModel.cursorEmbedded &&
-      !pi.isWayland) {
-    final enabled = !ffiModel.viewOnly;
+      !pi.isWayland &&
+      versionCmp(pi.version, "1.2.4") >= 0 &&
+      pi.isSupportMultiDisplay &&
+      isMultiScreens) {
     final option = 'follow-remote-cursor';
     final value =
         bind.sessionGetToggleOptionSync(sessionId: sessionId, arg: option);
@@ -417,43 +420,39 @@ Future<List<TToggleMenu>> toolbarCursor(
     v.add(TToggleMenu(
         child: Text(translate('Follow remote cursor')),
         value: value,
-        onChanged: enabled
-            ? (value) async {
-                if (value == null) return;
-                await bind.sessionToggleOption(
-                    sessionId: sessionId, value: option);
-                value = bind.sessionGetToggleOptionSync(
-                    sessionId: sessionId, arg: option);
-                showCursorLockState.value = value;
-                if (!showCursorEnabled) {
-                  await bind.sessionToggleOption(
-                      sessionId: sessionId, value: showCursorOption);
-                  showCursorState.value = bind.sessionGetToggleOptionSync(
-                      sessionId: sessionId, arg: showCursorOption);
-                }
-              }
-            : null));
+        onChanged: (value) async {
+          if (value == null) return;
+          await bind.sessionToggleOption(sessionId: sessionId, value: option);
+          value = bind.sessionGetToggleOptionSync(
+              sessionId: sessionId, arg: option);
+          showCursorLockState.value = value;
+          if (!showCursorEnabled) {
+            await bind.sessionToggleOption(
+                sessionId: sessionId, value: showCursorOption);
+            showCursorState.value = bind.sessionGetToggleOptionSync(
+                sessionId: sessionId, arg: showCursorOption);
+          }
+        }));
   }
   // follow remote window focus
   if (pi.platform != kPeerPlatformAndroid &&
       !ffi.canvasModel.cursorEmbedded &&
-      !pi.isWayland) {
-    final enabled = !ffiModel.viewOnly;
+      !pi.isWayland &&
+      versionCmp(pi.version, "1.2.4") >= 0 &&
+      pi.isSupportMultiDisplay &&
+      isMultiScreens) {
     final option = 'follow-remote-window';
     final value =
         bind.sessionGetToggleOptionSync(sessionId: sessionId, arg: option);
     v.add(TToggleMenu(
         child: Text(translate('Follow remote window focus')),
         value: value,
-        onChanged: enabled
-            ? (value) async {
-                if (value == null) return;
-                await bind.sessionToggleOption(
-                    sessionId: sessionId, value: option);
-                value = bind.sessionGetToggleOptionSync(
-                    sessionId: sessionId, arg: option);
-              }
-            : null));
+        onChanged: (value) async {
+          if (value == null) return;
+          await bind.sessionToggleOption(sessionId: sessionId, value: option);
+          value = bind.sessionGetToggleOptionSync(
+              sessionId: sessionId, arg: option);
+        }));
   }
   // zoom cursor
   final viewStyle = await bind.sessionGetViewStyle(sessionId: sessionId) ?? '';
