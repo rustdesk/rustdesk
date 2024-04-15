@@ -264,7 +264,6 @@ pub(super) fn get_original_resolution(
     .into()
 }
 
-#[cfg(target_os = "linux")]
 pub(super) fn get_sync_displays() -> Vec<DisplayInfo> {
     SYNC_DISPLAYS.lock().unwrap().displays.clone()
 }
@@ -315,10 +314,6 @@ pub fn is_inited_msg() -> Option<Message> {
         return super::wayland::is_inited();
     }
     None
-}
-
-pub fn get_sync_displays() -> ResultType<Vec<DisplayInfo>> {
-    Ok(SYNC_DISPLAYS.lock().unwrap().displays.clone())
 }
 
 pub async fn update_get_sync_displays() -> ResultType<Vec<DisplayInfo>> {

@@ -383,18 +383,17 @@ fn run_cursor(sp: MouseCursorService, state: &mut StateCursor) -> ResultType<()>
 }
 
 fn run_window_focus(sp: EmptyExtraFieldService, state: &mut StateWindowFocus) -> ResultType<()> {
-    if let Ok(displays) = super::display_service::get_sync_displays() {
-        let disp_idx = crate::get_focused_display(displays);
-        if let Some(disp_idx) = disp_idx.map(|id| id as i32) {
-            if state.is_changed(disp_idx) {
-                let mut misc = Misc::new();
-                misc.set_window_focus(disp_idx as _);
-                let mut msg_out = Message::new();
-                msg_out.set_misc(misc);
-                sp.send(msg_out);
-            }
-            state.display_idx = disp_idx;
+    let displays = super::display_service::get_sync_displays();
+    let disp_idx = crate::get_focused_display(displays);
+    if let Some(disp_idx) = disp_idx.map(|id| id as i32) {
+        if state.is_changed(disp_idx) {
+            let mut misc = Misc::new();
+            misc.set_window_focus(disp_idx as _);
+            let mut msg_out = Message::new();
+            msg_out.set_misc(misc);
+            sp.send(msg_out);
         }
+        state.display_idx = disp_idx;
     }
     Ok(())
 }
