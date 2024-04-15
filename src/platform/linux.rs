@@ -119,15 +119,6 @@ pub fn get_cursor_pos() -> Option<(i32, i32)> {
 
 pub fn reset_input_cache() {}
 
-pub fn get_focused_window_id() -> Option<i32> {
-    if let Ok(focused_window_id) = run_cmds("xdotool getactivewindow") {
-        if let Ok(id) = focused_window_id.trim().parse::<i32>() {
-            return Some(id);
-        }
-    }
-    None
-}
-
 pub fn get_focused_display(displays: Vec<DisplayInfo>) -> Option<usize> {
     if let Ok(focused_window_pos) = run_cmds("xdotool getactivewindow getwindowgeometry --shell") {
         let mut focused_window_pos = focused_window_pos.split("\n").collect::<Vec<&str>>();
@@ -1263,7 +1254,7 @@ mod desktop {
                     if !home.is_empty() {
                         assert_eq!(d.home, home);
                     } else {
-                        // 
+                        //
                     }
                 }
             }

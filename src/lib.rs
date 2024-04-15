@@ -4,8 +4,7 @@ mod keyboard;
 pub mod platform;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub use platform::{
-    get_cursor, get_cursor_data, get_cursor_pos, get_focused_display, get_focused_window_id,
-    start_os_service,
+    get_cursor, get_cursor_data, get_cursor_pos, get_focused_display, start_os_service,
 };
 #[cfg(not(any(target_os = "ios")))]
 /// cbindgen:ignore

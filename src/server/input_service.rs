@@ -28,7 +28,7 @@ use std::{
 use winapi::um::winuser::WHEEL_DELTA;
 
 const INVALID_CURSOR_POS: i32 = i32::MIN;
-const INVALID_WINDOW_ID: i32 = -1;
+const INVALID_DISPLAY_IDX: i32 = -1;
 
 #[derive(Default)]
 struct StateCursor {
@@ -77,24 +77,24 @@ impl StatePos {
 
 #[derive(Default)]
 struct StateWindowFocus {
-    window_id: i32,
+    display_idx: i32,
 }
 
 impl super::service::Reset for StateWindowFocus {
     fn reset(&mut self) {
-        self.window_id = INVALID_WINDOW_ID;
+        self.display_idx = INVALID_DISPLAY_IDX;
     }
 }
 
 impl StateWindowFocus {
     #[inline]
     fn is_valid(&self) -> bool {
-        self.window_id != INVALID_WINDOW_ID
+        self.display_idx != INVALID_DISPLAY_IDX
     }
 
     #[inline]
-    fn is_changed(&self, window_id: i32) -> bool {
-        self.is_valid() && self.window_id != window_id
+    fn is_changed(&self, disp_idx: i32) -> bool {
+        self.is_valid() && self.display_idx != disp_idx
     }
 }
 
@@ -383,16 +383,18 @@ fn run_cursor(sp: MouseCursorService, state: &mut StateCursor) -> ResultType<()>
 }
 
 fn run_window_focus(sp: EmptyExtraFieldService, state: &mut StateWindowFocus) -> ResultType<()> {
-    let window_id = crate::get_focused_window_id();
-    if let Some(window_id) = window_id {
-        if state.is_changed(window_id) {
-            let mut misc = Misc::new();
-            misc.set_window_focus(window_id as _);
-            let mut msg_out = Message::new();
-            msg_out.set_misc(misc);
-            sp.send(msg_out);
+    if let Ok(displays) = super::display_service::get_sync_displays() {
+        let disp_idx = crate::get_focused_display(displays);
+        if let Some(disp_idx) = disp_idx.map(|id| id as i32) {
+            if state.is_changed(disp_idx) {
+                let mut misc = Misc::new();
+                misc.set_window_focus(disp_idx as _);
+                let mut msg_out = Message::new();
+                msg_out.set_misc(misc);
+                sp.send(msg_out);
+            }
+            state.display_idx = disp_idx;
         }
-        state.window_id = window_id;
     }
     Ok(())
 }

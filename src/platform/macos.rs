@@ -306,29 +306,6 @@ pub fn get_cursor_pos() -> Option<(i32, i32)> {
     */
 }
 
-pub fn get_focused_window_id() -> Option<i32> {
-    unsafe {
-        let window_list =
-            CGWindowListCopyWindowInfo(kCGWindowListOptionOnScreenOnly, kCGNullWindowID);
-        let n = CFArrayGetCount(window_list);
-
-        for i in 0..n {
-            let window: id = CFArrayGetValueAtIndex(window_list, i) as _;
-            let layer: id = msg_send![window, valueForKey: kCGWindowLayer];
-            let layer: i32 = msg_send![layer, intValue];
-            if layer == 0 {
-                let number: id = msg_send![window, valueForKey: kCGWindowNumber];
-                if number == nil {
-                    continue;
-                }
-                let id: i32 = msg_send![number, intValue];
-                return Some(id);
-            }
-        }
-        None
-    }
-}
-
 pub fn get_focused_display(displays: Vec<DisplayInfo>) -> Option<usize> {
     unsafe {
         let main_screen: id = msg_send![class!(NSScreen), mainScreen];

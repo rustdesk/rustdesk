@@ -317,6 +317,10 @@ pub fn is_inited_msg() -> Option<Message> {
     None
 }
 
+pub fn get_sync_displays() -> ResultType<Vec<DisplayInfo>> {
+    Ok(SYNC_DISPLAYS.lock().unwrap().displays.clone())
+}
+
 pub async fn update_get_sync_displays() -> ResultType<Vec<DisplayInfo>> {
     #[cfg(target_os = "linux")]
     {
