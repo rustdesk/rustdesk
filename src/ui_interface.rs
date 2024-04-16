@@ -829,10 +829,9 @@ pub fn get_api_server() -> String {
 
 #[inline]
 pub fn has_hwcodec() -> bool {
-    #[cfg(not(any(feature = "hwcodec", feature = "mediacodec")))]
-    return false;
-    #[cfg(any(feature = "hwcodec", feature = "mediacodec"))]
-    return true;
+    // Has real hardware codec using gpu
+    (cfg!(feature = "hwcodec") && (cfg!(windows) || cfg!(target_os = "linux")))
+        || cfg!(feature = "mediacodec")
 }
 
 #[inline]

@@ -1,9 +1,10 @@
 use crate::{
-    codec::{base_bitrate, codec_thread_num, EncoderApi, EncoderCfg, Quality as Q},
+    codec::{
+        base_bitrate, codec_thread_num, enable_hwcodec_option, EncoderApi, EncoderCfg, Quality as Q,
+    },
     hw, CodecFormat, EncodeInput, ImageFormat, ImageRgb, Pixfmt, HW_STRIDE_ALIGN,
 };
 use hbb_common::{
-    allow_err,
     anyhow::{anyhow, bail, Context},
     bytes::Bytes,
     config::HwCodecConfig,
@@ -223,10 +224,18 @@ pub struct HwRamDecoder {
 
 impl HwRamDecoder {
     pub fn best() -> CodecInfos {
-        get_config().map(|c| c.d).unwrap_or(CodecInfos {
-            h264: None,
-            h265: None,
-        })
+        let mut info = CodecInfo::soft();
+        if enable_hwcodec_option() {
+            if let Ok(hw) = get_config().map(|c| c.d) {
+                if let Some(h264) = hw.h264 {
+                    info.h264 = Some(h264);
+                }
+                if let Some(h265) = hw.h265 {
+                    info.h265 = Some(h265);
+                }
+            }
+        }
+        info
     }
 
     pub fn new(format: CodecFormat) -> ResultType<Self> {
@@ -359,8 +368,8 @@ pub fn check_available_hwcodec() {
     let vram = crate::vram::check_available_vram();
     #[cfg(not(feature = "vram"))]
     let vram = "".to_owned();
-    let encoders = CodecInfo::score(Encoder::available_encoders(ctx, Some(vram.clone())));
-    let decoders = CodecInfo::score(Decoder::available_decoders(Some(vram.clone())));
+    let encoders = CodecInfo::prioritized(Encoder::available_encoders(ctx, Some(vram.clone())));
+    let decoders = CodecInfo::prioritized(Decoder::available_decoders(Some(vram.clone())));
     let ram = Available {
         e: encoders,
         d: decoders,
@@ -370,7 +379,9 @@ pub fn check_available_hwcodec() {
     }
 }
 
+#[cfg(any(target_os = "windows", target_os = "linux"))]
 pub fn hwcodec_new_check_process() {
+    use hbb_common::allow_err;
     use std::sync::Once;
     let f = || {
         // Clear to avoid checking process errors

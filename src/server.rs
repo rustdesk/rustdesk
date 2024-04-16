@@ -449,6 +449,7 @@ pub async fn start_server(is_server: bool) {
         log::info!("XAUTHORITY={:?}", std::env::var("XAUTHORITY"));
     }
     #[cfg(feature = "hwcodec")]
+    #[cfg(any(target_os = "windows", target_os = "linux"))]
     scrap::hwcodec::hwcodec_new_check_process();
     #[cfg(windows)]
     hbb_common::platform::windows::start_cpu_performance_monitor();

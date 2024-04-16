@@ -2122,10 +2122,7 @@ pub mod server_side {
     }
 
     #[no_mangle]
-    pub unsafe extern "system" fn Java_ffi_FFI_startService(
-        _env: JNIEnv,
-        _class: JClass,
-    ) {
+    pub unsafe extern "system" fn Java_ffi_FFI_startService(_env: JNIEnv, _class: JClass) {
         log::debug!("startService from jvm");
         config::Config::set_option("stop-service".into(), "".into());
         crate::rendezvous_mediator::RendezvousMediator::restart();
@@ -2151,10 +2148,7 @@ pub mod server_side {
     }
 
     #[no_mangle]
-    pub unsafe extern "system" fn Java_ffi_FFI_refreshScreen(
-        _env: JNIEnv,
-        _class: JClass,
-    ) {
+    pub unsafe extern "system" fn Java_ffi_FFI_refreshScreen(_env: JNIEnv, _class: JClass) {
         crate::server::video_service::refresh()
     }
 }
