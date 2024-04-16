@@ -401,13 +401,11 @@ Future<List<TToggleMenu>> toolbarCursor(
             : null));
   }
   // follow remote cursor
-  final isMultiScreens = !isWeb && (await getScreenRectList()).length > 1;
   if (pi.platform != kPeerPlatformAndroid &&
       !ffi.canvasModel.cursorEmbedded &&
       !pi.isWayland &&
       versionCmp(pi.version, "1.2.4") >= 0 &&
-      pi.isSupportMultiDisplay &&
-      isMultiScreens) {
+      pi.displays.length > 1) {
     final option = 'follow-remote-cursor';
     final value =
         bind.sessionGetToggleOptionSync(sessionId: sessionId, arg: option);
@@ -439,8 +437,7 @@ Future<List<TToggleMenu>> toolbarCursor(
       !ffi.canvasModel.cursorEmbedded &&
       !pi.isWayland &&
       versionCmp(pi.version, "1.2.4") >= 0 &&
-      pi.isSupportMultiDisplay &&
-      isMultiScreens) {
+      pi.displays.length > 1) {
     final option = 'follow-remote-window';
     final value =
         bind.sessionGetToggleOptionSync(sessionId: sessionId, arg: option);
