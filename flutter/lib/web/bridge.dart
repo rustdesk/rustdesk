@@ -44,7 +44,7 @@ class EventToUI_Texture implements EventToUI {
   int get field0 => field;
 }
 
-class RustdeskImpl {
+class RaksadeskImpl {
   Future<void> stopGlobalEventStream({required String appType, dynamic hint}) {
     throw UnimplementedError();
   }
@@ -1052,7 +1052,7 @@ class RustdeskImpl {
     throw UnimplementedError();
   }
 
-  bool mainHasVram({dynamic hint}) {
+  bool mainHasGpucodec({dynamic hint}) {
     throw UnimplementedError();
   }
 

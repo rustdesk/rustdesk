@@ -1,11 +1,11 @@
 [package]
-name = "rustdesk"
+name = "raksadesk"
 version = "1.2.4"
 authors = ["rustdesk <info@rustdesk.com>"]
 edition = "2021"
 build= "build.rs"
 description = "RustDesk Remote Desktop"
-default-run = "rustdesk"
+default-run = "raksadesk"
 rust-version = "1.75"
 
 [lib]
@@ -28,7 +28,7 @@ use_dasp = ["dasp"]
 flutter = ["flutter_rust_bridge"]
 default = ["use_dasp"]
 hwcodec = ["scrap/hwcodec"]
-vram = ["scrap/vram"]
+gpucodec = ["scrap/gpucodec"]
 mediacodec = ["scrap/mediacodec"]
 linux_headless = ["pam" ]
 virtual_display_driver = ["virtual_display"]
@@ -164,9 +164,9 @@ exclude = ["vdi/host", "examples/custom_plugin"]
 
 [package.metadata.winres]
 LegalCopyright = "Copyright © 2024 Purslane Ltd. All rights reserved."
-ProductName = "RustDesk"
+ProductName = "RaksaDesk"
 FileDescription = "RustDesk Remote Desktop"
-OriginalFilename = "rustdesk.exe"
+OriginalFilename = "raksadesk.exe"
 
 [target.'cfg(target_os="windows")'.build-dependencies]
 winres = "0.1"
@@ -181,8 +181,8 @@ os-version = "0.2"
 hound = "3.5"
 
 [package.metadata.bundle]
-name = "RustDesk"
-identifier = "com.carriez.rustdesk"
+name = "RaksaDesk"
+identifier = "com.carriez.raksadesk"
 icon = ["res/32x32.png", "res/128x128.png", "res/128x128@2x.png"]
 osx_minimum_system_version = "10.14"
 

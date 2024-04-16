@@ -13,7 +13,7 @@ import sys
 windows = platform.platform().startswith('Windows')
 osx = platform.platform().startswith(
     'Darwin') or platform.platform().startswith("macOS")
-hbb_name = 'rustdesk' + ('.exe' if windows else '')
+hbb_name = 'raksadesk' + ('.exe' if windows else '')
 exe_path = 'target/release/' + hbb_name
 if windows:
     flutter_build_dir = 'build/windows/x64/runner/Release/'
@@ -33,9 +33,9 @@ def get_arch() -> str:
 
 
 def system2(cmd):
-    exit_code = os.system(cmd)
-    if exit_code != 0:
-        sys.stderr.write(f"Error occurred when executing: `{cmd}`. Exiting.\n")
+    err = os.system(cmd)
+    if err != 0:
+        print(f"Error occurred when executing: {cmd}. Exiting.")
         sys.exit(-1)
 
 
@@ -118,9 +118,9 @@ def make_parser():
             '' if windows or osx else ', need libva-dev, libvdpau-dev.')
     )
     parser.add_argument(
-        '--vram',
+        '--gpucodec',
         action='store_true',
-        help='Enable feature vram, only available on windows now.'
+        help='Enable feature gpucodec, only available on windows now.'
     )
     parser.add_argument(
         '--portable',
@@ -282,8 +282,8 @@ def get_features(args):
     features = ['inline'] if not args.flutter else []
     if args.hwcodec:
         features.append('hwcodec')
-    if args.vram:
-        features.append('vram')
+    if args.gpucodec:
+        features.append('gpucodec')
     if args.flutter:
         features.append('flutter')
         features.append('flutter_texture_render')
