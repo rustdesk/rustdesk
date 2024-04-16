@@ -2125,7 +2125,7 @@ pub mod server_side {
         }
         if let Ok(custom_client_config) = env.get_string(&custom_client_config) {
             if !custom_client_config.is_empty() {
-                crate::read_custom_client(custom_client_config);
+                crate::read_custom_client(custom_client_config.into());
             }
         }
         std::thread::spawn(move || start_server(true));
