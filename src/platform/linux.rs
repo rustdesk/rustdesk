@@ -53,6 +53,14 @@ extern "C" {
         screen_num: *mut c_int,
     ) -> c_int;
     fn xdo_new(display: *const c_char) -> Xdo;
+    fn xdo_get_active_window(xdo: Xdo, window: *mut *mut c_void) -> c_int;
+    fn xdo_get_window_location(
+        xdo: Xdo,
+        window: *mut c_void,
+        x: *mut c_int,
+        y: *mut c_int,
+        screen_num: *mut c_int,
+    ) -> c_int;
 }
 
 #[link(name = "X11")]
@@ -120,29 +128,37 @@ pub fn get_cursor_pos() -> Option<(i32, i32)> {
 pub fn reset_input_cache() {}
 
 pub fn get_focused_display(displays: Vec<DisplayInfo>) -> Option<usize> {
-    if let Ok(focused_window_pos) = run_cmds("xdotool getactivewindow getwindowgeometry --shell") {
-        let mut focused_window_pos = focused_window_pos.split("\n").collect::<Vec<&str>>();
-        let mut x = 0;
-        let mut y = 0;
-        for i in 0..focused_window_pos.len() {
-            if focused_window_pos[i].contains("X=") {
-                x = focused_window_pos[i].split("=").collect::<Vec<&str>>()[1]
-                    .parse::<i32>()
-                    .unwrap_or(0);
-            } else if focused_window_pos[i].contains("Y=") {
-                y = focused_window_pos[i].split("=").collect::<Vec<&str>>()[1]
-                    .parse::<i32>()
-                    .unwrap_or(0);
+    let mut res = None;
+    XDO.with(|xdo| {
+        if let Ok(xdo) = xdo.try_borrow_mut() {
+            if xdo.is_null() {
+                return;
+            }
+            let mut x: c_int = 0;
+            let mut y: c_int = 0;
+            let mut window: *mut c_void = std::ptr::null_mut();
+
+            unsafe {
+                if xdo_get_active_window(*xdo, &mut window) != 0 {
+                    return;
+                }
+                if xdo_get_window_location(
+                    *xdo,
+                    window,
+                    &mut x as _,
+                    &mut y as _,
+                    std::ptr::null_mut(),
+                ) != 0
+                {
+                    return;
+                }
+                res = displays
+                    .iter()
+                    .position(|d| x >= d.x && x < d.x + d.width && y >= d.y && y < d.y + d.height);
             }
         }
-        return displays.iter().position(|display| {
-            x >= display.x
-                && x <= display.x + display.width
-                && y >= display.y
-                && y <= display.y + display.height
-        });
-    };
-    None
+    });
+    res
 }
 
 pub fn get_cursor() -> ResultType<Option<u64>> {
