@@ -39,7 +39,11 @@ g_arpsystemcomponent = {
 def make_parser():
     parser = argparse.ArgumentParser(description="Msi preprocess script.")
     parser.add_argument(
-        "-d", "--dist-dir", type=str, default="../../rustdesk", help="The dist direcotry to install."
+        "-d",
+        "--dist-dir",
+        type=str,
+        default="../../rustdesk",
+        help="The dist direcotry to install.",
     )
     parser.add_argument(
         "-arp",
@@ -103,11 +107,6 @@ def insert_components_between_tags(lines, index_start, app_name, dist_dir):
             if file_path.name.lower() == f"{app_name}.exe".lower():
                 continue
 
-            relative_file_path = file_path.relative_to(path)
-            guid = uuid.uuid5(
-                uuid.NAMESPACE_OID, app_name + "/" + str(relative_file_path)
-            )
-
             subdir = str(file_path.parent.relative_to(path))
             dir_attr = ""
             if subdir != ".":
@@ -117,7 +116,7 @@ def insert_components_between_tags(lines, index_start, app_name, dist_dir):
             # because it will cause error
             # "Error WIX0130	The primary key 'xxxx' is duplicated in table 'Directory'"
             to_insert_lines = f"""
-{indent}<Component Guid="{guid}" {dir_attr}>
+{indent}<Component Guid="{uuid.uuid4()}" {dir_attr}>
 {indent}{g_indent_unit}<File Source="{file_path.as_posix()}" KeyPath="yes" Checksum="yes" />
 {indent}</Component>
 """
@@ -251,7 +250,9 @@ def gen_custom_ARPSYSTEMCOMPONENT_False(args):
         )
         for _, v in g_arpsystemcomponent.items():
             if "msi" in v and "v" in v:
-                lines_new.append(f'{indent}<Property Id="{v["msi"]}" Value="{v["v"]}" />\n')
+                lines_new.append(
+                    f'{indent}<Property Id="{v["msi"]}" Value="{v["v"]}" />\n'
+                )
 
         for i, line in enumerate(lines_new):
             lines.insert(index_start + i + 1, line)
@@ -318,7 +319,9 @@ def gen_custom_ARPSYSTEMCOMPONENT_True(args, dist_dir):
         lines_new.append(
             f'{indent}<RegistryValue Type="expandable" Name="ModifyPath" Value="MsiExec.exe /X [ProductCode]" />\n'
         )
-        lines_new.append(f'{indent}<RegistryValue Type="integer" Id="NoModify" Value="1" />\n')
+        lines_new.append(
+            f'{indent}<RegistryValue Type="integer" Id="NoModify" Value="1" />\n'
+        )
         lines_new.append(
             f'{indent}<RegistryValue Type="expandable" Name="UninstallString" Value="MsiExec.exe /X [ProductCode]" />\n'
         )
@@ -341,9 +344,11 @@ def gen_custom_ARPSYSTEMCOMPONENT_True(args, dist_dir):
             f'{indent}<RegistryValue Type="integer" Name="WindowsInstaller" Value="1" />\n'
         )
         for k, v in g_arpsystemcomponent.items():
-            if 'v' in v:
-                t = v['t'] if 't' in v is None else 'string'
-                lines_new.append(f'{indent}<RegistryValue Type="{t}" Name="{k}" Value="{v["v"]}" />\n')
+            if "v" in v:
+                t = v["t"] if "t" in v is None else "string"
+                lines_new.append(
+                    f'{indent}<RegistryValue Type="{t}" Name="{k}" Value="{v["v"]}" />\n'
+                )
 
         for i, line in enumerate(lines_new):
             lines.insert(index_start + i + 1, line)
@@ -420,6 +425,22 @@ def init_global_vars(args):
     return True
 
 
+def replace_component_guids_in_wxs():
+    langs_dir = Path(sys.argv[0]).parent.joinpath("Package")
+    for file_path in langs_dir.glob("**/*.wxs"):
+        with open(file_path, "r") as f:
+            lines = f.readlines()
+
+        # <Component Id="Product.Registry.DefaultIcon" Guid="6DBF2690-0955-4C6A-940F-634DDA503F49">
+        for i, line in enumerate(lines):
+            match = re.search(r'Component.+Guid="([^"]+)"', line)
+            if match:
+                lines[i] = re.sub(r'Guid="[^"]+"', f'Guid="{uuid.uuid4()}"', line)
+
+        with open(file_path, "w") as f:
+            f.writelines(lines)
+
+
 if __name__ == "__main__":
     parser = make_parser()
     args = parser.parse_args()
@@ -432,6 +453,9 @@ if __name__ == "__main__":
 
     if not gen_pre_vars(args, dist_dir):
         sys.exit(-1)
+
+    if app_name != "RustDesk":
+        replace_component_guids_in_wxs()
 
     if not gen_upgrade_info():
         sys.exit(-1)
