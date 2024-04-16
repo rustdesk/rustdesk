@@ -25,8 +25,8 @@
 		<!--$ArpStart$-->
 		<!--$ArpEnd$-->
 
-		<Property Id="RUSTDESK_WINDOWS_INSTALLER">
-			<RegistrySearch Id="RustDeskWindowsInstallerFolderSearch" Root="HKLM" Key="Software\Microsoft\Windows\CurrentVersion\Uninstall\$(var.Product)" Name="WindowsInstaller" Type="raw" />
+		<Property Id="APP_WINDOWS_INSTALLER">
+			<RegistrySearch Id="AppWindowsInstallerFolderSearch" Root="HKLM" Key="Software\Microsoft\Windows\CurrentVersion\Uninstall\$(var.Product)" Name="WindowsInstaller" Type="raw" />
 		</Property>
 	</Fragment>
 </Wix>

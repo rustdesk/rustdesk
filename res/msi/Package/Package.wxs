@@ -22,7 +22,7 @@
 		<UIRef Id="WixUI_ErrorProgressText" />
 
 		<InstallUISequence>
-			<Show Dialog="AnotherAppDialog" Before="WelcomeDlg" Condition="Not installed AND RUSTDESK_WINDOWS_INSTALLER=&quot;#0&quot;"/>
+			<Show Dialog="AnotherAppDialog" Before="WelcomeDlg" Condition="Not installed AND APP_WINDOWS_INSTALLER=&quot;#0&quot;"/>
 		</InstallUISequence>
 
 		<InstallExecuteSequence>
@@ -45,7 +45,7 @@
 			<ComponentRef Id="Product.Registry.CommandPlay" />
 			<ComponentRef Id="Product.Registry.URLProtocol" />
 			<ComponentRef Id="Product.Registry.Command" />
-			<ComponentRef Id="Product.Registry.UninstallRustDesk" />
+			<ComponentRef Id="Product.Registry.UninstallApp" />
 			<ComponentRef Id="App.StartMenu" />
 			<ComponentRef Id="Product.Registry.PersistedShortcutProperties" />
 		</Feature>

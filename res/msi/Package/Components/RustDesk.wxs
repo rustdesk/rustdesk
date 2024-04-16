@@ -5,9 +5,9 @@
 		<?include ../Includes.wxi?>
 
 		<DirectoryRef Id="INSTALLFOLDER" FileSource="$(var.BuildDir)">
-			<Component Id="RustDesk.exe" Guid="620F0F69-4C17-4320-A619-495E329712A4">
-				<File Id="$(var.Product).exe" Name="$(var.Product).exe" KeyPath="yes" Checksum="yes">
-					<!--<fire:FirewallException Id="RustDeskEx" Name="$(var.Product) Service" Scope="any" IgnoreFailure="yes" />-->
+			<Component Id="App.exe" Guid="620F0F69-4C17-4320-A619-495E329712A4">
+				<File Id="App.exe" Name="$(var.Product).exe" KeyPath="yes" Checksum="yes">
+					<!--<fire:FirewallException Id="AppEx" Name="$(var.Product) Service" Scope="any" IgnoreFailure="yes" />-->
 				</File>
 			</Component>
 		</DirectoryRef>
@@ -18,14 +18,14 @@
 		<CustomAction Id="CreateStartService.SetParam" Return="check" Property="CreateStartService" Value="$(var.Product);&quot;[INSTALLFOLDER]$(var.Product).exe&quot; --service" />
 		<CustomAction Id="TryStopDeleteService.SetParam" Return="check" Property="TryStopDeleteService" Value="$(var.Product)" />
 		
-		<CustomAction Id="LaunchApp" ExeCommand="" Return="asyncNoWait" FileRef="RustDesk.exe" />
-		<CustomAction Id="LaunchAppTray" ExeCommand=" --tray" Return="asyncNoWait" FileRef="RustDesk.exe" />
-		<Property Id="TerminateProcesses" Value="RustDeskTest.exe" />
+		<CustomAction Id="LaunchApp" ExeCommand="" Return="asyncNoWait" FileRef="App.exe" />
+		<CustomAction Id="LaunchAppTray" ExeCommand=" --tray" Return="asyncNoWait" FileRef="App.exe" />
+		<Property Id="TerminateProcesses" Value="AppTest.exe" />
 		<CustomAction Id="TerminateProcesses.SetParam" Return="check" Property="TerminateProcesses" Value="$(var.Product).exe" />
 		<CustomAction Id="TerminateBrokers.SetParam" Return="check" Property="TerminateProcesses" Value="RuntimeBroker_rustdesk.exe" />
 		<CustomAction Id="SetPropertyIsServiceRunning.SetParam.AppName" Return="check" Property="AppName" Value="$(var.Product)" />
 		<CustomAction Id="SetPropertyIsServiceRunning.SetParam.PropertyName" Return="check" Property="PropertyName" Value="STOP_SERVICE" />
-		<CustomAction Id="SetPropertyServiceStop.SetParam.ConfigFile" Return="check" Property="ConfigFile" Value="[AppDataFolder]rustdesk\config\rustdesk2.toml" />
+		<CustomAction Id="SetPropertyServiceStop.SetParam.ConfigFile" Return="check" Property="ConfigFile" Value="[AppDataFolder]$(var.Product)\config\$(var.Product)2.toml" />
 		<CustomAction Id="SetPropertyServiceStop.SetParam.ConfigKey" Return="check" Property="ConfigKey" Value="stop-service" />
 		<CustomAction Id="SetPropertyServiceStop.SetParam.PropertyName" Return="check" Property="PropertyName" Value="STOP_SERVICE" />
 		<CustomAction Id="TryDeleteStartupShortcut.SetParam" Return="check" Property="ShortcutName" Value="$(var.Product) Tray" />
@@ -84,7 +84,7 @@
 
 		<DirectoryRef Id="App.StartMenu">
 			<Component Id="App.StartMenu.Shortcut" Guid="43ABCAC7-E47D-42D8-A408-25EC70DBB993" Condition="STARTMENUSHORTCUTS = 1">
-				<Shortcut Id="App.StartMenu.Shortcut" Name="!(loc.SC_Client)" Description="!(loc.SC_Client_Desc)" Target="[!RustDesk.exe]" Icon="AppIcon" WorkingDirectory="INSTALLFOLDER" />
+				<Shortcut Id="App.StartMenu.Shortcut" Name="!(loc.SC_Client)" Description="!(loc.SC_Client_Desc)" Target="[!App.exe]" Icon="AppIcon" WorkingDirectory="INSTALLFOLDER" />
 				<!--
 					Fix ICE 38 by adding a dummy registry key that is the key for this shortcut.
 					https://learn.microsoft.com/en-us/windows/win32/msi/ice38
@@ -99,13 +99,13 @@
 		</DirectoryRef>
 		<StandardDirectory Id="DesktopFolder">
 			<Component Id="App.Desktop.Shortcut" Guid="CA8FB7AA-17F7-4E36-A58A-5A016A303709" Condition="DESKTOPSHORTCUTS = 1">
-				<Shortcut Id="App.Desktop.Shortcut" Name="!(loc.SC_Client)" Description="!(loc.SC_Client_Desc)" Target="[!RustDesk.exe]" Icon="AppIcon" WorkingDirectory="INSTALLFOLDER" />
+				<Shortcut Id="App.Desktop.Shortcut" Name="!(loc.SC_Client)" Description="!(loc.SC_Client_Desc)" Target="[!App.exe]" Icon="AppIcon" WorkingDirectory="INSTALLFOLDER" />
 				<RegistryValue Root="HKCU" Key="Software\$(var.Product)" Name="App.Desktop.Shortcut" Type="string" Value="1" KeyPath="yes" />
 			</Component>
 		</StandardDirectory>
 		<StandardDirectory Id="StartupFolder">
 			<Component Id="App.StartupFolder.ShortcutTray" Guid="B1D1E2BB-E53E-E159-DB7C-744D5C726A8C" Condition="STARTUPSHORTCUTS = 1">
-				<Shortcut Id="App.StartupFolder.ShortcutTray" Name="!(loc.SC_Client_Tray)" Description="!(loc.SC_Client_Tray_Desc)" Target="[!RustDesk.exe]" Arguments="--tray" Icon="AppIcon" WorkingDirectory="INSTALLFOLDER" />
+				<Shortcut Id="App.StartupFolder.ShortcutTray" Name="!(loc.SC_Client_Tray)" Description="!(loc.SC_Client_Tray_Desc)" Target="[!App.exe]" Arguments="--tray" Icon="AppIcon" WorkingDirectory="INSTALLFOLDER" />
 				<RegistryValue Root="HKCU" Key="Software\$(var.Product)" Name="App.StartupFolder.ShortcutTray" Type="string" Value="1" KeyPath="yes" />
 			</Component>
 		</StandardDirectory>
@@ -117,7 +117,7 @@
 		</DirectoryRef>-->
 
 		<ComponentGroup Id="Components" Directory="INSTALLFOLDER">
-			<ComponentRef Id="RustDesk.exe" />
+			<ComponentRef Id="App.exe" />
 			<ComponentRef Id="App.Desktop.Shortcut" />
 			<!--<ComponentRef Id="App.UninstallShortcut" />-->
 			<ComponentRef Id="App.StartMenu.Shortcut" />

@@ -13,6 +13,7 @@ g_indent_unit = "\t"
 g_version = ""
 g_build_date = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
 
+# Replace the following links with your own in the custom arp properties.
 # https://learn.microsoft.com/en-us/windows/win32/msi/property-reference
 g_arpsystemcomponent = {
     "Comments": {
@@ -168,7 +169,7 @@ def gen_pre_vars(args, dist_dir):
 
 def replace_app_name_in_langs(app_name):
     langs_dir = Path(sys.argv[0]).parent.joinpath("Package/Language")
-    for file_path in langs_dir.glob("*.wxs"):
+    for file_path in langs_dir.glob("*.wxl"):
         with open(file_path, "r") as f:
             lines = f.readlines()
         for i, line in enumerate(lines):
