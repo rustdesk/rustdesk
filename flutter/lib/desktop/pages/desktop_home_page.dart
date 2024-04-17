@@ -69,44 +69,6 @@ class _DesktopHomePageState extends State<DesktopHomePage>
     );
   }
 
-  Widget buildPresetPasswordWarning() {
-    return FutureBuilder<bool>(
-      future: bind.isPresetPassword(),
-      builder: (BuildContext context, AsyncSnapshot<bool> snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return CircularProgressIndicator(); // Show a loading spinner while waiting for the Future to complete
-        } else if (snapshot.hasError) {
-          return Text(
-              'Error: ${snapshot.error}'); // Show an error message if the Future completed with an error
-        } else if (snapshot.hasData && snapshot.data == true) {
-          return Container(
-            color: Colors.yellow,
-            child: Column(
-              children: [
-                Align(
-                    child: Text(
-                  translate("Security Alert"),
-                  style: TextStyle(
-                    color: Colors.red,
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                  ),
-                )).paddingOnly(bottom: 8),
-                Text(
-                  translate("preset_password_warning"),
-                  style: TextStyle(color: Colors.red),
-                )
-              ],
-            ).paddingAll(8),
-          ); // Show a warning message if the Future completed with true
-        } else {
-          return SizedBox
-              .shrink(); // Show nothing if the Future completed with false or null
-        }
-      },
-    );
-  }
-
   Widget buildLeftPane(BuildContext context) {
     final isIncomingOnly = bind.isIncomingOnly();
     final isOutgoingOnly = bind.isOutgoingOnly();
@@ -115,22 +77,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
       if (bind.isCustomClient())
         Align(
           alignment: Alignment.center,
-          child: MouseRegion(
-            cursor: SystemMouseCursors.click,
-            child: GestureDetector(
-              onTap: () {
-                launchUrl(Uri.parse('https://rustdesk.com'));
-              },
-              child: Opacity(
-                  opacity: 0.5,
-                  child: Text(
-                    translate("powered_by_me"),
-                    overflow: TextOverflow.clip,
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        fontSize: 9, decoration: TextDecoration.underline),
-                  )),
-            ),
-          ).marginOnly(top: 6),
+          child: loadPowered(context),
         ),
       Align(
         alignment: Alignment.center,

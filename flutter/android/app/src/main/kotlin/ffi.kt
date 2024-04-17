@@ -11,7 +11,7 @@ object FFI {
     }
 
     external fun init(ctx: Context)
-    external fun startServer(app_dir: String)
+    external fun startServer(app_dir: String, custom_client_config: String)
     external fun startService()
     external fun onVideoFrameUpdate(buf: ByteBuffer)
     external fun onAudioFrameUpdate(buf: ByteBuffer)
