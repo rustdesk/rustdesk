@@ -19,7 +19,7 @@ class AddressBook: Reactor.Component
             return <div style="margin: *"><div #login-link .link style="margin: *; width: 100px; text-align: center; font-size: 1.2em;">{translate("Login")}</div></div>;
         }
         if (abLoading) {
-            return <div style="margin: *"><progress style="color: #0071ff" /></div>;
+            return <div style="margin: *"><progress style="color: #eb5f0a" /></div>;
         } else if (abError) {
             return <div style="margin: *; text-align: center;">{abError}
                 <div #retry .link style="margin-left: 1em;">{translate("Retry")}</div>

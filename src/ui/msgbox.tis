@@ -123,7 +123,7 @@ class MsgboxComponent: Reactor.Component {
         if (this.type.indexOf("error") >= 0 || this.type == "re-input-password" || this.type == "session-re-login" || this.type == "session-login-re-password") {
             return "#e04f5f";
         }
-        return "#2C8CFF";
+        return "#ff4500";
     }
 
     function hasSkip() {
