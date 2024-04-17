@@ -45,7 +45,7 @@ class HomePageState extends State<HomePage> {
   void initPages() {
     _pages.clear();
     if (!bind.isIncomingOnly()) _pages.add(ConnectionPage());
-    if (isAndroid) {
+    if (isAndroid && !bind.isOutgoingOnly()) {
       _pages.addAll([ChatPage(type: ChatPageType.mobileMain), ServerPage()]);
     }
     _pages.add(SettingsPage());
