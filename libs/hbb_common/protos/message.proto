@@ -751,6 +751,7 @@ message Misc {
     SupportedEncoding supported_encoding = 34;
     uint32 selected_sid = 35;
     uint32 window_focus = 36;
+    int32 follow_current_display = 37;
   }
 }
 

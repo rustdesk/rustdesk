@@ -1504,7 +1504,12 @@ impl<T: InvokeUiSession> Remote<T> {
                         log::info!("update supported encoding:{:?}", e);
                         self.handler.lc.write().unwrap().supported_encoding = e;
                     }
-
+                    Some(misc::Union::FollowCurrentDisplay(d_idx)) => {
+                        let config = self.handler.load_config();
+                        if config.displays_as_individual_windows != "Y" {
+                            self.handler.set_current_display(d_idx);
+                        }
+                    }
                     _ => {}
                 },
                 Some(message::Union::TestDelay(t)) => {
@@ -1565,16 +1570,8 @@ impl<T: InvokeUiSession> Remote<T> {
                     }
                 }
                 Some(message::Union::PeerInfo(pi)) => {
-                    // For follow cursor, follow window focus
-                    if pi.displays.is_empty() && pi.platform_additions.is_empty() {
-                        let config = self.handler.load_config();
-                        if config.displays_as_individual_windows != "Y" {
-                            self.handler.set_current_display(pi.current_display);
-                        }
-                    } else {
-                        self.handler.set_displays(&pi.displays);
-                        self.handler.set_platform_additions(&pi.platform_additions);
-                    }
+                    self.handler.set_displays(&pi.displays);
+                    self.handler.set_platform_additions(&pi.platform_additions);
                 }
                 _ => {}
             }

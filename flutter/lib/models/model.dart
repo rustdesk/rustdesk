@@ -367,6 +367,8 @@ class FfiModel with ChangeNotifier {
         }
       } else if (name == 'sync_peer_option') {
         _handleSyncPeerOption(evt, peerId);
+      } else if (name == 'follow_current_display') {
+        handleFollowCurrentDisplay(evt, sessionId, peerId);
       } else {
         debugPrint('Unknown event name: $name');
       }
@@ -975,22 +977,6 @@ class FfiModel with ChangeNotifier {
         }
       }
     }
-    if (evt['current_display'] != null) {
-      if (pi.currentDisplay == kAllDisplayValue) {
-        return;
-      }
-      _pi.currentDisplay = int.parse(evt['current_display']);
-      try {
-        CurrentDisplayState.find(peerId).value = _pi.currentDisplay;
-      } catch (e) {
-        //
-      }
-      bind.sessionSwitchDisplay(
-        isDesktop: isDesktop,
-        sessionId: sessionId,
-        value: Int32List.fromList([_pi.currentDisplay]),
-      );
-    }
     notifyListeners();
   }
 
@@ -1019,6 +1005,27 @@ class FfiModel with ChangeNotifier {
 
     cachedPeerData.peerInfo['platform_additions'] =
         json.encode(_pi.platformAdditions);
+  }
+
+  handleFollowCurrentDisplay(
+      Map<String, dynamic> evt, SessionID sessionId, String peerId) async {
+    if (evt['display_idx'] != null) {
+      if (pi.currentDisplay == kAllDisplayValue) {
+        return;
+      }
+      _pi.currentDisplay = int.parse(evt['display_idx']);
+      try {
+        CurrentDisplayState.find(peerId).value = _pi.currentDisplay;
+      } catch (e) {
+        //
+      }
+      bind.sessionSwitchDisplay(
+        isDesktop: isDesktop,
+        sessionId: sessionId,
+        value: Int32List.fromList([_pi.currentDisplay]),
+      );
+    }
+    notifyListeners();
   }
 
   // Directly switch to the new display without waiting for the response.

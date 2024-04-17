@@ -3147,11 +3147,11 @@ impl Connection {
     async fn handle_window_focus(&mut self) {
         if let Ok(displays) = super::display_service::update_get_sync_displays().await {
             let current_display = crate::get_focused_display(displays);
-            if let Some(idx) = current_display {
-                let mut pi = PeerInfo::default();
-                pi.current_display = idx as i32;
+            if let Some(d_index) = current_display {
+                let mut misc = Misc::new();
+                misc.set_follow_current_display(d_index as i32);
                 let mut msg_out = Message::new();
-                msg_out.set_peer_info(pi);
+                msg_out.set_misc(misc);
                 self.send(msg_out).await;
             }
         }
@@ -3169,10 +3169,10 @@ impl Connection {
             });
             if let Some(d_index) = d_index {
                 if self.display_idx != d_index {
-                    let mut pi = PeerInfo::default();
-                    pi.current_display = d_index as i32;
+                    let mut misc = Misc::new();
+                    misc.set_follow_current_display(d_index as i32);
                     let mut msg_out = Message::new();
-                    msg_out.set_peer_info(pi);
+                    msg_out.set_misc(misc);
                     self.send(msg_out).await;
                 }
             }
