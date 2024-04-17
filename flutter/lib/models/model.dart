@@ -976,6 +976,9 @@ class FfiModel with ChangeNotifier {
       }
     }
     if (evt['current_display'] != null) {
+      if (pi.currentDisplay == kAllDisplayValue) {
+        return;
+      }
       _pi.currentDisplay = int.parse(evt['current_display']);
       try {
         CurrentDisplayState.find(peerId).value = _pi.currentDisplay;

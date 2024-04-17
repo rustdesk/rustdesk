@@ -260,10 +260,6 @@ impl<T: InvokeUiSession> Session<T> {
             .clone()
     }
 
-    pub fn get_show_all_displays(&self) -> String {
-        self.lc.read().unwrap().show_all_displays.clone()
-    }
-
     pub fn get_use_all_my_displays_for_the_remote_session(&self) -> String {
         self.lc
             .read()
@@ -281,10 +277,6 @@ impl<T: InvokeUiSession> Session<T> {
             .write()
             .unwrap()
             .save_displays_as_individual_windows(value);
-    }
-
-    pub fn save_show_all_displays(&self, value: String) {
-        self.lc.write().unwrap().save_show_all_displays(value);
     }
 
     pub fn save_use_all_my_displays_for_the_remote_session(&self, value: String) {

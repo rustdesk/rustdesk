@@ -1382,17 +1382,6 @@ impl LoginConfigHandler {
         self.save_config(config);
     }
 
-    /// Save "show_all_displays" ("", "Y") to the current config.
-    ///
-    /// # Arguments
-    ///
-    /// * `value` - The "show_all_displays" value ("", "Y").
-    pub fn save_show_all_displays(&mut self, value: String) {
-        let mut config = self.load_config();
-        config.show_all_displays = value;
-        self.save_config(config);
-    }
-
     /// Save "use_all_my_displays_for_the_remote_session" ("", "Y") to the current config.
     ///
     /// # Arguments

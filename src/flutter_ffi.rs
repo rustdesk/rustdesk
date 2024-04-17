@@ -390,20 +390,6 @@ pub fn session_set_displays_as_individual_windows(session_id: SessionID, value: 
     }
 }
 
-pub fn session_get_show_all_displays(session_id: SessionID) -> SyncReturn<Option<String>> {
-    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
-        SyncReturn(Some(session.get_show_all_displays()))
-    } else {
-        SyncReturn(None)
-    }
-}
-
-pub fn session_set_show_all_displays(session_id: SessionID, value: String) {
-    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
-        session.save_show_all_displays(value);
-    }
-}
-
 pub fn session_get_use_all_my_displays_for_the_remote_session(
     session_id: SessionID,
 ) -> SyncReturn<Option<String>> {

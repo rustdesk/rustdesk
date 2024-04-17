@@ -1568,9 +1568,7 @@ impl<T: InvokeUiSession> Remote<T> {
                     // For follow cursor, follow window focus
                     if pi.displays.is_empty() && pi.platform_additions.is_empty() {
                         let config = self.handler.load_config();
-                        if config.displays_as_individual_windows != "Y"
-                            && config.show_all_displays != "Y"
-                        {
+                        if config.displays_as_individual_windows != "Y" {
                             self.handler.set_current_display(pi.current_display);
                         }
                     } else {
