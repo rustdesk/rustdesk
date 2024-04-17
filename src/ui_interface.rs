@@ -709,6 +709,18 @@ pub fn change_id(id: String) {
 }
 
 #[inline]
+pub fn http_request(url: String, method: String, body: String, header: String) {
+    *ASYNC_JOB_STATUS.lock().unwrap() = " ".to_owned();
+    std::thread::spawn(move || {
+        *ASYNC_JOB_STATUS.lock().unwrap() =
+            match crate::http_request_sync(url, method, body, header) {
+                Err(err) => err.to_string(),
+                Ok(text) => text,
+            };
+    });
+}
+
+#[inline]
 pub fn post_request(url: String, body: String, header: String) {
     *ASYNC_JOB_STATUS.lock().unwrap() = " ".to_owned();
     std::thread::spawn(move || {

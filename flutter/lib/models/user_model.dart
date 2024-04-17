@@ -9,6 +9,7 @@ import 'package:get/get.dart';
 import 'package:http/http.dart' as http;
 
 import '../common.dart';
+import '../utils/http_service.dart';
 import 'model.dart';
 import 'platform_model.dart';
 
@@ -135,8 +136,8 @@ class UserModel {
   /// throw [RequestException]
   Future<LoginResponse> login(LoginRequest loginRequest) async {
     final url = await bind.mainGetApiServer();
-    final resp = await http.post(Uri.parse('$url/api/login'),
-        headers: {'Content-Type': 'application/json'},
+    final resp = await HttpService().sendRequest(
+        '$url/api/login', HttpMethod.post,
         body: jsonEncode(loginRequest.toJson()));
 
     final Map<String, dynamic> body;

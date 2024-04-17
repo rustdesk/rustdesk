@@ -874,9 +874,8 @@ pub fn main_get_api_server() -> String {
     get_api_server()
 }
 
-// This function doesn't seem to be used.
-pub fn main_post_request(url: String, body: String, header: String) {
-    post_request(url, body, header)
+pub fn main_http_request(url: String, method: String, body: String, header: String) {
+    http_request(url,method, body, header)
 }
 
 pub fn main_get_local_option(key: String) -> SyncReturn<String> {
