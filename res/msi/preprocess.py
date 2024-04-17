@@ -63,7 +63,7 @@ def make_parser():
         "-c", "--custom", action="store_true", help="Is custom client", default=False
     )
     parser.add_argument(
-        "-an", "--app-name", type=str, default="RustDesk", help="The app name."
+        "-an", "--app-name", type=str, default="RaksaDesk", help="The app name."
     )
     parser.add_argument(
         "-v", "--version", type=str, default="", help="The app version."
