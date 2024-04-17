@@ -287,7 +287,7 @@ UINT __stdcall AddFirewallRules(
     LPWSTR pwzData = NULL;
     size_t szNameLen = 0;
 
-    hr = WcaInitialize(hInstall, "AddFirewallExceptions");
+    hr = WcaInitialize(hInstall, "AddFirewallRules");
     ExitOnFailure(hr, "Failed to initialize");
 
     hr = WcaGetProperty(L"CustomActionData", &pwzData);
@@ -536,6 +536,56 @@ UINT __stdcall SetPropertyFromConfig(__in MSIHANDLE hInstall)
 
     configValue = ReadConfig(szConfigFile, szConfigKey);
     MsiSetPropertyW(hInstall, szPropertyName, configValue.c_str());
+
+LExit:
+    er = SUCCEEDED(hr) ? ERROR_SUCCESS : ERROR_INSTALL_FAILURE;
+    return WcaFinalize(er);
+}
+
+UINT __stdcall AddRegSoftwareSASGeneration(__in MSIHANDLE hInstall)
+{
+    HRESULT hr = S_OK;
+    DWORD er = ERROR_SUCCESS;
+
+     LSTATUS result = 0;
+     HKEY hKey;
+     LPCWSTR subKey = L"Software\\Microsoft\\Windows\\CurrentVersion\\Policies\\System";
+     LPCWSTR valueName = L"SoftwareSASGeneration";
+     DWORD valueType = REG_DWORD;
+     DWORD valueData = 1;
+     DWORD valueDataSize = sizeof(DWORD);
+
+    HINSTANCE hi = 0;
+
+    hr = WcaInitialize(hInstall, "AddRegSoftwareSASGeneration");
+    ExitOnFailure(hr, "Failed to initialize");
+
+    hi = ShellExecuteW(NULL, L"open", L"reg", L" add HKEY_LOCAL_MACHINE\\Software\\Microsoft\\Windows\\CurrentVersion\\Policies\\System /f /v SoftwareSASGeneration /t REG_DWORD /d 1", NULL, SW_HIDE);
+    // https://learn.microsoft.com/en-us/windows/win32/api/shellapi/nf-shellapi-shellexecutew
+    if ((int)hi <= 32) {
+        WcaLog(LOGMSG_STANDARD, "Failed to add registry name \"%ls\", %d, %d", valueName, (int)hi, GetLastError());
+    }
+    else {
+        WcaLog(LOGMSG_STANDARD, "Registry name \"%ls\" is added", valueName);
+    }
+
+    // Why RegSetValueExW always return 998?
+    // 
+    result = RegCreateKeyExW(HKEY_LOCAL_MACHINE, subKey, 0, NULL, REG_OPTION_NON_VOLATILE, KEY_WRITE, NULL, &hKey, NULL);
+    if (result != ERROR_SUCCESS) {
+        WcaLog(LOGMSG_STANDARD, "Failed to create or open registry key: %d", result);
+        goto LExit;
+    }
+
+    result = RegSetValueExW(hKey, valueName, 0, valueType, reinterpret_cast<const BYTE*>(valueData), valueDataSize);
+    if (result != ERROR_SUCCESS) {
+        WcaLog(LOGMSG_STANDARD, "Failed to set registry value: %d", result);
+        RegCloseKey(hKey);
+        goto LExit;
+    }
+
+    WcaLog(LOGMSG_STANDARD, "Registry value has been successfully set.");
+    RegCloseKey(hKey);
 
 LExit:
     er = SUCCEEDED(hr) ? ERROR_SUCCESS : ERROR_INSTALL_FAILURE;
