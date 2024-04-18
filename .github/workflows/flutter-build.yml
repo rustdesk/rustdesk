@@ -331,8 +331,7 @@ jobs:
 
       - name: Build rustdesk
         run: |
-          # --hwcodec not supported on macos yet
-          ./build.py --flutter
+          ./build.py --flutter --hwcodec
 
       - name: create unsigned dmg
         if: env.UPLOAD_ARTIFACT == 'true'
@@ -486,8 +485,7 @@ jobs:
 
       - name: Build rustdesk
         run: |
-          # --hwcodec not supported on macos yet
-          ./build.py --flutter ${{ matrix.job.extra-build-args }}
+          ./build.py --flutter --hwcodec ${{ matrix.job.extra-build-args }}
 
       - name: create unsigned dmg
         if: env.UPLOAD_ARTIFACT == 'true'
@@ -636,7 +634,7 @@ jobs:
       - name: Build rustdesk lib
         run: |
           rustup target add ${{ matrix.job.target }}
-          cargo build --features flutter --release --target aarch64-apple-ios --lib
+          cargo build --features flutter,hwcodec --release --target aarch64-apple-ios --lib
 
       - name: Build rustdesk
         shell: bash
@@ -1257,7 +1255,7 @@ jobs:
               export DEFAULT_FEAT=linux_headless
             fi
             export CARGO_INCREMENTAL=0
-            cargo build --lib --features flutter,flutter_texture_render,${{ matrix.job.extra-build-features }},$DEFAULT_FEAT --release
+            cargo build --lib --features flutter,flutter_texture_render,hwcodec,${{ matrix.job.extra-build-features }},$DEFAULT_FEAT --release
 
       - name: Upload Artifacts
         uses: actions/upload-artifact@master
@@ -1432,7 +1430,7 @@ jobs:
             if ${{ matrix.job.enable-headless }}; then
               export DEFAULT_FEAT=linux_headless
             fi
-            cargo build --features inline,${{ matrix.job.extra-build-features }},$DEFAULT_FEAT --release --bins
+            cargo build --features inline,hwcodec,${{ matrix.job.extra-build-features }},$DEFAULT_FEAT --release --bins
             # package
             mkdir -p ./Release
             mv ./target/release/rustdesk ./Release/rustdesk

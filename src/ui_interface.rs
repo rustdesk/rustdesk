@@ -829,10 +829,9 @@ pub fn get_api_server() -> String {
 
 #[inline]
 pub fn has_hwcodec() -> bool {
-    #[cfg(not(any(feature = "hwcodec", feature = "mediacodec")))]
-    return false;
-    #[cfg(any(feature = "hwcodec", feature = "mediacodec"))]
-    return true;
+    // Has real hardware codec using gpu
+    (cfg!(feature = "hwcodec") && (cfg!(windows) || cfg!(target_os = "linux")))
+        || cfg!(feature = "mediacodec")
 }
 
 #[inline]
@@ -1314,4 +1313,15 @@ pub fn verify2fa(code: String) -> bool {
         refresh_options();
     }
     res
+}
+
+pub fn check_hwcodec() {
+    #[cfg(feature = "hwcodec")]
+    #[cfg(any(target_os = "windows", target_os = "linux"))]
+    {
+        scrap::hwcodec::start_check_process(true);
+        if crate::platform::is_installed() {
+            ipc::notify_server_to_check_hwcodec().ok();
+        }
+    }
 }

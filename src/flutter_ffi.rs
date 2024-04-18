@@ -2100,6 +2100,10 @@ pub fn main_get_hard_option(key: String) -> SyncReturn<String> {
     SyncReturn(get_hard_option(key))
 }
 
+pub fn main_check_hwcodec() {
+    check_hwcodec()
+}
+
 #[cfg(target_os = "android")]
 pub mod server_side {
     use hbb_common::{config, log};

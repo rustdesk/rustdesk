@@ -621,6 +621,10 @@ impl UI {
         );
         format!("data:image/png;base64,{s}")
     }
+
+    pub fn check_hwcodec(&self) {
+        check_hwcodec()
+    }
 }
 
 impl sciter::EventHandler for UI {
@@ -711,6 +715,7 @@ impl sciter::EventHandler for UI {
         fn generate2fa();
         fn generate_2fa_img_src(String);
         fn verify2fa(String);
+        fn check_hwcodec();
     }
 }
 
