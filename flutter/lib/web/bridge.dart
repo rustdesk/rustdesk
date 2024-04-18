@@ -1573,5 +1573,9 @@ class RustdeskImpl {
     throw UnimplementedError();
   }
 
+  Future<void> mainCheckHwcodec({dynamic hint}) {
+    throw UnimplementedError();
+  }
+
   void dispose() {}
 }

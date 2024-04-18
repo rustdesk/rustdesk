@@ -1314,3 +1314,14 @@ pub fn verify2fa(code: String) -> bool {
     }
     res
 }
+
+pub fn check_hwcodec() {
+    #[cfg(feature = "hwcodec")]
+    #[cfg(any(target_os = "windows", target_os = "linux"))]
+    {
+        scrap::hwcodec::start_check_process(true);
+        if crate::platform::is_installed() {
+            ipc::notify_server_to_check_hwcodec().ok();
+        }
+    }
+}

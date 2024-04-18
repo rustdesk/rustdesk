@@ -380,7 +380,10 @@ pub fn check_available_hwcodec() {
 }
 
 #[cfg(any(target_os = "windows", target_os = "linux"))]
-pub fn hwcodec_new_check_process() {
+pub fn start_check_process(force: bool) {
+    if !force && !enable_hwcodec_option() {
+        return;
+    }
     use hbb_common::allow_err;
     use std::sync::Once;
     let f = || {
@@ -421,7 +424,11 @@ pub fn hwcodec_new_check_process() {
         };
     };
     static ONCE: Once = Once::new();
-    ONCE.call_once(|| {
+    if force && ONCE.is_completed() {
         std::thread::spawn(f);
-    });
+    } else {
+        ONCE.call_once(|| {
+            std::thread::spawn(f);
+        });
+    }
 }

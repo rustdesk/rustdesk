@@ -450,7 +450,7 @@ pub async fn start_server(is_server: bool) {
     }
     #[cfg(feature = "hwcodec")]
     #[cfg(any(target_os = "windows", target_os = "linux"))]
-    scrap::hwcodec::hwcodec_new_check_process();
+    scrap::hwcodec::start_check_process(false);
     #[cfg(windows)]
     hbb_common::platform::windows::start_cpu_performance_monitor();
 
