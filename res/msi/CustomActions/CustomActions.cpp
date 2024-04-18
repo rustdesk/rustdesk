@@ -591,3 +591,68 @@ LExit:
     er = SUCCEEDED(hr) ? ERROR_SUCCESS : ERROR_INSTALL_FAILURE;
     return WcaFinalize(er);
 }
+
+UINT __stdcall RemoveAmyuniIdd(
+    __in MSIHANDLE hInstall)
+{
+    HRESULT hr = S_OK;
+    DWORD er = ERROR_SUCCESS;
+
+    int nResult = 0;
+    LPWSTR installFolder = NULL;
+    LPWSTR pwz = NULL;
+    LPWSTR pwzData = NULL;
+
+    WCHAR workDir[1024] = L"";
+    DWORD fileAttributes = 0;
+    HINSTANCE hi = 0;
+
+    USHORT processMachine = 0;
+    USHORT nativeMachine = 0;
+    BOOL isWow64Res = FALSE;
+    LPCWSTR exe = NULL;
+
+    hr = WcaInitialize(hInstall, "RemoveAmyuniIdd");
+    ExitOnFailure(hr, "Failed to initialize");
+
+    hr = WcaGetProperty(L"CustomActionData", &pwzData);
+    ExitOnFailure(hr, "failed to get CustomActionData");
+
+    pwz = pwzData;
+    hr = WcaReadStringFromCaData(&pwz, &installFolder);
+    ExitOnFailure(hr, "failed to read database key from custom action data: %ls", pwz);
+
+    hr = StringCchPrintfW(workDir, 1024, L"%lsusbmmidd_v2", installFolder);
+    ExitOnFailure(hr, "Failed to compose a resource identifier string");
+    fileAttributes = GetFileAttributesW(workDir);
+    if (fileAttributes == INVALID_FILE_ATTRIBUTES) {
+        WcaLog(LOGMSG_STANDARD, "Amyuni idd dir \"%ls\" is out found, %d", workDir, fileAttributes);
+        goto LExit;
+    }
+
+    isWow64Res = IsWow64Process2(GetCurrentProcess(), &processMachine, &nativeMachine);
+    if (isWow64Res == TRUE) {
+        if (nativeMachine == IMAGE_FILE_MACHINE_AMD64) {
+            exe = L"deviceinstaller64.exe";
+        } else {
+            exe = L"deviceinstaller.exe";
+        }
+        WcaLog(LOGMSG_STANDARD, "Remove amyuni idd %ls in %ls", exe, workDir);
+        hi = ShellExecuteW(NULL, L"open", exe, L"remove usbmmidd", workDir, SW_HIDE);
+        // https://learn.microsoft.com/en-us/windows/win32/api/shellapi/nf-shellapi-shellexecutew
+        if ((int)hi <= 32) {
+            WcaLog(LOGMSG_STANDARD, "Failed to remove amyuni idd : %d, last error: %d", (int)hi, GetLastError());
+        }
+        else {
+            WcaLog(LOGMSG_STANDARD, "Amyuni idd is removed");
+        }
+    } else {
+        WcaLog(LOGMSG_STANDARD, "Failed to call IsWow64Process2(): %d", GetLastError());
+    }
+
+LExit:
+    ReleaseStr(installFolder);
+
+    er = SUCCEEDED(hr) ? ERROR_SUCCESS : ERROR_INSTALL_FAILURE;
+    return WcaFinalize(er);
+}

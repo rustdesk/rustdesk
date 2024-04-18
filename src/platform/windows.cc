@@ -669,4 +669,48 @@ extern "C"
         AllocConsole();
         freopen("CONOUT$", "w", stdout);
     }
+
+    bool is_service_running_w(LPCWSTR serviceName)
+    {
+        SC_HANDLE hSCManager = OpenSCManagerW(NULL, NULL, SC_MANAGER_CONNECT);
+        if (hSCManager == NULL) {
+            return false;
+        }
+
+        SC_HANDLE hService = OpenServiceW(hSCManager, serviceName, SERVICE_QUERY_STATUS);
+        if (hService == NULL) {
+            CloseServiceHandle(hSCManager);
+            return false;
+        }
+
+        SERVICE_STATUS_PROCESS serviceStatus;
+        DWORD bytesNeeded;
+        if (!QueryServiceStatusEx(hService, SC_STATUS_PROCESS_INFO, reinterpret_cast<LPBYTE>(&serviceStatus), sizeof(serviceStatus), &bytesNeeded)) {
+            CloseServiceHandle(hService);
+            CloseServiceHandle(hSCManager);
+            return false;
+        }
+
+        bool isRunning = (serviceStatus.dwCurrentState == SERVICE_RUNNING);
+
+        CloseServiceHandle(hService);
+        CloseServiceHandle(hSCManager);
+
+        return isRunning;
+    }
 } // end of extern "C"
+
+extern "C"
+{
+    int get_native_machine()
+    {
+        USHORT processMachine = 0;
+        USHORT nativeMachine = 0;
+        BOOL res = IsWow64Process2(GetCurrentProcess(), &processMachine, &nativeMachine);
+        if (res == TRUE) {
+            return (int)nativeMachine;
+        } else {
+            return -1;
+        }
+    }
+}

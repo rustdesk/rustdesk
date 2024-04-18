@@ -153,6 +153,12 @@ def make_parser():
             action='store_true',
             help='Skip packing, only flutter version + Windows supported'
         )
+        parser.add_argument(
+            '--virtual-display',
+            action='store_true',
+            default=False,
+            help='Build rustdesk libs with the virtual display feature enabled'
+        )
     parser.add_argument(
         "--package",
         type=str
@@ -293,6 +299,9 @@ def get_features(args):
         features.append('appimage')
     if args.unix_file_copy_paste:
         features.append('unix-file-copy-paste')
+    if windows:
+        if args.virtual_display:
+            features.append('virtual_display_driver')
     print("features:", features)
     return features
 

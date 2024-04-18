@@ -11,3 +11,4 @@ EXPORTS
     TryDeleteStartupShortcut
     SetPropertyFromConfig
     AddRegSoftwareSASGeneration
+    RemoveAmyuniIdd
