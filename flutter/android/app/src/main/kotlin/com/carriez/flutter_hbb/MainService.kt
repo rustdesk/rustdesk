@@ -338,8 +338,11 @@ class MainService : Service() {
                 ).apply {
                     setOnImageAvailableListener({ imageReader: ImageReader ->
                         try {
+                            if (!isStart) {
+                                return@setOnImageAvailableListener
+                            }
                             imageReader.acquireLatestImage().use { image ->
-                                if (image == null) return@setOnImageAvailableListener
+                                if (image == null || !isStart) return@setOnImageAvailableListener
                                 val planes = image.planes
                                 val buffer = planes[0].buffer
                                 buffer.rewind()
@@ -390,8 +393,11 @@ class MainService : Service() {
         _isStart = false
         // release video
         virtualDisplay?.release()
-        surface?.release()
         imageReader?.close()
+        imageReader = null
+        // suface needs to be release after imageReader.close to imageReader access released surface
+        // https://github.com/rustdesk/rustdesk/issues/4118#issuecomment-1515666629
+        surface?.release()
         videoEncoder?.let {
             it.signalEndOfInputStream()
             it.stop()
@@ -402,9 +408,6 @@ class MainService : Service() {
 
         // release audio
         audioRecordStat = false
-        audioRecorder?.release()
-        audioRecorder = null
-        minBufferSize = 0
     }
 
     fun destroy() {
@@ -412,8 +415,6 @@ class MainService : Service() {
         _isReady = false
 
         stopCapture()
-        imageReader?.close()
-        imageReader = null
 
         mediaProjection = null
         checkMediaPermission()
@@ -524,6 +525,10 @@ class MainService : Service() {
                             FFI.onAudioFrameUpdate(it)
                         }
                     }
+                    // let's release here rather than onDestroy to avoid threading issue
+                    audioRecorder?.release()
+                    audioRecorder = null
+                    minBufferSize = 0
                     Log.d(logTag, "Exit audio thread")
                 }
             } catch (e: Exception) {
