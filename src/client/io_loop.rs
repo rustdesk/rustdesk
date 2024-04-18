@@ -1505,10 +1505,7 @@ impl<T: InvokeUiSession> Remote<T> {
                         self.handler.lc.write().unwrap().supported_encoding = e;
                     }
                     Some(misc::Union::FollowCurrentDisplay(d_idx)) => {
-                        let config = self.handler.load_config();
-                        if config.displays_as_individual_windows != "Y" {
-                            self.handler.set_current_display(d_idx);
-                        }
+                        self.handler.set_current_display(d_idx);
                     }
                     _ => {}
                 },
