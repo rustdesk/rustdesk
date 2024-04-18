@@ -194,6 +194,8 @@ class Header: Reactor.Component {
                 </div> : ""}
                 <div .separator />
                 {!cursor_embedded && <li #show-remote-cursor .toggle-option><span>{svg_checkmark}</span>{translate('Show remote cursor')}</li>}
+                {<li #follow-remote-cursor .toggle-option><span>{svg_checkmark}</span>{translate('Follow remote cursor')}</li>}
+                {<li #follow-remote-window .toggle-option><span>{svg_checkmark}</span>{translate('Follow remote window focus')}</li>}
                 <li #show-quality-monitor .toggle-option><span>{svg_checkmark}</span>{translate('Show quality monitor')}</li> 
                 {audio_enabled ? <li #disable-audio .toggle-option><span>{svg_checkmark}</span>{translate('Mute')}</li> : ""}
                 {(is_win && pi.platform == "Windows") && file_enabled ? <li #enable-file-transfer .toggle-option><span>{svg_checkmark}</span>{translate('Enable file copy and paste')}</li> : ""}
@@ -479,7 +481,7 @@ function toggleMenuState() {
     for (var el in $$(menu#keyboard-options>li)) {
         el.attributes.toggleClass("selected", values.indexOf(el.id) >= 0);
     }
-    for (var id in ["show-remote-cursor", "show-quality-monitor", "disable-audio", "enable-file-transfer", "disable-clipboard", "lock-after-session-end", "allow_swap_key", "i444"]) {
+    for (var id in ["show-remote-cursor", "follow-remote-cursor", "follow-remote-window", "show-quality-monitor", "disable-audio", "enable-file-transfer", "disable-clipboard", "lock-after-session-end", "allow_swap_key", "i444"]) {
         var el = self.select('#' + id);
         if (el) {
             var value = handler.get_toggle_option(id);
@@ -536,6 +538,15 @@ handler.setMultipleWindowsSession = function(sessions) {
             }
         }, 230);
     });
+}
+
+handler.setCurrentDisplay = function(v) {
+    pi.current_display = v;
+    handler.switch_display(v);
+    header.update();
+    if (is_port_forward) {
+        view.windowState = View.WINDOW_MINIMIZED;
+    }
 }
 
 function updatePrivacyMode() {

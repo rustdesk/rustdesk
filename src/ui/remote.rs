@@ -260,7 +260,7 @@ impl InvokeUiSession for SciterHandler {
     }
 
     fn set_current_display(&self, _disp_idx: i32) {
-        // Ignore for sciter version.
+        self.call("setCurrentDisplay", &make_args!(_disp_idx));
     }
 
     fn set_multiple_windows_session(&self, sessions: Vec<WindowsSession>) {
