@@ -187,7 +187,7 @@ impl LockModesHandler {
     fn new(key_event: &KeyEvent) -> Self {
         let event_caps_enabled = Self::is_modifier_enabled(key_event, ControlKey::CapsLock);
         // Do not use the following code to detect `local_caps_enabled`.
-        // Because the state of get_key_state will not affect simuation of `VIRTUAL_INPUT_STATE` in this file.
+        // Because the state of get_key_state will not affect simulation of `VIRTUAL_INPUT_STATE` in this file.
         //
         // let local_caps_enabled = VirtualInput::get_key_state(
         //     CGEventSourceStateID::CombinedSessionState,
