@@ -421,6 +421,14 @@ pub fn set_socks(proxy: String, username: String, password: String) {
     .ok();
 }
 
+#[inline]
+pub fn get_proxy_status() -> bool {
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    return ipc::get_proxy_status();
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    return false;
+}
+
 #[cfg(any(target_os = "android", target_os = "ios"))]
 pub fn set_socks(_: String, _: String, _: String) {}
 

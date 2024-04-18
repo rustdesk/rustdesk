@@ -801,6 +801,10 @@ pub fn main_set_socks(proxy: String, username: String, password: String) {
     set_socks(proxy, username, password)
 }
 
+pub fn main_get_proxy_status() -> bool {
+    get_proxy_status()
+}
+
 pub fn main_get_socks() -> Vec<String> {
     get_socks()
 }
