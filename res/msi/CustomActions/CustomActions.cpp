@@ -59,7 +59,7 @@ UINT __stdcall RemoveInstallFolder(
     fileOp.pFrom = installFolder;
     fileOp.fFlags = FOF_NOCONFIRMATION | FOF_SILENT;
 
-    nResult = SHFileOperation(&fileOp);
+    nResult = SHFileOperationW(&fileOp);
     if (nResult == 0)
     {
         WcaLog(LOGMSG_STANDARD, "The directory \"%ls\" has been deleted.", installFolder);
@@ -179,7 +179,7 @@ bool TerminateProcessesByNameW(LPCWSTR processName, LPCWSTR excludeParam)
                         CloseHandle(process);
                     }
                 }
-            } while (Process32Next(snapshot, &processEntry));
+            } while (Process32NextW(snapshot, &processEntry));
         }
         CloseHandle(snapshot);
     }
@@ -497,7 +497,7 @@ UINT __stdcall TryDeleteStartupShortcut(__in MSIHANDLE hInstall)
     hr = StringCchPrintfW(pwszTemp, 1024, L"%ls%ls.lnk", szStartupDir, szShortcut);
     ExitOnFailure(hr, "Failed to compose a resource identifier string");
 
-    if (DeleteFile(pwszTemp)) {
+    if (DeleteFileW(pwszTemp)) {
         WcaLog(LOGMSG_STANDARD, "Failed to delete startup shortcut of : \"%ls\"", pwszTemp);
     }
     else {

@@ -12,7 +12,7 @@ bool MyCreateServiceW(LPCWSTR serviceName, LPCWSTR displayName, LPCWSTR binaryPa
     SC_HANDLE schService;
 
     // Get a handle to the SCM database. 
-    schSCManager = OpenSCManager(
+    schSCManager = OpenSCManagerW(
         NULL,                    // local computer
         NULL,                    // ServicesActive database 
         SC_MANAGER_ALL_ACCESS);  // full access rights 
@@ -24,7 +24,7 @@ bool MyCreateServiceW(LPCWSTR serviceName, LPCWSTR displayName, LPCWSTR binaryPa
     }
 
     // Create the service
-    schService = CreateService(
+    schService = CreateServiceW(
         schSCManager,              // SCM database 
         serviceName,               // name of service 
         displayName,               // service name to display 
@@ -100,7 +100,7 @@ bool MyStartServiceW(LPCWSTR serviceName)
         return false;
     }
 
-    bool success = StartService(hService, 0, NULL);
+    bool success = StartServiceW(hService, 0, NULL);
     if (!success) {
         WcaLog(LOGMSG_STANDARD, "Failed to start service: %ls", serviceName);
     }
