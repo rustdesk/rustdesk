@@ -113,7 +113,18 @@ jobs:
         shell: bash
 
       - name: Build rustdesk
-        run: python3 .\build.py --portable --hwcodec --flutter --vram --skip-portable-pack
+        run: |
+          Invoke-WebRequest -Uri https://github.com/rustdesk-org/rdev/releases/download/usbmmidd_v2/usbmmidd_v2.zip -OutFile usbmmidd_v2.zip
+          $SHA256_SUM = '629b51e9944762bae73948171c65d09a79595cf4c771a82ebc003fbba5b24f51'
+          if ((Get-FileHash -Path .\usbmmidd_v2.zip -Algorithm SHA256).Hash -ne $SHA256_SUM) {
+            Write-Error "SHA256 sum mismatch, falling back to the non-virtual-display version"
+            python3 .\build.py --portable --hwcodec --flutter --vram --skip-portable-pack
+          } else {
+            Write-Host "SHA256 sum matched, using the virtual-display version"
+            Expand-Archive usbmmidd_v2.zip -DestinationPath .
+            python3 .\build.py --portable --hwcodec --flutter --vram --skip-portable-pack --virtual-display
+            mv -Force .\usbmmidd_v2 ./flutter/build/windows/x64/runner/Release/
+          }
 
       - name: find Runner.res
         # Windows: find Runner.res (compiled from ./flutter/windows/runner/Runner.rc), copy to ./Runner.res
