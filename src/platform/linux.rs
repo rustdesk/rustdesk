@@ -61,6 +61,12 @@ extern "C" {
         y: *mut c_int,
         screen_num: *mut c_int,
     ) -> c_int;
+    fn xdo_get_window_size(
+        xdo: Xdo,
+        window: *mut c_void,
+        width: *mut c_int,
+        height: *mut c_int,
+    ) -> c_int;
 }
 
 #[link(name = "X11")]
@@ -136,6 +142,8 @@ pub fn get_focused_display(displays: Vec<DisplayInfo>) -> Option<usize> {
             }
             let mut x: c_int = 0;
             let mut y: c_int = 0;
+            let mut width: c_int = 0;
+            let mut height: c_int = 0;
             let mut window: *mut c_void = std::ptr::null_mut();
 
             unsafe {
@@ -152,9 +160,17 @@ pub fn get_focused_display(displays: Vec<DisplayInfo>) -> Option<usize> {
                 {
                     return;
                 }
-                res = displays
-                    .iter()
-                    .position(|d| x >= d.x && x < d.x + d.width && y >= d.y && y < d.y + d.height);
+                if xdo_get_window_size(*xdo, window, &mut width as _, &mut height as _) != 0 {
+                    return;
+                }
+                let center_x = x + width / 2;
+                let center_y = y + height / 2;
+                res = displays.iter().position(|d| {
+                    center_x >= d.x
+                        && center_x < d.x + d.width
+                        && center_y >= d.y
+                        && center_y < d.y + d.height
+                });
             }
         }
     });
