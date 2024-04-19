@@ -3145,36 +3145,34 @@ impl Connection {
 
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     async fn handle_window_focus(&mut self) {
-        if let Ok(displays) = super::display_service::update_get_sync_displays().await {
-            let current_display = crate::get_focused_display(displays);
-            if let Some(d_index) = current_display {
-                let mut misc = Misc::new();
-                misc.set_follow_current_display(d_index as i32);
-                let mut msg_out = Message::new();
-                msg_out.set_misc(misc);
-                self.send(msg_out).await;
-            }
+        let displays = super::display_service::get_sync_displays();
+        let current_display = crate::get_focused_display(displays);
+        if let Some(d_index) = current_display {
+            let mut misc = Misc::new();
+            misc.set_follow_current_display(d_index as i32);
+            let mut msg_out = Message::new();
+            msg_out.set_misc(misc);
+            self.send(msg_out).await;
         }
     }
 
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     async fn handle_cursor_switch_display(&mut self, pos: CursorPosition) {
-        if let Ok(displays) = super::display_service::update_get_sync_displays().await {
-            let d_index = displays.iter().position(|d| {
-                let scale = d.scale;
-                pos.x >= d.x
-                    && pos.y >= d.y
-                    && (pos.x - d.x) as f64 * scale < d.width as f64
-                    && (pos.y - d.y) as f64 * scale < d.height as f64
-            });
-            if let Some(d_index) = d_index {
-                if self.display_idx != d_index {
-                    let mut misc = Misc::new();
-                    misc.set_follow_current_display(d_index as i32);
-                    let mut msg_out = Message::new();
-                    msg_out.set_misc(misc);
-                    self.send(msg_out).await;
-                }
+        let displays = super::display_service::get_sync_displays();
+        let d_index = displays.iter().position(|d| {
+            let scale = d.scale;
+            pos.x >= d.x
+                && pos.y >= d.y
+                && (pos.x - d.x) as f64 * scale < d.width as f64
+                && (pos.y - d.y) as f64 * scale < d.height as f64
+        });
+        if let Some(d_index) = d_index {
+            if self.display_idx != d_index {
+                let mut misc = Misc::new();
+                misc.set_follow_current_display(d_index as i32);
+                let mut msg_out = Message::new();
+                msg_out.set_misc(misc);
+                self.send(msg_out).await;
             }
         }
     }

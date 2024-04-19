@@ -886,7 +886,6 @@ impl InvokeUiSession for FlutterHandler {
         if self.session_handlers.read().unwrap().len() > 1 {
             return;
         }
-        self.peer_info.write().unwrap().current_display = disp_idx;
         self.push_event(
             "follow_current_display",
             &[("display_idx", &disp_idx.to_string())],
