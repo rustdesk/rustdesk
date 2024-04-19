@@ -400,7 +400,6 @@ def init_global_vars(dist_dir, app_name, args):
     global g_build_date
     g_version = args.version.replace("-", ".")
     if g_version == "":
-        # pub const VERSION: &str = "1.2.4";
         g_version = read_process_output('--version')
     if g_version == "":
         print(f"Error: version not found in {dist_app}")
