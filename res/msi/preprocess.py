@@ -6,6 +6,7 @@ import sys
 import uuid
 import argparse
 import datetime
+import subprocess
 import re
 from pathlib import Path
 
@@ -46,14 +47,12 @@ def make_parser():
         help="The dist direcotry to install.",
     )
     parser.add_argument(
-        "-arp",
         "--arp",
         action="store_true",
         help="Is ARPSYSTEMCOMPONENT",
         default=False,
     )
     parser.add_argument(
-        "-custom-arp",
         "--custom-arp",
         type=str,
         default="{}",
@@ -63,7 +62,7 @@ def make_parser():
         "-c", "--custom", action="store_true", help="Is custom client", default=False
     )
     parser.add_argument(
-        "-an", "--app-name", type=str, default="RustDesk", help="The app name."
+        "--app-name", type=str, default="RustDesk", help="The app name."
     )
     parser.add_argument(
         "-v", "--version", type=str, default="", help="The app version."
@@ -149,7 +148,7 @@ def gen_pre_vars(args, dist_dir):
             f'{indent}<?define Description="{args.app_name} Installer" ?>\n',
             f'{indent}<?define ProductLower="{args.app_name.lower()}" ?>\n',
             f'{indent}<?define RegKeyRoot=".$(var.ProductLower)" ?>\n',
-            f'{indent}<?define RegKeyInstall="$(var.RegKeyRoot)\Install" ?>\n',
+            f'{indent}<?define RegKeyInstall="$(var.RegKeyRoot)\\Install" ?>\n',
             f'{indent}<?define BuildDir="{dist_dir}" ?>\n',
             f'{indent}<?define BuildDate="{g_build_date}" ?>\n',
             "\n",
@@ -390,37 +389,26 @@ def gen_content_between_tags(filename, tag_start, tag_end, func):
     return True
 
 
-def init_global_vars(args):
-    var_file = "../../src/version.rs"
-    if not Path(var_file).exists():
-        print(f"Error: {var_file} not found")
-        return False
-
-    with open(var_file, "r") as f:
-        content = f.readlines()
+def init_global_vars(dist_dir, app_name, args):
+    dist_app = dist_dir.joinpath(app_name + ".exe")
+    def read_process_output(args):
+        process = subprocess.Popen(f'{dist_app} {args}', stdout=subprocess.PIPE, stderr=subprocess.STDOUT, shell=True)
+        output, _ = process.communicate()
+        return output.decode('utf-8').strip()
 
     global g_version
     global g_build_date
     g_version = args.version.replace("-", ".")
     if g_version == "":
-        # pub const VERSION: &str = "1.2.4";
-        version_pattern = re.compile(r'.*VERSION: &str = "(.*)";.*')
-        for line in content:
-            match = version_pattern.match(line)
-            if match:
-                g_version = match.group(1)
-                break
+        g_version = read_process_output('--version')
     if g_version == "":
-        print(f"Error: version not found in {var_file}")
+        print(f"Error: version not found in {dist_app}")
         return False
 
-    # pub const BUILD_DATE: &str = "2024-04-08 23:11";
-    build_date_pattern = re.compile(r'BUILD_DATE: &str = "(.*)";')
-    for line in content:
-        match = build_date_pattern.match(line)
-        if match:
-            g_build_date = match.group(1)
-            break
+    g_build_date = read_process_output('--build-date')
+    if g_build_date == "":
+        print(f"Error: build date not found in {dist_app}")
+        return False
 
     return True
 
@@ -448,7 +436,7 @@ if __name__ == "__main__":
     app_name = args.app_name
     dist_dir = Path(sys.argv[0]).parent.joinpath(args.dist_dir).resolve()
 
-    if not init_global_vars(args):
+    if not init_global_vars(dist_dir, app_name, args):
         sys.exit(-1)
 
     if not gen_pre_vars(args, dist_dir):
