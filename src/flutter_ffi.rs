@@ -878,7 +878,7 @@ pub fn main_get_api_server() -> String {
     get_api_server()
 }
 
-pub fn main_http_request(url: String, method: String, body: String, header: String) {
+pub fn main_http_request(url: String, method: String, body: Option<String>, header: String) {
     http_request(url,method, body, header)
 }
 

@@ -548,7 +548,7 @@ impl UI {
         change_id_shared(id, old_id);
     }
 
-    fn http_request(&self, url: String, method: String, body: String, header: String) {
+    fn http_request(&self, url: String, method: String, body: Option<String>, header: String) {
         http_request(url, method, body, header)
     }
 

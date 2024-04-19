@@ -145,6 +145,7 @@ use hbb_common::{
 };
 // #[cfg(any(target_os = "android", target_os = "ios", feature = "cli"))]
 use hbb_common::{config::RENDEZVOUS_PORT, futures::future::join_all};
+use hbb_common::log::debug;
 
 use crate::hbbs_http::create_http_client_async;
 use crate::ui_interface::{get_option, set_option};
@@ -1090,10 +1091,11 @@ pub async fn post_request_sync(url: String, body: String, header: &str) -> Resul
 pub async fn http_request_sync(
     url: String,
     method: String,
-    body: String,
+    body: Option<String>,
     header: String,
 ) -> ResultType<String> {
     let http_client = create_http_client_async();
+    debug!("url: {}, method: {}, body: {:?}, header: {}", url, method, body,header);
     let mut http_client = match method.as_str() {
         "get" => http_client.get(url),
         "post" => http_client.post(url),
@@ -1106,14 +1108,16 @@ pub async fn http_request_sync(
     if let Value::Object(obj) = v {
         for (key, value) in obj.iter() {
             http_client = http_client.header(key, value.as_str().unwrap_or_default());
-            println!("Key: {}, Value: {}", key, value);
         }
     } else {
         return Err(anyhow!("HTTP header information parsing failed!"));
     }
 
+    if let Some(b) = body {
+        http_client = http_client.body(b);
+    }
+
     let response = http_client
-        .body(body)
         .timeout(std::time::Duration::from_secs(12))
         .send()
         .await?;
@@ -1142,6 +1146,7 @@ pub async fn http_request_sync(
     // Convert map to JSON string
     serde_json::to_string(&result).map_err(|e| anyhow!("Failed to serialize response: {}", e))
 }
+
 #[inline]
 pub fn make_privacy_mode_msg_with_details(
     state: back_notification::PrivacyModeState,

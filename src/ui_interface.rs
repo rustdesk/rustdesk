@@ -24,6 +24,7 @@ use std::{
     collections::HashMap,
     sync::{Arc, Mutex},
 };
+use hbb_common::log::error;
 
 use crate::common::SOFTWARE_UPDATE_URL;
 #[cfg(feature = "flutter")]
@@ -717,12 +718,12 @@ pub fn change_id(id: String) {
 }
 
 #[inline]
-pub fn http_request(url: String, method: String, body: String, header: String) {
+pub fn http_request(url: String, method: String, body: Option<String>, header: String) {
     *ASYNC_JOB_STATUS.lock().unwrap() = " ".to_owned();
     std::thread::spawn(move || {
         *ASYNC_JOB_STATUS.lock().unwrap() =
             match crate::http_request_sync(url, method, body, header) {
-                Err(err) => err.to_string(),
+                Err(err) => { error!("{}", err); err.to_string() },
                 Ok(text) => text,
             };
     });

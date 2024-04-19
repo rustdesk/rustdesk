@@ -14,11 +14,9 @@ macro_rules! configure_http_client {
             match proxy_result {
                 Ok(proxy) => {
                     let proxy_setup = match &proxy.intercept {
-                        ProxyScheme::Http { host, .. } => reqwest::Proxy::http(host),
-                        ProxyScheme::Https { host, .. } => reqwest::Proxy::https(host),
-                        ProxyScheme::Socks5 { addr, .. } => {
-                            reqwest::Proxy::all(&format!("socks5://{}", addr))
-                        }
+                        ProxyScheme::Http { host, .. } =>{ reqwest::Proxy::http(format!("http://{}", host))},
+                        ProxyScheme::Https { host, .. } => {reqwest::Proxy::https(format!("https://{}", host))},
+                        ProxyScheme::Socks5 { addr, .. } => { reqwest::Proxy::all(&format!("socks5://{}", addr)) }
                     };
 
                     match proxy_setup {

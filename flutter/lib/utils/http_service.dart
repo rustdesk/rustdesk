@@ -1,13 +1,13 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
-
 import '../models/platform_model.dart';
+export 'package:http/http.dart' show Response;
 
 enum HttpMethod { get, post, put, delete }
 
 class HttpService {
   Future<http.Response> sendRequest(
-    String url,
+    Uri url,
     HttpMethod method, {
     Map<String, String>? headers,
     dynamic body,
@@ -23,12 +23,8 @@ class HttpService {
       return await _pollFultterHttp(url, method, headers: headers, body: body);
     }
 
-    if (body is! String) {
-      throw Exception('Unsupported HTTP body type');
-    }
-
     await bind.mainHttpRequest(
-        url: url,
+        url: url.toString(),
         method: methodName.toLowerCase(),
         body: body,
         header: headersJson);
@@ -38,26 +34,25 @@ class HttpService {
   }
 
   Future<http.Response> _pollFultterHttp(
-    String url,
+    Uri url,
     HttpMethod method, {
     Map<String, String>? headers,
     dynamic body,
   }) async {
     var response = http.Response('', 400); // 默认响应
-    Uri uri = Uri.parse(url);
 
     switch (method) {
       case HttpMethod.get:
-        response = await http.get(uri, headers: headers);
+        response = await http.get(url, headers: headers);
         break;
       case HttpMethod.post:
-        response = await http.post(uri, headers: headers, body: body);
+        response = await http.post(url, headers: headers, body: body);
         break;
       case HttpMethod.put:
-        response = await http.put(uri, headers: headers, body: body);
+        response = await http.put(url, headers: headers, body: body);
         break;
       case HttpMethod.delete:
-        response = await http.delete(uri, headers: headers, body: body);
+        response = await http.delete(url, headers: headers, body: body);
         break;
       default:
         throw Exception('Unsupported HTTP method');
@@ -91,23 +86,23 @@ class HttpService {
   }
 }
 
-Future<http.Response> get(String url, {Map<String, String>? headers}) async {
+Future<http.Response> get(Uri url, {Map<String, String>? headers}) async {
   return await HttpService().sendRequest(url, HttpMethod.get, headers: headers);
 }
 
-Future<http.Response> post(String url,
+Future<http.Response> post(Uri url,
     {Map<String, String>? headers, Object? body, Encoding? encoding}) async {
   return await HttpService()
       .sendRequest(url, HttpMethod.post, body: body, headers: headers);
 }
 
-Future<http.Response> put(String url,
+Future<http.Response> put(Uri url,
     {Map<String, String>? headers, Object? body, Encoding? encoding}) async {
   return await HttpService()
       .sendRequest(url, HttpMethod.put, body: body, headers: headers);
 }
 
-Future<http.Response> delete(String url,
+Future<http.Response> delete(Uri url,
     {Map<String, String>? headers, Object? body, Encoding? encoding}) async {
   return await HttpService()
       .sendRequest(url, HttpMethod.delete, body: body, headers: headers);
