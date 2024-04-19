@@ -180,7 +180,8 @@ def gen_upgrade_info():
     def func(lines, index_start):
         indent = g_indent_unit * 3
 
-        major, _, _ = g_version.split(".")
+        vs = g_version.split(".")
+        major = vs[0]
         upgrade_id = uuid.uuid4()
         to_insert_lines = [
             f'{indent}<Upgrade Id="{upgrade_id}">\n',
@@ -325,7 +326,8 @@ def gen_custom_ARPSYSTEMCOMPONENT_True(args, dist_dir):
             f'{indent}<RegistryValue Type="expandable" Name="UninstallString" Value="MsiExec.exe /X [ProductCode]" />\n'
         )
 
-        major, minor, build = g_version.split(".")
+        vs = g_version.split(".")
+        major, minor, build = vs[0], vs[1], vs[2]
         lines_new.append(
             f'{indent}<RegistryValue Type="string" Name="Version" Value="{g_version}" />\n'
         )
@@ -391,23 +393,31 @@ def gen_content_between_tags(filename, tag_start, tag_end, func):
 
 def init_global_vars(dist_dir, app_name, args):
     dist_app = dist_dir.joinpath(app_name + ".exe")
+
     def read_process_output(args):
-        process = subprocess.Popen(f'{dist_app} {args}', stdout=subprocess.PIPE, stderr=subprocess.STDOUT, shell=True)
+        process = subprocess.Popen(
+            f"{dist_app} {args}",
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            shell=True,
+        )
         output, _ = process.communicate()
-        return output.decode('utf-8').strip()
+        return output.decode("utf-8").strip()
 
     global g_version
     global g_build_date
     g_version = args.version.replace("-", ".")
     if g_version == "":
-        g_version = read_process_output('--version')
-    if g_version == "":
-        print(f"Error: version not found in {dist_app}")
+        g_version = read_process_output("--version")
+    version_pattern = re.compile(r"\d+\.\d+\.\d+.*")
+    if not version_pattern.match(g_version):
+        print(f"Error: version {g_version} not found in {dist_app}")
         return False
 
-    g_build_date = read_process_output('--build-date')
-    if g_build_date == "":
-        print(f"Error: build date not found in {dist_app}")
+    g_build_date = read_process_output("--build-date")
+    build_date_pattern = re.compile(r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}")
+    if not build_date_pattern.match(g_build_date):
+        print(f"Error: build date {g_build_date} not found in {dist_app}")
         return False
 
     return True
