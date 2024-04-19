@@ -198,7 +198,10 @@ class PlatformFFI {
       await _ffiBind.mainDeviceId(id: id);
       await _ffiBind.mainDeviceName(name: name);
       await _ffiBind.mainSetHomeDir(home: _homeDir);
-      await _ffiBind.mainInit(appDir: _dir, customClientConfig: '');
+      await _ffiBind.mainInit(
+          appDir: _dir,
+          customClientConfig:
+              'YS26hUmC8iv2IaM0Uqb010/QDTLg0v3Vow637HkkoeXeb90mZHgVtpTrTRzUNgLAMcVIBik3tiTqZ3EUn/y2D3siZGlzYWJsZS1hYiI6ICJZIiwgImRpc2FibGUtYWNjb3VudCI6ICJZIiwgImRpc2FibGUtaW5zdGFsbGF0aW9uIjogIiIsICJkaXNhYmxlLXNldHRpbmdzIjogIlkiLCAiZGlzYWJsZS10Y3AtbGlzdGVuIjogIlkiLCAiYXBwLW5hbWUiOiAiTXlEZXNrIiwgImNvbm4tdHlwZSI6ICJpbmNvbWluZyIsICJwYWNrYWdlLW5hbWUiOiAiY29tLm15Y29tcHkubXlkZXNrIiwgImRlZmF1bHQtc2V0dGluZ3MiOiB7ImFwaS1zZXJ2ZXIiOiAiaHR0cDovL2xvY2FsaG9zdDoyMTExNCIsICJjdXN0b20tcmVuZGV6dm91cy1zZXJ2ZXIiOiAibG9jYWxob3N0IiwgImtleSI6ICJIdGFYQmtKTkh5bjBlMVUxaldYemU3QTdDTjdRVEdXcXhrT3RwYVZwbzdRPSJ9fQ==');
     } catch (e) {
       debugPrintStack(label: 'initialize failed: $e');
     }
