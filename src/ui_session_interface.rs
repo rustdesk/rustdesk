@@ -192,6 +192,7 @@ impl<T: InvokeUiSession> Session<T> {
         self.lc.read().unwrap().conn_type.eq(&ConnType::RDP)
     }
 
+    #[cfg(feature = "flutter")]
     pub fn is_multi_ui_session(&self) -> bool {
         self.ui_handler.is_multi_ui_session()
     }
