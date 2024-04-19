@@ -1160,10 +1160,7 @@ impl Connection {
             );
             #[cfg(feature = "virtual_display_driver")]
             if crate::platform::is_installed() {
-                let virtual_displays = virtual_display_manager::get_virtual_displays();
-                if !virtual_displays.is_empty() {
-                    platform_additions.insert("virtual_displays".into(), json!(&virtual_displays));
-                }
+                platform_additions.extend(virtual_display_manager::get_platform_additions());
             }
             platform_additions.insert(
                 "supported_privacy_mode_impl".into(),
@@ -2622,8 +2619,7 @@ impl Connection {
                 self.send(make_msg("idd_not_support_under_win10_2004_tip".to_string()))
                     .await;
             } else {
-                if let Err(e) =
-                    virtual_display_manager::plug_in_index_modes(t.display as _, Vec::new())
+                if let Err(e) = virtual_display_manager::plug_in_monitor(t.display as _, Vec::new())
                 {
                     log::error!("Failed to plug in virtual display: {}", e);
                     self.send(make_msg(format!(
@@ -2634,13 +2630,8 @@ impl Connection {
                 }
             }
         } else {
-            let indices = if t.display == -1 {
-                virtual_display_manager::get_virtual_displays()
-            } else {
-                vec![t.display as _]
-            };
-            if let Err(e) = virtual_display_manager::plug_out_peer_request(&indices) {
-                log::error!("Failed to plug out virtual display {:?}: {}", &indices, e);
+            if let Err(e) = virtual_display_manager::plug_out_monitor(t.display) {
+                log::error!("Failed to plug out virtual display {}: {}", t.display, e);
                 self.send(make_msg(format!(
                     "Failed to plug out virtual displays: {}",
                     e
@@ -2666,7 +2657,7 @@ impl Connection {
                     let name = display.name();
                     #[cfg(all(windows, feature = "virtual_display_driver"))]
                     if let Some(_ok) =
-                        virtual_display_manager::change_resolution_if_is_virtual_display(
+                        virtual_display_manager::rustdesk_idd::change_resolution_if_is_virtual_display(
                             &name,
                             r.width as _,
                             r.height as _,
@@ -2896,7 +2887,6 @@ impl Connection {
         } else {
             let is_pre_privacy_on = privacy_mode::is_in_privacy_mode();
             let pre_impl_key = privacy_mode::get_cur_impl_key();
-            let turn_on_res = privacy_mode::turn_on_privacy(&impl_key, self.inner.id);
 
             if is_pre_privacy_on {
                 if let Some(pre_impl_key) = pre_impl_key {
@@ -2910,6 +2900,7 @@ impl Connection {
                 }
             }
 
+            let turn_on_res = privacy_mode::turn_on_privacy(&impl_key, self.inner.id).await;
             match turn_on_res {
                 Some(Ok(res)) => {
                     if res {
@@ -2944,7 +2935,7 @@ impl Connection {
                 }
                 Some(Err(e)) => {
                     log::error!("Failed to turn on privacy mode. {}", e);
-                    if !privacy_mode::is_in_privacy_mode() {
+                    if privacy_mode::is_in_privacy_mode() {
                         let _ = Self::turn_off_privacy_to_msg(
                             privacy_mode::INVALID_PRIVACY_MODE_CONN_ID,
                         );

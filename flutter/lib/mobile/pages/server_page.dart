@@ -158,6 +158,7 @@ class _ServerPageState extends State<ServerPage> {
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.start,
                       children: [
+                        buildPresetPasswordWarning(),
                         gFFI.serverModel.isStart
                             ? ServerInfo()
                             : ServiceNotRunningNotification(),
@@ -226,7 +227,7 @@ class ScamWarningDialog extends StatefulWidget {
 }
 
 class ScamWarningDialogState extends State<ScamWarningDialog> {
-  int _countdown = 12;
+  int _countdown = bind.isCustomClient() ? 0 : 12;
   bool show_warning = false;
   late Timer _timer;
   late ServerModel _serverModel;

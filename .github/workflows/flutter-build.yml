@@ -14,7 +14,7 @@ env:
   RUST_VERSION: "1.75" # https://github.com/rustdesk/rustdesk/discussions/7503
   CARGO_NDK_VERSION: "3.1.2"
   LLVM_VERSION: "15.0.6"
-  FLUTTER_VERSION: "3.19.5"
+  FLUTTER_VERSION: "3.19.6"
   FLUTTER_RUST_BRIDGE_VERSION: "1.80.1"
   # for arm64 linux because official Dart SDK does not work
   FLUTTER_ELINUX_VERSION: "3.16.9"
@@ -113,7 +113,18 @@ jobs:
         shell: bash
 
       - name: Build rustdesk
-        run: python3 .\build.py --portable --hwcodec --flutter --vram --skip-portable-pack
+        run: |
+          Invoke-WebRequest -Uri https://github.com/rustdesk-org/rdev/releases/download/usbmmidd_v2/usbmmidd_v2.zip -OutFile usbmmidd_v2.zip
+          $SHA256_SUM = '629b51e9944762bae73948171c65d09a79595cf4c771a82ebc003fbba5b24f51'
+          if ((Get-FileHash -Path .\usbmmidd_v2.zip -Algorithm SHA256).Hash -ne $SHA256_SUM) {
+            Write-Error "SHA256 sum mismatch, falling back to the non-virtual-display version"
+            python3 .\build.py --portable --hwcodec --flutter --vram --skip-portable-pack
+          } else {
+            Write-Host "SHA256 sum matched, using the virtual-display version"
+            Expand-Archive usbmmidd_v2.zip -DestinationPath .
+            python3 .\build.py --portable --hwcodec --flutter --vram --skip-portable-pack --virtual-display
+            mv -Force .\usbmmidd_v2 ./flutter/build/windows/x64/runner/Release/
+          }
 
       - name: find Runner.res
         # Windows: find Runner.res (compiled from ./flutter/windows/runner/Runner.rc), copy to ./Runner.res
@@ -169,7 +180,7 @@ jobs:
         if: env.UPLOAD_ARTIFACT == 'true'
         run: |
           pushd ./res/msi
-          python preprocess.py -arp -d ../../rustdesk
+          python preprocess.py --arp -d ../../rustdesk
           nuget restore msi.sln
           msbuild msi.sln -p:Configuration=Release -p:Platform=x64 /p:TargetVersion=Windows10
           mv ./Package/bin/x64/Release/en-us/Package.msi ../../SignOutput/rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}-beta.msi
@@ -331,8 +342,7 @@ jobs:
 
       - name: Build rustdesk
         run: |
-          # --hwcodec not supported on macos yet
-          ./build.py --flutter
+          ./build.py --flutter --hwcodec
 
       - name: create unsigned dmg
         if: env.UPLOAD_ARTIFACT == 'true'
@@ -486,8 +496,7 @@ jobs:
 
       - name: Build rustdesk
         run: |
-          # --hwcodec not supported on macos yet
-          ./build.py --flutter ${{ matrix.job.extra-build-args }}
+          ./build.py --flutter --hwcodec ${{ matrix.job.extra-build-args }}
 
       - name: create unsigned dmg
         if: env.UPLOAD_ARTIFACT == 'true'
@@ -636,7 +645,7 @@ jobs:
       - name: Build rustdesk lib
         run: |
           rustup target add ${{ matrix.job.target }}
-          cargo build --features flutter --release --target aarch64-apple-ios --lib
+          cargo build --features flutter,hwcodec --release --target aarch64-apple-ios --lib
 
       - name: Build rustdesk
         shell: bash
@@ -1257,7 +1266,7 @@ jobs:
               export DEFAULT_FEAT=linux_headless
             fi
             export CARGO_INCREMENTAL=0
-            cargo build --lib --features flutter,flutter_texture_render,${{ matrix.job.extra-build-features }},$DEFAULT_FEAT --release
+            cargo build --lib --features flutter,flutter_texture_render,hwcodec,${{ matrix.job.extra-build-features }},$DEFAULT_FEAT --release
 
       - name: Upload Artifacts
         uses: actions/upload-artifact@master
