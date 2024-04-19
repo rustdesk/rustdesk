@@ -664,9 +664,14 @@ impl Connection {
                                 Some(misc::Union::WindowFocus(_)) => {
                                     #[cfg(not(any(target_os = "android", target_os = "ios")))]
                                     {
-                                        if conn.follow_remote_window {
-                                            conn.handle_window_focus().await;
+                                        let mut subbed_disp_count = 0;
+                                        if let Some(s) = conn.server.upgrade() {
+                                            let server = s.write().unwrap();
+                                            subbed_disp_count = server.get_subbed_displays_count(conn.inner.id());
                                         }
+                                            if conn.follow_remote_window && subbed_disp_count == 1 {
+                                                conn.handle_window_focus().await;
+                                            }
                                     }
                                 }
                                 _ => {},
@@ -680,9 +685,14 @@ impl Connection {
                         Some(message::Union::CursorPosition(pos)) => {
                             #[cfg(not(any(target_os = "android", target_os = "ios")))]
                             {
-                                if conn.follow_remote_cursor {
-                                    conn.handle_cursor_switch_display(pos.clone()).await;
+                                let mut subbed_disp_count = 0;
+                                if let Some(s) = conn.server.upgrade() {
+                                    let mut server = s.write().unwrap();
+                                    subbed_disp_count = server.get_subbed_displays_count(conn.inner.id());
                                 }
+                                    if conn.follow_remote_cursor && subbed_disp_count == 1 {
+                                        conn.handle_cursor_switch_display(pos.clone()).await;
+                                    }
                             }
                             #[cfg(target_os = "macos")]
                             if let Some(new_msg) = conn.retina.on_cursor_pos(&pos, conn.display_idx) {

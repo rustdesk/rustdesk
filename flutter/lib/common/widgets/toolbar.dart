@@ -390,20 +390,6 @@ Future<List<TToggleMenu>> toolbarCursor(
     if (pi.currentDisplay == kAllDisplayValue ||
         bind.sessionIsMultiUiSession(sessionId: sessionId)) {
       lockState.value = false;
-      final followCursorOption = 'follow-remote-cursor';
-      final followCursorValue = bind.sessionGetToggleOptionSync(
-          sessionId: sessionId, arg: followCursorOption);
-      final followWindowOption = 'follow-remote-window';
-      final followWindowValue = bind.sessionGetToggleOptionSync(
-          sessionId: sessionId, arg: followWindowOption);
-      if (followCursorValue) {
-        bind.sessionToggleOption(
-            sessionId: sessionId, value: followCursorOption);
-      }
-      if (followWindowValue) {
-        bind.sessionToggleOption(
-            sessionId: sessionId, value: followWindowOption);
-      }
     }
     v.add(TToggleMenu(
         child: Text(translate('Show remote cursor')),

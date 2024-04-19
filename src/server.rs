@@ -355,6 +355,15 @@ impl Server {
         }
     }
 
+    fn get_subbed_displays_count(&self, conn_id: i32) -> usize {
+        self.services
+            .keys()
+            .filter(|k| {
+                Self::is_video_service_name(k) && self.services.get(*k).unwrap().is_subed(conn_id)
+            })
+            .count()
+    }
+
     fn capture_displays(
         &mut self,
         conn: ConnInner,
