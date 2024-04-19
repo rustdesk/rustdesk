@@ -882,8 +882,12 @@ impl InvokeUiSession for FlutterHandler {
         );
     }
 
+    fn is_multi_ui_session(&self) -> bool {
+        self.session_handlers.read().unwrap().len() > 1
+    }
+
     fn set_current_display(&self, disp_idx: i32) {
-        if self.session_handlers.read().unwrap().len() > 1 {
+        if self.is_multi_ui_session() {
             return;
         }
         self.push_event(
