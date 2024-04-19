@@ -387,6 +387,9 @@ Future<List<TToggleMenu>> toolbarCursor(
     final lockState = ShowRemoteCursorLockState.find(id);
     final enabled = !ffiModel.viewOnly;
     final option = 'show-remote-cursor';
+    if (pi.currentDisplay == kAllDisplayValue) {
+      lockState.value = false;
+    }
     v.add(TToggleMenu(
         child: Text(translate('Show remote cursor')),
         value: state.value,
@@ -405,7 +408,8 @@ Future<List<TToggleMenu>> toolbarCursor(
       !ffi.canvasModel.cursorEmbedded &&
       !pi.isWayland &&
       versionCmp(pi.version, "1.2.4") >= 0 &&
-      pi.displays.length > 1) {
+      pi.displays.length > 1 &&
+      pi.currentDisplay != kAllDisplayValue) {
     final option = 'follow-remote-cursor';
     final value =
         bind.sessionGetToggleOptionSync(sessionId: sessionId, arg: option);
@@ -443,7 +447,8 @@ Future<List<TToggleMenu>> toolbarCursor(
       !ffi.canvasModel.cursorEmbedded &&
       !pi.isWayland &&
       versionCmp(pi.version, "1.2.4") >= 0 &&
-      pi.displays.length > 1) {
+      pi.displays.length > 1 &&
+      pi.currentDisplay != kAllDisplayValue) {
     final option = 'follow-remote-window';
     final value =
         bind.sessionGetToggleOptionSync(sessionId: sessionId, arg: option);
