@@ -538,7 +538,7 @@ pub mod amyuni_idd {
     }
 
     #[inline]
-    pub fn is_self_display(name: &str) -> bool {
+    pub fn is_my_display(name: &str) -> bool {
         windows::get_device_names(Some(super::AMYUNI_IDD_DEVICE_STRING))
             .iter()
             .any(|s| windows::is_device_name(s, name))
