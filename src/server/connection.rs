@@ -2300,7 +2300,11 @@ impl Connection {
                         }
                     }
                     #[cfg(not(any(target_os = "android", target_os = "ios")))]
-                    Some(misc::Union::ChangeResolution(r)) => self.change_resolution(&r),
+                    Some(misc::Union::ChangeResolution(r)) => self.change_resolution(None, &r),
+                    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+                    Some(misc::Union::ChangeDisplayResolution(dr)) => {
+                        self.change_resolution(Some(dr.display as _), &dr.resolution)
+                    }
                     #[cfg(all(feature = "flutter", feature = "plugin_framework"))]
                     #[cfg(not(any(target_os = "android", target_os = "ios")))]
                     Some(misc::Union::PluginRequest(p)) => {
@@ -2341,6 +2345,13 @@ impl Connection {
                             } else {
                                 self.try_sub_services();
                             }
+                        }
+                    }
+                    Some(misc::Union::MessageQuery(mq)) => {
+                        if let Some(msg_out) =
+                            video_service::make_display_changed_msg(mq.switch_display as _, None)
+                        {
+                            self.send(msg_out).await;
                         }
                     }
                     _ => {}
@@ -2472,11 +2483,14 @@ impl Connection {
 
                 #[cfg(not(any(target_os = "android", target_os = "ios")))]
                 if s.width != 0 && s.height != 0 {
-                    self.change_resolution(&Resolution {
-                        width: s.width,
-                        height: s.height,
-                        ..Default::default()
-                    });
+                    self.change_resolution(
+                        None,
+                        &Resolution {
+                            width: s.width,
+                            height: s.height,
+                            ..Default::default()
+                        },
+                    );
                 }
             }
 
@@ -2623,10 +2637,11 @@ impl Connection {
     }
 
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    fn change_resolution(&mut self, r: &Resolution) {
+    fn change_resolution(&mut self, d: Option<usize>, r: &Resolution) {
         if self.keyboard {
             if let Ok(displays) = display_service::try_get_displays() {
-                if let Some(display) = displays.get(self.display_idx) {
+                let display_idx = d.unwrap_or(self.display_idx);
+                if let Some(display) = displays.get(display_idx) {
                     let name = display.name();
                     #[cfg(all(windows, feature = "virtual_display_driver"))]
                     if let Some(_ok) =
@@ -2638,11 +2653,18 @@ impl Connection {
                     {
                         return;
                     }
-                    display_service::set_last_changed_resolution(
-                        &name,
-                        (display.width() as _, display.height() as _),
-                        (r.width, r.height),
-                    );
+                    let mut record_changed = true;
+                    #[cfg(all(windows, feature = "virtual_display_driver"))]
+                    if virtual_display_manager::amyuni_idd::is_my_display(&name) {
+                        record_changed = false;
+                    }
+                    if record_changed {
+                        display_service::set_last_changed_resolution(
+                            &name,
+                            (display.width() as _, display.height() as _),
+                            (r.width, r.height),
+                        );
+                    }
                     if let Err(e) =
                         crate::platform::change_resolution(&name, r.width as _, r.height as _)
                     {
