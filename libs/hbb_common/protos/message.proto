@@ -504,6 +504,11 @@ message Resolution {
   int32 height = 2;
 }
 
+message DisplayResolution {
+  int32 display = 1;
+  Resolution resolution = 2;
+}
+
 message SupportedResolutions { repeated Resolution resolutions = 1; }
 
 message SwitchDisplay {
@@ -736,6 +741,8 @@ message Misc {
     bool portable_service_running = 20;
     SwitchSidesRequest switch_sides_request = 21;
     SwitchBack switch_back = 22;
+    // Deprecated since 1.2.4.
+    // Use change_display_resolution instead
     Resolution change_resolution = 24;
     PluginRequest plugin_request = 25;
     PluginFailure plugin_failure = 26;
@@ -748,6 +755,7 @@ message Misc {
     TogglePrivacyMode toggle_privacy_mode = 33;
     SupportedEncoding supported_encoding = 34;
     uint32 selected_sid = 35;
+    DisplayResolution change_display_resolution = 36;
   }
 }
 
