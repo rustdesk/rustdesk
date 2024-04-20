@@ -2104,7 +2104,7 @@ pub fn main_check_hwcodec() {
     check_hwcodec()
 }
 
-pub fn session_request_init_msgs(session_id: SessionID, display: usize) {
+pub fn session_request_new_display_init_msgs(session_id: SessionID, display: usize) {
     if let Some(session) = sessions::get_session_by_session_id(&session_id) {
         session.request_init_msgs(display);
     }

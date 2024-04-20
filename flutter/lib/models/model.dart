@@ -2321,7 +2321,7 @@ class FFI {
           }
           await ffiModel.handleCachedPeerData(data, id);
           await sessionRefreshVideo(sessionId, ffiModel.pi);
-          await bind.sessionRequestInitMsgs(
+          await bind.sessionRequestNewDisplayInitMsgs(
               sessionId: sessionId, display: ffiModel.pi.currentDisplay);
         });
         isToNewWindowNotified.value = true;
