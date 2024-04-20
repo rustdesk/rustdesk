@@ -2347,6 +2347,13 @@ impl Connection {
                             }
                         }
                     }
+                    Some(misc::Union::MessageQuery(mq)) => {
+                        if let Some(msg_out) =
+                            video_service::make_display_changed_msg(mq.switch_display as _, None)
+                        {
+                            self.send(msg_out).await;
+                        }
+                    }
                     _ => {}
                 },
                 Some(message::Union::AudioFrame(frame)) => {

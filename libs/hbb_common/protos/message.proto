@@ -721,6 +721,13 @@ message WindowsSessions {
   uint32 current_sid = 2;
 }
 
+// Query a message from peer.
+message MessageQuery {
+  // The SwitchDisplay message of the target display.
+  // If the target display is not found, the message will be ignored.
+  int32 switch_display = 1;
+}
+
 message Misc {
   oneof union {
     ChatMessage chat_message = 4;
@@ -741,8 +748,8 @@ message Misc {
     bool portable_service_running = 20;
     SwitchSidesRequest switch_sides_request = 21;
     SwitchBack switch_back = 22;
-    // Deprecated since 1.2.4.
-    // Use change_display_resolution instead
+    // Deprecated since 1.2.4, use `change_display_resolution` (36) instead.
+    // But we must keep it for compatibility when peer version < 1.2.4.
     Resolution change_resolution = 24;
     PluginRequest plugin_request = 25;
     PluginFailure plugin_failure = 26;
@@ -756,6 +763,7 @@ message Misc {
     SupportedEncoding supported_encoding = 34;
     uint32 selected_sid = 35;
     DisplayResolution change_display_resolution = 36;
+    MessageQuery message_query = 37;
   }
 }
 

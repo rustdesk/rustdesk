@@ -1239,14 +1239,14 @@ impl<T: InvokeUiSession> Session<T> {
             height,
             ..Default::default()
         };
-        if self.get_peer_version() < get_version_number("1.2.4") {
-            misc.set_change_resolution(resolution);
-        } else {
+        if crate::common::is_support_multi_ui_session_num(self.lc.read().unwrap().version) {
             misc.set_change_display_resolution(DisplayResolution {
                 display,
                 resolution: Some(resolution).into(),
                 ..Default::default()
             });
+        } else {
+            misc.set_change_resolution(resolution);
         }
         let mut msg = Message::new();
         msg.set_misc(misc);
@@ -1301,6 +1301,22 @@ impl<T: InvokeUiSession> Session<T> {
         } else {
             log::error!("selected invalid sid: {}", sid);
         }
+    }
+
+    #[inline]
+    pub fn request_init_msgs(&self, display: usize) {
+        self.send_message_query(display);
+    }
+
+    fn send_message_query(&self, display: usize) {
+        let mut misc = Misc::new();
+        misc.set_message_query(MessageQuery {
+            switch_display: display as _,
+            ..Default::default()
+        });
+        let mut msg = Message::new();
+        msg.set_misc(misc);
+        self.send(Data::Message(msg));
     }
 }
 
