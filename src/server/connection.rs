@@ -2795,6 +2795,13 @@ impl Connection {
         if let Ok(q) = o.follow_remote_window.enum_value() {
             if q != BoolOption::NotSet {
                 self.follow_remote_window = q == BoolOption::Yes;
+                if let Some(s) = self.server.upgrade() {
+                    s.write().unwrap().subscribe(
+                        NAME_WINDOW_FOCUS,
+                        self.inner.clone(),
+                        self.follow_remote_window,
+                    );
+                }
             }
         }
         if let Ok(q) = o.disable_audio.enum_value() {

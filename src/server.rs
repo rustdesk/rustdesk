@@ -50,6 +50,7 @@ pub const NAME: &'static str = "";
 pub mod input_service {
 pub const NAME_CURSOR: &'static str = "";
 pub const NAME_POS: &'static str = "";
+pub const NAME_WINDOW_FOCUS: &'static str = "";
 }
 }
 }
