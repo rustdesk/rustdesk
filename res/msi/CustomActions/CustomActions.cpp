@@ -607,9 +607,7 @@ UINT __stdcall RemoveAmyuniIdd(
     DWORD fileAttributes = 0;
     HINSTANCE hi = 0;
 
-    USHORT processMachine = 0;
-    USHORT nativeMachine = 0;
-    BOOL isWow64Res = FALSE;
+    SYSTEM_INFO si;
     LPCWSTR exe = NULL;
 
     hr = WcaInitialize(hInstall, "RemoveAmyuniIdd");
@@ -630,24 +628,22 @@ UINT __stdcall RemoveAmyuniIdd(
         goto LExit;
     }
 
-    isWow64Res = IsWow64Process2(GetCurrentProcess(), &processMachine, &nativeMachine);
-    if (isWow64Res == TRUE) {
-        if (nativeMachine == IMAGE_FILE_MACHINE_AMD64) {
-            exe = L"deviceinstaller64.exe";
-        } else {
-            exe = L"deviceinstaller.exe";
-        }
-        WcaLog(LOGMSG_STANDARD, "Remove amyuni idd %ls in %ls", exe, workDir);
-        hi = ShellExecuteW(NULL, L"open", exe, L"remove usbmmidd", workDir, SW_HIDE);
-        // https://learn.microsoft.com/en-us/windows/win32/api/shellapi/nf-shellapi-shellexecutew
-        if ((int)hi <= 32) {
-            WcaLog(LOGMSG_STANDARD, "Failed to remove amyuni idd : %d, last error: %d", (int)hi, GetLastError());
-        }
-        else {
-            WcaLog(LOGMSG_STANDARD, "Amyuni idd is removed");
-        }
+    GetNativeSystemInfo(&si);
+    if (si.wProcessorArchitecture == PROCESSOR_ARCHITECTURE_AMD64) {
+        exe = L"deviceinstaller64.exe";
     } else {
-        WcaLog(LOGMSG_STANDARD, "Failed to call IsWow64Process2(): %d", GetLastError());
+        // No need to check if is other architecture.
+        // Because the driver is only for x86 and x64. It will not work at on other architectures.
+        exe = L"deviceinstaller.exe";
+    }
+    WcaLog(LOGMSG_STANDARD, "Remove amyuni idd %ls in %ls", exe, workDir);
+    hi = ShellExecuteW(NULL, L"open", exe, L"remove usbmmidd", workDir, SW_HIDE);
+    // https://learn.microsoft.com/en-us/windows/win32/api/shellapi/nf-shellapi-shellexecutew
+    if ((int)hi <= 32) {
+        WcaLog(LOGMSG_STANDARD, "Failed to remove amyuni idd : %d, last error: %d", (int)hi, GetLastError());
+    }
+    else {
+        WcaLog(LOGMSG_STANDARD, "Amyuni idd is removed");
     }
 
 LExit:
