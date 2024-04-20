@@ -664,14 +664,9 @@ impl Connection {
                                 Some(misc::Union::WindowFocus(_)) => {
                                     #[cfg(not(any(target_os = "android", target_os = "ios")))]
                                     {
-                                        let mut subbed_disp_count = 0;
-                                        if let Some(s) = conn.server.upgrade() {
-                                            let server = s.write().unwrap();
-                                            subbed_disp_count = server.get_subbed_displays_count(conn.inner.id());
+                                        if conn.follow_remote_window {
+                                            conn.handle_window_focus().await;
                                         }
-                                            if conn.follow_remote_window && subbed_disp_count == 1 {
-                                                conn.handle_window_focus().await;
-                                            }
                                     }
                                 }
                                 _ => {},
@@ -685,14 +680,9 @@ impl Connection {
                         Some(message::Union::CursorPosition(pos)) => {
                             #[cfg(not(any(target_os = "android", target_os = "ios")))]
                             {
-                                let mut subbed_disp_count = 0;
-                                if let Some(s) = conn.server.upgrade() {
-                                    let mut server = s.write().unwrap();
-                                    subbed_disp_count = server.get_subbed_displays_count(conn.inner.id());
+                                if conn.follow_remote_cursor {
+                                    conn.handle_cursor_switch_display(pos.clone()).await;
                                 }
-                                    if conn.follow_remote_cursor && subbed_disp_count == 1 {
-                                        conn.handle_cursor_switch_display(pos.clone()).await;
-                                    }
                             }
                             #[cfg(target_os = "macos")]
                             if let Some(new_msg) = conn.retina.on_cursor_pos(&pos, conn.display_idx) {
@@ -3146,6 +3136,13 @@ impl Connection {
 
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     async fn handle_window_focus(&mut self) {
+        if let Some(s) = self.server.upgrade() {
+            let server = s.write().unwrap();
+            let subbed_disp_count = server.get_subbed_displays_count(self.inner.id());
+            if subbed_disp_count != 1 {
+                return;
+            }
+        }
         let displays = super::display_service::get_sync_displays();
         let current_display = crate::get_focused_display(displays);
         if let Some(d_index) = current_display {
@@ -3159,6 +3156,13 @@ impl Connection {
 
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     async fn handle_cursor_switch_display(&mut self, pos: CursorPosition) {
+        if let Some(s) = self.server.upgrade() {
+            let server = s.write().unwrap();
+            let subbed_disp_count = server.get_subbed_displays_count(self.inner.id());
+            if subbed_disp_count != 1 {
+                return;
+            }
+        }
         let displays = super::display_service::get_sync_displays();
         let d_index = displays.iter().position(|d| {
             let scale = d.scale;
