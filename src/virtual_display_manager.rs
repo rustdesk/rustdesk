@@ -536,6 +536,13 @@ pub mod amyuni_idd {
     pub fn get_monitor_count() -> usize {
         windows::get_device_names(Some(super::AMYUNI_IDD_DEVICE_STRING)).len()
     }
+
+    #[inline]
+    pub fn is_my_display(name: &str) -> bool {
+        windows::get_device_names(Some(super::AMYUNI_IDD_DEVICE_STRING))
+            .iter()
+            .any(|s| windows::is_device_name(s, name))
+    }
 }
 
 mod windows {

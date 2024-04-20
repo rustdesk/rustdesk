@@ -1581,5 +1581,10 @@ class RustdeskImpl {
     throw UnimplementedError();
   }
 
+  Future<void> sessionRequestNewDisplayInitMsgs(
+      {required UuidValue sessionId, required int display, dynamic hint}) {
+    throw UnimplementedError();
+  }
+
   void dispose() {}
 }
