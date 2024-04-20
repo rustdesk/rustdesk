@@ -262,6 +262,7 @@ fn should_disable_numlock(evt: &KeyEvent) -> bool {
 
 pub const NAME_CURSOR: &'static str = "mouse_cursor";
 pub const NAME_POS: &'static str = "mouse_pos";
+pub const NAME_WINDOW_FOCUS: &'static str = "window_focus";
 #[derive(Clone)]
 pub struct MouseCursorService {
     pub sp: ServiceTmpl<MouseCursorSub>,
@@ -302,7 +303,7 @@ pub fn new_pos() -> GenericService {
 }
 
 pub fn new_window_focus() -> GenericService {
-    let svc = EmptyExtraFieldService::new("window_focus".to_owned(), false);
+    let svc = EmptyExtraFieldService::new(NAME_WINDOW_FOCUS.to_owned(), false);
     GenericService::repeat::<StateWindowFocus, _, _>(&svc.clone(), 33, run_window_focus);
     svc.sp
 }

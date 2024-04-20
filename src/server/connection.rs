@@ -1325,6 +1325,9 @@ impl Connection {
                 if !self.show_remote_cursor {
                     noperms.push(NAME_POS);
                 }
+                if !self.follow_remote_window {
+                    noperms.push(NAME_WINDOW_FOCUS);
+                }
                 if !self.clipboard_enabled() || !self.peer_keyboard_enabled() {
                     noperms.push(super::clipboard_service::NAME);
                 }
