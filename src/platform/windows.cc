@@ -699,18 +699,3 @@ extern "C"
         return isRunning;
     }
 } // end of extern "C"
-
-extern "C"
-{
-    int get_native_machine()
-    {
-        USHORT processMachine = 0;
-        USHORT nativeMachine = 0;
-        BOOL res = IsWow64Process2(GetCurrentProcess(), &processMachine, &nativeMachine);
-        if (res == TRUE) {
-            return (int)nativeMachine;
-        } else {
-            return -1;
-        }
-    }
-}

@@ -460,7 +460,6 @@ extern "C" {
     fn is_win_down() -> BOOL;
     fn is_local_system() -> BOOL;
     fn alloc_console_and_redirect();
-    fn get_native_machine() -> i32;
     fn is_service_running_w(svc_name: *const u16) -> bool;
 }
 
@@ -2370,55 +2369,16 @@ impl Drop for WallPaperRemover {
     }
 }
 
-// See winnt.h for more information.
-#[derive(Clone, Copy)]
-pub enum MachineArch {
-    Unknown = 0,
-    I386 = 0x014c,
-    ARM = 0x01c0,
-    AMD64 = 0x8664,
-    ARM64 = 0xAA64,
-}
-
-pub fn get_machine_arch() -> Result<MachineArch, io::Error> {
-    let native_machine = unsafe { get_native_machine() };
-    if native_machine != -1 {
-        let native_machine = native_machine as u16;
-        let check_types = [
-            MachineArch::I386,
-            MachineArch::AMD64,
-            MachineArch::ARM,
-            MachineArch::ARM64,
-        ];
-        for check_type in check_types.iter() {
-            if *check_type as u16 == native_machine {
-                return Ok(*check_type);
-            }
-        }
-        Ok(MachineArch::Unknown)
-    } else {
-        Err(io::Error::last_os_error())
-    }
-}
-
 pub fn get_amyuni_exe_name() -> Option<String> {
-    match get_machine_arch() {
-        Ok(arch) => {
-            let exe = match arch {
-                MachineArch::I386 => "deviceinstaller.exe",
-                MachineArch::AMD64 => "deviceinstaller64.exe",
-                _ => {
-                    log::error!("Unsupported machine architecture");
-                    return None;
-                }
-            };
-            Some(exe.to_string())
+    let exe = match std::env::consts::ARCH {
+        "x86" => "deviceinstaller.exe",
+        "x86_64" => "deviceinstaller64.exe",
+        _ => {
+            log::error!("Unsupported machine architecture");
+            return None;
         }
-        Err(e) => {
-            log::warn!("Failed to get machine architecture: {}", e);
-            None
-        }
-    }
+    };
+    Some(exe.to_string())
 }
 
 fn get_uninstall_amyuni_idd(path: &str) -> String {
