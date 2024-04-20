@@ -1619,11 +1619,9 @@ impl LoginConfigHandler {
         }
         if self.get_toggle_option("follow-remote-cursor") {
             msg.follow_remote_cursor = BoolOption::Yes.into();
-            n += 1;
         }
         if self.get_toggle_option("follow-remote-window") {
             msg.follow_remote_window = BoolOption::Yes.into();
-            n += 1;
         }
         if !view_only && self.get_toggle_option("lock-after-session-end") {
             msg.lock_after_session_end = BoolOption::Yes.into();
