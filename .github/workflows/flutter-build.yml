@@ -41,7 +41,7 @@ jobs:
     uses: ./.github/workflows/third-party-RustDeskTempTopMostWindow.yml
     with:
       upload-artifact: ${{ inputs.upload-artifact }}
-      target: windows-2019
+      target: windows-2022
       configuration: Release
       platform: x64
       target_version: Windows10
@@ -56,10 +56,10 @@ jobs:
       fail-fast: false
       matrix:
         job:
-          # - { target: i686-pc-windows-msvc        , os: windows-2019                  }
-          # - { target: x86_64-pc-windows-gnu       , os: windows-2019                  }
-          - { target: x86_64-pc-windows-msvc, os: windows-2019, arch: x86_64 }
-          # - { target: aarch64-pc-windows-msvc, os: windows-2019, arch: aarch64 }
+          # - { target: i686-pc-windows-msvc        , os: windows-2022                  }
+          # - { target: x86_64-pc-windows-gnu       , os: windows-2022                  }
+          - { target: x86_64-pc-windows-msvc, os: windows-2022, arch: x86_64 }
+          # - { target: aarch64-pc-windows-msvc, os: windows-2022, arch: aarch64 }
     steps:
       - name: Export GitHub Actions cache environment variables
         uses: actions/github-script@v6
@@ -213,10 +213,10 @@ jobs:
       fail-fast: false
       matrix:
         job:
-          # - { target: i686-pc-windows-msvc        , os: windows-2019                  }
-          # - { target: x86_64-pc-windows-gnu       , os: windows-2019                  }
-          - { target: i686-pc-windows-msvc, os: windows-2019, arch: x86 }
-          # - { target: aarch64-pc-windows-msvc, os: windows-2019 }
+          # - { target: i686-pc-windows-msvc        , os: windows-2022                  }
+          # - { target: x86_64-pc-windows-gnu       , os: windows-2022                  }
+          - { target: i686-pc-windows-msvc, os: windows-2022, arch: x86 }
+          # - { target: aarch64-pc-windows-msvc, os: windows-2022 }
     steps:
       - name: Export GitHub Actions cache environment variables
         uses: actions/github-script@v6
