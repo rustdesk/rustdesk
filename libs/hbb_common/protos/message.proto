@@ -722,7 +722,7 @@ message WindowsSessions {
   uint32 current_sid = 2;
 }
 
-// Query a message from peer.
+// Query messages from peer.
 message MessageQuery {
   // The SwitchDisplay message of the target display.
   // If the target display is not found, the message will be ignored.
