@@ -1337,8 +1337,7 @@ impl Connection {
                 && raii::AuthedConnID::remote_and_file_conn_count() == 1
                 && sessions.len() > 1
                 && sessions.iter().any(|e| e.sid == current_sid)
-                && (get_version_number(&self.lr.version) > get_version_number("1.2.4")
-                    || self.lr.option.support_windows_specific_session == BoolOption::Yes.into())
+                && get_version_number(&self.lr.version) >= get_version_number("1.2.4")
             {
                 pi.windows_sessions = Some(WindowsSessions {
                     sessions,

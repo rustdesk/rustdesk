@@ -601,7 +601,8 @@ message OptionMessage {
   BoolOption disable_keyboard = 12;
 // Position 13 is used for Resolution. Remove later.
 // Resolution custom_resolution = 13;
-  BoolOption support_windows_specific_session = 14;
+// BoolOption support_windows_specific_session = 14;
+  // starting from 15 please, do not use removed fields
 }
 
 message TestDelay {
