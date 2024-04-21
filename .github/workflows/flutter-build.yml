@@ -115,16 +115,11 @@ jobs:
       - name: Build rustdesk
         run: |
           Invoke-WebRequest -Uri https://github.com/rustdesk-org/rdev/releases/download/usbmmidd_v2/usbmmidd_v2.zip -OutFile usbmmidd_v2.zip
-          $SHA256_SUM = '629b51e9944762bae73948171c65d09a79595cf4c771a82ebc003fbba5b24f51'
-          if ((Get-FileHash -Path .\usbmmidd_v2.zip -Algorithm SHA256).Hash -ne $SHA256_SUM) {
-            Write-Error "SHA256 sum mismatch, falling back to the non-virtual-display version"
-            python3 .\build.py --portable --hwcodec --flutter --vram --skip-portable-pack
-          } else {
-            Write-Host "SHA256 sum matched, using the virtual-display version"
-            Expand-Archive usbmmidd_v2.zip -DestinationPath .
-            python3 .\build.py --portable --hwcodec --flutter --vram --skip-portable-pack --virtual-display
-            mv -Force .\usbmmidd_v2 ./flutter/build/windows/x64/runner/Release/
-          }
+          Expand-Archive usbmmidd_v2.zip -DestinationPath .
+          python3 .\build.py --portable --hwcodec --flutter --vram --skip-portable-pack --virtual-display
+          Remove-Item -Path usbmmidd_v2\Win32 -Recurse
+          Remove-Item -Path usbmmidd_v2\deviceinstaller.exe
+          mv -Force .\usbmmidd_v2 ./flutter/build/windows/x64/runner/Release/
 
       - name: find Runner.res
         # Windows: find Runner.res (compiled from ./flutter/windows/runner/Runner.rc), copy to ./Runner.res
@@ -262,11 +257,14 @@ jobs:
           python3 res/inline-sciter.py
           # Patch sciter x86
           sed -i 's/branch = "dyn"/branch = "dyn_x86"/g' ./Cargo.toml
-          cargo build --features inline,vram,hwcodec --release --bins
+          cargo build --features inline,vram,hwcodec,virtual_display_driver --release --bins
           mkdir -p ./Release
           mv ./target/release/rustdesk.exe ./Release/rustdesk.exe
           curl -LJ -o ./Release/sciter.dll https://github.com/c-smile/sciter-sdk/raw/master/bin.win/x32/sciter.dll
           echo "output_folder=./Release" >> $GITHUB_OUTPUT
+          curl -LJ -o ./usbmmidd_v2.zip https://github.com/rustdesk-org/rdev/releases/download/usbmmidd_v2/usbmmidd_v2.zip
+          unzip usbmmidd_v2.zip
+          mv ./usbmmidd_v2 ./Release || true
 
       - name: find Runner.res
         # Windows: find Runner.res (compiled from ./flutter/windows/runner/Runner.rc), copy to ./Runner.res
