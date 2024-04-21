@@ -70,7 +70,7 @@ UINT __stdcall RemoveInstallFolder(
     }
 
 LExit:
-    ReleaseStr(installFolder);
+    ReleaseStr(pwzData);
 
     er = SUCCEEDED(hr) ? ERROR_SUCCESS : ERROR_INSTALL_FAILURE;
     return WcaFinalize(er);
@@ -598,57 +598,14 @@ UINT __stdcall RemoveAmyuniIdd(
     HRESULT hr = S_OK;
     DWORD er = ERROR_SUCCESS;
 
-    int nResult = 0;
-    LPWSTR installFolder = NULL;
-    LPWSTR pwz = NULL;
-    LPWSTR pwzData = NULL;
-
-    WCHAR workDir[1024] = L"";
-    DWORD fileAttributes = 0;
-    HINSTANCE hi = 0;
-
-    SYSTEM_INFO si;
-    LPCWSTR exe = NULL;
+    BOOL rebootRequired = FALSE;
 
     hr = WcaInitialize(hInstall, "RemoveAmyuniIdd");
     ExitOnFailure(hr, "Failed to initialize");
 
-    hr = WcaGetProperty(L"CustomActionData", &pwzData);
-    ExitOnFailure(hr, "failed to get CustomActionData");
-
-    pwz = pwzData;
-    hr = WcaReadStringFromCaData(&pwz, &installFolder);
-    ExitOnFailure(hr, "failed to read database key from custom action data: %ls", pwz);
-
-    hr = StringCchPrintfW(workDir, 1024, L"%lsusbmmidd_v2", installFolder);
-    ExitOnFailure(hr, "Failed to compose a resource identifier string");
-    fileAttributes = GetFileAttributesW(workDir);
-    if (fileAttributes == INVALID_FILE_ATTRIBUTES) {
-        WcaLog(LOGMSG_STANDARD, "Amyuni idd dir \"%ls\" is out found, %d", workDir, fileAttributes);
-        goto LExit;
-    }
-
-    GetNativeSystemInfo(&si);
-    if (si.wProcessorArchitecture == PROCESSOR_ARCHITECTURE_AMD64) {
-        exe = L"deviceinstaller64.exe";
-    } else {
-        // No need to check if is other architecture.
-        // Because the driver is only for x86 and x64. It will not work at on other architectures.
-        exe = L"deviceinstaller.exe";
-    }
-    WcaLog(LOGMSG_STANDARD, "Remove amyuni idd %ls in %ls", exe, workDir);
-    hi = ShellExecuteW(NULL, L"open", exe, L"remove usbmmidd", workDir, SW_HIDE);
-    // https://learn.microsoft.com/en-us/windows/win32/api/shellapi/nf-shellapi-shellexecutew
-    if ((int)hi <= 32) {
-        WcaLog(LOGMSG_STANDARD, "Failed to remove amyuni idd : %d, last error: %d", (int)hi, GetLastError());
-    }
-    else {
-        WcaLog(LOGMSG_STANDARD, "Amyuni idd is removed");
-    }
+    UninstallDriver(L"usbmmidd", rebootRequired);
 
 LExit:
-    ReleaseStr(installFolder);
-
     er = SUCCEEDED(hr) ? ERROR_SUCCESS : ERROR_INSTALL_FAILURE;
     return WcaFinalize(er);
 }

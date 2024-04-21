@@ -72,10 +72,6 @@ pub struct PrivacyModeImpl {
 }
 
 impl PrivacyMode for PrivacyModeImpl {
-    fn is_async_privacy_mode(&self) -> bool {
-        false
-    }
-
     fn init(&self) -> ResultType<()> {
         Ok(())
     }

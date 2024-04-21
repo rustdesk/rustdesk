@@ -60,6 +60,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="CustomActions.cpp" />
+    <ClCompile Include="DeviceUtils.cpp" />
     <ClCompile Include="dllmain.cpp" />
     <ClCompile Include="FirewallRules.cpp" />
     <ClCompile Include="pch.cpp">

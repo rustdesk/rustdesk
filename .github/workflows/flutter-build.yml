@@ -118,7 +118,7 @@ jobs:
           Expand-Archive usbmmidd_v2.zip -DestinationPath .
           python3 .\build.py --portable --hwcodec --flutter --vram --skip-portable-pack --virtual-display
           Remove-Item -Path usbmmidd_v2\Win32 -Recurse
-          Remove-Item -Path usbmmidd_v2\deviceinstaller.exe
+          Remove-Item -Path "usbmmidd_v2\deviceinstaller64.exe", "usbmmidd_v2\deviceinstaller.exe", "usbmmidd_v2\usbmmidd.bat"
           mv -Force .\usbmmidd_v2 ./flutter/build/windows/x64/runner/Release/
 
       - name: find Runner.res
@@ -264,6 +264,7 @@ jobs:
           echo "output_folder=./Release" >> $GITHUB_OUTPUT
           curl -LJ -o ./usbmmidd_v2.zip https://github.com/rustdesk-org/rdev/releases/download/usbmmidd_v2/usbmmidd_v2.zip
           unzip usbmmidd_v2.zip
+          rm -rf ./usbmmidd_v2/x64 ./usbmmidd_v2/deviceinstaller.exe ./usbmmidd_v2/deviceinstaller64.exe ./usbmmidd_v2/usbmmidd.bat 
           mv ./usbmmidd_v2 ./Release || true
 
       - name: find Runner.res

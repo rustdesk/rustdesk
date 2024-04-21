@@ -51,6 +51,7 @@ pub use serde_json;
 pub use sysinfo;
 pub use toml;
 pub use uuid;
+pub use thiserror;
 
 #[cfg(feature = "quic")]
 pub type Stream = quic::Connection;

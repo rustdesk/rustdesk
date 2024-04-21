@@ -2904,6 +2904,7 @@ dependencies = [
  "socket2 0.3.19",
  "sodiumoxide",
  "sysinfo",
+ "thiserror",
  "tokio",
  "tokio-socks",
  "tokio-util",
