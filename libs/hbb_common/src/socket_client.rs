@@ -1,6 +1,6 @@
-use crate::proxy::IntoProxyScheme;
 use crate::{
     config::{Config, NetworkType},
+    proxy::IntoProxyScheme,
     tcp::FramedStream,
     udp::FramedSocket,
     ResultType,

@@ -1,10 +1,11 @@
-use serde_json::Value;
 use std::{
     borrow::Cow,
     future::Future,
     sync::{Arc, Mutex, RwLock},
     task::Poll,
 };
+
+use serde_json::Value;
 
 #[derive(Debug, Eq, PartialEq)]
 pub enum GrabState {
@@ -124,7 +125,7 @@ use hbb_common::compress::decompress;
 use hbb_common::{
     allow_err,
     anyhow::{anyhow, Context},
-    bail,
+    bail, base64,
     bytes::Bytes,
     compress::compress as compress_func,
     config::{self, Config, CONNECT_TIMEOUT, READ_TIMEOUT},
@@ -145,10 +146,11 @@ use hbb_common::{
 };
 // #[cfg(any(target_os = "android", target_os = "ios", feature = "cli"))]
 use hbb_common::{config::RENDEZVOUS_PORT, futures::future::join_all};
-use hbb_common::log::debug;
 
-use crate::hbbs_http::create_http_client_async;
-use crate::ui_interface::{get_option, set_option};
+use crate::{
+    hbbs_http::create_http_client_async,
+    ui_interface::{get_option, set_option},
+};
 
 pub type NotifyMessageBox = fn(String, String, String, String) -> dyn Future<Output = ()>;
 
@@ -1095,7 +1097,6 @@ pub async fn http_request_sync(
     header: String,
 ) -> ResultType<String> {
     let http_client = create_http_client_async();
-    debug!("url: {}, method: {}, body: {:?}, header: {}", url, method, body,header);
     let mut http_client = match method.as_str() {
         "get" => http_client.get(url),
         "post" => http_client.post(url),

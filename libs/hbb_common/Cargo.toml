@@ -49,7 +49,7 @@ mac_address = "1.1"
 machine-uid = { git = "https://github.com/21pages/machine-uid" }
 [target.'cfg(not(any(target_os = "macos", target_os = "windows")))'.dependencies]
 tokio-rustls = "0.26"
-webpki-roots = "0.26"
+rustls-platform-verifier = "0.3" 
 rustls-pki-types = "1.4"
 [target.'cfg(any(target_os = "macos", target_os = "windows"))'.dependencies]
 tokio-native-tls ="0.3"

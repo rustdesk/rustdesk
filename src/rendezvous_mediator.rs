@@ -9,14 +9,13 @@ use std::{
 
 use uuid::Uuid;
 
-use hbb_common::log::info;
-use hbb_common::proxy::Proxy;
 use hbb_common::{
     allow_err,
     anyhow::{self, bail},
     config::{self, Config, CONNECT_TIMEOUT, READ_TIMEOUT, REG_INTERVAL, RENDEZVOUS_PORT},
     futures::future::join_all,
     log,
+    proxy::Proxy,
     protobuf::Message as _,
     rendezvous_proto::*,
     sleep,
@@ -389,7 +388,7 @@ impl RendezvousMediator {
     }
 
     pub async fn start(server: ServerPtr, host: String) -> ResultType<()> {
-        info!("start rendezvous mediator of {}", host);
+        log::info!("start rendezvous mediator of {}", host);
         //If the investment agent type is http or https, then tcp forwarding is enabled.
         let is_http_proxy = if let Some(conf) = Config::get_socks() {
             let proxy = Proxy::from_conf(&conf, None)?;

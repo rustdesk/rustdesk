@@ -8,7 +8,6 @@ macro_rules! configure_http_client {
     ($builder:expr, $Client: ty) => {{
         let mut builder = $builder;
         let client = if let Some(conf) = Config::get_socks() {
-            info!("Create an http request client with proxy forwarding");
             let proxy_result = Proxy::from_conf(&conf, None);
 
             match proxy_result {

@@ -50,6 +50,7 @@ pub use machine_uid;
 pub use sysinfo;
 pub use toml;
 pub use uuid;
+pub use base64;
 
 #[cfg(feature = "quic")]
 pub type Stream = quic::Connection;

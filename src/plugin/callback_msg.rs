@@ -5,7 +5,6 @@ use crate::{
     ui_interface::get_api_server,
 };
 use hbb_common::{lazy_static, log, message_proto::PluginRequest};
-use reqwest::blocking::Client;
 use serde_derive::{Deserialize, Serialize};
 use serde_json;
 use std::{

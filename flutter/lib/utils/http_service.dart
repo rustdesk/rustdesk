@@ -13,9 +13,6 @@ class HttpService {
     dynamic body,
   }) async {
     headers ??= {'Content-Type': 'application/json'};
-    String headersJson = jsonEncode(headers);
-    String methodName = method.toString().split('.').last;
-
     // Determine if there is currently a proxy setting, and if so, use FFI to call the Rust HTTP method.
     final isProxy = await bind.mainGetProxyStatus();
 
@@ -23,13 +20,15 @@ class HttpService {
       return await _pollFultterHttp(url, method, headers: headers, body: body);
     }
 
+    String headersJson = jsonEncode(headers);
+    String methodName = method.toString().split('.').last;
     await bind.mainHttpRequest(
         url: url.toString(),
         method: methodName.toLowerCase(),
         body: body,
         header: headersJson);
 
-    var resJson = await _pollForResponse();
+    var resJson = await _pollForResponse(url.toString());
     return _parseHttpResponse(resJson);
   }
 
@@ -39,7 +38,7 @@ class HttpService {
     Map<String, String>? headers,
     dynamic body,
   }) async {
-    var response = http.Response('', 400); // 默认响应
+    var response = http.Response('', 400);
 
     switch (method) {
       case HttpMethod.get:
@@ -61,13 +60,18 @@ class HttpService {
     return response;
   }
 
-  Future<String> _pollForResponse() async {
-    String responseJson = await bind.mainGetAsyncStatus();
+  Future<String> _pollForResponse(String url) async {
+    String? responseJson = " ";
     while (responseJson == " ") {
-      await Future.delayed(const Duration(milliseconds: 100));
-      responseJson = await bind.mainGetAsyncStatus();
+      responseJson = await bind.mainGetHttpStatus(url: url);
+      if (responseJson == null) {
+        throw Exception('The HTTP request failed');
+      }
+      if (responseJson == " ") {
+        await Future.delayed(const Duration(milliseconds: 100));
+      }
     }
-    return responseJson;
+    return responseJson!;
   }
 
   http.Response _parseHttpResponse(String responseJson) {

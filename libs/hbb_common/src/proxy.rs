@@ -1,26 +1,30 @@
-use crate::bytes_codec::BytesCodec;
-use crate::config::Socks5Server;
-use crate::tcp::{DynTcpStream, FramedStream};
-use crate::ResultType;
-use base64::engine::general_purpose;
-use base64::Engine;
+use std::{
+    convert::TryFrom,
+    io::Error as IoError,
+    net::{SocketAddr, ToSocketAddrs},
+    sync::Arc,
+};
+
+use base64::{engine::general_purpose, Engine};
 use httparse::{Error as HttpParseError, Response, EMPTY_HEADER};
 use log::info;
 use rustls_pki_types;
-use std::convert::TryFrom;
-use std::io::Error as IoError;
-use std::net::{SocketAddr, ToSocketAddrs};
-use std::sync::Arc;
 use thiserror::Error as ThisError;
 use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt, BufStream};
 #[cfg(any(target_os = "windows", target_os = "macos"))]
 use tokio_native_tls::{native_tls, TlsConnector, TlsStream};
 #[cfg(not(any(target_os = "windows", target_os = "macos")))]
 use tokio_rustls::{client::TlsStream, rustls, TlsConnector};
-use tokio_socks::tcp::Socks5Stream;
-use tokio_socks::IntoTargetAddr;
+use tokio_socks::{tcp::Socks5Stream, IntoTargetAddr};
 use tokio_util::codec::Framed;
 use url::Url;
+
+use crate::{
+    bytes_codec::BytesCodec,
+    config::Socks5Server,
+    tcp::{DynTcpStream, FramedStream},
+    ResultType,
+};
 
 #[derive(Debug, ThisError)]
 pub enum ProxyError {
@@ -450,20 +454,14 @@ impl Proxy {
         Input: AsyncRead + AsyncWrite + Unpin,
         T: IntoTargetAddr<'a>,
     {
-        let root_store = rustls::RootCertStore {
-            roots: webpki_roots::TLS_SERVER_ROOTS.into(),
-        };
-
-        let config = rustls::ClientConfig::builder()
-            .with_root_certificates(root_store)
-            .with_no_client_auth();
+        let verifier = rustls_platform_verifier::tls_config();
         let url_domain = self.intercept.get_domain()?;
 
         let domain = rustls_pki_types::ServerName::try_from(url_domain.as_str())
             .map_err(|e| ProxyError::AddressResolutionFailed(e.to_string()))?
             .to_owned();
 
-        let tls_connector = TlsConnector::from(Arc::new(config));
+        let tls_connector = TlsConnector::from(Arc::new(verifier));
         let stream = tls_connector.connect(domain, io).await?;
         self.http_connect(stream, target).await
     }

@@ -564,6 +564,10 @@ impl UI {
         get_async_job_status()
     }
 
+    fn get_http_status(&self, url: String) -> Option<String> {
+        get_async_http_status(url)
+    }
+
     fn t(&self, name: String) -> String {
         crate::client::translate(name)
     }

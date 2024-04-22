@@ -745,6 +745,10 @@ pub fn main_get_async_status() -> String {
     get_async_job_status()
 }
 
+pub fn main_get_http_status(url: String) -> Option<String> {
+    get_async_http_status(url)
+}
+
 pub fn main_get_option(key: String) -> String {
     get_option(key)
 }
