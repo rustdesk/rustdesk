@@ -423,58 +423,54 @@ pub mod amyuni_idd {
     };
     const HARDWARE_ID: &str = "usbmmidd";
     const PLUG_MONITOR_IO_CONTROL_CDOE: u32 = 2307084;
+    const INSTALLER_EXE_FILE: &str = "deviceinstaller64.exe";
 
     lazy_static::lazy_static! {
         static ref LOCK: Arc<Mutex<()>> = Default::default();
     }
 
-    pub fn uninstall_driver() -> ResultType<()> {
-        let mut reboot_required = false;
-        let res = unsafe { win_device::uninstall_driver(HARDWARE_ID, &mut reboot_required) };
-        retry_install_if_x86_on_x64(res, "remove usbmmidd", true)?;
-        Ok(())
-    }
-
-    // SetupDiCallClassInstaller() will always fail if current_exe() is built as x86 and running on x64.
-    // So we need to call another x64 version exe to install and uninstall the driver.
-    // We need to force try when uninstalling the driver. Because `win_device::uninstall_driver()` always return Ok(()).
-    fn retry_install_if_x86_on_x64(
-        res: Result<(), win_device::DeviceError>,
-        args: &str,
-        uninstall: bool,
-    ) -> ResultType<()> {
-        if res.is_ok() && !uninstall {
-            return Ok(());
-        }
-        if !crate::platform::windows::is_x64() {
-            let _ = res?;
-            return Ok(());
-        }
-
+    fn get_deviceinstaller64_work_dir() -> ResultType<Option<Vec<u8>>> {
         let cur_exe = std::env::current_exe()?;
         let Some(cur_dir) = cur_exe.parent() else {
             bail!("Cannot get parent of current exe file.");
         };
         let work_dir = cur_dir.join("usbmmidd_v2");
         if !work_dir.exists() {
-            bail!("usbmmidd_v2 does not exist.",);
+            return Ok(None);
         }
-        let exefile = "deviceinstaller64.exe";
-        let exe_path = work_dir.join(exefile);
+        let exe_path = work_dir.join(INSTALLER_EXE_FILE);
         if !exe_path.exists() {
-            let _ = res?;
-            return Ok(());
+            return Ok(None);
         }
+
         let Some(work_dir) = work_dir.to_str() else {
             bail!("Cannot convert work_dir to string.");
         };
         let mut work_dir2 = work_dir.as_bytes().to_vec();
         work_dir2.push(0);
+        Ok(Some(work_dir2))
+    }
 
+    pub fn uninstall_driver() -> ResultType<()> {
+        if let Ok(Some(work_dir)) = get_deviceinstaller64_work_dir() {
+            if crate::platform::windows::is_x64() {
+                install_if_x86_on_x64(&work_dir, "remove usbmmidd")?;
+                return Ok(());
+            }
+        }
+
+        let mut reboot_required = false;
+        let _ = unsafe { win_device::uninstall_driver(HARDWARE_ID, &mut reboot_required)? };
+        Ok(())
+    }
+
+    // SetupDiCallClassInstaller() will always fail if current_exe() is built as x86 and running on x64.
+    // So we need to call another x64 version exe to install and uninstall the driver.
+    fn install_if_x86_on_x64(work_dir: &[u8], args: &str) -> ResultType<()> {
         const SW_HIDE: i32 = 0;
         let mut args = args.bytes().collect::<Vec<_>>();
         args.push(0);
-        let mut exe_file = exefile.bytes().collect::<Vec<_>>();
+        let mut exe_file = INSTALLER_EXE_FILE.bytes().collect::<Vec<_>>();
         exe_file.push(0);
         let hi = unsafe {
             ShellExecuteA(
@@ -482,7 +478,7 @@ pub mod amyuni_idd {
                 "open\0".as_ptr() as _,
                 exe_file.as_ptr() as _,
                 args.as_ptr() as _,
-                work_dir2.as_ptr() as _,
+                work_dir.as_ptr() as _,
                 SW_HIDE,
             ) as i32
         };
@@ -517,12 +513,18 @@ pub mod amyuni_idd {
         }
         let inf_path = inf_path.to_string_lossy().to_string();
 
+        if let Ok(Some(work_dir)) = get_deviceinstaller64_work_dir() {
+            if crate::platform::windows::is_x64() {
+                *is_async = true;
+                install_if_x86_on_x64(&work_dir, "install usbmmidd.inf usbmmidd")?;
+                return Ok(());
+            }
+        }
+
+        *is_async = false;
         let mut reboot_required = false;
-        let install_res =
-            unsafe { win_device::install_driver(&inf_path, HARDWARE_ID, &mut reboot_required) };
-        *is_async = !install_res.is_ok();
-        retry_install_if_x86_on_x64(install_res, "install usbmmidd.inf usbmmidd", false)?;
-        *is_async = true;
+        let _ =
+            unsafe { win_device::install_driver(&inf_path, HARDWARE_ID, &mut reboot_required)? };
         Ok(())
     }
 
