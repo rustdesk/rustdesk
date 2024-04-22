@@ -536,6 +536,8 @@ pub mod amyuni_idd {
         Ok(())
     }
 
+    // `std::thread::sleep()` with a timeout is acceptable here.
+    // Because user can wait for a while to plug in a monitor.
     fn plug_in_monitor_(add: bool, is_driver_async_installed: bool) -> ResultType<()> {
         let timeout = Duration::from_secs(3);
         let now = Instant::now();
