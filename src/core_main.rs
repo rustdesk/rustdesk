@@ -232,6 +232,12 @@ pub fn core_main() -> Option<Vec<String>> {
                     _is_run_as_system,
                 );
                 return None;
+            } else if args[0] == "--uninstall-amyuni-idd" {
+                #[cfg(all(windows, feature = "virtual_display_driver"))]
+                hbb_common::allow_err!(
+                    crate::virtual_display_manager::amyuni_idd::uninstall_driver()
+                );
+                return None;
             }
         }
         if args[0] == "--remove" {

@@ -42,7 +42,6 @@ use winapi::{
         },
         securitybaseapi::GetTokenInformation,
         shellapi::ShellExecuteW,
-        sysinfoapi::{GetNativeSystemInfo, SYSTEM_INFO},
         winbase::*,
         wingdi::*,
         winnt::{
@@ -2370,37 +2369,13 @@ impl Drop for WallPaperRemover {
     }
 }
 
-pub fn get_amyuni_exe_name() -> Option<String> {
-    let mut sys_info = SYSTEM_INFO::default();
-    unsafe {
-        GetNativeSystemInfo(&mut sys_info as _);
-    }
-    const PROCESSOR_ARCHITECTURE_INTEL: u16 = 0;
-    const PROCESSOR_ARCHITECTURE_AMD64: u16 = 9;
-
-    let exe = match unsafe { sys_info.u.s().wProcessorArchitecture } {
-        PROCESSOR_ARCHITECTURE_INTEL => "deviceinstaller.exe",
-        PROCESSOR_ARCHITECTURE_AMD64 => "deviceinstaller64.exe",
-        _ => {
-            log::error!("Unsupported machine architecture");
-            return None;
-        }
-    };
-    Some(exe.to_string())
-}
-
 fn get_uninstall_amyuni_idd(path: &str) -> String {
-    let Some(exe) = get_amyuni_exe_name() else {
-        return "".to_string();
-    };
-    let work_dir = PathBuf::from(path).join("usbmmidd_v2");
-    if work_dir.join(&exe).exists() {
-        format!(
-            "pushd {} && .\\{exe} remove usbmmidd && popd",
-            work_dir.to_string_lossy()
-        )
-    } else {
-        "".to_string()
+    match std::env::current_exe() {
+        Ok(path) => format!("\"{}\" --uninstall-amyuni-idd", path.to_str().unwrap_or("")),
+        Err(e) => {
+            log::warn!("Failed to get current exe path, cannot get command of uninstalling idd, Zzerror: {:?}", e);
+            "".to_string()
+        }
     }
 }
 

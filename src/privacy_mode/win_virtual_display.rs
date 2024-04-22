@@ -360,10 +360,6 @@ impl PrivacyModeImpl {
 }
 
 impl PrivacyMode for PrivacyModeImpl {
-    fn is_async_privacy_mode(&self) -> bool {
-        virtual_display_manager::is_amyuni_idd()
-    }
-
     fn init(&self) -> ResultType<()> {
         Ok(())
     }
