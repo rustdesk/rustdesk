@@ -601,5 +601,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("share_warning_tip", "Iepriekš minētie lauki ir koplietoti un redzami citiem."),
         ("Everyone", "Visi"),
         ("ab_web_console_tip", "Vairāk par tīmekļa konsoli"),
+        ("allow-only-conn-window-open-tip", "Atļaut savienojumu tikai tad, ja ir atvērts RustDesk logs"),
+        ("no_need_privacy_mode_no_physical_displays_tip", "Nav fizisku displeju, nav jāizmanto privātuma režīms."),
     ].iter().cloned().collect();
 }

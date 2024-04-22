@@ -210,13 +210,13 @@ class Enhancements: Reactor.Component {
 
     function render() {
         var has_hwcodec = handler.has_hwcodec();
-        var has_gpucodec = handler.has_gpucodec();
+        var has_vram = handler.has_vram();
         var support_remove_wallpaper = handler.support_remove_wallpaper();
         var me = this;
         self.timer(1ms, function() { me.toggleMenuState() });
         return <li>{translate('Enhancements')}
             <menu #enhancements-menu>
-                {(has_hwcodec || has_gpucodec) ? <li #enable-hwcodec><span>{svg_checkmark}</span>{translate("Enable hardware codec")}</li> : ""}
+                {(has_hwcodec || has_vram) ? <li #enable-hwcodec><span>{svg_checkmark}</span>{translate("Enable hardware codec")}</li> : ""}
                 <li #enable-abr><span>{svg_checkmark}</span>{translate("Adaptive bitrate")} (beta)</li>
                 <li #screen-recording>{translate("Recording")}</li>
                 {support_remove_wallpaper ? <li #allow-remove-wallpaper><span>{svg_checkmark}</span>{translate("Remove wallpaper during incoming sessions")}</li> : ""}
@@ -240,7 +240,11 @@ class Enhancements: Reactor.Component {
     event click $(menu#enhancements-menu>li) (_, me) {
         var v = me.id;
         if (v.indexOf("enable-") == 0) {
-            handler.set_option(v, handler.get_option(v) != 'N' ? 'N' : '');
+            var set_value = handler.get_option(v) != 'N' ? 'N' : '';
+            handler.set_option(v, set_value);
+            if (v == "enable-hwcodec" && set_value == '') {
+                handler.check_hwcodec();
+            }
         } else if (v.indexOf("allow-") == 0) {
             handler.set_option(v, handler.get_option(v) == 'Y' ? '' : 'Y');
         } else if (v == 'screen-recording') {

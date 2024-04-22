@@ -14,7 +14,7 @@
 
 			<Component Id="Product.Registry.DefaultIcon" Guid="6DBF2690-0955-4C6A-940F-634DDA503F49">
 				<RegistryKey Root="HKCR" Key="$(var.RegKeyRoot)\DefaultIcon">
-					<RegistryValue Type="string" Value='"[INSTALLFOLDER]$(var.Product)",0' />
+					<RegistryValue Type="string" Value='"[INSTALLFOLDER]$(var.Product).exe",0' />
 				</RegistryKey>
 			</Component>
 
@@ -22,7 +22,7 @@
 				<RegistryKey Root="HKCR" Key="$(var.RegKeyRoot)\shell" />
 				<RegistryKey Root="HKCR" Key="$(var.RegKeyRoot)\shell\open" />
 				<RegistryKey Root="HKCR" Key="$(var.RegKeyRoot)\shell\open\command">
-					<RegistryValue Type="string" Value='"[INSTALLFOLDER]$(var.Product)" "--play" "%1"' />
+					<RegistryValue Type="string" Value='"[INSTALLFOLDER]$(var.Product).exe" --play "%1"' />
 				</RegistryKey>
 			</Component>
 
@@ -36,10 +36,20 @@
 				<RegistryKey Root="HKCR" Key="$(var.ProductLower)\shell" />
 				<RegistryKey Root="HKCR" Key="$(var.ProductLower)\shell\open" />
 				<RegistryKey Root="HKCR" Key="$(var.ProductLower)\shell\open\command">
-					<RegistryValue Type="string" Value='"[INSTALLFOLDER]$(var.Product)" "%1"' />
+					<RegistryValue Type="string" Value='"[INSTALLFOLDER]$(var.Product).exe" "%1"' />
 				</RegistryKey>
 			</Component>
-			
+
+			<!--For compatibility with registry values from previous versions-->
+			<Component Id="Product.Registry.UninstallApp" Guid="FC1A3D2E-5642-FBD8-CFA6-5ECAC6DE69A8">
+				<RegistryKey Root="HKLM" Key="Software\Microsoft\Windows\CurrentVersion\Uninstall\$(var.Product)" >
+					<RegistryValue Type="string" Name="BuildDate" Value="$(var.BuildDate)" />
+					<RegistryValue Type="string" Name="share_rdp" Value="" />
+
+					<!--$ArpStart$-->
+					<!--$ArpEnd$-->
+				</RegistryKey>
+			</Component>
 		</DirectoryRef>
 
 	</Fragment>

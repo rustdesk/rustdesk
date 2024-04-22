@@ -10,7 +10,7 @@ on:
             description: 'Target'
             required: true
             type: string
-            default: 'windows-2019'
+            default: 'windows-2022'
         configuration:
             description: 'Configuration'
             required: true

@@ -441,10 +441,17 @@ Future<List<TToggleMenu>> toolbarDisplayToggle(
         child: Text(translate('Mute'))));
   }
   // file copy and paste
+  // If the version is less than 1.2.4, file copy and paste is supported on Windows only.
+  final isSupportIfPeer_1_2_3 = versionCmp(pi.version, '1.2.4') < 0 &&
+      isWindows &&
+      pi.platform == kPeerPlatformWindows;
+  // If the version is 1.2.4 or later, file copy and paste is supported when kPlatformAdditionsHasFileClipboard is set.
+  final isSupportIfPeer_1_2_4 = versionCmp(pi.version, '1.2.4') >= 0 &&
+      bind.mainHasFileClipboard() &&
+      pi.platformAdditions.containsKey(kPlatformAdditionsHasFileClipboard);
   if (ffiModel.keyboard &&
       perms['file'] != false &&
-      bind.mainHasFileClipboard() &&
-      pi.platformAdditions.containsKey(kPlatformAdditionsHasFileClipboard)) {
+      (isSupportIfPeer_1_2_3 || isSupportIfPeer_1_2_4)) {
     final enabled = !ffiModel.viewOnly;
     final option = 'enable-file-transfer';
     final value =

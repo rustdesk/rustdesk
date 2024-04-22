@@ -28,7 +28,7 @@ use_dasp = ["dasp"]
 flutter = ["flutter_rust_bridge"]
 default = ["use_dasp"]
 hwcodec = ["scrap/hwcodec"]
-gpucodec = ["scrap/gpucodec"]
+vram = ["scrap/vram"]
 mediacodec = ["scrap/mediacodec"]
 linux_headless = ["pam" ]
 virtual_display_driver = ["virtual_display"]
@@ -99,7 +99,20 @@ system_shutdown = "4.0"
 qrcode-generator = "4.1"
 
 [target.'cfg(target_os = "windows")'.dependencies]
-winapi = { version = "0.3", features = ["winuser", "wincrypt", "shellscalingapi", "pdh", "synchapi", "memoryapi", "shellapi"] }
+winapi = { version = "0.3", features = [
+    "winuser",
+    "wincrypt",
+    "shellscalingapi",
+    "pdh",
+    "synchapi",
+    "memoryapi",
+    "shellapi",
+    "devguid",
+    "setupapi",
+    "cguid",
+    "cfgmgr32",
+    "ioapiset",
+] }
 winreg = "0.11"
 windows-service = "0.6"
 virtual_display = { path = "libs/virtual_display", optional = true }

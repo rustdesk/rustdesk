@@ -601,5 +601,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("share_warning_tip", "Vyššie uvedené polia sú zdieľané a viditeľné pre ostatných."),
         ("Everyone", "Každý"),
         ("ab_web_console_tip", "Viac na webovej konzole"),
+        ("allow-only-conn-window-open-tip", "Povoliť pripojenie iba vtedy, ak je otvorené okno aplikácie RustDesk"),
+        ("no_need_privacy_mode_no_physical_displays_tip", "Žiadne fyzické displeje, nie je potrebné používať režim ochrany osobných údajov."),
     ].iter().cloned().collect();
 }

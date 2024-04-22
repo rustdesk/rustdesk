@@ -1052,7 +1052,7 @@ class RustdeskImpl {
     throw UnimplementedError();
   }
 
-  bool mainHasGpucodec({dynamic hint}) {
+  bool mainHasVram({dynamic hint}) {
     throw UnimplementedError();
   }
 
@@ -1570,6 +1570,15 @@ class RustdeskImpl {
   }
 
   String mainGetHardOption({required String key, dynamic hint}) {
+    throw UnimplementedError();
+  }
+
+  Future<void> mainCheckHwcodec({dynamic hint}) {
+    throw UnimplementedError();
+  }
+
+  Future<void> sessionRequestNewDisplayInitMsgs(
+      {required UuidValue sessionId, required int display, dynamic hint}) {
     throw UnimplementedError();
   }
 

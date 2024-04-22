@@ -160,15 +160,8 @@ fn displays_to_msg(displays: Vec<DisplayInfo>) -> Message {
 
     #[cfg(all(windows, feature = "virtual_display_driver"))]
     if crate::platform::is_installed() {
-        let virtual_displays = crate::virtual_display_manager::get_virtual_displays();
-        if !virtual_displays.is_empty() {
-            let mut platform_additions = serde_json::Map::new();
-            platform_additions.insert(
-                "virtual_displays".into(),
-                serde_json::json!(&virtual_displays),
-            );
-            pi.platform_additions = serde_json::to_string(&platform_additions).unwrap_or("".into());
-        }
+        let m = crate::virtual_display_manager::get_platform_additions();
+        pi.platform_additions = serde_json::to_string(&m).unwrap_or_default();
     }
 
     // current_display should not be used in server.
@@ -227,10 +220,11 @@ pub(super) fn get_original_resolution(
     h: usize,
 ) -> MessageField<Resolution> {
     #[cfg(all(windows, feature = "virtual_display_driver"))]
-    let is_virtual_display = crate::virtual_display_manager::is_virtual_display(&display_name);
+    let is_rustdesk_virtual_display =
+        crate::virtual_display_manager::rustdesk_idd::is_virtual_display(&display_name);
     #[cfg(not(all(windows, feature = "virtual_display_driver")))]
-    let is_virtual_display = false;
-    Some(if is_virtual_display {
+    let is_rustdesk_virtual_display = false;
+    Some(if is_rustdesk_virtual_display {
         Resolution {
             width: 0,
             height: 0,
@@ -382,8 +376,10 @@ pub fn try_get_displays() -> ResultType<Vec<Display>> {
 #[cfg(all(windows, feature = "virtual_display_driver"))]
 pub fn try_get_displays() -> ResultType<Vec<Display>> {
     let mut displays = Display::all()?;
+    let no_displays_v = no_displays(&displays);
+    virtual_display_manager::set_can_plug_out_all(!no_displays_v);
     if crate::platform::is_installed()
-        && no_displays(&displays)
+        && no_displays_v
         && virtual_display_manager::is_virtual_display_supported()
     {
         log::debug!("no displays, create virtual display");

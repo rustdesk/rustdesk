@@ -239,16 +239,16 @@ fn test_av1(
 
 #[cfg(feature = "hwcodec")]
 mod hw {
-    use hwcodec::ffmpeg::CodecInfo;
+    use hwcodec::ffmpeg_ram::CodecInfo;
     use scrap::{
-        hwcodec::{HwDecoder, HwEncoder, HwEncoderConfig},
+        hwcodec::{HwRamDecoder, HwRamEncoder, HwRamEncoderConfig},
         CodecFormat,
     };
 
     use super::*;
 
     pub fn test(c: &mut Capturer, width: usize, height: usize, quality: Q, yuv_count: usize) {
-        let best = HwEncoder::best();
+        let best = HwRamEncoder::best();
         let mut h264s = Vec::new();
         let mut h265s = Vec::new();
         if let Some(info) = best.h264 {
@@ -270,8 +270,8 @@ mod hw {
         yuv_count: usize,
         h26xs: &mut Vec<Vec<u8>>,
     ) {
-        let mut encoder = HwEncoder::new(
-            EncoderCfg::HW(HwEncoderConfig {
+        let mut encoder = HwRamEncoder::new(
+            EncoderCfg::HWRAM(HwRamEncoderConfig {
                 name: info.name.clone(),
                 width,
                 height,
@@ -321,7 +321,7 @@ mod hw {
     }
 
     fn test_decoder(format: CodecFormat, h26xs: &Vec<Vec<u8>>) {
-        let mut decoder = HwDecoder::new(format).unwrap();
+        let mut decoder = HwRamDecoder::new(format).unwrap();
         let start = Instant::now();
         let mut cnt = 0;
         for h26x in h26xs {

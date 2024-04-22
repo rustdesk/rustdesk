@@ -3106,6 +3106,27 @@ Color? disabledTextColor(BuildContext context, bool enabled) {
       : Theme.of(context).textTheme.titleLarge?.color?.withOpacity(0.6);
 }
 
+Widget loadPowered(BuildContext context) {
+  return MouseRegion(
+    cursor: SystemMouseCursors.click,
+    child: GestureDetector(
+      onTap: () {
+        launchUrl(Uri.parse('https://rustdesk.com'));
+      },
+      child: Opacity(
+          opacity: 0.5,
+          child: Text(
+            translate("powered_by_me"),
+            overflow: TextOverflow.clip,
+            style: Theme.of(context)
+                .textTheme
+                .bodySmall
+                ?.copyWith(fontSize: 9, decoration: TextDecoration.underline),
+          )),
+    ),
+  ).marginOnly(top: 6);
+}
+
 // max 300 x 60
 Widget loadLogo() {
   return FutureBuilder<ByteData>(
@@ -3154,4 +3175,42 @@ Size getIncomingOnlySettingsSize() {
 bool isInHomePage() {
   final controller = Get.find<DesktopTabController>();
   return controller.state.value.selected == 0;
+}
+
+Widget buildPresetPasswordWarning() {
+  return FutureBuilder<bool>(
+    future: bind.isPresetPassword(),
+    builder: (BuildContext context, AsyncSnapshot<bool> snapshot) {
+      if (snapshot.connectionState == ConnectionState.waiting) {
+        return CircularProgressIndicator(); // Show a loading spinner while waiting for the Future to complete
+      } else if (snapshot.hasError) {
+        return Text(
+            'Error: ${snapshot.error}'); // Show an error message if the Future completed with an error
+      } else if (snapshot.hasData && snapshot.data == true) {
+        return Container(
+          color: Colors.yellow,
+          child: Column(
+            children: [
+              Align(
+                  child: Text(
+                translate("Security Alert"),
+                style: TextStyle(
+                  color: Colors.red,
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                ),
+              )).paddingOnly(bottom: 8),
+              Text(
+                translate("preset_password_warning"),
+                style: TextStyle(color: Colors.red),
+              )
+            ],
+          ).paddingAll(8),
+        ); // Show a warning message if the Future completed with true
+      } else {
+        return SizedBox
+            .shrink(); // Show nothing if the Future completed with false or null
+      }
+    },
+  );
 }

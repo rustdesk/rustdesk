@@ -4,7 +4,4 @@
 	<!--$PreVarsStart$-->
 	<!--$PreVarsEnd$-->
 
-	<!-- This should NEVER be changed ! -->
-	<?define UpgradeCode = "9D8E3E95-42B8-427E-B801-79F3FE7B6DD7" ?>
-
 </Include>

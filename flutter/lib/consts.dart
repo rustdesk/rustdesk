@@ -19,7 +19,9 @@ const kKeyTranslateMode = 'translate';
 const String kPlatformAdditionsIsWayland = "is_wayland";
 const String kPlatformAdditionsHeadless = "headless";
 const String kPlatformAdditionsIsInstalled = "is_installed";
-const String kPlatformAdditionsVirtualDisplays = "virtual_displays";
+const String kPlatformAdditionsIddImpl = "idd_impl";
+const String kPlatformAdditionsRustDeskVirtualDisplays = "rustdesk_virtual_displays";
+const String kPlatformAdditionsAmyuniVirtualDisplays = "amyuni_virtual_displays";
 const String kPlatformAdditionsHasFileClipboard = "has_file_clipboard";
 const String kPlatformAdditionsSupportedPrivacyModeImpl =
     "supported_privacy_mode_impl";
@@ -121,12 +123,11 @@ double kNewWindowOffset = isWindows
             ? 30.0
             : 50.0;
 
-EdgeInsets get kDragToResizeAreaPadding =>
-    !kUseCompatibleUiMode && isLinux
-        ? stateGlobal.fullscreen.isTrue || stateGlobal.isMaximized.value
-            ? EdgeInsets.zero
-            : EdgeInsets.all(5.0)
-        : EdgeInsets.zero;
+EdgeInsets get kDragToResizeAreaPadding => !kUseCompatibleUiMode && isLinux
+    ? stateGlobal.fullscreen.isTrue || stateGlobal.isMaximized.value
+        ? EdgeInsets.zero
+        : EdgeInsets.all(5.0)
+    : EdgeInsets.zero;
 // https://en.wikipedia.org/wiki/Non-breaking_space
 const int $nbsp = 0x00A0;
 

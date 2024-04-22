@@ -39,11 +39,15 @@ lazy_static::lazy_static! {
     static ref TEXTURE_RENDER_KEY: Arc<AtomicI32> = Arc::new(AtomicI32::new(0));
 }
 
-fn initialize(app_dir: &str) {
+fn initialize(app_dir: &str, custom_client_config: &str) {
     flutter::async_tasks::start_flutter_async_runner();
     *config::APP_DIR.write().unwrap() = app_dir.to_owned();
     // core_main's load_custom_client does not work for flutter since it is only applied to its load_library in main.c
-    crate::load_custom_client();
+    if custom_client_config.is_empty() {
+        crate::load_custom_client();
+    } else {
+        crate::read_custom_client(custom_client_config);
+    }
     #[cfg(target_os = "android")]
     {
         // flexi_logger can't work when android_logger initialized.
@@ -1282,8 +1286,8 @@ pub fn cm_get_clients_length() -> usize {
     crate::ui_cm_interface::get_clients_length()
 }
 
-pub fn main_init(app_dir: String) {
-    initialize(&app_dir);
+pub fn main_init(app_dir: String, custom_client_config: String) {
+    initialize(&app_dir, &custom_client_config);
 }
 
 pub fn main_device_id(id: String) {
@@ -1302,8 +1306,8 @@ pub fn main_has_hwcodec() -> SyncReturn<bool> {
     SyncReturn(has_hwcodec())
 }
 
-pub fn main_has_gpucodec() -> SyncReturn<bool> {
-    SyncReturn(has_gpucodec())
+pub fn main_has_vram() -> SyncReturn<bool> {
+    SyncReturn(has_vram())
 }
 
 pub fn main_supported_hwdecodings() -> SyncReturn<String> {
@@ -1789,7 +1793,7 @@ pub fn main_has_file_clipboard() -> SyncReturn<bool> {
 }
 
 pub fn main_has_gpu_texture_render() -> SyncReturn<bool> {
-    SyncReturn(cfg!(feature = "gpucodec"))
+    SyncReturn(cfg!(feature = "vram"))
 }
 
 pub fn cm_init() {
@@ -2103,6 +2107,16 @@ pub fn main_get_hard_option(key: String) -> SyncReturn<String> {
     SyncReturn(get_hard_option(key))
 }
 
+pub fn main_check_hwcodec() {
+    check_hwcodec()
+}
+
+pub fn session_request_new_display_init_msgs(session_id: SessionID, display: usize) {
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
+        session.request_init_msgs(display);
+    }
+}
+
 #[cfg(target_os = "android")]
 pub mod server_side {
     use hbb_common::{config, log};
@@ -2115,31 +2129,35 @@ pub mod server_side {
     use crate::start_server;
 
     #[no_mangle]
-    pub unsafe extern "system" fn Java_com_carriez_flutter_1hbb_MainService_startServer(
+    pub unsafe extern "system" fn Java_ffi_FFI_startServer(
         env: JNIEnv,
         _class: JClass,
         app_dir: JString,
+        custom_client_config: JString,
     ) {
         log::debug!("startServer from jvm");
         let mut env = env;
         if let Ok(app_dir) = env.get_string(&app_dir) {
             *config::APP_DIR.write().unwrap() = app_dir.into();
         }
+        if let Ok(custom_client_config) = env.get_string(&custom_client_config) {
+            if !custom_client_config.is_empty() {
+                let custom_client_config: String = custom_client_config.into();
+                crate::read_custom_client(&custom_client_config);
+            }
+        }
         std::thread::spawn(move || start_server(true));
     }
 
     #[no_mangle]
-    pub unsafe extern "system" fn Java_com_carriez_flutter_1hbb_MainService_startService(
-        _env: JNIEnv,
-        _class: JClass,
-    ) {
+    pub unsafe extern "system" fn Java_ffi_FFI_startService(_env: JNIEnv, _class: JClass) {
         log::debug!("startService from jvm");
         config::Config::set_option("stop-service".into(), "".into());
         crate::rendezvous_mediator::RendezvousMediator::restart();
     }
 
     #[no_mangle]
-    pub unsafe extern "system" fn Java_com_carriez_flutter_1hbb_MainService_translateLocale(
+    pub unsafe extern "system" fn Java_ffi_FFI_translateLocale(
         env: JNIEnv,
         _class: JClass,
         locale: JString,
@@ -2158,10 +2176,7 @@ pub mod server_side {
     }
 
     #[no_mangle]
-    pub unsafe extern "system" fn Java_com_carriez_flutter_1hbb_MainService_refreshScreen(
-        _env: JNIEnv,
-        _class: JClass,
-    ) {
+    pub unsafe extern "system" fn Java_ffi_FFI_refreshScreen(_env: JNIEnv, _class: JClass) {
         crate::server::video_service::refresh()
     }
 }

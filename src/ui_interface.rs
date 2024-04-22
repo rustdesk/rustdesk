@@ -862,15 +862,14 @@ pub fn get_api_server() -> String {
 
 #[inline]
 pub fn has_hwcodec() -> bool {
-    #[cfg(not(any(feature = "hwcodec", feature = "mediacodec")))]
-    return false;
-    #[cfg(any(feature = "hwcodec", feature = "mediacodec"))]
-    return true;
+    // Has real hardware codec using gpu
+    (cfg!(feature = "hwcodec") && (cfg!(windows) || cfg!(target_os = "linux")))
+        || cfg!(feature = "mediacodec")
 }
 
 #[inline]
-pub fn has_gpucodec() -> bool {
-    cfg!(feature = "gpucodec")
+pub fn has_vram() -> bool {
+    cfg!(feature = "vram")
 }
 
 #[cfg(feature = "flutter")]
@@ -879,14 +878,14 @@ pub fn supported_hwdecodings() -> (bool, bool) {
     let decoding = scrap::codec::Decoder::supported_decodings(None, true, None, &vec![]);
     #[allow(unused_mut)]
     let (mut h264, mut h265) = (decoding.ability_h264 > 0, decoding.ability_h265 > 0);
-    #[cfg(feature = "gpucodec")]
+    #[cfg(feature = "vram")]
     {
         // supported_decodings check runtime luid
-        let gpu = scrap::gpucodec::GpuDecoder::possible_available_without_check();
-        if gpu.0 {
+        let vram = scrap::vram::VRamDecoder::possible_available_without_check();
+        if vram.0 {
             h264 = true;
         }
-        if gpu.1 {
+        if vram.1 {
             h265 = true;
         }
     }
@@ -1347,4 +1346,15 @@ pub fn verify2fa(code: String) -> bool {
         refresh_options();
     }
     res
+}
+
+pub fn check_hwcodec() {
+    #[cfg(feature = "hwcodec")]
+    #[cfg(any(target_os = "windows", target_os = "linux"))]
+    {
+        scrap::hwcodec::start_check_process(true);
+        if crate::platform::is_installed() {
+            ipc::notify_server_to_check_hwcodec().ok();
+        }
+    }
 }

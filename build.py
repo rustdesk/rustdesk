@@ -33,9 +33,9 @@ def get_arch() -> str:
 
 
 def system2(cmd):
-    err = os.system(cmd)
-    if err != 0:
-        print(f"Error occurred when executing: {cmd}. Exiting.")
+    exit_code = os.system(cmd)
+    if exit_code != 0:
+        sys.stderr.write(f"Error occurred when executing: `{cmd}`. Exiting.\n")
         sys.exit(-1)
 
 
@@ -118,9 +118,9 @@ def make_parser():
             '' if windows or osx else ', need libva-dev, libvdpau-dev.')
     )
     parser.add_argument(
-        '--gpucodec',
+        '--vram',
         action='store_true',
-        help='Enable feature gpucodec, only available on windows now.'
+        help='Enable feature vram, only available on windows now.'
     )
     parser.add_argument(
         '--portable',
@@ -152,6 +152,12 @@ def make_parser():
             '--skip-portable-pack',
             action='store_true',
             help='Skip packing, only flutter version + Windows supported'
+        )
+        parser.add_argument(
+            '--virtual-display',
+            action='store_true',
+            default=False,
+            help='Build rustdesk libs with the virtual display feature enabled'
         )
     parser.add_argument(
         "--package",
@@ -282,8 +288,8 @@ def get_features(args):
     features = ['inline'] if not args.flutter else []
     if args.hwcodec:
         features.append('hwcodec')
-    if args.gpucodec:
-        features.append('gpucodec')
+    if args.vram:
+        features.append('vram')
     if args.flutter:
         features.append('flutter')
         features.append('flutter_texture_render')
@@ -293,6 +299,9 @@ def get_features(args):
         features.append('appimage')
     if args.unix_file_copy_paste:
         features.append('unix-file-copy-paste')
+    if windows:
+        if args.virtual_display:
+            features.append('virtual_display_driver')
     print("features:", features)
     return features
 

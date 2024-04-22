@@ -84,7 +84,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
       slivers: [
         SliverList(
             delegate: SliverChildListDelegate([
-          _buildUpdateUI(),
+          if (!bind.isCustomClient()) _buildUpdateUI(),
           _buildRemoteIDTextField(),
         ])),
         SliverFillRemaining(

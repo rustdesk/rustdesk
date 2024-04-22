@@ -54,8 +54,3 @@ jobs:
       - name: Run
         shell: bash
         run: |
-          cd /opt/build
-          #./update_mac_template.sh
-          #security default-keychain -s rustdesk.keychain
-          #security unlock-keychain -p ${{ secrets.MACOS_P12_PASSWORD }} rustdesk.keychain
-          ./agent.sh

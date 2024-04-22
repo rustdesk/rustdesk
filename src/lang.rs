@@ -16,6 +16,7 @@ mod et;
 mod fa;
 mod fr;
 mod he;
+mod hr;
 mod hu;
 mod id;
 mod it;
@@ -81,6 +82,7 @@ pub const LANGS: &[(&str, &str)] = &[
     ("lv", "Latviešu"),
     ("ar", "العربية"),
     ("he", "עברית"),
+    ("hr", "Hrvatski"),
 ];
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -152,6 +154,7 @@ pub fn translate_locale(name: String, locale: &str) -> String {
         "ar" => ar::T.deref(),
         "bg" => bg::T.deref(),
         "he" => he::T.deref(),
+        "hr" => hr::T.deref(),
         _ => en::T.deref(),
     };
     let (name, placeholder_value) = extract_placeholder(&name);
