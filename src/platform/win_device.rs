@@ -451,8 +451,10 @@ unsafe fn get_device_path(interface_guid: &GUID) -> Result<Vec<u16>, DeviceError
     }
 
     let mut path = Vec::new();
-    let device_path = vec_data.as_ptr().add(std::mem::size_of::<DWORD>()) as *const u16;
-    for i in 0..(predicted_length - std::mem::size_of::<DWORD>() as u32) / 2 {
+    let device_path_ptr = std::ptr::addr_of!((*device_interface_detail_data).DevicePath) as *const u16;
+    let steps = device_path_ptr as usize - vec_data.as_ptr() as usize;
+    let device_path = vec_data.as_ptr().add(steps) as *const u16;
+    for i in 0..(predicted_length - steps as u32) / 2 {
         if *device_path.offset(i as _) == 0 {
             path.push(0);
             break;
