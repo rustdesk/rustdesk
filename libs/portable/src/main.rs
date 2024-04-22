@@ -12,7 +12,7 @@ pub mod bin_reader;
 const APP_PREFIX: &str = "rustdesk";
 const APPNAME_RUNTIME_ENV_KEY: &str = "RUSTDESK_APPNAME";
 
-fn setup(reader: BinaryReader, dir: Option<PathBuf>, clear: bool) -> Option<PathBuf> {
+fn setup(dir: Option<PathBuf>) -> Option<PathBuf> {
     let dir = if let Some(dir) = dir {
         dir
     } else {
@@ -24,17 +24,27 @@ fn setup(reader: BinaryReader, dir: Option<PathBuf>, clear: bool) -> Option<Path
             return None;
         }
     };
-    if clear {
-        std::fs::remove_dir_all(&dir).ok();
-    }
-    for file in reader.files.iter() {
-        file.write_to_file(&dir);
-    }
+
     #[cfg(windows)]
     windows::copy_runtime_broker(&dir);
     #[cfg(linux)]
     reader.configure_permission(&dir);
-    Some(dir.join(&reader.exe))
+
+    let (executable, md5) = BinaryReader::get_exe_md5();
+    let cur_exe = dir.join(&executable);
+    if cur_exe.exists() {
+        let cur_exe_md5 = format!("{:x}", md5::compute(&std::fs::read(&cur_exe).ok()?));
+        if cur_exe_md5 == md5 {
+            return Some(cur_exe);
+        }
+    }
+
+    std::fs::remove_dir_all(&dir).ok();
+    let reader = BinaryReader::default();
+    for file in reader.files.iter() {
+        file.write_to_file(&dir);
+    }
+    Some(cur_exe)
 }
 
 fn execute(path: PathBuf, args: Vec<String>) {
@@ -73,12 +83,7 @@ fn main() {
     let click_setup = args.is_empty() && arg_exe.to_lowercase().ends_with("install.exe");
     let quick_support = args.is_empty() && arg_exe.to_lowercase().ends_with("qs.exe");
 
-    let reader = BinaryReader::default();
-    if let Some(exe) = setup(
-        reader,
-        None,
-        click_setup || args.contains(&"--silent-install".to_owned()),
-    ) {
+    if let Some(exe) = setup(None) {
         if click_setup {
             args = vec!["--install".to_owned()];
         } else if quick_support {
