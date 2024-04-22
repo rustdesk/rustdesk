@@ -502,29 +502,28 @@ pub mod amyuni_idd {
             return Ok(());
         }
 
+        if let Ok(Some(work_dir)) = get_deviceinstaller64_work_dir() {
+            if crate::platform::windows::is_x64() {
+                install_if_x86_on_x64(&work_dir, "install usbmmidd.inf usbmmidd")?;
+                *is_async = true;
+                return Ok(());
+            }
+        }
+
         let exe_file = std::env::current_exe()?;
         let Some(cur_dir) = exe_file.parent() else {
             bail!("Cannot get parent of current exe file");
         };
-
         let inf_path = cur_dir.join(INF_PATH);
         if !inf_path.exists() {
             bail!("Driver inf file not found.");
         }
         let inf_path = inf_path.to_string_lossy().to_string();
 
-        if let Ok(Some(work_dir)) = get_deviceinstaller64_work_dir() {
-            if crate::platform::windows::is_x64() {
-                *is_async = true;
-                install_if_x86_on_x64(&work_dir, "install usbmmidd.inf usbmmidd")?;
-                return Ok(());
-            }
-        }
-
-        *is_async = false;
         let mut reboot_required = false;
         let _ =
             unsafe { win_device::install_driver(&inf_path, HARDWARE_ID, &mut reboot_required)? };
+        *is_async = false;
         Ok(())
     }
 
