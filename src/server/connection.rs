@@ -2883,7 +2883,7 @@ impl Connection {
                 }
             }
 
-            let turn_on_res = privacy_mode::turn_on_privacy(&impl_key, self.inner.id);
+            let turn_on_res = privacy_mode::turn_on_privacy(&impl_key, self.inner.id).await;
             match turn_on_res {
                 Some(Ok(res)) => {
                     if res {

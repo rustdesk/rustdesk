@@ -46,16 +46,20 @@ pub enum DeviceError {
     Raw(String),
 }
 
+impl DeviceError {
+    #[inline]
+    fn new_api_last_err(api: &str) -> Self {
+        Self::WinApiLastErr(api.to_string(), io::Error::last_os_error())
+    }
+}
+
 struct DeviceInfo(HDEVINFO);
 
 impl DeviceInfo {
     fn setup_di_create_device_info_list(class_guid: &mut GUID) -> Result<Self, DeviceError> {
         let dev_info = unsafe { SetupDiCreateDeviceInfoList(class_guid, null_mut()) };
         if dev_info == null_mut() {
-            return Err(DeviceError::WinApiLastErr(
-                "SetupDiCreateDeviceInfoList".to_string(),
-                io::Error::last_os_error(),
-            ));
+            return Err(DeviceError::new_api_last_err("SetupDiCreateDeviceInfoList"));
         }
 
         Ok(Self(dev_info))
@@ -77,10 +81,7 @@ impl DeviceInfo {
             )
         };
         if dev_info == null_mut() {
-            return Err(DeviceError::WinApiLastErr(
-                "SetupDiGetClassDevsExW".to_string(),
-                io::Error::last_os_error(),
-            ));
+            return Err(DeviceError::new_api_last_err("SetupDiGetClassDevsExW"));
         }
         Ok(Self(dev_info))
     }
@@ -133,10 +134,7 @@ pub unsafe fn install_driver(
         null_mut(),
     ) == FALSE
     {
-        return Err(DeviceError::WinApiLastErr(
-            "SetupDiGetINFClassW".to_string(),
-            io::Error::last_os_error(),
-        ));
+        return Err(DeviceError::new_api_last_err("SetupDiGetINFClassW"));
     }
 
     let dev_info = DeviceInfo::setup_di_create_device_info_list(&mut class_guid)?;
@@ -157,10 +155,7 @@ pub unsafe fn install_driver(
         &mut dev_info_data,
     ) == FALSE
     {
-        return Err(DeviceError::WinApiLastErr(
-            "SetupDiCreateDeviceInfoW".to_string(),
-            io::Error::last_os_error(),
-        ));
+        return Err(DeviceError::new_api_last_err("SetupDiCreateDeviceInfoW"));
     }
 
     if SetupDiSetDeviceRegistryPropertyW(
@@ -171,17 +166,13 @@ pub unsafe fn install_driver(
         (hardware_id.len() * 2) as _,
     ) == FALSE
     {
-        return Err(DeviceError::WinApiLastErr(
-            "SetupDiSetDeviceRegistryPropertyW".to_string(),
-            io::Error::last_os_error(),
+        return Err(DeviceError::new_api_last_err(
+            "SetupDiSetDeviceRegistryPropertyW",
         ));
     }
 
     if SetupDiCallClassInstaller(DIF_REGISTERDEVICE, *dev_info, &mut dev_info_data) == FALSE {
-        return Err(DeviceError::WinApiLastErr(
-            "SetupDiCallClassInstaller".to_string(),
-            io::Error::last_os_error(),
-        ));
+        return Err(DeviceError::new_api_last_err("SetupDiCallClassInstaller"));
     }
 
     let mut reboot_required_ = FALSE;
@@ -193,9 +184,8 @@ pub unsafe fn install_driver(
         &mut reboot_required_,
     ) == FALSE
     {
-        return Err(DeviceError::WinApiLastErr(
-            "UpdateDriverForPlugAndPlayDevicesW".to_string(),
-            io::Error::last_os_error(),
+        return Err(DeviceError::new_api_last_err(
+            "UpdateDriverForPlugAndPlayDevicesW",
         ));
     }
     *reboot_required = reboot_required_ == TRUE;
@@ -219,9 +209,8 @@ unsafe fn is_same_hardware_id(
         null_mut(),
     ) == FALSE
     {
-        return Err(DeviceError::WinApiLastErr(
-            "SetupDiGetDeviceRegistryPropertyW".to_string(),
-            io::Error::last_os_error(),
+        return Err(DeviceError::new_api_last_err(
+            "SetupDiGetDeviceRegistryPropertyW",
         ));
     }
 
@@ -245,9 +234,8 @@ pub unsafe fn uninstall_driver(
         RemoteMachineName: [0; SP_MAX_MACHINENAME_LENGTH],
     };
     if SetupDiGetDeviceInfoListDetailW(*dev_info, &mut device_info_list_detail) == FALSE {
-        return Err(DeviceError::WinApiLastErr(
-            "SetupDiGetDeviceInfoListDetailW".to_string(),
-            io::Error::last_os_error(),
+        return Err(DeviceError::new_api_last_err(
+            "SetupDiGetDeviceInfoListDetailW",
         ));
     }
 
@@ -300,17 +288,13 @@ pub unsafe fn uninstall_driver(
             std::mem::size_of::<SP_REMOVEDEVICE_PARAMS>() as _,
         ) == FALSE
         {
-            return Err(DeviceError::WinApiLastErr(
-                "SetupDiSetClassInstallParams".to_string(),
-                io::Error::last_os_error(),
+            return Err(DeviceError::new_api_last_err(
+                "SetupDiSetClassInstallParams",
             ));
         }
 
         if SetupDiCallClassInstaller(DIF_REMOVE, *dev_info, &mut devinfo_data) == FALSE {
-            return Err(DeviceError::WinApiLastErr(
-                "SetupDiCallClassInstaller".to_string(),
-                io::Error::last_os_error(),
-            ));
+            return Err(DeviceError::new_api_last_err("SetupDiCallClassInstaller"));
         }
 
         let mut device_params = SP_DEVINSTALL_PARAMS_W {
@@ -371,10 +355,7 @@ pub unsafe fn device_io_control(
     );
     CloseHandle(h_device);
     if result == FALSE {
-        return Err(DeviceError::WinApiLastErr(
-            "DeviceIoControl".to_string(),
-            io::Error::last_os_error(),
-        ));
+        return Err(DeviceError::new_api_last_err("DeviceIoControl"));
     }
     if outbuf_max_len > 0 {
         outbuf.set_len(bytes_returned as _);
@@ -403,10 +384,7 @@ unsafe fn get_device_path(interface_guid: &GUID) -> Result<Vec<u16>, DeviceError
         &mut device_interface_data,
     ) == FALSE
     {
-        return Err(DeviceError::WinApiLastErr(
-            "SetupDiEnumDeviceInterfaces".to_string(),
-            io::Error::last_os_error(),
-        ));
+        return Err(DeviceError::new_api_last_err("SetupDiEnumDeviceInterfaces"));
     }
 
     let mut required_length = 0;
@@ -444,14 +422,14 @@ unsafe fn get_device_path(interface_guid: &GUID) -> Result<Vec<u16>, DeviceError
         null_mut(),
     ) == FALSE
     {
-        return Err(DeviceError::WinApiLastErr(
-            "SetupDiGetDeviceInterfaceDetailW".to_string(),
-            io::Error::last_os_error(),
+        return Err(DeviceError::new_api_last_err(
+            "SetupDiGetDeviceInterfaceDetailW",
         ));
     }
 
     let mut path = Vec::new();
-    let device_path_ptr = std::ptr::addr_of!((*device_interface_detail_data).DevicePath) as *const u16;
+    let device_path_ptr =
+        std::ptr::addr_of!((*device_interface_detail_data).DevicePath) as *const u16;
     let steps = device_path_ptr as usize - vec_data.as_ptr() as usize;
     for i in 0..(predicted_length - steps as u32) / 2 {
         if *device_path_ptr.offset(i as _) == 0 {
@@ -465,7 +443,6 @@ unsafe fn get_device_path(interface_guid: &GUID) -> Result<Vec<u16>, DeviceError
 
 unsafe fn open_device_handle(interface_guid: &GUID) -> Result<HANDLE, DeviceError> {
     let device_path = get_device_path(interface_guid)?;
-    println!("device_path: {:?}", String::from_utf16_lossy(&device_path));
     let h_device = CreateFileW(
         device_path.as_ptr(),
         GENERIC_READ | GENERIC_WRITE,
@@ -476,10 +453,7 @@ unsafe fn open_device_handle(interface_guid: &GUID) -> Result<HANDLE, DeviceErro
         null_mut(),
     );
     if h_device == INVALID_HANDLE_VALUE || h_device == NULL {
-        return Err(DeviceError::WinApiLastErr(
-            "CreateFileW".to_string(),
-            io::Error::last_os_error(),
-        ));
+        return Err(DeviceError::new_api_last_err("CreateFileW"));
     }
     Ok(h_device)
 }
