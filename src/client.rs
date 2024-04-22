@@ -1564,22 +1564,13 @@ impl LoginConfigHandler {
     ///
     /// * `ignore_default` - If `true`, ignore the default value of the option.
     fn get_option_message(&self, ignore_default: bool) -> Option<OptionMessage> {
-        if self.conn_type.eq(&ConnType::PORT_FORWARD) || self.conn_type.eq(&ConnType::RDP) {
+        if self.conn_type.eq(&ConnType::PORT_FORWARD) || self.conn_type.eq(&ConnType::RDP) ||  self.conn_type.eq(&ConnType::FILE_TRANSFER) {
             return None;
         }
-        let mut n = 0;
         let mut msg = OptionMessage::new();
-        // Version 1.2.5 can remove this, and OptionMessage is not needed for file transfer
-        msg.support_windows_specific_session = BoolOption::Yes.into();
-        n += 1;
-
-        if self.conn_type.eq(&ConnType::FILE_TRANSFER) {
-            return Some(msg);
-        }
         let q = self.image_quality.clone();
         if let Some(q) = self.get_image_quality_enum(&q, ignore_default) {
             msg.image_quality = q.into();
-            n += 1;
         } else if q == "custom" {
             let config = self.load_config();
             let allow_more = !crate::using_public_server() || self.direct == Some(true);
@@ -1602,32 +1593,25 @@ impl LoginConfigHandler {
                 msg.custom_fps = custom_fps;
                 *self.custom_fps.lock().unwrap() = Some(custom_fps as _);
             }
-            n += 1;
         }
         let view_only = self.get_toggle_option("view-only");
         if view_only {
             msg.disable_keyboard = BoolOption::Yes.into();
-            n += 1;
         }
         if view_only || self.get_toggle_option("show-remote-cursor") {
             msg.show_remote_cursor = BoolOption::Yes.into();
-            n += 1;
         }
         if !view_only && self.get_toggle_option("lock-after-session-end") {
             msg.lock_after_session_end = BoolOption::Yes.into();
-            n += 1;
         }
         if self.get_toggle_option("disable-audio") {
             msg.disable_audio = BoolOption::Yes.into();
-            n += 1;
         }
         if !view_only && self.get_toggle_option("enable-file-transfer") {
             msg.enable_file_transfer = BoolOption::Yes.into();
-            n += 1;
         }
         if view_only || self.get_toggle_option("disable-clipboard") {
             msg.disable_clipboard = BoolOption::Yes.into();
-            n += 1;
         }
         msg.supported_decoding =
             hbb_common::protobuf::MessageField::some(Decoder::supported_decodings(
@@ -1636,12 +1620,7 @@ impl LoginConfigHandler {
                 self.adapter_luid,
                 &self.mark_unsupported,
             ));
-        n += 1;
-        if n > 0 {
-            Some(msg)
-        } else {
-            None
-        }
+        Some(msg)
     }
 
     pub fn get_option_message_after_login(&self) -> Option<OptionMessage> {

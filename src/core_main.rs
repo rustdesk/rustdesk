@@ -114,9 +114,14 @@ pub fn core_main() -> Option<Vec<String>> {
     if args.contains(&"--noinstall".to_string()) {
         args.clear();
     }
-    if args.len() > 0 && args[0] == "--version" {
-        println!("{}", crate::VERSION);
-        return None;
+    if args.len() > 0 {
+        if args[0] == "--version" {
+            println!("{}", crate::VERSION);
+            return None;
+        } else if args[0] == "--build-date" {
+            println!("{}", crate::BUILD_DATE);
+            return None;
+        }
     }
     #[cfg(windows)]
     {
@@ -215,7 +220,9 @@ pub fn core_main() -> Option<Vec<String>> {
             } else if args[0] == "--install-idd" {
                 #[cfg(all(windows, feature = "virtual_display_driver"))]
                 if crate::virtual_display_manager::is_virtual_display_supported() {
-                    hbb_common::allow_err!(crate::virtual_display_manager::install_update_driver());
+                    hbb_common::allow_err!(
+                        crate::virtual_display_manager::rustdesk_idd::install_update_driver()
+                    );
                 }
                 return None;
             } else if args[0] == "--portable-service" {
@@ -223,6 +230,12 @@ pub fn core_main() -> Option<Vec<String>> {
                     click_setup,
                     _is_elevate,
                     _is_run_as_system,
+                );
+                return None;
+            } else if args[0] == "--uninstall-amyuni-idd" {
+                #[cfg(all(windows, feature = "virtual_display_driver"))]
+                hbb_common::allow_err!(
+                    crate::virtual_display_manager::amyuni_idd::uninstall_driver()
                 );
                 return None;
             }
@@ -254,7 +267,7 @@ pub fn core_main() -> Option<Vec<String>> {
         } else if args[0] == "--server" {
             log::info!("start --server with user {}", crate::username());
             #[cfg(all(windows, feature = "virtual_display_driver"))]
-            crate::privacy_mode::restore_reg_connectivity();
+            crate::privacy_mode::restore_reg_connectivity(true);
             #[cfg(any(target_os = "linux", target_os = "windows"))]
             {
                 crate::start_server(true);

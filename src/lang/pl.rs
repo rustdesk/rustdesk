@@ -601,5 +601,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Everyone", "Wszyscy"),
         ("ab_web_console_tip", "Więcej w konsoli web"),
         ("allow-only-conn-window-open-tip", "Zezwalaj na połączenie tylko wtedy, gdy okno RustDesk jest otwarte"),
+        ("no_need_privacy_mode_no_physical_displays_tip", ""),
     ].iter().cloned().collect();
 }

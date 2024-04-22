@@ -68,10 +68,11 @@
 			<Custom Action="RemoveFirewallRules" Before="RemoveFiles"/>
 			<Custom Action="RemoveFirewallRules.SetParam" Before="RemoveFirewallRules"/>
 
-			<Custom Action="TerminateProcesses" Before="RemoveFiles"/>
+			<Custom Action="TerminateProcesses" Before="RemoveInstallFolder"/>
 			<Custom Action="TerminateProcesses.SetParam" Before="TerminateProcesses"/>
-			<Custom Action="TerminateBrokers" Before="RemoveFiles"/>
+			<Custom Action="TerminateBrokers" Before="RemoveInstallFolder"/>
 			<Custom Action="TerminateBrokers.SetParam" Before="TerminateBrokers"/>
+			<Custom Action="RemoveAmyuniIdd" Before="RemoveInstallFolder"/>
 		</InstallExecuteSequence>
 
 		<!-- Shortcuts -->

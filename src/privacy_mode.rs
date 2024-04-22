@@ -6,9 +6,7 @@ use crate::{
     display_service,
     ipc::{connect, Data},
 };
-#[cfg(windows)]
-use hbb_common::tokio;
-use hbb_common::{anyhow::anyhow, bail, lazy_static, ResultType};
+use hbb_common::{anyhow::anyhow, bail, lazy_static, tokio, ResultType};
 use serde_derive::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
@@ -30,10 +28,10 @@ mod win_virtual_display;
 pub use win_virtual_display::restore_reg_connectivity;
 
 pub const INVALID_PRIVACY_MODE_CONN_ID: i32 = 0;
-pub const OCCUPIED: &'static str = "Privacy occupied by another one";
+pub const OCCUPIED: &'static str = "Privacy occupied by another one.";
 pub const TURN_OFF_OTHER_ID: &'static str =
-    "Failed to turn off privacy mode that belongs to someone else";
-pub const NO_DISPLAYS: &'static str = "No displays";
+    "Failed to turn off privacy mode that belongs to someone else.";
+pub const NO_PHYSICAL_DISPLAYS: &'static str = "no_need_privacy_mode_no_physical_displays_tip";
 
 #[cfg(windows)]
 pub const PRIVACY_MODE_IMPL_WIN_MAG: &str = win_mag::PRIVACY_MODE_IMPL;
@@ -202,7 +200,6 @@ fn get_supported_impl(impl_key: &str) -> String {
     cur_impl
 }
 
-#[inline]
 pub fn turn_on_privacy(impl_key: &str, conn_id: i32) -> Option<ResultType<bool>> {
     // Check if privacy mode is already on or occupied by another one
     let mut privacy_mode_lock = PRIVACY_MODE.lock().unwrap();
@@ -300,7 +297,7 @@ pub fn get_supported_privacy_mode_impl() -> Vec<(&'static str, &'static str)> {
         }
 
         #[cfg(feature = "virtual_display_driver")]
-        if is_installed() {
+        if is_installed() && crate::platform::windows::is_self_service_running() {
             vec_impls.push((
                 PRIVACY_MODE_IMPL_WIN_VIRTUAL_DISPLAY,
                 "privacy_mode_impl_virtual_display_tip",

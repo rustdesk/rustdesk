@@ -561,8 +561,12 @@ class FfiModel with ChangeNotifier {
       showRelayHintDialog(sessionId, type, title, text, dialogManager, peerId);
     } else if (text == 'Connected, waiting for image...') {
       showConnectedWaitingForImage(dialogManager, sessionId, type, title, text);
+    } else if (title == 'Privacy mode') {
+      final hasRetry = evt['hasRetry'] == 'true';
+      showPrivacyFailedDialog(
+          sessionId, type, title, text, link, hasRetry, dialogManager);
     } else {
-      var hasRetry = evt['hasRetry'] == 'true';
+      final hasRetry = evt['hasRetry'] == 'true';
       showMsgBox(sessionId, type, title, text, link, hasRetry, dialogManager);
     }
   }
@@ -657,6 +661,27 @@ class FfiModel with ChangeNotifier {
     bind.sessionOnWaitingForImageDialogShow(sessionId: sessionId);
   }
 
+  void showPrivacyFailedDialog(
+      SessionID sessionId,
+      String type,
+      String title,
+      String text,
+      String link,
+      bool hasRetry,
+      OverlayDialogManager dialogManager) {
+    if (text == 'no_need_privacy_mode_no_physical_displays_tip' ||
+        text == 'Enter privacy mode') {
+      // There are display changes on the remote side,
+      // which will cause some messages to refresh the canvas and dismiss dialogs.
+      // So we add a delay here to ensure the dialog is displayed.
+      Future.delayed(Duration(milliseconds: 3000), () {
+        showMsgBox(sessionId, type, title, text, link, hasRetry, dialogManager);
+      });
+    } else {
+      showMsgBox(sessionId, type, title, text, link, hasRetry, dialogManager);
+    }
+  }
+
   _updateSessionWidthHeight(SessionID sessionId) {
     if (_rect == null) return;
     if (_rect!.width <= 0 || _rect!.height <= 0) {
@@ -690,6 +715,8 @@ class FfiModel with ChangeNotifier {
     // Map clone is required here, otherwise "evt" may be changed by other threads through the reference.
     // Because this function is asynchronous, there's an "await" in this function.
     cachedPeerData.peerInfo = {...evt};
+    // Do not cache resolutions, because a new display connection have different resolutions.
+    cachedPeerData.peerInfo.remove('resolutions');
 
     // Recent peer is updated by handle_peer_info(ui_session_interface.rs) --> handle_peer_info(client.rs) --> save_config(client.rs)
     bind.mainLoadRecentPeers();
@@ -745,7 +772,9 @@ class FfiModel with ChangeNotifier {
       }
       Map<String, dynamic> features = json.decode(evt['features']);
       _pi.features.privacyMode = features['privacy_mode'] == 1;
-      handleResolutions(peerId, evt["resolutions"]);
+      if (!isCache) {
+        handleResolutions(peerId, evt["resolutions"]);
+      }
       parent.target?.elevationModel.onPeerInfo(_pi);
     }
     if (connType == ConnType.defaultConn) {
@@ -986,15 +1015,21 @@ class FfiModel with ChangeNotifier {
     }
 
     if (updateData.isEmpty) {
-      _pi.platformAdditions.remove(kPlatformAdditionsVirtualDisplays);
+      _pi.platformAdditions.remove(kPlatformAdditionsRustDeskVirtualDisplays);
+      _pi.platformAdditions.remove(kPlatformAdditionsAmyuniVirtualDisplays);
     } else {
       try {
         final updateJson = json.decode(updateData) as Map<String, dynamic>;
         for (final key in updateJson.keys) {
           _pi.platformAdditions[key] = updateJson[key];
         }
-        if (!updateJson.containsKey(kPlatformAdditionsVirtualDisplays)) {
-          _pi.platformAdditions.remove(kPlatformAdditionsVirtualDisplays);
+        if (!updateJson
+            .containsKey(kPlatformAdditionsRustDeskVirtualDisplays)) {
+          _pi.platformAdditions
+              .remove(kPlatformAdditionsRustDeskVirtualDisplays);
+        }
+        if (!updateJson.containsKey(kPlatformAdditionsAmyuniVirtualDisplays)) {
+          _pi.platformAdditions.remove(kPlatformAdditionsAmyuniVirtualDisplays);
         }
       } catch (e) {
         debugPrint('Failed to decode platformAdditions $e');
@@ -2286,6 +2321,8 @@ class FFI {
           }
           await ffiModel.handleCachedPeerData(data, id);
           await sessionRefreshVideo(sessionId, ffiModel.pi);
+          await bind.sessionRequestNewDisplayInitMsgs(
+              sessionId: sessionId, display: ffiModel.pi.currentDisplay);
         });
         isToNewWindowNotified.value = true;
       }
@@ -2490,13 +2527,20 @@ class PeerInfo with ChangeNotifier {
   bool get isInstalled =>
       platform != kPeerPlatformWindows ||
       platformAdditions[kPlatformAdditionsIsInstalled] == true;
-  List<int> get virtualDisplays => List<int>.from(
-      platformAdditions[kPlatformAdditionsVirtualDisplays] ?? []);
+  List<int> get RustDeskVirtualDisplays => List<int>.from(
+      platformAdditions[kPlatformAdditionsRustDeskVirtualDisplays] ?? []);
+  int get amyuniVirtualDisplayCount =>
+      platformAdditions[kPlatformAdditionsAmyuniVirtualDisplays] ?? 0;
 
   bool get isSupportMultiDisplay =>
       (isDesktop || isWebDesktop) && isSupportMultiUiSession;
 
   bool get cursorEmbedded => tryGetDisplay()?.cursorEmbedded ?? false;
+
+  bool get isRustDeskIdd =>
+      platformAdditions[kPlatformAdditionsIddImpl] == 'rustdesk_idd';
+  bool get isAmyuniIdd =>
+      platformAdditions[kPlatformAdditionsIddImpl] == 'amyuni_idd';
 
   Display? tryGetDisplay() {
     if (displays.isEmpty) {

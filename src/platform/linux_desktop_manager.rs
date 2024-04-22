@@ -277,7 +277,7 @@ impl DesktopManager {
         }
     }
 
-    // The logic mainly fron https://github.com/neutrinolabs/xrdp/blob/34fe9b60ebaea59e8814bbc3ca5383cabaa1b869/sesman/session.c#L334.
+    // The logic mainly from https://github.com/neutrinolabs/xrdp/blob/34fe9b60ebaea59e8814bbc3ca5383cabaa1b869/sesman/session.c#L334.
     fn get_avail_display() -> ResultType<u32> {
         let display_range = 0..51;
         for i in display_range.clone() {

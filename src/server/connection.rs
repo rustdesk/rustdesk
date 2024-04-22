@@ -1133,10 +1133,7 @@ impl Connection {
             );
             #[cfg(feature = "virtual_display_driver")]
             if crate::platform::is_installed() {
-                let virtual_displays = virtual_display_manager::get_virtual_displays();
-                if !virtual_displays.is_empty() {
-                    platform_additions.insert("virtual_displays".into(), json!(&virtual_displays));
-                }
+                platform_additions.extend(virtual_display_manager::get_platform_additions());
             }
             platform_additions.insert(
                 "supported_privacy_mode_impl".into(),
@@ -1340,8 +1337,7 @@ impl Connection {
                 && raii::AuthedConnID::remote_and_file_conn_count() == 1
                 && sessions.len() > 1
                 && sessions.iter().any(|e| e.sid == current_sid)
-                && (get_version_number(&self.lr.version) > get_version_number("1.2.4")
-                    || self.lr.option.support_windows_specific_session == BoolOption::Yes.into())
+                && get_version_number(&self.lr.version) >= get_version_number("1.2.4")
             {
                 pi.windows_sessions = Some(WindowsSessions {
                     sessions,
@@ -2303,7 +2299,11 @@ impl Connection {
                         }
                     }
                     #[cfg(not(any(target_os = "android", target_os = "ios")))]
-                    Some(misc::Union::ChangeResolution(r)) => self.change_resolution(&r),
+                    Some(misc::Union::ChangeResolution(r)) => self.change_resolution(None, &r),
+                    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+                    Some(misc::Union::ChangeDisplayResolution(dr)) => {
+                        self.change_resolution(Some(dr.display as _), &dr.resolution)
+                    }
                     #[cfg(all(feature = "flutter", feature = "plugin_framework"))]
                     #[cfg(not(any(target_os = "android", target_os = "ios")))]
                     Some(misc::Union::PluginRequest(p)) => {
@@ -2344,6 +2344,13 @@ impl Connection {
                             } else {
                                 self.try_sub_services();
                             }
+                        }
+                    }
+                    Some(misc::Union::MessageQuery(mq)) => {
+                        if let Some(msg_out) =
+                            video_service::make_display_changed_msg(mq.switch_display as _, None)
+                        {
+                            self.send(msg_out).await;
                         }
                     }
                     _ => {}
@@ -2475,11 +2482,14 @@ impl Connection {
 
                 #[cfg(not(any(target_os = "android", target_os = "ios")))]
                 if s.width != 0 && s.height != 0 {
-                    self.change_resolution(&Resolution {
-                        width: s.width,
-                        height: s.height,
-                        ..Default::default()
-                    });
+                    self.change_resolution(
+                        None,
+                        &Resolution {
+                            width: s.width,
+                            height: s.height,
+                            ..Default::default()
+                        },
+                    );
                 }
             }
 
@@ -2595,8 +2605,7 @@ impl Connection {
                 self.send(make_msg("idd_not_support_under_win10_2004_tip".to_string()))
                     .await;
             } else {
-                if let Err(e) =
-                    virtual_display_manager::plug_in_index_modes(t.display as _, Vec::new())
+                if let Err(e) = virtual_display_manager::plug_in_monitor(t.display as _, Vec::new())
                 {
                     log::error!("Failed to plug in virtual display: {}", e);
                     self.send(make_msg(format!(
@@ -2607,13 +2616,8 @@ impl Connection {
                 }
             }
         } else {
-            let indices = if t.display == -1 {
-                virtual_display_manager::get_virtual_displays()
-            } else {
-                vec![t.display as _]
-            };
-            if let Err(e) = virtual_display_manager::plug_out_peer_request(&indices) {
-                log::error!("Failed to plug out virtual display {:?}: {}", &indices, e);
+            if let Err(e) = virtual_display_manager::plug_out_monitor(t.display) {
+                log::error!("Failed to plug out virtual display {}: {}", t.display, e);
                 self.send(make_msg(format!(
                     "Failed to plug out virtual displays: {}",
                     e
@@ -2632,14 +2636,15 @@ impl Connection {
     }
 
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    fn change_resolution(&mut self, r: &Resolution) {
+    fn change_resolution(&mut self, d: Option<usize>, r: &Resolution) {
         if self.keyboard {
             if let Ok(displays) = display_service::try_get_displays() {
-                if let Some(display) = displays.get(self.display_idx) {
+                let display_idx = d.unwrap_or(self.display_idx);
+                if let Some(display) = displays.get(display_idx) {
                     let name = display.name();
                     #[cfg(all(windows, feature = "virtual_display_driver"))]
                     if let Some(_ok) =
-                        virtual_display_manager::change_resolution_if_is_virtual_display(
+                        virtual_display_manager::rustdesk_idd::change_resolution_if_is_virtual_display(
                             &name,
                             r.width as _,
                             r.height as _,
@@ -2647,11 +2652,18 @@ impl Connection {
                     {
                         return;
                     }
-                    display_service::set_last_changed_resolution(
-                        &name,
-                        (display.width() as _, display.height() as _),
-                        (r.width, r.height),
-                    );
+                    let mut record_changed = true;
+                    #[cfg(all(windows, feature = "virtual_display_driver"))]
+                    if virtual_display_manager::amyuni_idd::is_my_display(&name) {
+                        record_changed = false;
+                    }
+                    if record_changed {
+                        display_service::set_last_changed_resolution(
+                            &name,
+                            (display.width() as _, display.height() as _),
+                            (r.width, r.height),
+                        );
+                    }
                     if let Err(e) =
                         crate::platform::change_resolution(&name, r.width as _, r.height as _)
                     {
@@ -2858,7 +2870,6 @@ impl Connection {
         } else {
             let is_pre_privacy_on = privacy_mode::is_in_privacy_mode();
             let pre_impl_key = privacy_mode::get_cur_impl_key();
-            let turn_on_res = privacy_mode::turn_on_privacy(&impl_key, self.inner.id);
 
             if is_pre_privacy_on {
                 if let Some(pre_impl_key) = pre_impl_key {
@@ -2872,6 +2883,7 @@ impl Connection {
                 }
             }
 
+            let turn_on_res = privacy_mode::turn_on_privacy(&impl_key, self.inner.id);
             match turn_on_res {
                 Some(Ok(res)) => {
                     if res {
@@ -2906,7 +2918,7 @@ impl Connection {
                 }
                 Some(Err(e)) => {
                     log::error!("Failed to turn on privacy mode. {}", e);
-                    if !privacy_mode::is_in_privacy_mode() {
+                    if privacy_mode::is_in_privacy_mode() {
                         let _ = Self::turn_off_privacy_to_msg(
                             privacy_mode::INVALID_PRIVACY_MODE_CONN_ID,
                         );

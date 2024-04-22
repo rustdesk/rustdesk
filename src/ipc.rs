@@ -232,6 +232,7 @@ pub enum Data {
     #[cfg(windows)]
     ControlledSessionCount(usize),
     CmErr(String),
+    CheckHwcodec,
 }
 
 #[tokio::main(flavor = "current_thread")]
@@ -501,6 +502,14 @@ async fn handle(data: Data, stream: &mut Connection) {
                     ))
                     .await
             );
+        }
+        Data::CheckHwcodec =>
+        {
+            #[cfg(feature = "hwcodec")]
+            #[cfg(any(target_os = "windows", target_os = "linux"))]
+            if crate::platform::is_root() {
+                scrap::hwcodec::start_check_process(true);
+            }
         }
         _ => {}
     }
@@ -923,6 +932,12 @@ pub fn close_all_instances() -> ResultType<bool> {
 pub async fn connect_to_user_session(usid: Option<u32>) -> ResultType<()> {
     let mut stream = crate::ipc::connect(1000, crate::POSTFIX_SERVICE).await?;
     timeout(1000, stream.send(&crate::ipc::Data::UserSid(usid))).await??;
+    Ok(())
+}
+
+#[tokio::main(flavor = "current_thread")]
+pub async fn notify_server_to_check_hwcodec() -> ResultType<()> {
+    connect(1_000, "").await?.send(&&Data::CheckHwcodec).await?;
     Ok(())
 }
 

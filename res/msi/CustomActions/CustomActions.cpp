@@ -59,7 +59,7 @@ UINT __stdcall RemoveInstallFolder(
     fileOp.pFrom = installFolder;
     fileOp.fFlags = FOF_NOCONFIRMATION | FOF_SILENT;
 
-    nResult = SHFileOperation(&fileOp);
+    nResult = SHFileOperationW(&fileOp);
     if (nResult == 0)
     {
         WcaLog(LOGMSG_STANDARD, "The directory \"%ls\" has been deleted.", installFolder);
@@ -70,7 +70,7 @@ UINT __stdcall RemoveInstallFolder(
     }
 
 LExit:
-    ReleaseStr(installFolder);
+    ReleaseStr(pwzData);
 
     er = SUCCEEDED(hr) ? ERROR_SUCCESS : ERROR_INSTALL_FAILURE;
     return WcaFinalize(er);
@@ -179,7 +179,7 @@ bool TerminateProcessesByNameW(LPCWSTR processName, LPCWSTR excludeParam)
                         CloseHandle(process);
                     }
                 }
-            } while (Process32Next(snapshot, &processEntry));
+            } while (Process32NextW(snapshot, &processEntry));
         }
         CloseHandle(snapshot);
     }
@@ -497,7 +497,7 @@ UINT __stdcall TryDeleteStartupShortcut(__in MSIHANDLE hInstall)
     hr = StringCchPrintfW(pwszTemp, 1024, L"%ls%ls.lnk", szStartupDir, szShortcut);
     ExitOnFailure(hr, "Failed to compose a resource identifier string");
 
-    if (DeleteFile(pwszTemp)) {
+    if (DeleteFileW(pwszTemp)) {
         WcaLog(LOGMSG_STANDARD, "Failed to delete startup shortcut of : \"%ls\"", pwszTemp);
     }
     else {
@@ -586,6 +586,24 @@ UINT __stdcall AddRegSoftwareSASGeneration(__in MSIHANDLE hInstall)
 
     WcaLog(LOGMSG_STANDARD, "Registry value has been successfully set.");
     RegCloseKey(hKey);
+
+LExit:
+    er = SUCCEEDED(hr) ? ERROR_SUCCESS : ERROR_INSTALL_FAILURE;
+    return WcaFinalize(er);
+}
+
+UINT __stdcall RemoveAmyuniIdd(
+    __in MSIHANDLE hInstall)
+{
+    HRESULT hr = S_OK;
+    DWORD er = ERROR_SUCCESS;
+
+    BOOL rebootRequired = FALSE;
+
+    hr = WcaInitialize(hInstall, "RemoveAmyuniIdd");
+    ExitOnFailure(hr, "Failed to initialize");
+
+    UninstallDriver(L"usbmmidd", rebootRequired);
 
 LExit:
     er = SUCCEEDED(hr) ? ERROR_SUCCESS : ERROR_INSTALL_FAILURE;

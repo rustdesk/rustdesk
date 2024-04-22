@@ -715,9 +715,6 @@ fn handle_hw_encoder(
         #[cfg(feature = "hwcodec")]
         match _name {
             CodecName::H264VRAM | CodecName::H265VRAM => {
-                if !scrap::codec::enable_hwcodec_option() {
-                    return Err(());
-                }
                 let is_h265 = _name == CodecName::H265VRAM;
                 let best = HwRamEncoder::best();
                 if let Some(h264) = best.h264 {

@@ -1106,7 +1106,7 @@ pub fn session_start_(
 ) -> ResultType<()> {
     // is_connected is used to indicate whether to start a peer connection. For two cases:
     // 1. "Move tab to new window"
-    // 2. multi ui session within the same peer connnection.
+    // 2. multi ui session within the same peer connection.
     let mut is_connected = false;
     let mut is_found = false;
     for s in sessions::get_sessions() {

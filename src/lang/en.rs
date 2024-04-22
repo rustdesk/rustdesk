@@ -219,5 +219,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("share_warning_tip", "The fields above are shared and visible to others."),
         ("ab_web_console_tip", "More on web console"),
         ("allow-only-conn-window-open-tip", "Only allow connection if RustDesk window is open"),
+        ("no_need_privacy_mode_no_physical_displays_tip", "No physical displays, no need to use the privacy mode."),
     ].iter().cloned().collect();
 }

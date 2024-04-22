@@ -219,6 +219,20 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
   Widget build(BuildContext context) {
     Provider.of<FfiModel>(context);
     final outgoingOnly = bind.isOutgoingOnly();
+    final customClientSection = CustomSettingsSection(
+        child: Column(
+      children: [
+        if (bind.isCustomClient())
+          Align(
+            alignment: Alignment.center,
+            child: loadPowered(context),
+          ),
+        Align(
+          alignment: Alignment.center,
+          child: loadLogo(),
+        )
+      ],
+    ));
     final List<AbstractSettingsTile> enhancementsTiles = [];
     final List<AbstractSettingsTile> shareScreenTiles = [
       SettingsTile.switchTile(
@@ -452,6 +466,7 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
     final disabledSettings = bind.isDisableSettings();
     final settings = SettingsList(
       sections: [
+        customClientSection,
         if (!bind.isDisableAccount())
           SettingsSection(
             title: Text(translate('Account')),
@@ -582,20 +597,7 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
         ),
       ],
     );
-    return Column(
-      children: [
-        if (bind.isCustomClient())
-          Align(
-            alignment: Alignment.center,
-            child: loadPowered(context),
-          ),
-        Align(
-          alignment: Alignment.center,
-          child: loadLogo(),
-        ),
-        settings
-      ],
-    );
+    return settings;
   }
 
   Future<bool> canStartOnBoot() async {

@@ -404,7 +404,16 @@ class _GeneralState extends State<_General> {
     return Offstage(
       offstage: !(hwcodec || vram),
       child: _Card(title: 'Hardware Codec', children: [
-        _OptionCheckBox(context, 'Enable hardware codec', 'enable-hwcodec')
+        _OptionCheckBox(
+          context,
+          'Enable hardware codec',
+          'enable-hwcodec',
+          update: () {
+            if (mainGetBoolOptionSync('enable-hwcodec')) {
+              bind.mainCheckHwcodec();
+            }
+          },
+        )
       ]),
     );
   }
