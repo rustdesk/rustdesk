@@ -485,21 +485,31 @@ pub fn lock_screen() {
 
 pub fn start_os_service() {
     crate::platform::macos::hide_dock();
-    let exe = std::env::current_exe().unwrap_or_default();
     log::info!("Username: {}", crate::username());
-    log::info!("Startime: {:?}", get_server_start_time());
+    let mut sys = System::new();
+    sys.refresh_processes_specifics(ProcessRefreshKind::new());
+    let path =
+        std::fs::canonicalize(std::env::current_exe().unwrap_or_default()).unwrap_or_default();
+    let my_start_time = sys
+        .process((std::process::id() as usize).into())
+        .map(|p| p.start_time())
+        .unwrap_or_default() as i64;
+    log::info!(
+        "Startime: {my_start_time} vs {:?}",
+        get_server_start_time(&mut sys, &path)
+    );
 
     std::thread::spawn(move || loop {
         loop {
             std::thread::sleep(std::time::Duration::from_secs(1));
-            let Some(start_time) = get_server_start_time() else {
+            let Some(start_time) = get_server_start_time(&mut sys, &path) else {
                 continue;
             };
-            if start_time.0 <= start_time.1 {
+
+            if my_start_time <= start_time {
                 // I tried add delegate (using tao and with its main loop0, but it works in normal mode, but not work as daemon
                 log::info!(
-                    "Agent start later, {:?}, will restart --service to make delegate work",
-                    start_time
+                    "Agent start later, {my_start_time} vs {start_time}, will restart --service to make delegate work",
                 );
                 std::process::exit(0);
             }
@@ -604,36 +614,25 @@ pub fn hide_dock() {
     }
 }
 
-fn get_server_start_time() -> Option<(i64, i64)> {
-    use hbb_common::sysinfo::System;
-    let mut sys = System::new();
-    sys.refresh_processes();
-    let mut path = std::env::current_exe().unwrap_or_default();
-    if let Ok(linked) = path.read_link() {
-        path = linked;
-    }
-    let path = path.to_string_lossy().to_lowercase();
-    let Some(my_start_time) = sys
-        .process((std::process::id() as usize).into())
-        .map(|p| p.start_time())
-    else {
-        return None;
-    };
+use hbb_common::sysinfo::{ProcessRefreshKind, System};
+#[inline]
+fn get_server_start_time(sys: &mut System, path: &PathBuf) -> Option<i64> {
+    sys.refresh_processes_specifics(ProcessRefreshKind::new());
     for (_, p) in sys.processes() {
-        let mut cur_path = p.exe().to_path_buf();
-        if let Ok(linked) = cur_path.read_link() {
-            cur_path = linked;
-        }
-        if cur_path.to_string_lossy().to_lowercase() != path {
+        let cmd = p.cmd();
+        if cmd.len() <= 1 {
             continue;
         }
-        if p.pid().as_u32() == std::process::id() {
+        if &cmd[1] != "--server" {
             continue;
         }
-        let parg = if p.cmd().len() <= 1 { "" } else { &p.cmd()[1] };
-        if parg == "--server" {
-            return Some((my_start_time as _, p.start_time() as _));
+        let Ok(cur) = std::fs::canonicalize(p.exe()) else {
+            continue;
+        };
+        if &cur != path {
+            continue;
         }
+        return Some(p.start_time() as _);
     }
     None
 }
