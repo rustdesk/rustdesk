@@ -170,7 +170,7 @@ jobs:
 
       - name: Add MSBuild to PATH
         uses: microsoft/setup-msbuild@v2
-      
+
       - name: Build msi
         if: env.UPLOAD_ARTIFACT == 'true'
         run: |
@@ -644,6 +644,7 @@ jobs:
       - name: Build rustdesk lib
         run: |
           rustup target add ${{ matrix.job.target }}
+          cargo install bindgen-cli
           cargo build --features flutter,hwcodec --release --target aarch64-apple-ios --lib
 
       - name: Build rustdesk
@@ -709,11 +710,13 @@ jobs:
                curl \
                gcc-multilib \
                git \
+               gcc\
                g++ \
                g++-multilib \
                libappindicator3-dev \
                libasound2-dev \
                libc6-dev \
+               libclang1 \
                libclang-10-dev \
                libclang-dev \
                libgstreamer1.0-dev \
@@ -792,6 +795,7 @@ jobs:
         run: |
           rustup target add ${{ matrix.job.target }}
           cargo install cargo-ndk --version ${{ env.CARGO_NDK_VERSION }}
+          cargo install bindgen-cli
           case ${{ matrix.job.target }} in
             aarch64-linux-android)
               ./flutter/ndk_arm64.sh
@@ -1000,6 +1004,7 @@ jobs:
                g++ \
                libappindicator3-dev \
                libasound2-dev \
+               libclang1 \
                libclang-10-dev \
                libclang-dev \
                libgstreamer1.0-dev \
@@ -1215,6 +1220,7 @@ jobs:
                libappindicator3-dev \
                libasound2-dev \
                libclang-10-dev \
+               libclang1 \
                libclang-dev \
                libgstreamer1.0-dev \
                libgstreamer-plugins-base1.0-dev \
