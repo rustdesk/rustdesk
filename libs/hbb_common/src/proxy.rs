@@ -1,14 +1,11 @@
 use std::{
-    convert::TryFrom,
     io::Error as IoError,
     net::{SocketAddr, ToSocketAddrs},
-    sync::Arc,
 };
 
 use base64::{engine::general_purpose, Engine};
 use httparse::{Error as HttpParseError, Response, EMPTY_HEADER};
 use log::info;
-use rustls_pki_types;
 use thiserror::Error as ThisError;
 use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt, BufStream};
 #[cfg(any(target_os = "windows", target_os = "macos"))]
@@ -457,6 +454,7 @@ impl Proxy {
         Input: AsyncRead + AsyncWrite + Unpin,
         T: IntoTargetAddr<'a>,
     {
+        use std::convert::TryFrom;
         let verifier = rustls_platform_verifier::tls_config();
         let url_domain = self.intercept.get_domain()?;
 
@@ -464,7 +462,7 @@ impl Proxy {
             .map_err(|e| ProxyError::AddressResolutionFailed(e.to_string()))?
             .to_owned();
 
-        let tls_connector = TlsConnector::from(Arc::new(verifier));
+        let tls_connector = TlsConnector::from(std::sync::Arc::new(verifier));
         let stream = tls_connector.connect(domain, io).await?;
         self.http_connect(stream, target).await
     }
