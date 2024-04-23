@@ -29,6 +29,7 @@ use std::{
     time::{Duration, Instant},
 };
 use wallpaper;
+use winapi::um::sysinfoapi::{GetNativeSystemInfo, SYSTEM_INFO};
 use winapi::{
     ctypes::c_void,
     shared::{minwindef::*, ntdef::NULL, windef::*, winerror::*},
@@ -1302,7 +1303,7 @@ fn get_uninstall(kill_self: bool) -> String {
     if exist \"%PROGRAMDATA%\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\{app_name} Tray.lnk\" del /f /q \"%PROGRAMDATA%\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\{app_name} Tray.lnk\"
     ",
         before_uninstall=get_before_uninstall(kill_self),
-        uninstall_amyuni_idd=get_uninstall_amyuni_idd(&path),
+        uninstall_amyuni_idd=get_uninstall_amyuni_idd(),
         app_name = crate::get_app_name(),
     )
 }
@@ -2369,7 +2370,7 @@ impl Drop for WallPaperRemover {
     }
 }
 
-fn get_uninstall_amyuni_idd(path: &str) -> String {
+fn get_uninstall_amyuni_idd() -> String {
     match std::env::current_exe() {
         Ok(path) => format!("\"{}\" --uninstall-amyuni-idd", path.to_str().unwrap_or("")),
         Err(e) => {
@@ -2389,4 +2390,14 @@ pub fn is_service_running(service_name: &str) -> bool {
         let service_name = wide_string(service_name);
         is_service_running_w(service_name.as_ptr() as _)
     }
+}
+
+pub fn is_x64() -> bool {
+    const PROCESSOR_ARCHITECTURE_AMD64: u16 = 9;
+
+    let mut sys_info = SYSTEM_INFO::default();
+    unsafe {
+        GetNativeSystemInfo(&mut sys_info as _);
+    }
+    unsafe { sys_info.u.s().wProcessorArchitecture == PROCESSOR_ARCHITECTURE_AMD64 }
 }

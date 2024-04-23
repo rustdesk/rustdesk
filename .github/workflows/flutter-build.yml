@@ -264,7 +264,10 @@ jobs:
           echo "output_folder=./Release" >> $GITHUB_OUTPUT
           curl -LJ -o ./usbmmidd_v2.zip https://github.com/rustdesk-org/rdev/releases/download/usbmmidd_v2/usbmmidd_v2.zip
           unzip usbmmidd_v2.zip
-          rm -rf ./usbmmidd_v2/x64 ./usbmmidd_v2/deviceinstaller.exe ./usbmmidd_v2/deviceinstaller64.exe ./usbmmidd_v2/usbmmidd.bat 
+          # Do not remove x64 files, because the user may run the 32bit version on a 64bit system.
+          # Do not remove ./usbmmidd_v2/deviceinstaller64.exe, as x86 exe cannot install and uninstall drivers when running on x64,
+          # we need the x64 exe to install and uninstall the driver.
+          rm -rf ./usbmmidd_v2/deviceinstaller.exe ./usbmmidd_v2/usbmmidd.bat 
           mv ./usbmmidd_v2 ./Release || true
 
       - name: find Runner.res

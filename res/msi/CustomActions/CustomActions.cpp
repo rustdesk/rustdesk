@@ -598,6 +598,19 @@ UINT __stdcall RemoveAmyuniIdd(
     HRESULT hr = S_OK;
     DWORD er = ERROR_SUCCESS;
 
+    int nResult = 0;
+    LPWSTR installFolder = NULL;
+    LPWSTR pwz = NULL;
+    LPWSTR pwzData = NULL;
+
+    WCHAR workDir[1024] = L"";
+    DWORD fileAttributes = 0;
+    HINSTANCE hi = 0;
+
+    SYSTEM_INFO si;
+    LPCWSTR exe = L"deviceinstaller64.exe";
+    WCHAR exePath[1024] = L"";
+
     BOOL rebootRequired = FALSE;
 
     hr = WcaInitialize(hInstall, "RemoveAmyuniIdd");
@@ -605,7 +618,49 @@ UINT __stdcall RemoveAmyuniIdd(
 
     UninstallDriver(L"usbmmidd", rebootRequired);
 
+    // Only for x86 app on x64
+    GetNativeSystemInfo(&si);
+    if (si.wProcessorArchitecture != PROCESSOR_ARCHITECTURE_AMD64) {
+        goto LExit;
+    }
+
+    hr = WcaGetProperty(L"CustomActionData", &pwzData);
+    ExitOnFailure(hr, "failed to get CustomActionData");
+
+    pwz = pwzData;
+    hr = WcaReadStringFromCaData(&pwz, &installFolder);
+    ExitOnFailure(hr, "failed to read database key from custom action data: %ls", pwz);
+
+    hr = StringCchPrintfW(workDir, 1024, L"%lsusbmmidd_v2", installFolder);
+    ExitOnFailure(hr, "Failed to compose a resource identifier string");
+    fileAttributes = GetFileAttributesW(workDir);
+    if (fileAttributes == INVALID_FILE_ATTRIBUTES) {
+        WcaLog(LOGMSG_STANDARD, "Amyuni idd dir \"%ls\" is not found, %d", workDir, fileAttributes);
+        goto LExit;
+    }
+
+    hr = StringCchPrintfW(exePath, 1024, L"%ls\\%ls", workDir, exe);
+    ExitOnFailure(hr, "Failed to compose a resource identifier string");
+    fileAttributes = GetFileAttributesW(exePath);
+    if (fileAttributes == INVALID_FILE_ATTRIBUTES) {
+        goto LExit;
+    }
+
+    WcaLog(LOGMSG_STANDARD, "Remove amyuni idd %ls in %ls", exe, workDir);
+    hi = ShellExecuteW(NULL, L"open", exe, L"remove usbmmidd", workDir, SW_HIDE);
+    // https://learn.microsoft.com/en-us/windows/win32/api/shellapi/nf-shellapi-shellexecutew
+    if ((int)hi <= 32) {
+        WcaLog(LOGMSG_STANDARD, "Failed to remove amyuni idd : %d, last error: %d", (int)hi, GetLastError());
+    }
+    else {
+        WcaLog(LOGMSG_STANDARD, "Amyuni idd is removed");
+    }
+
 LExit:
+    if (pwzData) {
+        ReleaseStr(pwzData);
+    }
+
     er = SUCCEEDED(hr) ? ERROR_SUCCESS : ERROR_INSTALL_FAILURE;
     return WcaFinalize(er);
 }

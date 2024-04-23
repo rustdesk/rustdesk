@@ -403,9 +403,16 @@ pub mod rustdesk_idd {
 pub mod amyuni_idd {
     use super::windows;
     use crate::platform::win_device;
-    use hbb_common::{bail, lazy_static, log, ResultType};
-    use std::sync::{Arc, Mutex};
-    use winapi::shared::guiddef::GUID;
+    use hbb_common::{bail, lazy_static, log, tokio::time::Instant, ResultType};
+    use std::{
+        ptr::null_mut,
+        sync::{Arc, Mutex},
+        time::Duration,
+    };
+    use winapi::{
+        shared::{guiddef::GUID, winerror::ERROR_NO_MORE_ITEMS},
+        um::shellapi::ShellExecuteA,
+    };
 
     const INF_PATH: &str = r#"usbmmidd_v2\usbmmIdd.inf"#;
     const INTERFACE_GUID: GUID = GUID {
@@ -416,53 +423,148 @@ pub mod amyuni_idd {
     };
     const HARDWARE_ID: &str = "usbmmidd";
     const PLUG_MONITOR_IO_CONTROL_CDOE: u32 = 2307084;
+    const INSTALLER_EXE_FILE: &str = "deviceinstaller64.exe";
 
     lazy_static::lazy_static! {
         static ref LOCK: Arc<Mutex<()>> = Default::default();
     }
 
+    fn get_deviceinstaller64_work_dir() -> ResultType<Option<Vec<u8>>> {
+        let cur_exe = std::env::current_exe()?;
+        let Some(cur_dir) = cur_exe.parent() else {
+            bail!("Cannot get parent of current exe file.");
+        };
+        let work_dir = cur_dir.join("usbmmidd_v2");
+        if !work_dir.exists() {
+            return Ok(None);
+        }
+        let exe_path = work_dir.join(INSTALLER_EXE_FILE);
+        if !exe_path.exists() {
+            return Ok(None);
+        }
+
+        let Some(work_dir) = work_dir.to_str() else {
+            bail!("Cannot convert work_dir to string.");
+        };
+        let mut work_dir2 = work_dir.as_bytes().to_vec();
+        work_dir2.push(0);
+        Ok(Some(work_dir2))
+    }
+
     pub fn uninstall_driver() -> ResultType<()> {
+        if let Ok(Some(work_dir)) = get_deviceinstaller64_work_dir() {
+            if crate::platform::windows::is_x64() {
+                log::info!("Uninstalling driver by deviceinstaller64.exe");
+                install_if_x86_on_x64(&work_dir, "remove usbmmidd")?;
+                return Ok(());
+            }
+        }
+
+        log::info!("Uninstalling driver by SetupAPI");
         let mut reboot_required = false;
-        unsafe {
-            win_device::uninstall_driver(HARDWARE_ID, &mut reboot_required)?;
+        let _ = unsafe { win_device::uninstall_driver(HARDWARE_ID, &mut reboot_required)? };
+        Ok(())
+    }
+
+    // SetupDiCallClassInstaller() will always fail if current_exe() is built as x86 and running on x64.
+    // So we need to call another x64 version exe to install and uninstall the driver.
+    fn install_if_x86_on_x64(work_dir: &[u8], args: &str) -> ResultType<()> {
+        const SW_HIDE: i32 = 0;
+        let mut args = args.bytes().collect::<Vec<_>>();
+        args.push(0);
+        let mut exe_file = INSTALLER_EXE_FILE.bytes().collect::<Vec<_>>();
+        exe_file.push(0);
+        let hi = unsafe {
+            ShellExecuteA(
+                null_mut(),
+                "open\0".as_ptr() as _,
+                exe_file.as_ptr() as _,
+                args.as_ptr() as _,
+                work_dir.as_ptr() as _,
+                SW_HIDE,
+            ) as i32
+        };
+        if hi <= 32 {
+            log::error!("Failed to run deviceinstaller: {}", hi);
+            bail!("Failed to run deviceinstaller.")
         }
         Ok(())
     }
 
-    fn check_install_driver() -> ResultType<()> {
+    // If the driver is installed by "deviceinstaller64.exe", the driver will be installed asynchronously.
+    // The caller must wait some time before using the driver.
+    fn check_install_driver(is_async: &mut bool) -> ResultType<()> {
         let _l = LOCK.lock().unwrap();
         let drivers = windows::get_display_drivers();
         if drivers
             .iter()
             .any(|(s, c)| s == super::AMYUNI_IDD_DEVICE_STRING && *c == 0)
         {
+            *is_async = false;
             return Ok(());
+        }
+
+        if let Ok(Some(work_dir)) = get_deviceinstaller64_work_dir() {
+            if crate::platform::windows::is_x64() {
+                log::info!("Installing driver by deviceinstaller64.exe");
+                install_if_x86_on_x64(&work_dir, "install usbmmidd.inf usbmmidd")?;
+                *is_async = true;
+                return Ok(());
+            }
         }
 
         let exe_file = std::env::current_exe()?;
         let Some(cur_dir) = exe_file.parent() else {
             bail!("Cannot get parent of current exe file");
         };
-
         let inf_path = cur_dir.join(INF_PATH);
         if !inf_path.exists() {
             bail!("Driver inf file not found.");
         }
         let inf_path = inf_path.to_string_lossy().to_string();
 
+        log::info!("Installing driver by SetupAPI");
         let mut reboot_required = false;
-        unsafe {
-            win_device::install_driver(&inf_path, HARDWARE_ID, &mut reboot_required)?;
-        }
+        let _ =
+            unsafe { win_device::install_driver(&inf_path, HARDWARE_ID, &mut reboot_required)? };
+        *is_async = false;
         Ok(())
     }
 
     #[inline]
-    fn plug_in_monitor_(add: bool) -> ResultType<()> {
+    fn plug_monitor_(add: bool) -> Result<(), win_device::DeviceError> {
         let cmd = if add { 0x10 } else { 0x00 };
         let cmd = [cmd, 0x00, 0x00, 0x00];
         unsafe {
             win_device::device_io_control(&INTERFACE_GUID, PLUG_MONITOR_IO_CONTROL_CDOE, &cmd, 0)?;
+        }
+        Ok(())
+    }
+
+    // `std::thread::sleep()` with a timeout is acceptable here.
+    // Because user can wait for a while to plug in a monitor.
+    fn plug_in_monitor_(add: bool, is_driver_async_installed: bool) -> ResultType<()> {
+        let timeout = Duration::from_secs(3);
+        let now = Instant::now();
+        loop {
+            match plug_monitor_(add) {
+                Ok(_) => {
+                    break;
+                }
+                Err(e) => {
+                    if is_driver_async_installed {
+                        if let win_device::DeviceError::WinApiLastErr(_, e2) = &e {
+                            if e2.raw_os_error() == Some(ERROR_NO_MORE_ITEMS as _) {
+                                if now.elapsed() < timeout {
+                                    std::thread::sleep(Duration::from_millis(100));
+                                    continue;
+                                }
+                            }
+                        }
+                    }
+                    return Err(e.into());
+                }
+            }
         }
         Ok(())
     }
@@ -472,16 +574,18 @@ pub mod amyuni_idd {
             return Ok(());
         }
 
-        if let Err(e) = check_install_driver() {
+        let mut is_async = false;
+        if let Err(e) = check_install_driver(&mut is_async) {
             log::error!("Failed to install driver: {}", e);
             bail!("Failed to install driver.");
         }
 
-        plug_in_monitor_(true)
+        plug_in_monitor_(true, is_async)
     }
 
     pub fn plug_in_monitor() -> ResultType<()> {
-        if let Err(e) = check_install_driver() {
+        let mut is_async = false;
+        if let Err(e) = check_install_driver(&mut is_async) {
             log::error!("Failed to install driver: {}", e);
             bail!("Failed to install driver.");
         }
@@ -490,7 +594,7 @@ pub mod amyuni_idd {
             bail!("There are already 4 monitors plugged in.");
         }
 
-        plug_in_monitor_(true)
+        plug_in_monitor_(true, is_async)
     }
 
     pub fn plug_out_monitor(index: i32) -> ResultType<()> {
@@ -525,7 +629,7 @@ pub mod amyuni_idd {
             to_plug_out_count = 1;
         }
         for _i in 0..to_plug_out_count {
-            let _ = plug_in_monitor_(false);
+            let _ = plug_monitor_(false);
         }
         Ok(())
     }
