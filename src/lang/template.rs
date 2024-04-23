@@ -239,7 +239,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Empty", ""),
         ("Invalid folder name", ""),
         ("Socks5 Proxy", ""),
-        ("Socks5/Http(s) Proxy", ""),
         ("Discovered", ""),
         ("install_daemon_tip", ""),
         ("Remote ID", ""),

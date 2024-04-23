@@ -31,7 +31,7 @@ use hbb_common::tokio::sync::mpsc::UnboundedSender;
 use hbb_common::tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver};
 use hbb_common::{
     allow_err,
-    anyhow::Context,
+    anyhow::{anyhow, Context},
     bail,
     config::{
         self, Config, LocalConfig, PeerConfig, PeerInfoSerde, Resolution, CONNECT_TIMEOUT,

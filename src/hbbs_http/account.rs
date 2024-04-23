@@ -1,5 +1,4 @@
 use super::HbbHttpResponse;
-use crate::hbbs_http::create_http_client;
 use hbb_common::{config::LocalConfig, log, ResultType};
 use reqwest::blocking::Client;
 use serde_derive::{Deserialize, Serialize};
@@ -131,7 +130,7 @@ impl Default for UserStatus {
 impl OidcSession {
     fn new() -> Self {
         Self {
-            client: create_http_client(),
+            client: Client::new(),
             state_msg: REQUESTING_ACCOUNT_AUTH,
             failed_msg: "".to_owned(),
             code_url: None,
@@ -169,7 +168,7 @@ impl OidcSession {
         id: &str,
         uuid: &str,
     ) -> ResultType<HbbHttpResponse<AuthBody>> {
-        let url = Url::parse_with_params(
+        let url = reqwest::Url::parse_with_params(
             &format!("{}/api/oidc/auth-query", api_server),
             &[("code", code), ("id", id), ("uuid", uuid)],
         )?;

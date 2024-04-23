@@ -16,7 +16,6 @@ use std::{
 };
 pub use tokio;
 pub use tokio_util;
-pub mod proxy;
 pub mod socket_client;
 pub mod tcp;
 pub mod udp;
@@ -52,7 +51,6 @@ pub use serde_json;
 pub use sysinfo;
 pub use toml;
 pub use uuid;
-pub use base64;
 pub use thiserror;
 
 #[cfg(feature = "quic")]

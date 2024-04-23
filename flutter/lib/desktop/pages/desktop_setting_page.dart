@@ -1117,7 +1117,7 @@ class _NetworkState extends State<_Network> with AutomaticKeepAliveClientMixin {
                 child: Column(children: [
                   server(enabled),
                   _Card(title: 'Proxy', children: [
-                    _Button('Socks5/Http(s) Proxy', changeSocks5Proxy,
+                    _Button('Socks5 Proxy', changeSocks5Proxy,
                         enabled: enabled),
                   ]),
                 ]),
@@ -2047,7 +2047,7 @@ void changeSocks5Proxy() async {
     }
 
     return CustomAlertDialog(
-      title: Text(translate('Socks5/Http(s) Proxy')),
+      title: Text(translate('Socks5 Proxy')),
       content: ConstrainedBox(
         constraints: const BoxConstraints(minWidth: 500),
         child: Column(
@@ -2064,9 +2064,7 @@ void changeSocks5Proxy() async {
                 Expanded(
                   child: TextField(
                     decoration: InputDecoration(
-                        errorText: proxyMsg.isNotEmpty ? proxyMsg : null,
-                        hintText: translate('Default protocol and port are Socks5 and 1080'),
-                    ),
+                        errorText: proxyMsg.isNotEmpty ? proxyMsg : null),
                     controller: proxyController,
                     autofocus: true,
                   ),

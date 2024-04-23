@@ -1,9 +1,5 @@
-use hbb_common::{
-    bail,
-    base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _},
-    sodiumoxide::crypto::sign,
-    ResultType,
-};
+use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
+use hbb_common::{bail, sodiumoxide::crypto::sign, ResultType};
 use serde_derive::{Deserialize, Serialize};
 
 #[derive(Debug, PartialEq, Default, Serialize, Deserialize, Clone)]
