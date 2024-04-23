@@ -511,7 +511,7 @@ pub fn start_os_service() {
                 std::process::exit(0);
             }
             // only refresh this pid and check if valid, no need to refresh all processes since refreshing all is expensive, about 10ms on my machine
-            if !sys.refresh_process(pid) {
+            if !sys.refresh_process_specifics(pid, ProcessRefreshKind::new()) {
                 server = None;
                 continue;
             }
