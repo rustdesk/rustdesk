@@ -29,9 +29,9 @@ pub struct Encrypt(Key, u64, u64);
 
 pub struct FramedStream(
     pub(crate) Framed<DynTcpStream, BytesCodec>,
-    pub(crate)SocketAddr,
-    pub(crate)Option<Encrypt>,
-    pub(crate)u64,
+    pub(crate) SocketAddr,
+    pub(crate) Option<Encrypt>,
+    pub(crate) u64,
 );
 
 impl Deref for FramedStream {

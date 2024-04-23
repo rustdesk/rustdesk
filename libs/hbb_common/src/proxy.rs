@@ -48,6 +48,9 @@ pub enum ProxyError {
     HttpCode200(u16),
     #[error("The proxy address resolution failed: {0}")]
     AddressResolutionFailed(String),
+    #[cfg(any(target_os = "windows", target_os = "macos"))]
+    #[error("The native tls error: {0}")]
+    NativeTlsError(#[from] tokio_native_tls::native_tls::Error),
 }
 
 const MAXIMUM_RESPONSE_HEADER_LENGTH: usize = 4096;
