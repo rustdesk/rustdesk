@@ -9,7 +9,10 @@ use bin_reader::BinaryReader;
 
 pub mod bin_reader;
 
+#[cfg(windows)]
 const APP_METADATA: &[u8] = include_bytes!("../app_metadata.toml");
+#[cfg(not(windows))]
+const APP_METADATA: &[u8] = &[];
 const APP_METADATA_CONFIG: &str = "meta.toml";
 const META_LINE_PREFIX_TIMESTAMP: &str = "timestamp = ";
 const APP_PREFIX: &str = "rustdesk";
