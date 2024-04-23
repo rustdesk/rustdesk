@@ -749,6 +749,10 @@ pub fn main_get_async_status() -> String {
     get_async_job_status()
 }
 
+pub fn main_get_http_status(url: String) -> Option<String> {
+    get_async_http_status(url)
+}
+
 pub fn main_get_option(key: String) -> String {
     get_option(key)
 }
@@ -803,6 +807,10 @@ pub fn main_test_if_valid_server(server: String) -> String {
 
 pub fn main_set_socks(proxy: String, username: String, password: String) {
     set_socks(proxy, username, password)
+}
+
+pub fn main_get_proxy_status() -> bool {
+    get_proxy_status()
 }
 
 pub fn main_get_socks() -> Vec<String> {
@@ -878,9 +886,8 @@ pub fn main_get_api_server() -> String {
     get_api_server()
 }
 
-// This function doesn't seem to be used.
-pub fn main_post_request(url: String, body: String, header: String) {
-    post_request(url, body, header)
+pub fn main_http_request(url: String, method: String, body: Option<String>, header: String) {
+    http_request(url,method, body, header)
 }
 
 pub fn main_get_local_option(key: String) -> SyncReturn<String> {

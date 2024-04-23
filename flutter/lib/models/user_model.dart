@@ -6,9 +6,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common/hbbs/hbbs.dart';
 import 'package:flutter_hbb/models/ab_model.dart';
 import 'package:get/get.dart';
-import 'package:http/http.dart' as http;
 
 import '../common.dart';
+import '../utils/http_service.dart' as http;
 import 'model.dart';
 import 'platform_model.dart';
 
@@ -136,7 +136,6 @@ class UserModel {
   Future<LoginResponse> login(LoginRequest loginRequest) async {
     final url = await bind.mainGetApiServer();
     final resp = await http.post(Uri.parse('$url/api/login'),
-        headers: {'Content-Type': 'application/json'},
         body: jsonEncode(loginRequest.toJson()));
 
     final Map<String, dynamic> body;
