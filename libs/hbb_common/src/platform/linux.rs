@@ -49,6 +49,16 @@ pub fn is_x11_or_headless() -> bool {
 const INVALID_SESSION: &str = "4294967295";
 
 pub fn get_display_server() -> String {
+    // Check for forced display server environment variable first
+    if let Ok(forced_display) = std::env::var("RUSTDESK_FORCED_DISPLAY_SERVER") {
+        return forced_display;
+    }
+
+    // Check if `loginctl` can be called successfully
+    if run_loginctl(None).is_err() {
+        return DISPLAY_SERVER_X11.to_owned();
+    }
+
     let mut session = get_values_of_seat0(&[0])[0].clone();
     if session.is_empty() {
         // loginctl has not given the expected output.  try something else.
