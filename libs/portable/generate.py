@@ -4,6 +4,7 @@ import os
 import optparse
 from hashlib import md5
 import brotli
+import datetime
 
 # 4GB maximum
 length_count = 4
@@ -22,7 +23,7 @@ def generate_md5_table(folder: str, level) -> dict:
         for f in files:
             md5_generator = md5()
             full_path = os.path.join(root, f)
-            print(f"processing {full_path}...")
+            print(f"Processing {full_path}...")
             f = open(full_path, "rb")
             content = f.read()
             content_compressed = brotli.compress(
@@ -34,7 +35,7 @@ def generate_md5_table(folder: str, level) -> dict:
     return res
 
 
-def write_metadata(md5_table: dict, output_folder: str, exe: str):
+def write_package_metadata(md5_table: dict, output_folder: str, exe: str):
     output_path = os.path.join(output_folder, "data.bin")
     with open(output_path, "wb") as f:
         f.write("rustdesk".encode(encoding=encoding))
@@ -55,8 +56,13 @@ def write_metadata(md5_table: dict, output_folder: str, exe: str):
         f.write("rustdesk".encode(encoding=encoding))
         # executable
         f.write(exe.encode(encoding='utf-8'))
-    print(f"metadata had written to {output_path}")
+    print(f"Metadata has been written to {output_path}")
 
+def write_app_metadata(output_folder: str):
+    output_path = os.path.join(output_folder, "app_metadata.toml")
+    with open(output_path, "w") as f:
+        f.write(f"timestamp = {int(datetime.datetime.now().timestamp() * 1000)}\n")
+    print(f"App metadata has been written to {output_path}")
 
 def build_portable(output_folder: str, target: str):
     os.chdir(output_folder)
@@ -91,11 +97,12 @@ if __name__ == '__main__':
         options.executable = folder + '/' + options.executable
     exe: str = os.path.abspath(options.executable)
     if not exe.startswith(os.path.abspath(folder)):
-        print("the executable must locate in source folder")
+        print("The executable must locate in source folder")
         exit(-1)
     exe = '.' + exe[len(os.path.abspath(folder)):]
-    print("executable path: " + exe)
-    print("compression level: " + str(options.level))
+    print("Executable path: " + exe)
+    print("Compression level: " + str(options.level))
     md5_table = generate_md5_table(folder, options.level)
-    write_metadata(md5_table, output_folder, exe)
+    write_package_metadata(md5_table, output_folder, exe)
+    write_app_metadata(output_folder)
     build_portable(output_folder, options.target)
