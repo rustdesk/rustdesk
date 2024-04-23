@@ -1,5 +1,6 @@
 mod custom_server;
-use hbb_common::{ResultType, base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _}};
+use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
+use hbb_common::ResultType;
 use custom_server::*;
 
 fn gen_name(lic: &CustomServer) -> ResultType<String> {
