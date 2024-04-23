@@ -69,14 +69,23 @@ impl BinaryData {
 
 impl BinaryReader {
     #[inline]
-    pub fn get_exe_md5() -> (String, String) {
+    pub fn get_exe_timestamp() -> (String, u64) {
         let mut base: usize = META_BEGIN.len();
         let len = Self::get_len(base);
         base += LENGTH;
         let exe = String::from_utf8_lossy(&BIN_DATA[base..base + len]).to_string();
         base += len;
-        let md5 = String::from_utf8_lossy(&BIN_DATA[base..base + MD5_LENGTH]).to_string();
-        (exe, md5)
+        let ts = u64::from_be_bytes([
+            BIN_DATA[base],
+            BIN_DATA[base + 1],
+            BIN_DATA[base + 2],
+            BIN_DATA[base + 3],
+            BIN_DATA[base + 4],
+            BIN_DATA[base + 5],
+            BIN_DATA[base + 6],
+            BIN_DATA[base + 7],
+        ]);
+        (exe, ts)
     }
 
     #[inline]
@@ -98,7 +107,7 @@ impl BinaryReader {
             panic!("bin file is not valid!");
         }
         base += META_BEGIN.len();
-        base += LENGTH + Self::get_len(base) + MD5_LENGTH;
+        base += LENGTH + Self::get_len(base) + 8;
         loop {
             iden = String::from_utf8_lossy(&BIN_DATA[base..base + META_END.len()]);
             if iden == META_END {

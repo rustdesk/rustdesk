@@ -4,6 +4,7 @@ import os
 import optparse
 from hashlib import md5
 import brotli
+import datetime
 
 # 4GB maximum
 length_count = 4
@@ -43,8 +44,8 @@ def write_metadata(md5_table: dict, output_folder: str, exe: str):
         exe_encoded = exe.encode(encoding='utf-8')
         f.write((len(exe_encoded)).to_bytes(length=length_count, byteorder='big'))
         f.write(exe_encoded)
-        (_, md5_code) = md5_table[exe]
-        f.write(md5_code)
+        ts = int(datetime.datetime.now().timestamp() * 1000)
+        f.write(ts.to_bytes(length=8, byteorder='big'))
         # others
         for path in md5_table.keys():
             (compressed_data, md5_code) = md5_table[path]

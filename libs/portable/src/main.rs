@@ -11,6 +11,29 @@ pub mod bin_reader;
 
 const APP_PREFIX: &str = "rustdesk";
 const APPNAME_RUNTIME_ENV_KEY: &str = "RUSTDESK_APPNAME";
+const APP_META_CONFIG: &str = "meta.toml";
+const META_LINE_PREFIX_TIMESTAMP: &str = "timestamp = ";
+
+fn is_timestamp_matches(dir: &PathBuf, ts: u64) -> bool {
+    let meta_file = dir.join(APP_META_CONFIG);
+    if let Ok(content) = std::fs::read_to_string(meta_file) {
+        for line in content.lines() {
+            if line.starts_with(META_LINE_PREFIX_TIMESTAMP) {
+                if let Ok(stored_ts) = line.replace(META_LINE_PREFIX_TIMESTAMP, "").parse::<u64>() {
+                    return ts == stored_ts;
+                }
+            }
+        }
+    }
+    false
+}
+
+fn write_meta(dir: &PathBuf, timestamp: u64) {
+    let meta_file = dir.join(APP_META_CONFIG);
+    let content = format!("{}{}", META_LINE_PREFIX_TIMESTAMP, timestamp);
+    // Ignore is ok here
+    let _ = std::fs::write(meta_file, content);
+}
 
 fn setup(dir: Option<PathBuf>) -> Option<PathBuf> {
     let dir = if let Some(dir) = dir {
@@ -24,19 +47,15 @@ fn setup(dir: Option<PathBuf>) -> Option<PathBuf> {
             return None;
         }
     };
-
     #[cfg(windows)]
     windows::copy_runtime_broker(&dir);
     #[cfg(linux)]
     reader.configure_permission(&dir);
 
-    let (executable, md5) = BinaryReader::get_exe_md5();
+    let (executable, ts) = BinaryReader::get_exe_timestamp();
     let cur_exe = dir.join(&executable);
-    if cur_exe.exists() {
-        let cur_exe_md5 = format!("{:x}", md5::compute(&std::fs::read(&cur_exe).ok()?));
-        if cur_exe_md5 == md5 {
-            return Some(cur_exe);
-        }
+    if is_timestamp_matches(&dir, ts) && cur_exe.exists() {
+        return Some(cur_exe);
     }
 
     std::fs::remove_dir_all(&dir).ok();
@@ -44,6 +63,7 @@ fn setup(dir: Option<PathBuf>) -> Option<PathBuf> {
     for file in reader.files.iter() {
         file.write_to_file(&dir);
     }
+    write_meta(&dir, ts);
     Some(cur_exe)
 }
 
