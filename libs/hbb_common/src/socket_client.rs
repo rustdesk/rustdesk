@@ -1,11 +1,13 @@
 use crate::{
     config::{Config, NetworkType},
+    proxy::IntoProxyScheme,
     tcp::FramedStream,
     udp::FramedSocket,
     ResultType,
 };
 use anyhow::Context;
 use std::net::SocketAddr;
+use log::info;
 use tokio::net::ToSocketAddrs;
 use tokio_socks::{IntoTargetAddr, TargetAddr};
 
@@ -50,19 +52,15 @@ pub fn increase_port<T: std::string::ToString>(host: T, offset: i32) -> String {
 }
 
 pub fn test_if_valid_server(host: &str) -> String {
-    let host = check_port(host, 0);
-
+    info!("Testing server validity for host: {}", host);
     use std::net::ToSocketAddrs;
-    match Config::get_network_type() {
-        NetworkType::Direct => match host.to_socket_addrs() {
-            Err(err) => err.to_string(),
-            Ok(_) => "".to_owned(),
-        },
-        NetworkType::ProxySocks => match &host.into_target_addr() {
-            Err(err) => err.to_string(),
-            Ok(_) => "".to_owned(),
-        },
-    }
+    // Even if the current network type is a proxy type,
+    // the system DNS should be used to resolve the proxy server address.
+    host.into_proxy_scheme()
+        .and_then(|scheme| scheme.get_host_and_port())
+        .and_then(|domain| domain.to_socket_addrs().map_err(Into::into))
+        .map(|_| "".to_owned()) // on success, return an empty string
+        .unwrap_or_else(|e| e.to_string()) // on error, convert the error into a string
 }
 
 pub trait IsResolvedSocketAddr {
@@ -107,15 +105,7 @@ pub async fn connect_tcp_local<
     ms_timeout: u64,
 ) -> ResultType<FramedStream> {
     if let Some(conf) = Config::get_socks() {
-        return FramedStream::connect(
-            conf.proxy.as_str(),
-            target,
-            local,
-            conf.username.as_str(),
-            conf.password.as_str(),
-            ms_timeout,
-        )
-        .await;
+        return FramedStream::connect(target, local, &conf, ms_timeout).await;
     }
     if let Some(target) = target.resolve() {
         if let Some(local) = local {

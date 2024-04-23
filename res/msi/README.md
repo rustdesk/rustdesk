@@ -1,6 +1,6 @@
 # RustDesk msi project
 
-Use Visual Studio 2019 to compile this project.
+Use Visual Studio 2022 to compile this project.
 
 This project is mainly derived from <https://github.com/MediaPortal/MediaPortal-2.git> .
 

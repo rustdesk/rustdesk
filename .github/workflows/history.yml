@@ -18,7 +18,7 @@ jobs:
       fail-fast: false
       matrix:
         job:
-          - { target: x86_64-pc-windows-msvc, os: windows-2019, arch: x86_64, date: 2023-08-04, ref: 72c198a1e94cc1e0242fce88f92b3f3caedcd0c3 }
+          - { target: x86_64-pc-windows-msvc, os: windows-2022, arch: x86_64, date: 2023-08-04, ref: 72c198a1e94cc1e0242fce88f92b3f3caedcd0c3 }
     steps:
       - name: Checkout source code
         uses: actions/checkout@v4

@@ -22,6 +22,7 @@ use hbb_common::{
     anyhow::anyhow,
     bail, log,
     message_proto::{DisplayInfo, Resolution},
+    sysinfo::{Pid, Process, ProcessRefreshKind, System},
 };
 use include_dir::{include_dir, Dir};
 use objc::{class, msg_send, sel, sel_impl};
@@ -504,23 +505,43 @@ pub fn lock_screen() {
 
 pub fn start_os_service() {
     crate::platform::macos::hide_dock();
-    let exe = std::env::current_exe().unwrap_or_default();
     log::info!("Username: {}", crate::username());
-    log::info!("Startime: {:?}", get_server_start_time());
+    let mut sys = System::new();
+    let path =
+        std::fs::canonicalize(std::env::current_exe().unwrap_or_default()).unwrap_or_default();
+    let mut server = get_server_start_time(&mut sys, &path);
+    let my_start_time = sys
+        .process((std::process::id() as usize).into())
+        .map(|p| p.start_time())
+        .unwrap_or_default() as i64;
+    log::info!("Startime: {my_start_time} vs {:?}", server);
 
     std::thread::spawn(move || loop {
-        loop {
-            std::thread::sleep(std::time::Duration::from_secs(1));
-            let Some(start_time) = get_server_start_time() else {
-                continue;
-            };
-            if start_time.0 <= start_time.1 {
+        std::thread::sleep(std::time::Duration::from_secs(1));
+        if server.is_none() {
+            server = get_server_start_time(&mut sys, &path);
+        }
+        if let Some((start_time, pid)) = server {
+            if my_start_time <= start_time {
                 // I tried add delegate (using tao and with its main loop0, but it works in normal mode, but not work as daemon
                 log::info!(
-                    "Agent start later, {:?}, will restart --service to make delegate work",
-                    start_time
+                    "Agent start later, {my_start_time} vs {start_time}, will restart --service to make delegate work",
                 );
                 std::process::exit(0);
+            }
+            // only refresh this pid and check if valid, no need to refresh all processes since refreshing all is expensive, about 10ms on my machine
+            if !sys.refresh_process(pid) {
+                server = None;
+                continue;
+            }
+            if let Some(p) = sys.process(pid.into()) {
+                if let Some(p) = get_server_start_time_of(p, &path) {
+                    server = Some((p, pid));
+                } else {
+                    server = None;
+                }
+            } else {
+                server = None;
             }
         }
     });
@@ -623,35 +644,30 @@ pub fn hide_dock() {
     }
 }
 
-fn get_server_start_time() -> Option<(i64, i64)> {
-    use hbb_common::sysinfo::System;
-    let mut sys = System::new();
-    sys.refresh_processes();
-    let mut path = std::env::current_exe().unwrap_or_default();
-    if let Ok(linked) = path.read_link() {
-        path = linked;
+#[inline]
+fn get_server_start_time_of(p: &Process, path: &PathBuf) -> Option<i64> {
+    let cmd = p.cmd();
+    if cmd.len() <= 1 {
+        return None;
     }
-    let path = path.to_string_lossy().to_lowercase();
-    let Some(my_start_time) = sys
-        .process((std::process::id() as usize).into())
-        .map(|p| p.start_time())
-    else {
+    if &cmd[1] != "--server" {
+        return None;
+    }
+    let Ok(cur) = std::fs::canonicalize(p.exe()) else {
         return None;
     };
+    if &cur != path {
+        return None;
+    }
+    Some(p.start_time() as _)
+}
+
+#[inline]
+fn get_server_start_time(sys: &mut System, path: &PathBuf) -> Option<(i64, Pid)> {
+    sys.refresh_processes_specifics(ProcessRefreshKind::new());
     for (_, p) in sys.processes() {
-        let mut cur_path = p.exe().to_path_buf();
-        if let Ok(linked) = cur_path.read_link() {
-            cur_path = linked;
-        }
-        if cur_path.to_string_lossy().to_lowercase() != path {
-            continue;
-        }
-        if p.pid().as_u32() == std::process::id() {
-            continue;
-        }
-        let parg = if p.cmd().len() <= 1 { "" } else { &p.cmd()[1] };
-        if parg == "--server" {
-            return Some((my_start_time as _, p.start_time() as _));
+        if let Some(t) = get_server_start_time_of(p, path) {
+            return Some((t, p.pid() as _));
         }
     }
     None

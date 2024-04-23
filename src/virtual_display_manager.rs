@@ -402,58 +402,31 @@ pub mod rustdesk_idd {
 
 pub mod amyuni_idd {
     use super::windows;
-    use crate::platform::windows::get_amyuni_exe_name;
+    use crate::platform::win_device;
     use hbb_common::{bail, lazy_static, log, ResultType};
-    use std::{
-        ptr::null_mut,
-        sync::{Arc, Mutex},
+    use std::sync::{Arc, Mutex};
+    use winapi::shared::guiddef::GUID;
+
+    const INF_PATH: &str = r#"usbmmidd_v2\usbmmIdd.inf"#;
+    const INTERFACE_GUID: GUID = GUID {
+        Data1: 0xb5ffd75f,
+        Data2: 0xda40,
+        Data3: 0x4353,
+        Data4: [0x8f, 0xf8, 0xb6, 0xda, 0xf6, 0xf1, 0xd8, 0xca],
     };
-    use winapi::um::shellapi::ShellExecuteA;
+    const HARDWARE_ID: &str = "usbmmidd";
+    const PLUG_MONITOR_IO_CONTROL_CDOE: u32 = 2307084;
 
     lazy_static::lazy_static! {
         static ref LOCK: Arc<Mutex<()>> = Default::default();
     }
 
-    fn run_deviceinstaller(args: &str) -> ResultType<()> {
-        let Some(exe_name) = get_amyuni_exe_name() else {
-            bail!("Cannot get amyuni exe name.")
-        };
-
-        let cur_exe = std::env::current_exe()?;
-        let Some(cur_dir) = cur_exe.parent() else {
-            bail!("Cannot get parent of current exe file.");
-        };
-
-        let work_dir = cur_dir.join("usbmmidd_v2");
-        if !work_dir.exists() {
-            bail!("usbmmidd_v2 does not exist.",);
-        }
-        let Some(work_dir) = work_dir.to_str() else {
-            bail!("Cannot convert work_dir to string.");
-        };
-        let mut work_dir2 = work_dir.as_bytes().to_vec();
-        work_dir2.push(0);
-
+    pub fn uninstall_driver() -> ResultType<()> {
+        let mut reboot_required = false;
         unsafe {
-            const SW_HIDE: i32 = 0;
-            let mut args = args.bytes().collect::<Vec<_>>();
-            args.push(0);
-            let mut exe_name = exe_name.bytes().collect::<Vec<_>>();
-            exe_name.push(0);
-            let hi = ShellExecuteA(
-                null_mut(),
-                "open\0".as_ptr() as _,
-                exe_name.as_ptr() as _,
-                args.as_ptr() as _,
-                work_dir2.as_ptr() as _,
-                SW_HIDE,
-            ) as i32;
-            if hi <= 32 {
-                log::error!("Failed to run deviceinstaller: {}", hi);
-                bail!("Failed to run deviceinstaller.")
-            }
-            Ok(())
+            win_device::uninstall_driver(HARDWARE_ID, &mut reboot_required)?;
         }
+        Ok(())
     }
 
     fn check_install_driver() -> ResultType<()> {
@@ -466,7 +439,32 @@ pub mod amyuni_idd {
             return Ok(());
         }
 
-        run_deviceinstaller("install usbmmidd.inf usbmmidd")
+        let exe_file = std::env::current_exe()?;
+        let Some(cur_dir) = exe_file.parent() else {
+            bail!("Cannot get parent of current exe file");
+        };
+
+        let inf_path = cur_dir.join(INF_PATH);
+        if !inf_path.exists() {
+            bail!("Driver inf file not found.");
+        }
+        let inf_path = inf_path.to_string_lossy().to_string();
+
+        let mut reboot_required = false;
+        unsafe {
+            win_device::install_driver(&inf_path, HARDWARE_ID, &mut reboot_required)?;
+        }
+        Ok(())
+    }
+
+    #[inline]
+    fn plug_in_monitor_(add: bool) -> ResultType<()> {
+        let cmd = if add { 0x10 } else { 0x00 };
+        let cmd = [cmd, 0x00, 0x00, 0x00];
+        unsafe {
+            win_device::device_io_control(&INTERFACE_GUID, PLUG_MONITOR_IO_CONTROL_CDOE, &cmd, 0)?;
+        }
+        Ok(())
     }
 
     pub fn plug_in_headless() -> ResultType<()> {
@@ -479,7 +477,7 @@ pub mod amyuni_idd {
             bail!("Failed to install driver.");
         }
 
-        run_deviceinstaller("enableidd 1")
+        plug_in_monitor_(true)
     }
 
     pub fn plug_in_monitor() -> ResultType<()> {
@@ -492,7 +490,7 @@ pub mod amyuni_idd {
             bail!("There are already 4 monitors plugged in.");
         }
 
-        run_deviceinstaller("enableidd 1")
+        plug_in_monitor_(true)
     }
 
     pub fn plug_out_monitor(index: i32) -> ResultType<()> {
@@ -527,7 +525,7 @@ pub mod amyuni_idd {
             to_plug_out_count = 1;
         }
         for _i in 0..to_plug_out_count {
-            let _ = run_deviceinstaller(&format!("enableidd 0"));
+            let _ = plug_in_monitor_(false);
         }
         Ok(())
     }

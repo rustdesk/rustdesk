@@ -239,6 +239,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Empty", "Vacío"),
         ("Invalid folder name", "Nombre de carpeta incorrecto"),
         ("Socks5 Proxy", "Proxy Socks5"),
+        ("Socks5/Http(s) Proxy", "Proxy Socks5/Http(s)"),
         ("Discovered", "Descubierto"),
         ("install_daemon_tip", "Para comenzar en el encendido, debe instalar el servicio del sistema."),
         ("Remote ID", "ID remoto"),
@@ -601,7 +602,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Everyone", "Todos"),
         ("ab_web_console_tip", "Más en consola web"),
         ("allow-only-conn-window-open-tip", "Permitir la conexión solo si la ventana RusDesk está abierta"),
-        ("no_need_privacy_mode_no_physical_displays_tip", ""),
+        ("no_need_privacy_mode_no_physical_displays_tip", "No hay pantallas físicas, no es necesario usar el modo privado."),
         ("Follow remote cursor", ""),
         ("Follow remote window focus", ""),
     ].iter().cloned().collect();

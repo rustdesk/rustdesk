@@ -10,8 +10,8 @@ import 'package:flutter_hbb/models/peer_model.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:get/get.dart';
 import 'package:bot_toast/bot_toast.dart';
-import 'package:http/http.dart' as http;
 
+import '../utils/http_service.dart' as http;
 import '../common.dart';
 
 final syncAbOption = 'sync-ab-with-recent-sessions';
