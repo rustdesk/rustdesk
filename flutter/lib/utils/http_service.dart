@@ -14,10 +14,7 @@ class HttpService {
     dynamic body,
   }) async {
     headers ??= {'Content-Type': 'application/json'};
-    // For web platforms
-    if (kIsWeb) {
-      return await _pollFultterHttp(url, method, headers: headers, body: body);
-    }
+
     // Determine if there is currently a proxy setting, and if so, use FFI to call the Rust HTTP method.
     final isProxy = await bind.mainGetProxyStatus();
 
