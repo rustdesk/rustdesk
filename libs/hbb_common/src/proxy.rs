@@ -56,6 +56,7 @@ const MAXIMUM_RESPONSE_HEADERS: usize = 16;
 const DEFINE_TIME_OUT: u64 = 600;
 
 pub trait IntoUrl {
+    
     // Besides parsing as a valid `Url`, the `Url` must be a valid
     // `http::Uri`, in that it makes sense to use in a network request.
     fn into_url(self) -> Result<Url, ProxyError>;
