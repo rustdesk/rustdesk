@@ -454,11 +454,13 @@ pub mod amyuni_idd {
     pub fn uninstall_driver() -> ResultType<()> {
         if let Ok(Some(work_dir)) = get_deviceinstaller64_work_dir() {
             if crate::platform::windows::is_x64() {
+                log::info!("Uninstalling driver by deviceinstaller64.exe");
                 install_if_x86_on_x64(&work_dir, "remove usbmmidd")?;
                 return Ok(());
             }
         }
 
+        log::info!("Uninstalling driver by SetupAPI");
         let mut reboot_required = false;
         let _ = unsafe { win_device::uninstall_driver(HARDWARE_ID, &mut reboot_required)? };
         Ok(())
@@ -504,6 +506,7 @@ pub mod amyuni_idd {
 
         if let Ok(Some(work_dir)) = get_deviceinstaller64_work_dir() {
             if crate::platform::windows::is_x64() {
+                log::info!("Installing driver by deviceinstaller64.exe");
                 install_if_x86_on_x64(&work_dir, "install usbmmidd.inf usbmmidd")?;
                 *is_async = true;
                 return Ok(());
@@ -520,6 +523,7 @@ pub mod amyuni_idd {
         }
         let inf_path = inf_path.to_string_lossy().to_string();
 
+        log::info!("Installing driver by SetupAPI");
         let mut reboot_required = false;
         let _ =
             unsafe { win_device::install_driver(&inf_path, HARDWARE_ID, &mut reboot_required)? };
