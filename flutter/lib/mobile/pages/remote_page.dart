@@ -223,7 +223,7 @@ class _RemotePageState extends State<RemotePage> {
     _timer?.cancel();
     _timer = Timer(kMobileDelaySoftKeyboard, () {
       // show now, and sleep a while to requestFocus to
-      // make sure edit ready, so that keyboard wont show/hide/show/hide happen
+      // make sure edit ready, so that keyboard won't show/hide/show/hide happen
       setState(() => _showEdit = true);
       _timer?.cancel();
       _timer = Timer(kMobileDelaySoftKeyboardFocus, () {

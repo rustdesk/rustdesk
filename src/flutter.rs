@@ -1052,7 +1052,7 @@ pub fn session_add(
 
     let mut preset_password = password.clone();
     let shared_password = if is_shared_password {
-        // To achieve a flexible password application order, we dont' treat shared password as a preset password.
+        // To achieve a flexible password application order, we don't treat shared password as a preset password.
         preset_password = Default::default();
         Some(password)
     } else {
