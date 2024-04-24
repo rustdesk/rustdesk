@@ -242,6 +242,7 @@ pub struct Connection {
     retina: Retina,
     follow_remote_cursor: bool,
     follow_remote_window: bool,
+    multi_ui_session: bool,
 }
 
 impl ConnInner {
@@ -351,6 +352,7 @@ impl Connection {
             show_remote_cursor: false,
             follow_remote_cursor: false,
             follow_remote_window: false,
+            multi_ui_session: false,
             ip: "".to_owned(),
             disable_audio: false,
             #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
@@ -2593,9 +2595,13 @@ impl Connection {
             } else {
                 lock.capture_displays(self.inner.clone(), set, true, true);
             }
+            self.multi_ui_session = lock.get_subbed_displays_count(self.inner.id()) > 1;
             if self.follow_remote_window {
-                let subbed = lock.get_subbed_displays_count(self.inner.id());
-                lock.subscribe(NAME_WINDOW_FOCUS, self.inner.clone(), subbed <= 1);
+                lock.subscribe(
+                    NAME_WINDOW_FOCUS,
+                    self.inner.clone(),
+                    !self.multi_ui_session,
+                );
             }
             drop(lock);
         }
@@ -3163,12 +3169,8 @@ impl Connection {
 
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     async fn handle_cursor_switch_display(&mut self, pos: CursorPosition) {
-        if let Some(s) = self.server.upgrade() {
-            let server = s.write().unwrap();
-            let subbed_disp_count = server.get_subbed_displays_count(self.inner.id());
-            if subbed_disp_count != 1 {
-                return;
-            }
+        if self.multi_ui_session {
+            return;
         }
         let displays = super::display_service::get_sync_displays();
         let d_index = displays.iter().position(|d| {
