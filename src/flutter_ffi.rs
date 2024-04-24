@@ -1861,7 +1861,7 @@ pub fn is_preset_password() -> bool {
         })
 }
 
-/// Send a url scheme throught the ipc.
+/// Send a url scheme through the ipc.
 ///
 /// * macOS only
 #[allow(unused_variables)]
