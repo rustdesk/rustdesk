@@ -389,7 +389,7 @@ fn run_window_focus(sp: EmptyExtraFieldService, state: &mut StateWindowFocus) ->
     if let Some(disp_idx) = disp_idx.map(|id| id as i32) {
         if state.is_changed(disp_idx) {
             let mut misc = Misc::new();
-            misc.set_window_focus(disp_idx as _);
+            misc.set_follow_current_display(disp_idx as i32);
             let mut msg_out = Message::new();
             msg_out.set_misc(misc);
             sp.send(msg_out);

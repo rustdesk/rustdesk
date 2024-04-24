@@ -767,8 +767,7 @@ message Misc {
     uint32 selected_sid = 35;
     DisplayResolution change_display_resolution = 36;
     MessageQuery message_query = 37;
-    uint32 window_focus = 38;
-    int32 follow_current_display = 39;
+    int32 follow_current_display = 38;
   }
 }
 

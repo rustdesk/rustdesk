@@ -661,14 +661,6 @@ impl Connection {
                                     conn.on_close("stop service", false).await;
                                     break;
                                 }
-                                Some(misc::Union::WindowFocus(_)) => {
-                                    #[cfg(not(any(target_os = "android", target_os = "ios")))]
-                                    {
-                                        if conn.follow_remote_window {
-                                            conn.handle_window_focus().await;
-                                        }
-                                    }
-                                }
                                 _ => {},
                             }
                         }
@@ -2601,6 +2593,10 @@ impl Connection {
             } else {
                 lock.capture_displays(self.inner.clone(), set, true, true);
             }
+            if self.follow_remote_window {
+                let subbed = lock.get_subbed_displays_count(self.inner.id());
+                lock.subscribe(NAME_WINDOW_FOCUS, self.inner.clone(), subbed <= 1);
+            }
             drop(lock);
         }
     }
@@ -3163,26 +3159,6 @@ impl Connection {
         msg.set_misc(misc);
         self.inner.send(msg.into());
         self.supported_encoding_flag = (true, not_use);
-    }
-
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    async fn handle_window_focus(&mut self) {
-        if let Some(s) = self.server.upgrade() {
-            let server = s.write().unwrap();
-            let subbed_disp_count = server.get_subbed_displays_count(self.inner.id());
-            if subbed_disp_count != 1 {
-                return;
-            }
-        }
-        let displays = super::display_service::get_sync_displays();
-        let current_display = crate::get_focused_display(displays);
-        if let Some(d_index) = current_display {
-            let mut misc = Misc::new();
-            misc.set_follow_current_display(d_index as i32);
-            let mut msg_out = Message::new();
-            msg_out.set_misc(misc);
-            self.send(msg_out).await;
-        }
     }
 
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
