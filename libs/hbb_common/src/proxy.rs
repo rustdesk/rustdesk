@@ -11,7 +11,7 @@ use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt, BufStream};
 #[cfg(any(target_os = "windows", target_os = "macos"))]
 use tokio_native_tls::{native_tls, TlsConnector, TlsStream};
 #[cfg(not(any(target_os = "windows", target_os = "macos")))]
-use tokio_rustls::{client::TlsStream, rustls, TlsConnector};
+use tokio_rustls::{client::TlsStream, TlsConnector};
 use tokio_socks::{tcp::Socks5Stream, IntoTargetAddr};
 use tokio_util::codec::Framed;
 use url::Url;
