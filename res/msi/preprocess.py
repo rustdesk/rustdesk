@@ -398,6 +398,11 @@ def prepare_resources():
     if icon_src.exists():
         icon_dst.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy(icon_src, icon_dst)
+        return True
+    else:
+        # unreachable
+        print(f"Error: icon.ico not found in {icon_src}")
+        return False
 
 
 def init_global_vars(dist_dir, app_name, args):
@@ -455,7 +460,8 @@ if __name__ == "__main__":
     app_name = args.app_name
     dist_dir = Path(sys.argv[0]).parent.joinpath(args.dist_dir).resolve()
 
-    prepare_resources()
+    if not prepare_resources():
+        sys.exit(-1)
 
     if not init_global_vars(dist_dir, app_name, args):
         sys.exit(-1)
