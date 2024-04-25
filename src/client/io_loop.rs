@@ -1504,7 +1504,9 @@ impl<T: InvokeUiSession> Remote<T> {
                         log::info!("update supported encoding:{:?}", e);
                         self.handler.lc.write().unwrap().supported_encoding = e;
                     }
-
+                    Some(misc::Union::FollowCurrentDisplay(d_idx)) => {
+                        self.handler.set_current_display(d_idx);
+                    }
                     _ => {}
                 },
                 Some(message::Union::TestDelay(t)) => {

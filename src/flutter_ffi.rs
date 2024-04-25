@@ -213,6 +213,14 @@ pub fn session_refresh(session_id: SessionID, display: usize) {
     }
 }
 
+pub fn session_is_multi_ui_session(session_id: SessionID) -> SyncReturn<bool> {
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
+        SyncReturn(session.is_multi_ui_session())
+    } else {
+        SyncReturn(false)
+    }
+}
+
 pub fn session_record_screen(
     session_id: SessionID,
     start: bool,

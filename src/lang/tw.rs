@@ -603,5 +603,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("ab_web_console_tip", "打開 Web 控制台以進行更多操作"),
         ("allow-only-conn-window-open-tip", "只在 RustDesk 視窗開啟時允許連接"),
         ("no_need_privacy_mode_no_physical_displays_tip", ""),
+        ("Follow remote cursor", ""),
+        ("Follow remote window focus", ""),
     ].iter().cloned().collect();
 }

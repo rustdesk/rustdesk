@@ -17,8 +17,13 @@ use core_graphics::{
     display::{kCGNullWindowID, kCGWindowListOptionOnScreenOnly, CGWindowListCopyWindowInfo},
     window::{kCGWindowName, kCGWindowOwnerPID},
 };
-use hbb_common::sysinfo::{Pid, Process, ProcessRefreshKind, System};
-use hbb_common::{anyhow::anyhow, bail, log, message_proto::Resolution};
+use hbb_common::{
+    allow_err,
+    anyhow::anyhow,
+    bail, log,
+    message_proto::{DisplayInfo, Resolution},
+    sysinfo::{Pid, Process, ProcessRefreshKind, System},
+};
 use include_dir::{include_dir, Dir};
 use objc::{class, msg_send, sel, sel_impl};
 use scrap::{libc::c_void, quartz::ffi::*};
@@ -300,6 +305,20 @@ pub fn get_cursor_pos() -> Option<(i32, i32)> {
     pt.y -= frame.origin.y;
     Some((pt.x as _, pt.y as _))
     */
+}
+
+pub fn get_focused_display(displays: Vec<DisplayInfo>) -> Option<usize> {
+    unsafe {
+        let main_screen: id = msg_send![class!(NSScreen), mainScreen];
+        let screen: id = msg_send![main_screen, deviceDescription];
+        let id: id =
+            msg_send![screen, objectForKey: NSString::alloc(nil).init_str("NSScreenNumber")];
+        let display_name: u32 = msg_send![id, unsignedIntValue];
+
+        displays
+            .iter()
+            .position(|d| d.name == display_name.to_string())
+    }
 }
 
 pub fn get_cursor() -> ResultType<Option<u64>> {

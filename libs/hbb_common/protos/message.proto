@@ -603,6 +603,8 @@ message OptionMessage {
 // Resolution custom_resolution = 13;
 // BoolOption support_windows_specific_session = 14;
   // starting from 15 please, do not use removed fields
+  BoolOption follow_remote_cursor = 15;
+  BoolOption follow_remote_window = 16;
 }
 
 message TestDelay {
@@ -765,6 +767,7 @@ message Misc {
     uint32 selected_sid = 35;
     DisplayResolution change_display_resolution = 36;
     MessageQuery message_query = 37;
+    int32 follow_current_display = 38;
   }
 }
 

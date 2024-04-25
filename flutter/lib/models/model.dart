@@ -367,6 +367,8 @@ class FfiModel with ChangeNotifier {
         }
       } else if (name == 'sync_peer_option') {
         _handleSyncPeerOption(evt, peerId);
+      } else if (name == 'follow_current_display') {
+        handleFollowCurrentDisplay(evt, sessionId, peerId);
       } else {
         debugPrint('Unknown event name: $name');
       }
@@ -440,7 +442,7 @@ class FfiModel with ChangeNotifier {
     }
   }
 
-  updateCurDisplay(SessionID sessionId, {updateCursorPos = true}) {
+  updateCurDisplay(SessionID sessionId, {updateCursorPos = false}) {
     final newRect = displaysRect();
     if (newRect == null) {
       return;
@@ -1040,9 +1042,30 @@ class FfiModel with ChangeNotifier {
         json.encode(_pi.platformAdditions);
   }
 
+  handleFollowCurrentDisplay(
+      Map<String, dynamic> evt, SessionID sessionId, String peerId) async {
+    if (evt['display_idx'] != null) {
+      if (pi.currentDisplay == kAllDisplayValue) {
+        return;
+      }
+      _pi.currentDisplay = int.parse(evt['display_idx']);
+      try {
+        CurrentDisplayState.find(peerId).value = _pi.currentDisplay;
+      } catch (e) {
+        //
+      }
+      bind.sessionSwitchDisplay(
+        isDesktop: isDesktop,
+        sessionId: sessionId,
+        value: Int32List.fromList([_pi.currentDisplay]),
+      );
+    }
+    notifyListeners();
+  }
+
   // Directly switch to the new display without waiting for the response.
   switchToNewDisplay(int display, SessionID sessionId, String peerId,
-      {bool updateCursorPos = true}) {
+      {bool updateCursorPos = false}) {
     // VideoHandler creation is upon when video frames are received, so either caching commands(don't know next width/height) or stopping recording when switching displays.
     parent.target?.recordingModel.onClose();
     // no need to wait for the response

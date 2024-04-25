@@ -3,7 +3,9 @@ mod keyboard;
 /// cbindgen:ignore
 pub mod platform;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
-pub use platform::{get_cursor, get_cursor_data, get_cursor_pos, start_os_service};
+pub use platform::{
+    get_cursor, get_cursor_data, get_cursor_pos, get_focused_display, start_os_service,
+};
 #[cfg(not(any(target_os = "ios")))]
 /// cbindgen:ignore
 mod server;
@@ -36,15 +38,15 @@ pub mod flutter;
 #[cfg(any(target_os = "android", target_os = "ios", feature = "flutter"))]
 pub mod flutter_ffi;
 use common::*;
+mod auth_2fa;
 #[cfg(feature = "cli")]
 pub mod cli;
 #[cfg(not(any(target_os = "android", target_os = "ios", feature = "cli")))]
 pub mod core_main;
-mod lang;
 mod custom_server;
+mod lang;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 mod port_forward;
-mod auth_2fa;
 
 #[cfg(all(feature = "flutter", feature = "plugin_framework"))]
 #[cfg(not(any(target_os = "android", target_os = "ios")))]

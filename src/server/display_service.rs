@@ -258,7 +258,6 @@ pub(super) fn get_original_resolution(
     .into()
 }
 
-#[cfg(target_os = "linux")]
 pub(super) fn get_sync_displays() -> Vec<DisplayInfo> {
     SYNC_DISPLAYS.lock().unwrap().displays.clone()
 }

@@ -212,6 +212,8 @@ List<(String, String)> otherDefaultSettings() {
     if ((isDesktop || isWebDesktop)) ('show_monitors_tip', kKeyShowMonitorsToolbar),
     if ((isDesktop || isWebDesktop)) ('Collapse toolbar', 'collapse_toolbar'),
     ('Show remote cursor', 'show_remote_cursor'),
+    ('Follow remote cursor', 'follow_remote_cursor'),
+    ('Follow remote window focus', 'follow_remote_window'),
     if ((isDesktop || isWebDesktop)) ('Zoom cursor', 'zoom-cursor'),
     ('Show quality monitor', 'show_quality_monitor'),
     ('Mute', 'disable_audio'),

@@ -1045,7 +1045,6 @@ class _DisplayMenuState extends State<_DisplayMenu> {
   @override
   Widget build(BuildContext context) {
     _screenAdjustor.updateScreen();
-
     menuChildrenGetter() {
       final menuChildren = <Widget>[
         _screenAdjustor.adjustWindow(context),
@@ -1068,6 +1067,8 @@ class _DisplayMenuState extends State<_DisplayMenu> {
             id: widget.id,
             ffi: widget.ffi,
           ),
+        Divider(),
+        cursorToggles(),
         Divider(),
         toggles(),
       ];
@@ -1205,6 +1206,23 @@ class _DisplayMenuState extends State<_DisplayMenu> {
                   .map((e) => RdoMenuButton(
                       value: e.value,
                       groupValue: e.groupValue,
+                      onChanged: e.onChanged,
+                      child: e.child,
+                      ffi: ffi))
+                  .toList());
+        });
+  }
+
+  cursorToggles() {
+    return futureBuilder(
+        future: toolbarCursor(context, id, ffi),
+        hasData: (data) {
+          final v = data as List<TToggleMenu>;
+          if (v.isEmpty) return Offstage();
+          return Column(
+              children: v
+                  .map((e) => CkbMenuButton(
+                      value: e.value,
                       onChanged: e.onChanged,
                       child: e.child,
                       ffi: ffi))

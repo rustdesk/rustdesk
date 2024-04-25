@@ -50,6 +50,7 @@ pub const NAME: &'static str = "";
 pub mod input_service {
 pub const NAME_CURSOR: &'static str = "";
 pub const NAME_POS: &'static str = "";
+pub const NAME_WINDOW_FOCUS: &'static str = "";
 }
 }
 }
@@ -105,6 +106,7 @@ pub fn new() -> ServerPtr {
         if !display_service::capture_cursor_embedded() {
             server.add_service(Box::new(input_service::new_cursor()));
             server.add_service(Box::new(input_service::new_pos()));
+            server.add_service(Box::new(input_service::new_window_focus()));
         }
     }
     Arc::new(RwLock::new(server))
@@ -352,6 +354,15 @@ impl Server {
                 v.set_option(opt, value);
             }
         }
+    }
+
+    fn get_subbed_displays_count(&self, conn_id: i32) -> usize {
+        self.services
+            .keys()
+            .filter(|k| {
+                Self::is_video_service_name(k) && self.services.get(*k).unwrap().is_subed(conn_id)
+            })
+            .count()
     }
 
     fn capture_displays(

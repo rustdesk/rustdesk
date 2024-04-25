@@ -836,6 +836,7 @@ void showOptions(
   List<TRadioMenu<String>> imageQualityRadios =
       await toolbarImageQuality(context, id, gFFI);
   List<TRadioMenu<String>> codecRadios = await toolbarCodec(context, id, gFFI);
+  List<TToggleMenu> cursorToggles = await toolbarCursor(context, id, gFFI);
   List<TToggleMenu> displayToggles =
       await toolbarDisplayToggle(context, id, gFFI);
 
@@ -876,8 +877,23 @@ void showOptions(
             })),
       if (codecRadios.isNotEmpty) const Divider(color: MyTheme.border),
     ];
+    final rxCursorToggleValues = cursorToggles.map((e) => e.value.obs).toList();
+    final cursorTogglesList = cursorToggles
+        .asMap()
+        .entries
+        .map((e) => Obx(() => CheckboxListTile(
+            contentPadding: EdgeInsets.zero,
+            visualDensity: VisualDensity.compact,
+            value: rxCursorToggleValues[e.key].value,
+            onChanged: (v) {
+              e.value.onChanged?.call(v);
+              if (v != null) rxCursorToggleValues[e.key].value = v;
+            },
+            title: e.value.child)))
+        .toList();
+
     final rxToggleValues = displayToggles.map((e) => e.value.obs).toList();
-    final toggles = displayToggles
+    final displayTogglesList = displayToggles
         .asMap()
         .entries
         .map((e) => Obx(() => CheckboxListTile(
@@ -890,6 +906,11 @@ void showOptions(
             },
             title: e.value.child)))
         .toList();
+    final toggles = [
+      ...cursorTogglesList,
+      if (cursorToggles.isNotEmpty) const Divider(color: MyTheme.border),
+      ...displayTogglesList,
+    ];
 
     Widget privacyModeWidget = Offstage();
     if (privacyModeList.length > 1) {

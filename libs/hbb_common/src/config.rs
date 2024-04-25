@@ -281,6 +281,10 @@ pub struct PeerConfig {
     pub enable_file_transfer: EnableFileTransfer,
     #[serde(flatten)]
     pub show_quality_monitor: ShowQualityMonitor,
+    #[serde(flatten)]
+    pub follow_remote_cursor: FollowRemoteCursor,
+    #[serde(flatten)]
+    pub follow_remote_window: FollowRemoteWindow,
     #[serde(
         default,
         deserialize_with = "deserialize_string",
@@ -353,6 +357,8 @@ impl Default for PeerConfig {
             disable_clipboard: Default::default(),
             enable_file_transfer: Default::default(),
             show_quality_monitor: Default::default(),
+            follow_remote_cursor: Default::default(),
+            follow_remote_window: Default::default(),
             keyboard_mode: Default::default(),
             view_only: Default::default(),
             reverse_mouse_wheel: Self::default_reverse_mouse_wheel(),
@@ -1257,6 +1263,19 @@ serde_field_bool!(
     "show_remote_cursor",
     default_show_remote_cursor,
     "ShowRemoteCursor::default_show_remote_cursor"
+);
+serde_field_bool!(
+    FollowRemoteCursor,
+    "follow_remote_cursor",
+    default_follow_remote_cursor,
+    "FollowRemoteCursor::default_follow_remote_cursor"
+);
+
+serde_field_bool!(
+    FollowRemoteWindow,
+    "follow_remote_window",
+    default_follow_remote_window,
+    "FollowRemoteWindow::default_follow_remote_window"
 );
 serde_field_bool!(
     ShowQualityMonitor,

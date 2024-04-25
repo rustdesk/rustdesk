@@ -1456,6 +1456,22 @@ impl LoginConfigHandler {
                 BoolOption::No
             })
             .into();
+        } else if name == "follow-remote-cursor" {
+            config.follow_remote_cursor.v = !config.follow_remote_cursor.v;
+            option.follow_remote_cursor = (if config.follow_remote_cursor.v {
+                BoolOption::Yes
+            } else {
+                BoolOption::No
+            })
+            .into();
+        } else if name == "follow-remote-window" {
+            config.follow_remote_window.v = !config.follow_remote_window.v;
+            option.follow_remote_window = (if config.follow_remote_window.v {
+                BoolOption::Yes
+            } else {
+                BoolOption::No
+            })
+            .into();
         } else if name == "disable-audio" {
             config.disable_audio.v = !config.disable_audio.v;
             option.disable_audio = (if config.disable_audio.v {
@@ -1601,6 +1617,12 @@ impl LoginConfigHandler {
         if view_only || self.get_toggle_option("show-remote-cursor") {
             msg.show_remote_cursor = BoolOption::Yes.into();
         }
+        if self.get_toggle_option("follow-remote-cursor") {
+            msg.follow_remote_cursor = BoolOption::Yes.into();
+        }
+        if self.get_toggle_option("follow-remote-window") {
+            msg.follow_remote_window = BoolOption::Yes.into();
+        }
         if !view_only && self.get_toggle_option("lock-after-session-end") {
             msg.lock_after_session_end = BoolOption::Yes.into();
         }
@@ -1692,6 +1714,10 @@ impl LoginConfigHandler {
             self.config.allow_swap_key.v
         } else if name == "view-only" {
             self.config.view_only.v
+        } else if name == "follow-remote-cursor" {
+            self.config.follow_remote_cursor.v
+        } else if name == "follow-remote-window" {
+            self.config.follow_remote_window.v
         } else {
             !self.get_option(name).is_empty()
         }

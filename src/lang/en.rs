@@ -222,5 +222,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("ab_web_console_tip", "More on web console"),
         ("allow-only-conn-window-open-tip", "Only allow connection if RustDesk window is open"),
         ("no_need_privacy_mode_no_physical_displays_tip", "No physical displays, no need to use the privacy mode."),
+        ("Follow remote cursor", ""),
+        ("Follow remote window focus", ""),
     ].iter().cloned().collect();
 }

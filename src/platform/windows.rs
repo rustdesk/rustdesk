@@ -12,7 +12,7 @@ use hbb_common::{
     bail,
     config::{self, Config},
     log,
-    message_proto::{Resolution, WindowsSession},
+    message_proto::{DisplayInfo, Resolution, WindowsSession},
     sleep, timeout, tokio,
 };
 use std::process::{Command, Stdio};
@@ -64,6 +64,24 @@ use windows_service::{
 };
 use winreg::enums::*;
 use winreg::RegKey;
+
+pub fn get_focused_display(displays: Vec<DisplayInfo>) -> Option<usize> {
+    unsafe {
+        let hWnd = GetForegroundWindow();
+        let mut rect: RECT = mem::zeroed();
+        if GetWindowRect(hWnd, &mut rect as *mut RECT) == 0 {
+            return None;
+        }
+        displays.iter().position(|display| {
+            let center_x = rect.left + (rect.right - rect.left) / 2;
+            let center_y = rect.top + (rect.bottom - rect.top) / 2;
+            center_x >= display.x
+                && center_x <= display.x + display.width
+                && center_y >= display.y
+                && center_y <= display.y + display.height
+        })
+    }
+}
 
 pub fn get_cursor_pos() -> Option<(i32, i32)> {
     unsafe {

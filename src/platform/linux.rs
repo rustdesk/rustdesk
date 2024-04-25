@@ -11,7 +11,7 @@ use hbb_common::{
     config::Config,
     libc::{c_char, c_int, c_long, c_void},
     log,
-    message_proto::Resolution,
+    message_proto::{DisplayInfo, Resolution},
     regex::{Captures, Regex},
 };
 use std::{
@@ -53,6 +53,20 @@ extern "C" {
         screen_num: *mut c_int,
     ) -> c_int;
     fn xdo_new(display: *const c_char) -> Xdo;
+    fn xdo_get_active_window(xdo: Xdo, window: *mut *mut c_void) -> c_int;
+    fn xdo_get_window_location(
+        xdo: Xdo,
+        window: *mut c_void,
+        x: *mut c_int,
+        y: *mut c_int,
+        screen_num: *mut c_int,
+    ) -> c_int;
+    fn xdo_get_window_size(
+        xdo: Xdo,
+        window: *mut c_void,
+        width: *mut c_int,
+        height: *mut c_int,
+    ) -> c_int;
 }
 
 #[link(name = "X11")]
@@ -118,6 +132,50 @@ pub fn get_cursor_pos() -> Option<(i32, i32)> {
 }
 
 pub fn reset_input_cache() {}
+
+pub fn get_focused_display(displays: Vec<DisplayInfo>) -> Option<usize> {
+    let mut res = None;
+    XDO.with(|xdo| {
+        if let Ok(xdo) = xdo.try_borrow_mut() {
+            if xdo.is_null() {
+                return;
+            }
+            let mut x: c_int = 0;
+            let mut y: c_int = 0;
+            let mut width: c_int = 0;
+            let mut height: c_int = 0;
+            let mut window: *mut c_void = std::ptr::null_mut();
+
+            unsafe {
+                if xdo_get_active_window(*xdo, &mut window) != 0 {
+                    return;
+                }
+                if xdo_get_window_location(
+                    *xdo,
+                    window,
+                    &mut x as _,
+                    &mut y as _,
+                    std::ptr::null_mut(),
+                ) != 0
+                {
+                    return;
+                }
+                if xdo_get_window_size(*xdo, window, &mut width as _, &mut height as _) != 0 {
+                    return;
+                }
+                let center_x = x + width / 2;
+                let center_y = y + height / 2;
+                res = displays.iter().position(|d| {
+                    center_x >= d.x
+                        && center_x < d.x + d.width
+                        && center_y >= d.y
+                        && center_y < d.y + d.height
+                });
+            }
+        }
+    });
+    res
+}
 
 pub fn get_cursor() -> ResultType<Option<u64>> {
     let mut res = None;
@@ -1228,7 +1286,7 @@ mod desktop {
                     if !home.is_empty() {
                         assert_eq!(d.home, home);
                     } else {
-                        // 
+                        //
                     }
                 }
             }

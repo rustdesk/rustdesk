@@ -346,6 +346,10 @@ class RustdeskImpl {
     return mode == kKeyLegacyMode;
   }
 
+  bool sessionIsMultiUiSession({required UuidValue sessionId, dynamic hint}) {
+    return false;
+  }
+
   Future<void> sessionSetCustomImageQuality(
       {required UuidValue sessionId, required int value, dynamic hint}) {
     return Future(() => js.context.callMethod('setByName', [

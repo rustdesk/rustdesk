@@ -371,7 +371,7 @@ Future<List<TRadioMenu<String>>> toolbarCodec(
   ];
 }
 
-Future<List<TToggleMenu>> toolbarDisplayToggle(
+Future<List<TToggleMenu>> toolbarCursor(
     BuildContext context, String id, FFI ffi) async {
   List<TToggleMenu> v = [];
   final ffiModel = ffi.ffiModel;
@@ -384,12 +384,17 @@ Future<List<TToggleMenu>> toolbarDisplayToggle(
       !ffi.canvasModel.cursorEmbedded &&
       !pi.isWayland) {
     final state = ShowRemoteCursorState.find(id);
+    final lockState = ShowRemoteCursorLockState.find(id);
     final enabled = !ffiModel.viewOnly;
     final option = 'show-remote-cursor';
+    if (pi.currentDisplay == kAllDisplayValue ||
+        bind.sessionIsMultiUiSession(sessionId: sessionId)) {
+      lockState.value = false;
+    }
     v.add(TToggleMenu(
         child: Text(translate('Show remote cursor')),
         value: state.value,
-        onChanged: enabled
+        onChanged: enabled && !lockState.value
             ? (value) async {
                 if (value == null) return;
                 await bind.sessionToggleOption(
@@ -398,6 +403,67 @@ Future<List<TToggleMenu>> toolbarDisplayToggle(
                     sessionId: sessionId, arg: option);
               }
             : null));
+  }
+  // follow remote cursor
+  if (pi.platform != kPeerPlatformAndroid &&
+      !ffi.canvasModel.cursorEmbedded &&
+      !pi.isWayland &&
+      versionCmp(pi.version, "1.2.4") >= 0 &&
+      pi.displays.length > 1 &&
+      pi.currentDisplay != kAllDisplayValue &&
+      !bind.sessionIsMultiUiSession(sessionId: sessionId)) {
+    final option = 'follow-remote-cursor';
+    final value =
+        bind.sessionGetToggleOptionSync(sessionId: sessionId, arg: option);
+    final showCursorOption = 'show-remote-cursor';
+    final showCursorState = ShowRemoteCursorState.find(id);
+    final showCursorLockState = ShowRemoteCursorLockState.find(id);
+    final showCursorEnabled = bind.sessionGetToggleOptionSync(
+        sessionId: sessionId, arg: showCursorOption);
+    showCursorLockState.value = value;
+    if (value && !showCursorEnabled) {
+      await bind.sessionToggleOption(
+          sessionId: sessionId, value: showCursorOption);
+      showCursorState.value = bind.sessionGetToggleOptionSync(
+          sessionId: sessionId, arg: showCursorOption);
+    }
+    v.add(TToggleMenu(
+        child: Text(translate('Follow remote cursor')),
+        value: value,
+        onChanged: (value) async {
+          if (value == null) return;
+          await bind.sessionToggleOption(sessionId: sessionId, value: option);
+          value = bind.sessionGetToggleOptionSync(
+              sessionId: sessionId, arg: option);
+          showCursorLockState.value = value;
+          if (!showCursorEnabled) {
+            await bind.sessionToggleOption(
+                sessionId: sessionId, value: showCursorOption);
+            showCursorState.value = bind.sessionGetToggleOptionSync(
+                sessionId: sessionId, arg: showCursorOption);
+          }
+        }));
+  }
+  // follow remote window focus
+  if (pi.platform != kPeerPlatformAndroid &&
+      !ffi.canvasModel.cursorEmbedded &&
+      !pi.isWayland &&
+      versionCmp(pi.version, "1.2.4") >= 0 &&
+      pi.displays.length > 1 &&
+      pi.currentDisplay != kAllDisplayValue &&
+      !bind.sessionIsMultiUiSession(sessionId: sessionId)) {
+    final option = 'follow-remote-window';
+    final value =
+        bind.sessionGetToggleOptionSync(sessionId: sessionId, arg: option);
+    v.add(TToggleMenu(
+        child: Text(translate('Follow remote window focus')),
+        value: value,
+        onChanged: (value) async {
+          if (value == null) return;
+          await bind.sessionToggleOption(sessionId: sessionId, value: option);
+          value = bind.sessionGetToggleOptionSync(
+              sessionId: sessionId, arg: option);
+        }));
   }
   // zoom cursor
   final viewStyle = await bind.sessionGetViewStyle(sessionId: sessionId) ?? '';
@@ -417,6 +483,17 @@ Future<List<TToggleMenu>> toolbarDisplayToggle(
       },
     ));
   }
+  return v;
+}
+
+Future<List<TToggleMenu>> toolbarDisplayToggle(
+    BuildContext context, String id, FFI ffi) async {
+  List<TToggleMenu> v = [];
+  final ffiModel = ffi.ffiModel;
+  final pi = ffiModel.pi;
+  final perms = ffiModel.permissions;
+  final sessionId = ffi.sessionId;
+
   // show quality monitor
   final option = 'show-quality-monitor';
   v.add(TToggleMenu(

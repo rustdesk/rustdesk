@@ -259,6 +259,10 @@ impl InvokeUiSession for SciterHandler {
         // Ignore for sciter version.
     }
 
+    fn set_current_display(&self, _disp_idx: i32) {
+        self.call("setCurrentDisplay", &make_args!(_disp_idx));
+    }
+
     fn set_multiple_windows_session(&self, sessions: Vec<WindowsSession>) {
         let mut v = Value::array(0);
         let mut sessions = sessions;

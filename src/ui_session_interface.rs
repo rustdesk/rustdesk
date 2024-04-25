@@ -192,6 +192,11 @@ impl<T: InvokeUiSession> Session<T> {
         self.lc.read().unwrap().conn_type.eq(&ConnType::RDP)
     }
 
+    #[cfg(feature = "flutter")]
+    pub fn is_multi_ui_session(&self) -> bool {
+        self.ui_handler.is_multi_ui_session()
+    }
+
     pub fn get_view_style(&self) -> String {
         self.lc.read().unwrap().view_style.clone()
     }
@@ -1378,6 +1383,9 @@ pub trait InvokeUiSession: Send + Sync + Clone + 'static + Sized + Default {
     #[cfg(all(feature = "vram", feature = "flutter"))]
     fn on_texture(&self, display: usize, texture: *mut c_void);
     fn set_multiple_windows_session(&self, sessions: Vec<WindowsSession>);
+    fn set_current_display(&self, disp_idx: i32);
+    #[cfg(feature = "flutter")]
+    fn is_multi_ui_session(&self) -> bool;
 }
 
 impl<T: InvokeUiSession> Deref for Session<T> {

@@ -31,8 +31,7 @@ use hbb_common::platform::linux::run_cmds;
 use hbb_common::protobuf::EnumOrUnknown;
 use hbb_common::{
     config::Config,
-    fs,
-    fs::can_enable_overwrite_detection,
+    fs::{self, can_enable_overwrite_detection},
     futures::{SinkExt, StreamExt},
     get_time, get_version_number,
     message_proto::{option_message::BoolOption, permission_info::Permission},
@@ -241,6 +240,9 @@ pub struct Connection {
     delayed_read_dir: Option<(String, bool)>,
     #[cfg(target_os = "macos")]
     retina: Retina,
+    follow_remote_cursor: bool,
+    follow_remote_window: bool,
+    multi_ui_session: bool,
 }
 
 impl ConnInner {
@@ -348,6 +350,9 @@ impl Connection {
             network_delay: 0,
             lock_after_session_end: false,
             show_remote_cursor: false,
+            follow_remote_cursor: false,
+            follow_remote_window: false,
+            multi_ui_session: false,
             ip: "".to_owned(),
             disable_audio: false,
             #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
@@ -666,8 +671,14 @@ impl Connection {
                             #[cfg(target_os = "macos")]
                             conn.retina.set_displays(&_pi.displays);
                         }
-                        #[cfg(target_os = "macos")]
                         Some(message::Union::CursorPosition(pos)) => {
+                            #[cfg(not(any(target_os = "android", target_os = "ios")))]
+                            {
+                                if conn.follow_remote_cursor {
+                                    conn.handle_cursor_switch_display(pos.clone()).await;
+                                }
+                            }
+                            #[cfg(target_os = "macos")]
                             if let Some(new_msg) = conn.retina.on_cursor_pos(&pos, conn.display_idx) {
                                 msg = Arc::new(new_msg);
                             }
@@ -1307,6 +1318,9 @@ impl Connection {
                 }
                 if !self.show_remote_cursor {
                     noperms.push(NAME_POS);
+                }
+                if !self.follow_remote_window {
+                    noperms.push(NAME_WINDOW_FOCUS);
                 }
                 if !self.clipboard_enabled() || !self.peer_keyboard_enabled() {
                     noperms.push(super::clipboard_service::NAME);
@@ -2581,6 +2595,14 @@ impl Connection {
             } else {
                 lock.capture_displays(self.inner.clone(), set, true, true);
             }
+            self.multi_ui_session = lock.get_subbed_displays_count(self.inner.id()) > 1;
+            if self.follow_remote_window {
+                lock.subscribe(
+                    NAME_WINDOW_FOCUS,
+                    self.inner.clone(),
+                    !self.multi_ui_session,
+                );
+            }
             drop(lock);
         }
     }
@@ -2762,6 +2784,24 @@ impl Connection {
                         NAME_POS,
                         self.inner.clone(),
                         self.show_remote_cursor,
+                    );
+                }
+            }
+        }
+        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+        if let Ok(q) = o.follow_remote_cursor.enum_value() {
+            if q != BoolOption::NotSet {
+                self.follow_remote_cursor = q == BoolOption::Yes;
+            }
+        }
+        if let Ok(q) = o.follow_remote_window.enum_value() {
+            if q != BoolOption::NotSet {
+                self.follow_remote_window = q == BoolOption::Yes;
+                if let Some(s) = self.server.upgrade() {
+                    s.write().unwrap().subscribe(
+                        NAME_WINDOW_FOCUS,
+                        self.inner.clone(),
+                        self.follow_remote_window,
                     );
                 }
             }
@@ -3125,6 +3165,30 @@ impl Connection {
         msg.set_misc(misc);
         self.inner.send(msg.into());
         self.supported_encoding_flag = (true, not_use);
+    }
+
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    async fn handle_cursor_switch_display(&mut self, pos: CursorPosition) {
+        if self.multi_ui_session {
+            return;
+        }
+        let displays = super::display_service::get_sync_displays();
+        let d_index = displays.iter().position(|d| {
+            let scale = d.scale;
+            pos.x >= d.x
+                && pos.y >= d.y
+                && (pos.x - d.x) as f64 * scale < d.width as f64
+                && (pos.y - d.y) as f64 * scale < d.height as f64
+        });
+        if let Some(d_index) = d_index {
+            if self.display_idx != d_index {
+                let mut misc = Misc::new();
+                misc.set_follow_current_display(d_index as i32);
+                let mut msg_out = Message::new();
+                msg_out.set_misc(misc);
+                self.send(msg_out).await;
+            }
+        }
     }
 }
 
