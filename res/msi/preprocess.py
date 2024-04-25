@@ -9,6 +9,7 @@ import datetime
 import subprocess
 import re
 from pathlib import Path
+import shutil
 
 g_indent_unit = "\t"
 g_version = ""
@@ -391,6 +392,19 @@ def gen_content_between_tags(filename, tag_start, tag_end, func):
     return True
 
 
+def prepare_resources():
+    icon_src = Path(sys.argv[0]).parent.joinpath("../icon.ico")
+    icon_dst = Path(sys.argv[0]).parent.joinpath("Package/Resources/icon.ico")
+    if icon_src.exists():
+        icon_dst.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy(icon_src, icon_dst)
+        return True
+    else:
+        # unreachable
+        print(f"Error: icon.ico not found in {icon_src}")
+        return False
+
+
 def init_global_vars(dist_dir, app_name, args):
     dist_app = dist_dir.joinpath(app_name + ".exe")
 
@@ -445,6 +459,9 @@ if __name__ == "__main__":
 
     app_name = args.app_name
     dist_dir = Path(sys.argv[0]).parent.joinpath(args.dist_dir).resolve()
+
+    if not prepare_resources():
+        sys.exit(-1)
 
     if not init_global_vars(dist_dir, app_name, args):
         sys.exit(-1)
