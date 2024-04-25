@@ -17,7 +17,7 @@ use hbb_common::{
 };
 use hwcodec::{
     common::{DataFormat, Driver, MAX_GOP},
-    native::{
+    vram::{
         decode::{self, DecodeFrame, Decoder},
         encode::{self, EncodeFrame, Encoder},
         Available, DecodeContext, DynamicContext, EncodeContext, FeatureContext,
@@ -294,6 +294,10 @@ impl VRamDecoder {
     pub fn try_get(format: CodecFormat, luid: Option<i64>) -> Option<DecodeContext> {
         let v: Vec<_> = Self::available(format, luid);
         if v.len() > 0 {
+            // prefer ffmpeg
+            if let Some(ctx) = v.iter().find(|c| c.driver == Driver::FFMPEG) {
+                return Some(ctx.clone());
+            }
             Some(v[0].clone())
         } else {
             None
