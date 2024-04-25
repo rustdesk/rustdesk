@@ -770,6 +770,24 @@ class RustdeskImpl {
     throw UnimplementedError();
   }
 
+  Future<bool> mainGetProxyStatus({dynamic hint}) {
+    return Future(() => false);
+  }
+
+  Future<void> mainHttpRequest({
+    required String url,
+    required String method,
+    String? body,
+    required String header,
+    dynamic hint,
+  }) {
+    throw UnimplementedError();
+  }
+
+  Future<String?> mainGetHttpStatus({required String url, dynamic hint}){
+    throw UnimplementedError();
+  }
+
   String mainGetLocalOption({required String key, dynamic hint}) {
     return js.context.callMethod('getByName', ['option:local', key]);
   }

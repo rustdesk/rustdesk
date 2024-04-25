@@ -4,7 +4,7 @@ use hbb_common::{
     allow_err,
     bytes::Bytes,
     config::{
-        self, Config, LocalConfig, PeerConfig, CONNECT_TIMEOUT, HARD_SETTINGS, RENDEZVOUS_PORT,
+        self, Config, LocalConfig, PeerConfig, CONNECT_TIMEOUT, RENDEZVOUS_PORT,
     },
     directories_next,
     futures::future::join_all,
@@ -65,6 +65,7 @@ lazy_static::lazy_static! {
         id: "".to_owned(),
     }));
     static ref ASYNC_JOB_STATUS : Arc<Mutex<String>> = Default::default();
+    static ref ASYNC_HTTP_STATUS : Arc<Mutex<HashMap<String, String>>> = Arc::new(Mutex::new(HashMap::new()));
     static ref TEMPORARY_PASSWD : Arc<Mutex<String>> = Arc::new(Mutex::new("".to_owned()));
 }
 
@@ -421,6 +422,16 @@ pub fn set_socks(proxy: String, username: String, password: String) {
     .ok();
 }
 
+#[inline]
+pub fn get_proxy_status() -> bool {
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    return ipc::get_proxy_status();
+    
+    // Currently, only the desktop version has proxy settings.
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    return false;
+}
+
 #[cfg(any(target_os = "android", target_os = "ios"))]
 pub fn set_socks(_: String, _: String, _: String) {}
 
@@ -707,6 +718,28 @@ pub fn change_id(id: String) {
         change_id_shared(id, old_id);
     });
 }
+
+#[inline]
+pub fn http_request(url: String, method: String, body: Option<String>, header: String) {
+    // Respond to concurrent requests for resources
+    let current_request = ASYNC_HTTP_STATUS.clone();
+    current_request.lock().unwrap().insert(url.clone()," ".to_owned());
+    std::thread::spawn(move || {
+          let res =  match crate::http_request_sync(url.clone(), method, body, header) {
+                Err(err) => { log::error!("{}", err); err.to_string() },
+                Ok(text) => text,
+            };
+        current_request.lock().unwrap().insert(url,res);
+    });
+}
+#[inline]
+pub fn get_async_http_status(url: String) -> Option<String> {
+    match ASYNC_HTTP_STATUS.lock().unwrap().get(&url) {
+        None => {None}
+        Some(_str) => {Some(_str.to_string())}
+    }
+}
+
 
 #[inline]
 pub fn post_request(url: String, body: String, header: String) {

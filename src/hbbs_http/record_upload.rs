@@ -1,3 +1,4 @@
+use crate::hbbs_http::create_http_client;
 use bytes::Bytes;
 use hbb_common::{bail, config::Config, lazy_static, log, ResultType};
 use reqwest::blocking::{Body, Client};
@@ -25,7 +26,7 @@ pub fn is_enable() -> bool {
 
 pub fn run(rx: Receiver<RecordState>) {
     let mut uploader = RecordUploader {
-        client: Client::new(),
+        client: create_http_client(),
         api_server: crate::get_api_server(
             Config::get_option("api-server"),
             Config::get_option("custom-rendezvous-server"),
