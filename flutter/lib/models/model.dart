@@ -50,6 +50,8 @@ class CachedPeerData {
   Map<String, dynamic> peerInfo = {};
   List<Map<String, dynamic>> cursorDataList = [];
   Map<String, dynamic> lastCursorId = {};
+  Map<String, bool> permissions = {};
+
   bool secure = false;
   bool direct = false;
 
@@ -62,6 +64,7 @@ class CachedPeerData {
       'peerInfo': peerInfo,
       'cursorDataList': cursorDataList,
       'lastCursorId': lastCursorId,
+      'permissions': permissions,
       'secure': secure,
       'direct': direct,
     });
@@ -77,6 +80,9 @@ class CachedPeerData {
         data.cursorDataList.add(cursorData);
       }
       data.lastCursorId = map['lastCursorId'];
+      map['permissions'].forEach((key, value) {
+        data.permissions[key] = value;
+      });
       data.secure = map['secure'];
       data.direct = map['direct'];
       return data;
@@ -116,6 +122,10 @@ class FfiModel with ChangeNotifier {
       _pi.tryGetDisplayIfNotAllDisplay()?.isOriginalResolution ?? false;
 
   Map<String, bool> get permissions => _permissions;
+  setPermissions(Map<String, bool> permissions) {
+    _permissions.clear();
+    _permissions.addAll(permissions);
+  }
 
   bool? get secure => _secure;
 
@@ -138,6 +148,7 @@ class FfiModel with ChangeNotifier {
   FfiModel(this.parent) {
     clear();
     sessionId = parent.target!.sessionId;
+    cachedPeerData.permissions = _permissions;
   }
 
   Rect? globalDisplaysRect() => _getDisplaysRect(_pi.displays, true);
@@ -2342,6 +2353,7 @@ class FFI {
             debugPrint('Unreachable, the cached data cannot be decoded.');
             return;
           }
+          ffiModel.setPermissions(data.permissions);
           await ffiModel.handleCachedPeerData(data, id);
           await sessionRefreshVideo(sessionId, ffiModel.pi);
           await bind.sessionRequestNewDisplayInitMsgs(
