@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_gpu_texture_renderer/flutter_gpu_texture_renderer.dart';
+import 'package:flutter_hbb/common/shared_state.dart';
 import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/models/model.dart';
 import 'package:get/get.dart';
@@ -152,40 +153,36 @@ class TextureModel {
   TextureModel(this.parent);
 
   setTextureType({required int display, required bool gpuTexture}) {
-    debugPrint("setTextureType: display:$display, isGpuTexture:$gpuTexture");
-    var texture = _control[display];
-    if (texture == null) {
-      texture = _Control();
-      _control[display] = texture;
+    debugPrint("setTextureType: display=$display, isGpuTexture=$gpuTexture");
+    ensureControl(display);
+    _control[display]?.setTextureType(gpuTexture: gpuTexture);
+    // For versions that do not support multiple displays, the display parameter is always 0, need set type of current display
+    final ffi = parent.target;
+    if (ffi == null) return;
+    if (!ffi.ffiModel.pi.isSupportMultiDisplay) {
+      final currentDisplay = CurrentDisplayState.find(ffi.id).value;
+      if (currentDisplay != display) {
+        debugPrint(
+            "setTextureType: currentDisplay=$currentDisplay, isGpuTexture=$gpuTexture");
+        ensureControl(currentDisplay);
+        _control[currentDisplay]?.setTextureType(gpuTexture: gpuTexture);
+      }
     }
-    texture.setTextureType(gpuTexture: gpuTexture);
   }
 
   setRgbaTextureId({required int display, required int id}) {
-    var ctl = _control[display];
-    if (ctl == null) {
-      ctl = _Control();
-      _control[display] = ctl;
-    }
-    ctl.setRgbaTextureId(id);
+    ensureControl(display);
+    _control[display]?.setRgbaTextureId(id);
   }
 
   setGpuTextureId({required int display, required int id}) {
-    var ctl = _control[display];
-    if (ctl == null) {
-      ctl = _Control();
-      _control[display] = ctl;
-    }
-    ctl.setGpuTextureId(id);
+    ensureControl(display);
+    _control[display]?.setGpuTextureId(id);
   }
 
   RxInt getTextureId(int display) {
-    var ctl = _control[display];
-    if (ctl == null) {
-      ctl = _Control();
-      _control[display] = ctl;
-    }
-    return ctl.textureID;
+    ensureControl(display);
+    return _control[display]!.textureID;
   }
 
   updateCurrentDisplay(int curDisplay) {
@@ -239,6 +236,14 @@ class TextureModel {
     }
     for (final texture in _gpuRenderTextures.values) {
       await texture.destroy(ffi);
+    }
+  }
+
+  ensureControl(int display) {
+    var ctl = _control[display];
+    if (ctl == null) {
+      ctl = _Control();
+      _control[display] = ctl;
     }
   }
 }
