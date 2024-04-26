@@ -16,7 +16,7 @@
 		<Icon Id="AppIcon" SourceFile="Resources\icon.ico" />
 
 		<!-- User Interface -->
-		<WixVariable Id="WixUILicenseRtf" Value="RustDesk License.rtf" />
+		<WixVariable Id="WixUILicenseRtf" Value="License.rtf" />
 
 		<ui:WixUI Id="WixUI_InstallDir" InstallDirectory="INSTALLFOLDER" />
 		<UIRef Id="WixUI_ErrorProgressText" />
