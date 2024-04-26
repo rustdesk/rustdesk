@@ -420,6 +420,8 @@ jobs:
           cargo build --features flutter,hwcodec --release --target aarch64-apple-ios --lib
 
       - name: Build rustdesk
+        # ios sdk not installed on this machine, I will install it later after I am back home
+        if: false
         shell: bash
         run: |
           pushd flutter
