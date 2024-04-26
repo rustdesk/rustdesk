@@ -221,7 +221,6 @@ impl Encoder {
         let h265_useable =
             _all_support_h265_decoding && (h265vram_encoding || h265hw_encoding.is_some());
         let mut name = ENCODE_CODEC_NAME.lock().unwrap();
-        let mut preference = PreferCodec::Auto;
         let preferences: Vec<_> = decodings
             .iter()
             .filter(|(_, s)| {
@@ -233,9 +232,20 @@ impl Encoder {
             })
             .map(|(_, s)| s.prefer)
             .collect();
-        if preferences.len() > 0 && preferences.iter().all(|&p| p == preferences[0]) {
-            preference = preferences[0].enum_value_or(PreferCodec::Auto);
+        // find the most frequent preference
+        let mut counts = Vec::new();
+        for pref in &preferences {
+            match counts.iter_mut().find(|(p, _)| p == pref) {
+                Some((_, count)) => *count += 1,
+                None => counts.push((pref.clone(), 1)),
+            }
         }
+        let max_count = counts.iter().map(|(_, count)| *count).max().unwrap_or(0);
+        let (most_frequent, _) = counts
+            .into_iter()
+            .find(|(_, count)| *count == max_count)
+            .unwrap_or((PreferCodec::Auto.into(), 0));
+        let preference = most_frequent.enum_value_or(PreferCodec::Auto);
 
         #[allow(unused_mut)]
         let mut auto_codec = CodecName::VP9;

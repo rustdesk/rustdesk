@@ -24,8 +24,6 @@ use hwcodec::{
     },
 };
 
-const OUTPUT_SHARED_HANDLE: bool = false;
-
 // https://www.reddit.com/r/buildapc/comments/d2m4ny/two_graphics_cards_two_monitors/
 // https://www.reddit.com/r/techsupport/comments/t2v9u6/dual_monitor_setup_with_dual_gpu/
 // https://cybersided.com/two-monitors-two-gpus/
@@ -331,8 +329,8 @@ impl VRamDecoder {
     }
 
     pub fn new(format: CodecFormat, luid: Option<i64>) -> ResultType<Self> {
-        log::info!("try create {format:?} vram decoder, luid: {luid:?}");
         let ctx = Self::try_get(format, luid).ok_or(anyhow!("Failed to get decode context"))?;
+        log::info!("try create vram decoder: {ctx:?}");
         match Decoder::new(ctx) {
             Ok(decoder) => Ok(Self { decoder }),
             Err(_) => {
@@ -376,7 +374,7 @@ pub(crate) fn check_available_vram() -> String {
         gop: MAX_GOP as _,
     };
     let encoders = encode::available(d);
-    let decoders = decode::available(OUTPUT_SHARED_HANDLE);
+    let decoders = decode::available();
     let available = Available {
         e: encoders,
         d: decoders,
