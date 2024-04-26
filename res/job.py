@@ -23,17 +23,21 @@ SECRET_KEY = os.getenv("SECRET_KEY") or "worldpeace2024"
 # The headers for API requests
 HEADERS = {"Authorization": f"Bearer {SECRET_KEY}"}
 
-TIMEOUT = int(os.getenv("TIMEOUT") or "30")
+SIGN_TIMEOUT = int(os.getenv("SIGN_TIMEOUT") or "30")
+TIMEOUT = float(os.getenv("TIMEOUT") or "900")
 
 
 def create(task_name, file_path=None):
     if file_path is None:
-        response = requests.post(f"{BASE_URL}/tasks/{task_name}", headers=HEADERS)
+        response = requests.post(
+            f"{BASE_URL}/tasks/{task_name}", timeout=TIMEOUT, headers=HEADERS
+        )
     else:
         with open(file_path, "rb") as f:
             files = {"file": f}
             response = requests.post(
                 f"{BASE_URL}/tasks/{task_name}",
+                timeout=TIMEOUT,
                 headers=HEADERS,
                 files=files,
             )
@@ -44,19 +48,27 @@ def upload_file(task_id, file_path):
     with open(file_path, "rb") as f:
         files = {"file": f}
         response = requests.post(
-            f"{BASE_URL}/tasks/{task_id}/files", headers=HEADERS, files=files
+            f"{BASE_URL}/tasks/{task_id}/files",
+            timeout=TIMEOUT,
+            headers=HEADERS,
+            files=files,
         )
     return get_json(response)
 
 
 def get_status(task_id):
-    response = requests.get(f"{BASE_URL}/tasks/{task_id}/status", headers=HEADERS)
+    response = requests.get(
+        f"{BASE_URL}/tasks/{task_id}/status", timeout=TIMEOUT, headers=HEADERS
+    )
     return get_json(response)
 
 
 def download_files(task_id, output_dir, fn=None):
     response = requests.get(
-        f"{BASE_URL}/tasks/{task_id}/files", headers=HEADERS, stream=True
+        f"{BASE_URL}/tasks/{task_id}/files",
+        timeout=TIMEOUT,
+        headers=HEADERS,
+        stream=True,
     )
 
     # Check if the request was successful
@@ -73,7 +85,10 @@ def download_files(task_id, output_dir, fn=None):
 
 def download_one_file(task_id, file_id, output_dir):
     response = requests.get(
-        f"{BASE_URL}/tasks/{task_id}/files/{file_id}", headers=HEADERS, stream=True
+        f"{BASE_URL}/tasks/{task_id}/files/{file_id}",
+        timeout=TIMEOUT,
+        headers=HEADERS,
+        stream=True,
     )
 
     # Check if the request was successful
@@ -86,14 +101,19 @@ def download_one_file(task_id, file_id, output_dir):
     return response.ok
 
 
-def fetch():
-    response = requests.get(f"{BASE_URL}/tasks/fetch_task", headers=HEADERS)
+def fetch(tag=None):
+    response = requests.get(
+        f"{BASE_URL}/tasks/fetch_task" + ("?tag=%s" % tag if tag else ""),
+        timeout=TIMEOUT,
+        headers=HEADERS,
+    )
     return get_json(response)
 
 
 def update_status(task_id, status):
     response = requests.patch(
         f"{BASE_URL}/tasks/{task_id}/status",
+        timeout=TIMEOUT,
         headers=HEADERS,
         json=status,
     )
@@ -103,6 +123,7 @@ def update_status(task_id, status):
 def delete_task(task_id):
     response = requests.delete(
         f"{BASE_URL}/tasks/{task_id}",
+        timeout=TIMEOUT,
         headers=HEADERS,
     )
     return get_json(response)
@@ -135,7 +156,7 @@ def sign_one_file(file_path):
     task_id = res["id"]
     n = 0
     while True:
-        if n >= TIMEOUT:
+        if n >= SIGN_TIMEOUT:
             delete_task(task_id)
             logging.error(f"Failed to sign {file_path}")
             break
