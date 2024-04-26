@@ -603,7 +603,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("ab_web_console_tip", "Altre info sulla console web"),
         ("allow-only-conn-window-open-tip", "Consenti la connessione solo se la finestra RustDesk è aperta"),
         ("no_need_privacy_mode_no_physical_displays_tip", "Nessun display fisico, nessuna necessità di usare la modalità privacy."),
-        ("Follow remote cursor", ""),
-        ("Follow remote window focus", ""),
+        ("Follow remote cursor", "Segui cursore remoto"),
+        ("Follow remote window focus", "Segui focus finestra remota"),
     ].iter().cloned().collect();
 }
