@@ -1580,7 +1580,10 @@ impl LoginConfigHandler {
     ///
     /// * `ignore_default` - If `true`, ignore the default value of the option.
     fn get_option_message(&self, ignore_default: bool) -> Option<OptionMessage> {
-        if self.conn_type.eq(&ConnType::PORT_FORWARD) || self.conn_type.eq(&ConnType::RDP) ||  self.conn_type.eq(&ConnType::FILE_TRANSFER) {
+        if self.conn_type.eq(&ConnType::PORT_FORWARD)
+            || self.conn_type.eq(&ConnType::RDP)
+            || self.conn_type.eq(&ConnType::FILE_TRANSFER)
+        {
             return None;
         }
         let mut msg = OptionMessage::new();
@@ -2110,7 +2113,7 @@ where
     std::thread::spawn(move || {
         #[cfg(windows)]
         sync_cpu_usage();
-        let mut handler_controller_map = Vec::new();
+        let mut handler_controller_map = HashMap::new();
         // let mut count = Vec::new();
         // let mut duration = std::time::Duration::ZERO;
         // let mut skip_beginning = Vec::new();
@@ -2141,17 +2144,18 @@ where
                         let display = vf.display as usize;
                         let start = std::time::Instant::now();
                         let format = CodecFormat::from(&vf);
-                        if handler_controller_map.len() <= display {
-                            for _i in handler_controller_map.len()..=display {
-                                handler_controller_map.push(VideoHandlerController {
-                                    handler: VideoHandler::new(format, _i),
+                        if !handler_controller_map.contains_key(&display) {
+                            handler_controller_map.insert(
+                                display,
+                                VideoHandlerController {
+                                    handler: VideoHandler::new(format, display),
                                     count: 0,
                                     duration: std::time::Duration::ZERO,
                                     skip_beginning: 0,
-                                });
-                            }
+                                },
+                            );
                         }
-                        if let Some(handler_controller) = handler_controller_map.get_mut(display) {
+                        if let Some(handler_controller) = handler_controller_map.get_mut(&display) {
                             let mut pixelbuffer = true;
                             let mut tmp_chroma = None;
                             match handler_controller.handler.handle_frame(
@@ -2219,7 +2223,7 @@ where
                         let mut should_update_supported = false;
                         handler_controller_map
                             .iter()
-                            .map(|h| {
+                            .map(|(_, h)| {
                                 if !h.handler.decoder.valid() || h.handler.fail_counter >= MAX_DECODE_FAIL_COUNTER {
                                     let mut lc = session.lc.write().unwrap();
                                     let format = h.handler.decoder.format();
@@ -2238,21 +2242,20 @@ where
                         }
                     }
                     MediaData::Reset(display) => {
-                        if let Some(handler_controler) = handler_controller_map.get_mut(display) {
+                        if let Some(handler_controler) = handler_controller_map.get_mut(&display) {
                             handler_controler.handler.reset(None);
                         }
                     }
                     MediaData::RecordScreen(start, display, w, h, id) => {
                         log::info!("record screen command: start: {start}, display: {display}");
-                        if handler_controller_map.len() == 1 {
-                            // Compatible with the sciter version(single ui session).
-                            // For the sciter version, there're no multi-ui-sessions for one connection.
-                            // The display is always 0, video_handler_controllers.len() is always 1. So we use the first video handler.
-                            handler_controller_map[0]
-                                .handler
-                                .record_screen(start, w, h, id);
-                        } else {
-                            if let Some(handler_controler) = handler_controller_map.get_mut(display)
+                        // Compatible with the sciter version(single ui session).
+                        // For the sciter version, there're no multi-ui-sessions for one connection.
+                        // The display is always 0, video_handler_controllers.len() is always 1. So we use the first video handler.
+                        if let Some(handler_controler) = handler_controller_map.get_mut(&display) {
+                            handler_controler.handler.record_screen(start, w, h, id);
+                        } else if handler_controller_map.len() == 1 {
+                            if let Some(handler_controler) =
+                                handler_controller_map.values_mut().next()
                             {
                                 handler_controler.handler.record_screen(start, w, h, id);
                             }
