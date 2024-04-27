@@ -774,6 +774,12 @@ class _DesktopHomePageState extends State<DesktopHomePage>
         final screenRect = parseParamScreenRect(args);
         await rustDeskWinManager.openMonitorSession(
             windowId, peerId, display, displayCount, screenRect);
+      } else if (call.method == kWindowEventRemoteWindowCoords) {
+        final windowId = int.tryParse(call.arguments);
+        if (windowId != null) {
+          return jsonEncode(
+              await rustDeskWinManager.getOtherRemoteWindowCoords(windowId));
+        }
       }
     });
     _uniLinksSubscription = listenUniLinks();

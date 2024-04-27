@@ -203,7 +203,7 @@ class _RawTouchGestureDetectorRegionState
       return;
     }
     if (!handleTouch) {
-      ffi.cursorModel.updatePan(d.delta.dx, d.delta.dy, handleTouch);
+      ffi.cursorModel.updatePan(d.delta, d.localPosition, handleTouch);
     }
   }
 
@@ -222,6 +222,9 @@ class _RawTouchGestureDetectorRegionState
       return;
     }
     if (handleTouch) {
+      if (isDesktop) {
+        ffi.cursorModel.trySetRemoteWindowCoords();
+      }
       inputModel.sendMouse('down', MouseButtons.left);
       ffi.cursorModel.move(d.localPosition.dx, d.localPosition.dy);
     } else {
@@ -241,12 +244,15 @@ class _RawTouchGestureDetectorRegionState
     if (lastDeviceKind != PointerDeviceKind.touch) {
       return;
     }
-    ffi.cursorModel.updatePan(d.delta.dx, d.delta.dy, handleTouch);
+    ffi.cursorModel.updatePan(d.delta, d.localPosition, handleTouch);
   }
 
   onOneFingerPanEnd(DragEndDetails d) {
     if (lastDeviceKind != PointerDeviceKind.touch) {
       return;
+    }
+    if (isDesktop) {
+      ffi.cursorModel.clearRemoteWindowCoords();
     }
     inputModel.sendMouse('up', MouseButtons.left);
   }

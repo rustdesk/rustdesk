@@ -4,9 +4,12 @@ import 'dart:io';
 import 'dart:math';
 import 'dart:ui' as ui;
 
+import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
+import 'package:flutter_hbb/main.dart';
+import 'package:flutter_hbb/utils/multi_window_manager.dart';
 import 'package:get/get.dart';
 
 import '../../models/model.dart';
@@ -20,6 +23,128 @@ enum MouseButtons { left, right, wheel }
 const _kMouseEventDown = 'mousedown';
 const _kMouseEventUp = 'mouseup';
 const _kMouseEventMove = 'mousemove';
+
+class CanvasCoords {
+  double x = 0;
+  double y = 0;
+  double scale = 1.0;
+  double scrollX = 0;
+  double scrollY = 0;
+  ScrollStyle scrollStyle = ScrollStyle.scrollauto;
+  Size size = Size.zero;
+
+  CanvasCoords();
+
+  Map<String, dynamic> toJson() {
+    return {
+      'x': x,
+      'y': y,
+      'scale': scale,
+      'scrollX': scrollX,
+      'scrollY': scrollY,
+      'scrollStyle':
+          scrollStyle == ScrollStyle.scrollauto ? 'scrollauto' : 'scrollbar',
+      'size': {
+        'w': size.width,
+        'h': size.height,
+      }
+    };
+  }
+
+  static CanvasCoords fromJson(Map<String, dynamic> json) {
+    final model = CanvasCoords();
+    model.x = json['x'];
+    model.y = json['y'];
+    model.scale = json['scale'];
+    model.scrollX = json['scrollX'];
+    model.scrollY = json['scrollY'];
+    model.scrollStyle = json['scrollStyle'] == 'scrollauto'
+        ? ScrollStyle.scrollauto
+        : ScrollStyle.scrollbar;
+    model.size = Size(json['size']['w'], json['size']['h']);
+    return model;
+  }
+
+  static CanvasCoords fromCanvasModel(CanvasModel model) {
+    final coords = CanvasCoords();
+    coords.x = model.x;
+    coords.y = model.y;
+    coords.scale = model.scale;
+    coords.scrollX = model.scrollX;
+    coords.scrollY = model.scrollY;
+    coords.scrollStyle = model.scrollStyle;
+    coords.size = model.size;
+    return coords;
+  }
+}
+
+class CursorCoords {
+  Offset offset = Offset.zero;
+
+  CursorCoords();
+
+  Map<String, dynamic> toJson() {
+    return {
+      'offset_x': offset.dx,
+      'offset_y': offset.dy,
+    };
+  }
+
+  static CursorCoords fromJson(Map<String, dynamic> json) {
+    final model = CursorCoords();
+    model.offset = Offset(json['offset_x'], json['offset_y']);
+    return model;
+  }
+
+  static CursorCoords fromCursorModel(CursorModel model) {
+    final coords = CursorCoords();
+    coords.offset = model.offset;
+    return coords;
+  }
+}
+
+class RemoteWindowCoords {
+  RemoteWindowCoords(
+      this.windowRect, this.canvas, this.cursor, this.remoteRect);
+  Rect windowRect;
+  CanvasCoords canvas;
+  CursorCoords cursor;
+  Rect remoteRect;
+  Offset relativeOffset = Offset.zero;
+
+  Map<String, dynamic> toJson() {
+    return {
+      'canvas': canvas.toJson(),
+      'cursor': cursor.toJson(),
+      'windowRect': rectToJson(windowRect),
+      'remoteRect': rectToJson(remoteRect),
+    };
+  }
+
+  static Map<String, dynamic> rectToJson(Rect r) {
+    return {
+      'l': r.left,
+      't': r.top,
+      'w': r.width,
+      'h': r.height,
+    };
+  }
+
+  static Rect rectFromJson(Map<String, dynamic> json) {
+    return Rect.fromLTWH(
+      json['l'],
+      json['t'],
+      json['w'],
+      json['h'],
+    );
+  }
+
+  RemoteWindowCoords.fromJson(Map<String, dynamic> json)
+      : windowRect = rectFromJson(json['windowRect']),
+        canvas = CanvasCoords.fromJson(json['canvas']),
+        cursor = CursorCoords.fromJson(json['cursor']),
+        remoteRect = rectFromJson(json['remoteRect']);
+}
 
 extension ToString on MouseButtons {
   String get value {
@@ -188,12 +313,17 @@ class InputModel {
   int _lastButtons = 0;
   Offset lastMousePos = Offset.zero;
 
+  bool _queryOtherWindowCoords = false;
+  Rect? _windowRect;
+  List<RemoteWindowCoords> _remoteWindowCoords = [];
+
   late final SessionID sessionId;
 
   bool get keyboardPerm => parent.target!.ffiModel.keyboard;
   String get id => parent.target?.id ?? '';
   String? get peerPlatform => parent.target?.ffiModel.pi.platform;
   bool get isViewOnly => parent.target!.ffiModel.viewOnly;
+  double get devicePixelRatio => parent.target!.canvasModel.devicePixelRatio;
 
   InputModel(this.parent) {
     sessionId = parent.target!.sessionId;
@@ -616,6 +746,9 @@ class InputModel {
   void onPointDownImage(PointerDownEvent e) {
     debugPrint("onPointDownImage ${e.kind}");
     _stopFling = true;
+    if (isDesktop) _queryOtherWindowCoords = true;
+    _remoteWindowCoords = [];
+    _windowRect = null;
     if (isViewOnly) return;
     if (e.kind != ui.PointerDeviceKind.mouse) {
       if (isPhysicalMouse.value) {
@@ -628,6 +761,7 @@ class InputModel {
   }
 
   void onPointUpImage(PointerUpEvent e) {
+    if (isDesktop) _queryOtherWindowCoords = false;
     if (isViewOnly) return;
     if (e.kind != ui.PointerDeviceKind.mouse) return;
     if (isPhysicalMouse.value) {
@@ -638,9 +772,35 @@ class InputModel {
   void onPointMoveImage(PointerMoveEvent e) {
     if (isViewOnly) return;
     if (e.kind != ui.PointerDeviceKind.mouse) return;
+    if (_queryOtherWindowCoords) {
+      Future.delayed(Duration.zero, () async {
+        _windowRect = await fillRemoteCoordsAndGetCurFrame(_remoteWindowCoords);
+      });
+      _queryOtherWindowCoords = false;
+    }
     if (isPhysicalMouse.value) {
       handleMouse(_getMouseEvent(e, _kMouseEventMove), e.position);
     }
+  }
+
+  static Future<Rect?> fillRemoteCoordsAndGetCurFrame(
+      List<RemoteWindowCoords> remoteWindowCoords) async {
+    final coords =
+        await rustDeskWinManager.getOtherRemoteWindowCoordsFromMain();
+    final wc = WindowController.fromWindowId(kWindowId!);
+    try {
+      final frame = await wc.getFrame();
+      for (final c in coords) {
+        c.relativeOffset = Offset(
+            c.windowRect.left - frame.left, c.windowRect.top - frame.top);
+        remoteWindowCoords.add(c);
+      }
+      return frame;
+    } catch (e) {
+      // Unreachable code
+      debugPrint("Failed to get frame of window $kWindowId, it may be hidden");
+    }
+    return null;
   }
 
   void onPointerSignalImage(PointerSignalEvent e) {
@@ -843,43 +1003,107 @@ class InputModel {
     bool onExit = false,
     int buttons = kPrimaryMouseButton,
   }) {
-    y -= CanvasModel.topToEdge;
-    x -= CanvasModel.leftToEdge;
-    final canvasModel = parent.target!.canvasModel;
     final ffiModel = parent.target!.ffiModel;
+    CanvasCoords canvas =
+        CanvasCoords.fromCanvasModel(parent.target!.canvasModel);
+    Rect? rect = ffiModel.rect;
+
     if (isMove) {
-      canvasModel.moveDesktopMouse(x, y);
+      if (_remoteWindowCoords.isNotEmpty &&
+          _windowRect != null &&
+          !_isInCurrentWindow(x, y)) {
+        final coords =
+            findRemoteCoords(x, y, _remoteWindowCoords, devicePixelRatio);
+        if (coords != null) {
+          isMove = false;
+          canvas = coords.canvas;
+          rect = coords.remoteRect;
+          x -= coords.relativeOffset.dx / devicePixelRatio;
+          y -= coords.relativeOffset.dy / devicePixelRatio;
+        }
+      }
     }
 
-    final nearThr = 3;
-    var nearRight = (canvasModel.size.width - x) < nearThr;
-    var nearBottom = (canvasModel.size.height - y) < nearThr;
-    final rect = ffiModel.rect;
+    y -= CanvasModel.topToEdge;
+    x -= CanvasModel.leftToEdge;
+    if (isMove) {
+      parent.target!.canvasModel.moveDesktopMouse(x, y);
+    }
+
+    return _handlePointerDevicePos(
+      kind,
+      x,
+      y,
+      isMove,
+      canvas,
+      rect,
+      evtType,
+      onExit: onExit,
+      buttons: buttons,
+    );
+  }
+
+  bool _isInCurrentWindow(double x, double y) {
+    final w = _windowRect!.width / devicePixelRatio;
+    final h = _windowRect!.width / devicePixelRatio;
+    return x >= 0 && y >= 0 && x <= w && y <= h;
+  }
+
+  static RemoteWindowCoords? findRemoteCoords(double x, double y,
+      List<RemoteWindowCoords> remoteWindowCoords, double devicePixelRatio) {
+    x *= devicePixelRatio;
+    y *= devicePixelRatio;
+    for (final c in remoteWindowCoords) {
+      if (x >= c.relativeOffset.dx &&
+          y >= c.relativeOffset.dy &&
+          x <= c.relativeOffset.dx + c.windowRect.width &&
+          y <= c.relativeOffset.dy + c.windowRect.height) {
+        return c;
+      }
+    }
+    return null;
+  }
+
+  Point? _handlePointerDevicePos(
+    String kind,
+    double x,
+    double y,
+    bool moveInCanvas,
+    CanvasCoords canvas,
+    Rect? rect,
+    String evtType, {
+    bool onExit = false,
+    int buttons = kPrimaryMouseButton,
+  }) {
     if (rect == null) {
       return null;
     }
-    final imageWidth = rect.width * canvasModel.scale;
-    final imageHeight = rect.height * canvasModel.scale;
-    if (canvasModel.scrollStyle == ScrollStyle.scrollbar) {
-      x += imageWidth * canvasModel.scrollX;
-      y += imageHeight * canvasModel.scrollY;
+
+    final nearThr = 3;
+    var nearRight = (canvas.size.width - x) < nearThr;
+    var nearBottom = (canvas.size.height - y) < nearThr;
+    final imageWidth = rect.width * canvas.scale;
+    final imageHeight = rect.height * canvas.scale;
+    if (canvas.scrollStyle == ScrollStyle.scrollbar) {
+      x += imageWidth * canvas.scrollX;
+      y += imageHeight * canvas.scrollY;
 
       // boxed size is a center widget
-      if (canvasModel.size.width > imageWidth) {
-        x -= ((canvasModel.size.width - imageWidth) / 2);
+      if (canvas.size.width > imageWidth) {
+        x -= ((canvas.size.width - imageWidth) / 2);
       }
-      if (canvasModel.size.height > imageHeight) {
-        y -= ((canvasModel.size.height - imageHeight) / 2);
+      if (canvas.size.height > imageHeight) {
+        y -= ((canvas.size.height - imageHeight) / 2);
       }
     } else {
-      x -= canvasModel.x;
-      y -= canvasModel.y;
+      x -= canvas.x;
+      y -= canvas.y;
     }
 
-    x /= canvasModel.scale;
-    y /= canvasModel.scale;
-    if (canvasModel.scale > 0 && canvasModel.scale < 1) {
-      final step = 1.0 / canvasModel.scale - 1;
+    x /= canvas.scale;
+    y /= canvas.scale;
+    if (canvas.scale > 0 && canvas.scale < 1) {
+      final step = 1.0 / canvas.scale - 1;
       if (nearRight) {
         x += step;
       }
@@ -902,8 +1126,7 @@ class InputModel {
       evtX = x.round();
       evtY = y.round();
     } catch (e) {
-      debugPrintStack(
-          label: 'canvasModel.scale value ${canvasModel.scale}, $e');
+      debugPrintStack(label: 'canvas.scale value ${canvas.scale}, $e');
       return null;
     }
 

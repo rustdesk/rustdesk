@@ -6,6 +6,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/common.dart';
+import 'package:flutter_hbb/main.dart';
+import 'package:flutter_hbb/models/input_model.dart';
 
 /// must keep the order
 // ignore: constant_identifier_names
@@ -430,6 +432,39 @@ class RustDeskMultiWindowManager {
 
   void unregisterActiveWindowListener(AsyncCallback callback) {
     _windowActiveCallbacks.remove(callback);
+  }
+
+  // This function is called from the main window.
+  // It will query the active remote windows to get their coords.
+  Future<List<String>> getOtherRemoteWindowCoords(int wId) async {
+    List<String> coords = [];
+    for (final windowId in _remoteDesktopWindows) {
+      if (windowId != wId) {
+        if (_activeWindows.contains(windowId)) {
+          final res = await DesktopMultiWindow.invokeMethod(
+              windowId, kWindowEventRemoteWindowCoords, '');
+          if (res != null) {
+            coords.add(res);
+          }
+        }
+      }
+    }
+    return coords;
+  }
+
+  // This function is called from one remote window.
+  // Only the main window knows `_remoteDesktopWindows` and `_activeWindows`.
+  // So we need to call the main window to get the other remote windows' coords.
+  Future<List<RemoteWindowCoords>> getOtherRemoteWindowCoordsFromMain() async {
+    List<RemoteWindowCoords> coords = [];
+    // Call the main window to get the coords of other remote windows.
+    String res = await DesktopMultiWindow.invokeMethod(
+        kMainWindowId, kWindowEventRemoteWindowCoords, kWindowId.toString());
+    List<dynamic> list = jsonDecode(res);
+    for (var item in list) {
+      coords.add(RemoteWindowCoords.fromJson(jsonDecode(item)));
+    }
+    return coords;
   }
 }
 
