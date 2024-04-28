@@ -319,7 +319,7 @@ jobs:
             ./SignOutput/rustdesk-*.exe
             ./rustdesk-*.tar.gz
 
-  build-for-macOS-arm64:
+  build-for-macOS-arm64-selfhost:
     # use build-for-macOS instead
     if: false
     name: build-for-macOS-arm64
