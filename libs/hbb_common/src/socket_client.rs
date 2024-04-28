@@ -1,13 +1,11 @@
 use crate::{
     config::{Config, NetworkType},
-    proxy::IntoProxyScheme,
     tcp::FramedStream,
     udp::FramedSocket,
     ResultType,
 };
 use anyhow::Context;
 use std::net::SocketAddr;
-use log::info;
 use tokio::net::ToSocketAddrs;
 use tokio_socks::{IntoTargetAddr, TargetAddr};
 
@@ -51,25 +49,28 @@ pub fn increase_port<T: std::string::ToString>(host: T, offset: i32) -> String {
     host
 }
 
-pub fn test_if_valid_server(host: &str) -> String {
-    info!("Testing server validity for host: {}", host);
+pub fn test_if_valid_server(host: &str, test_with_proxy: bool) -> String {
+    let host = check_port(host, 0);
     use std::net::ToSocketAddrs;
 
-    let host = if !host.contains("://") {
-        // We just add a scheme for testing the domain and port parts,
-        // we don't care about the scheme, so "http://" is used for simple.
-        format!("http://{}", host)
+    if test_with_proxy && NetworkType::ProxySocks == Config::get_network_type() {
+        test_if_valid_server_for_proxy_(&host)
     } else {
-        host.to_string()
-    };
+        match host.to_socket_addrs() {
+            Err(err) => err.to_string(),
+            Ok(_) => "".to_owned(),
+        }
+    }
+}
 
-    // Even if the current network type is a proxy type,
-    // the system DNS should be used to resolve the proxy server address.
-    host.into_proxy_scheme()
-        .and_then(|scheme| scheme.get_host_and_port())
-        .and_then(|domain| domain.to_socket_addrs().map_err(Into::into))
-        .map(|_| "".to_owned()) // on success, return an empty string
-        .unwrap_or_else(|e| e.to_string()) // on error, convert the error into a string
+#[inline]
+pub fn test_if_valid_server_for_proxy_(host: &str) -> String {
+    // `&host.into_target_addr()` is defined in `tokio-socs`, but is a common pattern for testing,
+    // it can be used for both `socks` and `http` proxy.
+    match &host.into_target_addr() {
+        Err(err) => err.to_string(),
+        Ok(_) => "".to_owned(),
+    }
 }
 
 pub trait IsResolvedSocketAddr {
@@ -254,15 +255,20 @@ mod tests {
 
     #[test]
     fn test_test_if_valid_server() {
-        assert!(!test_if_valid_server("a").is_empty());
+        assert!(!test_if_valid_server("a", false).is_empty());
         // on Linux, "1" is resolved to "0.0.0.1"
-        assert!(test_if_valid_server("1.1.1.1").is_empty());
-        assert!(test_if_valid_server("1.1.1.1:1").is_empty());
-        assert!(test_if_valid_server("abcd.com:1").is_empty());
-        assert!(test_if_valid_server("http://abcd.com:1").is_empty());
-        assert!(test_if_valid_server("https://abcd.com:1").is_empty());
-        assert!(test_if_valid_server("socks5://abcd.com:1").is_empty());
-        assert!(test_if_valid_server("https://1.1.1.1:1").is_empty());
+        assert!(test_if_valid_server("1.1.1.1", false).is_empty());
+        assert!(test_if_valid_server("1.1.1.1:1", false).is_empty());
+        assert!(test_if_valid_server("abcd.com", false).is_empty());
+        assert!(test_if_valid_server("abcd.com:1", false).is_empty());
+
+        // with proxy
+        // `:0` indicates `let host = check_port(host, 0);` is called.
+        assert!(test_if_valid_server_for_proxy_("a:0").is_empty());
+        assert!(test_if_valid_server_for_proxy_("1.1.1.1:0").is_empty());
+        assert!(test_if_valid_server_for_proxy_("1.1.1.1:1").is_empty());
+        assert!(test_if_valid_server_for_proxy_("abc.com:0").is_empty());
+        assert!(test_if_valid_server_for_proxy_("abcd.com:1").is_empty());
     }
 
     #[test]

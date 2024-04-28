@@ -280,8 +280,8 @@ pub fn get_options() -> String {
 }
 
 #[inline]
-pub fn test_if_valid_server(host: String) -> String {
-    hbb_common::socket_client::test_if_valid_server(&host)
+pub fn test_if_valid_server(host: String, test_with_proxy: bool) -> String {
+    hbb_common::socket_client::test_if_valid_server(&host, test_with_proxy)
 }
 
 #[inline]
