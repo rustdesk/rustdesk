@@ -233,6 +233,7 @@ pub enum Data {
     ControlledSessionCount(usize),
     CmErr(String),
     CheckHwcodec,
+    VideoConnCount(Option<usize>),
 }
 
 #[tokio::main(flavor = "current_thread")]
@@ -382,6 +383,15 @@ async fn handle(data: Data, stream: &mut Connection) {
                 log::info!("socks updated");
             }
         },
+        Data::VideoConnCount(None) => {
+            let n = crate::server::AUTHED_CONNS
+                .lock()
+                .unwrap()
+                .iter()
+                .filter(|x| x.1 == crate::server::AuthConnType::Remote)
+                .count();
+            allow_err!(stream.send(&Data::VideoConnCount(Some(n))).await);
+        }
         Data::Config((name, value)) => match value {
             None => {
                 let value;
@@ -905,7 +915,7 @@ pub async fn set_socks(value: config::Socks5Server) -> ResultType<()> {
 }
 
 pub fn get_proxy_status() -> bool {
-     Config::get_socks().is_some()
+    Config::get_socks().is_some()
 }
 #[tokio::main(flavor = "current_thread")]
 pub async fn test_rendezvous_server() -> ResultType<()> {

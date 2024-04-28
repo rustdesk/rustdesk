@@ -78,8 +78,9 @@ struct IpcTaskRunner<T: InvokeUiCM> {
 
 lazy_static::lazy_static! {
     static ref CLIENTS: RwLock<HashMap<i32, Client>> = Default::default();
-    static ref CLICK_TIME: AtomicI64 = AtomicI64::new(0);
 }
+    
+static CLICK_TIME: AtomicI64 = AtomicI64::new(0);
 
 #[derive(Clone)]
 pub struct ConnectionManager<T: InvokeUiCM> {
