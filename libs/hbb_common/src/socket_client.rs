@@ -57,7 +57,7 @@ pub fn test_if_valid_server(host: &str) -> String {
 
     let host = if !host.contains("://") {
         // We just add a scheme for testing the domain and port parts,
-        // we don't care about the scheme, so we use http:// for simple.
+        // we don't care about the scheme, so "http://" is used for simple.
         format!("http://{}", host)
     } else {
         host.to_string()
