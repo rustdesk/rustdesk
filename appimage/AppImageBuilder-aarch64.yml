@@ -56,7 +56,6 @@ AppDir:
     - libpulse0
     - packagekit-gtk3-module
     - libcanberra-gtk3-module
-    - libnsl
     exclude:
     - humanity-icon-theme
     - hicolor-icon-theme
