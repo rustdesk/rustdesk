@@ -680,7 +680,8 @@ class RustdeskImpl {
     return Future(() => js.context.callMethod('setByName', ['options', json]));
   }
 
-  Future<String> mainTestIfValidServer({required String server, dynamic hint}) {
+  Future<String> mainTestIfValidServer(
+      {required String server, required bool testWithProxy, dynamic hint}) {
     // TODO: implement
     return Future.value('');
   }
@@ -788,7 +789,7 @@ class RustdeskImpl {
     throw UnimplementedError();
   }
 
-  Future<String?> mainGetHttpStatus({required String url, dynamic hint}){
+  Future<String?> mainGetHttpStatus({required String url, dynamic hint}) {
     throw UnimplementedError();
   }
 
