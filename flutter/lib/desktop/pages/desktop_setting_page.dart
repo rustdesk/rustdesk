@@ -2079,7 +2079,12 @@ void changeSocks5Proxy() async {
       password = pwdController.text.trim();
 
       if (proxy.isNotEmpty) {
-        proxyMsg = translate(await bind.mainTestIfValidServer(server: proxy));
+        String domainPort = proxy;
+        if (domainPort.contains('://')) {
+          domainPort = domainPort.split('://')[1];
+        }
+        proxyMsg = translate(await bind.mainTestIfValidServer(
+            server: domainPort, testWithProxy: false));
         if (proxyMsg.isEmpty) {
           // ignore
         } else {

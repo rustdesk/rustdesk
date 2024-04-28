@@ -283,12 +283,3 @@ void setPrivacyModeDialog(
     );
   }, backDismiss: true, clickMaskDismiss: true);
 }
-
-Future<String?> validateAsync(String value) async {
-  value = value.trim();
-  if (value.isEmpty) {
-    return null;
-  }
-  final res = await bind.mainTestIfValidServer(server: value);
-  return res.isEmpty ? null : res;
-}

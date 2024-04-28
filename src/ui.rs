@@ -272,8 +272,8 @@ impl UI {
         m
     }
 
-    fn test_if_valid_server(&self, host: String) -> String {
-        test_if_valid_server(host)
+    fn test_if_valid_server(&self, host: String, test_with_proxy: bool) -> String {
+        test_if_valid_server(host, test_with_proxy)
     }
 
     fn get_sound_inputs(&self) -> Value {
@@ -689,7 +689,7 @@ impl sciter::EventHandler for UI {
         fn forget_password(String);
         fn set_peer_option(String, String, String);
         fn get_license();
-        fn test_if_valid_server(String);
+        fn test_if_valid_server(String, bool);
         fn get_sound_inputs();
         fn set_options(Value);
         fn set_option(String, String);

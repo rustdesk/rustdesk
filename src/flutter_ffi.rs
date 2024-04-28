@@ -809,8 +809,8 @@ pub fn main_set_options(json: String) {
     }
 }
 
-pub fn main_test_if_valid_server(server: String) -> String {
-    test_if_valid_server(server)
+pub fn main_test_if_valid_server(server: String, test_with_proxy: bool) -> String {
+    test_if_valid_server(server, test_with_proxy)
 }
 
 pub fn main_set_socks(proxy: String, username: String, password: String) {
@@ -895,7 +895,7 @@ pub fn main_get_api_server() -> String {
 }
 
 pub fn main_http_request(url: String, method: String, body: Option<String>, header: String) {
-    http_request(url,method, body, header)
+    http_request(url, method, body, header)
 }
 
 pub fn main_get_local_option(key: String) -> SyncReturn<String> {
