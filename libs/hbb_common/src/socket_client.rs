@@ -54,6 +54,15 @@ pub fn increase_port<T: std::string::ToString>(host: T, offset: i32) -> String {
 pub fn test_if_valid_server(host: &str) -> String {
     info!("Testing server validity for host: {}", host);
     use std::net::ToSocketAddrs;
+
+    let host = if !host.contains("://") {
+        // We just add a scheme for testing the domain and port parts,
+        // we don't care about the scheme, so "http://" is used for simple.
+        format!("http://{}", host)
+    } else {
+        host.to_string()
+    };
+
     // Even if the current network type is a proxy type,
     // the system DNS should be used to resolve the proxy server address.
     host.into_proxy_scheme()
@@ -249,6 +258,11 @@ mod tests {
         // on Linux, "1" is resolved to "0.0.0.1"
         assert!(test_if_valid_server("1.1.1.1").is_empty());
         assert!(test_if_valid_server("1.1.1.1:1").is_empty());
+        assert!(test_if_valid_server("abcd.com:1").is_empty());
+        assert!(test_if_valid_server("http://abcd.com:1").is_empty());
+        assert!(test_if_valid_server("https://abcd.com:1").is_empty());
+        assert!(test_if_valid_server("socks5://abcd.com:1").is_empty());
+        assert!(test_if_valid_server("https://1.1.1.1:1").is_empty());
     }
 
     #[test]
