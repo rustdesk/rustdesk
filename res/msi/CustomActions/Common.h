@@ -5,6 +5,7 @@
 
 bool AddFirewallRule(bool add, LPWSTR exeName, LPWSTR exeFile);
 
+bool QueryServiceStatusExW(LPCWSTR serviceName, SERVICE_STATUS_PROCESS* status);
 bool IsServiceRunningW(LPCWSTR serviceName);
 bool MyCreateServiceW(LPCWSTR serviceName, LPCWSTR displayName, LPCWSTR binaryPath);
 bool MyDeleteServiceW(LPCWSTR serviceName);
