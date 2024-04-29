@@ -19,7 +19,7 @@ use hwcodec::{
     ffmpeg_ram::{
         decode::{DecodeContext, DecodeFrame, Decoder},
         encode::{EncodeContext, EncodeFrame, Encoder},
-        CodecInfo, CodecInfos,
+        CodecInfo,
         Quality::{self, *},
         RateControl::{self, *},
     },
@@ -188,11 +188,25 @@ impl EncoderApi for HwRamEncoder {
 }
 
 impl HwRamEncoder {
-    pub fn best() -> CodecInfos {
-        get_config().map(|c| c.e).unwrap_or(CodecInfos {
-            h264: None,
-            h265: None,
-        })
+    pub fn try_get(format: CodecFormat) -> Option<CodecInfo> {
+        let mut info = None;
+        if let Ok(hw) = get_config().map(|c| c.e) {
+            let best = CodecInfo::prioritized(hw);
+            match format {
+                CodecFormat::H264 => {
+                    if let Some(v) = best.h264 {
+                        info = Some(v);
+                    }
+                }
+                CodecFormat::H265 => {
+                    if let Some(v) = best.h265 {
+                        info = Some(v);
+                    }
+                }
+                _ => {}
+            }
+        }
+        info
     }
 
     pub fn encode(&mut self, yuv: &[u8]) -> ResultType<Vec<EncodeFrame>> {
@@ -223,15 +237,37 @@ pub struct HwRamDecoder {
 }
 
 impl HwRamDecoder {
-    pub fn best() -> CodecInfos {
-        let mut info = CodecInfo::soft();
+    pub fn try_get(format: CodecFormat) -> Option<CodecInfo> {
+        let mut info = None;
+        let soft = CodecInfo::soft();
+        match format {
+            CodecFormat::H264 => {
+                if let Some(v) = soft.h264 {
+                    info = Some(v);
+                }
+            }
+            CodecFormat::H265 => {
+                if let Some(v) = soft.h265 {
+                    info = Some(v);
+                }
+            }
+            _ => {}
+        }
         if enable_hwcodec_option() {
             if let Ok(hw) = get_config().map(|c| c.d) {
-                if let Some(h264) = hw.h264 {
-                    info.h264 = Some(h264);
-                }
-                if let Some(h265) = hw.h265 {
-                    info.h265 = Some(h265);
+                let best = CodecInfo::prioritized(hw);
+                match format {
+                    CodecFormat::H264 => {
+                        if let Some(v) = best.h264 {
+                            info = Some(v);
+                        }
+                    }
+                    CodecFormat::H265 => {
+                        if let Some(v) = best.h265 {
+                            info = Some(v);
+                        }
+                    }
+                    _ => {}
                 }
             }
         }
@@ -239,24 +275,10 @@ impl HwRamDecoder {
     }
 
     pub fn new(format: CodecFormat) -> ResultType<Self> {
-        log::info!("try create {format:?} ram decoder");
-        let best = HwRamDecoder::best();
-        let info = match format {
-            CodecFormat::H264 => {
-                if let Some(info) = best.h264 {
-                    info
-                } else {
-                    bail!("no h264 decoder, should not be here");
-                }
-            }
-            CodecFormat::H265 => {
-                if let Some(info) = best.h265 {
-                    info
-                } else {
-                    bail!("no h265 decoder, should not be here");
-                }
-            }
-            _ => bail!("unsupported format: {:?}", format),
+        let info = HwRamDecoder::try_get(format);
+        log::info!("try create {info:?} ram decoder");
+        let Some(info) = info else {
+            bail!("unsupported format: {:?}", format);
         };
         let ctx = DecodeContext {
             name: info.name.clone(),
@@ -339,8 +361,8 @@ impl HwRamDecoderImage<'_> {
 
 #[derive(Debug, Eq, PartialEq, Clone, Serialize, Deserialize)]
 struct Available {
-    e: CodecInfos,
-    d: CodecInfos,
+    e: Vec<CodecInfo>,
+    d: Vec<CodecInfo>,
 }
 
 fn get_config() -> ResultType<Available> {
@@ -368,11 +390,9 @@ pub fn check_available_hwcodec() {
     let vram = crate::vram::check_available_vram();
     #[cfg(not(feature = "vram"))]
     let vram = "".to_owned();
-    let encoders = CodecInfo::prioritized(Encoder::available_encoders(ctx, Some(vram.clone())));
-    let decoders = CodecInfo::prioritized(Decoder::available_decoders(Some(vram.clone())));
     let ram = Available {
-        e: encoders,
-        d: decoders,
+        e: Encoder::available_encoders(ctx, Some(vram.clone())),
+        d: Decoder::available_decoders(Some(vram.clone())),
     };
     if let Ok(ram) = serde_json::to_string_pretty(&ram) {
         HwCodecConfig { ram, vram }.store();

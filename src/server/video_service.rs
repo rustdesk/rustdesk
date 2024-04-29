@@ -53,7 +53,7 @@ use scrap::{
     codec::{Encoder, EncoderCfg, Quality},
     record::{Recorder, RecorderContext},
     vpxcodec::{VpxEncoderConfig, VpxVideoCodecId},
-    CodecName, Display, Frame, TraitCapturer,
+    CodecFormat, CodecName, Display, Frame, TraitCapturer,
 };
 #[cfg(windows)]
 use std::sync::Once;
@@ -715,29 +715,19 @@ fn handle_hw_encoder(
         #[cfg(feature = "hwcodec")]
         match _name {
             CodecName::H264VRAM | CodecName::H265VRAM => {
-                let is_h265 = _name == CodecName::H265VRAM;
-                let best = HwRamEncoder::best();
-                if let Some(h264) = best.h264 {
-                    if !is_h265 {
-                        return Ok(EncoderCfg::HWRAM(HwRamEncoderConfig {
-                            name: h264.name,
-                            width,
-                            height,
-                            quality,
-                            keyframe_interval,
-                        }));
-                    }
-                }
-                if let Some(h265) = best.h265 {
-                    if is_h265 {
-                        return Ok(EncoderCfg::HWRAM(HwRamEncoderConfig {
-                            name: h265.name,
-                            width,
-                            height,
-                            quality,
-                            keyframe_interval,
-                        }));
-                    }
+                let format = if _name == CodecName::H265VRAM {
+                    CodecFormat::H265
+                } else {
+                    CodecFormat::H264
+                };
+                if let Some(hw) = HwRamEncoder::try_get(format) {
+                    return Ok(EncoderCfg::HWRAM(HwRamEncoderConfig {
+                        name: hw.name,
+                        width,
+                        height,
+                        quality,
+                        keyframe_interval,
+                    }));
                 }
             }
             CodecName::H264RAM(name) | CodecName::H265RAM(name) => {
