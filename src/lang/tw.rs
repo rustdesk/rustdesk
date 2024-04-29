@@ -602,8 +602,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Everyone", "所有人"),
         ("ab_web_console_tip", "打開 Web 控制台以進行更多操作"),
         ("allow-only-conn-window-open-tip", "只在 RustDesk 視窗開啟時允許連接"),
-        ("no_need_privacy_mode_no_physical_displays_tip", ""),
-        ("Follow remote cursor", ""),
-        ("Follow remote window focus", ""),
+        ("no_need_privacy_mode_no_physical_displays_tip", "沒有物理螢幕，沒必要使用隱私模式。"),
+        ("Follow remote cursor", "跟隨遠端游標"),
+        ("Follow remote window focus", "跟隨遠端視窗焦點"),
     ].iter().cloned().collect();
 }
