@@ -446,33 +446,33 @@ UINT __stdcall TryStopDeleteService(__in MSIHANDLE hInstall)
     ExitOnFailure(hr, "failed to read database key from custom action data: %ls", pwz);
     WcaLog(LOGMSG_STANDARD, "Try stop and delete service : %ls", svcName);
 
-     if (MyStopServiceW(svcName)) {
-         for (int i = 0; i < 10; i++) {
-             if (IsServiceRunningW(svcName)) {
-                 Sleep(100);
-             }
-             else {
-                 break;
-             }
-         }
-     }
-     else {
-         WcaLog(LOGMSG_STANDARD, "Failed to stop service: \"%ls\", error: 0x%02X.", svcName, GetLastError());
-     }
+    if (MyStopServiceW(svcName)) {
+        for (int i = 0; i < 10; i++) {
+            if (IsServiceRunningW(svcName)) {
+                Sleep(100);
+            }
+            else {
+                break;
+            }
+        }
+    }
+    else {
+        WcaLog(LOGMSG_STANDARD, "Failed to stop service: \"%ls\", error: 0x%02X.", svcName, GetLastError());
+    }
 
-     if (IsServiceRunningW(svcName)) {
-         WcaLog(LOGMSG_STANDARD, "Service \"%ls\" is not stoped after 1000 ms.", svcName);
-     }
-     else {
-         WcaLog(LOGMSG_STANDARD, "Service \"%ls\" is stoped.", svcName);
-     }
+    if (IsServiceRunningW(svcName)) {
+        WcaLog(LOGMSG_STANDARD, "Service \"%ls\" is not stoped after 1000 ms.", svcName);
+    }
+    else {
+        WcaLog(LOGMSG_STANDARD, "Service \"%ls\" is stoped.", svcName);
+    }
 
-     if (MyDeleteServiceW(svcName)) {
-         WcaLog(LOGMSG_STANDARD, "Service \"%ls\" deletion is completed without errors.", svcName);
-     }
-     else {
-         WcaLog(LOGMSG_STANDARD, "Failed to delete service: \"%ls\", error: 0x%02X.", svcName, GetLastError());
-     }
+    if (MyDeleteServiceW(svcName)) {
+        WcaLog(LOGMSG_STANDARD, "Service \"%ls\" deletion is completed without errors.", svcName);
+    }
+    else {
+        WcaLog(LOGMSG_STANDARD, "Failed to delete service: \"%ls\", error: 0x%02X.", svcName, GetLastError());
+    }
 
     if (QueryServiceStatusExW(svcName, &svcStatus)) {
         WcaLog(LOGMSG_STANDARD, "Failed to delete service: \"%ls\", current status: %d.", svcName, svcStatus.dwCurrentState);
