@@ -233,10 +233,12 @@ impl<T: InvokeUiSession> Session<T> {
         }
     }
 
+    // Caution: This function must be called after peer info is received.
     pub fn get_keyboard_mode(&self) -> String {
         let mode = self.lc.read().unwrap().keyboard_mode.clone();
         let keyboard_mode = KeyboardMode::from_str(&mode);
 
+        // Note: peer_version is 0 before peer info is received.
         let peer_version = self.get_peer_version();
         let platform = self.peer_platform();
 
