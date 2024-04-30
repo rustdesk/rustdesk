@@ -740,16 +740,16 @@ jobs:
           name: rustdesk-${{ env.VERSION }}-x86_64.deb
           path: ./
 
-      - name: Combine unsigned macos app
+      - name: Combine unsigned app
         run: |
-          tar czf rustdesk-${{ env.VERSION }}-macos-unsigned.tar.gz *.dmg windows-x86_64 *.deb
+          tar czf rustdesk-${{ env.VERSION }}-unsigned.tar.gz *.dmg windows-x86_64 *.deb
 
-      - name: Publish unsigned macos app
+      - name: Publish unsigned app
         uses: softprops/action-gh-release@v1
         with:
           prerelease: true
           tag_name: ${{ env.TAG_NAME }}
-          files: rustdesk-${{ env.VERSION }}-macos-unsigned.tar.gz
+          files: rustdesk-${{ env.VERSION }}-unsigned.tar.gz
 
   generate-bridge-linux:
     uses: ./.github/workflows/bridge.yml
