@@ -1086,20 +1086,24 @@ pub async fn lock_screen() {
     }
 }
 
+#[inline]
+#[cfg(target_os = "linux")]
 pub fn handle_key(evt: &KeyEvent) {
-    #[cfg(target_os = "macos")]
-    if !is_server() {
-        // having GUI, run main GUI thread, otherwise crash
-        let evt = evt.clone();
-        QUEUE.exec_async(move || handle_key_(&evt));
-        key_sleep();
-        return;
-    }
-    #[cfg(windows)]
-    crate::portable_service::client::handle_key(evt);
-    #[cfg(not(windows))]
     handle_key_(evt);
-    #[cfg(target_os = "macos")]
+}
+
+#[inline]
+#[cfg(target_os = "windows")]
+pub fn handle_key(evt: &KeyEvent) {
+    crate::portable_service::client::handle_key(evt);
+}
+
+#[inline]
+#[cfg(target_os = "macos")]
+pub fn handle_key(evt: &KeyEvent) {
+    // having GUI, run main GUI thread, otherwise crash
+    let evt = evt.clone();
+    QUEUE.exec_async(move || handle_key_(&evt));
     key_sleep();
 }
 
