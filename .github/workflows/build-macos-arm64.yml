@@ -33,7 +33,7 @@ env:
 
 jobs:
   build-rustdesk-ios:
-    runs-on: [self-hosted, macOS, ARM64]
+    runs-on: ${{ matrix.job.on }}
     strategy:
       fail-fast: false
       matrix:
