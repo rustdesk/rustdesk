@@ -322,7 +322,6 @@ jobs:
   build-for-macOS-arm64-selfhost:
     # use build-for-macOS instead
     if: false
-    name: build-for-macOS-arm64
     runs-on: [self-hosted, macOS, ARM64]
     steps:
       - name: Export GitHub Actions cache environment variables
@@ -943,7 +942,7 @@ jobs:
 
   build-rustdesk-lib-linux:
     needs: [generate-bridge-linux]
-    name: build-rust-lib ${{ matrix.job.target }} [${{ matrix.job.extra-build-features }}]
+    name: build-rust-lib ${{ matrix.job.target }} ${{ matrix.job.extra-build-features }}
     runs-on: ${{ matrix.job.on }}
     strategy:
       fail-fast: false
@@ -1156,8 +1155,8 @@ jobs:
 
   build-rustdesk-sciter-arm:
     if: ${{ inputs.upload-artifact }}
-    name: build-rustdesk(sciter)
     runs-on: [self-hosted, Linux, ARM64]
+    name: build-rustdesk-sciter-arm ${{ matrix.job.target }}
     strategy:
       fail-fast: false
       matrix:
@@ -1338,7 +1337,7 @@ jobs:
 
   build-rustdesk-linux:
     needs: [build-rustdesk-lib-linux]
-    name: build-rustdesk ${{ matrix.job.target }} [${{ matrix.job.extra-build-features }}]
+    name: build-rustdesk-liunux ${{ matrix.job.target }} ${{ matrix.job.extra-build-features }}
     runs-on: ubuntu-20.04
     strategy:
       fail-fast: false
