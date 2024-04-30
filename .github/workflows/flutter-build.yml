@@ -1058,6 +1058,7 @@ jobs:
           vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
 
       - name: Install vcpkg dependencies
+        if: matrix.job.extra-build-features == '' || env.UPLOAD_ARTIFACT == 'true'
         run: |
           case ${{ matrix.job.target }} in
             aarch64-unknown-linux-gnu)
@@ -1072,6 +1073,7 @@ jobs:
       - uses: rustdesk-org/run-on-arch-action@amd64-support
         name: Build rustdesk library for ${{ matrix.job.arch }}
         id: vcpkg
+        if: matrix.job.extra-build-features == '' || env.UPLOAD_ARTIFACT == 'true'
         with:
           arch: ${{ matrix.job.arch }}
           distro: ${{ matrix.job.distro }}
@@ -1149,6 +1151,7 @@ jobs:
 
       - name: Upload Artifacts
         uses: actions/upload-artifact@master
+        if: matrix.job.extra-build-features == '' || env.UPLOAD_ARTIFACT == 'true'
         with:
           name: librustdesk-${{ matrix.job.arch }}-${{ matrix.job.extra-build-features }}.so
           path: target/release/liblibrustdesk.so
@@ -1403,6 +1406,7 @@ jobs:
 
       - name: Restore the rustdesk lib file
         uses: actions/download-artifact@master
+        if: matrix.job.extra-build-features == '' || env.UPLOAD_ARTIFACT == 'true'
         with:
           name: librustdesk-${{ matrix.job.arch }}-${{ matrix.job.extra-build-features }}.so
           path: ./target/release/
@@ -1410,6 +1414,7 @@ jobs:
       - uses: rustdesk-org/run-on-arch-action@amd64-support
         name: flutter build
         id: vcpkg
+        if: matrix.job.extra-build-features == '' || env.UPLOAD_ARTIFACT == 'true'
         with:
           arch: ${{ matrix.job.arch }}
           distro: ${{ matrix.job.distro }}
@@ -1528,14 +1533,14 @@ jobs:
 
       - name: Upload Artifact
         uses: actions/upload-artifact@master
-        if: ${{ contains(matrix.job.extra-build-features, 'flatpak') }}
+        if: matrix.job.extra-build-features == 'flatpak' && env.UPLOAD_ARTIFACT == 'true'
         with:
           name: rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}.deb
           path: rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}.deb
 
       # Temporary disable for there is no many archlinux arm hosts
       - name: Patch archlinux PKGBUILD
-        if: matrix.job.extra-build-features == '' && matrix.job.arch == 'x86_64'
+        if: matrix.job.extra-build-features == '' && env.UPLOAD_ARTIFACT == 'true' && matrix.job.arch == 'x86_64'
         run: |
           sed -i "s/arch=('x86_64')/arch=('${{ matrix.job.arch }}')/g" res/PKGBUILD
           case ${{ matrix.job.arch }} in
@@ -1546,7 +1551,7 @@ jobs:
 
       # Temporary disable for there is no many archlinux arm hosts
       - name: Build archlinux package
-        if: matrix.job.extra-build-features == '' && matrix.job.arch == 'x86_64'
+        if: matrix.job.extra-build-features == '' && env.UPLOAD_ARTIFACT == 'true' && matrix.job.arch == 'x86_64'
         uses: rustdesk-org/arch-makepkg-action@master
         with:
           packages: >
