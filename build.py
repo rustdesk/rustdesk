@@ -292,7 +292,8 @@ def get_features(args):
         features.append('vram')
     if args.flutter:
         features.append('flutter')
-        features.append('flutter_texture_render')
+        if not osx:
+            features.append('flutter_texture_render')
     if args.flatpak:
         features.append('flatpak')
     if args.appimage:
