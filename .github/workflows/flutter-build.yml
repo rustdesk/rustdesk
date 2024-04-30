@@ -654,8 +654,9 @@ jobs:
           if [[ "${{ matrix.job.arch }}" == "aarch64" ]]; then
             export EXTRA_ARGS=""
           else
-            export EXTRA_ARGs="--disable-flutter-texture-render"
+            export EXTRA_ARGS="--disable-flutter-texture-render"
           fi
+          echo $EXTRA_ARGS
           ./build.py --flutter $EXTRA_ARGS --hwcodec ${{ matrix.job.extra-build-args }}
 
       - name: create unsigned dmg
@@ -1177,6 +1178,7 @@ jobs:
             else
               export JOBS=""
             fi
+            echo $JOBS
             cargo build --lib $JOBS --features hwcodec,flutter,flutter_texture_render,${{ matrix.job.extra-build-features }},$DEFAULT_FEAT --release
 
       - name: Upload Artifacts
