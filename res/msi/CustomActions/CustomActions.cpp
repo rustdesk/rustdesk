@@ -66,7 +66,7 @@ UINT __stdcall RemoveInstallFolder(
     }
     else
     {
-        WcaLog(LOGMSG_STANDARD, "The directory \"%ls\" has not been deleted, error code: 0X%02X. Please refer to https://learn.microsoft.com/en-us/windows/win32/api/shellapi/nf-shellapi-shfileoperationa for the error codes.", installFolder, nResult);
+        WcaLog(LOGMSG_STANDARD, "The directory \"%ls\" has not been deleted, error code: 0x%02X. Please refer to https://learn.microsoft.com/en-us/windows/win32/api/shellapi/nf-shellapi-shfileoperationa for the error codes.", installFolder, nResult);
     }
 
 LExit:
@@ -222,13 +222,13 @@ void AddFirewallRuleCmdline(LPWSTR exeName, LPWSTR exeFile, LPCWSTR dir)
     WCHAR rulename[500] = { 0, };
 
     StringCchPrintfW(rulename, sizeof(rulename) / sizeof(rulename[0]), L"%ls Service", exeName);
-    if (hr < 0) {
+    if (FAILED(hr)) {
         WcaLog(LOGMSG_STANDARD, "Failed to make rulename: %ls", exeName);
         return;
     }
 
     StringCchPrintfW(cmdline, sizeof(cmdline) / sizeof(cmdline[0]), L"advfirewall firewall add rule name=\"%ls\" dir=%ls action=allow program=\"%ls\" enable=yes", rulename, dir, exeFile);
-    if (hr < 0) {
+    if (FAILED(hr)) {
         WcaLog(LOGMSG_STANDARD, "Failed to make cmdline: %ls", exeName);
         return;
     }
@@ -252,13 +252,13 @@ void RemoveFirewallRuleCmdline(LPWSTR exeName)
     WCHAR rulename[500] = { 0, };
 
     StringCchPrintfW(rulename, sizeof(rulename) / sizeof(rulename[0]), L"%ls Service", exeName);
-    if (hr < 0) {
+    if (FAILED(hr)) {
         WcaLog(LOGMSG_STANDARD, "Failed to make rulename: %ls", exeName);
         return;
     }
 
     StringCchPrintfW(cmdline, sizeof(cmdline) / sizeof(cmdline[0]), L"advfirewall firewall delete rule name=\"%ls\"", rulename);
-    if (hr < 0) {
+    if (FAILED(hr)) {
         WcaLog(LOGMSG_STANDARD, "Failed to make cmdline: %ls", exeName);
         return;
     }
@@ -353,6 +353,7 @@ LExit:
     return WcaFinalize(er);
 }
 
+void TryCreateStartServiceByShell(LPWSTR svcName, LPWSTR svcBinary, LPWSTR szSvcDisplayName);
 UINT __stdcall CreateStartService(__in MSIHANDLE hInstall)
 {
     HRESULT hr = S_OK;
@@ -402,6 +403,14 @@ UINT __stdcall CreateStartService(__in MSIHANDLE hInstall)
         WcaLog(LOGMSG_STANDARD, "Failed to create service: \"%ls\"", svcName);
     }
 
+    if (IsServiceRunningW(svcName)) {
+        WcaLog(LOGMSG_STANDARD, "Service \"%ls\" is running.", svcName);
+    }
+    else {
+        WcaLog(LOGMSG_STANDARD, "Service \"%ls\" is not running, try create and start service by shell", svcName);
+        TryCreateStartServiceByShell(svcName, svcBinary, szSvcDisplayName);
+    }
+
 LExit:
     if (pwzData) {
         ReleaseStr(pwzData);
@@ -411,6 +420,7 @@ LExit:
     return WcaFinalize(er);
 }
 
+void TryStopDeleteServiceByShell(LPWSTR svcName);
 UINT __stdcall TryStopDeleteService(__in MSIHANDLE hInstall)
 {
     HRESULT hr = S_OK;
@@ -447,7 +457,7 @@ UINT __stdcall TryStopDeleteService(__in MSIHANDLE hInstall)
         }
     }
     else {
-        WcaLog(LOGMSG_STANDARD, "Failed to stop service: \"%ls\", error: 0X%02X.", svcName, GetLastError());
+        WcaLog(LOGMSG_STANDARD, "Failed to stop service: \"%ls\", error: 0x%02X.", svcName, GetLastError());
     }
 
     if (IsServiceRunningW(svcName)) {
@@ -461,11 +471,12 @@ UINT __stdcall TryStopDeleteService(__in MSIHANDLE hInstall)
         WcaLog(LOGMSG_STANDARD, "Service \"%ls\" deletion is completed without errors.", svcName);
     }
     else {
-        WcaLog(LOGMSG_STANDARD, "Failed to delete service: \"%ls\", error: 0X%02X.", svcName, GetLastError());
+        WcaLog(LOGMSG_STANDARD, "Failed to delete service: \"%ls\", error: 0x%02X.", svcName, GetLastError());
     }
 
     if (QueryServiceStatusExW(svcName, &svcStatus)) {
         WcaLog(LOGMSG_STANDARD, "Failed to delete service: \"%ls\", current status: %d.", svcName, svcStatus.dwCurrentState);
+        TryStopDeleteServiceByShell(svcName);
     }
     else {
         lastErrorCode = GetLastError();
@@ -473,7 +484,8 @@ UINT __stdcall TryStopDeleteService(__in MSIHANDLE hInstall)
             WcaLog(LOGMSG_STANDARD, "Service \"%ls\" is deleted.", svcName);
         }
         else {
-            WcaLog(LOGMSG_STANDARD, "Failed to query service status: \"%ls\", error: 0X%02X.", svcName, lastErrorCode);
+            WcaLog(LOGMSG_STANDARD, "Failed to query service status: \"%ls\", error: 0x%02X.", svcName, lastErrorCode);
+            TryStopDeleteServiceByShell(svcName);
         }
     }
 
@@ -684,4 +696,178 @@ LExit:
 
     er = SUCCEEDED(hr) ? ERROR_SUCCESS : ERROR_INSTALL_FAILURE;
     return WcaFinalize(er);
+}
+
+void TryCreateStartServiceByShell(LPWSTR svcName, LPWSTR svcBinary, LPWSTR szSvcDisplayName)
+{
+    HRESULT hr = S_OK;
+    HINSTANCE hi = 0;
+    wchar_t szNewBin[500] = { 0 };
+    DWORD cchNewBin = sizeof(szNewBin) / sizeof(szNewBin[0]);
+    wchar_t szCmd[800] = { 0 };
+    DWORD cchCmd = sizeof(szCmd) / sizeof(szCmd[0]);
+    SERVICE_STATUS_PROCESS svcStatus;
+    DWORD lastErrorCode = 0;
+    int i = 0;
+    int j = 0;
+
+    WcaLog(LOGMSG_STANDARD, "TryCreateStartServiceByShell, service: %ls", svcName);
+
+    TryStopDeleteServiceByShell(svcName);
+    // Do not check the result here
+
+    i = 0;
+    j = 0;
+    // svcBinary is a string with double quotes, we need to escape it for shell arguments.
+    // It is orignal used for `CreateServiceW`.
+    // eg. "C:\Program Files\MyApp\MyApp.exe" --service -> \"C:\Program Files\MyApp\MyApp.exe\" --service
+    while (true) {
+        if (svcBinary[j] == L'"') {
+            szNewBin[i] = L'\\';
+            i += 1;
+            if (i >= cchNewBin) {
+                WcaLog(LOGMSG_STANDARD, "Failed to copy bin for service: %ls, buffer is not enough", svcName);
+                return;
+            }
+            szNewBin[i] = L'"';
+        }
+        else {
+            szNewBin[i] = svcBinary[j];
+        }
+        if (svcBinary[j] == L'\0') {
+            break;
+        }
+        i += 1;
+        j += 1;
+        if (i >= cchNewBin) {
+            WcaLog(LOGMSG_STANDARD, "Failed to copy bin for service: %ls, buffer is not enough", svcName);
+            return;
+        }
+    }
+
+    hr = StringCchPrintfW(szCmd, cchCmd, L"create %ls binpath= \"%ls\" start= auto DisplayName= \"%ls\"", svcName, szNewBin, szSvcDisplayName);
+    if (FAILED(hr)) {
+        WcaLog(LOGMSG_STANDARD, "Failed to make command: %ls", svcName);
+        return;
+    }
+    hi = ShellExecuteW(NULL, L"open", L"sc", szCmd, NULL, SW_HIDE);
+    if ((int)hi <= 32) {
+        WcaLog(LOGMSG_STANDARD, "Failed to create service with shell : %d, last error: 0x%02X.", (int)hi, GetLastError());
+    }
+    else {
+        WcaLog(LOGMSG_STANDARD, "Service \"%ls\" is created with shell.", svcName);
+    }
+
+    // Query and log if the service is running.
+    for (int k = 0; k < 10; ++k) {
+        if (!QueryServiceStatusExW(svcName, &svcStatus)) {
+            lastErrorCode = GetLastError();
+            if (lastErrorCode == ERROR_SERVICE_DOES_NOT_EXIST) {
+                if (k == 29) {
+                    WcaLog(LOGMSG_STANDARD, "Failed to query service status: \"%ls\", service is not found.", svcName);
+                    return;
+                }
+                else {
+                    Sleep(100);
+                    continue;
+                }
+            }
+            // Break if the service exists.
+            WcaLog(LOGMSG_STANDARD, "Failed to query service status: \"%ls\", error: 0x%02X.", svcName, lastErrorCode);
+            break;
+        }
+        else {
+            if (svcStatus.dwCurrentState == SERVICE_RUNNING) {
+                WcaLog(LOGMSG_STANDARD, "Service \"%ls\" is running.", svcName);
+                return;
+            }
+            WcaLog(LOGMSG_STANDARD, "Service \"%ls\" is not running.", svcName);
+            break;
+        }
+    }
+
+    hr = StringCchPrintfW(szCmd, cchCmd, L"/c sc start %ls", svcName);
+    if (FAILED(hr)) {
+        WcaLog(LOGMSG_STANDARD, "Failed to make command: %ls", svcName);
+        return;
+    }
+    hi = ShellExecuteW(NULL, L"open", L"cmd.exe", szCmd, NULL, SW_HIDE);
+    if ((int)hi <= 32) {
+        WcaLog(LOGMSG_STANDARD, "Failed to start service with shell : %d, last error: 0x%02X.", (int)hi, GetLastError());
+    }
+    else {
+        WcaLog(LOGMSG_STANDARD, "Service \"%ls\" is started with shell.", svcName);
+    }
+}
+
+void TryStopDeleteServiceByShell(LPWSTR svcName)
+{
+    HRESULT hr = S_OK;
+    HINSTANCE hi = 0;
+    wchar_t szCmd[800] = { 0 };
+    DWORD cchCmd = sizeof(szCmd) / sizeof(szCmd[0]);
+    SERVICE_STATUS_PROCESS svcStatus;
+    DWORD lastErrorCode = 0;
+
+    WcaLog(LOGMSG_STANDARD, "TryStopDeleteServiceByShell, service: %ls", svcName);
+
+    hr = StringCchPrintfW(szCmd, cchCmd, L"/c sc stop %ls", svcName);
+    if (FAILED(hr)) {
+        WcaLog(LOGMSG_STANDARD, "Failed to make command: %ls", svcName);
+        return;
+    }
+    hi = ShellExecuteW(NULL, L"open", L"cmd.exe", szCmd, NULL, SW_HIDE);
+
+    // Query and log if the service is stopped or deleted.
+    for (int k = 0; k < 10; ++k) {
+        if (!IsServiceRunningW(svcName)) {
+            break;
+        }
+        Sleep(100);
+    }
+    if (!QueryServiceStatusExW(svcName, &svcStatus)) {
+        if (GetLastError() == ERROR_SERVICE_DOES_NOT_EXIST) {
+            WcaLog(LOGMSG_STANDARD, "Service \"%ls\" is already deleted.", svcName);
+            return;
+        }
+        WcaLog(LOGMSG_STANDARD, "Failed to query service status: \"%ls\" with shell, error: 0x%02X.", svcName, lastErrorCode);
+    }
+    else {
+        WcaLog(LOGMSG_STANDARD, "Status of service: \"%ls\" with shell, current status: %d.", svcName, svcStatus.dwCurrentState);
+    }
+
+    hr = StringCchPrintfW(szCmd, cchCmd, L"/c sc delete %ls", svcName);
+    if (FAILED(hr)) {
+        WcaLog(LOGMSG_STANDARD, "Failed to make command: %ls", svcName);
+        return;
+    }
+    hi = ShellExecuteW(NULL, L"open", L"cmd.exe", szCmd, NULL, SW_HIDE);
+    if ((int)hi <= 32) {
+        WcaLog(LOGMSG_STANDARD, "Failed to delete service with shell : %d, last error: 0x%02X.", (int)hi, GetLastError());
+    }
+    else {
+        WcaLog(LOGMSG_STANDARD, "Service \"%ls\" deletion is completed without errors with shell,", svcName);
+    }
+
+    // Query and log the status of the service after deletion.
+    for (int k = 0; k < 10; ++k) {
+        if (!QueryServiceStatusExW(svcName, &svcStatus)) {
+            if (GetLastError() == ERROR_SERVICE_DOES_NOT_EXIST) {
+                WcaLog(LOGMSG_STANDARD, "Service \"%ls\" is deleted with shell.", svcName);
+                return;
+            }
+        }
+        Sleep(100);
+    }
+    if (!QueryServiceStatusExW(svcName, &svcStatus)) {
+        lastErrorCode = GetLastError();
+        if (lastErrorCode == ERROR_SERVICE_DOES_NOT_EXIST) {
+            WcaLog(LOGMSG_STANDARD, "Service \"%ls\" is deleted with shell.", svcName);
+            return;
+        }
+        WcaLog(LOGMSG_STANDARD, "Failed to query service status: \"%ls\" with shell, error: 0x%02X.", svcName, lastErrorCode);
+    }
+    else {
+        WcaLog(LOGMSG_STANDARD, "Failed to delete service: \"%ls\" with shell, current status: %d.", svcName, svcStatus.dwCurrentState);
+    }
 }

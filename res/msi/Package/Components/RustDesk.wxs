@@ -41,8 +41,10 @@
 			<Custom Action="SetPropertyServiceStop.SetParam.ConfigKey" Before="SetPropertyServiceStop" Condition="NOT Installed" />
 			<Custom Action="SetPropertyServiceStop.SetParam.PropertyName" Before="SetPropertyServiceStop" Condition="NOT Installed" />
 			
-			<Custom Action="CreateStartService" Before="InstallFinalize" Condition="NOT STOP_SERVICE=&quot;&apos;Y&apos;&quot;" />
-			<Custom Action="CreateStartService.SetParam" Before="CreateStartService" Condition="NOT STOP_SERVICE=&quot;&apos;Y&apos;&quot;" />
+			<!-- Do not call CreateStartService if is uninstalling. -->
+			<!-- (Installed AND REMOVE AND NOT UPGRADINGPRODUCTCODE) means uninstalling. -->
+			<Custom Action="CreateStartService" Before="InstallFinalize" Condition="(NOT (Installed AND REMOVE AND NOT UPGRADINGPRODUCTCODE)) AND (NOT STOP_SERVICE=&quot;&apos;Y&apos;&quot;)" />
+			<Custom Action="CreateStartService.SetParam" Before="CreateStartService" Condition="(NOT (Installed AND REMOVE AND NOT UPGRADINGPRODUCTCODE)) AND (NOT STOP_SERVICE=&quot;&apos;Y&apos;&quot;)" />
 
 			<Custom Action="CustomActionHello" Before="InstallFinalize" />
 
@@ -51,18 +53,18 @@
 			<Custom Action="TryDeleteStartupShortcut.SetParam" Before="SetPropertyIsServiceRunning" Condition="STOP_SERVICE=&quot;&apos;Y&apos;&quot;" />
 
 			<!-- Launch ClientLauncher if installing or already installed and not uninstalling -->
-			<Custom Action="LaunchApp" After="InstallFinalize" />
-			<Custom Action="LaunchAppTray" After="InstallFinalize" Condition="NOT STOP_SERVICE=&quot;&apos;Y&apos;&quot;"/>
+			<Custom Action="LaunchApp" After="InstallFinalize" Condition="NOT (Installed AND REMOVE AND NOT UPGRADINGPRODUCTCODE)"/>
+			<Custom Action="LaunchAppTray" After="InstallFinalize" Condition="(NOT (Installed AND REMOVE AND NOT UPGRADINGPRODUCTCODE)) AND (NOT STOP_SERVICE=&quot;&apos;Y&apos;&quot;)"/>
 
 			<!--Workaround of "fire:FirewallException". If Outbound="Yes" or Outbound="true", the following error occurs.-->
 			<!--ExecFirewallExceptions: Error 0x80070057: failed to add app to the authorized apps list-->
-			<Custom Action="AddFirewallRules" Before="InstallFinalize"/>
-			<Custom Action="AddFirewallRules.SetParam" Before="AddFirewallRules" Condition="NOT Installed"/>
+			<Custom Action="AddFirewallRules" Before="InstallFinalize" Condition="NOT (Installed AND REMOVE AND NOT UPGRADINGPRODUCTCODE)"/>
+			<Custom Action="AddFirewallRules.SetParam" Before="AddFirewallRules" Condition="NOT (Installed AND REMOVE AND NOT UPGRADINGPRODUCTCODE)"/>
 
-			<Custom Action="AddRegSoftwareSASGeneration" Before="InstallFinalize" />
+			<Custom Action="AddRegSoftwareSASGeneration" Before="InstallFinalize" Condition="NOT (Installed AND REMOVE AND NOT UPGRADINGPRODUCTCODE)"/>
 
-			<Custom Action="RemoveInstallFolder" Before="RemoveFiles" Condition="Installed AND NOT UPGRADINGPRODUCTCODE AND REMOVE"/>
-			<Custom Action="RemoveInstallFolder.SetParam" Before="RemoveInstallFolder" Condition="Installed AND NOT UPGRADINGPRODUCTCODE AND REMOVE"/>
+			<Custom Action="RemoveInstallFolder" Before="RemoveFiles"/>
+			<Custom Action="RemoveInstallFolder.SetParam" Before="RemoveInstallFolder"/>
 			<Custom Action="TryStopDeleteService" Before="RemoveInstallFolder.SetParam" />
 			<Custom Action="TryStopDeleteService.SetParam" Before="TryStopDeleteService" />
 
