@@ -58,13 +58,13 @@ bool MyDeleteServiceW(LPCWSTR serviceName)
 {
     SC_HANDLE hSCManager = OpenSCManagerW(NULL, NULL, SC_MANAGER_CONNECT);
     if (hSCManager == NULL) {
-        WcaLog(LOGMSG_STANDARD, "Failed to open Service Control Manager");
+        WcaLog(LOGMSG_STANDARD, "Failed to open Service Control Manager, error: 0x%02X", GetLastError());
         return false;
     }
 
     SC_HANDLE hService = OpenServiceW(hSCManager, serviceName, SERVICE_STOP | DELETE);
     if (hService == NULL) {
-        WcaLog(LOGMSG_STANDARD, "Failed to open service: %ls", serviceName);
+        WcaLog(LOGMSG_STANDARD, "Failed to open service: %ls, error: 0x%02X", serviceName, GetLastError());
         CloseServiceHandle(hSCManager);
         return false;
     }
@@ -76,7 +76,7 @@ bool MyDeleteServiceW(LPCWSTR serviceName)
 
     bool success = DeleteService(hService);
     if (!success) {
-        WcaLog(LOGMSG_STANDARD, "Failed to delete service: %ls", serviceName);
+        WcaLog(LOGMSG_STANDARD, "Failed to delete service: %ls, error: 0x%02X", serviceName, GetLastError());
     }
 
     CloseServiceHandle(hService);
@@ -89,20 +89,20 @@ bool MyStartServiceW(LPCWSTR serviceName)
 {
     SC_HANDLE hSCManager = OpenSCManagerW(NULL, NULL, SC_MANAGER_CONNECT);
     if (hSCManager == NULL) {
-        WcaLog(LOGMSG_STANDARD, "Failed to open Service Control Manager");
+        WcaLog(LOGMSG_STANDARD, "Failed to open Service Control Manager, error: 0x%02X", GetLastError());
         return false;
     }
 
     SC_HANDLE hService = OpenServiceW(hSCManager, serviceName, SERVICE_START);
     if (hService == NULL) {
-        WcaLog(LOGMSG_STANDARD, "Failed to open service: %ls", serviceName);
+        WcaLog(LOGMSG_STANDARD, "Failed to open service: %ls, error: 0x%02X", serviceName, GetLastError());
         CloseServiceHandle(hSCManager);
         return false;
     }
 
     bool success = StartServiceW(hService, 0, NULL);
     if (!success) {
-        WcaLog(LOGMSG_STANDARD, "Failed to start service: %ls", serviceName);
+        WcaLog(LOGMSG_STANDARD, "Failed to start service: %ls, error: 0x%02X", serviceName, GetLastError());
     }
 
     CloseServiceHandle(hService);
@@ -156,7 +156,7 @@ bool QueryServiceStatusExW(LPCWSTR serviceName, SERVICE_STATUS_PROCESS* status)
     }
 
     DWORD bytesNeeded;
-    BOOL success = QueryServiceStatusEx(hService, SC_STATUS_PROCESS_INFO, reinterpret_cast<LPBYTE>(&status), sizeof(status), &bytesNeeded);
+    BOOL success = QueryServiceStatusEx(hService, SC_STATUS_PROCESS_INFO, reinterpret_cast<LPBYTE>(status), sizeof(*status), &bytesNeeded);
     if (!success) {
         WcaLog(LOGMSG_STANDARD, "Failed to query service: %ls", serviceName);
     }
