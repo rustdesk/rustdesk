@@ -469,7 +469,7 @@ UINT __stdcall TryStopDeleteService(__in MSIHANDLE hInstall)
     }
     else {
         lastErrorCode = GetLastError();
-        if (lastErrorCode == 1060) {
+        if (lastErrorCode == ERROR_SERVICE_DOES_NOT_EXIST) {
             WcaLog(LOGMSG_STANDARD, "Service \"%ls\" is deleted.", svcName);
         }
         else {
