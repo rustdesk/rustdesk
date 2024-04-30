@@ -651,7 +651,12 @@ jobs:
 
       - name: Build rustdesk
         run: |
-          ./build.py --flutter --hwcodec ${{ matrix.job.extra-build-args }}
+          if [[ "${{ matrix.job.arch }}" == "aarch64" ]]; then
+            export EXTRA_ARGS=""
+          else
+            export EXTRA_ARGs="--disable-flutter-texture-render"
+          fi
+          ./build.py --flutter $EXTRA_ARGS --hwcodec ${{ matrix.job.extra-build-args }}
 
       - name: create unsigned dmg
         if: env.UPLOAD_ARTIFACT == 'true'
