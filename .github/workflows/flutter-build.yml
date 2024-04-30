@@ -549,7 +549,7 @@ jobs:
           - {
               target: x86_64-apple-darwin,
               os: macos-13, #macos-latest or macos-14 use M1 now, https://docs.github.com/en/actions/using-github-hosted-runners/about-github-hosted-runners/about-github-hosted-runners#:~:text=14%20GB-,macos%2Dlatest%20or%20macos%2D14,-The%20macos%2Dlatestlabel
-              extra-build-args: "",
+              extra-build-args: "--disable-flutter-texture-render",
               arch: x86_64,
             }
           - {
@@ -651,13 +651,7 @@ jobs:
 
       - name: Build rustdesk
         run: |
-          if [[ "${{ matrix.job.arch }}" == "aarch64" ]]; then
-            export EXTRA_ARGS=""
-          else
-            export EXTRA_ARGS="--disable-flutter-texture-render"
-          fi
-          echo $EXTRA_ARGS
-          ./build.py --flutter $EXTRA_ARGS --hwcodec ${{ matrix.job.extra-build-args }}
+          ./build.py --flutter --hwcodec ${{ matrix.job.extra-build-args }}
 
       - name: create unsigned dmg
         if: env.UPLOAD_ARTIFACT == 'true'
