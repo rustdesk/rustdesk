@@ -150,6 +150,15 @@ extern "C"
 
     typedef struct _cliprdr_client_context CliprdrClientContext;
 
+    struct _NOTIFICATION_MESSAGE
+    {
+        // 0 - info, 1 - warning, 2 - error
+        UINT32 type;
+        char *msg;
+        char *details;
+    };
+    typedef struct _NOTIFICATION_MESSAGE NOTIFICATION_MESSAGE;
+
     typedef UINT (*pcCliprdrServerCapabilities)(CliprdrClientContext *context,
                                                 const CLIPRDR_CAPABILITIES *capabilities);
     typedef UINT (*pcCliprdrClientCapabilities)(CliprdrClientContext *context,
@@ -158,6 +167,9 @@ extern "C"
                                           const CLIPRDR_MONITOR_READY *monitorReady);
     typedef UINT (*pcCliprdrTempDirectory)(CliprdrClientContext *context,
                                            const CLIPRDR_TEMP_DIRECTORY *tempDirectory);
+
+    typedef UINT (*pcNotifyClipboardMsg)(UINT32 connID, const NOTIFICATION_MESSAGE *msg);
+
     typedef UINT (*pcCliprdrClientFormatList)(CliprdrClientContext *context,
                                               const CLIPRDR_FORMAT_LIST *formatList);
     typedef UINT (*pcCliprdrServerFormatList)(CliprdrClientContext *context,
@@ -191,20 +203,20 @@ extern "C"
     typedef UINT (*pcCliprdrServerFileContentsResponse)(
         CliprdrClientContext *context, const CLIPRDR_FILE_CONTENTS_RESPONSE *fileContentsResponse);
 
-    typedef BOOL (*pcCheckEnabled)(UINT32 connID);
-
     // TODO: hide more members of clipboard context
     struct _cliprdr_client_context
     {
-        void *custom;
-        BOOL enableFiles;
-        BOOL enableOthers;
+        void *Custom;
+        BOOL EnableFiles;
+        BOOL EnableOthers;
 
-        pcCheckEnabled CheckEnabled;
+        BOOL IsStopped;
+        UINT32 ResponseWaitTimeoutSecs;
         pcCliprdrServerCapabilities ServerCapabilities;
         pcCliprdrClientCapabilities ClientCapabilities;
         pcCliprdrMonitorReady MonitorReady;
         pcCliprdrTempDirectory TempDirectory;
+        pcNotifyClipboardMsg NotifyClipboardMsg;
         pcCliprdrClientFormatList ClientFormatList;
         pcCliprdrServerFormatList ServerFormatList;
         pcCliprdrClientFormatListResponse ClientFormatListResponse;
@@ -222,7 +234,7 @@ extern "C"
         pcCliprdrClientFileContentsResponse ClientFileContentsResponse;
         pcCliprdrServerFileContentsResponse ServerFileContentsResponse;
 
-        UINT32 lastRequestedFormatId;
+        UINT32 LastRequestedFormatId;
     };
 
 #ifdef __cplusplus
@@ -230,4 +242,3 @@ extern "C"
 #endif
 
 #endif // WF_CLIPRDR_H__
-

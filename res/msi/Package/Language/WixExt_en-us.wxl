@@ -1,0 +1,32 @@
+﻿<!--
+   Copyright (c) Microsoft Corporation.  All rights reserved.
+   
+   The use and distribution terms for this software are covered by the
+   Common Public License 1.0 (http://opensource.org/licenses/cpl1.0.php)
+   which can be found in the file CPL.TXT at the root of this distribution.
+   By using this software in any fashion, you are agreeing to be bound by
+   the terms of this license.
+   
+   You must not remove this notice, or any other, from this software.
+-->
+<!--
+Adapted by RustDesk for Custom Dialogs insertions
+-->
+<WixLocalization Culture="en-us"
+	xmlns="http://wixtoolset.org/schemas/v4/wxl">
+
+	<!-- Firewall Extension needs translation here -->
+	<String Id="msierrFirewallCannotConnect" Overridable="yes" Value="Cannot connect to Windows Firewall. ([2]   [3]   [4]   [5])" />
+
+	<String Id="WixSchedFirewallExceptionsInstall" Overridable="yes" Value="Configuring Windows Firewall" />
+	<String Id="WixSchedFirewallExceptionsUninstall" Overridable="yes" Value="Configuring Windows Firewall" />
+	<String Id="WixRollbackFirewallExceptionsInstall" Overridable="yes" Value="Rolling back Windows Firewall configuration" />
+	<String Id="WixExecFirewallExceptionsInstall" Overridable="yes" Value="Installing Windows Firewall configuration" />
+	<String Id="WixRollbackFirewallExceptionsUninstall" Overridable="yes" Value="Rolling back Windows Firewall configuration" />
+	<String Id="WixExecFirewallExceptionsUninstall" Overridable="yes" Value="Uninstalling Windows Firewall configuration" />
+
+	<!-- Util Extension does not need translation here, because it is already in official WiX Toolkit -->
+	<String Id="msierrSecureObjectsFailedCreateSD" Overridable="yes" Value="Could not create security descriptor [3]\[4], error: [2]" />
+	<String Id="msierrSecureObjectsFailedSet" Overridable="yes" Value="Could not apply object security descriptor [3], error: [2]" />
+	<String Id="msierrSecureObjectsUnknownType" Overridable="yes" Value="Unknown object type [3], error: [2]" />
+</WixLocalization>

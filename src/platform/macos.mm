@@ -4,6 +4,32 @@
 #include <Security/Authorization.h>
 #include <Security/AuthorizationTags.h>
 
+extern "C" bool CanUseNewApiForScreenCaptureCheck() {
+    #ifdef NO_InputMonitoringAuthStatus
+    return false;
+    #else
+    NSOperatingSystemVersion version = [[NSProcessInfo processInfo] operatingSystemVersion];
+    return version.majorVersion >= 11;
+    #endif
+}
+
+extern "C" uint32_t majorVersion() {
+    NSOperatingSystemVersion version = [[NSProcessInfo processInfo] operatingSystemVersion];
+    return version.majorVersion;
+}
+
+extern "C" bool IsCanScreenRecording(bool prompt) {
+    #ifdef NO_InputMonitoringAuthStatus
+    return false;
+    #else
+    bool res = CGPreflightScreenCaptureAccess();
+    if (!res && prompt) {
+        CGRequestScreenCaptureAccess();
+    }
+    return res;
+    #endif
+}
+
 
 // https://github.com/codebytere/node-mac-permissions/blob/main/permissions.mm
 
@@ -42,31 +68,45 @@ extern "C" bool InputMonitoringAuthStatus(bool prompt) {
     #endif
 }
 
+extern "C" bool Elevate(char* process, char** args) {
+    AuthorizationRef authRef;
+    OSStatus status;
+
+    status = AuthorizationCreate(NULL, kAuthorizationEmptyEnvironment,
+                                kAuthorizationFlagDefaults, &authRef);
+    if (status != errAuthorizationSuccess) {
+        printf("Failed to create AuthorizationRef\n");
+        return false;
+    }
+
+    AuthorizationItem authItem = {kAuthorizationRightExecute, 0, NULL, 0};
+    AuthorizationRights authRights = {1, &authItem};
+    AuthorizationFlags flags = kAuthorizationFlagDefaults |
+                                kAuthorizationFlagInteractionAllowed |
+                                kAuthorizationFlagPreAuthorize |
+                                kAuthorizationFlagExtendRights;
+    status = AuthorizationCopyRights(authRef, &authRights, kAuthorizationEmptyEnvironment, flags, NULL);
+    if (status != errAuthorizationSuccess) {
+        printf("Failed to authorize\n");
+        return false;
+    }
+
+    if (process != NULL) {
+        FILE *pipe = NULL;
+        status = AuthorizationExecuteWithPrivileges(authRef, process, kAuthorizationFlagDefaults, args, &pipe);
+        if (status != errAuthorizationSuccess) {
+            printf("Failed to run as root\n");
+            AuthorizationFree(authRef, kAuthorizationFlagDefaults);
+            return false;
+        }
+    }
+
+    AuthorizationFree(authRef, kAuthorizationFlagDefaults);
+    return true;
+}
+
 extern "C" bool MacCheckAdminAuthorization() {
-  AuthorizationRef authRef;
-  OSStatus status;
-
-  status = AuthorizationCreate(NULL, kAuthorizationEmptyEnvironment,
-                               kAuthorizationFlagDefaults, &authRef);
-  if (status != errAuthorizationSuccess) {
-    printf("Failed to create AuthorizationRef\n");
-    return false;
-  }
-
-  AuthorizationItem authItem = {kAuthorizationRightExecute, 0, NULL, 0};
-  AuthorizationRights authRights = {1, &authItem};
-  AuthorizationFlags flags = kAuthorizationFlagDefaults |
-                             kAuthorizationFlagInteractionAllowed |
-                             kAuthorizationFlagPreAuthorize |
-                             kAuthorizationFlagExtendRights;
-  status = AuthorizationCopyRights(authRef, &authRights, kAuthorizationEmptyEnvironment, flags, NULL);
-  if (status != errAuthorizationSuccess) {
-    printf("Failed to authorize\n");
-    return false;
-  }
-
-  AuthorizationFree(authRef, kAuthorizationFlagDefaults);
-  return true;
+    return Elevate(NULL, NULL);
 }
 
 extern "C" float BackingScaleFactor() {
@@ -78,7 +118,7 @@ extern "C" float BackingScaleFactor() {
 // https://github.com/jhford/screenresolution/blob/master/cg_utils.c
 // https://github.com/jdoupe/screenres/blob/master/setgetscreen.m
 
-size_t bitDepth(CGDisplayModeRef mode) {	
+size_t bitDepth(CGDisplayModeRef mode) {
     size_t depth = 0;
     // Deprecated, same display same bpp? 
     // https://stackoverflow.com/questions/8210824/how-to-avoid-cgdisplaymodecopypixelencoding-to-get-bpp

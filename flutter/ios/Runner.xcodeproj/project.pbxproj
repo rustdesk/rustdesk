@@ -159,7 +159,7 @@
 		97C146E61CF9000F007C117D /* Project object */ = {
 			isa = PBXProject;
 			attributes = {
-				LastUpgradeCheck = 1300;
+				LastUpgradeCheck = 1510;
 				ORGANIZATIONNAME = "";
 				TargetAttributes = {
 					97C146ED1CF9000F007C117D = {
@@ -208,6 +208,7 @@
 			files = (
 			);
 			inputPaths = (
+				"${TARGET_BUILD_DIR}/${INFOPLIST_PATH}",
 			);
 			name = "Thin Binary";
 			outputPaths = (
@@ -346,7 +347,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 11.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 12.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				SDKROOT = iphoneos;
 				SUPPORTED_PLATFORMS = iphoneos;
@@ -393,8 +394,6 @@
 					"-framework",
 					"\"DKPhotoGallery\"",
 					"-framework",
-					"\"FMDB\"",
-					"-framework",
 					"\"Foundation\"",
 					"-framework",
 					"\"ImageIO\"",
@@ -433,10 +432,11 @@
 					"-framework",
 					"\"video_player_avfoundation\"",
 					"-framework",
-					"\"wakelock\"",
+					"\"wakelock_plus\"",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.carriez.flutterHbb;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRIP_STYLE = "non-global";
 				SWIFT_OBJC_BRIDGING_HEADER = "Runner/Runner-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
 				VERSIONING_SYSTEM = "apple-generic";
@@ -491,7 +491,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 11.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 12.0;
 				MTL_ENABLE_DEBUG_INFO = YES;
 				ONLY_ACTIVE_ARCH = YES;
 				SDKROOT = iphoneos;
@@ -541,7 +541,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 11.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 12.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				SDKROOT = iphoneos;
 				SUPPORTED_PLATFORMS = iphoneos;
@@ -590,8 +590,6 @@
 					"-framework",
 					"\"DKPhotoGallery\"",
 					"-framework",
-					"\"FMDB\"",
-					"-framework",
 					"\"Foundation\"",
 					"-framework",
 					"\"ImageIO\"",
@@ -630,10 +628,11 @@
 					"-framework",
 					"\"video_player_avfoundation\"",
 					"-framework",
-					"\"wakelock\"",
+					"\"wakelock_plus\"",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.carriez.flutterHbb;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRIP_STYLE = "non-global";
 				SWIFT_OBJC_BRIDGING_HEADER = "Runner/Runner-Bridging-Header.h";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 5.0;
@@ -679,8 +678,6 @@
 					"-framework",
 					"\"DKPhotoGallery\"",
 					"-framework",
-					"\"FMDB\"",
-					"-framework",
 					"\"Foundation\"",
 					"-framework",
 					"\"ImageIO\"",
@@ -719,10 +716,11 @@
 					"-framework",
 					"\"video_player_avfoundation\"",
 					"-framework",
-					"\"wakelock\"",
+					"\"wakelock_plus\"",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.carriez.flutterHbb;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRIP_STYLE = "non-global";
 				SWIFT_OBJC_BRIDGING_HEADER = "Runner/Runner-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
 				VERSIONING_SYSTEM = "apple-generic";

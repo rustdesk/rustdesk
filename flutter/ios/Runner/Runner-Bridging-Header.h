@@ -1,3 +1,3 @@
 #import "GeneratedPluginRegistrant.h"
 
-#import "ffi.h"
+#import "bridge_generated.h"

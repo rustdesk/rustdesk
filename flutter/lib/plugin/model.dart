@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import './common.dart';
-import './desc.dart';
+import './manager.dart';
 
 final Map<String, LocationModel> _locationModels = {};
 final Map<String, OptionModel> _optionModels = {};
@@ -22,16 +22,18 @@ class PluginModel with ChangeNotifier {
   final List<UiType> uiList = [];
   final Map<String, String> opts = {};
 
-  void add(UiType ui) {
+  void add(List<UiType> uiList) {
     bool found = false;
-    for (int i = 0; i < uiList.length; i++) {
-      if (uiList[i].key == ui.key) {
-        uiList[i] = ui;
-        found = true;
+    for (var ui in uiList) {
+      for (int i = 0; i < this.uiList.length; i++) {
+        if (this.uiList[i].key == ui.key) {
+          this.uiList[i] = ui;
+          found = true;
+        }
       }
-    }
-    if (!found) {
-      uiList.add(ui);
+      if (!found) {
+        this.uiList.add(ui);
+      }
     }
     notifyListeners();
   }
@@ -44,12 +46,12 @@ class PluginModel with ChangeNotifier {
 class LocationModel with ChangeNotifier {
   final Map<PluginId, PluginModel> pluginModels = {};
 
-  void add(PluginId id, UiType ui) {
+  void add(PluginId id, List<UiType> uiList) {
     if (pluginModels[id] != null) {
-      pluginModels[id]!.add(ui);
+      pluginModels[id]!.add(uiList);
     } else {
       var model = PluginModel();
-      model.add(ui);
+      model.add(uiList);
       pluginModels[id] = model;
       notifyListeners();
     }
@@ -68,11 +70,11 @@ class LocationModel with ChangeNotifier {
   bool get isEmpty => pluginModels.isEmpty;
 }
 
-void addLocationUi(String location, PluginId id, UiType ui) {
+void addLocationUi(String location, PluginId id, List<UiType> uiList) {
   if (_locationModels[location] == null) {
     _locationModels[location] = LocationModel();
   }
-  _locationModels[location]?.add(id, ui);
+  _locationModels[location]?.add(id, uiList);
 }
 
 LocationModel? getLocationModel(String location) => _locationModels[location];

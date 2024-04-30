@@ -1,5 +1,10 @@
 pub use self::vpxcodec::*;
-use hbb_common::message_proto::{video_frame, VideoFrame};
+use hbb_common::{
+    bail, log,
+    message_proto::{video_frame, Chroma, VideoFrame},
+    ResultType,
+};
+use std::{ffi::c_void, slice};
 
 cfg_if! {
     if #[cfg(quartz)] {
@@ -12,8 +17,8 @@ cfg_if! {
         mod wayland;
         mod x11;
         pub use self::linux::*;
-        pub use self::x11::Frame;
         pub use self::wayland::set_map_err;
+        pub use self::x11::PixelBuffer;
             } else {
                 mod x11;
                 pub use self::x11::*;
@@ -37,26 +42,30 @@ pub mod hwcodec;
 #[cfg(feature = "mediacodec")]
 pub mod mediacodec;
 pub mod vpxcodec;
+#[cfg(feature = "vram")]
+pub mod vram;
 pub use self::convert::*;
 pub const STRIDE_ALIGN: usize = 64; // commonly used in libvpx vpx_img_alloc caller
 pub const HW_STRIDE_ALIGN: usize = 0; // recommended by av_frame_get_buffer
 
+pub mod aom;
 pub mod record;
 mod vpx;
 
+#[repr(usize)]
 #[derive(Copy, Clone)]
 pub enum ImageFormat {
     Raw,
     ABGR,
     ARGB,
 }
-
+#[repr(C)]
 pub struct ImageRgb {
     pub raw: Vec<u8>,
     pub w: usize,
     pub h: usize,
-    fmt: ImageFormat,
-    stride: usize,
+    pub fmt: ImageFormat,
+    pub stride: usize,
 }
 
 impl ImageRgb {
@@ -93,8 +102,6 @@ pub fn would_block_if_equal(old: &mut Vec<u8>, b: &[u8]) -> std::io::Result<()> 
 }
 
 pub trait TraitCapturer {
-    fn set_use_yuv(&mut self, use_yuv: bool);
-
     // We doesn't support
     #[cfg(not(any(target_os = "ios")))]
     fn frame<'a>(&'a mut self, timeout: std::time::Duration) -> std::io::Result<Frame<'a>>;
@@ -103,6 +110,112 @@ pub trait TraitCapturer {
     fn is_gdi(&self) -> bool;
     #[cfg(windows)]
     fn set_gdi(&mut self) -> bool;
+
+    #[cfg(feature = "vram")]
+    fn device(&self) -> AdapterDevice;
+
+    #[cfg(feature = "vram")]
+    fn set_output_texture(&mut self, texture: bool);
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct AdapterDevice {
+    pub device: *mut c_void,
+    pub vendor_id: ::std::os::raw::c_uint,
+    pub luid: i64,
+}
+
+impl Default for AdapterDevice {
+    fn default() -> Self {
+        Self {
+            device: std::ptr::null_mut(),
+            vendor_id: Default::default(),
+            luid: Default::default(),
+        }
+    }
+}
+
+pub trait TraitPixelBuffer {
+    fn data(&self) -> &[u8];
+
+    fn width(&self) -> usize;
+
+    fn height(&self) -> usize;
+
+    fn stride(&self) -> Vec<usize>;
+
+    fn pixfmt(&self) -> Pixfmt;
+}
+
+#[cfg(not(any(target_os = "ios")))]
+pub enum Frame<'a> {
+    PixelBuffer(PixelBuffer<'a>),
+    Texture(*mut c_void),
+}
+
+#[cfg(not(any(target_os = "ios")))]
+impl Frame<'_> {
+    pub fn valid<'a>(&'a self) -> bool {
+        match self {
+            Frame::PixelBuffer(pixelbuffer) => !pixelbuffer.data().is_empty(),
+            Frame::Texture(texture) => !texture.is_null(),
+        }
+    }
+
+    pub fn to<'a>(
+        &'a self,
+        yuvfmt: EncodeYuvFormat,
+        yuv: &'a mut Vec<u8>,
+        mid_data: &mut Vec<u8>,
+    ) -> ResultType<EncodeInput> {
+        match self {
+            Frame::PixelBuffer(pixelbuffer) => {
+                convert_to_yuv(&pixelbuffer, yuvfmt, yuv, mid_data)?;
+                Ok(EncodeInput::YUV(yuv))
+            }
+            Frame::Texture(texture) => Ok(EncodeInput::Texture(*texture)),
+        }
+    }
+}
+
+pub enum EncodeInput<'a> {
+    YUV(&'a [u8]),
+    Texture(*mut c_void),
+}
+
+impl<'a> EncodeInput<'a> {
+    pub fn yuv(&self) -> ResultType<&'_ [u8]> {
+        match self {
+            Self::YUV(f) => Ok(f),
+            _ => bail!("not pixelfbuffer frame"),
+        }
+    }
+
+    pub fn texture(&self) -> ResultType<*mut c_void> {
+        match self {
+            Self::Texture(f) => Ok(*f),
+            _ => bail!("not texture frame"),
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub enum Pixfmt {
+    BGRA,
+    RGBA,
+    I420,
+    NV12,
+    I444,
+}
+
+#[derive(Debug, Clone)]
+pub struct EncodeYuvFormat {
+    pub pixfmt: Pixfmt,
+    pub w: usize,
+    pub h: usize,
+    pub stride: Vec<usize>,
+    pub u: usize,
+    pub v: usize,
 }
 
 #[cfg(x11)]
@@ -117,7 +230,7 @@ pub fn is_cursor_embedded() -> bool {
     if is_x11() {
         x11::IS_CURSOR_EMBEDDED
     } else {
-        wayland::is_cursor_embedded()
+        false
     }
 }
 
@@ -131,14 +244,18 @@ pub fn is_cursor_embedded() -> bool {
 pub enum CodecName {
     VP8,
     VP9,
-    H264(String),
-    H265(String),
+    AV1,
+    H264RAM(String),
+    H265RAM(String),
+    H264VRAM,
+    H265VRAM,
 }
 
-#[derive(PartialEq, Debug, Clone)]
+#[derive(PartialEq, Debug, Clone, Copy)]
 pub enum CodecFormat {
     VP8,
     VP9,
+    AV1,
     H264,
     H265,
     Unknown,
@@ -149,6 +266,7 @@ impl From<&VideoFrame> for CodecFormat {
         match it.union {
             Some(video_frame::Union::Vp8s(_)) => CodecFormat::VP8,
             Some(video_frame::Union::Vp9s(_)) => CodecFormat::VP9,
+            Some(video_frame::Union::Av1s(_)) => CodecFormat::AV1,
             Some(video_frame::Union::H264s(_)) => CodecFormat::H264,
             Some(video_frame::Union::H265s(_)) => CodecFormat::H265,
             _ => CodecFormat::Unknown,
@@ -161,8 +279,9 @@ impl From<&CodecName> for CodecFormat {
         match value {
             CodecName::VP8 => Self::VP8,
             CodecName::VP9 => Self::VP9,
-            CodecName::H264(_) => Self::H264,
-            CodecName::H265(_) => Self::H265,
+            CodecName::AV1 => Self::AV1,
+            CodecName::H264RAM(_) | CodecName::H264VRAM => Self::H264,
+            CodecName::H265RAM(_) | CodecName::H265VRAM => Self::H265,
         }
     }
 }
@@ -172,9 +291,193 @@ impl ToString for CodecFormat {
         match self {
             CodecFormat::VP8 => "VP8".into(),
             CodecFormat::VP9 => "VP9".into(),
+            CodecFormat::AV1 => "AV1".into(),
             CodecFormat::H264 => "H264".into(),
             CodecFormat::H265 => "H265".into(),
             CodecFormat::Unknown => "Unknow".into(),
+        }
+    }
+}
+
+#[derive(Debug)]
+pub enum Error {
+    FailedCall(String),
+    BadPtr(String),
+}
+
+impl std::fmt::Display for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::result::Result<(), std::fmt::Error> {
+        write!(f, "{:?}", self)
+    }
+}
+
+impl std::error::Error for Error {}
+
+pub type Result<T> = std::result::Result<T, Error>;
+
+#[macro_export]
+macro_rules! generate_call_macro {
+    ($func_name:ident, $allow_err:expr) => {
+        macro_rules! $func_name {
+            ($x:expr) => {{
+                let result = unsafe { $x };
+                let result_int = unsafe { std::mem::transmute::<_, i32>(result) };
+                if result_int != 0 {
+                    let message = format!(
+                        "errcode={} {}:{}:{}:{}",
+                        result_int,
+                        module_path!(),
+                        file!(),
+                        line!(),
+                        column!()
+                    );
+                    if $allow_err {
+                        log::warn!("Failed to call {}, {}", stringify!($func_name), message);
+                    } else {
+                        return Err(crate::Error::FailedCall(message).into());
+                    }
+                }
+                result
+            }};
+        }
+    };
+}
+
+#[macro_export]
+macro_rules! generate_call_ptr_macro {
+    ($func_name:ident) => {
+        macro_rules! $func_name {
+            ($x:expr) => {{
+                let result = unsafe { $x };
+                let result_int = unsafe { std::mem::transmute::<_, isize>(result) };
+                if result_int == 0 {
+                    return Err(crate::Error::BadPtr(format!(
+                        "errcode={} {}:{}:{}:{}",
+                        result_int,
+                        module_path!(),
+                        file!(),
+                        line!(),
+                        column!()
+                    ))
+                    .into());
+                }
+                result
+            }};
+        }
+    };
+}
+
+pub trait GoogleImage {
+    fn width(&self) -> usize;
+    fn height(&self) -> usize;
+    fn stride(&self) -> Vec<i32>;
+    fn planes(&self) -> Vec<*mut u8>;
+    fn chroma(&self) -> Chroma;
+    fn get_bytes_per_row(w: usize, fmt: ImageFormat, stride: usize) -> usize {
+        let bytes_per_pixel = match fmt {
+            ImageFormat::Raw => 3,
+            ImageFormat::ARGB | ImageFormat::ABGR => 4,
+        };
+        // https://github.com/lemenkov/libyuv/blob/6900494d90ae095d44405cd4cc3f346971fa69c9/source/convert_argb.cc#L128
+        // https://github.com/lemenkov/libyuv/blob/6900494d90ae095d44405cd4cc3f346971fa69c9/source/convert_argb.cc#L129
+        (w * bytes_per_pixel + stride - 1) & !(stride - 1)
+    }
+    // rgb [in/out] fmt and stride must be set in ImageRgb
+    fn to(&self, rgb: &mut ImageRgb) {
+        rgb.w = self.width();
+        rgb.h = self.height();
+        let bytes_per_row = Self::get_bytes_per_row(rgb.w, rgb.fmt, rgb.stride());
+        rgb.raw.resize(rgb.h * bytes_per_row, 0);
+        let stride = self.stride();
+        let planes = self.planes();
+        unsafe {
+            match (self.chroma(), rgb.fmt()) {
+                (Chroma::I420, ImageFormat::Raw) => {
+                    super::I420ToRAW(
+                        planes[0],
+                        stride[0],
+                        planes[1],
+                        stride[1],
+                        planes[2],
+                        stride[2],
+                        rgb.raw.as_mut_ptr(),
+                        bytes_per_row as _,
+                        self.width() as _,
+                        self.height() as _,
+                    );
+                }
+                (Chroma::I420, ImageFormat::ARGB) => {
+                    super::I420ToARGB(
+                        planes[0],
+                        stride[0],
+                        planes[1],
+                        stride[1],
+                        planes[2],
+                        stride[2],
+                        rgb.raw.as_mut_ptr(),
+                        bytes_per_row as _,
+                        self.width() as _,
+                        self.height() as _,
+                    );
+                }
+                (Chroma::I420, ImageFormat::ABGR) => {
+                    super::I420ToABGR(
+                        planes[0],
+                        stride[0],
+                        planes[1],
+                        stride[1],
+                        planes[2],
+                        stride[2],
+                        rgb.raw.as_mut_ptr(),
+                        bytes_per_row as _,
+                        self.width() as _,
+                        self.height() as _,
+                    );
+                }
+                (Chroma::I444, ImageFormat::ARGB) => {
+                    super::I444ToARGB(
+                        planes[0],
+                        stride[0],
+                        planes[1],
+                        stride[1],
+                        planes[2],
+                        stride[2],
+                        rgb.raw.as_mut_ptr(),
+                        bytes_per_row as _,
+                        self.width() as _,
+                        self.height() as _,
+                    );
+                }
+                (Chroma::I444, ImageFormat::ABGR) => {
+                    super::I444ToABGR(
+                        planes[0],
+                        stride[0],
+                        planes[1],
+                        stride[1],
+                        planes[2],
+                        stride[2],
+                        rgb.raw.as_mut_ptr(),
+                        bytes_per_row as _,
+                        self.width() as _,
+                        self.height() as _,
+                    );
+                }
+                // (Chroma::I444, ImageFormat::Raw), new version libyuv have I444ToRAW
+                _ => log::error!("unsupported pixfmt: {:?}", self.chroma()),
+            }
+        }
+    }
+    fn data(&self) -> (&[u8], &[u8], &[u8]) {
+        unsafe {
+            let stride = self.stride();
+            let planes = self.planes();
+            let h = (self.height() as usize + 1) & !1;
+            let n = stride[0] as usize * h;
+            let y = slice::from_raw_parts(planes[0], n);
+            let n = stride[1] as usize * (h >> 1);
+            let u = slice::from_raw_parts(planes[1], n);
+            let v = slice::from_raw_parts(planes[2], n);
+            (y, u, v)
         }
     }
 }

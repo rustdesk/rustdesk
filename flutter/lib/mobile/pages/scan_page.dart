@@ -8,6 +8,7 @@ import 'package:qr_code_scanner/qr_code_scanner.dart';
 import 'package:zxing2/qrcode.dart';
 
 import '../../common.dart';
+import '../../models/platform_model.dart';
 import '../widgets/dialog.dart';
 
 class ScanPage extends StatefulWidget {
@@ -46,13 +47,13 @@ class _ScanPageState extends State<ScanPage> {
                       await picker.pickImage(source: ImageSource.gallery);
                   if (file != null) {
                     var image = img.decodeNamedImage(
-                        File(file.path).readAsBytesSync(), file.path)!;
+                        file.path, File(file.path).readAsBytesSync())!;
 
                     LuminanceSource source = RGBLuminanceSource(
                         image.width,
                         image.height,
                         image
-                            .getBytes(format: img.Format.abgr)
+                            .getBytes(order: img.ChannelOrder.abgr)
                             .buffer
                             .asInt32List());
                     var bitmap = BinaryBitmap(HybridBinarizer(source));
@@ -60,7 +61,11 @@ class _ScanPageState extends State<ScanPage> {
                     var reader = QRCodeReader();
                     try {
                       var result = reader.decode(bitmap);
-                      showServerSettingFromQr(result.text);
+                      if (result.text.startsWith(bind.mainUriPrefixSync())) {
+                        handleUriLink(uriString: result.text);
+                      } else {
+                        showServerSettingFromQr(result.text);
+                      }
                     } catch (e) {
                       showToast('No QR code found');
                     }

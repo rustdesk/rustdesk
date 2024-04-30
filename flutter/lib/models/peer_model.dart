@@ -1,18 +1,25 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
+import 'package:get/get.dart';
 import 'platform_model.dart';
+// ignore: depend_on_referenced_packages
+import 'package:collection/collection.dart';
 
 class Peer {
   final String id;
-  final String username;
-  final String hostname;
-  final String platform;
+  String hash; // personal ab hash password
+  String password; // shared ab password
+  String username; // pc username
+  String hostname;
+  String platform;
   String alias;
   List<dynamic> tags;
   bool forceAlwaysRelay = false;
   String rdpPort;
   String rdpUsername;
   bool online = false;
+  String loginName; //login username
+  bool? sameServer;
 
   String getId() {
     if (alias != '') {
@@ -23,6 +30,8 @@ class Peer {
 
   Peer.fromJson(Map<String, dynamic> json)
       : id = json['id'] ?? '',
+        hash = json['hash'] ?? '',
+        password = json['password'] ?? '',
         username = json['username'] ?? '',
         hostname = json['hostname'] ?? '',
         platform = json['platform'] ?? '',
@@ -30,11 +39,15 @@ class Peer {
         tags = json['tags'] ?? [],
         forceAlwaysRelay = json['forceAlwaysRelay'] == 'true',
         rdpPort = json['rdpPort'] ?? '',
-        rdpUsername = json['rdpUsername'] ?? '';
+        rdpUsername = json['rdpUsername'] ?? '',
+        loginName = json['loginName'] ?? '',
+        sameServer = json['same_server'];
 
   Map<String, dynamic> toJson() {
     return <String, dynamic>{
       "id": id,
+      "hash": hash,
+      "password": password,
       "username": username,
       "hostname": hostname,
       "platform": platform,
@@ -43,11 +56,40 @@ class Peer {
       "forceAlwaysRelay": forceAlwaysRelay.toString(),
       "rdpPort": rdpPort,
       "rdpUsername": rdpUsername,
+      'loginName': loginName,
+      'same_server': sameServer,
+    };
+  }
+
+  Map<String, dynamic> toCustomJson({required bool includingHash}) {
+    var res = <String, dynamic>{
+      "id": id,
+      "username": username,
+      "hostname": hostname,
+      "platform": platform,
+      "alias": alias,
+      "tags": tags,
+    };
+    if (includingHash) {
+      res['hash'] = hash;
+    }
+    return res;
+  }
+
+  Map<String, dynamic> toGroupCacheJson() {
+    return <String, dynamic>{
+      "id": id,
+      "username": username,
+      "hostname": hostname,
+      "platform": platform,
+      "login_name": loginName,
     };
   }
 
   Peer({
     required this.id,
+    required this.hash,
+    required this.password,
     required this.username,
     required this.hostname,
     required this.platform,
@@ -56,11 +98,15 @@ class Peer {
     required this.forceAlwaysRelay,
     required this.rdpPort,
     required this.rdpUsername,
+    required this.loginName,
+    this.sameServer,
   });
 
   Peer.loading()
       : this(
           id: '...',
+          hash: '',
+          password: '',
           username: '...',
           hostname: '...',
           platform: '...',
@@ -69,16 +115,57 @@ class Peer {
           forceAlwaysRelay: false,
           rdpPort: '',
           rdpUsername: '',
+          loginName: '',
         );
+  bool equal(Peer other) {
+    return id == other.id &&
+        hash == other.hash &&
+        password == other.password &&
+        username == other.username &&
+        hostname == other.hostname &&
+        platform == other.platform &&
+        alias == other.alias &&
+        tags.equals(other.tags) &&
+        forceAlwaysRelay == other.forceAlwaysRelay &&
+        rdpPort == other.rdpPort &&
+        rdpUsername == other.rdpUsername &&
+        loginName == other.loginName;
+  }
+
+  Peer.copy(Peer other)
+      : this(
+            id: other.id,
+            hash: other.hash,
+            password: other.password,
+            username: other.username,
+            hostname: other.hostname,
+            platform: other.platform,
+            alias: other.alias,
+            tags: other.tags.toList(),
+            forceAlwaysRelay: other.forceAlwaysRelay,
+            rdpPort: other.rdpPort,
+            rdpUsername: other.rdpUsername,
+            loginName: other.loginName,
+            sameServer: other.sameServer);
 }
+
+enum UpdateEvent { online, load }
+
+typedef GetInitPeers = RxList<Peer> Function();
 
 class Peers extends ChangeNotifier {
   final String name;
   final String loadEvent;
-  List<Peer> peers;
+  List<Peer> peers = List.empty(growable: true);
+  final GetInitPeers? getInitPeers;
+  UpdateEvent event = UpdateEvent.load;
   static const _cbQueryOnlines = 'callback_query_onlines';
 
-  Peers({required this.name, required this.peers, required this.loadEvent}) {
+  Peers(
+      {required this.name,
+      required this.getInitPeers,
+      required this.loadEvent}) {
+    peers = getInitPeers?.call() ?? [];
     platformFFI.registerEventHandler(_cbQueryOnlines, name, (evt) async {
       _updateOnlineState(evt);
     });
@@ -123,16 +210,22 @@ class Peers extends ChangeNotifier {
       }
     });
 
+    event = UpdateEvent.online;
     notifyListeners();
   }
 
   void _updatePeers(Map<String, dynamic> evt) {
     final onlineStates = _getOnlineStates();
-    peers = _decodePeers(evt['peers']);
+    if (getInitPeers != null) {
+      peers = getInitPeers?.call() ?? [];
+    } else {
+      peers = _decodePeers(evt['peers']);
+    }
     for (var peer in peers) {
       final state = onlineStates[peer.id];
       peer.online = state != null && state != false;
     }
+    event = UpdateEvent.load;
     notifyListeners();
   }
 

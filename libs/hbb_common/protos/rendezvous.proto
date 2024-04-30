@@ -73,6 +73,7 @@ message RegisterPkResponse {
     SERVER_ERROR = 7;
   }
   Result result = 1;
+  int32 keep_alive = 2;
 }
 
 message PunchHoleResponse {
@@ -163,6 +164,10 @@ message OnlineResponse {
   bytes states = 1;
 }
 
+message KeyExchange {
+  repeated bytes keys = 1; 
+}
+
 message RendezvousMessage {
   oneof union {
     RegisterPeer register_peer = 6;
@@ -184,5 +189,6 @@ message RendezvousMessage {
     PeerDiscovery peer_discovery = 22;
     OnlineRequest online_request = 23;
     OnlineResponse online_response = 24;
+    KeyExchange key_exchange = 25;
   }
 }

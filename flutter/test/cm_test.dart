@@ -16,7 +16,7 @@ final testClients = [
   Client(3, false, false, "UserDDDDDDDDDDDd", "441123123", true, false, false)
 ];
 
-/// flutter run -d {platform} -t lib/cm_test.dart to test cm
+/// flutter run -d {platform} -t test/cm_test.dart to test cm
 void main(List<String> args) async {
   isTest = true;
   WidgetsFlutterBinding.ensureInitialized();
@@ -45,12 +45,12 @@ void main(List<String> args) async {
       ],
       supportedLocales: supportedLocales,
       home: const DesktopServerPage()));
-  WindowOptions windowOptions =
-      getHiddenTitleBarWindowOptions(size: kConnectionManagerWindowSize);
+  WindowOptions windowOptions = getHiddenTitleBarWindowOptions(
+      size: kConnectionManagerWindowSizeClosedChat);
   windowManager.waitUntilReadyToShow(windowOptions, () async {
     await windowManager.show();
     // ensure initial window size to be changed
-    await windowManager.setSize(kConnectionManagerWindowSize);
+    await windowManager.setSize(kConnectionManagerWindowSizeClosedChat);
     await Future.wait([
       windowManager.setAlignment(Alignment.topRight),
       windowManager.focus(),

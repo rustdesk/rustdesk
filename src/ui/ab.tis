@@ -325,16 +325,16 @@ class SessionList: Reactor.Component {
             <popup>
                 <menu.context #remote-context>
                     <li #connect>{translate('Connect')}</li>
-                    <li #transfer>{translate('Transfer File')}</li>
-                    <li #tunnel>{translate('TCP Tunneling')}</li>
+                    <li #transfer>{translate('Transfer file')}</li>
+                    <li #tunnel>{translate('TCP tunneling')}</li>
                     <li #force-always-relay><span>{svg_checkmark}</span>{translate('Always connect via relay')}</li>
                     <li #rdp>RDP<EditRdpPort /></li>
                     <li #wol>{translate('WOL')}</li>
                     <div .separator />
                     {this.type != "lan" && <li #rename>{translate('Rename')}</li>}
                     {this.type != "fav" && <li #remove>{translate('Remove')}</li>}
-                    {is_win && <li #shortcut>{translate('Create Desktop Shortcut')}</li>}
-                    <li #forget-password>{translate('Unremember Password')}</li>
+                    {is_win && <li #shortcut>{translate('Create desktop shortcut')}</li>}
+                    <li #forget-password>{translate('Forget Password')}</li>
                     {(!this.type || this.type == "fav") && <li #add-fav>{translate('Add to Favorites')}</li>}
                     {(!this.type || this.type == "fav") && <li #remove-fav>{translate('Remove from Favorites')}</li>}
                     {this.type == "ab" && <li #edit-tag>{translate('Edit Tag')}</li>}
@@ -540,10 +540,10 @@ class MultipleSessions: Reactor.Component {
         return  <div style="size: *">
                 <div .sessions-bar>
                     <div style="width:*" .sessions-tab #sessions-type>
-                        <span class={!type ? 'active' : 'inactive'}>{translate('Recent Sessions')}</span>
+                        <span class={!type ? 'active' : 'inactive'}>{translate('Recent sessions')}</span>
                         <span #fav class={type == "fav" ? 'active' : 'inactive'}>{translate('Favorites')}</span>
                         {handler.is_installed() && <span #lan class={type == "lan" ? 'active' : 'inactive'}>{translate('Discovered')}</span>}
-                        <span #ab class={type == "ab" ? 'active' : 'inactive'}>{translate('Address Book')}</span>
+                        <span #ab class={type == "ab" ? 'active' : 'inactive'}>{translate('Address book')}</span>
                     </div>
                     {!this.hidden && <SearchBar type={type} />}
                     {!this.hidden && <SessionStyle type={type} />}
@@ -578,7 +578,7 @@ class MultipleSessions: Reactor.Component {
 
     function onSize() {
         var w = this.$(.sessions-bar .sessions-tab).box(#width);
-        var len = translate('Recent Sessions').length;
+        var len = translate('Recent sessions').length;
         var totalChars = 0;
         var nEle = 0;
         for (var el in this.$$(#sessions-type span)) {

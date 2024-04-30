@@ -1,6 +1,7 @@
 import 'dart:async';
-import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter_hbb/common/widgets/setting_widgets.dart';
+import 'package:flutter_hbb/common/widgets/toolbar.dart';
 import 'package:get/get.dart';
 
 import '../../common.dart';
@@ -20,7 +21,7 @@ void setPermanentPasswordDialog(OverlayDialogManager dialogManager) async {
   final p1 = TextEditingController(text: pw);
   var validateLength = false;
   var validateSame = false;
-  dialogManager.show((setState, close) {
+  dialogManager.show((setState, close, context) {
     submit() async {
       close();
       dialogManager.showLoading(translate("Waiting"));
@@ -111,7 +112,7 @@ void setTemporaryPasswordLengthDialog(
   var index = lengths.indexOf(length);
   if (index < 0) index = 0;
   length = lengths[index];
-  dialogManager.show((setState, close) {
+  dialogManager.show((setState, close, context) {
     setLength(newValue) {
       final oldValue = length;
       if (oldValue == newValue) return;
@@ -147,59 +148,72 @@ void setTemporaryPasswordLengthDialog(
 
 void showServerSettingsWithValue(
     ServerConfig serverConfig, OverlayDialogManager dialogManager) async {
-  Map<String, dynamic> oldOptions = jsonDecode(await bind.mainGetOptions());
-  final oldCfg = ServerConfig.fromOptions(oldOptions);
-
   var isInProgress = false;
   final idCtrl = TextEditingController(text: serverConfig.idServer);
   final relayCtrl = TextEditingController(text: serverConfig.relayServer);
   final apiCtrl = TextEditingController(text: serverConfig.apiServer);
   final keyCtrl = TextEditingController(text: serverConfig.key);
 
-  String? idServerMsg;
-  String? relayServerMsg;
-  String? apiServerMsg;
+  RxString idServerMsg = ''.obs;
+  RxString relayServerMsg = ''.obs;
+  RxString apiServerMsg = ''.obs;
 
-  dialogManager.show((setState, close) {
-    Future<bool> validate() async {
-      if (idCtrl.text != oldCfg.idServer) {
-        final res = await validateAsync(idCtrl.text);
-        setState(() => idServerMsg = res);
-        if (idServerMsg != null) return false;
-      }
-      if (relayCtrl.text != oldCfg.relayServer) {
-        relayServerMsg = await validateAsync(relayCtrl.text);
-        if (relayServerMsg != null) return false;
-      }
-      if (apiCtrl.text != oldCfg.apiServer) {
-        if (apiServerMsg != null) return false;
-      }
-      return true;
+  final controllers = [idCtrl, relayCtrl, apiCtrl, keyCtrl];
+  final errMsgs = [
+    idServerMsg,
+    relayServerMsg,
+    apiServerMsg,
+  ];
+
+  dialogManager.show((setState, close, context) {
+    Future<bool> submit() async {
+      setState(() {
+        isInProgress = true;
+      });
+      bool ret = await setServerConfig(
+          null,
+          errMsgs,
+          ServerConfig(
+              idServer: idCtrl.text.trim(),
+              relayServer: relayCtrl.text.trim(),
+              apiServer: apiCtrl.text.trim(),
+              key: keyCtrl.text.trim()));
+      setState(() {
+        isInProgress = false;
+      });
+      return ret;
     }
 
     return CustomAlertDialog(
-      title: Text(translate('ID/Relay Server')),
+      title: Row(
+        children: [
+          Expanded(child: Text(translate('ID/Relay Server'))),
+          ...ServerConfigImportExportWidgets(controllers, errMsgs),
+        ],
+      ),
       content: Form(
-          child: Column(
+          child: Obx(() => Column(
               mainAxisSize: MainAxisSize.min,
               children: <Widget>[
                     TextFormField(
                       controller: idCtrl,
                       decoration: InputDecoration(
                           labelText: translate('ID Server'),
-                          errorText: idServerMsg),
+                          errorText: idServerMsg.value.isEmpty
+                              ? null
+                              : idServerMsg.value),
                     )
                   ] +
-                  (isAndroid
-                      ? [
-                          TextFormField(
-                            controller: relayCtrl,
-                            decoration: InputDecoration(
-                                labelText: translate('Relay Server'),
-                                errorText: relayServerMsg),
-                          )
-                        ]
-                      : []) +
+                  [
+                    TextFormField(
+                      controller: relayCtrl,
+                      decoration: InputDecoration(
+                          labelText: translate('Relay Server'),
+                          errorText: relayServerMsg.value.isEmpty
+                              ? null
+                              : relayServerMsg.value),
+                    )
+                  ] +
                   [
                     TextFormField(
                       controller: apiCtrl,
@@ -214,7 +228,7 @@ void showServerSettingsWithValue(
                             return translate("invalid_http");
                           }
                         }
-                        return apiServerMsg;
+                        return null;
                       },
                     ),
                     TextFormField(
@@ -223,10 +237,9 @@ void showServerSettingsWithValue(
                         labelText: 'Key',
                       ),
                     ),
-                    Offstage(
-                        offstage: !isInProgress,
-                        child: LinearProgressIndicator())
-                  ])),
+                    // NOT use Offstage to wrap LinearProgressIndicator
+                    if (isInProgress) const LinearProgressIndicator(),
+                  ]))),
       actions: [
         dialogButton('Cancel', onPressed: () {
           close();
@@ -234,35 +247,12 @@ void showServerSettingsWithValue(
         dialogButton(
           'OK',
           onPressed: () async {
-            setState(() {
-              idServerMsg = null;
-              relayServerMsg = null;
-              apiServerMsg = null;
-              isInProgress = true;
-            });
-            if (await validate()) {
-              if (idCtrl.text != oldCfg.idServer) {
-                if (oldCfg.idServer.isNotEmpty) {
-                  await gFFI.userModel.logOut();
-                }
-                bind.mainSetOption(
-                    key: "custom-rendezvous-server", value: idCtrl.text);
-              }
-              if (relayCtrl.text != oldCfg.relayServer) {
-                bind.mainSetOption(key: "relay-server", value: relayCtrl.text);
-              }
-              if (keyCtrl.text != oldCfg.key) {
-                bind.mainSetOption(key: "key", value: keyCtrl.text);
-              }
-              if (apiCtrl.text != oldCfg.apiServer) {
-                bind.mainSetOption(key: "api-server", value: apiCtrl.text);
-              }
+            if (await submit()) {
               close();
               showToast(translate('Successful'));
+            } else {
+              showToast(translate('Failed'));
             }
-            setState(() {
-              isInProgress = false;
-            });
           },
         ),
       ],
@@ -270,11 +260,26 @@ void showServerSettingsWithValue(
   });
 }
 
-Future<String?> validateAsync(String value) async {
-  value = value.trim();
-  if (value.isEmpty) {
-    return null;
-  }
-  final res = await bind.mainTestIfValidServer(server: value);
-  return res.isEmpty ? null : res;
+void setPrivacyModeDialog(
+  OverlayDialogManager dialogManager,
+  List<TToggleMenu> privacyModeList,
+  RxString privacyModeState,
+) async {
+  dialogManager.dismissAll();
+  dialogManager.show((setState, close, context) {
+    return CustomAlertDialog(
+      title: Text(translate('Privacy mode')),
+      content: Column(
+          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          children: privacyModeList
+              .map((value) => CheckboxListTile(
+                    contentPadding: EdgeInsets.zero,
+                    visualDensity: VisualDensity.compact,
+                    title: value.child,
+                    value: value.value,
+                    onChanged: value.onChanged,
+                  ))
+              .toList()),
+    );
+  }, backDismiss: true, clickMaskDismiss: true);
 }

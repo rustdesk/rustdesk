@@ -19,6 +19,7 @@ lazy_static! {
     static ref MAIN_SERVICE_CTX: RwLock<Option<GlobalRef>> = RwLock::new(None); // MainService -> video service / audio service / info
     static ref VIDEO_RAW: Mutex<FrameRaw> = Mutex::new(FrameRaw::new("video", MAX_VIDEO_FRAME_TIMEOUT));
     static ref AUDIO_RAW: Mutex<FrameRaw> = Mutex::new(FrameRaw::new("audio", MAX_AUDIO_FRAME_TIMEOUT));
+    static ref NDK_CONTEXT_INITED: Mutex<bool> = Default::default();
 }
 
 const MAX_VIDEO_FRAME_TIMEOUT: Duration = Duration::from_millis(100);
@@ -49,12 +50,12 @@ impl FrameRaw {
         self.enable = value;
     }
 
-    fn update(&mut self, data: &mut [u8]) {
+    fn update(&mut self, data: *mut u8, len: usize) {
         if self.enable.not() {
             return;
         }
-        self.len = data.len();
-        self.ptr.store(data.as_mut_ptr(), SeqCst);
+        self.len = len;
+        self.ptr.store(data, SeqCst);
         self.last_update = Instant::now();
     }
 
@@ -93,35 +94,42 @@ pub fn get_audio_raw<'a>() -> Option<&'a [u8]> {
 }
 
 #[no_mangle]
-pub extern "system" fn Java_com_carriez_flutter_1hbb_MainService_onVideoFrameUpdate(
+pub extern "system" fn Java_ffi_FFI_onVideoFrameUpdate(
     env: JNIEnv,
     _class: JClass,
     buffer: JObject,
 ) {
     let jb = JByteBuffer::from(buffer);
-    let slice = env.get_direct_buffer_address(jb).unwrap();
-    VIDEO_RAW.lock().unwrap().update(slice);
+    if let Ok(data) = env.get_direct_buffer_address(&jb) {
+        if let Ok(len) = env.get_direct_buffer_capacity(&jb) {
+            VIDEO_RAW.lock().unwrap().update(data, len);
+        }
+    }
 }
 
 #[no_mangle]
-pub extern "system" fn Java_com_carriez_flutter_1hbb_MainService_onAudioFrameUpdate(
+pub extern "system" fn Java_ffi_FFI_onAudioFrameUpdate(
     env: JNIEnv,
     _class: JClass,
     buffer: JObject,
 ) {
     let jb = JByteBuffer::from(buffer);
-    let slice = env.get_direct_buffer_address(jb).unwrap();
-    AUDIO_RAW.lock().unwrap().update(slice);
+    if let Ok(data) = env.get_direct_buffer_address(&jb) {
+        if let Ok(len) = env.get_direct_buffer_capacity(&jb) {
+            AUDIO_RAW.lock().unwrap().update(data, len);
+        }
+    }
 }
 
 #[no_mangle]
-pub extern "system" fn Java_com_carriez_flutter_1hbb_MainService_setFrameRawEnable(
+pub extern "system" fn Java_ffi_FFI_setFrameRawEnable(
     env: JNIEnv,
     _class: JClass,
     name: JString,
     value: jboolean,
 ) {
-    if let Ok(name) = env.get_string(name) {
+    let mut env = env;
+    if let Ok(name) = env.get_string(&name) {
         let name: String = name.into();
         let value = value.eq(&1);
         if name.eq("video") {
@@ -133,31 +141,58 @@ pub extern "system" fn Java_com_carriez_flutter_1hbb_MainService_setFrameRawEnab
 }
 
 #[no_mangle]
-pub extern "system" fn Java_com_carriez_flutter_1hbb_MainService_init(
+pub extern "system" fn Java_ffi_FFI_init(
     env: JNIEnv,
     _class: JClass,
     ctx: JObject,
 ) {
     log::debug!("MainService init from java");
-    let jvm = env.get_java_vm().unwrap();
-
-    *JVM.write().unwrap() = Some(jvm);
-
-    let context = env.new_global_ref(ctx).unwrap();
-    *MAIN_SERVICE_CTX.write().unwrap() = Some(context);
+    if let Ok(jvm) = env.get_java_vm() {
+        *JVM.write().unwrap() = Some(jvm);
+        if let Ok(context) = env.new_global_ref(ctx) {
+            *MAIN_SERVICE_CTX.write().unwrap() = Some(context);
+            init_ndk_context().ok();
+        }
+    }
 }
 
-pub fn call_main_service_mouse_input(mask: i32, x: i32, y: i32) -> JniResult<()> {
+pub fn call_main_service_pointer_input(kind: &str, mask: i32, x: i32, y: i32) -> JniResult<()> {
     if let (Some(jvm), Some(ctx)) = (
         JVM.read().unwrap().as_ref(),
         MAIN_SERVICE_CTX.read().unwrap().as_ref(),
     ) {
-        let env = jvm.attach_current_thread_as_daemon()?;
+        let mut env = jvm.attach_current_thread_as_daemon()?;
+        let kind = env.new_string(kind)?;
         env.call_method(
             ctx,
-            "rustMouseInput",
-            "(III)V",
-            &[JValue::Int(mask), JValue::Int(x), JValue::Int(y)],
+            "rustPointerInput",
+            "(Ljava/lang/String;III)V",
+            &[
+                JValue::Object(&JObject::from(kind)),
+                JValue::Int(mask),
+                JValue::Int(x),
+                JValue::Int(y),
+            ],
+        )?;
+        return Ok(());
+    } else {
+        return Err(JniError::ThrowFailed(-1));
+    }
+}
+
+pub fn call_main_service_key_event(data: &[u8]) -> JniResult<()> {
+    if let (Some(jvm), Some(ctx)) = (
+        JVM.read().unwrap().as_ref(),
+        MAIN_SERVICE_CTX.read().unwrap().as_ref(),
+    ) {
+        let mut env = jvm.attach_current_thread_as_daemon()?;
+        let data = env.byte_array_from_slice(data)?;
+
+        env.call_method(
+            ctx,
+            "rustKeyEventInput",
+            "([B)V",
+            &[JValue::Object(&JObject::from(data))],
         )?;
         return Ok(());
     } else {
@@ -170,17 +205,18 @@ pub fn call_main_service_get_by_name(name: &str) -> JniResult<String> {
         JVM.read().unwrap().as_ref(),
         MAIN_SERVICE_CTX.read().unwrap().as_ref(),
     ) {
-        let env = jvm.attach_current_thread_as_daemon()?;
+        let mut env = jvm.attach_current_thread_as_daemon()?;
         let name = env.new_string(name)?;
         let res = env
             .call_method(
                 ctx,
                 "rustGetByName",
                 "(Ljava/lang/String;)Ljava/lang/String;",
-                &[JValue::Object(name.into())],
+                &[JValue::Object(&JObject::from(name))],
             )?
             .l()?;
-        let res = env.get_string(res.into())?;
+        let res = JString::from(res);
+        let res = env.get_string(&res)?;
         let res = res.to_string_lossy().to_string();
         return Ok(res);
     } else {
@@ -197,7 +233,7 @@ pub fn call_main_service_set_by_name(
         JVM.read().unwrap().as_ref(),
         MAIN_SERVICE_CTX.read().unwrap().as_ref(),
     ) {
-        let env = jvm.attach_current_thread_as_daemon()?;
+        let mut env = jvm.attach_current_thread_as_daemon()?;
         let name = env.new_string(name)?;
         let arg1 = env.new_string(arg1.unwrap_or(""))?;
         let arg2 = env.new_string(arg2.unwrap_or(""))?;
@@ -207,13 +243,37 @@ pub fn call_main_service_set_by_name(
             "rustSetByName",
             "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V",
             &[
-                JValue::Object(name.into()),
-                JValue::Object(arg1.into()),
-                JValue::Object(arg2.into()),
+                JValue::Object(&JObject::from(name)),
+                JValue::Object(&JObject::from(arg1)),
+                JValue::Object(&JObject::from(arg2)),
             ],
         )?;
         return Ok(());
     } else {
         return Err(JniError::ThrowFailed(-1));
     }
+}
+
+fn init_ndk_context() -> JniResult<()> {
+    let mut lock = NDK_CONTEXT_INITED.lock().unwrap();
+    if *lock {
+        unsafe {
+            ndk_context::release_android_context();
+        }
+        *lock = false;
+    }
+    if let (Some(jvm), Some(ctx)) = (
+        JVM.read().unwrap().as_ref(),
+        MAIN_SERVICE_CTX.read().unwrap().as_ref(),
+    ) {
+        unsafe {
+            ndk_context::initialize_android_context(
+                jvm.get_java_vm_pointer() as _,
+                ctx.as_obj().as_raw() as _,
+            );
+        }
+        *lock = true;
+        return Ok(());
+    }
+    Err(JniError::ThrowFailed(-1))
 }

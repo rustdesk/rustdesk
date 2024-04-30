@@ -29,26 +29,6 @@ RustDesk heißt jegliche Mitarbeit willkommen. Schauen Sie sich [CONTRIBUTING-DE
     alt="Get it on F-Droid"
     height="80">](https://f-droid.org/en/packages/com.carriez.flutter_hbb)
 
-## Freie öffentliche Server
-
-Nachfolgend sind die Server gelistet, die Sie kostenlos nutzen können. Es kann sein, dass sich diese Liste immer mal wieder ändert. Falls Sie nicht in der Nähe einer dieser Server sind, kann es sein, dass Ihre Verbindung langsam sein wird.
-| Standort | Anbieter | Spezifikation |
-| --------- | ------------- | ------------------ |
-| Südkorea (Seoul) | [AWS lightsail](https://aws.amazon.com/de/) | 1 vCPU / 0,5 GB RAM |
-| Deutschland | [Hetzner](https://www.hetzner.com/de/) | 2 vCPU / 4 GB RAM |
-| Deutschland | [Codext](https://codext.de/) | 4 vCPU / 8 GB RAM |
-| Finnland (Helsinki) | [Netlock](https://netlockendpoint.com/de/index.html) | 4 vCPU / 8 GB RAM |
-| USA (Ashburn) | [Netlock](https://netlockendpoint.com/de/index.html) | 4 vCPU / 8 GB RAM |
-| Ukraine (Kiew) | [dc.volia](https://dc.volia.com) | 2 vCPU / 4 GB RAM |
-
-## Dev-Container
-
-[![In Dev-Containern öffnen](https://img.shields.io/static/v1?label=Dev%20Container&message=Open&color=blue&logo=visualstudiocode)](https://vscode.dev/redirect?url=vscode://ms-vscode-remote.remote-containers/cloneInVolume?url=https://github.com/rustdesk/rustdesk)
-
-Wenn Sie VS Code und Docker bereits installiert haben, können Sie auf das Abzeichen oben klicken, um loszulegen. Wenn Sie darauf klicken, wird VS Code automatisch die Dev-Container-Erweiterung installieren, den Quellcode in ein Container-Volume klonen und einen Dev-Container für die Verwendung aufsetzen.
-
-Weitere Informationen finden Sie in [DEVCONTAINER-DE.md](DEVCONTAINER-DE.md).
-
 ## Abhängigkeiten
 
 Desktop-Versionen verwenden [Sciter](https://sciter.com/) oder Flutter für die GUI, dieses Tutorial ist nur für Sciter.
@@ -65,8 +45,8 @@ Bitte laden Sie die dynamische Bibliothek Sciter selbst herunter.
 
 - Installieren Sie [vcpkg](https://github.com/microsoft/vcpkg) und fügen Sie die Systemumgebungsvariable `VCPKG_ROOT` hinzu
 
-  - Windows: `vcpkg install libvpx:x64-windows-static libyuv:x64-windows-static opus:x64-windows-static`
-  - Linux/macOS: `vcpkg install libvpx libyuv opus`
+  - Windows: `vcpkg install libvpx:x64-windows-static libyuv:x64-windows-static opus:x64-windows-static aom:x64-windows-static`
+  - Linux/macOS: `vcpkg install libvpx libyuv opus aom`
 
 - Nutzen Sie `cargo run`
 
@@ -104,11 +84,11 @@ sudo pacman -Syu --needed unzip git cmake gcc curl wget yasm nasm zip make pkg-c
 ```sh
 git clone https://github.com/microsoft/vcpkg
 cd vcpkg
-git checkout 2021.12.01
+git checkout 2023.04.15
 cd ..
 vcpkg/bootstrap-vcpkg.sh
 export VCPKG_ROOT=$HOME/vcpkg
-vcpkg/vcpkg install libvpx libyuv opus
+vcpkg/vcpkg install libvpx libyuv opus aom
 ```
 
 ### libvpx reparieren (für Fedora)
@@ -135,34 +115,6 @@ mkdir -p target/debug
 wget https://raw.githubusercontent.com/c-smile/sciter-sdk/master/bin.lnx/x64/libsciter-gtk.so
 mv libsciter-gtk.so target/debug
 VCPKG_ROOT=$HOME/vcpkg cargo run
-```
-
-### Wayland zu X11 (Xorg) ändern
-
-RustDesk unterstützt Wayland nicht. Siehe [hier](https://docs.fedoraproject.org/en-US/quick-docs/configuring-xorg-as-default-gnome-session/), um Xorg als Standard-GNOME-Sitzung zu nutzen.
-
-## Wayland-Unterstützung
-
-Wayland scheint keine API für das Senden von Tastatureingaben an andere Fenster zu bieten. Daher verwendet RustDesk eine API von einer niedrigeren Ebene, nämlich dem Gerät `/dev/uinput` (Linux-Kernelebene).
-
-Wenn Wayland die kontrollierte Seite ist, müssen Sie wie folgt vorgehen:
-```bash
-# Dienst uinput starten
-$ sudo rustdesk --service
-$ rustdesk
-```
-**Hinweis**: Die Wayland-Bildschirmaufnahme verwendet verschiedene Schnittstellen. RustDesk unterstützt derzeit nur org.freedesktop.portal.ScreenCast.
-```bash
-$ dbus-send --session --print-reply       \
-  --dest=org.freedesktop.portal.Desktop \
-  /org/freedesktop/portal/desktop       \
-  org.freedesktop.DBus.Properties.Get   \
-  string:org.freedesktop.portal.ScreenCast string:version
-# Keine Unterstützung
-Error org.freedesktop.DBus.Error.InvalidArgs: No such interface “org.freedesktop.portal.ScreenCast”
-# Unterstützung
-method return time=1662544486.931020 sender=:1.54 -> destination=:1.139 serial=257 reply_serial=2
-   variant       uint32 4
 ```
 
 ## Auf Docker kompilieren

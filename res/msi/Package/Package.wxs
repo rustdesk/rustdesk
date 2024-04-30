@@ -1,0 +1,57 @@
+﻿<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+	xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util"
+	xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
+
+	<?include Includes.wxi?>
+
+	<Package Name="$(var.Product)" Version="$(var.Version)" Manufacturer="$(var.Manufacturer)" Language="!(loc.ProductLanguage)" UpgradeCode="$(var.UpgradeCode)" Scope="perMachine">
+
+		<SummaryInformation Keywords="Installer" Description="$(var.Description)" Codepage="!(loc.SummaryCodepage)" />
+
+		<!--<PropertyRef Id="UpgradesFile" />-->
+
+		<PropertyRef Id="AddRemovePropertiesFile" />
+
+		<Media Id="1" Cabinet="cab1.cab" EmbedCab="yes" CompressionLevel="high" />
+		<Icon Id="AppIcon" SourceFile="Resources\icon.ico" />
+
+		<!-- User Interface -->
+		<WixVariable Id="WixUILicenseRtf" Value="License.rtf" />
+
+		<ui:WixUI Id="WixUI_InstallDir" InstallDirectory="INSTALLFOLDER" />
+		<UIRef Id="WixUI_ErrorProgressText" />
+
+		<InstallUISequence>
+			<Show Dialog="AnotherAppDialog" Before="WelcomeDlg" Condition="Not installed AND APP_WINDOWS_INSTALLER=&quot;#0&quot;"/>
+		</InstallUISequence>
+
+		<InstallExecuteSequence>
+			<InstallExecute After="RemoveExistingProducts" />
+
+			<!--Only do InstallValidate if is not Uninstall-->
+			<!--<InstallValidate Condition="NOT (Installed AND REMOVE AND NOT UPGRADINGPRODUCTCODE )" />-->
+			<!--Only do InstallValidate if is Install-->
+			<InstallValidate Condition="NOT Installed" />
+
+		</InstallExecuteSequence>
+
+		<MajorUpgrade DowngradeErrorMessage="!(loc.DowngradeError)" Schedule="afterInstallInitialize" AllowSameVersionUpgrades="yes" />
+
+		<Feature Id="App" Level="1" AllowAdvertise="no" Display="expand" Title="!(loc.F_App)" Description="!(loc.F_App_Desc)" AllowAbsent="no">
+			<ComponentGroupRef Id="Components" />
+
+			<ComponentRef Id="Product.Registry.InstallDir" />
+			<ComponentRef Id="Product.Registry.DefaultIcon" />
+			<ComponentRef Id="Product.Registry.CommandPlay" />
+			<ComponentRef Id="Product.Registry.URLProtocol" />
+			<ComponentRef Id="Product.Registry.Command" />
+			<ComponentRef Id="Product.Registry.UninstallApp" />
+			<ComponentRef Id="App.StartMenu" />
+			<ComponentRef Id="Product.Registry.PersistedShortcutProperties" />
+		</Feature>
+
+		<!--https://wixtoolset.org/docs/tools/wixext/wixui/#customizing-a-dialog-set-->
+		<!--$CustomBitmapsStart$-->
+		<!--$CustomBitmapsEnd$-->
+	</Package>
+</Wix>

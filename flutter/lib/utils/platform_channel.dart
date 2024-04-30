@@ -1,8 +1,7 @@
-import 'dart:io';
-
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hbb/main.dart';
+import 'package:flutter_hbb/common.dart';
 
 enum SystemWindowTheme { light, dark }
 
@@ -16,14 +15,10 @@ class RdPlatformChannel {
 
   final MethodChannel _osxMethodChannel =
       MethodChannel("org.rustdesk.rustdesk/macos");
-  final MethodChannel _winMethodChannel =
-      MethodChannel("org.rustdesk.rustdesk/windows");
-  final MethodChannel _linuxMethodChannel =
-      MethodChannel("org.rustdesk.rustdesk/linux");
 
   /// Change the theme of the system window
   Future<void> changeSystemWindowTheme(SystemWindowTheme theme) {
-    assert(Platform.isMacOS);
+    assert(isMacOS);
     if (kDebugMode) {
       print(
           "[Window ${kWindowId ?? 'Main'}] change system window theme to ${theme.name}");
@@ -34,7 +29,7 @@ class RdPlatformChannel {
 
   /// Terminate .app manually.
   Future<void> terminate() {
-    assert(Platform.isMacOS);
+    assert(isMacOS);
     return _osxMethodChannel.invokeMethod("terminate");
   }
 }

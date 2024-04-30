@@ -13,7 +13,7 @@ use std::time::{Duration, Instant};
 use std::{io, thread};
 
 use docopt::Docopt;
-use scrap::codec::{EncoderApi, EncoderCfg};
+use scrap::codec::{EncoderApi, EncoderCfg, Quality as Q};
 use webm::mux;
 use webm::mux::Track;
 
@@ -24,17 +24,18 @@ const USAGE: &'static str = "
 Simple WebM screen capture.
 
 Usage:
-  record-screen <path> [--time=<s>] [--fps=<fps>] [--bv=<kbps>] [--ba=<kbps>] [--codec CODEC]
+  record-screen <path> [--time=<s>] [--fps=<fps>] [--quality=<quality>] [--ba=<kbps>] [--codec CODEC]
   record-screen (-h | --help)
 
 Options:
-  -h --help      Show this screen.
-  --time=<s>     Recording duration in seconds.
-  --fps=<fps>    Frames per second [default: 30].
-  --bv=<kbps>    Video bitrate in kilobits per second [default: 5000].
-  --ba=<kbps>    Audio bitrate in kilobits per second [default: 96].
-  --codec CODEC  Configure the codec used. [default: vp9]
-                 Valid values: vp8, vp9.
+  -h --help                 Show this screen.
+  --time=<s>                Recording duration in seconds.
+  --fps=<fps>               Frames per second [default: 30].
+  --quality=<quality>       Video quality [default: Balanced].
+                            Valid values: Best, Balanced, Low.
+  --ba=<kbps>               Audio bitrate in kilobits per second [default: 96].
+  --codec CODEC             Configure the codec used. [default: vp9]
+                            Valid values: vp8, vp9.
 ";
 
 #[derive(Debug, serde::Deserialize)]
@@ -43,7 +44,14 @@ struct Args {
     flag_codec: Codec,
     flag_time: Option<u64>,
     flag_fps: u64,
-    flag_bv: u32,
+    flag_quality: Quality,
+}
+
+#[derive(Debug, serde::Deserialize)]
+enum Quality {
+    Best,
+    Balanced,
+    Low,
 }
 
 #[derive(Debug, serde::Deserialize)]
@@ -97,15 +105,21 @@ fn main() -> io::Result<()> {
     let mut vt = webm.add_video_track(width, height, None, mux_codec);
 
     // Setup the encoder.
-
-    let mut vpx = vpx_encode::VpxEncoder::new(EncoderCfg::VPX(vpx_encode::VpxEncoderConfig {
-        width,
-        height,
-        timebase: [1, 1000],
-        bitrate: args.flag_bv,
-        codec: vpx_codec,
-        num_threads: 0,
-    }))
+    let quality = match args.flag_quality {
+        Quality::Best => Q::Best,
+        Quality::Balanced => Q::Balanced,
+        Quality::Low => Q::Low,
+    };
+    let mut vpx = vpx_encode::VpxEncoder::new(
+        EncoderCfg::VPX(vpx_encode::VpxEncoderConfig {
+            width,
+            height,
+            quality,
+            codec: vpx_codec,
+            keyframe_interval: None,
+        }),
+        false,
+    )
     .unwrap();
 
     // Start recording.
@@ -125,7 +139,9 @@ fn main() -> io::Result<()> {
     let spf = Duration::from_nanos(1_000_000_000 / args.flag_fps);
 
     // Capturer object is expensive, avoiding to create it frequently.
-    let mut c = Capturer::new(d, true).unwrap();
+    let mut c = Capturer::new(d).unwrap();
+    let mut yuv = Vec::new();
+    let mut mid_data = Vec::new();
     while !stop.load(Ordering::Acquire) {
         let now = Instant::now();
         let time = now - start;
@@ -136,8 +152,8 @@ fn main() -> io::Result<()> {
 
         if let Ok(frame) = c.frame(Duration::from_millis(0)) {
             let ms = time.as_secs() * 1000 + time.subsec_millis() as u64;
-
-            for frame in vpx.encode(ms as i64, &frame, STRIDE_ALIGN).unwrap() {
+            frame.to(vpx.yuvfmt(), &mut yuv, &mut mid_data).unwrap();
+            for frame in vpx.encode(ms as i64, &yuv, STRIDE_ALIGN).unwrap() {
                 vt.add_frame(frame.data, frame.pts as u64 * 1_000_000, frame.key);
             }
         }

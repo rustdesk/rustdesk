@@ -36,6 +36,7 @@ impl Error for DbusError {}
 /// - use dbus-send command:
 /// `dbus-send --session --print-reply --dest=org.rustdesk.rustdesk /dbus org.rustdesk.rustdesk.NewConnection string:'PEER_ID'`
 pub fn invoke_new_connection(uni_links: String) -> Result<(), Box<dyn Error>> {
+    log::info!("Starting dbus service for uni");
     let conn = Connection::new_session()?;
     let proxy = conn.with_proxy(DBUS_NAME, DBUS_PREFIX, DBUS_TIMEOUT);
     let (ret,): (String,) =
@@ -73,8 +74,8 @@ fn handle_client_message(builder: &mut IfaceBuilder<()>) {
             {
                 use crate::flutter;
                 let data = HashMap::from([
-                    ("name", "new_connection"),
-                    ("uni_links", _uni_links.as_str()),
+                    ("name", "on_url_scheme_received"),
+                    ("url", _uni_links.as_str()),
                 ]);
                 let event = serde_json::ser::to_string(&data).unwrap_or("".to_string());
                 match crate::flutter::push_global_event(flutter::APP_TYPE_MAIN, event) {

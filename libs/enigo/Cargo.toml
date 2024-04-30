@@ -35,7 +35,7 @@ winapi = { version = "0.3", features = ["winuser", "winbase"] }
 [target.'cfg(target_os = "macos")'.dependencies]
 core-graphics = "0.22"
 objc = "0.2"
-unicode-segmentation = "1.6"
+unicode-segmentation = "1.10"
 
 [build-dependencies]
 pkg-config = "0.3"

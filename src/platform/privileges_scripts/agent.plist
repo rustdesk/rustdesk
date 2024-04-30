@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+    <dict>
+        <key>Label</key>
+        <string>com.carriez.RustDesk_server</string>
+        <key>LimitLoadToSessionType</key>
+        <array>
+          <string>LoginWindow</string>
+          <string>Aqua</string>
+        </array>
+        <key>KeepAlive</key>
+        <dict>
+            <key>SuccessfulExit</key>
+            <false />
+            <key>AfterInitialDemand</key>
+            <false />
+        </dict>
+        <key>ThrottleInterval</key>
+        <integer>1</integer>
+        <key>RunAtLoad</key>
+        <true />
+        <key>ProgramArguments</key>
+        <array>
+            <string>/Applications/RustDesk.app/Contents/MacOS/RustDesk</string>
+            <string>--server</string>
+        </array>
+        <key>WorkingDirectory</key>
+        <string>/Applications/RustDesk.app/Contents/MacOS/</string>
+    </dict>
+</plist>

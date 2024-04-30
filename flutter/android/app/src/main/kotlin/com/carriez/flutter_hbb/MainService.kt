@@ -1,5 +1,7 @@
 package com.carriez.flutter_hbb
 
+import ffi.FFI
+
 /**
  * Capture screen,get video and audio,send to rust.
  * Dispatch notifications
@@ -44,7 +46,6 @@ import java.nio.ByteBuffer
 import kotlin.math.max
 import kotlin.math.min
 
-
 const val DEFAULT_NOTIFY_TITLE = "RustDesk"
 const val DEFAULT_NOTIFY_TEXT = "Service is running"
 const val DEFAULT_NOTIFY_ID = 1
@@ -65,24 +66,35 @@ const val AUDIO_CHANNEL_MASK = AudioFormat.CHANNEL_IN_STEREO
 
 class MainService : Service() {
 
-    init {
-        System.loadLibrary("rustdesk")
-    }
-
     @Keep
     @RequiresApi(Build.VERSION_CODES.N)
-    fun rustMouseInput(mask: Int, x: Int, y: Int) {
+    fun rustPointerInput(kind: String, mask: Int, x: Int, y: Int) {
         // turn on screen with LIFT_DOWN when screen off
-        if (!powerManager.isInteractive && mask == LIFT_DOWN) {
+        if (!powerManager.isInteractive && (kind == "touch" || mask == LIFT_DOWN)) {
             if (wakeLock.isHeld) {
-                Log.d(logTag,"Turn on Screen, WakeLock release")
+                Log.d(logTag, "Turn on Screen, WakeLock release")
                 wakeLock.release()
             }
             Log.d(logTag,"Turn on Screen")
             wakeLock.acquire(5000)
         } else {
-            InputService.ctx?.onMouseInput(mask,x,y)
+            when (kind) {
+                "touch" -> {
+                    InputService.ctx?.onTouchInput(mask, x, y)
+                }
+                "mouse" -> {
+                    InputService.ctx?.onMouseInput(mask, x, y)
+                }
+                else -> {
+                }
+            }
         }
+    }
+
+    @Keep
+    @RequiresApi(Build.VERSION_CODES.N)
+    fun rustKeyEventInput(input: ByteArray) {
+        InputService.ctx?.onKeyEvent(input)
     }
 
     @Keep
@@ -142,23 +154,9 @@ class MainService : Service() {
     private val powerManager: PowerManager by lazy { applicationContext.getSystemService(Context.POWER_SERVICE) as PowerManager }
     private val wakeLock: PowerManager.WakeLock by lazy { powerManager.newWakeLock(PowerManager.ACQUIRE_CAUSES_WAKEUP or PowerManager.SCREEN_BRIGHT_WAKE_LOCK, "rustdesk:wakelock")}
 
-    // jvm call rust
-    private external fun init(ctx: Context)
-
-    /// When app start on boot, app_dir will not be passed from flutter
-    /// so pass a app_dir here to rust server
-    private external fun startServer(app_dir: String)
-    private external fun startService()
-    private external fun onVideoFrameUpdate(buf: ByteBuffer)
-    private external fun onAudioFrameUpdate(buf: ByteBuffer)
-    private external fun translateLocale(localeName: String, input: String): String
-    private external fun refreshScreen()
-    private external fun setFrameRawEnable(name: String, value: Boolean)
-    // private external fun sendVp9(data: ByteArray)
-
     private fun translate(input: String): String {
         Log.d(logTag, "translate:$LOCAL_NAME")
-        return translateLocale(LOCAL_NAME, input)
+        return FFI.translateLocale(LOCAL_NAME, input)
     }
 
     companion object {
@@ -197,6 +195,7 @@ class MainService : Service() {
     override fun onCreate() {
         super.onCreate()
         Log.d(logTag,"MainService onCreate")
+        FFI.init(this)
         HandlerThread("Service", Process.THREAD_PRIORITY_BACKGROUND).apply {
             start()
             serviceLooper = looper
@@ -208,7 +207,7 @@ class MainService : Service() {
         // keep the config dir same with flutter
         val prefs = applicationContext.getSharedPreferences(KEY_SHARED_PREFERENCES, FlutterActivity.MODE_PRIVATE)
         val configPath = prefs.getString(KEY_APP_DIR_CONFIG_PATH, "") ?: ""
-        startServer(configPath)
+        FFI.startServer(configPath, "")
 
         createForegroundNotification()
     }
@@ -263,7 +262,7 @@ class MainService : Service() {
                 SCREEN_INFO.dpi = dpi
                 if (isStart) {
                     stopCapture()
-                    refreshScreen()
+                    FFI.refreshScreen()
                     startCapture()
                 }
             }
@@ -291,7 +290,7 @@ class MainService : Service() {
             createForegroundNotification()
 
             if (intent.getBooleanExtra(EXT_INIT_FROM_BOOT, false)) {
-                startService()
+                FFI.startService()
             }
             Log.d(logTag, "service starting: ${startId}:${Thread.currentThread()}")
             val mediaProjectionManager =
@@ -301,7 +300,6 @@ class MainService : Service() {
                 mediaProjection =
                     mediaProjectionManager.getMediaProjection(Activity.RESULT_OK, it)
                 checkMediaPermission()
-                init(this)
                 _isReady = true
             } ?: let {
                 Log.d(logTag, "getParcelableExtra intent null, invoke requestMediaProjection")
@@ -340,12 +338,15 @@ class MainService : Service() {
                 ).apply {
                     setOnImageAvailableListener({ imageReader: ImageReader ->
                         try {
+                            if (!isStart) {
+                                return@setOnImageAvailableListener
+                            }
                             imageReader.acquireLatestImage().use { image ->
-                                if (image == null) return@setOnImageAvailableListener
+                                if (image == null || !isStart) return@setOnImageAvailableListener
                                 val planes = image.planes
                                 val buffer = planes[0].buffer
                                 buffer.rewind()
-                                onVideoFrameUpdate(buffer)
+                                FFI.onVideoFrameUpdate(buffer)
                             }
                         } catch (ignored: java.lang.Exception) {
                         }
@@ -379,21 +380,24 @@ class MainService : Service() {
         }
         checkMediaPermission()
         _isStart = true
-        setFrameRawEnable("video",true)
-        setFrameRawEnable("audio",true)
+        FFI.setFrameRawEnable("video",true)
+        FFI.setFrameRawEnable("audio",true)
         return true
     }
 
     @Synchronized
     fun stopCapture() {
         Log.d(logTag, "Stop Capture")
-        setFrameRawEnable("video",false)
-        setFrameRawEnable("audio",false)
+        FFI.setFrameRawEnable("video",false)
+        FFI.setFrameRawEnable("audio",false)
         _isStart = false
         // release video
         virtualDisplay?.release()
-        surface?.release()
         imageReader?.close()
+        imageReader = null
+        // suface needs to be release after imageReader.close to imageReader access released surface
+        // https://github.com/rustdesk/rustdesk/issues/4118#issuecomment-1515666629
+        surface?.release()
         videoEncoder?.let {
             it.signalEndOfInputStream()
             it.stop()
@@ -404,9 +408,6 @@ class MainService : Service() {
 
         // release audio
         audioRecordStat = false
-        audioRecorder?.release()
-        audioRecorder = null
-        minBufferSize = 0
     }
 
     fun destroy() {
@@ -414,8 +415,6 @@ class MainService : Service() {
         _isReady = false
 
         stopCapture()
-        imageReader?.close()
-        imageReader = null
 
         mediaProjection = null
         checkMediaPermission()
@@ -523,9 +522,13 @@ class MainService : Service() {
                 thread {
                     while (audioRecordStat) {
                         audioReader!!.readSync(audioRecorder!!)?.let {
-                            onAudioFrameUpdate(it)
+                            FFI.onAudioFrameUpdate(it)
                         }
                     }
+                    // let's release here rather than onDestroy to avoid threading issue
+                    audioRecorder?.release()
+                    audioRecorder = null
+                    minBufferSize = 0
                     Log.d(logTag, "Exit audio thread")
                 }
             } catch (e: Exception) {

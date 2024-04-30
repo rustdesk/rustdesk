@@ -24,8 +24,8 @@ fn new_socket(addr: SocketAddr, reuse: bool, buf_size: usize) -> Result<Socket, 
         // almost equals to unix's reuse_port + reuse_address,
         // though may introduce nondeterministic behavior
         #[cfg(unix)]
-        socket.set_reuse_port(true)?;
-        socket.set_reuse_address(true)?;
+        socket.set_reuse_port(true).ok();
+        socket.set_reuse_address(true).ok();
     }
     // only nonblocking work with tokio, https://stackoverflow.com/questions/64649405/receiver-on-tokiompscchannel-only-receives-messages-when-buffer-is-full
     socket.set_nonblocking(true)?;

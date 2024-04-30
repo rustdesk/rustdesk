@@ -13,7 +13,7 @@ Porozmawiaj z nami na: [Discord](https://discord.gg/nDceKgxnkV) | [Twitter](http
 
 [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/I2I04VU09)
 
-Kolejny program do zdalnego pulpitu, napisany w Rust. Działa od samego początku, nie wymaga konfiguracji. Masz pełną kontrolę nad swoimi danymi, bez obaw o bezpieczeństwo. Możesz skorzystać z naszego darmowego serwera publicznego , [skonfigurować własny](https://rustdesk.com/server), lub [napisać własny serwer](https://github.com/rustdesk/rustdesk-server-demo).
+Kolejny program do zdalnego pulpitu, napisany w Rust. Działa od samego początku, nie wymaga konfiguracji. Masz pełną kontrolę nad swoimi danymi, bez obaw o bezpieczeństwo. Możesz skorzystać z naszego darmowego serwera publicznego, [skonfigurować własny](https://rustdesk.com/server), lub [napisać własny serwer](https://github.com/rustdesk/rustdesk-server-demo).
 
 ![image](https://user-images.githubusercontent.com/71636191/171661982-430285f0-2e12-4b1d-9957-4a58e375304d.png) 
 
@@ -29,26 +29,6 @@ RustDesk zaprasza do współpracy każdego. Zobacz [`docs/CONTRIBUTING-PL.md`](C
     alt="Get it on F-Droid"
     height="80">](https://f-droid.org/en/packages/com.carriez.flutter_hbb)
 
-## Darmowe Serwery Publiczne
-
-Poniżej znajdują się serwery, z których można korzystać za darmo, może się to zmienić z upływem czasu. Jeśli nie znajdujesz się w pobliżu jednego z nich, Twoja prędkość połączenia może być niska.
-| Lokalizacja | Dostawca | Specyfikacja |
-| --------- | ------------- | ------------------ |
-| Korea Płd. (Seul) | AWS lightsail | 1 vCPU / 0.5GB RAM |
-| Niemcy | Hetzner | 2 vCPU / 4GB RAM |
-| Niemcy | Codext | 4 vCPU / 8GB RAM |
-| Finlandia (Helsinki) | [Netlock](https://netlockendpoint.com) | 4 vCPU / 8GB RAM |
-| USA (Ashburn) | [Netlock](https://netlockendpoint.com) | 4 vCPU / 8GB RAM |
-| Ukraina (Kijów) | [dc.volia](https://dc.volia.com) | 2 vCPU / 4GB RAM |
-
-## Konterner Programisty (Dev Container)
-
-[![Otwórz w Kontenerze programisty](https://img.shields.io/static/v1?label=Dev%20Container&message=Open&color=blue&logo=visualstudiocode)](https://vscode.dev/redirect?url=vscode://ms-vscode-remote.remote-containers/cloneInVolume?url=https://github.com/rustdesk/rustdesk)
-
-Jeżeli masz zainstalowany VS Code i Docker, możesz kliknąć w powyższy link, aby rozpocząć. Kliknięcie spowoduje automatyczną instalację rozszrzenia Kontenera Programisty w VS Code (jeżeli wymagany), sklonuje kod źródłowy do kontenera, i przygotuje kontener do użycia.
-
-Więcej informacji w pliku [DEVCONTAINER-PL.md](docs/DEVCONTAINER-PL.md) for more info.
-
 ## Zależności
 
 Wersje desktopowe używają [sciter](https://sciter.com/) dla GUI, proszę pobrać samodzielnie bibliotekę sciter.
@@ -63,8 +43,8 @@ Wersje desktopowe używają [sciter](https://sciter.com/) dla GUI, proszę pobra
 
 - Zainstaluj [vcpkg](https://github.com/microsoft/vcpkg), i ustaw prawidłowo zmienną `VCPKG_ROOT`
 
-  - Windows: vcpkg install libvpx:x64-windows-static libyuv:x64-windows-static opus:x64-windows-static
-  - Linux/MacOS: vcpkg install libvpx libyuv opus
+  - Windows: vcpkg install libvpx:x64-windows-static libyuv:x64-windows-static opus:x64-windows-static aom:x64-windows-static
+  - Linux/MacOS: vcpkg install libvpx libyuv opus aom
 
 - uruchom `cargo run`
 
@@ -99,11 +79,11 @@ sudo pacman -Syu --needed unzip git cmake gcc curl wget yasm nasm zip make pkg-c
 ```sh
 git clone https://github.com/microsoft/vcpkg
 cd vcpkg
-git checkout 2021.12.01
+git checkout 2023.04.15
 cd ..
 vcpkg/bootstrap-vcpkg.sh
 export VCPKG_ROOT=$HOME/vcpkg
-vcpkg/vcpkg install libvpx libyuv opus
+vcpkg/vcpkg install libvpx libyuv opus aom
 ```
 
 ### Popraw libvpx (Dla Fedora)
@@ -132,34 +112,6 @@ mv libsciter-gtk.so target/debug
 cargo run
 ```
 
-### Zmień Wayland na X11 (Xorg)
-
-RustDesk nie obsługuje Waylanda. Sprawdź [tutaj](https://docs.fedoraproject.org/en-US/quick-docs/configuring-xorg-as-default-gnome-session/), jak skonfigurować Xorg jako domyślną sesję GNOME.
-
-## Wspracie Wayland
-
-Wygląda na to, że Wayland nie wspiera żadnego API do wysyłania naciśnięć klawiszy do innych okien. Dlatego rustdesk używa API z niższego poziomu, urządzenia o nazwie `/dev/uinput` (poziom jądra Linux).
-
-Gdy po stronie kontrolowanej pracuje Wayland, musisz uruchomić program w następujący sposób:
-```bash
-# Start uinput service
-$ sudo rustdesk --service
-$ rustdesk
-```
-**Uwaga**: Nagrywanie ekranu Wayland wykorzystuje różne interfejsy. RustDesk obecnie obsługuje tylko org.freedesktop.portal.ScreenCast.
-```bash
-$ dbus-send --session --print-reply       \
-  --dest=org.freedesktop.portal.Desktop \
-  /org/freedesktop/portal/desktop       \
-  org.freedesktop.DBus.Properties.Get   \
-  string:org.freedesktop.portal.ScreenCast string:version
-# Not support
-Error org.freedesktop.DBus.Error.InvalidArgs: No such interface “org.freedesktop.portal.ScreenCast”
-# Support
-method return time=1662544486.931020 sender=:1.54 -> destination=:1.139 serial=257 reply_serial=2
-   variant       uint32 4
-```
-
 ## Jak kompilować za pomocą Dockera
 
 Rozpocznij od sklonowania repozytorium i stworzenia kontenera docker:
@@ -176,7 +128,7 @@ Następnie, za każdym razem, gdy potrzebujesz skompilować aplikację, uruchom 
 docker run --rm -it -v $PWD:/home/user/rustdesk -v rustdesk-git-cache:/home/user/.cargo/git -v rustdesk-registry-cache:/home/user/.cargo/registry -e PUID="$(id -u)" -e PGID="$(id -g)" rustdesk-builder
 ```
 
-Zauważ, że pierwsza kompilacja może potrwać dłużej zanim zależności zostaną zbuforowane, kolejne będą szybsze. Dodatkowo, jeśli potrzebujesz określić inne argumenty dla polecenia budowania, możesz to zrobić na końcu komendy w miejscu `<OPTIONAL-ARGS>`. Na przykład, jeśli chciałbyś zbudować zoptymalizowaną wersję wydania, uruchomiłbyś powyższą komendę a następnie `--release`. Powstały plik wykonywalny będzie dostępny w folderze docelowym w twoim systemie, i może być uruchomiony z:
+Zauważ, że pierwsza kompilacja może potrwać dłużej zanim zależności zostaną zbuforowane, kolejne będą szybsze. Dodatkowo, jeśli potrzebujesz określić inne argumenty dla polecenia budowania, możesz to zrobić na końcu komendy w miejscu `<OPTIONAL-ARGS>`. Na przykład, jeśli chciałbyś zbudować zoptymalizowaną wersję wydania, uruchomiłbyś powyższą komendę a następnie `--release`. Powstały plik wykonywalny będzie dostępny w folderze docelowym w twoim systemie i może być uruchomiony z:
 
 ```sh
 target/debug/rustdesk

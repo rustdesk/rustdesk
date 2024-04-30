@@ -1,24 +1,34 @@
+#[cfg(target_os = "linux")]
+use super::rdp_input::client::{RdpInputKeyboard, RdpInputMouse};
 use super::*;
 #[cfg(target_os = "macos")]
 use crate::common::is_server;
-#[cfg(target_os = "linux")]
-use crate::common::IS_X11;
+use crate::input::*;
 #[cfg(target_os = "macos")]
 use dispatch::Queue;
 use enigo::{Enigo, Key, KeyboardControllable, MouseButton, MouseControllable};
-use hbb_common::{config::COMPRESS_LEVEL, get_time, protobuf::EnumOrUnknown};
+use hbb_common::{
+    get_time,
+    message_proto::{pointer_device_event::Union::TouchEvent, touch_event::Union::ScaleUpdate},
+    protobuf::EnumOrUnknown,
+};
 use rdev::{self, EventType, Key as RdevKey, KeyCode, RawKey};
 #[cfg(target_os = "macos")]
 use rdev::{CGEventSourceStateID, CGEventTapLocation, VirtualInput};
+#[cfg(target_os = "linux")]
+use scrap::wayland::pipewire::RDP_RESPONSE;
 use std::{
     convert::TryFrom,
-    ops::Sub,
+    ops::{Deref, DerefMut, Sub},
     sync::atomic::{AtomicBool, Ordering},
     thread,
     time::{self, Duration, Instant},
 };
+#[cfg(windows)]
+use winapi::um::winuser::WHEEL_DELTA;
 
 const INVALID_CURSOR_POS: i32 = i32::MIN;
+const INVALID_DISPLAY_IDX: i32 = -1;
 
 #[derive(Default)]
 struct StateCursor {
@@ -62,6 +72,29 @@ impl StatePos {
     #[inline]
     fn is_moved(&self, x: i32, y: i32) -> bool {
         self.is_valid() && (self.cursor_pos.0 != x || self.cursor_pos.1 != y)
+    }
+}
+
+#[derive(Default)]
+struct StateWindowFocus {
+    display_idx: i32,
+}
+
+impl super::service::Reset for StateWindowFocus {
+    fn reset(&mut self) {
+        self.display_idx = INVALID_DISPLAY_IDX;
+    }
+}
+
+impl StateWindowFocus {
+    #[inline]
+    fn is_valid(&self) -> bool {
+        self.display_idx != INVALID_DISPLAY_IDX
+    }
+
+    #[inline]
+    fn is_changed(&self, disp_idx: i32) -> bool {
+        self.is_valid() && self.display_idx != disp_idx
     }
 }
 
@@ -178,7 +211,7 @@ impl LockModesHandler {
     fn new(key_event: &KeyEvent) -> Self {
         let event_caps_enabled = Self::is_modifier_enabled(key_event, ControlKey::CapsLock);
         // Do not use the following code to detect `local_caps_enabled`.
-        // Because the state of get_key_state will not affect simuation of `VIRTUAL_INPUT_STATE` in this file.
+        // Because the state of get_key_state will not affect simulation of `VIRTUAL_INPUT_STATE` in this file.
         //
         // let local_caps_enabled = VirtualInput::get_key_state(
         //     CGEventSourceStateID::CombinedSessionState,
@@ -229,18 +262,50 @@ fn should_disable_numlock(evt: &KeyEvent) -> bool {
 
 pub const NAME_CURSOR: &'static str = "mouse_cursor";
 pub const NAME_POS: &'static str = "mouse_pos";
-pub type MouseCursorService = ServiceTmpl<MouseCursorSub>;
+pub const NAME_WINDOW_FOCUS: &'static str = "window_focus";
+#[derive(Clone)]
+pub struct MouseCursorService {
+    pub sp: ServiceTmpl<MouseCursorSub>,
+}
 
-pub fn new_cursor() -> MouseCursorService {
-    let sp = MouseCursorService::new(NAME_CURSOR, true);
-    sp.repeat::<StateCursor, _>(33, run_cursor);
-    sp
+impl Deref for MouseCursorService {
+    type Target = ServiceTmpl<MouseCursorSub>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.sp
+    }
+}
+
+impl DerefMut for MouseCursorService {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.sp
+    }
+}
+
+impl MouseCursorService {
+    pub fn new(name: String, need_snapshot: bool) -> Self {
+        Self {
+            sp: ServiceTmpl::<MouseCursorSub>::new(name, need_snapshot),
+        }
+    }
+}
+
+pub fn new_cursor() -> ServiceTmpl<MouseCursorSub> {
+    let svc = MouseCursorService::new(NAME_CURSOR.to_owned(), true);
+    ServiceTmpl::<MouseCursorSub>::repeat::<StateCursor, _, _>(&svc.clone(), 33, run_cursor);
+    svc.sp
 }
 
 pub fn new_pos() -> GenericService {
-    let sp = GenericService::new(NAME_POS, false);
-    sp.repeat::<StatePos, _>(33, run_pos);
-    sp
+    let svc = EmptyExtraFieldService::new(NAME_POS.to_owned(), false);
+    GenericService::repeat::<StatePos, _, _>(&svc.clone(), 33, run_pos);
+    svc.sp
+}
+
+pub fn new_window_focus() -> GenericService {
+    let svc = EmptyExtraFieldService::new(NAME_WINDOW_FOCUS.to_owned(), false);
+    GenericService::repeat::<StateWindowFocus, _, _>(&svc.clone(), 33, run_window_focus);
+    svc.sp
 }
 
 #[inline]
@@ -251,7 +316,7 @@ fn update_last_cursor_pos(x: i32, y: i32) {
     }
 }
 
-fn run_pos(sp: GenericService, state: &mut StatePos) -> ResultType<()> {
+fn run_pos(sp: EmptyExtraFieldService, state: &mut StatePos) -> ResultType<()> {
     let (_, (x, y)) = *LATEST_SYS_CURSOR_POS.lock().unwrap();
     if x == INVALID_CURSOR_POS || y == INVALID_CURSOR_POS {
         return Ok(());
@@ -299,8 +364,7 @@ fn run_cursor(sp: MouseCursorService, state: &mut StateCursor) -> ResultType<()>
                 msg = cached.clone();
             } else {
                 let mut data = crate::get_cursor_data(hcursor)?;
-                data.colors =
-                    hbb_common::compress::compress(&data.colors[..], COMPRESS_LEVEL).into();
+                data.colors = hbb_common::compress::compress(&data.colors[..]).into();
                 let mut tmp = Message::new();
                 tmp.set_cursor_data(data);
                 msg = Arc::new(tmp);
@@ -316,6 +380,22 @@ fn run_cursor(sp: MouseCursorService, state: &mut StateCursor) -> ResultType<()>
         sps.send_shared(state.cursor_data.clone());
         Ok(())
     })?;
+    Ok(())
+}
+
+fn run_window_focus(sp: EmptyExtraFieldService, state: &mut StateWindowFocus) -> ResultType<()> {
+    let displays = super::display_service::get_sync_displays();
+    let disp_idx = crate::get_focused_display(displays);
+    if let Some(disp_idx) = disp_idx.map(|id| id as i32) {
+        if state.is_changed(disp_idx) {
+            let mut misc = Misc::new();
+            misc.set_follow_current_display(disp_idx as i32);
+            let mut msg_out = Message::new();
+            msg_out.set_misc(misc);
+            sp.send(msg_out);
+        }
+        state.display_idx = disp_idx;
+    }
     Ok(())
 }
 
@@ -341,13 +421,13 @@ const MOUSE_ACTIVE_DISTANCE: i32 = 5;
 
 static RECORD_CURSOR_POS_RUNNING: AtomicBool = AtomicBool::new(false);
 
-pub fn try_start_record_cursor_pos() {
+pub fn try_start_record_cursor_pos() -> Option<thread::JoinHandle<()>> {
     if RECORD_CURSOR_POS_RUNNING.load(Ordering::SeqCst) {
-        return;
+        return None;
     }
 
     RECORD_CURSOR_POS_RUNNING.store(true, Ordering::SeqCst);
-    thread::spawn(|| {
+    let handle = thread::spawn(|| {
         let interval = time::Duration::from_millis(33);
         loop {
             if !RECORD_CURSOR_POS_RUNNING.load(Ordering::SeqCst) {
@@ -365,6 +445,7 @@ pub fn try_start_record_cursor_pos() {
         }
         update_last_cursor_pos(INVALID_CURSOR_POS, INVALID_CURSOR_POS);
     });
+    Some(handle)
 }
 
 pub fn try_stop_record_cursor_pos() {
@@ -390,12 +471,15 @@ struct VirtualInputState {
 #[cfg(target_os = "macos")]
 impl VirtualInputState {
     fn new() -> Option<Self> {
-        VirtualInput::new(CGEventSourceStateID::Private, CGEventTapLocation::Session)
-            .map(|virtual_input| Self {
-                virtual_input,
-                capslock_down: false,
-            })
-            .ok()
+        VirtualInput::new(
+            CGEventSourceStateID::CombinedSessionState,
+            CGEventTapLocation::Session,
+        )
+        .map(|virtual_input| Self {
+            virtual_input,
+            capslock_down: false,
+        })
+        .ok()
     }
 
     #[inline]
@@ -428,6 +512,25 @@ pub async fn setup_uinput(minx: i32, maxx: i32, miny: i32, maxy: i32) -> ResultT
         .unwrap()
         .set_custom_keyboard(Box::new(keyboard));
     ENIGO.lock().unwrap().set_custom_mouse(Box::new(mouse));
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+pub async fn setup_rdp_input() -> ResultType<(), Box<dyn std::error::Error>> {
+    let mut en = ENIGO.lock()?;
+    let rdp_res_lock = RDP_RESPONSE.lock()?;
+    let rdp_res = rdp_res_lock.as_ref().ok_or("RDP response is None")?;
+
+    let keyboard = RdpInputKeyboard::new(rdp_res.conn.clone(), rdp_res.session.clone())?;
+    en.set_custom_keyboard(Box::new(keyboard));
+    log::info!("RdpInput keyboard created");
+
+    if let Some(stream) = rdp_res.streams.clone().into_iter().next() {
+        let mouse = RdpInputMouse::new(rdp_res.conn.clone(), rdp_res.session.clone(), stream)?;
+        en.set_custom_mouse(Box::new(mouse));
+        log::info!("RdpInput mouse created");
+    }
+
     Ok(())
 }
 
@@ -507,30 +610,32 @@ fn get_modifier_state(key: Key, en: &mut Enigo) -> bool {
 }
 
 pub fn handle_mouse(evt: &MouseEvent, conn: i32) {
-    if !active_mouse_(conn) {
-        return;
-    }
-    let evt_type = evt.mask & 0x7;
-    if evt_type == 0 {
-        let time = get_time();
-        *LATEST_PEER_INPUT_CURSOR.lock().unwrap() = Input {
-            time,
-            conn,
-            x: evt.x,
-            y: evt.y,
-        };
-    }
     #[cfg(target_os = "macos")]
     if !is_server() {
         // having GUI, run main GUI thread, otherwise crash
         let evt = evt.clone();
-        QUEUE.exec_async(move || handle_mouse_(&evt));
+        QUEUE.exec_async(move || handle_mouse_(&evt, conn));
         return;
     }
     #[cfg(windows)]
-    crate::portable_service::client::handle_mouse(evt);
+    crate::portable_service::client::handle_mouse(evt, conn);
     #[cfg(not(windows))]
-    handle_mouse_(evt);
+    handle_mouse_(evt, conn);
+}
+
+// to-do: merge handle_mouse and handle_pointer
+pub fn handle_pointer(evt: &PointerDeviceEvent, conn: i32) {
+    #[cfg(target_os = "macos")]
+    if !is_server() {
+        // having GUI, run main GUI thread, otherwise crash
+        let evt = evt.clone();
+        QUEUE.exec_async(move || handle_pointer_(&evt, conn));
+        return;
+    }
+    #[cfg(windows)]
+    crate::portable_service::client::handle_pointer(evt, conn);
+    #[cfg(not(windows))]
+    handle_pointer_(evt, conn);
 }
 
 pub fn fix_key_down_timeout_loop() {
@@ -683,7 +788,25 @@ fn fix_modifiers(modifiers: &[EnumOrUnknown<ControlKey>], en: &mut Enigo, ck: i3
     }
 }
 
+// Update time to avoid send cursor position event to the peer.
+// See `run_pos` --> `set_cursor_position` --> `exclude`
+#[inline]
+pub fn update_latest_input_cursor_time(conn: i32) {
+    let mut lock = LATEST_PEER_INPUT_CURSOR.lock().unwrap();
+    lock.conn = conn;
+    lock.time = get_time();
+}
+
+#[inline]
+fn get_last_input_cursor_pos() -> (i32, i32) {
+    let lock = LATEST_PEER_INPUT_CURSOR.lock().unwrap();
+    (lock.x, lock.y)
+}
+
+// check if mouse is moved by the controlled side user to make controlled side has higher mouse priority than remote.
 fn active_mouse_(conn: i32) -> bool {
+    true
+    /* this method is buggy (not working on macOS, making fast moving mouse event discarded here) and added latency (this is blocking way, must do in async way), so we disable it for now
     // out of time protection
     if LATEST_SYS_CURSOR_POS.lock().unwrap().0.elapsed() > MOUSE_MOVE_PROTECTION_TIMEOUT {
         return true;
@@ -699,20 +822,32 @@ fn active_mouse_(conn: i32) -> bool {
     // Check if input is in valid range
     match crate::get_cursor_pos() {
         Some((x, y)) => {
-            let (last_in_x, last_in_y) = {
-                let lock = LATEST_PEER_INPUT_CURSOR.lock().unwrap();
-                (lock.x, lock.y)
-            };
+            let (last_in_x, last_in_y) = get_last_input_cursor_pos();
             let mut can_active = in_active_dist(last_in_x, x) && in_active_dist(last_in_y, y);
             // The cursor may not have been moved to last input position if system is busy now.
             // While this is not a common case, we check it again after some time later.
             if !can_active {
-                // 10 micros may be enough for system to move cursor.
-                // We do not care about the situation which system is too slow(more than 10 micros is required).
-                std::thread::sleep(std::time::Duration::from_micros(10));
-                // Sleep here can also somehow suppress delay accumulation.
-                if let Some((x2, y2)) = crate::get_cursor_pos() {
-                    can_active = in_active_dist(last_in_x, x2) && in_active_dist(last_in_y, y2);
+                // 100 micros may be enough for system to move cursor.
+                // Mouse inputs on macOS are asynchronous. 1. Put in a queue to process in main thread. 2. Send event async.
+                // More reties are needed on macOS.
+                #[cfg(not(target_os = "macos"))]
+                let retries = 10;
+                #[cfg(target_os = "macos")]
+                let retries = 100;
+                #[cfg(not(target_os = "macos"))]
+                let sleep_interval: u64 = 10;
+                #[cfg(target_os = "macos")]
+                let sleep_interval: u64 = 30;
+                for _retry in 0..retries {
+                    std::thread::sleep(std::time::Duration::from_micros(sleep_interval));
+                    // Sleep here can also somehow suppress delay accumulation.
+                    if let Some((x2, y2)) = crate::get_cursor_pos() {
+                        let (last_in_x, last_in_y) = get_last_input_cursor_pos();
+                        can_active = in_active_dist(last_in_x, x2) && in_active_dist(last_in_y, y2);
+                        if can_active {
+                            break;
+                        }
+                    }
                 }
             }
             if !can_active {
@@ -724,9 +859,35 @@ fn active_mouse_(conn: i32) -> bool {
         }
         None => true,
     }
+    */
 }
 
-pub fn handle_mouse_(evt: &MouseEvent) {
+pub fn handle_pointer_(evt: &PointerDeviceEvent, conn: i32) {
+    if !active_mouse_(conn) {
+        return;
+    }
+
+    if EXITING.load(Ordering::SeqCst) {
+        return;
+    }
+
+    match &evt.union {
+        Some(TouchEvent(evt)) => match &evt.union {
+            Some(ScaleUpdate(_scale_evt)) => {
+                #[cfg(target_os = "windows")]
+                handle_scale(_scale_evt.scale);
+            }
+            _ => {}
+        },
+        _ => {}
+    }
+}
+
+pub fn handle_mouse_(evt: &MouseEvent, conn: i32) {
+    if !active_mouse_(conn) {
+        return;
+    }
+
     if EXITING.load(Ordering::SeqCst) {
         return;
     }
@@ -738,7 +899,7 @@ pub fn handle_mouse_(evt: &MouseEvent) {
     let mut en = ENIGO.lock().unwrap();
     #[cfg(not(target_os = "macos"))]
     let mut to_release = Vec::new();
-    if evt_type == 1 {
+    if evt_type == MOUSE_TYPE_DOWN {
         fix_modifiers(&evt.modifiers[..], &mut en, 0);
         #[cfg(target_os = "macos")]
         en.reset_flag();
@@ -759,46 +920,52 @@ pub fn handle_mouse_(evt: &MouseEvent) {
         }
     }
     match evt_type {
-        0 => {
+        MOUSE_TYPE_MOVE => {
             en.mouse_move_to(evt.x, evt.y);
+            *LATEST_PEER_INPUT_CURSOR.lock().unwrap() = Input {
+                conn,
+                time: get_time(),
+                x: evt.x,
+                y: evt.y,
+            };
         }
-        1 => match buttons {
-            0x01 => {
+        MOUSE_TYPE_DOWN => match buttons {
+            MOUSE_BUTTON_LEFT => {
                 allow_err!(en.mouse_down(MouseButton::Left));
             }
-            0x02 => {
+            MOUSE_BUTTON_RIGHT => {
                 allow_err!(en.mouse_down(MouseButton::Right));
             }
-            0x04 => {
+            MOUSE_BUTTON_WHEEL => {
                 allow_err!(en.mouse_down(MouseButton::Middle));
             }
-            0x08 => {
+            MOUSE_BUTTON_BACK => {
                 allow_err!(en.mouse_down(MouseButton::Back));
             }
-            0x10 => {
+            MOUSE_BUTTON_FORWARD => {
                 allow_err!(en.mouse_down(MouseButton::Forward));
             }
             _ => {}
         },
-        2 => match buttons {
-            0x01 => {
+        MOUSE_TYPE_UP => match buttons {
+            MOUSE_BUTTON_LEFT => {
                 en.mouse_up(MouseButton::Left);
             }
-            0x02 => {
+            MOUSE_BUTTON_RIGHT => {
                 en.mouse_up(MouseButton::Right);
             }
-            0x04 => {
+            MOUSE_BUTTON_WHEEL => {
                 en.mouse_up(MouseButton::Middle);
             }
-            0x08 => {
+            MOUSE_BUTTON_BACK => {
                 en.mouse_up(MouseButton::Back);
             }
-            0x10 => {
+            MOUSE_BUTTON_FORWARD => {
                 en.mouse_up(MouseButton::Forward);
             }
             _ => {}
         },
-        3 | 4 => {
+        MOUSE_TYPE_WHEEL | MOUSE_TYPE_TRACKPAD => {
             #[allow(unused_mut)]
             let mut x = evt.x;
             #[allow(unused_mut)]
@@ -808,12 +975,13 @@ pub fn handle_mouse_(evt: &MouseEvent) {
                 x = -x;
                 y = -y;
             }
+
+            #[cfg(any(target_os = "macos", target_os = "windows"))]
+            let is_track_pad = evt_type == MOUSE_TYPE_TRACKPAD;
+
             #[cfg(target_os = "macos")]
             {
                 // TODO: support track pad on win.
-                let is_track_pad = evt
-                    .modifiers
-                    .contains(&EnumOrUnknown::new(ControlKey::Scroll));
 
                 // fix shift + scroll(down/up)
                 if !is_track_pad
@@ -833,13 +1001,19 @@ pub fn handle_mouse_(evt: &MouseEvent) {
                 }
             }
 
+            #[cfg(windows)]
+            if !is_track_pad {
+                x *= WHEEL_DELTA as i32;
+                y *= WHEEL_DELTA as i32;
+            }
+
             #[cfg(not(target_os = "macos"))]
             {
-                if x != 0 {
-                    en.mouse_scroll_x(x);
-                }
                 if y != 0 {
                     en.mouse_scroll_y(y);
+                }
+                if x != 0 {
+                    en.mouse_scroll_x(x);
                 }
             }
         }
@@ -848,6 +1022,18 @@ pub fn handle_mouse_(evt: &MouseEvent) {
     #[cfg(not(target_os = "macos"))]
     for key in to_release {
         en.key_up(key.clone());
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn handle_scale(scale: i32) {
+    let mut en = ENIGO.lock().unwrap();
+    if scale == 0 {
+        en.key_up(Key::Control);
+    } else {
+        if en.key_down(Key::Control).is_ok() {
+            en.mouse_scroll_y(scale);
+        }
     }
 }
 
@@ -898,7 +1084,6 @@ pub async fn lock_screen() {
     crate::platform::lock_screen();
     }
     }
-    super::video_service::switch_to_primary().await;
 }
 
 pub fn handle_key(evt: &KeyEvent) {
@@ -1038,7 +1223,7 @@ fn map_keyboard_mode(evt: &KeyEvent) {
 
     // Wayland
     #[cfg(target_os = "linux")]
-    if !*IS_X11 {
+    if !crate::platform::linux::is_x11() {
         let mut en = ENIGO.lock().unwrap();
         let code = evt.chr() as u16;
 
@@ -1181,6 +1366,7 @@ fn is_function_key(ck: &EnumOrUnknown<ControlKey>) -> bool {
     let mut res = false;
     if ck.value() == ControlKey::CtrlAltDel.value() {
         // have to spawn new thread because send_sas is tokio_main, the caller can not be tokio_main.
+        #[cfg(windows)]
         std::thread::spawn(|| {
             allow_err!(send_sas());
         });
@@ -1411,11 +1597,11 @@ pub fn handle_key_(evt: &KeyEvent) {
         _ => {}
     };
 
-    match evt.mode.unwrap() {
-        KeyboardMode::Map => {
+    match evt.mode.enum_value() {
+        Ok(KeyboardMode::Map) => {
             map_keyboard_mode(evt);
         }
-        KeyboardMode::Translate => {
+        Ok(KeyboardMode::Translate) => {
             translate_keyboard_mode(evt);
         }
         _ => {
@@ -1429,10 +1615,15 @@ async fn lock_screen_2() {
     lock_screen().await;
 }
 
+#[cfg(windows)]
 #[tokio::main(flavor = "current_thread")]
 async fn send_sas() -> ResultType<()> {
-    let mut stream = crate::ipc::connect(1000, crate::POSTFIX_SERVICE).await?;
-    timeout(1000, stream.send(&crate::ipc::Data::SAS)).await??;
+    if crate::platform::is_physical_console_session().unwrap_or(true) {
+        let mut stream = crate::ipc::connect(1000, crate::POSTFIX_SERVICE).await?;
+        timeout(1000, stream.send(&crate::ipc::Data::SAS)).await??;
+    } else {
+        crate::platform::send_sas();
+    };
     Ok(())
 }
 

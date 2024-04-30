@@ -4,13 +4,14 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use serde_derive::{Deserialize, Serialize};
+use serde_json::json;
 use tokio::{fs::File, io::*};
 
-use crate::{bail, get_version_number, message_proto::*, ResultType, Stream};
+use crate::{anyhow::anyhow, bail, get_version_number, message_proto::*, ResultType, Stream};
 // https://doc.rust-lang.org/std/os/windows/fs/trait.MetadataExt.html
 use crate::{
     compress::{compress, decompress},
-    config::{Config, COMPRESS_LEVEL},
+    config::Config,
 };
 
 pub fn read_dir(path: &Path, include_hidden: bool) -> ResultType<FileDirectory> {
@@ -194,7 +195,8 @@ pub fn can_enable_overwrite_detection(version: i64) -> bool {
     version >= get_version_number("1.1.10")
 }
 
-#[derive(Default)]
+#[derive(Default, Serialize, Debug)]
+#[serde(rename_all = "camelCase")]
 pub struct TransferJob {
     pub id: i32,
     pub remote: String,
@@ -203,10 +205,13 @@ pub struct TransferJob {
     pub is_remote: bool,
     pub is_last_job: bool,
     pub file_num: i32,
+    #[serde(skip_serializing)]
     pub files: Vec<FileEntry>,
+    pub conn_id: i32, // server only
 
+    #[serde(skip_serializing)]
     file: Option<File>,
-    total_size: u64,
+    pub total_size: u64,
     finished_size: u64,
     transferred: u64,
     enable_overwrite_detection: bool,
@@ -403,10 +408,18 @@ impl TransferJob {
         }
         if block.compressed {
             let tmp = decompress(&block.data);
-            self.file.as_mut().unwrap().write_all(&tmp).await?;
+            self.file
+                .as_mut()
+                .ok_or(anyhow!("file is None"))?
+                .write_all(&tmp)
+                .await?;
             self.finished_size += tmp.len() as u64;
         } else {
-            self.file.as_mut().unwrap().write_all(&block.data).await?;
+            self.file
+                .as_mut()
+                .ok_or(anyhow!("file is None"))?
+                .write_all(&block.data)
+                .await?;
             self.finished_size += block.data.len() as u64;
         }
         self.transferred += block.data.len() as u64;
@@ -456,7 +469,13 @@ impl TransferJob {
         let mut compressed = false;
         let mut offset: usize = 0;
         loop {
-            match self.file.as_mut().unwrap().read(&mut buf[offset..]).await {
+            match self
+                .file
+                .as_mut()
+                .ok_or(anyhow!("file is None"))?
+                .read(&mut buf[offset..])
+                .await
+            {
                 Err(err) => {
                     self.file_num += 1;
                     self.file = None;
@@ -481,7 +500,7 @@ impl TransferJob {
         } else {
             self.finished_size += offset as u64;
             if !is_compressed_file(name) {
-                let tmp = compress(&buf, COMPRESS_LEVEL);
+                let tmp = compress(&buf);
                 if tmp.len() < buf.len() {
                     buf = tmp;
                     compressed = true;
@@ -501,7 +520,12 @@ impl TransferJob {
     async fn send_current_digest(&mut self, stream: &mut Stream) -> ResultType<()> {
         let mut msg = Message::new();
         let mut resp = FileResponse::new();
-        let meta = self.file.as_ref().unwrap().metadata().await?;
+        let meta = self
+            .file
+            .as_ref()
+            .ok_or(anyhow!("file is None"))?
+            .metadata()
+            .await?;
         let last_modified = meta
             .modified()?
             .duration_since(SystemTime::UNIX_EPOCH)?
@@ -516,7 +540,7 @@ impl TransferJob {
         msg.set_file_response(resp);
         stream.send(&msg).await?;
         log::info!(
-            "id: {}, file_num:{}, digest message is sent. waiting for confirm. msg: {:?}",
+            "id: {}, file_num: {}, digest message is sent. waiting for confirm. msg: {:?}",
             self.id,
             self.file_num,
             msg
@@ -676,13 +700,20 @@ pub fn new_send_confirm(r: FileTransferSendConfirmRequest) -> Message {
 }
 
 #[inline]
-pub fn new_receive(id: i32, path: String, file_num: i32, files: Vec<FileEntry>) -> Message {
+pub fn new_receive(
+    id: i32,
+    path: String,
+    file_num: i32,
+    files: Vec<FileEntry>,
+    total_size: u64,
+) -> Message {
     let mut action = FileAction::new();
     action.set_receive(FileTransferReceiveRequest {
         id,
         path,
         files,
         file_num,
+        total_size,
         ..Default::default()
     });
     let mut msg_out = Message::new();
@@ -692,7 +723,7 @@ pub fn new_receive(id: i32, path: String, file_num: i32, files: Vec<FileEntry>) 
 
 #[inline]
 pub fn new_send(id: i32, path: String, file_num: i32, include_hidden: bool) -> Message {
-    log::info!("new send: {},id : {}", path, id);
+    log::info!("new send: {}, id: {}", path, id);
     let mut action = FileAction::new();
     action.set_send(FileTransferSendRequest {
         id,
@@ -729,10 +760,16 @@ pub fn get_job(id: i32, jobs: &mut [TransferJob]) -> Option<&mut TransferJob> {
     jobs.iter_mut().find(|x| x.id() == id)
 }
 
+#[inline]
+pub fn get_job_immutable(id: i32, jobs: &[TransferJob]) -> Option<&TransferJob> {
+    jobs.iter().find(|x| x.id() == id)
+}
+
 pub async fn handle_read_jobs(
     jobs: &mut Vec<TransferJob>,
     stream: &mut crate::Stream,
-) -> ResultType<()> {
+) -> ResultType<String> {
+    let mut job_log = Default::default();
     let mut finished = Vec::new();
     for job in jobs.iter_mut() {
         if job.is_last_job {
@@ -749,14 +786,16 @@ pub async fn handle_read_jobs(
             }
             Ok(None) => {
                 if job.job_completed() {
+                    job_log = serialize_transfer_job(job, true, false, "");
                     finished.push(job.id());
-                    let err = job.job_error();
-                    if err.is_some() {
-                        stream
-                            .send(&new_error(job.id(), err.unwrap(), job.file_num()))
-                            .await?;
-                    } else {
-                        stream.send(&new_done(job.id(), job.file_num())).await?;
+                    match job.job_error() {
+                        Some(err) => {
+                            job_log = serialize_transfer_job(job, false, false, &err);
+                            stream
+                                .send(&new_error(job.id(), err, job.file_num()))
+                                .await?
+                        }
+                        None => stream.send(&new_done(job.id(), job.file_num())).await?,
                     }
                 } else {
                     // waiting confirmation.
@@ -767,7 +806,7 @@ pub async fn handle_read_jobs(
     for id in finished {
         remove_job(id, jobs);
     }
-    Ok(())
+    Ok(job_log)
 }
 
 pub fn remove_all_empty_dir(path: &PathBuf) -> ResultType<()> {
@@ -841,4 +880,21 @@ pub fn is_write_need_confirmation(
     } else {
         Ok(DigestCheckResult::NoSuchFile)
     }
+}
+
+pub fn serialize_transfer_jobs(jobs: &[TransferJob]) -> String {
+    let mut v = vec![];
+    for job in jobs {
+        let value = serde_json::to_value(job).unwrap_or_default();
+        v.push(value);
+    }
+    serde_json::to_string(&v).unwrap_or_default()
+}
+
+pub fn serialize_transfer_job(job: &TransferJob, done: bool, cancel: bool, error: &str) -> String {
+    let mut value = serde_json::to_value(job).unwrap_or_default();
+    value["done"] = json!(done);
+    value["cancel"] = json!(cancel);
+    value["error"] = json!(error);
+    serde_json::to_string(&value).unwrap_or_default()
 }

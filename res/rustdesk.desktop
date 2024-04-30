@@ -1,10 +1,9 @@
 [Desktop Entry]
-Version=1.5
 Name=RustDesk
 GenericName=Remote Desktop
 Comment=Remote Desktop
 Exec=rustdesk %u
-Icon=/usr/share/rustdesk/files/rustdesk.png
+Icon=rustdesk
 Terminal=false
 Type=Application
 StartupNotify=true

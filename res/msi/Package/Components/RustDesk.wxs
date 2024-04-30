@@ -1,0 +1,138 @@
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+	xmlns:fire="http://wixtoolset.org/schemas/v4/wxs/firewall">
+	<Fragment>
+
+		<?include ../Includes.wxi?>
+
+		<DirectoryRef Id="INSTALLFOLDER" FileSource="$(var.BuildDir)">
+			<Component Id="App.exe" Guid="620F0F69-4C17-4320-A619-495E329712A4">
+				<File Id="App.exe" Name="$(var.Product).exe" KeyPath="yes" Checksum="yes">
+					<!--<fire:FirewallException Id="AppEx" Name="$(var.Product) Service" Scope="any" IgnoreFailure="yes" />-->
+				</File>
+			</Component>
+		</DirectoryRef>
+
+		<CustomAction Id="RemoveInstallFolder.SetParam" Return="check" Property="RemoveInstallFolder" Value="[INSTALLFOLDER]" />
+		<CustomAction Id="AddFirewallRules.SetParam" Return="check" Property="AddFirewallRules" Value="1[INSTALLFOLDER]$(var.Product).exe" />
+		<CustomAction Id="RemoveFirewallRules.SetParam" Return="check" Property="RemoveFirewallRules" Value="0[INSTALLFOLDER]$(var.Product).exe" />
+		<CustomAction Id="CreateStartService.SetParam" Return="check" Property="CreateStartService" Value="$(var.Product);&quot;[INSTALLFOLDER]$(var.Product).exe&quot; --service" />
+		<CustomAction Id="TryStopDeleteService.SetParam" Return="check" Property="TryStopDeleteService" Value="$(var.Product)" />
+		
+		<CustomAction Id="LaunchApp" ExeCommand="" Return="asyncNoWait" FileRef="App.exe" />
+		<CustomAction Id="LaunchAppTray" ExeCommand=" --tray" Return="asyncNoWait" FileRef="App.exe" />
+		<Property Id="TerminateProcesses" Value="AppTest.exe" />
+		<CustomAction Id="TerminateProcesses.SetParam" Return="check" Property="TerminateProcesses" Value="$(var.Product).exe" />
+		<CustomAction Id="TerminateBrokers.SetParam" Return="check" Property="TerminateProcesses" Value="RuntimeBroker_rustdesk.exe" />
+		<CustomAction Id="SetPropertyIsServiceRunning.SetParam.AppName" Return="check" Property="AppName" Value="$(var.Product)" />
+		<CustomAction Id="SetPropertyIsServiceRunning.SetParam.PropertyName" Return="check" Property="PropertyName" Value="STOP_SERVICE" />
+		<CustomAction Id="SetPropertyServiceStop.SetParam.ConfigFile" Return="check" Property="ConfigFile" Value="[AppDataFolder]$(var.Product)\config\$(var.Product)2.toml" />
+		<CustomAction Id="SetPropertyServiceStop.SetParam.ConfigKey" Return="check" Property="ConfigKey" Value="stop-service" />
+		<CustomAction Id="SetPropertyServiceStop.SetParam.PropertyName" Return="check" Property="PropertyName" Value="STOP_SERVICE" />
+		<CustomAction Id="TryDeleteStartupShortcut.SetParam" Return="check" Property="ShortcutName" Value="$(var.Product) Tray" />
+		<CustomAction Id="RemoveAmyuniIdd.SetParam" Return="check" Property="RemoveAmyuniIdd" Value="[INSTALLFOLDER]" />
+		<InstallExecuteSequence>
+
+			<Custom Action="SetPropertyIsServiceRunning" After="InstallInitialize" Condition="Installed" />
+			<Custom Action="SetPropertyIsServiceRunning.SetParam.AppName" Before="SetPropertyIsServiceRunning" Condition="Installed" />
+			<Custom Action="SetPropertyIsServiceRunning.SetParam.PropertyName" Before="SetPropertyIsServiceRunning" Condition="Installed" />
+
+			<Custom Action="SetPropertyServiceStop" After="InstallInitialize" Condition="NOT Installed" />
+			<Custom Action="SetPropertyServiceStop.SetParam.ConfigFile" Before="SetPropertyServiceStop" Condition="NOT Installed" />
+			<Custom Action="SetPropertyServiceStop.SetParam.ConfigKey" Before="SetPropertyServiceStop" Condition="NOT Installed" />
+			<Custom Action="SetPropertyServiceStop.SetParam.PropertyName" Before="SetPropertyServiceStop" Condition="NOT Installed" />
+			
+			<!-- Do not call CreateStartService if is uninstalling. -->
+			<!-- (Installed AND REMOVE AND NOT UPGRADINGPRODUCTCODE) means uninstalling. -->
+			<Custom Action="CreateStartService" Before="InstallFinalize" Condition="(NOT (Installed AND REMOVE AND NOT UPGRADINGPRODUCTCODE)) AND (NOT STOP_SERVICE=&quot;&apos;Y&apos;&quot;)" />
+			<Custom Action="CreateStartService.SetParam" Before="CreateStartService" Condition="(NOT (Installed AND REMOVE AND NOT UPGRADINGPRODUCTCODE)) AND (NOT STOP_SERVICE=&quot;&apos;Y&apos;&quot;)" />
+
+			<Custom Action="CustomActionHello" Before="InstallFinalize" />
+
+			<!--Shortcut is in InstallValidate section. So we just let it be created, then try delete if stopping service.-->
+			<Custom Action="TryDeleteStartupShortcut" After="InstallFinalize" Condition="STOP_SERVICE=&quot;&apos;Y&apos;&quot;" />
+			<Custom Action="TryDeleteStartupShortcut.SetParam" Before="SetPropertyIsServiceRunning" Condition="STOP_SERVICE=&quot;&apos;Y&apos;&quot;" />
+
+			<!-- Launch ClientLauncher if installing or already installed and not uninstalling -->
+			<Custom Action="LaunchApp" After="InstallFinalize" Condition="NOT (Installed AND REMOVE AND NOT UPGRADINGPRODUCTCODE)"/>
+			<Custom Action="LaunchAppTray" After="InstallFinalize" Condition="(NOT (Installed AND REMOVE AND NOT UPGRADINGPRODUCTCODE)) AND (NOT STOP_SERVICE=&quot;&apos;Y&apos;&quot;)"/>
+
+			<!--Workaround of "fire:FirewallException". If Outbound="Yes" or Outbound="true", the following error occurs.-->
+			<!--ExecFirewallExceptions: Error 0x80070057: failed to add app to the authorized apps list-->
+			<Custom Action="AddFirewallRules" Before="InstallFinalize" Condition="NOT (Installed AND REMOVE AND NOT UPGRADINGPRODUCTCODE)"/>
+			<Custom Action="AddFirewallRules.SetParam" Before="AddFirewallRules" Condition="NOT (Installed AND REMOVE AND NOT UPGRADINGPRODUCTCODE)"/>
+
+			<Custom Action="AddRegSoftwareSASGeneration" Before="InstallFinalize" Condition="NOT (Installed AND REMOVE AND NOT UPGRADINGPRODUCTCODE)"/>
+
+			<Custom Action="RemoveInstallFolder" Before="RemoveFiles"/>
+			<Custom Action="RemoveInstallFolder.SetParam" Before="RemoveInstallFolder"/>
+			<Custom Action="TryStopDeleteService" Before="RemoveInstallFolder.SetParam" />
+			<Custom Action="TryStopDeleteService.SetParam" Before="TryStopDeleteService" />
+
+			<Custom Action="RemoveFirewallRules" Before="RemoveFiles"/>
+			<Custom Action="RemoveFirewallRules.SetParam" Before="RemoveFirewallRules"/>
+
+			<Custom Action="TerminateProcesses" Before="RemoveInstallFolder"/>
+			<Custom Action="TerminateProcesses.SetParam" Before="TerminateProcesses"/>
+			<Custom Action="TerminateBrokers" Before="RemoveInstallFolder"/>
+			<Custom Action="TerminateBrokers.SetParam" Before="TerminateBrokers"/>
+			<Custom Action="RemoveAmyuniIdd" Before="RemoveInstallFolder"/>
+			<Custom Action="RemoveAmyuniIdd.SetParam" Before="RemoveAmyuniIdd"/>
+		</InstallExecuteSequence>
+
+		<!-- Shortcuts -->
+		<DirectoryRef Id="App.StartMenu">
+			<Component Id="App.StartMenu" Guid="30F6D57A-B805-4DA4-A071-05A3B22400CA">
+				<RegistryValue Root="HKCU" Key="Software\$(var.Product)" Name="App.StartMenu" Type="string" Value="1" KeyPath="yes" />
+				<RemoveFolder Id="Remove.App.StartMenu" On="uninstall" />
+			</Component>
+		</DirectoryRef>
+
+		<DirectoryRef Id="App.StartMenu">
+			<Component Id="App.StartMenu.Shortcut" Guid="43ABCAC7-E47D-42D8-A408-25EC70DBB993" Condition="STARTMENUSHORTCUTS = 1">
+				<Shortcut Id="App.StartMenu.Shortcut" Name="!(loc.SC_Client)" Description="!(loc.SC_Client_Desc)" Target="[!App.exe]" Icon="AppIcon" WorkingDirectory="INSTALLFOLDER" />
+				<!--
+					Fix ICE 38 by adding a dummy registry key that is the key for this shortcut.
+					https://learn.microsoft.com/en-us/windows/win32/msi/ice38
+				-->
+				<RegistryValue Root="HKCU" Key="Software\$(var.Product)" Name="App.StartMenu.Shortcut" Type="string" Value="1" KeyPath="yes" />
+			</Component>
+
+			<Component Id="App.StartMenu.ShortcutUninstall" Guid="E100D7F8-D607-4513-28DA-2C95E5EA698E" Condition="STARTMENUSHORTCUTS = 1">
+				<Shortcut Id="App.StartMenu.ShortcutUninstall" Name="!(loc.SC_Uninstall)" Description="!(loc.SC_Uninstall_Desc)" Target="[System6432Folder]msiexec.exe" Arguments="/x [ProductCode]" Icon="AppIcon" />
+				<RegistryValue Root="HKCU" Key="Software\$(var.Product)" Name="App.StartMenu.ShortcutUninstall" Type="string" Value="1" KeyPath="yes" />
+			</Component>
+		</DirectoryRef>
+		<StandardDirectory Id="DesktopFolder">
+			<Component Id="App.Desktop.Shortcut" Guid="CA8FB7AA-17F7-4E36-A58A-5A016A303709" Condition="DESKTOPSHORTCUTS = 1">
+				<Shortcut Id="App.Desktop.Shortcut" Name="!(loc.SC_Client)" Description="!(loc.SC_Client_Desc)" Target="[!App.exe]" Icon="AppIcon" WorkingDirectory="INSTALLFOLDER" />
+				<RegistryValue Root="HKCU" Key="Software\$(var.Product)" Name="App.Desktop.Shortcut" Type="string" Value="1" KeyPath="yes" />
+			</Component>
+		</StandardDirectory>
+		<StandardDirectory Id="StartupFolder">
+			<Component Id="App.StartupFolder.ShortcutTray" Guid="B1D1E2BB-E53E-E159-DB7C-744D5C726A8C" Condition="STARTUPSHORTCUTS = 1">
+				<Shortcut Id="App.StartupFolder.ShortcutTray" Name="!(loc.SC_Client_Tray)" Description="!(loc.SC_Client_Tray_Desc)" Target="[!App.exe]" Arguments="--tray" Icon="AppIcon" WorkingDirectory="INSTALLFOLDER" />
+				<RegistryValue Root="HKCU" Key="Software\$(var.Product)" Name="App.StartupFolder.ShortcutTray" Type="string" Value="1" KeyPath="yes" />
+			</Component>
+		</StandardDirectory>
+
+		<!--<DirectoryRef Id="INSTALLFOLDER">
+			<Component Id="App.UninstallShortcut" Guid="FB0F2AC7-2AE5-4C54-B860-5E472620B6B1">
+				<Shortcut Id="App.UninstallShortcut" Name="!(loc.SC_Uninstall)" Description="!(loc.SC_Uninstall_Desc)" Target="[System6432Folder]msiexec.exe" Arguments="/x [ProductCode]" Icon="AppIcon" />
+			</Component>
+		</DirectoryRef>-->
+
+		<ComponentGroup Id="Components" Directory="INSTALLFOLDER">
+			<ComponentRef Id="App.exe" />
+			<ComponentRef Id="App.Desktop.Shortcut" />
+			<!--<ComponentRef Id="App.UninstallShortcut" />-->
+			<ComponentRef Id="App.StartMenu.Shortcut" />
+			<ComponentRef Id="App.StartMenu.ShortcutUninstall" />
+			<ComponentRef Id="App.StartupFolder.ShortcutTray" />
+
+			<!--$AutoComonentStart$-->
+			<!--$AutoComponentEnd$-->
+
+		</ComponentGroup>
+
+	</Fragment>
+</Wix>

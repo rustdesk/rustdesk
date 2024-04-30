@@ -1,8 +1,8 @@
 <p align="center">
   <img src="../res/logo-header.svg" alt="RustDesk - Your remote desktop"><br>
-  <a href="#免费公共服务器">服务器</a> •
+  <a href="#免费的公共服务器">服务器</a> •
   <a href="#基本构建步骤">编译</a> •
-  <a href="#使用Docker编译">Docker</a> •
+  <a href="#使用-Docker-编译">Docker</a> •
   <a href="#文件结构">结构</a> •
   <a href="#截图">截图</a><br>
   [<a href="../README.md">English</a>] | [<a href="README-UA.md">Українська</a>] | [<a href="README-CS.md">česky</a>] | [<a href="README-HU.md">Magyar</a>] | [<a href="README-ES.md">Español</a>] | [<a href="README-FA.md">فارسی</a>] | [<a href="README-FR.md">Français</a>] | [<a href="README-DE.md">Deutsch</a>] | [<a href="README-PL.md">Polski</a>] | [<a href="README-ID.md">Indonesian</a>] | [<a href="README-FI.md">Suomi</a>] | [<a href="README-ML.md">മലയാളം</a>] | [<a href="README-JP.md">日本語</a>] | [<a href="README-NL.md">Nederlands</a>] | [<a href="README-IT.md">Italiano</a>] | [<a href="README-RU.md">Русский</a>] | [<a href="README-PTBR.md">Português (Brasil)</a>] | [<a href="README-EO.md">Esperanto</a>] | [<a href="README-KR.md">한국어</a>] | [<a href="README-AR.md">العربي</a>] | [<a href="README-VN.md">Tiếng Việt</a>] | [<a href="README-GR.md">Ελληνικά</a>]<br>
@@ -16,21 +16,19 @@ Chat with us: [知乎](https://www.zhihu.com/people/rustdesk) | [Discord](https:
 或者[自己设置](https://rustdesk.com/server)，
 亦或者[开发您的版本](https://github.com/rustdesk/rustdesk-server-demo)。
 
-欢迎大家贡献代码， 请看 [`docs/CONTRIBUTING.md`](CONTRIBUTING.md).
+![image](https://user-images.githubusercontent.com/71636191/171661982-430285f0-2e12-4b1d-9957-4a58e375304d.png)
 
-[**可执行程序下载**](https://github.com/rustdesk/rustdesk/releases)
+RustDesk 期待各位的贡献. 如何参与开发? 详情请看 [CONTRIBUTING.md](CONTRIBUTING.md).
 
-## 免费的公共服务器
+[**FAQ**](https://github.com/rustdesk/rustdesk/wiki/FAQ)
 
-以下是您可以使用的、免费的、会随时更新的公共服务器列表，在国内也许网速会很慢或者无法访问。
+[**BINARY DOWNLOAD**](https://github.com/rustdesk/rustdesk/releases)
 
-| Location | Vendor | Specification |
-| --------- | ------------- | ------------------ |
-| Seoul | AWS lightsail | 1 vCPU / 0.5GB RAM |
-| Germany | Hetzner | 2 vCPU / 4GB RAM |
-| Germany | Codext | 4 vCPU / 8GB RAM |
-| Finland (Helsinki) | 0x101 Cyber Security | 4 vCPU / 8GB RAM |
-| USA (Ashburn) | 0x101 Cyber Security | 4 vCPU / 8GB RAM |
+[**NIGHTLY BUILD**](https://github.com/rustdesk/rustdesk/releases/tag/nightly)
+
+[<img src="https://fdroid.gitlab.io/artwork/badge/get-it-on.png"
+    alt="Get it on F-Droid"
+    height="80">](https://f-droid.org/en/packages/com.carriez.flutter_hbb)
 
 ## 依赖
 
@@ -40,16 +38,14 @@ Chat with us: [知乎](https://www.zhihu.com/people/rustdesk) | [Discord](https:
 [Linux](https://raw.githubusercontent.com/c-smile/sciter-sdk/master/bin.lnx/x64/libsciter-gtk.so) |
 [macOS](https://raw.githubusercontent.com/c-smile/sciter-sdk/master/bin.osx/libsciter.dylib)
 
-移动版本使用Flutter，未来会将桌面版本从Sciter迁移到Flutter。
-
 ## 基本构建步骤
 
-- 请准备好 Rust 开发环境和 C++编译环境
+- 请准备好 Rust 开发环境和 C++ 编译环境
 
-- 安装[vcpkg](https://github.com/microsoft/vcpkg), 正确设置`VCPKG_ROOT`环境变量
+- 安装 [vcpkg](https://github.com/microsoft/vcpkg), 正确设置 `VCPKG_ROOT` 环境变量
 
-  - Windows: vcpkg install libvpx:x64-windows-static libyuv:x64-windows-static opus:x64-windows-static
-  - Linux/Osx: vcpkg install libvpx libyuv opus
+  - Windows: vcpkg install libvpx:x64-windows-static libyuv:x64-windows-static opus:x64-windows-static aom:x64-windows-static
+  - Linux/macOS: vcpkg install libvpx libyuv opus aom
 
 - 运行 `cargo run`
 
@@ -60,7 +56,15 @@ Chat with us: [知乎](https://www.zhihu.com/people/rustdesk) | [Discord](https:
 ### Ubuntu 18 (Debian 10)
 
 ```sh
-sudo apt install -y g++ gcc git curl wget nasm yasm libgtk-3-dev clang libxcb-randr0-dev libxdo-dev libxfixes-dev libxcb-shape0-dev libxcb-xfixes0-dev libasound2-dev libpulse-dev cmake
+sudo apt install -y zip g++ gcc git curl wget nasm yasm libgtk-3-dev clang libxcb-randr0-dev libxdo-dev \
+        libxfixes-dev libxcb-shape0-dev libxcb-xfixes0-dev libasound2-dev libpulse-dev cmake make \
+        libclang-dev ninja-build libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev
+```
+
+### openSUSE Tumbleweed 
+
+```sh
+sudo zypper install gcc-c++ git curl wget nasm yasm gcc gtk3-devel clang libxcb-devel libXfixes-devel cmake alsa-lib-devel gstreamer-devel gstreamer-plugins-base-devel xdotool-devel
 ```
 
 ### Fedora 28 (CentOS 8)
@@ -80,11 +84,11 @@ sudo pacman -Syu --needed unzip git cmake gcc curl wget yasm nasm zip make pkg-c
 ```sh
 git clone https://github.com/microsoft/vcpkg
 cd vcpkg
-git checkout 2021.12.01
+git checkout 2023.04.15
 cd ..
 vcpkg/bootstrap-vcpkg.sh
 export VCPKG_ROOT=$HOME/vcpkg
-vcpkg/vcpkg install libvpx libyuv opus
+vcpkg/vcpkg install libvpx libyuv opus aom
 ```
 
 ### 修复 libvpx (仅仅针对 Fedora)
@@ -110,24 +114,19 @@ cd rustdesk
 mkdir -p target/debug
 wget https://raw.githubusercontent.com/c-smile/sciter-sdk/master/bin.lnx/x64/libsciter-gtk.so
 mv libsciter-gtk.so target/debug
-cargo run
+VCPKG_ROOT=$HOME/vcpkg cargo run
 ```
-
-### 把 Wayland 修改成 X11 (Xorg)
-
-RustDesk 暂时不支持 Wayland，不过正在积极开发中。
-> [点我](https://docs.fedoraproject.org/en-US/quick-docs/configuring-xorg-as-default-gnome-session/)
-查看 如何将Xorg设置成默认的GNOME session
 
 ## 使用 Docker 编译
 
-### 构建Docker容器
+克隆版本库并构建 Docker 容器:
 
 ```sh
 git clone https://github.com/rustdesk/rustdesk # 克隆Github存储库
 cd rustdesk # 进入文件夹
 docker build -t "rustdesk-builder" . # 构建容器
 ```
+
 请注意：
 * 针对国内网络访问问题，可以做以下几点优化：  
    1. Dockerfile 中修改系统的源到国内镜像
@@ -166,8 +165,9 @@ docker build -t "rustdesk-builder" . # 构建容器
       docker build -t "rustdesk-builder" . --build-arg http_proxy=http://host:port --build-arg https_proxy=http://host:port
       ```
 
-### 构建RustDesk程序
-容器构建完成后，运行下列指令以完成对RustDesk应用程序的构建：
+### 构建 RustDesk 程序
+
+然后, 每次需要构建应用程序时, 运行以下命令:
 
 ```sh
 docker run --rm -it -v $PWD:/home/user/rustdesk -v rustdesk-git-cache:/home/user/.cargo/git -v rustdesk-registry-cache:/home/user/.cargo/registry -e PUID="$(id -u)" -e PGID="$(id -g)" rustdesk-builder
@@ -182,25 +182,25 @@ docker run --rm -it -v $PWD:/home/user/rustdesk -v rustdesk-git-cache:/home/user
    groupmod: Permission denied.
    groupmod: cannot lock /etc/group; try again later.
    ```
-   > **原因：** 容器的entrypoint脚本会检测UID和GID，在度判和给定的环境变量的不一致时，会强行修改user的UID和GID并重新运行。但在重启后读不到环境中的UID和GID，然后再次进入判错重启环节
+   > **原因：** 容器的 entrypoint 脚本会检测 UID 和 GID，在度判和给定的环境变量的不一致时，会强行修改 user 的 UID 和 GID 并重新运行。但在重启后读不到环境中的 UID 和 GID，然后再次进入判错重启环节
 
 
-### 运行RustDesk程序
+### 运行 RustDesk 程序
 
-生成的可执行程序在target目录下，可直接通过指令运行调试(Debug)版本的RustDesk:
+生成的可执行程序在 target 目录下，可直接通过指令运行调试 (Debug) 版本的 RustDesk:
 ```sh
 target/debug/rustdesk
 ```
 
-或者您想运行发行(Release)版本:
+或者您想运行发行 (Release) 版本:
 
 ```sh
 target/release/rustdesk
 ```
 
 请注意：
-* 请保证您运行的目录是在RustDesk库的根目录内，否则软件会读不到文件。
-* `install`、`run`等Cargo的子指令在容器内不可用，宿主机才行。
+* 请保证您运行的目录是在 RustDesk 库的根目录内，否则软件会读不到文件。
+* `install`、`run`等 Cargo 的子指令在容器内不可用，宿主机才行。
 
 ## 文件结构
 

@@ -27,17 +27,6 @@
 
 [**BINARY تنزيل**](https://github.com/rustdesk/rustdesk/releases)
 
-## خوادم مفتوحة ومجانية
-
-فيما يلي الخوادم التي تستخدمها مجانًا، وقد تتغير طوال الوقت. إذا لم تكن قريبًا من أحد هؤلاء، فقد تكون شبكتك بطيئة.
-| الموقع | المورد | المواصفات |
-| --------- | ------------- | ------------------ |
-| Seoul | AWS lightsail | 1 vCPU / 0.5GB RAM |
-| Germany | Hetzner | 2 vCPU / 4GB RAM |
-| Germany | Codext | 4 vCPU / 8GB RAM |
-| Finland (Helsinki) | 0x101 Cyber Security | 4 vCPU / 8GB RAM |
-| USA (Ashburn) | 0x101 Cyber Security | 4 vCPU / 8GB RAM |
-
 ## التبعيات
 
  لواجهة المستخدم الرسومية [sciter](https://sciter.com/) نسخة سطح المكتب تستخدم
@@ -55,8 +44,8 @@
 
 - بطريقة صحيحة `VCPKG_ROOT` env variable وأعد [vcpkg](https://github.com/microsoft/vcpkg) ثبت
 
-  - Windows: `vcpkg install libvpx:x64-windows-static libyuv:x64-windows-static opus:x64-windows-static`
-  - Linux/MacOS: `vcpkg install libvpx libyuv opus`
+  - Windows: `vcpkg install libvpx:x64-windows-static libyuv:x64-windows-static opus:x64-windows-static aom:x64-windows-static`
+  - Linux/MacOS: `vcpkg install libvpx libyuv opus aom`
 
 - run `cargo run`
 
@@ -88,11 +77,11 @@ sudo pacman -Syu --needed unzip git cmake gcc curl wget yasm nasm zip make pkg-c
 ```sh
 git clone https://github.com/microsoft/vcpkg
 cd vcpkg
-git checkout 2021.12.01
+git checkout 2023.04.15
 cd ..
 vcpkg/bootstrap-vcpkg.sh
 export VCPKG_ROOT=$HOME/vcpkg
-vcpkg/vcpkg install libvpx libyuv opus
+vcpkg/vcpkg install libvpx libyuv opus aom
 ```
 
 ### Fix libvpx (For Fedora)
@@ -120,10 +109,6 @@ wget https://raw.githubusercontent.com/c-smile/sciter-sdk/master/bin.lnx/x64/lib
 mv libsciter-gtk.so target/debug
 VCPKG_ROOT=$HOME/vcpkg cargo run
 ```
-
-###  X11 (Xorg) إلى Wayland تغيير
-
-افتراضية GNOME session  ك Xorg إتبع [هذه](https://docs.fedoraproject.org/en-US/quick-docs/configuring-xorg-as-default-gnome-session/) الخطوات لإعداد Wayland لا تدعم RustDesk
 
 ## Docker طريقة البناء باستخدام
 

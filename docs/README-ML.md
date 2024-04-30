@@ -19,17 +19,6 @@
 
 [**BINARY DOWNLOAD**](https://github.com/rustdesk/rustdesk/releases)
 
-## സൗജന്യ പൊതു സെർവറുകൾ
-
-നിങ്ങൾ സൗജന്യമായി ഉപയോഗിക്കുന്ന സെർവറുകൾ ചുവടെയുണ്ട്, അത് സമയത്തിനനുസരിച്ച് മാറിയേക്കാം. നിങ്ങൾ ഇവയിലൊന്നിനോട് അടുത്തല്ലെങ്കിൽ, നിങ്ങളുടെ നെറ്റ്‌വർക്ക് സ്ലോ ആയേക്കാം.
-| സ്ഥാനം | കച്ചവടക്കാരൻ | വിവരണം |
-| --------- | ------------- | ------------------ |
-| Seoul | AWS lightsail | 1 vCPU / 0.5GB RAM |
-| Germany | Hetzner | 2 vCPU / 4GB RAM |
-| Germany | Codext | 4 vCPU / 8GB RAM |
-| Finland (Helsinki) | 0x101 Cyber Security | 4 vCPU / 8GB RAM |
-| USA (Ashburn) | 0x101 Cyber Security | 4 vCPU / 8GB RAM |
-
 ## ഡിപെൻഡൻസികൾ
 
 ഡെസ്‌ക്‌ടോപ്പ് പതിപ്പുകൾ GUI-യ്‌ക്കായി [sciter](https://sciter.com/) ഉപയോഗിക്കുന്നു, ദയവായി സ്‌സൈറ്റർ ഡൈനാമിക് ലൈബ്രറി സ്വയം ഡൗൺലോഡ് ചെയ്യുക.
@@ -44,8 +33,8 @@
 
 - [vcpkg](https://github.com/microsoft/vcpkg) ഇൻസ്റ്റാൾ ചെയ്ത് `VCPKG_ROOT` env വേരിയബിൾ ശരിയായി സജ്ജമാക്കുക
 
-  - Windows: vcpkg install libvpx:x64-windows-static libyuv:x64-windows-static opus:x64-windows-static
-  - Linux/MacOS: vcpkg install libvpx libyuv opus
+  - Windows: vcpkg install libvpx:x64-windows-static libyuv:x64-windows-static opus:x64-windows-static aom:x64-windows-static
+  - Linux/MacOS: vcpkg install libvpx libyuv opus aom
 
 - run `cargo run`
 
@@ -74,11 +63,11 @@ sudo pacman -Syu --needed unzip git cmake gcc curl wget yasm nasm zip make pkg-c
 ```sh
 git clone https://github.com/microsoft/vcpkg
 cd vcpkg
-git checkout 2021.12.01
+git checkout 2023.04.15
 cd ..
 vcpkg/bootstrap-vcpkg.sh
 export VCPKG_ROOT=$HOME/vcpkg
-vcpkg/vcpkg install libvpx libyuv opus
+vcpkg/vcpkg install libvpx libyuv opus aom
 ```
 
 ### libvpx പരിഹരിക്കുക (ഫെഡോറയ്ക്ക്)
@@ -106,10 +95,6 @@ wget https://raw.githubusercontent.com/c-smile/sciter-sdk/master/bin.lnx/x64/lib
 mv libsciter-gtk.so target/debug
 VCPKG_ROOT=$HOME/vcpkg cargo run
 ```
-
-### വേലാൻഡ് X11 (Xorg) ആയി മാറ്റുക
-
-RustDesk Wayland-നെ പിന്തുണയ്ക്കുന്നില്ല. സ്ഥിരസ്ഥിതി ഗ്നോം സെഷനായി Xorg കോൺഫിഗർ ചെയ്യുന്നതിന് [ഇത്](https://docs.fedoraproject.org/en-US/quick-docs/configuring-xorg-as-default-gnome-session/) പരിശോധിക്കുക.
 
 ## ഡോക്കർ ഉപയോഗിച്ച് എങ്ങനെ നിർമ്മിക്കാം
 

@@ -568,6 +568,47 @@ class MenuEntrySwitch<T> extends MenuEntrySwitchBase<T> {
   }
 }
 
+// Compatible with MenuEntrySwitch, it uses value instead of getter
+class MenuEntrySwitchSync<T> extends MenuEntrySwitchBase<T> {
+  final SwitchSetter setter;
+  final RxBool _curOption = false.obs;
+
+  MenuEntrySwitchSync({
+    required SwitchType switchType,
+    required String text,
+    required bool currentValue,
+    required this.setter,
+    Rx<TextStyle>? textStyle,
+    EdgeInsets? padding,
+    dismissOnClicked = false,
+    RxBool? enabled,
+    dismissCallback,
+  }) : super(
+          switchType: switchType,
+          text: text,
+          textStyle: textStyle,
+          padding: padding,
+          dismissOnClicked: dismissOnClicked,
+          enabled: enabled,
+          dismissCallback: dismissCallback,
+        ) {
+    _curOption.value = currentValue;
+  }
+
+  @override
+  RxBool get curOption => _curOption;
+  @override
+  setOption(bool? option) async {
+    if (option != null) {
+      await setter(option);
+      // Notice: no ensure with getter, best used on menus that are destroyed on click
+      if (_curOption.value != option) {
+        _curOption.value = option;
+      }
+    }
+  }
+}
+
 typedef Switch2Getter = RxBool Function();
 typedef Switch2Setter = Future<void> Function(bool);
 

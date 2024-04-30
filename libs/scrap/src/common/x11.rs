@@ -1,13 +1,13 @@
-use crate::{common::TraitCapturer, x11};
-use std::{io, ops, time::Duration};
+use crate::{common::TraitCapturer, x11, Frame, Pixfmt, TraitPixelBuffer};
+use std::{io, time::Duration};
 
 pub struct Capturer(x11::Capturer);
 
 pub const IS_CURSOR_EMBEDDED: bool = false;
 
 impl Capturer {
-    pub fn new(display: Display, yuv: bool) -> io::Result<Capturer> {
-        x11::Capturer::new(display.0, yuv).map(Capturer)
+    pub fn new(display: Display) -> io::Result<Capturer> {
+        x11::Capturer::new(display.0).map(Capturer)
     }
 
     pub fn width(&self) -> usize {
@@ -20,21 +20,60 @@ impl Capturer {
 }
 
 impl TraitCapturer for Capturer {
-    fn set_use_yuv(&mut self, use_yuv: bool) {
-        self.0.set_use_yuv(use_yuv);
-    }
-
     fn frame<'a>(&'a mut self, _timeout: Duration) -> io::Result<Frame<'a>> {
-        Ok(Frame(self.0.frame()?))
+        let width = self.width();
+        let height = self.height();
+        Ok(Frame::PixelBuffer(PixelBuffer::new(
+            self.0.frame()?,
+            Pixfmt::BGRA,
+            width,
+            height,
+        )))
     }
 }
 
-pub struct Frame<'a>(pub &'a [u8]);
+pub struct PixelBuffer<'a> {
+    data: &'a [u8],
+    pixfmt: Pixfmt,
+    width: usize,
+    height: usize,
+    stride: Vec<usize>,
+}
 
-impl<'a> ops::Deref for Frame<'a> {
-    type Target = [u8];
-    fn deref(&self) -> &[u8] {
-        self.0
+impl<'a> PixelBuffer<'a> {
+    pub fn new(data: &'a [u8], pixfmt: Pixfmt, width: usize, height: usize) -> Self {
+        let stride0 = data.len() / height;
+        let mut stride = Vec::new();
+        stride.push(stride0);
+        Self {
+            data,
+            pixfmt,
+            width,
+            height,
+            stride,
+        }
+    }
+}
+
+impl<'a> TraitPixelBuffer for PixelBuffer<'a> {
+    fn data(&self) -> &[u8] {
+        self.data
+    }
+
+    fn width(&self) -> usize {
+        self.width
+    }
+
+    fn height(&self) -> usize {
+        self.height
+    }
+
+    fn stride(&self) -> Vec<usize> {
+        self.stride.clone()
+    }
+
+    fn pixfmt(&self) -> crate::Pixfmt {
+        self.pixfmt
     }
 }
 
@@ -91,5 +130,9 @@ impl Display {
 
     pub fn name(&self) -> String {
         self.0.name()
+    }
+
+    pub fn get_shm_status(&self) -> Result<(), x11::Error> {
+        self.0.server().get_shm_status()
     }
 }
