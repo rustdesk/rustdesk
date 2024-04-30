@@ -758,7 +758,8 @@ void TryCreateStartServiceByShell(LPWSTR svcName, LPWSTR svcBinary, LPWSTR szSvc
         WcaLog(LOGMSG_STANDARD, "Service \"%ls\" is created with shell.", svcName);
     }
 
-    for (int k = 0; k < 30; ++k) {
+    // Query and log if the service is running.
+    for (int k = 0; k < 10; ++k) {
         if (!QueryServiceStatusExW(svcName, &svcStatus)) {
             lastErrorCode = GetLastError();
             if (lastErrorCode == ERROR_SERVICE_DOES_NOT_EXIST) {
@@ -817,7 +818,8 @@ void TryStopDeleteServiceByShell(LPWSTR svcName)
     }
     hi = ShellExecuteW(NULL, L"open", L"cmd.exe", szCmd, NULL, SW_HIDE);
 
-    for (int k = 0; k < 30; ++k) {
+    // Query and log if the service is stopped or deleted.
+    for (int k = 0; k < 10; ++k) {
         if (!IsServiceRunningW(svcName)) {
             break;
         }
@@ -847,7 +849,8 @@ void TryStopDeleteServiceByShell(LPWSTR svcName)
         WcaLog(LOGMSG_STANDARD, "Service \"%ls\" deletion is completed without errors with shell,", svcName);
     }
 
-    for (int k = 0; k < 30; ++k) {
+    // Query and log the status of the service after deletion.
+    for (int k = 0; k < 10; ++k) {
         if (!QueryServiceStatusExW(svcName, &svcStatus)) {
             if (GetLastError() == ERROR_SERVICE_DOES_NOT_EXIST) {
                 WcaLog(LOGMSG_STANDARD, "Service \"%ls\" is deleted with shell.", svcName);
