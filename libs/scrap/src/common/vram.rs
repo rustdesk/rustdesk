@@ -179,7 +179,7 @@ impl EncoderApi for VRamEncoder {
     }
 
     fn support_abr(&self) -> bool {
-        self.ctx.f.driver != Driver::VPL
+        self.ctx.f.driver != Driver::MFX
     }
 }
 
@@ -190,6 +190,10 @@ impl VRamEncoder {
             .filter(|e| e.luid == device.luid)
             .collect();
         if v.len() > 0 {
+            // prefer ffmpeg
+            if let Some(ctx) = v.iter().find(|c| c.driver == Driver::FFMPEG) {
+                return Some(ctx.clone());
+            }
             Some(v[0].clone())
         } else {
             None
@@ -250,21 +254,21 @@ impl VRamEncoder {
     pub fn convert_quality(quality: Quality, f: &FeatureContext) -> u32 {
         match quality {
             Quality::Best => {
-                if f.driver == Driver::VPL && f.data_format == DataFormat::H264 {
+                if f.driver == Driver::MFX && f.data_format == DataFormat::H264 {
                     200
                 } else {
                     150
                 }
             }
             Quality::Balanced => {
-                if f.driver == Driver::VPL && f.data_format == DataFormat::H264 {
+                if f.driver == Driver::MFX && f.data_format == DataFormat::H264 {
                     150
                 } else {
                     100
                 }
             }
             Quality::Low => {
-                if f.driver == Driver::VPL && f.data_format == DataFormat::H264 {
+                if f.driver == Driver::MFX && f.data_format == DataFormat::H264 {
                     75
                 } else {
                     50
