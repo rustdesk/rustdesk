@@ -327,23 +327,15 @@ class InputModel {
 
   InputModel(this.parent) {
     sessionId = parent.target!.sessionId;
-
-    // It is ok to call updateKeyboardMode() directly.
-    // Because `bind` is initialized in `PlatformFFI.init()` which is called very early.
-    // But we still wrap it in a Future.delayed() to make it more clear.
-    Future.delayed(Duration(milliseconds: 100), () {
-      updateKeyboardMode();
-    });
   }
 
+  // This function must be called after the peer info is received.
+  // Because `sessionGetKeyboardMode` relies on the peer version.
   updateKeyboardMode() async {
     // * Currently mobile does not enable map mode
     if (isDesktop || isWebDesktop) {
-      if (keyboardMode.isEmpty) {
-        keyboardMode =
-            await bind.sessionGetKeyboardMode(sessionId: sessionId) ??
-                kKeyLegacyMode;
-      }
+      keyboardMode = await bind.sessionGetKeyboardMode(sessionId: sessionId) ??
+          kKeyLegacyMode;
     }
   }
 

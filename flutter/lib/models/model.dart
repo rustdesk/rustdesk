@@ -725,6 +725,9 @@ class FfiModel with ChangeNotifier {
 
   /// Handle the peer info event based on [evt].
   handlePeerInfo(Map<String, dynamic> evt, String peerId, bool isCache) async {
+    // This call is to ensuer the keyboard mode is updated depending on the peer version.
+    parent.target?.inputModel.updateKeyboardMode();
+
     // Map clone is required here, otherwise "evt" may be changed by other threads through the reference.
     // Because this function is asynchronous, there's an "await" in this function.
     cachedPeerData.peerInfo = {...evt};
