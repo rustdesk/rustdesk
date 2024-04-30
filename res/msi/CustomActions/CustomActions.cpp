@@ -422,6 +422,8 @@ UINT __stdcall TryStopDeleteService(__in MSIHANDLE hInstall)
     LPWSTR pwzData = NULL;
     wchar_t szExeFile[500] = { 0 };
     DWORD cchExeFile = sizeof(szExeFile) / sizeof(szExeFile[0]);
+    SERVICE_STATUS_PROCESS svcStatus;
+    DWORD lastErrorCode = 0;
 
     hr = WcaInitialize(hInstall, "TryStopDeleteService");
     ExitOnFailure(hr, "Failed to initialize");
@@ -443,17 +445,36 @@ UINT __stdcall TryStopDeleteService(__in MSIHANDLE hInstall)
                 break;
             }
         }
-        WcaLog(LOGMSG_STANDARD, "Service \"%ls\" is stopped", svcName);
     }
     else {
-        WcaLog(LOGMSG_STANDARD, "Failed to stop service: \"%ls\"", svcName);
+        WcaLog(LOGMSG_STANDARD, "Failed to stop service: \"%ls\", error: 0X%02X.", svcName, GetLastError());
+    }
+
+    if (IsServiceRunningW(svcName)) {
+        WcaLog(LOGMSG_STANDARD, "Service \"%ls\" is not stoped after 1000 ms.", svcName);
+    }
+    else {
+        WcaLog(LOGMSG_STANDARD, "Service \"%ls\" is stoped.", svcName);
     }
 
     if (MyDeleteServiceW(svcName)) {
-        WcaLog(LOGMSG_STANDARD, "Service \"%ls\" is deleted", svcName);
+        WcaLog(LOGMSG_STANDARD, "Service \"%ls\" deletion is completed without errors.", svcName);
     }
     else {
-        WcaLog(LOGMSG_STANDARD, "Failed to delete service: \"%ls\"", svcName);
+        WcaLog(LOGMSG_STANDARD, "Failed to delete service: \"%ls\", error: 0X%02X.", svcName, GetLastError());
+    }
+
+    if (QueryServiceStatusExW(svcName, &svcStatus)) {
+        WcaLog(LOGMSG_STANDARD, "Failed to delete service: \"%ls\", current status: %d.", svcName, svcStatus.dwCurrentState);
+    }
+    else {
+        lastErrorCode = GetLastError();
+        if (lastErrorCode == ERROR_SERVICE_DOES_NOT_EXIST) {
+            WcaLog(LOGMSG_STANDARD, "Service \"%ls\" is deleted.", svcName);
+        }
+        else {
+            WcaLog(LOGMSG_STANDARD, "Failed to query service status: \"%ls\", error: 0X%02X.", svcName, lastErrorCode);
+        }
     }
 
     // It's really strange that we need sleep here.

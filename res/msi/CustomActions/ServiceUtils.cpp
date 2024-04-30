@@ -140,7 +140,7 @@ bool MyStopServiceW(LPCWSTR serviceName)
     return true;
 }
 
-bool IsServiceRunningW(LPCWSTR serviceName)
+bool QueryServiceStatusExW(LPCWSTR serviceName, SERVICE_STATUS_PROCESS* status)
 {
     SC_HANDLE hSCManager = OpenSCManagerW(NULL, NULL, SC_MANAGER_CONNECT);
     if (hSCManager == NULL) {
@@ -155,19 +155,21 @@ bool IsServiceRunningW(LPCWSTR serviceName)
         return false;
     }
 
-    SERVICE_STATUS_PROCESS serviceStatus;
     DWORD bytesNeeded;
-    if (!QueryServiceStatusEx(hService, SC_STATUS_PROCESS_INFO, reinterpret_cast<LPBYTE>(&serviceStatus), sizeof(serviceStatus), &bytesNeeded)) {
+    BOOL success = QueryServiceStatusEx(hService, SC_STATUS_PROCESS_INFO, reinterpret_cast<LPBYTE>(&status), sizeof(status), &bytesNeeded);
+    if (!success) {
         WcaLog(LOGMSG_STANDARD, "Failed to query service: %ls", serviceName);
-        CloseServiceHandle(hService);
-        CloseServiceHandle(hSCManager);
-        return false;
     }
-
-    bool isRunning = (serviceStatus.dwCurrentState == SERVICE_RUNNING);
 
     CloseServiceHandle(hService);
     CloseServiceHandle(hSCManager);
 
-    return isRunning;
+    return success;
+}
+
+bool IsServiceRunningW(LPCWSTR serviceName)
+{
+    SERVICE_STATUS_PROCESS serviceStatus;
+    QueryServiceStatusExW(serviceName, &serviceStatus);
+    return (serviceStatus.dwCurrentState == SERVICE_RUNNING);
 }
