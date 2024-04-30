@@ -117,7 +117,8 @@ jobs:
           python3 .\build.py --portable --hwcodec --flutter --vram --skip-portable-pack --virtual-display
           Remove-Item -Path usbmmidd_v2\Win32 -Recurse
           Remove-Item -Path "usbmmidd_v2\deviceinstaller64.exe", "usbmmidd_v2\deviceinstaller.exe", "usbmmidd_v2\usbmmidd.bat"
-          mv -Force .\usbmmidd_v2 ./flutter/build/windows/x64/runner/Release/
+          mv ./flutter/build/windows/x64/runner/Release ./rustdesk
+          mv -Force .\usbmmidd_v2 ./rustdesk
 
       - name: find Runner.res
         # Windows: find Runner.res (compiled from ./flutter/windows/runner/Runner.rc), copy to ./Runner.res
@@ -140,13 +141,14 @@ jobs:
         if: ${{ inputs.upload-artifact }}
         with:
           name: topmostwindow-artifacts
-          path: "./flutter/build/windows/x64/runner/Release/"
+          path: "./rustdesk"
 
-      - name: Compress unsigned
-        shell: bash
-        run: |
-          mv ./flutter/build/windows/x64/runner/Release ./rustdesk
-          tar czf rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}-unsigned.tar.gz rustdesk
+      - name: Upload unsigned
+        if: env.UPLOAD_ARTIFACT == 'true'
+        uses: actions/upload-artifact@master
+        with:
+          name: rustdesk-unsigned-windows-${{ matrix.job.arch }}         
+          path: rustdesk
 
       - name: Sign rustdesk files
         if: env.UPLOAD_ARTIFACT == 'true' && env.SIGN_BASE_URL != ''
@@ -194,7 +196,6 @@ jobs:
           files: |
             ./SignOutput/rustdesk-*.msi
             ./SignOutput/rustdesk-*.exe
-            ./rustdesk-*.tar.gz
 
   # The fallback for the flutter version, we use Sciter for 32bit Windows.
   build-for-windows-sciter:
@@ -701,10 +702,11 @@ jobs:
           files: |
             rustdesk*-${{ matrix.job.arch }}.dmg
 
-  publish_unsigned_mac:
+  publish_unsigned:
     needs:
       - build-for-macOS
-      #- build-for-macOS-arm64
+      - build-for-windows-flutter
+      - build-rustdesk-linux
     runs-on: ubuntu-latest
     if: ${{ inputs.upload-artifact }}
     steps:
@@ -720,9 +722,27 @@ jobs:
           name: rustdesk-unsigned-macos-aarch64
           path: ./
 
+      - name: Download Artifacts
+        uses: actions/download-artifact@master
+        with:
+          name: rustdesk-unsigned-windows-x86_64
+          path: ./windows-x86_64/
+
+      - name: Download Artifacts
+        uses: actions/download-artifact@master
+        with:
+          name: rustdesk-${{ env.VERSION }}-aarch64.deb
+          path: ./
+
+      - name: Download Artifacts
+        uses: actions/download-artifact@master
+        with:
+          name: rustdesk-${{ env.VERSION }}-x86_64.deb
+          path: ./
+
       - name: Combine unsigned macos app
         run: |
-          tar czf rustdesk-${{ env.VERSION }}-macos-unsigned.tar.gz *.dmg
+          tar czf rustdesk-${{ env.VERSION }}-macos-unsigned.tar.gz *.dmg windows-x86_64 *.deb
 
       - name: Publish unsigned macos app
         uses: softprops/action-gh-release@v1
