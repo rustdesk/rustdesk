@@ -1536,6 +1536,7 @@ jobs:
 
       - name: Rename rustdesk
         shell: bash
+        if: matrix.job.extra-build-features == '' || env.UPLOAD_ARTIFACT == 'true'
         run: |
           for name in rustdesk*??.deb; do
               # use cp to duplicate deb files to fit other packages.
