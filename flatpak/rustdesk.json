@@ -20,7 +20,7 @@
         "sed -i '/^Icon=/ c\\Icon=com.rustdesk.RustDesk' /app/share/applications/com.rustdesk.RustDesk.desktop",
         "sed -i '/^Icon=/ c\\Icon=com.rustdesk.RustDesk' /app/share/applications/rustdesk-link.desktop",
         "mv /app/share/icons/hicolor/scalable/apps/rustdesk.svg /app/share/icons/hicolor/scalable/apps/com.rustdesk.RustDesk.svg",
-        "for size in 16 24 32 48 64 128 256 512; do\n rsvg-convert -w $size -h $size -f png -o $size.png logo.svg\n install -Dm644 $size.png /app/share/icons/hicolor/${size}x${size}/apps/com.rustdesk.RustDesk.png\n done"
+        "for size in 16 24 32 48 64 128 256 512; do\n rsvg-convert -w $size -h $size -f png -o $size.png scalable.svg\n install -Dm644 $size.png /app/share/icons/hicolor/${size}x${size}/apps/com.rustdesk.RustDesk.png\n done"
       ],
       "cleanup": ["/include", "/lib/pkgconfig", "/share/gtk-doc"],
       "sources": [
@@ -30,7 +30,7 @@
         },
         {
           "type": "file",
-          "path": "../res/logo.svg"
+          "path": "../res/scalable.svg"
         }
       ]
     }

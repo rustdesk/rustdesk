@@ -210,12 +210,13 @@ class Enhancements: Reactor.Component {
 
     function render() {
         var has_hwcodec = handler.has_hwcodec();
+        var has_vram = handler.has_vram();
         var support_remove_wallpaper = handler.support_remove_wallpaper();
         var me = this;
         self.timer(1ms, function() { me.toggleMenuState() });
         return <li>{translate('Enhancements')}
             <menu #enhancements-menu>
-                {has_hwcodec ? <li #enable-hwcodec><span>{svg_checkmark}</span>{translate("Hardware Codec")} (beta)</li> : ""}
+                {(has_hwcodec || has_vram) ? <li #enable-hwcodec><span>{svg_checkmark}</span>{translate("Enable hardware codec")}</li> : ""}
                 <li #enable-abr><span>{svg_checkmark}</span>{translate("Adaptive bitrate")} (beta)</li>
                 <li #screen-recording>{translate("Recording")}</li>
                 {support_remove_wallpaper ? <li #allow-remove-wallpaper><span>{svg_checkmark}</span>{translate("Remove wallpaper during incoming sessions")}</li> : ""}
@@ -239,7 +240,11 @@ class Enhancements: Reactor.Component {
     event click $(menu#enhancements-menu>li) (_, me) {
         var v = me.id;
         if (v.indexOf("enable-") == 0) {
-            handler.set_option(v, handler.get_option(v) != 'N' ? 'N' : '');
+            var set_value = handler.get_option(v) != 'N' ? 'N' : '';
+            handler.set_option(v, set_value);
+            if (v == "enable-hwcodec" && set_value == '') {
+                handler.check_hwcodec();
+            }
         } else if (v.indexOf("allow-") == 0) {
             handler.set_option(v, handler.get_option(v) == 'Y' ? '' : 'Y');
         } else if (v == 'screen-recording') {
@@ -317,7 +322,7 @@ class MyIdMenu: Reactor.Component {
                 <li #socks5-server>{translate('Socks5 Proxy')}</li>
                 <div .separator />
                 <li #stop-service class={service_stopped ? "line-through" : "selected"}><span>{svg_checkmark}</span>{translate("Enable service")}</li>
-                {handler.is_rdp_service_open() ? <ShareRdp /> : ""}
+                {is_win && handler.is_installed() ? <ShareRdp /> : ""}
                 <DirectServer />
                 {false && handler.using_public_server() && <li #allow-always-relay><span>{svg_checkmark}</span>{translate('Always connect via relay')}</li>}
                 {handler.is_ok_change_id() ? <div .separator /> : ""}
@@ -375,7 +380,7 @@ class MyIdMenu: Reactor.Component {
             <div>Fingerprint: " + handler.get_fingerprint() + " \
             <div .link .custom-event url='https://rustdesk.com/privacy.html'>" + translate("Privacy Statement") + "</div> \
             <div .link .custom-event url='https://rustdesk.com'>" + translate("Website") + "</div> \
-	    <div style='background: #2c8cff; color: white; padding: 1em; margin-top: 1em;'>Copyright &copy; 2023 Purslane Ltd.\
+	    <div style='background: #2c8cff; color: white; padding: 1em; margin-top: 1em;'>Copyright &copy; " + new Date().getFullYear() + " Purslane Ltd.\
             <br />" + handler.get_license() + " \
             <p style='font-weight: bold'>" + translate("Slogan_tip") + "</p>\
             </div>\
@@ -436,11 +441,11 @@ class MyIdMenu: Reactor.Component {
                 var key = (res.key || "").trim();
                 if (id == old_id && relay == old_relay && key == old_key && api == old_api) return;
                 if (id) {
-                    var err = handler.test_if_valid_server(id);
+                    var err = handler.test_if_valid_server(id, true);
                     if (err) return translate("ID Server") + ": " + err;
                 }
                 if (relay) {
-                    var err = handler.test_if_valid_server(relay);
+                    var err = handler.test_if_valid_server(relay, true);
                     if (err) return translate("Relay Server") + ": " + err;
                 }
                 if (api) {
@@ -460,7 +465,7 @@ class MyIdMenu: Reactor.Component {
             var old_username = socks5[1] || "";
             var old_password = socks5[2] || "";
             msgbox("custom-server", "Socks5 Proxy", <div .form .set-password> 
-            <div><span>{translate("Hostname")}:</span><input|text .outline-focus name='proxy' value={old_proxy} /></div>
+            <div><span>{translate("Server")}:</span><input|text .outline-focus name='proxy' value={old_proxy} /></div>
             <div><span>{translate("Username")}:</span><input|text name='username' value={old_username} /></div>
             <div><span>{translate("Password")}:</span><PasswordComponent value={old_password} /></div>
             </div>
@@ -471,7 +476,7 @@ class MyIdMenu: Reactor.Component {
                 var password = (res.password || "").trim();
                 if (proxy == old_proxy && username == old_username && password == old_password) return;
                 if (proxy) {
-                    var err = handler.test_if_valid_server(proxy);
+                    var err = handler.test_if_valid_server(proxy, false);
                     if (err) return translate("Server") + ": " + err;
                 }
                 handler.set_socks(proxy, username, password);
@@ -911,6 +916,8 @@ class PasswordArea: Reactor.Component {
             { !show_password ? '' : <div .separator /> }
             { !show_password ? '' : <li #set-password  disabled={ method == 'use-temporary-password' ? "true" : "false" }>{translate('Set permanent password')}</li> }
             { !show_password ? '' : <TemporaryPasswordLengthMenu /> }
+            <div .separator />
+            <li #tfa><span>{svg_checkmark}</span>{translate('enable-2fa-title')}</li>
         </menu></popup>;
     }
 
@@ -926,11 +933,14 @@ class PasswordArea: Reactor.Component {
         var pwd_id = handler.get_option('verification-method');
         if (pwd_id != 'use-temporary-password' && pwd_id != 'use-permanent-password')
             pwd_id = 'use-both-passwords';
+        var has_valid_2fa = handler.has_valid_2fa();
         for (var el in this.$$(menu#edit-password-context>li)) {
             if (el.id.indexOf("approve-mode-") == 0)
                 el.attributes.toggleClass("selected", el.id == mode_id);
             if (el.id.indexOf("use-") == 0)
                 el.attributes.toggleClass("selected", el.id == pwd_id);
+            if (el.id == "tfa")
+                el.attributes.toggleClass("selected", has_valid_2fa);
         }
     }
 
@@ -981,6 +991,32 @@ class PasswordArea: Reactor.Component {
             handler.set_option('approve-mode', approve_mode);
             this.toggleMenuState();
             passwordArea.update();
+        }
+    }
+
+    event click $(li#tfa) {
+        var me = this;
+        var has_valid_2fa = handler.has_valid_2fa();
+        if (has_valid_2fa) {
+            handler.set_option('2fa', '');
+            me.update();
+        } else {
+            var new2fa = handler.generate2fa();
+            var src = handler.generate_2fa_img_src(new2fa);
+            msgbox("custom-2fa-setting", translate('enable-2fa-title'),
+                <div .form>
+                    <div>{translate('enable-2fa-desc')}</div>
+                    <img src={src} />
+                    <div .code><input name='code' type='text' .outline-focus /></div>
+                </div>
+                , "", function(res=null) {
+                if (!res) return;
+                if (!res.code) return;
+                if (!handler.verify2fa(res.code)) {
+                    return translate('wrong-2fa-code');
+                }
+                me.update();
+            }, 400);
         }
     }
 }
@@ -1222,7 +1258,7 @@ function login() {
             if (data.type == 'email_check') {
                 abLoading = false;
                 show_progress(-1);
-                on_email_check(data);
+                on_2fa_check(data);
                 return;
             }
             handler.set_local_option("access_token", data.access_token);
@@ -1240,12 +1276,15 @@ function login() {
       });
 }
 
-function on_email_check(last_msg) {
-    var emailHint = last_msg.user.email;
-    msgbox("custom-email-verification-code", translate('Verification code'), <div .form .set-password> 
-            <div><span>{translate('Email')}:</span><span>{emailHint}</span></div> 
-            <div><span>{translate('Verification code')}:</span><input|text name="verification_code" .outline-focus /></div> 
-            <div style="font-size:0.9em; margin-bottom:1em;">{translate('verification_tip')}</div>
+function on_2fa_check(last_msg) {
+    const isEmailCheck = !last_msg.tfa_type || last_msg.tfa_type == 'email_check';
+    const secret = last_msg.secret;
+    const emailHint = last_msg.user.email;
+
+    msgbox("custom-2fa-verification-code", translate('Verification code'), <div .form .set-password> 
+            { isEmailCheck && <div><span>{translate('Email')}:</span><span>{emailHint}</span></div> }
+            <div><span>{translate(isEmailCheck ? 'Verification code' : '2FA code')}:</span><input|text name="verification_code" .outline-focus /></div> 
+            { isEmailCheck && <div style="font-size:0.9em; margin-bottom:1em;">{translate('verification_tip')}</div> }
         </div>, "", 
         function(res=null, show_progress) {
             if (!res) return;
@@ -1257,7 +1296,17 @@ function on_email_check(last_msg) {
             }
             abLoading = true;
             var url = handler.get_api_server();
-            httpRequest(url + "/api/login", #post, {username: last_msg.user.name, id: my_id, uuid: handler.get_uuid(), type: 'email_code', autoLogin: true, verificationCode: code, deviceInfo: getDeviceInfo()}, 
+            const loginData = {
+                username: last_msg.user.name,
+                id: my_id,
+                uuid: handler.get_uuid(),
+                type: 'email_code',
+                verificationCode: code,
+                tfaCode: isEmailCheck ? '' : code,
+                secret: secret,
+                deviceInfo: getDeviceInfo()
+            };
+            httpRequest(url + "/api/login", #post, loginData, 
                 function(data) {
                     if (data.error) {
                         abLoading = false;

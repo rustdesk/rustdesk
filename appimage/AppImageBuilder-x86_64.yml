@@ -57,6 +57,8 @@ AppDir:
     - libwayland-cursor0
     - libwayland-egl1
     - libpulse0
+    - packagekit-gtk3-module
+    - libcanberra-gtk3-module
     exclude:
     - humanity-icon-theme
     - hicolor-icon-theme

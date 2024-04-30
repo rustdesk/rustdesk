@@ -18,32 +18,27 @@ pub fn make_tray() -> hbb_common::ResultType<()> {
     use tao::event_loop::{ControlFlow, EventLoopBuilder};
     use tray_icon::{
         menu::{Menu, MenuEvent, MenuItem},
-        TrayEvent, TrayIconBuilder,
+        TrayIconBuilder, TrayIconEvent as TrayEvent,
     };
     let icon;
     #[cfg(target_os = "macos")]
     {
-        let mode = dark_light::detect();
-        const LIGHT: &[u8] = include_bytes!("../res/mac-tray-light-x2.png");
-        const DARK: &[u8] = include_bytes!("../res/mac-tray-dark-x2.png");
-        icon = match mode {
-            dark_light::Mode::Dark => LIGHT,
-            _ => DARK,
-        };
+        icon = include_bytes!("../res/mac-tray-dark-x2.png"); // use as template, so color is not important
     }
     #[cfg(not(target_os = "macos"))]
     {
         icon = include_bytes!("../res/tray-icon.ico");
     }
+
     let (icon_rgba, icon_width, icon_height) = {
-        let image = image::load_from_memory(icon)
-            .context("Failed to open icon path")?
+        let image = load_icon_from_asset()
+            .unwrap_or(image::load_from_memory(icon).context("Failed to open icon path")?)
             .into_rgba8();
         let (width, height) = image.dimensions();
         let rgba = image.into_raw();
         (rgba, width, height)
     };
-    let icon = tray_icon::icon::Icon::from_rgba(icon_rgba, icon_width, icon_height)
+    let icon = tray_icon::Icon::from_rgba(icon_rgba, icon_width, icon_height)
         .context("Failed to open icon")?;
 
     let event_loop = EventLoopBuilder::new().build();
@@ -51,7 +46,7 @@ pub fn make_tray() -> hbb_common::ResultType<()> {
     let tray_menu = Menu::new();
     let quit_i = MenuItem::new(translate("Exit".to_owned()), true, None);
     let open_i = MenuItem::new(translate("Open".to_owned()), true, None);
-    tray_menu.append_items(&[&open_i, &quit_i]);
+    tray_menu.append_items(&[&open_i, &quit_i]).ok();
     let tooltip = |count: usize| {
         if count == 0 {
             format!(
@@ -73,6 +68,7 @@ pub fn make_tray() -> hbb_common::ResultType<()> {
             .with_menu(Box::new(tray_menu))
             .with_tooltip(tooltip(0))
             .with_icon(icon)
+            .with_icon_as_template(true) // mac only
             .build()?,
     );
     let _tray_icon = Arc::new(Mutex::new(_tray_icon));
@@ -92,18 +88,15 @@ pub fn make_tray() -> hbb_common::ResultType<()> {
         crate::platform::macos::handle_application_should_open_untitled_file();
         #[cfg(target_os = "windows")]
         {
-            use std::os::windows::process::CommandExt;
-            use std::process::Command;
-            Command::new("cmd")
-                .arg("/c")
-                .arg("start rustdesk://")
-                .creation_flags(winapi::um::winbase::CREATE_NO_WINDOW)
-                .spawn()
-                .ok();
+            // Do not use "start uni link" way, it may not work on some Windows, and pop out error
+            // dialog, I found on one user's desktop, but no idea why, Windows is shit.
+            // Use `run_me` instead.
+            // `allow_multiple_instances` in `flutter/windows/runner/main.cpp` allows only one instance without args.
+            crate::run_me::<&str>(vec![]).ok();
         }
         #[cfg(target_os = "linux")]
         if !std::process::Command::new("xdg-open")
-            .arg("rustdesk://")
+            .arg(&crate::get_uri_prefix())
             .spawn()
             .is_ok()
         {
@@ -115,6 +108,8 @@ pub fn make_tray() -> hbb_common::ResultType<()> {
     std::thread::spawn(move || {
         start_query_session_count(ipc_sender.clone());
     });
+    #[cfg(windows)]
+    let mut last_click = std::time::Instant::now();
     event_loop.run(move |_event, _, control_flow| {
         if !docker_hiden {
             #[cfg(target_os = "macos")]
@@ -133,7 +128,7 @@ pub fn make_tray() -> hbb_common::ResultType<()> {
                     return;
                 }
                 */
-                if !crate::platform::uninstall_service(false) {
+                if !crate::platform::uninstall_service(false, false) {
                     *control_flow = ControlFlow::Exit;
                 }
             } else if event.id == open_i.id() {
@@ -143,8 +138,14 @@ pub fn make_tray() -> hbb_common::ResultType<()> {
 
         if let Ok(_event) = tray_channel.try_recv() {
             #[cfg(target_os = "windows")]
-            if _event.event == tray_icon::ClickEvent::Left {
+            if _event.click_type == tray_icon::ClickType::Left
+                || _event.click_type == tray_icon::ClickType::Double
+            {
+                if last_click.elapsed() < std::time::Duration::from_secs(1) {
+                    return;
+                }
                 open_func();
+                last_click = std::time::Instant::now();
             }
         }
 
@@ -170,7 +171,7 @@ async fn start_query_session_count(sender: std::sync::mpsc::Sender<Data>) {
     let mut last_count = 0;
     loop {
         if let Ok(mut c) = crate::ipc::connect(1000, "").await {
-            let mut timer = tokio::time::interval(Duration::from_secs(1));
+            let mut timer = crate::rustdesk_interval(tokio::time::interval(Duration::from_secs(1)));
             loop {
                 tokio::select! {
                     res = c.next() => {
@@ -198,4 +199,21 @@ async fn start_query_session_count(sender: std::sync::mpsc::Sender<Data>) {
         }
         hbb_common::sleep(1.).await;
     }
+}
+
+fn load_icon_from_asset() -> Option<image::DynamicImage> {
+    let Some(path) = std::env::current_exe().map_or(None, |x| x.parent().map(|x| x.to_path_buf()))
+    else {
+        return None;
+    };
+    #[cfg(target_os = "macos")]
+    let path = path.join("../Frameworks/App.framework/Resources/flutter_assets/assets/icon.png");
+    #[cfg(windows)]
+    let path = path.join(r"data\flutter_assets\assets\icon.png");
+    if path.exists() {
+        if let Ok(image) = image::open(path) {
+            return Some(image);
+        }
+    }
+    None
 }

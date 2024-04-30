@@ -171,7 +171,7 @@ void showServerSettingsWithValue(
         isInProgress = true;
       });
       bool ret = await setServerConfig(
-          controllers,
+          null,
           errMsgs,
           ServerConfig(
               idServer: idCtrl.text.trim(),
@@ -282,13 +282,4 @@ void setPrivacyModeDialog(
               .toList()),
     );
   }, backDismiss: true, clickMaskDismiss: true);
-}
-
-Future<String?> validateAsync(String value) async {
-  value = value.trim();
-  if (value.isEmpty) {
-    return null;
-  }
-  final res = await bind.mainTestIfValidServer(server: value);
-  return res.isEmpty ? null : res;
 }

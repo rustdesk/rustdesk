@@ -9,6 +9,7 @@
 #include <shlobj.h> // NOLINT(build/include_order)
 #include <userenv.h>
 #include <versionhelpers.h>
+#include <vector>
 
 void flog(char const *fmt, ...)
 {
@@ -433,26 +434,61 @@ extern "C"
         return nout;
     }
 
-    BOOL has_rdp_service()
+    uint32_t get_session_user_info(PWSTR bufin, uint32_t nin, BOOL rdp, uint32_t id)
     {
-        PWTS_SESSION_INFOA pInfos;
-        DWORD count;
-        auto rdp = "rdp";
-        auto nrdp = strlen(rdp);
-        auto rdp_or_console = WTSGetActiveConsoleSessionId();
-        if (WTSEnumerateSessionsA(WTS_CURRENT_SERVER_HANDLE, NULL, 1, &pInfos, &count))
+        uint32_t nout = 0;
+        PWSTR buf = NULL;
+        DWORD n = 0;
+        if (WTSQuerySessionInformationW(WTS_CURRENT_SERVER_HANDLE, id, WTSUserName, &buf, &n))
         {
-            for (DWORD i = 0; i < count; i++)
+            if (buf)
             {
+                nout = min(nin, n);
+                memcpy(bufin, buf, nout);
+                WTSFreeMemory(buf);
+            }
+        }
+        return nout;
+    }
+
+    void get_available_session_ids(PWSTR buf, uint32_t bufSize, BOOL include_rdp) {
+        std::vector<std::wstring> sessionIds;
+        PWTS_SESSION_INFOA pInfos = NULL;
+        DWORD count;
+
+        if (WTSEnumerateSessionsA(WTS_CURRENT_SERVER_HANDLE, 0, 1, &pInfos, &count)) {
+            for (DWORD i = 0; i < count; i++) {
                 auto info = pInfos[i];
-                if (!strnicmp(info.pWinStationName, rdp, nrdp))
-                {
-                    return TRUE;
+                auto rdp = "rdp";
+                auto nrdp = strlen(rdp);
+                if (info.State == WTSActive) {
+                    if (info.pWinStationName == NULL)
+                        continue;
+                    if (info.SessionId == 65536 || info.SessionId == 655)
+                        continue;
+
+                    if (!stricmp(info.pWinStationName, "console")){
+                        sessionIds.push_back(std::wstring(L"Console:") + std::to_wstring(info.SessionId));
+                    }
+                    else if (include_rdp && !strnicmp(info.pWinStationName, rdp, nrdp)) {
+                        sessionIds.push_back(std::wstring(L"RDP:") + std::to_wstring(info.SessionId));
+                    }
                 }
             }
             WTSFreeMemory(pInfos);
         }
-        return FALSE;
+
+        std::wstring tmpStr;
+        for (size_t i = 0; i < sessionIds.size(); i++) {
+            if (i > 0) {
+                tmpStr += L",";
+            }
+            tmpStr += sessionIds[i];
+        }
+
+        if (buf && !tmpStr.empty() && tmpStr.size() < bufSize) {
+            wcsncpy_s(buf, bufSize, tmpStr.c_str(), tmpStr.size());
+        }
     }
 } // end of extern "C"
 
@@ -632,5 +668,34 @@ extern "C"
     {
         AllocConsole();
         freopen("CONOUT$", "w", stdout);
+    }
+
+    bool is_service_running_w(LPCWSTR serviceName)
+    {
+        SC_HANDLE hSCManager = OpenSCManagerW(NULL, NULL, SC_MANAGER_CONNECT);
+        if (hSCManager == NULL) {
+            return false;
+        }
+
+        SC_HANDLE hService = OpenServiceW(hSCManager, serviceName, SERVICE_QUERY_STATUS);
+        if (hService == NULL) {
+            CloseServiceHandle(hSCManager);
+            return false;
+        }
+
+        SERVICE_STATUS_PROCESS serviceStatus;
+        DWORD bytesNeeded;
+        if (!QueryServiceStatusEx(hService, SC_STATUS_PROCESS_INFO, reinterpret_cast<LPBYTE>(&serviceStatus), sizeof(serviceStatus), &bytesNeeded)) {
+            CloseServiceHandle(hService);
+            CloseServiceHandle(hSCManager);
+            return false;
+        }
+
+        bool isRunning = (serviceStatus.dwCurrentState == SERVICE_RUNNING);
+
+        CloseServiceHandle(hService);
+        CloseServiceHandle(hSCManager);
+
+        return isRunning;
     }
 } // end of extern "C"

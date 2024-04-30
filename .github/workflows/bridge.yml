@@ -1,13 +1,14 @@
 # This yaml shares the build bridge steps with ci and nightly.
 name: Build flutter-rust-bridge
-# 2023-04-19 15:48:00+00:00
+# 2023-11-23 18:00:00+00:00
 
 on:
   workflow_call:
 
 env:
-  FLUTTER_VERSION: "3.13.9"
+  FLUTTER_VERSION: "3.16.9"
   FLUTTER_RUST_BRIDGE_VERSION: "1.80.1"
+  RUST_VERSION: "1.75" # https://github.com/rustdesk/rustdesk/discussions/7503
 
 jobs:
   generate_bridge:
@@ -23,7 +24,7 @@ jobs:
             }
     steps:
       - name: Checkout source code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Install prerequisites
         run: |
@@ -47,12 +48,11 @@ jobs:
             wget
 
       - name: Install Rust toolchain
-        uses: actions-rs/toolchain@v1
+        uses: dtolnay/rust-toolchain@v1
         with:
-          toolchain: stable
-          target: ${{ matrix.job.target }}
-          override: true
-          profile: minimal # minimal component installation (ie, no documentation)
+          toolchain: ${{ env.RUST_VERSION }}
+          targets: ${{ matrix.job.target }}
+          components: "rustfmt"
 
       - uses: Swatinem/rust-cache@v2
         with:

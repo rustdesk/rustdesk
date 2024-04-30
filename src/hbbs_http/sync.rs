@@ -51,13 +51,18 @@ pub struct StrategyOptions {
 #[cfg(not(any(target_os = "ios")))]
 #[tokio::main(flavor = "current_thread")]
 async fn start_hbbs_sync_async() {
-    let mut interval = tokio::time::interval_at(Instant::now() + TIME_CONN, TIME_CONN);
+    let mut interval = crate::rustdesk_interval(tokio::time::interval_at(
+        Instant::now() + TIME_CONN,
+        TIME_CONN,
+    ));
     let mut last_sent: Option<Instant> = None;
-    let mut info_uploaded: (bool, String, Option<Instant>) = (false, "".to_owned(), None);
+    let mut info_uploaded: (bool, String, Option<Instant>, String) =
+        (false, "".to_owned(), None, "".to_owned());
     loop {
         tokio::select! {
             _ = interval.tick() => {
                 let url = heartbeat_url();
+                let id = Config::get_id();
                 if url.is_empty() {
                     *PRO.lock().unwrap() = false;
                     continue;
@@ -66,19 +71,19 @@ async fn start_hbbs_sync_async() {
                     continue;
                 }
                 let conns = Connection::alive_conns();
-                if info_uploaded.0 && url != info_uploaded.1 {
+                if info_uploaded.0 && (url != info_uploaded.1 || id != info_uploaded.3){
                     info_uploaded.0 = false;
                     *PRO.lock().unwrap() = false;
                 }
                 if !info_uploaded.0 && info_uploaded.2.map(|x| x.elapsed() >= UPLOAD_SYSINFO_TIMEOUT).unwrap_or(true){
                     let mut v = crate::get_sysinfo();
                     v["version"] = json!(crate::VERSION);
-                    v["id"] = json!(Config::get_id());
+                    v["id"] = json!(id);
                     v["uuid"] = json!(crate::encode64(hbb_common::get_uuid()));
                     match crate::post_request(url.replace("heartbeat", "sysinfo"), v.to_string(), "").await {
                         Ok(x)  => {
                             if x == "SYSINFO_UPDATED" {
-                                info_uploaded = (true, url.clone(), None);
+                                info_uploaded = (true, url.clone(), None, id.clone());
                                 hbb_common::log::info!("sysinfo updated");
                                 *PRO.lock().unwrap() = true;
                             } else if x == "ID_NOT_FOUND" {
@@ -97,7 +102,7 @@ async fn start_hbbs_sync_async() {
                 }
                 last_sent = Some(Instant::now());
                 let mut v = Value::default();
-                v["id"] = json!(Config::get_id());
+                v["id"] = json!(id);
                 v["uuid"] = json!(crate::encode64(hbb_common::get_uuid()));
                 v["ver"] = json!(hbb_common::get_version_number(crate::VERSION));
                 if !conns.is_empty() {
@@ -147,22 +152,10 @@ fn handle_config_options(config_options: HashMap<String, String>) {
     config_options
         .iter()
         .map(|(k, v)| {
-            if k == "allow-share-rdp" {
-                // only changes made after installation take effect.
-                #[cfg(windows)]
-                if crate::ui_interface::is_rdp_service_open() {
-                    let current = crate::ui_interface::is_share_rdp();
-                    let set = v == "Y";
-                    if current != set {
-                        crate::platform::windows::set_share_rdp(set);
-                    }
-                }
+            if v.is_empty() {
+                options.remove(k);
             } else {
-                if v.is_empty() {
-                    options.remove(k);
-                } else {
-                    options.insert(k.to_string(), v.to_string());
-                }
+                options.insert(k.to_string(), v.to_string());
             }
         })
         .count();

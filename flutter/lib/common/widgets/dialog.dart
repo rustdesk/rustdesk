@@ -1,11 +1,16 @@
 import 'dart:async';
+import 'dart:convert';
 
+import 'package:bot_toast/bot_toast.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hbb/common/shared_state.dart';
 import 'package:flutter_hbb/common/widgets/setting_widgets.dart';
 import 'package:flutter_hbb/consts.dart';
+import 'package:flutter_hbb/models/peer_model.dart';
+import 'package:flutter_hbb/models/peer_tab_model.dart';
 import 'package:get/get.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 
 import '../../common.dart';
 import '../../models/model.dart';
@@ -75,7 +80,7 @@ void changeIdDialog() {
       final Iterable violations = rules.where((r) => !r.validate(newId));
       if (violations.isNotEmpty) {
         setState(() {
-          msg = isDesktop
+          msg = (isDesktop || isWebDesktop)
               ? '${translate('Prompt')}:  ${violations.map((r) => r.name).join(', ')}'
               : violations.map((r) => r.name).join(', ');
         });
@@ -100,7 +105,7 @@ void changeIdDialog() {
       }
       setState(() {
         isInProgress = false;
-        msg = isDesktop
+        msg = (isDesktop || isWebDesktop)
             ? '${translate('Prompt')}: ${translate(status)}'
             : translate(status);
       });
@@ -137,7 +142,7 @@ void changeIdDialog() {
           const SizedBox(
             height: 8.0,
           ),
-          isDesktop
+          (isDesktop || isWebDesktop)
               ? Obx(() => Wrap(
                     runSpacing: 8,
                     spacing: 4,
@@ -360,6 +365,8 @@ class DialogTextField extends StatelessWidget {
   final Widget? suffixIcon;
   final TextEditingController controller;
   final FocusNode? focusNode;
+  final TextInputType? keyboardType;
+  final List<TextInputFormatter>? inputFormatters;
 
   static const kUsernameTitle = 'Username';
   static const kUsernameIcon = Icon(Icons.account_circle_outlined);
@@ -375,6 +382,8 @@ class DialogTextField extends StatelessWidget {
       this.prefixIcon,
       this.suffixIcon,
       this.hintText,
+      this.keyboardType,
+      this.inputFormatters,
       required this.title,
       required this.controller})
       : super(key: key);
@@ -399,10 +408,253 @@ class DialogTextField extends StatelessWidget {
             focusNode: focusNode,
             autofocus: true,
             obscureText: obscureText,
+            keyboardType: keyboardType,
+            inputFormatters: inputFormatters,
           ),
         ),
       ],
     ).paddingSymmetric(vertical: 4.0);
+  }
+}
+
+abstract class ValidationField extends StatelessWidget {
+  ValidationField({Key? key}) : super(key: key);
+
+  String? validate();
+  bool get isReady;
+}
+
+class Dialog2FaField extends ValidationField {
+  Dialog2FaField({
+    Key? key,
+    required this.controller,
+    this.autoFocus = true,
+    this.reRequestFocus = false,
+    this.title,
+    this.hintText,
+    this.errorText,
+    this.readyCallback,
+    this.onChanged,
+  }) : super(key: key);
+
+  final TextEditingController controller;
+  final bool autoFocus;
+  final bool reRequestFocus;
+  final String? title;
+  final String? hintText;
+  final String? errorText;
+  final VoidCallback? readyCallback;
+  final VoidCallback? onChanged;
+  final errMsg = translate('2FA code must be 6 digits.');
+
+  @override
+  Widget build(BuildContext context) {
+    return DialogVerificationCodeField(
+      title: title ?? translate('2FA code'),
+      controller: controller,
+      errorText: errorText,
+      autoFocus: autoFocus,
+      reRequestFocus: reRequestFocus,
+      hintText: hintText,
+      readyCallback: readyCallback,
+      onChanged: _onChanged,
+      keyboardType: TextInputType.number,
+      inputFormatters: [
+        FilteringTextInputFormatter.allow(RegExp(r'[0-9]')),
+      ],
+    );
+  }
+
+  String get text => controller.text;
+  bool get isAllDigits => text.codeUnits.every((e) => e >= 48 && e <= 57);
+
+  @override
+  bool get isReady => text.length == 6 && isAllDigits;
+
+  @override
+  String? validate() => isReady ? null : errMsg;
+
+  _onChanged(StateSetter setState, SimpleWrapper<String?> errText) {
+    onChanged?.call();
+
+    if (text.length > 6) {
+      setState(() => errText.value = errMsg);
+      return;
+    }
+
+    if (!isAllDigits) {
+      setState(() => errText.value = errMsg);
+      return;
+    }
+
+    if (isReady) {
+      readyCallback?.call();
+      return;
+    }
+
+    if (errText.value != null) {
+      setState(() => errText.value = null);
+    }
+  }
+}
+
+class DialogEmailCodeField extends ValidationField {
+  DialogEmailCodeField({
+    Key? key,
+    required this.controller,
+    this.autoFocus = true,
+    this.reRequestFocus = false,
+    this.hintText,
+    this.errorText,
+    this.readyCallback,
+    this.onChanged,
+  }) : super(key: key);
+
+  final TextEditingController controller;
+  final bool autoFocus;
+  final bool reRequestFocus;
+  final String? hintText;
+  final String? errorText;
+  final VoidCallback? readyCallback;
+  final VoidCallback? onChanged;
+  final errMsg = translate('Email verification code must be 6 characters.');
+
+  @override
+  Widget build(BuildContext context) {
+    return DialogVerificationCodeField(
+      title: translate('Verification code'),
+      controller: controller,
+      errorText: errorText,
+      autoFocus: autoFocus,
+      reRequestFocus: reRequestFocus,
+      hintText: hintText,
+      readyCallback: readyCallback,
+      helperText: translate('verification_tip'),
+      onChanged: _onChanged,
+      keyboardType: TextInputType.visiblePassword,
+    );
+  }
+
+  String get text => controller.text;
+
+  @override
+  bool get isReady => text.length == 6;
+
+  @override
+  String? validate() => isReady ? null : errMsg;
+
+  _onChanged(StateSetter setState, SimpleWrapper<String?> errText) {
+    onChanged?.call();
+
+    if (text.length > 6) {
+      setState(() => errText.value = errMsg);
+      return;
+    }
+
+    if (isReady) {
+      readyCallback?.call();
+      return;
+    }
+
+    if (errText.value != null) {
+      setState(() => errText.value = null);
+    }
+  }
+}
+
+class DialogVerificationCodeField extends StatefulWidget {
+  DialogVerificationCodeField({
+    Key? key,
+    required this.controller,
+    required this.title,
+    this.autoFocus = true,
+    this.reRequestFocus = false,
+    this.helperText,
+    this.hintText,
+    this.errorText,
+    this.textLength,
+    this.readyCallback,
+    this.onChanged,
+    this.keyboardType,
+    this.inputFormatters,
+  }) : super(key: key);
+
+  final TextEditingController controller;
+  final bool autoFocus;
+  final bool reRequestFocus;
+  final String title;
+  final String? helperText;
+  final String? hintText;
+  final String? errorText;
+  final int? textLength;
+  final VoidCallback? readyCallback;
+  final Function(StateSetter setState, SimpleWrapper<String?> errText)?
+      onChanged;
+  final TextInputType? keyboardType;
+  final List<TextInputFormatter>? inputFormatters;
+
+  @override
+  State<DialogVerificationCodeField> createState() =>
+      _DialogVerificationCodeField();
+}
+
+class _DialogVerificationCodeField extends State<DialogVerificationCodeField> {
+  final _focusNode = FocusNode();
+  Timer? _timer;
+  Timer? _timerReRequestFocus;
+  SimpleWrapper<String?> errorText = SimpleWrapper(null);
+  String _preText = '';
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.autoFocus) {
+      _timer =
+          Timer(Duration(milliseconds: 50), () => _focusNode.requestFocus());
+
+      if (widget.onChanged != null) {
+        widget.controller.addListener(() {
+          final text = widget.controller.text.trim();
+          if (text == _preText) return;
+          widget.onChanged!(setState, errorText);
+          _preText = text;
+        });
+      }
+    }
+
+    // software secure keyboard will take the focus since flutter 3.13
+    // request focus again when android account password obtain focus
+    if (isAndroid && widget.reRequestFocus) {
+      _focusNode.addListener(() {
+        if (_focusNode.hasFocus) {
+          _timerReRequestFocus?.cancel();
+          _timerReRequestFocus = Timer(
+              Duration(milliseconds: 100), () => _focusNode.requestFocus());
+        }
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    _timerReRequestFocus?.cancel();
+    _focusNode.unfocus();
+    _focusNode.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return DialogTextField(
+      title: widget.title,
+      controller: widget.controller,
+      errorText: widget.errorText ?? errorText.value,
+      focusNode: _focusNode,
+      helperText: widget.helperText,
+      keyboardType: widget.keyboardType,
+      inputFormatters: widget.inputFormatters,
+    );
   }
 }
 
@@ -411,12 +663,14 @@ class PasswordWidget extends StatefulWidget {
     Key? key,
     required this.controller,
     this.autoFocus = true,
+    this.reRequestFocus = false,
     this.hintText,
     this.errorText,
   }) : super(key: key);
 
   final TextEditingController controller;
   final bool autoFocus;
+  final bool reRequestFocus;
   final String? hintText;
   final String? errorText;
 
@@ -428,6 +682,7 @@ class _PasswordWidgetState extends State<PasswordWidget> {
   bool _passwordVisible = false;
   final _focusNode = FocusNode();
   Timer? _timer;
+  Timer? _timerReRequestFocus;
 
   @override
   void initState() {
@@ -436,11 +691,23 @@ class _PasswordWidgetState extends State<PasswordWidget> {
       _timer =
           Timer(Duration(milliseconds: 50), () => _focusNode.requestFocus());
     }
+    // software secure keyboard will take the focus since flutter 3.13
+    // request focus again when android account password obtain focus
+    if (isAndroid && widget.reRequestFocus) {
+      _focusNode.addListener(() {
+        if (_focusNode.hasFocus) {
+          _timerReRequestFocus?.cancel();
+          _timerReRequestFocus = Timer(
+              Duration(milliseconds: 100), () => _focusNode.requestFocus());
+        }
+      });
+    }
   }
 
   @override
   void dispose() {
     _timer?.cancel();
+    _timerReRequestFocus?.cancel();
     _focusNode.unfocus();
     _focusNode.dispose();
     super.dispose();
@@ -841,7 +1108,7 @@ void showRequestElevationDialog(
                 errorText: errPwd.isEmpty ? null : errPwd.value,
               ),
             ],
-          ).marginOnly(left: isDesktop ? 35 : 0),
+          ).marginOnly(left: (isDesktop || isWebDesktop) ? 35 : 0),
         ).marginOnly(top: 10),
       ],
     ),
@@ -1318,7 +1585,7 @@ customImageQualityDialog(SessionID sessionId, String id, FFI ffi) async {
   msgBoxCommon(ffi.dialogManager, 'Custom Image Quality', content, [btnClose]);
 }
 
-void deletePeerConfirmDialog(Function onSubmit, String title) async {
+void deleteConfirmDialog(Function onSubmit, String title) async {
   gFFI.dialogManager.show(
     (setState, close, context) {
       submit() async {
@@ -1366,7 +1633,7 @@ void editAbTagDialog(
     List<dynamic> currentTags, Function(List<dynamic>) onSubmit) {
   var isInProgress = false;
 
-  final tags = List.of(gFFI.abModel.tags);
+  final tags = List.of(gFFI.abModel.currentAbTags);
   var selectedTag = currentTags.obs;
 
   gFFI.dialogManager.show((setState, close, context) {
@@ -1481,6 +1748,369 @@ void renameDialog(
         ),
       ],
       onSubmit: submit,
+      onCancel: cancel,
+    );
+  });
+}
+
+void change2fa({Function()? callback}) async {
+  if (bind.mainHasValid2FaSync()) {
+    await bind.mainSetOption(key: "2fa", value: "");
+    callback?.call();
+    return;
+  }
+  var new2fa = (await bind.mainGenerate2Fa());
+  final secretRegex = RegExp(r'secret=([^&]+)');
+  final secret = secretRegex.firstMatch(new2fa)?.group(1);
+  String? errorText;
+  final controller = TextEditingController();
+  gFFI.dialogManager.show((setState, close, context) {
+    onVerify() async {
+      if (await bind.mainVerify2Fa(code: controller.text.trim())) {
+        callback?.call();
+        close();
+      } else {
+        errorText = translate('wrong-2fa-code');
+      }
+    }
+
+    final codeField = Dialog2FaField(
+      controller: controller,
+      errorText: errorText,
+      onChanged: () => setState(() => errorText = null),
+      title: translate('Verification code'),
+      readyCallback: () {
+        onVerify();
+        setState(() {});
+      },
+    );
+
+    getOnSubmit() => codeField.isReady ? onVerify : null;
+
+    return CustomAlertDialog(
+      title: Text(translate("enable-2fa-title")),
+      content: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SelectableText(translate("enable-2fa-desc"),
+                  style: TextStyle(fontSize: 12))
+              .marginOnly(bottom: 12),
+          SizedBox(
+              width: 160,
+              height: 160,
+              child: QrImageView(
+                backgroundColor: Colors.white,
+                data: new2fa,
+                version: QrVersions.auto,
+                size: 160,
+                gapless: false,
+              )).marginOnly(bottom: 6),
+          SelectableText(secret ?? '', style: TextStyle(fontSize: 12))
+              .marginOnly(bottom: 12),
+          Row(children: [Expanded(child: codeField)]),
+        ],
+      ),
+      actions: [
+        dialogButton("Cancel", onPressed: close, isOutline: true),
+        dialogButton("OK", onPressed: getOnSubmit()),
+      ],
+      onCancel: close,
+    );
+  });
+}
+
+void enter2FaDialog(
+    SessionID sessionId, OverlayDialogManager dialogManager) async {
+  final controller = TextEditingController();
+  final RxBool submitReady = false.obs;
+
+  dialogManager.dismissAll();
+  dialogManager.show((setState, close, context) {
+    cancel() {
+      close();
+      closeConnection();
+    }
+
+    submit() {
+      gFFI.send2FA(sessionId, controller.text.trim());
+      close();
+      dialogManager.showLoading(translate('Logging in...'),
+          onCancel: closeConnection);
+    }
+
+    late Dialog2FaField codeField;
+
+    codeField = Dialog2FaField(
+      controller: controller,
+      title: translate('Verification code'),
+      onChanged: () => submitReady.value = codeField.isReady,
+    );
+
+    return CustomAlertDialog(
+        title: Text(translate('enter-2fa-title')),
+        content: codeField,
+        actions: [
+          dialogButton('Cancel',
+              onPressed: cancel,
+              isOutline: true,
+              style: TextStyle(
+                  color: Theme.of(context).textTheme.bodyMedium?.color)),
+          Obx(() => dialogButton(
+                'OK',
+                onPressed: submitReady.isTrue ? submit : null,
+              )),
+        ],
+        onSubmit: submit,
+        onCancel: cancel);
+  });
+}
+
+// This dialog should not be dismissed, otherwise it will be black screen, have not reproduced this.
+void showWindowsSessionsDialog(
+    String type,
+    String title,
+    String text,
+    OverlayDialogManager dialogManager,
+    SessionID sessionId,
+    String peerId,
+    String sessions) {
+  List<dynamic> sessionsList = [];
+  try {
+    sessionsList = json.decode(sessions);
+  } catch (e) {
+    print(e);
+  }
+  List<String> sids = [];
+  List<String> names = [];
+  for (var session in sessionsList) {
+    sids.add(session['sid']);
+    names.add(session['name']);
+  }
+  String selectedUserValue = sids.first;
+  dialogManager.dismissAll();
+  dialogManager.show((setState, close, context) {
+    submit() {
+      bind.sessionSendSelectedSessionId(
+          sessionId: sessionId, sid: selectedUserValue);
+      close();
+    }
+
+    return CustomAlertDialog(
+      title: null,
+      content: msgboxContent(type, title, text),
+      actions: [
+        ComboBox(
+            keys: sids,
+            values: names,
+            initialKey: selectedUserValue,
+            onChanged: (value) {
+              selectedUserValue = value;
+            }),
+        dialogButton('Connect', onPressed: submit, isOutline: false),
+      ],
+    );
+  });
+}
+
+void addPeersToAbDialog(
+  List<Peer> peers,
+) async {
+  Future<bool> addTo(String abname) async {
+    final mapList = peers.map((e) {
+      var json = e.toJson();
+      // remove password when add to another address book to avoid re-share
+      json.remove('password');
+      json.remove('hash');
+      return json;
+    }).toList();
+    final errMsg = await gFFI.abModel.addPeersTo(mapList, abname);
+    if (errMsg == null) {
+      showToast(translate('Successful'));
+      return true;
+    } else {
+      BotToast.showText(text: errMsg, contentColor: Colors.red);
+      return false;
+    }
+  }
+
+  // if only one address book and it is personal, add to it directly
+  if (gFFI.abModel.addressbooks.length == 1 &&
+      gFFI.abModel.current.isPersonal()) {
+    await addTo(gFFI.abModel.currentName.value);
+    return;
+  }
+
+  RxBool isInProgress = false.obs;
+  final names = gFFI.abModel.addressBooksCanWrite();
+  RxString currentName = gFFI.abModel.currentName.value.obs;
+  TextEditingController controller = TextEditingController();
+  if (gFFI.peerTabModel.currentTab == PeerTabIndex.ab.index) {
+    names.remove(currentName.value);
+  }
+  if (names.isEmpty) {
+    debugPrint('no address book to add peers to, should not happen');
+    return;
+  }
+  if (!names.contains(currentName.value)) {
+    currentName.value = names[0];
+  }
+  gFFI.dialogManager.show((setState, close, context) {
+    submit() async {
+      if (controller.text != gFFI.abModel.translatedName(currentName.value)) {
+        BotToast.showText(
+            text: 'illegal address book name: ${controller.text}',
+            contentColor: Colors.red);
+        return;
+      }
+      isInProgress.value = true;
+      if (await addTo(currentName.value)) {
+        close();
+      }
+      isInProgress.value = false;
+    }
+
+    cancel() {
+      close();
+    }
+
+    return CustomAlertDialog(
+      title: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(IconFont.addressBook, color: MyTheme.accent),
+          Text(translate('Add to address book')).paddingOnly(left: 10),
+        ],
+      ),
+      content: Obx(() => Column(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              // https://github.com/flutter/flutter/issues/145081
+              DropdownMenu(
+                initialSelection: currentName.value,
+                onSelected: (value) {
+                  if (value != null) {
+                    currentName.value = value;
+                  }
+                },
+                dropdownMenuEntries: names
+                    .map((e) => DropdownMenuEntry(
+                        value: e, label: gFFI.abModel.translatedName(e)))
+                    .toList(),
+                inputDecorationTheme: InputDecorationTheme(
+                    isDense: true, border: UnderlineInputBorder()),
+                enableFilter: true,
+                controller: controller,
+              ),
+              // NOT use Offstage to wrap LinearProgressIndicator
+              isInProgress.value ? const LinearProgressIndicator() : Offstage()
+            ],
+          )),
+      actions: [
+        dialogButton(
+          "Cancel",
+          icon: Icon(Icons.close_rounded),
+          onPressed: cancel,
+          isOutline: true,
+        ),
+        dialogButton(
+          "OK",
+          icon: Icon(Icons.done_rounded),
+          onPressed: submit,
+        ),
+      ],
+      onSubmit: submit,
+      onCancel: cancel,
+    );
+  });
+}
+
+void setSharedAbPasswordDialog(String abName, Peer peer) {
+  TextEditingController controller = TextEditingController(text: '');
+  RxBool isInProgress = false.obs;
+  RxBool isInputEmpty = true.obs;
+  bool passwordVisible = false;
+  controller.addListener(() {
+    isInputEmpty.value = controller.text.isEmpty;
+  });
+  gFFI.dialogManager.show((setState, close, context) {
+    change(String password) async {
+      isInProgress.value = true;
+      bool res =
+          await gFFI.abModel.changeSharedPassword(abName, peer.id, password);
+      isInProgress.value = false;
+      if (res) {
+        showToast(translate('Successful'));
+      }
+      close();
+    }
+
+    cancel() {
+      close();
+    }
+
+    return CustomAlertDialog(
+      title: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.key, color: MyTheme.accent),
+          Text(translate(peer.password.isEmpty
+                  ? 'Set shared password'
+                  : 'Change Password'))
+              .paddingOnly(left: 10),
+        ],
+      ),
+      content: Obx(() => Column(children: [
+            TextField(
+              controller: controller,
+              autofocus: true,
+              obscureText: !passwordVisible,
+              decoration: InputDecoration(
+                suffixIcon: IconButton(
+                  icon: Icon(
+                      passwordVisible ? Icons.visibility : Icons.visibility_off,
+                      color: MyTheme.lightTheme.primaryColor),
+                  onPressed: () {
+                    setState(() {
+                      passwordVisible = !passwordVisible;
+                    });
+                  },
+                ),
+              ),
+            ),
+            if (!gFFI.abModel.current.isPersonal())
+              Row(children: [
+                Icon(Icons.info, color: Colors.amber).marginOnly(right: 4),
+                Text(
+                  translate('share_warning_tip'),
+                  style: TextStyle(fontSize: 12),
+                )
+              ]).marginSymmetric(vertical: 10),
+            // NOT use Offstage to wrap LinearProgressIndicator
+            isInProgress.value ? const LinearProgressIndicator() : Offstage()
+          ])),
+      actions: [
+        dialogButton(
+          "Cancel",
+          icon: Icon(Icons.close_rounded),
+          onPressed: cancel,
+          isOutline: true,
+        ),
+        if (peer.password.isNotEmpty)
+          dialogButton(
+            "Remove",
+            icon: Icon(Icons.delete_outline_rounded),
+            onPressed: () => change(''),
+            buttonStyle: ButtonStyle(
+                backgroundColor: MaterialStatePropertyAll(Colors.red)),
+          ),
+        Obx(() => dialogButton(
+              "OK",
+              icon: Icon(Icons.done_rounded),
+              onPressed:
+                  isInputEmpty.value ? null : () => change(controller.text),
+            )),
+      ],
+      onSubmit: isInputEmpty.value ? null : () => change(controller.text),
       onCancel: cancel,
     );
   });

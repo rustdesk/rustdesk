@@ -1,11 +1,10 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/desktop/pages/desktop_home_page.dart';
 import 'package:flutter_hbb/desktop/pages/desktop_setting_page.dart';
 import 'package:flutter_hbb/desktop/widgets/tabbar_widget.dart';
+import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:flutter_hbb/models/state_model.dart';
 import 'package:get/get.dart';
 import 'package:window_manager/window_manager.dart';
@@ -18,7 +17,8 @@ class DesktopTabPage extends StatefulWidget {
   @override
   State<DesktopTabPage> createState() => _DesktopTabPageState();
 
-  static void onAddSetting({int initialPage = 0}) {
+  static void onAddSetting(
+      {SettingsTabKey initialPage = SettingsTabKey.general}) {
     try {
       DesktopTabController tabController = Get.find();
       tabController.add(TabInfo(
@@ -28,7 +28,7 @@ class DesktopTabPage extends StatefulWidget {
           unselectedIcon: Icons.build_outlined,
           page: DesktopSettingPage(
             key: const ValueKey(kTabLabelSettingPage),
-            initialPage: initialPage,
+            initialTabkey: initialPage,
           )));
     } catch (e) {
       debugPrintStack(label: '$e');
@@ -53,6 +53,17 @@ class _DesktopTabPageState extends State<DesktopTabPage> {
         page: DesktopHomePage(
           key: const ValueKey(kTabLabelHomePage),
         )));
+    if (bind.isIncomingOnly()) {
+      tabController.onSelected = (key) {
+        if (key == kTabLabelHomePage) {
+          windowManager.setSize(getIncomingOnlyHomeSize());
+          windowManager.setResizable(false);
+        } else {
+          windowManager.setSize(getIncomingOnlySettingsSize());
+          windowManager.setResizable(true);
+        }
+      };
+    }
   }
 
   @override
@@ -68,14 +79,17 @@ class _DesktopTabPageState extends State<DesktopTabPage> {
             backgroundColor: Theme.of(context).colorScheme.background,
             body: DesktopTab(
               controller: tabController,
-              tail: ActionIcon(
-                message: 'Settings',
-                icon: IconFont.menu,
-                onTap: DesktopTabPage.onAddSetting,
-                isClose: false,
+              tail: Offstage(
+                offstage: bind.isIncomingOnly() || bind.isDisableSettings(),
+                child: ActionIcon(
+                  message: 'Settings',
+                  icon: IconFont.menu,
+                  onTap: DesktopTabPage.onAddSetting,
+                  isClose: false,
+                ),
               ),
             )));
-    return Platform.isMacOS || kUseCompatibleUiMode
+    return isMacOS || kUseCompatibleUiMode
         ? tabWidget
         : Obx(
             () => DragToResizeArea(

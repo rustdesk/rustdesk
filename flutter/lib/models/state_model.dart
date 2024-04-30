@@ -1,16 +1,15 @@
-import 'dart:io';
-
 import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_hbb/common.dart';
 import 'package:get/get.dart';
 
 import '../consts.dart';
+import './platform_model.dart';
 
 enum SvcStatus { notReady, connecting, ready }
 
 class StateGlobal {
   int _windowId = -1;
-  bool grabKeyboard = false;
   final RxBool _fullscreen = false.obs;
   bool _isMinimized = false;
   final RxBool isMaximized = false.obs;
@@ -21,6 +20,8 @@ class StateGlobal {
   final svcStatus = SvcStatus.notReady.obs;
   // Only used for macOS
   bool? closeOnFullscreen;
+
+  String _inputSource = '';
 
   // Use for desktop -> remote toolbar -> resolution
   final Map<String, Map<int, String?>> _lastResolutionGroupValues = {};
@@ -57,7 +58,7 @@ class StateGlobal {
         _resizeEdgeSize.value =
             isMaximized.isTrue ? kMaximizeEdgeSize : kWindowEdgeSize;
       }
-      if (!Platform.isMacOS) {
+      if (!isMacOS) {
         _windowBorderWidth.value = v ? 0 : kWindowBorderWidth;
       }
     }
@@ -81,7 +82,7 @@ class StateGlobal {
         final wc = WindowController.fromWindowId(windowId);
         wc.setFullscreen(_fullscreen.isTrue).then((_) {
           // https://github.com/leanflutter/window_manager/issues/131#issuecomment-1111587982
-          if (Platform.isWindows && !v) {
+          if (isWindows && !v) {
             Future.delayed(Duration.zero, () async {
               final frame = await wc.getFrame();
               final newRect = Rect.fromLTWH(
@@ -92,6 +93,18 @@ class StateGlobal {
         });
       }
     }
+  }
+
+  String getInputSource({bool force = false}) {
+    if (force || _inputSource.isEmpty) {
+      _inputSource = bind.mainGetInputSource();
+    }
+    return _inputSource;
+  }
+
+  setInputSource(SessionID sessionId, String v) async {
+    await bind.mainSetInputSource(sessionId: sessionId, value: v);
+    _inputSource = bind.mainGetInputSource();
   }
 
   StateGlobal._();

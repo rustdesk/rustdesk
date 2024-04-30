@@ -49,6 +49,7 @@ message DisplayInfo {
   bool online = 6;
   bool cursor_embedded = 7;
   Resolution original_resolution = 8;
+  double scale = 9;
 }
 
 message PortForward {
@@ -80,6 +81,10 @@ message LoginRequest {
   uint64 session_id = 10;
   string version = 11;
   OSLogin os_login = 12;
+}
+
+message Auth2FA {
+  string code = 1;
 }
 
 message ChatMessage { string text = 1; }
@@ -118,7 +123,13 @@ message PeerInfo {
   // Use JSON's key-value format which is friendly for peer to handle.
   // NOTE: Only support one-level dictionaries (for peer to update), and the key is of type string.
   string platform_additions = 12;
+  WindowsSessions windows_sessions = 13;
 }
+
+message WindowsSession {  
+  uint32 sid = 1;  
+  string name = 2;  
+}  
 
 message LoginResponse {
   oneof union {
@@ -493,6 +504,11 @@ message Resolution {
   int32 height = 2;
 }
 
+message DisplayResolution {
+  int32 display = 1;
+  Resolution resolution = 2;
+}
+
 message SupportedResolutions { repeated Resolution resolutions = 1; }
 
 message SwitchDisplay {
@@ -585,6 +601,10 @@ message OptionMessage {
   BoolOption disable_keyboard = 12;
 // Position 13 is used for Resolution. Remove later.
 // Resolution custom_resolution = 13;
+// BoolOption support_windows_specific_session = 14;
+  // starting from 15 please, do not use removed fields
+  BoolOption follow_remote_cursor = 15;
+  BoolOption follow_remote_window = 16;
 }
 
 message TestDelay {
@@ -699,6 +719,18 @@ message PluginFailure {
   string msg = 3;
 }
 
+message WindowsSessions {
+  repeated WindowsSession sessions = 1;
+  uint32 current_sid = 2;
+}
+
+// Query messages from peer.
+message MessageQuery {
+  // The SwitchDisplay message of the target display.
+  // If the target display is not found, the message will be ignored.
+  int32 switch_display = 1;
+}
+
 message Misc {
   oneof union {
     ChatMessage chat_message = 4;
@@ -719,6 +751,8 @@ message Misc {
     bool portable_service_running = 20;
     SwitchSidesRequest switch_sides_request = 21;
     SwitchBack switch_back = 22;
+    // Deprecated since 1.2.4, use `change_display_resolution` (36) instead.
+    // But we must keep it for compatibility when peer version < 1.2.4.
     Resolution change_resolution = 24;
     PluginRequest plugin_request = 25;
     PluginFailure plugin_failure = 26;
@@ -729,6 +763,11 @@ message Misc {
     int32 refresh_video_display = 31;
     ToggleVirtualDisplay toggle_virtual_display = 32;
     TogglePrivacyMode toggle_privacy_mode = 33;
+    SupportedEncoding supported_encoding = 34;
+    uint32 selected_sid = 35;
+    DisplayResolution change_display_resolution = 36;
+    MessageQuery message_query = 37;
+    int32 follow_current_display = 38;
   }
 }
 
@@ -770,5 +809,6 @@ message Message {
     VoiceCallResponse voice_call_response = 24;
     PeerInfo peer_info = 25;
     PointerDeviceEvent pointer_device_event = 26;
+    Auth2FA auth_2fa = 27;
   }
 }

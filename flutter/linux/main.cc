@@ -9,7 +9,11 @@ bool gIsConnectionManager = false;
 bool flutter_rustdesk_core_main() {
    void* librustdesk = dlopen(RUSTDESK_LIB_PATH, RTLD_LAZY);
    if (!librustdesk) {
-     fprintf(stderr,"load librustdesk.so failed\n");
+      fprintf(stderr,"load librustdesk.so failed\n");
+      char* error;
+      if ((error = dlerror()) != nullptr) {
+        fprintf(stderr, "%s", error);
+      }
      return true;
    }
    auto core_main = (RustDeskCoreMain) dlsym(librustdesk,"rustdesk_core_main");

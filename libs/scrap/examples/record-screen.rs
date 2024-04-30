@@ -17,7 +17,7 @@ use scrap::codec::{EncoderApi, EncoderCfg, Quality as Q};
 use webm::mux;
 use webm::mux::Track;
 
-use scrap::{convert_to_yuv, vpxcodec as vpx_encode};
+use scrap::vpxcodec as vpx_encode;
 use scrap::{Capturer, Display, TraitCapturer, STRIDE_ALIGN};
 
 const USAGE: &'static str = "
@@ -152,7 +152,7 @@ fn main() -> io::Result<()> {
 
         if let Ok(frame) = c.frame(Duration::from_millis(0)) {
             let ms = time.as_secs() * 1000 + time.subsec_millis() as u64;
-            convert_to_yuv(&frame, vpx.yuvfmt(), &mut yuv, &mut mid_data);
+            frame.to(vpx.yuvfmt(), &mut yuv, &mut mid_data).unwrap();
             for frame in vpx.encode(ms as i64, &yuv, STRIDE_ALIGN).unwrap() {
                 vt.add_frame(frame.data, frame.pts as u64 * 1_000_000, frame.key);
             }

@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:flutter/foundation.dart';
@@ -7,8 +6,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/common.dart';
+import 'package:flutter_hbb/main.dart';
+import 'package:flutter_hbb/models/input_model.dart';
 
 /// must keep the order
+// ignore: constant_identifier_names
 enum WindowType { Main, RemoteDesktop, FileTransfer, PortForward, Unknown }
 
 extension Index on int {
@@ -138,7 +140,7 @@ class RustDeskMultiWindowManager {
         overrideType: type,
       ));
     }
-    if (Platform.isMacOS) {
+    if (isMacOS) {
       Future.microtask(() => windowController.show());
     }
     registerActiveWindow(windowId);
@@ -193,6 +195,7 @@ class RustDeskMultiWindowManager {
     bool? forceRelay,
     String? switchUuid,
     bool? isRDP,
+    bool? isSharedPassword,
   }) async {
     var params = {
       "type": type.index,
@@ -205,6 +208,9 @@ class RustDeskMultiWindowManager {
     }
     if (isRDP != null) {
       params['isRDP'] = isRDP;
+    }
+    if (isSharedPassword != null) {
+      params['isSharedPassword'] = isSharedPassword;
     }
     final msg = jsonEncode(params);
 
@@ -227,6 +233,7 @@ class RustDeskMultiWindowManager {
   Future<MultiWindowCallResult> newRemoteDesktop(
     String remoteId, {
     String? password,
+    bool? isSharedPassword,
     String? switchUuid,
     bool? forceRelay,
   }) async {
@@ -238,11 +245,12 @@ class RustDeskMultiWindowManager {
       password: password,
       forceRelay: forceRelay,
       switchUuid: switchUuid,
+      isSharedPassword: isSharedPassword,
     );
   }
 
   Future<MultiWindowCallResult> newFileTransfer(String remoteId,
-      {String? password, bool? forceRelay}) async {
+      {String? password, bool? isSharedPassword, bool? forceRelay}) async {
     return await newSession(
       WindowType.FileTransfer,
       kWindowEventNewFileTransfer,
@@ -250,11 +258,12 @@ class RustDeskMultiWindowManager {
       _fileTransferWindows,
       password: password,
       forceRelay: forceRelay,
+      isSharedPassword: isSharedPassword,
     );
   }
 
   Future<MultiWindowCallResult> newPortForward(String remoteId, bool isRDP,
-      {String? password, bool? forceRelay}) async {
+      {String? password, bool? isSharedPassword, bool? forceRelay}) async {
     return await newSession(
       WindowType.PortForward,
       kWindowEventNewPortForward,
@@ -263,6 +272,7 @@ class RustDeskMultiWindowManager {
       password: password,
       forceRelay: forceRelay,
       isRDP: isRDP,
+      isSharedPassword: isSharedPassword,
     );
   }
 
@@ -422,6 +432,39 @@ class RustDeskMultiWindowManager {
 
   void unregisterActiveWindowListener(AsyncCallback callback) {
     _windowActiveCallbacks.remove(callback);
+  }
+
+  // This function is called from the main window.
+  // It will query the active remote windows to get their coords.
+  Future<List<String>> getOtherRemoteWindowCoords(int wId) async {
+    List<String> coords = [];
+    for (final windowId in _remoteDesktopWindows) {
+      if (windowId != wId) {
+        if (_activeWindows.contains(windowId)) {
+          final res = await DesktopMultiWindow.invokeMethod(
+              windowId, kWindowEventRemoteWindowCoords, '');
+          if (res != null) {
+            coords.add(res);
+          }
+        }
+      }
+    }
+    return coords;
+  }
+
+  // This function is called from one remote window.
+  // Only the main window knows `_remoteDesktopWindows` and `_activeWindows`.
+  // So we need to call the main window to get the other remote windows' coords.
+  Future<List<RemoteWindowCoords>> getOtherRemoteWindowCoordsFromMain() async {
+    List<RemoteWindowCoords> coords = [];
+    // Call the main window to get the coords of other remote windows.
+    String res = await DesktopMultiWindow.invokeMethod(
+        kMainWindowId, kWindowEventRemoteWindowCoords, kWindowId.toString());
+    List<dynamic> list = jsonDecode(res);
+    for (var item in list) {
+      coords.add(RemoteWindowCoords.fromJson(jsonDecode(item)));
+    }
+    return coords;
   }
 }
 

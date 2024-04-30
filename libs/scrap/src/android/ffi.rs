@@ -19,6 +19,7 @@ lazy_static! {
     static ref MAIN_SERVICE_CTX: RwLock<Option<GlobalRef>> = RwLock::new(None); // MainService -> video service / audio service / info
     static ref VIDEO_RAW: Mutex<FrameRaw> = Mutex::new(FrameRaw::new("video", MAX_VIDEO_FRAME_TIMEOUT));
     static ref AUDIO_RAW: Mutex<FrameRaw> = Mutex::new(FrameRaw::new("audio", MAX_AUDIO_FRAME_TIMEOUT));
+    static ref NDK_CONTEXT_INITED: Mutex<bool> = Default::default();
 }
 
 const MAX_VIDEO_FRAME_TIMEOUT: Duration = Duration::from_millis(100);
@@ -93,7 +94,7 @@ pub fn get_audio_raw<'a>() -> Option<&'a [u8]> {
 }
 
 #[no_mangle]
-pub extern "system" fn Java_com_carriez_flutter_1hbb_MainService_onVideoFrameUpdate(
+pub extern "system" fn Java_ffi_FFI_onVideoFrameUpdate(
     env: JNIEnv,
     _class: JClass,
     buffer: JObject,
@@ -107,7 +108,7 @@ pub extern "system" fn Java_com_carriez_flutter_1hbb_MainService_onVideoFrameUpd
 }
 
 #[no_mangle]
-pub extern "system" fn Java_com_carriez_flutter_1hbb_MainService_onAudioFrameUpdate(
+pub extern "system" fn Java_ffi_FFI_onAudioFrameUpdate(
     env: JNIEnv,
     _class: JClass,
     buffer: JObject,
@@ -121,7 +122,7 @@ pub extern "system" fn Java_com_carriez_flutter_1hbb_MainService_onAudioFrameUpd
 }
 
 #[no_mangle]
-pub extern "system" fn Java_com_carriez_flutter_1hbb_MainService_setFrameRawEnable(
+pub extern "system" fn Java_ffi_FFI_setFrameRawEnable(
     env: JNIEnv,
     _class: JClass,
     name: JString,
@@ -140,7 +141,7 @@ pub extern "system" fn Java_com_carriez_flutter_1hbb_MainService_setFrameRawEnab
 }
 
 #[no_mangle]
-pub extern "system" fn Java_com_carriez_flutter_1hbb_MainService_init(
+pub extern "system" fn Java_ffi_FFI_init(
     env: JNIEnv,
     _class: JClass,
     ctx: JObject,
@@ -150,6 +151,7 @@ pub extern "system" fn Java_com_carriez_flutter_1hbb_MainService_init(
         *JVM.write().unwrap() = Some(jvm);
         if let Ok(context) = env.new_global_ref(ctx) {
             *MAIN_SERVICE_CTX.write().unwrap() = Some(context);
+            init_ndk_context().ok();
         }
     }
 }
@@ -165,7 +167,12 @@ pub fn call_main_service_pointer_input(kind: &str, mask: i32, x: i32, y: i32) ->
             ctx,
             "rustPointerInput",
             "(Ljava/lang/String;III)V",
-            &[JValue::Object(&JObject::from(kind)), JValue::Int(mask), JValue::Int(x), JValue::Int(y)],
+            &[
+                JValue::Object(&JObject::from(kind)),
+                JValue::Int(mask),
+                JValue::Int(x),
+                JValue::Int(y),
+            ],
         )?;
         return Ok(());
     } else {
@@ -245,4 +252,28 @@ pub fn call_main_service_set_by_name(
     } else {
         return Err(JniError::ThrowFailed(-1));
     }
+}
+
+fn init_ndk_context() -> JniResult<()> {
+    let mut lock = NDK_CONTEXT_INITED.lock().unwrap();
+    if *lock {
+        unsafe {
+            ndk_context::release_android_context();
+        }
+        *lock = false;
+    }
+    if let (Some(jvm), Some(ctx)) = (
+        JVM.read().unwrap().as_ref(),
+        MAIN_SERVICE_CTX.read().unwrap().as_ref(),
+    ) {
+        unsafe {
+            ndk_context::initialize_android_context(
+                jvm.get_java_vm_pointer() as _,
+                ctx.as_obj().as_raw() as _,
+            );
+        }
+        *lock = true;
+        return Ok(());
+    }
+    Err(JniError::ThrowFailed(-1))
 }

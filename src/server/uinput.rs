@@ -382,7 +382,7 @@ pub mod service {
         Ok(keyboard)
     }
 
-    fn map_key(key: &enigo::Key) -> ResultType<(evdev::Key, bool)> {
+    pub fn map_key(key: &enigo::Key) -> ResultType<(evdev::Key, bool)> {
         if let Some(k) = KEY_MAP.get(&key) {
             log::trace!("mapkey {:?}, get {:?}", &key, &k);
             return Ok((k.clone(), false));

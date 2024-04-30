@@ -1,13 +1,16 @@
 import 'dart:math';
 
+import 'package:dropdown_button2/dropdown_button2.dart';
 import 'package:dynamic_layouts/dynamic_layouts.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common/formatter/id_formatter.dart';
+import 'package:flutter_hbb/common/hbbs/hbbs.dart';
 import 'package:flutter_hbb/common/widgets/peer_card.dart';
 import 'package:flutter_hbb/common/widgets/peers_view.dart';
 import 'package:flutter_hbb/desktop/widgets/popup_menu.dart';
 import 'package:flutter_hbb/models/ab_model.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
+import 'package:url_launcher/url_launcher_string.dart';
 import '../../desktop/widgets/material_mod_popup_menu.dart' as mod_menu;
 import 'package:get/get.dart';
 import 'package:flex_color_picker/flex_color_picker.dart';
@@ -43,27 +46,24 @@ class _AddressBookState extends State<AddressBook> {
               child: ElevatedButton(
                   onPressed: loginDialog, child: Text(translate("Login"))));
         } else {
-          if (gFFI.abModel.abLoading.value && gFFI.abModel.emtpy) {
-            return const Center(
-              child: CircularProgressIndicator(),
-            );
-          }
           return Column(
             children: [
               // NOT use Offstage to wrap LinearProgressIndicator
-              if (gFFI.abModel.retrying.value) LinearProgressIndicator(),
+              if (gFFI.abModel.currentAbLoading.value &&
+                  gFFI.abModel.currentAbEmpty)
+                const LinearProgressIndicator(),
               buildErrorBanner(context,
-                  loading: gFFI.abModel.abLoading,
-                  err: gFFI.abModel.pullError,
+                  loading: gFFI.abModel.currentAbLoading,
+                  err: gFFI.abModel.currentAbPullError,
                   retry: null,
-                  close: () => gFFI.abModel.pullError.value = ''),
+                  close: () => gFFI.abModel.currentAbPullError.value = ''),
               buildErrorBanner(context,
-                  loading: gFFI.abModel.abLoading,
-                  err: gFFI.abModel.pushError,
-                  retry: () => gFFI.abModel.pushAb(isRetry: true),
-                  close: () => gFFI.abModel.pushError.value = ''),
+                  loading: gFFI.abModel.currentAbLoading,
+                  err: gFFI.abModel.currentAbPushError,
+                  retry: null, // remove retry
+                  close: () => gFFI.abModel.currentAbPushError.value = ''),
               Expanded(
-                  child: isDesktop
+                  child: (isDesktop || isWebDesktop)
                       ? _buildAddressBookDesktop()
                       : _buildAddressBookMobile())
             ],
@@ -82,19 +82,23 @@ class _AddressBookState extends State<AddressBook> {
                   border: Border.all(
                       color: Theme.of(context).colorScheme.background)),
               child: Container(
-                width: 150,
+                width: 200,
                 height: double.infinity,
-                padding: const EdgeInsets.all(8.0),
                 child: Column(
                   children: [
-                    _buildTagHeader().marginOnly(left: 8.0, right: 0),
+                    _buildAbDropdown(),
+                    _buildTagHeader().marginOnly(
+                        left: 8.0,
+                        right: gFFI.abModel.legacyMode.value ? 8.0 : 0,
+                        top: gFFI.abModel.legacyMode.value ? 8.0 : 0),
                     Expanded(
                       child: Container(
                         width: double.infinity,
                         height: double.infinity,
                         child: _buildTags(),
                       ),
-                    )
+                    ),
+                    _buildAbPermission(),
                   ],
                 ),
               ),
@@ -119,17 +123,144 @@ class _AddressBookState extends State<AddressBook> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
+                    _buildAbDropdown(),
                     _buildTagHeader().marginOnly(left: 8.0, right: 0),
                     Container(
                       width: double.infinity,
                       child: _buildTags(),
                     ),
+                    _buildAbPermission(),
                   ],
                 ),
               ),
             ).marginOnly(bottom: 12.0)),
         _buildPeersViews()
       ],
+    );
+  }
+
+  Widget _buildAbPermission() {
+    icon(IconData data, String tooltip) {
+      return Tooltip(
+          message: translate(tooltip),
+          waitDuration: Duration.zero,
+          child: Icon(data, size: 12.0).marginSymmetric(horizontal: 2.0));
+    }
+
+    return Obx(() {
+      if (gFFI.abModel.legacyMode.value) return Offstage();
+      if (gFFI.abModel.current.isPersonal()) {
+        return Row(
+          mainAxisAlignment: MainAxisAlignment.end,
+          children: [
+            icon(Icons.cloud_off, "Personal"),
+          ],
+        );
+      } else {
+        List<Widget> children = [];
+        final rule = gFFI.abModel.current.sharedProfile()?.rule;
+        if (rule == ShareRule.read.value) {
+          children.add(
+              icon(Icons.visibility, ShareRule.desc(ShareRule.read.value)));
+        } else if (rule == ShareRule.readWrite.value) {
+          children
+              .add(icon(Icons.edit, ShareRule.desc(ShareRule.readWrite.value)));
+        } else if (rule == ShareRule.fullControl.value) {
+          children.add(icon(
+              Icons.security, ShareRule.desc(ShareRule.fullControl.value)));
+        }
+        final owner = gFFI.abModel.current.sharedProfile()?.owner;
+        if (owner != null) {
+          children.add(icon(Icons.person, "${translate("Owner")}: $owner"));
+        }
+        return Row(
+          mainAxisAlignment: MainAxisAlignment.end,
+          children: children,
+        );
+      }
+    });
+  }
+
+  Widget _buildAbDropdown() {
+    if (gFFI.abModel.legacyMode.value) {
+      return Offstage();
+    }
+    final names = gFFI.abModel.addressBookNames();
+    if (!names.contains(gFFI.abModel.currentName.value)) {
+      return Offstage();
+    }
+    final TextEditingController textEditingController = TextEditingController();
+
+    return DropdownButton2<String>(
+      value: gFFI.abModel.currentName.value,
+      onChanged: (value) {
+        if (value != null) {
+          gFFI.abModel.setCurrentName(value);
+          bind.setLocalFlutterOption(k: 'current-ab-name', v: value);
+        }
+      },
+      underline: Container(
+        height: 0.7,
+        color: Theme.of(context).dividerColor.withOpacity(0.1),
+      ),
+      buttonStyleData: ButtonStyleData(height: 48),
+      menuItemStyleData: MenuItemStyleData(height: 36),
+      items: names
+          .map((e) => DropdownMenuItem(
+              value: e,
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Tooltip(
+                        waitDuration: Duration(milliseconds: 500),
+                        message: gFFI.abModel.translatedName(e),
+                        child: Text(
+                          gFFI.abModel.translatedName(e),
+                          style: TextStyle(fontSize: 14.0),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        )),
+                  ),
+                ],
+              )))
+          .toList(),
+      isExpanded: true,
+      dropdownSearchData: DropdownSearchData(
+        searchController: textEditingController,
+        searchInnerWidgetHeight: 50,
+        searchInnerWidget: Container(
+          height: 50,
+          padding: const EdgeInsets.only(
+            top: 8,
+            bottom: 4,
+            right: 8,
+            left: 8,
+          ),
+          child: TextFormField(
+            expands: true,
+            maxLines: null,
+            controller: textEditingController,
+            decoration: InputDecoration(
+              isDense: true,
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 10,
+                vertical: 8,
+              ),
+              hintText: translate('Search'),
+              hintStyle: const TextStyle(fontSize: 12),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+          ),
+        ),
+        searchMatchFn: (item, searchValue) {
+          return item.value
+              .toString()
+              .toLowerCase()
+              .contains(searchValue.toLowerCase());
+        },
+      ),
     );
   }
 
@@ -154,11 +285,12 @@ class _AddressBookState extends State<AddressBook> {
     return Obx(() {
       final List tags;
       if (gFFI.abModel.sortTags.value) {
-        tags = gFFI.abModel.tags.toList();
+        tags = gFFI.abModel.currentAbTags.toList();
         tags.sort();
       } else {
-        tags = gFFI.abModel.tags;
+        tags = gFFI.abModel.currentAbTags;
       }
+      final editPermission = gFFI.abModel.current.canWrite();
       tagBuilder(String e) {
         return AddressBookTag(
             name: e,
@@ -169,7 +301,8 @@ class _AddressBookState extends State<AddressBook> {
               } else {
                 gFFI.abModel.selectedTags.add(e);
               }
-            });
+            },
+            showActionMenu: editPermission);
       }
 
       final gridView = DynamicGridView.builder(
@@ -181,7 +314,7 @@ class _AddressBookState extends State<AddressBook> {
             return tagBuilder(e);
           });
       final maxHeight = max(MediaQuery.of(context).size.height / 6, 100.0);
-      return isDesktop
+      return (isDesktop || isWebDesktop)
           ? gridView
           : LimitedBox(maxHeight: maxHeight, child: gridView);
     });
@@ -193,7 +326,7 @@ class _AddressBookState extends State<AddressBook> {
           alignment: Alignment.topLeft,
           child: AddressBookPeersView(
             menuPadding: widget.menuPadding,
-            initPeers: gFFI.abModel.peers,
+            getInitPeers: () => gFFI.abModel.currentAbPeers,
           )),
     );
   }
@@ -207,7 +340,7 @@ class _AddressBookState extends State<AddressBook> {
         return shouldSyncAb();
       },
       setter: (bool v) async {
-        bind.mainSetLocalOption(key: syncAbOption, value: v ? 'Y' : '');
+        gFFI.abModel.setShouldAsync(v);
       },
       dismissOnClicked: true,
     );
@@ -246,13 +379,22 @@ class _AddressBookState extends State<AddressBook> {
   }
 
   void _showMenu(RelativeRect pos) {
+    final canWrite = gFFI.abModel.current.canWrite();
     final items = [
-      getEntry(translate("Add ID"), abAddId),
-      getEntry(translate("Add Tag"), abAddTag),
+      if (canWrite) getEntry(translate("Add ID"), addIdToCurrentAb),
+      if (canWrite) getEntry(translate("Add Tag"), abAddTag),
       getEntry(translate("Unselect all tags"), gFFI.abModel.unsetSelectedTags),
       sortMenuItem(),
       syncMenuItem(),
       filterMenuItem(),
+      if (!gFFI.abModel.legacyMode.value) MenuEntryDivider<String>(),
+      if (!gFFI.abModel.legacyMode.value)
+        getEntry(translate("ab_web_console_tip"), () async {
+          final url = await bind.mainGetApiServer();
+          if (await canLaunchUrlString(url)) {
+            launchUrlString(url);
+          }
+        }),
     ];
 
     mod_menu.showMenu(
@@ -271,17 +413,20 @@ class _AddressBookState extends State<AddressBook> {
     );
   }
 
-  void abAddId() async {
-    if (gFFI.abModel.isFull(true)) {
+  void addIdToCurrentAb() async {
+    if (gFFI.abModel.isCurrentAbFull(true)) {
       return;
     }
     var isInProgress = false;
+    var passwordVisible = false;
     IDTextEditingController idController = IDTextEditingController(text: '');
     TextEditingController aliasController = TextEditingController(text: '');
-    final tags = List.of(gFFI.abModel.tags);
+    TextEditingController passwordController = TextEditingController(text: '');
+    final tags = List.of(gFFI.abModel.currentAbTags);
     var selectedTag = List<dynamic>.empty(growable: true).obs;
     final style = TextStyle(fontSize: 14.0);
     String? errorMsg;
+    final isCurrentAbShared = !gFFI.abModel.current.isPersonal();
 
     gFFI.dialogManager.show((setState, close, context) {
       submit() async {
@@ -293,22 +438,50 @@ class _AddressBookState extends State<AddressBook> {
         if (id.isEmpty) {
           // pass
         } else {
-          if (gFFI.abModel.idContainBy(id)) {
+          if (gFFI.abModel.idContainByCurrent(id)) {
             setState(() {
               isInProgress = false;
               errorMsg = translate('ID already exists');
             });
             return;
           }
-          gFFI.abModel.addId(id, aliasController.text.trim(), selectedTag);
-          gFFI.abModel.pushAb();
-          this.setState(() {});
+          var password = '';
+          if (isCurrentAbShared) {
+            password = passwordController.text;
+          }
+          String? errMsg2 = await gFFI.abModel.addIdToCurrent(
+              id, aliasController.text.trim(), password, selectedTag);
+          if (errMsg2 != null) {
+            setState(() {
+              isInProgress = false;
+              errorMsg = errMsg2;
+            });
+            return;
+          }
           // final currentPeers
         }
         close();
       }
 
       double marginBottom = 4;
+
+      row({required Widget lable, required Widget input}) {
+        return Row(
+          children: [
+            !isMobile
+                ? ConstrainedBox(
+                    constraints: const BoxConstraints(minWidth: 100),
+                    child: lable.marginOnly(right: 10))
+                : SizedBox.shrink(),
+            Expanded(
+              child: ConstrainedBox(
+                  constraints: const BoxConstraints(minWidth: 200),
+                  child: input),
+            ),
+          ],
+        ).marginOnly(bottom: !isMobile ? 8 : 0);
+      }
+
       return CustomAlertDialog(
         title: Text(translate("Add ID")),
         content: Column(
@@ -316,66 +489,103 @@ class _AddressBookState extends State<AddressBook> {
           children: [
             Column(
               children: [
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: Row(
-                    children: [
-                      Text(
-                        '*',
-                        style: TextStyle(color: Colors.red, fontSize: 14),
-                      ),
-                      Text(
-                        'ID',
-                        style: style,
-                      ),
-                    ],
-                  ),
-                ).marginOnly(bottom: marginBottom),
-                TextField(
-                  controller: idController,
-                  inputFormatters: [IDTextInputFormatter()],
-                  decoration: InputDecoration(errorText: errorMsg),
-                ),
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text(
+                row(
+                    lable: Row(
+                      children: [
+                        Text(
+                          '*',
+                          style: TextStyle(color: Colors.red, fontSize: 14),
+                        ),
+                        Text(
+                          'ID',
+                          style: style,
+                        ),
+                      ],
+                    ),
+                    input: TextField(
+                      controller: idController,
+                      inputFormatters: [IDTextInputFormatter()],
+                      decoration: InputDecoration(
+                          labelText: !isMobile ? null : translate('ID'),
+                          errorText: errorMsg,
+                          errorMaxLines: 5),
+                    )),
+                row(
+                  lable: Text(
                     translate('Alias'),
                     style: style,
                   ),
-                ).marginOnly(top: 8, bottom: marginBottom),
-                TextField(
-                  controller: aliasController,
+                  input: TextField(
+                      controller: aliasController,
+                      decoration: InputDecoration(
+                        labelText: !isMobile ? null : translate('Alias'),
+                      )),
                 ),
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    translate('Tags'),
-                    style: style,
-                  ),
-                ).marginOnly(top: 8, bottom: marginBottom),
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: Wrap(
-                    children: tags
-                        .map((e) => AddressBookTag(
-                            name: e,
-                            tags: selectedTag,
-                            onTap: () {
-                              if (selectedTag.contains(e)) {
-                                selectedTag.remove(e);
-                              } else {
-                                selectedTag.add(e);
-                              }
+                if (isCurrentAbShared)
+                  row(
+                      lable: Text(
+                        translate('Password'),
+                        style: style,
+                      ),
+                      input: TextField(
+                        controller: passwordController,
+                        obscureText: !passwordVisible,
+                        decoration: InputDecoration(
+                          labelText: !isMobile ? null : translate('Password'),
+                          suffixIcon: IconButton(
+                            icon: Icon(
+                                passwordVisible
+                                    ? Icons.visibility
+                                    : Icons.visibility_off,
+                                color: MyTheme.lightTheme.primaryColor),
+                            onPressed: () {
+                              setState(() {
+                                passwordVisible = !passwordVisible;
+                              });
                             },
-                            showActionMenu: false))
-                        .toList(growable: false),
+                          ),
+                        ),
+                      )),
+                if (gFFI.abModel.currentAbTags.isNotEmpty)
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      translate('Tags'),
+                      style: style,
+                    ),
+                  ).marginOnly(top: 8, bottom: marginBottom),
+                if (gFFI.abModel.currentAbTags.isNotEmpty)
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Wrap(
+                      children: tags
+                          .map((e) => AddressBookTag(
+                              name: e,
+                              tags: selectedTag,
+                              onTap: () {
+                                if (selectedTag.contains(e)) {
+                                  selectedTag.remove(e);
+                                } else {
+                                  selectedTag.add(e);
+                                }
+                              },
+                              showActionMenu: false))
+                          .toList(growable: false),
+                    ),
                   ),
-                ),
               ],
             ),
             const SizedBox(
               height: 4.0,
             ),
+            if (!gFFI.abModel.current.isPersonal())
+              Row(children: [
+                Icon(Icons.info, color: Colors.amber).marginOnly(right: 4),
+                Text(
+                  translate('share_warning_tip'),
+                  style: TextStyle(fontSize: 12),
+                )
+              ]).marginSymmetric(vertical: 10),
             // NOT use Offstage to wrap LinearProgressIndicator
             if (isInProgress) const LinearProgressIndicator(),
           ],
@@ -407,10 +617,7 @@ class _AddressBookState extends State<AddressBook> {
         } else {
           final tags = field.trim().split(RegExp(r"[\s,;\n]+"));
           field = tags.join(',');
-          for (final tag in tags) {
-            gFFI.abModel.addTag(tag);
-          }
-          gFFI.abModel.pushAb();
+          gFFI.abModel.addTags(tags);
           // final currentPeers
         }
         close();
@@ -491,7 +698,7 @@ class AddressBookTag extends StatelessWidget {
       child: Obx(() => Container(
             decoration: BoxDecoration(
                 color: tags.contains(name)
-                    ? gFFI.abModel.getTagColor(name)
+                    ? gFFI.abModel.getCurrentAbTagColor(name)
                     : Theme.of(context).colorScheme.background,
                 borderRadius: BorderRadius.circular(4)),
             margin: const EdgeInsets.symmetric(horizontal: 4.0, vertical: 4.0),
@@ -506,7 +713,7 @@ class AddressBookTag extends StatelessWidget {
                         shape: BoxShape.circle,
                         color: tags.contains(name)
                             ? Colors.white
-                            : gFFI.abModel.getTagColor(name)),
+                            : gFFI.abModel.getCurrentAbTagColor(name)),
                   ).marginOnly(right: radius / 2),
                   Expanded(
                     child: Text(name,
@@ -530,7 +737,8 @@ class AddressBookTag extends StatelessWidget {
               if (newName == null || newName.isEmpty) {
                 return translate('Can not be empty');
               }
-              if (newName != name && gFFI.abModel.tags.contains(newName)) {
+              if (newName != name &&
+                  gFFI.abModel.currentAbTags.contains(newName)) {
                 return translate('Already exists');
               }
               return null;
@@ -538,7 +746,6 @@ class AddressBookTag extends StatelessWidget {
             onSubmit: (String newName) {
               if (name != newName) {
                 gFFI.abModel.renameTag(name, newName);
-                gFFI.abModel.pushAb();
               }
               Future.delayed(Duration.zero, () => Get.back());
             },
@@ -548,7 +755,7 @@ class AddressBookTag extends StatelessWidget {
       }),
       getEntry(translate(translate('Change Color')), () async {
         final model = gFFI.abModel;
-        Color oldColor = model.getTagColor(name);
+        Color oldColor = model.getCurrentAbTagColor(name);
         Color newColor = await showColorPickerDialog(
           context,
           oldColor,
@@ -567,12 +774,10 @@ class AddressBookTag extends StatelessWidget {
         );
         if (oldColor != newColor) {
           model.setTagColor(name, newColor);
-          model.pushAb();
         }
       }),
       getEntry(translate("Delete"), () {
         gFFI.abModel.deleteTag(name);
-        gFFI.abModel.pushAb();
         Future.delayed(Duration.zero, () => Get.back());
       }),
     ];

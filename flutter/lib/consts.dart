@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/models/state_model.dart';
@@ -21,9 +19,12 @@ const kKeyTranslateMode = 'translate';
 const String kPlatformAdditionsIsWayland = "is_wayland";
 const String kPlatformAdditionsHeadless = "headless";
 const String kPlatformAdditionsIsInstalled = "is_installed";
-const String kPlatformAdditionsVirtualDisplays = "virtual_displays";
+const String kPlatformAdditionsIddImpl = "idd_impl";
+const String kPlatformAdditionsRustDeskVirtualDisplays = "rustdesk_virtual_displays";
+const String kPlatformAdditionsAmyuniVirtualDisplays = "amyuni_virtual_displays";
 const String kPlatformAdditionsHasFileClipboard = "has_file_clipboard";
-const String kPlatformAdditionsSupportedPrivacyModeImpl = "supported_privacy_mode_impl";
+const String kPlatformAdditionsSupportedPrivacyModeImpl =
+    "supported_privacy_mode_impl";
 
 const String kPeerPlatformWindows = "Windows";
 const String kPeerPlatformLinux = "Linux";
@@ -45,6 +46,7 @@ const String kAppTypeDesktopPortForward = "port forward";
 const String kWindowMainWindowOnTop = "main_window_on_top";
 const String kWindowGetWindowInfo = "get_window_info";
 const String kWindowGetScreenList = "get_screen_list";
+// This method is not used, maybe it can be removed.
 const String kWindowDisableGrabKeyboard = "disable_grab_keyboard";
 const String kWindowActionRebuild = "rebuild";
 const String kWindowEventHide = "hide";
@@ -58,6 +60,7 @@ const String kWindowEventActiveSession = "active_session";
 const String kWindowEventActiveDisplaySession = "active_display_session";
 const String kWindowEventGetRemoteList = "get_remote_list";
 const String kWindowEventGetSessionIdList = "get_session_id_list";
+const String kWindowEventRemoteWindowCoords = "remote_window_coords";
 
 const String kWindowEventMoveTabToNewWindow = "move_tab_to_new_window";
 const String kWindowEventGetCachedSessionData = "get_cached_session_data";
@@ -67,8 +70,8 @@ const String kOptionOpenNewConnInTabs = "enable-open-new-connections-in-tabs";
 const String kOptionOpenInTabs = "allow-open-in-tabs";
 const String kOptionOpenInWindows = "allow-open-in-windows";
 const String kOptionForceAlwaysRelay = "force-always-relay";
+const String kOptionViewOnly = "view-only";
 
-const String kUniLinksPrefix = "rustdesk://";
 const String kUrlActionClose = "close";
 
 const String kTabLabelHomePage = "Home";
@@ -85,6 +88,7 @@ const String kKeyShowDisplaysAsIndividualWindows =
 const String kKeyUseAllMyDisplaysForTheRemoteSession =
     'use_all_my_displays_for_the_remote_session';
 const String kKeyShowMonitorsToolbar = 'show_monitors_toolbar';
+const String kKeyReverseMouseWheel = "reverse_mouse_wheel";
 
 // the executable name of the portable version
 const String kEnvPortableExecutable = "RUSTDESK_APPNAME";
@@ -112,20 +116,19 @@ const double kDefaultQuality = 50;
 const double kMaxQuality = 100;
 const double kMaxMoreQuality = 2000;
 
-double kNewWindowOffset = Platform.isWindows
+double kNewWindowOffset = isWindows
     ? 56.0
-    : Platform.isLinux
+    : isLinux
         ? 50.0
-        : Platform.isMacOS
+        : isMacOS
             ? 30.0
             : 50.0;
 
-EdgeInsets get kDragToResizeAreaPadding =>
-    !kUseCompatibleUiMode && Platform.isLinux
-        ? stateGlobal.fullscreen.isTrue || stateGlobal.isMaximized.value
-            ? EdgeInsets.zero
-            : EdgeInsets.all(5.0)
-        : EdgeInsets.zero;
+EdgeInsets get kDragToResizeAreaPadding => !kUseCompatibleUiMode && isLinux
+    ? stateGlobal.fullscreen.isTrue || stateGlobal.isMaximized.value
+        ? EdgeInsets.zero
+        : EdgeInsets.all(5.0)
+    : EdgeInsets.zero;
 // https://en.wikipedia.org/wiki/Non-breaking_space
 const int $nbsp = 0x00A0;
 
@@ -149,7 +152,7 @@ const kDefaultScrollDuration = Duration(milliseconds: 50);
 const kDefaultMouseWheelThrottleDuration = Duration(milliseconds: 50);
 const kFullScreenEdgeSize = 0.0;
 const kMaximizeEdgeSize = 0.0;
-var kWindowEdgeSize = Platform.isWindows ? 1.0 : 5.0;
+var kWindowEdgeSize = isWindows ? 1.0 : 5.0;
 const kWindowBorderWidth = 1.0;
 const kDesktopMenuPadding = EdgeInsets.only(left: 12.0, right: 3.0);
 

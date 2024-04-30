@@ -6,8 +6,7 @@ use hbb_common::{
 use scrap::{
     aom::{AomDecoder, AomEncoder, AomEncoderConfig},
     codec::{EncoderApi, EncoderCfg, Quality as Q},
-    convert_to_yuv, Capturer, Display, TraitCapturer, VpxDecoder, VpxDecoderConfig, VpxEncoder,
-    VpxEncoderConfig,
+    Capturer, Display, TraitCapturer, VpxDecoder, VpxDecoderConfig, VpxEncoder, VpxEncoderConfig,
     VpxVideoCodecId::{self, *},
     STRIDE_ALIGN,
 };
@@ -122,7 +121,8 @@ fn test_vpx(
         match c.frame(std::time::Duration::from_millis(30)) {
             Ok(frame) => {
                 let tmp_timer = Instant::now();
-                convert_to_yuv(&frame, encoder.yuvfmt(), &mut yuv, &mut mid_data);
+                let frame = frame.to(encoder.yuvfmt(), &mut yuv, &mut mid_data).unwrap();
+                let yuv = frame.yuv().unwrap();
                 for ref frame in encoder
                     .encode(start.elapsed().as_millis() as _, &yuv, STRIDE_ALIGN)
                     .unwrap()
@@ -199,7 +199,8 @@ fn test_av1(
         match c.frame(std::time::Duration::from_millis(30)) {
             Ok(frame) => {
                 let tmp_timer = Instant::now();
-                convert_to_yuv(&frame, encoder.yuvfmt(), &mut yuv, &mut mid_data);
+                let frame = frame.to(encoder.yuvfmt(), &mut yuv, &mut mid_data).unwrap();
+                let yuv = frame.yuv().unwrap();
                 for ref frame in encoder
                     .encode(start.elapsed().as_millis() as _, &yuv, STRIDE_ALIGN)
                     .unwrap()
@@ -238,16 +239,16 @@ fn test_av1(
 
 #[cfg(feature = "hwcodec")]
 mod hw {
-    use hwcodec::ffmpeg::CodecInfo;
+    use hwcodec::ffmpeg_ram::CodecInfo;
     use scrap::{
-        codec::HwEncoderConfig,
-        hwcodec::{HwDecoder, HwEncoder},
+        hwcodec::{HwRamDecoder, HwRamEncoder, HwRamEncoderConfig},
+        CodecFormat,
     };
 
     use super::*;
 
     pub fn test(c: &mut Capturer, width: usize, height: usize, quality: Q, yuv_count: usize) {
-        let best = HwEncoder::best();
+        let best = HwRamEncoder::best();
         let mut h264s = Vec::new();
         let mut h265s = Vec::new();
         if let Some(info) = best.h264 {
@@ -256,13 +257,8 @@ mod hw {
         if let Some(info) = best.h265 {
             test_encoder(width, height, quality, info, c, yuv_count, &mut h265s);
         }
-        let best = HwDecoder::best();
-        if let Some(info) = best.h264 {
-            test_decoder(info, &h264s);
-        }
-        if let Some(info) = best.h265 {
-            test_decoder(info, &h265s);
-        }
+        test_decoder(CodecFormat::H264, &h264s);
+        test_decoder(CodecFormat::H265, &h265s);
     }
 
     fn test_encoder(
@@ -274,8 +270,8 @@ mod hw {
         yuv_count: usize,
         h26xs: &mut Vec<Vec<u8>>,
     ) {
-        let mut encoder = HwEncoder::new(
-            EncoderCfg::HW(HwEncoderConfig {
+        let mut encoder = HwRamEncoder::new(
+            EncoderCfg::HWRAM(HwRamEncoderConfig {
                 name: info.name.clone(),
                 width,
                 height,
@@ -295,7 +291,8 @@ mod hw {
             match c.frame(std::time::Duration::from_millis(30)) {
                 Ok(frame) => {
                     let tmp_timer = Instant::now();
-                    convert_to_yuv(&frame, encoder.yuvfmt(), &mut yuv, &mut mid_data);
+                    let frame = frame.to(encoder.yuvfmt(), &mut yuv, &mut mid_data).unwrap();
+                    let yuv = frame.yuv().unwrap();
                     for ref frame in encoder.encode(&yuv).unwrap() {
                         size += frame.data.len();
 
@@ -323,16 +320,21 @@ mod hw {
         );
     }
 
-    fn test_decoder(info: CodecInfo, h26xs: &Vec<Vec<u8>>) {
-        let mut decoder = HwDecoder::new(info.clone()).unwrap();
+    fn test_decoder(format: CodecFormat, h26xs: &Vec<Vec<u8>>) {
+        let mut decoder = HwRamDecoder::new(format).unwrap();
         let start = Instant::now();
         let mut cnt = 0;
         for h26x in h26xs {
             let _ = decoder.decode(h26x).unwrap();
             cnt += 1;
         }
-        let device = format!("{:?}", info.hwdevice).to_lowercase();
+        let device = format!("{:?}", decoder.info.hwdevice).to_lowercase();
         let device = device.split("_").last().unwrap();
-        println!("{} {}: {:?}", info.name, device, start.elapsed() / cnt);
+        println!(
+            "{} {}: {:?}",
+            decoder.info.name,
+            device,
+            start.elapsed() / cnt
+        );
     }
 }

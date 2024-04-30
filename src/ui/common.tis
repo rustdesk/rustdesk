@@ -262,6 +262,15 @@ function msgbox(type, title, content, link="", callback=null, height=180, width=
               else msgbox("connecting", "Connecting...", "Logging in...");
             }
         };
+    } else if (type.indexOf("input-2fa") >= 0) {
+        callback = function (res) {
+            if (!res) {
+                view.close();
+                return;
+            }
+            handler.send2fa(res.code); 
+            msgbox("connecting", "Connecting...", "Logging in...");
+        };
     } else if (type == "session-login" || type == "session-re-login") {
         callback = function (res) {
             if (!res) {
@@ -449,3 +458,24 @@ function awake() {
     view.focus = self;
 }
 
+class MultipleSessionComponent extends Reactor.Component {
+    this var sessions = [];
+    this var messageText = translate("Please select the session you want to connect to");
+
+    function this(params) {
+        if (params && params.sessions) {
+            this.sessions = params.sessions;
+        }
+    }
+
+    function render() {
+        return <div .user-session>
+            <div .title>{this.messageText}</div>
+            <select>
+                {this.sessions.map(session =>
+                    <option value={session.sid}>{session.name}</option>
+                )}
+            </select>
+        </div>;
+    }
+}

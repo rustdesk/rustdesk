@@ -29,22 +29,6 @@
     alt="Get it on F-Droid"
     height="80">](https://f-droid.org/en/packages/com.carriez.flutter_hbb)
 
-## Δωρεάν δημόσιοι διακομιστές
-
-Παρακάτω είναι οι διακομιστές που χρησιμοποιούνται δωρεάν, ενδέχεται να αλλάξουν με την πάροδο του χρόνου. Εάν δεν είστε κοντά σε ένα από αυτούς, το δίκτυό σας ίσως να είναι αργό.
-| Περιοχή | Πάροχος | Προδιαγραφές |
-| --------- | ------------- | ------------------ |
-| Γερμανία | Hetzner | 2 vCPU / 4GB RAM |
-| Ουκρανία (Κίεβο) | [dc.volia](https://dc.volia.com) | 2 vCPU / 4GB RAM |
-
-## Dev Container
-
-[![Open in Dev Containers](https://img.shields.io/static/v1?label=Dev%20Container&message=Open&color=blue&logo=visualstudiocode)](https://vscode.dev/redirect?url=vscode://ms-vscode-remote.remote-containers/cloneInVolume?url=https://github.com/rustdesk/rustdesk)
-
-Αν έχετε εγκατεστημένα το VS Code και το Docker, μπορείτε να ξεκινήσετε κάνοντας κλικ στην παραπάνω εικόνα. Αυτό θα έχει ως αποτέλεσμα, το VS Code να εγκαταστήσει αυτόματα την επέκταση Dev Containers, εάν χρειάζεται, θα κλωνοποιήσει τον πηγαίο κώδικα σε έναν νέο container και θα εκκινήσει ένα Dev Container για χρήση προγραμματισμού.
-
-Για περισσότερες πληροφορίες μεταβείτε στο [DEVCONTAINER.md](docs/DEVCONTAINER.md).
-
 ## Προαπαιτούμενα για build  
 
 Στις παραθυρικές εκδόσεις χρησιμοποιείται είτε το [sciter](https://sciter.com/) είτε το Flutter, τα παρακάτω βήματα είναι μόνο για το Sciter.

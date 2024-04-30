@@ -1,4 +1,5 @@
 use super::HbbHttpResponse;
+use crate::hbbs_http::create_http_client;
 use hbb_common::{config::LocalConfig, log, ResultType};
 use reqwest::blocking::Client;
 use serde_derive::{Deserialize, Serialize};
@@ -95,6 +96,10 @@ pub struct UserPayload {
 pub struct AuthBody {
     pub access_token: String,
     pub r#type: String,
+    #[serde(default)]
+    pub tfa_type: String,
+    #[serde(default)]
+    pub secret: String,
     pub user: UserPayload,
 }
 
@@ -126,7 +131,7 @@ impl Default for UserStatus {
 impl OidcSession {
     fn new() -> Self {
         Self {
-            client: Client::new(),
+            client: create_http_client(),
             state_msg: REQUESTING_ACCOUNT_AUTH,
             failed_msg: "".to_owned(),
             code_url: None,
@@ -164,7 +169,7 @@ impl OidcSession {
         id: &str,
         uuid: &str,
     ) -> ResultType<HbbHttpResponse<AuthBody>> {
-        let url = reqwest::Url::parse_with_params(
+        let url = Url::parse_with_params(
             &format!("{}/api/oidc/auth-query", api_server),
             &[("code", code), ("id", id), ("uuid", uuid)],
         )?;
@@ -238,15 +243,17 @@ impl OidcSession {
         while OIDC_SESSION.read().unwrap().keep_querying && begin.elapsed() < query_timeout {
             match Self::query(&api_server, &code_url.code, &id, &uuid) {
                 Ok(HbbHttpResponse::<_>::Data(auth_body)) => {
-                    if remember_me {
-                        LocalConfig::set_option(
-                            "access_token".to_owned(),
-                            auth_body.access_token.clone(),
-                        );
-                        LocalConfig::set_option(
-                            "user_info".to_owned(),
-                            serde_json::json!({ "name": auth_body.user.name, "status": auth_body.user.status }).to_string(),
-                        );
+                    if auth_body.r#type == "access_token" {
+                        if remember_me {
+                            LocalConfig::set_option(
+                                "access_token".to_owned(),
+                                auth_body.access_token.clone(),
+                            );
+                            LocalConfig::set_option(
+                                "user_info".to_owned(),
+                                serde_json::json!({ "name": auth_body.user.name, "status": auth_body.user.status }).to_string(),
+                            );
+                        }
                     }
                     OIDC_SESSION
                         .write()

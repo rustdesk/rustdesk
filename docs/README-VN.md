@@ -1,64 +1,55 @@
+
+
 <p align="center">
-  <img src="../res/logo-header.svg" alt="RustDesk - Phần mềm điểu khiển máy tính từ xa dành cho bạn"><br>
-  <a href="#free-public-servers">Máy chủ</a> •
+  <img src="../res/logo-header.svg" alt="RustDesk - Your remote desktop"><br>
+  <a href="#free-public-servers">Server</a> •
   <a href="#raw-steps-to-build">Build</a> •
   <a href="#how-to-build-with-docker">Docker</a> •
-  <a href="#file-structure">Cấu trúc tệp tin</a> •
+  <a href="#file-structure">Structure</a> •
   <a href="#snapshot">Snapshot</a><br>
   [<a href="../README.md">English</a>] | [<a href="README-UA.md">Українська</a>] | [<a href="README-CS.md">česky</a>] | [<a href="README-ZH.md">中文</a>] | [<a href="README-HU.md">Magyar</a>] | [<a href="README-ES.md">Español</a>] | [<a href="README-FA.md">فارسی</a>] | [<a href="README-FR.md">Français</a>] | [<a href="README-DE.md">Deutsch</a>] | [<a href="README-PL.md">Polski</a>] | [<a href="README-ID.md">Indonesian</a>] | [<a href="README-FI.md">Suomi</a>] | [<a href="README-ML.md">മലയാളം</a>] | [<a href="README-JP.md">日本語</a>] | [<a href="README-NL.md">Nederlands</a>] | [<a href="README-IT.md">Italiano</a>] | [<a href="README-RU.md">Русский</a>] | [<a href="README-PTBR.md">Português (Brasil)</a>] | [<a href="README-EO.md">Esperanto</a>] | [<a href="README-KR.md">한국어</a>] | [<a href="README-AR.md">العربي</a>] | [<a href="README-GR.md">Ελληνικά</a>]<br>
-  <b>Chúng tôi cần sự gíup đỡ của bạn để dịch trang README này, <a href="https://github.com/rustdesk/rustdesk/tree/master/src/lang">RustDesk UI</a> và <a href="https://github.com/rustdesk/doc.rustdesk.com">tài liệu</a> sang ngôn ngữ bản địa của bạn</b>
+  <b>Chúng tôi rất hoan nghênh sự hỗ trợ của bạn trong việc dịch trang README, trang giao diện người dùng của RustDesk - <a href="https://github.com/rustdesk/rustdesk/tree/master/src/lang">RustDesk UI</a> và trang tài liệu của RustDesk - <a href="https://github.com/rustdesk/doc.rustdesk.com">RustDesk Doc</a> sang Tiếng Việt</b>
 </p>
 
-Chat với chúng tôi qua: [Discord](https://discord.gg/nDceKgxnkV) | [Twitter](https://twitter.com/rustdesk) | [Reddit](https://www.reddit.com/r/rustdesk)
+Hãy trao đổi với chúng tôi qua: [Discord](https://discord.gg/nDceKgxnkV) | [Twitter](https://twitter.com/rustdesk) | [Reddit](https://www.reddit.com/r/rustdesk)
 
 [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/I2I04VU09)
 
-Một phần mềm điểu khiển máy tính từ xa, đuợc lập trình bằng ngôn ngữ Rust. Hoạt động tức thì, không cần phải cài đặt. Bạn có toàn quyền điểu khiển với dữ liệu của bạn mà không cần phải lo lắng về sự bảo mật. Bạn có thể sử dụng máy chủ rendezvous/relay của chúng tôi, [tự cài đặt máy chủ](https://rustdesk.com/server), hay thậm chí [tự tạo máy chủ rendezvous/relay](https://github.com/rustdesk/rustdesk-server-demo).
+RustDesk là một phần mềm điểu khiển máy tính từ xa mã nguồn mở, được viết bằng Rust. Nó hoạt động ngay sau khi cài đặt, không yêu cầu cấu hình phức tạp. Bạn có toàn quyền kiểm soát với dữ liệu của mình mà không cần phải lo lắng về vấn đề bảo mật. Bạn có thể sử dụng máy chủ rendezvous/relay của chúng tôi hoặc [tự cài đặt máy chủ của riêng mình](https://rustdesk.com/server) hay thậm chí [tự tạo máy chủ rendezvous/relay cho riêng bạn](https://github.com/rustdesk/rustdesk-server-demo).
 
 ![image](https://user-images.githubusercontent.com/71636191/171661982-430285f0-2e12-4b1d-9957-4a58e375304d.png)
 
-Mọi người đều đuợc chào đón để đóng góp vào RustDesk. Để bắt đầu, hãy đọc [`docs/CONTRIBUTING.md`](CONTRIBUTING.md).
+**RustDesk** luôn hoan nghênh mọi đóng góp từ mọi người. Hãy xem tệp [`docs/CONTRIBUTING.md`](CONTRIBUTING.md) để bắt đầu. 
 
-[**RustDesk hoạt động như thế nào?**](https://github.com/rustdesk/rustdesk/wiki/How-does-RustDesk-work%3F)
-
-[**CÁC BẢN PHÂN PHÁT MÃ NHỊ PHÂN**](https://github.com/rustdesk/rustdesk/releases)
+[**FAQ**](https://github.com/rustdesk/rustdesk/wiki/FAQ)
+[**BINARY DOWNLOAD**](https://github.com/rustdesk/rustdesk/releases)
+[**NIGHTLY BUILD**](https://github.com/rustdesk/rustdesk/FAQreleases/tag/nightly)
 
 [<img src="https://fdroid.gitlab.io/artwork/badge/get-it-on.png"
     alt="Get it on F-Droid"
     height="80">](https://f-droid.org/en/packages/com.carriez.flutter_hbb)
 
-## Các Máy Chủ Công Khai Miễn Phí
-
-Dưới đây là những máy chủ mà bạn có thể sử dụng mà không mất phí, chú ý là máy chủ có thể thay đổi theo thời gian. Nếu địa điểm của bạn không gần một trong số những máy chủ này, thì kết nói có thể chậm.
-
-| Địa điểm | Nhà cung cấp | Cấu hình |
-| --------- | ------------- | ------------------ |
-| Germany | Hetzner | 2 vCPU / 4GB RAM |
-
 ## Dependencies
 
-Phiên bản cho máy tính sử dụng [sciter](https://sciter.com/) cho giao diện của phần mềm, vậy nên bạn cần tự tải về thư viện sciter.
+Phiên bản máy tính sử dụng __Flutter__ hoặc __Sciter__ (đã lỗi thời) cho giao diện người dùng (GUI). Hướng dẫn này chỉ áp dụng cho phiên bản Sciter, vì nó thân thiện và dễ bắt đầu hơn. Hãy kiểm tra [CI](https://github.com/rustdesk/rustdesk/blob/master/.github/workflows/flutter-build.yml) của chúng tôi để xây dựng phiên bản Flutter.
 
-[Windows](https://raw.githubusercontent.com/c-smile/sciter-sdk/master/bin.win/x64/sciter.dll) |
-[Linux](https://raw.githubusercontent.com/c-smile/sciter-sdk/master/bin.lnx/x64/libsciter-gtk.so) |
-[MacOS](https://raw.githubusercontent.com/c-smile/sciter-sdk/master/bin.osx/libsciter.dylib)
+Vui lòng tự tải thư viện `Sciter` về máy theo hướng dẫn cho từng hệ điều hành.
 
-Phiên bản cho điện thoại sử dụng Flutter. Chúng tôi sẽ chuyển sang sử dụng Flutter thay cho Sciter cho phiên bản máy tính.
+[Windows](https://raw.githubusercontent.com/c-smile/sciter-sdk/master/bin.win/x64/sciter.dll) | [Linux](https://raw.githubusercontent.com/c-smile/sciter-sdk/master/bin.lnx/x64/libsciter-gtk.so) | [MacOS](https://raw.githubusercontent.com/c-smile/sciter-sdk/master/bin.osx/libsciter.dylib)
 
-## Cách để build
+## Các bước build cơ bản
 
-- Chuẩn bị môi trường phát triển Rust và môi trường build C++
+- Chuẩn bị môi trường phát triển Rust và môi trường biên dịch C++
 
-- Tải và cài [vcpkg](https://github.com/microsoft/vcpkg), và đặt biến môi trường `VCPKG_ROOT` sao cho đúng.
+- Tải và cài đặt [`vcpkg`](https://github.com/microsoft/vcpkg), và thiết lập biến môi trường `VCPKG_ROOT`.
 
-  - Đối với Windows: vcpkg install libvpx:x64-windows-static libyuv:x64-windows-static opus:x64-windows-static aom:x64-windows-static
-  - Đối với Linux/MacOS: vcpkg install libvpx libyuv opus aom
-
+  - Windows: `vcpkg install libvpx:x64-windows-static libyuv:x64-windows-static opus:x64-windows-static aom:x64-windows-static`
+  - Linux/MacOS: `vcpkg install libvpx libyuv opus aom`
 - Chạy lệnh `cargo run`
 
 ## [Build](https://rustdesk.com/docs/en/dev/build/)
 
-## Cách để build cho Linux
+## Cách build cho Linux
 
 ### Ubuntu 18 (Debian 10)
 
@@ -78,7 +69,7 @@ sudo yum -y install gcc-c++ git curl wget nasm yasm gcc gtk3-devel clang libxcb-
 sudo pacman -Syu --needed unzip git cmake gcc curl wget yasm nasm zip make pkg-config clang gtk3 xdotool libxcb libxfixes alsa-lib pipewire
 ```
 
-### Cách cài vcpkg
+### Cách cài đặt `vcpkg`
 
 ```sh
 git clone https://github.com/microsoft/vcpkg
@@ -90,7 +81,7 @@ export VCPKG_ROOT=$HOME/vcpkg
 vcpkg/vcpkg install libvpx libyuv opus aom
 ```
 
-### Cách sửa lỗi libvpx (Dành cho hệ điều hành Fedora)
+### Cách sửa lỗi `libvpx` (Dành cho hệ điều hành Fedora)
 
 ```sh
 cd vcpkg/buildtrees/libvpx/src
@@ -103,7 +94,7 @@ cp libvpx.a $HOME/vcpkg/installed/x64-linux/lib/
 cd
 ```
 
-### Cách build
+### Build
 
 ```sh
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
@@ -116,9 +107,9 @@ mv libsciter-gtk.so target/debug
 VCPKG_ROOT=$HOME/vcpkg cargo run
 ```
 
-## Cách để build sử dụng Docker
+## Cách build bằng Docker
 
-Bắt đầu bằng cách sao chép repo này về máy tính và build cái Docker cointainer:
+Bắt đầu bằng cách sao chép repo này về máy tính của bạn và tạo Docker container:
 
 ```sh
 git clone https://github.com/rustdesk/rustdesk
@@ -126,37 +117,37 @@ cd rustdesk
 docker build -t "rustdesk-builder" .
 ```
 
-Rồi mỗi khi bạn chạy ứng dụng, thì hãy chạy lệnh này:
+Sau đó, mỗi khi bạn chạy ứng dụng, thì hãy chạy dòng lệnh sau:
 
 ```sh
 docker run --rm -it -v $PWD:/home/user/rustdesk -v rustdesk-git-cache:/home/user/.cargo/git -v rustdesk-registry-cache:/home/user/.cargo/registry -e PUID="$(id -u)" -e PGID="$(id -g)" rustdesk-builder
 ```
 
-Chú ý: Lần build đầu tiên có thể sẽ mất lâu hơn truớc khi các dependecies đuợc lưu lại, những lần build sau sẽ nhanh hơn. Hơn nũa, nếu bạn cần cung cấp các cài đặt lệnh khác cho lệnh build, bạn có thể đặt những cài đặt lệnh này vào cuối lệnh ở phần `<OPTIONAL-ARGS>`. Ví dụ nếu bạn cần build phiên bản đuợc tối ưu hóa, bạn sẽ chạy lệnh trên cùng với cài đặt lệnh ‘--release’. Kết quả build sẽ được lưu trong thư mục target trên máy tính của bạn, và có thể chạy với lệnh:
+Lưu ý rằng **lần build đầu tiên có thể mất thời gian hơn trước khi các dependencies được lưu vào bộ nhớ cache**, nhưng các lần build sau sẽ nhanh hơn. Ngoài ra, nếu bạn cần chỉ định các đối số khác cho lệnh build, bạn có thể thêm chúng vào cuối lệnh ở phần `<OPTIONAL-ARGS>`. Ví dụ, nếu bạn muốn build phiên bản tối ưu hóa, bạn sẽ chạy lệnh trên với tùy chọn `--release`. Kết quả biên dịch sẽ được lưu trong thư mục target trên máy tính của bạn, và có thể chạy với lệnh:
 
 ```sh
 target/debug/rustdesk
 ```
 
-Nếu bạn đang chạy bản build đuợc tối ưu hóa, thì bạn có thể chạy với lệnh:
+Nếu bạn đang chạy bản build được tối ưu hóa, thì bạn có thể chạy với lệnh:
 
 ```sh
 target/release/rustdesk
 ```
 
-Hãy đảm bảo là bạn đang chạy những lệnh này từ thu mục rễ của repo RustDesk, vì nếu không thì ứng dụng có thể sẽ không tìm đuợc những tệp tài nguyên cần thiết. Cũng như nhớ rằng những lệnh con của cargo như `install` hoặc `run` hiện chưa được hỗ trợ bởi phương pháp này vì chúng sẽ cài đặt hoặc chạy ứng dụng trong container thay vì trên máy tính của bạn.
+Hãy đảm bảo rằng bạn đang chạy các lệnh này từ gốc của thư mục **RustDesk**, nếu không, ứng dụng có thể không thể tìm thấy các tệp tài nguyên cần thiết. Hãy lưu ý rằng các câu lệnh con khác của **cargo** như **install** hoặc **run** hiện không được hỗ trợ qua phương pháp này, vì chúng sẽ cài đặt hoặc chạy chương trình bên trong **container** thay vì trên máy tính của bạn.
 
 ## Cấu trúc tệp tin
 
 - **[libs/hbb_common](https://github.com/rustdesk/rustdesk/tree/master/libs/hbb_common)**: video codec, cấu hình, tcp/udp wrapper, protobuf, fs functions để truyền file, và một số hàm tiện ích khác
-- **[libs/scrap](https://github.com/rustdesk/rustdesk/tree/master/libs/scrap)**: để ghi lại màn hình
-- **[libs/enigo](https://github.com/rustdesk/rustdesk/tree/master/libs/enigo)**: để điều khiển máy tính/con chuột trên những nền tảng khác nhau
+- **[libs/scrap](https://github.com/rustdesk/rustdesk/tree/master/libs/scrap)**: ghi lại màn hình
+- **[libs/enigo](https://github.com/rustdesk/rustdesk/tree/master/libs/enigo)**: điều khiển máy tính/chuột trên các nền tảng khác nhau
 - **[src/ui](https://github.com/rustdesk/rustdesk/tree/master/src/ui)**: giao diện người dùng
 - **[src/server](https://github.com/rustdesk/rustdesk/tree/master/src/server)**: các dịch vụ âm thanh, clipboard, đầu vào, video và các kết nối mạng
-- **[src/client.rs](https://github.com/rustdesk/rustdesk/tree/master/src/client.rs)**: để bắt đầu kết nối với một peer
-- **[src/rendezvous_mediator.rs](https://github.com/rustdesk/rustdesk/tree/master/src/rendezvous_mediator.rs)**: Để liên lạc với [rustdesk-server](https://github.com/rustdesk/rustdesk-server), đợi cho kết nối trực tiếp (TCP hole punching) hoặc kết nối được relayed.
+- **[src/client.rs](https://github.com/rustdesk/rustdesk/tree/master/src/client.rs)**: bắt đầu kết nối với một peer
+- **[src/rendezvous_mediator.rs](https://github.com/rustdesk/rustdesk/tree/master/src/rendezvous_mediator.rs)**: giao tiếp với [rustdesk-server](https://github.com/rustdesk/rustdesk-server), đợi kết nối trực tiếp (TCP hole punching) hoặc kết nối được chuyển tiếp.
 - **[src/platform](https://github.com/rustdesk/rustdesk/tree/master/src/platform)**: mã nguồn riêng cho mỗi nền tảng
-- **[flutter](https://github.com/rustdesk/rustdesk/tree/master/flutter)**: Mã Flutter dành cho điện thoại
+- **[flutter](https://github.com/rustdesk/rustdesk/tree/master/flutter)**: Mã Flutter dành máy tính và điện thoại
 - **[flutter/web/js](https://github.com/rustdesk/rustdesk/tree/master/flutter/web/js)**: Mã JavaScript dành cho giao diện trên web bằng Flutter
 
 ## Snapshot

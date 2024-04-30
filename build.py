@@ -16,7 +16,7 @@ osx = platform.platform().startswith(
 hbb_name = 'rustdesk' + ('.exe' if windows else '')
 exe_path = 'target/release/' + hbb_name
 if windows:
-    flutter_build_dir = 'build/windows/runner/Release/'
+    flutter_build_dir = 'build/windows/x64/runner/Release/'
 elif osx:
     flutter_build_dir = 'build/macos/Build/Products/Release/'
 else:
@@ -33,9 +33,9 @@ def get_arch() -> str:
 
 
 def system2(cmd):
-    err = os.system(cmd)
-    if err != 0:
-        print(f"Error occurred when executing: {cmd}. Exiting.")
+    exit_code = os.system(cmd)
+    if exit_code != 0:
+        sys.stderr.write(f"Error occurred when executing: `{cmd}`. Exiting.\n")
         sys.exit(-1)
 
 
@@ -49,12 +49,6 @@ def get_version():
 
 def parse_rc_features(feature):
     available_features = {
-        'IddDriver': {
-            'platform': ['windows'],
-            'zip_url': 'https://github.com/fufesou/RustDeskIddDriver/releases/download/v0.3/RustDeskIddDriver_x64.zip',
-            'checksum_url': 'https://github.com/fufesou/RustDeskIddDriver/releases/download/v0.3/checksum_md5',
-            'exclude': ['README.md', 'certmgr.exe', 'install_cert_runas_admin.bat', 'RustDeskIddApp.exe'],
-        },
         'PrivacyMode': {
             'platform': ['windows'],
             'zip_url': 'https://github.com/fufesou/RustDeskTempTopMostWindow/releases/download/v0.3'
@@ -86,8 +80,10 @@ def parse_rc_features(feature):
         return get_all_features()
     elif isinstance(feature, list):
         if windows:
+            # download third party is deprecated, we use github ci instead.
             # force add PrivacyMode
-            feature.append('PrivacyMode')
+            # feature.append('PrivacyMode')
+            pass
         for feat in feature:
             if isinstance(feat, str) and feat.upper() == 'ALL':
                 return get_all_features()
@@ -112,7 +108,7 @@ def make_parser():
         nargs='+',
         default='',
         help='Integrate features, windows only.'
-             'Available: IddDriver, PrivacyMode. Special value is "ALL" and empty "". Default is empty.')
+             'Available: PrivacyMode. Special value is "ALL" and empty "". Default is empty.')
     parser.add_argument('--flutter', action='store_true',
                         help='Build flutter package', default=False)
     parser.add_argument(
@@ -120,6 +116,11 @@ def make_parser():
         action='store_true',
         help='Enable feature hwcodec' + (
             '' if windows or osx else ', need libva-dev, libvdpau-dev.')
+    )
+    parser.add_argument(
+        '--vram',
+        action='store_true',
+        help='Enable feature vram, only available on windows now.'
     )
     parser.add_argument(
         '--portable',
@@ -146,6 +147,18 @@ def make_parser():
         action='store_true',
         help='Skip cargo build process, only flutter version + Linux supported currently'
     )
+    if windows:
+        parser.add_argument(
+            '--skip-portable-pack',
+            action='store_true',
+            help='Skip packing, only flutter version + Windows supported'
+        )
+        parser.add_argument(
+            '--virtual-display',
+            action='store_true',
+            default=False,
+            help='Build rustdesk libs with the virtual display feature enabled'
+        )
     parser.add_argument(
         "--package",
         type=str
@@ -189,6 +202,9 @@ def generate_build_script_for_docker():
     system2("bash /tmp/build.sh")
 
 
+# Downloading third party resources is deprecated.
+# We can use this function in an offline build environment.
+# Even in an online environment, we recommend building third-party resources yourself.
 def download_extract_features(features, res_dir):
     import re
 
@@ -270,10 +286,10 @@ def external_resources(flutter, args, res_dir):
 
 def get_features(args):
     features = ['inline'] if not args.flutter else []
-    if windows:
-        features.append('virtual_display_driver')
     if args.hwcodec:
         features.append('hwcodec')
+    if args.vram:
+        features.append('vram')
     if args.flutter:
         features.append('flutter')
         features.append('flutter_texture_render')
@@ -283,6 +299,9 @@ def get_features(args):
         features.append('appimage')
     if args.unix_file_copy_paste:
         features.append('unix-file-copy-paste')
+    if windows:
+        if args.virtual_display:
+            features.append('virtual_display_driver')
     print("features:", features)
     return features
 
@@ -411,9 +430,11 @@ def build_flutter_dmg(version, features):
         "cp target/release/liblibrustdesk.dylib target/release/librustdesk.dylib")
     os.chdir('flutter')
     system2('flutter build macos --release')
+    '''
     system2(
         "create-dmg --volname \"RustDesk Installer\" --window-pos 200 120 --window-size 800 400 --icon-size 100 --app-drop-link 600 185 --icon RustDesk.app 200 190 --hide-extension RustDesk.app rustdesk.dmg ./build/macos/Build/Products/Release/RustDesk.app")
     os.rename("rustdesk.dmg", f"../rustdesk-{version}.dmg")
+    '''
     os.chdir("..")
 
 
@@ -428,7 +449,7 @@ def build_flutter_arch_manjaro(version, features):
     system2('HBB=`pwd`/.. FLUTTER=1 makepkg -f')
 
 
-def build_flutter_windows(version, features):
+def build_flutter_windows(version, features, skip_portable_pack):
     if not skip_cargo:
         system2(f'cargo build --features {features} --lib --release')
         if not os.path.exists("target/release/librustdesk.dll"):
@@ -439,6 +460,8 @@ def build_flutter_windows(version, features):
     os.chdir('..')
     shutil.copy2('target/release/deps/dylib_virtual_display.dll',
                  flutter_build_dir_2)
+    if skip_portable_pack:
+        return
     os.chdir('libs/portable')
     system2('pip3 install -r requirements.txt')
     system2(
@@ -488,13 +511,14 @@ def main():
         os.chdir('../../..')
 
         if flutter:
-            build_flutter_windows(version, features)
+            build_flutter_windows(version, features, args.skip_portable_pack)
             return
         system2('cargo build --release --features ' + features)
         # system2('upx.exe target/release/rustdesk.exe')
         system2('mv target/release/rustdesk.exe target/release/RustDesk.exe')
         pa = os.environ.get('P')
         if pa:
+            # https://certera.com/kb/tutorial-guide-for-safenet-authentication-client-for-code-signing/
             system2(
                 f'signtool sign /a /v /p {pa} /debug /f .\\cert.pfx /t http://timestamp.digicert.com  '
                 'target\\release\\rustdesk.exe')

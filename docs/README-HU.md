@@ -27,14 +27,6 @@ A RustDesk szívesen fogad minden contributiont, támogatást mindenkitől. Lás
     alt="Get it on F-Droid"
     height="80">](https://f-droid.org/en/packages/com.carriez.flutter_hbb)
 
-## Ingyenes publikus szerverek
-
-Ezalatt az üzenet alatt találhatóak azok a publikus szerverek, amelyeket ingyen használhatsz. Ezek a szerverek változhatnak a jövőben, illetve a hálózatuk lehet hogy lassú lehet.
-| Hely | Host | Specifikáció |
-| --------- | ------------- | ------------------ |
-| Germany | Hetzner | 2 vCPU / 4GB RAM |
-| Ukraine (Kyiv) | [dc.volia](https://dc.volia.com) | 2 vCPU / 4GB RAM |
-
 ## Dependencies
 
 Az asztali verziók [sciter](https://sciter.com/)-t használnak a GUI-hoz, kérlek telepítsd a dynamikus könyvtárat magad.

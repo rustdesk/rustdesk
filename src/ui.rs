@@ -259,7 +259,7 @@ impl UI {
     }
 
     fn using_public_server(&self) -> bool {
-        using_public_server()
+        crate::using_public_server()
     }
 
     fn get_options(&self) -> Value {
@@ -272,8 +272,8 @@ impl UI {
         m
     }
 
-    fn test_if_valid_server(&self, host: String) -> String {
-        test_if_valid_server(host)
+    fn test_if_valid_server(&self, host: String, test_with_proxy: bool) -> String {
+        test_if_valid_server(host, test_with_proxy)
     }
 
     fn get_sound_inputs(&self) -> Value {
@@ -323,10 +323,6 @@ impl UI {
         return true;
         #[cfg(debug_assertions)]
         return false;
-    }
-
-    fn is_rdp_service_open(&self) -> bool {
-        is_rdp_service_open()
     }
 
     fn is_share_rdp(&self) -> bool {
@@ -552,6 +548,10 @@ impl UI {
         change_id_shared(id, old_id);
     }
 
+    fn http_request(&self, url: String, method: String, body: Option<String>, header: String) {
+        http_request(url, method, body, header)
+    }
+
     fn post_request(&self, url: String, body: String, header: String) {
         post_request(url, body, header)
     }
@@ -562,6 +562,10 @@ impl UI {
 
     fn get_async_job_status(&self) -> String {
         get_async_job_status()
+    }
+
+    fn get_http_status(&self, url: String) -> Option<String> {
+        get_async_http_status(url)
     }
 
     fn t(&self, name: String) -> String {
@@ -578,6 +582,10 @@ impl UI {
 
     fn has_hwcodec(&self) -> bool {
         has_hwcodec()
+    }
+
+    fn has_vram(&self) -> bool {
+        has_vram()
     }
 
     fn get_langs(&self) -> String {
@@ -598,6 +606,32 @@ impl UI {
 
     fn support_remove_wallpaper(&self) -> bool {
         support_remove_wallpaper()
+    }
+
+    fn has_valid_2fa(&self) -> bool {
+        has_valid_2fa()
+    }
+
+    fn generate2fa(&self) -> String {
+        generate2fa()
+    }
+
+    pub fn verify2fa(&self, code: String) -> bool {
+        verify2fa(code)
+    }
+
+    fn generate_2fa_img_src(&self, data: String) -> String {
+        let v = qrcode_generator::to_png_to_vec(data, qrcode_generator::QrCodeEcc::Low, 128)
+            .unwrap_or_default();
+        let s = hbb_common::sodiumoxide::base64::encode(
+            v,
+            hbb_common::sodiumoxide::base64::Variant::Original,
+        );
+        format!("data:image/png;base64,{s}")
+    }
+
+    pub fn check_hwcodec(&self) {
+        check_hwcodec()
     }
 }
 
@@ -635,7 +669,6 @@ impl sciter::EventHandler for UI {
         fn is_release();
         fn set_socks(String, String, String);
         fn get_socks();
-        fn is_rdp_service_open();
         fn is_share_rdp();
         fn set_share_rdp(bool);
         fn is_installed_lower_version();
@@ -656,7 +689,7 @@ impl sciter::EventHandler for UI {
         fn forget_password(String);
         fn set_peer_option(String, String, String);
         fn get_license();
-        fn test_if_valid_server(String);
+        fn test_if_valid_server(String, bool);
         fn get_sound_inputs();
         fn set_options(Value);
         fn set_option(String, String);
@@ -680,11 +713,17 @@ impl sciter::EventHandler for UI {
         fn get_lan_peers();
         fn get_uuid();
         fn has_hwcodec();
+        fn has_vram();
         fn get_langs();
         fn default_video_save_directory();
         fn handle_relay_id(String);
         fn get_login_device_info();
         fn support_remove_wallpaper();
+        fn has_valid_2fa();
+        fn generate2fa();
+        fn generate_2fa_img_src(String);
+        fn verify2fa(String);
+        fn check_hwcodec();
     }
 }
 

@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -26,9 +25,12 @@ import '../widgets/dialog.dart';
 final initText = '1' * 1024;
 
 class RemotePage extends StatefulWidget {
-  RemotePage({Key? key, required this.id}) : super(key: key);
+  RemotePage({Key? key, required this.id, this.password, this.isSharedPassword})
+      : super(key: key);
 
   final String id;
+  final String? password;
+  final bool? isSharedPassword;
 
   @override
   State<RemotePage> createState() => _RemotePageState();
@@ -55,15 +57,21 @@ class _RemotePageState extends State<RemotePage> {
   @override
   void initState() {
     super.initState();
-    gFFI.start(widget.id);
+    gFFI.ffiModel.updateEventListener(sessionId, widget.id);
+    gFFI.start(
+      widget.id,
+      password: widget.password,
+      isSharedPassword: widget.isSharedPassword,
+    );
     WidgetsBinding.instance.addPostFrameCallback((_) {
       SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual, overlays: []);
       gFFI.dialogManager
           .showLoading(translate('Connecting...'), onCancel: closeConnection);
     });
-    WakelockPlus.enable();
+    if (!isWeb) {
+      WakelockPlus.enable();
+    }
     _physicalFocusNode.requestFocus();
-    gFFI.ffiModel.updateEventListener(sessionId, widget.id);
     gFFI.inputModel.listenToMouse(true);
     gFFI.qualityMonitorModel.checkShowQualityMonitor(sessionId);
     keyboardSubscription =
@@ -89,7 +97,9 @@ class _RemotePageState extends State<RemotePage> {
     gFFI.dialogManager.dismissAll();
     await SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual,
         overlays: SystemUiOverlay.values);
-    await WakelockPlus.disable();
+    if (!isWeb) {
+      await WakelockPlus.disable();
+    }
     await keyboardSubscription.cancel();
     removeSharedStates(widget.id);
   }
@@ -213,7 +223,7 @@ class _RemotePageState extends State<RemotePage> {
     _timer?.cancel();
     _timer = Timer(kMobileDelaySoftKeyboard, () {
       // show now, and sleep a while to requestFocus to
-      // make sure edit ready, so that keyboard wont show/hide/show/hide happen
+      // make sure edit ready, so that keyboard won't show/hide/show/hide happen
       setState(() => _showEdit = true);
       _timer?.cancel();
       _timer = Timer(kMobileDelaySoftKeyboardFocus, () {
@@ -289,25 +299,26 @@ class _RemotePageState extends State<RemotePage> {
                       : Offstage(),
                 ],
               )),
-          body: getRawPointerAndKeyBody(Overlay(
-            initialEntries: [
-              OverlayEntry(builder: (context) {
-                return Container(
+          body: Obx(
+            () => getRawPointerAndKeyBody(Overlay(
+              initialEntries: [
+                OverlayEntry(builder: (context) {
+                  return Container(
                     color: Colors.black,
                     child: isWebDesktop
                         ? getBodyForDesktopWithListener(keyboard)
-                        : SafeArea(child:
-                            OrientationBuilder(builder: (ctx, orientation) {
-                            if (_currentOrientation != orientation) {
-                              Timer(const Duration(milliseconds: 200), () {
-                                gFFI.dialogManager
-                                    .resetMobileActionsOverlay(ffi: gFFI);
-                                _currentOrientation = orientation;
-                                gFFI.canvasModel.updateViewStyle();
-                              });
-                            }
-                            return Obx(
-                              () => Container(
+                        : SafeArea(
+                            child:
+                                OrientationBuilder(builder: (ctx, orientation) {
+                              if (_currentOrientation != orientation) {
+                                Timer(const Duration(milliseconds: 200), () {
+                                  gFFI.dialogManager
+                                      .resetMobileActionsOverlay(ffi: gFFI);
+                                  _currentOrientation = orientation;
+                                  gFFI.canvasModel.updateViewStyle();
+                                });
+                              }
+                              return Container(
                                 color: MyTheme.canvasColor,
                                 child: inputModel.isPhysicalMouse.value
                                     ? getBodyForMobile()
@@ -315,12 +326,14 @@ class _RemotePageState extends State<RemotePage> {
                                         child: getBodyForMobile(),
                                         ffi: gFFI,
                                       ),
-                              ),
-                            );
-                          })));
-              })
-            ],
-          ))),
+                              );
+                            }),
+                          ),
+                  );
+                })
+              ],
+            )),
+          )),
     );
   }
 
@@ -788,9 +801,7 @@ void showOptions(
       children.add(InkWell(
           onTap: () {
             if (i == cur) return;
-            gFFI.recordingModel.onClose();
-            bind.sessionSwitchDisplay(
-                sessionId: gFFI.sessionId, value: Int32List.fromList([i]));
+            openMonitorInTheSameTab(i, gFFI, pi);
             gFFI.dialogManager.dismissAll();
           },
           child: Ink(
@@ -825,6 +836,7 @@ void showOptions(
   List<TRadioMenu<String>> imageQualityRadios =
       await toolbarImageQuality(context, id, gFFI);
   List<TRadioMenu<String>> codecRadios = await toolbarCodec(context, id, gFFI);
+  List<TToggleMenu> cursorToggles = await toolbarCursor(context, id, gFFI);
   List<TToggleMenu> displayToggles =
       await toolbarDisplayToggle(context, id, gFFI);
 
@@ -865,8 +877,23 @@ void showOptions(
             })),
       if (codecRadios.isNotEmpty) const Divider(color: MyTheme.border),
     ];
+    final rxCursorToggleValues = cursorToggles.map((e) => e.value.obs).toList();
+    final cursorTogglesList = cursorToggles
+        .asMap()
+        .entries
+        .map((e) => Obx(() => CheckboxListTile(
+            contentPadding: EdgeInsets.zero,
+            visualDensity: VisualDensity.compact,
+            value: rxCursorToggleValues[e.key].value,
+            onChanged: (v) {
+              e.value.onChanged?.call(v);
+              if (v != null) rxCursorToggleValues[e.key].value = v;
+            },
+            title: e.value.child)))
+        .toList();
+
     final rxToggleValues = displayToggles.map((e) => e.value.obs).toList();
-    final toggles = displayToggles
+    final displayTogglesList = displayToggles
         .asMap()
         .entries
         .map((e) => Obx(() => CheckboxListTile(
@@ -879,6 +906,11 @@ void showOptions(
             },
             title: e.value.child)))
         .toList();
+    final toggles = [
+      ...cursorTogglesList,
+      if (cursorToggles.isNotEmpty) const Divider(color: MyTheme.border),
+      ...displayTogglesList,
+    ];
 
     Widget privacyModeWidget = Offstage();
     if (privacyModeList.length > 1) {

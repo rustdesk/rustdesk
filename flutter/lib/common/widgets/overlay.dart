@@ -54,7 +54,7 @@ class DraggableChatWindow extends StatelessWidget {
                 resizeToAvoidBottomInset: false,
                 appBar: CustomAppBar(
                   onPanUpdate: onPanUpdate,
-                  appBar: isDesktop
+                  appBar: (isDesktop || isWebDesktop)
                       ? _buildDesktopAppBar(context)
                       : _buildMobileAppBar(context),
                 ),
@@ -369,10 +369,10 @@ class IOSDraggable extends StatefulWidget {
   final Widget Function(BuildContext) builder;
 
   @override
-  _IOSDraggableState createState() => _IOSDraggableState();
+  IOSDraggableState createState() => IOSDraggableState();
 }
 
-class _IOSDraggableState extends State<IOSDraggable> {
+class IOSDraggableState extends State<IOSDraggable> {
   late Offset _position;
   late ChatModel? _chatModel;
   late double _width;

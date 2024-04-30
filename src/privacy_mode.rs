@@ -6,9 +6,12 @@ use crate::{
     display_service,
     ipc::{connect, Data},
 };
-#[cfg(windows)]
-use hbb_common::tokio;
-use hbb_common::{anyhow::anyhow, bail, lazy_static, ResultType};
+use hbb_common::{
+    anyhow::anyhow,
+    bail, lazy_static,
+    tokio::{self, sync::oneshot},
+    ResultType,
+};
 use serde_derive::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
@@ -30,10 +33,10 @@ mod win_virtual_display;
 pub use win_virtual_display::restore_reg_connectivity;
 
 pub const INVALID_PRIVACY_MODE_CONN_ID: i32 = 0;
-pub const OCCUPIED: &'static str = "Privacy occupied by another one";
+pub const OCCUPIED: &'static str = "Privacy occupied by another one.";
 pub const TURN_OFF_OTHER_ID: &'static str =
-    "Failed to turn off privacy mode that belongs to someone else";
-pub const NO_DISPLAYS: &'static str = "No displays";
+    "Failed to turn off privacy mode that belongs to someone else.";
+pub const NO_PHYSICAL_DISPLAYS: &'static str = "no_need_privacy_mode_no_physical_displays_tip";
 
 #[cfg(windows)]
 pub const PRIVACY_MODE_IMPL_WIN_MAG: &str = win_mag::PRIVACY_MODE_IMPL;
@@ -53,6 +56,8 @@ pub enum PrivacyModeState {
 }
 
 pub trait PrivacyMode: Sync + Send {
+    fn is_async_privacy_mode(&self) -> bool;
+
     fn init(&self) -> ResultType<()>;
     fn clear(&mut self);
     fn turn_on_privacy(&mut self, conn_id: i32) -> ResultType<bool>;
@@ -202,8 +207,40 @@ fn get_supported_impl(impl_key: &str) -> String {
     cur_impl
 }
 
+pub async fn turn_on_privacy(impl_key: &str, conn_id: i32) -> Option<ResultType<bool>> {
+    if is_async_privacy_mode() {
+        turn_on_privacy_async(impl_key.to_string(), conn_id).await
+    } else {
+        turn_on_privacy_sync(impl_key, conn_id)
+    }
+}
+
 #[inline]
-pub fn turn_on_privacy(impl_key: &str, conn_id: i32) -> Option<ResultType<bool>> {
+fn is_async_privacy_mode() -> bool {
+    PRIVACY_MODE
+        .lock()
+        .unwrap()
+        .as_ref()
+        .map_or(false, |m| m.is_async_privacy_mode())
+}
+
+#[inline]
+async fn turn_on_privacy_async(impl_key: String, conn_id: i32) -> Option<ResultType<bool>> {
+    let (tx, rx) = oneshot::channel();
+    std::thread::spawn(move || {
+        let res = turn_on_privacy_sync(&impl_key, conn_id);
+        let _ = tx.send(res);
+    });
+    match hbb_common::timeout(5000, rx).await {
+        Ok(res) => match res {
+            Ok(res) => res,
+            Err(e) => Some(Err(anyhow!(e.to_string()))),
+        },
+        Err(e) => Some(Err(anyhow!(e.to_string()))),
+    }
+}
+
+fn turn_on_privacy_sync(impl_key: &str, conn_id: i32) -> Option<ResultType<bool>> {
     // Check if privacy mode is already on or occupied by another one
     let mut privacy_mode_lock = PRIVACY_MODE.lock().unwrap();
 
@@ -300,7 +337,7 @@ pub fn get_supported_privacy_mode_impl() -> Vec<(&'static str, &'static str)> {
         }
 
         #[cfg(feature = "virtual_display_driver")]
-        if is_installed() {
+        if is_installed() && crate::platform::windows::is_self_service_running() {
             vec_impls.push((
                 PRIVACY_MODE_IMPL_WIN_VIRTUAL_DISPLAY,
                 "privacy_mode_impl_virtual_display_tip",

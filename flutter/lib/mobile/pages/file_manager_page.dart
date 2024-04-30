@@ -11,8 +11,12 @@ import '../../common.dart';
 import '../../common/widgets/dialog.dart';
 
 class FileManagerPage extends StatefulWidget {
-  FileManagerPage({Key? key, required this.id}) : super(key: key);
+  FileManagerPage(
+      {Key? key, required this.id, this.password, this.isSharedPassword})
+      : super(key: key);
   final String id;
+  final String? password;
+  final bool? isSharedPassword;
 
   @override
   State<StatefulWidget> createState() => _FileManagerPageState();
@@ -67,7 +71,10 @@ class _FileManagerPageState extends State<FileManagerPage> {
   @override
   void initState() {
     super.initState();
-    gFFI.start(widget.id, isFileTransfer: true);
+    gFFI.start(widget.id,
+        isFileTransfer: true,
+        password: widget.password,
+        isSharedPassword: widget.isSharedPassword);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       gFFI.dialogManager
           .showLoading(translate('Connecting...'), onCancel: closeConnection);
@@ -661,6 +668,7 @@ class BottomSheetBody extends StatelessWidget {
 
   @override
   BottomSheet build(BuildContext context) {
+    // ignore: no_leading_underscores_for_local_identifiers
     final _actions = actions ?? [];
     return BottomSheet(
       builder: (BuildContext context) {

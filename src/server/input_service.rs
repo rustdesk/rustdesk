@@ -1,3 +1,5 @@
+#[cfg(target_os = "linux")]
+use super::rdp_input::client::{RdpInputKeyboard, RdpInputMouse};
 use super::*;
 #[cfg(target_os = "macos")]
 use crate::common::is_server;
@@ -13,6 +15,8 @@ use hbb_common::{
 use rdev::{self, EventType, Key as RdevKey, KeyCode, RawKey};
 #[cfg(target_os = "macos")]
 use rdev::{CGEventSourceStateID, CGEventTapLocation, VirtualInput};
+#[cfg(target_os = "linux")]
+use scrap::wayland::pipewire::RDP_RESPONSE;
 use std::{
     convert::TryFrom,
     ops::{Deref, DerefMut, Sub},
@@ -24,6 +28,7 @@ use std::{
 use winapi::um::winuser::WHEEL_DELTA;
 
 const INVALID_CURSOR_POS: i32 = i32::MIN;
+const INVALID_DISPLAY_IDX: i32 = -1;
 
 #[derive(Default)]
 struct StateCursor {
@@ -67,6 +72,29 @@ impl StatePos {
     #[inline]
     fn is_moved(&self, x: i32, y: i32) -> bool {
         self.is_valid() && (self.cursor_pos.0 != x || self.cursor_pos.1 != y)
+    }
+}
+
+#[derive(Default)]
+struct StateWindowFocus {
+    display_idx: i32,
+}
+
+impl super::service::Reset for StateWindowFocus {
+    fn reset(&mut self) {
+        self.display_idx = INVALID_DISPLAY_IDX;
+    }
+}
+
+impl StateWindowFocus {
+    #[inline]
+    fn is_valid(&self) -> bool {
+        self.display_idx != INVALID_DISPLAY_IDX
+    }
+
+    #[inline]
+    fn is_changed(&self, disp_idx: i32) -> bool {
+        self.is_valid() && self.display_idx != disp_idx
     }
 }
 
@@ -183,7 +211,7 @@ impl LockModesHandler {
     fn new(key_event: &KeyEvent) -> Self {
         let event_caps_enabled = Self::is_modifier_enabled(key_event, ControlKey::CapsLock);
         // Do not use the following code to detect `local_caps_enabled`.
-        // Because the state of get_key_state will not affect simuation of `VIRTUAL_INPUT_STATE` in this file.
+        // Because the state of get_key_state will not affect simulation of `VIRTUAL_INPUT_STATE` in this file.
         //
         // let local_caps_enabled = VirtualInput::get_key_state(
         //     CGEventSourceStateID::CombinedSessionState,
@@ -234,6 +262,7 @@ fn should_disable_numlock(evt: &KeyEvent) -> bool {
 
 pub const NAME_CURSOR: &'static str = "mouse_cursor";
 pub const NAME_POS: &'static str = "mouse_pos";
+pub const NAME_WINDOW_FOCUS: &'static str = "window_focus";
 #[derive(Clone)]
 pub struct MouseCursorService {
     pub sp: ServiceTmpl<MouseCursorSub>,
@@ -270,6 +299,12 @@ pub fn new_cursor() -> ServiceTmpl<MouseCursorSub> {
 pub fn new_pos() -> GenericService {
     let svc = EmptyExtraFieldService::new(NAME_POS.to_owned(), false);
     GenericService::repeat::<StatePos, _, _>(&svc.clone(), 33, run_pos);
+    svc.sp
+}
+
+pub fn new_window_focus() -> GenericService {
+    let svc = EmptyExtraFieldService::new(NAME_WINDOW_FOCUS.to_owned(), false);
+    GenericService::repeat::<StateWindowFocus, _, _>(&svc.clone(), 33, run_window_focus);
     svc.sp
 }
 
@@ -348,6 +383,22 @@ fn run_cursor(sp: MouseCursorService, state: &mut StateCursor) -> ResultType<()>
     Ok(())
 }
 
+fn run_window_focus(sp: EmptyExtraFieldService, state: &mut StateWindowFocus) -> ResultType<()> {
+    let displays = super::display_service::get_sync_displays();
+    let disp_idx = crate::get_focused_display(displays);
+    if let Some(disp_idx) = disp_idx.map(|id| id as i32) {
+        if state.is_changed(disp_idx) {
+            let mut misc = Misc::new();
+            misc.set_follow_current_display(disp_idx as i32);
+            let mut msg_out = Message::new();
+            msg_out.set_misc(misc);
+            sp.send(msg_out);
+        }
+        state.display_idx = disp_idx;
+    }
+    Ok(())
+}
+
 #[derive(Copy, Clone, PartialEq, Eq, Hash)]
 enum KeysDown {
     RdevKey(RawKey),
@@ -420,12 +471,15 @@ struct VirtualInputState {
 #[cfg(target_os = "macos")]
 impl VirtualInputState {
     fn new() -> Option<Self> {
-        VirtualInput::new(CGEventSourceStateID::Private, CGEventTapLocation::Session)
-            .map(|virtual_input| Self {
-                virtual_input,
-                capslock_down: false,
-            })
-            .ok()
+        VirtualInput::new(
+            CGEventSourceStateID::CombinedSessionState,
+            CGEventTapLocation::Session,
+        )
+        .map(|virtual_input| Self {
+            virtual_input,
+            capslock_down: false,
+        })
+        .ok()
     }
 
     #[inline]
@@ -458,6 +512,25 @@ pub async fn setup_uinput(minx: i32, maxx: i32, miny: i32, maxy: i32) -> ResultT
         .unwrap()
         .set_custom_keyboard(Box::new(keyboard));
     ENIGO.lock().unwrap().set_custom_mouse(Box::new(mouse));
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+pub async fn setup_rdp_input() -> ResultType<(), Box<dyn std::error::Error>> {
+    let mut en = ENIGO.lock()?;
+    let rdp_res_lock = RDP_RESPONSE.lock()?;
+    let rdp_res = rdp_res_lock.as_ref().ok_or("RDP response is None")?;
+
+    let keyboard = RdpInputKeyboard::new(rdp_res.conn.clone(), rdp_res.session.clone())?;
+    en.set_custom_keyboard(Box::new(keyboard));
+    log::info!("RdpInput keyboard created");
+
+    if let Some(stream) = rdp_res.streams.clone().into_iter().next() {
+        let mouse = RdpInputMouse::new(rdp_res.conn.clone(), rdp_res.session.clone(), stream)?;
+        en.set_custom_mouse(Box::new(mouse));
+        log::info!("RdpInput mouse created");
+    }
+
     Ok(())
 }
 
@@ -1293,6 +1366,7 @@ fn is_function_key(ck: &EnumOrUnknown<ControlKey>) -> bool {
     let mut res = false;
     if ck.value() == ControlKey::CtrlAltDel.value() {
         // have to spawn new thread because send_sas is tokio_main, the caller can not be tokio_main.
+        #[cfg(windows)]
         std::thread::spawn(|| {
             allow_err!(send_sas());
         });
@@ -1541,10 +1615,15 @@ async fn lock_screen_2() {
     lock_screen().await;
 }
 
+#[cfg(windows)]
 #[tokio::main(flavor = "current_thread")]
 async fn send_sas() -> ResultType<()> {
-    let mut stream = crate::ipc::connect(1000, crate::POSTFIX_SERVICE).await?;
-    timeout(1000, stream.send(&crate::ipc::Data::SAS)).await??;
+    if crate::platform::is_physical_console_session().unwrap_or(true) {
+        let mut stream = crate::ipc::connect(1000, crate::POSTFIX_SERVICE).await?;
+        timeout(1000, stream.send(&crate::ipc::Data::SAS)).await??;
+    } else {
+        crate::platform::send_sas();
+    };
     Ok(())
 }
 

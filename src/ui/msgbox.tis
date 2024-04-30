@@ -41,7 +41,7 @@ class MsgboxComponent: Reactor.Component {
     }
 
     function getIcon(color) {
-        if (this.type == "input-password" || this.type == "session-login" || this.type == "session-login-password") {
+        if (this.type == "input-password" || this.type == "session-login" || this.type == "session-login-password" || this.type == "input-2fa") {
             return <svg viewBox="0 0 505 505"><circle cx="252.5" cy="252.5" r="252.5" fill={color}/><path d="M271.9 246.1c29.2 17.5 67.6 13.6 92.7-11.5 29.7-29.7 29.7-77.8 0-107.4s-77.8-29.7-107.4 0c-25.1 25.1-29 63.5-11.5 92.7L118.1 347.4l26.2 26.2 26.4 26.4 10.6-10.6-10.1-10.1 9.7-9.7 10.1 10.1 10.6-10.6-10.1-10 9.7-9.7 10.1 10.1 10.6-10.6-26.4-26.3 76.4-76.5z" fill="#fff"/><circle cx="337.4" cy="154.4" r="17.7" fill={color}/></svg>;
         }
         if (this.type == "connecting") {
@@ -50,7 +50,7 @@ class MsgboxComponent: Reactor.Component {
         if (this.type == "success") {
             return <svg viewBox="0 0 512 512"><circle cx="256" cy="256" r="256" fill={color} /><path fill="#fff" d="M235.472 392.08l-121.04-94.296 34.416-44.168 74.328 57.904 122.672-177.016 46.032 31.888z"/></svg>;
         }
-        if (this.type.indexOf("error") >= 0 || this.type == "re-input-password" || this.type == "session-re-login" || this.type == "session-login-re-password") {
+        if (this.type.indexOf("error") >= 0 || this.type == "re-input-password" || this.type == "input-2fa" || this.type == "session-re-login" || this.type == "session-login-re-password") {
             return <svg viewBox="0 0 512 512"><ellipse cx="256" cy="256" rx="256" ry="255.832" fill={color}/><g fill="#fff"><path d="M376.812 337.18l-39.592 39.593-201.998-201.999 39.592-39.592z"/><path d="M376.818 174.825L174.819 376.824l-39.592-39.592 201.999-201.999z"/></g></svg>;
         }
         return null;
@@ -62,6 +62,13 @@ class MsgboxComponent: Reactor.Component {
             <div>{translate('Please enter your password')}</div>
             <PasswordComponent />
             <div><button|checkbox(remember) {ts}>{translate('Remember password')}</button></div>
+        </div>;
+    }
+
+    function get2faContent() {
+        return <div .form>
+            <div>{translate('enter-2fa-title')}</div>
+            <div .code><input name='code' type='text' .outline-focus /></div>
         </div>;
     }
 
@@ -90,6 +97,8 @@ class MsgboxComponent: Reactor.Component {
     function getContent() {
         if (this.type == "input-password") {
             return this.getInputPasswordContent();
+        } else if (this.type == "input-2fa") {
+            return this.get2faContent();
         } else if (this.type == "session-login") {
             return this.getInputUserPasswordContent();
         } else if (this.type == "session-login-password") {
@@ -105,7 +114,7 @@ class MsgboxComponent: Reactor.Component {
     }
 
     function getColor() {
-        if (this.type == "input-password" || this.type == "custom-os-password" || this.type == "session-login" || this.type == "session-login-password") {
+        if (this.type == "input-password" || this.type == "input-2fa" || this.type == "custom-os-password" || this.type == "session-login" || this.type == "session-login-password") {
             return "#AD448E";
         }
         if (this.type == "success") {
@@ -282,6 +291,12 @@ class MsgboxComponent: Reactor.Component {
                 return;
             }
         }
+        if (this.type == "input-2fa") {
+            values.code = (values.code || "").trim();
+            if (!values.code) {
+                return;
+            }
+        }
         if (this.type == "session-login") {
             values.osusername = (values.osusername || "").trim();
             values.ospassword = (values.ospassword || "").trim();
@@ -296,6 +311,9 @@ class MsgboxComponent: Reactor.Component {
             if (!values.osusername || !values.ospassword || !values.password) {
                 return;
             }
+        }
+        if (this.type == "multiple-sessions-nocancel") {
+            values.sid = (this.$$(select))[0].value;
         }
         return values;
     }

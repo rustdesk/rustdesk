@@ -1,4 +1,5 @@
 use super::*;
+use crate::hbbs_http::create_http_client;
 use crate::{
     flutter::{self, APP_TYPE_CM, APP_TYPE_MAIN, SESSIONS},
     ui_interface::get_api_server,
@@ -280,7 +281,7 @@ fn request_plugin_sign(id: String, msg_to_rustdesk: MsgToRustDesk) -> PluginRetu
     );
     thread::spawn(move || {
         let sign_url = format!("{}/lic/web/api/plugin-sign", get_api_server());
-        let client = reqwest::blocking::Client::new();
+        let client = create_http_client();
         let req = PluginSignReq {
             plugin_id: id.clone(),
             version: signature_data.version,

@@ -1,5 +1,4 @@
-import 'dart:io';
-
+import 'package:bot_toast/bot_toast.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hbb/common/widgets/dialog.dart';
@@ -52,7 +51,7 @@ class _PeerCardState extends State<_PeerCard>
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    if (isDesktop) {
+    if (isDesktop || isWebDesktop) {
       return _buildDesktop();
     } else {
       return _buildMobile();
@@ -70,12 +69,12 @@ class _PeerCardState extends State<_PeerCard>
               peerTabModel.select(peer);
             } else {
               if (!isWebDesktop) {
-                connectInPeerTab(context, peer.id, widget.tab);
+                connectInPeerTab(context, peer, widget.tab);
               }
             }
           },
           onDoubleTap: isWebDesktop
-              ? () => connectInPeerTab(context, peer.id, widget.tab)
+              ? () => connectInPeerTab(context, peer, widget.tab)
               : null,
           onLongPress: () {
             peerTabModel.select(peer);
@@ -140,21 +139,30 @@ class _PeerCardState extends State<_PeerCard>
       mainAxisSize: MainAxisSize.max,
       children: [
         Container(
-          decoration: BoxDecoration(
-            color: str2color('${peer.id}${peer.platform}', 0x7f),
-            borderRadius: isMobile
-                ? BorderRadius.circular(_tileRadius)
-                : BorderRadius.only(
-                    topLeft: Radius.circular(_tileRadius),
-                    bottomLeft: Radius.circular(_tileRadius),
+            decoration: BoxDecoration(
+              color: str2color('${peer.id}${peer.platform}', 0x7f),
+              borderRadius: isMobile
+                  ? BorderRadius.circular(_tileRadius)
+                  : BorderRadius.only(
+                      topLeft: Radius.circular(_tileRadius),
+                      bottomLeft: Radius.circular(_tileRadius),
+                    ),
+            ),
+            alignment: Alignment.center,
+            width: isMobile ? 50 : 42,
+            height: isMobile ? 50 : null,
+            child: Stack(
+              children: [
+                getPlatformImage(peer.platform, size: isMobile ? 38 : 30)
+                    .paddingAll(6),
+                if (_shouldBuildPasswordIcon(peer))
+                  Positioned(
+                    top: 1,
+                    left: 1,
+                    child: Icon(Icons.key, size: 6, color: Colors.white),
                   ),
-          ),
-          alignment: Alignment.center,
-          width: isMobile ? 50 : 42,
-          height: isMobile ? 50 : null,
-          child: getPlatformImage(peer.platform, size: isMobile ? 38 : 30)
-              .paddingAll(6),
-        ),
+              ],
+            )),
         Expanded(
           child: Container(
             decoration: BoxDecoration(
@@ -199,8 +207,9 @@ class _PeerCardState extends State<_PeerCard>
         )
       ],
     );
-    final colors =
-        _frontN(peer.tags, 25).map((e) => gFFI.abModel.getTagColor(e)).toList();
+    final colors = _frontN(peer.tags, 25)
+        .map((e) => gFFI.abModel.getCurrentAbTagColor(e))
+        .toList();
     return Tooltip(
       message: isMobile
           ? ''
@@ -310,14 +319,21 @@ class _PeerCardState extends State<_PeerCard>
       ),
     );
 
-    final colors =
-        _frontN(peer.tags, 25).map((e) => gFFI.abModel.getTagColor(e)).toList();
+    final colors = _frontN(peer.tags, 25)
+        .map((e) => gFFI.abModel.getCurrentAbTagColor(e))
+        .toList();
     return Tooltip(
       message: peer.tags.isNotEmpty
           ? '${translate('Tags')}: ${peer.tags.join(', ')}'
           : '',
       child: Stack(children: [
         child,
+        if (_shouldBuildPasswordIcon(peer))
+          Positioned(
+            top: 4,
+            left: 12,
+            child: Icon(Icons.key, size: 12, color: Colors.white),
+          ),
         if (colors.isNotEmpty)
           Positioned(
             top: 4,
@@ -401,6 +417,12 @@ class _PeerCardState extends State<_PeerCard>
       onPointerUp: (_) => _showPeerMenu(peer.id),
       child: build_more(context));
 
+  bool _shouldBuildPasswordIcon(Peer peer) {
+    if (gFFI.peerTabModel.currentTab != PeerTabIndex.ab.index) return false;
+    if (gFFI.abModel.current.isPersonal()) return false;
+    return peer.password.isNotEmpty;
+  }
+
   /// Show the peer menu and handle user's choice.
   /// User might remove the peer or send a file to the peer.
   void _showPeerMenu(String id) async {
@@ -431,7 +453,7 @@ abstract class BasePeerCard extends StatelessWidget {
       peer: peer,
       tab: tab,
       connect: (BuildContext context, String id) =>
-          connectInPeerTab(context, id, tab),
+          connectInPeerTab(context, peer, tab),
       popupMenuEntryBuilder: _buildPopupMenuEntry,
     );
   }
@@ -453,7 +475,6 @@ abstract class BasePeerCard extends StatelessWidget {
 
   MenuEntryBase<String> _connectCommonAction(
     BuildContext context,
-    String id,
     String title, {
     bool isFileTransfer = false,
     bool isTcpTunneling = false,
@@ -467,7 +488,7 @@ abstract class BasePeerCard extends StatelessWidget {
       proc: () {
         connectInPeerTab(
           context,
-          peer.id,
+          peer,
           tab,
           isFileTransfer: isFileTransfer,
           isTcpTunneling: isTcpTunneling,
@@ -480,10 +501,9 @@ abstract class BasePeerCard extends StatelessWidget {
   }
 
   @protected
-  MenuEntryBase<String> _connectAction(BuildContext context, Peer peer) {
+  MenuEntryBase<String> _connectAction(BuildContext context) {
     return _connectCommonAction(
       context,
-      peer.id,
       (peer.alias.isEmpty
           ? translate('Connect')
           : '${translate('Connect')} ${peer.id}'),
@@ -491,20 +511,18 @@ abstract class BasePeerCard extends StatelessWidget {
   }
 
   @protected
-  MenuEntryBase<String> _transferFileAction(BuildContext context, String id) {
+  MenuEntryBase<String> _transferFileAction(BuildContext context) {
     return _connectCommonAction(
       context,
-      id,
       translate('Transfer file'),
       isFileTransfer: true,
     );
   }
 
   @protected
-  MenuEntryBase<String> _tcpTunnelingAction(BuildContext context, String id) {
+  MenuEntryBase<String> _tcpTunnelingAction(BuildContext context) {
     return _connectCommonAction(
       context,
-      id,
       translate('TCP tunneling'),
       isTcpTunneling: true,
     );
@@ -541,7 +559,7 @@ abstract class BasePeerCard extends StatelessWidget {
             ],
           )),
       proc: () {
-        connectInPeerTab(context, id, tab, isRDP: true);
+        connectInPeerTab(context, peer, tab, isRDP: true);
       },
       padding: menuPadding,
       dismissOnClicked: true,
@@ -602,6 +620,7 @@ abstract class BasePeerCard extends StatelessWidget {
   _openInWindowsAction(String id) async => await _openNewConnInAction(
       id, 'Open in new window', kOptionOpenInWindows);
 
+  // ignore: unused_element
   _openNewConnInOptAction(String id) async =>
       mainGetLocalBoolOptionSync(kOptionOpenNewConnInTabs)
           ? await _openInWindowsAction(id)
@@ -647,9 +666,8 @@ abstract class BasePeerCard extends StatelessWidget {
             onSubmit: (String newName) async {
               if (newName != oldName) {
                 if (tab == PeerTabIndex.ab) {
-                  gFFI.abModel.changeAlias(id: id, alias: newName);
+                  await gFFI.abModel.changeAlias(id: id, alias: newName);
                   await bind.mainSetPeerAlias(id: id, alias: newName);
-                  gFFI.abModel.pushAb();
                 } else {
                   await bind.mainSetPeerAlias(id: id, alias: newName);
                   showToast(translate('Successful'));
@@ -701,11 +719,7 @@ abstract class BasePeerCard extends StatelessWidget {
               await bind.mainLoadLanPeers();
               break;
             case PeerTabIndex.ab:
-              gFFI.abModel.deletePeer(id);
-              final future = gFFI.abModel.pushAb();
-              if (await bind.mainPeerExists(id: peer.id)) {
-                gFFI.abModel.reSyncToast(future);
-              }
+              await gFFI.abModel.deletePeers([id]);
               break;
             case PeerTabIndex.group:
               break;
@@ -715,7 +729,7 @@ abstract class BasePeerCard extends StatelessWidget {
           }
         }
 
-        deletePeerConfirmDialog(onSubmit,
+        deleteConfirmDialog(onSubmit,
             '${translate('Delete')} "${peer.alias.isEmpty ? formatID(peer.id) : peer.alias}"?');
       },
       padding: menuPadding,
@@ -731,14 +745,16 @@ abstract class BasePeerCard extends StatelessWidget {
         style: style,
       ),
       proc: () async {
-        bool result = gFFI.abModel.changePassword(id, '');
+        bool succ = await gFFI.abModel.changePersonalHashPassword(id, '');
         await bind.mainForgetPassword(id: id);
-        bool toast = false;
-        if (result) {
-          toast = tab == PeerTabIndex.ab;
-          gFFI.abModel.pushAb(toastIfFail: toast, toastIfSucc: toast);
+        if (succ) {
+          showToast(translate('Successful'));
+        } else {
+          if (tab.index == PeerTabIndex.ab.index) {
+            BotToast.showText(
+                contentColor: Colors.red, text: translate("Failed"));
+          }
         }
-        if (!toast) showToast(translate('Successful'));
       },
       padding: menuPadding,
       dismissOnClicked: true,
@@ -823,13 +839,7 @@ abstract class BasePeerCard extends StatelessWidget {
       ),
       proc: () {
         () async {
-          if (gFFI.abModel.isFull(true)) {
-            return;
-          }
-          if (!gFFI.abModel.idContainBy(peer.id)) {
-            gFFI.abModel.addPeer(peer);
-            gFFI.abModel.pushAb();
-          }
+          addPeersToAbDialog([Peer.copy(peer)]);
         }();
       },
       padding: menuPadding,
@@ -857,25 +867,29 @@ class RecentPeerCard extends BasePeerCard {
   Future<List<MenuEntryBase<String>>> _buildMenuItems(
       BuildContext context) async {
     final List<MenuEntryBase<String>> menuItems = [
-      _connectAction(context, peer),
-      _transferFileAction(context, peer.id),
+      _connectAction(context),
+      if (!isWeb) _transferFileAction(context),
     ];
 
     final List favs = (await bind.mainGetFav()).toList();
 
     if (isDesktop && peer.platform != kPeerPlatformAndroid) {
-      menuItems.add(_tcpTunnelingAction(context, peer.id));
+      menuItems.add(_tcpTunnelingAction(context));
     }
     // menuItems.add(await _openNewConnInOptAction(peer.id));
-    menuItems.add(await _forceAlwaysRelayAction(peer.id));
-    if (Platform.isWindows && peer.platform == kPeerPlatformWindows) {
+    if (!isWeb) {
+      menuItems.add(await _forceAlwaysRelayAction(peer.id));
+    }
+    if (isWindows && peer.platform == kPeerPlatformWindows) {
       menuItems.add(_rdpAction(context, peer.id));
     }
-    if (Platform.isWindows) {
+    if (isWindows) {
       menuItems.add(_createShortCutAction(peer.id));
     }
     menuItems.add(MenuEntryDivider());
-    menuItems.add(_renameAction(peer.id));
+    if (isDesktop || isWebDesktop) {
+      menuItems.add(_renameAction(peer.id));
+    }
     if (await bind.mainPeerHasPassword(id: peer.id)) {
       menuItems.add(_unrememberPasswordAction(peer.id));
     }
@@ -887,9 +901,7 @@ class RecentPeerCard extends BasePeerCard {
     }
 
     if (gFFI.userModel.userName.isNotEmpty) {
-      if (!gFFI.abModel.idContainBy(peer.id)) {
-        menuItems.add(_addToAb(peer));
-      }
+      menuItems.add(_addToAb(peer));
     }
 
     menuItems.add(MenuEntryDivider());
@@ -914,22 +926,26 @@ class FavoritePeerCard extends BasePeerCard {
   Future<List<MenuEntryBase<String>>> _buildMenuItems(
       BuildContext context) async {
     final List<MenuEntryBase<String>> menuItems = [
-      _connectAction(context, peer),
-      _transferFileAction(context, peer.id),
+      _connectAction(context),
+      if (!isWeb) _transferFileAction(context),
     ];
     if (isDesktop && peer.platform != kPeerPlatformAndroid) {
-      menuItems.add(_tcpTunnelingAction(context, peer.id));
+      menuItems.add(_tcpTunnelingAction(context));
     }
     // menuItems.add(await _openNewConnInOptAction(peer.id));
-    menuItems.add(await _forceAlwaysRelayAction(peer.id));
-    if (Platform.isWindows && peer.platform == kPeerPlatformWindows) {
+    if (!isWeb) {
+      menuItems.add(await _forceAlwaysRelayAction(peer.id));
+    }
+    if (isWindows && peer.platform == kPeerPlatformWindows) {
       menuItems.add(_rdpAction(context, peer.id));
     }
-    if (Platform.isWindows) {
+    if (isWindows) {
       menuItems.add(_createShortCutAction(peer.id));
     }
     menuItems.add(MenuEntryDivider());
-    menuItems.add(_renameAction(peer.id));
+    if (isDesktop || isWebDesktop) {
+      menuItems.add(_renameAction(peer.id));
+    }
     if (await bind.mainPeerHasPassword(id: peer.id)) {
       menuItems.add(_unrememberPasswordAction(peer.id));
     }
@@ -938,9 +954,7 @@ class FavoritePeerCard extends BasePeerCard {
     }));
 
     if (gFFI.userModel.userName.isNotEmpty) {
-      if (!gFFI.abModel.idContainBy(peer.id)) {
-        menuItems.add(_addToAb(peer));
-      }
+      menuItems.add(_addToAb(peer));
     }
 
     menuItems.add(MenuEntryDivider());
@@ -965,22 +979,24 @@ class DiscoveredPeerCard extends BasePeerCard {
   Future<List<MenuEntryBase<String>>> _buildMenuItems(
       BuildContext context) async {
     final List<MenuEntryBase<String>> menuItems = [
-      _connectAction(context, peer),
-      _transferFileAction(context, peer.id),
+      _connectAction(context),
+      if (!isWeb) _transferFileAction(context),
     ];
 
     final List favs = (await bind.mainGetFav()).toList();
 
     if (isDesktop && peer.platform != kPeerPlatformAndroid) {
-      menuItems.add(_tcpTunnelingAction(context, peer.id));
+      menuItems.add(_tcpTunnelingAction(context));
     }
     // menuItems.add(await _openNewConnInOptAction(peer.id));
-    menuItems.add(await _forceAlwaysRelayAction(peer.id));
-    if (Platform.isWindows && peer.platform == kPeerPlatformWindows) {
+    if (!isWeb) {
+      menuItems.add(await _forceAlwaysRelayAction(peer.id));
+    }
+    if (isWindows && peer.platform == kPeerPlatformWindows) {
       menuItems.add(_rdpAction(context, peer.id));
     }
     menuItems.add(_wolAction(peer.id));
-    if (Platform.isWindows) {
+    if (isWindows) {
       menuItems.add(_createShortCutAction(peer.id));
     }
 
@@ -991,9 +1007,7 @@ class DiscoveredPeerCard extends BasePeerCard {
     }
 
     if (gFFI.userModel.userName.isNotEmpty) {
-      if (!gFFI.abModel.idContainBy(peer.id)) {
-        menuItems.add(_addToAb(peer));
-      }
+      menuItems.add(_addToAb(peer));
     }
 
     menuItems.add(MenuEntryDivider());
@@ -1018,37 +1032,55 @@ class AddressBookPeerCard extends BasePeerCard {
   Future<List<MenuEntryBase<String>>> _buildMenuItems(
       BuildContext context) async {
     final List<MenuEntryBase<String>> menuItems = [
-      _connectAction(context, peer),
-      _transferFileAction(context, peer.id),
+      _connectAction(context),
+      if (!isWeb) _transferFileAction(context),
     ];
     if (isDesktop && peer.platform != kPeerPlatformAndroid) {
-      menuItems.add(_tcpTunnelingAction(context, peer.id));
+      menuItems.add(_tcpTunnelingAction(context));
     }
     // menuItems.add(await _openNewConnInOptAction(peer.id));
-    menuItems.add(await _forceAlwaysRelayAction(peer.id));
-    if (Platform.isWindows && peer.platform == kPeerPlatformWindows) {
+    // menuItems.add(await _forceAlwaysRelayAction(peer.id));
+    if (isWindows && peer.platform == kPeerPlatformWindows) {
       menuItems.add(_rdpAction(context, peer.id));
     }
-    if (Platform.isWindows) {
+    if (isWindows) {
       menuItems.add(_createShortCutAction(peer.id));
     }
-    menuItems.add(MenuEntryDivider());
-    menuItems.add(_renameAction(peer.id));
-    if (peer.hash.isNotEmpty) {
-      menuItems.add(_unrememberPasswordAction(peer.id));
+    if (gFFI.abModel.current.canWrite()) {
+      menuItems.add(MenuEntryDivider());
+      if (isDesktop || isWebDesktop) {
+        menuItems.add(_renameAction(peer.id));
+      }
+      if (gFFI.abModel.current.isPersonal() && peer.hash.isNotEmpty) {
+        menuItems.add(_unrememberPasswordAction(peer.id));
+      }
+      if (!gFFI.abModel.current.isPersonal()) {
+        menuItems.add(_changeSharedAbPassword());
+      }
+      if (gFFI.abModel.currentAbTags.isNotEmpty) {
+        menuItems.add(_editTagAction(peer.id));
+      }
     }
-    if (gFFI.abModel.tags.isNotEmpty) {
-      menuItems.add(_editTagAction(peer.id));
+    final addressbooks = gFFI.abModel.addressBooksCanWrite();
+    if (gFFI.peerTabModel.currentTab == PeerTabIndex.ab.index) {
+      addressbooks.remove(gFFI.abModel.currentName.value);
     }
-
-    menuItems.add(MenuEntryDivider());
-    menuItems.add(_removeAction(peer.id));
+    if (addressbooks.isNotEmpty) {
+      menuItems.add(_addToAb(peer));
+    }
+    menuItems.add(_existIn());
+    if (gFFI.abModel.current.canWrite()) {
+      menuItems.add(MenuEntryDivider());
+      menuItems.add(_removeAction(peer.id));
+    }
     return menuItems;
   }
 
+  // address book does not need to update
   @protected
   @override
-  void _update() => gFFI.abModel.pullAb(quiet: true);
+  void _update() =>
+      {}; //gFFI.abModel.pullAb(force: ForcePullAb.current, quiet: true);
 
   @protected
   MenuEntryBase<String> _editTagAction(String id) {
@@ -1059,8 +1091,7 @@ class AddressBookPeerCard extends BasePeerCard {
       ),
       proc: () {
         editAbTagDialog(gFFI.abModel.getPeerTags(id), (selectedTag) async {
-          gFFI.abModel.changeTagForPeer(id, selectedTag);
-          gFFI.abModel.pushAb();
+          await gFFI.abModel.changeTagForPeers([id], selectedTag);
         });
       },
       padding: super.menuPadding,
@@ -1072,6 +1103,53 @@ class AddressBookPeerCard extends BasePeerCard {
   @override
   Future<String> _getAlias(String id) async =>
       gFFI.abModel.find(id)?.alias ?? '';
+
+  MenuEntryBase<String> _changeSharedAbPassword() {
+    return MenuEntryButton<String>(
+      childBuilder: (TextStyle? style) => Text(
+        translate(
+            peer.password.isEmpty ? 'Set shared password' : 'Change Password'),
+        style: style,
+      ),
+      proc: () {
+        setSharedAbPasswordDialog(gFFI.abModel.currentName.value, peer);
+      },
+      padding: super.menuPadding,
+      dismissOnClicked: true,
+    );
+  }
+
+  MenuEntryBase<String> _existIn() {
+    final names = gFFI.abModel.idExistIn(peer.id);
+    final text = names.join(', ');
+    return MenuEntryButton<String>(
+      childBuilder: (TextStyle? style) => Text(
+        translate('Exist in'),
+        style: style,
+      ),
+      proc: () {
+        gFFI.dialogManager.show((setState, close, context) {
+          return CustomAlertDialog(
+            title: Text(translate('Exist in')),
+            content: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [Text(text)]),
+            actions: [
+              dialogButton(
+                "OK",
+                icon: Icon(Icons.done_rounded),
+                onPressed: close,
+              ),
+            ],
+            onSubmit: close,
+            onCancel: close,
+          );
+        });
+      },
+      padding: super.menuPadding,
+      dismissOnClicked: true,
+    );
+  }
 }
 
 class MyGroupPeerCard extends BasePeerCard {
@@ -1086,18 +1164,18 @@ class MyGroupPeerCard extends BasePeerCard {
   Future<List<MenuEntryBase<String>>> _buildMenuItems(
       BuildContext context) async {
     final List<MenuEntryBase<String>> menuItems = [
-      _connectAction(context, peer),
-      _transferFileAction(context, peer.id),
+      _connectAction(context),
+      if (!isWeb) _transferFileAction(context),
     ];
     if (isDesktop && peer.platform != kPeerPlatformAndroid) {
-      menuItems.add(_tcpTunnelingAction(context, peer.id));
+      menuItems.add(_tcpTunnelingAction(context));
     }
     // menuItems.add(await _openNewConnInOptAction(peer.id));
     // menuItems.add(await _forceAlwaysRelayAction(peer.id));
-    if (Platform.isWindows && peer.platform == kPeerPlatformWindows) {
+    if (isWindows && peer.platform == kPeerPlatformWindows) {
       menuItems.add(_rdpAction(context, peer.id));
     }
-    if (Platform.isWindows) {
+    if (isWindows) {
       menuItems.add(_createShortCutAction(peer.id));
     }
     // menuItems.add(MenuEntryDivider());
@@ -1106,9 +1184,7 @@ class MyGroupPeerCard extends BasePeerCard {
     //   menuItems.add(_unrememberPasswordAction(peer.id));
     // }
     if (gFFI.userModel.userName.isNotEmpty) {
-      if (!gFFI.abModel.idContainBy(peer.id)) {
-        menuItems.add(_addToAb(peer));
-      }
+      menuItems.add(_addToAb(peer));
     }
     return menuItems;
   }
@@ -1175,7 +1251,7 @@ void _rdpDialog(String id) async {
             ).marginOnly(bottom: isDesktop ? 8 : 0),
             Row(
               children: [
-                isDesktop
+                (isDesktop || isWebDesktop)
                     ? ConstrainedBox(
                         constraints: const BoxConstraints(minWidth: 140),
                         child: Text(
@@ -1186,15 +1262,17 @@ void _rdpDialog(String id) async {
                 Expanded(
                   child: TextField(
                     decoration: InputDecoration(
-                        labelText: isDesktop ? null : translate('Username')),
+                        labelText: (isDesktop || isWebDesktop)
+                            ? null
+                            : translate('Username')),
                     controller: userController,
                   ),
                 ),
               ],
-            ).marginOnly(bottom: isDesktop ? 8 : 0),
+            ).marginOnly(bottom: (isDesktop || isWebDesktop) ? 8 : 0),
             Row(
               children: [
-                isDesktop
+                (isDesktop || isWebDesktop)
                     ? ConstrainedBox(
                         constraints: const BoxConstraints(minWidth: 140),
                         child: Text(
@@ -1206,7 +1284,9 @@ void _rdpDialog(String id) async {
                   child: Obx(() => TextField(
                         obscureText: secure.value,
                         decoration: InputDecoration(
-                            labelText: isDesktop ? null : translate('Password'),
+                            labelText: (isDesktop || isWebDesktop)
+                                ? null
+                                : translate('Password'),
                             suffixIcon: IconButton(
                                 onPressed: () => secure.value = !secure.value,
                                 icon: Icon(secure.value
@@ -1304,24 +1384,32 @@ class TagPainter extends CustomPainter {
   }
 }
 
-void connectInPeerTab(BuildContext context, String id, PeerTabIndex tab,
+void connectInPeerTab(BuildContext context, Peer peer, PeerTabIndex tab,
     {bool isFileTransfer = false,
     bool isTcpTunneling = false,
     bool isRDP = false}) async {
+  var password = '';
+  bool isSharedPassword = false;
   if (tab == PeerTabIndex.ab) {
     // If recent peer's alias is empty, set it to ab's alias
     // Because the platform is not set, it may not take effect, but it is more important not to display if the connection is not successful
-    Peer? p = gFFI.abModel.find(id);
-    if (p != null &&
-        p.alias.isNotEmpty &&
-        (await bind.mainGetPeerOption(id: id, key: "alias")).isEmpty) {
+    if (peer.alias.isNotEmpty &&
+        (await bind.mainGetPeerOption(id: peer.id, key: "alias")).isEmpty) {
       await bind.mainSetPeerAlias(
-        id: id,
-        alias: p.alias,
+        id: peer.id,
+        alias: peer.alias,
       );
     }
+    if (!gFFI.abModel.current.isPersonal()) {
+      if (peer.password.isNotEmpty) {
+        password = peer.password;
+        isSharedPassword = true;
+      }
+    }
   }
-  connect(context, id,
+  connect(context, peer.id,
+      password: password,
+      isSharedPassword: isSharedPassword,
       isFileTransfer: isFileTransfer,
       isTcpTunneling: isTcpTunneling,
       isRDP: isRDP);
