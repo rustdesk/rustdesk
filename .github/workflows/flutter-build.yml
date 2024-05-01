@@ -1571,7 +1571,7 @@ jobs:
           sed -i "s/x86_64/${{ matrix.job.arch }}/g" res/PKGBUILD
           if [[ "${{ matrix.job.arch }}" == "aarch64" ]]; then
             sed -i "s/linux\/x64/linux\/arm64/g" ./res/PKGBUILD
-          end
+          fi
 
       - name: Build archlinux package
         if: matrix.job.extra-build-features == '' && env.UPLOAD_ARTIFACT == 'true'
