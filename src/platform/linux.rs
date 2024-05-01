@@ -780,7 +780,7 @@ pub fn check_super_user_permission() -> ResultType<bool> {
     );
     let arg;
     if Path::new(&file).is_file() {
-        arg = &file;
+        arg = file.as_str();
     } else {
         arg = "echo";
     }
@@ -1027,8 +1027,13 @@ mod desktop {
         fn get_display_xauth_xwayland(&mut self) {
             let tray = format!("{} +--tray", crate::get_app_name().to_lowercase());
             for _ in 0..5 {
-                let display_proc =
-                    vec![XWAYLAND, IBUS_DAEMON, GNOME_GOA_DAEMON, PLASMA_KDED, &tray];
+                let display_proc = vec![
+                    XWAYLAND,
+                    IBUS_DAEMON,
+                    GNOME_GOA_DAEMON,
+                    PLASMA_KDED,
+                    tray.as_str(),
+                ];
                 for proc in display_proc {
                     self.display = get_env("DISPLAY", &self.uid, proc);
                     self.xauth = get_env("XAUTHORITY", &self.uid, proc);
@@ -1134,7 +1139,7 @@ mod desktop {
                     PLASMA_KDED,
                     XFCE4_PANEL,
                     SDDM_GREETER,
-                    &tray,
+                    tray.as_str(),
                 ];
                 for proc in display_proc {
                     self.xauth = get_env("XAUTHORITY", &self.uid, proc);
