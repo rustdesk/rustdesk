@@ -1568,7 +1568,7 @@ jobs:
       - name: Patch archlinux PKGBUILD
         if: matrix.job.extra-build-features == '' && env.UPLOAD_ARTIFACT == 'true'
         run: |
-          sed -i "s/arch=('x86_64')/arch=('${{ matrix.job.arch }}')/g" res/PKGBUILD
+          sed -i "s/x86_64/${{ matrix.job.arch }}/g" res/PKGBUILD
           if [[ "${{ matrix.job.arch }}" == "aarch64" ]]; then
             sed -i "s/linux\/x64/linux\/arm64/g" ./res/PKGBUILD
           end
