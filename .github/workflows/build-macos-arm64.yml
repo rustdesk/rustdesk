@@ -19,7 +19,7 @@ env:
   # vcpkg version: 2024.03.25
   VCPKG_COMMIT_ID: "a34c873a9717a888f58dc05268dea15592c2f0ff"
   VERSION: "1.2.4"
-  NDK_VERSION: "r26b"
+  NDK_VERSION: "r26d"
   #signing keys env variable checks
   ANDROID_SIGNING_KEY: "${{ secrets.ANDROID_SIGNING_KEY }}"
   MACOS_P12_BASE64: "${{ secrets.MACOS_P12_BASE64 }}"
@@ -224,7 +224,7 @@ jobs:
           path: ${{steps.sign-rustdesk.outputs.signedReleaseFile}}
 
       - name: Publish signed apk package
-        if: env.ANDROID_SIGNING_KEY != null && env.UPLOAD_ARTIFACT == 'true'
+        if: env.ANDROID_SIGNING_KEY != null
         uses: softprops/action-gh-release@v1
         with:
           prerelease: true
