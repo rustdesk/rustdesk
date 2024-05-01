@@ -1184,6 +1184,7 @@ jobs:
 
   build-rustdesk-sciter-arm:
     if: ${{ inputs.upload-artifact }}
+    needs: build-rustdesk-lib-linux # not for dep, just make it run later for parallelism
     runs-on: [self-hosted, Linux, ARM64]
     name: build-rustdesk-sciter-arm ${{ matrix.job.target }}
     strategy:
