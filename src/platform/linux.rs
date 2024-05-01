@@ -1360,9 +1360,9 @@ fn switch_service(stop: bool) -> String {
     let home = std::env::var("HOME").unwrap_or_default();
     Config::set_option("stop-service".into(), if stop { "Y" } else { "" }.into());
     if home != "/root" && !Config::get().is_empty() {
-        let app_name0 = crate::get_app_name().to_lowercase();
-        let app_name = crate::get_app_name();
-        format!("cp -f {home}/.config/{app_name}/{app_name0}.toml /root/.config/{app_name}/; cp -f {home}/.config/{app_name}/{app_name0}2.toml /root/.config/{app_name}/;")
+        let p = format!(".config/{}", crate::get_app_name().to_lowercase());
+        let app_name0 = crate::get_app_name();
+        format!("cp -f {home}/{p}/{app_name0}.toml /root/{p}/; cp -f {home}/{p}/{app_name0}2.toml /root/{p}/;")
     } else {
         "".to_owned()
     }
