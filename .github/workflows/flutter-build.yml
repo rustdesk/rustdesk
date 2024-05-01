@@ -1565,20 +1565,16 @@ jobs:
           name: rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}.deb
           path: rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}.deb
 
-      # Temporary disable for there is no many archlinux arm hosts
       - name: Patch archlinux PKGBUILD
-        if: matrix.job.extra-build-features == '' && env.UPLOAD_ARTIFACT == 'true' && matrix.job.arch == 'x86_64'
+        if: matrix.job.extra-build-features == '' && env.UPLOAD_ARTIFACT == 'true'
         run: |
           sed -i "s/arch=('x86_64')/arch=('${{ matrix.job.arch }}')/g" res/PKGBUILD
-          case ${{ matrix.job.arch }} in
-              aarch64)
-                sed -i "s/linux\/x64/linux\/arm64/g" ./res/PKGBUILD
-                ;;
-          esac
+          if [[ "${{ matrix.job.arch }}" == "aarch64" ]]; then
+            sed -i "s/linux\/x64/linux\/arm64/g" ./res/PKGBUILD
+          end
 
-      # Temporary disable for there is no many archlinux arm hosts
       - name: Build archlinux package
-        if: matrix.job.extra-build-features == '' && env.UPLOAD_ARTIFACT == 'true' && matrix.job.arch == 'x86_64'
+        if: matrix.job.extra-build-features == '' && env.UPLOAD_ARTIFACT == 'true'
         uses: rustdesk-org/arch-makepkg-action@master
         with:
           packages: >
@@ -1615,7 +1611,7 @@ jobs:
             cd res && HBB=`pwd`/.. FLUTTER=1 makepkg -f
 
       - name: Publish archlinux package
-        if: matrix.job.extra-build-features == '' && env.UPLOAD_ARTIFACT == 'true' && matrix.job.arch == 'x86_64'
+        if: matrix.job.extra-build-features == '' && env.UPLOAD_ARTIFACT == 'true'
         uses: softprops/action-gh-release@v1
         with:
           prerelease: true
