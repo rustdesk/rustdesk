@@ -778,9 +778,10 @@ pub fn get_capturables() -> Result<Vec<PipeWireCapturable>, Box<dyn Error>> {
 }
 
 fn is_server_running() -> bool {
+    let app_name = config::APP_NAME.read().unwrap().clone().to_lowercase();
     let output = match Command::new("sh")
         .arg("-c")
-        .arg("ps aux | grep rustdesk")
+        .arg(&format!("ps aux | grep {}", app_name))
         .output()
     {
         Ok(output) => output,
@@ -790,6 +791,6 @@ fn is_server_running() -> bool {
     };
 
     let output_str = String::from_utf8_lossy(&output.stdout);
-    let is_running = output_str.contains("rustdesk --server");
+    let is_running = output_str.contains(&format!("{} --server", app_name));
     is_running
 }
