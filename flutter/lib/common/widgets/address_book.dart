@@ -385,10 +385,10 @@ class _AddressBookState extends State<AddressBook> {
       if (canWrite) getEntry(translate("Add Tag"), abAddTag),
       getEntry(translate("Unselect all tags"), gFFI.abModel.unsetSelectedTags),
       sortMenuItem(),
-      syncMenuItem(),
+      if (canWrite) syncMenuItem(),
       filterMenuItem(),
       if (!gFFI.abModel.legacyMode.value) MenuEntryDivider<String>(),
-      if (!gFFI.abModel.legacyMode.value)
+      if (!gFFI.abModel.legacyMode.value && canWrite)
         getEntry(translate("ab_web_console_tip"), () async {
           final url = await bind.mainGetApiServer();
           if (await canLaunchUrlString(url)) {

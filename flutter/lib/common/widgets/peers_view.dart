@@ -86,17 +86,6 @@ class _PeersViewState extends State<_PeersView> with WindowListener {
   var _queryCount = 0;
   var _exit = false;
 
-  late final mobileWidth = () {
-    const minWidth = 320.0;
-    final windowWidth = MediaQuery.of(context).size.width;
-    var width = windowWidth - 2 * space;
-    if (windowWidth > minWidth + 2 * space) {
-      final n = (windowWidth / (minWidth + 2 * space)).floor();
-      width = windowWidth / n - 2 * space;
-    }
-    return width;
-  }();
-
   final _scrollController = ScrollController();
 
   _PeersViewState() {
@@ -189,61 +178,60 @@ class _PeersViewState extends State<_PeersView> with WindowListener {
                 onVisibilityChanged: onVisibilityChanged,
                 child: widget.peerCardBuilder(peer),
               );
-              final windowWidth = MediaQuery.of(context).size.width;
               // `Provider.of<PeerTabModel>(context)` will causes infinete loop.
               // Because `gFFI.peerTabModel.setCurrentTabCachedPeers(peers)` will trigger `notifyListeners()`.
               //
               // No need to listen the currentTab change event.
               // Because the currentTab change event will trigger the peers change event,
               // and the peers change event will trigger _buildPeersView().
-              final currentTab =
-                  Provider.of<PeerTabModel>(context, listen: false).currentTab;
-              final hideAbTagsPanel =
-                  bind.mainGetLocalOption(key: "hideAbTagsPanel").isNotEmpty;
               return (isDesktop || isWebDesktop)
-                  ? Obx(
-                      () => SizedBox(
-                        width: peerCardUiType.value != PeerUiType.list
-                            ? 220
-                            : currentTab == PeerTabIndex.group.index ||
-                                    (currentTab == PeerTabIndex.ab.index &&
-                                        !hideAbTagsPanel)
-                                ? windowWidth - 390
-                                : windowWidth - 227,
-                        height: peerCardUiType.value == PeerUiType.grid
-                            ? 140
-                            : peerCardUiType.value != PeerUiType.list
-                                ? 42
-                                : 45,
-                        child: visibilityChild,
-                      ),
-                    )
-                  : SizedBox(width: mobileWidth, child: visibilityChild);
+                  ? Obx(() => peerCardUiType.value == PeerUiType.list
+                      ? Container(height: 45, child: visibilityChild)
+                      : peerCardUiType.value == PeerUiType.grid
+                          ? SizedBox(
+                              width: 220, height: 140, child: visibilityChild)
+                          : SizedBox(
+                              width: 220, height: 42, child: visibilityChild))
+                  : Container(child: visibilityChild);
             }
 
             final Widget child;
             if (isMobile) {
-              child = DynamicGridView.builder(
-                gridDelegate: SliverGridDelegateWithWrapping(
-                    mainAxisSpacing: space / 2, crossAxisSpacing: space),
+              child = ListView.builder(
                 itemCount: peers.length,
                 itemBuilder: (BuildContext context, int index) {
-                  return buildOnePeer(peers[index]);
+                  return buildOnePeer(peers[index]).marginOnly(
+                      top: index == 0 ? 0 : space / 2, bottom: space / 2);
                 },
               );
             } else {
-              child = DesktopScrollWrapper(
-                scrollController: _scrollController,
-                child: DynamicGridView.builder(
-                    controller: _scrollController,
-                    physics: DraggableNeverScrollableScrollPhysics(),
-                    gridDelegate: SliverGridDelegateWithWrapping(
-                        mainAxisSpacing: space / 2, crossAxisSpacing: space),
-                    itemCount: peers.length,
-                    itemBuilder: (BuildContext context, int index) {
-                      return buildOnePeer(peers[index]);
-                    }),
-              );
+              child = Obx(() => peerCardUiType.value == PeerUiType.list
+                  ? DesktopScrollWrapper(
+                      scrollController: _scrollController,
+                      child: ListView.builder(
+                          controller: _scrollController,
+                          physics: DraggableNeverScrollableScrollPhysics(),
+                          itemCount: peers.length,
+                          itemBuilder: (BuildContext context, int index) {
+                            return buildOnePeer(peers[index]).marginOnly(
+                                right: space,
+                                top: index == 0 ? 0 : space / 2,
+                                bottom: space / 2);
+                          }),
+                    )
+                  : DesktopScrollWrapper(
+                      scrollController: _scrollController,
+                      child: DynamicGridView.builder(
+                          controller: _scrollController,
+                          physics: DraggableNeverScrollableScrollPhysics(),
+                          gridDelegate: SliverGridDelegateWithWrapping(
+                              mainAxisSpacing: space / 2,
+                              crossAxisSpacing: space),
+                          itemCount: peers.length,
+                          itemBuilder: (BuildContext context, int index) {
+                            return buildOnePeer(peers[index]);
+                          }),
+                    ));
             }
 
             if (updateEvent == UpdateEvent.load) {
