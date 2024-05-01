@@ -84,7 +84,7 @@ class AbModel {
   reset() async {
     print("reset ab model");
     addressbooks.clear();
-    setCurrentName('');
+    _currentName.value = '';
     await bind.mainClearAb();
     listInitialized = false;
   }
