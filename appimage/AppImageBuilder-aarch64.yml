@@ -52,13 +52,14 @@ AppDir:
     - libvdpau1
     - libgstreamer-plugins-base1.0-0
     - gstreamer1.0-pipewire
+    - libwayland-client0
     - libwayland-cursor0
     - libwayland-egl1
     - libpulse0
     - packagekit-gtk3-module
     - libcanberra-gtk3-module
     - libpam0g
-    - pipewire # to include /usr/lib/x86_64-linux-gnu/spa/support/libspa-support.so on 20.04, may be different for 22.04, libspa-0.2-modules has /usr/lib/x86_64-linux-gnu/spa0.2/support/libspa-support.so on 22.04
+    - pipewire # to include /usr/lib/aarch64-linux-gnu/spa/support/libspa-support.so on 20.04, may be different for 22.04, libspa-0.2-modules has /usr/lib/x86_64-linux-gnu/spa0.2/support/libspa-support.so on 22.04
     exclude:
     - humanity-icon-theme
     - hicolor-icon-theme
@@ -76,6 +77,7 @@ AppDir:
     env:
       GIO_MODULE_DIR: $APPDIR/usr/lib/aarch64-linux-gnu/gio/modules/
       GDK_BACKEND: x11
+      SPA_PLUGIN_DIR: $APPDIR/usr/lib/aarch64-linux-gnu/spa/
   test:
     fedora-30:
       image: appimagecrafters/tests-env:fedora-30

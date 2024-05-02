@@ -54,6 +54,7 @@ AppDir:
     - libvdpau1
     - libgstreamer-plugins-base1.0-0
     - gstreamer1.0-pipewire
+    - libwayland-client0
     - libwayland-cursor0
     - libwayland-egl1
     - libpulse0
