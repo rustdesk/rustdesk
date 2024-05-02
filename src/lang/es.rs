@@ -603,7 +603,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("ab_web_console_tip", "Más en consola web"),
         ("allow-only-conn-window-open-tip", "Permitir la conexión solo si la ventana RusDesk está abierta"),
         ("no_need_privacy_mode_no_physical_displays_tip", "No hay pantallas físicas, no es necesario usar el modo privado."),
-        ("Follow remote cursor", ""),
-        ("Follow remote window focus", ""),
+        ("Follow remote cursor", "Seguir cursor remoto"),
+        ("Follow remote window focus", "Seguir ventana remota activa"),
     ].iter().cloned().collect();
 }
