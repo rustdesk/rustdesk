@@ -1181,6 +1181,9 @@ jobs:
             pushd /workspace
             export CARGO_INCREMENTAL=0
             python3 ./build.py --flutter --skip-cargo
+            for name in rustdesk*??.deb; do
+              mv "$name" "${name%%.deb}-${{ matrix.job.arch }}.deb"
+            done
             # rpm package
             echo -e "start packaging fedora package"
             pushd /workspace
@@ -1203,10 +1206,6 @@ jobs:
             pushd ~/rpmbuild/RPMS/${{ matrix.job.arch }}
             for name in rustdesk*??.rpm; do
                 mv "$name" "${name%%.rpm}-suse.rpm"
-            done
-            pushd /workspace
-            for name in rustdesk*??.deb; do
-              mv "$name" "${name%%.deb}-${{ matrix.job.arch }}.deb"
             done
 
       - name: Publish debian/rpm package
