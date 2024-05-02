@@ -394,7 +394,7 @@ jobs:
 
   build-rustdesk-ios:
     if: ${{ inputs.upload-artifact }}
-    name: build rustdesk ios ipa ${{ matrix.job.target }} (${{ matrix.job.os }}) [${{ matrix.job.extra-build-features }}]
+    name: build rustdesk ios ipa
     runs-on: ${{ matrix.job.os }}
     strategy:
       fail-fast: false
@@ -404,7 +404,6 @@ jobs:
               arch: aarch64,
               target: aarch64-apple-ios,
               os: macos-13,
-              extra-build-features: "",
             }
     steps:
       - name: Export GitHub Actions cache environment variables
@@ -445,7 +444,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           prefix-key: rustdesk-lib-cache-ios
-          key: ${{ matrix.job.target }}-${{ matrix.job.extra-build-features }}
+          key: ${{ matrix.job.target }}
 
       - name: Install flutter rust bridge deps
         shell: bash
@@ -756,7 +755,7 @@ jobs:
 
   build-rustdesk-android:
     needs: [generate-bridge-linux]
-    name: build rustdesk android apk ${{ matrix.job.target }} (${{ matrix.job.os }}) [${{ matrix.job.extra-build-features }}]
+    name: build rustdesk android apk ${{ matrix.job.target }}
     runs-on: ${{ matrix.job.os }}
     strategy:
       fail-fast: false
@@ -766,14 +765,12 @@ jobs:
               arch: aarch64,
               target: aarch64-linux-android,
               os: ubuntu-20.04,
-              extra-build-features: "",
               openssl-arch: android-arm64,
             }
           - {
               arch: armv7,
               target: armv7-linux-androideabi,
               os: ubuntu-20.04,
-              extra-build-features: "",
               openssl-arch: android-arm,
             }
     steps:
@@ -867,7 +864,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           prefix-key: rustdesk-lib-cache-android # TODO: drop '-android' part after caches are invalidated
-          key: ${{ matrix.job.target }}-${{ matrix.job.extra-build-features }}
+          key: ${{ matrix.job.target }}
 
       - name: Build rustdesk lib
         env:
@@ -962,7 +959,7 @@ jobs:
 
   build-rustdesk-linux:
     needs: [generate-bridge-linux]
-    name: build-rust-lib ${{ matrix.job.target }} ${{ matrix.job.extra-build-features }}
+    name: build-rust-lib ${{ matrix.job.target }} 
     runs-on: ${{ matrix.job.on }}
     strategy:
       fail-fast: false
@@ -1042,7 +1039,7 @@ jobs:
           vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
 
       - name: Install vcpkg dependencies
-        if: matrix.job.extra-build-features == '' || env.UPLOAD_ARTIFACT == 'true'
+        if: env.UPLOAD_ARTIFACT == 'true'
         run: |
           case ${{ matrix.job.target }} in
             aarch64-unknown-linux-gnu)
@@ -1063,7 +1060,7 @@ jobs:
       - uses: rustdesk-org/run-on-arch-action@amd64-support
         name: Build rustdesk library for ${{ matrix.job.arch }}
         id: vcpkg
-        if: matrix.job.extra-build-features == '' || env.UPLOAD_ARTIFACT == 'true'
+        if: env.UPLOAD_ARTIFACT == 'true'
         with:
           arch: ${{ matrix.job.arch }}
           distro: ${{ matrix.job.distro }}
@@ -1221,15 +1218,15 @@ jobs:
             rustdesk-*.deb
             rustdesk-*.rpm
 
-      - name: Upload Artifact
+      - name: Upload deb 
         uses: actions/upload-artifact@master
-        if: matrix.job.extra-build-features == 'flatpak' && env.UPLOAD_ARTIFACT == 'true'
+        if: env.UPLOAD_ARTIFACT == 'true'
         with:
           name: rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}.deb
           path: rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}.deb
       
       - name: Patch archlinux PKGBUILD
-        if: matrix.job.extra-build-features == '' && env.UPLOAD_ARTIFACT == 'true'
+        if: env.UPLOAD_ARTIFACT == 'true'
         run: |
           sed -i "s/x86_64/${{ matrix.job.arch }}/g" res/PKGBUILD
           if [[ "${{ matrix.job.arch }}" == "aarch64" ]]; then
@@ -1237,7 +1234,7 @@ jobs:
           fi
 
       - name: Build archlinux package
-        if: matrix.job.extra-build-features == '' && env.UPLOAD_ARTIFACT == 'true'
+        if: env.UPLOAD_ARTIFACT == 'true'
         uses: rustdesk-org/arch-makepkg-action@master
         with:
           packages: >
@@ -1274,7 +1271,7 @@ jobs:
             cd res && HBB=`pwd`/.. FLUTTER=1 makepkg -f
 
       - name: Publish archlinux package
-        if: matrix.job.extra-build-features == '' && env.UPLOAD_ARTIFACT == 'true'
+        if: env.UPLOAD_ARTIFACT == 'true'
         uses: softprops/action-gh-release@v1
         with:
           prerelease: true
@@ -1297,7 +1294,6 @@ jobs:
               target: armv7-unknown-linux-gnueabihf,
               deb-arch: armhf,
               use-cross: true,
-              extra-build-features: "",
             }
     steps:
       - name: Export GitHub Actions cache environment variables
@@ -1429,7 +1425,7 @@ jobs:
             export VCPKG_ROOT=/opt/artifacts/vcpkg
             export ARCH=armhf
             export CARGO_INCREMENTAL=0
-            cargo build --features inline,${{ matrix.job.extra-build-features }} --release --bins --jobs 3
+            cargo build --features inline --release --bins --jobs 3
             # package
             mkdir -p ./Release
             mv ./target/release/rustdesk ./Release/rustdesk
@@ -1445,20 +1441,13 @@ jobs:
           done
 
       - name: Publish debian package
-        if: matrix.job.extra-build-features == '' && env.UPLOAD_ARTIFACT == 'true'
+        if: env.UPLOAD_ARTIFACT == 'true'
         uses: softprops/action-gh-release@v1
         with:
           prerelease: true
           tag_name: ${{ env.TAG_NAME }}
           files: |
             rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}-sciter.deb
-
-      - name: Upload Artifact
-        uses: actions/upload-artifact@master
-        if: ${{ contains(matrix.job.extra-build-features, 'flatpak') }}
-        with:
-          name: rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}-sciter.deb
-          path: rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}-sciter.deb
 
   build-flatpak-appimage:
     name: Build Flatpak ${{ matrix.job.target }}
@@ -1497,7 +1486,6 @@ jobs:
           mv rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}.deb rustdesk-${{ env.VERSION }}.deb
 
       - name: Build appimage package
-        if: matrix.job.extra-build-features == 'appimage' && env.UPLOAD_ARTIFACT == 'true'
         shell: bash
         run: |
           # set-up appimage-builder
