@@ -560,8 +560,7 @@ async fn sync_and_watch_config_dir() {
 
     let mut cfg0 = (Config::get(), Config2::get());
     let mut synced = false;
-    let is_server = std::env::args().nth(1) == Some("--server".to_owned());
-    let tries = if is_server { 30 } else { 3 };
+    let tries = if crate::is_server() { 30 } else { 3 };
     log::debug!("#tries of ipc service connection: {}", tries);
     use hbb_common::sleep;
     for i in 1..=tries {

@@ -15,8 +15,8 @@ use hbb_common::{
     config::{self, Config, CONNECT_TIMEOUT, READ_TIMEOUT, REG_INTERVAL, RENDEZVOUS_PORT},
     futures::future::join_all,
     log,
-    proxy::Proxy,
     protobuf::Message as _,
+    proxy::Proxy,
     rendezvous_proto::*,
     sleep,
     socket_client::{self, connect_tcp, is_ipv4},
@@ -89,9 +89,10 @@ impl RendezvousMediator {
             });
         }
         // It is ok to run xdesktop manager when the headless function is not allowed.
-        #[cfg(all(target_os = "linux", feature = "linux_headless"))]
-        #[cfg(not(any(feature = "flatpak", feature = "appimage")))]
-        crate::platform::linux_desktop_manager::start_xdesktop();
+        #[cfg(target_os = "linux")]
+        if crate::is_server() {
+            crate::platform::linux_desktop_manager::start_xdesktop();
+        }
         loop {
             let conn_start_time = Instant::now();
             *SOLVING_PK_MISMATCH.lock().await = "".to_owned();
@@ -128,11 +129,6 @@ impl RendezvousMediator {
                 }
             }
         }
-        // It should be better to call stop_xdesktop.
-        // But for server, it also is Ok without calling this method.
-        // #[cfg(all(target_os = "linux", feature = "linux_headless"))]
-        // #[cfg(not(any(feature = "flatpak", feature = "appimage")))]
-        // crate::platform::linux_desktop_manager::stop_xdesktop();
     }
 
     fn get_host_prefix(host: &str) -> String {

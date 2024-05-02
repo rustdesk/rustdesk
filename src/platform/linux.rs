@@ -1,7 +1,5 @@
 use super::{CursorData, ResultType};
 use desktop::Desktop;
-#[cfg(all(feature = "linux_headless"))]
-#[cfg(not(any(feature = "flatpak", feature = "appimage")))]
 use hbb_common::config::CONFIG_OPTION_ALLOW_LINUX_HEADLESS;
 pub use hbb_common::platform::linux::*;
 use hbb_common::{
@@ -96,8 +94,6 @@ pub struct xcb_xfixes_get_cursor_image {
 }
 
 #[inline]
-#[cfg(feature = "linux_headless")]
-#[cfg(not(any(feature = "flatpak", feature = "appimage")))]
 pub fn is_headless_allowed() -> bool {
     Config::get_option(CONFIG_OPTION_ALLOW_LINUX_HEADLESS) == "Y"
 }

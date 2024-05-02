@@ -41,15 +41,23 @@ pub fn start(args: &mut [String]) {
     crate::platform::delegate::show_dock();
     #[cfg(all(target_os = "linux", feature = "inline"))]
     {
-        #[cfg(feature = "appimage")]
-        let prefix = std::env::var("APPDIR").unwrap_or("".to_string());
-        #[cfg(not(feature = "appimage"))]
-        let prefix = "".to_string();
-        #[cfg(feature = "flatpak")]
-        let dir = "/app";
-        #[cfg(not(feature = "flatpak"))]
-        let dir = "/usr";
-        sciter::set_library(&(prefix + dir + "/lib/rustdesk/libsciter-gtk.so")).ok();
+        let app_dir = std::env::var("APPDIR").unwrap_or("".to_string());
+        let mut so_path = "/usr/lib/rustdesk/libsciter-gtk.so".to_owned();
+        for (prefix, dir) in [
+            ("", "/usr"),
+            ("", "/app"),
+            (&app_dir, "/usr"),
+            (&app_dir, "/app"),
+        ]
+        .iter()
+        {
+            let path = format!("{prefix}{dir}/lib/rustdesk/libsciter-gtk.so");
+            if std::path::Path::new(&path).exists() {
+                so_path = path;
+                break;
+            }
+        }
+        sciter::set_library(&so_path).ok();
     }
     #[cfg(windows)]
     // Check if there is a sciter.dll nearby.

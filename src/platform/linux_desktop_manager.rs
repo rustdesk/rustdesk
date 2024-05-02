@@ -44,8 +44,8 @@ fn check_desktop_manager() {
     }
 }
 
-// --server process
 pub fn start_xdesktop() {
+    debug_assert!(crate::is_sever());
     std::thread::spawn(|| {
         *DESKTOP_MANAGER.lock().unwrap() = Some(DesktopManager::new());
 
@@ -91,6 +91,7 @@ fn detect_headless() -> Option<&'static str> {
 }
 
 pub fn try_start_desktop(_username: &str, _passsword: &str) -> String {
+    debug_assert!(crate::is_sever());
     if _username.is_empty() {
         let username = get_username();
         if username.is_empty() {
