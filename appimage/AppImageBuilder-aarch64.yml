@@ -58,7 +58,7 @@ AppDir:
     - packagekit-gtk3-module
     - libcanberra-gtk3-module
     - libpam0g
-    - libpipewire-0.3-0 
+    - libpipewire-0.2-1 # libpipewire-0.3-0 for Ubuntu 22.04
     exclude:
     - humanity-icon-theme
     - hicolor-icon-theme
@@ -74,7 +74,7 @@ AppDir:
     - usr/share/doc/*/TODO.*
   runtime:
     env:
-      GIO_MODULE_DIR: $APPDIR/usr/lib/x86_64-linux-gnu/gio/modules/
+      GIO_MODULE_DIR: $APPDIR/usr/lib/aarch64-linux-gnu/gio/modules/
       GDK_BACKEND: x11
   test:
     fedora-30:
