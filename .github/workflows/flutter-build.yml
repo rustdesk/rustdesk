@@ -1219,6 +1219,63 @@ jobs:
           name: rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}.deb
           path: rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}.deb
       
+      # only x86_64 for arch since we can not find newest arm64 docker image to build
+      # old arch image does not make sense for arch since it is "arch" which always update to date
+      # and failed to makepkg arm64 on x86_64 
+      - name: Patch archlinux PKGBUILD
+        if: matrix.job.arch == 'x86_64' && env.UPLOAD_ARTIFACT == 'true'
+        run: |
+          sed -i "s/x86_64/${{ matrix.job.arch }}/g" res/PKGBUILD
+          if [[ "${{ matrix.job.arch }}" == "aarch64" ]]; then
+            sed -i "s/linux\/x64/linux\/arm64/g" ./res/PKGBUILD
+          fi
+
+      - name: Build archlinux package
+        if: matrix.job.arch == 'x86_64' && env.UPLOAD_ARTIFACT == 'true'
+        uses: rustdesk-org/arch-makepkg-action@master
+        with:
+          packages: >
+            llvm
+            clang
+            libva
+            libvdpau
+            rust
+            gstreamer
+            unzip
+            git
+            cmake
+            gcc
+            curl
+            wget
+            nasm
+            zip
+            make
+            pkg-config
+            clang
+            gtk3
+            xdotool
+            libxcb
+            libxfixes
+            alsa-lib
+            pipewire
+            python
+            ttf-arphic-uming
+            libappindicator-gtk3
+            pam
+            gst-plugins-base
+            gst-plugin-pipewire
+          scripts: |
+            cd res && HBB=`pwd`/.. FLUTTER=1 makepkg -f
+
+      - name: Publish archlinux package
+        if: matrix.job.arch == 'x86_64' && env.UPLOAD_ARTIFACT == 'true'
+        uses: softprops/action-gh-release@v1
+        with:
+          prerelease: true
+          tag_name: ${{ env.TAG_NAME }}
+          files: |
+            res/rustdesk-${{ env.VERSION }}*.zst
+
   build-rustdesk-sciter-arm:
     if: ${{ inputs.upload-artifact }}
     needs: build-rustdesk-linux # not for dep, just make it run later for parallelism
@@ -1389,8 +1446,8 @@ jobs:
           files: |
             rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}-sciter.deb
 
-  build-arch-appimage:
-    name: Build arch/appimage ${{ matrix.job.target }}
+  build-appimage:
+    name: Build appimage ${{ matrix.job.target }}
     needs: [build-rustdesk-linux]
     runs-on: ubuntu-20.04
     if: ${{ inputs.upload-artifact }}
@@ -1420,71 +1477,6 @@ jobs:
         run: |
           mv rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}.deb rustdesk-${{ env.VERSION }}.deb
 
-      - name: Patch archlinux PKGBUILD
-        run: |
-          sed -i "s/x86_64/${{ matrix.job.arch }}/g" res/PKGBUILD
-          if [[ "${{ matrix.job.arch }}" == "aarch64" ]]; then
-            sed -i "s/linux\/x64/linux\/arm64/g" ./res/PKGBUILD
-          fi
-          sudo apt-get update -y
-          sudo apt-get install -y libarchive-tools
-          bsdtar -zxvf rustdesk-${{ env.VERSION }}.deb
-          tar -xvf ./data.tar.xz
-          case ${{ matrix.job.arch }} in
-            aarch64)
-              mkdir -p flutter/build/linux/arm64/release/bundle
-              cp -rf usr/lib/rustdesk/* flutter/build/linux/arm64/release/bundle/
-              ;;
-            x86_64)
-              mkdir -p flutter/build/linux/x64/release/bundle
-              cp -rf usr/lib/rustdesk/* flutter/build/linux/x64/release/bundle/
-              ;;
-          esac
-
-      - name: Build archlinux package
-        uses: rustdesk-org/arch-makepkg-action@master
-        with:
-          packages: >
-            llvm
-            clang
-            libva
-            libvdpau
-            rust
-            gstreamer
-            unzip
-            git
-            cmake
-            gcc
-            curl
-            wget
-            nasm
-            zip
-            make
-            pkg-config
-            clang
-            gtk3
-            xdotool
-            libxcb
-            libxfixes
-            alsa-lib
-            pipewire
-            python
-            ttf-arphic-uming
-            libappindicator-gtk3
-            pam
-            gst-plugins-base
-            gst-plugin-pipewire
-          scripts: |
-            cd res && HBB=`pwd`/.. FLUTTER=1 makepkg -f
-
-      - name: Publish archlinux package
-        uses: softprops/action-gh-release@v1
-        with:
-          prerelease: true
-          tag_name: ${{ env.TAG_NAME }}
-          files: |
-            res/rustdesk-${{ env.VERSION }}*.zst
-
       - name: Build appimage package
         shell: bash
         run: |
@@ -1497,6 +1489,15 @@ jobs:
           # run appimage-builder
           pushd appimage
           sudo appimage-builder --skip-tests --recipe ./AppImageBuilder-${{ matrix.job.arch }}.yml
+
+      - name: Publish appimage package
+        if: matrix.job.extra-build-features == 'appimage' && env.UPLOAD_ARTIFACT == 'true'
+        uses: softprops/action-gh-release@v1
+        with:
+          prerelease: true
+          tag_name: ${{ env.TAG_NAME }}
+          files: |
+            ./appimage/rustdesk-${{ env.VERSION }}-*.AppImage
 
   build-flatpak:
     name: Build flatpak ${{ matrix.job.target }}

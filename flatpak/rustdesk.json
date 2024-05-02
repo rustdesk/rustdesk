@@ -12,7 +12,7 @@
       "name": "pam",    
       "buildsystem": "simple",
       "build-commands": [
-          "./configure --prefix=/app && make -j4 install"
+          "./configure --disable-selinux --prefix=/app && make -j4 install"
       ],
       "sources": [
         {

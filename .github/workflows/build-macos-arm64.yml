@@ -58,6 +58,7 @@ jobs:
           mv rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}.deb rustdesk-${{ env.VERSION }}.deb
 
       - name: Patch archlinux PKGBUILD
+        if: matrix.job.arch == 'x86_64' 
         run: |
           sed -i "s/x86_64/${{ matrix.job.arch }}/g" res/PKGBUILD
           if [[ "${{ matrix.job.arch }}" == "aarch64" ]]; then
@@ -77,6 +78,7 @@ jobs:
           esac
 
       - name: Build archlinux package
+        if: matrix.job.arch == 'x86_64' 
         uses: rustdesk-org/arch-makepkg-action@master
         with:
           packages: >
@@ -113,6 +115,7 @@ jobs:
             cd res && HBB=`pwd`/.. FLUTTER=1 makepkg -f
 
       - name: Publish archlinux package
+        if: matrix.job.arch == 'x86_64' 
         uses: softprops/action-gh-release@v1
         with:
           prerelease: true
@@ -132,6 +135,15 @@ jobs:
           # run appimage-builder
           pushd appimage
           sudo appimage-builder --skip-tests --recipe ./AppImageBuilder-${{ matrix.job.arch }}.yml
+
+      - name: Publish appimage package
+        if: matrix.job.extra-build-features == 'appimage' && env.UPLOAD_ARTIFACT == 'true'
+        uses: softprops/action-gh-release@v1
+        with:
+          prerelease: true
+          tag_name: ${{ env.TAG_NAME }}
+          files: |
+            ./appimage/rustdesk-${{ env.VERSION }}-*.AppImage
 
   build-flatpak:
     name: Build Flatpak ${{ matrix.job.target }}
