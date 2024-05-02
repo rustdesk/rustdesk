@@ -1431,6 +1431,18 @@ jobs:
           if [[ "${{ matrix.job.arch }}" == "aarch64" ]]; then
             sed -i "s/linux\/x64/linux\/arm64/g" ./res/PKGBUILD
           fi
+          bsdtar -zxvf rustdesk-${{ env.VERSION }}.deb
+          tar -xvf ./data.tar.xz
+          case ${{ matrix.job.arch }} in
+            aarch64)
+              mkdir -p flutter/build/linux/arm64/release/bundle
+              cp -rf usr/lib/rustdesk/* flutter/build/linux/arm64/release/bundle/
+              ;;
+            x86_64)
+              mkdir -p flutter/build/linux/x64/release/bundle
+              cp -rf usr/lib/rustdesk/* flutter/build/linux/x64/release/bundle/
+              ;;
+          esac
 
       - name: Build archlinux package
         uses: rustdesk-org/arch-makepkg-action@master
@@ -1466,18 +1478,6 @@ jobs:
             gst-plugins-base
             gst-plugin-pipewire
           scripts: |
-            bsdtar -zxvf rustdesk-${{ env.VERSION }}.deb
-            tar -xvf ./data.tar.xz
-            case ${{ matrix.job.arch }} in
-              aarch64)
-                mkdir -p flutter/build/linux/arm64/release/bundle
-                cp -rf usr/lib/rustdesk/* flutter/build/linux/arm64/release/bundle/
-                ;;
-              x86_64)
-                mkdir -p flutter/build/linux/x64/release/bundle
-                cp -rf usr/lib/rustdesk/* flutter/build/linux/x64/release/bundle/
-                ;;
-            esac
             cd res && HBB=`pwd`/.. FLUTTER=1 makepkg -f
 
       - name: Publish archlinux package
@@ -1549,7 +1549,6 @@ jobs:
 
       - name: Publish flatpak package
         uses: softprops/action-gh-release@v1
-        if: env.UPLOAD_ARTIFACT == 'true'
         with:
           prerelease: true
           tag_name: ${{ env.TAG_NAME }}
