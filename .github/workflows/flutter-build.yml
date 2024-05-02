@@ -1143,6 +1143,7 @@ jobs:
             echo $JOBS
             cargo build --lib $JOBS --features hwcodec,flutter,flutter_texture_render --release
 
+            # Setup Flutter
             # disable git safe.directory
             git config --global --add safe.directory "*"
             pushd /workspace
@@ -1158,7 +1159,6 @@ jobs:
               ;;
             esac
             popd
-            # Setup Flutter
             pushd /opt
             wget https://storage.googleapis.com/flutter_infra_release/releases/stable/linux/flutter_linux_${{ env.FLUTTER_VERSION }}-stable.tar.xz
             tar xf flutter_linux_${{ env.FLUTTER_VERSION }}-stable.tar.xz
@@ -1178,12 +1178,15 @@ jobs:
                 flutter doctor -v
               ;;
             esac
+
+            # build flutter
             pushd /workspace
             export CARGO_INCREMENTAL=0
             python3 ./build.py --flutter --skip-cargo
             for name in rustdesk*??.deb; do
               mv "$name" "${name%%.deb}-${{ matrix.job.arch }}.deb"
             done
+
             # rpm package
             echo -e "start packaging fedora package"
             pushd /workspace
@@ -1194,6 +1197,10 @@ jobs:
             esac
             HBB=`pwd` rpmbuild ./res/rpm-flutter.spec -bb
             pushd ~/rpmbuild/RPMS/${{ matrix.job.arch }}
+            for name in rustdesk*??.rpm; do
+                mv "$name" /workspace/"${name%%.rpm}.rpm"
+            done
+
             # rpm suse package
             echo -e "start packaging suse package"
             pushd /workspace
@@ -1205,7 +1212,7 @@ jobs:
             HBB=`pwd` rpmbuild ./res/rpm-flutter-suse.spec -bb
             pushd ~/rpmbuild/RPMS/${{ matrix.job.arch }}
             for name in rustdesk*??.rpm; do
-                mv "$name" "${name%%.rpm}-suse.rpm"
+                mv "$name" /workspace/"${name%%.rpm}-suse.rpm"
             done
 
       - name: Publish debian/rpm package
