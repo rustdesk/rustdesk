@@ -387,7 +387,8 @@ class _AddressBookState extends State<AddressBook> {
       sortMenuItem(),
       if (canWrite) syncMenuItem(),
       filterMenuItem(),
-      if (!gFFI.abModel.legacyMode.value) MenuEntryDivider<String>(),
+      if (!gFFI.abModel.legacyMode.value && canWrite)
+        MenuEntryDivider<String>(),
       if (!gFFI.abModel.legacyMode.value && canWrite)
         getEntry(translate("ab_web_console_tip"), () async {
           final url = await bind.mainGetApiServer();
