@@ -12,6 +12,12 @@ script:
  # desktop file
  # - sed -i "s/Icon=\/usr\/share\/rustdesk\/files\/rustdesk.png/Icon=rustdesk/g" ./AppDir/usr/share/applications/rustdesk.desktop
  - rm -rf ./AppDir/usr/share/applications
+ - touch ./AppDir/start.sh
+ - echo "#\!/bin/sh" >> ./AppDir/start.sh
+ - echo "echo \$APPIMAGE" >> ./AppDir/start.sh
+ - echo "echo \$ARGV0" >> ./AppDir/start.sh
+ - echo "exec usr/lib/rustdesk/rustdesk" >> ./AppDir/start.sh
+ - chmod +x ./AppDir/start.sh
 AppDir:
   path: ./AppDir
   app_info:
@@ -19,7 +25,7 @@ AppDir:
     name: rustdesk
     icon: rustdesk
     version: 1.2.4
-    exec: usr/lib/rustdesk/rustdesk
+    exec: ./start.sh
     exec_args: $@
   apt:
     arch:
