@@ -1476,6 +1476,8 @@ jobs:
       - name: Rename Binary
         run: |
           mv rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}.deb rustdesk-${{ env.VERSION }}.deb
+          sudo apt-get update -y
+          sudo apt-get install -y libarchive-tools
 
       - name: Build appimage package
         shell: bash
