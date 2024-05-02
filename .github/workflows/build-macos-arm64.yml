@@ -53,7 +53,7 @@ jobs:
       - name: Rename Binary
         run: |
           sudo apt-get update -y
-          sudo apt-get install -y wget
+          sudo apt-get install -y wget libarchive-tools
           wget https://github.com/rustdesk/rustdesk/releases/download/nightly/rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}.deb
           mv rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}.deb rustdesk-${{ env.VERSION }}.deb
 

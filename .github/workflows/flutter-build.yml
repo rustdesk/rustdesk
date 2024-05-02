@@ -1426,6 +1426,8 @@ jobs:
           if [[ "${{ matrix.job.arch }}" == "aarch64" ]]; then
             sed -i "s/linux\/x64/linux\/arm64/g" ./res/PKGBUILD
           fi
+          sudo apt-get update -y
+          sudo apt-get install -y libarchive-tools
           bsdtar -zxvf rustdesk-${{ env.VERSION }}.deb
           tar -xvf ./data.tar.xz
           case ${{ matrix.job.arch }} in
