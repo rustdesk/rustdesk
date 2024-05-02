@@ -959,7 +959,7 @@ jobs:
 
   build-rustdesk-linux:
     needs: [generate-bridge-linux]
-    name: build-rust-lib ${{ matrix.job.target }} 
+    name: build rustdesk linux ${{ matrix.job.target }} 
     runs-on: ${{ matrix.job.on }}
     strategy:
       fail-fast: false
@@ -1058,7 +1058,7 @@ jobs:
           path: ./
 
       - uses: rustdesk-org/run-on-arch-action@amd64-support
-        name: Build rustdesk library for ${{ matrix.job.arch }}
+        name: Build rustdesk for ${{ matrix.job.arch }}
         id: vcpkg
         if: env.UPLOAD_ARTIFACT == 'true'
         with:
