@@ -7,7 +7,9 @@ After=systemd-user-sessions.service
 Type=simple
 ExecStart=/usr/bin/rustdesk --service
 # kill --tray and --server both
-ExecStop=pkill -f "rustdesk --"
+# ExecStop=pkill -f "rustdesk --"
+ExecStop=pkill -f "rustdesk --tray"
+ExecStop=pkill -f "rustdesk --server"
 PIDFile=/run/rustdesk.pid
 KillMode=mixed
 TimeoutStopSec=30
