@@ -1389,10 +1389,10 @@ jobs:
           files: |
             rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}-sciter.deb
 
-  build-flatpak-appimage:
-    name: Build Flatpak ${{ matrix.job.target }}
+  build-arch-appimage:
+    name: Build arch/appimage ${{ matrix.job.target }}
     needs: [build-rustdesk-linux]
-    runs-on: ${{ matrix.job.on }}
+    runs-on: ubuntu-20.04
     if: ${{ inputs.upload-artifact }}
     strategy:
       fail-fast: false
@@ -1400,15 +1400,10 @@ jobs:
         job:
           - {
               target: x86_64-unknown-linux-gnu,
-              distro: ubuntu18.04,
-              on: ubuntu-20.04,
               arch: x86_64,
             }
           - {
               target: aarch64-unknown-linux-gnu,
-              # try out newer flatpak since error of "error: Nothing matches org.freedesktop.Platform in remote flathub"
-              distro: ubuntu22.04,
-              on: [self-hosted, Linux, ARM64],
               arch: aarch64,
             }
     steps:
@@ -1500,6 +1495,42 @@ jobs:
           # run appimage-builder
           pushd appimage
           sudo appimage-builder --skip-tests --recipe ./AppImageBuilder-${{ matrix.job.arch }}.yml
+
+  build-flatpak:
+    name: Build flatpak ${{ matrix.job.target }}
+    needs: [build-rustdesk-linux]
+    runs-on: ${{ matrix.job.on }}
+    if: ${{ inputs.upload-artifact }}
+    strategy:
+      fail-fast: false
+      matrix:
+        job:
+          - {
+              target: x86_64-unknown-linux-gnu,
+              distro: ubuntu18.04,
+              on: ubuntu-20.04,
+              arch: x86_64,
+            }
+          - {
+              target: aarch64-unknown-linux-gnu,
+              # try out newer flatpak since error of "error: Nothing matches org.freedesktop.Platform in remote flathub"
+              distro: ubuntu22.04,
+              on: [self-hosted, Linux, ARM64],
+              arch: aarch64,
+            }
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v3
+
+      - name: Download Binary
+        uses: actions/download-artifact@master
+        with:
+          name: rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}.deb
+          path: .
+
+      - name: Rename Binary
+        run: |
+          mv rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}.deb rustdesk-${{ env.VERSION }}.deb
 
       - uses: rustdesk-org/run-on-arch-action@amd64-support
         name: Build rustdesk flatpak package for ${{ matrix.job.arch }}
