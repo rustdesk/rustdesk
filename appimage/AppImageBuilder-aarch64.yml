@@ -58,7 +58,7 @@ AppDir:
     - packagekit-gtk3-module
     - libcanberra-gtk3-module
     - libpam0g
-    - libspa-0.2-modules
+    - pipewire # to include /usr/lib/x86_64-linux-gnu/spa/support/libspa-support.so on 20.04, may be different for 22.04, libspa-0.2-modules has /usr/lib/x86_64-linux-gnu/spa0.2/support/libspa-support.so on 22.04
     exclude:
     - humanity-icon-theme
     - hicolor-icon-theme
