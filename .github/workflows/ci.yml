@@ -103,6 +103,7 @@ jobs:
                gcc \
                git \
                g++ \
+               libpam0g-dev \
                libasound2-dev \
                libgstreamer1.0-dev \
                libgstreamer-plugins-base1.0-dev \
