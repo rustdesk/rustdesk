@@ -223,24 +223,24 @@ pub fn run_cmds_trim_newline(cmds: &str) -> ResultType<String> {
     })
 }
 
-#[cfg(not(feature = "flatpak"))]
 fn run_loginctl(args: Option<Vec<&str>>) -> std::io::Result<std::process::Output> {
+    if std::env::var("FLATPAK_ID").is_ok() {
+        let mut l_args = String::from("loginctl");
+        if let Some(a) = args {
+            l_args = format!("{} {}", l_args, a.join(" "));
+        }
+        let res = std::process::Command::new("flatpak-spawn")
+            .args(vec![String::from("--host"), l_args])
+            .output();
+        if res.is_ok() {
+            return res;
+        }
+    }
     let mut cmd = std::process::Command::new("loginctl");
     if let Some(a) = args {
         return cmd.args(a).output();
     }
     cmd.output()
-}
-
-#[cfg(feature = "flatpak")]
-fn run_loginctl(args: Option<Vec<&str>>) -> std::io::Result<std::process::Output> {
-    let mut l_args = String::from("loginctl");
-    if let Some(a) = args {
-        l_args = format!("{} {}", l_args, a.join(" "));
-    }
-    std::process::Command::new("flatpak-spawn")
-        .args(vec![String::from("--host"), l_args])
-        .output()
 }
 
 /// forever: may not work
@@ -290,6 +290,9 @@ mod tests {
     fn test_run_cmds_trim_newline() {
         assert_eq!(run_cmds_trim_newline("echo -n 123").unwrap(), "123");
         assert_eq!(run_cmds_trim_newline("echo 123").unwrap(), "123");
-        assert_eq!(run_cmds_trim_newline("whoami").unwrap() + "\n", run_cmds("whoami").unwrap());
+        assert_eq!(
+            run_cmds_trim_newline("whoami").unwrap() + "\n",
+            run_cmds("whoami").unwrap()
+        );
     }
 }
