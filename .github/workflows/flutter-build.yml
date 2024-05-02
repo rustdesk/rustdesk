@@ -1058,7 +1058,7 @@ jobs:
           path: ./
 
       - uses: rustdesk-org/run-on-arch-action@amd64-support
-        name: Build rustdesk for ${{ matrix.job.arch }}
+        name: Build rustdesk
         id: vcpkg
         if: env.UPLOAD_ARTIFACT == 'true'
         with:
