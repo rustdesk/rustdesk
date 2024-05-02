@@ -1204,6 +1204,7 @@ jobs:
             for name in rustdesk*??.rpm; do
                 mv "$name" "${name%%.rpm}-suse.rpm"
             done
+            pushd /workspace
             for name in rustdesk*??.deb; do
               mv "$name" "${name%%.deb}-${{ matrix.job.arch }}.deb"
             done
