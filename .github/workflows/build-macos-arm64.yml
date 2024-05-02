@@ -135,7 +135,7 @@ jobs:
 
   build-flatpak:
     name: Build Flatpak ${{ matrix.job.target }}
-    runs-on: ubuntu-20.04
+    runs-on: ${{ matrix.job.on }}
     strategy:
       fail-fast: false
       matrix:
@@ -159,8 +159,8 @@ jobs:
 
       - name: Rename Binary
         run: |
-          apt-get update -y
-          apt-get install -y wget
+          sudo apt-get update -y
+          sudo apt-get install -y wget
           wget https://github.com/rustdesk/rustdesk/releases/download/nightly/rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}.deb
           mv rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}.deb rustdesk-${{ env.VERSION }}.deb
 
