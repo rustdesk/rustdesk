@@ -9,7 +9,7 @@ bool gIsConnectionManager = false;
 bool flutter_rustdesk_core_main() {
    void* librustdesk = dlopen(RUSTDESK_LIB_PATH, RTLD_LAZY);
    if (!librustdesk) {
-      fprintf(stderr,"load librustdesk.so failed\n");
+      fprintf(stderr,"Failed to load \"librustdesk.so\"\n");
       char* error;
       if ((error = dlerror()) != nullptr) {
         fprintf(stderr, "%s\n", error);
@@ -17,7 +17,7 @@ bool flutter_rustdesk_core_main() {
         char* libmissed = strstr(error, ": cannot open shared object file: No such file or directory");
         if (libmissed != nullptr) {
           *libmissed = '\0';
-          fprintf(stderr, "Please install the shared library %s.\n", error);
+          fprintf(stderr, "Please install the shared library \"%s\".\n", error);
         }
       }
      return false;
@@ -25,7 +25,7 @@ bool flutter_rustdesk_core_main() {
    auto core_main = (RustDeskCoreMain) dlsym(librustdesk,"rustdesk_core_main");
    char* error;
    if ((error = dlerror()) != nullptr) {
-       fprintf(stderr, "error finding rustdesk_core_main: %s\n", error);
+       fprintf(stderr, "Program entry \"rustdesk_core_main\" is not found: %s\n", error);
        return false;
    }
    return core_main();
