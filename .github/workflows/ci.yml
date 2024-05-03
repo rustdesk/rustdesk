@@ -21,6 +21,7 @@ on:
       - ".github/**"
       - "docs/**"
       - "README.md"
+      - "res/**""
 
 jobs:
   # ensure_cargo_fmt:
