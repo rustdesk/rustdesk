@@ -108,21 +108,24 @@ class PlatformFFI {
       _ffiBind.sessionRegisterGpuTexture(
           sessionId: sessionId, display: display, ptr: ptr);
 
-  /// Init the FFI class, loads the native Rust core library.
-  Future<void> init(String appType) async {
-    _appType = appType;
-    final dylib = isAndroid
-        ? DynamicLibrary.open('librustdesk.so')
-        : isLinux
-            ? DynamicLibrary.open('librustdesk.so')
-            : isWindows
-                ? DynamicLibrary.open('librustdesk.dll')
-                : isMacOS
-                    ? DynamicLibrary.open("liblibrustdesk.dylib")
-                    : DynamicLibrary.process();
-    debugPrint('initializing FFI $_appType');
+  _loadDyLib() async {
     try {
-      _session_get_rgba = dylib.lookupFunction<F3Dart, F3>("session_get_rgba");
+      final dylib = isAndroid
+          ? DynamicLibrary.open('librustdesk.so')
+          : isLinux
+              ? DynamicLibrary.open('librustdesk.so')
+              : isWindows
+                  ? DynamicLibrary.open('librustdesk.dll')
+                  : isMacOS
+                      ? DynamicLibrary.open("liblibrustdesk.dylib")
+                      : DynamicLibrary.process();
+      try {
+        _session_get_rgba =
+            dylib.lookupFunction<F3Dart, F3>("session_get_rgba");
+      } catch (e) {
+        print('Failed to lookup function "session_get_rgba": $e');
+        exit(1);
+      }
       try {
         // SYSTEM user failed
         _dir = (await getApplicationDocumentsDirectory()).path;
@@ -130,7 +133,19 @@ class PlatformFFI {
         debugPrint('Failed to get documents directory: $e');
       }
       _ffiBind = RustdeskImpl(dylib);
+    } catch (e) {
+      print('Failed to load dynamic library: $e');
+      exit(1);
+    }
+  }
 
+  /// Init the FFI class, loads the native Rust core library.
+  Future<void> init(String appType) async {
+    _appType = appType;
+    await _loadDyLib();
+
+    debugPrint('initializing FFI $_appType');
+    try {
       if (isLinux) {
         // Start a dbus service, no need to await
         _ffiBind.mainStartDbusServer();
