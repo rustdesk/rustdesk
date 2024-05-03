@@ -13,6 +13,12 @@ bool flutter_rustdesk_core_main() {
       char* error;
       if ((error = dlerror()) != nullptr) {
         fprintf(stderr, "%s\n", error);
+        // libnsl.so.1: cannot open shared object file: No such file or directory
+        char* libmissed = strstr(error, ": cannot open shared object file: No such file or directory");
+        if (libmissed != nullptr) {
+          *libmissed = '\0';
+          fprintf(stderr, "Please install the shared library %s.\n", error);
+        }
       }
      return false;
    }
