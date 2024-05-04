@@ -103,6 +103,18 @@ int is_command_exists(const char* command) {
 // as the search process can be time consuming and update may be required.
 void print_help_install_pkg(const char* so)
 {
+  if (strcmp(so, "libnsl.so.1") == 0) {
+    const char* mgr[] = {"yum", "dnf", NULL};
+    const char** m = mgr;
+    while (*m != NULL) {
+      if (is_command_exists(*m)) {
+        fprintf(stderr, "Please run \"%s install libnsl\" to install the required package.\n", *m);
+        return;
+      }
+      m++;
+    }
+  }
+
   const PkgMgrSearch *mgr_search = g_mgrs;
   while (mgr_search->mgr != NULL) {
       if (is_command_exists(mgr_search->mgr) == 1) {
