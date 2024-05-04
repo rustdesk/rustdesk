@@ -74,7 +74,7 @@ pub fn get_display_server() -> String {
         }
     }
     if session.is_empty() {
-        "".to_owned()
+        std::env::var("XDG_SESSION_TYPE").unwrap_or("x11".to_owned())
     } else {
         get_display_server_of_session(&session)
     }
