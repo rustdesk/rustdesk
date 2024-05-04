@@ -1,4 +1,5 @@
 #include <dlfcn.h>
+#include <string>
 #include "my_application.h"
 
 #define RUSTDESK_LIB_PATH "librustdesk.so"
