@@ -13,7 +13,7 @@ bool flutter_rustdesk_core_main() {
   const char* apprun_ld_library_path = getenv("APPRUN_LD_LIBRARY_PATH");
   if (appdir && apprun_ld_library_path) {
     std::string new_ld_library_path = std::string(apprun_ld_library_path) + ":" + getenv("LD_LIBRARY_PATH");
-    printf("Setting LD_LIBRARY_PATH to %s\n", new_ld_library_path.c_str()
+    printf("Setting LD_LIBRARY_PATH to %s\n", new_ld_library_path.c_str());
     setenv("LD_LIBRARY_PATH", new_ld_library_path.c_str(), 1);
   }
    void* librustdesk = dlopen(RUSTDESK_LIB_PATH, RTLD_LAZY);
