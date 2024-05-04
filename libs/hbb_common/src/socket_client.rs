@@ -259,8 +259,8 @@ mod tests {
         // on Linux, "1" is resolved to "0.0.0.1"
         assert!(test_if_valid_server("1.1.1.1", false).is_empty());
         assert!(test_if_valid_server("1.1.1.1:1", false).is_empty());
-        assert!(test_if_valid_server("abcd.com", false).is_empty());
-        assert!(test_if_valid_server("abcd.com:1", false).is_empty());
+        assert!(test_if_valid_server("microsoft.com", false).is_empty());
+        assert!(test_if_valid_server("microsoft.com:1", false).is_empty());
 
         // with proxy
         // `:0` indicates `let host = check_port(host, 0);` is called.
