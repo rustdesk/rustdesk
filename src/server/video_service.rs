@@ -53,7 +53,7 @@ use scrap::{
     codec::{Encoder, EncoderCfg, Quality},
     record::{Recorder, RecorderContext},
     vpxcodec::{VpxEncoderConfig, VpxVideoCodecId},
-    CodecFormat, Display, Frame, TraitCapturer,
+    CodecFormat, Display, EncodeInput, Frame, TraitCapturer,
 };
 #[cfg(windows)]
 use std::sync::Once;
@@ -470,6 +470,8 @@ fn run(vs: VideoService) -> ResultType<()> {
     let mut would_block_count = 0u32;
     let mut yuv = Vec::new();
     let mut mid_data = Vec::new();
+    let mut repeat_encode_counter = 0;
+    let repeat_encode_max = 10;
 
     while sp.ok() {
         #[cfg(windows)]
@@ -480,8 +482,15 @@ fn run(vs: VideoService) -> ResultType<()> {
         if quality != video_qos.quality() {
             log::debug!("quality: {:?} -> {:?}", quality, video_qos.quality());
             quality = video_qos.quality();
-            allow_err!(encoder.set_quality(quality));
-            video_qos.store_bitrate(encoder.bitrate());
+            if encoder.support_changing_quality() {
+                allow_err!(encoder.set_quality(quality));
+                video_qos.store_bitrate(encoder.bitrate());
+            } else {
+                if !video_qos.in_vbr_state() && !quality.is_custom() {
+                    log::info!("switch to change quality");
+                    bail!("SWITCH");
+                }
+            }
         }
         if client_record != video_qos.record() {
             bail!("SWITCH");
@@ -526,17 +535,17 @@ fn run(vs: VideoService) -> ResultType<()> {
 
         frame_controller.reset();
 
+        let time = now - start;
+        let ms = (time.as_secs() * 1000 + time.subsec_millis() as u64) as i64;
         let res = match c.frame(spf) {
             Ok(frame) => {
-                let time = now - start;
-                let ms = (time.as_secs() * 1000 + time.subsec_millis() as u64) as i64;
+                repeat_encode_counter = 0;
                 if frame.valid() {
+                    let frame = frame.to(encoder.yuvfmt(), &mut yuv, &mut mid_data)?;
                     let send_conn_ids = handle_one_frame(
                         display_idx,
                         &sp,
                         frame,
-                        &mut yuv,
-                        &mut mid_data,
                         ms,
                         &mut encoder,
                         recorder.clone(),
@@ -577,6 +586,21 @@ fn run(vs: VideoService) -> ResultType<()> {
                             // super::wayland::clear();
                             // bail!("Wayland capturer none 100 times, try restart capture");
                         }
+                    }
+                }
+                if !encoder.latency_free() && yuv.len() > 0 {
+                    // yun.len() > 0 means the frame is not texture.
+                    if repeat_encode_counter < repeat_encode_max {
+                        repeat_encode_counter += 1;
+                        let send_conn_ids = handle_one_frame(
+                            display_idx,
+                            &sp,
+                            EncodeInput::YUV(&yuv),
+                            ms,
+                            &mut encoder,
+                            recorder.clone(),
+                        )?;
+                        frame_controller.set_send(now, send_conn_ids);
                     }
                 }
             }
@@ -707,6 +731,7 @@ fn get_encoder_config(
             if let Some(hw) = HwRamEncoder::try_get(negotiated_codec) {
                 return EncoderCfg::HWRAM(HwRamEncoderConfig {
                     name: hw.name,
+                    mc_name: hw.mc_name,
                     width: c.width,
                     height: c.height,
                     quality,
@@ -805,9 +830,7 @@ fn check_privacy_mode_changed(sp: &GenericService, privacy_mode_id: i32) -> Resu
 fn handle_one_frame(
     display: usize,
     sp: &GenericService,
-    frame: Frame,
-    yuv: &mut Vec<u8>,
-    mid_data: &mut Vec<u8>,
+    frame: EncodeInput,
     ms: i64,
     encoder: &mut Encoder,
     recorder: Arc<Mutex<Option<Recorder>>>,
@@ -820,7 +843,6 @@ fn handle_one_frame(
         Ok(())
     })?;
 
-    let frame = frame.to(encoder.yuvfmt(), yuv, mid_data)?;
     let mut send_conn_ids: HashSet<i32> = Default::default();
     match encoder.encode_to_message(frame, ms) {
         Ok(mut vf) => {

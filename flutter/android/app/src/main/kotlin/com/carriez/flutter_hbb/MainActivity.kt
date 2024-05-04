@@ -7,6 +7,8 @@ package com.carriez.flutter_hbb
  * Inspired by [droidVNC-NG] https://github.com/bk138/droidVNC-NG
  */
 
+import ffi.FFI
+
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
@@ -15,10 +17,20 @@ import android.os.Build
 import android.os.IBinder
 import android.util.Log
 import android.view.WindowManager
+import android.media.MediaCodecInfo
+import android.media.MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface
+import android.media.MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420SemiPlanar
+import android.media.MediaCodecList
+import android.media.MediaFormat
+import android.util.DisplayMetrics
+import androidx.annotation.RequiresApi
+import org.json.JSONArray
+import org.json.JSONObject
 import com.hjq.permissions.XXPermissions
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
+import kotlin.concurrent.thread
 
 
 class MainActivity : FlutterActivity() {
@@ -42,6 +54,7 @@ class MainActivity : FlutterActivity() {
             channelTag
         )
         initFlutterChannel(flutterMethodChannel!!)
+        thread { setCodecInfo() }
     }
 
     override fun onResume() {
@@ -222,5 +235,81 @@ class MainActivity : FlutterActivity() {
                 }
             }
         }
+    }
+
+    private fun setCodecInfo() {
+        val codecList = MediaCodecList(MediaCodecList.REGULAR_CODECS)
+        val codecs = codecList.codecInfos
+        val codecArray = JSONArray()
+
+        val windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
+        var w = 0
+        var h = 0
+        @Suppress("DEPRECATION")
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            val m = windowManager.maximumWindowMetrics
+            w = m.bounds.width()
+            h = m.bounds.height()
+        } else {
+            val dm = DisplayMetrics()
+            windowManager.defaultDisplay.getRealMetrics(dm)
+            w = dm.widthPixels
+            h = dm.heightPixels
+        }
+        codecs.forEach { codec ->
+            val codecObject = JSONObject()
+            codecObject.put("name", codec.name)
+            codecObject.put("is_encoder", codec.isEncoder)
+            var hw: Boolean? = null;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                hw = codec.isHardwareAccelerated
+            } else {
+                if (listOf("OMX.google.", "OMX.SEC.", "c2.android").any { codec.name.startsWith(it) }) {
+                    hw = false
+                }
+            }
+            codecObject.put("hw", hw)
+            var mime_type = ""
+            codec.supportedTypes.forEach { type ->
+                if (listOf("video/avc", "video/hevc", "video/x-vnd.on2.vp8", "video/x-vnd.on2.vp9", "video/av01").contains(type)) {
+                    mime_type = type;
+                }
+            }
+            if (mime_type.isNotEmpty()) {
+                codecObject.put("mime_type", mime_type)
+                val caps = codec.getCapabilitiesForType(mime_type)
+                var usable = true;
+                if (codec.isEncoder) {
+                    if (!caps.videoCapabilities.isSizeSupported(w,h) || !caps.videoCapabilities.isSizeSupported(h,w)) {
+                        usable = false
+                    }
+                }
+                codecObject.put("min_width", caps.videoCapabilities.supportedWidths.lower)
+                codecObject.put("max_width", caps.videoCapabilities.supportedWidths.upper)
+                codecObject.put("min_height", caps.videoCapabilities.supportedHeights.lower)
+                codecObject.put("max_height", caps.videoCapabilities.supportedHeights.upper)
+                val surface = caps.colorFormats.contains(COLOR_FormatSurface);
+                codecObject.put("surface", surface)
+                val nv12 = caps.colorFormats.contains(COLOR_FormatYUV420SemiPlanar)
+                codecObject.put("nv12", nv12)
+                if (!(nv12 || surface)) {
+                    usable = false
+                }
+                codecObject.put("min_bitrate", caps.videoCapabilities.bitrateRange.lower / 1000)
+                codecObject.put("max_bitrate", caps.videoCapabilities.bitrateRange.upper / 1000)
+                if (!codec.isEncoder) {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                        codecObject.put("low_latency", caps.isFeatureSupported(MediaCodecInfo.CodecCapabilities.FEATURE_LowLatency))
+                    }
+                }
+                if (usable) {
+                    codecArray.put(codecObject)
+                }
+            }
+        }
+        val result = JSONObject()
+        result.put("version", Build.VERSION.SDK_INT)
+        result.put("codecs", codecArray)
+        FFI.setCodecInfo(result.toString())
     }
 }

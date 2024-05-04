@@ -29,11 +29,15 @@ const DEFAULT_PIXFMT: AVPixelFormat = AVPixelFormat::AV_PIX_FMT_NV12;
 pub const DEFAULT_TIME_BASE: [i32; 2] = [1, 30];
 const DEFAULT_GOP: i32 = i32::MAX;
 const DEFAULT_HW_QUALITY: Quality = Quality_Default;
-const DEFAULT_RC: RateControl = RC_DEFAULT;
+#[cfg(target_os = "android")]
+const DEFAULT_RC: RateControl = RC_VBR; // android cbr poor quality
+#[cfg(not(target_os = "android"))]
+const DEFAULT_RC: RateControl = RC_CBR;
 
 #[derive(Debug, Clone)]
 pub struct HwRamEncoderConfig {
     pub name: String,
+    pub mc_name: Option<String>,
     pub width: usize,
     pub height: usize,
     pub quality: Q,
@@ -57,20 +61,22 @@ impl EncoderApi for HwRamEncoder {
     {
         match cfg {
             EncoderCfg::HWRAM(config) => {
-                let b = Self::convert_quality(config.quality);
+                let b = Self::convert_quality(&config.name, config.quality);
                 let base_bitrate = base_bitrate(config.width as _, config.height as _);
                 let mut bitrate = base_bitrate * b / 100;
                 if base_bitrate <= 0 {
                     bitrate = base_bitrate;
                 }
+                bitrate = Self::check_bitrate_range(&config.name, bitrate);
                 let gop = config.keyframe_interval.unwrap_or(DEFAULT_GOP as _) as i32;
                 let ctx = EncodeContext {
                     name: config.name.clone(),
+                    mc_name: config.mc_name.clone(),
                     width: config.width as _,
                     height: config.height as _,
                     pixfmt: DEFAULT_PIXFMT,
                     align: HW_STRIDE_ALIGN as _,
-                    bitrate: bitrate as i32 * 1000,
+                    kbs: bitrate as i32,
                     timebase: DEFAULT_TIME_BASE,
                     gop,
                     quality: DEFAULT_HW_QUALITY,
@@ -166,10 +172,11 @@ impl EncoderApi for HwRamEncoder {
     }
 
     fn set_quality(&mut self, quality: crate::codec::Quality) -> ResultType<()> {
-        let b = Self::convert_quality(quality);
-        let bitrate = base_bitrate(self.width as _, self.height as _) * b / 100;
+        let b = Self::convert_quality(&self.name, quality);
+        let mut bitrate = base_bitrate(self.width as _, self.height as _) * b / 100;
         if bitrate > 0 {
-            self.encoder.set_bitrate((bitrate * 1000) as _).ok();
+            bitrate = Self::check_bitrate_range(&self.name, bitrate);
+            self.encoder.set_bitrate(bitrate as _).ok();
             self.bitrate = bitrate;
         }
         Ok(())
@@ -180,7 +187,19 @@ impl EncoderApi for HwRamEncoder {
     }
 
     fn support_abr(&self) -> bool {
-        ["qsv", "vaapi"].iter().all(|&x| !self.name.contains(x))
+        ["qsv", "vaapi", "mediacodec"]
+            .iter()
+            .all(|&x| !self.name.contains(x))
+    }
+
+    fn support_changing_quality(&self) -> bool {
+        ["vaapi", "mediacodec"]
+            .iter()
+            .all(|&x| !self.name.contains(x))
+    }
+
+    fn latency_free(&self) -> bool {
+        !self.name.contains("mediacodec")
     }
 }
 
@@ -217,14 +236,42 @@ impl HwRamEncoder {
         }
     }
 
-    pub fn convert_quality(quality: crate::codec::Quality) -> u32 {
+    pub fn convert_quality(name: &str, quality: crate::codec::Quality) -> u32 {
         use crate::codec::Quality;
-        match quality {
+        let quality = match quality {
             Quality::Best => 150,
             Quality::Balanced => 100,
             Quality::Low => 50,
             Quality::Custom(b) => b,
+        };
+        let factor = if name.contains("mediacodec") {
+            if name.contains("h264") {
+                6
+            } else {
+                3
+            }
+        } else {
+            1
+        };
+        quality * factor
+    }
+
+    pub fn check_bitrate_range(name: &str, bitrate: u32) -> u32 {
+        #[cfg(target_os = "android")]
+        if name.contains("mediacodec") {
+            let info = crate::android::ffi::get_codec_info();
+            if let Some(info) = info {
+                if let Some(codec) = info.codecs.iter().find(|c| c.name == name && c.is_encoder) {
+                    if bitrate > codec.max_bitrate {
+                        return codec.max_bitrate;
+                    }
+                    if bitrate < codec.min_bitrate {
+                        return codec.min_bitrate;
+                    }
+                }
+            }
         }
+        bitrate
     }
 }
 
@@ -285,7 +332,10 @@ impl HwRamDecoder {
         match Decoder::new(ctx) {
             Ok(decoder) => Ok(HwRamDecoder { decoder, info }),
             Err(_) => {
-                HwCodecConfig::clear_ram();
+                #[cfg(target_os = "android")]
+                crate::android::ffi::clear_codec_info();
+                #[cfg(not(target_os = "android"))]
+                hbb_common::config::HwCodecConfig::clear_ram();
                 Err(anyhow!(format!("Failed to create decoder")))
             }
         }
@@ -363,20 +413,87 @@ struct Available {
 }
 
 fn get_config() -> ResultType<Available> {
-    match serde_json::from_str(&HwCodecConfig::load().ram) {
-        Ok(v) => Ok(v),
-        Err(e) => Err(anyhow!("Failed to get config:{e:?}")),
+    #[cfg(target_os = "android")]
+    {
+        let info = crate::android::ffi::get_codec_info();
+        struct T {
+            name_prefix: &'static str,
+            data_format: DataFormat,
+        }
+        let ts = vec![
+            T {
+                name_prefix: "h264",
+                data_format: DataFormat::H264,
+            },
+            T {
+                name_prefix: "hevc",
+                data_format: DataFormat::H265,
+            },
+        ];
+        let mut e = vec![];
+        if let Some(info) = info {
+            ts.iter().for_each(|t| {
+                let codecs: Vec<_> = info
+                    .codecs
+                    .iter()
+                    .filter(|c| {
+                        c.is_encoder
+                            && c.mime_type.as_str() == get_mime_type(t.data_format)
+                            && c.nv12
+                    })
+                    .collect();
+                log::debug!("available {:?} encoders: {codecs:?}", t.data_format);
+                let mut best = None;
+                if let Some(c) = codecs.iter().find(|c| c.hw == Some(true)) {
+                    best = Some(c.name.clone());
+                } else if let Some(c) = codecs.iter().find(|c| c.hw == None) {
+                    best = Some(c.name.clone());
+                } else if let Some(c) = codecs.first() {
+                    best = Some(c.name.clone());
+                }
+                if let Some(best) = best {
+                    e.push(CodecInfo {
+                        name: format!("{}_mediacodec", t.name_prefix),
+                        mc_name: Some(best),
+                        format: t.data_format,
+                        hwdevice: hwcodec::ffmpeg::AVHWDeviceType::AV_HWDEVICE_TYPE_NONE,
+                        priority: 0,
+                    });
+                }
+            });
+        }
+        log::debug!("e: {e:?}");
+        Ok(Available { e, d: vec![] })
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        match serde_json::from_str(&HwCodecConfig::load().ram) {
+            Ok(v) => Ok(v),
+            Err(e) => Err(anyhow!("Failed to get config:{e:?}")),
+        }
+    }
+}
+
+#[cfg(target_os = "android")]
+fn get_mime_type(codec: DataFormat) -> &'static str {
+    match codec {
+        DataFormat::VP8 => "video/x-vnd.on2.vp8",
+        DataFormat::VP9 => "video/x-vnd.on2.vp9",
+        DataFormat::AV1 => "video/av01",
+        DataFormat::H264 => "video/avc",
+        DataFormat::H265 => "video/hevc",
     }
 }
 
 pub fn check_available_hwcodec() {
     let ctx = EncodeContext {
         name: String::from(""),
+        mc_name: None,
         width: 1280,
         height: 720,
         pixfmt: DEFAULT_PIXFMT,
         align: HW_STRIDE_ALIGN as _,
-        bitrate: 0,
+        kbs: 0,
         timebase: DEFAULT_TIME_BASE,
         gop: DEFAULT_GOP,
         quality: DEFAULT_HW_QUALITY,

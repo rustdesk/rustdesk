@@ -235,6 +235,13 @@ impl EncoderApi for VpxEncoder {
     fn support_abr(&self) -> bool {
         true
     }
+    fn support_changing_quality(&self) -> bool {
+        true
+    }
+
+    fn latency_free(&self) -> bool {
+        true
+    }
 }
 
 impl VpxEncoder {
