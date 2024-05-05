@@ -157,7 +157,7 @@ class ConnectionManagerState extends State<ConnectionManager> {
               controller: serverModel.tabController,
               selectedBorderColor: MyTheme.accent,
               maxLabelWidth: 100,
-              tail: buildScrollJumper(),
+              tail: null, //buildScrollJumper(),
               selectedTabBackgroundColor:
                   Theme.of(context).hintColor.withOpacity(0),
               tabBuilder: (key, icon, label, themeConf) {
