@@ -180,7 +180,9 @@ impl Encoder {
         }
 
         let vp8_useable = decodings.len() > 0 && decodings.iter().all(|(_, s)| s.ability_vp8 > 0);
-        let av1_useable = decodings.len() > 0 && decodings.iter().all(|(_, s)| s.ability_av1 > 0);
+        let av1_useable = decodings.len() > 0
+            && decodings.iter().all(|(_, s)| s.ability_av1 > 0)
+            && !disable_av1();
         let _all_support_h264_decoding =
             decodings.len() > 0 && decodings.iter().all(|(_, s)| s.ability_h264 > 0);
         let _all_support_h265_decoding =
@@ -250,8 +252,7 @@ impl Encoder {
 
         #[allow(unused_mut)]
         let mut auto_codec = CodecName::VP9;
-        // aom is very slow for x86 sciter version on windows x64
-        if av1_useable && !(cfg!(windows) && std::env::consts::ARCH == "x86") {
+        if av1_useable {
             auto_codec = CodecName::AV1;
         }
         let mut system = System::new();
@@ -307,7 +308,7 @@ impl Encoder {
         #[allow(unused_mut)]
         let mut encoding = SupportedEncoding {
             vp8: true,
-            av1: true,
+            av1: !disable_av1(),
             i444: Some(CodecAbility {
                 vp9: true,
                 av1: true,
@@ -397,7 +398,7 @@ impl Decoder {
         let mut decoding = SupportedDecoding {
             ability_vp8: 1,
             ability_vp9: 1,
-            ability_av1: 1,
+            ability_av1: if disable_av1() { 0 } else { 1 },
             i444: Some(CodecAbility {
                 vp9: true,
                 av1: true,
@@ -913,4 +914,9 @@ pub fn codec_thread_num(limit: usize) -> usize {
         *THREAD_LOG_TIME.lock().unwrap() = Some(Instant::now());
     }
     res
+}
+
+fn disable_av1() -> bool {
+    // aom is very slow for x86 sciter version on windows x64
+    cfg!(windows) && std::env::consts::ARCH == "x86"
 }
