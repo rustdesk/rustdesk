@@ -143,7 +143,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
           body: DesktopTab(
             controller: tabController,
             onWindowCloseButton: handleWindowCloseButton,
-            tail: const AddButton().paddingOnly(left: 10),
+            tail: const AddButton(),
             pageViewBuilder: (pageView) => pageView,
             labelGetter: DesktopTab.tablabelGetter,
             tabBuilder: (key, icon, label, themeConf) => Obx(() {
