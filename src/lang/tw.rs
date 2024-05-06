@@ -605,5 +605,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("no_need_privacy_mode_no_physical_displays_tip", "沒有物理螢幕，沒必要使用隱私模式。"),
         ("Follow remote cursor", "跟隨遠端游標"),
         ("Follow remote window focus", "跟隨遠端視窗焦點"),
+        ("default_proxy_tip", ""),
     ].iter().cloned().collect();
 }

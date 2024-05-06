@@ -61,7 +61,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Remove from Favorites", "Remove from favorites"),
         ("Socks5 Proxy", "Socks5 proxy"),
         ("Socks5/Http(s) Proxy", "Socks5/Http(s) proxy"),
-        ("Default protocol and port are Socks5 and 1080", "Default protocol and port are Socks5 and 1080"),
         ("install_daemon_tip", "For starting on boot, you need to install system service."),
         ("Are you sure to close the connection?", "Are you sure you want to close the connection?"),
         ("One-Finger Tap", "One-finger tap"),
@@ -224,5 +223,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("no_need_privacy_mode_no_physical_displays_tip", "No physical displays, no need to use the privacy mode."),
         ("Follow remote cursor", ""),
         ("Follow remote window focus", ""),
+        ("default_proxy_tip", "Default protocol and port are Socks5 and 1080"),
     ].iter().cloned().collect();
 }

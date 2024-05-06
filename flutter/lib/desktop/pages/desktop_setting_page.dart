@@ -2116,8 +2116,7 @@ void changeSocks5Proxy() async {
                   child: TextField(
                     decoration: InputDecoration(
                       errorText: proxyMsg.isNotEmpty ? proxyMsg : null,
-                      hintText: translate(
-                          'Default protocol and port are Socks5 and 1080'),
+                      hintText: translate('default_proxy_tip'),
                     ),
                     controller: proxyController,
                     autofocus: true,

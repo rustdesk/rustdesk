@@ -605,5 +605,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("no_need_privacy_mode_no_physical_displays_tip", "Žádné fyzické displeje, není třeba používat režim soukromí."),
         ("Follow remote cursor", "Sledovat dálkový kurzor"),
         ("Follow remote window focus", "Sledovat zaměření vzdáleného okna"),
+        ("default_proxy_tip", ""),
     ].iter().cloned().collect();
 }
