@@ -382,11 +382,13 @@ pub fn try_get_displays() -> ResultType<Vec<Display>> {
 // If we add a virtual display, we cannot remove it automatically.
 // So when using amyuni idd, we only add a virtual display for headless if it is required.
 // eg. when the client is connecting.
+#[inline]
 #[cfg(all(windows, feature = "virtual_display_driver"))]
 pub fn try_get_displays_add_amyuni_headless() -> ResultType<Vec<Display>> {
     try_get_displays_(true)
 }
 
+#[inline]
 #[cfg(all(windows, feature = "virtual_display_driver"))]
 pub fn try_get_displays_(add_amyuni_headless: bool) -> ResultType<Vec<Display>> {
     let mut displays = Display::all()?;
