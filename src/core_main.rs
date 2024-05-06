@@ -218,7 +218,7 @@ pub fn core_main() -> Option<Vec<String>> {
                 hbb_common::allow_err!(crate::platform::windows::uninstall_cert());
                 return None;
             } else if args[0] == "--install-idd" {
-                #[cfg(all(windows, feature = "virtual_display_driver"))]
+                #[cfg(windows)]
                 if crate::virtual_display_manager::is_virtual_display_supported() {
                     hbb_common::allow_err!(
                         crate::virtual_display_manager::rustdesk_idd::install_update_driver()
@@ -233,7 +233,7 @@ pub fn core_main() -> Option<Vec<String>> {
                 );
                 return None;
             } else if args[0] == "--uninstall-amyuni-idd" {
-                #[cfg(all(windows, feature = "virtual_display_driver"))]
+                #[cfg(windows)]
                 hbb_common::allow_err!(
                     crate::virtual_display_manager::amyuni_idd::uninstall_driver()
                 );
@@ -266,7 +266,7 @@ pub fn core_main() -> Option<Vec<String>> {
             return None;
         } else if args[0] == "--server" {
             log::info!("start --server with user {}", crate::username());
-            #[cfg(all(windows, feature = "virtual_display_driver"))]
+            #[cfg(windows)]
             crate::privacy_mode::restore_reg_connectivity(true);
             #[cfg(any(target_os = "linux", target_os = "windows"))]
             {

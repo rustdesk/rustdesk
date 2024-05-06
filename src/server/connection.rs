@@ -57,7 +57,7 @@ use std::{
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use system_shutdown;
 
-#[cfg(all(windows, feature = "virtual_display_driver"))]
+#[cfg(windows)]
 use crate::virtual_display_manager;
 #[cfg(not(any(target_os = "ios")))]
 use std::collections::HashSet;
@@ -1136,7 +1136,6 @@ impl Connection {
                 "is_installed".into(),
                 json!(crate::platform::is_installed()),
             );
-            #[cfg(feature = "virtual_display_driver")]
             if crate::platform::is_installed() {
                 platform_additions.extend(virtual_display_manager::get_platform_additions());
             }
@@ -1231,9 +1230,9 @@ impl Connection {
         } else {
             #[cfg(not(any(target_os = "android", target_os = "ios")))]
             {
-                #[cfg(not(all(windows, feature = "virtual_display_driver")))]
+                #[cfg(not(windows))]
                 let displays = display_service::try_get_displays();
-                #[cfg(all(windows, feature = "virtual_display_driver"))]
+                #[cfg(windows)]
                 let displays = display_service::try_get_displays_add_amyuni_headless();
                 pi.resolutions = Some(SupportedResolutions {
                     resolutions: displays
@@ -2210,7 +2209,7 @@ impl Connection {
                         let set = displays.set.iter().map(|d| *d as usize).collect::<Vec<_>>();
                         self.capture_displays(&add, &sub, &set).await;
                     }
-                    #[cfg(all(windows, feature = "virtual_display_driver"))]
+                    #[cfg(windows)]
                     Some(misc::Union::ToggleVirtualDisplay(t)) => {
                         self.toggle_virtual_display(t).await;
                     }
@@ -2598,7 +2597,7 @@ impl Connection {
         }
     }
 
-    #[cfg(all(windows, feature = "virtual_display_driver"))]
+    #[cfg(windows)]
     async fn toggle_virtual_display(&mut self, t: ToggleVirtualDisplay) {
         let make_msg = |text: String| {
             let mut msg_out = Message::new();
@@ -2655,7 +2654,7 @@ impl Connection {
                 let display_idx = d.unwrap_or(self.display_idx);
                 if let Some(display) = displays.get(display_idx) {
                     let name = display.name();
-                    #[cfg(all(windows, feature = "virtual_display_driver"))]
+                    #[cfg(windows)]
                     if let Some(_ok) =
                         virtual_display_manager::rustdesk_idd::change_resolution_if_is_virtual_display(
                             &name,
@@ -2666,7 +2665,7 @@ impl Connection {
                         return;
                     }
                     let mut record_changed = true;
-                    #[cfg(all(windows, feature = "virtual_display_driver"))]
+                    #[cfg(windows)]
                     if virtual_display_manager::amyuni_idd::is_my_display(&name) {
                         record_changed = false;
                     }
@@ -3724,7 +3723,7 @@ mod raii {
                 }
                 #[cfg(not(any(target_os = "android", target_os = "ios")))]
                 display_service::reset_resolutions();
-                #[cfg(all(windows, feature = "virtual_display_driver"))]
+                #[cfg(windows)]
                 let _ = virtual_display_manager::reset_all();
             }
             Self::check_wake_lock();
