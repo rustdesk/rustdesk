@@ -66,5 +66,5 @@ pub mod clipboard_file;
 
 pub mod privacy_mode;
 
-#[cfg(all(windows, feature = "virtual_display_driver"))]
+#[cfg(windows)]
 pub mod virtual_display_manager;

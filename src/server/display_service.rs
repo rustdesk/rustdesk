@@ -1,7 +1,7 @@
 use super::*;
 #[cfg(target_os = "linux")]
 use crate::platform::linux::is_x11;
-#[cfg(all(windows, feature = "virtual_display_driver"))]
+#[cfg(windows)]
 use crate::virtual_display_manager;
 #[cfg(windows)]
 use hbb_common::get_version_number;
@@ -12,7 +12,7 @@ use scrap::Display;
 
 pub const NAME: &'static str = "display";
 
-#[cfg(all(windows, feature = "virtual_display_driver"))]
+#[cfg(windows)]
 const DUMMY_DISPLAY_SIDE_MAX_SIZE: usize = 1024;
 
 struct ChangedResolution {
@@ -158,7 +158,7 @@ fn displays_to_msg(displays: Vec<DisplayInfo>) -> Message {
     };
     pi.displays = displays.clone();
 
-    #[cfg(all(windows, feature = "virtual_display_driver"))]
+    #[cfg(windows)]
     if crate::platform::is_installed() {
         let m = crate::virtual_display_manager::get_platform_additions();
         pi.platform_additions = serde_json::to_string(&m).unwrap_or_default();
@@ -219,10 +219,10 @@ pub(super) fn get_original_resolution(
     w: usize,
     h: usize,
 ) -> MessageField<Resolution> {
-    #[cfg(all(windows, feature = "virtual_display_driver"))]
+    #[cfg(windows)]
     let is_rustdesk_virtual_display =
         crate::virtual_display_manager::rustdesk_idd::is_virtual_display(&display_name);
-    #[cfg(not(all(windows, feature = "virtual_display_driver")))]
+    #[cfg(not(windows))]
     let is_rustdesk_virtual_display = false;
     Some(if is_rustdesk_virtual_display {
         Resolution {
@@ -342,7 +342,7 @@ pub fn get_primary_2(all: &Vec<Display>) -> usize {
 }
 
 #[inline]
-#[cfg(all(windows, feature = "virtual_display_driver"))]
+#[cfg(windows)]
 fn no_displays(displays: &Vec<Display>) -> bool {
     let display_len = displays.len();
     if display_len == 0 {
@@ -367,13 +367,13 @@ fn no_displays(displays: &Vec<Display>) -> bool {
 }
 
 #[inline]
-#[cfg(not(all(windows, feature = "virtual_display_driver")))]
+#[cfg(not(windows))]
 pub fn try_get_displays() -> ResultType<Vec<Display>> {
     Ok(Display::all()?)
 }
 
 #[inline]
-#[cfg(all(windows, feature = "virtual_display_driver"))]
+#[cfg(windows)]
 pub fn try_get_displays() -> ResultType<Vec<Display>> {
     try_get_displays_(false)
 }
@@ -383,13 +383,13 @@ pub fn try_get_displays() -> ResultType<Vec<Display>> {
 // So when using amyuni idd, we only add a virtual display for headless if it is required.
 // eg. when the client is connecting.
 #[inline]
-#[cfg(all(windows, feature = "virtual_display_driver"))]
+#[cfg(windows)]
 pub fn try_get_displays_add_amyuni_headless() -> ResultType<Vec<Display>> {
     try_get_displays_(true)
 }
 
 #[inline]
-#[cfg(all(windows, feature = "virtual_display_driver"))]
+#[cfg(windows)]
 pub fn try_get_displays_(add_amyuni_headless: bool) -> ResultType<Vec<Display>> {
     let mut displays = Display::all()?;
 
