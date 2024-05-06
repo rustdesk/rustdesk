@@ -183,7 +183,7 @@ impl EncoderApi for HwRamEncoder {
     }
 
     fn support_abr(&self) -> bool {
-        !self.name.contains("qsv")
+        ["qsv", "vaapi"].iter().all(|&x| !self.name.contains(x))
     }
 }
 
