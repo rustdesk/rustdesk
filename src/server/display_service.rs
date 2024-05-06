@@ -372,15 +372,47 @@ pub fn try_get_displays() -> ResultType<Vec<Display>> {
     Ok(Display::all()?)
 }
 
+#[inline]
 #[cfg(all(windows, feature = "virtual_display_driver"))]
 pub fn try_get_displays() -> ResultType<Vec<Display>> {
+    try_get_displays_(false)
+}
+
+// We can't get full control of the virtual display if we use amyuni idd.
+// If we add a virtual display, we cannot remove it automatically.
+// So when using amyuni idd, we only add a virtual display for headless if it is required.
+// eg. when the client is connecting.
+#[inline]
+#[cfg(all(windows, feature = "virtual_display_driver"))]
+pub fn try_get_displays_add_amyuni_headless() -> ResultType<Vec<Display>> {
+    try_get_displays_(true)
+}
+
+#[inline]
+#[cfg(all(windows, feature = "virtual_display_driver"))]
+pub fn try_get_displays_(add_amyuni_headless: bool) -> ResultType<Vec<Display>> {
     let mut displays = Display::all()?;
+
+    // Do not add virtual display if the platform is not installed or the virtual display is not supported.
+    if !crate::platform::is_installed() || !virtual_display_manager::is_virtual_display_supported() {
+        return Ok(displays);
+    }
+
+    // Enable headless virtual display when
+    // 1. `amyuni` idd is not used.
+    // 2. `amyuni` idd is used and `add_amyuni_headless` is true.
+    if virtual_display_manager::is_amyuni_idd() && !add_amyuni_headless {
+        return Ok(displays);
+    }
+
+    // If is switching session, no displays may be detected. But it is not a real case.
+    if displays.is_empty() && crate::platform::desktop_changed() {
+        return Ok(displays);
+    }
+
     let no_displays_v = no_displays(&displays);
     virtual_display_manager::set_can_plug_out_all(!no_displays_v);
-    if crate::platform::is_installed()
-        && no_displays_v
-        && virtual_display_manager::is_virtual_display_supported()
-    {
+    if no_displays_v {
         log::debug!("no displays, create virtual display");
         if let Err(e) = virtual_display_manager::plug_in_headless() {
             log::error!("plug in headless failed {}", e);

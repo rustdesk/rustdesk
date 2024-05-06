@@ -1231,8 +1231,12 @@ impl Connection {
         } else {
             #[cfg(not(any(target_os = "android", target_os = "ios")))]
             {
+                #[cfg(not(all(windows, feature = "virtual_display_driver")))]
+                let displays = display_service::try_get_displays();
+                #[cfg(all(windows, feature = "virtual_display_driver"))]
+                let displays = display_service::try_get_displays_add_amyuni_headless();
                 pi.resolutions = Some(SupportedResolutions {
-                    resolutions: display_service::try_get_displays()
+                    resolutions: displays
                         .map(|displays| {
                             displays
                                 .get(self.display_idx)
