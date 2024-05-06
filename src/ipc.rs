@@ -454,7 +454,12 @@ async fn handle(data: Data, stream: &mut Connection) {
                 if let Some(v) = value.get("privacy-mode-impl-key") {
                     crate::privacy_mode::switch(v);
                 }
+                let pre_opts = Config::get_options();
+                let new_audio_input = pre_opts.get("audio-input");
                 Config::set_options(value);
+                if new_audio_input != pre_opts.get("audio-input") {
+                    crate::audio_service::restart();
+                }
                 allow_err!(stream.send(&Data::Options(None)).await);
             }
         },

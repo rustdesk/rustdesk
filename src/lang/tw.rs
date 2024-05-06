@@ -606,5 +606,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Follow remote cursor", "跟隨遠端游標"),
         ("Follow remote window focus", "跟隨遠端視窗焦點"),
         ("default_proxy_tip", ""),
+        ("no_audio_input_device_tip", ""),
     ].iter().cloned().collect();
 }
