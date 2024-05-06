@@ -405,6 +405,7 @@ pub mod amyuni_idd {
     use crate::platform::win_device;
     use hbb_common::{bail, lazy_static, log, tokio::time::Instant, ResultType};
     use std::{
+        ops::Sub,
         ptr::null_mut,
         sync::{Arc, Mutex},
         time::Duration,
@@ -427,6 +428,7 @@ pub mod amyuni_idd {
 
     lazy_static::lazy_static! {
         static ref LOCK: Arc<Mutex<()>> = Default::default();
+        static ref LAST_PLUG_IN_HEADLESS_TIME: Arc<Mutex<Instant>> = Arc::new(Mutex::new(Instant::now().sub(Duration::from_secs(100))));
     }
 
     fn get_deviceinstaller64_work_dir() -> ResultType<Option<Vec<u8>>> {
@@ -570,9 +572,12 @@ pub mod amyuni_idd {
     }
 
     pub fn plug_in_headless() -> ResultType<()> {
-        if get_monitor_count() > 0 {
-            return Ok(());
+        let mut tm = LAST_PLUG_IN_HEADLESS_TIME.lock().unwrap();
+        if tm.elapsed() < Duration::from_secs(3) {
+            bail!("Plugging in too frequently.");
         }
+        *tm = Instant::now();
+        drop(tm);
 
         let mut is_async = false;
         if let Err(e) = check_install_driver(&mut is_async) {
