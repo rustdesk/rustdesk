@@ -186,8 +186,8 @@ impl EncoderApi for VRamEncoder {
 }
 
 impl VRamEncoder {
-    pub fn try_get(device: &AdapterDevice, name: CodecName) -> Option<FeatureContext> {
-        let v: Vec<_> = Self::available(name)
+    pub fn try_get(device: &AdapterDevice, format: CodecFormat) -> Option<FeatureContext> {
+        let v: Vec<_> = Self::available(format)
             .drain(..)
             .filter(|e| e.luid == device.luid)
             .collect();
@@ -202,15 +202,15 @@ impl VRamEncoder {
         }
     }
 
-    pub fn available(name: CodecName) -> Vec<FeatureContext> {
+    pub fn available(format: CodecFormat) -> Vec<FeatureContext> {
         let not_use = ENOCDE_NOT_USE.lock().unwrap().clone();
         if not_use.values().any(|not_use| *not_use) {
             log::info!("currently not use vram encoders: {not_use:?}");
             return vec![];
         }
-        let data_format = match name {
-            CodecName::H264VRAM => DataFormat::H264,
-            CodecName::H265VRAM => DataFormat::H265,
+        let data_format = match format {
+            CodecFormat::H264 => DataFormat::H264,
+            CodecFormat::H265 => DataFormat::H265,
             _ => return vec![],
         };
         let Ok(displays) = crate::Display::all() else {
