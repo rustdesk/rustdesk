@@ -605,7 +605,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("no_need_privacy_mode_no_physical_displays_tip", "Žádné fyzické displeje, není třeba používat režim soukromí."),
         ("Follow remote cursor", "Sledovat dálkový kurzor"),
         ("Follow remote window focus", "Sledovat zaměření vzdáleného okna"),
-        ("default_proxy_tip", ""),
-        ("no_audio_input_device_tip", ""),
+        ("default_proxy_tip", "Výchozí protokol a port jsou Socks5 a 1080"),
+        ("no_audio_input_device_tip", "Nebylo nalezeno žádné vstupní zvukové zařízení."),
     ].iter().cloned().collect();
 }
