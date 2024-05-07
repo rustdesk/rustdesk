@@ -20,8 +20,10 @@ const String kPlatformAdditionsIsWayland = "is_wayland";
 const String kPlatformAdditionsHeadless = "headless";
 const String kPlatformAdditionsIsInstalled = "is_installed";
 const String kPlatformAdditionsIddImpl = "idd_impl";
-const String kPlatformAdditionsRustDeskVirtualDisplays = "rustdesk_virtual_displays";
-const String kPlatformAdditionsAmyuniVirtualDisplays = "amyuni_virtual_displays";
+const String kPlatformAdditionsRustDeskVirtualDisplays =
+    "rustdesk_virtual_displays";
+const String kPlatformAdditionsAmyuniVirtualDisplays =
+    "amyuni_virtual_displays";
 const String kPlatformAdditionsHasFileClipboard = "has_file_clipboard";
 const String kPlatformAdditionsSupportedPrivacyModeImpl =
     "supported_privacy_mode_impl";
@@ -224,6 +226,7 @@ const kManageExternalStorage = "android.permission.MANAGE_EXTERNAL_STORAGE";
 const kRequestIgnoreBatteryOptimizations =
     "android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS";
 const kSystemAlertWindow = "android.permission.SYSTEM_ALERT_WINDOW";
+const kAndroid13Notification = "android.permission.POST_NOTIFICATIONS";
 
 /// Android channel invoke type key
 class AndroidChannel {

@@ -322,6 +322,20 @@ class ServerModel with ChangeNotifier {
     }
   }
 
+  Future<bool> checkRequestNotificationPermission() async {
+    debugPrint("androidVersion $androidVersion");
+    if (androidVersion < 33) {
+      return true;
+    }
+    if (await AndroidPermissionManager.check(kAndroid13Notification)) {
+      debugPrint("notification permission already granted");
+      return true;
+    }
+    var res = await AndroidPermissionManager.request(kAndroid13Notification);
+    debugPrint("notification permission request result: $res");
+    return res;
+  }
+
   /// Toggle the screen sharing service.
   toggleService() async {
     if (_isStart) {
@@ -348,6 +362,7 @@ class ServerModel with ChangeNotifier {
         stopService();
       }
     } else {
+      await checkRequestNotificationPermission();
       final res = await parent.target?.dialogManager
           .show<bool>((setState, close, context) {
         submit() => close(true);
