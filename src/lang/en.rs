@@ -224,5 +224,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Follow remote cursor", ""),
         ("Follow remote window focus", ""),
         ("default_proxy_tip", "Default protocol and port are Socks5 and 1080"),
+        ("no_audio_input_device_tip", "No audio input device found."),
     ].iter().cloned().collect();
 }

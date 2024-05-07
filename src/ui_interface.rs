@@ -369,6 +369,8 @@ pub fn set_option(key: String, value: String) {
                 return;
             }
         }
+    } else if &key == "audio-input" {
+        crate::audio_service::restart();
     }
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     {
