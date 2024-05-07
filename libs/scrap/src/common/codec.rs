@@ -252,9 +252,6 @@ impl Encoder {
 
         #[allow(unused_mut)]
         let mut auto_codec = CodecName::VP9;
-        if av1_useable {
-            auto_codec = CodecName::AV1;
-        }
         let mut system = System::new();
         system.refresh_memory();
         if vp8_useable && system.total_memory() <= 4 * 1024 * 1024 * 1024 {
