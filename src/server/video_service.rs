@@ -414,22 +414,34 @@ fn run(vs: VideoService) -> ResultType<()> {
     let record_incoming = !Config::get_option("allow-auto-record-incoming").is_empty();
     let client_record = video_qos.record();
     drop(video_qos);
-    let encoder_cfg = get_encoder_config(
+    let (mut encoder, encoder_cfg, codec_format, use_i444, recorder) = match setup_encoder(
         &c,
         display_idx,
         quality,
-        client_record || record_incoming,
+        client_record,
+        record_incoming,
         last_portable_service_running,
-    );
-    Encoder::set_fallback(&encoder_cfg);
-    let codec_name = Encoder::negotiated_codec();
-    let recorder = get_recorder(c.width, c.height, &codec_name, record_incoming);
-    let mut encoder;
-    let use_i444 = Encoder::use_i444(&encoder_cfg);
-    match Encoder::new(encoder_cfg.clone(), use_i444) {
-        Ok(x) => encoder = x,
-        Err(err) => bail!("Failed to create encoder: {}", err),
-    }
+    ) {
+        Ok(result) => result,
+        Err(err) => {
+            log::error!("Failed to create encoder: {err:?}, fallback to VP9");
+            Encoder::set_fallback(&EncoderCfg::VPX(VpxEncoderConfig {
+                width: c.width as _,
+                height: c.height as _,
+                quality,
+                codec: VpxVideoCodecId::VP9,
+                keyframe_interval: None,
+            }));
+            setup_encoder(
+                &c,
+                display_idx,
+                quality,
+                client_record,
+                record_incoming,
+                last_portable_service_running,
+            )?
+        }
+    };
     #[cfg(feature = "vram")]
     c.set_output_texture(encoder.input_texture());
     VIDEO_QOS.lock().unwrap().store_bitrate(encoder.bitrate());
@@ -480,7 +492,7 @@ fn run(vs: VideoService) -> ResultType<()> {
             let _ = try_broadcast_display_changed(&sp, display_idx, &c);
             bail!("SWITCH");
         }
-        if codec_name != Encoder::negotiated_codec() {
+        if codec_format != Encoder::negotiated_codec() {
             bail!("SWITCH");
         }
         #[cfg(windows)]
@@ -491,7 +503,7 @@ fn run(vs: VideoService) -> ResultType<()> {
             bail!("SWITCH");
         }
         #[cfg(all(windows, feature = "vram"))]
-        if c.is_gdi() && (codec_name == CodecName::H264VRAM || codec_name == CodecName::H265VRAM) {
+        if c.is_gdi() && encoder.input_texture() {
             log::info!("changed to gdi when using vram");
             bail!("SWITCH");
         }
@@ -630,6 +642,35 @@ impl Drop for Raii {
     }
 }
 
+fn setup_encoder(
+    c: &CapturerInfo,
+    display_idx: usize,
+    quality: Quality,
+    client_record: bool,
+    record_incoming: bool,
+    last_portable_service_running: bool,
+) -> ResultType<(
+    Encoder,
+    EncoderCfg,
+    CodecFormat,
+    bool,
+    Arc<Mutex<Option<Recorder>>>,
+)> {
+    let encoder_cfg = get_encoder_config(
+        &c,
+        display_idx,
+        quality,
+        client_record || record_incoming,
+        last_portable_service_running,
+    );
+    Encoder::set_fallback(&encoder_cfg);
+    let codec_format = Encoder::negotiated_codec();
+    let recorder = get_recorder(c.width, c.height, &codec_format, record_incoming);
+    let use_i444 = Encoder::use_i444(&encoder_cfg);
+    let encoder = Encoder::new(encoder_cfg.clone(), use_i444)?;
+    Ok((encoder, encoder_cfg, codec_format, use_i444, recorder))
+}
+
 fn get_encoder_config(
     c: &CapturerInfo,
     _display_idx: usize,
@@ -647,111 +688,57 @@ fn get_encoder_config(
     // https://www.wowza.com/community/t/the-correct-keyframe-interval-in-obs-studio/95162
     let keyframe_interval = if record { Some(240) } else { None };
     let negotiated_codec = Encoder::negotiated_codec();
-    match negotiated_codec.clone() {
-        CodecName::H264VRAM | CodecName::H265VRAM => {
+    match negotiated_codec {
+        CodecFormat::H264 | CodecFormat::H265 => {
             #[cfg(feature = "vram")]
-            if let Some(feature) = VRamEncoder::try_get(&c.device(), negotiated_codec.clone()) {
-                EncoderCfg::VRAM(VRamEncoderConfig {
+            if let Some(feature) = VRamEncoder::try_get(&c.device(), negotiated_codec) {
+                return EncoderCfg::VRAM(VRamEncoderConfig {
                     device: c.device(),
                     width: c.width,
                     height: c.height,
                     quality,
                     feature,
                     keyframe_interval,
-                })
-            } else {
-                handle_hw_encoder(
-                    negotiated_codec.clone(),
-                    c.width,
-                    c.height,
-                    quality as _,
-                    keyframe_interval,
-                )
+                });
             }
-            #[cfg(not(feature = "vram"))]
-            handle_hw_encoder(
-                negotiated_codec.clone(),
-                c.width,
-                c.height,
-                quality as _,
+            #[cfg(feature = "hwcodec")]
+            if let Some(hw) = HwRamEncoder::try_get(negotiated_codec) {
+                return EncoderCfg::HWRAM(HwRamEncoderConfig {
+                    name: hw.name,
+                    width: c.width,
+                    height: c.height,
+                    quality,
+                    keyframe_interval,
+                });
+            }
+            EncoderCfg::VPX(VpxEncoderConfig {
+                width: c.width as _,
+                height: c.height as _,
+                quality,
+                codec: VpxVideoCodecId::VP9,
                 keyframe_interval,
-            )
+            })
         }
-        CodecName::H264RAM(_name) | CodecName::H265RAM(_name) => handle_hw_encoder(
-            negotiated_codec.clone(),
-            c.width,
-            c.height,
-            quality as _,
-            keyframe_interval,
-        ),
-        name @ (CodecName::VP8 | CodecName::VP9) => EncoderCfg::VPX(VpxEncoderConfig {
+        format @ (CodecFormat::VP8 | CodecFormat::VP9) => EncoderCfg::VPX(VpxEncoderConfig {
             width: c.width as _,
             height: c.height as _,
             quality,
-            codec: if name == CodecName::VP8 {
+            codec: if format == CodecFormat::VP8 {
                 VpxVideoCodecId::VP8
             } else {
                 VpxVideoCodecId::VP9
             },
             keyframe_interval,
         }),
-        CodecName::AV1 => EncoderCfg::AOM(AomEncoderConfig {
+        CodecFormat::AV1 => EncoderCfg::AOM(AomEncoderConfig {
             width: c.width as _,
             height: c.height as _,
             quality,
             keyframe_interval,
         }),
-    }
-}
-
-fn handle_hw_encoder(
-    _name: CodecName,
-    width: usize,
-    height: usize,
-    quality: Quality,
-    keyframe_interval: Option<usize>,
-) -> EncoderCfg {
-    let f = || {
-        #[cfg(feature = "hwcodec")]
-        match _name {
-            CodecName::H264VRAM | CodecName::H265VRAM => {
-                let format = if _name == CodecName::H265VRAM {
-                    CodecFormat::H265
-                } else {
-                    CodecFormat::H264
-                };
-                if let Some(hw) = HwRamEncoder::try_get(format) {
-                    return Ok(EncoderCfg::HWRAM(HwRamEncoderConfig {
-                        name: hw.name,
-                        width,
-                        height,
-                        quality,
-                        keyframe_interval,
-                    }));
-                }
-            }
-            CodecName::H264RAM(name) | CodecName::H265RAM(name) => {
-                return Ok(EncoderCfg::HWRAM(HwRamEncoderConfig {
-                    name,
-                    width,
-                    height,
-                    quality,
-                    keyframe_interval,
-                }));
-            }
-            _ => {
-                return Err(());
-            }
-        };
-
-        Err(())
-    };
-
-    match f() {
-        Ok(cfg) => cfg,
         _ => EncoderCfg::VPX(VpxEncoderConfig {
-            width: width as _,
-            height: height as _,
+            width: c.width as _,
+            height: c.height as _,
             quality,
             codec: VpxVideoCodecId::VP9,
             keyframe_interval,
@@ -762,7 +749,7 @@ fn handle_hw_encoder(
 fn get_recorder(
     width: usize,
     height: usize,
-    codec_name: &CodecName,
+    codec_format: &CodecFormat,
     record_incoming: bool,
 ) -> Arc<Mutex<Option<Recorder>>> {
     let recorder = if record_incoming {
@@ -782,7 +769,7 @@ fn get_recorder(
             filename: "".to_owned(),
             width,
             height,
-            format: codec_name.into(),
+            format: codec_format.clone(),
             tx,
         })
         .map_or(Default::default(), |r| Arc::new(Mutex::new(Some(r))))
