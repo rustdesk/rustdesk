@@ -414,22 +414,34 @@ fn run(vs: VideoService) -> ResultType<()> {
     let record_incoming = !Config::get_option("allow-auto-record-incoming").is_empty();
     let client_record = video_qos.record();
     drop(video_qos);
-    let encoder_cfg = get_encoder_config(
+    let (mut encoder, encoder_cfg, codec_format, use_i444, recorder) = match setup_encoder(
         &c,
         display_idx,
         quality,
-        client_record || record_incoming,
+        client_record,
+        record_incoming,
         last_portable_service_running,
-    );
-    Encoder::set_fallback(&encoder_cfg);
-    let codec_format = Encoder::negotiated_codec();
-    let recorder = get_recorder(c.width, c.height, &codec_format, record_incoming);
-    let mut encoder;
-    let use_i444 = Encoder::use_i444(&encoder_cfg);
-    match Encoder::new(encoder_cfg.clone(), use_i444) {
-        Ok(x) => encoder = x,
-        Err(err) => bail!("Failed to create encoder: {}", err),
-    }
+    ) {
+        Ok(result) => result,
+        Err(err) => {
+            log::error!("Failed to create encoder: {err:?}, fallback to VP9");
+            Encoder::set_fallback(&EncoderCfg::VPX(VpxEncoderConfig {
+                width: c.width as _,
+                height: c.height as _,
+                quality,
+                codec: VpxVideoCodecId::VP9,
+                keyframe_interval: None,
+            }));
+            setup_encoder(
+                &c,
+                display_idx,
+                quality,
+                client_record,
+                record_incoming,
+                last_portable_service_running,
+            )?
+        }
+    };
     #[cfg(feature = "vram")]
     c.set_output_texture(encoder.input_texture());
     VIDEO_QOS.lock().unwrap().store_bitrate(encoder.bitrate());
@@ -628,6 +640,35 @@ impl Drop for Raii {
         VRamEncoder::set_not_use(self.0, false);
         VIDEO_QOS.lock().unwrap().set_support_abr(self.0, true);
     }
+}
+
+fn setup_encoder(
+    c: &CapturerInfo,
+    display_idx: usize,
+    quality: Quality,
+    client_record: bool,
+    record_incoming: bool,
+    last_portable_service_running: bool,
+) -> ResultType<(
+    Encoder,
+    EncoderCfg,
+    CodecFormat,
+    bool,
+    Arc<Mutex<Option<Recorder>>>,
+)> {
+    let encoder_cfg = get_encoder_config(
+        &c,
+        display_idx,
+        quality,
+        client_record || record_incoming,
+        last_portable_service_running,
+    );
+    Encoder::set_fallback(&encoder_cfg);
+    let codec_format = Encoder::negotiated_codec();
+    let recorder = get_recorder(c.width, c.height, &codec_format, record_incoming);
+    let use_i444 = Encoder::use_i444(&encoder_cfg);
+    let encoder = Encoder::new(encoder_cfg.clone(), use_i444)?;
+    Ok((encoder, encoder_cfg, codec_format, use_i444, recorder))
 }
 
 fn get_encoder_config(
