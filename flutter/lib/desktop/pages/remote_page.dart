@@ -7,6 +7,7 @@ import 'package:get/get.dart';
 import 'package:provider/provider.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:flutter_improved_scrolling/flutter_improved_scrolling.dart';
+import 'package:flutter_hbb/models/state_model.dart';
 
 import '../../consts.dart';
 import '../../common/widgets/overlay.dart';
@@ -165,6 +166,7 @@ class _RemotePageState extends State<RemotePage>
       // and let OS to handle events instead.
       _rawKeyFocusNode.unfocus();
     }
+    stateGlobal.isFocused.value = false;
   }
 
   @override
@@ -174,6 +176,7 @@ class _RemotePageState extends State<RemotePage>
     if (isWindows) {
       _isWindowBlur = false;
     }
+    stateGlobal.isFocused.value = true;
   }
 
   @override

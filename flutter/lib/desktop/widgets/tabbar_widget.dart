@@ -549,6 +549,16 @@ class WindowActionPanelState extends State<WindowActionPanel>
   }
 
   @override
+  void onWindowFocus() {
+    stateGlobal.isFocused.value = true;
+  }
+
+  @override
+  void onWindowBlur() {
+    stateGlobal.isFocused.value = false;
+  }
+
+  @override
   void onWindowMinimize() {
     stateGlobal.setMinimized(true);
     stateGlobal.setMaximized(false);

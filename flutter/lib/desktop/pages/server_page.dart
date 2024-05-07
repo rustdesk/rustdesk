@@ -77,14 +77,20 @@ class _DesktopServerPageState extends State<DesktopServerPage>
         ChangeNotifierProvider.value(value: gFFI.chatModel),
       ],
       child: Consumer<ServerModel>(
-        builder: (context, serverModel, child) => Container(
-          decoration: BoxDecoration(
-              border: Border.all(color: MyTheme.color(context).border!)),
-          child: Scaffold(
+        builder: (context, serverModel, child) {
+          final body = Scaffold(
             backgroundColor: Theme.of(context).scaffoldBackgroundColor,
             body: ConnectionManager(),
-          ),
-        ),
+          );
+          return isLinux
+              ? buildVirtualWindowFrame(context, body)
+              : Container(
+                  decoration: BoxDecoration(
+                      border:
+                          Border.all(color: MyTheme.color(context).border!)),
+                  child: body,
+                );
+        },
       ),
     );
   }

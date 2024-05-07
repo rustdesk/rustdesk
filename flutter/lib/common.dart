@@ -3214,3 +3214,46 @@ Widget buildPresetPasswordWarning() {
     },
   );
 }
+
+// https://github.com/leanflutter/window_manager/blob/87dd7a50b4cb47a375b9fc697f05e56eea0a2ab3/lib/src/widgets/virtual_window_frame.dart#L44
+Widget buildVirtualWindowFrame(BuildContext context, Widget child) {
+  boxShadow() => isMainDesktopWindow
+      ? <BoxShadow>[
+          if (stateGlobal.fullscreen.isFalse || stateGlobal.isMaximized.isFalse)
+            BoxShadow(
+              color: Colors.black.withOpacity(0.1),
+              offset: Offset(
+                  0.0,
+                  stateGlobal.isFocused.isTrue
+                      ? kFrameBoxShadowOffsetFocused
+                      : kFrameBoxShadowOffsetUnfocused),
+              blurRadius: kFrameBoxShadowBlurRadius,
+            ),
+        ]
+      : null;
+  return Obx(
+    () => Container(
+      decoration: BoxDecoration(
+        color: isMainDesktopWindow ? Colors.transparent : Theme.of(context).colorScheme.background,
+        border: Border.all(
+          color: Theme.of(context).dividerColor,
+          width: stateGlobal.windowBorderWidth.value,
+        ),
+        borderRadius: BorderRadius.circular(
+          (stateGlobal.fullscreen.isTrue || stateGlobal.isMaximized.isTrue)
+              ? 0
+              : kFrameBorderRadius,
+        ),
+        boxShadow: boxShadow(),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(
+          (stateGlobal.fullscreen.isTrue || stateGlobal.isMaximized.isTrue)
+              ? 0
+              : kFrameClipRRectBorderRadius,
+        ),
+        child: child,
+      ),
+    ),
+  );
+}
