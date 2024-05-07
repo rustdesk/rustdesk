@@ -355,14 +355,18 @@ Future<List<TRadioMenu<String>>> toolbarCodec(
 
   TRadioMenu<String> radio(String label, String value, bool enabled) {
     return TRadioMenu<String>(
-        child: Text(translate(label)),
+        child: Text(label),
         value: value,
         groupValue: groupValue,
         onChanged: enabled ? onChanged : null);
   }
 
+  var autoLabel = translate('Auto');
+  if (groupValue == 'auto') {
+    autoLabel = '$autoLabel (${ffi.qualityMonitorModel.data.codecFormat})';
+  }
   return [
-    radio('Auto', 'auto', true),
+    radio(autoLabel, 'auto', true),
     if (codecs[0]) radio('VP8', 'vp8', codecs[0]),
     radio('VP9', 'vp9', true),
     if (codecs[1]) radio('AV1', 'av1', codecs[1]),
