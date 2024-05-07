@@ -2107,17 +2107,34 @@ void changeSocks5Proxy() async {
             Row(
               children: [
                 ConstrainedBox(
-                    constraints: const BoxConstraints(minWidth: 140),
-                    child: Text(
-                      '${translate("Server")}:',
-                      textAlign: TextAlign.right,
-                    ).marginOnly(right: 10)),
+                  constraints: const BoxConstraints(minWidth: 140),
+                  child: Align(
+                      alignment: Alignment.centerRight,
+                      child: Row(
+                        children: [
+                          Text(
+                            translate('Server'),
+                          ).marginOnly(right: 4),
+                          Tooltip(
+                            waitDuration: Duration(milliseconds: 0),
+                            message: translate("default_proxy_tip"),
+                            child: Icon(
+                              Icons.help_outline_outlined,
+                              size: 16,
+                              color: Theme.of(context)
+                                  .textTheme
+                                  .titleLarge
+                                  ?.color
+                                  ?.withOpacity(0.5),
+                            ),
+                          ),
+                        ],
+                      )).marginOnly(right: 10),
+                ),
                 Expanded(
                   child: TextField(
                     decoration: InputDecoration(
                       errorText: proxyMsg.isNotEmpty ? proxyMsg : null,
-                      hintText: translate(
-                          'Default protocol and port are Socks5 and 1080'),
                     ),
                     controller: proxyController,
                     autofocus: true,
