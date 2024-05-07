@@ -1228,6 +1228,10 @@ impl Connection {
         if self.file_transfer.is_some() {
             res.set_peer_info(pi);
         } else {
+            if let Some(msg_out) = super::display_service::is_inited_msg() {
+                self.send(msg_out).await;
+            }
+
             #[cfg(not(any(target_os = "android", target_os = "ios")))]
             {
                 #[cfg(not(windows))]
@@ -1249,9 +1253,6 @@ impl Connection {
             }
 
             try_activate_screen();
-            if let Some(msg_out) = super::video_service::is_inited_msg() {
-                self.send(msg_out).await;
-            }
 
             match super::display_service::update_get_sync_displays().await {
                 Err(err) => {
