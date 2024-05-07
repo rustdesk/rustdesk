@@ -82,7 +82,7 @@ if __name__ == '__main__':
     parser.add_option("-o", "--output", dest="output_folder",
                       help="the root of portable packer project, default is './'")
     parser.add_option("-e", "--executable", dest="executable",
-                      help="specify startup file in --folder, default is rustdesk.exe")
+                      help="specify startup file in --folder, default is ipmrmt.exe")
     parser.add_option("-t", "--target", dest="target",
                       help="the target used by cargo")
     parser.add_option("-l", "--level", dest="level", type="int",
@@ -92,7 +92,7 @@ if __name__ == '__main__':
     output_folder = os.path.abspath(options.output_folder or './')
 
     if not options.executable:
-        options.executable = 'rustdesk.exe'
+        options.executable = 'ipmrmt.exe'
     if not options.executable.startswith(folder):
         options.executable = folder + '/' + options.executable
     exe: str = os.path.abspath(options.executable)

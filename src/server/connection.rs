@@ -1,6 +1,8 @@
 use super::{input_service::*, *};
 #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
 use crate::clipboard_file::*;
+use crc32fast::Hasher;       // (JEM)
+use hostname::get;           // (JEM)
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use crate::common::update_clipboard;
 #[cfg(target_os = "android")]
@@ -89,7 +91,12 @@ lazy_static::lazy_static! {
         (Arc::new(Mutex::new(tx)), Arc::new(Mutex::new(rx)))
     };
 }
-
+// (JEM)
+fn get_strcrc(input: &str) -> u32 {
+    let mut hasher = Hasher::new();
+    hasher.update(input.as_bytes());
+    hasher.finalize()
+}
 // Block input is required for some special cases, such as privacy mode.
 #[cfg(all(feature = "flutter", feature = "plugin_framework"))]
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -968,6 +975,25 @@ impl Connection {
                 self.send_login_error("The main window is not open").await;
                 return false;
             }
+        }
+        #[cfg(not(any(target_os = "android", target_os = "ios")))]   // (JEM)
+        if crate::is_server() {
+           let parm_set_hinf = Config::get_option("parm-set-hinf");
+           if parm_set_hinf == "" {
+              self.send_login_error("The IPMon Agent is not properly configured").await;
+              return false;
+		   }
+           if parm_set_hinf != "10E686D" {
+             let host_str: String = get().unwrap_or_else(|_| "Unknown".into()).into_string().unwrap_or_else(|_| "Errror".into());
+             let agt = "agt";
+             let mut strcrc = agt.to_string();
+             strcrc.push_str(&host_str.to_uppercase());
+             let crc_value = get_strcrc(&strcrc);
+             if crc_value.to_string() != parm_set_hinf {
+                self.send_login_error("Inconsistency in IPMon Agent configuration").await;
+                return false;
+             }
+		   }
         }
         self.ip = addr.ip().to_string();
         let mut msg_out = Message::new();

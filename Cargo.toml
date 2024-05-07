@@ -1,11 +1,11 @@
 [package]
-name = "rustdesk"
+name = "ipmrmt"
 version = "1.2.4"
-authors = ["rustdesk <info@rustdesk.com>"]
+authors = ["ipmrmt <contato@softjem.com.br>"]
 edition = "2021"
 build= "build.rs"
-description = "RustDesk Remote Desktop"
-default-run = "rustdesk"
+description = "IPMon Remote Desktop"
+default-run = "ipmrmt"
 rust-version = "1.75"
 
 [lib]
@@ -41,6 +41,8 @@ unix-file-copy-paste = [
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+hostname = "0.3.1"
+crc32fast = "1.2.1"
 async-trait = "0.1"
 whoami = "1.5.0"
 scrap = { path = "libs/scrap", features = ["wayland"] }
@@ -171,10 +173,10 @@ members = ["libs/scrap", "libs/hbb_common", "libs/enigo", "libs/clipboard", "lib
 exclude = ["vdi/host", "examples/custom_plugin"]
 
 [package.metadata.winres]
-LegalCopyright = "Copyright © 2024 Purslane Ltd. All rights reserved."
-ProductName = "RustDesk"
-FileDescription = "RustDesk Remote Desktop"
-OriginalFilename = "rustdesk.exe"
+LegalCopyright = "Copyright © 2024 SoftJem Tecnologia"
+ProductName = "IPMRmt"
+FileDescription = "IPMon Remote Desktop"
+OriginalFilename = "ipmrmt.exe"
 
 [target.'cfg(target_os="windows")'.build-dependencies]
 winres = "0.1"
@@ -189,8 +191,8 @@ os-version = "0.2"
 hound = "3.5"
 
 [package.metadata.bundle]
-name = "RustDesk"
-identifier = "com.carriez.rustdesk"
+name = "IPMRmt"
+identifier = "com.softjem.ipmrmt"
 icon = ["res/32x32.png", "res/128x128.png", "res/128x128@2x.png"]
 osx_minimum_system_version = "10.14"
 

@@ -1170,19 +1170,19 @@ oLink.Save
     .to_owned();
     let tray_shortcut = get_tray_shortcut(&exe, &tmp_path)?;
     let mut shortcuts = Default::default();
-    if options.contains("desktopicon") {
-        shortcuts = format!(
-            "copy /Y \"{}\\{}.lnk\" \"%PUBLIC%\\Desktop\\\"",
-            tmp_path,
-            crate::get_app_name()
-        );
-    }
+    // if options.contains("desktopicon") { // (JEM)
+        // shortcuts = format!(
+        //     "copy /Y \"{}\\{}.lnk\" \"%PUBLIC%\\Desktop\\\"",
+        //     tmp_path,
+        //     crate::get_app_name()
+        // );
+    // }
     if options.contains("startmenu") {
         shortcuts = format!(
             "{shortcuts}
-md \"{start_menu}\"
-copy /Y \"{tmp_path}\\{app_name}.lnk\" \"{start_menu}\\\"
-copy /Y \"{tmp_path}\\Uninstall {app_name}.lnk\" \"{start_menu}\\\"
+REM -- md \"{start_menu}\" -- (JEM)
+REM -- copy /Y \"{tmp_path}\\{app_name}.lnk\" \"{start_menu}\\\"
+REM -- copy /Y \"{tmp_path}\\Uninstall {app_name}.lnk\" \"{start_menu}\\\"
      "
         );
     }
@@ -1217,7 +1217,7 @@ if exist \"{tmp_path}\\{app_name} Tray.lnk\" del /f /q \"{tmp_path}\\{app_name} 
     } else {
         format!("
 cscript \"{tray_shortcut}\"
-copy /Y \"{tmp_path}\\{app_name} Tray.lnk\" \"%PROGRAMDATA%\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\\"
+REM -- copy /Y \"{tmp_path}\\{app_name} Tray.lnk\" \"%PROGRAMDATA%\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\\" (JEM)
 ")
     };
 
@@ -2105,7 +2105,7 @@ pub fn install_service() -> bool {
 chcp 65001
 taskkill /F /IM {app_name}.exe{filter}
 cscript \"{tray_shortcut}\"
-copy /Y \"{tmp_path}\\{app_name} Tray.lnk\" \"%PROGRAMDATA%\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\\"
+rem -- copy /Y \"{tmp_path}\\{app_name} Tray.lnk\" \"%PROGRAMDATA%\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\\" (JEM)
 {import_config}
 {create_service}
 if exist \"{tray_shortcut}\" del /f /q \"{tray_shortcut}\"

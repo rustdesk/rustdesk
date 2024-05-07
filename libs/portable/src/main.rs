@@ -15,7 +15,7 @@ const APP_METADATA: &[u8] = include_bytes!("../app_metadata.toml");
 const APP_METADATA: &[u8] = &[];
 const APP_METADATA_CONFIG: &str = "meta.toml";
 const META_LINE_PREFIX_TIMESTAMP: &str = "timestamp = ";
-const APP_PREFIX: &str = "rustdesk";
+const APP_PREFIX: &str = "ipmrmt";
 const APPNAME_RUNTIME_ENV_KEY: &str = "RUSTDESK_APPNAME";
 
 fn is_timestamp_matches(dir: &PathBuf, ts: &mut u64) -> bool {
@@ -140,7 +140,7 @@ mod windows {
 
     // Used for privacy mode(magnifier impl).
     pub const RUNTIME_BROKER_EXE: &'static str = "C:\\Windows\\System32\\RuntimeBroker.exe";
-    pub const WIN_TOPMOST_INJECTED_PROCESS_EXE: &'static str = "RuntimeBroker_rustdesk.exe";
+    pub const WIN_TOPMOST_INJECTED_PROCESS_EXE: &'static str = "RuntimeBroker_ipmrmt.exe";
 
     pub(super) fn copy_runtime_broker(dir: &PathBuf) {
         let src = RUNTIME_BROKER_EXE;
@@ -156,7 +156,7 @@ mod windows {
             }
         }
         let _allow_err = Command::new("taskkill")
-            .args(&["/F", "/IM", "RuntimeBroker_rustdesk.exe"])
+            .args(&["/F", "/IM", "RuntimeBroker_ipmrmt.exe"])
             .creation_flags(winapi::um::winbase::CREATE_NO_WINDOW)
             .output();
         let _allow_err = std::fs::copy(src, &format!("{}\\{}", dir.to_string_lossy(), tgt));

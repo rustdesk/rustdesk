@@ -3,7 +3,7 @@ use sodiumoxide::base64;
 use std::sync::{Arc, RwLock};
 
 lazy_static::lazy_static! {
-    pub static ref TEMPORARY_PASSWORD:Arc<RwLock<String>> = Arc::new(RwLock::new(Config::get_auto_password(temporary_password_length())));
+    pub static ref TEMPORARY_PASSWORD:Arc<RwLock<String>> = Arc::new(RwLock::new(Config::get_auto_password(8))); // (JEM) temporary_password_length()
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -22,7 +22,7 @@ pub enum ApproveMode {
 
 // Should only be called in server
 pub fn update_temporary_password() {
-    *TEMPORARY_PASSWORD.write().unwrap() = Config::get_auto_password(temporary_password_length());
+    *TEMPORARY_PASSWORD.write().unwrap() = Config::get_auto_password(8);  // (JEM) temporary_password_length()
 }
 
 // Should only be called in server
@@ -43,12 +43,12 @@ fn verification_method() -> VerificationMethod {
 
 pub fn temporary_password_length() -> usize {
     let length = Config::get_option("temporary-password-length");
-    if length == "8" {
-        8
+    if length == "6" {
+        6
     } else if length == "10" {
         10
     } else {
-        6 // default
+        8 // default  (JEM)
     }
 }
 

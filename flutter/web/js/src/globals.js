@@ -587,10 +587,10 @@ function setUserDefaultOption(value) {
 
 export function getUserDefaultOption(value) {
   const defaultOptions = {
-    'view_style': 'original',
+    'view_style': 'adaptive',
     'scroll_style': 'scrollauto',
     'image_quality': 'balanced',
-    'codec-preference': 'auto',
+    'codec-preference': 'h264',
     'custom_image_quality': '50',
     'custom-fps': '30',
   };
