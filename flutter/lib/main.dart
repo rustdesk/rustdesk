@@ -440,6 +440,9 @@ class _AppState extends State<App> {
                   if (isDesktop && desktopType == DesktopType.main) {
                     child = keyListenerBuilder(context, child);
                   }
+                  if (isLinux) {
+                    child = buildVirtualWindowFrame(context, child);
+                  }
                   return child;
                 },
         ),

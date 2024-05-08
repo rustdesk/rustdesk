@@ -97,21 +97,30 @@ class _PortForwardTabPageState extends State<PortForwardTabPage> {
 
   @override
   Widget build(BuildContext context) {
-    final tabWidget = Container(
-      decoration: BoxDecoration(
-          border: Border.all(color: MyTheme.color(context).border!)),
-      child: Scaffold(
-          backgroundColor: Theme.of(context).colorScheme.background,
-          body: DesktopTab(
-            controller: tabController,
-            onWindowCloseButton: () async {
-              tabController.clear();
-              return true;
-            },
-            tail: AddButton(),
-            labelGetter: DesktopTab.tablabelGetter,
-          )),
+    final child = Scaffold(
+      backgroundColor: Theme.of(context).colorScheme.background,
+      body: DesktopTab(
+        controller: tabController,
+        onWindowCloseButton: () async {
+          tabController.clear();
+          return true;
+        },
+        tail: AddButton(),
+        labelGetter: DesktopTab.tablabelGetter,
+      ),
     );
+    final tabWidget = isLinux
+        ? buildVirtualWindowFrame(
+            context,
+            Scaffold(
+                backgroundColor: Theme.of(context).colorScheme.background,
+                body: child),
+          )
+        : Container(
+            decoration: BoxDecoration(
+                border: Border.all(color: MyTheme.color(context).border!)),
+            child: child,
+          );
     return isMacOS || kUseCompatibleUiMode
         ? tabWidget
         : Obx(

@@ -131,103 +131,103 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
 
   @override
   Widget build(BuildContext context) {
-    final tabWidget = Obx(
-      () => Container(
-        decoration: BoxDecoration(
-          border: Border.all(
-              color: MyTheme.color(context).border!,
-              width: stateGlobal.windowBorderWidth.value),
-        ),
-        child: Scaffold(
-          backgroundColor: Theme.of(context).colorScheme.background,
-          body: DesktopTab(
-            controller: tabController,
-            onWindowCloseButton: handleWindowCloseButton,
-            tail: const AddButton(),
-            pageViewBuilder: (pageView) => pageView,
-            labelGetter: DesktopTab.tablabelGetter,
-            tabBuilder: (key, icon, label, themeConf) => Obx(() {
-              final connectionType = ConnectionTypeState.find(key);
-              if (!connectionType.isValid()) {
-                return Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    icon,
-                    label,
-                  ],
-                );
-              } else {
-                bool secure =
-                    connectionType.secure.value == ConnectionType.strSecure;
-                bool direct =
-                    connectionType.direct.value == ConnectionType.strDirect;
-                String msgConn;
-                if (secure && direct) {
-                  msgConn = translate("Direct and encrypted connection");
-                } else if (secure && !direct) {
-                  msgConn = translate("Relayed and encrypted connection");
-                } else if (!secure && direct) {
-                  msgConn = translate("Direct and unencrypted connection");
-                } else {
-                  msgConn = translate("Relayed and unencrypted connection");
-                }
-                var msgFingerprint = '${translate('Fingerprint')}:\n';
-                var fingerprint = FingerprintState.find(key).value;
-                if (fingerprint.isEmpty) {
-                  fingerprint = 'N/A';
-                }
-                if (fingerprint.length > 5 * 8) {
-                  var first = fingerprint.substring(0, 39);
-                  var second = fingerprint.substring(40);
-                  msgFingerprint += '$first\n$second';
-                } else {
-                  msgFingerprint += fingerprint;
-                }
+    final child = Scaffold(
+      backgroundColor: Theme.of(context).colorScheme.background,
+      body: DesktopTab(
+        controller: tabController,
+        onWindowCloseButton: handleWindowCloseButton,
+        tail: const AddButton(),
+        pageViewBuilder: (pageView) => pageView,
+        labelGetter: DesktopTab.tablabelGetter,
+        tabBuilder: (key, icon, label, themeConf) => Obx(() {
+          final connectionType = ConnectionTypeState.find(key);
+          if (!connectionType.isValid()) {
+            return Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                icon,
+                label,
+              ],
+            );
+          } else {
+            bool secure =
+                connectionType.secure.value == ConnectionType.strSecure;
+            bool direct =
+                connectionType.direct.value == ConnectionType.strDirect;
+            String msgConn;
+            if (secure && direct) {
+              msgConn = translate("Direct and encrypted connection");
+            } else if (secure && !direct) {
+              msgConn = translate("Relayed and encrypted connection");
+            } else if (!secure && direct) {
+              msgConn = translate("Direct and unencrypted connection");
+            } else {
+              msgConn = translate("Relayed and unencrypted connection");
+            }
+            var msgFingerprint = '${translate('Fingerprint')}:\n';
+            var fingerprint = FingerprintState.find(key).value;
+            if (fingerprint.isEmpty) {
+              fingerprint = 'N/A';
+            }
+            if (fingerprint.length > 5 * 8) {
+              var first = fingerprint.substring(0, 39);
+              var second = fingerprint.substring(40);
+              msgFingerprint += '$first\n$second';
+            } else {
+              msgFingerprint += fingerprint;
+            }
 
-                final tab = Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    icon,
-                    Tooltip(
-                      message: '$msgConn\n$msgFingerprint',
-                      child: SvgPicture.asset(
-                        'assets/${connectionType.secure.value}${connectionType.direct.value}.svg',
-                        width: themeConf.iconSize,
-                        height: themeConf.iconSize,
-                      ).paddingOnly(right: 5),
-                    ),
-                    label,
-                    unreadMessageCountBuilder(UnreadChatCountState.find(key))
-                        .marginOnly(left: 4),
-                  ],
-                );
+            final tab = Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                icon,
+                Tooltip(
+                  message: '$msgConn\n$msgFingerprint',
+                  child: SvgPicture.asset(
+                    'assets/${connectionType.secure.value}${connectionType.direct.value}.svg',
+                    width: themeConf.iconSize,
+                    height: themeConf.iconSize,
+                  ).paddingOnly(right: 5),
+                ),
+                label,
+                unreadMessageCountBuilder(UnreadChatCountState.find(key))
+                    .marginOnly(left: 4),
+              ],
+            );
 
-                return Listener(
-                  onPointerDown: (e) {
-                    if (e.kind != ui.PointerDeviceKind.mouse) {
-                      return;
-                    }
-                    final remotePage = tabController.state.value.tabs
-                        .firstWhere((tab) => tab.key == key)
-                        .page as RemotePage;
-                    if (remotePage.ffi.ffiModel.pi.isSet.isTrue &&
-                        e.buttons == 2) {
-                      showRightMenu(
-                        (CancelFunc cancelFunc) {
-                          return _tabMenuBuilder(key, cancelFunc);
-                        },
-                        target: e.position,
-                      );
-                    }
-                  },
-                  child: tab,
-                );
-              }
-            }),
-          ),
-        ),
+            return Listener(
+              onPointerDown: (e) {
+                if (e.kind != ui.PointerDeviceKind.mouse) {
+                  return;
+                }
+                final remotePage = tabController.state.value.tabs
+                    .firstWhere((tab) => tab.key == key)
+                    .page as RemotePage;
+                if (remotePage.ffi.ffiModel.pi.isSet.isTrue && e.buttons == 2) {
+                  showRightMenu(
+                    (CancelFunc cancelFunc) {
+                      return _tabMenuBuilder(key, cancelFunc);
+                    },
+                    target: e.position,
+                  );
+                }
+              },
+              child: tab,
+            );
+          }
+        }),
       ),
     );
+    final tabWidget = isLinux
+        ? buildVirtualWindowFrame(context, child)
+        : Obx(() => Container(
+              decoration: BoxDecoration(
+                border: Border.all(
+                    color: MyTheme.color(context).border!,
+                    width: stateGlobal.windowBorderWidth.value),
+              ),
+              child: child,
+            ));
     return isMacOS || kUseCompatibleUiMode
         ? tabWidget
         : Obx(() => SubWindowDragToResizeArea(
