@@ -485,42 +485,72 @@ class _GeneralState extends State<_General> {
   }
 
   Widget record(BuildContext context) {
+    final showRootDir = isWindows && bind.mainIsInstalled();
     return futureBuilder(future: () async {
-      String defaultDirectory = await bind.mainDefaultVideoSaveDirectory();
+      String user_dir = await bind.mainVideoSaveDirectory(root: false);
+      String root_dir =
+          showRootDir ? await bind.mainVideoSaveDirectory(root: true) : '';
+      bool user_dir_exists = await Directory(user_dir).exists();
+      bool root_dir_exists =
+          showRootDir ? await Directory(root_dir).exists() : false;
       // canLaunchUrl blocked on windows portable, user SYSTEM
-      return {'dir': defaultDirectory, 'canlaunch': true};
+      return {
+        'user_dir': user_dir,
+        'root_dir': root_dir,
+        'user_dir_exists': user_dir_exists,
+        'root_dir_exists': root_dir_exists,
+      };
     }(), hasData: (data) {
       Map<String, dynamic> map = data as Map<String, dynamic>;
-      String dir = map['dir']!;
-      String customDirectory =
-          bind.mainGetOptionSync(key: 'video-save-directory');
-      if (customDirectory.isNotEmpty) {
-        dir = customDirectory;
-      }
-      bool canlaunch = map['canlaunch']! as bool;
-
+      String user_dir = map['user_dir']!;
+      String root_dir = map['root_dir']!;
+      bool root_dir_exists = map['root_dir_exists']!;
+      bool user_dir_exists = map['user_dir_exists']!;
       return _Card(title: 'Recording', children: [
         _OptionCheckBox(context, 'Automatically record incoming sessions',
             'allow-auto-record-incoming'),
+        if (showRootDir)
+          Row(
+            children: [
+              Text('${translate("Incoming")}:'),
+              Expanded(
+                child: GestureDetector(
+                    onTap: root_dir_exists
+                        ? () => launchUrl(Uri.file(root_dir))
+                        : null,
+                    child: Text(
+                      root_dir,
+                      softWrap: true,
+                      style: root_dir_exists
+                          ? const TextStyle(
+                              decoration: TextDecoration.underline)
+                          : null,
+                    )).marginOnly(left: 10),
+              ),
+            ],
+          ).marginOnly(left: _kContentHMargin),
         Row(
           children: [
-            Text('${translate("Directory")}:'),
+            Text('${translate(showRootDir ? "Outgoing" : "Directory")}:'),
             Expanded(
               child: GestureDetector(
-                  onTap: canlaunch ? () => launchUrl(Uri.file(dir)) : null,
+                  onTap: user_dir_exists
+                      ? () => launchUrl(Uri.file(user_dir))
+                      : null,
                   child: Text(
-                    dir,
+                    user_dir,
                     softWrap: true,
-                    style:
-                        const TextStyle(decoration: TextDecoration.underline),
+                    style: user_dir_exists
+                        ? const TextStyle(decoration: TextDecoration.underline)
+                        : null,
                   )).marginOnly(left: 10),
             ),
             ElevatedButton(
                     onPressed: () async {
                       String? initialDirectory;
-                      if (await Directory.fromUri(Uri.directory(dir))
+                      if (await Directory.fromUri(Uri.directory(user_dir))
                           .exists()) {
-                        initialDirectory = dir;
+                        initialDirectory = user_dir;
                       }
                       String? selectedDirectory = await FilePicker.platform
                           .getDirectoryPath(initialDirectory: initialDirectory);

@@ -607,5 +607,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Follow remote window focus", "跟随远程窗口焦点"),
         ("default_proxy_tip", "默认代理协议及端口为 Socks5 和 1080"),
         ("no_audio_input_device_tip", "未找到音频输入设备"),
+        ("Incoming", "被控"),
+        ("Outgoing", "主控"),
     ].iter().cloned().collect();
 }

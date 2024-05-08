@@ -600,8 +600,8 @@ impl UI {
         get_langs()
     }
 
-    fn default_video_save_directory(&self) -> String {
-        default_video_save_directory()
+    fn video_save_directory(&self, root: bool) -> String {
+        video_save_directory(root)
     }
 
     fn handle_relay_id(&self, id: String) -> String {
@@ -723,7 +723,7 @@ impl sciter::EventHandler for UI {
         fn has_hwcodec();
         fn has_vram();
         fn get_langs();
-        fn default_video_save_directory();
+        fn video_save_directory(bool);
         fn handle_relay_id(String);
         fn get_login_device_info();
         fn support_remove_wallpaper();

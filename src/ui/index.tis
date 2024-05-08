@@ -248,8 +248,9 @@ class Enhancements: Reactor.Component {
         } else if (v.indexOf("allow-") == 0) {
             handler.set_option(v, handler.get_option(v) == 'Y' ? '' : 'Y');
         } else if (v == 'screen-recording') {
-            var dir = handler.get_option("video-save-directory");
-            if (!dir) dir = handler.default_video_save_directory();
+            var show_root_dir = is_win && handler.is_installed();
+            var user_dir = handler.video_save_directory(false);
+            var root_dir = show_root_dir ? handler.video_save_directory(true) : "";
             var ts0 = handler.get_option("enable-record-session") == '' ? { checked: true } : {};
             var ts1 = handler.get_option("allow-auto-record-incoming") == 'Y' ? { checked: true } : {};
             msgbox("custom-recording", translate('Recording'),
@@ -257,7 +258,8 @@ class Enhancements: Reactor.Component {
                     <div><button|checkbox(enable_record_session) {ts0}>{translate('Enable recording session')}</button></div>
                     <div><button|checkbox(auto_record_incoming) {ts1}>{translate('Automatically record incoming sessions')}</button></div>
                     <div>
-                        <div style="word-wrap:break-word"><span>{translate("Directory")}:&nbsp;&nbsp;</span><span #folderPath>{dir}</span></div>
+                        {show_root_dir ? <div style="word-wrap:break-word"><span>{translate("Incoming")}:&nbsp;&nbsp;</span><span>{root_dir}</span></div> : ""}
+                        <div style="word-wrap:break-word"><span>{translate(show_root_dir ? "Outgoing" : "Directory")}:&nbsp;&nbsp;</span><span #folderPath>{user_dir}</span></div>
                         <div> <button #select_directory .link>{translate('Change')}</button> </div>
                     </div>
                 </div>

@@ -778,7 +778,7 @@ pub fn get_langs() -> String {
 }
 
 #[inline]
-pub fn default_video_save_directory() -> String {
+pub fn video_save_directory(root: bool) -> String {
     let appname = crate::get_app_name();
     // ui process can show it correctly Once vidoe process created it.
     let try_create = |path: &std::path::Path| {
@@ -792,6 +792,20 @@ pub fn default_video_save_directory() -> String {
         }
     };
 
+    if root {
+        // Currently, only installed windows run as root
+        #[cfg(windows)]
+        {
+            let drive = std::env::var("SystemDrive").unwrap_or("C:".to_owned());
+            let dir =
+                std::path::PathBuf::from(format!("{drive}\\ProgramData\\RustDesk\\recording",));
+            return dir.to_string_lossy().to_string();
+        }
+    }
+    let dir = Config::get_option("video-save-directory");
+    if !dir.is_empty() {
+        return dir;
+    }
     #[cfg(any(target_os = "android", target_os = "ios"))]
     if let Ok(home) = config::APP_HOME_DIR.read() {
         let mut path = home.to_owned();
@@ -858,7 +872,7 @@ pub fn default_video_save_directory() -> String {
             return parent.to_string_lossy().to_string();
         }
     }
-    "".to_owned()
+    Default::default()
 }
 
 #[inline]

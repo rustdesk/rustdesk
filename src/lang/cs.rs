@@ -607,5 +607,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Follow remote window focus", "Sledovat zaměření vzdáleného okna"),
         ("default_proxy_tip", "Výchozí protokol a port jsou Socks5 a 1080"),
         ("no_audio_input_device_tip", "Nebylo nalezeno žádné vstupní zvukové zařízení."),
+        ("Incoming", ""),
+        ("Outgoing", ""),
     ].iter().cloned().collect();
 }
