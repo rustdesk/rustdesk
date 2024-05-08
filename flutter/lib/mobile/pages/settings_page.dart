@@ -525,7 +525,7 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
                     builder: (ctx, data) => Offstage(
                         offstage: !data.hasData,
                         child: Text("${translate("Directory")}: ${data.data}")),
-                    future: bind.mainDefaultVideoSaveDirectory()),
+                    future: bind.mainVideoSaveDirectory(root: false)),
                 initialValue: _autoRecordIncomingSession,
                 onToggle: (v) async {
                   await bind.mainSetOption(

@@ -53,7 +53,7 @@ use scrap::{
     codec::{Encoder, EncoderCfg, Quality},
     record::{Recorder, RecorderContext},
     vpxcodec::{VpxEncoderConfig, VpxVideoCodecId},
-    CodecFormat, CodecName, Display, Frame, TraitCapturer,
+    CodecFormat, Display, Frame, TraitCapturer,
 };
 #[cfg(windows)]
 use std::sync::Once;
@@ -752,6 +752,10 @@ fn get_recorder(
     codec_format: &CodecFormat,
     record_incoming: bool,
 ) -> Arc<Mutex<Option<Recorder>>> {
+    #[cfg(windows)]
+    let root = crate::platform::is_root();
+    #[cfg(not(windows))]
+    let root = false;
     let recorder = if record_incoming {
         use crate::hbbs_http::record_upload;
 
@@ -765,7 +769,7 @@ fn get_recorder(
         Recorder::new(RecorderContext {
             server: true,
             id: Config::get_id(),
-            default_dir: crate::ui_interface::default_video_save_directory(),
+            dir: crate::ui_interface::video_save_directory(root),
             filename: "".to_owned(),
             width,
             height,

@@ -1112,7 +1112,7 @@ impl VideoHandler {
             self.recorder = Recorder::new(RecorderContext {
                 server: false,
                 id,
-                default_dir: crate::ui_interface::default_video_save_directory(),
+                dir: crate::ui_interface::video_save_directory(false),
                 filename: "".to_owned(),
                 width: w as _,
                 height: h as _,

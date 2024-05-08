@@ -1145,8 +1145,8 @@ pub fn main_change_language(lang: String) {
     send_to_cm(&crate::ipc::Data::Language(lang));
 }
 
-pub fn main_default_video_save_directory() -> String {
-    default_video_save_directory()
+pub fn main_video_save_directory(root: bool) -> String {
+    video_save_directory(root)
 }
 
 pub fn main_set_user_default_option(key: String, value: String) {

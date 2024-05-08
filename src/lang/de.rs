@@ -607,5 +607,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Follow remote window focus", "Dem Fokus des entfernten Fensters folgen"),
         ("default_proxy_tip", ""),
         ("no_audio_input_device_tip", ""),
+        ("Incoming", ""),
+        ("Outgoing", ""),
     ].iter().cloned().collect();
 }
