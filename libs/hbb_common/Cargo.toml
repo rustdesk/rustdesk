@@ -51,7 +51,7 @@ machine-uid = { git = "https://github.com/21pages/machine-uid" }
 [target.'cfg(not(any(target_os = "macos", target_os = "windows")))'.dependencies]
 tokio-rustls = { version = "0.26", features = ["logging", "tls12", "ring"], default-features = false }
 rustls-platform-verifier = "0.3.1"
-rustls-pki-types = "1.4"
+rustls-pki-types = "1.7"
 [target.'cfg(any(target_os = "macos", target_os = "windows"))'.dependencies]
 tokio-native-tls ="0.3"
 
