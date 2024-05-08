@@ -1,0 +1,14 @@
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "daily"
+  - package-ecosystem: "cargo"
+    directory: "/"
+    schedule:
+      interval: "daily"
+  - package-ecosystem: "pub"
+    directory: "/flutter"
+    schedule:
+      interval: "daily"
