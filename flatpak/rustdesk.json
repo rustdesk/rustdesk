@@ -40,7 +40,7 @@
       "sources": [
         {
           "type": "file",
-          "path": "../rustdesk-1.2.4.deb"
+          "path": "./rustdesk.deb"
         },
         {
           "type": "file",
