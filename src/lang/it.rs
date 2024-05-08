@@ -605,7 +605,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("no_need_privacy_mode_no_physical_displays_tip", "Nessun display fisico, nessuna necessità di usare la modalità privacy."),
         ("Follow remote cursor", "Segui cursore remoto"),
         ("Follow remote window focus", "Segui focus finestra remota"),
-        ("default_proxy_tip", ""),
-        ("no_audio_input_device_tip", ""),
+        ("default_proxy_tip", "Protocollo e porta predefiniti sono Socks5 e 1080"),
+        ("no_audio_input_device_tip", "Nessun dispositivo input audio trovato."),
     ].iter().cloned().collect();
 }
