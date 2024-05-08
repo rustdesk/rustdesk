@@ -838,14 +838,6 @@ fn handle_one_frame(
     Ok(send_conn_ids)
 }
 
-pub fn is_inited_msg() -> Option<Message> {
-    #[cfg(target_os = "linux")]
-    if !is_x11() {
-        return super::wayland::is_inited();
-    }
-    None
-}
-
 #[inline]
 pub fn refresh() {
     #[cfg(target_os = "android")]
