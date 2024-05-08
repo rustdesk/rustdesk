@@ -49,7 +49,7 @@ dependencies:
   image_picker: ^0.8.5
   image: ^4.0.17
   back_button_interceptor: ^6.0.1
-  flutter_rust_bridge: "1.80.1"
+  flutter_rust_bridge: 1.82.1
   window_manager:
     git:
       url: https://github.com/rustdesk-org/window_manager
