@@ -248,7 +248,7 @@ bool _isCmReadyToShow = false;
 showCmWindow({bool isStartup = false}) async {
   if (isStartup) {
     WindowOptions windowOptions = getHiddenTitleBarWindowOptions(
-        size: kConnectionManagerWindowSizeClosedChat);
+        size: kConnectionManagerWindowSizeClosedChat, alwaysOnTop: true);
     await windowManager.waitUntilReadyToShow(windowOptions, null);
     bind.mainHideDocker();
     await Future.wait([
@@ -342,7 +342,7 @@ void runInstallPage() async {
 }
 
 WindowOptions getHiddenTitleBarWindowOptions(
-    {Size? size, bool center = false}) {
+    {Size? size, bool center = false, bool? alwaysOnTop}) {
   var defaultTitleBarStyle = TitleBarStyle.hidden;
   // we do not hide titlebar on win7 because of the frame overflow.
   if (kUseCompatibleUiMode) {
@@ -354,6 +354,7 @@ WindowOptions getHiddenTitleBarWindowOptions(
     backgroundColor: Colors.transparent,
     skipTaskbar: false,
     titleBarStyle: defaultTitleBarStyle,
+    alwaysOnTop: alwaysOnTop,
   );
 }
 
