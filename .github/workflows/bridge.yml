@@ -60,7 +60,7 @@ jobs:
 
       - name: Cache Bridge
         id: cache-bridge
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: /tmp/flutter_rust_bridge
           key: vcpkg-${{ matrix.job.arch }}
