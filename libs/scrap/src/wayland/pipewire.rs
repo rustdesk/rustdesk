@@ -589,6 +589,7 @@ fn on_create_session_response(
 
         let portal = get_portal(c);
         let mut args: PropMap = HashMap::new();
+        // See `is_server_running()` to understand the following code.
         if is_server_running() {
             if let Ok(version) = screencast_portal::version(&portal) {
                 if version >= 4 {
@@ -714,6 +715,7 @@ fn on_start_response(
 ) -> Result<(), Box<dyn Error>> {
     move |r: OrgFreedesktopPortalRequestResponse, c, _| {
         let portal = get_portal(c);
+        // See `is_server_running()` to understand the following code.
         if is_server_running() {
             if let Ok(version) = screencast_portal::version(&portal) {
                 if version >= 4 {
@@ -777,6 +779,15 @@ pub fn get_capturables() -> Result<Vec<PipeWireCapturable>, Box<dyn Error>> {
         .collect())
 }
 
+// If `is_server_running()` is true, then `screencast_portal::start` is called.
+// Otherwise, `remote_desktop_portal::start` is called.
+//
+// If `is_server_running()` is true, `--service` process is running,
+// then we can use uinput as the input method.
+// Otherwise, we have to use remote_desktop_portal's input method.
+//
+// `screencast_portal` supports restore_token and persist_mode if the version is greater than or equal to 4.
+// `remote_desktop_portal` does not support restore_token and persist_mode.
 fn is_server_running() -> bool {
     let app_name = config::APP_NAME.read().unwrap().clone().to_lowercase();
     let output = match Command::new("sh")
