@@ -15,7 +15,7 @@ use crate::{
     aom::{self, AomDecoder, AomEncoder, AomEncoderConfig},
     common::GoogleImage,
     vpxcodec::{self, VpxDecoder, VpxDecoderConfig, VpxEncoder, VpxEncoderConfig, VpxVideoCodecId},
-    CodecFormat, CodecName, EncodeInput, EncodeYuvFormat, ImageRgb,
+    CodecFormat, EncodeInput, EncodeYuvFormat, ImageRgb,
 };
 
 use hbb_common::{
@@ -38,6 +38,7 @@ lazy_static::lazy_static! {
     static ref PEER_DECODINGS: Arc<Mutex<HashMap<i32, SupportedDecoding>>> = Default::default();
     static ref ENCODE_CODEC_FORMAT: Arc<Mutex<CodecFormat>> = Arc::new(Mutex::new(CodecFormat::VP9));
     static ref THREAD_LOG_TIME: Arc<Mutex<Option<Instant>>> = Arc::new(Mutex::new(None));
+    static ref USABLE_ENCODING: Arc<Mutex<Option<SupportedEncoding>>> = Arc::new(Mutex::new(None));
 }
 
 pub const ENCODE_NEED_SWITCH: &'static str = "ENCODE_NEED_SWITCH";
@@ -235,6 +236,13 @@ impl Encoder {
             })
             .map(|(_, s)| s.prefer)
             .collect();
+        *USABLE_ENCODING.lock().unwrap() = Some(SupportedEncoding {
+            vp8: vp8_useable,
+            av1: av1_useable,
+            h264: h264_useable,
+            h265: h265_useable,
+            ..Default::default()
+        });
         // find the most frequent preference
         let mut counts = Vec::new();
         for pref in &preferences {
@@ -321,6 +329,10 @@ impl Encoder {
             encoding.h265 |= VRamEncoder::available(CodecFormat::H265).len() > 0;
         }
         encoding
+    }
+
+    pub fn usable_encoding() -> Option<SupportedEncoding> {
+        USABLE_ENCODING.lock().unwrap().clone()
     }
 
     pub fn set_fallback(config: &EncoderCfg) {

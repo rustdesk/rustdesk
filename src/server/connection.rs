@@ -231,8 +231,7 @@ pub struct Connection {
     auto_disconnect_timer: Option<(Instant, u64)>,
     authed_conn_id: Option<self::raii::AuthedConnID>,
     file_remove_log_control: FileRemoveLogControl,
-    #[cfg(feature = "vram")]
-    supported_encoding_flag: (bool, Option<bool>),
+    last_supported_encoding: Option<SupportedEncoding>,
     services_subed: bool,
     delayed_read_dir: Option<(String, bool)>,
     #[cfg(target_os = "macos")]
@@ -386,8 +385,7 @@ impl Connection {
             auto_disconnect_timer: None,
             authed_conn_id: None,
             file_remove_log_control: FileRemoveLogControl::new(id),
-            #[cfg(feature = "vram")]
-            supported_encoding_flag: (false, None),
+            last_supported_encoding: None,
             services_subed: false,
             delayed_read_dir: None,
             #[cfg(target_os = "macos")]
@@ -1161,10 +1159,6 @@ impl Connection {
             pi.platform_additions = serde_json::to_string(&platform_additions).unwrap_or("".into());
         }
 
-        let supported_encoding = scrap::codec::Encoder::supported_encoding();
-        log::info!("peer info supported_encoding: {:?}", supported_encoding);
-        pi.encoding = Some(supported_encoding).into();
-
         if self.port_forward_socket.is_some() {
             let mut msg_out = Message::new();
             res.set_peer_info(pi);
@@ -1228,6 +1222,10 @@ impl Connection {
         if self.file_transfer.is_some() {
             res.set_peer_info(pi);
         } else {
+            let supported_encoding = scrap::codec::Encoder::supported_encoding();
+            self.last_supported_encoding = Some(supported_encoding.clone());
+            log::info!("peer info supported_encoding: {:?}", supported_encoding);
+            pi.encoding = Some(supported_encoding).into();
             if let Some(msg_out) = super::display_service::is_inited_msg() {
                 self.send(msg_out).await;
             }
@@ -3140,22 +3138,34 @@ impl Connection {
             .map(|t| t.0 = Instant::now());
     }
 
-    #[cfg(feature = "vram")]
     fn update_supported_encoding(&mut self) {
-        let not_use = Some(scrap::vram::VRamEncoder::not_use());
-        if !self.authorized
-            || self.supported_encoding_flag.0 && self.supported_encoding_flag.1 == not_use
-        {
+        let Some(last) = &self.last_supported_encoding else {
             return;
-        }
-        let mut misc: Misc = Misc::new();
-        let supported_encoding = scrap::codec::Encoder::supported_encoding();
-        log::info!("update supported encoding: {:?}", supported_encoding);
-        misc.set_supported_encoding(supported_encoding);
-        let mut msg = Message::new();
-        msg.set_misc(misc);
-        self.inner.send(msg.into());
-        self.supported_encoding_flag = (true, not_use);
+        };
+        let usable = scrap::codec::Encoder::usable_encoding();
+        let Some(usable) = usable else {
+            return;
+        };
+        if usable.vp8 != last.vp8
+            || usable.av1 != last.av1
+            || usable.h264 != last.h264
+            || usable.h265 != last.h265
+        {
+            let mut misc: Misc = Misc::new();
+            let supported_encoding = SupportedEncoding {
+                vp8: usable.vp8,
+                av1: usable.av1,
+                h264: usable.h264,
+                h265: usable.h265,
+                ..last.clone()
+            };
+            log::info!("update supported encoding: {:?}", supported_encoding);
+            self.last_supported_encoding = Some(supported_encoding.clone());
+            misc.set_supported_encoding(supported_encoding);
+            let mut msg = Message::new();
+            msg.set_misc(misc);
+            self.inner.send(msg.into());
+        };
     }
 
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
