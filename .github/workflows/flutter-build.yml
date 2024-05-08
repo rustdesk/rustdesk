@@ -1227,7 +1227,7 @@ jobs:
         run: |
           sed -i "s/x86_64/${{ matrix.job.arch }}/g" res/PKGBUILD
           if [[ "${{ matrix.job.arch }}" == "aarch64" ]]; then
-            sed -i "s/linux\/x64/linux\/arm64/g" ./res/PKGBUILD
+            sed -i "s/x86_64/aarch64/g" ./res/PKGBUILD
           fi
 
       - name: Build archlinux package
