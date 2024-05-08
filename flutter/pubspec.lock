@@ -69,10 +69,10 @@ packages:
     dependency: "direct main"
     description:
       name: auto_size_text_field
-      sha256: d47c81ffa9b61d219f6c50492dc03ea28fa9346561b2ec33b46ccdc000ddb0aa
+      sha256: c4ba8714ba4216ca122acac1573581dac499f3162c9218a28b573dca73721b3f
       url: "https://pub.dev"
     source: hosted
-    version: "2.2.2"
+    version: "2.2.3"
   back_button_interceptor:
     dependency: "direct main"
     description:
