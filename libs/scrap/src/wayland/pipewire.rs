@@ -30,11 +30,26 @@ lazy_static! {
     pub static ref RDP_RESPONSE: Mutex<Option<RdpResponse>> = Mutex::new(None);
 }
 
+pub fn try_close_session() {
+    let mut rdp_res = RDP_RESPONSE.lock().unwrap();
+    let mut close = false;
+    if let Some(rdp_res) = &*rdp_res {
+        // If is server running and restore token is supported, there's no need to keep the session.
+        if is_server_running() && rdp_res.is_support_restore_token {
+            close = true;
+        }
+    }
+    if close {
+        *rdp_res = None;
+    }
+}
+
 pub struct RdpResponse {
     pub conn: Arc<SyncConnection>,
     pub streams: Vec<PwStreamInfo>,
     pub fd: OwnedFd,
     pub session: dbus::Path<'static>,
+    pub is_support_restore_token: bool,
 }
 #[derive(Debug, Clone, Copy)]
 pub struct PwStreamInfo {
@@ -476,6 +491,7 @@ pub fn request_remote_desktop() -> Result<
         OwnedFd,
         Vec<PwStreamInfo>,
         dbus::Path<'static>,
+        bool,
     ),
     Box<dyn Error>,
 > {
@@ -504,6 +520,14 @@ pub fn request_remote_desktop() -> Result<
         "handle_token".to_string(),
         Variant(Box::new("u1".to_string())),
     );
+
+    let mut is_support_restore_token = false;
+    if let Ok(version) = screencast_portal::version(&portal) {
+        if version >= 4 {
+            is_support_restore_token = true;
+        }
+    }
+
     // The following code may be improved.
     // https://flatpak.github.io/xdg-desktop-portal/#:~:text=To%20avoid%20a%20race%20condition
     // To avoid a race condition
@@ -524,6 +548,7 @@ pub fn request_remote_desktop() -> Result<
             streams.clone(),
             session.clone(),
             failure.clone(),
+            is_support_restore_token,
         ),
         failure_res.clone(),
     )?;
@@ -547,7 +572,13 @@ pub fn request_remote_desktop() -> Result<
     if let Some(fd_res) = fd_res.clone() {
         if let Some(session) = session_res.clone() {
             if !streams_res.is_empty() {
-                return Ok((conn, fd_res, streams_res.clone(), session));
+                return Ok((
+                    conn,
+                    fd_res,
+                    streams_res.clone(),
+                    session,
+                    is_support_restore_token,
+                ));
             }
         }
     }
@@ -561,6 +592,7 @@ fn on_create_session_response(
     streams: Arc<Mutex<Vec<PwStreamInfo>>>,
     session: Arc<Mutex<Option<dbus::Path<'static>>>>,
     failure: Arc<AtomicBool>,
+    is_support_restore_token: bool,
 ) -> impl Fn(
     OrgFreedesktopPortalRequestResponse,
     &SyncConnection,
@@ -591,15 +623,13 @@ fn on_create_session_response(
         let mut args: PropMap = HashMap::new();
         // See `is_server_running()` to understand the following code.
         if is_server_running() {
-            if let Ok(version) = screencast_portal::version(&portal) {
-                if version >= 4 {
-                    let restore_token = config::LocalConfig::get_option(RESTORE_TOKEN_CONF_KEY);
-                    if !restore_token.is_empty() {
-                        args.insert(RESTORE_TOKEN.to_string(), Variant(Box::new(restore_token)));
-                    }
-                    // persist_mode may be configured by the user.
-                    args.insert("persist_mode".to_string(), Variant(Box::new(2u32)));
+            if is_support_restore_token {
+                let restore_token = config::LocalConfig::get_option(RESTORE_TOKEN_CONF_KEY);
+                if !restore_token.is_empty() {
+                    args.insert(RESTORE_TOKEN.to_string(), Variant(Box::new(restore_token)));
                 }
+                // persist_mode may be configured by the user.
+                args.insert("persist_mode".to_string(), Variant(Box::new(2u32)));
             }
             args.insert(
                 "handle_token".to_string(),
@@ -613,7 +643,13 @@ fn on_create_session_response(
             handle_response(
                 c,
                 path,
-                on_select_sources_response(fd.clone(), streams.clone(), failure.clone(), ses),
+                on_select_sources_response(
+                    fd.clone(),
+                    streams.clone(),
+                    failure.clone(),
+                    ses,
+                    is_support_restore_token,
+                ),
                 failure.clone(),
             )?;
         } else {
@@ -627,7 +663,13 @@ fn on_create_session_response(
             handle_response(
                 c,
                 path,
-                on_select_devices_response(fd.clone(), streams.clone(), failure.clone(), ses),
+                on_select_devices_response(
+                    fd.clone(),
+                    streams.clone(),
+                    failure.clone(),
+                    ses,
+                    is_support_restore_token,
+                ),
                 failure.clone(),
             )?;
         }
@@ -641,6 +683,7 @@ fn on_select_devices_response(
     streams: Arc<Mutex<Vec<PwStreamInfo>>>,
     failure: Arc<AtomicBool>,
     session: dbus::Path<'static>,
+    is_support_restore_token: bool,
 ) -> impl Fn(
     OrgFreedesktopPortalRequestResponse,
     &SyncConnection,
@@ -662,7 +705,13 @@ fn on_select_devices_response(
         handle_response(
             c,
             path,
-            on_select_sources_response(fd.clone(), streams.clone(), failure.clone(), session),
+            on_select_sources_response(
+                fd.clone(),
+                streams.clone(),
+                failure.clone(),
+                session,
+                is_support_restore_token,
+            ),
             failure.clone(),
         )?;
 
@@ -675,6 +724,7 @@ fn on_select_sources_response(
     streams: Arc<Mutex<Vec<PwStreamInfo>>>,
     failure: Arc<AtomicBool>,
     session: dbus::Path<'static>,
+    is_support_restore_token: bool,
 ) -> impl Fn(
     OrgFreedesktopPortalRequestResponse,
     &SyncConnection,
@@ -696,7 +746,12 @@ fn on_select_sources_response(
         handle_response(
             c,
             path,
-            on_start_response(fd.clone(), streams.clone(), session.clone()),
+            on_start_response(
+                fd.clone(),
+                streams.clone(),
+                session.clone(),
+                is_support_restore_token,
+            ),
             failure.clone(),
         )?;
 
@@ -708,6 +763,7 @@ fn on_start_response(
     fd: Arc<Mutex<Option<OwnedFd>>>,
     streams: Arc<Mutex<Vec<PwStreamInfo>>>,
     session: dbus::Path<'static>,
+    is_support_restore_token: bool,
 ) -> impl Fn(
     OrgFreedesktopPortalRequestResponse,
     &SyncConnection,
@@ -717,15 +773,13 @@ fn on_start_response(
         let portal = get_portal(c);
         // See `is_server_running()` to understand the following code.
         if is_server_running() {
-            if let Ok(version) = screencast_portal::version(&portal) {
-                if version >= 4 {
-                    if let Some(restore_token) = r.results.get(RESTORE_TOKEN) {
-                        if let Some(restore_token) = restore_token.as_str() {
-                            config::LocalConfig::set_option(
-                                RESTORE_TOKEN_CONF_KEY.to_owned(),
-                                restore_token.to_owned(),
-                            );
-                        }
+            if is_support_restore_token {
+                if let Some(restore_token) = r.results.get(RESTORE_TOKEN) {
+                    if let Some(restore_token) = restore_token.as_str() {
+                        config::LocalConfig::set_option(
+                            RESTORE_TOKEN_CONF_KEY.to_owned(),
+                            restore_token.to_owned(),
+                        );
                     }
                 }
             }
@@ -752,7 +806,7 @@ pub fn get_capturables() -> Result<Vec<PipeWireCapturable>, Box<dyn Error>> {
     };
 
     if rdp_connection.is_none() {
-        let (conn, fd, streams, session) = request_remote_desktop()?;
+        let (conn, fd, streams, session, is_support_restore_token) = request_remote_desktop()?;
         let conn = Arc::new(conn);
 
         let rdp_res = RdpResponse {
@@ -760,6 +814,7 @@ pub fn get_capturables() -> Result<Vec<PipeWireCapturable>, Box<dyn Error>> {
             streams,
             fd,
             session,
+            is_support_restore_token,
         };
         *rdp_connection = Some(rdp_res);
     }

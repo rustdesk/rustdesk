@@ -639,6 +639,9 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
                     password(context),
                     _Card(title: '2FA', children: [tfa()]),
                     _Card(title: 'ID', children: [changeId()]),
+                    _Card(
+                        title: 'Cleanup',
+                        children: [WaylandScreenSelection(enabled: !locked)]),
                     more(context),
                   ]),
                 ),
@@ -1855,14 +1858,71 @@ Widget _Radio<T>(BuildContext context,
   );
 }
 
+class WaylandScreenSelection extends StatefulWidget {
+  final bool enabled;
+  const WaylandScreenSelection({Key? key, required this.enabled})
+      : super(key: key);
+
+  @override
+  State<WaylandScreenSelection> createState() => _WaylandScreenSelectionState();
+}
+
+class _WaylandScreenSelectionState extends State<WaylandScreenSelection> {
+  final optKey = 'wayland-restore-token';
+
+  @override
+  Widget build(BuildContext context) {
+    onConfirm() async {
+      final msg = await bind.mainHandleWaylandScreencastRestoreToken(
+          key: optKey, value: "clear");
+      gFFI.dialogManager.dismissAll();
+      if (msg.isNotEmpty) {
+        msgBox(gFFI.sessionId, 'custom-nocancel', 'Error', msg, '',
+            gFFI.dialogManager);
+      } else {
+        setState(() {});
+      }
+    }
+    showConfirmMsgBox() => msgBoxCommon(
+            gFFI.dialogManager,
+            'Confirmation',
+            Text(
+              translate('confirm_clear_wayland_screen_selection_tip'),
+            ),
+            [
+              dialogButton('OK', onPressed: onConfirm),
+              dialogButton('Cancel',
+                  onPressed: () => gFFI.dialogManager.dismissAll())
+            ]);
+    return futureBuilder(
+      future: bind.mainHandleWaylandScreencastRestoreToken(
+          key: optKey, value: "get"),
+      hasData: (restoreToken) => Offstage(
+        offstage: restoreToken.isEmpty,
+        child: _Button(
+          'Clear wayland screen selection',
+          showConfirmMsgBox,
+          tip: 'clear_wayland_screen_selection_tip',
+          style: ButtonStyle(
+            backgroundColor: MaterialStateProperty.all<Color>(
+                Theme.of(context).colorScheme.error.withOpacity(0.75)),
+          ),
+          enabled: widget.enabled,
+        ),
+      ),
+    );
+  }
+}
+
 // ignore: non_constant_identifier_names
 Widget _Button(String label, Function() onPressed,
-    {bool enabled = true, String? tip}) {
+    {bool enabled = true, String? tip, ButtonStyle? style}) {
   var button = ElevatedButton(
     onPressed: enabled ? onPressed : null,
     child: Text(
       translate(label),
     ).marginSymmetric(horizontal: 15),
+    style: style,
   );
   StatefulWidget child;
   if (tip == null) {

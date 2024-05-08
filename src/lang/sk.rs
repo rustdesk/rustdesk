@@ -609,5 +609,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("no_audio_input_device_tip", "Nenašlo sa žiadne vstupné zvukové zariadenie."),
         ("Incoming", ""),
         ("Outgoing", ""),
+        ("Clear wayland screen selection", ""),
+        ("clear_wayland_screen_selection_tip", ""),
+        ("confirm_clear_wayland_screen_selection_tip", ""),
     ].iter().cloned().collect();
 }

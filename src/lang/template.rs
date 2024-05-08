@@ -607,7 +607,13 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Follow remote window focus", ""),
         ("default_proxy_tip", ""),
         ("no_audio_input_device_tip", ""),
+<<<<<<< HEAD
         ("Incoming", ""),
         ("Outgoing", ""),
+=======
+        ("Clear wayland screen selection", ""),
+        ("clear_wayland_screen_selection_tip", ""),
+        ("confirm_clear_wayland_screen_selection_tip", ""),
+>>>>>>> 65138937a (fix: wayland delete restore token)
     ].iter().cloned().collect();
 }
