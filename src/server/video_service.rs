@@ -638,6 +638,8 @@ impl Drop for Raii {
     fn drop(&mut self) {
         #[cfg(feature = "vram")]
         VRamEncoder::set_not_use(self.0, false);
+        #[cfg(feature = "vram")]
+        Encoder::update(scrap::codec::EncodingUpdate::Check);
         VIDEO_QOS.lock().unwrap().set_support_abr(self.0, true);
     }
 }

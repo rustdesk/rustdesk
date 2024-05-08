@@ -6,7 +6,7 @@ use std::{
 
 use crate::{
     codec::{base_bitrate, enable_vram_option, EncoderApi, EncoderCfg, Quality},
-    AdapterDevice, CodecFormat, CodecName, EncodeInput, EncodeYuvFormat, Pixfmt,
+    AdapterDevice, CodecFormat, EncodeInput, EncodeYuvFormat, Pixfmt,
 };
 use hbb_common::{
     anyhow::{anyhow, bail, Context},
@@ -283,10 +283,6 @@ impl VRamEncoder {
     pub fn set_not_use(display: usize, not_use: bool) {
         log::info!("set display#{display} not use vram encode to {not_use}");
         ENOCDE_NOT_USE.lock().unwrap().insert(display, not_use);
-    }
-
-    pub fn not_use() -> bool {
-        ENOCDE_NOT_USE.lock().unwrap().iter().any(|v| *v.1)
     }
 }
 
