@@ -1065,10 +1065,10 @@ packages:
     dependency: "direct main"
     description:
       name: pull_down_button
-      sha256: "235b302701ce029fd9e9470975069376a6700935bb47a5f1b3ec8a5efba07e6f"
+      sha256: "48b928203afdeafa4a8be5dc96980523bc8a2ddbd04569f766071a722be22379"
       url: "https://pub.dev"
     source: hosted
-    version: "0.9.3"
+    version: "0.9.4"
   puppeteer:
     dependency: transitive
     description:
