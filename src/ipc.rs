@@ -5,7 +5,10 @@ use std::{
 #[cfg(not(windows))]
 use std::{fs::File, io::prelude::*};
 
-use crate::privacy_mode::PrivacyModeState;
+use crate::{
+    privacy_mode::PrivacyModeState,
+    ui_interface::{get_local_option, set_local_option},
+};
 use bytes::Bytes;
 use parity_tokio_ipc::{
     Connection as Conn, ConnectionClient as ConnClient, Endpoint, Incoming, SecurityAttributes,
@@ -234,6 +237,8 @@ pub enum Data {
     CmErr(String),
     CheckHwcodec,
     VideoConnCount(Option<usize>),
+    // Although the key is not neccessary, it is used to avoid hardcoding the key.
+    WaylandScreencastRestoreToken((String, String)),
 }
 
 #[tokio::main(flavor = "current_thread")]
@@ -524,6 +529,42 @@ async fn handle(data: Data, stream: &mut Connection) {
             #[cfg(any(target_os = "windows", target_os = "linux"))]
             if crate::platform::is_root() {
                 scrap::hwcodec::start_check_process(true);
+            }
+        }
+        Data::WaylandScreencastRestoreToken((key, value)) => {
+            let v = if value == "get" {
+                let opt = get_local_option(key.clone());
+                #[cfg(not(target_os = "linux"))]
+                {
+                    Some(opt)
+                }
+                #[cfg(target_os = "linux")]
+                {
+                    let v = if opt.is_empty() {
+                        if scrap::wayland::pipewire::is_rdp_session_hold() {
+                            "fake token".to_string()
+                        } else {
+                            "".to_owned()
+                        }
+                    } else {
+                        opt
+                    };
+                    Some(v)
+                }
+            } else if value == "clear" {
+                set_local_option(key.clone(), "".to_owned());
+                #[cfg(target_os = "linux")]
+                scrap::wayland::pipewire::close_session();
+                Some("".to_owned())
+            } else {
+                None
+            };
+            if let Some(v) = v {
+                allow_err!(
+                    stream
+                        .send(&Data::WaylandScreencastRestoreToken((key, v)))
+                        .await
+                );
             }
         }
         _ => {}
@@ -957,6 +998,35 @@ pub async fn connect_to_user_session(usid: Option<u32>) -> ResultType<()> {
 pub async fn notify_server_to_check_hwcodec() -> ResultType<()> {
     connect(1_000, "").await?.send(&&Data::CheckHwcodec).await?;
     Ok(())
+}
+
+#[tokio::main(flavor = "current_thread")]
+pub async fn get_wayland_screencast_restore_token(key: String) -> ResultType<String> {
+    let v = handle_wayland_screencast_restore_token(key, "get".to_owned()).await?;
+    Ok(v.unwrap_or_default())
+}
+
+#[tokio::main(flavor = "current_thread")]
+pub async fn clear_wayland_screencast_restore_token(key: String) -> ResultType<bool> {
+    if let Some(v) = handle_wayland_screencast_restore_token(key, "clear".to_owned()).await? {
+        return Ok(v.is_empty());
+    }
+    return Ok(false);
+}
+
+async fn handle_wayland_screencast_restore_token(
+    key: String,
+    value: String,
+) -> ResultType<Option<String>> {
+    let ms_timeout = 1_000;
+    let mut c = connect(ms_timeout, "").await?;
+    c.send(&Data::WaylandScreencastRestoreToken((key, value)))
+        .await?;
+    if let Some(Data::WaylandScreencastRestoreToken((_key, v))) = c.next_timeout(ms_timeout).await?
+    {
+        return Ok(Some(v));
+    }
+    return Ok(None);
 }
 
 #[cfg(test)]

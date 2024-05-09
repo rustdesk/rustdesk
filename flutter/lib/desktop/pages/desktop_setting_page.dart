@@ -318,6 +318,7 @@ class _GeneralState extends State<_General> {
             hwcodec(),
             audio(context),
             record(context),
+            WaylandCard(),
             _Card(title: 'Language', children: [language()]),
             other()
           ],
@@ -1855,14 +1856,80 @@ Widget _Radio<T>(BuildContext context,
   );
 }
 
+class WaylandCard extends StatefulWidget {
+  const WaylandCard({Key? key}) : super(key: key);
+
+  @override
+  State<WaylandCard> createState() => _WaylandCardState();
+}
+
+class _WaylandCardState extends State<WaylandCard> {
+  final restoreTokenKey = 'wayland-restore-token';
+
+  @override
+  Widget build(BuildContext context) {
+    return futureBuilder(
+      future: bind.mainHandleWaylandScreencastRestoreToken(
+          key: restoreTokenKey, value: "get"),
+      hasData: (restoreToken) {
+        final children = [
+          if (restoreToken.isNotEmpty)
+            _buildClearScreenSelection(context, restoreToken),
+        ];
+        return Offstage(
+          offstage: children.isEmpty,
+          child: _Card(title: 'Wayland', children: children),
+        );
+      },
+    );
+  }
+
+  Widget _buildClearScreenSelection(BuildContext context, String restoreToken) {
+    onConfirm() async {
+      final msg = await bind.mainHandleWaylandScreencastRestoreToken(
+          key: restoreTokenKey, value: "clear");
+      gFFI.dialogManager.dismissAll();
+      if (msg.isNotEmpty) {
+        msgBox(gFFI.sessionId, 'custom-nocancel', 'Error', msg, '',
+            gFFI.dialogManager);
+      } else {
+        setState(() {});
+      }
+    }
+
+    showConfirmMsgBox() => msgBoxCommon(
+            gFFI.dialogManager,
+            'Confirmation',
+            Text(
+              translate('confirm_clear_Wayland_screen_selection_tip'),
+            ),
+            [
+              dialogButton('OK', onPressed: onConfirm),
+              dialogButton('Cancel',
+                  onPressed: () => gFFI.dialogManager.dismissAll())
+            ]);
+
+    return _Button(
+      'Clear Wayland screen selection',
+      showConfirmMsgBox,
+      tip: 'clear_Wayland_screen_selection_tip',
+      style: ButtonStyle(
+        backgroundColor: MaterialStateProperty.all<Color>(
+            Theme.of(context).colorScheme.error.withOpacity(0.75)),
+      ),
+    );
+  }
+}
+
 // ignore: non_constant_identifier_names
 Widget _Button(String label, Function() onPressed,
-    {bool enabled = true, String? tip}) {
+    {bool enabled = true, String? tip, ButtonStyle? style}) {
   var button = ElevatedButton(
     onPressed: enabled ? onPressed : null,
     child: Text(
       translate(label),
     ).marginSymmetric(horizontal: 15),
+    style: style,
   );
   StatefulWidget child;
   if (tip == null) {
