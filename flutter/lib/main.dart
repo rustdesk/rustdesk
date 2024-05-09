@@ -144,7 +144,12 @@ void runMainApp(bool startService) async {
     }
     windowManager.setOpacity(1);
     windowManager.setTitle(getWindowName());
-    windowManager.setResizable(!bind.isIncomingOnly());
+    // `windowManager.setResizable(false)` will reset the window size to the default size on Linux.
+    // https://stackoverflow.com/questions/8193613/gtk-window-resize-disable-without-going-back-to-default
+    if (!isLinux) {
+      windowManager.setResizable(!bind.isIncomingOnly());
+    }
+    // For Linux, we set the edge size to 0 to disable resize. See `get windowEdgeSize` in common.dart.
   });
 }
 

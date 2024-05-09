@@ -3257,3 +3257,5 @@ Widget buildVirtualWindowFrame(BuildContext context, Widget child) {
     ),
   );
 }
+
+get windowEdgeSize => isLinux && bind.isIncomingOnly() ? 0.0 : kWindowEdgeSize;
