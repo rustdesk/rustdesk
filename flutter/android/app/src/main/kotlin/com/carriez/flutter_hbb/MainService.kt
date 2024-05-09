@@ -365,11 +365,11 @@ class MainService : Service() {
         }
 
         // Try release imageReader first to avoid surface access issue.
-        // Move the following code from stopCapture to here to avoid "dequeueBuffer: BufferQueue has been abandoned" after disconnecting.
+        // Move the following code from `stopCapture()` to here to avoid "dequeueBuffer: BufferQueue has been abandoned" after disconnecting.
         // https://github.com/bk138/droidVNC-NG/blob/b79af62db5a1c08ed94e6a91464859ffed6f4e97/app/src/main/java/net/christianbeier/droidvnc_ng/MediaProjectionService.java#L189
         imageReader?.close()
         imageReader = null
-        // suface needs to be release after imageReader.close to imageReader access released surface
+        // suface needs to be release after `imageReader.close()` to imageReader access released surface
         // https://github.com/rustdesk/rustdesk/issues/4118#issuecomment-1515666629
         surface?.release()
         
