@@ -338,9 +338,7 @@ class MainService : Service() {
                 ).apply {
                     setOnImageAvailableListener({ imageReader: ImageReader ->
                         try {
-                            if (!isStart) {
-                                return@setOnImageAvailableListener
-                            }
+                            // If not call acquireLatestImage, listener will not be called again
                             imageReader.acquireLatestImage().use { image ->
                                 if (image == null || !isStart) return@setOnImageAvailableListener
                                 val planes = image.planes
