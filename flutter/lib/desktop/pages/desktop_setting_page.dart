@@ -318,6 +318,7 @@ class _GeneralState extends State<_General> {
             hwcodec(),
             audio(context),
             record(context),
+            WaylandCard(),
             _Card(title: 'Language', children: [language()]),
             other()
           ],
@@ -639,9 +640,6 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
                     password(context),
                     _Card(title: '2FA', children: [tfa()]),
                     _Card(title: 'ID', children: [changeId()]),
-                    _Card(
-                        title: 'Cleanup',
-                        children: [WaylandScreenSelection(enabled: !locked)]),
                     more(context),
                   ]),
                 ),
@@ -1858,23 +1856,38 @@ Widget _Radio<T>(BuildContext context,
   );
 }
 
-class WaylandScreenSelection extends StatefulWidget {
-  final bool enabled;
-  const WaylandScreenSelection({Key? key, required this.enabled})
-      : super(key: key);
+class WaylandCard extends StatefulWidget {
+  const WaylandCard({Key? key}) : super(key: key);
 
   @override
-  State<WaylandScreenSelection> createState() => _WaylandScreenSelectionState();
+  State<WaylandCard> createState() => _WaylandCardState();
 }
 
-class _WaylandScreenSelectionState extends State<WaylandScreenSelection> {
-  final optKey = 'wayland-restore-token';
+class _WaylandCardState extends State<WaylandCard> {
+  final restoreTokenKey = 'wayland-restore-token';
 
   @override
   Widget build(BuildContext context) {
+    return futureBuilder(
+      future: bind.mainHandleWaylandScreencastRestoreToken(
+          key: restoreTokenKey, value: "get"),
+      hasData: (restoreToken) {
+        final children = [
+          if (restoreToken.isNotEmpty)
+            _buildClearScreenSelection(context, restoreToken),
+        ];
+        return Offstage(
+          offstage: children.isEmpty,
+          child: _Card(title: 'Wayland', children: children),
+        );
+      },
+    );
+  }
+
+  Widget _buildClearScreenSelection(BuildContext context, String restoreToken) {
     onConfirm() async {
       final msg = await bind.mainHandleWaylandScreencastRestoreToken(
-          key: optKey, value: "clear");
+          key: restoreTokenKey, value: "clear");
       gFFI.dialogManager.dismissAll();
       if (msg.isNotEmpty) {
         msgBox(gFFI.sessionId, 'custom-nocancel', 'Error', msg, '',
@@ -1883,32 +1896,26 @@ class _WaylandScreenSelectionState extends State<WaylandScreenSelection> {
         setState(() {});
       }
     }
+
     showConfirmMsgBox() => msgBoxCommon(
             gFFI.dialogManager,
             'Confirmation',
             Text(
-              translate('confirm_clear_wayland_screen_selection_tip'),
+              translate('confirm_clear_Wayland_screen_selection_tip'),
             ),
             [
               dialogButton('OK', onPressed: onConfirm),
               dialogButton('Cancel',
                   onPressed: () => gFFI.dialogManager.dismissAll())
             ]);
-    return futureBuilder(
-      future: bind.mainHandleWaylandScreencastRestoreToken(
-          key: optKey, value: "get"),
-      hasData: (restoreToken) => Offstage(
-        offstage: restoreToken.isEmpty,
-        child: _Button(
-          'Clear wayland screen selection',
-          showConfirmMsgBox,
-          tip: 'clear_wayland_screen_selection_tip',
-          style: ButtonStyle(
-            backgroundColor: MaterialStateProperty.all<Color>(
-                Theme.of(context).colorScheme.error.withOpacity(0.75)),
-          ),
-          enabled: widget.enabled,
-        ),
+
+    return _Button(
+      'Clear Wayland screen selection',
+      showConfirmMsgBox,
+      tip: 'clear_Wayland_screen_selection_tip',
+      style: ButtonStyle(
+        backgroundColor: MaterialStateProperty.all<Color>(
+            Theme.of(context).colorScheme.error.withOpacity(0.75)),
       ),
     );
   }
