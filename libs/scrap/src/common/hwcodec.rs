@@ -96,10 +96,7 @@ impl EncoderApi for HwRamEncoder {
                         height: ctx.height as _,
                         bitrate,
                     }),
-                    Err(_) => {
-                        HwCodecConfig::clear_ram();
-                        Err(anyhow!(format!("Failed to create encoder")))
-                    }
+                    Err(_) => Err(anyhow!(format!("Failed to create encoder"))),
                 }
             }
             _ => Err(anyhow!("encoder type mismatch")),
