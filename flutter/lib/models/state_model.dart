@@ -14,7 +14,7 @@ class StateGlobal {
   bool _isMinimized = false;
   final RxBool isMaximized = false.obs;
   final RxBool _showTabBar = true.obs;
-  final RxDouble _resizeEdgeSize = RxDouble(kWindowEdgeSize);
+  final RxDouble _resizeEdgeSize = RxDouble(windowEdgeSize);
   final RxDouble _windowBorderWidth = RxDouble(kWindowBorderWidth);
   final RxBool showRemoteToolBar = false.obs;
   final svcStatus = SvcStatus.notReady.obs;
@@ -57,7 +57,7 @@ class StateGlobal {
       if (isMaximized.value != v) {
         isMaximized.value = v;
         _resizeEdgeSize.value =
-            isMaximized.isTrue ? kMaximizeEdgeSize : kWindowEdgeSize;
+            isMaximized.isTrue ? kMaximizeEdgeSize : windowEdgeSize;
       }
       if (!isMacOS) {
         _windowBorderWidth.value = v ? 0 : kWindowBorderWidth;
@@ -75,7 +75,7 @@ class StateGlobal {
           ? kFullScreenEdgeSize
           : isMaximized.isTrue
               ? kMaximizeEdgeSize
-              : kWindowEdgeSize;
+              : windowEdgeSize;
       print(
           "fullscreen: $fullscreen, resizeEdgeSize: ${_resizeEdgeSize.value}");
       _windowBorderWidth.value = fullscreen.isTrue ? 0 : kWindowBorderWidth;
@@ -113,4 +113,5 @@ class StateGlobal {
   static final StateGlobal instance = StateGlobal._();
 }
 
+// This final variable is initialized when the first time it is accessed.
 final stateGlobal = StateGlobal.instance;

@@ -262,7 +262,7 @@ class _ConnectionPageState extends State<ConnectionPage>
   void onWindowLeaveFullScreen() {
     // Restore edge border to default edge size.
     stateGlobal.resizeEdgeSize.value =
-        stateGlobal.isMaximized.isTrue ? kMaximizeEdgeSize : kWindowEdgeSize;
+        stateGlobal.isMaximized.isTrue ? kMaximizeEdgeSize : windowEdgeSize;
   }
 
   @override
