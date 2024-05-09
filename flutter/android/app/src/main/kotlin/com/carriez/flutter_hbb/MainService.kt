@@ -363,6 +363,16 @@ class MainService : Service() {
             Log.w(logTag, "startCapture fail,mediaProjection is null")
             return false
         }
+
+        // Try release imageReader first to avoid surface access issue.
+        // Move the following code from `stopCapture()` to here to avoid "dequeueBuffer: BufferQueue has been abandoned" after disconnecting.
+        // https://github.com/bk138/droidVNC-NG/blob/b79af62db5a1c08ed94e6a91464859ffed6f4e97/app/src/main/java/net/christianbeier/droidvnc_ng/MediaProjectionService.java#L189
+        imageReader?.close()
+        imageReader = null
+        // suface needs to be release after `imageReader.close()` to imageReader access released surface
+        // https://github.com/rustdesk/rustdesk/issues/4118#issuecomment-1515666629
+        surface?.release()
+        
         updateScreenInfo(resources.configuration.orientation)
         Log.d(logTag, "Start Capture")
         surface = createSurface()
@@ -389,19 +399,11 @@ class MainService : Service() {
         FFI.setFrameRawEnable("video",false)
         FFI.setFrameRawEnable("audio",false)
         _isStart = false
-        // release video
-        virtualDisplay?.release()
-        imageReader?.close()
-        imageReader = null
-        // suface needs to be release after imageReader.close to imageReader access released surface
-        // https://github.com/rustdesk/rustdesk/issues/4118#issuecomment-1515666629
-        surface?.release()
         videoEncoder?.let {
             it.signalEndOfInputStream()
             it.stop()
             it.release()
         }
-        virtualDisplay = null
         videoEncoder = null
 
         // release audio
@@ -413,6 +415,11 @@ class MainService : Service() {
         _isReady = false
 
         stopCapture()
+
+        // Move `virtualDisplay.release()` from `stopCapture()` to here.
+        // release video
+        virtualDisplay?.release()
+        virtualDisplay = null
 
         mediaProjection = null
         checkMediaPermission()
@@ -442,11 +449,7 @@ class MainService : Service() {
             Log.d(logTag, "startRawVideoRecorder failed,surface is null")
             return
         }
-        virtualDisplay = mp.createVirtualDisplay(
-            "RustDeskVD",
-            SCREEN_INFO.width, SCREEN_INFO.height, SCREEN_INFO.dpi, VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
-            surface, null, null
-        )
+        createOrSetVirtualDisplay(mp, surface!!)
     }
 
     private fun startVP9VideoRecorder(mp: MediaProjection) {
@@ -458,11 +461,28 @@ class MainService : Service() {
             }
             it.setCallback(cb)
             it.start()
-            virtualDisplay = mp.createVirtualDisplay(
-                "RustDeskVD",
-                SCREEN_INFO.width, SCREEN_INFO.height, SCREEN_INFO.dpi, VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
-                surface, null, null
-            )
+            createOrSetVirtualDisplay(mp, surface!!)
+        }
+    }
+
+    // https://github.com/bk138/droidVNC-NG/blob/b79af62db5a1c08ed94e6a91464859ffed6f4e97/app/src/main/java/net/christianbeier/droidvnc_ng/MediaProjectionService.java#L250
+    // Reuse virtualDisplay if it exists, to avoid media projection confirmation dialog every connection.
+    private fun createOrSetVirtualDisplay(mp: MediaProjection, s: Surface) {
+        try {
+            virtualDisplay?.let {
+                it.resize(SCREEN_INFO.width, SCREEN_INFO.height, SCREEN_INFO.dpi)
+                it.setSurface(s)
+            } ?: let {
+                virtualDisplay = mp.createVirtualDisplay(
+                    "RustDeskVD",
+                    SCREEN_INFO.width, SCREEN_INFO.height, SCREEN_INFO.dpi, VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
+                    s, null, null
+                )
+            }
+        } catch (e: SecurityException) {
+            Log.w(logTag, "createOrSetVirtualDisplay: got SecurityException, re-requesting confirmation");
+            // This initiates a prompt dialog for the user to confirm screen projection.
+            requestMediaProjection()
         }
     }
 
