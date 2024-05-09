@@ -18,6 +18,7 @@ RUN apt update -y && \
         libxcb-shape0-dev \
         libxcb-xfixes0-dev \
         libasound2-dev \
+        libpam0g-dev \
         libpulse-dev \
         make \
         cmake \
