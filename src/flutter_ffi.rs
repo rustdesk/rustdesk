@@ -913,20 +913,24 @@ pub fn main_set_local_option(key: String, value: String) {
 //
 // 1. For get, the value is stored in the server process.
 // 2. For clear, we need to need to return the error mmsg from the server process to flutter.
-#[cfg(target_os = "linux")]
-pub fn main_handle_wayland_screencast_restore_token(key: String, value: String) -> String {
-    if value == "get" {
-        match crate::ipc::get_wayland_screencast_restore_token(key) {
+pub fn main_handle_wayland_screencast_restore_token(_key: String, _value: String) -> String {
+    #[cfg(not(target_os = "linux"))]
+    {
+        return "".to_owned();
+    }
+    #[cfg(target_os = "linux")]
+    if _value == "get" {
+        match crate::ipc::get_wayland_screencast_restore_token(_key) {
             Ok(v) => v,
             Err(e) => {
                 log::error!("Failed to get wayland screencast restore token, {}", e);
                 "".to_owned()
             }
         }
-    } else if value == "clear" {
-        match crate::ipc::clear_wayland_screencast_restore_token(key.clone()) {
+    } else if _value == "clear" {
+        match crate::ipc::clear_wayland_screencast_restore_token(_key.clone()) {
             Ok(true) => {
-                set_local_option(key, "".to_owned());
+                set_local_option(_key, "".to_owned());
                 "".to_owned()
             }
             Ok(false) => "Failed to clear, please try again.".to_owned(),
@@ -935,11 +939,7 @@ pub fn main_handle_wayland_screencast_restore_token(key: String, value: String) 
     } else {
         "".to_owned()
     }
-}
-
-#[cfg(not(target_os = "linux"))]
-pub fn main_handle_wayland_screencast_restore_token(_key: String, _value: String) -> String {
-    "".to_owned()
+    
 }
 
 pub fn main_get_input_source() -> SyncReturn<String> {
