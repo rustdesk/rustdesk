@@ -533,7 +533,24 @@ async fn handle(data: Data, stream: &mut Connection) {
         }
         Data::WaylandScreencastRestoreToken((key, value)) => {
             let v = if value == "get" {
-                Some(get_local_option(key.clone()))
+                let opt = get_local_option(key.clone());
+                #[cfg(not(target_os = "linux"))]
+                {
+                    Some(opt)
+                }
+                #[cfg(target_os = "linux")]
+                {
+                    let v = if opt.is_empty() {
+                        if scrap::wayland::pipewire::is_rdp_session_hold() {
+                            "fake token".to_string()
+                        } else {
+                            "".to_owned()
+                        }
+                    } else {
+                        opt
+                    };
+                    Some(v)
+                }
             } else if value == "clear" {
                 set_local_option(key.clone(), "".to_owned());
                 #[cfg(target_os = "linux")]

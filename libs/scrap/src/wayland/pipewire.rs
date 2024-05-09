@@ -35,6 +35,11 @@ pub fn close_session() {
     let _ = RDP_RESPONSE.lock().unwrap().take();
 }
 
+#[inline]
+pub fn is_rdp_session_hold() -> bool {
+    RDP_RESPONSE.lock().unwrap().is_some()
+}
+
 pub fn try_close_session() {
     let mut rdp_res = RDP_RESPONSE.lock().unwrap();
     let mut close = false;
