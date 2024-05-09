@@ -32,7 +32,7 @@ lazy_static! {
 
 #[inline]
 pub fn close_session() {
-    let _ RDP_RESPONSE.lock().unwrap().take();
+    let _ = RDP_RESPONSE.lock().unwrap().take();
 }
 
 pub fn try_close_session() {
