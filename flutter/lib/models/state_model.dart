@@ -113,4 +113,5 @@ class StateGlobal {
   static final StateGlobal instance = StateGlobal._();
 }
 
+// This final variable is initialized when the first time it is accessed.
 final stateGlobal = StateGlobal.instance;
