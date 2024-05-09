@@ -1605,5 +1605,10 @@ class RustdeskImpl {
     throw UnimplementedError();
   }
 
+  Future<String> mainHandleWaylandScreencastRestoreToken(
+      {required String key, required String value, dynamic hint}) {
+    throw UnimplementedError();
+  }
+
   void dispose() {}
 }
