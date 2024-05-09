@@ -30,6 +30,11 @@ lazy_static! {
     pub static ref RDP_RESPONSE: Mutex<Option<RdpResponse>> = Mutex::new(None);
 }
 
+#[inline]
+pub fn close_session() {
+    let _ RDP_RESPONSE.lock().unwrap().take();
+}
+
 pub fn try_close_session() {
     let mut rdp_res = RDP_RESPONSE.lock().unwrap();
     let mut close = false;

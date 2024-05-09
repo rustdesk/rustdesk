@@ -536,6 +536,8 @@ async fn handle(data: Data, stream: &mut Connection) {
                 Some(get_local_option(key.clone()))
             } else if value == "clear" {
                 set_local_option(key.clone(), "".to_owned());
+                #[cfg(target_os = "linux")]
+                scrap::wayland::pipewire::close_session();
                 Some("".to_owned())
             } else {
                 None
