@@ -154,6 +154,7 @@ const kDefaultScrollDuration = Duration(milliseconds: 50);
 const kDefaultMouseWheelThrottleDuration = Duration(milliseconds: 50);
 const kFullScreenEdgeSize = 0.0;
 const kMaximizeEdgeSize = 0.0;
+// Do not use kWindowEdgeSize directly. Use `windowEdgeSize` in `common.dart` instead.
 final kWindowEdgeSize = isWindows ? 1.0 : 5.0;
 final kWindowBorderWidth = isLinux ? 1.0 : 0.0;
 const kDesktopMenuPadding = EdgeInsets.only(left: 12.0, right: 3.0);
