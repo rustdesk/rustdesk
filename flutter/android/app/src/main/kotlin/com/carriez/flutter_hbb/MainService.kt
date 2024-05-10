@@ -171,6 +171,7 @@ class MainService : Service() {
     private val useVP9 = false
     private val binder = LocalBinder()
 
+    private var reuseVirtualDisplay = Build.VERSION.SDK_INT > 33
 
     // video
     private var mediaProjection: MediaProjection? = null
@@ -193,7 +194,7 @@ class MainService : Service() {
 
     override fun onCreate() {
         super.onCreate()
-        Log.d(logTag,"MainService onCreate")
+        Log.d(logTag,"MainService onCreate, sdk int:${Build.VERSION.SDK_INT} reuseVirtualDisplay:$reuseVirtualDisplay")
         FFI.init(this)
         HandlerThread("Service", Process.THREAD_PRIORITY_BACKGROUND).apply {
             start()
@@ -356,15 +357,6 @@ class MainService : Service() {
             Log.w(logTag, "startCapture fail,mediaProjection is null")
             return false
         }
-
-        // Try release imageReader first to avoid surface access issue.
-        // Move the following code from `stopCapture()` to here to avoid "dequeueBuffer: BufferQueue has been abandoned" after disconnecting.
-        // https://github.com/bk138/droidVNC-NG/blob/b79af62db5a1c08ed94e6a91464859ffed6f4e97/app/src/main/java/net/christianbeier/droidvnc_ng/MediaProjectionService.java#L189
-        imageReader?.close()
-        imageReader = null
-        // suface needs to be release after `imageReader.close()` to imageReader access released surface
-        // https://github.com/rustdesk/rustdesk/issues/4118#issuecomment-1515666629
-        surface?.release()
         
         updateScreenInfo(resources.configuration.orientation)
         Log.d(logTag, "Start Capture")
@@ -392,12 +384,31 @@ class MainService : Service() {
         FFI.setFrameRawEnable("video",false)
         FFI.setFrameRawEnable("audio",false)
         _isStart = false
+        // release video
+        if (reuseVirtualDisplay) {
+            // The virtual display video projection can be paused by calling `setSurface(null)`.
+            // https://developer.android.com/reference/android/hardware/display/VirtualDisplay.Callback
+            // https://learn.microsoft.com/en-us/dotnet/api/android.hardware.display.virtualdisplay.callback.onpaused?view=net-android-34.0
+            virtualDisplay?.setSurface(null)
+        } else {
+            virtualDisplay?.release()
+        }
+        // suface needs to be release after `imageReader.close()` to imageReader access released surface
+        // https://github.com/rustdesk/rustdesk/issues/4118#issuecomment-1515666629
+        imageReader?.close()
+        imageReader = null
         videoEncoder?.let {
             it.signalEndOfInputStream()
             it.stop()
             it.release()
         }
+        if (!reuseVirtualDisplay) {
+            virtualDisplay = null
+        }
         videoEncoder = null
+        // suface needs to be release after `imageReader.close()` to imageReader access released surface
+        // https://github.com/rustdesk/rustdesk/issues/4118#issuecomment-1515666629
+        surface?.release()
 
         // release audio
         audioRecordStat = false
@@ -409,10 +420,10 @@ class MainService : Service() {
 
         stopCapture()
 
-        // Move `virtualDisplay.release()` from `stopCapture()` to here.
-        // release video
-        virtualDisplay?.release()
-        virtualDisplay = null
+        if (reuseVirtualDisplay) {
+            virtualDisplay?.release()
+            virtualDisplay = null
+        }
 
         mediaProjection = null
         checkMediaPermission()
