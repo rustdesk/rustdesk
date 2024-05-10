@@ -210,6 +210,8 @@ fn load_icon_from_asset() -> Option<image::DynamicImage> {
     let path = path.join("../Frameworks/App.framework/Resources/flutter_assets/assets/icon.png");
     #[cfg(windows)]
     let path = path.join(r"data\flutter_assets\assets\icon.png");
+    #[cfg(target_os = "linux")]
+    let path = path.join(r"data/flutter_assets/assets/icon.png");
     if path.exists() {
         if let Ok(image) = image::open(path) {
             return Some(image);
