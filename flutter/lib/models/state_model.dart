@@ -56,8 +56,7 @@ class StateGlobal {
     if (!_fullscreen.isTrue) {
       if (isMaximized.value != v) {
         isMaximized.value = v;
-        _resizeEdgeSize.value =
-            isMaximized.isTrue ? kMaximizeEdgeSize : windowEdgeSize;
+        refreshResizeEdgeSize();
       }
       if (!isMacOS) {
         _windowBorderWidth.value = v ? 0 : kWindowBorderWidth;
@@ -71,11 +70,7 @@ class StateGlobal {
     if (_fullscreen.value != v) {
       _fullscreen.value = v;
       _showTabBar.value = !_fullscreen.value;
-      _resizeEdgeSize.value = fullscreen.isTrue
-          ? kFullScreenEdgeSize
-          : isMaximized.isTrue
-              ? kMaximizeEdgeSize
-              : windowEdgeSize;
+      refreshResizeEdgeSize();
       print(
           "fullscreen: $fullscreen, resizeEdgeSize: ${_resizeEdgeSize.value}");
       _windowBorderWidth.value = fullscreen.isTrue ? 0 : kWindowBorderWidth;
@@ -95,6 +90,12 @@ class StateGlobal {
       }
     }
   }
+
+  refreshResizeEdgeSize() => _resizeEdgeSize.value = fullscreen.isTrue
+      ? kFullScreenEdgeSize
+      : isMaximized.isTrue
+          ? kMaximizeEdgeSize
+          : windowEdgeSize;
 
   String getInputSource({bool force = false}) {
     if (force || _inputSource.isEmpty) {
