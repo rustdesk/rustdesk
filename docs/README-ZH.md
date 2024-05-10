@@ -182,7 +182,7 @@ docker run --rm -it -v $PWD:/home/user/rustdesk -v rustdesk-git-cache:/home/user
    groupmod: Permission denied.
    groupmod: cannot lock /etc/group; try again later.
    ```
-   > **原因：** 容器的 entrypoint 脚本会检测 UID 和 GID，在度判和给定的环境变量的不一致时，会强行修改 user 的 UID 和 GID 并重新运行。但在重启后读不到环境中的 UID 和 GID，然后再次进入判错重启环节
+   > **原因：** 容器的 entrypoint 脚本会检测 UID 和 GID，在度判断和给定的环境变量的不一致时，会强行修改 user 的 UID 和 GID 并重新运行。但在重启后读不到环境中的 UID 和 GID，然后再次进入判错重启环节
 
 
 ### 运行 RustDesk 程序
