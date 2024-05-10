@@ -609,8 +609,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("no_audio_input_device_tip", "Nav atrasta neviena audio ievades ierīce."),
         ("Incoming", "Ienākošie"),
         ("Outgoing", "Izejošie"),
-        ("Clear Wayland screen selection", ""),
-        ("clear_Wayland_screen_selection_tip", ""),
-        ("confirm_clear_Wayland_screen_selection_tip", ""),
+        ("Clear Wayland screen selection", "Notīrīt Wayland ekrāna atlasi"),
+        ("clear_Wayland_screen_selection_tip", "Pēc ekrāna atlases notīrīšanas varat atkārtoti atlasīt ekrānu, ko kopīgot."),
+        ("confirm_clear_Wayland_screen_selection_tip", "Vai tiešām notīrīt Wayland ekrāna atlasi?"),
     ].iter().cloned().collect();
 }
