@@ -40,7 +40,7 @@ class _PixelbufferTexture {
           final ptr = await textureRenderer.getTexturePtr(_textureKey);
           platformFFI.registerPixelbufferTexture(sessionId, display, ptr);
           debugPrint(
-              "create pixelbuffer texture: peerId: ${ffi.id} display:$_display, textureId:$id");
+              "create pixelbuffer texture: peerId: ${ffi.id} display:$_display, textureId:$id, texturePtr:$ptr");
         }
       });
     }
