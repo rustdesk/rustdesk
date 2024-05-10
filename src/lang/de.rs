@@ -609,8 +609,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("no_audio_input_device_tip", "Kein Audio-Eingabegerät gefunden."),
         ("Incoming", "Eingehend"),
         ("Outgoing", "Ausgehend"),
-        ("Clear Wayland screen selection", ""),
-        ("clear_Wayland_screen_selection_tip", ""),
-        ("confirm_clear_Wayland_screen_selection_tip", ""),
+        ("Clear Wayland screen selection", "Wayland-Bildschirmauswahl löschen"),
+        ("clear_Wayland_screen_selection_tip", "Nachdem Sie die Bildschirmauswahl gelöscht haben, können Sie den freizugebenden Bildschirm erneut auswählen."),
+        ("confirm_clear_Wayland_screen_selection_tip", "Sind Sie sicher, dass Sie die Auswahl des Wayland-Bildschirms löschen möchten?"),
     ].iter().cloned().collect();
 }
