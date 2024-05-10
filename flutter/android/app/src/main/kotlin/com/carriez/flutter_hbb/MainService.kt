@@ -54,7 +54,6 @@ const val NOTIFY_ID_OFFSET = 100
 const val MIME_TYPE = MediaFormat.MIMETYPE_VIDEO_VP9
 
 // video const
-const val MAX_SCREEN_SIZE = 1200
 
 const val VIDEO_KEY_BIT_RATE = 1024_000
 const val VIDEO_KEY_FRAME_RATE = 30
@@ -249,12 +248,6 @@ class MainService : Service() {
         Log.d(logTag,"updateScreenInfo:w:$w,h:$h")
         var scale = 1
         if (w != 0 && h != 0) {
-            if (w > MAX_SCREEN_SIZE || h > MAX_SCREEN_SIZE) {
-                scale = 2
-                w /= scale
-                h /= scale
-                dpi /= scale
-            }
             if (SCREEN_INFO.width != w) {
                 SCREEN_INFO.width = w
                 SCREEN_INFO.height = h
