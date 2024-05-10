@@ -1129,6 +1129,8 @@ jobs:
             fi
             echo $JOBS
             cargo build --lib $JOBS --features hwcodec,flutter,flutter_texture_render --release
+            rm -rf target/release/deps target/release/build
+            rm -rf ~/.cargo
 
             # Setup Flutter
             # disable git safe.directory
@@ -1160,6 +1162,7 @@ jobs:
                   bin/flutter-elinux precache --linux
                 popd
                 cp -R flutter/bin/cache/artifacts/engine/linux-x64/shader_lib flutter-elinux/flutter/bin/cache/artifacts/engine/linux-arm64
+                rm -rf flutter
               ;;
               x86_64)
                 flutter doctor -v
