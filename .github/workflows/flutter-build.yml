@@ -1396,7 +1396,7 @@ jobs:
             export VCPKG_ROOT=/opt/artifacts/vcpkg
             export ARCH=armhf
             export CARGO_INCREMENTAL=0
-            cargo build --features inline --release --bins --jobs 3
+            cargo build --features inline --release --bins --jobs 1
             # package
             mkdir -p ./Release
             mv ./target/release/rustdesk ./Release/rustdesk
