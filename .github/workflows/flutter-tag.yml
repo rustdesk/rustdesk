@@ -15,7 +15,7 @@ jobs:
     secrets: inherit
     with:
       upload-artifact: true
-      upload-tag: ${{ env.GITHUB_REF_NAME }}
+      upload-tag: ${{ github.ref_name }}
 
   update-fdroid-version-file:
     name: Publish RustDesk version file for F-Droid updater
