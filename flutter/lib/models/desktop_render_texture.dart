@@ -40,7 +40,7 @@ class _PixelbufferTexture {
           final ptr = await textureRenderer.getTexturePtr(_textureKey);
           platformFFI.registerPixelbufferTexture(sessionId, display, ptr);
           debugPrint(
-              "create pixelbuffer texture: peerId: ${ffi.id} display:$_display, textureId:$id");
+              "create pixelbuffer texture: peerId: ${ffi.id} display:$_display, textureId:$id, texturePtr:$ptr");
         }
       });
     }
@@ -102,13 +102,15 @@ class _GpuTexture {
     }
   }
 
-  destroy(FFI ffi) async {
+  destroy(bool unregisterTexture, FFI ffi) async {
     // must stop texture render, render unregistered texture cause crash
     if (!_destroying && support && _sessionId != null && _textureId != -1) {
       _destroying = true;
-      platformFFI.registerGpuTexture(_sessionId!, _display, 0);
-      // sleep for a while to avoid the texture is used after it's unregistered.
-      await Future.delayed(Duration(milliseconds: 100));
+      if (unregisterTexture) {
+        platformFFI.registerGpuTexture(_sessionId!, _display, 0);
+        // sleep for a while to avoid the texture is used after it's unregistered.
+        await Future.delayed(Duration(milliseconds: 100));
+      }
       await gpuTextureRenderer.unregisterTexture(_textureId);
       _textureId = -1;
       _destroying = false;
@@ -208,7 +210,7 @@ class TextureModel {
         _pixelbufferRenderTextures.remove(idx);
       }
       if (_gpuRenderTextures.containsKey(idx)) {
-        _gpuRenderTextures[idx]!.destroy(ffi);
+        _gpuRenderTextures[idx]!.destroy(true, ffi);
         _gpuRenderTextures.remove(idx);
       }
     }
@@ -235,7 +237,7 @@ class TextureModel {
       await texture.destroy(closeSession, ffi);
     }
     for (final texture in _gpuRenderTextures.values) {
-      await texture.destroy(ffi);
+      await texture.destroy(closeSession, ffi);
     }
   }
 
