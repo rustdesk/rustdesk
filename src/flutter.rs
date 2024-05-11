@@ -330,24 +330,23 @@ impl VideoRenderer {
     fn register_pixelbuffer_texture(&self, display: usize, ptr: usize) {
         let mut sessions_lock = self.map_display_sessions.write().unwrap();
         if ptr == 0 {
-            let mut can_remove = false;
             if let Some(info) = sessions_lock.get_mut(&display) {
                 if info.texture_rgba_ptr != usize::default() {
                     info.texture_rgba_ptr = usize::default();
                 }
                 #[cfg(feature = "vram")]
-                if info.gpu_output_ptr == usize::default() {
-                    can_remove = true;
+                if info.gpu_output_ptr != usize::default() {
+                    return;
                 }
             }
-            if can_remove {
-                sessions_lock.remove(&display);
-            }
+            sessions_lock.remove(&display);
         } else {
             if let Some(info) = sessions_lock.get_mut(&display) {
-                if info.texture_rgba_ptr != usize::default() && info.texture_rgba_ptr != ptr as TextureRgbaPtr {
+                if info.texture_rgba_ptr != usize::default()
+                    && info.texture_rgba_ptr != ptr as TextureRgbaPtr
+                {
                     log::warn!(
-                        "texture_rgba_ptr is not null and not equal to ptr, replace the {} to {}",
+                        "texture_rgba_ptr is not null and not equal to ptr, replace {} to {}",
                         info.texture_rgba_ptr,
                         ptr
                     );
@@ -375,24 +374,21 @@ impl VideoRenderer {
     pub fn register_gpu_output(&self, display: usize, ptr: usize) {
         let mut sessions_lock = self.map_display_sessions.write().unwrap();
         if ptr == 0 {
-            let mut can_remove = false;
             if let Some(info) = sessions_lock.get_mut(&display) {
                 if info.gpu_output_ptr != usize::default() {
                     info.gpu_output_ptr = usize::default();
                 }
                 #[cfg(feature = "flutter_texture_render")]
-                if info.texture_rgba_ptr == usize::default() {
-                    can_remove = true;
+                if info.texture_rgba_ptr != usize::default() {
+                    return;
                 }
             }
-            if can_remove {
-                sessions_lock.remove(&display);
-            }
+            sessions_lock.remove(&display);
         } else {
             if let Some(info) = sessions_lock.get_mut(&display) {
                 if info.gpu_output_ptr != usize::default() && info.gpu_output_ptr != ptr {
                     log::error!(
-                        "gpu_output_ptr is not null and not equal to ptr, relace the {} to {}",
+                        "gpu_output_ptr is not null and not equal to ptr, relace {} to {}",
                         info.gpu_output_ptr,
                         ptr
                     );
