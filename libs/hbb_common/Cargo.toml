@@ -9,15 +9,14 @@ edition = "2018"
 [dependencies]
 flexi_logger = { version = "0.27", features = ["async"] }
 protobuf = { version = "3.4", features = ["with-bytes"] }
-tokio = { version = "1.36", features = ["full"] }
+tokio = { version = "1.37", features = ["full"] }
 tokio-util = { version = "0.7", features = ["full"] }
 futures = "0.3"
-bytes = { version = "1.4", features = ["serde"] }
+bytes = { version = "1.6", features = ["serde"] }
 log = "0.4"
 env_logger = "0.10"
 socket2 = { version = "0.3", features = ["reuseport"] }
 zstd = "0.13"
-quinn = {version = "0.9", optional = true }
 anyhow = "1.0"
 futures-util = "0.3"
 directories-next = "2.0"
@@ -26,12 +25,12 @@ serde_derive = "1.0"
 serde = "1.0"
 serde_json = "1.0"
 lazy_static = "1.4"
-confy = { git = "https://github.com/open-trade/confy" }
+confy = { git = "https://github.com/rustdesk-org/confy" }
 dirs-next = "2.0"
 filetime = "0.2"
 sodiumoxide = "0.2"
 regex = "1.8"
-tokio-socks = { git = "https://github.com/open-trade/tokio-socks" }
+tokio-socks = { git = "https://github.com/rustdesk-org/tokio-socks" }
 chrono = "0.4"
 backtrace = "0.3"
 libc = "0.2"
@@ -54,9 +53,6 @@ rustls-platform-verifier = "0.3.1"
 rustls-pki-types = "1.4"
 [target.'cfg(any(target_os = "macos", target_os = "windows"))'.dependencies]
 tokio-native-tls ="0.3"
-
-[features]
-quic = []
 
 [build-dependencies]
 protobuf-codegen = { version = "3.4" }

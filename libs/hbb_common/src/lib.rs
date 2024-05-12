@@ -23,8 +23,6 @@ pub mod udp;
 pub use env_logger;
 pub use log;
 pub mod bytes_codec;
-#[cfg(feature = "quic")]
-pub mod quic;
 pub use anyhow::{self, bail};
 pub use futures_util;
 pub mod config;
@@ -55,9 +53,6 @@ pub use uuid;
 pub use base64;
 pub use thiserror;
 
-#[cfg(feature = "quic")]
-pub type Stream = quic::Connection;
-#[cfg(not(feature = "quic"))]
 pub type Stream = tcp::FramedStream;
 pub type SessionID = uuid::Uuid;
 
