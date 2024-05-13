@@ -75,6 +75,9 @@ lazy_static::lazy_static! {
     pub static ref HARD_SETTINGS: RwLock<HashMap<String, String>> = Default::default();
 }
 
+pub const DISPLAY_SETTINGS_PREFIX: &str = "$$";
+pub const LOCAL_SETTINGS_PREFIX: &str = "$";
+
 lazy_static::lazy_static! {
     pub static ref APP_DIR: RwLock<String> = Default::default();
 }

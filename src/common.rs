@@ -1603,16 +1603,16 @@ pub fn read_custom_client(config: &str) {
                 let Some(v) = v.as_str() else {
                     continue;
                 };
-                if k.starts_with("$$") {
-                    config::DEFAULT_DISPLAY_SETTINGS
-                        .write()
-                        .unwrap()
-                        .insert(k.clone(), v[2..].to_owned());
-                } else if k.starts_with("$") {
-                    config::DEFAULT_LOCAL_SETTINGS
-                        .write()
-                        .unwrap()
-                        .insert(k.clone(), v[1..].to_owned());
+                if k.starts_with(config::DISPLAY_SETTINGS_PREFIX) {
+                    config::DEFAULT_DISPLAY_SETTINGS.write().unwrap().insert(
+                        k[config::DISPLAY_SETTINGS_PREFIX.len()..].to_owned(),
+                        v.to_owned(),
+                    );
+                } else if k.starts_with(config::LOCAL_SETTINGS_PREFIX) {
+                    config::DEFAULT_LOCAL_SETTINGS.write().unwrap().insert(
+                        k[config::LOCAL_SETTINGS_PREFIX.len()..].to_owned(),
+                        v.to_owned(),
+                    );
                 } else {
                     config::DEFAULT_SETTINGS
                         .write()
@@ -1628,16 +1628,16 @@ pub fn read_custom_client(config: &str) {
                 let Some(v) = v.as_str() else {
                     continue;
                 };
-                if k.starts_with("$$") {
-                    config::OVERWRITE_DISPLAY_SETTINGS
-                        .write()
-                        .unwrap()
-                        .insert(k.clone(), v[2..].to_owned());
-                } else if k.starts_with("$") {
-                    config::OVERWRITE_LOCAL_SETTINGS
-                        .write()
-                        .unwrap()
-                        .insert(k.clone(), v[1..].to_owned());
+                if k.starts_with(config::DISPLAY_SETTINGS_PREFIX) {
+                    config::OVERWRITE_DISPLAY_SETTINGS.write().unwrap().insert(
+                        k[config::DISPLAY_SETTINGS_PREFIX.len()..].to_owned(),
+                        v.to_owned(),
+                    );
+                } else if k.starts_with(config::LOCAL_SETTINGS_PREFIX) {
+                    config::OVERWRITE_LOCAL_SETTINGS.write().unwrap().insert(
+                        k[config::LOCAL_SETTINGS_PREFIX.len()..].to_owned(),
+                        v.to_owned(),
+                    );
                 } else {
                     config::OVERWRITE_SETTINGS
                         .write()

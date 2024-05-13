@@ -1610,5 +1610,10 @@ class RustdeskImpl {
     throw UnimplementedError();
   }
 
+  bool mainIsOptionFixed(
+      {required String key, required String typ, dynamic hint}) {
+    throw UnimplementedError();
+  }
+
   void dispose() {}
 }

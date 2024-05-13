@@ -215,7 +215,7 @@ void changeWhiteList({Function()? callback}) async {
       actions: [
         dialogButton("Cancel", onPressed: close, isOutline: true),
         dialogButton("Clear", onPressed: () async {
-          await bind.mainSetOption(key: 'whitelist', value: '');
+          await bind.mainSetOption(key: kOptionWhitelist, value: '');
           callback?.call();
           close();
         }, isOutline: true),
@@ -248,7 +248,8 @@ void changeWhiteList({Function()? callback}) async {
               }
               newWhiteList = ips.join(',');
             }
-            await bind.mainSetOption(key: 'whitelist', value: newWhiteList);
+            await bind.mainSetOption(
+                key: kOptionWhitelist, value: newWhiteList);
             callback?.call();
             close();
           },
@@ -298,7 +299,7 @@ Future<String> changeDirectAccessPort(
         dialogButton("Cancel", onPressed: close, isOutline: true),
         dialogButton("OK", onPressed: () async {
           await bind.mainSetOption(
-              key: 'direct-access-port', value: controller.text);
+              key: kOptionDirectAccessPort, value: controller.text);
           close();
         }),
       ],
@@ -345,7 +346,7 @@ Future<String> changeAutoDisconnectTimeout(String old) async {
         dialogButton("Cancel", onPressed: close, isOutline: true),
         dialogButton("OK", onPressed: () async {
           await bind.mainSetOption(
-              key: 'auto-disconnect-timeout', value: controller.text);
+              key: kOptionAutoDisconnectTimeout, value: controller.text);
           close();
         }),
       ],

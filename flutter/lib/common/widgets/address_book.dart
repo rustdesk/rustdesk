@@ -7,6 +7,7 @@ import 'package:flutter_hbb/common/formatter/id_formatter.dart';
 import 'package:flutter_hbb/common/hbbs/hbbs.dart';
 import 'package:flutter_hbb/common/widgets/peer_card.dart';
 import 'package:flutter_hbb/common/widgets/peers_view.dart';
+import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/desktop/widgets/popup_menu.dart';
 import 'package:flutter_hbb/models/ab_model.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
@@ -333,6 +334,7 @@ class _AddressBookState extends State<AddressBook> {
 
   @protected
   MenuEntryBase<String> syncMenuItem() {
+    final isOptionFixed = isLocalOptionFixed(syncAbOption);
     return MenuEntrySwitch<String>(
       switchType: SwitchType.scheckbox,
       text: translate('Sync with recent sessions'),
@@ -343,11 +345,13 @@ class _AddressBookState extends State<AddressBook> {
         gFFI.abModel.setShouldAsync(v);
       },
       dismissOnClicked: true,
+      enabled: (!isOptionFixed).obs,
     );
   }
 
   @protected
   MenuEntryBase<String> sortMenuItem() {
+    final isOptionFixed = isLocalOptionFixed(sortAbTagsOption);
     return MenuEntrySwitch<String>(
       switchType: SwitchType.scheckbox,
       text: translate('Sort tags'),
@@ -359,11 +363,13 @@ class _AddressBookState extends State<AddressBook> {
         gFFI.abModel.sortTags.value = v;
       },
       dismissOnClicked: true,
+      enabled: (!isOptionFixed).obs,
     );
   }
 
   @protected
   MenuEntryBase<String> filterMenuItem() {
+    final isOptionFixed = isLocalOptionFixed(filterAbTagOption);
     return MenuEntrySwitch<String>(
       switchType: SwitchType.scheckbox,
       text: translate('Filter by intersection'),
@@ -375,6 +381,7 @@ class _AddressBookState extends State<AddressBook> {
         gFFI.abModel.filterByIntersection.value = v;
       },
       dismissOnClicked: true,
+      enabled: (!isOptionFixed).obs,
     );
   }
 

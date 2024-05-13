@@ -3281,3 +3281,15 @@ setResizable(bool resizable) {
     windowManager.setResizable(resizable);
   }
 }
+
+isDefaultOptionFixed(String key) {
+  return bind.mainIsOptionFixed(key: key, typ: kOptionTypeDefault);
+}
+
+isLocalOptionFixed(String key) {
+  return bind.mainIsOptionFixed(key: key, typ: kOptionTypeLocal);
+}
+
+isUserDefaultOptionFixed(String key) {
+  return bind.mainIsOptionFixed(key: key, typ: kOptionTypeUserDefault);
+}

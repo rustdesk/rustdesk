@@ -68,11 +68,35 @@ const String kWindowEventMoveTabToNewWindow = "move_tab_to_new_window";
 const String kWindowEventGetCachedSessionData = "get_cached_session_data";
 const String kWindowEventOpenMonitorSession = "open_monitor_session";
 
+const String kOptionViewStyle = "view_style";
+const String kOptionImageQuality = "image_quality";
 const String kOptionOpenNewConnInTabs = "enable-open-new-connections-in-tabs";
 const String kOptionOpenInTabs = "allow-open-in-tabs";
 const String kOptionOpenInWindows = "allow-open-in-windows";
 const String kOptionForceAlwaysRelay = "force-always-relay";
 const String kOptionViewOnly = "view-only";
+const String kOptionEnableLanDiscovery = "enable-lan-discovery";
+const String kOptionWhitelist = "whitelist";
+const String kOptionEnableAbr = "enable-abr";
+const String kOptionEnableRecordSession = "enable-record-session";
+const String kOptionDirectServer = "direct-server";
+const String kOptionDirectAccessPort = "direct-access-port";
+const String kOptionAllowAutoDisconnect = "allow-auto-disconnect";
+const String kOptionAutoDisconnectTimeout = "auto-disconnect-timeout";
+const String kOptionEnableHwcodec = "enable-hwcodec";
+const String kOptionAllowAutoRecordIncoming = "allow-auto-record-incoming";
+const String kOptionVideoSaveDirectory = "video-save-directory";
+const String kOptionAccessMode = "access-mode";
+const String kOptionEnableKeyboard = "enable-keyboard";
+const String kOptionEnableClipboard = "enable-clipboard";
+const String kOptionEnableFileTransfer = "enable-file-transfer";
+const String kOptionEnableAudio = "enable-audio";
+const String kOptionEnableTunnel = "enable-tunnel";
+const String kOptionEnableRemoteRestart = "enable-remote-restart";
+const String kOptionEnableBlockInput = "enable-block-input";
+const String kOptionAllowRemoteConfigModification = "allow-remote-config-modification";
+const String kOptionVerificationMethod =  "verification-method";
+const String kOptionApproveMode =  "approve-mode";
 
 const String kUrlActionClose = "close";
 
@@ -166,6 +190,10 @@ const kFrameBoxShadowOffsetUnfocused = 2.0;
 
 const kInvalidValueStr = 'InvalidValueStr';
 
+const kOptionTypeLocal = '\$';
+const kOptionTypeUserDefault = '\$\$';
+const kOptionTypeDefault = '';
+
 // Config key shared by flutter and other ui.
 const kCommConfKeyTheme = 'theme';
 const kCommConfKeyLang = 'lang';
@@ -207,12 +235,6 @@ const kRemoteImageQualityLow = 'low';
 
 /// [kRemoteImageQualityCustom] Custom image quality.
 const kRemoteImageQualityCustom = 'custom';
-
-/// [kRemoteAudioGuestToHost] Guest to host audio mode(default).
-const kRemoteAudioGuestToHost = 'guest-to-host';
-
-/// [kRemoteAudioDualWay] dual-way audio mode(default).
-const kRemoteAudioDualWay = 'dual-way';
 
 const kIgnoreDpi = true;
 

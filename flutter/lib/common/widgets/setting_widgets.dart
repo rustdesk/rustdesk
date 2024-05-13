@@ -10,8 +10,8 @@ import 'package:get/get.dart';
 customImageQualityWidget(
     {required double initQuality,
     required double initFps,
-    required Function(double) setQuality,
-    required Function(double) setFps,
+    required Function(double)? setQuality,
+    required Function(double)? setFps,
     required bool showFps,
     required bool showMoreQuality}) {
   if (initQuality < kMinQuality ||
@@ -27,16 +27,12 @@ customImageQualityWidget(
   final RxBool moreQualityChecked = RxBool(qualityValue.value > kMaxQuality);
   final debouncerQuality = Debouncer<double>(
     Duration(milliseconds: 1000),
-    onChanged: (double v) {
-      setQuality(v);
-    },
+    onChanged: setQuality,
     initialValue: qualityValue.value,
   );
   final debouncerFps = Debouncer<double>(
     Duration(milliseconds: 1000),
-    onChanged: (double v) {
-      setFps(v);
-    },
+    onChanged: setFps,
     initialValue: fpsValue.value,
   );
 
@@ -62,10 +58,12 @@ customImageQualityWidget(
                   divisions: moreQualityChecked.value
                       ? ((kMaxMoreQuality - kMinQuality) / 10).round()
                       : ((kMaxQuality - kMinQuality) / 5).round(),
-                  onChanged: (double value) async {
-                    qualityValue.value = value;
-                    debouncerQuality.value = value;
-                  },
+                  onChanged: setQuality == null
+                      ? null
+                      : (double value) async {
+                          qualityValue.value = value;
+                          debouncerQuality.value = value;
+                        },
                 ),
               ),
               Expanded(
@@ -124,10 +122,12 @@ customImageQualityWidget(
                     min: kMinFps,
                     max: kMaxFps,
                     divisions: ((kMaxFps - kMinFps) / 5).round(),
-                    onChanged: (double value) async {
-                      fpsValue.value = value;
-                      debouncerFps.value = value;
-                    },
+                    onChanged: setFps == null
+                        ? null
+                        : (double value) async {
+                            fpsValue.value = value;
+                            debouncerFps.value = value;
+                          },
                   ),
                 ),
                 Expanded(
@@ -152,21 +152,29 @@ customImageQualitySetting() {
   final qualityKey = 'custom_image_quality';
   final fpsKey = 'custom-fps';
 
-  var initQuality =
+  final initQuality =
       (double.tryParse(bind.mainGetUserDefaultOption(key: qualityKey)) ??
           kDefaultQuality);
-  var initFps = (double.tryParse(bind.mainGetUserDefaultOption(key: fpsKey)) ??
-      kDefaultFps);
+  final isQuanlityFixed = isUserDefaultOptionFixed(qualityKey);
+  final initFps =
+      (double.tryParse(bind.mainGetUserDefaultOption(key: fpsKey)) ??
+          kDefaultFps);
+  final isFpsFixed = isUserDefaultOptionFixed(fpsKey);
 
   return customImageQualityWidget(
       initQuality: initQuality,
       initFps: initFps,
-      setQuality: (v) {
-        bind.mainSetUserDefaultOption(key: qualityKey, value: v.toString());
-      },
-      setFps: (v) {
-        bind.mainSetUserDefaultOption(key: fpsKey, value: v.toString());
-      },
+      setQuality: isQuanlityFixed
+          ? null
+          : (v) {
+              bind.mainSetUserDefaultOption(
+                  key: qualityKey, value: v.toString());
+            },
+      setFps: isFpsFixed
+          ? null
+          : (v) {
+              bind.mainSetUserDefaultOption(key: fpsKey, value: v.toString());
+            },
       showFps: true,
       showMoreQuality: true);
 }
@@ -209,7 +217,8 @@ List<Widget> ServerConfigImportExportWidgets(
 List<(String, String)> otherDefaultSettings() {
   List<(String, String)> v = [
     ('View Mode', 'view_only'),
-    if ((isDesktop || isWebDesktop)) ('show_monitors_tip', kKeyShowMonitorsToolbar),
+    if ((isDesktop || isWebDesktop))
+      ('show_monitors_tip', kKeyShowMonitorsToolbar),
     if ((isDesktop || isWebDesktop)) ('Collapse toolbar', 'collapse_toolbar'),
     ('Show remote cursor', 'show_remote_cursor'),
     ('Follow remote cursor', 'follow_remote_cursor'),

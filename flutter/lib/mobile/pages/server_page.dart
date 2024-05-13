@@ -39,6 +39,7 @@ class ServerPage extends StatefulWidget implements PageShape {
           final approveMode = gFFI.serverModel.approveMode;
           final verificationMethod = gFFI.serverModel.verificationMethod;
           final showPasswordOption = approveMode != 'click';
+          final isApproveModeFixed = isDefaultOptionFixed(kOptionApproveMode);
           return [
             PopupMenuItem(
               enabled: gFFI.serverModel.connectStatus > 0,
@@ -50,16 +51,19 @@ class ServerPage extends StatefulWidget implements PageShape {
               value: 'AcceptSessionsViaPassword',
               child: listTile(
                   'Accept sessions via password', approveMode == 'password'),
+              enabled: !isApproveModeFixed,
             ),
             PopupMenuItem(
               value: 'AcceptSessionsViaClick',
               child:
                   listTile('Accept sessions via click', approveMode == 'click'),
+              enabled: !isApproveModeFixed,
             ),
             PopupMenuItem(
               value: "AcceptSessionsViaBoth",
               child: listTile("Accept sessions via both",
                   approveMode != 'password' && approveMode != 'click'),
+              enabled: !isApproveModeFixed,
             ),
             if (showPasswordOption) const PopupMenuDivider(),
             if (showPasswordOption &&
