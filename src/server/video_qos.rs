@@ -124,6 +124,10 @@ impl VideoQoS {
         self.support_abr.insert(display_idx, support);
     }
 
+    pub fn in_vbr_state(&self) -> bool {
+        Config::get_option("enable-abr") != "N" && self.support_abr.iter().all(|e| *e.1)
+    }
+
     pub fn refresh(&mut self, typ: Option<RefreshType>) {
         // fps
         let user_fps = |u: &UserData| {
@@ -178,8 +182,7 @@ impl VideoQoS {
         let mut quality = latest_quality;
 
         // network delay
-        let abr_enabled =
-            Config::get_option("enable-abr") != "N" && self.support_abr.iter().all(|e| *e.1);
+        let abr_enabled = self.in_vbr_state();
         if abr_enabled && typ != Some(RefreshType::SetImageQuality) {
             // max delay
             let delay = self

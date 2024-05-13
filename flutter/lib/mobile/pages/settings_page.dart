@@ -44,6 +44,7 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
   var _onlyWhiteList = false;
   var _enableDirectIPAccess = false;
   var _enableRecordSession = false;
+  var _enableHardwareCodec = false;
   var _autoRecordIncomingSession = false;
   var _allowAutoDisconnect = false;
   var _localIP = "";
@@ -118,6 +119,13 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
       if (enableRecordSession != _enableRecordSession) {
         update = true;
         _enableRecordSession = enableRecordSession;
+      }
+
+      final enableHardwareCodec = option2bool(
+          'enable-hwcodec', await bind.mainGetOption(key: 'enable-hwcodec'));
+      if (_enableHardwareCodec != enableHardwareCodec) {
+        update = true;
+        _enableHardwareCodec = enableHardwareCodec;
       }
 
       final autoRecordIncomingSession = option2bool(
@@ -513,6 +521,22 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
             },
           )
         ]),
+        if (isAndroid)
+          SettingsSection(title: Text(translate('Hardware Codec')), tiles: [
+            SettingsTile.switchTile(
+              title: Text(translate('Enable hardware codec')),
+              initialValue: _enableHardwareCodec,
+              onToggle: (v) async {
+                await bind.mainSetOption(
+                    key: "enable-hwcodec", value: v ? "" : "N");
+                final newValue =
+                    await bind.mainGetOption(key: "enable-hwcodec") != "N";
+                setState(() {
+                  _enableHardwareCodec = newValue;
+                });
+              },
+            ),
+          ]),
         if (isAndroid && !outgoingOnly)
           SettingsSection(
             title: Text(translate("Recording")),

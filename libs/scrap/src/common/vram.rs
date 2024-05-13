@@ -180,6 +180,14 @@ impl EncoderApi for VRamEncoder {
     fn support_abr(&self) -> bool {
         self.config.device.vendor_id != ADAPTER_VENDOR_INTEL as u32
     }
+
+    fn support_changing_quality(&self) -> bool {
+        true
+    }
+
+    fn latency_free(&self) -> bool {
+        true
+    }
 }
 
 impl VRamEncoder {
