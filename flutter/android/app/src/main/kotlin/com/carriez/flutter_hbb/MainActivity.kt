@@ -42,6 +42,9 @@ class MainActivity : FlutterActivity() {
     private val logTag = "mMainActivity"
     private var mainService: MainService? = null
 
+    private var isAudioStart = false
+    private val audioRecordHandle = AudioRecordHandle(this, { false }, { isAudioStart })
+
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         if (MainService.isReady) {
@@ -230,6 +233,12 @@ class MainActivity : FlutterActivity() {
                         result.success(false)
                     }
                 }
+                "on_voice_call_started" -> {
+                    onVoiceCallStarted()
+                }
+                "on_voice_call_closed" -> {
+                    onVoiceCallClosed()
+                }
                 else -> {
                     result.error("-1", "No such method", null)
                 }
@@ -318,5 +327,45 @@ class MainActivity : FlutterActivity() {
         result.put("h", h)
         result.put("codecs", codecArray)
         FFI.setCodecInfo(result.toString())
+    }
+
+    private fun onVoiceCallStarted() {
+        var ok = false
+        mainService?.let {
+            ok = it.onVoiceCallStarted()
+        } ?: let {
+            isAudioStart = true
+            ok = audioRecordHandle.onVoiceCallStarted(null)
+        }
+        if (!ok) {
+            // Rarely happens, So we just add log and msgbox here.
+            Log.e(logTag, "onVoiceCallStarted fail")
+            flutterMethodChannel?.invokeMethod("msgbox", mapOf(
+                "type" to "custom-nook-nocancel-hasclose-error",
+                "title" to "Voice call",
+                "text" to "Failed to start voice call."))
+        } else {
+            Log.d(logTag, "onVoiceCallStarted success")
+        }
+    }
+
+    private fun onVoiceCallClosed() {
+        var ok = false
+        mainService?.let {
+            ok = it.onVoiceCallClosed()
+        } ?: let {
+            isAudioStart = false
+            ok = audioRecordHandle.onVoiceCallClosed(null)
+        }
+        if (!ok) {
+            // Rarely happens, So we just add log and msgbox here.
+            Log.e(logTag, "onVoiceCallClosed fail")
+            flutterMethodChannel?.invokeMethod("msgbox", mapOf(
+                "type" to "custom-nook-nocancel-hasclose-error",
+                "title" to "Voice call",
+                "text" to "Failed to stop voice call."))
+        } else {
+            Log.d(logTag, "onVoiceCallClosed success")
+        }
     }
 }

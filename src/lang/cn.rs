@@ -612,5 +612,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Clear Wayland screen selection", "清除 Wayland 的屏幕选择"),
         ("clear_Wayland_screen_selection_tip", "清除 Wayland 的屏幕选择后，您可以重新选择分享的屏幕。"),
         ("confirm_clear_Wayland_screen_selection_tip", "是否确认清除 Wayland 的分享屏幕选择？"),
+        ("android_new_voice_call_tip", "收到新的语音呼叫请求。如果您接受，音频将切换为语音通信。"),
     ].iter().cloned().collect();
 }
