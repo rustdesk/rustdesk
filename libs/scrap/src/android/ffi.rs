@@ -178,6 +178,8 @@ pub struct MediaCodecInfo {
 #[derive(Debug, Deserialize, Clone)]
 pub struct MediaCodecInfos {
     pub version: usize,
+    pub w: usize,
+    pub h: usize,
     pub codecs: Vec<MediaCodecInfo>,
 }
 

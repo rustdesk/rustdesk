@@ -416,6 +416,7 @@ fn get_config() -> ResultType<Available> {
     #[cfg(target_os = "android")]
     {
         let info = crate::android::ffi::get_codec_info();
+        log::info!("all codec info: {info:?}");
         struct T {
             name_prefix: &'static str,
             data_format: DataFormat,
@@ -440,16 +441,26 @@ fn get_config() -> ResultType<Available> {
                         c.is_encoder
                             && c.mime_type.as_str() == get_mime_type(t.data_format)
                             && c.nv12
+                            && c.hw == Some(true) //only use hardware codec
                     })
                     .collect();
                 log::debug!("available {:?} encoders: {codecs:?}", t.data_format);
+                let screen_wh = std::cmp::max(info.w, info.h);
                 let mut best = None;
-                if let Some(c) = codecs.iter().find(|c| c.hw == Some(true)) {
-                    best = Some(c.name.clone());
-                } else if let Some(c) = codecs.iter().find(|c| c.hw == None) {
-                    best = Some(c.name.clone());
-                } else if let Some(c) = codecs.first() {
-                    best = Some(c.name.clone());
+                if let Some(codec) = codecs
+                    .iter()
+                    .find(|c| c.max_width >= screen_wh && c.max_height >= screen_wh)
+                {
+                    best = Some(codec.name.clone());
+                } else {
+                    // find the max resolution
+                    let mut max_area = 0;
+                    for codec in codecs.iter() {
+                        if codec.max_width * codec.max_height > max_area {
+                            best = Some(codec.name.clone());
+                            max_area = codec.max_width * codec.max_height;
+                        }
+                    }
                 }
                 if let Some(best) = best {
                     e.push(CodecInfo {
