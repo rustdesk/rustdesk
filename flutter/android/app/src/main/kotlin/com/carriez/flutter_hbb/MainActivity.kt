@@ -264,8 +264,12 @@ class MainActivity : FlutterActivity() {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 hw = codec.isHardwareAccelerated
             } else {
-                if (listOf("OMX.google.", "OMX.SEC.", "c2.android").any { codec.name.startsWith(it) }) {
+                // https://chromium.googlesource.com/external/webrtc/+/HEAD/sdk/android/src/java/org/webrtc/MediaCodecUtils.java#29
+                // https://chromium.googlesource.com/external/webrtc/+/master/sdk/android/api/org/webrtc/HardwareVideoEncoderFactory.java#229
+                if (listOf("OMX.google.", "OMX.SEC.", "c2.android").any { codec.name.startsWith(it, true) }) {
                     hw = false
+                } else if (listOf("c2.qti", "OMX.qcom.video", "OMX.Exynos", "OMX.hisi", "OMX.MTK", "OMX.Intel", "OMX.Nvidia").any { codec.name.startsWith(it, true) }) {
+                    hw = true
                 }
             }
             codecObject.put("hw", hw)
@@ -280,7 +284,8 @@ class MainActivity : FlutterActivity() {
                 val caps = codec.getCapabilitiesForType(mime_type)
                 var usable = true;
                 if (codec.isEncoder) {
-                    if (!caps.videoCapabilities.isSizeSupported(w,h) || !caps.videoCapabilities.isSizeSupported(h,w)) {
+                    // Encoder‘s max_height and max_width are interchangeable
+                    if (!caps.videoCapabilities.isSizeSupported(w,h) && !caps.videoCapabilities.isSizeSupported(h,w)) {
                         usable = false
                     }
                 }
@@ -309,6 +314,8 @@ class MainActivity : FlutterActivity() {
         }
         val result = JSONObject()
         result.put("version", Build.VERSION.SDK_INT)
+        result.put("w", w)
+        result.put("h", h)
         result.put("codecs", codecArray)
         FFI.setCodecInfo(result.toString())
     }
