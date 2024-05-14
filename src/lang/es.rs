@@ -612,6 +612,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Clear Wayland screen selection", "Borrar la selección de pantalla Wayland"),
         ("clear_Wayland_screen_selection_tip", "Tras borrar la selección de pantalla, puedes volver a seleccionarla para compartir."),
         ("confirm_clear_Wayland_screen_selection_tip", "¿Seguro que deseas borrar la selección de pantalla Wayland?"),
-        ("android_new_voice_call_tip", ""),
+        ("android_new_voice_call_tip", "Se ha recibido una nueva solicitud de llamada de voz. Si aceptas el audio cambiará a comunicación de voz."),
     ].iter().cloned().collect();
 }
