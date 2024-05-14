@@ -38,10 +38,8 @@ jobs:
             git \
             g++ \
             libclang-10-dev \
-            libclang-dev \
             libgtk-3-dev \
             llvm-10-dev \
-            llvm-dev \
             nasm \
             ninja-build \
             pkg-config \
