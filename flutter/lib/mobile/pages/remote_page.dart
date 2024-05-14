@@ -419,7 +419,11 @@ class _RemotePageState extends State<RemotePage> {
                       : <Widget>[
                           IconButton(
                             color: Colors.white,
-                            icon: Icon(Icons.message),
+                            icon: isAndroid
+                                ? SvgPicture.asset('assets/chat.svg',
+                                    colorFilter: ColorFilter.mode(
+                                        Colors.white, BlendMode.srcIn))
+                                : Icon(Icons.message),
                             onPressed: () => isAndroid
                                 ? showChatOptions(widget.id)
                                 : onPressedTextChat(widget.id),
@@ -549,19 +553,15 @@ class _RemotePageState extends State<RemotePage> {
     onPressVoiceCall() => bind.sessionRequestVoiceCall(sessionId: sessionId);
     onPressEndVoiceCall() => bind.sessionCloseVoiceCall(sessionId: sessionId);
 
-    makeTextMenu(String label, String svg, VoidCallback onPressed,
-            {ColorFilter? colorFilter, TextStyle? labelStyle}) =>
+    makeTextMenu(String label, Widget icon, VoidCallback onPressed,
+            {TextStyle? labelStyle}) =>
         TTextMenu(
           child: Text(translate(label), style: labelStyle),
           trailingIcon: Transform.scale(
             scale: (isDesktop || isWebDesktop) ? 0.8 : 1,
             child: IconButton(
               onPressed: onPressed,
-              icon: SvgPicture.asset(
-                svg,
-                colorFilter: colorFilter ??
-                    ColorFilter.mode(MyTheme.accent, BlendMode.srcIn),
-              ),
+              icon: icon,
             ),
           ),
           onPressed: onPressed,
@@ -572,15 +572,25 @@ class _RemotePageState extends State<RemotePage> {
       VoiceCallStatus.connected
     ].contains(gFFI.chatModel.voiceCallStatus.value);
     final menus = [
-      makeTextMenu(
-          'Text chat', 'assets/chat.svg', () => onPressedTextChat(widget.id)),
+      makeTextMenu('Text chat', Icon(Icons.message, color: MyTheme.accent),
+          () => onPressedTextChat(widget.id)),
       isInVoice
           ? makeTextMenu(
-              'End voice call', 'assets/call_wait.svg', onPressEndVoiceCall,
-              colorFilter: ColorFilter.mode(Colors.redAccent, BlendMode.srcIn),
+              'End voice call',
+              SvgPicture.asset(
+                'assets/call_wait.svg',
+                colorFilter:
+                    ColorFilter.mode(Colors.redAccent, BlendMode.srcIn),
+              ),
+              onPressEndVoiceCall,
               labelStyle: TextStyle(color: Colors.redAccent))
           : makeTextMenu(
-              'Voice call', 'assets/call_wait.svg', onPressVoiceCall),
+              'Voice call',
+              SvgPicture.asset(
+                'assets/call_wait.svg',
+                colorFilter: ColorFilter.mode(MyTheme.accent, BlendMode.srcIn),
+              ),
+              onPressVoiceCall),
     ];
     getChild(TTextMenu menu) {
       if (menu.trailingIcon != null) {
