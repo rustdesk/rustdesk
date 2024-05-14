@@ -8,6 +8,7 @@ import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/mobile/widgets/gesture_help.dart';
 import 'package:flutter_hbb/models/chat_model.dart';
 import 'package:flutter_keyboard_visibility/flutter_keyboard_visibility.dart';
+import 'package:flutter_svg/svg.dart';
 import 'package:get/get.dart';
 import 'package:provider/provider.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
@@ -79,7 +80,7 @@ class _RemotePageState extends State<RemotePage> {
     initSharedStates(widget.id);
     gFFI.chatModel
         .changeCurrentKey(MessageKey(widget.id, ChatModel.clientModeID));
-
+    gFFI.chatModel.voiceCallStatus.value = VoiceCallStatus.notStarted;
     _blockableOverlayState.applyFfi(gFFI);
   }
 
@@ -102,6 +103,11 @@ class _RemotePageState extends State<RemotePage> {
     }
     await keyboardSubscription.cancel();
     removeSharedStates(widget.id);
+    if (isAndroid) {
+      // Only one client is considered here for now.
+      // TODO: take into account the case where there are multiple clients
+      gFFI.invokeMethod("on_voice_call_closed");
+    }
   }
 
   // to-do: It should be better to use transparent color instead of the bgColor.
@@ -369,9 +375,7 @@ class _RemotePageState extends State<RemotePage> {
                       onPressed: () {
                         clientClose(sessionId, gFFI.dialogManager);
                       },
-                    )
-                  ] +
-                  <Widget>[
+                    ),
                     IconButton(
                       color: Colors.white,
                       icon: Icon(Icons.tv),
@@ -415,12 +419,14 @@ class _RemotePageState extends State<RemotePage> {
                       : <Widget>[
                           IconButton(
                             color: Colors.white,
-                            icon: Icon(Icons.message),
-                            onPressed: () {
-                              gFFI.chatModel.changeCurrentKey(MessageKey(
-                                  widget.id, ChatModel.clientModeID));
-                              gFFI.chatModel.toggleChatOverlay();
-                            },
+                            icon: isAndroid
+                                ? SvgPicture.asset('assets/chat.svg',
+                                    colorFilter: ColorFilter.mode(
+                                        Colors.white, BlendMode.srcIn))
+                                : Icon(Icons.message),
+                            onPressed: () => isAndroid
+                                ? showChatOptions(widget.id)
+                                : onPressedTextChat(widget.id),
                           )
                         ]) +
                   [
@@ -536,6 +542,88 @@ class _RemotePageState extends State<RemotePage> {
         menus[index].onPressed.call();
       }
     }();
+  }
+
+  onPressedTextChat(String id) {
+    gFFI.chatModel.changeCurrentKey(MessageKey(id, ChatModel.clientModeID));
+    gFFI.chatModel.toggleChatOverlay();
+  }
+
+  showChatOptions(String id) async {
+    onPressVoiceCall() => bind.sessionRequestVoiceCall(sessionId: sessionId);
+    onPressEndVoiceCall() => bind.sessionCloseVoiceCall(sessionId: sessionId);
+
+    makeTextMenu(String label, Widget icon, VoidCallback onPressed,
+            {TextStyle? labelStyle}) =>
+        TTextMenu(
+          child: Text(translate(label), style: labelStyle),
+          trailingIcon: Transform.scale(
+            scale: (isDesktop || isWebDesktop) ? 0.8 : 1,
+            child: IconButton(
+              onPressed: onPressed,
+              icon: icon,
+            ),
+          ),
+          onPressed: onPressed,
+        );
+
+    final isInVoice = [
+      VoiceCallStatus.waitingForResponse,
+      VoiceCallStatus.connected
+    ].contains(gFFI.chatModel.voiceCallStatus.value);
+    final menus = [
+      makeTextMenu('Text chat', Icon(Icons.message, color: MyTheme.accent),
+          () => onPressedTextChat(widget.id)),
+      isInVoice
+          ? makeTextMenu(
+              'End voice call',
+              SvgPicture.asset(
+                'assets/call_wait.svg',
+                colorFilter:
+                    ColorFilter.mode(Colors.redAccent, BlendMode.srcIn),
+              ),
+              onPressEndVoiceCall,
+              labelStyle: TextStyle(color: Colors.redAccent))
+          : makeTextMenu(
+              'Voice call',
+              SvgPicture.asset(
+                'assets/call_wait.svg',
+                colorFilter: ColorFilter.mode(MyTheme.accent, BlendMode.srcIn),
+              ),
+              onPressVoiceCall),
+    ];
+    getChild(TTextMenu menu) {
+      if (menu.trailingIcon != null) {
+        return Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              menu.child,
+              menu.trailingIcon!,
+            ]);
+      } else {
+        return menu.child;
+      }
+    }
+
+    final menuItems = menus
+        .asMap()
+        .entries
+        .map((e) => PopupMenuItem<int>(child: getChild(e.value), value: e.key))
+        .toList();
+    Future.delayed(Duration.zero, () async {
+      final size = MediaQuery.of(context).size;
+      final x = 120.0;
+      final y = size.height;
+      var index = await showMenu(
+        context: context,
+        position: RelativeRect.fromLTRB(x, y, x, y),
+        items: menuItems,
+        elevation: 8,
+      );
+      if (index != null && index < menus.length) {
+        menus[index].onPressed.call();
+      }
+    });
   }
 
   /// aka changeTouchMode
