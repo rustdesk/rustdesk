@@ -612,5 +612,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Clear Wayland screen selection", "Annulla selezione schermata Wayland"),
         ("clear_Wayland_screen_selection_tip", "Dopo aver annullato la selezione schermo, è possibile selezionare nuovamente lo schermo da condividere."),
         ("confirm_clear_Wayland_screen_selection_tip", "Sei sicuro di voler annullare la selezione schermo Wayland?"),
+        ("android_new_voice_call_tip", ""),
     ].iter().cloned().collect();
 }

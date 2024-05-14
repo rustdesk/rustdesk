@@ -1239,11 +1239,11 @@ pub mod connection_manager {
         fn add_connection(&self, client: &crate::ui_cm_interface::Client) {
             let client_json = serde_json::to_string(&client).unwrap_or("".into());
             // send to Android service, active notification no matter UI is shown or not.
-            #[cfg(any(target_os = "android"))]
+            #[cfg(target_os = "android")]
             if let Err(e) =
                 call_main_service_set_by_name("add_connection", Some(&client_json), None)
             {
-                log::debug!("call_service_set_by_name fail,{}", e);
+                log::debug!("call_main_service_set_by_name fail,{}", e);
             }
             // send to UI, refresh widget
             self.push_event("add_connection", &[("client", &client_json)]);
@@ -1277,6 +1277,13 @@ pub mod connection_manager {
 
         fn update_voice_call_state(&self, client: &crate::ui_cm_interface::Client) {
             let client_json = serde_json::to_string(&client).unwrap_or("".into());
+            // send to Android service, active notification no matter UI is shown or not.
+            #[cfg(target_os = "android")]
+            if let Err(e) =
+                call_main_service_set_by_name("update_voice_call_state", Some(&client_json), None)
+            {
+                log::debug!("call_main_service_set_by_name fail,{}", e);
+            }
             self.push_event("update_voice_call_state", &[("client", &client_json)]);
         }
 

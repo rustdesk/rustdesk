@@ -550,37 +550,60 @@ class ServerModel with ChangeNotifier {
   }
 
   void showLoginDialog(Client client) {
+    showClientDialog(
+      client,
+      client.isFileTransfer ? "File Connection" : "Screen Connection",
+      'Do you accept?',
+      'android_new_connection_tip',
+      () => sendLoginResponse(client, false),
+      () => sendLoginResponse(client, true),
+    );
+  }
+
+  handleVoiceCall(Client client, bool accept) {
+    parent.target?.invokeMethod("cancel_notification", client.id);
+    bind.cmHandleIncomingVoiceCall(id: client.id, accept: accept);
+  }
+
+  showVoiceCallDialog(Client client) {
+    showClientDialog(
+      client,
+      'Voice call',
+      'Do you accept?',
+      'android_new_voice_call_tip',
+      () => handleVoiceCall(client, false),
+      () => handleVoiceCall(client, true),
+    );
+  }
+
+  showClientDialog(Client client, String title, String contentTitle,
+      String content, VoidCallback onCancel, VoidCallback onSubmit) {
     parent.target?.dialogManager.show((setState, close, context) {
       cancel() {
-        sendLoginResponse(client, false);
+        onCancel();
         close();
       }
 
       submit() {
-        sendLoginResponse(client, true);
+        onSubmit();
         close();
       }
 
       return CustomAlertDialog(
         title:
             Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-          Text(translate(
-              client.isFileTransfer ? "File Connection" : "Screen Connection")),
-          IconButton(
-              onPressed: () {
-                close();
-              },
-              icon: const Icon(Icons.close))
+          Text(translate(title)),
+          IconButton(onPressed: close, icon: const Icon(Icons.close))
         ]),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           mainAxisAlignment: MainAxisAlignment.center,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(translate("Do you accept?")),
+            Text(translate(contentTitle)),
             ClientInfo(client),
             Text(
-              translate("android_new_connection_tip"),
+              translate(content),
               style: Theme.of(globalKey.currentContext!).textTheme.bodyMedium,
             ),
           ],
@@ -676,10 +699,14 @@ class ServerModel with ChangeNotifier {
         _clients[index].inVoiceCall = client.inVoiceCall;
         _clients[index].incomingVoiceCall = client.incomingVoiceCall;
         if (client.incomingVoiceCall) {
-          // Has incoming phone call, let's set the window on top.
-          Future.delayed(Duration.zero, () {
-            windowOnTop(null);
-          });
+          if (isAndroid) {
+            showVoiceCallDialog(client);
+          } else {
+            // Has incoming phone call, let's set the window on top.
+            Future.delayed(Duration.zero, () {
+              windowOnTop(null);
+            });
+          }
         }
         notifyListeners();
       }
