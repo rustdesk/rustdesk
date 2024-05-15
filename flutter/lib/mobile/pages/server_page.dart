@@ -120,7 +120,7 @@ class ServerPage extends StatefulWidget implements PageShape {
             } else if (value == "Click") {
               gFFI.serverModel.setApproveMode('click');
             } else {
-              gFFI.serverModel.setApproveMode('');
+              gFFI.serverModel.setApproveMode(defaultOptionApproveMode);
             }
           }
         })

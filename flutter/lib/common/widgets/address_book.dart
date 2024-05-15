@@ -359,7 +359,7 @@ class _AddressBookState extends State<AddressBook> {
         return shouldSortTags();
       },
       setter: (bool v) async {
-        bind.mainSetLocalOption(key: sortAbTagsOption, value: v ? 'Y' : '');
+        bind.mainSetLocalOption(key: sortAbTagsOption, value: v ? 'Y' : defaultOptionNo);
         gFFI.abModel.sortTags.value = v;
       },
       dismissOnClicked: true,
@@ -377,7 +377,7 @@ class _AddressBookState extends State<AddressBook> {
         return filterAbTagByIntersection();
       },
       setter: (bool v) async {
-        bind.mainSetLocalOption(key: filterAbTagOption, value: v ? 'Y' : '');
+        bind.mainSetLocalOption(key: filterAbTagOption, value: v ? 'Y' : defaultOptionNo);
         gFFI.abModel.filterByIntersection.value = v;
       },
       dismissOnClicked: true,

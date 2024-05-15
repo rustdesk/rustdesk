@@ -285,8 +285,8 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
             : (_) async {
                 update() async {
                   final onlyWhiteList =
-                      (await bind.mainGetOption(key: kOptionWhitelist))
-                          .isNotEmpty;
+                      (await bind.mainGetOption(key: kOptionWhitelist)) !=
+                          defaultOptionWhitelist;
                   if (onlyWhiteList != _onlyWhiteList) {
                     setState(() {
                       _onlyWhiteList = onlyWhiteList;
@@ -304,7 +304,7 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
             ? null
             : (v) async {
                 await bind.mainSetOption(
-                    key: kOptionEnableAbr, value: v ? "" : "N");
+                    key: kOptionEnableAbr, value: v ? defaultOptionYes : "N");
                 final newValue =
                     await bind.mainGetOption(key: kOptionEnableAbr) != "N";
                 setState(() {
@@ -319,7 +319,7 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
             ? null
             : (v) async {
                 await bind.mainSetOption(
-                    key: kOptionEnableRecordSession, value: v ? "" : "N");
+                    key: kOptionEnableRecordSession, value: v ? defaultOptionYes : "N");
                 final newValue =
                     await bind.mainGetOption(key: kOptionEnableRecordSession) !=
                         "N";
@@ -555,7 +555,7 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
                   ? null
                   : (v) async {
                       await bind.mainSetOption(
-                          key: kOptionEnableHwcodec, value: v ? "" : "N");
+                          key: kOptionEnableHwcodec, value: v ? defaultOptionYes : "N");
                       final newValue =
                           await bind.mainGetOption(key: kOptionEnableHwcodec) !=
                               "N";
@@ -708,7 +708,8 @@ void showLanguageSettings(OverlayDialogManager dialogManager) async {
       return CustomAlertDialog(
         content: Column(
           children: [
-                getRadio(Text(translate('Default')), '', lang, setLang),
+                getRadio(Text(translate('Default')), defaultOptionLang, lang,
+                    setLang),
                 Divider(color: MyTheme.border),
               ] +
               langs.map((e) {
@@ -900,7 +901,7 @@ class __DisplayPageState extends State<_DisplayPage> {
           ? null
           : (b) async {
               await bind.mainSetUserDefaultOption(
-                  key: key, value: b ? 'Y' : '');
+                  key: key, value: b ? 'Y' : defaultOptionNo);
               setState(() {});
             },
     );

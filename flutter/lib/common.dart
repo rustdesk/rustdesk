@@ -550,7 +550,8 @@ class MyTheme {
     Get.changeThemeMode(mode);
     if (desktopType == DesktopType.main || isAndroid || isIOS) {
       if (mode == ThemeMode.system) {
-        await bind.mainSetLocalOption(key: kCommConfKeyTheme, value: '');
+        await bind.mainSetLocalOption(
+            key: kCommConfKeyTheme, value: defaultOptionTheme);
       } else {
         await bind.mainSetLocalOption(
             key: kCommConfKeyTheme, value: mode.toShortString());
@@ -1421,13 +1422,13 @@ bool option2bool(String option, String value) {
 String bool2option(String option, bool b) {
   String res;
   if (option.startsWith('enable-')) {
-    res = b ? '' : 'N';
+    res = b ? defaultOptionYes : 'N';
   } else if (option.startsWith('allow-') ||
       option == "stop-service" ||
       option == "direct-server" ||
       option == "stop-rendezvous-service" ||
       option == kOptionForceAlwaysRelay) {
-    res = b ? 'Y' : '';
+    res = b ? 'Y' : defaultOptionNo;
   } else {
     assert(false);
     res = b ? 'Y' : 'N';
@@ -3293,3 +3294,12 @@ isLocalOptionFixed(String key) {
 isUserDefaultOptionFixed(String key) {
   return bind.mainIsOptionFixed(key: key, typ: kOptionTypeUserDefault);
 }
+
+final isCustomClient = bind.isCustomClient();
+get defaultOptionLang => isCustomClient ? 'default' : '';
+get defaultOptionTheme => isCustomClient ? 'system' : '';
+get defaultOptionYes => isCustomClient ? 'Y' : '';
+get defaultOptionNo => isCustomClient ? 'N' : '';
+get defaultOptionWhitelist => isCustomClient ? ',' : '';
+get defaultOptionAccessMode => isCustomClient ? 'custom' : '';
+get defaultOptionApproveMode => isCustomClient ? 'password-click' : '';

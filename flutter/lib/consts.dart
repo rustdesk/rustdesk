@@ -74,7 +74,7 @@ const String kOptionOpenNewConnInTabs = "enable-open-new-connections-in-tabs";
 const String kOptionOpenInTabs = "allow-open-in-tabs";
 const String kOptionOpenInWindows = "allow-open-in-windows";
 const String kOptionForceAlwaysRelay = "force-always-relay";
-const String kOptionViewOnly = "view-only";
+const String kOptionViewOnly = "view_only";
 const String kOptionEnableLanDiscovery = "enable-lan-discovery";
 const String kOptionWhitelist = "whitelist";
 const String kOptionEnableAbr = "enable-abr";
@@ -88,7 +88,10 @@ const String kOptionAllowAutoRecordIncoming = "allow-auto-record-incoming";
 const String kOptionVideoSaveDirectory = "video-save-directory";
 const String kOptionAccessMode = "access-mode";
 const String kOptionEnableKeyboard = "enable-keyboard";
+// "Settings -> Security -> Permissions"
 const String kOptionEnableClipboard = "enable-clipboard";
+// "enable_file_transfer" is used as "Enable file copy and paste" in "Settings -> Display -> Other default options".
+// "enable-file-transfer" is used as "Enable file transfer" in "Settings -> Security -> Permissions".
 const String kOptionEnableFileTransfer = "enable-file-transfer";
 const String kOptionEnableAudio = "enable-audio";
 const String kOptionEnableTunnel = "enable-tunnel";
@@ -97,6 +100,20 @@ const String kOptionEnableBlockInput = "enable-block-input";
 const String kOptionAllowRemoteConfigModification = "allow-remote-config-modification";
 const String kOptionVerificationMethod =  "verification-method";
 const String kOptionApproveMode =  "approve-mode";
+const String kOptionCollapseToolbar = "collapse_toolbar";
+const String kOptionShowRemoteCursor = "show_remote_cursor";
+const String kOptionFollowRemoteCursor = "follow_remote_cursor";
+const String kOptionFollowRemoteWindow = "follow_remote_window";
+const String kOptionZoomCursor = "zoom-cursor";
+const String kOptionShowQualityMonitor = "show_quality_monitor";
+const String kOptionDisableAudio = "disable_audio";
+// "Settings -> Display -> Other default options"
+const String kOptionDisableClipboard = "disable_clipboard";
+const String kOptionLockAfterSessionEnd = "lock_after_session_end";
+const String kOptionPrivacyMode = "privacy_mode";
+const String kOptionTouchMode = "touch-mode";
+const String kOptionI444 = "i444";
+const String kOptionSwapLeftRightMouse = 'swap-left-right-mouse';
 
 const String kUrlActionClose = "close";
 

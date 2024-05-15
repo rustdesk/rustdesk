@@ -283,7 +283,7 @@ class ServerModel with ChangeNotifier {
     }
 
     _audioOk = !_audioOk;
-    bind.mainSetOption(key: "enable-audio", value: _audioOk ? '' : 'N');
+    bind.mainSetOption(key: "enable-audio", value: _audioOk ? defaultOptionYes : 'N');
     notifyListeners();
   }
 
@@ -302,7 +302,7 @@ class ServerModel with ChangeNotifier {
     }
 
     _fileOk = !_fileOk;
-    bind.mainSetOption(key: kOptionEnableFileTransfer, value: _fileOk ? '' : 'N');
+    bind.mainSetOption(key: kOptionEnableFileTransfer, value: _fileOk ? defaultOptionYes : 'N');
     notifyListeners();
   }
 
@@ -445,7 +445,7 @@ class ServerModel with ChangeNotifier {
         break;
       case "input":
         if (_inputOk != value) {
-          bind.mainSetOption(key: kOptionEnableKeyboard, value: value ? '' : 'N');
+          bind.mainSetOption(key: kOptionEnableKeyboard, value: value ? defaultOptionYes : 'N');
         }
         _inputOk = value;
         break;

@@ -509,7 +509,7 @@ class AbModel {
   }
 
   void setShouldAsync(bool v) async {
-    await bind.mainSetLocalOption(key: syncAbOption, value: v ? 'Y' : '');
+    await bind.mainSetLocalOption(key: syncAbOption, value: v ? 'Y' : defaultOptionNo);
     _syncAllFromRecent = true;
     _timerCounter = 0;
   }

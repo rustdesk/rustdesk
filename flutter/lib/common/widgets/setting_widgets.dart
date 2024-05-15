@@ -216,24 +216,25 @@ List<Widget> ServerConfigImportExportWidgets(
 
 List<(String, String)> otherDefaultSettings() {
   List<(String, String)> v = [
-    ('View Mode', 'view_only'),
+    ('View Mode', kOptionViewOnly),
     if ((isDesktop || isWebDesktop))
       ('show_monitors_tip', kKeyShowMonitorsToolbar),
-    if ((isDesktop || isWebDesktop)) ('Collapse toolbar', 'collapse_toolbar'),
-    ('Show remote cursor', 'show_remote_cursor'),
-    ('Follow remote cursor', 'follow_remote_cursor'),
-    ('Follow remote window focus', 'follow_remote_window'),
-    if ((isDesktop || isWebDesktop)) ('Zoom cursor', 'zoom-cursor'),
-    ('Show quality monitor', 'show_quality_monitor'),
-    ('Mute', 'disable_audio'),
+    if ((isDesktop || isWebDesktop))
+      ('Collapse toolbar', kOptionCollapseToolbar),
+    ('Show remote cursor', kOptionShowRemoteCursor),
+    ('Follow remote cursor', kOptionFollowRemoteCursor),
+    ('Follow remote window focus', kOptionFollowRemoteWindow),
+    if ((isDesktop || isWebDesktop)) ('Zoom cursor', kOptionZoomCursor),
+    ('Show quality monitor', kOptionShowQualityMonitor),
+    ('Mute', kOptionDisableAudio),
     if (isDesktop) ('Enable file copy and paste', 'enable_file_transfer'),
-    ('Disable clipboard', 'disable_clipboard'),
-    ('Lock after session end', 'lock_after_session_end'),
-    ('Privacy mode', 'privacy_mode'),
-    if (isMobile) ('Touch mode', 'touch-mode'),
-    ('True color (4:4:4)', 'i444'),
+    ('Disable clipboard', kOptionDisableClipboard),
+    ('Lock after session end', kOptionLockAfterSessionEnd),
+    ('Privacy mode', kOptionPrivacyMode),
+    if (isMobile) ('Touch mode', kOptionTouchMode),
+    ('True color (4:4:4)', kOptionI444),
     ('Reverse mouse wheel', kKeyReverseMouseWheel),
-    ('swap-left-right-mouse', 'swap-left-right-mouse'),
+    ('swap-left-right-mouse', kOptionSwapLeftRightMouse),
     if (isDesktop && useTextureRender)
       (
         'Show displays as individual windows',

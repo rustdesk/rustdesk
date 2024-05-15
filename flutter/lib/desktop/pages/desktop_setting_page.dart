@@ -732,7 +732,7 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
       return _Card(title: 'Permissions', children: [
         ComboBox(
             keys: [
-              '',
+              defaultOptionAccessMode,
               'full',
               'view',
             ],
@@ -849,7 +849,11 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
                   ))
               .toList();
 
-          final modeKeys = ['password', 'click', ''];
+          final modeKeys = <String>[
+            'password',
+            'click',
+            defaultOptionApproveMode
+          ];
           final modeValues = [
             translate('Accept sessions via password'),
             translate('Accept sessions via click'),
@@ -859,9 +863,10 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
           if (!modeKeys.contains(modeInitialKey)) modeInitialKey = '';
           final usePassword = model.approveMode != 'click';
 
+          final isApproveModeFixed = isDefaultOptionFixed(kOptionApproveMode);
           return _Card(title: 'Password', children: [
             ComboBox(
-              enabled: !locked,
+              enabled: !locked && !isApproveModeFixed,
               keys: modeKeys,
               values: modeValues,
               initialKey: modeInitialKey,
@@ -1000,14 +1005,15 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
 
   Widget whitelist() {
     bool enabled = !locked;
-    final isOptionFixed = isLocalOptionFixed(kOptionWhitelist);
+    final isOptionFixed = isDefaultOptionFixed(kOptionWhitelist);
     // Simple temp wrapper for PR check
     tmpWrapper() {
-      RxBool hasWhitelist =
-          bind.mainGetOptionSync(key: kOptionWhitelist).isNotEmpty.obs;
+      RxBool hasWhitelist = (bind.mainGetOptionSync(key: kOptionWhitelist) !=
+              defaultOptionWhitelist)
+          .obs;
       update() async {
-        hasWhitelist.value =
-            bind.mainGetOptionSync(key: kOptionWhitelist).isNotEmpty;
+        hasWhitelist.value = bind.mainGetOptionSync(key: kOptionWhitelist) !=
+            defaultOptionWhitelist;
       }
 
       onChanged(bool? checked) async {
@@ -1472,7 +1478,8 @@ class _DisplayState extends State<_Display> {
     final value = bind.mainGetUserDefaultOption(key: key) == 'Y';
     final isOptionFixed = isUserDefaultOptionFixed(key);
     onChanged(bool b) async {
-      await bind.mainSetUserDefaultOption(key: key, value: b ? 'Y' : '');
+      await bind.mainSetUserDefaultOption(
+          key: key, value: b ? 'Y' : (key == 'enable_file_transfer' ? 'N' : defaultOptionNo));
       setState(() {});
     }
 

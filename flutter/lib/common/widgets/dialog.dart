@@ -177,8 +177,10 @@ void changeIdDialog() {
 }
 
 void changeWhiteList({Function()? callback}) async {
-  var newWhiteList = (await bind.mainGetOption(key: 'whitelist')).split(',');
-  var newWhiteListField = newWhiteList.join('\n');
+  final curWhiteList = await bind.mainGetOption(key: kOptionWhitelist);
+  var newWhiteListField = curWhiteList == defaultOptionWhitelist
+      ? ''
+      : curWhiteList.split(',').join('\n');
   var controller = TextEditingController(text: newWhiteListField);
   var msg = "";
   var isInProgress = false;
@@ -215,7 +217,8 @@ void changeWhiteList({Function()? callback}) async {
       actions: [
         dialogButton("Cancel", onPressed: close, isOutline: true),
         dialogButton("Clear", onPressed: () async {
-          await bind.mainSetOption(key: kOptionWhitelist, value: '');
+          await bind.mainSetOption(
+              key: kOptionWhitelist, value: defaultOptionWhitelist);
           callback?.call();
           close();
         }, isOutline: true),
@@ -247,6 +250,9 @@ void changeWhiteList({Function()? callback}) async {
                 }
               }
               newWhiteList = ips.join(',');
+            }
+            if (newWhiteList.trim().isEmpty) {
+              newWhiteList = defaultOptionWhitelist;
             }
             await bind.mainSetOption(
                 key: kOptionWhitelist, value: newWhiteList);

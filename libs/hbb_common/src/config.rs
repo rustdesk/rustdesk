@@ -919,7 +919,7 @@ impl Config {
 
     #[inline]
     fn purify_options(v: &mut HashMap<String, String>) {
-        v.retain(|k, v| is_option_can_save(&OVERWRITE_SETTINGS, &DEFAULT_SETTINGS, k, v));
+        v.retain(|k, _| is_option_can_save(&OVERWRITE_SETTINGS, k));
     }
 
     pub fn set_options(mut v: HashMap<String, String>) {
@@ -943,7 +943,7 @@ impl Config {
     }
 
     pub fn set_option(k: String, v: String) {
-        if !is_option_can_save(&OVERWRITE_SETTINGS, &DEFAULT_SETTINGS, &k, &v) {
+        if !is_option_can_save(&OVERWRITE_SETTINGS, &k) {
             return;
         }
         let mut config = CONFIG2.write().unwrap();
@@ -1418,7 +1418,7 @@ impl LocalConfig {
     }
 
     pub fn set_option(k: String, v: String) {
-        if !is_option_can_save(&OVERWRITE_LOCAL_SETTINGS, &DEFAULT_LOCAL_SETTINGS, &k, &v) {
+        if !is_option_can_save(&OVERWRITE_LOCAL_SETTINGS, &k) {
             return;
         }
         let mut config = LOCAL_CONFIG.write().unwrap();
@@ -1583,7 +1583,7 @@ impl UserDefaultConfig {
             }
             "custom_image_quality" => self.get_double_string(key, 50.0, 10.0, 0xFFF as f64),
             "custom-fps" => self.get_double_string(key, 30.0, 5.0, 120.0),
-            "enable_file_transfer" => self.get_string(key, "Y", vec![""]),
+            "enable_file_transfer" => self.get_string(key, "Y", vec!["", "N"]),
             _ => self
                 .get_after(key)
                 .map(|v| v.to_string())
@@ -1592,12 +1592,7 @@ impl UserDefaultConfig {
     }
 
     pub fn set(&mut self, key: String, value: String) {
-        if !is_option_can_save(
-            &OVERWRITE_DISPLAY_SETTINGS,
-            &DEFAULT_DISPLAY_SETTINGS,
-            &key,
-            &value,
-        ) {
+        if !is_option_can_save(&OVERWRITE_DISPLAY_SETTINGS, &key) {
             return;
         }
         if value.is_empty() {
@@ -1920,16 +1915,8 @@ fn get_or(
 }
 
 #[inline]
-fn is_option_can_save(
-    overwrite: &RwLock<HashMap<String, String>>,
-    defaults: &RwLock<HashMap<String, String>>,
-    k: &str,
-    v: &str,
-) -> bool {
+fn is_option_can_save(overwrite: &RwLock<HashMap<String, String>>, k: &str) -> bool {
     if overwrite.read().unwrap().contains_key(k) {
-        return false;
-    }
-    if defaults.read().unwrap().get(k).map_or(false, |x| x == v) {
         return false;
     }
     true
