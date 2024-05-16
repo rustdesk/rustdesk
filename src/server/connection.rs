@@ -695,7 +695,7 @@ impl Connection {
                         }
                     }
                     conn.file_remove_log_control.on_timer().drain(..).map(|x| conn.send_to_cm(x)).count();
-                    #[cfg(feature = "vram")]
+                    #[cfg(feature = "hwcodec")]
                     conn.update_supported_encoding();
                 }
                 _ = test_delay_timer.tick() => {
