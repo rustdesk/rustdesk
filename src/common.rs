@@ -149,7 +149,6 @@ use hbb_common::{
 use hbb_common::{config::RENDEZVOUS_PORT, futures::future::join_all};
 
 use crate::{
-    audio_service::new,
     hbbs_http::create_http_client_async,
     ui_interface::{get_option, set_option},
 };
