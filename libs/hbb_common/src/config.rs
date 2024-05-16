@@ -2015,6 +2015,10 @@ mod tests {
         OVERWRITE_SETTINGS
             .write()
             .unwrap()
+            .insert("c".to_string(), "f".to_string());
+        OVERWRITE_SETTINGS
+            .write()
+            .unwrap()
             .insert("d".to_string(), "c".to_string());
         let mut res: HashMap<String, String> = Default::default();
         res.insert("b".to_owned(), "c".to_string());
@@ -2032,7 +2036,7 @@ mod tests {
         res.insert("d".to_owned(), "c".to_string());
         res.insert("c".to_owned(), "a".to_string());
         res.insert("f".to_owned(), "a".to_string());
-        res.insert("c".to_owned(), "d".to_string());
+        res.insert("e".to_owned(), "d".to_string());
         Config::purify_options(&mut res);
         assert!(res.len() == 2);
         res.insert("b".to_owned(), "c".to_string());
@@ -2045,11 +2049,11 @@ mod tests {
         assert!(res.len() == 2);
         let res = Config::get_options();
         assert!(res["a"] == "b");
-        assert!(res["c"] == "a");
+        assert!(res["c"] == "f");
         assert!(res["b"] == "c");
         assert!(res["d"] == "c");
         assert!(Config::get_option("a") == "b");
-        assert!(Config::get_option("c") == "a");
+        assert!(Config::get_option("c") == "f");
         assert!(Config::get_option("b") == "c");
         assert!(Config::get_option("d") == "c");
         DEFAULT_SETTINGS.write().unwrap().clear();
