@@ -1,6 +1,6 @@
 use std::{
     borrow::Cow,
-    collections::HashSet,
+    collections::HashMap,
     future::Future,
     sync::{Arc, Mutex, RwLock},
     task::Poll,
@@ -149,6 +149,7 @@ use hbb_common::{
 use hbb_common::{config::RENDEZVOUS_PORT, futures::future::join_all};
 
 use crate::{
+    audio_service::new,
     hbbs_http::create_http_client_async,
     ui_interface::{get_option, set_option},
 };
@@ -1599,14 +1600,18 @@ pub fn read_custom_client(config: &str) {
         }
     }
 
-    let set_display_settings: HashSet<String> = config::keys::KEYS_DISPLAY_SETTINGS
-        .into_iter()
-        .map(|x| x.replace("_", "-"))
-        .collect();
-    let set_local_settings: HashSet<String> = config::keys::KEYS_LOCAL_SETTINGS
-        .into_iter()
-        .map(|x| x.replace("_", "-"))
-        .collect();
+    let mut map_display_settings = HashMap::new();
+    for s in config::keys::KEYS_DISPLAY_SETTINGS {
+        map_display_settings.insert(s.replace("_", "-"), s);
+    }
+    let mut map_local_settings = HashMap::new();
+    for s in config::keys::KEYS_LOCAL_SETTINGS {
+        map_local_settings.insert(s.replace("_", "-"), s);
+    }
+    let mut map_settings = HashMap::new();
+    for s in config::keys::KEYS_SETTINGS {
+        map_settings.insert(s.replace("_", "-"), s);
+    }
 
     if let Some(default_settings) = data.remove("default-settings") {
         if let Some(default_settings) = default_settings.as_object() {
@@ -1614,16 +1619,21 @@ pub fn read_custom_client(config: &str) {
                 let Some(v) = v.as_str() else {
                     continue;
                 };
-                if set_display_settings.contains(k) {
+                if let Some(k2) = map_display_settings.get(k) {
                     config::DEFAULT_DISPLAY_SETTINGS
                         .write()
                         .unwrap()
-                        .insert(k.to_owned(), v.to_owned());
-                } else if set_local_settings.contains(k) {
+                        .insert(k2.to_string(), v.to_owned());
+                } else if let Some(k2) = map_local_settings.get(k) {
                     config::DEFAULT_LOCAL_SETTINGS
                         .write()
                         .unwrap()
-                        .insert(k.to_owned(), v.to_owned());
+                        .insert(k2.to_string(), v.to_owned());
+                } else if let Some(k2) = map_settings.get(k) {
+                    config::DEFAULT_SETTINGS
+                        .write()
+                        .unwrap()
+                        .insert(k2.to_string(), v.to_owned());
                 } else {
                     config::DEFAULT_SETTINGS
                         .write()
@@ -1639,16 +1649,21 @@ pub fn read_custom_client(config: &str) {
                 let Some(v) = v.as_str() else {
                     continue;
                 };
-                if set_display_settings.contains(k) {
+                if let Some(k2) = map_display_settings.get(k) {
                     config::OVERWRITE_DISPLAY_SETTINGS
                         .write()
                         .unwrap()
-                        .insert(k.to_owned(), v.to_owned());
-                } else if set_local_settings.contains(k) {
+                        .insert(k2.to_string(), v.to_owned());
+                } else if let Some(k2) = map_local_settings.get(k) {
                     config::OVERWRITE_LOCAL_SETTINGS
                         .write()
                         .unwrap()
-                        .insert(k.to_owned(), v.to_owned());
+                        .insert(k2.to_string(), v.to_owned());
+                } else if let Some(k2) = map_settings.get(k) {
+                    config::OVERWRITE_SETTINGS
+                        .write()
+                        .unwrap()
+                        .insert(k2.to_string(), v.to_owned());
                 } else {
                     config::OVERWRITE_SETTINGS
                         .write()
