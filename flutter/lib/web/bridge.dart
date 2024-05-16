@@ -1610,8 +1610,7 @@ class RustdeskImpl {
     throw UnimplementedError();
   }
 
-  bool mainIsOptionFixed(
-      {required String key, required String typ, dynamic hint}) {
+  bool mainIsOptionFixed({required String key, dynamic hint}) {
     throw UnimplementedError();
   }
 

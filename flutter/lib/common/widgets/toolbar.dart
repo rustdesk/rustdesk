@@ -327,7 +327,7 @@ Future<List<TRadioMenu<String>>> toolbarCodec(
   final alternativeCodecs =
       await bind.sessionAlternativeCodecs(sessionId: sessionId);
   final groupValue = await bind.sessionGetOption(
-          sessionId: sessionId, arg: 'codec-preference') ??
+          sessionId: sessionId, arg: kOptionCodecPreference) ??
       '';
   final List<bool> codecs = [];
   try {
@@ -349,7 +349,7 @@ Future<List<TRadioMenu<String>>> toolbarCodec(
   onChanged(String? value) async {
     if (value == null) return;
     await bind.sessionPeerOption(
-        sessionId: sessionId, name: 'codec-preference', value: value);
+        sessionId: sessionId, name: kOptionCodecPreference, value: value);
     bind.sessionChangePreferCodec(sessionId: sessionId);
   }
 

@@ -3283,17 +3283,7 @@ setResizable(bool resizable) {
   }
 }
 
-isDefaultOptionFixed(String key) {
-  return bind.mainIsOptionFixed(key: key, typ: kOptionTypeDefault);
-}
-
-isLocalOptionFixed(String key) {
-  return bind.mainIsOptionFixed(key: key, typ: kOptionTypeLocal);
-}
-
-isUserDefaultOptionFixed(String key) {
-  return bind.mainIsOptionFixed(key: key, typ: kOptionTypeUserDefault);
-}
+isOptionFixed(String key) => bind.mainIsOptionFixed(key: key);
 
 final isCustomClient = bind.isCustomClient();
 get defaultOptionLang => isCustomClient ? 'default' : '';

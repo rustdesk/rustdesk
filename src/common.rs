@@ -1,5 +1,6 @@
 use std::{
     borrow::Cow,
+    collections::HashSet,
     future::Future,
     sync::{Arc, Mutex, RwLock},
     task::Poll,
@@ -1597,22 +1598,32 @@ pub fn read_custom_client(config: &str) {
             *config::APP_NAME.write().unwrap() = app_name.to_owned();
         }
     }
+
+    let set_display_settings: HashSet<String> = config::keys::KEYS_DISPLAY_SETTINGS
+        .into_iter()
+        .map(|x| x.replace("_", "-"))
+        .collect();
+    let set_local_settings: HashSet<String> = config::keys::KEYS_LOCAL_SETTINGS
+        .into_iter()
+        .map(|x| x.replace("_", "-"))
+        .collect();
+
     if let Some(default_settings) = data.remove("default-settings") {
         if let Some(default_settings) = default_settings.as_object() {
             for (k, v) in default_settings {
                 let Some(v) = v.as_str() else {
                     continue;
                 };
-                if k.starts_with(config::DISPLAY_SETTINGS_PREFIX) {
-                    config::DEFAULT_DISPLAY_SETTINGS.write().unwrap().insert(
-                        k[config::DISPLAY_SETTINGS_PREFIX.len()..].to_owned(),
-                        v.to_owned(),
-                    );
-                } else if k.starts_with(config::LOCAL_SETTINGS_PREFIX) {
-                    config::DEFAULT_LOCAL_SETTINGS.write().unwrap().insert(
-                        k[config::LOCAL_SETTINGS_PREFIX.len()..].to_owned(),
-                        v.to_owned(),
-                    );
+                if set_display_settings.contains(k) {
+                    config::DEFAULT_DISPLAY_SETTINGS
+                        .write()
+                        .unwrap()
+                        .insert(k.to_owned(), v.to_owned());
+                } else if set_local_settings.contains(k) {
+                    config::DEFAULT_LOCAL_SETTINGS
+                        .write()
+                        .unwrap()
+                        .insert(k.to_owned(), v.to_owned());
                 } else {
                     config::DEFAULT_SETTINGS
                         .write()
@@ -1628,16 +1639,16 @@ pub fn read_custom_client(config: &str) {
                 let Some(v) = v.as_str() else {
                     continue;
                 };
-                if k.starts_with(config::DISPLAY_SETTINGS_PREFIX) {
-                    config::OVERWRITE_DISPLAY_SETTINGS.write().unwrap().insert(
-                        k[config::DISPLAY_SETTINGS_PREFIX.len()..].to_owned(),
-                        v.to_owned(),
-                    );
-                } else if k.starts_with(config::LOCAL_SETTINGS_PREFIX) {
-                    config::OVERWRITE_LOCAL_SETTINGS.write().unwrap().insert(
-                        k[config::LOCAL_SETTINGS_PREFIX.len()..].to_owned(),
-                        v.to_owned(),
-                    );
+                if set_display_settings.contains(k) {
+                    config::OVERWRITE_DISPLAY_SETTINGS
+                        .write()
+                        .unwrap()
+                        .insert(k.to_owned(), v.to_owned());
+                } else if set_local_settings.contains(k) {
+                    config::OVERWRITE_LOCAL_SETTINGS
+                        .write()
+                        .unwrap()
+                        .insert(k.to_owned(), v.to_owned());
                 } else {
                     config::OVERWRITE_SETTINGS
                         .write()

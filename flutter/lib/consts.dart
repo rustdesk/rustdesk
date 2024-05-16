@@ -69,6 +69,7 @@ const String kWindowEventGetCachedSessionData = "get_cached_session_data";
 const String kWindowEventOpenMonitorSession = "open_monitor_session";
 
 const String kOptionViewStyle = "view_style";
+const String kOptionScrollStyle = "scroll_style";
 const String kOptionImageQuality = "image_quality";
 const String kOptionOpenNewConnInTabs = "enable-open-new-connections-in-tabs";
 const String kOptionOpenInTabs = "allow-open-in-tabs";
@@ -90,16 +91,15 @@ const String kOptionAccessMode = "access-mode";
 const String kOptionEnableKeyboard = "enable-keyboard";
 // "Settings -> Security -> Permissions"
 const String kOptionEnableClipboard = "enable-clipboard";
-// "enable_file_transfer" is used as "Enable file copy and paste" in "Settings -> Display -> Other default options".
-// "enable-file-transfer" is used as "Enable file transfer" in "Settings -> Security -> Permissions".
 const String kOptionEnableFileTransfer = "enable-file-transfer";
 const String kOptionEnableAudio = "enable-audio";
 const String kOptionEnableTunnel = "enable-tunnel";
 const String kOptionEnableRemoteRestart = "enable-remote-restart";
 const String kOptionEnableBlockInput = "enable-block-input";
-const String kOptionAllowRemoteConfigModification = "allow-remote-config-modification";
-const String kOptionVerificationMethod =  "verification-method";
-const String kOptionApproveMode =  "approve-mode";
+const String kOptionAllowRemoteConfigModification =
+    "allow-remote-config-modification";
+const String kOptionVerificationMethod = "verification-method";
+const String kOptionApproveMode = "approve-mode";
 const String kOptionCollapseToolbar = "collapse_toolbar";
 const String kOptionShowRemoteCursor = "show_remote_cursor";
 const String kOptionFollowRemoteCursor = "follow_remote_cursor";
@@ -114,6 +114,7 @@ const String kOptionPrivacyMode = "privacy_mode";
 const String kOptionTouchMode = "touch-mode";
 const String kOptionI444 = "i444";
 const String kOptionSwapLeftRightMouse = 'swap-left-right-mouse';
+const String kOptionCodecPreference = 'codec-preference';
 
 const String kUrlActionClose = "close";
 

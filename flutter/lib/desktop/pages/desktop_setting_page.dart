@@ -332,23 +332,23 @@ class _GeneralState extends State<_General> {
       setState(() {});
     }
 
-    final isOptionFixed = isLocalOptionFixed(kCommConfKeyTheme);
+    final isOptFixed = isOptionFixed(kCommConfKeyTheme);
     return _Card(title: 'Theme', children: [
       _Radio<String>(context,
           value: 'light',
           groupValue: current,
           label: 'Light',
-          onChanged: isOptionFixed ? null : onChanged),
+          onChanged: isOptFixed ? null : onChanged),
       _Radio<String>(context,
           value: 'dark',
           groupValue: current,
           label: 'Dark',
-          onChanged: isOptionFixed ? null : onChanged),
+          onChanged: isOptFixed ? null : onChanged),
       _Radio<String>(context,
           value: 'system',
           groupValue: current,
           label: 'Follow System',
-          onChanged: isOptionFixed ? null : onChanged),
+          onChanged: isOptFixed ? null : onChanged),
     ]);
   }
 
@@ -548,7 +548,7 @@ class _GeneralState extends State<_General> {
                   )).marginOnly(left: 10),
             ),
             ElevatedButton(
-                    onPressed: isDefaultOptionFixed(kOptionVideoSaveDirectory)
+                    onPressed: isOptionFixed(kOptionVideoSaveDirectory)
                         ? null
                         : () async {
                             String? initialDirectory;
@@ -741,7 +741,7 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
               translate('Full Access'),
               translate('Screen Share'),
             ],
-            enabled: enabled && !isDefaultOptionFixed(kOptionAccessMode),
+            enabled: enabled && !isOptionFixed(kOptionAccessMode),
             initialKey: initialKey,
             onChanged: (mode) async {
               await bind.mainSetOption(key: kOptionAccessMode, value: mode);
@@ -863,7 +863,7 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
           if (!modeKeys.contains(modeInitialKey)) modeInitialKey = '';
           final usePassword = model.approveMode != 'click';
 
-          final isApproveModeFixed = isDefaultOptionFixed(kOptionApproveMode);
+          final isApproveModeFixed = isOptionFixed(kOptionApproveMode);
           return _Card(title: 'Password', children: [
             ComboBox(
               enabled: !locked && !isApproveModeFixed,
@@ -952,7 +952,7 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
           if (!enabled) applyEnabled.value = false;
           controller.text =
               bind.mainGetOptionSync(key: kOptionDirectAccessPort);
-          final isOptionFixed = isDefaultOptionFixed(kOptionDirectAccessPort);
+          final isOptFixed = isOptionFixed(kOptionDirectAccessPort);
           return Offstage(
             offstage: !enabled,
             child: _SubLabeledWidget(
@@ -963,7 +963,7 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
                   width: 95,
                   child: TextField(
                     controller: controller,
-                    enabled: enabled && !locked && !isOptionFixed,
+                    enabled: enabled && !locked && !isOptFixed,
                     onChanged: (_) => applyEnabled.value = true,
                     inputFormatters: [
                       FilteringTextInputFormatter.allow(RegExp(
@@ -980,7 +980,7 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
                       onPressed: applyEnabled.value &&
                               enabled &&
                               !locked &&
-                              !isOptionFixed
+                              !isOptFixed
                           ? () async {
                               applyEnabled.value = false;
                               await bind.mainSetOption(
@@ -993,7 +993,7 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
                       ),
                     ))
               ]),
-              enabled: enabled && !locked && !isOptionFixed,
+              enabled: enabled && !locked && !isOptFixed,
             ),
           );
         }
@@ -1005,7 +1005,7 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
 
   Widget whitelist() {
     bool enabled = !locked;
-    final isOptionFixed = isDefaultOptionFixed(kOptionWhitelist);
+    final isOptFixed = isOptionFixed(kOptionWhitelist);
     // Simple temp wrapper for PR check
     tmpWrapper() {
       RxBool hasWhitelist = (bind.mainGetOptionSync(key: kOptionWhitelist) !=
@@ -1027,8 +1027,7 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
                 children: [
                   Checkbox(
                           value: hasWhitelist.value,
-                          onChanged:
-                              enabled && !isOptionFixed ? onChanged : null)
+                          onChanged: enabled && !isOptFixed ? onChanged : null)
                       .marginOnly(right: 5),
                   Offstage(
                     offstage: !hasWhitelist.value,
@@ -1045,7 +1044,7 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
                 ],
               )),
         ),
-        onTap: enabled && !isOptionFixed
+        onTap: enabled && !isOptFixed
             ? () {
                 onChanged(!hasWhitelist.value);
               }
@@ -1110,8 +1109,7 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
         if (!enabled) applyEnabled.value = false;
         controller.text =
             bind.mainGetOptionSync(key: kOptionAutoDisconnectTimeout);
-        final isOptionFixed =
-            !isDefaultOptionFixed(kOptionAutoDisconnectTimeout);
+        final isOptFixed = isOptionFixed(kOptionAutoDisconnectTimeout);
         return Offstage(
           offstage: !enabled,
           child: _SubLabeledWidget(
@@ -1122,7 +1120,7 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
                 width: 95,
                 child: TextField(
                   controller: controller,
-                  enabled: enabled && !locked && isOptionFixed,
+                  enabled: enabled && !locked && isOptFixed,
                   onChanged: (_) => applyEnabled.value = true,
                   inputFormatters: [
                     FilteringTextInputFormatter.allow(RegExp(
@@ -1136,23 +1134,21 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
                 ).marginOnly(right: 15),
               ),
               Obx(() => ElevatedButton(
-                    onPressed: applyEnabled.value &&
-                            enabled &&
-                            !locked &&
-                            !isOptionFixed
-                        ? () async {
-                            applyEnabled.value = false;
-                            await bind.mainSetOption(
-                                key: kOptionAutoDisconnectTimeout,
-                                value: controller.text);
-                          }
-                        : null,
+                    onPressed:
+                        applyEnabled.value && enabled && !locked && !isOptFixed
+                            ? () async {
+                                applyEnabled.value = false;
+                                await bind.mainSetOption(
+                                    key: kOptionAutoDisconnectTimeout,
+                                    value: controller.text);
+                              }
+                            : null,
                     child: Text(
                       translate('Apply'),
                     ),
                   ))
             ]),
-            enabled: enabled && !locked && !isOptionFixed,
+            enabled: enabled && !locked && !isOptFixed,
           ),
         );
       }(),
@@ -1301,48 +1297,47 @@ class _DisplayState extends State<_Display> {
   }
 
   Widget viewStyle(BuildContext context) {
-    final key = 'view_style';
-    final isOptionFixed = isUserDefaultOptionFixed(key);
+    final isOptFixed = isOptionFixed(kOptionViewStyle);
     onChanged(String value) async {
-      await bind.mainSetUserDefaultOption(key: key, value: value);
+      await bind.mainSetUserDefaultOption(key: kOptionViewStyle, value: value);
       setState(() {});
     }
 
-    final groupValue = bind.mainGetUserDefaultOption(key: key);
+    final groupValue = bind.mainGetUserDefaultOption(key: kOptionViewStyle);
     return _Card(title: 'Default View Style', children: [
       _Radio(context,
           value: kRemoteViewStyleOriginal,
           groupValue: groupValue,
           label: 'Scale original',
-          onChanged: isOptionFixed ? null : onChanged),
+          onChanged: isOptFixed ? null : onChanged),
       _Radio(context,
           value: kRemoteViewStyleAdaptive,
           groupValue: groupValue,
           label: 'Scale adaptive',
-          onChanged: isOptionFixed ? null : onChanged),
+          onChanged: isOptFixed ? null : onChanged),
     ]);
   }
 
   Widget scrollStyle(BuildContext context) {
-    final key = 'scroll_style';
-    final isOptionFixed = isUserDefaultOptionFixed(key);
+    final isOptFixed = isOptionFixed(kOptionScrollStyle);
     onChanged(String value) async {
-      await bind.mainSetUserDefaultOption(key: key, value: value);
+      await bind.mainSetUserDefaultOption(
+          key: kOptionScrollStyle, value: value);
       setState(() {});
     }
 
-    final groupValue = bind.mainGetUserDefaultOption(key: key);
+    final groupValue = bind.mainGetUserDefaultOption(key: kOptionScrollStyle);
     return _Card(title: 'Default Scroll Style', children: [
       _Radio(context,
           value: kRemoteScrollStyleAuto,
           groupValue: groupValue,
           label: 'ScrollAuto',
-          onChanged: isOptionFixed ? null : onChanged),
+          onChanged: isOptFixed ? null : onChanged),
       _Radio(context,
           value: kRemoteScrollStyleBar,
           groupValue: groupValue,
           label: 'Scrollbar',
-          onChanged: isOptionFixed ? null : onChanged),
+          onChanged: isOptFixed ? null : onChanged),
     ]);
   }
 
@@ -1353,29 +1348,29 @@ class _DisplayState extends State<_Display> {
       setState(() {});
     }
 
-    final isOptionFixed = isUserDefaultOptionFixed(key);
+    final isOptFixed = isOptionFixed(key);
     final groupValue = bind.mainGetUserDefaultOption(key: key);
     return _Card(title: 'Default Image Quality', children: [
       _Radio(context,
           value: kRemoteImageQualityBest,
           groupValue: groupValue,
           label: 'Good image quality',
-          onChanged: isOptionFixed ? null : onChanged),
+          onChanged: isOptFixed ? null : onChanged),
       _Radio(context,
           value: kRemoteImageQualityBalanced,
           groupValue: groupValue,
           label: 'Balanced',
-          onChanged: isOptionFixed ? null : onChanged),
+          onChanged: isOptFixed ? null : onChanged),
       _Radio(context,
           value: kRemoteImageQualityLow,
           groupValue: groupValue,
           label: 'Optimize reaction time',
-          onChanged: isOptionFixed ? null : onChanged),
+          onChanged: isOptFixed ? null : onChanged),
       _Radio(context,
           value: kRemoteImageQualityCustom,
           groupValue: groupValue,
           label: 'Custom',
-          onChanged: isOptionFixed ? null : onChanged),
+          onChanged: isOptFixed ? null : onChanged),
       Offstage(
         offstage: groupValue != kRemoteImageQualityCustom,
         child: customImageQualitySetting(),
@@ -1384,13 +1379,14 @@ class _DisplayState extends State<_Display> {
   }
 
   Widget codec(BuildContext context) {
-    final key = 'codec-preference';
     onChanged(String value) async {
-      await bind.mainSetUserDefaultOption(key: key, value: value);
+      await bind.mainSetUserDefaultOption(
+          key: kOptionCodecPreference, value: value);
       setState(() {});
     }
 
-    final groupValue = bind.mainGetUserDefaultOption(key: key);
+    final groupValue =
+        bind.mainGetUserDefaultOption(key: kOptionCodecPreference);
     var hwRadios = [];
     try {
       final Map codecsJson = jsonDecode(bind.mainSupportedHwdecodings());
@@ -1476,10 +1472,13 @@ class _DisplayState extends State<_Display> {
 
   Widget otherRow(String label, String key) {
     final value = bind.mainGetUserDefaultOption(key: key) == 'Y';
-    final isOptionFixed = isUserDefaultOptionFixed(key);
+    final isOptFixed = isOptionFixed(key);
     onChanged(bool b) async {
       await bind.mainSetUserDefaultOption(
-          key: key, value: b ? 'Y' : (key == 'enable_file_transfer' ? 'N' : defaultOptionNo));
+          key: key,
+          value: b
+              ? 'Y'
+              : (key == kOptionEnableFileTransfer ? 'N' : defaultOptionNo));
       setState(() {});
     }
 
@@ -1488,14 +1487,14 @@ class _DisplayState extends State<_Display> {
           children: [
             Checkbox(
                     value: value,
-                    onChanged: isOptionFixed ? null : (_) => onChanged(!value))
+                    onChanged: isOptFixed ? null : (_) => onChanged(!value))
                 .marginOnly(right: 5),
             Expanded(
               child: Text(translate(label)),
             )
           ],
         ).marginOnly(left: _kCheckBoxLeftMargin),
-        onTap: isOptionFixed ? null : () => onChanged(!value));
+        onTap: isOptFixed ? null : () => onChanged(!value));
   }
 
   Widget other(BuildContext context) {
@@ -1807,8 +1806,7 @@ Widget _OptionCheckBox(BuildContext context, String label, String key,
     bool isServer = true}) {
   bool value =
       isServer ? mainGetBoolOptionSync(key) : mainGetLocalBoolOptionSync(key);
-  final isOptionFixed = bind.mainIsOptionFixed(
-      key: key, typ: isServer ? kOptionTypeDefault : kOptionTypeLocal);
+  final isOptFixed = isOptionFixed(key);
   if (reverse) value = !value;
   var ref = value.obs;
   onChanged(option) async {
@@ -1840,7 +1838,7 @@ Widget _OptionCheckBox(BuildContext context, String label, String key,
         children: [
           Checkbox(
                   value: ref.value,
-                  onChanged: enabled && !isOptionFixed ? onChanged : null)
+                  onChanged: enabled && !isOptFixed ? onChanged : null)
               .marginOnly(right: 5),
           Offstage(
             offstage: !ref.value || checkedIcon == null,
@@ -1854,7 +1852,7 @@ Widget _OptionCheckBox(BuildContext context, String label, String key,
         ],
       ),
     ).marginOnly(left: _kCheckBoxLeftMargin),
-    onTap: enabled && !isOptionFixed
+    onTap: enabled && !isOptFixed
         ? () {
             onChanged(!ref.value);
           }

@@ -1193,22 +1193,21 @@ pub fn main_handle_relay_id(id: String) -> String {
     handle_relay_id(&id).to_owned()
 }
 
-pub fn main_is_option_fixed(key: String, typ: String) -> SyncReturn<bool> {
-    let is_fixed = match typ.as_str() {
-        config::DISPLAY_SETTINGS_PREFIX => config::OVERWRITE_DISPLAY_SETTINGS
+pub fn main_is_option_fixed(key: String) -> SyncReturn<bool> {
+    SyncReturn(
+        config::OVERWRITE_DISPLAY_SETTINGS
             .read()
             .unwrap()
-            .contains_key(&key),
-        config::LOCAL_SETTINGS_PREFIX => config::OVERWRITE_LOCAL_SETTINGS
-            .read()
-            .unwrap()
-            .contains_key(&key),
-        _ => config::OVERWRITE_SETTINGS
-            .read()
-            .unwrap()
-            .contains_key(&key),
-    };
-    SyncReturn(is_fixed)
+            .contains_key(&key)
+            || config::OVERWRITE_LOCAL_SETTINGS
+                .read()
+                .unwrap()
+                .contains_key(&key)
+            || config::OVERWRITE_SETTINGS
+                .read()
+                .unwrap()
+                .contains_key(&key),
+    )
 }
 
 pub fn main_get_main_display() -> SyncReturn<String> {

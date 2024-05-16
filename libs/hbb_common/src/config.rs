@@ -75,9 +75,6 @@ lazy_static::lazy_static! {
     pub static ref HARD_SETTINGS: RwLock<HashMap<String, String>> = Default::default();
 }
 
-pub const DISPLAY_SETTINGS_PREFIX: &str = "$$";
-pub const LOCAL_SETTINGS_PREFIX: &str = "$";
-
 lazy_static::lazy_static! {
     pub static ref APP_DIR: RwLock<String> = Default::default();
 }
@@ -1197,36 +1194,36 @@ impl PeerConfig {
     serde_field_string!(
         default_view_style,
         deserialize_view_style,
-        UserDefaultConfig::read("view_style")
+        UserDefaultConfig::read(keys::OPTION_VIEW_STYLE)
     );
     serde_field_string!(
         default_scroll_style,
         deserialize_scroll_style,
-        UserDefaultConfig::read("scroll_style")
+        UserDefaultConfig::read(keys::OPTION_SCROLL_STYLE)
     );
     serde_field_string!(
         default_image_quality,
         deserialize_image_quality,
-        UserDefaultConfig::read("image_quality")
+        UserDefaultConfig::read(keys::OPTION_IMAGE_QUALITY)
     );
     serde_field_string!(
         default_reverse_mouse_wheel,
         deserialize_reverse_mouse_wheel,
-        UserDefaultConfig::read("reverse_mouse_wheel")
+        UserDefaultConfig::read(keys::OPTION_REVERSE_MOUSE_WHEEL)
     );
     serde_field_string!(
         default_displays_as_individual_windows,
         deserialize_displays_as_individual_windows,
-        UserDefaultConfig::read("displays_as_individual_windows")
+        UserDefaultConfig::read(keys::OPTION_DISPLAYS_AS_INDIVIDUAL_WINDOWS)
     );
     serde_field_string!(
         default_use_all_my_displays_for_the_remote_session,
         deserialize_use_all_my_displays_for_the_remote_session,
-        UserDefaultConfig::read("use_all_my_displays_for_the_remote_session")
+        UserDefaultConfig::read(keys::OPTION_USE_ALL_MY_DISPLAYS_FOR_THE_REMOTE_SESSION)
     );
 
     fn default_custom_image_quality() -> Vec<i32> {
-        let f: f64 = UserDefaultConfig::read("custom_image_quality")
+        let f: f64 = UserDefaultConfig::read(keys::OPTION_CUSTOM_IMAGE_QUALITY)
             .parse()
             .unwrap_or(50.0);
         vec![f as _]
@@ -1247,12 +1244,12 @@ impl PeerConfig {
     fn default_options() -> HashMap<String, String> {
         let mut mp: HashMap<String, String> = Default::default();
         [
-            "codec-preference",
-            "custom-fps",
-            "zoom-cursor",
-            "touch-mode",
-            "i444",
-            "swap-left-right-mouse",
+            keys::OPTION_CODEC_PREFERENCE,
+            keys::OPTION_CUSTOM_FPS,
+            keys::OPTION_ZOOM_CURSOR,
+            keys::OPTION_TOUCH_MODE,
+            keys::OPTION_I444,
+            keys::OPTION_SWAP_LEFT_RIGHT_MOUSE,
         ]
         .map(|key| {
             mp.insert(key.to_owned(), UserDefaultConfig::read(key));
@@ -1575,15 +1572,19 @@ impl UserDefaultConfig {
 
     pub fn get(&self, key: &str) -> String {
         match key {
-            "view_style" => self.get_string(key, "original", vec!["adaptive"]),
-            "scroll_style" => self.get_string(key, "scrollauto", vec!["scrollbar"]),
-            "image_quality" => self.get_string(key, "balanced", vec!["best", "low", "custom"]),
-            "codec-preference" => {
+            keys::OPTION_VIEW_STYLE => self.get_string(key, "original", vec!["adaptive"]),
+            keys::OPTION_SCROLL_STYLE => self.get_string(key, "scrollauto", vec!["scrollbar"]),
+            keys::OPTION_IMAGE_QUALITY => {
+                self.get_string(key, "balanced", vec!["best", "low", "custom"])
+            }
+            keys::OPTION_CODEC_PREFERENCE => {
                 self.get_string(key, "auto", vec!["vp8", "vp9", "av1", "h264", "h265"])
             }
-            "custom_image_quality" => self.get_double_string(key, 50.0, 10.0, 0xFFF as f64),
-            "custom-fps" => self.get_double_string(key, 30.0, 5.0, 120.0),
-            "enable_file_transfer" => self.get_string(key, "Y", vec!["", "N"]),
+            keys::OPTION_CUSTOM_IMAGE_QUALITY => {
+                self.get_double_string(key, 50.0, 10.0, 0xFFF as f64)
+            }
+            keys::OPTION_CUSTOM_FPS => self.get_double_string(key, 30.0, 5.0, 120.0),
+            keys::OPTION_ENABLE_FILE_TRANSFER => self.get_string(key, "Y", vec!["", "N"]),
             _ => self
                 .get_after(key)
                 .map(|v| v.to_string())
@@ -1972,6 +1973,132 @@ pub fn is_disable_account() -> bool {
 #[inline]
 pub fn is_disable_installation() -> bool {
     is_some_hard_opton("disable-installation")
+}
+
+pub mod keys {
+    pub const OPTION_VIEW_ONLY: &str = "view_only";
+    pub const OPTION_SHOW_MONITORS_TOOLBAR: &str = "show_monitors_toolbar";
+    pub const OPTION_COLLAPSE_TOOLBAR: &str = "collapse_toolbar";
+    pub const OPTION_SHOW_REMOTE_CURSOR: &str = "show_remote_cursor";
+    pub const OPTION_FOLLOW_REMOTE_CURSOR: &str = "follow_remote_cursor";
+    pub const OPTION_FOLLOW_REMOTE_WINDOW: &str = "follow_remote_window";
+    pub const OPTION_ZOOM_CURSOR: &str = "zoom-cursor";
+    pub const OPTION_SHOW_QUALITY_MONITOR: &str = "show_quality_monitor";
+    pub const OPTION_DISABLE_AUDIO: &str = "disable_audio";
+    pub const OPTION_DISABLE_CLIPBOARD: &str = "disable_clipboard";
+    pub const OPTION_LOCK_AFTER_SESSION_END: &str = "lock_after_session_end";
+    pub const OPTION_PRIVACY_MODE: &str = "privacy_mode";
+    pub const OPTION_TOUCH_MODE: &str = "touch-mode";
+    pub const OPTION_I444: &str = "i444";
+    pub const OPTION_REVERSE_MOUSE_WHEEL: &str = "reverse_mouse_wheel";
+    pub const OPTION_SWAP_LEFT_RIGHT_MOUSE: &str = "swap-left-right-mouse";
+    pub const OPTION_DISPLAYS_AS_INDIVIDUAL_WINDOWS: &str = "displays_as_individual_windows";
+    pub const OPTION_USE_ALL_MY_DISPLAYS_FOR_THE_REMOTE_SESSION: &str =
+        "use_all_my_displays_for_the_remote_session";
+    pub const OPTION_VIEW_STYLE: &str = "view_style";
+    pub const OPTION_SCROLL_STYLE: &str = "scroll_style";
+    pub const OPTION_IMAGE_QUALITY: &str = "image_quality";
+    pub const OPTION_CUSTOM_IMAGE_QUALITY: &str = "custom_image_quality";
+    pub const OPTION_CUSTOM_FPS: &str = "custom-fps";
+    pub const OPTION_THEME: &str = "theme";
+    pub const OPTION_ENABLE_CONFIRM_CLOSING_TABS: &str = "enable-confirm-closing-tabs";
+    pub const OPTION_ENABLE_OPEN_NEW_CONNECTIONS_IN_TABS: &str =
+        "enable-open-new-connections-in-tabs";
+    pub const OPTION_ENABLE_CHECK_UPDATE: &str = "enable-check-update";
+    pub const OPTION_SYNC_AB_WITH_RECENT_SESSIONS: &str = "sync-ab-with-recent-sessions";
+    pub const OPTION_SYNC_AB_TAGS: &str = "sync-ab-tags";
+    pub const OPTION_FILTER_AB_BY_INTERSECTION: &str = "filter-ab-by-intersection";
+    pub const OPTION_ACCESS_MODE: &str = "access-mode";
+    pub const OPTION_ENABLE_KEYBOARD: &str = "enable-keyboard";
+    pub const OPTION_ENABLE_CLIPBOARD: &str = "enable-clipboard";
+    pub const OPTION_ENABLE_FILE_TRANSFER: &str = "enable-file-transfer";
+    pub const OPTION_ENABLE_AUDIO: &str = "enable-audio";
+    pub const OPTION_ENABLE_TUNNEL: &str = "enable-tunnel";
+    pub const OPTION_ENABLE_REMOTE_RESTART: &str = "enable-remote-restart";
+    pub const OPTION_ENABLE_RECORD_SESSION: &str = "enable-record-session";
+    pub const OPTION_ENABLE_BLOCK_INPUT: &str = "enable-block-input";
+    pub const OPTION_ALLOW_REMOTE_CONFIG_MODIFICATION: &str = "allow-remote-config-modification";
+    pub const OPTION_ENABLE_LAN_DISCOVERY: &str = "enable-lan-discovery";
+    pub const OPTION_DIRECT_SERVER: &str = "direct-server";
+    pub const OPTION_DIRECT_ACCESS_PORT: &str = "direct-access-port";
+    pub const OPTION_WHITELIST: &str = "whitelist";
+    pub const OPTION_ALLOW_AUTO_DISCONNECT: &str = "allow-auto-disconnect";
+    pub const OPTION_AUTO_DISCONNECT_TIMEOUT: &str = "auto-disconnect-timeout";
+    pub const OPTION_ALLOW_ONLY_CONN_WINDOW_OPEN: &str = "allow-only-conn-window-open";
+    pub const OPTION_ALLOW_AUTO_RECORD_INCOMING: &str = "allow-auto-record-incoming";
+    pub const OPTION_VIDEO_SAVE_DIRECTORY: &str = "video-save-directory";
+    pub const OPTION_ENABLE_ABR: &str = "enable-abr";
+    pub const OPTION_ALLOW_REMOVE_WALLPAPER: &str = "allow-remove-wallpaper";
+    pub const OPTION_ALLOW_ALWAYS_SOFTWARE_RENDER: &str = "allow-always-software-render";
+    pub const OPTION_ALLOW_LINUX_HEADLESS: &str = "allow-linux-headless";
+    pub const OPTION_ENABLE_HWCODEC: &str = "enable-hwcodec";
+    pub const OPTION_APPROVE_MODE: &str = "approve-mode";
+    pub const OPTION_CODEC_PREFERENCE: &str = "codec-preference";
+
+    // DEFAULT_SETTINGS, OVERWRITE_SETTINGS
+    pub const KEYS_SETTINGS: &[&str] = &[
+        OPTION_VIEW_ONLY,
+        OPTION_SHOW_MONITORS_TOOLBAR,
+        OPTION_COLLAPSE_TOOLBAR,
+        OPTION_SHOW_REMOTE_CURSOR,
+        OPTION_FOLLOW_REMOTE_CURSOR,
+        OPTION_FOLLOW_REMOTE_WINDOW,
+        OPTION_ZOOM_CURSOR,
+        OPTION_SHOW_QUALITY_MONITOR,
+        OPTION_DISABLE_AUDIO,
+        OPTION_DISABLE_CLIPBOARD,
+        OPTION_LOCK_AFTER_SESSION_END,
+        OPTION_PRIVACY_MODE,
+        OPTION_TOUCH_MODE,
+        OPTION_I444,
+        OPTION_REVERSE_MOUSE_WHEEL,
+        OPTION_SWAP_LEFT_RIGHT_MOUSE,
+        OPTION_DISPLAYS_AS_INDIVIDUAL_WINDOWS,
+        OPTION_USE_ALL_MY_DISPLAYS_FOR_THE_REMOTE_SESSION,
+        OPTION_VIEW_STYLE,
+        OPTION_SCROLL_STYLE,
+        OPTION_IMAGE_QUALITY,
+        OPTION_CUSTOM_IMAGE_QUALITY,
+        OPTION_CUSTOM_FPS,
+    ];
+    // DEFAULT_DISPLAY_SETTINGS, OVERWRITE_DISPLAY_SETTINGS
+    pub const KEYS_DISPLAY_SETTINGS: &[&str] = &[
+        OPTION_THEME,
+        OPTION_ENABLE_CONFIRM_CLOSING_TABS,
+        OPTION_ENABLE_OPEN_NEW_CONNECTIONS_IN_TABS,
+        OPTION_ENABLE_CHECK_UPDATE,
+        OPTION_SYNC_AB_WITH_RECENT_SESSIONS,
+        OPTION_SYNC_AB_TAGS,
+        OPTION_FILTER_AB_BY_INTERSECTION,
+    ];
+    // DEFAULT_LOCAL_SETTINGS, OVERWRITE_LOCAL_SETTINGS
+    pub const KEYS_LOCAL_SETTINGS: &[&str] = &[
+        OPTION_ACCESS_MODE,
+        OPTION_ENABLE_KEYBOARD,
+        OPTION_ENABLE_CLIPBOARD,
+        OPTION_ENABLE_FILE_TRANSFER,
+        OPTION_ENABLE_AUDIO,
+        OPTION_ENABLE_TUNNEL,
+        OPTION_ENABLE_REMOTE_RESTART,
+        OPTION_ENABLE_RECORD_SESSION,
+        OPTION_ENABLE_BLOCK_INPUT,
+        OPTION_ALLOW_REMOTE_CONFIG_MODIFICATION,
+        OPTION_ENABLE_LAN_DISCOVERY,
+        OPTION_DIRECT_SERVER,
+        OPTION_DIRECT_ACCESS_PORT,
+        OPTION_WHITELIST,
+        OPTION_ALLOW_AUTO_DISCONNECT,
+        OPTION_AUTO_DISCONNECT_TIMEOUT,
+        OPTION_ALLOW_ONLY_CONN_WINDOW_OPEN,
+        OPTION_ALLOW_AUTO_RECORD_INCOMING,
+        OPTION_VIDEO_SAVE_DIRECTORY,
+        OPTION_ENABLE_ABR,
+        OPTION_ALLOW_REMOVE_WALLPAPER,
+        OPTION_ALLOW_ALWAYS_SOFTWARE_RENDER,
+        OPTION_ALLOW_LINUX_HEADLESS,
+        OPTION_ENABLE_HWCODEC,
+        OPTION_APPROVE_MODE,
+    ];
 }
 
 #[cfg(test)]

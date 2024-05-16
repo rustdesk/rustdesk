@@ -155,11 +155,11 @@ customImageQualitySetting() {
   final initQuality =
       (double.tryParse(bind.mainGetUserDefaultOption(key: qualityKey)) ??
           kDefaultQuality);
-  final isQuanlityFixed = isUserDefaultOptionFixed(qualityKey);
+  final isQuanlityFixed = isOptionFixed(qualityKey);
   final initFps =
       (double.tryParse(bind.mainGetUserDefaultOption(key: fpsKey)) ??
           kDefaultFps);
-  final isFpsFixed = isUserDefaultOptionFixed(fpsKey);
+  final isFpsFixed = isOptionFixed(fpsKey);
 
   return customImageQualityWidget(
       initQuality: initQuality,
@@ -227,7 +227,7 @@ List<(String, String)> otherDefaultSettings() {
     if ((isDesktop || isWebDesktop)) ('Zoom cursor', kOptionZoomCursor),
     ('Show quality monitor', kOptionShowQualityMonitor),
     ('Mute', kOptionDisableAudio),
-    if (isDesktop) ('Enable file copy and paste', 'enable_file_transfer'),
+    if (isDesktop) ('Enable file copy and paste', kOptionEnableFileTransfer),
     ('Disable clipboard', kOptionDisableClipboard),
     ('Lock after session end', kOptionLockAfterSessionEnd),
     ('Privacy mode', kOptionPrivacyMode),

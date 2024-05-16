@@ -39,7 +39,7 @@ class ServerPage extends StatefulWidget implements PageShape {
           final approveMode = gFFI.serverModel.approveMode;
           final verificationMethod = gFFI.serverModel.verificationMethod;
           final showPasswordOption = approveMode != 'click';
-          final isApproveModeFixed = isDefaultOptionFixed(kOptionApproveMode);
+          final isApproveModeFixed = isOptionFixed(kOptionApproveMode);
           return [
             PopupMenuItem(
               enabled: gFFI.serverModel.connectStatus > 0,
