@@ -77,7 +77,7 @@ class ServerModel with ChangeNotifier {
   String get approveMode => _approveMode;
 
   setVerificationMethod(String method) async {
-    await bind.mainSetOption(key: "verification-method", value: method);
+    await bind.mainSetOption(key: kOptionVerificationMethod, value: method);
     /*
     if (method != kUsePermanentPassword) {
       await bind.mainSetOption(
@@ -99,7 +99,7 @@ class ServerModel with ChangeNotifier {
   }
 
   setApproveMode(String mode) async {
-    await bind.mainSetOption(key: 'approve-mode', value: mode);
+    await bind.mainSetOption(key: kOptionApproveMode, value: mode);
     /*
     if (mode != 'password') {
       await bind.mainSetOption(
@@ -283,7 +283,7 @@ class ServerModel with ChangeNotifier {
     }
 
     _audioOk = !_audioOk;
-    bind.mainSetOption(key: "enable-audio", value: _audioOk ? '' : 'N');
+    bind.mainSetOption(key: "enable-audio", value: _audioOk ? defaultOptionYes : 'N');
     notifyListeners();
   }
 
@@ -302,7 +302,7 @@ class ServerModel with ChangeNotifier {
     }
 
     _fileOk = !_fileOk;
-    bind.mainSetOption(key: "enable-file-transfer", value: _fileOk ? '' : 'N');
+    bind.mainSetOption(key: kOptionEnableFileTransfer, value: _fileOk ? defaultOptionYes : 'N');
     notifyListeners();
   }
 
@@ -312,7 +312,7 @@ class ServerModel with ChangeNotifier {
     }
     if (_inputOk) {
       parent.target?.invokeMethod("stop_input");
-      bind.mainSetOption(key: "enable-keyboard", value: 'N');
+      bind.mainSetOption(key: kOptionEnableKeyboard, value: 'N');
     } else {
       if (parent.target != null) {
         /// the result of toggle-on depends on user actions in the settings page.
@@ -445,7 +445,7 @@ class ServerModel with ChangeNotifier {
         break;
       case "input":
         if (_inputOk != value) {
-          bind.mainSetOption(key: "enable-keyboard", value: value ? '' : 'N');
+          bind.mainSetOption(key: kOptionEnableKeyboard, value: value ? defaultOptionYes : 'N');
         }
         _inputOk = value;
         break;

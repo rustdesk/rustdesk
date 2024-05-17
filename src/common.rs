@@ -1,5 +1,6 @@
 use std::{
     borrow::Cow,
+    collections::HashMap,
     future::Future,
     sync::{Arc, Mutex, RwLock},
     task::Poll,
@@ -1597,22 +1598,41 @@ pub fn read_custom_client(config: &str) {
             *config::APP_NAME.write().unwrap() = app_name.to_owned();
         }
     }
+
+    let mut map_display_settings = HashMap::new();
+    for s in config::keys::KEYS_DISPLAY_SETTINGS {
+        map_display_settings.insert(s.replace("_", "-"), s);
+    }
+    let mut map_local_settings = HashMap::new();
+    for s in config::keys::KEYS_LOCAL_SETTINGS {
+        map_local_settings.insert(s.replace("_", "-"), s);
+    }
+    let mut map_settings = HashMap::new();
+    for s in config::keys::KEYS_SETTINGS {
+        map_settings.insert(s.replace("_", "-"), s);
+    }
+
     if let Some(default_settings) = data.remove("default-settings") {
         if let Some(default_settings) = default_settings.as_object() {
             for (k, v) in default_settings {
                 let Some(v) = v.as_str() else {
                     continue;
                 };
-                if k.starts_with("$$") {
+                if let Some(k2) = map_display_settings.get(k) {
                     config::DEFAULT_DISPLAY_SETTINGS
                         .write()
                         .unwrap()
-                        .insert(k.clone(), v[2..].to_owned());
-                } else if k.starts_with("$") {
+                        .insert(k2.to_string(), v.to_owned());
+                } else if let Some(k2) = map_local_settings.get(k) {
                     config::DEFAULT_LOCAL_SETTINGS
                         .write()
                         .unwrap()
-                        .insert(k.clone(), v[1..].to_owned());
+                        .insert(k2.to_string(), v.to_owned());
+                } else if let Some(k2) = map_settings.get(k) {
+                    config::DEFAULT_SETTINGS
+                        .write()
+                        .unwrap()
+                        .insert(k2.to_string(), v.to_owned());
                 } else {
                     config::DEFAULT_SETTINGS
                         .write()
@@ -1628,16 +1648,21 @@ pub fn read_custom_client(config: &str) {
                 let Some(v) = v.as_str() else {
                     continue;
                 };
-                if k.starts_with("$$") {
+                if let Some(k2) = map_display_settings.get(k) {
                     config::OVERWRITE_DISPLAY_SETTINGS
                         .write()
                         .unwrap()
-                        .insert(k.clone(), v[2..].to_owned());
-                } else if k.starts_with("$") {
+                        .insert(k2.to_string(), v.to_owned());
+                } else if let Some(k2) = map_local_settings.get(k) {
                     config::OVERWRITE_LOCAL_SETTINGS
                         .write()
                         .unwrap()
-                        .insert(k.clone(), v[1..].to_owned());
+                        .insert(k2.to_string(), v.to_owned());
+                } else if let Some(k2) = map_settings.get(k) {
+                    config::OVERWRITE_SETTINGS
+                        .write()
+                        .unwrap()
+                        .insert(k2.to_string(), v.to_owned());
                 } else {
                     config::OVERWRITE_SETTINGS
                         .write()

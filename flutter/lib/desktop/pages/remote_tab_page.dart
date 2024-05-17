@@ -428,7 +428,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
       }
       ConnectionTypeState.init(id);
       _toolbarState.setShow(
-          bind.mainGetUserDefaultOption(key: 'collapse_toolbar') != 'Y');
+          bind.mainGetUserDefaultOption(key: kOptionCollapseToolbar) != 'Y');
       tabController.add(TabInfo(
         key: id,
         label: id,

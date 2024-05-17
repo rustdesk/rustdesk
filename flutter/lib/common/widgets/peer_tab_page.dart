@@ -537,7 +537,7 @@ class _PeerTabPageState extends State<PeerTabPage>
         ),
         onTap: () async {
           await bind.mainSetLocalOption(
-              key: "hideAbTagsPanel", value: hideAbTagsPanel.value ? "" : "Y");
+              key: "hideAbTagsPanel", value: hideAbTagsPanel.value ? defaultOptionNo : "Y");
           hideAbTagsPanel.value = !hideAbTagsPanel.value;
         });
   }

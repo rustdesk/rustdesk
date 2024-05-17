@@ -333,6 +333,7 @@ class _AddressBookState extends State<AddressBook> {
 
   @protected
   MenuEntryBase<String> syncMenuItem() {
+    final isOptFixed = isOptionFixed(syncAbOption);
     return MenuEntrySwitch<String>(
       switchType: SwitchType.scheckbox,
       text: translate('Sync with recent sessions'),
@@ -343,11 +344,13 @@ class _AddressBookState extends State<AddressBook> {
         gFFI.abModel.setShouldAsync(v);
       },
       dismissOnClicked: true,
+      enabled: (!isOptFixed).obs,
     );
   }
 
   @protected
   MenuEntryBase<String> sortMenuItem() {
+    final isOptFixed = isOptionFixed(sortAbTagsOption);
     return MenuEntrySwitch<String>(
       switchType: SwitchType.scheckbox,
       text: translate('Sort tags'),
@@ -355,15 +358,17 @@ class _AddressBookState extends State<AddressBook> {
         return shouldSortTags();
       },
       setter: (bool v) async {
-        bind.mainSetLocalOption(key: sortAbTagsOption, value: v ? 'Y' : '');
+        bind.mainSetLocalOption(key: sortAbTagsOption, value: v ? 'Y' : defaultOptionNo);
         gFFI.abModel.sortTags.value = v;
       },
       dismissOnClicked: true,
+      enabled: (!isOptFixed).obs,
     );
   }
 
   @protected
   MenuEntryBase<String> filterMenuItem() {
+    final isOptFixed = isOptionFixed(filterAbTagOption);
     return MenuEntrySwitch<String>(
       switchType: SwitchType.scheckbox,
       text: translate('Filter by intersection'),
@@ -371,10 +376,11 @@ class _AddressBookState extends State<AddressBook> {
         return filterAbTagByIntersection();
       },
       setter: (bool v) async {
-        bind.mainSetLocalOption(key: filterAbTagOption, value: v ? 'Y' : '');
+        bind.mainSetLocalOption(key: filterAbTagOption, value: v ? 'Y' : defaultOptionNo);
         gFFI.abModel.filterByIntersection.value = v;
       },
       dismissOnClicked: true,
+      enabled: (!isOptFixed).obs,
     );
   }
 

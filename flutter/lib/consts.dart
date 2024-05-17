@@ -68,11 +68,53 @@ const String kWindowEventMoveTabToNewWindow = "move_tab_to_new_window";
 const String kWindowEventGetCachedSessionData = "get_cached_session_data";
 const String kWindowEventOpenMonitorSession = "open_monitor_session";
 
+const String kOptionViewStyle = "view_style";
+const String kOptionScrollStyle = "scroll_style";
+const String kOptionImageQuality = "image_quality";
 const String kOptionOpenNewConnInTabs = "enable-open-new-connections-in-tabs";
 const String kOptionOpenInTabs = "allow-open-in-tabs";
 const String kOptionOpenInWindows = "allow-open-in-windows";
 const String kOptionForceAlwaysRelay = "force-always-relay";
-const String kOptionViewOnly = "view-only";
+const String kOptionViewOnly = "view_only";
+const String kOptionEnableLanDiscovery = "enable-lan-discovery";
+const String kOptionWhitelist = "whitelist";
+const String kOptionEnableAbr = "enable-abr";
+const String kOptionEnableRecordSession = "enable-record-session";
+const String kOptionDirectServer = "direct-server";
+const String kOptionDirectAccessPort = "direct-access-port";
+const String kOptionAllowAutoDisconnect = "allow-auto-disconnect";
+const String kOptionAutoDisconnectTimeout = "auto-disconnect-timeout";
+const String kOptionEnableHwcodec = "enable-hwcodec";
+const String kOptionAllowAutoRecordIncoming = "allow-auto-record-incoming";
+const String kOptionVideoSaveDirectory = "video-save-directory";
+const String kOptionAccessMode = "access-mode";
+const String kOptionEnableKeyboard = "enable-keyboard";
+// "Settings -> Security -> Permissions"
+const String kOptionEnableClipboard = "enable-clipboard";
+const String kOptionEnableFileTransfer = "enable-file-transfer";
+const String kOptionEnableAudio = "enable-audio";
+const String kOptionEnableTunnel = "enable-tunnel";
+const String kOptionEnableRemoteRestart = "enable-remote-restart";
+const String kOptionEnableBlockInput = "enable-block-input";
+const String kOptionAllowRemoteConfigModification =
+    "allow-remote-config-modification";
+const String kOptionVerificationMethod = "verification-method";
+const String kOptionApproveMode = "approve-mode";
+const String kOptionCollapseToolbar = "collapse_toolbar";
+const String kOptionShowRemoteCursor = "show_remote_cursor";
+const String kOptionFollowRemoteCursor = "follow_remote_cursor";
+const String kOptionFollowRemoteWindow = "follow_remote_window";
+const String kOptionZoomCursor = "zoom-cursor";
+const String kOptionShowQualityMonitor = "show_quality_monitor";
+const String kOptionDisableAudio = "disable_audio";
+// "Settings -> Display -> Other default options"
+const String kOptionDisableClipboard = "disable_clipboard";
+const String kOptionLockAfterSessionEnd = "lock_after_session_end";
+const String kOptionPrivacyMode = "privacy_mode";
+const String kOptionTouchMode = "touch-mode";
+const String kOptionI444 = "i444";
+const String kOptionSwapLeftRightMouse = 'swap-left-right-mouse';
+const String kOptionCodecPreference = 'codec-preference';
 
 const String kUrlActionClose = "close";
 
@@ -207,12 +249,6 @@ const kRemoteImageQualityLow = 'low';
 
 /// [kRemoteImageQualityCustom] Custom image quality.
 const kRemoteImageQualityCustom = 'custom';
-
-/// [kRemoteAudioGuestToHost] Guest to host audio mode(default).
-const kRemoteAudioGuestToHost = 'guest-to-host';
-
-/// [kRemoteAudioDualWay] dual-way audio mode(default).
-const kRemoteAudioDualWay = 'dual-way';
 
 const kIgnoreDpi = true;
 
