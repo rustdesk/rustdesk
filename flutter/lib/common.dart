@@ -1822,7 +1822,7 @@ Future<bool> restoreWindowPosition(WindowType type,
   }
 
   final size = await _adjustRestoreMainWindowSize(lpos.width, lpos.height);
-  var offsetDevicePixelRatio = await _adjustRestoreMainWindowOffset(
+  final offsetDevicePixelRatio = await _adjustRestoreMainWindowOffset(
     lpos.offsetWidth,
     lpos.offsetHeight,
     size.width,
