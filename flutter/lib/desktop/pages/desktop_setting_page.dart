@@ -1390,6 +1390,7 @@ class _DisplayState extends State<_Display> {
     final groupValue =
         bind.mainGetUserDefaultOption(key: kOptionCodecPreference);
     var hwRadios = [];
+    final isOptFixed = isOptionFixed(kOptionCodecPreference);
     try {
       final Map codecsJson = jsonDecode(bind.mainSupportedHwdecodings());
       final h264 = codecsJson['h264'] ?? false;
@@ -1399,19 +1400,18 @@ class _DisplayState extends State<_Display> {
             value: 'h264',
             groupValue: groupValue,
             label: 'H264',
-            onChanged: onChanged));
+            onChanged: isOptFixed ? null : onChanged));
       }
       if (h265) {
         hwRadios.add(_Radio(context,
             value: 'h265',
             groupValue: groupValue,
             label: 'H265',
-            onChanged: onChanged));
+            onChanged: isOptFixed ? null : onChanged));
       }
     } catch (e) {
       debugPrint("failed to parse supported hwdecodings, err=$e");
     }
-    final isOptFixed = isOptionFixed(kOptionCodecPreference);
     return _Card(title: 'Default Codec', children: [
       _Radio(context,
           value: 'auto',
