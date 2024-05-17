@@ -208,10 +208,6 @@ const kFrameBoxShadowOffsetUnfocused = 2.0;
 
 const kInvalidValueStr = 'InvalidValueStr';
 
-const kOptionTypeLocal = '\$';
-const kOptionTypeUserDefault = '\$\$';
-const kOptionTypeDefault = '';
-
 // Config key shared by flutter and other ui.
 const kCommConfKeyTheme = 'theme';
 const kCommConfKeyLang = 'lang';

@@ -1419,6 +1419,13 @@ impl LocalConfig {
             return;
         }
         let mut config = LOCAL_CONFIG.write().unwrap();
+        // The custom client will explictly set "default" as the default language.
+        let is_custom_client_default_lang = k == keys::OPTION_LANGUAGE && v == "default";
+        if is_custom_client_default_lang {
+            config.options.insert(k, "".to_owned());
+            config.store();
+            return;
+        }
         let v2 = if v.is_empty() { None } else { Some(&v) };
         if v2 != config.options.get(&k) {
             if v2.is_none() {
@@ -2000,7 +2007,9 @@ pub mod keys {
     pub const OPTION_IMAGE_QUALITY: &str = "image_quality";
     pub const OPTION_CUSTOM_IMAGE_QUALITY: &str = "custom_image_quality";
     pub const OPTION_CUSTOM_FPS: &str = "custom-fps";
+    pub const OPTION_CODEC_PREFERENCE: &str = "codec-preference";
     pub const OPTION_THEME: &str = "theme";
+    pub const OPTION_LANGUAGE: &str = "lang";
     pub const OPTION_ENABLE_CONFIRM_CLOSING_TABS: &str = "enable-confirm-closing-tabs";
     pub const OPTION_ENABLE_OPEN_NEW_CONNECTIONS_IN_TABS: &str =
         "enable-open-new-connections-in-tabs";
@@ -2033,7 +2042,6 @@ pub mod keys {
     pub const OPTION_ALLOW_LINUX_HEADLESS: &str = "allow-linux-headless";
     pub const OPTION_ENABLE_HWCODEC: &str = "enable-hwcodec";
     pub const OPTION_APPROVE_MODE: &str = "approve-mode";
-    pub const OPTION_CODEC_PREFERENCE: &str = "codec-preference";
 
     // DEFAULT_DISPLAY_SETTINGS, OVERWRITE_DISPLAY_SETTINGS
     pub const KEYS_DISPLAY_SETTINGS: &[&str] = &[
@@ -2061,10 +2069,12 @@ pub mod keys {
         OPTION_IMAGE_QUALITY,
         OPTION_CUSTOM_IMAGE_QUALITY,
         OPTION_CUSTOM_FPS,
+        OPTION_CODEC_PREFERENCE,
     ];
     // DEFAULT_LOCAL_SETTINGS, OVERWRITE_LOCAL_SETTINGS
     pub const KEYS_LOCAL_SETTINGS: &[&str] = &[
         OPTION_THEME,
+        OPTION_LANGUAGE,
         OPTION_ENABLE_CONFIRM_CLOSING_TABS,
         OPTION_ENABLE_OPEN_NEW_CONNECTIONS_IN_TABS,
         OPTION_ENABLE_CHECK_UPDATE,

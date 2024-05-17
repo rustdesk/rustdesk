@@ -584,12 +584,13 @@ class _GeneralState extends State<_General> {
       Map<String, String> langsMap = {for (var v in langsList) v[0]: v[1]};
       List<String> keys = langsMap.keys.toList();
       List<String> values = langsMap.values.toList();
-      keys.insert(0, '');
+      keys.insert(0, defaultOptionLang);
       values.insert(0, translate('Default'));
       String currentKey = bind.mainGetLocalOption(key: kCommConfKeyLang);
       if (!keys.contains(currentKey)) {
-        currentKey = '';
+        currentKey = defaultOptionLang;
       }
+      final isOptFixed = isOptionFixed(kCommConfKeyLang);
       return ComboBox(
         keys: keys,
         values: values,
@@ -599,6 +600,7 @@ class _GeneralState extends State<_General> {
           reloadAllWindows();
           bind.mainChangeLanguage(lang: key);
         },
+        enabled: !isOptFixed,
       ).marginOnly(left: _kContentHMargin);
     });
   }
@@ -1409,27 +1411,28 @@ class _DisplayState extends State<_Display> {
     } catch (e) {
       debugPrint("failed to parse supported hwdecodings, err=$e");
     }
+    final isOptFixed = isOptionFixed(kOptionCodecPreference);
     return _Card(title: 'Default Codec', children: [
       _Radio(context,
           value: 'auto',
           groupValue: groupValue,
           label: 'Auto',
-          onChanged: onChanged),
+          onChanged: isOptFixed ? null : onChanged),
       _Radio(context,
           value: 'vp8',
           groupValue: groupValue,
           label: 'VP8',
-          onChanged: onChanged),
+          onChanged: isOptFixed ? null : onChanged),
       _Radio(context,
           value: 'vp9',
           groupValue: groupValue,
           label: 'VP9',
-          onChanged: onChanged),
+          onChanged: isOptFixed ? null : onChanged),
       _Radio(context,
           value: 'av1',
           groupValue: groupValue,
           label: 'AV1',
-          onChanged: onChanged),
+          onChanged: isOptFixed ? null : onChanged),
       ...hwRadios,
     ]);
   }

@@ -692,30 +692,32 @@ void showServerSettings(OverlayDialogManager dialogManager) async {
 void showLanguageSettings(OverlayDialogManager dialogManager) async {
   try {
     final langs = json.decode(await bind.mainGetLangs()) as List<dynamic>;
-    var lang = bind.mainGetLocalOption(key: "lang");
+    var lang = bind.mainGetLocalOption(key: kCommConfKeyLang);
     dialogManager.show((setState, close, context) {
       setLang(v) async {
         if (lang != v) {
           setState(() {
             lang = v;
           });
-          await bind.mainSetLocalOption(key: "lang", value: v);
+          await bind.mainSetLocalOption(key: kCommConfKeyLang, value: v);
           HomePage.homeKey.currentState?.refreshPages();
           Future.delayed(Duration(milliseconds: 200), close);
         }
       }
 
+      final isOptFixed = isOptionFixed(kCommConfKeyLang);
       return CustomAlertDialog(
         content: Column(
           children: [
                 getRadio(Text(translate('Default')), defaultOptionLang, lang,
-                    setLang),
+                    isOptFixed ? null : setLang),
                 Divider(color: MyTheme.border),
               ] +
               langs.map((e) {
                 final key = e[0] as String;
                 final name = e[1] as String;
-                return getRadio(Text(translate(name)), key, lang, setLang);
+                return getRadio(Text(translate(name)), key, lang,
+                    isOptFixed ? null : setLang);
               }).toList(),
         ),
       );
@@ -875,10 +877,12 @@ class __DisplayPageState extends State<_DisplayPage> {
               list: codecList,
               getter: () =>
                   bind.mainGetUserDefaultOption(key: kOptionCodecPreference),
-              asyncSetter: (value) async {
-                await bind.mainSetUserDefaultOption(
-                    key: kOptionCodecPreference, value: value);
-              },
+              asyncSetter: isOptionFixed(kOptionCodecPreference)
+                  ? null
+                  : (value) async {
+                      await bind.mainSetUserDefaultOption(
+                          key: kOptionCodecPreference, value: value);
+                    },
             ),
           ],
         ),
