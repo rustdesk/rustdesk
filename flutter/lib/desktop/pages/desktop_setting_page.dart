@@ -1007,7 +1007,6 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
 
   Widget whitelist() {
     bool enabled = !locked;
-    final isOptFixed = isOptionFixed(kOptionWhitelist);
     // Simple temp wrapper for PR check
     tmpWrapper() {
       RxBool hasWhitelist = (bind.mainGetOptionSync(key: kOptionWhitelist) !=
@@ -1022,6 +1021,7 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
         changeWhiteList(callback: update);
       }
 
+      final isOptFixed = isOptionFixed(kOptionWhitelist);
       return GestureDetector(
         child: Tooltip(
           message: translate('whitelist_tip'),
@@ -1033,9 +1033,12 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
                       .marginOnly(right: 5),
                   Offstage(
                     offstage: !hasWhitelist.value,
-                    child: const Icon(Icons.warning_amber_rounded,
-                            color: Color.fromARGB(255, 255, 204, 0))
-                        .marginOnly(right: 5),
+                    child: MouseRegion(
+                      child: const Icon(Icons.warning_amber_rounded,
+                              color: Color.fromARGB(255, 255, 204, 0))
+                          .marginOnly(right: 5),
+                      cursor: SystemMouseCursors.click,
+                    ),
                   ),
                   Expanded(
                       child: Text(
@@ -1046,7 +1049,7 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
                 ],
               )),
         ),
-        onTap: enabled && !isOptFixed
+        onTap: enabled
             ? () {
                 onChanged(!hasWhitelist.value);
               }

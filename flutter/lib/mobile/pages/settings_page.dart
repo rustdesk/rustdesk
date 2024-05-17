@@ -100,8 +100,8 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
         _denyLANDiscovery = denyLanDiscovery;
       }
 
-      final onlyWhiteList =
-          (await bind.mainGetOption(key: 'whitelist')).isNotEmpty;
+      final onlyWhiteList = (await bind.mainGetOption(key: kOptionWhitelist)) !=
+          defaultOptionWhitelist;
       if (onlyWhiteList != _onlyWhiteList) {
         update = true;
         _onlyWhiteList = onlyWhiteList;
@@ -280,9 +280,7 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
               .marginOnly(left: 5)
         ]),
         initialValue: _onlyWhiteList,
-        onToggle: isOptionFixed(kOptionWhitelist)
-            ? null
-            : (_) async {
+        onToggle: (_) async {
                 update() async {
                   final onlyWhiteList =
                       (await bind.mainGetOption(key: kOptionWhitelist)) !=

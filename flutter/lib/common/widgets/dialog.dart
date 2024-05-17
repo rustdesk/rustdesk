@@ -184,6 +184,7 @@ void changeWhiteList({Function()? callback}) async {
   var controller = TextEditingController(text: newWhiteListField);
   var msg = "";
   var isInProgress = false;
+  final isOptFixed = isOptionFixed(kOptionWhitelist);
   gFFI.dialogManager.show((setState, close, context) {
     return CustomAlertDialog(
       title: Text(translate("IP Whitelisting")),
@@ -216,7 +217,7 @@ void changeWhiteList({Function()? callback}) async {
       ),
       actions: [
         dialogButton("Cancel", onPressed: close, isOutline: true),
-        dialogButton("Clear", onPressed: () async {
+        dialogButton("Clear", onPressed: isOptFixed ? null : () async {
           await bind.mainSetOption(
               key: kOptionWhitelist, value: defaultOptionWhitelist);
           callback?.call();
@@ -224,7 +225,7 @@ void changeWhiteList({Function()? callback}) async {
         }, isOutline: true),
         dialogButton(
           "OK",
-          onPressed: () async {
+          onPressed: isOptFixed ? null : () async {
             setState(() {
               msg = "";
               isInProgress = true;
