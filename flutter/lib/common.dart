@@ -1695,6 +1695,13 @@ Future<Size> _adjustRestoreMainWindowSize(double? width, double? height) async {
   return Size(restoreWidth, restoreHeight);
 }
 
+bool isPointInRect(Offset point, Rect rect) {
+  return point.dx >= rect.left &&
+      point.dx <= rect.right &&
+      point.dy >= rect.top &&
+      point.dy <= rect.bottom;
+}
+
 /// return null means center
 Future<OffsetDevicePixelRatio?> _adjustRestoreMainWindowOffset(
   double? left,
@@ -1714,10 +1721,7 @@ Future<OffsetDevicePixelRatio?> _adjustRestoreMainWindowOffset(
 
   if (isDesktop || isWebDesktop) {
     for (final screen in await window_size.getScreenList()) {
-      if (left >= screen.visibleFrame.left &&
-          left <= screen.visibleFrame.right &&
-          top >= screen.visibleFrame.top &&
-          top <= screen.visibleFrame.bottom) {
+      if (isPointInRect(Offset(left, top), screen.visibleFrame)) {
         devicePixelRatio = screen.scaleFactor;
       }
       frameLeft = frameLeft == null
@@ -1834,9 +1838,16 @@ Future<bool> restoreWindowPosition(WindowType type,
       // So we need to adjust the offset by the scale factor.
       // https://github.com/rustdesk-org/window_manager/blob/f19acdb008645366339444a359a45c3257c8b32e/windows/window_manager.cpp#L701
       if (isWindows) {
-        final curDevicePixelRatio = WidgetsBinding
-            .instance.platformDispatcher.views.first.devicePixelRatio;
-        if (curDevicePixelRatio != 0 && offsetDevicePixelRatio != null) {
+        double? curDevicePixelRatio;
+        Offset curPos = await windowManager.getPosition();
+        for (final screen in await window_size.getScreenList()) {
+          if (isPointInRect(curPos, screen.visibleFrame)) {
+            curDevicePixelRatio = screen.scaleFactor;
+          }
+        }
+        if (curDevicePixelRatio != null &&
+            curDevicePixelRatio != 0 &&
+            offsetDevicePixelRatio != null) {
           if (offsetDevicePixelRatio.devicePixelRatio != 0) {
             final scale =
                 offsetDevicePixelRatio.devicePixelRatio / curDevicePixelRatio;
