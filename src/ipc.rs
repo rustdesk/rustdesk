@@ -356,6 +356,8 @@ async fn handle(data: Data, stream: &mut Connection) {
                 crate::server::input_service::fix_key_down_timeout_at_exit();
                 if is_server() {
                     let _ = privacy_mode::turn_off_privacy(0, Some(PrivacyModeState::OffByPeer));
+                    #[cfg(all(windows, feature = "flutter"))]
+                    crate::platform::kill_flutter_main_window();
                 }
                 std::process::exit(0);
             }
