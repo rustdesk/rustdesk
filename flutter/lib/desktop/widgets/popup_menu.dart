@@ -445,6 +445,8 @@ abstract class MenuEntrySwitchBase<T> extends MenuEntryBase<T> {
           dismissCallback: dismissCallback,
         );
 
+  bool get isEnabled => enabled?.value ?? true;
+
   RxBool get curOption;
   Future<void> setOption(bool? option);
 
@@ -481,44 +483,50 @@ abstract class MenuEntrySwitchBase<T> extends MenuEntryBase<T> {
                             if (switchType == SwitchType.sswitch) {
                               return Switch(
                                 value: curOption.value,
-                                onChanged: (v) {
-                                  if (super.dismissOnClicked &&
-                                      Navigator.canPop(context)) {
-                                    Navigator.pop(context);
-                                    if (super.dismissCallback != null) {
-                                      super.dismissCallback!();
-                                    }
-                                  }
-                                  setOption(v);
-                                },
+                                onChanged: isEnabled
+                                    ? (v) {
+                                        if (super.dismissOnClicked &&
+                                            Navigator.canPop(context)) {
+                                          Navigator.pop(context);
+                                          if (super.dismissCallback != null) {
+                                            super.dismissCallback!();
+                                          }
+                                        }
+                                        setOption(v);
+                                      }
+                                    : null,
                               );
                             } else {
                               return Checkbox(
                                 value: curOption.value,
-                                onChanged: (v) {
-                                  if (super.dismissOnClicked &&
-                                      Navigator.canPop(context)) {
-                                    Navigator.pop(context);
-                                    if (super.dismissCallback != null) {
-                                      super.dismissCallback!();
-                                    }
-                                  }
-                                  setOption(v);
-                                },
+                                onChanged: isEnabled
+                                    ? (v) {
+                                        if (super.dismissOnClicked &&
+                                            Navigator.canPop(context)) {
+                                          Navigator.pop(context);
+                                          if (super.dismissCallback != null) {
+                                            super.dismissCallback!();
+                                          }
+                                        }
+                                        setOption(v);
+                                      }
+                                    : null,
                               );
                             }
                           })),
                     ))
                   ])),
-              onPressed: () {
-                if (super.dismissOnClicked && Navigator.canPop(context)) {
-                  Navigator.pop(context);
-                  if (super.dismissCallback != null) {
-                    super.dismissCallback!();
-                  }
-                }
-                setOption(!curOption.value);
-              },
+              onPressed: isEnabled
+                  ? () {
+                      if (super.dismissOnClicked && Navigator.canPop(context)) {
+                        Navigator.pop(context);
+                        if (super.dismissCallback != null) {
+                          super.dismissCallback!();
+                        }
+                      }
+                      setOption(!curOption.value);
+                    }
+                  : null,
             )),
       )
     ];

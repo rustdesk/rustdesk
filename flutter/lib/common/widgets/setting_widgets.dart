@@ -227,7 +227,8 @@ List<(String, String)> otherDefaultSettings() {
     if ((isDesktop || isWebDesktop)) ('Zoom cursor', kOptionZoomCursor),
     ('Show quality monitor', kOptionShowQualityMonitor),
     ('Mute', kOptionDisableAudio),
-    if (isDesktop) ('Enable file copy and paste', kOptionEnableFileTransfer),
+    if (isDesktop)
+      ('Enable file copy and paste', kOptionEnableFileCopyPaste),
     ('Disable clipboard', kOptionDisableClipboard),
     ('Lock after session end', kOptionLockAfterSessionEnd),
     ('Privacy mode', kOptionPrivacyMode),

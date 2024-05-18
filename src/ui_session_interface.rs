@@ -312,7 +312,7 @@ impl<T: InvokeUiSession> Session<T> {
     pub fn toggle_option(&self, name: String) {
         let msg = self.lc.write().unwrap().toggle_option(name.clone());
         #[cfg(not(feature = "flutter"))]
-        if name == "enable-file-transfer" {
+        if name == hbb_common::config::keys::OPTION_ENABLE_FILE_COPY_PASTE {
             self.send(Data::ToggleClipboardFile);
         }
         if let Some(msg) = msg {

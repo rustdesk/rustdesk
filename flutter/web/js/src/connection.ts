@@ -660,7 +660,7 @@ export default class Connection {
     const defaultToggleTrue = [
       'show-remote-cursor',
       'privacy-mode',
-      'enable-file-transfer',
+      'enable-file-copy-paste',
       'allow_swap_key',
     ];
     return this._options[name] || (defaultToggleTrue.includes(name) ? true : false);
@@ -906,7 +906,7 @@ export default class Connection {
       case "privacy-mode":
         option.privacy_mode = v2;
         break;
-      case "enable-file-transfer":
+      case "enable-file-copy-paste":
         option.enable_file_transfer = v2;
         break;
       case "block-input":
@@ -933,7 +933,7 @@ export default class Connection {
           option.show_remote_cursor = this.getToggleOption("show-remote-cursor")
             ? message.OptionMessage_BoolOption.Yes
             : message.OptionMessage_BoolOption.No;
-          option.enable_file_transfer = this.getToggleOption("enable-file-transfer")
+          option.enable_file_transfer = this.getToggleOption("enable-file-copy-paste")
             ? message.OptionMessage_BoolOption.Yes
             : message.OptionMessage_BoolOption.No;
           option.lock_after_session_end = this.getToggleOption("lock-after-session-end")

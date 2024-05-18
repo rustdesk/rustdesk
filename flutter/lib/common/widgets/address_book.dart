@@ -7,6 +7,7 @@ import 'package:flutter_hbb/common/formatter/id_formatter.dart';
 import 'package:flutter_hbb/common/hbbs/hbbs.dart';
 import 'package:flutter_hbb/common/widgets/peer_card.dart';
 import 'package:flutter_hbb/common/widgets/peers_view.dart';
+import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/desktop/widgets/popup_menu.dart';
 import 'package:flutter_hbb/models/ab_model.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
@@ -191,14 +192,17 @@ class _AddressBookState extends State<AddressBook> {
     }
     final TextEditingController textEditingController = TextEditingController();
 
+    final isOptFixed = isOptionFixed(kOptionCurrentAbName);
     return DropdownButton2<String>(
       value: gFFI.abModel.currentName.value,
-      onChanged: (value) {
-        if (value != null) {
-          gFFI.abModel.setCurrentName(value);
-          bind.setLocalFlutterOption(k: 'current-ab-name', v: value);
-        }
-      },
+      onChanged: isOptFixed
+          ? null
+          : (value) {
+              if (value != null) {
+                gFFI.abModel.setCurrentName(value);
+                bind.setLocalFlutterOption(k: kOptionCurrentAbName, v: value);
+              }
+            },
       underline: Container(
         height: 0.7,
         color: Theme.of(context).dividerColor.withOpacity(0.1),
@@ -358,7 +362,8 @@ class _AddressBookState extends State<AddressBook> {
         return shouldSortTags();
       },
       setter: (bool v) async {
-        bind.mainSetLocalOption(key: sortAbTagsOption, value: v ? 'Y' : defaultOptionNo);
+        bind.mainSetLocalOption(
+            key: sortAbTagsOption, value: v ? 'Y' : defaultOptionNo);
         gFFI.abModel.sortTags.value = v;
       },
       dismissOnClicked: true,
@@ -376,7 +381,8 @@ class _AddressBookState extends State<AddressBook> {
         return filterAbTagByIntersection();
       },
       setter: (bool v) async {
-        bind.mainSetLocalOption(key: filterAbTagOption, value: v ? 'Y' : defaultOptionNo);
+        bind.mainSetLocalOption(
+            key: filterAbTagOption, value: v ? 'Y' : defaultOptionNo);
         gFFI.abModel.filterByIntersection.value = v;
       },
       dismissOnClicked: true,

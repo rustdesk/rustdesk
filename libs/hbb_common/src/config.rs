@@ -40,10 +40,6 @@ const SERIAL: i32 = 3;
 const PASSWORD_ENC_VERSION: &str = "00";
 const ENCRYPT_MAX_LEN: usize = 128;
 
-// config2 options
-#[cfg(target_os = "linux")]
-pub const CONFIG_OPTION_ALLOW_LINUX_HEADLESS: &str = "allow-linux-headless";
-
 #[cfg(target_os = "macos")]
 lazy_static::lazy_static! {
     pub static ref ORG: RwLock<String> = RwLock::new("com.carriez".to_owned());
@@ -278,7 +274,7 @@ pub struct PeerConfig {
     #[serde(flatten)]
     pub disable_clipboard: DisableClipboard,
     #[serde(flatten)]
-    pub enable_file_transfer: EnableFileTransfer,
+    pub enable_file_copy_paste: EnableFileCopyPaste,
     #[serde(flatten)]
     pub show_quality_monitor: ShowQualityMonitor,
     #[serde(flatten)]
@@ -355,7 +351,7 @@ impl Default for PeerConfig {
             direct_failures: Default::default(),
             disable_audio: Default::default(),
             disable_clipboard: Default::default(),
-            enable_file_transfer: Default::default(),
+            enable_file_copy_paste: Default::default(),
             show_quality_monitor: Default::default(),
             follow_remote_cursor: Default::default(),
             follow_remote_window: Default::default(),
@@ -1289,11 +1285,13 @@ serde_field_bool!(
     default_disable_audio,
     "DisableAudio::default_disable_audio"
 );
+// The key is enable_file_transfer, but no need to keep the old name.
+// This option should always be true.
 serde_field_bool!(
-    EnableFileTransfer,
-    "enable_file_transfer",
-    default_enable_file_transfer,
-    "EnableFileTransfer::default_enable_file_transfer"
+    EnableFileCopyPaste,
+    "enable_file_copy_paste",
+    default_enable_file_copy_paste,
+    "EnableFileCopyPaste::default_enable_file_copy_paste"
 );
 serde_field_bool!(
     DisableClipboard,
@@ -1438,11 +1436,13 @@ impl LocalConfig {
     }
 
     pub fn get_flutter_option(k: &str) -> String {
-        if let Some(v) = LOCAL_CONFIG.read().unwrap().ui_flutter.get(k) {
-            v.clone()
-        } else {
-            "".to_owned()
-        }
+        get_or(
+            &OVERWRITE_LOCAL_SETTINGS,
+            &LOCAL_CONFIG.read().unwrap().ui_flutter,
+            &DEFAULT_LOCAL_SETTINGS,
+            k,
+        )
+        .unwrap_or_default()
     }
 
     pub fn set_flutter_option(k: String, v: String) {
@@ -1591,7 +1591,7 @@ impl UserDefaultConfig {
                 self.get_double_string(key, 50.0, 10.0, 0xFFF as f64)
             }
             keys::OPTION_CUSTOM_FPS => self.get_double_string(key, 30.0, 5.0, 120.0),
-            keys::OPTION_ENABLE_FILE_TRANSFER => self.get_string(key, "Y", vec!["", "N"]),
+            keys::OPTION_ENABLE_FILE_COPY_PASTE => self.get_string(key, "Y", vec!["", "N"]),
             _ => self
                 .get_after(key)
                 .map(|v| v.to_string())
@@ -1992,6 +1992,7 @@ pub mod keys {
     pub const OPTION_ZOOM_CURSOR: &str = "zoom-cursor";
     pub const OPTION_SHOW_QUALITY_MONITOR: &str = "show_quality_monitor";
     pub const OPTION_DISABLE_AUDIO: &str = "disable_audio";
+    pub const OPTION_ENABLE_FILE_COPY_PASTE: &str = "enable-file-copy-paste";
     pub const OPTION_DISABLE_CLIPBOARD: &str = "disable_clipboard";
     pub const OPTION_LOCK_AFTER_SESSION_END: &str = "lock_after_session_end";
     pub const OPTION_PRIVACY_MODE: &str = "privacy_mode";
@@ -2010,6 +2011,9 @@ pub mod keys {
     pub const OPTION_CODEC_PREFERENCE: &str = "codec-preference";
     pub const OPTION_THEME: &str = "theme";
     pub const OPTION_LANGUAGE: &str = "lang";
+    pub const OPTION_REMOTE_MENUBAR_DRAG_LEFT: &str = "remote-menubar-drag-left";
+    pub const OPTION_REMOTE_MENUBAR_DRAG_RIGHT: &str = "remote-menubar-drag-right";
+    pub const OPTION_HIDE_AB_TAGS_PANEL: &str = "hideAbTagsPanel";
     pub const OPTION_ENABLE_CONFIRM_CLOSING_TABS: &str = "enable-confirm-closing-tabs";
     pub const OPTION_ENABLE_OPEN_NEW_CONNECTIONS_IN_TABS: &str =
         "enable-open-new-connections-in-tabs";
@@ -2043,6 +2047,15 @@ pub mod keys {
     pub const OPTION_ENABLE_HWCODEC: &str = "enable-hwcodec";
     pub const OPTION_APPROVE_MODE: &str = "approve-mode";
 
+    // flutter local options
+    pub const OPTION_FLUTTER_REMOTE_MENUBAR_STATE: &str = "remoteMenubarState";
+    pub const OPTION_FLUTTER_PEER_SORTING: &str = "peer-sorting";
+    pub const OPTION_FLUTTER_PEER_TAB_INDEX: &str = "peer-tab-index";
+    pub const OPTION_FLUTTER_PEER_TAB_ORDER: &str = "peer-tab-order";
+    pub const OPTION_FLUTTER_PEER_TAB_VISIBLE: &str = "peer-tab-visible";
+    pub const OPTION_FLUTTER_PEER_CARD_UI_TYLE: &str = "peer-card-ui-type";
+    pub const OPTION_FLUTTER_CURRENT_AB_NAME: &str = "current-ab-name";
+
     // DEFAULT_DISPLAY_SETTINGS, OVERWRITE_DISPLAY_SETTINGS
     pub const KEYS_DISPLAY_SETTINGS: &[&str] = &[
         OPTION_VIEW_ONLY,
@@ -2054,7 +2067,7 @@ pub mod keys {
         OPTION_ZOOM_CURSOR,
         OPTION_SHOW_QUALITY_MONITOR,
         OPTION_DISABLE_AUDIO,
-        OPTION_ENABLE_FILE_TRANSFER,
+        OPTION_ENABLE_FILE_COPY_PASTE,
         OPTION_DISABLE_CLIPBOARD,
         OPTION_LOCK_AFTER_SESSION_END,
         OPTION_PRIVACY_MODE,
@@ -2081,6 +2094,16 @@ pub mod keys {
         OPTION_SYNC_AB_WITH_RECENT_SESSIONS,
         OPTION_SYNC_AB_TAGS,
         OPTION_FILTER_AB_BY_INTERSECTION,
+        OPTION_REMOTE_MENUBAR_DRAG_LEFT,
+        OPTION_REMOTE_MENUBAR_DRAG_RIGHT,
+        OPTION_HIDE_AB_TAGS_PANEL,
+        OPTION_FLUTTER_REMOTE_MENUBAR_STATE,
+        OPTION_FLUTTER_PEER_SORTING,
+        OPTION_FLUTTER_PEER_TAB_INDEX,
+        OPTION_FLUTTER_PEER_TAB_ORDER,
+        OPTION_FLUTTER_PEER_TAB_VISIBLE,
+        OPTION_FLUTTER_PEER_CARD_UI_TYLE,
+        OPTION_FLUTTER_CURRENT_AB_NAME,
     ];
     // DEFAULT_SETTINGS, OVERWRITE_SETTINGS
     pub const KEYS_SETTINGS: &[&str] = &[

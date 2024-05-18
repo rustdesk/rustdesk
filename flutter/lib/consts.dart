@@ -107,14 +107,27 @@ const String kOptionFollowRemoteWindow = "follow_remote_window";
 const String kOptionZoomCursor = "zoom-cursor";
 const String kOptionShowQualityMonitor = "show_quality_monitor";
 const String kOptionDisableAudio = "disable_audio";
+const String kOptionEnableFileCopyPaste = "enable-file-copy-paste";
 // "Settings -> Display -> Other default options"
 const String kOptionDisableClipboard = "disable_clipboard";
 const String kOptionLockAfterSessionEnd = "lock_after_session_end";
 const String kOptionPrivacyMode = "privacy_mode";
 const String kOptionTouchMode = "touch-mode";
 const String kOptionI444 = "i444";
-const String kOptionSwapLeftRightMouse = 'swap-left-right-mouse';
-const String kOptionCodecPreference = 'codec-preference';
+const String kOptionSwapLeftRightMouse = "swap-left-right-mouse";
+const String kOptionCodecPreference = "codec-preference";
+const String kOptionRemoteMenubarDragLeft = "remote-menubar-drag-left";
+const String kOptionRemoteMenubarDragRight = "remote-menubar-drag-right";
+const String kOptionHideAbTagsPanel = "hideAbTagsPanel";
+const String kOptionRemoteMenubarState = "remoteMenubarState";
+const String kOptionPeerSorting = "peer-sorting";
+const String kOptionPeerTabIndex = "peer-tab-index";
+const String kOptionPeerTabOrder = "peer-tab-order";
+const String kOptionPeerTabVisible = "peer-tab-visible";
+const String kOptionPeerCardUiType = "peer-card-ui-type";
+const String kOptionCurrentAbName = "current-ab-name";
+
+const String kOptionToggleViewOnly = "view-only";
 
 const String kUrlActionClose = "close";
 

@@ -87,7 +87,7 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
       }
 
       final enableAbrRes = option2bool(
-          "enable-abr", await bind.mainGetOption(key: "enable-abr"));
+          kOptionEnableAbr, await bind.mainGetOption(key: kOptionEnableAbr));
       if (enableAbrRes != _enableAbr) {
         update = true;
         _enableAbr = enableAbrRes;
@@ -107,30 +107,30 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
         _onlyWhiteList = onlyWhiteList;
       }
 
-      final enableDirectIPAccess = option2bool(
-          'direct-server', await bind.mainGetOption(key: 'direct-server'));
+      final enableDirectIPAccess = option2bool(kOptionDirectServer,
+          await bind.mainGetOption(key: kOptionDirectServer));
       if (enableDirectIPAccess != _enableDirectIPAccess) {
         update = true;
         _enableDirectIPAccess = enableDirectIPAccess;
       }
 
-      final enableRecordSession = option2bool('enable-record-session',
-          await bind.mainGetOption(key: 'enable-record-session'));
+      final enableRecordSession = option2bool(kOptionEnableRecordSession,
+          await bind.mainGetOption(key: kOptionEnableRecordSession));
       if (enableRecordSession != _enableRecordSession) {
         update = true;
         _enableRecordSession = enableRecordSession;
       }
 
-      final enableHardwareCodec = option2bool(
-          'enable-hwcodec', await bind.mainGetOption(key: 'enable-hwcodec'));
+      final enableHardwareCodec = option2bool(kOptionEnableHwcodec,
+          await bind.mainGetOption(key: kOptionEnableHwcodec));
       if (_enableHardwareCodec != enableHardwareCodec) {
         update = true;
         _enableHardwareCodec = enableHardwareCodec;
       }
 
       final autoRecordIncomingSession = option2bool(
-          'allow-auto-record-incoming',
-          await bind.mainGetOption(key: 'allow-auto-record-incoming'));
+          kOptionAllowAutoRecordIncoming,
+          await bind.mainGetOption(key: kOptionAllowAutoRecordIncoming));
       if (autoRecordIncomingSession != _autoRecordIncomingSession) {
         update = true;
         _autoRecordIncomingSession = autoRecordIncomingSession;
@@ -161,15 +161,15 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
         _buildDate = buildDate;
       }
 
-      final allowAutoDisconnect = option2bool('allow-auto-disconnect',
-          await bind.mainGetOption(key: 'allow-auto-disconnect'));
+      final allowAutoDisconnect = option2bool(kOptionAllowAutoDisconnect,
+          await bind.mainGetOption(key: kOptionAllowAutoDisconnect));
       if (allowAutoDisconnect != _allowAutoDisconnect) {
         update = true;
         _allowAutoDisconnect = allowAutoDisconnect;
       }
 
       final autoDisconnectTimeout =
-          await bind.mainGetOption(key: 'auto-disconnect-timeout');
+          await bind.mainGetOption(key: kOptionAutoDisconnectTimeout);
       if (autoDisconnectTimeout != _autoDisconnectTimeout) {
         update = true;
         _autoDisconnectTimeout = autoDisconnectTimeout;
@@ -281,19 +281,19 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
         ]),
         initialValue: _onlyWhiteList,
         onToggle: (_) async {
-                update() async {
-                  final onlyWhiteList =
-                      (await bind.mainGetOption(key: kOptionWhitelist)) !=
-                          defaultOptionWhitelist;
-                  if (onlyWhiteList != _onlyWhiteList) {
-                    setState(() {
-                      _onlyWhiteList = onlyWhiteList;
-                    });
-                  }
-                }
+          update() async {
+            final onlyWhiteList =
+                (await bind.mainGetOption(key: kOptionWhitelist)) !=
+                    defaultOptionWhitelist;
+            if (onlyWhiteList != _onlyWhiteList) {
+              setState(() {
+                _onlyWhiteList = onlyWhiteList;
+              });
+            }
+          }
 
-                changeWhiteList(callback: update);
-              },
+          changeWhiteList(callback: update);
+        },
       ),
       SettingsTile.switchTile(
         title: Text('${translate('Adaptive bitrate')} (beta)'),

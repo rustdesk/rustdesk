@@ -323,11 +323,11 @@ class DesktopTab extends StatelessWidget {
     return buildRemoteBlock(
         child: child,
         use: () async {
-          var access_mode = await bind.mainGetOption(key: 'access-mode');
+          var access_mode = await bind.mainGetOption(key: kOptionAccessMode);
           var option = option2bool(
-              'allow-remote-config-modification',
+              kOptionAllowRemoteConfigModification,
               await bind.mainGetOption(
-                  key: 'allow-remote-config-modification'));
+                  key: kOptionAllowRemoteConfigModification));
           return access_mode == 'view' || (access_mode.isEmpty && !option);
         });
   }

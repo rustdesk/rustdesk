@@ -377,7 +377,7 @@ class _GeneralState extends State<_General> {
         _OptionCheckBox(context, 'Confirm before closing multiple tabs',
             'enable-confirm-closing-tabs',
             isServer: false),
-      _OptionCheckBox(context, 'Adaptive bitrate', 'enable-abr'),
+      _OptionCheckBox(context, 'Adaptive bitrate', kOptionEnableAbr),
       wallpaper(),
       if (!bind.isIncomingOnly()) ...[
         _OptionCheckBox(
@@ -456,9 +456,9 @@ class _GeneralState extends State<_General> {
         _OptionCheckBox(
           context,
           'Enable hardware codec',
-          'enable-hwcodec',
+          kOptionEnableHwcodec,
           update: () {
-            if (mainGetBoolOptionSync('enable-hwcodec')) {
+            if (mainGetBoolOptionSync(kOptionEnableHwcodec)) {
               bind.mainCheckHwcodec();
             }
           },
@@ -510,7 +510,7 @@ class _GeneralState extends State<_General> {
       bool user_dir_exists = map['user_dir_exists']!;
       return _Card(title: 'Recording', children: [
         _OptionCheckBox(context, 'Automatically record incoming sessions',
-            'allow-auto-record-incoming'),
+            kOptionAllowAutoRecordIncoming),
         if (showRootDir)
           Row(
             children: [
@@ -705,7 +705,7 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
     bool enabled = !locked;
     // Simple temp wrapper for PR check
     tmpWrapper() {
-      String accessMode = bind.mainGetOptionSync(key: 'access-mode');
+      String accessMode = bind.mainGetOptionSync(key: kOptionAccessMode);
       _AccessMode mode;
       if (accessMode == 'full') {
         mode = _AccessMode.full;
@@ -1347,14 +1347,14 @@ class _DisplayState extends State<_Display> {
   }
 
   Widget imageQuality(BuildContext context) {
-    final key = 'image_quality';
     onChanged(String value) async {
-      await bind.mainSetUserDefaultOption(key: key, value: value);
+      await bind.mainSetUserDefaultOption(
+          key: kOptionImageQuality, value: value);
       setState(() {});
     }
 
-    final isOptFixed = isOptionFixed(key);
-    final groupValue = bind.mainGetUserDefaultOption(key: key);
+    final isOptFixed = isOptionFixed(kOptionImageQuality);
+    final groupValue = bind.mainGetUserDefaultOption(key: kOptionImageQuality);
     return _Card(title: 'Default Image Quality', children: [
       _Radio(context,
           value: kRemoteImageQualityBest,
@@ -1484,7 +1484,7 @@ class _DisplayState extends State<_Display> {
           key: key,
           value: b
               ? 'Y'
-              : (key == kOptionEnableFileTransfer ? 'N' : defaultOptionNo));
+              : (key == kOptionEnableFileCopyPaste ? 'N' : defaultOptionNo));
       setState(() {});
     }
 
