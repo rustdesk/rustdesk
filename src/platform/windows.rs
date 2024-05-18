@@ -65,13 +65,13 @@ use windows_service::{
 use winreg::enums::*;
 use winreg::RegKey;
 
-pub const FLUTTER_RUNNER_WIN32_WINDOW_CLASS: &'static str = "FLUTTER_RUNNER_WIN32_WINDOW";
+pub const FLUTTER_RUNNER_WIN32_WINDOW_CLASS: &'static str = "FLUTTER_RUNNER_WIN32_WINDOW"; // main window, install window
 
 pub fn get_focused_display(displays: Vec<DisplayInfo>) -> Option<usize> {
     unsafe {
-        let hWnd = GetForegroundWindow();
+        let hwnd = GetForegroundWindow();
         let mut rect: RECT = mem::zeroed();
-        if GetWindowRect(hWnd, &mut rect as *mut RECT) == 0 {
+        if GetWindowRect(hwnd, &mut rect as *mut RECT) == 0 {
             return None;
         }
         displays.iter().position(|display| {
@@ -2423,19 +2423,23 @@ pub fn is_x64() -> bool {
 }
 
 #[cfg(feature = "flutter")]
-pub fn kill_flutter_main_window() {
-    // It is used to kill the hidden flutter main window process, it can also kill the install window process
-    log::info!("kill flutter main window");
+pub fn try_kill_flutter_main_window_process() {
+    // It's called when --server failed to start ipc, because the ipc may be occupied by the main window process.
+    // When --service quit the ipc process, ipc process will call std::process::exit, std::process::exit not work may be the reason.
+    // FindWindow not work in --service, https://forums.codeguru.com/showthread.php?169091-FindWindow-in-service
+    log::info!("try kill flutter main window process");
     unsafe {
         let window_name = wide_string(&crate::get_app_name());
         let class_name = wide_string(FLUTTER_RUNNER_WIN32_WINDOW_CLASS);
         let hwnd = FindWindowW(class_name.as_ptr(), window_name.as_ptr());
         if hwnd.is_null() {
+            log::info!("not found flutter main window");
             return;
         }
         let mut process_id: u32 = 0;
         GetWindowThreadProcessId(hwnd, &mut process_id as *mut u32);
         if process_id == 0 {
+            log::info!("failed to get flutter window process id");
             return;
         }
         let output = Command::new("taskkill")
@@ -2445,9 +2449,9 @@ pub fn kill_flutter_main_window() {
             .output()
             .expect("Failed to execute command");
         if output.status.success() {
-            log::info!("kill flutter main window success");
+            log::info!("kill flutter main window process success");
         } else {
-            log::error!("kill flutter main window failed");
+            log::error!("kill flutter main window process failed");
         }
     }
 }
