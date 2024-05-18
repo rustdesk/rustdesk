@@ -534,15 +534,15 @@ Future<List<TToggleMenu>> toolbarDisplayToggle(
       perms['file'] != false &&
       (isSupportIfPeer_1_2_3 || isSupportIfPeer_1_2_4)) {
     final enabled = !ffiModel.viewOnly;
-    final option = 'enable-file-transfer';
-    final value =
-        bind.sessionGetToggleOptionSync(sessionId: sessionId, arg: option);
+    final value = bind.sessionGetToggleOptionSync(
+        sessionId: sessionId, arg: kOptionEnableFileCopyPaste);
     v.add(TToggleMenu(
         value: value,
         onChanged: enabled
             ? (value) {
                 if (value == null) return;
-                bind.sessionToggleOption(sessionId: sessionId, value: option);
+                bind.sessionToggleOption(
+                    sessionId: sessionId, value: kOptionEnableFileCopyPaste);
               }
             : null,
         child: Text(translate('Enable file copy and paste'))));

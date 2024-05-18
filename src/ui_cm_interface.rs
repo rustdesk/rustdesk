@@ -79,7 +79,7 @@ struct IpcTaskRunner<T: InvokeUiCM> {
 lazy_static::lazy_static! {
     static ref CLIENTS: RwLock<HashMap<i32, Client>> = Default::default();
 }
-    
+
 static CLICK_TIME: AtomicI64 = AtomicI64::new(0);
 
 #[derive(Clone)]
@@ -574,7 +574,9 @@ pub async fn start_ipc<T: InvokeUiCM>(cm: ConnectionManager<T>) {
             feature = "unix-file-copy-paste"
         ),
     ))]
-    ContextSend::enable(Config::get_option("enable-file-transfer").is_empty());
+    ContextSend::enable(
+        Config::get_option(hbb_common::config::keys::OPTION_ENABLE_FILE_TRANSFER).is_empty(),
+    );
 
     match ipc::new_listener("_cm").await {
         Ok(mut incoming) => {

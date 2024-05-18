@@ -4,12 +4,12 @@ import 'dart:collection';
 import 'package:dynamic_layouts/dynamic_layouts.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/desktop/widgets/scroll_wrapper.dart';
 import 'package:get/get.dart';
 import 'package:provider/provider.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 import 'package:window_manager/window_manager.dart';
-import 'package:flutter_hbb/models/peer_tab_model.dart';
 
 import '../../common.dart';
 import '../../models/peer_model.dart';
@@ -45,7 +45,7 @@ class LoadEvent {
 final peerSearchText = "".obs;
 
 /// for peer sort, global obs value
-final peerSort = bind.getLocalFlutterOption(k: 'peer-sorting').obs;
+final peerSort = bind.getLocalFlutterOption(k: kOptionPeerSorting).obs;
 
 // list for listener
 final obslist = [peerSearchText, peerSort].obs;
@@ -302,7 +302,7 @@ class _PeersViewState extends State<_PeersView> with WindowListener {
     if (!PeerSortType.values.contains(sortedBy)) {
       sortedBy = PeerSortType.remoteId;
       bind.setLocalFlutterOption(
-        k: "peer-sorting",
+        k: kOptionPeerSorting,
         v: sortedBy,
       );
     }

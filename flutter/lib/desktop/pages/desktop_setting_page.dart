@@ -1484,7 +1484,7 @@ class _DisplayState extends State<_Display> {
           key: key,
           value: b
               ? 'Y'
-              : (key == kOptionEnableFileTransfer ? 'N' : defaultOptionNo));
+              : (key == kOptionEnableFileCopyPaste ? 'N' : defaultOptionNo));
       setState(() {});
     }
 

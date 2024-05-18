@@ -1503,9 +1503,9 @@ impl LoginConfigHandler {
                 BoolOption::Yes
             })
             .into();
-        } else if name == "enable-file-transfer" {
-            config.enable_file_transfer.v = !config.enable_file_transfer.v;
-            option.enable_file_transfer = (if config.enable_file_transfer.v {
+        } else if name == "enable-file-copy-paste" {
+            config.enable_file_copy_paste.v = !config.enable_file_copy_paste.v;
+            option.enable_file_transfer = (if config.enable_file_copy_paste.v {
                 BoolOption::Yes
             } else {
                 BoolOption::No
@@ -1538,7 +1538,7 @@ impl LoginConfigHandler {
                 option.disable_keyboard = f(false);
                 option.disable_clipboard = f(self.get_toggle_option("disable-clipboard"));
                 option.show_remote_cursor = f(self.get_toggle_option("show-remote-cursor"));
-                option.enable_file_transfer = f(self.config.enable_file_transfer.v);
+                option.enable_file_transfer = f(self.config.enable_file_copy_paste.v);
                 option.lock_after_session_end = f(self.config.lock_after_session_end.v);
             }
         } else {
@@ -1631,7 +1631,7 @@ impl LoginConfigHandler {
         if self.get_toggle_option("disable-audio") {
             msg.disable_audio = BoolOption::Yes.into();
         }
-        if !view_only && self.get_toggle_option("enable-file-transfer") {
+        if !view_only && self.get_toggle_option(config::keys::OPTION_ENABLE_FILE_COPY_PASTE) {
             msg.enable_file_transfer = BoolOption::Yes.into();
         }
         if view_only || self.get_toggle_option("disable-clipboard") {
@@ -1704,8 +1704,8 @@ impl LoginConfigHandler {
             self.config.lock_after_session_end.v
         } else if name == "privacy-mode" {
             self.config.privacy_mode.v
-        } else if name == "enable-file-transfer" {
-            self.config.enable_file_transfer.v
+        } else if name == config::keys::OPTION_ENABLE_FILE_COPY_PASTE {
+            self.config.enable_file_copy_paste.v
         } else if name == "disable-audio" {
             self.config.disable_audio.v
         } else if name == "disable-clipboard" {
