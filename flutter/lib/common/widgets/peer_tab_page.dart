@@ -341,7 +341,8 @@ class _PeerTabPageState extends State<PeerTabPage>
           currentValue: model.isVisibleEnabled[tabIndex],
           setter: (show) async {
             model.setTabVisible(tabIndex, show);
-            cancelFunc();
+            // Do not hide the current menu (checkbox)
+            // cancelFunc();
           },
           enabled: (!isOptVisiableFixed).obs));
     }
@@ -821,6 +822,9 @@ class _PeerViewDropdownState extends State<PeerViewDropdown> {
                                   k: kOptionPeerCardUiType,
                                   v: peerCardUiType.value.index.toString(),
                                 );
+                                if (Navigator.canPop(context)) {
+                                  Navigator.pop(context);
+                                }
                               }
                             }),
                 ),

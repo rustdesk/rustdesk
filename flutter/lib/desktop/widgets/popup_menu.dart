@@ -450,6 +450,13 @@ abstract class MenuEntrySwitchBase<T> extends MenuEntryBase<T> {
   RxBool get curOption;
   Future<void> setOption(bool? option);
 
+  tryPop(BuildContext context) {
+    if (dismissOnClicked && Navigator.canPop(context)) {
+      Navigator.pop(context);
+      super.dismissCallback?.call();
+    }
+  }
+
   @override
   List<mod_menu.PopupMenuEntry<T>> build(
       BuildContext context, MenuConfig conf) {
@@ -485,13 +492,7 @@ abstract class MenuEntrySwitchBase<T> extends MenuEntryBase<T> {
                                 value: curOption.value,
                                 onChanged: isEnabled
                                     ? (v) {
-                                        if (super.dismissOnClicked &&
-                                            Navigator.canPop(context)) {
-                                          Navigator.pop(context);
-                                          if (super.dismissCallback != null) {
-                                            super.dismissCallback!();
-                                          }
-                                        }
+                                        tryPop(context);
                                         setOption(v);
                                       }
                                     : null,
@@ -501,13 +502,7 @@ abstract class MenuEntrySwitchBase<T> extends MenuEntryBase<T> {
                                 value: curOption.value,
                                 onChanged: isEnabled
                                     ? (v) {
-                                        if (super.dismissOnClicked &&
-                                            Navigator.canPop(context)) {
-                                          Navigator.pop(context);
-                                          if (super.dismissCallback != null) {
-                                            super.dismissCallback!();
-                                          }
-                                        }
+                                        tryPop(context);
                                         setOption(v);
                                       }
                                     : null,
@@ -518,12 +513,7 @@ abstract class MenuEntrySwitchBase<T> extends MenuEntryBase<T> {
                   ])),
               onPressed: isEnabled
                   ? () {
-                      if (super.dismissOnClicked && Navigator.canPop(context)) {
-                        Navigator.pop(context);
-                        if (super.dismissCallback != null) {
-                          super.dismissCallback!();
-                        }
-                      }
+                      tryPop(context);
                       setOption(!curOption.value);
                     }
                   : null,
