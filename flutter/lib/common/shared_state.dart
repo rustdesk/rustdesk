@@ -341,7 +341,7 @@ initSharedStates(String id) {
   ShowRemoteCursorLockState.init(id);
   RemoteCursorMovedState.init(id);
   FingerprintState.init(id);
-  PeerBoolOption.init(id, 'zoom-cursor', () => false);
+  PeerBoolOption.init(id, kOptionZoomCursor, () => false);
   UnreadChatCountState.init(id);
   if (isMobile) ConnectionTypeState.init(id); // desktop in other places
 }
@@ -355,7 +355,7 @@ removeSharedStates(String id) {
   KeyboardEnabledState.delete(id);
   RemoteCursorMovedState.delete(id);
   FingerprintState.delete(id);
-  PeerBoolOption.delete(id, 'zoom-cursor');
+  PeerBoolOption.delete(id, kOptionZoomCursor);
   UnreadChatCountState.delete(id);
   if (isMobile) ConnectionTypeState.delete(id);
 }

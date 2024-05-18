@@ -1607,6 +1607,7 @@ fn read_custom_client_advanced_settings(
                 server_settings.insert(k2.to_string(), v.to_owned());
             } else {
                 let k2 = k.replace("_", "-");
+                let k = k2.replace("-", "_");
                 // display
                 display_settings.insert(k.clone(), v.to_owned());
                 display_settings.insert(k2.clone(), v.to_owned());

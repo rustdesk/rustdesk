@@ -638,7 +638,7 @@ class _RemotePageState extends State<RemotePage> {
                   gFFI.ffiModel.toggleTouchMode();
                   final v = gFFI.ffiModel.touchMode ? 'Y' : '';
                   bind.sessionPeerOption(
-                      sessionId: sessionId, name: "touch-mode", value: v);
+                      sessionId: sessionId, name: kOptionTouchMode, value: v);
                 })));
   }
 

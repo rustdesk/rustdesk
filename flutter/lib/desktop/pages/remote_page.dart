@@ -94,7 +94,7 @@ class _RemotePageState extends State<RemotePage>
 
   void _initStates(String id) {
     initSharedStates(id);
-    _zoomCursor = PeerBoolOption.find(id, 'zoom-cursor');
+    _zoomCursor = PeerBoolOption.find(id, kOptionZoomCursor);
     _showRemoteCursor = ShowRemoteCursorState.find(id);
     _keyboardEnabled = KeyboardEnabledState.find(id);
     _remoteCursorMoved = RemoteCursorMovedState.find(id);
@@ -136,7 +136,7 @@ class _RemotePageState extends State<RemotePage>
     _showRemoteCursor.value = bind.sessionGetToggleOptionSync(
         sessionId: sessionId, arg: 'show-remote-cursor');
     _zoomCursor.value = bind.sessionGetToggleOptionSync(
-        sessionId: sessionId, arg: 'zoom-cursor');
+        sessionId: sessionId, arg: kOptionZoomCursor);
     DesktopMultiWindow.addListener(this);
     // if (!_isCustomCursorInited) {
     //   customCursorController.registerNeedUpdateCursorCallback(

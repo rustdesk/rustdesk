@@ -111,7 +111,7 @@ class ServerPage extends StatefulWidget implements PageShape {
           } else if (value == kUsePermanentPassword ||
               value == kUseTemporaryPassword ||
               value == kUseBothPasswords) {
-            bind.mainSetOption(key: "verification-method", value: value);
+            bind.mainSetOption(key: kOptionVerificationMethod, value: value);
             gFFI.serverModel.updatePasswordModel();
           } else if (value.startsWith("AcceptSessionsVia")) {
             value = value.substring("AcceptSessionsVia".length);

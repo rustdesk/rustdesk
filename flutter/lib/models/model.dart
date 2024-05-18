@@ -765,7 +765,7 @@ class FfiModel with ChangeNotifier {
       _touchMode = true;
     } else {
       _touchMode = await bind.sessionGetOption(
-              sessionId: sessionId, arg: 'touch-mode') !=
+              sessionId: sessionId, arg: kOptionTouchMode) !=
           '';
     }
     if (connType == ConnType.fileTransfer) {

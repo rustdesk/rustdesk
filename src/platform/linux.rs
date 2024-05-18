@@ -1,6 +1,6 @@
 use super::{CursorData, ResultType};
 use desktop::Desktop;
-use hbb_common::config::CONFIG_OPTION_ALLOW_LINUX_HEADLESS;
+use hbb_common::config::keys::OPTION_ALLOW_LINUX_HEADLESS;
 pub use hbb_common::platform::linux::*;
 use hbb_common::{
     allow_err,
@@ -95,7 +95,7 @@ pub struct xcb_xfixes_get_cursor_image {
 
 #[inline]
 pub fn is_headless_allowed() -> bool {
-    Config::get_option(CONFIG_OPTION_ALLOW_LINUX_HEADLESS) == "Y"
+    Config::get_option(OPTION_ALLOW_LINUX_HEADLESS) == "Y"
 }
 
 #[inline]

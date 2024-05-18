@@ -125,8 +125,8 @@ class ServerModel with ChangeNotifier {
     /*
     // initital _hideCm at startup
     final verificationMethod =
-        bind.mainGetOptionSync(key: "verification-method");
-    final approveMode = bind.mainGetOptionSync(key: 'approve-mode');
+        bind.mainGetOptionSync(key: kOptionVerificationMethod);
+    final approveMode = bind.mainGetOptionSync(key: kOptionApproveMode);
     _hideCm = option2bool(
         'allow-hide-cm', bind.mainGetOptionSync(key: 'allow-hide-cm'));
     if (!(approveMode == 'password' &&
@@ -187,18 +187,19 @@ class ServerModel with ChangeNotifier {
     if (androidVersion < 30 ||
         !await AndroidPermissionManager.check(kRecordAudio)) {
       _audioOk = false;
-      bind.mainSetOption(key: "enable-audio", value: "N");
+      bind.mainSetOption(key: kOptionEnableAudio, value: "N");
     } else {
-      final audioOption = await bind.mainGetOption(key: 'enable-audio');
+      final audioOption = await bind.mainGetOption(key: kOptionEnableAudio);
       _audioOk = audioOption.isEmpty;
     }
 
     // file
     if (!await AndroidPermissionManager.check(kManageExternalStorage)) {
       _fileOk = false;
-      bind.mainSetOption(key: "enable-file-transfer", value: "N");
+      bind.mainSetOption(key: kOptionEnableFileTransfer, value: "N");
     } else {
-      final fileOption = await bind.mainGetOption(key: 'enable-file-transfer');
+      final fileOption =
+          await bind.mainGetOption(key: kOptionEnableFileTransfer);
       _fileOk = fileOption.isEmpty;
     }
 
@@ -209,10 +210,10 @@ class ServerModel with ChangeNotifier {
     var update = false;
     final temporaryPassword = await bind.mainGetTemporaryPassword();
     final verificationMethod =
-        await bind.mainGetOption(key: "verification-method");
+        await bind.mainGetOption(key: kOptionVerificationMethod);
     final temporaryPasswordLength =
         await bind.mainGetOption(key: "temporary-password-length");
-    final approveMode = await bind.mainGetOption(key: 'approve-mode');
+    final approveMode = await bind.mainGetOption(key: kOptionApproveMode);
     /*
     var hideCm = option2bool(
         'allow-hide-cm', await bind.mainGetOption(key: 'allow-hide-cm'));
@@ -283,7 +284,8 @@ class ServerModel with ChangeNotifier {
     }
 
     _audioOk = !_audioOk;
-    bind.mainSetOption(key: "enable-audio", value: _audioOk ? defaultOptionYes : 'N');
+    bind.mainSetOption(
+        key: kOptionEnableAudio, value: _audioOk ? defaultOptionYes : 'N');
     notifyListeners();
   }
 
@@ -302,7 +304,9 @@ class ServerModel with ChangeNotifier {
     }
 
     _fileOk = !_fileOk;
-    bind.mainSetOption(key: kOptionEnableFileTransfer, value: _fileOk ? defaultOptionYes : 'N');
+    bind.mainSetOption(
+        key: kOptionEnableFileTransfer,
+        value: _fileOk ? defaultOptionYes : 'N');
     notifyListeners();
   }
 
@@ -445,7 +449,9 @@ class ServerModel with ChangeNotifier {
         break;
       case "input":
         if (_inputOk != value) {
-          bind.mainSetOption(key: kOptionEnableKeyboard, value: value ? defaultOptionYes : 'N');
+          bind.mainSetOption(
+              key: kOptionEnableKeyboard,
+              value: value ? defaultOptionYes : 'N');
         }
         _inputOk = value;
         break;
