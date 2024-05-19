@@ -1323,11 +1323,9 @@ serde_field_bool!(
     default_disable_audio,
     "DisableAudio::default_disable_audio"
 );
-// The key is enable_file_transfer, but no need to keep the old name.
-// This option should always be true.
 serde_field_bool!(
     EnableFileCopyPaste,
-    "enable_file_copy_paste",
+    "enable-file-copy-paste",
     default_enable_file_copy_paste,
     "EnableFileCopyPaste::default_enable_file_copy_paste"
 );
