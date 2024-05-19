@@ -2169,6 +2169,11 @@ void changeSocks5Proxy() async {
   var pwdController = TextEditingController(text: password);
   RxBool obscure = true.obs;
 
+  // proxy settings
+  // The following option is a not real key, it is just used for custom client advanced settings.
+  const String optionProxyUrl = "proxy-url";
+  final isOptFixed = isOptionFixed(optionProxyUrl);
+
   var isInProgress = false;
   gFFI.dialogManager.show((setState, close, context) {
     submit() async {
@@ -2246,6 +2251,7 @@ void changeSocks5Proxy() async {
                     ),
                     controller: proxyController,
                     autofocus: true,
+                    enabled: !isOptFixed,
                   ),
                 ),
               ],
@@ -2261,6 +2267,7 @@ void changeSocks5Proxy() async {
                 Expanded(
                   child: TextField(
                     controller: userController,
+                    enabled: isInProgress,
                   ),
                 ),
               ],
@@ -2283,6 +2290,7 @@ void changeSocks5Proxy() async {
                                     ? Icons.visibility_off
                                     : Icons.visibility))),
                         controller: pwdController,
+                        enabled: !isOptFixed,
                       )),
                 ),
               ],
@@ -2295,7 +2303,7 @@ void changeSocks5Proxy() async {
       ),
       actions: [
         dialogButton('Cancel', onPressed: close, isOutline: true),
-        dialogButton('OK', onPressed: submit),
+        if (!isOptFixed) dialogButton('OK', onPressed: submit),
       ],
       onSubmit: submit,
       onCancel: close,
