@@ -177,7 +177,7 @@ void changeIdDialog() {
 }
 
 void changeWhiteList({Function()? callback}) async {
-  final curWhiteList = await bind.mainGetOption(key: kOptionWhitelist);
+  final curWhiteList = (await bind.mainGetOption(key: kOptionWhitelist)).trim();
   var newWhiteListField = curWhiteList == defaultOptionWhitelist
       ? ''
       : curWhiteList.split(',').join('\n');
