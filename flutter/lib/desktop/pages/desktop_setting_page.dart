@@ -392,12 +392,13 @@ class _GeneralState extends State<_General> {
           child: _OptionCheckBox(context, "Always use software rendering",
               kOptionAllowAlwaysSoftwareRender),
         ),
-        _OptionCheckBox(
-          context,
-          'Check for software update on startup',
-          kOptionEnableCheckUpdate,
-          isServer: false,
-        )
+        if (!bind.isCustomClient())
+          _OptionCheckBox(
+            context,
+            'Check for software update on startup',
+            kOptionEnableCheckUpdate,
+            isServer: false,
+          )
       ],
     ];
     if (bind.mainShowOption(key: kOptionAllowLinuxHeadless)) {
