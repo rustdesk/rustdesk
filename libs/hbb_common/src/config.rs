@@ -1014,8 +1014,30 @@ impl Config {
         config.store();
     }
 
+    #[inline]
+    fn get_socks_from_custom_client_advanced_settings(
+        settings: &HashMap<String, String>,
+    ) -> Option<Socks5Server> {
+        let url = settings.get(keys::OPTION_PROXY_URL)?;
+        Some(Socks5Server {
+            proxy: url.to_owned(),
+            username: settings
+                .get(keys::OPTION_PROXY_USERNAME)
+                .map(|x| x.to_string())
+                .unwrap_or_default(),
+            password: settings
+                .get(keys::OPTION_PROXY_PASSWORD)
+                .map(|x| x.to_string())
+                .unwrap_or_default(),
+        })
+    }
+
     pub fn get_socks() -> Option<Socks5Server> {
-        CONFIG2.read().unwrap().socks.clone()
+        Self::get_socks_from_custom_client_advanced_settings(&OVERWRITE_SETTINGS.read().unwrap())
+            .or(CONFIG2.read().unwrap().socks.clone())
+            .or(Self::get_socks_from_custom_client_advanced_settings(
+                &DEFAULT_SETTINGS.read().unwrap(),
+            ))
     }
 
     #[inline]
@@ -1024,10 +1046,26 @@ impl Config {
     }
 
     pub fn get_network_type() -> NetworkType {
-        match &CONFIG2.read().unwrap().socks {
-            None => NetworkType::Direct,
-            Some(_) => NetworkType::ProxySocks,
+        if OVERWRITE_SETTINGS
+            .read()
+            .unwrap()
+            .get(keys::OPTION_PROXY_URL)
+            .is_some()
+        {
+            return NetworkType::ProxySocks;
         }
+        if CONFIG2.read().unwrap().socks.is_some() {
+            return NetworkType::ProxySocks;
+        }
+        if DEFAULT_SETTINGS
+            .read()
+            .unwrap()
+            .get(keys::OPTION_PROXY_URL)
+            .is_some()
+        {
+            return NetworkType::ProxySocks;
+        }
+        NetworkType::Direct
     }
 
     pub fn get() -> Config {
@@ -2056,6 +2094,13 @@ pub mod keys {
     pub const OPTION_FLUTTER_PEER_CARD_UI_TYLE: &str = "peer-card-ui-type";
     pub const OPTION_FLUTTER_CURRENT_AB_NAME: &str = "current-ab-name";
 
+    // proxy settings
+    // The following options are not real keys, they are just used for custom client advanced settings.
+    // The real keys are in Config2::socks.
+    pub const OPTION_PROXY_URL: &str = "proxy-url";
+    pub const OPTION_PROXY_USERNAME: &str = "proxy-username";
+    pub const OPTION_PROXY_PASSWORD: &str = "proxy-password";
+
     // DEFAULT_DISPLAY_SETTINGS, OVERWRITE_DISPLAY_SETTINGS
     pub const KEYS_DISPLAY_SETTINGS: &[&str] = &[
         OPTION_VIEW_ONLY,
@@ -2131,6 +2176,9 @@ pub mod keys {
         OPTION_ALLOW_LINUX_HEADLESS,
         OPTION_ENABLE_HWCODEC,
         OPTION_APPROVE_MODE,
+        OPTION_PROXY_URL,
+        OPTION_PROXY_USERNAME,
+        OPTION_PROXY_PASSWORD,
     ];
 }
 
