@@ -375,7 +375,7 @@ class _GeneralState extends State<_General> {
     final children = <Widget>[
       if (!bind.isIncomingOnly())
         _OptionCheckBox(context, 'Confirm before closing multiple tabs',
-            'enable-confirm-closing-tabs',
+            kOptionEnableConfirmClosingTabs,
             isServer: false),
       _OptionCheckBox(context, 'Adaptive bitrate', kOptionEnableAbr),
       wallpaper(),
@@ -390,19 +390,19 @@ class _GeneralState extends State<_General> {
         Tooltip(
           message: translate('software_render_tip'),
           child: _OptionCheckBox(context, "Always use software rendering",
-              'allow-always-software-render'),
+              kOptionAllowAlwaysSoftwareRender),
         ),
         _OptionCheckBox(
           context,
           'Check for software update on startup',
-          'enable-check-update',
+          kOptionEnableCheckUpdate,
           isServer: false,
         )
       ],
     ];
-    if (bind.mainShowOption(key: 'allow-linux-headless')) {
+    if (bind.mainShowOption(key: kOptionAllowLinuxHeadless)) {
       children.add(_OptionCheckBox(
-          context, 'Allow linux headless', 'allow-linux-headless'));
+          context, 'Allow linux headless', kOptionAllowLinuxHeadless));
     }
     return _Card(title: 'Other', children: children);
   }
@@ -417,15 +417,14 @@ class _GeneralState extends State<_General> {
       return support;
     }(), hasData: (data) {
       if (data is bool && data == true) {
-        final option = 'allow-remove-wallpaper';
-        bool value = mainGetBoolOptionSync(option);
+        bool value = mainGetBoolOptionSync(kOptionAllowRemoveWallpaper);
         return Row(
           children: [
             Flexible(
               child: _OptionCheckBox(
                 context,
                 'Remove wallpaper during incoming sessions',
-                option,
+                kOptionAllowRemoveWallpaper,
                 update: () {
                   setState(() {});
                 },
