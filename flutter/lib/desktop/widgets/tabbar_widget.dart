@@ -812,9 +812,9 @@ Future<bool> closeConfirmDialog() async {
   var confirm = true;
   final res = await gFFI.dialogManager.show<bool>((setState, close, context) {
     submit() {
-      final opt = "enable-confirm-closing-tabs";
-      String value = bool2option(opt, confirm);
-      bind.mainSetLocalOption(key: opt, value: value);
+      String value = bool2option(kOptionEnableConfirmClosingTabs, confirm);
+      bind.mainSetLocalOption(
+          key: kOptionEnableConfirmClosingTabs, value: value);
       close(true);
     }
 
