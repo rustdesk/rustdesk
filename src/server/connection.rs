@@ -1168,18 +1168,21 @@ impl Connection {
         }
         #[cfg(target_os = "linux")]
         if !self.file_transfer.is_some() && !self.port_forward_socket.is_some() {
-            let dtype = crate::platform::linux::get_display_server();
-            if dtype != crate::platform::linux::DISPLAY_SERVER_X11
-                && dtype != crate::platform::linux::DISPLAY_SERVER_WAYLAND
-            {
-                let msg = if crate::platform::linux::is_login_screen_wayland() {
-                    crate::client::LOGIN_SCREEN_WAYLAND.to_owned()
-                } else {
-                    format!(
+            let mut msg = "".to_string();
+            if crate::platform::linux::is_login_screen_wayland() {
+                msg = crate::client::LOGIN_SCREEN_WAYLAND.to_owned()
+            } else {
+                let dtype = crate::platform::linux::get_display_server();
+                if dtype != crate::platform::linux::DISPLAY_SERVER_X11
+                    && dtype != crate::platform::linux::DISPLAY_SERVER_WAYLAND
+                {
+                    msg = format!(
                         "Unsupported display server type \"{}\", x11 or wayland expected",
                         dtype
-                    )
-                };
+                    );
+                }
+            }
+            if !msg.is_empty() {
                 res.set_error(msg);
                 let mut msg_out = Message::new();
                 msg_out.set_login_response(res);
