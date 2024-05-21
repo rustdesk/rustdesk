@@ -1241,7 +1241,7 @@ mod desktop {
                 return;
             }
 
-            let seat0_values = get_values_of_seat0(&[0, 1, 2]);
+            let seat0_values = get_values_of_seat0_with_gdm_wayland(&[0, 1, 2]);
             if seat0_values[0].is_empty() {
                 *self = Self::default();
                 self.is_rustdesk_subprocess = false;
