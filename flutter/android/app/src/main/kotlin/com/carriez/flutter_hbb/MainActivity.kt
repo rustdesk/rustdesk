@@ -265,6 +265,9 @@ class MainActivity : FlutterActivity() {
             w = dm.widthPixels
             h = dm.heightPixels
         }
+        val align = 64
+        w = (w + align - 1) / align * align
+        h = (h + align - 1) / align * align
         codecs.forEach { codec ->
             val codecObject = JSONObject()
             codecObject.put("name", codec.name)
@@ -281,21 +284,23 @@ class MainActivity : FlutterActivity() {
                     hw = true
                 }
             }
+            if (hw != true) {
+                return@forEach
+            }
             codecObject.put("hw", hw)
             var mime_type = ""
             codec.supportedTypes.forEach { type ->
-                if (listOf("video/avc", "video/hevc", "video/x-vnd.on2.vp8", "video/x-vnd.on2.vp9", "video/av01").contains(type)) {
+                if (listOf("video/avc", "video/hevc").contains(type)) { // "video/x-vnd.on2.vp8", "video/x-vnd.on2.vp9", "video/av01"
                     mime_type = type;
                 }
             }
             if (mime_type.isNotEmpty()) {
                 codecObject.put("mime_type", mime_type)
                 val caps = codec.getCapabilitiesForType(mime_type)
-                var usable = true;
                 if (codec.isEncoder) {
                     // Encoder‘s max_height and max_width are interchangeable
                     if (!caps.videoCapabilities.isSizeSupported(w,h) && !caps.videoCapabilities.isSizeSupported(h,w)) {
-                        usable = false
+                        return@forEach
                     }
                 }
                 codecObject.put("min_width", caps.videoCapabilities.supportedWidths.lower)
@@ -307,7 +312,7 @@ class MainActivity : FlutterActivity() {
                 val nv12 = caps.colorFormats.contains(COLOR_FormatYUV420SemiPlanar)
                 codecObject.put("nv12", nv12)
                 if (!(nv12 || surface)) {
-                    usable = false
+                    return@forEach
                 }
                 codecObject.put("min_bitrate", caps.videoCapabilities.bitrateRange.lower / 1000)
                 codecObject.put("max_bitrate", caps.videoCapabilities.bitrateRange.upper / 1000)
@@ -316,9 +321,10 @@ class MainActivity : FlutterActivity() {
                         codecObject.put("low_latency", caps.isFeatureSupported(MediaCodecInfo.CodecCapabilities.FEATURE_LowLatency))
                     }
                 }
-                if (usable) {
-                    codecArray.put(codecObject)
+                if (!codec.isEncoder) {
+                    return@forEach
                 }
+                codecArray.put(codecObject)
             }
         }
         val result = JSONObject()
