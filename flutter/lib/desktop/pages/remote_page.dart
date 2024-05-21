@@ -210,6 +210,22 @@ class _RemotePageState extends State<RemotePage>
   }
 
   @override
+  void onWindowEnterFullScreen() {
+    super.onWindowEnterFullScreen();
+    if (isMacOS) {
+      stateGlobal.setFullscreen(true);
+    }
+  }
+
+  @override
+  void onWindowLeaveFullScreen() {
+    super.onWindowLeaveFullScreen();
+    if (isMacOS) {
+      stateGlobal.setFullscreen(false);
+    }
+  }
+
+  @override
   Future<void> dispose() async {
     final closeSession = closeSessionOnDispose.remove(widget.id) ?? true;
 
