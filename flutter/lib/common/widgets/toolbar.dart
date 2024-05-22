@@ -362,7 +362,8 @@ Future<List<TRadioMenu<String>>> toolbarCodec(
   }
 
   var autoLabel = translate('Auto');
-  if (groupValue == 'auto') {
+  if (groupValue == 'auto' &&
+      ffi.qualityMonitorModel.data.codecFormat != null) {
     autoLabel = '$autoLabel (${ffi.qualityMonitorModel.data.codecFormat})';
   }
   return [
@@ -380,7 +381,6 @@ Future<List<TToggleMenu>> toolbarCursor(
   List<TToggleMenu> v = [];
   final ffiModel = ffi.ffiModel;
   final pi = ffiModel.pi;
-  final perms = ffiModel.permissions;
   final sessionId = ffi.sessionId;
 
   // show remote cursor

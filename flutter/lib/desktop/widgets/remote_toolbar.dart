@@ -1067,7 +1067,6 @@ class _DisplayMenuState extends State<_DisplayMenu> {
             id: widget.id,
             ffi: widget.ffi,
           ),
-        Divider(),
         cursorToggles(),
         Divider(),
         toggles(),
@@ -1219,14 +1218,16 @@ class _DisplayMenuState extends State<_DisplayMenu> {
         hasData: (data) {
           final v = data as List<TToggleMenu>;
           if (v.isEmpty) return Offstage();
-          return Column(
-              children: v
-                  .map((e) => CkbMenuButton(
-                      value: e.value,
-                      onChanged: e.onChanged,
-                      child: e.child,
-                      ffi: ffi))
-                  .toList());
+          return Column(children: [
+            Divider(),
+            ...v
+                .map((e) => CkbMenuButton(
+                    value: e.value,
+                    onChanged: e.onChanged,
+                    child: e.child,
+                    ffi: ffi))
+                .toList(),
+          ]);
         });
   }
 
