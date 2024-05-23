@@ -350,15 +350,6 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
 
   void onRemoveId(String id) async {
     if (tabController.state.value.tabs.isEmpty) {
-      if (stateGlobal.fullscreen.isTrue) {
-        if (isLinux) {
-          // If the window is left fullscreen and then reuse, the frame state will be incorrect when exit fullscreen the next time.
-          // State `fullscreen -> hide -> show -> exit fullscreen`, then the window will be maximized and overlapped.
-          // No idea how the strange state comes, just a **workaround**.
-          await WindowController.fromWindowId(windowId()).setFullscreen(false);
-        }
-        stateGlobal.setFullscreen(false, procWnd: false);
-      }
       // Keep calling until the window status is hidden.
       //
       // Workaround for Windows:
@@ -424,16 +415,16 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
       final display = args['display'];
       final displays = args['displays'];
       final screenRect = parseParamScreenRect(args);
-      windowOnTop(windowId());
-      setNewConnectWindowFrame(windowId(), id!, screenRect);
-      if (tabController.length == 0) {
-        // Show the hidden window.
-        if (isMacOS && stateGlobal.closeOnFullscreen == true) {
-          stateGlobal.setFullscreen(true);
+      Future.delayed(Duration.zero, () async {
+        if (stateGlobal.fullscreen.isTrue) {
+          await WindowController.fromWindowId(windowId()).setFullscreen(false);
+          stateGlobal.setFullscreen(false, procWnd: false);
         }
-        // Reset the state
-        stateGlobal.closeOnFullscreen = null;
-      }
+        await setNewConnectWindowFrame(windowId(), id!, screenRect);
+        Future.delayed(Duration(milliseconds: isWindows ? 100 : 0), () async {
+          await windowOnTop(windowId());
+        });
+      });
       ConnectionTypeState.init(id);
       _toolbarState.setShow(
           bind.mainGetUserDefaultOption(key: kOptionCollapseToolbar) != 'Y');

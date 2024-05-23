@@ -1567,8 +1567,7 @@ Future<void> saveWindowPosition(WindowType type, {int? windowId}) async {
   late Offset position;
   late Size sz;
   late bool isMaximized;
-  bool isFullscreen = stateGlobal.fullscreen.isTrue ||
-      (isMacOS && stateGlobal.closeOnFullscreen == true);
+  bool isFullscreen = stateGlobal.fullscreen.isTrue;
   setPreFrame() {
     final pos = bind.getLocalFlutterOption(k: windowFramePrefix + type.name);
     var lpos = LastWindowPosition.loadFromString(pos);
@@ -1890,7 +1889,6 @@ Future<bool> restoreWindowPosition(WindowType type,
       }
       if (lpos.isFullscreen == true) {
         if (!isMacOS) {
-          stateGlobal.setFullscreen(false);
           await restoreFrame();
         }
         // An duration is needed to avoid the window being restored after fullscreen.
@@ -2906,10 +2904,10 @@ openMonitorInNewTabOrWindow(int i, String peerId, PeerInfo pi,
 
 setNewConnectWindowFrame(int windowId, String peerId, Rect? screenRect) async {
   if (screenRect == null) {
-    restoreWindowPosition(WindowType.RemoteDesktop,
+    await restoreWindowPosition(WindowType.RemoteDesktop,
         windowId: windowId, peerId: peerId);
   } else {
-    tryMoveToScreenAndSetFullscreen(screenRect);
+    await tryMoveToScreenAndSetFullscreen(screenRect);
   }
 }
 

@@ -18,8 +18,6 @@ class StateGlobal {
   final RxDouble _windowBorderWidth = RxDouble(kWindowBorderWidth);
   final RxBool showRemoteToolBar = false.obs;
   final svcStatus = SvcStatus.notReady.obs;
-  // Only used for macOS
-  bool? closeOnFullscreen;
   final RxBool isFocused = false.obs;
 
   String _inputSource = '';
