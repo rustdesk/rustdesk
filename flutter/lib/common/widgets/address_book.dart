@@ -190,6 +190,40 @@ class _AddressBookState extends State<AddressBook> {
     if (!names.contains(gFFI.abModel.currentName.value)) {
       return Offstage();
     }
+    // order: personal, divider, character order
+    // https://pub.dev/packages/dropdown_button2#3-dropdownbutton2-with-items-of-different-heights-like-dividers
+    final personalAddressBookName = gFFI.abModel.personalAddressBookName();
+    bool contains = names.remove(personalAddressBookName);
+    names.sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+    if (contains) {
+      names.insert(0, personalAddressBookName);
+    }
+    final items = names
+        .map((e) => DropdownMenuItem(
+            value: e,
+            child: Row(
+              children: [
+                Expanded(
+                  child: Tooltip(
+                      waitDuration: Duration(milliseconds: 500),
+                      message: gFFI.abModel.translatedName(e),
+                      child: Text(
+                        gFFI.abModel.translatedName(e),
+                        style: TextStyle(fontSize: 14.0),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      )),
+                ),
+              ],
+            )))
+        .toList();
+    var menuItemStyleData = MenuItemStyleData(height: 36);
+    if (contains && items.length > 1) {
+      items.insert(1, DropdownMenuItem(enabled: false, child: Divider()));
+      List<double> customHeights = List.filled(items.length, 36);
+      customHeights[1] = 4;
+      menuItemStyleData = MenuItemStyleData(customHeights: customHeights);
+    }
     final TextEditingController textEditingController = TextEditingController();
 
     final isOptFixed = isOptionFixed(kOptionCurrentAbName);
@@ -208,26 +242,8 @@ class _AddressBookState extends State<AddressBook> {
         color: Theme.of(context).dividerColor.withOpacity(0.1),
       ),
       buttonStyleData: ButtonStyleData(height: 48),
-      menuItemStyleData: MenuItemStyleData(height: 36),
-      items: names
-          .map((e) => DropdownMenuItem(
-              value: e,
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Tooltip(
-                        waitDuration: Duration(milliseconds: 500),
-                        message: gFFI.abModel.translatedName(e),
-                        child: Text(
-                          gFFI.abModel.translatedName(e),
-                          style: TextStyle(fontSize: 14.0),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        )),
-                  ),
-                ],
-              )))
-          .toList(),
+      menuItemStyleData: menuItemStyleData,
+      items: items,
       isExpanded: true,
       dropdownSearchData: DropdownSearchData(
         searchController: textEditingController,
