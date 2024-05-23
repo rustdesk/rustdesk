@@ -174,7 +174,9 @@ class RustDeskMultiWindowManager {
                   windowId: windowId, peerId: remoteId);
             }
             await DesktopMultiWindow.invokeMethod(windowId, methodName, msg);
-            WindowController.fromWindowId(windowId).show();
+            if (methodName != kWindowEventNewRemoteDesktop) {
+              WindowController.fromWindowId(windowId).show();
+            }
             registerActiveWindow(windowId);
             return MultiWindowCallResult(windowId, null);
           }

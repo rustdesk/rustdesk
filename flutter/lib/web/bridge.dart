@@ -203,12 +203,6 @@ class RustdeskImpl {
         ]));
   }
 
-  Future<String?> sessionGetFlutterOptionByPeerId(
-      {required String id, required String k, dynamic hint}) {
-    return Future(
-        () => js.context.callMethod('getByName', ['option:flutter:peer', k]));
-  }
-
   int getNextTextureKey({dynamic hint}) {
     return 0;
   }

@@ -278,15 +278,6 @@ pub fn session_set_flutter_option(session_id: SessionID, k: String, v: String) {
     }
 }
 
-// This function is only used for the default connection session.
-pub fn session_get_flutter_option_by_peer_id(id: String, k: String) -> Option<String> {
-    if let Some(session) = sessions::get_session_by_peer_id(id, ConnType::DEFAULT_CONN) {
-        Some(session.get_flutter_option(k))
-    } else {
-        None
-    }
-}
-
 pub fn get_next_texture_key() -> SyncReturn<i32> {
     let k = TEXTURE_RENDER_KEY.fetch_add(1, Ordering::SeqCst) + 1;
     SyncReturn(k)
