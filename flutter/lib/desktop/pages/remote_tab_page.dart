@@ -350,7 +350,15 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
 
   void onRemoveId(String id) async {
     if (tabController.state.value.tabs.isEmpty) {
-      stateGlobal.setFullscreen(false, procWnd: false);
+      if (stateGlobal.fullscreen.isTrue) {
+        if (isLinux) {
+          // If the window is left fullscreen and then reuse, the frame state will be incorrect when exit fullscreen the next time.
+          // State `fullscreen -> hide -> show -> exit fullscreen`, then the window will be maximized and overlapped.
+          // No idea how the strange state comes, just a **workaround**.
+          await WindowController.fromWindowId(windowId()).setFullscreen(false);
+        }
+        stateGlobal.setFullscreen(false, procWnd: false);
+      }
       // Keep calling until the window status is hidden.
       //
       // Workaround for Windows:
@@ -417,7 +425,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
       final displays = args['displays'];
       final screenRect = parseParamScreenRect(args);
       windowOnTop(windowId());
-      tryMoveToScreenAndSetFullscreen(screenRect);
+      setNewConnectWindowFrame(windowId(), id!, screenRect);
       if (tabController.length == 0) {
         // Show the hidden window.
         if (isMacOS && stateGlobal.closeOnFullscreen == true) {
@@ -522,6 +530,8 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
           returnValue = jsonEncode(coords.toJson());
         }
       }
+    } else if (call.method == kWindowEventSetFullscreen) {
+      stateGlobal.setFullscreen(call.arguments == 'true');
     }
     _update_remote_count();
     return returnValue;
