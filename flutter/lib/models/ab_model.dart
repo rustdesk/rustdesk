@@ -510,7 +510,8 @@ class AbModel {
   }
 
   void setShouldAsync(bool v) async {
-    await bind.mainSetLocalOption(key: syncAbOption, value: v ? 'Y' : defaultOptionNo);
+    await bind.mainSetLocalOption(
+        key: syncAbOption, value: v ? 'Y' : defaultOptionNo);
     _syncAllFromRecent = true;
     _timerCounter = 0;
   }
@@ -646,6 +647,10 @@ class AbModel {
 
   List<String> addressBookNames() {
     return addressbooks.keys.toList();
+  }
+
+  String personalAddressBookName() {
+    return _personalAddressBookName;
   }
 
   Future<void> setCurrentName(String name) async {
