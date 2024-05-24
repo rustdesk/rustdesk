@@ -90,6 +90,8 @@ class _RemotePageState extends State<RemotePage> {
     super.dispose();
     gFFI.dialogManager.hideMobileActionsOverlay();
     gFFI.inputModel.listenToMouse(false);
+    gFFI.imageModel.disposeImage();
+    gFFI.cursorModel.disposeImages();
     await gFFI.invokeMethod("enable_soft_keyboard", true);
     _mobileFocusNode.dispose();
     _physicalFocusNode.dispose();
