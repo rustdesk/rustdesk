@@ -157,6 +157,7 @@ const String kKeyReverseMouseWheel = "reverse_mouse_wheel";
 const String kEnvPortableExecutable = "RUSTDESK_APPNAME";
 
 const Color kColorWarn = Color.fromARGB(255, 245, 133, 59);
+const Color kColorCanvas = Colors.black;
 
 const int kMobileDefaultDisplayWidth = 720;
 const int kMobileDefaultDisplayHeight = 1280;
