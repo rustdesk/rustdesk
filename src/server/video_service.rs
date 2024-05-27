@@ -53,7 +53,7 @@ use scrap::{
     codec::{Encoder, EncoderCfg, Quality},
     record::{Recorder, RecorderContext},
     vpxcodec::{VpxEncoderConfig, VpxVideoCodecId},
-    CodecFormat, Display, EncodeInput, Frame, TraitCapturer,
+    CodecFormat, Display, EncodeInput, TraitCapturer,
 };
 #[cfg(windows)]
 use std::sync::Once;

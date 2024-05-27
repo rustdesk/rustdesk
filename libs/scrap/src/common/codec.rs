@@ -417,7 +417,7 @@ impl Encoder {
 impl Decoder {
     pub fn supported_decodings(
         id_for_perfer: Option<&str>,
-        _flutter: bool,
+        _use_texture_render: bool,
         _luid: Option<i64>,
         mark_unsupported: &Vec<CodecFormat>,
     ) -> SupportedDecoding {
@@ -452,7 +452,7 @@ impl Decoder {
             };
         }
         #[cfg(feature = "vram")]
-        if enable_vram_option() && _flutter {
+        if enable_vram_option() && _use_texture_render {
             decoding.ability_h264 |= if VRamDecoder::available(CodecFormat::H264, _luid).len() > 0 {
                 1
             } else {

@@ -16,7 +16,6 @@ import '../../common.dart';
 import '../../common/widgets/dialog.dart';
 import '../../common/widgets/toolbar.dart';
 import '../../models/model.dart';
-import '../../models/desktop_render_texture.dart';
 import '../../models/platform_model.dart';
 import '../../common/shared_state.dart';
 import '../../utils/image.dart';
@@ -593,12 +592,11 @@ class _ImagePaintState extends State<ImagePaint> {
               onHover: (evt) {},
               child: child);
         });
-
     if (c.imageOverflow.isTrue && c.scrollStyle == ScrollStyle.scrollbar) {
       final paintWidth = c.getDisplayWidth() * s;
       final paintHeight = c.getDisplayHeight() * s;
       final paintSize = Size(paintWidth, paintHeight);
-      final paintWidget = useTextureRender
+      final paintWidget = m.useTextureRender
           ? _BuildPaintTextureRender(
               c, s, Offset.zero, paintSize, isViewOriginal())
           : _buildScrollbarNonTextureRender(m, paintSize, s);
@@ -619,7 +617,7 @@ class _ImagePaintState extends State<ImagePaint> {
           ));
     } else {
       if (c.size.width > 0 && c.size.height > 0) {
-        final paintWidget = useTextureRender
+        final paintWidget = m.useTextureRender
             ? _BuildPaintTextureRender(
                 c,
                 s,

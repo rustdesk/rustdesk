@@ -11,15 +11,10 @@ import './platform_model.dart';
 import 'package:texture_rgba_renderer/texture_rgba_renderer.dart'
     if (dart.library.html) 'package:flutter_hbb/web/texture_rgba_renderer.dart';
 
-// Feature flutter_texture_render need to be enabled if feature vram is enabled.
-final useTextureRender = !isWeb &&
-    (bind.mainHasPixelbufferTextureRender() || bind.mainHasGpuTextureRender());
-
 class _PixelbufferTexture {
   int _textureKey = -1;
   int _display = 0;
   SessionID? _sessionId;
-  final support = bind.mainHasPixelbufferTextureRender();
   bool _destroying = false;
   int? _id;
 
@@ -28,26 +23,24 @@ class _PixelbufferTexture {
   int get display => _display;
 
   create(int d, SessionID sessionId, FFI ffi) {
-    if (support) {
-      _display = d;
-      _textureKey = bind.getNextTextureKey();
-      _sessionId = sessionId;
+    _display = d;
+    _textureKey = bind.getNextTextureKey();
+    _sessionId = sessionId;
 
-      textureRenderer.createTexture(_textureKey).then((id) async {
-        _id = id;
-        if (id != -1) {
-          ffi.textureModel.setRgbaTextureId(display: d, id: id);
-          final ptr = await textureRenderer.getTexturePtr(_textureKey);
-          platformFFI.registerPixelbufferTexture(sessionId, display, ptr);
-          debugPrint(
-              "create pixelbuffer texture: peerId: ${ffi.id} display:$_display, textureId:$id, texturePtr:$ptr");
-        }
-      });
-    }
+    textureRenderer.createTexture(_textureKey).then((id) async {
+      _id = id;
+      if (id != -1) {
+        ffi.textureModel.setRgbaTextureId(display: d, id: id);
+        final ptr = await textureRenderer.getTexturePtr(_textureKey);
+        platformFFI.registerPixelbufferTexture(sessionId, display, ptr);
+        debugPrint(
+            "create pixelbuffer texture: peerId: ${ffi.id} display:$_display, textureId:$id, texturePtr:$ptr");
+      }
+    });
   }
 
   destroy(bool unregisterTexture, FFI ffi) async {
-    if (!_destroying && support && _textureKey != -1 && _sessionId != null) {
+    if (!_destroying && _textureKey != -1 && _sessionId != null) {
       _destroying = true;
       if (unregisterTexture) {
         platformFFI.registerPixelbufferTexture(_sessionId!, display, 0);
