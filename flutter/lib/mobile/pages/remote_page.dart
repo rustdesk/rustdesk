@@ -312,7 +312,7 @@ class _RemotePageState extends State<RemotePage> {
               initialEntries: [
                 OverlayEntry(builder: (context) {
                   return Container(
-                    color: Colors.black,
+                    color: kColorCanvas,
                     child: isWebDesktop
                         ? getBodyForDesktopWithListener(keyboard)
                         : SafeArea(

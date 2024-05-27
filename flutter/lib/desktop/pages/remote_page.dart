@@ -279,7 +279,7 @@ class _RemotePageState extends State<RemotePage>
       return Stack(
         children: [
           Container(
-              color: Colors.black,
+              color: kColorCanvas,
               child: RawKeyFocusScope(
                   focusNode: _rawKeyFocusNode,
                   onFocusChange: (bool imageFocused) {

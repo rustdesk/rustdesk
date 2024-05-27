@@ -334,7 +334,7 @@ class DesktopTab extends StatelessWidget {
 
   List<Widget> _tabWidgets = [];
   Widget _buildPageView() {
-    return _buildBlock(
+    final child = _buildBlock(
         child: Obx(() => PageView(
             controller: state.value.pageController,
             physics: NeverScrollableScrollPhysics(),
@@ -358,6 +358,11 @@ class DesktopTab extends StatelessWidget {
                 return newList;
               }
             }())));
+    if (tabType == DesktopTabType.remoteScreen) {
+      return Container(color: kColorCanvas, child: child);
+    } else {
+      return child;
+    }
   }
 
   /// Check whether to show ListView
