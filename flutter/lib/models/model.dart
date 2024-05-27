@@ -1208,6 +1208,7 @@ class ImageModel with ChangeNotifier {
         parent.target?.canvasModel.updateViewStyle();
       }
     }
+    _image?.dispose();
     _image = image;
     if (image != null) notifyListeners();
   }
@@ -1230,6 +1231,11 @@ class ImageModel with ChangeNotifier {
     final xscale = size.width / _image!.width;
     final yscale = size.height / _image!.height;
     return min(xscale, yscale) / 1.5;
+  }
+
+  void disposeImage() {
+    _image?.dispose();
+    _image = null;
   }
 }
 
@@ -1702,6 +1708,7 @@ class PredefinedCursor {
         final defaultImg = _image2!;
         // This function is called only one time, no need to care about the performance.
         Uint8List data = defaultImg.getBytes(order: img2.ChannelOrder.rgba);
+        _image?.dispose();
         _image = await img.decodeImageFromPixels(
             data, defaultImg.width, defaultImg.height, ui.PixelFormat.rgba8888);
 
@@ -1937,6 +1944,11 @@ class CursorModel with ChangeNotifier {
     notifyListeners();
   }
 
+  disposeImages() {
+    _images.forEach((_, v) => v.item1.dispose());
+    _images.clear();
+  }
+
   updateCursorData(Map<String, dynamic> evt) async {
     final id = int.parse(evt['id']);
     final hotx = double.parse(evt['hotx']);
@@ -1947,7 +1959,11 @@ class CursorModel with ChangeNotifier {
     final rgba = Uint8List.fromList(colors.map((s) => s as int).toList());
     final image = await img.decodeImageFromPixels(
         rgba, width, height, ui.PixelFormat.rgba8888);
+    if (image == null) {
+      return;
+    }
     if (await _updateCache(rgba, image, id, hotx, hoty, width, height)) {
+      _images[id]?.item1.dispose();
       _images[id] = Tuple3(image, hotx, hoty);
     }
 
