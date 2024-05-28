@@ -614,5 +614,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("confirm_clear_Wayland_screen_selection_tip", "是否確認清除 Wayland 的分享螢幕選擇？"),
         ("android_new_voice_call_tip", "收到新的語音通話請求。如果您接受，音訊將切換為語音通訊。"),
         ("texture_render_tip", ""),
+        ("Use texture rendering", ""),
     ].iter().cloned().collect();
 }

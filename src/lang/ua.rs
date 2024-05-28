@@ -614,5 +614,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("confirm_clear_Wayland_screen_selection_tip", "Ви впевнені, що хочете очистити вибір екрана Wayland?"),
         ("android_new_voice_call_tip", "Отримано новий запит на голосовий дзвінок. Якщо ви приймете його, аудіо перемкнеться на голосовий звʼязок."),
         ("texture_render_tip", ""),
+        ("Use texture rendering", ""),
     ].iter().cloned().collect();
 }
