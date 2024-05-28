@@ -198,6 +198,10 @@ impl EncoderApi for HwRamEncoder {
     fn latency_free(&self) -> bool {
         !self.config.name.contains("mediacodec")
     }
+
+    fn is_hardware(&self) -> bool {
+        true
+    }
 }
 
 impl HwRamEncoder {

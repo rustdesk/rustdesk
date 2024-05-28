@@ -481,3 +481,8 @@ pub trait GoogleImage {
         }
     }
 }
+
+#[cfg(target_os = "android")]
+pub fn screen_size() -> (u16, u16, u16) {
+    SCREEN_SIZE.lock().unwrap().clone()
+}

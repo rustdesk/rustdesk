@@ -444,6 +444,8 @@ fn run(vs: VideoService) -> ResultType<()> {
     };
     #[cfg(feature = "vram")]
     c.set_output_texture(encoder.input_texture());
+    #[cfg(target_os = "android")]
+    check_change_scale(encoder.is_hardware())?;
     VIDEO_QOS.lock().unwrap().store_bitrate(encoder.bitrate());
     VIDEO_QOS
         .lock()
@@ -493,22 +495,31 @@ fn run(vs: VideoService) -> ResultType<()> {
             }
         }
         if client_record != video_qos.record() {
+            log::info!("switch due to record changed");
             bail!("SWITCH");
         }
         drop(video_qos);
 
         if sp.is_option_true(OPTION_REFRESH) {
             let _ = try_broadcast_display_changed(&sp, display_idx, &c);
+            log::info!("switch to refresh");
             bail!("SWITCH");
         }
         if codec_format != Encoder::negotiated_codec() {
+            log::info!(
+                "switch due to codec changed, {:?} -> {:?}",
+                codec_format,
+                Encoder::negotiated_codec()
+            );
             bail!("SWITCH");
         }
         #[cfg(windows)]
         if last_portable_service_running != crate::portable_service::client::running() {
+            log::info!("switch due to portable service running changed");
             bail!("SWITCH");
         }
         if Encoder::use_i444(&encoder_cfg) != use_i444 {
+            log::info!("switch due to i444 changed");
             bail!("SWITCH");
         }
         #[cfg(all(windows, feature = "vram"))]
@@ -811,6 +822,26 @@ fn get_recorder(
     recorder
 }
 
+#[cfg(target_os = "android")]
+fn check_change_scale(hardware: bool) -> ResultType<()> {
+    let screen_size = scrap::screen_size();
+    log::info!("hardware: {hardware}, screen_size: {screen_size:?}",);
+    scrap::android::call_main_service_set_by_name(
+        "is_hardware_codec",
+        Some(hardware.to_string().as_str()),
+        None,
+    )
+    .ok();
+    let old_scale = screen_size.2;
+    let new_scale = scrap::screen_size().2;
+    if old_scale != new_scale {
+        log::info!("switch due to scale changed, {old_scale} -> {new_scale}");
+        // switch is not a must, but it is better to do so.
+        bail!("SWITCH");
+    }
+    Ok(())
+}
+
 fn check_privacy_mode_changed(sp: &GenericService, privacy_mode_id: i32) -> ResultType<()> {
     let privacy_mode_id_2 = get_privacy_mode_conn_id().unwrap_or(INVALID_PRIVACY_MODE_CONN_ID);
     if privacy_mode_id != privacy_mode_id_2 {
@@ -821,6 +852,7 @@ fn check_privacy_mode_changed(sp: &GenericService, privacy_mode_id: i32) -> Resu
             );
             sp.send_to_others(msg_out, privacy_mode_id_2);
         }
+        log::info!("switch due to privacy mode changed");
         bail!("SWITCH");
     }
     Ok(())
@@ -838,6 +870,7 @@ fn handle_one_frame(
     sp.snapshot(|sps| {
         // so that new sub and old sub share the same encoder after switch
         if sps.has_subscribes() {
+            log::info!("switch due to new subscriber");
             bail!("SWITCH");
         }
         Ok(())
@@ -858,6 +891,7 @@ fn handle_one_frame(
         }
         Err(e) => match e.to_string().as_str() {
             scrap::codec::ENCODE_NEED_SWITCH => {
+                log::info!("switch due to encoder need switch");
                 bail!("SWITCH");
             }
             _ => {}
