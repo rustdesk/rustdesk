@@ -2,7 +2,7 @@ use crate::{
     client::file_trait::FileManager,
     common::{is_keyboard_mode_supported, make_fd_to_json},
     flutter::{
-        self, session_add, session_add_existed, session_start_, sessions, try_sync_peer_option,
+        self, session_add, session_add_existed, session_start_, sessions, try_sync_peer_option, FlutterHandler,
     },
     input::*,
     ui_interface::{self, *},
@@ -772,7 +772,6 @@ pub fn main_show_option(_key: String) -> SyncReturn<bool> {
 }
 
 pub fn main_set_option(key: String, value: String) {
-    let is_texture_render_key = key.eq(config::keys::OPTION_TEXTURE_RENDER);
     if key.eq("custom-rendezvous-server") {
         set_option(key, value.clone());
         #[cfg(target_os = "android")]
@@ -781,14 +780,6 @@ pub fn main_set_option(key: String, value: String) {
         crate::common::test_rendezvous_server();
     } else {
         set_option(key, value.clone());
-    }
-    if is_texture_render_key {
-        let session_event = [("v", &value)];
-        for session in sessions::get_sessions() {
-            session.push_event("use_texture_render", &session_event, &[]);
-            session.reset_decoders();
-            session.change_prefer_codec();
-        }
     }
 }
 
@@ -909,7 +900,16 @@ pub fn main_get_env(key: String) -> SyncReturn<String> {
 }
 
 pub fn main_set_local_option(key: String, value: String) {
-    set_local_option(key, value)
+    let is_texture_render_key = key.eq(config::keys::OPTION_TEXTURE_RENDER);
+    set_local_option(key, value.clone());
+    if is_texture_render_key {
+        let session_event = [("v", &value)];
+        for session in sessions::get_sessions() {
+            session.push_event("use_texture_render", &session_event, &[]);
+            session.use_texture_render_changed();
+            session.ui_handler.update_use_texture_render();
+        }
+    }
 }
 
 // We do use use `main_get_local_option` and `main_set_local_option`.

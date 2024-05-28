@@ -172,13 +172,15 @@ pub fn get_option<T: AsRef<str>>(key: T) -> String {
 #[inline]
 #[cfg(target_os = "macos")]
 pub fn use_texture_render() -> bool {
-    cfg!(feature = "flutter") && get_option(config::keys::OPTION_TEXTURE_RENDER) == "Y"
+    cfg!(feature = "flutter")
+        && get_local_option(config::keys::OPTION_TEXTURE_RENDER.to_string()) == "Y"
 }
 
 #[inline]
 #[cfg(any(target_os = "windows", target_os = "linux"))]
 pub fn use_texture_render() -> bool {
-    cfg!(feature = "flutter") && get_option(config::keys::OPTION_TEXTURE_RENDER) != "N"
+    cfg!(feature = "flutter")
+        && get_local_option(config::keys::OPTION_TEXTURE_RENDER.to_string()) != "N"
 }
 
 #[inline]

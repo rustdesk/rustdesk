@@ -1,7 +1,6 @@
 use crate::{
     client::*,
     flutter_ffi::{EventToUI, SessionID},
-    ui_interface::use_texture_render,
     ui_session_interface::{io_loop, InvokeUiSession, Session},
 };
 use flutter_rust_bridge::StreamSink;
@@ -22,7 +21,10 @@ use std::{
     ffi::CString,
     os::raw::{c_char, c_int, c_void},
     str::FromStr,
-    sync::{Arc, RwLock},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc, RwLock,
+    },
 };
 
 /// tag "main" for [Desktop Main Page] and [Mobile (Client and Server)] (the mobile don't need multiple windows, only one global event stream is needed)
@@ -176,7 +178,7 @@ enum RenderType {
     Texture,
 }
 
-#[derive(Default, Clone)]
+#[derive(Clone)]
 pub struct FlutterHandler {
     // ui session id -> display handler data
     session_handlers: Arc<RwLock<HashMap<SessionID, SessionHandler>>>,
@@ -184,6 +186,22 @@ pub struct FlutterHandler {
     peer_info: Arc<RwLock<PeerInfo>>,
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     hooks: Arc<RwLock<HashMap<String, SessionHook>>>,
+    use_texture_render: Arc<AtomicBool>,
+}
+
+impl Default for FlutterHandler {
+    fn default() -> Self {
+        Self {
+            session_handlers: Default::default(),
+            display_rgbas: Default::default(),
+            peer_info: Default::default(),
+            #[cfg(not(any(target_os = "android", target_os = "ios")))]
+            hooks: Default::default(),
+            use_texture_render: Arc::new(
+                AtomicBool::new(crate::ui_interface::use_texture_render()),
+            ),
+        }
+    }
 }
 
 #[derive(Default, Clone)]
@@ -557,6 +575,11 @@ impl FlutterHandler {
         let _ = hooks.remove(key);
         true
     }
+
+    pub fn update_use_texture_render(&self) {
+        self.use_texture_render
+            .store(crate::ui_interface::use_texture_render(), Ordering::Relaxed);
+    }
 }
 
 impl InvokeUiSession for FlutterHandler {
@@ -745,7 +768,7 @@ impl InvokeUiSession for FlutterHandler {
     #[inline]
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     fn on_rgba(&self, display: usize, rgba: &mut scrap::ImageRgb) {
-        if use_texture_render() {
+        if self.use_texture_render.load(Ordering::Relaxed) {
             self.on_rgba_flutter_texture_render(display, rgba);
         } else {
             self.on_rgba_soft_render(display, rgba);
@@ -761,6 +784,9 @@ impl InvokeUiSession for FlutterHandler {
     #[inline]
     #[cfg(feature = "vram")]
     fn on_texture(&self, display: usize, texture: *mut c_void) {
+        if !self.use_texture_render.load(Ordering::Relaxed) {
+            return;
+        }
         for (_, session) in self.session_handlers.read().unwrap().iter() {
             if session.renderer.on_texture(display, texture) {
                 if let Some(stream) = &session.event_stream {
@@ -1156,7 +1182,11 @@ pub fn session_start_(
     if let Some(session) = sessions::get_session_by_session_id(session_id) {
         let is_first_ui_session = session.session_handlers.read().unwrap().len() == 1;
         if !is_connected && is_first_ui_session {
-            log::info!("Session {} start, use texture render: {}", id, use_texture_render());
+            log::info!(
+                "Session {} start, use texture render: {}",
+                id,
+                session.use_texture_render.load(Ordering::Relaxed)
+            );
             let session = (*session).clone();
             std::thread::spawn(move || {
                 let round = session.connection_round_state.lock().unwrap().new_round();
@@ -1500,7 +1530,7 @@ pub fn get_adapter_luid() -> Option<i64> {
 
 #[cfg(feature = "vram")]
 pub fn get_adapter_luid() -> Option<i64> {
-    if !use_texture_render() {
+    if !crate::ui_interface::use_texture_render() {
         return None;
     }
     let get_adapter_luid_func = match &*TEXTURE_GPU_RENDERER_PLUGIN {

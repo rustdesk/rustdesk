@@ -404,7 +404,7 @@ class _GeneralState extends State<_General> {
             kOptionTextureRender,
             optGetter: bind.mainGetUseTextureRender,
             optSetter: (k, v) async =>
-                await bind.mainSetOption(key: k, value: v ? 'Y' : 'N'),
+                await bind.mainSetLocalOption(key: k, value: v ? 'Y' : 'N'),
           ),
         ),
         if (!bind.isCustomClient())

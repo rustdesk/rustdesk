@@ -470,8 +470,9 @@ impl<T: InvokeUiSession> Session<T> {
         self.send(Data::Message(msg));
     }
 
-    pub fn reset_decoders(&self) {
+    pub fn use_texture_render_changed(&self) {
         self.send(Data::ResetDecoder(None));
+        self.change_prefer_codec();
     }
 
     pub fn restart_remote_device(&self) {
@@ -1703,9 +1704,7 @@ pub async fn io_loop<T: InvokeUiSession>(handler: Session<T>, round: u32) {
                     ui_handler.on_rgba(display, data);
                 } else {
                     #[cfg(all(feature = "vram", feature = "flutter"))]
-                    if use_texture_render() {
-                        ui_handler.on_texture(display, _texture);
-                    }
+                    ui_handler.on_texture(display, _texture);
                 }
             },
         );
