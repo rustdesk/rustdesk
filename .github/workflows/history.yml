@@ -8,7 +8,7 @@ env:
   TAG_NAME: "tmp"
   FLUTTER_RUST_BRIDGE_VERSION: "1.80.1"
   VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
-  VERSION: "1.2.4"
+  VERSION: "1.2.5"
 
 jobs:
   build-for-history-windows:
