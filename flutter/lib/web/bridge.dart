@@ -1460,6 +1460,10 @@ class RustdeskImpl {
     return false;
   }
 
+  bool isDisableGroupPanel({dynamic hint}) {
+    return false;
+  }
+
   bool isDisableAccount({dynamic hint}) {
     return false;
   }

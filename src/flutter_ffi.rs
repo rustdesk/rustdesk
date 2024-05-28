@@ -2,7 +2,8 @@ use crate::{
     client::file_trait::FileManager,
     common::{is_keyboard_mode_supported, make_fd_to_json},
     flutter::{
-        self, session_add, session_add_existed, session_start_, sessions, try_sync_peer_option, FlutterHandler,
+        self, session_add, session_add_existed, session_start_, sessions, try_sync_peer_option,
+        FlutterHandler,
     },
     input::*,
     ui_interface::{self, *},
@@ -1903,6 +1904,10 @@ pub fn is_disable_ab() -> SyncReturn<bool> {
 
 pub fn is_disable_account() -> SyncReturn<bool> {
     SyncReturn(config::is_disable_account())
+}
+
+pub fn is_disable_group_panel() -> SyncReturn<bool> {
+    SyncReturn(LocalConfig::get_option("disable-group-panel") == "Y")
 }
 
 // windows only
