@@ -304,6 +304,10 @@ impl EncoderApi for AomEncoder {
     fn latency_free(&self) -> bool {
         true
     }
+
+    fn is_hardware(&self) -> bool {
+        false
+    }
 }
 
 impl AomEncoder {

@@ -242,6 +242,10 @@ impl EncoderApi for VpxEncoder {
     fn latency_free(&self) -> bool {
         true
     }
+
+    fn is_hardware(&self) -> bool {
+        false
+    }
 }
 
 impl VpxEncoder {

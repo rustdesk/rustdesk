@@ -213,6 +213,14 @@ pub fn convert_to_yuv(
         );
     }
     if src_pixfmt == crate::Pixfmt::BGRA || src_pixfmt == crate::Pixfmt::RGBA {
+        // stride is calculated, not real, so we need to check it
+        if src_stride[0] < src_width * 4 {
+            bail!(
+                "src_stride[0] < src_width * 4: {} < {}",
+                src_stride[0],
+                src_width * 4
+            );
+        }
         if src.len() < src_stride[0] * src_height {
             bail!(
                 "wrong src len, {} < {} * {}",

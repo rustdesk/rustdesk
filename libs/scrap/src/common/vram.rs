@@ -188,6 +188,10 @@ impl EncoderApi for VRamEncoder {
     fn latency_free(&self) -> bool {
         true
     }
+
+    fn is_hardware(&self) -> bool {
+        true
+    }
 }
 
 impl VRamEncoder {

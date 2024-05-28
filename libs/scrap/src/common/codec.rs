@@ -74,6 +74,8 @@ pub trait EncoderApi {
     fn support_changing_quality(&self) -> bool;
 
     fn latency_free(&self) -> bool;
+
+    fn is_hardware(&self) -> bool;
 }
 
 pub struct Encoder {

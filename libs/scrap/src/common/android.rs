@@ -7,7 +7,7 @@ use std::sync::Mutex;
 use std::{io, time::Duration};
 
 lazy_static! {
-    static ref SCREEN_SIZE: Mutex<(u16, u16, u16)> = Mutex::new((0, 0, 0)); // (width, height, scale)
+   pub(crate)  static ref SCREEN_SIZE: Mutex<(u16, u16, u16)> = Mutex::new((0, 0, 0)); // (width, height, scale)
 }
 
 pub struct Capturer {
