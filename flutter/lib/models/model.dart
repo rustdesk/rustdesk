@@ -112,6 +112,7 @@ class FfiModel with ChangeNotifier {
   RxBool waitForImageDialogShow = true.obs;
   Timer? waitForImageTimer;
   RxBool waitForFirstImage = true.obs;
+  bool isRefreshing = false;
 
   Rect? get rect => _rect;
   bool get isOriginalResolutionSet =>
@@ -392,6 +393,7 @@ class FfiModel with ChangeNotifier {
       Map<String, dynamic> evt, SessionID sessionId, String peerId) {
     parent.target?.imageModel.setUseTextureRender(evt['v'] == 'Y');
     waitForFirstImage.value = true;
+    isRefreshing = true;
     showConnectedWaitingForImage(parent.target!.dialogManager, sessionId,
         'success', 'Successful', kMsgboxTextWaitingForImage);
   }
@@ -677,7 +679,7 @@ class FfiModel with ChangeNotifier {
     );
     waitForImageDialogShow.value = true;
     waitForImageTimer = Timer(Duration(milliseconds: 1500), () {
-      if (waitForFirstImage.isTrue) {
+      if (waitForFirstImage.isTrue && !isRefreshing) {
         bind.sessionInputOsPassword(sessionId: sessionId, value: '');
       }
     });
@@ -795,6 +797,7 @@ class FfiModel with ChangeNotifier {
       if (displays.isNotEmpty) {
         _reconnects = 1;
         waitForFirstImage.value = true;
+        isRefreshing = false;
       }
       Map<String, dynamic> features = json.decode(evt['features']);
       _pi.features.privacyMode = features['privacy_mode'] == 1;
@@ -2348,6 +2351,7 @@ class FFI {
   /// Mobile reuse FFI
   void mobileReset() {
     ffiModel.waitForFirstImage.value = true;
+    ffiModel.isRefreshing = false;
     ffiModel.waitForImageDialogShow.value = true;
     ffiModel.waitForImageTimer?.cancel();
     ffiModel.waitForImageTimer = null;
