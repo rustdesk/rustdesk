@@ -88,6 +88,11 @@ impl ImageRgb {
     pub fn stride(&self) -> usize {
         self.stride
     }
+
+    #[inline]
+    pub fn set_stride(&mut self, stride: usize) {
+        self.stride = stride;
+    }
 }
 
 #[inline]

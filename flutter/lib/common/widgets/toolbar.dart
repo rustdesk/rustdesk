@@ -8,7 +8,6 @@ import 'package:flutter_hbb/common/widgets/dialog.dart';
 import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/models/model.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
-import 'package:flutter_hbb/models/desktop_render_texture.dart';
 import 'package:get/get.dart';
 
 bool isEditOsPassword = false;
@@ -581,7 +580,7 @@ Future<List<TToggleMenu>> toolbarDisplayToggle(
         child: Text(translate('Lock after session end'))));
   }
 
-  if (useTextureRender &&
+  if (bind.mainGetUseTextureRender() &&
       pi.isSupportMultiDisplay &&
       PrivacyModeState.find(id).isEmpty &&
       pi.displaysCount.value > 1 &&
@@ -600,7 +599,9 @@ Future<List<TToggleMenu>> toolbarDisplayToggle(
   }
 
   final isMultiScreens = !isWeb && (await getScreenRectList()).length > 1;
-  if (useTextureRender && pi.isSupportMultiDisplay && isMultiScreens) {
+  if (bind.mainGetUseTextureRender() &&
+      pi.isSupportMultiDisplay &&
+      isMultiScreens) {
     final value = bind.sessionGetUseAllMyDisplaysForTheRemoteSession(
             sessionId: ffi.sessionId) ==
         'Y';

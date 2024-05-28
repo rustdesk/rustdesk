@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/consts.dart';
-import 'package:flutter_hbb/models/desktop_render_texture.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:get/get.dart';
 
@@ -227,8 +226,7 @@ List<(String, String)> otherDefaultSettings() {
     if ((isDesktop || isWebDesktop)) ('Zoom cursor', kOptionZoomCursor),
     ('Show quality monitor', kOptionShowQualityMonitor),
     ('Mute', kOptionDisableAudio),
-    if (isDesktop)
-      ('Enable file copy and paste', kOptionEnableFileCopyPaste),
+    if (isDesktop) ('Enable file copy and paste', kOptionEnableFileCopyPaste),
     ('Disable clipboard', kOptionDisableClipboard),
     ('Lock after session end', kOptionLockAfterSessionEnd),
     ('Privacy mode', kOptionPrivacyMode),
@@ -236,12 +234,12 @@ List<(String, String)> otherDefaultSettings() {
     ('True color (4:4:4)', kOptionI444),
     ('Reverse mouse wheel', kKeyReverseMouseWheel),
     ('swap-left-right-mouse', kOptionSwapLeftRightMouse),
-    if (isDesktop && useTextureRender)
+    if (isDesktop && bind.mainGetUseTextureRender())
       (
         'Show displays as individual windows',
         kKeyShowDisplaysAsIndividualWindows
       ),
-    if (isDesktop && useTextureRender)
+    if (isDesktop && bind.mainGetUseTextureRender())
       (
         'Use all my displays for the remote session',
         kKeyUseAllMyDisplaysForTheRemoteSession

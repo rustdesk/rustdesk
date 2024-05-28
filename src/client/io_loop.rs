@@ -843,6 +843,9 @@ impl<T: InvokeUiSession> Remote<T> {
                     .on_voice_call_closed("Closed manually by the peer");
                 allow_err!(peer.send(&msg).await);
             }
+            Data::ResetDecoder(display) => {
+                self.video_sender.send(MediaData::Reset(display)).ok();
+            }
             _ => {}
         }
         true
@@ -1371,7 +1374,7 @@ impl<T: InvokeUiSession> Remote<T> {
                     Some(misc::Union::SwitchDisplay(s)) => {
                         self.handler.handle_peer_switch_display(&s);
                         self.video_sender
-                            .send(MediaData::Reset(s.display as _))
+                            .send(MediaData::Reset(Some(s.display as _)))
                             .ok();
                         if s.width > 0 && s.height > 0 {
                             self.handler.set_display(

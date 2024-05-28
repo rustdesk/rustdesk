@@ -613,5 +613,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("clear_Wayland_screen_selection_tip", "Nachdem Sie die Bildschirmauswahl gelöscht haben, können Sie den freizugebenden Bildschirm erneut auswählen."),
         ("confirm_clear_Wayland_screen_selection_tip", "Sind Sie sicher, dass Sie die Auswahl des Wayland-Bildschirms löschen möchten?"),
         ("android_new_voice_call_tip", "Eine neue Sprachanrufanfrage wurde empfangen. Wenn Sie die Anfrage annehmen, wird der Ton auf Sprachkommunikation umgeschaltet."),
+        ("texture_render_tip", ""),
+        ("Use texture rendering", ""),
     ].iter().cloned().collect();
 }

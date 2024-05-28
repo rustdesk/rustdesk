@@ -613,5 +613,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("clear_Wayland_screen_selection_tip", "После отмены можно заново выбрать экран для демонстрации."),
         ("confirm_clear_Wayland_screen_selection_tip", "Отменить выбор экрана Wayland?"),
         ("android_new_voice_call_tip", ""),
+        ("texture_render_tip", ""),
+        ("Use texture rendering", ""),
     ].iter().cloned().collect();
 }

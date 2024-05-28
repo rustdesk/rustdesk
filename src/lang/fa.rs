@@ -613,5 +613,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("clear_Wayland_screen_selection_tip", "پس از پاک کردن صفحه انتخابی، می توانید صفحه را برای اشتراک گذاری مجدد انتخاب کنید"),
         ("confirm_clear_Wayland_screen_selection_tip", "را پاک می کنید؟ Wayland آیا مطمئن هستید که انتخاب صفحه"),
         ("android_new_voice_call_tip", "یک درخواست تماس صوتی جدید دریافت شد. اگر بپذیرید، صدا به ارتباط صوتی تغییر خواهد کرد."),
+        ("texture_render_tip", ""),
+        ("Use texture rendering", ""),
     ].iter().cloned().collect();
 }

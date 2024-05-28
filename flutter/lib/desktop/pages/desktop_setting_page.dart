@@ -387,10 +387,25 @@ class _GeneralState extends State<_General> {
           isServer: false,
         ),
         // though this is related to GUI, but opengl problem affects all users, so put in config rather than local
+        if (isLinux)
+          Tooltip(
+            message: translate('software_render_tip'),
+            child: _OptionCheckBox(
+              context,
+              "Always use software rendering",
+              kOptionAllowAlwaysSoftwareRender,
+            ),
+          ),
         Tooltip(
-          message: translate('software_render_tip'),
-          child: _OptionCheckBox(context, "Always use software rendering",
-              kOptionAllowAlwaysSoftwareRender),
+          message: translate('texture_render_tip'),
+          child: _OptionCheckBox(
+            context,
+            "Use texture rendering",
+            kOptionTextureRender,
+            optGetter: bind.mainGetUseTextureRender,
+            optSetter: (k, v) async =>
+                await bind.mainSetLocalOption(key: k, value: v ? 'Y' : 'N'),
+          ),
         ),
         if (!bind.isCustomClient())
           _OptionCheckBox(
@@ -426,7 +441,7 @@ class _GeneralState extends State<_General> {
                 context,
                 'Remove wallpaper during incoming sessions',
                 kOptionAllowRemoveWallpaper,
-                update: () {
+                update: (bool v) {
                   setState(() {});
                 },
               ),
@@ -457,8 +472,8 @@ class _GeneralState extends State<_General> {
           context,
           'Enable hardware codec',
           kOptionEnableHwcodec,
-          update: () {
-            if (mainGetBoolOptionSync(kOptionEnableHwcodec)) {
+          update: (bool v) {
+            if (v) {
               bind.mainCheckHwcodec();
             }
           },
@@ -941,7 +956,7 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
 
   List<Widget> directIp(BuildContext context) {
     TextEditingController controller = TextEditingController();
-    update() => setState(() {});
+    update(bool v) => setState(() {});
     RxBool applyEnabled = false.obs;
     return [
       _OptionCheckBox(context, 'Enable direct IP access', kOptionDirectServer,
@@ -1102,7 +1117,7 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
 
   List<Widget> autoDisconnect(BuildContext context) {
     TextEditingController controller = TextEditingController();
-    update() => setState(() {});
+    update(bool v) => setState(() {});
     RxBool applyEnabled = false.obs;
     return [
       _OptionCheckBox(
@@ -1803,33 +1818,41 @@ Widget _Card(
 }
 
 // ignore: non_constant_identifier_names
-Widget _OptionCheckBox(BuildContext context, String label, String key,
-    {Function()? update,
-    bool reverse = false,
-    bool enabled = true,
-    Icon? checkedIcon,
-    bool? fakeValue,
-    bool isServer = true}) {
-  bool value =
-      isServer ? mainGetBoolOptionSync(key) : mainGetLocalBoolOptionSync(key);
+Widget _OptionCheckBox(
+  BuildContext context,
+  String label,
+  String key, {
+  Function(bool)? update,
+  bool reverse = false,
+  bool enabled = true,
+  Icon? checkedIcon,
+  bool? fakeValue,
+  bool isServer = true,
+  bool Function()? optGetter,
+  Future<void> Function(String, bool)? optSetter,
+}) {
+  getOpt() => optGetter != null
+      ? optGetter()
+      : (isServer
+          ? mainGetBoolOptionSync(key)
+          : mainGetLocalBoolOptionSync(key));
+  bool value = getOpt();
   final isOptFixed = isOptionFixed(key);
   if (reverse) value = !value;
   var ref = value.obs;
   onChanged(option) async {
     if (option != null) {
       if (reverse) option = !option;
-      isServer
-          ? await mainSetBoolOption(key, option)
-          : await mainSetLocalBoolOption(key, option);
-      final readOption = isServer
-          ? mainGetBoolOptionSync(key)
-          : mainGetLocalBoolOptionSync(key);
+      final setter =
+          optSetter ?? (isServer ? mainSetBoolOption : mainSetLocalBoolOption);
+      await setter(key, option);
+      final readOption = getOpt();
       if (reverse) {
         ref.value = !readOption;
       } else {
         ref.value = readOption;
       }
-      update?.call();
+      update?.call(readOption);
     }
   }
 
