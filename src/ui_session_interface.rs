@@ -473,6 +473,7 @@ impl<T: InvokeUiSession> Session<T> {
     pub fn use_texture_render_changed(&self) {
         self.send(Data::ResetDecoder(None));
         self.change_prefer_codec();
+        self.send(Data::Message(LoginConfigHandler::refresh()));
     }
 
     pub fn restart_remote_device(&self) {
