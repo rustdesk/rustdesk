@@ -65,7 +65,7 @@ impl FrameRaw {
 
     // take inner data as slice
     // release when success
-    fn take<'a>(&mut self) -> Option<&'a [u8]> {
+    fn take<'a>(&mut self, dst: &mut Vec<u8>, last: &mut Vec<u8>) -> Option<()> {
         if self.enable.not() {
             return None;
         }
@@ -79,7 +79,14 @@ impl FrameRaw {
             }
             let slice = unsafe { std::slice::from_raw_parts(ptr, self.len) };
             self.release();
-            Some(slice)
+            if last.len() == slice.len() && crate::would_block_if_equal(last, slice).is_err() {
+                return None;
+            }
+            dst.resize(slice.len(), 0);
+            unsafe {
+                std::ptr::copy_nonoverlapping(slice.as_ptr(), dst.as_mut_ptr(), slice.len());
+            }
+            Some(())
         }
     }
 
@@ -89,12 +96,12 @@ impl FrameRaw {
     }
 }
 
-pub fn get_video_raw<'a>() -> Option<&'a [u8]> {
-    VIDEO_RAW.lock().ok()?.take()
+pub fn get_video_raw<'a>(dst: &mut Vec<u8>, last: &mut Vec<u8>) -> Option<()> {
+    VIDEO_RAW.lock().ok()?.take(dst, last)
 }
 
-pub fn get_audio_raw<'a>() -> Option<&'a [u8]> {
-    AUDIO_RAW.lock().ok()?.take()
+pub fn get_audio_raw<'a>(dst: &mut Vec<u8>, last: &mut Vec<u8>) -> Option<()> {
+    AUDIO_RAW.lock().ok()?.take(dst, last)
 }
 
 #[no_mangle]
