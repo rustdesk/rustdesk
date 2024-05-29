@@ -840,32 +840,13 @@ impl Connection {
     }
 
     async fn check_whitelist(&mut self, addr: &SocketAddr) -> bool {
-        let whitelist: Vec<String> = Config::get_option("whitelist")
-            .split(",")
-            .filter(|x| !x.is_empty())
-            .map(|x| x.to_owned())
-            .collect();
-        if !whitelist.is_empty()
-            && whitelist
-                .iter()
-                .filter(|x| x == &"0.0.0.0")
-                .next()
-                .is_none()
-            && whitelist
-                .iter()
-                .filter(|x| IpCidr::from_str(x).map_or(false, |y| y.contains(addr.ip())))
-                .next()
-                .is_none()
-        {
-            self.send_login_error("Your ip is blocked by the peer")
-                .await;
-            Self::post_alarm_audit(
-                AlarmAuditType::IpWhitelist, //"ip whitelist",
-                json!({ "ip":addr.ip() }),
-            );
-            return false;
-        }
-        true
+        self.send_login_error("Your ip is blocked by the peer")
+            .await;
+        Self::post_alarm_audit(
+            AlarmAuditType::IpWhitelist, //"ip whitelist",
+            json!({ "ip":addr.ip() }),
+        );
+        return false;
     }
 
     async fn on_open(&mut self, addr: SocketAddr) -> bool {
