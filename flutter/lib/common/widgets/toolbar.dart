@@ -115,7 +115,10 @@ List<TTextMenu> toolbarControls(BuildContext context, String id, FFI ffi) {
     );
   }
   // paste
-  if (isMobile && perms['keyboard'] != false && perms['clipboard'] != false) {
+  if (isMobile &&
+      pi.platform != kPeerPlatformAndroid &&
+      perms['keyboard'] != false &&
+      perms['clipboard'] != false) {
     v.add(TTextMenu(
         child: Text(translate('Paste')),
         onPressed: () async {
