@@ -1699,13 +1699,15 @@ const _forbiddenCursorPng =
 const _defaultCursorPng =
     'iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAAXNSR0IArs4c6QAAAARzQklUCAgICHwIZIgAAAFmSURBVFiF7dWxSlxREMbx34QFDRowYBchZSxSCWlMCOwD5FGEFHap06UI7KPsAyyEEIQFqxRaCqYTsqCJFsKkuAeRXb17wrqV918dztw55zszc2fo6Oh47MR/e3zO1/iAHWmznHKGQwx9ip/LEbCfazbsoY8j/JLOhcC6sCW9wsjEwJf483AC9nPNc1+lFRwI13d+l3rYFS799rFGxJMqARv2pBXh+72XQ7gWvklPS7TmMl9Ak/M+DqrENvxAv/guKKApuKPWl0/TROK4+LbSqzhuB+OZ3fRSeFPWY+Fkyn56Y29hfgTSpnQ+s98cvorVey66uPlNFxKwZOYLCGfCs5n9NMYVrsp6mvXSoFqpqYFDvMBkStgJJe93dZOwVXxbqUnBENulydSReqUrDhcX0PT2EXarBYS3GNXMhboinBgIl9K71kg0L3+PvyYGdVpruT2MwrF0iotiXfIwus0Dj+OOjo6Of+e7ab74RkpgAAAAAElFTkSuQmCC';
 
+const kPreForbiddenCursorId = -2;
 final preForbiddenCursor = PredefinedCursor(
   png: _forbiddenCursorPng,
-  id: -2,
+  id: kPreForbiddenCursorId,
 );
+const kPreDefaultCursorId = -1;
 final preDefaultCursor = PredefinedCursor(
   png: _defaultCursorPng,
-  id: -1,
+  id: kPreDefaultCursorId,
   hotxGetter: (double w) => w / 2,
   hotyGetter: (double h) => h / 2,
 );
@@ -1730,6 +1732,11 @@ class PredefinedCursor {
   init() {
     _image2 = img2.decodePng(base64Decode(png));
     if (_image2 != null) {
+      // The png type of forbidden cursor image is `PngColorType.indexed`.
+      if (isWindows && id == kPreForbiddenCursorId) {
+        _image2 = _image2!.convert(format: img2.Format.uint8, numChannels: 4);
+      }
+
       () async {
         final defaultImg = _image2!;
         // This function is called only one time, no need to care about the performance.
