@@ -613,7 +613,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("clear_Wayland_screen_selection_tip", "Po vymazaní výberu obrazovky môžete znova vybrať obrazovku, ktorú chcete zdieľať."),
         ("confirm_clear_Wayland_screen_selection_tip", "Určite ste si istý, že chcete vyčistiť výber obrazovky Wayland?"),
         ("android_new_voice_call_tip", "Bola prijatá nová žiadosť o hlasový hovor. Ak ho prijmete, zvuk sa prepne na hlasovú komunikáciu."),
-        ("texture_render_tip", ""),
-        ("Use texture rendering", ""),
+        ("texture_render_tip", "Použiť vykresľovanie textúr, aby boli obrázky hladšie."),
+        ("Use texture rendering", "Použiť vykresľovanie textúr"),
     ].iter().cloned().collect();
 }
