@@ -564,7 +564,7 @@ Future<List<TToggleMenu>> toolbarDisplayToggle(
         child: Text(translate('Disable clipboard'))));
   }
   // lock after session end
-  if (ffiModel.keyboard) {
+  if (ffiModel.keyboard && !ffiModel.isPeerAndroid) {
     final enabled = !ffiModel.viewOnly;
     final option = 'lock-after-session-end';
     final value =
