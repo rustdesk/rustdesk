@@ -612,8 +612,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Clear Wayland screen selection", "Отменить выбор экрана Wayland"),
         ("clear_Wayland_screen_selection_tip", "После отмены можно заново выбрать экран для демонстрации."),
         ("confirm_clear_Wayland_screen_selection_tip", "Отменить выбор экрана Wayland?"),
-        ("android_new_voice_call_tip", ""),
-        ("texture_render_tip", ""),
-        ("Use texture rendering", ""),
+        ("android_new_voice_call_tip", "Получен новый запрос на голосовой вызов. Если вы его примите, звук переключится на голосовую связь."),
+        ("texture_render_tip", "Использовать визуализацию текстур, чтобы сделать изображения более плавными."),
+        ("Use texture rendering", "Визуализация текстур"),
     ].iter().cloned().collect();
 }
