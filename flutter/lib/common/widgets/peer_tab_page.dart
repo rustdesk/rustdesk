@@ -540,7 +540,7 @@ class _PeerTabPageState extends State<PeerTabPage>
   Widget _toggleTags() {
     return _hoverAction(
         context: context,
-        toolTip: translate('Toggle tags'),
+        toolTip: translate('Toggle Tags'),
         hoverableWhenfalse: hideAbTagsPanel,
         child: Icon(
           Icons.tag_rounded,
