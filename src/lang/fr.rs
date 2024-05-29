@@ -589,7 +589,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("powered_by_me", ""),
         ("outgoing_only_desk_tip", ""),
         ("preset_password_warning", ""),
-        ("Security Alert", "Alert de sécurité"),
+        ("Security Alert", "Alerte de sécurité"),
         ("My address book", "Mon carnet d'adresse"),
         ("Personal", "Personnel"),
         ("Owner", "Propriétaire"),
