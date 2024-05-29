@@ -1737,7 +1737,10 @@ class PredefinedCursor {
         _image?.dispose();
         _image = await img.decodeImageFromPixels(
             data, defaultImg.width, defaultImg.height, ui.PixelFormat.rgba8888);
-
+        if (_image == null) {
+          print("decodeImageFromPixels failed, pre-defined cursor $id");
+          return;
+        }
         double scale = 1.0;
         if (isWindows) {
           data = _image2!.getBytes(order: img2.ChannelOrder.bgra);
@@ -2104,7 +2107,7 @@ class CursorModel with ChangeNotifier {
     _x = -10000;
     _x = -10000;
     _image = null;
-    _images.clear();
+    disposeImages();
 
     _clearCache();
     _cache = null;
