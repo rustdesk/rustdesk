@@ -3,7 +3,6 @@ use crate::{
     common::{is_keyboard_mode_supported, make_fd_to_json},
     flutter::{
         self, session_add, session_add_existed, session_start_, sessions, try_sync_peer_option,
-        FlutterHandler,
     },
     input::*,
     ui_interface::{self, *},

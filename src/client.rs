@@ -1052,7 +1052,7 @@ impl VideoHandler {
         log::info!("new video handler for display #{_display}, format: {format:?}, luid: {luid:?}");
         VideoHandler {
             decoder: Decoder::new(format, luid),
-            rgb: ImageRgb::new(ImageFormat::ARGB, crate::get_dst_stride_rgba()),
+            rgb: ImageRgb::new(ImageFormat::ARGB, crate::get_dst_align_rgba()),
             texture: std::ptr::null_mut(),
             recorder: Default::default(),
             record: false,
@@ -1105,7 +1105,7 @@ impl VideoHandler {
     /// Reset the decoder, change format if it is Some
     pub fn reset(&mut self, format: Option<CodecFormat>) {
         #[cfg(target_os = "macos")]
-        self.rgb.set_stride(crate::get_dst_stride_rgba());
+        self.rgb.set_align(crate::get_dst_align_rgba());
         let luid = Self::get_adapter_luid();
         let format = format.unwrap_or(self.decoder.format());
         self.decoder = Decoder::new(format, luid);

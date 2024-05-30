@@ -1617,7 +1617,7 @@ fn read_custom_client_advanced_settings(
 
 #[inline]
 #[cfg(target_os = "macos")]
-pub fn get_dst_stride_rgba() -> usize {
+pub fn get_dst_align_rgba() -> usize {
     // https://developer.apple.com/forums/thread/712709
     // Memory alignment should be multiple of 64.
     if crate::ui_interface::use_texture_render() {
@@ -1629,7 +1629,7 @@ pub fn get_dst_stride_rgba() -> usize {
 
 #[inline]
 #[cfg(not(target_os = "macos"))]
-pub fn get_dst_stride_rgba() -> usize {
+pub fn get_dst_align_rgba() -> usize {
     1
 }
 
