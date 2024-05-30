@@ -2,7 +2,8 @@ use crate::{
     codec::{
         base_bitrate, codec_thread_num, enable_hwcodec_option, EncoderApi, EncoderCfg, Quality as Q,
     },
-    hw, CodecFormat, EncodeInput, ImageFormat, ImageRgb, Pixfmt, HW_STRIDE_ALIGN,
+    convert::*,
+    CodecFormat, EncodeInput, ImageFormat, ImageRgb, Pixfmt, HW_STRIDE_ALIGN,
 };
 use hbb_common::{
     anyhow::{anyhow, bail, Context},
@@ -23,7 +24,7 @@ use hwcodec::{
     ffmpeg_ram::{
         decode::{DecodeContext, DecodeFrame, Decoder},
         encode::{EncodeContext, EncodeFrame, Encoder},
-        CodecInfo,
+        ffmpeg_linesize_offset_length, CodecInfo,
     },
 };
 
@@ -31,6 +32,8 @@ const DEFAULT_PIXFMT: AVPixelFormat = AVPixelFormat::AV_PIX_FMT_NV12;
 pub const DEFAULT_TIME_BASE: [i32; 2] = [1, 30];
 const DEFAULT_GOP: i32 = i32::MAX;
 const DEFAULT_HW_QUALITY: Quality = Quality_Default;
+
+crate::generate_call_macro!(call_yuv, false);
 
 #[derive(Debug, Clone)]
 pub struct HwRamEncoderConfig {
@@ -237,9 +240,9 @@ impl HwRamEncoder {
         }
     }
 
-    fn rate_control(config: &HwRamEncoderConfig) -> RateControl {
+    fn rate_control(_config: &HwRamEncoderConfig) -> RateControl {
         #[cfg(target_os = "android")]
-        if config.name.contains("mediacodec") {
+        if _config.name.contains("mediacodec") {
             return RC_VBR;
         }
         RC_CBR
@@ -262,15 +265,15 @@ impl HwRamEncoder {
         quality * factor
     }
 
-    pub fn check_bitrate_range(config: &HwRamEncoderConfig, bitrate: u32) -> u32 {
+    pub fn check_bitrate_range(_config: &HwRamEncoderConfig, bitrate: u32) -> u32 {
         #[cfg(target_os = "android")]
-        if config.name.contains("mediacodec") {
+        if _config.name.contains("mediacodec") {
             let info = crate::android::ffi::get_codec_info();
             if let Some(info) = info {
                 if let Some(codec) = info
                     .codecs
                     .iter()
-                    .find(|c| Some(c.name.clone()) == config.mc_name && c.is_encoder)
+                    .find(|c| Some(c.name.clone()) == _config.mc_name && c.is_encoder)
                 {
                     if codec.max_bitrate > codec.min_bitrate {
                         if bitrate > codec.max_bitrate {
@@ -368,52 +371,98 @@ impl HwRamDecoderImage<'_> {
     // rgb [in/out] fmt and stride must be set in ImageRgb
     pub fn to_fmt(&self, rgb: &mut ImageRgb, i420: &mut Vec<u8>) -> ResultType<()> {
         let frame = self.frame;
-        rgb.w = frame.width as _;
-        rgb.h = frame.height as _;
-        // take dst_stride into account when you convert
-        let dst_stride = rgb.stride();
+        let width = frame.width;
+        let height = frame.height;
+        rgb.w = width as _;
+        rgb.h = height as _;
+        let dst_align = rgb.align();
+        let bytes_per_row = (rgb.w * 4 + dst_align - 1) & !(dst_align - 1);
+        rgb.raw.resize(rgb.h * bytes_per_row, 0);
         match frame.pixfmt {
-            AVPixelFormat::AV_PIX_FMT_NV12 => hw::hw_nv12_to(
-                rgb.fmt(),
-                frame.width as _,
-                frame.height as _,
-                &frame.data[0],
-                &frame.data[1],
-                frame.linesize[0] as _,
-                frame.linesize[1] as _,
-                &mut rgb.raw as _,
-                i420,
-                HW_STRIDE_ALIGN,
-            )?,
+            AVPixelFormat::AV_PIX_FMT_NV12 => {
+                // I420ToARGB is much faster than NV12ToARGB in tests on Windows
+                if cfg!(windows) {
+                    let Ok((linesize_i420, offset_i420, len_i420)) = ffmpeg_linesize_offset_length(
+                        AVPixelFormat::AV_PIX_FMT_YUV420P,
+                        width as _,
+                        height as _,
+                        HW_STRIDE_ALIGN,
+                    ) else {
+                        bail!("failed to get i420 linesize, offset, length");
+                    };
+                    i420.resize(len_i420 as _, 0);
+                    let i420_offset_y = unsafe { i420.as_ptr().add(0) as _ };
+                    let i420_offset_u = unsafe { i420.as_ptr().add(offset_i420[0] as _) as _ };
+                    let i420_offset_v = unsafe { i420.as_ptr().add(offset_i420[1] as _) as _ };
+                    call_yuv!(NV12ToI420(
+                        frame.data[0].as_ptr(),
+                        frame.linesize[0],
+                        frame.data[1].as_ptr(),
+                        frame.linesize[1],
+                        i420_offset_y,
+                        linesize_i420[0],
+                        i420_offset_u,
+                        linesize_i420[1],
+                        i420_offset_v,
+                        linesize_i420[2],
+                        width,
+                        height,
+                    ));
+                    let f = match rgb.fmt() {
+                        ImageFormat::ARGB => I420ToARGB,
+                        ImageFormat::ABGR => I420ToABGR,
+                        _ => bail!("unsupported format: {:?} -> {:?}", frame.pixfmt, rgb.fmt()),
+                    };
+                    call_yuv!(f(
+                        i420_offset_y,
+                        linesize_i420[0],
+                        i420_offset_u,
+                        linesize_i420[1],
+                        i420_offset_v,
+                        linesize_i420[2],
+                        rgb.raw.as_mut_ptr(),
+                        bytes_per_row as _,
+                        width,
+                        height,
+                    ));
+                } else {
+                    let f = match rgb.fmt() {
+                        ImageFormat::ARGB => NV12ToARGB,
+                        ImageFormat::ABGR => NV12ToABGR,
+                        _ => bail!("unsupported format: {:?} -> {:?}", frame.pixfmt, rgb.fmt()),
+                    };
+                    call_yuv!(f(
+                        frame.data[0].as_ptr(),
+                        frame.linesize[0],
+                        frame.data[1].as_ptr(),
+                        frame.linesize[1],
+                        rgb.raw.as_mut_ptr(),
+                        bytes_per_row as _,
+                        width,
+                        height,
+                    ));
+                }
+            }
             AVPixelFormat::AV_PIX_FMT_YUV420P => {
-                hw::hw_i420_to(
-                    rgb.fmt(),
-                    frame.width as _,
-                    frame.height as _,
-                    &frame.data[0],
-                    &frame.data[1],
-                    &frame.data[2],
-                    frame.linesize[0] as _,
-                    frame.linesize[1] as _,
-                    frame.linesize[2] as _,
-                    &mut rgb.raw as _,
-                )?;
+                let f = match rgb.fmt() {
+                    ImageFormat::ARGB => I420ToARGB,
+                    ImageFormat::ABGR => I420ToABGR,
+                    _ => bail!("unsupported format: {:?} -> {:?}", frame.pixfmt, rgb.fmt()),
+                };
+                call_yuv!(f(
+                    frame.data[0].as_ptr(),
+                    frame.linesize[0],
+                    frame.data[1].as_ptr(),
+                    frame.linesize[1],
+                    frame.data[2].as_ptr(),
+                    frame.linesize[2],
+                    rgb.raw.as_mut_ptr(),
+                    bytes_per_row as _,
+                    width,
+                    height,
+                ));
             }
         }
-        Ok(())
-    }
-
-    pub fn bgra(&self, bgra: &mut Vec<u8>, i420: &mut Vec<u8>) -> ResultType<()> {
-        let mut rgb = ImageRgb::new(ImageFormat::ARGB, 1);
-        self.to_fmt(&mut rgb, i420)?;
-        *bgra = rgb.raw;
-        Ok(())
-    }
-
-    pub fn rgba(&self, rgba: &mut Vec<u8>, i420: &mut Vec<u8>) -> ResultType<()> {
-        let mut rgb = ImageRgb::new(ImageFormat::ABGR, 1);
-        self.to_fmt(&mut rgb, i420)?;
-        *rgba = rgb.raw;
         Ok(())
     }
 }
