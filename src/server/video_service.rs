@@ -445,7 +445,10 @@ fn run(vs: VideoService) -> ResultType<()> {
     #[cfg(feature = "vram")]
     c.set_output_texture(encoder.input_texture());
     #[cfg(target_os = "android")]
-    check_change_scale(encoder.is_hardware())?;
+    if let Err(e) = check_change_scale(encoder.is_hardware()) {
+        try_broadcast_display_changed(&sp, display_idx, &c, true).ok();
+        bail!(e);
+    }
     VIDEO_QOS.lock().unwrap().store_bitrate(encoder.bitrate());
     VIDEO_QOS
         .lock()
@@ -501,7 +504,7 @@ fn run(vs: VideoService) -> ResultType<()> {
         drop(video_qos);
 
         if sp.is_option_true(OPTION_REFRESH) {
-            let _ = try_broadcast_display_changed(&sp, display_idx, &c);
+            let _ = try_broadcast_display_changed(&sp, display_idx, &c, true);
             log::info!("switch to refresh");
             bail!("SWITCH");
         }
@@ -541,7 +544,7 @@ fn run(vs: VideoService) -> ResultType<()> {
             last_check_displays = now;
             // This check may be redundant, but it is better to be safe.
             // The previous check in `sp.is_option_true(OPTION_REFRESH)` block may be enough.
-            try_broadcast_display_changed(&sp, display_idx, &c)?;
+            try_broadcast_display_changed(&sp, display_idx, &c, false)?;
         }
 
         frame_controller.reset();
@@ -616,11 +619,9 @@ fn run(vs: VideoService) -> ResultType<()> {
                 }
             }
             Err(err) => {
-                // Get display information again immediately after error.
-                crate::display_service::check_displays_changed().ok();
                 // This check may be redundant, but it is better to be safe.
                 // The previous check in `sp.is_option_true(OPTION_REFRESH)` block may be enough.
-                try_broadcast_display_changed(&sp, display_idx, &c)?;
+                try_broadcast_display_changed(&sp, display_idx, &c, true)?;
 
                 #[cfg(windows)]
                 if !c.is_gdi() {
@@ -931,7 +932,12 @@ fn try_broadcast_display_changed(
     sp: &GenericService,
     display_idx: usize,
     cap: &CapturerInfo,
+    refresh: bool,
 ) -> ResultType<()> {
+    if refresh {
+        // Get display information immediately.
+        crate::display_service::check_displays_changed().ok();
+    }
     if let Some(display) = check_display_changed(
         cap.ndisplay,
         cap.current,
