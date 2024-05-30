@@ -80,6 +80,14 @@ async fn start_hbbs_sync_async() {
                     v["version"] = json!(crate::VERSION);
                     v["id"] = json!(id);
                     v["uuid"] = json!(crate::encode64(hbb_common::get_uuid()));
+                    let ab_name = Config::get_option("preset-address-book-name");
+                    if !ab_name.is_empty() {
+                        v["preset-address-book-name"] = json!(ab_name);
+                    }
+                    let ab_tag = Config::get_option("preset-address-book-tag");
+                    if !ab_tag.is_empty() {
+                        v["preset-address-book-tag"] = json!(ab_tag);
+                    }
                     match crate::post_request(url.replace("heartbeat", "sysinfo"), v.to_string(), "").await {
                         Ok(x)  => {
                             if x == "SYSINFO_UPDATED" {
