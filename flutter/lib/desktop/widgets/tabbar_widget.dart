@@ -921,7 +921,7 @@ class _ListView extends StatelessWidget {
                 final label = labelGetter == null
                     ? Rx<String>(tab.label)
                     : labelGetter!(tab.label);
-                return VisibilityDetector(
+                final child = VisibilityDetector(
                   key: ValueKey(tab.key),
                   onVisibilityChanged: onVisibilityChanged,
                   child: _Tab(
@@ -953,6 +953,10 @@ class _ListView extends StatelessWidget {
                     unSelectedTabBackgroundColor: unSelectedTabBackgroundColor,
                     selectedBorderColor: selectedBorderColor,
                   ),
+                );
+                return GestureDetector(
+                  onPanStart: (e) {},
+                  child: child,
                 );
               }).toList()));
   }
