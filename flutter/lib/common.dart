@@ -3255,7 +3255,7 @@ Widget buildPresetPasswordWarning() {
                 translate("Security Alert"),
                 style: TextStyle(
                   color: Colors.red,
-                  fontSize: 20,
+                  fontSize: 18, // https://github.com/rustdesk/rustdesk-server-pro/issues/261
                   fontWeight: FontWeight.bold,
                 ),
               )).paddingOnly(bottom: 8),
