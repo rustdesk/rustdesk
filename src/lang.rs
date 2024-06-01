@@ -43,46 +43,13 @@ mod ua;
 mod vn;
 
 pub const LANGS: &[(&str, &str)] = &[
-    ("en", "English"),
-    ("it", "Italiano"),
-    ("fr", "Français"),
-    ("de", "Deutsch"),
-    ("nl", "Nederlands"),
-    ("nb", "Norsk bokmål"),
+<<<<<<< Updated upstream
+    
+=======
+   
+>>>>>>> Stashed changes
     ("zh-cn", "简体中文"),
-    ("zh-tw", "繁體中文"),
-    ("pt", "Português"),
-    ("es", "Español"),
-    ("et", "Eesti keel"),
-    ("hu", "Magyar"),
-    ("bg", "Български"),
-    ("ru", "Русский"),
-    ("sk", "Slovenčina"),
-    ("id", "Indonesia"),
-    ("cs", "Čeština"),
-    ("da", "Dansk"),
-    ("eo", "Esperanto"),
-    ("tr", "Türkçe"),
-    ("vn", "Tiếng Việt"),
-    ("pl", "Polski"),
-    ("ja", "日本語"),
-    ("ko", "한국어"),
-    ("kz", "Қазақ"),
-    ("ua", "Українська"),
-    ("fa", "فارسی"),
-    ("ca", "Català"),
-    ("el", "Ελληνικά"),
-    ("sv", "Svenska"),
-    ("sq", "Shqip"),
-    ("sr", "Srpski"),
-    ("th", "ภาษาไทย"),
-    ("sl", "Slovenščina"),
-    ("ro", "Română"),
-    ("lt", "Lietuvių"),
-    ("lv", "Latviešu"),
-    ("ar", "العربية"),
-    ("he", "עברית"),
-    ("hr", "Hrvatski"),
+    
 ];
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
