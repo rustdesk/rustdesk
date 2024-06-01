@@ -588,7 +588,7 @@ class _MobileActionMenu extends StatelessWidget {
           assetName: 'assets/actions_mobile.svg',
           tooltip: 'Mobile Actions',
           onPressed: () =>
-          ffi.dialogManager.mobileActionsOverlayVisible.toggle(),
+              ffi.dialogManager.mobileActionsOverlayVisible.toggle(),
           color: ffi.dialogManager.mobileActionsOverlayVisible.isTrue
               ? _ToolbarTheme.blueColor
               : _ToolbarTheme.inactiveColor,
@@ -2465,7 +2465,7 @@ class _DraggableShowHideState extends State<_DraggableShowHide> {
                 ),
               ),
             )),
-        Obx(() => Offstage(
+        if (!isMacOS) Obx(() => Offstage(
               offstage: isFullscreen.isFalse,
               child: TextButton(
                 onPressed: () => widget.setMinimize(),
