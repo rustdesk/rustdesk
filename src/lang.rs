@@ -43,11 +43,7 @@ mod ua;
 mod vn;
 
 pub const LANGS: &[(&str, &str)] = &[
-<<<<<<< Updated upstream
     
-=======
-   
->>>>>>> Stashed changes
     ("zh-cn", "简体中文"),
     
 ];
