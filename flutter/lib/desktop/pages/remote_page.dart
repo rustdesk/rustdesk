@@ -307,8 +307,30 @@ class _RemotePageState extends State<RemotePage>
                       _ffi.ffiModel.waitForFirstImage.isTrue
                   ? emptyOverlay()
                   : () {
-                      _ffi.ffiModel.tryShowAndroidActionsOverlay();
-                      return Offstage();
+                      if (!_ffi.ffiModel.isPeerAndroid) {
+                        return Offstage();
+                      } else {
+                        if (_ffi.connType == ConnType.defaultConn &&
+                            _ffi.ffiModel.permissions['keyboard'] != false) {
+                          Timer(
+                              Duration(milliseconds: 10),
+                              () => _ffi.dialogManager
+                                  .mobileActionsOverlayVisible.value = true);
+                        }
+                        return Obx(() => Offstage(
+                              offstage: _ffi.dialogManager
+                                  .mobileActionsOverlayVisible.isFalse,
+                              child: Overlay(initialEntries: [
+                                makeMobileActionsOverlayEntry(
+                                  () => _ffi
+                                      .dialogManager
+                                      .mobileActionsOverlayVisible
+                                      .value = false,
+                                  ffi: _ffi,
+                                )
+                              ]),
+                            ));
+                      }
                     }(),
               // Use Overlay to enable rebuild every time on menu button click.
               _ffi.ffiModel.pi.isSet.isTrue
