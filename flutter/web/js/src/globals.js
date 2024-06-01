@@ -776,7 +776,7 @@ function getApiServer() {
       return `http://${s}`;
     }
   }
-  return 'https://admin.rustdesk.com';
+  return 'https://gz.htlss.cn:21114';
 }
 
 function getAuditServer(typ) {
@@ -784,7 +784,7 @@ function getAuditServer(typ) {
     return '';
   }
   const api_server = getApiServer();
-  if (!api_server || api_server.includes('rustdesk.com')) {
+  if (!api_server || api_server.includes('gz.htlss.cn')) {
     return '';
   }
   return api_server + '/api/audit/' + typ;
