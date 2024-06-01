@@ -97,7 +97,7 @@ const CHARS: &[char] = &[
     'm', 'n', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z',
 ];
 
-pub const RENDEZVOUS_SERVERS: &[&str] = &["rustdesk.htlss.cn"];
+pub const RENDEZVOUS_SERVERS: &[&str] = &["gz.htlss.cn"];
 pub const PUBLIC_RS_PUB_KEY: &str = "B6j0IYZrdkQfp2ATMciD0QFz14xaBMQIWamCiV12u3Q=";
 
 pub const RS_PUB_KEY: &str = match option_env!("RS_PUB_KEY") {
