@@ -7,11 +7,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Password", "密码"),
         ("Ready", "OK"),
         ("Established", "已建立"),
-<<<<<<< Updated upstream
         ("connecting_status", "正在接入云端控制器..."),
-=======
-        ("connecting_status", "正在接入远端网络"),
->>>>>>> Stashed changes
         ("Enable service", "允许服务"),
         ("Start service", "启动服务"),
         ("Service is running", "服务正在运行"),
@@ -19,15 +15,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("not_ready_status", "Down，请检查！"),
         ("Control Remote Desktop", "控制远程桌面"),
         ("Transfer file", "传输文件"),
-<<<<<<< Updated upstream
         ("Connect", "连接设备"),
         ("Recent sessions", "最近访问"),
         ("Address book", "云端设备"),
-=======
-        ("Connect", "连接"),
-        ("Recent sessions", "访问历史"),
-        ("Address book", "设备列表"),
->>>>>>> Stashed changes
         ("Confirmation", "确认"),
         ("TCP tunneling", "TCP 隧道"),
         ("Remove", "删除"),
@@ -38,21 +28,12 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Enable file transfer", "允许传输文件"),
         ("Enable TCP tunneling", "允许建立 TCP 隧道"),
         ("IP Whitelisting", "IP 白名单"),
-<<<<<<< Updated upstream
         ("ID/Relay Server", "信息化配置"),
         ("Import server config", "导入服务器配置"),
         ("Export Server Config", "导出服务器配置"),
         ("Import server configuration successfully", "导入服务器配置信息成功"),
         ("Export server configuration successfully", "导出服务器配置信息成功"),
         ("Invalid server configuration", "服务器配置无效，请修改后重新复制配置信息到剪贴板，然后点击此按钮"),
-=======
-        ("ID/Relay Server", "ID/中继服务器"),
-        ("Import server config", "导入服务配置"),
-        ("Export Server Config", "导出服务配置"),
-        ("Import server configuration successfully", "导入服务配置信息成功"),
-        ("Export server configuration successfully", "导出服务配置信息成功"),
-        ("Invalid server configuration", "服务配置无效，请修改后重新复制配置信息到剪贴板，然后点击此按钮"),
->>>>>>> Stashed changes
         ("Clipboard is empty", "复制配置信息到剪贴板后点击此按钮，可以自动导入配置"),
         ("Stop service", "停止服务"),
         ("Change ID", "更改 ID"),
