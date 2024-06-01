@@ -18,6 +18,7 @@ import 'package:flutter_hbb/utils/multi_window_manager.dart';
 import 'package:flutter_hbb/utils/platform_channel.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:get/get.dart';
+import 'package:provider/provider.dart';
 import 'package:uni_links/uni_links.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:uuid/uuid.dart';
@@ -858,30 +859,10 @@ class OverlayDialogManager {
     final overlayState = _overlayKeyState.state;
     if (overlayState == null) return;
 
-    // compute overlay position
-    final screenW = MediaQuery.of(globalKey.currentContext!).size.width;
-    final screenH = MediaQuery.of(globalKey.currentContext!).size.height;
-    const double overlayW = 200;
-    const double overlayH = 45;
-    final left = (screenW - overlayW) / 2;
-    final top = screenH - overlayH - 80;
-
-    final overlay = OverlayEntry(builder: (context) {
-      final session = ffi ?? gFFI;
-      return DraggableMobileActions(
-        position: Offset(left, top),
-        width: overlayW,
-        height: overlayH,
-        onBackPressed: () => session.inputModel.tap(MouseButtons.right),
-        onHomePressed: () => session.inputModel.tap(MouseButtons.wheel),
-        onRecentPressed: () async {
-          session.inputModel.sendMouse('down', MouseButtons.wheel);
-          await Future.delayed(const Duration(milliseconds: 500));
-          session.inputModel.sendMouse('up', MouseButtons.wheel);
-        },
-        onHidePressed: () => hideMobileActionsOverlay(),
-      );
-    });
+    final overlay = makeMobileActionsOverlayEntry(
+      () => hideMobileActionsOverlay(),
+      ffi: ffi,
+    );
     overlayState.insert(overlay);
     _mobileActionsOverlayEntry = overlay;
     mobileActionsOverlayVisible.value = true;
@@ -907,6 +888,45 @@ class OverlayDialogManager {
   bool existing(String tag) {
     return _dialogs.keys.contains(tag);
   }
+}
+
+makeMobileActionsOverlayEntry(VoidCallback? onHide, {FFI? ffi}) {
+  final position = SimpleWrapper(Offset(0, 0));
+  makeMobileActions(BuildContext context, double s) {
+    final scale =  s < 0.85 ? 0.85 : s;
+    final session = ffi ?? gFFI;
+    // compute overlay position
+    final screenW = MediaQuery.of(context).size.width;
+    final screenH = MediaQuery.of(context).size.height;
+    const double overlayW = 200;
+    const double overlayH = 45;
+    final left = (screenW - overlayW * scale) / 2;
+    final top = screenH - (overlayH + 80) * scale;
+    position.value = Offset(left, top);
+    return DraggableMobileActions(
+      scale: scale,
+      position: position,
+      width: overlayW,
+      height: overlayH,
+      onBackPressed: () => session.inputModel.tap(MouseButtons.right),
+      onHomePressed: () => session.inputModel.tap(MouseButtons.wheel),
+      onRecentPressed: () async {
+        session.inputModel.sendMouse('down', MouseButtons.wheel);
+        await Future.delayed(const Duration(milliseconds: 500));
+        session.inputModel.sendMouse('up', MouseButtons.wheel);
+      },
+      onHidePressed: onHide,
+    );
+  }
+
+  return OverlayEntry(builder: (context) {
+    if (isDesktop) {
+      final c = Provider.of<CanvasModel>(context);
+      return makeMobileActions(context, c.scale * 2.0);
+    } else {
+      return makeMobileActions(globalKey.currentContext!, 1.0);
+    }
+  });
 }
 
 void showToast(String text, {Duration timeout = const Duration(seconds: 3)}) {
@@ -3255,7 +3275,8 @@ Widget buildPresetPasswordWarning() {
                 translate("Security Alert"),
                 style: TextStyle(
                   color: Colors.red,
-                  fontSize: 18, // https://github.com/rustdesk/rustdesk-server-pro/issues/261
+                  fontSize:
+                      18, // https://github.com/rustdesk/rustdesk-server-pro/issues/261
                   fontWeight: FontWeight.bold,
                 ),
               )).paddingOnly(bottom: 8),
