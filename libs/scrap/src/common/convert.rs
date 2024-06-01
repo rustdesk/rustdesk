@@ -13,186 +13,6 @@ use hbb_common::{bail, log, ResultType};
 
 generate_call_macro!(call_yuv, false);
 
-#[cfg(feature = "hwcodec")]
-pub mod hw {
-    use super::*;
-    use crate::ImageFormat;
-    #[cfg(target_os = "windows")]
-    use hwcodec::{ffmpeg::AVPixelFormat, ffmpeg_ram::ffmpeg_linesize_offset_length};
-
-    #[cfg(target_os = "windows")]
-    pub fn hw_nv12_to(
-        fmt: ImageFormat,
-        width: usize,
-        height: usize,
-        src_y: &[u8],
-        src_uv: &[u8],
-        src_stride_y: usize,
-        src_stride_uv: usize,
-        dst: &mut Vec<u8>,
-        i420: &mut Vec<u8>,
-        align: usize,
-    ) -> ResultType<()> {
-        let nv12_stride_y = src_stride_y;
-        let nv12_stride_uv = src_stride_uv;
-        if let Ok((linesize_i420, offset_i420, i420_len)) =
-            ffmpeg_linesize_offset_length(AVPixelFormat::AV_PIX_FMT_YUV420P, width, height, align)
-        {
-            dst.resize(width * height * 4, 0);
-            let i420_stride_y = linesize_i420[0];
-            let i420_stride_u = linesize_i420[1];
-            let i420_stride_v = linesize_i420[2];
-            i420.resize(i420_len as _, 0);
-
-            let i420_offset_y = unsafe { i420.as_ptr().add(0) as _ };
-            let i420_offset_u = unsafe { i420.as_ptr().add(offset_i420[0] as _) as _ };
-            let i420_offset_v = unsafe { i420.as_ptr().add(offset_i420[1] as _) as _ };
-            call_yuv!(NV12ToI420(
-                src_y.as_ptr(),
-                nv12_stride_y as _,
-                src_uv.as_ptr(),
-                nv12_stride_uv as _,
-                i420_offset_y,
-                i420_stride_y,
-                i420_offset_u,
-                i420_stride_u,
-                i420_offset_v,
-                i420_stride_v,
-                width as _,
-                height as _,
-            ));
-            match fmt {
-                ImageFormat::ARGB => {
-                    call_yuv!(I420ToARGB(
-                        i420_offset_y,
-                        i420_stride_y,
-                        i420_offset_u,
-                        i420_stride_u,
-                        i420_offset_v,
-                        i420_stride_v,
-                        dst.as_mut_ptr(),
-                        (width * 4) as _,
-                        width as _,
-                        height as _,
-                    ));
-                }
-                ImageFormat::ABGR => {
-                    call_yuv!(I420ToABGR(
-                        i420_offset_y,
-                        i420_stride_y,
-                        i420_offset_u,
-                        i420_stride_u,
-                        i420_offset_v,
-                        i420_stride_v,
-                        dst.as_mut_ptr(),
-                        (width * 4) as _,
-                        width as _,
-                        height as _,
-                    ));
-                }
-                _ => {
-                    bail!("unsupported image format");
-                }
-            }
-            return Ok(());
-        }
-        bail!("get linesize offset failed");
-    }
-
-    #[cfg(not(target_os = "windows"))]
-    pub fn hw_nv12_to(
-        fmt: ImageFormat,
-        width: usize,
-        height: usize,
-        src_y: &[u8],
-        src_uv: &[u8],
-        src_stride_y: usize,
-        src_stride_uv: usize,
-        dst: &mut Vec<u8>,
-        _i420: &mut Vec<u8>,
-        _align: usize,
-    ) -> ResultType<()> {
-        dst.resize(width * height * 4, 0);
-        match fmt {
-            ImageFormat::ARGB => {
-                call_yuv!(NV12ToARGB(
-                    src_y.as_ptr(),
-                    src_stride_y as _,
-                    src_uv.as_ptr(),
-                    src_stride_uv as _,
-                    dst.as_mut_ptr(),
-                    (width * 4) as _,
-                    width as _,
-                    height as _,
-                ));
-            }
-            ImageFormat::ABGR => {
-                call_yuv!(NV12ToABGR(
-                    src_y.as_ptr(),
-                    src_stride_y as _,
-                    src_uv.as_ptr(),
-                    src_stride_uv as _,
-                    dst.as_mut_ptr(),
-                    (width * 4) as _,
-                    width as _,
-                    height as _,
-                ));
-            }
-            _ => bail!("unsupported image format"),
-        }
-        Ok(())
-    }
-
-    pub fn hw_i420_to(
-        fmt: ImageFormat,
-        width: usize,
-        height: usize,
-        src_y: &[u8],
-        src_u: &[u8],
-        src_v: &[u8],
-        src_stride_y: usize,
-        src_stride_u: usize,
-        src_stride_v: usize,
-        dst: &mut Vec<u8>,
-    ) -> ResultType<()> {
-        let src_y = src_y.as_ptr();
-        let src_u = src_u.as_ptr();
-        let src_v = src_v.as_ptr();
-        dst.resize(width * height * 4, 0);
-        match fmt {
-            ImageFormat::ARGB => {
-                call_yuv!(I420ToARGB(
-                    src_y,
-                    src_stride_y as _,
-                    src_u,
-                    src_stride_u as _,
-                    src_v,
-                    src_stride_v as _,
-                    dst.as_mut_ptr(),
-                    (width * 4) as _,
-                    width as _,
-                    height as _,
-                ));
-            }
-            ImageFormat::ABGR => {
-                call_yuv!(I420ToABGR(
-                    src_y,
-                    src_stride_y as _,
-                    src_u,
-                    src_stride_u as _,
-                    src_v,
-                    src_stride_v as _,
-                    dst.as_mut_ptr(),
-                    (width * 4) as _,
-                    width as _,
-                    height as _,
-                ));
-            }
-            _ => bail!("unsupported image format"),
-        };
-        Ok(())
-    }
-}
 #[cfg(not(target_os = "ios"))]
 pub fn convert_to_yuv(
     captured: &PixelBuffer,
@@ -213,6 +33,14 @@ pub fn convert_to_yuv(
         );
     }
     if src_pixfmt == crate::Pixfmt::BGRA || src_pixfmt == crate::Pixfmt::RGBA {
+        // stride is calculated, not real, so we need to check it
+        if src_stride[0] < src_width * 4 {
+            bail!(
+                "src_stride[0] < src_width * 4: {} < {}",
+                src_stride[0],
+                src_width * 4
+            );
+        }
         if src.len() < src_stride[0] * src_height {
             bail!(
                 "wrong src len, {} < {} * {}",

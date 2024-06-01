@@ -12,7 +12,6 @@ import 'package:flutter_hbb/common/formatter/id_formatter.dart';
 import 'package:flutter_hbb/desktop/widgets/refresh_wrapper.dart';
 import 'package:flutter_hbb/desktop/widgets/tabbar_widget.dart';
 import 'package:flutter_hbb/main.dart';
-import 'package:flutter_hbb/models/desktop_render_texture.dart';
 import 'package:flutter_hbb/models/peer_model.dart';
 import 'package:flutter_hbb/models/state_model.dart';
 import 'package:flutter_hbb/utils/multi_window_manager.dart';
@@ -2799,11 +2798,6 @@ sessionRefreshVideo(SessionID sessionId, PeerInfo pi) async {
   }
 }
 
-bool isChooseDisplayToOpenInNewWindow(PeerInfo pi, SessionID sessionId) =>
-    pi.isSupportMultiDisplay &&
-    useTextureRender &&
-    bind.sessionGetDisplaysAsIndividualWindows(sessionId: sessionId) == 'Y';
-
 Future<List<Rect>> getScreenListWayland() async {
   final screenRectList = <Rect>[];
   if (isMainDesktopWindow) {
@@ -3261,7 +3255,7 @@ Widget buildPresetPasswordWarning() {
                 translate("Security Alert"),
                 style: TextStyle(
                   color: Colors.red,
-                  fontSize: 20,
+                  fontSize: 18, // https://github.com/rustdesk/rustdesk-server-pro/issues/261
                   fontWeight: FontWeight.bold,
                 ),
               )).paddingOnly(bottom: 8),

@@ -334,7 +334,7 @@ class DesktopTab extends StatelessWidget {
 
   List<Widget> _tabWidgets = [];
   Widget _buildPageView() {
-    return _buildBlock(
+    final child = _buildBlock(
         child: Obx(() => PageView(
             controller: state.value.pageController,
             physics: NeverScrollableScrollPhysics(),
@@ -358,6 +358,11 @@ class DesktopTab extends StatelessWidget {
                 return newList;
               }
             }())));
+    if (tabType == DesktopTabType.remoteScreen) {
+      return Container(color: kColorCanvas, child: child);
+    } else {
+      return child;
+    }
   }
 
   /// Check whether to show ListView
@@ -916,7 +921,7 @@ class _ListView extends StatelessWidget {
                 final label = labelGetter == null
                     ? Rx<String>(tab.label)
                     : labelGetter!(tab.label);
-                return VisibilityDetector(
+                final child = VisibilityDetector(
                   key: ValueKey(tab.key),
                   onVisibilityChanged: onVisibilityChanged,
                   child: _Tab(
@@ -948,6 +953,10 @@ class _ListView extends StatelessWidget {
                     unSelectedTabBackgroundColor: unSelectedTabBackgroundColor,
                     selectedBorderColor: selectedBorderColor,
                   ),
+                );
+                return GestureDetector(
+                  onPanStart: (e) {},
+                  child: child,
                 );
               }).toList()));
   }

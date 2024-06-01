@@ -1,6 +1,7 @@
 use crate::{
     common::{get_supported_keyboard_modes, is_keyboard_mode_supported},
     input::{MOUSE_BUTTON_LEFT, MOUSE_TYPE_DOWN, MOUSE_TYPE_UP, MOUSE_TYPE_WHEEL},
+    ui_interface::use_texture_render,
 };
 use async_trait::async_trait;
 use bytes::Bytes;
@@ -448,7 +449,7 @@ impl<T: InvokeUiSession> Session<T> {
         let mark_unsupported = self.lc.read().unwrap().mark_unsupported.clone();
         let decoder = scrap::codec::Decoder::supported_decodings(
             None,
-            cfg!(feature = "flutter"),
+            use_texture_render(),
             luid,
             &mark_unsupported,
         );
@@ -467,6 +468,12 @@ impl<T: InvokeUiSession> Session<T> {
     pub fn change_prefer_codec(&self) {
         let msg = self.lc.write().unwrap().update_supported_decodings();
         self.send(Data::Message(msg));
+    }
+
+    pub fn use_texture_render_changed(&self) {
+        self.send(Data::ResetDecoder(None));
+        self.change_prefer_codec();
+        self.send(Data::Message(LoginConfigHandler::refresh()));
     }
 
     pub fn restart_remote_device(&self) {
@@ -732,8 +739,7 @@ impl<T: InvokeUiSession> Session<T> {
         msg_out.set_misc(misc);
         self.send(Data::Message(msg_out));
 
-        #[cfg(not(feature = "flutter_texture_render"))]
-        {
+        if !use_texture_render() {
             self.capture_displays(vec![], vec![], vec![display]);
         }
     }

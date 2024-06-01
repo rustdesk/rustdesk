@@ -7,7 +7,6 @@ import 'package:flutter_hbb/common/widgets/audio_input.dart';
 import 'package:flutter_hbb/common/widgets/toolbar.dart';
 import 'package:flutter_hbb/models/chat_model.dart';
 import 'package:flutter_hbb/models/state_model.dart';
-import 'package:flutter_hbb/models/desktop_render_texture.dart';
 import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/utils/multi_window_manager.dart';
 import 'package:flutter_hbb/plugin/widgets/desc_ui.dart';
@@ -615,14 +614,14 @@ class _MonitorMenu extends StatelessWidget {
       bind.mainGetUserDefaultOption(key: kKeyShowMonitorsToolbar) == 'Y';
 
   bool get supportIndividualWindows =>
-      useTextureRender && ffi.ffiModel.pi.isSupportMultiDisplay;
+      !isWeb && ffi.ffiModel.pi.isSupportMultiDisplay;
 
   @override
   Widget build(BuildContext context) => showMonitorsToolbar
-      ? buildMultiMonitorMenu()
-      : Obx(() => buildMonitorMenu());
+      ? buildMultiMonitorMenu(context)
+      : Obx(() => buildMonitorMenu(context));
 
-  Widget buildMonitorMenu() {
+  Widget buildMonitorMenu(BuildContext context) {
     final width = SimpleWrapper<double>(0);
     final monitorsIcon =
         globalMonitorsWidget(width, Colors.white, Colors.black38);
@@ -636,20 +635,23 @@ class _MonitorMenu extends StatelessWidget {
         menuStyle: MenuStyle(
             padding:
                 MaterialStatePropertyAll(EdgeInsets.symmetric(horizontal: 6))),
-        menuChildrenGetter: () => [buildMonitorSubmenuWidget()]);
+        menuChildrenGetter: () => [buildMonitorSubmenuWidget(context)]);
   }
 
-  Widget buildMultiMonitorMenu() {
-    return Row(children: buildMonitorList(true));
+  Widget buildMultiMonitorMenu(BuildContext context) {
+    return Row(children: buildMonitorList(context, true));
   }
 
-  Widget buildMonitorSubmenuWidget() {
+  Widget buildMonitorSubmenuWidget(BuildContext context) {
+    final m = Provider.of<ImageModel>(context);
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Row(children: buildMonitorList(false)),
-        supportIndividualWindows ? Divider() : Offstage(),
-        supportIndividualWindows ? chooseDisplayBehavior() : Offstage(),
+        Row(children: buildMonitorList(context, false)),
+        supportIndividualWindows && m.useTextureRender ? Divider() : Offstage(),
+        supportIndividualWindows && m.useTextureRender
+            ? chooseDisplayBehavior()
+            : Offstage(),
       ],
     );
   }
@@ -680,7 +682,7 @@ class _MonitorMenu extends StatelessWidget {
         ),
       );
 
-  List<Widget> buildMonitorList(bool isMulti) {
+  List<Widget> buildMonitorList(BuildContext context, bool isMulti) {
     final List<Widget> monitorList = [];
     final pi = ffi.ffiModel.pi;
 
@@ -735,7 +737,10 @@ class _MonitorMenu extends StatelessWidget {
     for (int i = 0; i < pi.displays.length; i++) {
       monitorList.add(buildMonitorButton(i));
     }
-    if (supportIndividualWindows && pi.displays.length > 1) {
+    final m = Provider.of<ImageModel>(context);
+    if (supportIndividualWindows &&
+        m.useTextureRender &&
+        pi.displays.length > 1) {
       monitorList.add(buildMonitorButton(kAllDisplayValue));
     }
     return monitorList;
@@ -818,7 +823,12 @@ class _MonitorMenu extends StatelessWidget {
     }
     RxInt display = CurrentDisplayState.find(id);
     if (display.value != i) {
-      if (isChooseDisplayToOpenInNewWindow(pi, ffi.sessionId)) {
+      final isChooseDisplayToOpenInNewWindow = pi.isSupportMultiDisplay &&
+          bind.mainGetUseTextureRender() &&
+          bind.sessionGetDisplaysAsIndividualWindows(
+                  sessionId: ffi.sessionId) ==
+              'Y';
+      if (isChooseDisplayToOpenInNewWindow) {
         openMonitorInNewTabOrWindow(i, ffi.id, pi);
       } else {
         openMonitorInTheSameTab(i, ffi, pi, updateCursorPos: !isMulti);
