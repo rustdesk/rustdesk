@@ -32,51 +32,7 @@ class Body: Reactor.Component
         var show_elevation_btn = handler.can_elevate() && show_elevation && !c.is_file_transfer && c.port_forward.length == 0;
         var show_accept_btn = handler.get_option('approve-mode') != 'password';
        // below size:* is a workaround for Linux, it already set in css, but not work, shit sciter
-        return <div .content style="size:*">
-            <div .left-panel>
-                <div .icon-and-id>
-                    <div .icon style={"background: " + string2RGB(c.name, 1)}>
-                    {c.name[0].toUpperCase()}
-                    </div>
-                    <div>
-                        <div .id style="font-weight: bold; font-size: 1.2em;">{c.name}</div>
-                        <div .id>({c.peer_id})</div>
-                        <div style="margin-top: 1.2em">{auth
-                            ? <span>{disconnected ? translate('Disconnected') : translate('Connected')}{" "}<span #time>{getElapsed(c.time, c.now)}</span></span> 
-                            : <span>{translate('Request access to your device')}{"..."}</span>}
-                        </div>
-                    </div>
-                </div>
-                <div />
-                {c.is_file_transfer || c.port_forward || disconnected ? "" : <div>{translate('Permissions')}</div>}
-                {c.is_file_transfer || c.port_forward || disconnected ? "" : <div> <div .permissions>
-                    <div class={!c.keyboard ? "disabled" : ""} title={translate('Enable keyboard/mouse')}><icon .keyboard /></div>
-                    <div class={!c.clipboard ? "disabled" : ""} title={translate('Enable clipboard')}><icon .clipboard /></div>
-                    <div class={!c.audio ? "disabled" : ""} title={translate('Enable audio')}><icon .audio /></div>
-                    <div class={!c.file ? "disabled" : ""} title={translate('Enable file copy and paste')}><icon .file /></div>
-                    <div class={!c.restart ? "disabled" : ""} title={translate('Enable remote restart')}><icon .restart /></div>
-                </div> <div .permissions style="margin-top:8px;" >
-                    <div class={!c.recording ? "disabled" : ""} title={translate('Enable recording session')}><icon .recording /></div>
-                    <div class={!c.block_input ? "disabled" : ""} title={translate('Enable blocking user input')} style={is_win ? "" : "display:none;"}><icon .block_input /></div>
-                </div></div>
-                }
-                {c.port_forward ? <div>Port Forwarding: {c.port_forward}</div> : ""}
-                <div style="size:*"/>
-                <div .outer_buttons>
-                    {!auth && !disconnected && show_elevation_btn && show_accept_btn ? <button #elevate_accept .control .elevate .button><span><span><span>{svg_elevate}</span><span>{translate('Accept')}</span></span></span></button> : "" }
-                    {auth && !disconnected && show_elevation_btn ? <button #elevate .control .elevate .button><span><span><span>{svg_elevate}</span><span>{translate('Elevate')}</span></span></span></button> : "" }
-                    <div .inner_buttons style={auth ? "display:none;":""}>
-                        {!auth && show_accept_btn ? <button #accept .control .button>{translate('Accept')}</button> : "" }
-                        {!auth ? <button #dismiss .control .outline>{translate('Dismiss')}</button> : "" }
-                    </div>
-                    {auth && !disconnected ? <button #disconnect .control .button>{translate('Disconnect')}</button> : "" }
-                    {auth && disconnected ? <button #close .control .button>{translate('Close')}</button> : "" }
-                </div>
-                {c.is_file_transfer || c.port_forward ? "" : <div .chaticon>{svg_chat}</div>}
-            </div>
-            <div .right-panel style={right_style}>
-                {c.is_file_transfer || c.port_forward ? "" : <ChatBox msgs={c.msgs} callback={callback} />}
-            </div>
+
         </div>;
     }
 
