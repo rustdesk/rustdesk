@@ -893,7 +893,7 @@ class OverlayDialogManager {
 makeMobileActionsOverlayEntry(VoidCallback? onHide, {FFI? ffi}) {
   final position = SimpleWrapper(Offset(0, 0));
   makeMobileActions(BuildContext context, double s) {
-    final scale =  s < 0.85 ? 0.85 : s;
+    final scale = s < 0.85 ? 0.85 : s;
     final session = ffi ?? gFFI;
     // compute overlay position
     final screenW = MediaQuery.of(context).size.width;
@@ -2384,7 +2384,13 @@ Future<void> onActiveWindowChanged() async {
       await windowManager.setPreventClose(false);
       await windowManager.close();
       if (isMacOS) {
-        RdPlatformChannel.instance.terminate();
+        // If we call without delay, `flutter/macos/Runner/MainFlutterWindow.swift` can handle the "terminate" event.
+        // But the app will not close.
+        //
+        // No idea why we need to delay here, `terminate()` itself is also an async function.
+        Future.delayed(Duration.zero, () {
+          RdPlatformChannel.instance.terminate();
+        });
       }
     }
   }
