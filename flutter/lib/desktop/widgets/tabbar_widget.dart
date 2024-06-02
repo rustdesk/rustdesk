@@ -396,6 +396,16 @@ class DesktopTab extends StatelessWidget {
                       }
                     : null,
                 onPanStart: (_) => startDragging(isMainWindow),
+                onPanCancel: () {
+                  if (isMacOS) {
+                    setMovable(isMainWindow, false);
+                  }
+                },
+                onPanEnd: (_) {
+                  if (isMacOS) {
+                    setMovable(isMainWindow, false);
+                  }
+                },
                 child: Row(
                   children: [
                     Offstage(
@@ -783,6 +793,14 @@ void startDragging(bool isMainWindow) {
     windowManager.startDragging();
   } else {
     WindowController.fromWindowId(kWindowId!).startDragging();
+  }
+}
+
+void setMovable(bool isMainWindow, bool movable) {
+  if (isMainWindow) {
+    windowManager.setMovable(movable);
+  } else {
+    WindowController.fromWindowId(kWindowId!).setMovable(movable);
   }
 }
 
