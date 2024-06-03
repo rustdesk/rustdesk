@@ -1,10 +1,10 @@
 [package]
-name = "rustdesk"
+name = "ThibDesk"
 version = "1.2.6"
-authors = ["rustdesk <info@rustdesk.com>"]
-edition = "2021"
+authors = ["Micollet Thibaut <contact@it-thib.fr>"]
+edition = "2024"
 build= "build.rs"
-description = "RustDesk Remote Desktop"
+description = "ThibDesk Bureau à distance"
 default-run = "rustdesk"
 rust-version = "1.75"
 
