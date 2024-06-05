@@ -2093,6 +2093,12 @@ pub mod keys {
     pub const OPTION_FLUTTER_PEER_CARD_UI_TYLE: &str = "peer-card-ui-type";
     pub const OPTION_FLUTTER_CURRENT_AB_NAME: &str = "current-ab-name";
 
+    // android floating window options
+    pub const OPTION_DISABLE_FLOATING_WINDOW: &str = "disable-floating-window";
+    pub const OPTION_FLOATING_WINDOW_SIZE: &str = "floating-window-size";
+    pub const OPTION_FLOATING_WINDOW_TRANSPARENCY: &str = "floating-window-transparency";
+    pub const OPTION_FLOATING_WINDOW_SVG: &str = "floating-window-svg";
+
     // proxy settings
     // The following options are not real keys, they are just used for custom client advanced settings.
     // The real keys are in Config2::socks.
@@ -2148,6 +2154,10 @@ pub mod keys {
         OPTION_FLUTTER_PEER_TAB_VISIBLE,
         OPTION_FLUTTER_PEER_CARD_UI_TYLE,
         OPTION_FLUTTER_CURRENT_AB_NAME,
+        OPTION_DISABLE_FLOATING_WINDOW,
+        OPTION_FLOATING_WINDOW_SIZE,
+        OPTION_FLOATING_WINDOW_TRANSPARENCY,
+        OPTION_FLOATING_WINDOW_SVG,
     ];
     // DEFAULT_SETTINGS, OVERWRITE_SETTINGS
     pub const KEYS_SETTINGS: &[&str] = &[
