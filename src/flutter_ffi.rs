@@ -2224,24 +2224,35 @@ pub mod server_side {
         input: JString,
     ) -> jstring {
         let mut env = env;
-        let res =
-            env.with_local_frame_returning_local(10, |env: &mut JNIEnv| -> JniResult<JObject> {
-                let res = if let (Ok(input), Ok(locale)) =
-                    (env.get_string(&input), env.get_string(&locale))
-                {
-                    let input: String = input.into();
-                    let locale: String = locale.into();
-                    crate::client::translate_locale(input, &locale)
-                } else {
-                    "".into()
-                };
-                env.new_string(res).map(|v| v.into())
-            });
-        res.unwrap_or(input.into()).into_raw()
+        let res = if let (Ok(input), Ok(locale)) = (env.get_string(&input), env.get_string(&locale))
+        {
+            let input: String = input.into();
+            let locale: String = locale.into();
+            crate::client::translate_locale(input, &locale)
+        } else {
+            "".into()
+        };
+        return env.new_string(res).unwrap_or(input).into_raw();
     }
 
     #[no_mangle]
     pub unsafe extern "system" fn Java_ffi_FFI_refreshScreen(_env: JNIEnv, _class: JClass) {
         crate::server::video_service::refresh()
+    }
+
+    #[no_mangle]
+    pub unsafe extern "system" fn Java_ffi_FFI_getLocalOption(
+        env: JNIEnv,
+        _class: JClass,
+        key: JString,
+    ) -> jstring {
+        let mut env = env;
+        let res = if let Ok(key) = env.get_string(&key) {
+            let key: String = key.into();
+            super::get_local_option(key)
+        } else {
+            "".into()
+        };
+        return env.new_string(res).unwrap_or_default().into_raw();
     }
 }

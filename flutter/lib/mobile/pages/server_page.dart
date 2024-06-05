@@ -854,6 +854,15 @@ void androidChannelInit() {
             msgBox(gFFI.sessionId, type, title, text, link, gFFI.dialogManager);
             break;
           }
+        case "stop_service":
+          {
+            print(
+                "stop_service by kotlin, isStart:${gFFI.serverModel.isStart}");
+            if (gFFI.serverModel.isStart) {
+              gFFI.serverModel.stopService();
+            }
+            break;
+          }
       }
     } catch (e) {
       debugPrintStack(label: "MethodCallHandler err:$e");

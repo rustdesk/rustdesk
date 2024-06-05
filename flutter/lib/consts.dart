@@ -136,6 +136,8 @@ const String kOptionAllowRemoveWallpaper = "allow-remove-wallpaper";
 
 const String kOptionToggleViewOnly = "view-only";
 
+const String kOptionDisableFloatingWindow = "disable-floating-window";
+
 const String kUrlActionClose = "close";
 
 const String kTabLabelHomePage = "Home";

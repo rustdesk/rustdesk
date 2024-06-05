@@ -252,19 +252,9 @@ class MainActivity : FlutterActivity() {
         val codecArray = JSONArray()
 
         val windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
-        var w = 0
-        var h = 0
-        @Suppress("DEPRECATION")
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            val m = windowManager.maximumWindowMetrics
-            w = m.bounds.width()
-            h = m.bounds.height()
-        } else {
-            val dm = DisplayMetrics()
-            windowManager.defaultDisplay.getRealMetrics(dm)
-            w = dm.widthPixels
-            h = dm.heightPixels
-        }
+        val wh = getScreenSize(windowManager)
+        var w = wh.first
+        var h = wh.second
         val align = 64
         w = (w + align - 1) / align * align
         h = (h + align - 1) / align * align
@@ -373,5 +363,22 @@ class MainActivity : FlutterActivity() {
         } else {
             Log.d(logTag, "onVoiceCallClosed success")
         }
+    }
+
+    private var disableFloatingWindow: Boolean? = null
+    override fun onStop() {
+        super.onStop()
+        if (disableFloatingWindow == null) {
+            disableFloatingWindow = FFI.getLocalOption("disable-floating-window") == "Y"
+            Log.d(logTag, "disableFloatingWindow: $disableFloatingWindow")
+        }
+        if (disableFloatingWindow != true && MainService.isReady) {
+            startService(Intent(this, FloatingWindowService::class.java))
+        }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        stopService(Intent(this, FloatingWindowService::class.java))
     }
 }

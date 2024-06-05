@@ -19,4 +19,5 @@ object FFI {
     external fun refreshScreen()
     external fun setFrameRawEnable(name: String, value: Boolean)
     external fun setCodecInfo(info: String)
+    external fun getLocalOption(key: String): String
 }
