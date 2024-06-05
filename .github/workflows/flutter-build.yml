@@ -211,7 +211,7 @@ jobs:
 
       - name: Combine unsigned app
         run: |
-          tar czf rustdesk-${{ env.VERSION }}-unsigned.tar.gz *.dmg windows-x86_64
+          tar czf rustdesk-${{ env.VERSION }}-unsigned.tar.gz windows-x86_64
 
       - name: Publish unsigned app
         uses: softprops/action-gh-release@v1
