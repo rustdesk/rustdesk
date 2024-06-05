@@ -612,8 +612,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Clear Wayland screen selection", "Notīrīt Wayland ekrāna atlasi"),
         ("clear_Wayland_screen_selection_tip", "Pēc ekrāna atlases notīrīšanas varat atkārtoti atlasīt ekrānu, ko kopīgot."),
         ("confirm_clear_Wayland_screen_selection_tip", "Vai tiešām notīrīt Wayland ekrāna atlasi?"),
-        ("android_new_voice_call_tip", ""),
-        ("texture_render_tip", ""),
-        ("Use texture rendering", ""),
+        ("android_new_voice_call_tip", "Tika saņemts jauns balss zvana pieprasījums. Ja piekrītat, audio pārslēgsies uz balss saziņu."),
+        ("texture_render_tip", "Izmantojiet tekstūras renderēšanu, lai attēli būtu vienmērīgāki. Varat mēģināt atspējot šo opciju, ja rodas renderēšanas problēmas."),
+        ("Use texture rendering", "Izmantot tekstūras renderēšanu"),
     ].iter().cloned().collect();
 }
