@@ -397,6 +397,8 @@ class DesktopTab extends StatelessWidget {
                     : null,
                 onPanStart: (_) => startDragging(isMainWindow),
                 onPanCancel: () {
+                  // We need to disable dragging because macOS handles dragging by default.
+                  // We want to disable dragging of the tab area in the tab bar.
                   if (isMacOS) {
                     setMovable(isMainWindow, false);
                   }
