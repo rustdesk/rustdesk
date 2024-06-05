@@ -2180,7 +2180,8 @@ pub fn session_request_new_display_init_msgs(session_id: SessionID, display: usi
 pub mod server_side {
     use hbb_common::{config, log};
     use jni::{
-        objects::{JClass, JString},
+        errors::{Error as JniError, Result as JniResult},
+        objects::{JClass, JObject, JString},
         sys::jstring,
         JNIEnv,
     };
@@ -2223,15 +2224,20 @@ pub mod server_side {
         input: JString,
     ) -> jstring {
         let mut env = env;
-        let res = if let (Ok(input), Ok(locale)) = (env.get_string(&input), env.get_string(&locale))
-        {
-            let input: String = input.into();
-            let locale: String = locale.into();
-            crate::client::translate_locale(input, &locale)
-        } else {
-            "".into()
-        };
-        return env.new_string(res).unwrap_or(input).into_raw();
+        let res =
+            env.with_local_frame_returning_local(10, |env: &mut JNIEnv| -> JniResult<JObject> {
+                let res = if let (Ok(input), Ok(locale)) =
+                    (env.get_string(&input), env.get_string(&locale))
+                {
+                    let input: String = input.into();
+                    let locale: String = locale.into();
+                    crate::client::translate_locale(input, &locale)
+                } else {
+                    "".into()
+                };
+                env.new_string(res).map(|v| v.into())
+            });
+        res.unwrap_or(input.into()).into_raw()
     }
 
     #[no_mangle]
