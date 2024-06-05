@@ -58,7 +58,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    final isIncomingOnly = bind.isIncomingOnly();
+    final isIncomingOnly = true;
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -70,7 +70,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
   }
 
   Widget buildLeftPane(BuildContext context) {
-    final isIncomingOnly = bind.isIncomingOnly();
+    final isIncomingOnly = true;
     final isOutgoingOnly = bind.isOutgoingOnly();
     final children = <Widget>[
       if (!isOutgoingOnly) buildPresetPasswordWarning(),
@@ -520,7 +520,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
         );
       }
     }
-    if (bind.isIncomingOnly()) {
+    if (true) {
       return Align(
         alignment: Alignment.centerRight,
         child: OutlinedButton(
@@ -564,7 +564,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
       children: [
         Container(
           margin: EdgeInsets.fromLTRB(
-              0, marginTop, 0, bind.isIncomingOnly() ? marginTop : 0),
+              0, marginTop, 0, true ? marginTop : 0),
           child: Container(
               decoration: BoxDecoration(
                   gradient: LinearGradient(
@@ -793,7 +793,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
     });
     _uniLinksSubscription = listenUniLinks();
 
-    if (bind.isIncomingOnly()) {
+    if (true) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         _updateWindowSize();
       });

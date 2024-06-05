@@ -64,8 +64,8 @@ class DesktopSettingPage extends StatefulWidget {
     if (!bind.isOutgoingOnly() && !bind.isDisableSettings())
       SettingsTabKey.safety,
     if (!bind.isDisableSettings()) SettingsTabKey.network,
-    if (!bind.isIncomingOnly()) SettingsTabKey.display,
-    if (!isWeb && !bind.isIncomingOnly() && bind.pluginFeatureIsEnabled())
+    if (!true) SettingsTabKey.display,
+    if (!isWeb && !true && bind.pluginFeatureIsEnabled())
       SettingsTabKey.plugin,
     if (!bind.isDisableAccount()) SettingsTabKey.account,
     SettingsTabKey.about,
@@ -175,8 +175,8 @@ class _DesktopSettingPageState extends State<DesktopSettingPage>
       _General(),
       if (!bind.isOutgoingOnly() && !bind.isDisableSettings()) _Safety(),
       if (!bind.isDisableSettings()) _Network(),
-      if (!bind.isIncomingOnly()) _Display(),
-      if (!isWeb && !bind.isIncomingOnly() && bind.pluginFeatureIsEnabled())
+      if (!true) _Display(),
+      if (!isWeb && !true && bind.pluginFeatureIsEnabled())
         _Plugin(),
       if (!bind.isDisableAccount()) _Account(),
       _About(),
@@ -373,13 +373,13 @@ class _GeneralState extends State<_General> {
 
   Widget other() {
     final children = <Widget>[
-      if (!bind.isIncomingOnly())
+      if (!true)
         _OptionCheckBox(context, 'Confirm before closing multiple tabs',
             kOptionEnableConfirmClosingTabs,
             isServer: false),
       _OptionCheckBox(context, 'Adaptive bitrate', kOptionEnableAbr),
       wallpaper(),
-      if (!bind.isIncomingOnly()) ...[
+      if (!true) ...[
         _OptionCheckBox(
           context,
           'Open connection in new tab',

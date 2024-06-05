@@ -600,7 +600,7 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
             title: Text(translate("Share Screen")),
             tiles: shareScreenTiles,
           ),
-        if (!bind.isIncomingOnly()) defaultDisplaySection(),
+        if (!true) defaultDisplaySection(),
         if (isAndroid && !disabledSettings && !outgoingOnly)
           SettingsSection(
             title: Text(translate("Enhancements")),
