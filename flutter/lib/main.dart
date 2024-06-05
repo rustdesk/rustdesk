@@ -96,7 +96,7 @@ Future<void> main(List<String> args) async {
     await windowManager.ensureInitialized();
     windowManager.setPreventClose(true);
     if (isMacOS) {
-      windowManager.setMovable(false);
+      disableWindowMovable(kWindowId);
     }
     runMainApp(true);
   }
@@ -171,7 +171,7 @@ void runMultiWindow(
   // set prevent close to true, we handle close event manually
   WindowController.fromWindowId(kWindowId!).setPreventClose(true);
   if (isMacOS) {
-    WindowController.fromWindowId(kWindowId!).setMovable(false);
+    disableWindowMovable(kWindowId);
   }
   late Widget widget;
   switch (appType) {

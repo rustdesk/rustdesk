@@ -1008,7 +1008,8 @@ class CustomAlertDialog extends StatelessWidget {
           return KeyEventResult.handled; // avoid TextField exception on escape
         } else if (!tabTapped &&
             onSubmit != null &&
-            (key.logicalKey == LogicalKeyboardKey.enter || key.logicalKey == LogicalKeyboardKey.numpadEnter)) {
+            (key.logicalKey == LogicalKeyboardKey.enter ||
+                key.logicalKey == LogicalKeyboardKey.numpadEnter)) {
           if (key is RawKeyDownEvent) onSubmit?.call();
           return KeyEventResult.handled;
         } else if (key.logicalKey == LogicalKeyboardKey.tab) {
@@ -3372,3 +3373,27 @@ get defaultOptionNo => isCustomClient ? 'N' : '';
 get defaultOptionWhitelist => isCustomClient ? ',' : '';
 get defaultOptionAccessMode => isCustomClient ? 'custom' : '';
 get defaultOptionApproveMode => isCustomClient ? 'password-click' : '';
+
+// `setMovable()` is only supported on macOS.
+//
+// On macOS, the window can be dragged by the tab bar by default.
+// We need to disable the movable feature to prevent the window from being dragged by the tabs in the tab bar.
+//
+// When we drag the blank tab bar (not the tab), the window will be dragged normally by adding the `onPanStart` handle.
+//
+// See the following code for more details:
+// https://github.com/rustdesk/rustdesk/blob/ce1dac3b8613596b4d8ae981275f9335489eb935/flutter/lib/desktop/widgets/tabbar_widget.dart#L385
+// https://github.com/rustdesk/rustdesk/blob/ce1dac3b8613596b4d8ae981275f9335489eb935/flutter/lib/desktop/widgets/tabbar_widget.dart#L399
+//
+// @platforms macos
+disableWindowMovable(int? windowId) {
+  if (!isMacOS) {
+    return;
+  }
+
+  if (windowId == null) {
+    windowManager.setMovable(false);
+  } else {
+    WindowController.fromWindowId(windowId).setMovable(false);
+  }
+}
