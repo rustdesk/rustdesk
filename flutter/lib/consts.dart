@@ -157,6 +157,8 @@ const String kKeyShowMonitorsToolbar = 'show_monitors_toolbar';
 const String kKeyReverseMouseWheel = "reverse_mouse_wheel";
 
 const String kMsgboxTextWaitingForImage = 'Connected, waiting for image...';
+const String kLabelShowDisplaysAsIndividualWindows =
+    'Show displays as individual windows';
 
 // the executable name of the portable version
 const String kEnvPortableExecutable = "RUSTDESK_APPNAME";

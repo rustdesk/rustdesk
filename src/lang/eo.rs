@@ -615,5 +615,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("android_new_voice_call_tip", ""),
         ("texture_render_tip", ""),
         ("Use texture rendering", ""),
+        ("Wayland_switch_display_msg", ""),
     ].iter().cloned().collect();
 }

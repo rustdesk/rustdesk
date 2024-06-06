@@ -583,8 +583,10 @@ Future<List<TToggleMenu>> toolbarDisplayToggle(
         child: Text(translate('Lock after session end'))));
   }
 
-  if (bind.mainGetUseTextureRender() &&
+  if (!isWeb &&
       pi.isSupportMultiDisplay &&
+      !pi.isWayland &&
+      bind.mainGetUseTextureRender() &&
       PrivacyModeState.find(id).isEmpty &&
       pi.displaysCount.value > 1 &&
       bind.mainGetUserDefaultOption(key: kKeyShowMonitorsToolbar) == 'Y') {
@@ -598,7 +600,7 @@ Future<List<TToggleMenu>> toolbarDisplayToggle(
           bind.sessionSetDisplaysAsIndividualWindows(
               sessionId: sessionId, value: value ? 'Y' : '');
         },
-        child: Text(translate('Show displays as individual windows'))));
+        child: Text(translate(kLabelShowDisplaysAsIndividualWindows))));
   }
 
   final isMultiScreens = !isWeb && (await getScreenRectList()).length > 1;

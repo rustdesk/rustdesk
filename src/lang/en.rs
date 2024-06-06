@@ -229,5 +229,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("confirm_clear_Wayland_screen_selection_tip", "Are you sure to clear the Wayland screen selection?"),
         ("android_new_voice_call_tip", "A new voice call request was received. If you accept, the audio will switch to voice communication."),
         ("texture_render_tip", "Use texture rendering to make the pictures smoother. You could try disabling this option if you encounter rendering issues."),
+        ("Wayland_switch_display_msg", "Display switching is not supported under Wayland. Please reselect the shared display on the controlled side. 1. Clear the Wayland shared screen selection. Main window --> Settings --> General --> Wayland --> Clear Wayland screen selection. 2. Reconnect."),
     ].iter().cloned().collect();
 }

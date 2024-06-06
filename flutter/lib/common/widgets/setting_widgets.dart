@@ -236,7 +236,7 @@ List<(String, String)> otherDefaultSettings() {
     ('swap-left-right-mouse', kOptionSwapLeftRightMouse),
     if (isDesktop && bind.mainGetUseTextureRender())
       (
-        'Show displays as individual windows',
+        kLabelShowDisplaysAsIndividualWindows,
         kKeyShowDisplaysAsIndividualWindows
       ),
     if (isDesktop && bind.mainGetUseTextureRender())

@@ -616,6 +616,12 @@ class _MonitorMenu extends StatelessWidget {
   bool get supportIndividualWindows =>
       !isWeb && ffi.ffiModel.pi.isSupportMultiDisplay;
 
+  bool showIndividialDisplaysWindow(ImageModel m) =>
+      !isWeb &&
+      !ffi.ffiModel.pi.isWayland &&
+      supportIndividualWindows &&
+      m.useTextureRender;
+
   @override
   Widget build(BuildContext context) => showMonitorsToolbar
       ? buildMultiMonitorMenu(context)
@@ -648,10 +654,8 @@ class _MonitorMenu extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         Row(children: buildMonitorList(context, false)),
-        supportIndividualWindows && m.useTextureRender ? Divider() : Offstage(),
-        supportIndividualWindows && m.useTextureRender
-            ? chooseDisplayBehavior()
-            : Offstage(),
+        if (showIndividialDisplaysWindow(m)) Divider(),
+        if (showIndividialDisplaysWindow(m)) chooseDisplayBehavior(),
       ],
     );
   }
@@ -668,7 +672,7 @@ class _MonitorMenu extends StatelessWidget {
               sessionId: ffi.sessionId, value: value ? 'Y' : '');
         },
         ffi: ffi,
-        child: Text(translate('Show displays as individual windows')));
+        child: Text(translate(kLabelShowDisplaysAsIndividualWindows)));
   }
 
   buildOneMonitorButton(i, curDisplay) => Text(
@@ -817,6 +821,12 @@ class _MonitorMenu extends StatelessWidget {
   }
 
   onPressed(int i, PeerInfo pi, bool isMulti) {
+    if (pi.isWayland) {
+      msgBox(ffi.sessionId, 'custom-nook-nocancel-hasclose-info', 'Prompt',
+          'Wayland_switch_display_msg', '', ffi.dialogManager);
+      return;
+    }
+
     if (!isMulti) {
       // If show monitors in toolbar(`buildMultiMonitorMenu()`), then the menu will dismiss automatically.
       _menuDismissCallback(ffi);
@@ -2465,19 +2475,20 @@ class _DraggableShowHideState extends State<_DraggableShowHide> {
                 ),
               ),
             )),
-        if (!isMacOS) Obx(() => Offstage(
-              offstage: isFullscreen.isFalse,
-              child: TextButton(
-                onPressed: () => widget.setMinimize(),
-                child: Tooltip(
-                  message: translate('Minimize'),
-                  child: Icon(
-                    Icons.remove,
-                    size: iconSize,
+        if (!isMacOS)
+          Obx(() => Offstage(
+                offstage: isFullscreen.isFalse,
+                child: TextButton(
+                  onPressed: () => widget.setMinimize(),
+                  child: Tooltip(
+                    message: translate('Minimize'),
+                    child: Icon(
+                      Icons.remove,
+                      size: iconSize,
+                    ),
                   ),
                 ),
-              ),
-            )),
+              )),
         TextButton(
           onPressed: () => setState(() {
             widget.show.value = !widget.show.value;

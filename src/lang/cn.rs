@@ -615,5 +615,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("android_new_voice_call_tip", "收到新的语音呼叫请求。如果您接受，音频将切换为语音通信。"),
         ("texture_render_tip", "使用纹理渲染，使图片更加流畅。 如果您遭遇渲染问题，可尝试关闭此选项。"),
         ("Use texture rendering", "使用纹理渲染"),
+        ("Wayland_switch_display_msg", "Wayland 下，暂不支持直接切换显示器。请在被控端重新选择共享的显示器。1. 清理 Wayland 共享屏幕选择。主页 --> 设置 --> 常规 --> Wayland --> 清除 Wayland 的屏幕选择。 2. 重新连接。"),
     ].iter().cloned().collect();
 }
