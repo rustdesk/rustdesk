@@ -615,5 +615,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("android_new_voice_call_tip", "Byl přijat nový požadavek na hlasové volání. Pokud hovor přijmete, přepne se zvuk na hlasovou komunikaci."),
         ("texture_render_tip", "Použít vykreslování textur, aby byly obrázky hladší."),
         ("Use texture rendering", "Použít vykreslování textur"),
+        ("Floating window", ""),
+        ("floating_window_tip", ""),
     ].iter().cloned().collect();
 }

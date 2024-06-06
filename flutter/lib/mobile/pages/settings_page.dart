@@ -36,9 +36,11 @@ class SettingsPage extends StatefulWidget implements PageShape {
 const url = 'https://rustdesk.com/';
 
 class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
-  final _hasIgnoreBattery = androidVersion >= 26;
+  final _hasIgnoreBattery =
+      false; //androidVersion >= 26; // remove because not work on every device
   var _ignoreBatteryOpt = false;
   var _enableStartOnBoot = false;
+  var _floatingWindowDisabled = false;
   var _enableAbr = false;
   var _denyLANDiscovery = false;
   var _onlyWhiteList = false;
@@ -84,6 +86,14 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
       if (enableStartOnBoot != _enableStartOnBoot) {
         update = true;
         _enableStartOnBoot = enableStartOnBoot;
+      }
+
+      var floatingWindowDisabled =
+          bind.mainGetLocalOption(key: kOptionDisableFloatingWindow) == "Y" ||
+              !await AndroidPermissionManager.check(kSystemAlertWindow);
+      if (floatingWindowDisabled != _floatingWindowDisabled) {
+        update = true;
+        _floatingWindowDisabled = floatingWindowDisabled;
       }
 
       final enableAbrRes = option2bool(
@@ -492,6 +502,32 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
 
           gFFI.invokeMethod(AndroidChannel.kSetStartOnBootOpt, toValue);
         }));
+
+    onFloatingWindowChanged(bool toValue) async {
+      if (toValue) {
+        if (!await AndroidPermissionManager.check(kSystemAlertWindow)) {
+          if (!await AndroidPermissionManager.request(kSystemAlertWindow)) {
+            return;
+          }
+        }
+      }
+      final disable = !toValue;
+      bind.mainSetLocalOption(
+          key: kOptionDisableFloatingWindow,
+          value: disable ? 'Y' : defaultOptionNo);
+      setState(() => _floatingWindowDisabled = disable);
+    }
+
+    enhancementsTiles.add(SettingsTile.switchTile(
+        initialValue: !_floatingWindowDisabled,
+        title: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(translate('Floating window')),
+          Text('* ${translate('floating_window_tip')}',
+              style: Theme.of(context).textTheme.bodySmall),
+        ]),
+        onToggle: bind.mainIsOptionFixed(key: kOptionDisableFloatingWindow)
+            ? null
+            : onFloatingWindowChanged));
 
     final disabledSettings = bind.isDisableSettings();
     final settings = SettingsList(
