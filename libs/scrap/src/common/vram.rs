@@ -1,5 +1,5 @@
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     ffi::c_void,
     sync::{Arc, Mutex},
 };
@@ -30,6 +30,7 @@ use hwcodec::{
 // https://learn.microsoft.com/en-us/windows/win32/api/d3d12/nf-d3d12-id3d12device-getadapterluid#remarks
 lazy_static::lazy_static! {
     static ref ENOCDE_NOT_USE: Arc<Mutex<HashMap<usize, bool>>> = Default::default();
+    static ref FALLBACK_GDI_DISPLAYS: Arc<Mutex<HashSet<usize>>> = Default::default();
 }
 
 #[derive(Debug, Clone)]
@@ -212,6 +213,11 @@ impl VRamEncoder {
     }
 
     pub fn available(format: CodecFormat) -> Vec<FeatureContext> {
+        let fallbacks = FALLBACK_GDI_DISPLAYS.lock().unwrap().clone();
+        if !fallbacks.is_empty() {
+            log::info!("fallback gdi displays not empty: {fallbacks:?}");
+            return vec![];
+        }
         let not_use = ENOCDE_NOT_USE.lock().unwrap().clone();
         if not_use.values().any(|not_use| *not_use) {
             log::info!("currently not use vram encoders: {not_use:?}");
@@ -297,6 +303,14 @@ impl VRamEncoder {
     pub fn set_not_use(display: usize, not_use: bool) {
         log::info!("set display#{display} not use vram encode to {not_use}");
         ENOCDE_NOT_USE.lock().unwrap().insert(display, not_use);
+    }
+
+    pub fn set_fallback_gdi(display: usize, fallback: bool) {
+        if fallback {
+            FALLBACK_GDI_DISPLAYS.lock().unwrap().insert(display);
+        } else {
+            FALLBACK_GDI_DISPLAYS.lock().unwrap().remove(&display);
+        }
     }
 }
 
