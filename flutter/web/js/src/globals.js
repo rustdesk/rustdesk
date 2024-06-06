@@ -771,9 +771,9 @@ function getApiServer() {
   if (custom_rendezvous_server) {
     let s = increasePort(custom_rendezvous_server, -2);
     if (s == custom_rendezvous_server) {
-      return `http://${s}:${PORT - 2}`;
+      return `https://${s}:${PORT - 2}`;
     } else {
-      return `http://${s}`;
+      return `https://${s}`;
     }
   }
   return 'https://admin.rustdesk.com';
