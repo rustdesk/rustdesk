@@ -467,7 +467,8 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
 
     toolbarItems.add(Obx(() {
       if (PrivacyModeState.find(widget.id).isEmpty &&
-          pi.displaysCount.value > 1) {
+          pi.displaysCount.value > 1 &&
+          !pi.isWayland) {
         return _MonitorMenu(
             id: widget.id,
             ffi: widget.ffi,
