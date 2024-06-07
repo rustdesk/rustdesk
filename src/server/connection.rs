@@ -1595,7 +1595,9 @@ impl Connection {
                 {
                     log::error!("ipc to connection manager exit: {}", err);
                     #[cfg(windows)]
-                    if !crate::platform::is_prelogin() {
+                    if !crate::platform::is_prelogin()
+                        && !err.to_string().contains(crate::platform::EXPLORER_EXE)
+                    {
                         allow_err!(tx_from_cm_clone.send(Data::CmErr(err.to_string())));
                     }
                 }
