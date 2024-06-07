@@ -645,8 +645,8 @@ fn on_create_session_response(
                 "handle_token".to_string(),
                 Variant(Box::new("u3".to_string())),
             );
-            // https://flatpak.github.io/xdg-desktop-portal/portal-docs.html#gdbus-method-org-freedesktop-portal-ScreenCast.SelectSources
-            args.insert("multiple".into(), Variant(Box::new(true)));
+            // https://flatpak.github.io/xdg-desktop-portal/docs/doc-org.freedesktop.portal.ScreenCast.html
+            // args.insert("multiple".into(), Variant(Box::new(true)));
             args.insert("types".into(), Variant(Box::new(1u32))); //| 2u32)));
 
             let path = portal.select_sources(ses.clone(), args)?;
