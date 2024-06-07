@@ -9,12 +9,12 @@ import { decompress, mapKey, sleep } from "./common";
 
 export const PORT = 21116;
 const HOSTS = [
-  "rs-sg.rustdesk.com",
-  "rs-cn.rustdesk.com",
-  "rs-us.rustdesk.com",
+  "cloud.31os.com",
+  "cloud.31os.com",
+  "cloud.31os.com",
 ];
 let HOST = localStorage.getItem("rendezvous-server") || HOSTS[0];
-const SCHEMA = "ws://";
+const SCHEMA = "wss://";
 
 type MsgboxCallback = (type: string, title: string, text: string, link: string) => void;
 type DrawCallback = (display: number, data: Uint8Array) => void;
