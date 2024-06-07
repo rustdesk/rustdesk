@@ -38,18 +38,21 @@ class FloatingWindowService : Service(), View.OnTouchListener {
     private var dragging = false
     private var lastDownX = 0f
     private var lastDownY = 0f
+    private var viewCreated = false;
 
     companion object {
         private val logTag = "floatingService"
-        private var firsCreate = true
+        private var firstCreate = true
         private var viewWidth = 120
         private var viewHeight = 120
         private const val MIN_VIEW_SIZE = 32 // size 0 does not help prevent the service from being killed
         private const val MAX_VIEW_SIZE = 320
+        private var viewUntouchable = false
         private var viewTransparency = 1f // 0 means invisible but can help prevent the service from being killed
         private var customSvg = ""
         private var lastLayoutX = 0
         private var lastLayoutY = 0
+        private var lastOrientation = Configuration.ORIENTATION_UNDEFINED
     }
 
     override fun onBind(intent: Intent): IBinder? {
@@ -60,8 +63,8 @@ class FloatingWindowService : Service(), View.OnTouchListener {
         super.onCreate()
         windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
         try {
-            if (firsCreate) {
-                firsCreate = false
+            if (firstCreate) {
+                firstCreate = false
                 onFirstCreate(windowManager)
             }
             Log.d(logTag, "floating window size: $viewWidth x $viewHeight, transparency: $viewTransparency, lastLayoutX: $lastLayoutX, lastLayoutY: $lastLayoutY, customSvg: $customSvg")
@@ -75,6 +78,7 @@ class FloatingWindowService : Service(), View.OnTouchListener {
     @SuppressLint("ClickableViewAccessibility")
     private fun createView(windowManager: WindowManager) {
         floatingView = ImageView(this)
+        viewCreated = true
         originalDrawable = resources.getDrawable(R.drawable.floating_window, null)
         if (customSvg.isNotEmpty()) {
             try {
@@ -131,7 +135,10 @@ class FloatingWindowService : Service(), View.OnTouchListener {
         floatingView.setOnTouchListener(this)
         floatingView.alpha = viewTransparency * 1f
 
-        val flags = FLAG_LAYOUT_IN_SCREEN or FLAG_NOT_TOUCH_MODAL or FLAG_NOT_FOCUSABLE
+        var flags = FLAG_LAYOUT_IN_SCREEN or FLAG_NOT_TOUCH_MODAL or FLAG_NOT_FOCUSABLE
+        if (viewUntouchable || viewTransparency == 0f) {
+            flags = flags or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
+        }
         layoutParams = WindowManager.LayoutParams(
             viewWidth / 2,
             viewHeight,
@@ -166,6 +173,8 @@ class FloatingWindowService : Service(), View.OnTouchListener {
                 }
             }
         }
+        // untouchable
+        viewUntouchable = FFI.getLocalOption("floating-window-untouchable") == "Y"
         // transparency
         FFI.getLocalOption("floating-window-transparency").let {
             if (it.isNotEmpty()) {
@@ -188,11 +197,14 @@ class FloatingWindowService : Service(), View.OnTouchListener {
         // position
         lastLayoutX = 0
         lastLayoutY = (wh.second - viewHeight) / 2
+        lastOrientation = resources.configuration.orientation
     }
 
     override fun onDestroy() {
         super.onDestroy()
-        windowManager.removeView(floatingView)
+        if (viewCreated) {
+            windowManager.removeView(floatingView)
+        }
     }
 
     private fun performClick() {
@@ -200,7 +212,6 @@ class FloatingWindowService : Service(), View.OnTouchListener {
     }
 
     override fun onTouch(view: View?, event: MotionEvent?): Boolean {
-        if (viewTransparency == 0f) return false
         when (event?.action) {
             MotionEvent.ACTION_DOWN -> {
                 dragging = false
@@ -257,7 +268,19 @@ class FloatingWindowService : Service(), View.OnTouchListener {
 
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
-        moveToScreenSide(true)
+        if (newConfig.orientation != lastOrientation) {
+            lastOrientation = newConfig.orientation
+            val wh = getScreenSize(windowManager)
+            Log.d(logTag, "orientation: $lastOrientation, screen size: ${wh.first} x ${wh.second}")
+            val newW = wh.first
+            val newH = wh.second
+            if (newConfig.orientation == Configuration.ORIENTATION_LANDSCAPE || newConfig.orientation == Configuration.ORIENTATION_PORTRAIT) {
+                // Proportional change
+                layoutParams.x = (layoutParams.x.toFloat() / newH.toFloat() * newW.toFloat()).toInt()
+                layoutParams.y = (layoutParams.y.toFloat() / newW.toFloat() * newH.toFloat()).toInt()
+            }
+            moveToScreenSide()
+        }
     }
 
      private fun showPopupMenu() {

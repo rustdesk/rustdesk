@@ -2096,6 +2096,7 @@ pub mod keys {
     // android floating window options
     pub const OPTION_DISABLE_FLOATING_WINDOW: &str = "disable-floating-window";
     pub const OPTION_FLOATING_WINDOW_SIZE: &str = "floating-window-size";
+    pub const OPTION_FLOATING_WINDOW_UNTOUCHABLE: &str = "floating-window-untouchable";
     pub const OPTION_FLOATING_WINDOW_TRANSPARENCY: &str = "floating-window-transparency";
     pub const OPTION_FLOATING_WINDOW_SVG: &str = "floating-window-svg";
 
@@ -2156,6 +2157,7 @@ pub mod keys {
         OPTION_FLUTTER_CURRENT_AB_NAME,
         OPTION_DISABLE_FLOATING_WINDOW,
         OPTION_FLOATING_WINDOW_SIZE,
+        OPTION_FLOATING_WINDOW_UNTOUCHABLE,
         OPTION_FLOATING_WINDOW_TRANSPARENCY,
         OPTION_FLOATING_WINDOW_SVG,
     ];
