@@ -470,10 +470,12 @@ pub async fn start_server(is_server: bool) {
         std::thread::spawn(move || {
             if let Err(err) = crate::ipc::start("") {
                 log::error!("Failed to start ipc: {}", err);
-                #[cfg(all(windows, feature = "flutter"))]
-                if crate::is_server() && crate::ipc::test_ipc_connection().is_ok() {
+                #[cfg(windows)]
+                if crate::is_server() && crate::ipc::is_ipc_file_exist("").unwrap_or(false) {
                     log::error!("ipc is occupied by another process, try kill it");
-                    crate::platform::try_kill_flutter_main_window_process();
+                    if let Err(e) = crate::platform::try_kill_rustdesk_main_window_process() {
+                        log::error!("kill failed: {}", e);
+                    }
                 }
                 std::process::exit(-1);
             }
