@@ -67,6 +67,7 @@ use winreg::enums::*;
 use winreg::RegKey;
 
 pub const FLUTTER_RUNNER_WIN32_WINDOW_CLASS: &'static str = "FLUTTER_RUNNER_WIN32_WINDOW"; // main window, install window
+pub const EXPLORER_EXE: &'static str = "explorer.exe";
 
 pub fn get_focused_display(displays: Vec<DisplayInfo>) -> Option<usize> {
     unsafe {
@@ -668,6 +669,14 @@ pub fn run_as_user(arg: Vec<&str>) -> ResultType<Option<std::process::Child>> {
     let wstr = wstr.as_ptr();
     let h = unsafe { LaunchProcessWin(wstr, session_id, TRUE) };
     if h.is_null() {
+        if !is_process_running(EXPLORER_EXE, session_id) {
+            bail!(
+                "Failed to launch {:?} with session id {}: no process {}",
+                arg,
+                session_id,
+                EXPLORER_EXE
+            );
+        }
         bail!(
             "Failed to launch {:?} with session id {}: {}",
             arg,
@@ -2031,6 +2040,24 @@ pub fn is_process_consent_running() -> ResultType<bool> {
         .output()?;
     Ok(output.status.success() && !output.stdout.is_empty())
 }
+
+pub fn is_process_running(exe: &str, session_id: u32) -> bool {
+    use hbb_common::sysinfo::System;
+    let mut sys = System::new();
+    sys.refresh_processes();
+    for (_, p) in sys.processes().iter() {
+        if p.session_id() == Some((session_id as usize).into())
+            && p.exe()
+                .to_string_lossy()
+                .to_lowercase()
+                .contains(&exe.to_lowercase())
+        {
+            return true;
+        }
+    }
+    false
+}
+
 pub struct WakeLock(u32);
 // Failed to compile keepawake-rs on i686
 impl WakeLock {
