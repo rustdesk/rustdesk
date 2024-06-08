@@ -18,7 +18,7 @@ use hbb_common::{
 use std::process::{Command, Stdio};
 use std::{
     collections::HashMap,
-    ffi::OsString,
+    ffi::{CString, OsString},
     fs, io,
     io::prelude::*,
     mem,
@@ -36,6 +36,7 @@ use winapi::{
     um::{
         errhandlingapi::GetLastError,
         handleapi::CloseHandle,
+        libloaderapi::{GetProcAddress, LoadLibraryA},
         minwinbase::STILL_ACTIVE,
         processthreadsapi::{
             GetCurrentProcess, GetCurrentProcessId, GetExitCodeProcess, OpenProcess,
@@ -47,8 +48,8 @@ use winapi::{
         wingdi::*,
         winnt::{
             TokenElevation, ES_AWAYMODE_REQUIRED, ES_CONTINUOUS, ES_DISPLAY_REQUIRED,
-            ES_SYSTEM_REQUIRED, HANDLE, PROCESS_QUERY_LIMITED_INFORMATION, TOKEN_ELEVATION,
-            TOKEN_QUERY,
+            ES_SYSTEM_REQUIRED, HANDLE, PROCESS_ALL_ACCESS, PROCESS_QUERY_LIMITED_INFORMATION,
+            TOKEN_ELEVATION, TOKEN_QUERY,
         },
         winreg::HKEY_CURRENT_USER,
         winuser::*,
@@ -2420,36 +2421,80 @@ pub fn is_x64() -> bool {
     unsafe { sys_info.u.s().wProcessorArchitecture == PROCESSOR_ARCHITECTURE_AMD64 }
 }
 
-#[cfg(feature = "flutter")]
-pub fn try_kill_flutter_main_window_process() {
-    // It's called when --server failed to start ipc, because the ipc may be occupied by the main window process.
-    // When --service quit the ipc process, ipc process will call std::process::exit, std::process::exit not work may be the reason.
-    // FindWindow not work in --service, https://forums.codeguru.com/showthread.php?169091-FindWindow-in-service
-    log::info!("try kill flutter main window process");
+pub fn try_kill_rustdesk_main_window_process() -> ResultType<()> {
+    // Kill rustdesk.exe without extra arg, should only be called by --server
+    // We can find the exact process which occupies the ipc, see more from https://github.com/winsiderss/systeminformer
+    log::info!("try kill rustdesk main window process");
+    use hbb_common::sysinfo::System;
+    let mut sys = System::new();
+    sys.refresh_processes();
+    let my_uid = sys
+        .process((std::process::id() as usize).into())
+        .map(|x| x.user_id())
+        .unwrap_or_default();
+    let my_pid = std::process::id();
+    let app_name = crate::get_app_name().to_lowercase();
+    if app_name.is_empty() {
+        bail!("app name is empty");
+    }
+    for (_, p) in sys.processes().iter() {
+        let p_name = p.name().to_lowercase();
+        // name equal
+        if !(p_name == app_name || p_name == app_name.clone() + ".exe") {
+            continue;
+        }
+        // arg more than 1
+        if p.cmd().len() < 1 {
+            continue;
+        }
+        // first arg contain app name
+        if !p.cmd()[0].to_lowercase().contains(&p_name) {
+            continue;
+        }
+        // only one arg or the second arg is empty uni link
+        let is_empty_uni = p.cmd().len() == 2 && crate::common::is_empty_uni_link(&p.cmd()[1]);
+        if !(p.cmd().len() == 1 || is_empty_uni) {
+            continue;
+        }
+        // skip self
+        if p.pid().as_u32() == my_pid {
+            continue;
+        }
+        // because we call it with --server, so we can check user_id, remove this if call it with user process
+        if p.user_id() == my_uid {
+            log::info!("user id equal, continue");
+            continue;
+        }
+        log::info!("try kill process: {:?}, pid = {:?}", p.cmd(), p.pid());
+        nt_terminate_process(p.pid().as_u32())?;
+        log::info!("kill process success: {:?}, pid = {:?}", p.cmd(), p.pid());
+        return Ok(());
+    }
+    bail!("failed to find rustdesk main window process");
+}
+
+fn nt_terminate_process(process_id: DWORD) -> ResultType<()> {
+    type NtTerminateProcess = unsafe extern "system" fn(HANDLE, DWORD) -> DWORD;
     unsafe {
-        let window_name = wide_string(&crate::get_app_name());
-        let class_name = wide_string(FLUTTER_RUNNER_WIN32_WINDOW_CLASS);
-        let hwnd = FindWindowW(class_name.as_ptr(), window_name.as_ptr());
-        if hwnd.is_null() {
-            log::info!("not found flutter main window");
-            return;
-        }
-        let mut process_id: u32 = 0;
-        GetWindowThreadProcessId(hwnd, &mut process_id as *mut u32);
-        if process_id == 0 {
-            log::info!("failed to get flutter window process id");
-            return;
-        }
-        let output = Command::new("taskkill")
-            .arg("/F")
-            .arg("/PID")
-            .arg(process_id.to_string())
-            .output()
-            .expect("Failed to execute command");
-        if output.status.success() {
-            log::info!("kill flutter main window process success");
+        let h_module = LoadLibraryA(CString::new("ntdll.dll")?.as_ptr());
+        if !h_module.is_null() {
+            let f_nt_terminate_process: NtTerminateProcess = std::mem::transmute(GetProcAddress(
+                h_module,
+                CString::new("NtTerminateProcess")?.as_ptr(),
+            ));
+            let h_token = OpenProcess(PROCESS_ALL_ACCESS, 0, process_id);
+            if !h_token.is_null() {
+                if f_nt_terminate_process(h_token, 1) == 0 {
+                    log::info!("terminate process {} success", process_id);
+                    return Ok(());
+                } else {
+                    bail!("NtTerminateProcess {} failed", process_id);
+                }
+            } else {
+                bail!("OpenProcess {} failed", process_id);
+            }
         } else {
-            log::error!("kill flutter main window process failed");
+            bail!("Failed to load ntdll.dll");
         }
     }
 }

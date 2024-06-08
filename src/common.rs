@@ -1700,6 +1700,15 @@ pub fn read_custom_client(config: &str) {
     }
 }
 
+#[inline]
+pub fn is_empty_uni_link(arg: &str) -> bool {
+    let prefix = crate::get_uri_prefix();
+    if !arg.starts_with(&prefix) {
+        return false;
+    }
+    arg[prefix.len()..].chars().all(|c| c == '/')
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

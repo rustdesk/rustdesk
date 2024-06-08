@@ -970,10 +970,27 @@ pub async fn test_rendezvous_server() -> ResultType<()> {
     Ok(())
 }
 
-#[tokio::main(flavor = "current_thread")]
-pub async fn test_ipc_connection() -> ResultType<()> {
-    connect(1000, "").await?;
-    Ok(())
+#[cfg(windows)]
+pub fn is_ipc_file_exist(suffix: &str) -> ResultType<bool> {
+    let file_name = format!("{}\\query{}", crate::get_app_name(), suffix);
+    let mut err = None;
+    for entry in std::fs::read_dir("\\\\.\\pipe\\")? {
+        match entry {
+            Ok(entry) => {
+                if entry.file_name().into_string().unwrap_or_default() == file_name {
+                    return Ok(true);
+                }
+            }
+            Err(e) => {
+                err = Some(e);
+            }
+        }
+    }
+    if let Some(e) = err {
+        Err(e.into())
+    } else {
+        Ok(false)
+    }
 }
 
 #[tokio::main(flavor = "current_thread")]
