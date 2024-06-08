@@ -2503,8 +2503,10 @@ fn nt_terminate_process(process_id: DWORD) -> ResultType<()> {
             if !h_token.is_null() {
                 if f_nt_terminate_process(h_token, 1) == 0 {
                     log::info!("terminate process {} success", process_id);
+                    CloseHandle(h_token);
                     return Ok(());
                 } else {
+                    CloseHandle(h_token);
                     bail!("NtTerminateProcess {} failed", process_id);
                 }
             } else {
