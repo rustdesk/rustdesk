@@ -59,10 +59,12 @@ extern "C"
 {
     // if should try WTSQueryUserToken?
     // https://stackoverflow.com/questions/7285666/example-code-a-service-calls-createprocessasuser-i-want-the-process-to-run-in
-    BOOL GetSessionUserTokenWin(OUT LPHANDLE lphUserToken, DWORD dwSessionId, BOOL as_user)
+    BOOL GetSessionUserTokenWin(OUT LPHANDLE lphUserToken, DWORD dwSessionId, BOOL as_user, DWORD *pDwTokenPid)
     {
         BOOL bResult = FALSE;
         DWORD Id = GetLogonPid(dwSessionId, as_user);
+        if (pDwTokenPid)
+            *pDwTokenPid = Id;
         if (HANDLE hProcess = OpenProcess(PROCESS_ALL_ACCESS, FALSE, Id))
         {
             bResult = OpenProcessToken(hProcess, TOKEN_ALL_ACCESS, lphUserToken);
@@ -76,11 +78,11 @@ extern "C"
         return IsWindowsServer();
     }
 
-    HANDLE LaunchProcessWin(LPCWSTR cmd, DWORD dwSessionId, BOOL as_user)
+    HANDLE LaunchProcessWin(LPCWSTR cmd, DWORD dwSessionId, BOOL as_user, DWORD *pDwTokenPid)
     {
         HANDLE hProcess = NULL;
         HANDLE hToken = NULL;
-        if (GetSessionUserTokenWin(&hToken, dwSessionId, as_user))
+        if (GetSessionUserTokenWin(&hToken, dwSessionId, as_user, pDwTokenPid))
         {
             STARTUPINFOW si;
             ZeroMemory(&si, sizeof si);
