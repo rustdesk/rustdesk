@@ -461,8 +461,8 @@ const SERVICE_TYPE: ServiceType = ServiceType::OWN_PROCESS;
 
 extern "C" {
     fn get_current_session(rdp: BOOL) -> DWORD;
-    fn LaunchProcessWin(cmd: *const u16, session_id: DWORD, as_user: BOOL) -> HANDLE;
-    fn GetSessionUserTokenWin(lphUserToken: LPHANDLE, dwSessionId: DWORD, as_user: BOOL) -> BOOL;
+    fn LaunchProcessWin(cmd: *const u16, session_id: DWORD, as_user: BOOL, token_pid: &mut DWORD) -> HANDLE;
+    fn GetSessionUserTokenWin(lphUserToken: LPHANDLE, dwSessionId: DWORD, as_user: BOOL, token_pid: &mut DWORD) -> BOOL;
     fn selectInputDesktop() -> BOOL;
     fn inputDesktopSelected() -> BOOL;
     fn is_windows_server() -> BOOL;
@@ -645,9 +645,13 @@ async fn launch_server(session_id: DWORD, close_first: bool) -> ResultType<HANDL
         .chain(Some(0).into_iter())
         .collect();
     let wstr = wstr.as_ptr();
-    let h = unsafe { LaunchProcessWin(wstr, session_id, FALSE) };
+    let mut token_pid = 0;
+    let h = unsafe { LaunchProcessWin(wstr, session_id, FALSE, &mut token_pid) };
     if h.is_null() {
         log::error!("Failed to launch server: {}", io::Error::last_os_error());
+        if token_pid == 0 {
+            log::error!("No process winlogon.exe");
+        }
     }
     Ok(h)
 }
@@ -667,9 +671,10 @@ pub fn run_as_user(arg: Vec<&str>) -> ResultType<Option<std::process::Child>> {
         .chain(Some(0).into_iter())
         .collect();
     let wstr = wstr.as_ptr();
-    let h = unsafe { LaunchProcessWin(wstr, session_id, TRUE) };
+    let mut token_pid = 0;
+    let h = unsafe { LaunchProcessWin(wstr, session_id, TRUE, &mut token_pid) };
     if h.is_null() {
-        if !is_process_running(EXPLORER_EXE, session_id) {
+        if token_pid == 0 {
             bail!(
                 "Failed to launch {:?} with session id {}: no process {}",
                 arg,
@@ -1550,11 +1555,13 @@ pub fn quit_gui() {
 pub fn get_user_token(session_id: u32, as_user: bool) -> HANDLE {
     let mut token = NULL as HANDLE;
     unsafe {
+        let mut _token_pid = 0;
         if FALSE
             == GetSessionUserTokenWin(
                 &mut token as _,
                 session_id,
                 if as_user { TRUE } else { FALSE },
+                &mut _token_pid,
             )
         {
             NULL as _
@@ -2039,23 +2046,6 @@ pub fn is_process_consent_running() -> ResultType<bool> {
         .creation_flags(CREATE_NO_WINDOW)
         .output()?;
     Ok(output.status.success() && !output.stdout.is_empty())
-}
-
-pub fn is_process_running(exe: &str, session_id: u32) -> bool {
-    use hbb_common::sysinfo::System;
-    let mut sys = System::new();
-    sys.refresh_processes();
-    for (_, p) in sys.processes().iter() {
-        if p.session_id() == Some((session_id as usize).into())
-            && p.exe()
-                .to_string_lossy()
-                .to_lowercase()
-                .contains(&exe.to_lowercase())
-        {
-            return true;
-        }
-    }
-    false
 }
 
 pub struct WakeLock(u32);
