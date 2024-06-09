@@ -1709,6 +1709,23 @@ pub fn is_empty_uni_link(arg: &str) -> bool {
     arg[prefix.len()..].chars().all(|c| c == '/')
 }
 
+// This function must be kept the same as the one in flutter and sciter code.
+// flutter/lib/common.dart -> option2bool()
+pub fn option2bool(option: &str, value: &str) -> bool {
+    if option.starts_with("enable-") {
+        value != "N"
+    } else if option.starts_with("allow-")
+        || option == "stop-service"
+        || option == config::keys::OPTION_DIRECT_SERVER
+        || option == "stop-rendezvous-service"
+        || option == "force-always-relay"
+    {
+        value == "Y"
+    } else {
+        value != "N"
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -1555,7 +1555,7 @@ impl Connection {
                 return false;
             }
         }
-        return Config::get_option(enable_prefix_option).is_empty();
+        crate::option2bool(enable_prefix_option, &Config::get_option(enable_prefix_option))
     }
 
     fn update_codec_on_login(&self) {

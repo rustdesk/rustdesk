@@ -1422,6 +1422,8 @@ String translate(String name) {
   return platformFFI.translate(name, localeName);
 }
 
+// This function must be kept the same as the one in rust and sciter code.
+// src/common.rs -> option2bool()
 bool option2bool(String option, String value) {
   bool res;
   if (option.startsWith("enable-")) {
