@@ -77,6 +77,11 @@ async fn start_hbbs_sync_async() {
                 }
                 if !info_uploaded.0 && info_uploaded.2.map(|x| x.elapsed() >= UPLOAD_SYSINFO_TIMEOUT).unwrap_or(true){
                     let mut v = crate::get_sysinfo();
+                    // username is empty in login screen
+                    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+                    if v["username"].as_str().unwrap_or_default().is_empty() {
+                        continue;
+                    }
                     v["version"] = json!(crate::VERSION);
                     v["id"] = json!(id);
                     v["uuid"] = json!(crate::encode64(hbb_common::get_uuid()));
