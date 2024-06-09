@@ -1366,7 +1366,10 @@ impl Connection {
     fn on_remote_authorized(&self) {
         self.update_codec_on_login();
         #[cfg(any(target_os = "windows", target_os = "linux"))]
-        if !Config::get_option("allow-remove-wallpaper").is_empty() {
+        if config::option2bool(
+            "allow-remove-wallpaper",
+            &Config::get_option("allow-remove-wallpaper"),
+        ) {
             // multi connections set once
             let mut wallpaper = WALLPAPER_REMOVER.lock().unwrap();
             if wallpaper.is_none() {
@@ -1555,7 +1558,10 @@ impl Connection {
                 return false;
             }
         }
-        return Config::get_option(enable_prefix_option).is_empty();
+        config::option2bool(
+            enable_prefix_option,
+            &Config::get_option(enable_prefix_option),
+        )
     }
 
     fn update_codec_on_login(&self) {
