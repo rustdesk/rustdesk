@@ -1423,7 +1423,8 @@ String translate(String name) {
 }
 
 // This function must be kept the same as the one in rust and sciter code.
-// src/common.rs -> option2bool()
+// rust: src/common.rs -> option2bool()
+// sciter: Does not have the function, but it should be kept the same.
 bool option2bool(String option, String value) {
   bool res;
   if (option.startsWith("enable-")) {
