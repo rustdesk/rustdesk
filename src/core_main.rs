@@ -83,7 +83,10 @@ pub fn core_main() -> Option<Vec<String>> {
     #[cfg(feature = "flutter")]
     {
         let (k, v) = ("LIBGL_ALWAYS_SOFTWARE", "1");
-        if !config::Config::get_option("allow-always-software-render").is_empty() {
+        if config::option2bool(
+            "allow-always-software-render",
+            &config::Config::get_option("allow-always-software-render"),
+        ) {
             std::env::set_var(k, v);
         } else {
             std::env::remove_var(k);

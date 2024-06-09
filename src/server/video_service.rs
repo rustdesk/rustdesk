@@ -37,6 +37,7 @@ use crate::{
 };
 use hbb_common::{
     anyhow::anyhow,
+    config,
     tokio::sync::{
         mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender},
         Mutex as TokioMutex,
@@ -411,7 +412,10 @@ fn run(vs: VideoService) -> ResultType<()> {
     video_qos.refresh(None);
     let mut spf;
     let mut quality = video_qos.quality();
-    let record_incoming = !Config::get_option("allow-auto-record-incoming").is_empty();
+    let record_incoming = config::option2bool(
+        "allow-auto-record-incoming",
+        &Config::get_option("allow-auto-record-incoming"),
+    );
     let client_record = video_qos.record();
     drop(video_qos);
     let (mut encoder, encoder_cfg, codec_format, use_i444, recorder) = match setup_encoder(

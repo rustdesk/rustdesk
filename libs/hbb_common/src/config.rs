@@ -2018,6 +2018,24 @@ pub fn is_disable_installation() -> bool {
     is_some_hard_opton("disable-installation")
 }
 
+// This function must be kept the same as the one in flutter and sciter code.
+// flutter: flutter/lib/common.dart -> option2bool()
+// sciter: Does not have the function, but it should be kept the same.
+pub fn option2bool(option: &str, value: &str) -> bool {
+    if option.starts_with("enable-") {
+        value != "N"
+    } else if option.starts_with("allow-")
+        || option == "stop-service"
+        || option == keys::OPTION_DIRECT_SERVER
+        || option == "stop-rendezvous-service"
+        || option == "force-always-relay"
+    {
+        value == "Y"
+    } else {
+        value != "N"
+    }
+}
+
 pub mod keys {
     pub const OPTION_VIEW_ONLY: &str = "view_only";
     pub const OPTION_SHOW_MONITORS_TOOLBAR: &str = "show_monitors_toolbar";
