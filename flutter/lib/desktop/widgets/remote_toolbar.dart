@@ -665,7 +665,7 @@ class _MonitorMenu extends StatelessWidget {
         onChanged: (value) async {
           if (value == null) return;
           await bind.sessionSetDisplaysAsIndividualWindows(
-              sessionId: ffi.sessionId, value: value ? 'Y' : '');
+              sessionId: ffi.sessionId, value: value ? 'Y' : 'N');
         },
         ffi: ffi,
         child: Text(translate('Show displays as individual windows')));
