@@ -648,7 +648,7 @@ class _ImagePaintState extends State<ImagePaint> {
                 ),
                 c.size,
                 isViewOriginal())
-            : _buildScrollAuthNonTextureRender(m, c, s);
+            : _buildScrollAutoNonTextureRender(m, c, s);
         return mouseRegion(child: _buildListener(paintWidget));
       } else {
         return Container();
@@ -664,7 +664,7 @@ class _ImagePaintState extends State<ImagePaint> {
     );
   }
 
-  Widget _buildScrollAuthNonTextureRender(
+  Widget _buildScrollAutoNonTextureRender(
       ImageModel m, CanvasModel c, double s) {
     return CustomPaint(
       size: Size(c.size.width, c.size.height),

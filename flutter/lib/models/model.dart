@@ -1185,10 +1185,11 @@ class ImageModel with ChangeNotifier {
 
   onRgba(int display, Uint8List rgba) {
     final pid = parent.target?.id;
+    final rect = parent.target?.ffiModel.pi.getDisplayRect(display);
     img.decodeImageFromPixels(
         rgba,
-        parent.target?.ffiModel.rect?.width.toInt() ?? 0,
-        parent.target?.ffiModel.rect?.height.toInt() ?? 0,
+        rect?.width.toInt() ?? 0,
+        rect?.height.toInt() ?? 0,
         isWeb ? ui.PixelFormat.rgba8888 : ui.PixelFormat.bgra8888,
         onPixelsCopied: () {
       // Unlock the rgba memory from rust codes.
@@ -2693,30 +2694,32 @@ class PeerInfo with ChangeNotifier {
   bool get isAmyuniIdd =>
       platformAdditions[kPlatformAdditionsIddImpl] == 'amyuni_idd';
 
-  Display? tryGetDisplay() {
+  Display? tryGetDisplay({int? display}) {
     if (displays.isEmpty) {
       return null;
     }
-    if (currentDisplay == kAllDisplayValue) {
+    display ??= currentDisplay;
+    if (display == kAllDisplayValue) {
       return displays[0];
     } else {
-      if (currentDisplay > 0 && currentDisplay < displays.length) {
-        return displays[currentDisplay];
+      if (display > 0 && display < displays.length) {
+        return displays[display];
       } else {
         return displays[0];
       }
     }
   }
 
-  Display? tryGetDisplayIfNotAllDisplay() {
+  Display? tryGetDisplayIfNotAllDisplay({int? display}) {
     if (displays.isEmpty) {
       return null;
     }
-    if (currentDisplay == kAllDisplayValue) {
+    display ??= currentDisplay;
+    if (display == kAllDisplayValue) {
       return null;
     }
-    if (currentDisplay >= 0 && currentDisplay < displays.length) {
-      return displays[currentDisplay];
+    if (display >= 0 && display < displays.length) {
+      return displays[display];
     } else {
       return null;
     }
@@ -2739,6 +2742,12 @@ class PeerInfo with ChangeNotifier {
       return displays[display].scale;
     }
     return 1.0;
+  }
+
+  Rect? getDisplayRect(int display) {
+    final d = tryGetDisplayIfNotAllDisplay(display: display);
+    if (d == null) return null;
+    return Rect.fromLTWH(d.x, d.y, d.width.toDouble(), d.height.toDouble());
   }
 }
 

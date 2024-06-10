@@ -643,15 +643,12 @@ class _MonitorMenu extends StatelessWidget {
   }
 
   Widget buildMonitorSubmenuWidget(BuildContext context) {
-    final m = Provider.of<ImageModel>(context);
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
         Row(children: buildMonitorList(context, false)),
-        supportIndividualWindows && m.useTextureRender ? Divider() : Offstage(),
-        supportIndividualWindows && m.useTextureRender
-            ? chooseDisplayBehavior()
-            : Offstage(),
+        supportIndividualWindows ? Divider() : Offstage(),
+        supportIndividualWindows ? chooseDisplayBehavior() : Offstage(),
       ],
     );
   }
@@ -824,7 +821,6 @@ class _MonitorMenu extends StatelessWidget {
     RxInt display = CurrentDisplayState.find(id);
     if (display.value != i) {
       final isChooseDisplayToOpenInNewWindow = pi.isSupportMultiDisplay &&
-          bind.mainGetUseTextureRender() &&
           bind.sessionGetDisplaysAsIndividualWindows(
                   sessionId: ffi.sessionId) ==
               'Y';

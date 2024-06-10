@@ -408,6 +408,25 @@ impl VideoRenderer {
         }
     }
 
+    fn add_displays(&self, displays: &[i32]) {
+        let mut sessions_lock = self.map_display_sessions.write().unwrap();
+        for display in displays {
+            let d = *display as usize;
+            if !sessions_lock.contains_key(&d) {
+                sessions_lock.insert(
+                    d,
+                    DisplaySessionInfo {
+                        texture_rgba_ptr: 0,
+                        size: (0, 0),
+                        #[cfg(feature = "vram")]
+                        gpu_output_ptr: usize::default(),
+                        notify_render_type: None,
+                    },
+                );
+            }
+        }
+    }
+
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     pub fn on_rgba(&self, display: usize, rgba: &scrap::ImageRgb) -> bool {
         let mut write_lock = self.map_display_sessions.write().unwrap();
@@ -1039,11 +1058,17 @@ impl FlutterHandler {
         }
         drop(rgba_write_lock);
 
-        // Non-texture-render UI does not support multiple displays in the one UI session.
-        // It's Ok to notify each session for now.
         for h in self.session_handlers.read().unwrap().values() {
-            if let Some(stream) = &h.event_stream {
-                stream.add(EventToUI::Rgba(display));
+            // `map_display_sessions` stores the display indices that are used by the video renderer.
+            if h.renderer
+                .map_display_sessions
+                .read()
+                .unwrap()
+                .contains_key(&display)
+            {
+                if let Some(stream) = &h.event_stream {
+                    stream.add(EventToUI::Rgba(display));
+                }
             }
         }
     }
@@ -1517,6 +1542,22 @@ pub fn session_register_gpu_texture(_session_id: SessionID, _display: usize, _ou
             .get(&_session_id)
         {
             h.renderer.register_gpu_output(_display, _output_ptr);
+            break;
+        }
+    }
+}
+
+pub fn session_add_displays(session_id: &SessionID, displays: &[i32]) {
+    #[cfg(feature = "vram")]
+    for s in sessions::get_sessions() {
+        if let Some(h) = s
+            .ui_handler
+            .session_handlers
+            .read()
+            .unwrap()
+            .get(session_id)
+        {
+            h.renderer.add_displays(displays);
             break;
         }
     }
