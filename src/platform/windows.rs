@@ -825,12 +825,12 @@ fn get_current_session_username() -> Option<String> {
 
 fn get_session_username(session_id: u32) -> String {
     extern "C" {
-        fn get_session_user_info(path: *mut u16, n: u32, rdp: bool, session_id: u32) -> u32;
+        fn get_session_user_info(path: *mut u16, n: u32, session_id: u32) -> u32;
     }
     let buff_size = 256;
     let mut buff: Vec<u16> = Vec::with_capacity(buff_size);
     buff.resize(buff_size, 0);
-    let n = unsafe { get_session_user_info(buff.as_mut_ptr(), buff_size as _, true, session_id) };
+    let n = unsafe { get_session_user_info(buff.as_mut_ptr(), buff_size as _, session_id) };
     if n == 0 {
         return "".to_owned();
     }
