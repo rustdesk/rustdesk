@@ -103,8 +103,8 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
         _enableAbr = enableAbrRes;
       }
 
-      final denyLanDiscovery = !option2bool('enable-lan-discovery',
-          await bind.mainGetOption(key: 'enable-lan-discovery'));
+      final denyLanDiscovery = !option2bool(kOptionEnableLanDiscovery,
+          await bind.mainGetOption(key: kOptionEnableLanDiscovery));
       if (denyLanDiscovery != _denyLANDiscovery) {
         update = true;
         _denyLANDiscovery = denyLanDiscovery;
@@ -311,10 +311,8 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
         onToggle: isOptionFixed(kOptionEnableAbr)
             ? null
             : (v) async {
-                await bind.mainSetOption(
-                    key: kOptionEnableAbr, value: v ? defaultOptionYes : "N");
-                final newValue =
-                    await bind.mainGetOption(key: kOptionEnableAbr) != "N";
+                await mainSetBoolOption(kOptionEnableAbr, v);
+                final newValue = await mainGetBoolOption(kOptionEnableAbr);
                 setState(() {
                   _enableAbr = newValue;
                 });
@@ -326,12 +324,9 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
         onToggle: isOptionFixed(kOptionEnableRecordSession)
             ? null
             : (v) async {
-                await bind.mainSetOption(
-                    key: kOptionEnableRecordSession,
-                    value: v ? defaultOptionYes : "N");
+                await mainSetBoolOption(kOptionEnableRecordSession, v);
                 final newValue =
-                    await bind.mainGetOption(key: kOptionEnableRecordSession) !=
-                        "N";
+                    await mainGetBoolOption(kOptionEnableRecordSession);
                 setState(() {
                   _enableRecordSession = newValue;
                 });
@@ -587,12 +582,9 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
               onToggle: isOptionFixed(kOptionEnableHwcodec)
                   ? null
                   : (v) async {
-                      await bind.mainSetOption(
-                          key: kOptionEnableHwcodec,
-                          value: v ? defaultOptionYes : "N");
+                      await mainSetBoolOption(kOptionEnableHwcodec, v);
                       final newValue =
-                          await bind.mainGetOption(key: kOptionEnableHwcodec) !=
-                              "N";
+                          await mainGetBoolOption(kOptionEnableHwcodec);
                       setState(() {
                         _enableHardwareCodec = newValue;
                       });

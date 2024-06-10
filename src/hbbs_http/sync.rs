@@ -67,7 +67,7 @@ async fn start_hbbs_sync_async() {
                     *PRO.lock().unwrap() = false;
                     continue;
                 }
-                if !Config::get_option("stop-service").is_empty() {
+                if hbb_common::config::option2bool("stop-service", &Config::get_option("stop-service")) {
                     continue;
                 }
                 let conns = Connection::alive_conns();
@@ -77,7 +77,7 @@ async fn start_hbbs_sync_async() {
                 }
                 if !info_uploaded.0 && info_uploaded.2.map(|x| x.elapsed() >= UPLOAD_SYSINFO_TIMEOUT).unwrap_or(true) {
                     let mut v = crate::get_sysinfo();
-                    // username is empty in login screen of windows, but here we only upload sysinfo once, causing 
+                    // username is empty in login screen of windows, but here we only upload sysinfo once, causing
                     // real user name not uploaded after login screen. https://github.com/rustdesk/rustdesk/discussions/8031
                     if !cfg!(windows) || !v["username"].as_str().unwrap_or_default().is_empty() {
                         v["version"] = json!(crate::VERSION);
