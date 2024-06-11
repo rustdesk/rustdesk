@@ -777,9 +777,9 @@ impl InvokeUiSession for FlutterHandler {
     #[inline]
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     fn on_rgba(&self, display: usize, rgba: &mut scrap::ImageRgb) {
-        if self.use_texture_render.load(Ordering::Relaxed) {
-            self.on_rgba_flutter_texture_render(display, rgba);
-        } else {
+        let use_texture_render = self.use_texture_render.load(Ordering::Relaxed);
+        self.on_rgba_flutter_texture_render(use_texture_render, display, rgba);
+        if !use_texture_render {
             self.on_rgba_soft_render(display, rgba);
         }
     }
@@ -1048,12 +1048,12 @@ impl FlutterHandler {
 
         for h in self.session_handlers.read().unwrap().values() {
             // `map_display_sessions` stores the display indices that are used by the video renderer.
-            if h.renderer
-                .map_display_sessions
-                .read()
-                .unwrap()
-                .contains_key(&display)
-            {
+            let map_display_sessions = h.renderer.map_display_sessions.read().unwrap();
+            // The soft renderer does not support multi ui session for now.
+            if map_display_sessions.len() > 1 {
+                continue;
+            }
+            if map_display_sessions.contains_key(&display) {
                 if let Some(stream) = &h.event_stream {
                     stream.add(EventToUI::Rgba(display));
                 }
@@ -1063,11 +1063,19 @@ impl FlutterHandler {
 
     #[inline]
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    fn on_rgba_flutter_texture_render(&self, display: usize, rgba: &mut scrap::ImageRgb) {
+    fn on_rgba_flutter_texture_render(
+        &self,
+        use_texture_render: bool,
+        display: usize,
+        rgba: &mut scrap::ImageRgb,
+    ) {
         for (_, session) in self.session_handlers.read().unwrap().iter() {
-            if session.renderer.on_rgba(display, rgba) {
-                if let Some(stream) = &session.event_stream {
-                    stream.add(EventToUI::Rgba(display));
+            if use_texture_render || session.renderer.map_display_sessions.read().unwrap().len() > 1
+            {
+                if session.renderer.on_rgba(display, rgba) {
+                    if let Some(stream) = &session.event_stream {
+                        stream.add(EventToUI::Rgba(display));
+                    }
                 }
             }
         }

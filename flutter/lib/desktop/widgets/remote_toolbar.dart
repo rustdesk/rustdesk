@@ -734,10 +734,7 @@ class _MonitorMenu extends StatelessWidget {
     for (int i = 0; i < pi.displays.length; i++) {
       monitorList.add(buildMonitorButton(i));
     }
-    final m = Provider.of<ImageModel>(context);
-    if (supportIndividualWindows &&
-        m.useTextureRender &&
-        pi.displays.length > 1) {
+    if (supportIndividualWindows && pi.displays.length > 1) {
       monitorList.add(buildMonitorButton(kAllDisplayValue));
     }
     return monitorList;

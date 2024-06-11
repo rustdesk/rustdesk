@@ -2497,8 +2497,9 @@ class FFI {
           }
         } else if (message is EventToUI_Rgba) {
           final display = message.field0;
-          if (imageModel.useTextureRender) {
-            debugPrint("EventToUI_Rgba display:$display");
+          if (imageModel.useTextureRender ||
+              ffiModel.pi.currentDisplay == kAllDisplayValue) {
+            //debugPrint("EventToUI_Rgba display:$display");
             textureModel.setTextureType(display: display, gpuTexture: false);
             onEvent2UIRgba();
           } else {

@@ -617,7 +617,8 @@ class _ImagePaintState extends State<ImagePaint> {
       final paintWidth = c.getDisplayWidth() * s;
       final paintHeight = c.getDisplayHeight() * s;
       final paintSize = Size(paintWidth, paintHeight);
-      final paintWidget = m.useTextureRender
+      final paintWidget = m.useTextureRender ||
+              widget.ffi.ffiModel.pi.currentDisplay == kAllDisplayValue
           ? _BuildPaintTextureRender(
               c, s, Offset.zero, paintSize, isViewOriginal())
           : _buildScrollbarNonTextureRender(m, paintSize, s);
@@ -638,7 +639,8 @@ class _ImagePaintState extends State<ImagePaint> {
           ));
     } else {
       if (c.size.width > 0 && c.size.height > 0) {
-        final paintWidget = m.useTextureRender
+        final paintWidget = m.useTextureRender ||
+                widget.ffi.ffiModel.pi.currentDisplay == kAllDisplayValue
             ? _BuildPaintTextureRender(
                 c,
                 s,
