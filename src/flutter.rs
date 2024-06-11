@@ -209,6 +209,8 @@ struct RgbaData {
     // SAFETY: [rgba] is guarded by [rgba_valid], and it's safe to reach [rgba] with `rgba_valid == true`.
     // We must check the `rgba_valid` before reading [rgba].
     data: Vec<u8>,
+    // data should not update if size_got is true.
+    // Because flutter side will get the size first, then get the data.
     size_got: bool,
 }
 
