@@ -2132,6 +2132,7 @@ where
     std::thread::spawn(move || {
         #[cfg(windows)]
         sync_cpu_usage();
+        get_hwcodec_config();
         let mut handler_controller_map = HashMap::new();
         // let mut count = Vec::new();
         // let mut duration = std::time::Duration::ZERO;
@@ -2331,6 +2332,27 @@ pub fn start_audio_thread() -> MediaSender {
         log::info!("Audio decoder loop exits");
     });
     audio_sender
+}
+
+fn get_hwcodec_config() {
+    // for sciter and unilink
+    #[cfg(feature = "hwcodec")]
+    #[cfg(any(target_os = "windows", target_os = "linux"))]
+    {
+        use std::sync::Once;
+        static ONCE: Once = Once::new();
+        ONCE.call_once(|| {
+            let start = std::time::Instant::now();
+            if let Err(e) = crate::ipc::get_hwcodec_config_from_server() {
+                log::error!(
+                    "failed to get hwcodec config: {e:?}, elapsed: {:?}",
+                    start.elapsed()
+                );
+            } else {
+                log::info!("{:?} used to get hwcodec config", start.elapsed());
+            }
+        });
+    }
 }
 
 #[cfg(windows)]

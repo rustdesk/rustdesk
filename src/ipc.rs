@@ -239,6 +239,7 @@ pub enum Data {
     VideoConnCount(Option<usize>),
     // Although the key is not neccessary, it is used to avoid hardcoding the key.
     WaylandScreencastRestoreToken((String, String)),
+    HwCodecConfig(Option<String>),
 }
 
 #[tokio::main(flavor = "current_thread")]
@@ -523,12 +524,26 @@ async fn handle(data: Data, stream: &mut Connection) {
                     .await
             );
         }
-        Data::CheckHwcodec =>
-        {
-            #[cfg(feature = "hwcodec")]
-            #[cfg(any(target_os = "windows", target_os = "linux"))]
-            if crate::platform::is_root() {
-                scrap::hwcodec::start_check_process(true);
+        #[cfg(feature = "hwcodec")]
+        #[cfg(any(target_os = "windows", target_os = "linux"))]
+        Data::CheckHwcodec => {
+            scrap::hwcodec::start_check_process();
+        }
+        #[cfg(feature = "hwcodec")]
+        #[cfg(any(target_os = "windows", target_os = "linux"))]
+        Data::HwCodecConfig(c) => {
+            match c {
+                None => {
+                    let v = match scrap::hwcodec::HwCodecConfig::get_set_value() {
+                        Some(v) => Some(serde_json::to_string(&v).unwrap_or_default()),
+                        None => None,
+                    };
+                    allow_err!(stream.send(&Data::HwCodecConfig(v)).await);
+                }
+                Some(v) => {
+                    // --server and portable
+                    scrap::hwcodec::HwCodecConfig::set(v);
+                }
             }
         }
         Data::WaylandScreencastRestoreToken((key, value)) => {
@@ -1023,6 +1038,83 @@ pub async fn connect_to_user_session(usid: Option<u32>) -> ResultType<()> {
 pub async fn notify_server_to_check_hwcodec() -> ResultType<()> {
     connect(1_000, "").await?.send(&&Data::CheckHwcodec).await?;
     Ok(())
+}
+
+#[cfg(feature = "hwcodec")]
+#[cfg(any(target_os = "windows", target_os = "linux"))]
+#[tokio::main(flavor = "current_thread")]
+pub async fn get_hwcodec_config_from_server() -> ResultType<()> {
+    if !scrap::codec::enable_hwcodec_option() || scrap::hwcodec::HwCodecConfig::already_set() {
+        return Ok(());
+    }
+    let mut c = connect(50, "").await?;
+    c.send(&Data::HwCodecConfig(None)).await?;
+    if let Some(Data::HwCodecConfig(v)) = c.next_timeout(50).await? {
+        match v {
+            Some(v) => {
+                scrap::hwcodec::HwCodecConfig::set(v);
+                return Ok(());
+            }
+            None => {
+                bail!("hwcodec config is none");
+            }
+        }
+    }
+    bail!("failed to get hwcodec config");
+}
+
+#[cfg(feature = "hwcodec")]
+#[cfg(any(target_os = "windows", target_os = "linux"))]
+pub fn client_get_hwcodec_config_thread(wait_sec: u64) {
+    static ONCE: std::sync::Once = std::sync::Once::new();
+    if !crate::platform::is_installed()
+        || !scrap::codec::enable_hwcodec_option()
+        || scrap::hwcodec::HwCodecConfig::already_set()
+    {
+        return;
+    }
+    ONCE.call_once(move || {
+        std::thread::spawn(move || {
+            std::thread::sleep(std::time::Duration::from_secs(1));
+            let mut intervals: Vec<u64> = vec![wait_sec, 3, 3, 6, 9];
+            for i in intervals.drain(..) {
+                if i > 0 {
+                    std::thread::sleep(std::time::Duration::from_secs(i));
+                }
+                if get_hwcodec_config_from_server().is_ok() {
+                    break;
+                }
+            }
+        });
+    });
+}
+
+#[cfg(feature = "hwcodec")]
+#[tokio::main(flavor = "current_thread")]
+pub async fn hwcodec_process() {
+    let s = scrap::hwcodec::check_available_hwcodec();
+    for _ in 0..5 {
+        match crate::ipc::connect(1000, "").await {
+            Ok(mut conn) => {
+                match conn
+                    .send(&crate::ipc::Data::HwCodecConfig(Some(s.clone())))
+                    .await
+                {
+                    Ok(()) => {
+                        log::info!("send ok");
+                        break;
+                    }
+                    Err(e) => {
+                        log::error!("send failed: {e:?}");
+                    }
+                }
+            }
+            Err(e) => {
+                log::error!("connect failed: {e:?}");
+            }
+        }
+        std::thread::sleep(std::time::Duration::from_secs(1));
+    }
 }
 
 #[tokio::main(flavor = "current_thread")]

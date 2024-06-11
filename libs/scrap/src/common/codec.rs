@@ -144,10 +144,7 @@ impl Encoder {
                 }),
                 Err(e) => {
                     log::error!("new hw encoder failed: {e:?}, clear config");
-                    #[cfg(target_os = "android")]
-                    crate::android::ffi::clear_codec_info();
-                    #[cfg(not(target_os = "android"))]
-                    hbb_common::config::HwCodecConfig::clear_ram();
+                    HwCodecConfig::clear(false, true);
                     Self::update(EncodingUpdate::Check);
                     *ENCODE_CODEC_FORMAT.lock().unwrap() = CodecFormat::VP9;
                     Err(e)
@@ -160,7 +157,7 @@ impl Encoder {
                 }),
                 Err(e) => {
                     log::error!("new vram encoder failed: {e:?}, clear config");
-                    hbb_common::config::HwCodecConfig::clear_vram();
+                    HwCodecConfig::clear(true, true);
                     Self::update(EncodingUpdate::Check);
                     *ENCODE_CODEC_FORMAT.lock().unwrap() = CodecFormat::VP9;
                     Err(e)

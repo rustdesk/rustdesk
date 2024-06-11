@@ -6,6 +6,7 @@ use std::{
 
 use crate::{
     codec::{base_bitrate, enable_vram_option, EncoderApi, EncoderCfg, Quality},
+    hwcodec::HwCodecConfig,
     AdapterDevice, CodecFormat, EncodeInput, EncodeYuvFormat, Pixfmt,
 };
 use hbb_common::{
@@ -228,9 +229,8 @@ impl VRamEncoder {
             CodecFormat::H265 => DataFormat::H265,
             _ => return vec![],
         };
-        let v: Vec<_> = get_available_config()
-            .map(|c| c.e)
-            .unwrap_or_default()
+        let v: Vec<_> = crate::hwcodec::HwCodecConfig::get()
+            .vram_encode
             .drain(..)
             .filter(|c| c.data_format == data_format)
             .collect();
@@ -339,9 +339,8 @@ impl VRamDecoder {
             CodecFormat::H265 => DataFormat::H265,
             _ => return vec![],
         };
-        get_available_config()
-            .map(|c| c.d)
-            .unwrap_or_default()
+        crate::hwcodec::HwCodecConfig::get()
+            .vram_decode
             .drain(..)
             .filter(|c| c.data_format == data_format && c.luid == luid && luid != 0)
             .collect()
@@ -351,7 +350,7 @@ impl VRamDecoder {
         if !enable_vram_option() {
             return (false, false);
         }
-        let v = get_available_config().map(|c| c.d).unwrap_or_default();
+        let v = crate::hwcodec::HwCodecConfig::get().vram_decode;
         (
             v.iter().any(|d| d.data_format == DataFormat::H264),
             v.iter().any(|d| d.data_format == DataFormat::H265),
@@ -364,7 +363,7 @@ impl VRamDecoder {
         match Decoder::new(ctx) {
             Ok(decoder) => Ok(Self { decoder }),
             Err(_) => {
-                hbb_common::config::HwCodecConfig::clear_vram();
+                HwCodecConfig::clear(true, false);
                 Err(anyhow!(format!(
                     "Failed to create decoder, format: {:?}",
                     format
@@ -386,15 +385,7 @@ pub struct VRamDecoderImage<'a> {
 
 impl VRamDecoderImage<'_> {}
 
-fn get_available_config() -> ResultType<Available> {
-    let available = hbb_common::config::HwCodecConfig::load().vram;
-    match Available::deserialize(&available) {
-        Ok(v) => Ok(v),
-        Err(_) => Err(anyhow!("Failed to deserialize:{}", available)),
-    }
-}
-
-pub(crate) fn check_available_vram() -> String {
+pub(crate) fn check_available_vram() -> (Vec<FeatureContext>, Vec<DecodeContext>, String) {
     let d = DynamicContext {
         device: None,
         width: 1280,
@@ -406,8 +397,12 @@ pub(crate) fn check_available_vram() -> String {
     let encoders = encode::available(d);
     let decoders = decode::available();
     let available = Available {
-        e: encoders,
-        d: decoders,
+        e: encoders.clone(),
+        d: decoders.clone(),
     };
-    available.serialize().unwrap_or_default()
+    (
+        encoders,
+        decoders,
+        available.serialize().unwrap_or_default(),
+    )
 }
