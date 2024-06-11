@@ -1041,6 +1041,7 @@ impl FlutterHandler {
         } else {
             let mut rgba_data = RgbaData::default();
             std::mem::swap::<Vec<u8>>(&mut rgba.raw, &mut rgba_data.data);
+            rgba_data.size_got = false;
             rgba_write_lock.insert(display, rgba_data);
         }
         drop(rgba_write_lock);
