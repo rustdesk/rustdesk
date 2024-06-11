@@ -2504,12 +2504,15 @@ class FFI {
             // Fetch the image buffer from rust codes.
             final sz = platformFFI.getRgbaSize(sessionId, display);
             if (sz == 0) {
+              platformFFI.nextRgba(sessionId, display);
               return;
             }
             final rgba = platformFFI.getRgba(sessionId, display, sz);
             if (rgba != null) {
               onEvent2UIRgba();
               imageModel.onRgba(display, rgba);
+            } else {
+              platformFFI.nextRgba(sessionId, display);
             }
           }
         } else if (message is EventToUI_Texture) {
