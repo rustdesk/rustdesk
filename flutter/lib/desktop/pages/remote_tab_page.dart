@@ -420,7 +420,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
           await WindowController.fromWindowId(windowId()).setFullscreen(false);
           stateGlobal.setFullscreen(false, procWnd: false);
         }
-        await setNewConnectWindowFrame(windowId(), id!, screenRect);
+        await setNewConnectWindowFrame(windowId(), id!, display, screenRect);
         Future.delayed(Duration(milliseconds: isWindows ? 100 : 0), () async {
           await windowOnTop(windowId());
         });

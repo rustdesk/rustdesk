@@ -111,10 +111,6 @@ pub fn session_add_existed_sync(id: String, session_id: SessionID) -> SyncReturn
 }
 
 pub fn session_try_add_display(session_id: SessionID, displays: Vec<i32>) -> SyncReturn<()> {
-    // `session_add_displays` is used for software rendering, multi-ui sessions.
-    // We need to add displays to the session first, then capture the displays.
-    // Otherwise, the session may not send video frames to the flutter side.
-    super::flutter::session_add_displays(&session_id, &displays);
     if let Some(session) = sessions::get_session_by_session_id(&session_id) {
         session.capture_displays(displays, vec![], vec![]);
     }

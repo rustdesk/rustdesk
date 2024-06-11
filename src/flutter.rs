@@ -209,7 +209,14 @@ struct RgbaData {
     // SAFETY: [rgba] is guarded by [rgba_valid], and it's safe to reach [rgba] with `rgba_valid == true`.
     // We must check the `rgba_valid` before reading [rgba].
     data: Vec<u8>,
-    valid: bool,
+    size_got: bool,
+}
+
+impl RgbaData {
+    fn get_size(&mut self) -> usize {
+        self.size_got = true;
+        self.data.len()
+    }
 }
 
 pub type FlutterRgbaRendererPluginOnRgba = unsafe extern "C" fn(
@@ -404,25 +411,6 @@ impl VideoRenderer {
                         },
                     );
                 }
-            }
-        }
-    }
-
-    fn add_displays(&self, displays: &[i32]) {
-        let mut sessions_lock = self.map_display_sessions.write().unwrap();
-        for display in displays {
-            let d = *display as usize;
-            if !sessions_lock.contains_key(&d) {
-                sessions_lock.insert(
-                    d,
-                    DisplaySessionInfo {
-                        texture_rgba_ptr: 0,
-                        size: (0, 0),
-                        #[cfg(feature = "vram")]
-                        gpu_output_ptr: usize::default(),
-                        notify_render_type: None,
-                    },
-                );
             }
         }
     }
@@ -1012,7 +1000,7 @@ impl InvokeUiSession for FlutterHandler {
     #[inline]
     fn get_rgba(&self, _display: usize) -> *const u8 {
         if let Some(rgba_data) = self.display_rgbas.read().unwrap().get(&_display) {
-            if rgba_data.valid {
+            if rgba_data.size_got {
                 return rgba_data.data.as_ptr();
             }
         }
@@ -1022,7 +1010,7 @@ impl InvokeUiSession for FlutterHandler {
     #[inline]
     fn next_rgba(&self, _display: usize) {
         if let Some(rgba_data) = self.display_rgbas.write().unwrap().get_mut(&_display) {
-            rgba_data.valid = false;
+            rgba_data.size_got = false;
         }
     }
 }
@@ -1043,17 +1031,14 @@ impl FlutterHandler {
         // We give up sending a new event to flutter.
         let mut rgba_write_lock = self.display_rgbas.write().unwrap();
         if let Some(rgba_data) = rgba_write_lock.get_mut(&display) {
-            if rgba_data.valid {
+            if rgba_data.size_got {
                 return;
-            } else {
-                rgba_data.valid = true;
             }
             // Return the rgba buffer to the video handler for reusing allocated rgba buffer.
             std::mem::swap::<Vec<u8>>(&mut rgba.raw, &mut rgba_data.data);
         } else {
             let mut rgba_data = RgbaData::default();
             std::mem::swap::<Vec<u8>>(&mut rgba.raw, &mut rgba_data.data);
-            rgba_data.valid = true;
             rgba_write_lock.insert(display, rgba_data);
         }
         drop(rgba_write_lock);
@@ -1473,10 +1458,10 @@ pub fn session_get_rgba_size(session_id: SessionID, display: usize) -> usize {
     if let Some(session) = sessions::get_session_by_session_id(&session_id) {
         return session
             .display_rgbas
-            .read()
+            .write()
             .unwrap()
-            .get(&display)
-            .map_or(0, |rgba| rgba.data.len());
+            .get_mut(&display)
+            .map_or(0, |rgba| rgba.get_size());
     }
     0
 }
@@ -1542,22 +1527,6 @@ pub fn session_register_gpu_texture(_session_id: SessionID, _display: usize, _ou
             .get(&_session_id)
         {
             h.renderer.register_gpu_output(_display, _output_ptr);
-            break;
-        }
-    }
-}
-
-pub fn session_add_displays(session_id: &SessionID, displays: &[i32]) {
-    #[cfg(feature = "vram")]
-    for s in sessions::get_sessions() {
-        if let Some(h) = s
-            .ui_handler
-            .session_handlers
-            .read()
-            .unwrap()
-            .get(session_id)
-        {
-            h.renderer.add_displays(displays);
             break;
         }
     }
