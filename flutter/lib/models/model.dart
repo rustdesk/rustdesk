@@ -2497,9 +2497,6 @@ class FFI {
           }
         } else if (message is EventToUI_Rgba) {
           final display = message.field0;
-          if (display == 1) {
-            debugPrint('REMOVE ME ========================= handle display 1');
-          }
           if (imageModel.useTextureRender) {
             debugPrint("EventToUI_Rgba display:$display");
             textureModel.setTextureType(display: display, gpuTexture: false);
@@ -2508,7 +2505,6 @@ class FFI {
             // Fetch the image buffer from rust codes.
             final sz = platformFFI.getRgbaSize(sessionId, display);
             if (sz == 0) {
-                       debugPrint('REMOVE ME ========================= session, rgba size is 0');
               return;
             }
             final rgba = platformFFI.getRgba(sessionId, display, sz);
