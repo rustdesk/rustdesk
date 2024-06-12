@@ -76,6 +76,8 @@ pub trait EncoderApi {
     fn latency_free(&self) -> bool;
 
     fn is_hardware(&self) -> bool;
+
+    fn disable(&self);
 }
 
 pub struct Encoder {
@@ -145,7 +147,6 @@ impl Encoder {
                 Err(e) => {
                     log::error!("new hw encoder failed: {e:?}, clear config");
                     HwCodecConfig::clear(false, true);
-                    Self::update(EncodingUpdate::Check);
                     *ENCODE_CODEC_FORMAT.lock().unwrap() = CodecFormat::VP9;
                     Err(e)
                 }
@@ -158,7 +159,6 @@ impl Encoder {
                 Err(e) => {
                     log::error!("new vram encoder failed: {e:?}, clear config");
                     HwCodecConfig::clear(true, true);
-                    Self::update(EncodingUpdate::Check);
                     *ENCODE_CODEC_FORMAT.lock().unwrap() = CodecFormat::VP9;
                     Err(e)
                 }

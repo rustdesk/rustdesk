@@ -194,6 +194,10 @@ impl EncoderApi for VRamEncoder {
     fn is_hardware(&self) -> bool {
         true
     }
+
+    fn disable(&self) {
+        HwCodecConfig::clear(true, true);
+    }
 }
 
 impl VRamEncoder {
