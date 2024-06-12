@@ -209,16 +209,7 @@ struct RgbaData {
     // SAFETY: [rgba] is guarded by [rgba_valid], and it's safe to reach [rgba] with `rgba_valid == true`.
     // We must check the `rgba_valid` before reading [rgba].
     data: Vec<u8>,
-    // data should not update if size_got is true.
-    // Because flutter side will get the size first, then get the data.
-    size_got: bool,
-}
-
-impl RgbaData {
-    fn get_size(&mut self) -> usize {
-        self.size_got = true;
-        self.data.len()
-    }
+    valid: bool,
 }
 
 pub type FlutterRgbaRendererPluginOnRgba = unsafe extern "C" fn(
@@ -1002,7 +993,7 @@ impl InvokeUiSession for FlutterHandler {
     #[inline]
     fn get_rgba(&self, _display: usize) -> *const u8 {
         if let Some(rgba_data) = self.display_rgbas.read().unwrap().get(&_display) {
-            if rgba_data.size_got {
+            if rgba_data.valid {
                 return rgba_data.data.as_ptr();
             }
         }
@@ -1012,7 +1003,7 @@ impl InvokeUiSession for FlutterHandler {
     #[inline]
     fn next_rgba(&self, _display: usize) {
         if let Some(rgba_data) = self.display_rgbas.write().unwrap().get_mut(&_display) {
-            rgba_data.size_got = false;
+            rgba_data.valid = false;
         }
     }
 }
@@ -1033,15 +1024,17 @@ impl FlutterHandler {
         // We give up sending a new event to flutter.
         let mut rgba_write_lock = self.display_rgbas.write().unwrap();
         if let Some(rgba_data) = rgba_write_lock.get_mut(&display) {
-            if rgba_data.size_got {
+            if rgba_data.valid {
                 return;
+            } else {
+                rgba_data.valid = true;
             }
             // Return the rgba buffer to the video handler for reusing allocated rgba buffer.
             std::mem::swap::<Vec<u8>>(&mut rgba.raw, &mut rgba_data.data);
         } else {
             let mut rgba_data = RgbaData::default();
             std::mem::swap::<Vec<u8>>(&mut rgba.raw, &mut rgba_data.data);
-            rgba_data.size_got = false;
+            rgba_data.valid = true;
             rgba_write_lock.insert(display, rgba_data);
         }
         drop(rgba_write_lock);
@@ -1053,6 +1046,7 @@ impl FlutterHandler {
             if map_display_sessions.len() > 1 {
                 continue;
             }
+            make sure map_display_sessions is set first.
             if map_display_sessions.contains_key(&display) {
                 if let Some(stream) = &h.event_stream {
                     stream.add(EventToUI::Rgba(display));
@@ -1469,10 +1463,10 @@ pub fn session_get_rgba_size(session_id: SessionID, display: usize) -> usize {
     if let Some(session) = sessions::get_session_by_session_id(&session_id) {
         return session
             .display_rgbas
-            .write()
+            .read()
             .unwrap()
-            .get_mut(&display)
-            .map_or(0, |rgba| rgba.get_size());
+            .get(&display)
+            .map_or(0, |rgba| rgba.data.len());
     }
     0
 }
