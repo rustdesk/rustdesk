@@ -973,7 +973,9 @@ class FfiModel with ChangeNotifier {
   }
 
   updateLastCursorId(Map<String, dynamic> evt) {
-    parent.target?.cursorModel.id = int.parse(evt['id']);
+    // int.parse(evt['id']) may cause FormatException
+    // Unhandled Exception: FormatException: Positive input exceeds the limit of integer 18446744071749110741
+    parent.target?.cursorModel.id = evt['id'];
   }
 
   handleCursorId(Map<String, dynamic> evt) {
@@ -1619,7 +1621,7 @@ class CanvasModel with ChangeNotifier {
 // data for cursor
 class CursorData {
   final String peerId;
-  final int id;
+  final String id;
   final img2.Image image;
   double scale;
   Uint8List? data;
@@ -1699,12 +1701,12 @@ const _forbiddenCursorPng =
 const _defaultCursorPng =
     'iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAAXNSR0IArs4c6QAAAARzQklUCAgICHwIZIgAAAFmSURBVFiF7dWxSlxREMbx34QFDRowYBchZSxSCWlMCOwD5FGEFHap06UI7KPsAyyEEIQFqxRaCqYTsqCJFsKkuAeRXb17wrqV918dztw55zszc2fo6Oh47MR/e3zO1/iAHWmznHKGQwx9ip/LEbCfazbsoY8j/JLOhcC6sCW9wsjEwJf483AC9nPNc1+lFRwI13d+l3rYFS799rFGxJMqARv2pBXh+72XQ7gWvklPS7TmMl9Ak/M+DqrENvxAv/guKKApuKPWl0/TROK4+LbSqzhuB+OZ3fRSeFPWY+Fkyn56Y29hfgTSpnQ+s98cvorVey66uPlNFxKwZOYLCGfCs5n9NMYVrsp6mvXSoFqpqYFDvMBkStgJJe93dZOwVXxbqUnBENulydSReqUrDhcX0PT2EXarBYS3GNXMhboinBgIl9K71kg0L3+PvyYGdVpruT2MwrF0iotiXfIwus0Dj+OOjo6Of+e7ab74RkpgAAAAAElFTkSuQmCC';
 
-const kPreForbiddenCursorId = -2;
+const kPreForbiddenCursorId = "-2";
 final preForbiddenCursor = PredefinedCursor(
   png: _forbiddenCursorPng,
   id: kPreForbiddenCursorId,
 );
-const kPreDefaultCursorId = -1;
+const kPreDefaultCursorId = "-1";
 final preDefaultCursor = PredefinedCursor(
   png: _defaultCursorPng,
   id: kPreDefaultCursorId,
@@ -1717,7 +1719,7 @@ class PredefinedCursor {
   img2.Image? _image2;
   CursorData? _cache;
   String png;
-  int id;
+  String id;
   double Function(double)? hotxGetter;
   double Function(double)? hotyGetter;
 
@@ -1775,13 +1777,15 @@ class PredefinedCursor {
 
 class CursorModel with ChangeNotifier {
   ui.Image? _image;
-  final _images = <int, Tuple3<ui.Image, double, double>>{};
+  final _images = <String, Tuple3<ui.Image, double, double>>{};
   CursorData? _cache;
-  final _cacheMap = <int, CursorData>{};
+  final _cacheMap = <String, CursorData>{};
   final _cacheKeys = <String>{};
   double _x = -10000;
   double _y = -10000;
-  int _id = -1;
+  // int.parse(evt['id']) may cause FormatException
+  // So we use String here.
+  String _id = "-1";
   double _hotx = 0;
   double _hoty = 0;
   double _displayOriginX = 0;
@@ -1808,7 +1812,7 @@ class CursorModel with ChangeNotifier {
   double get hotx => _hotx;
   double get hoty => _hoty;
 
-  set id(int id) => _id = id;
+  set id(String id) => _id = id;
 
   bool get isPeerControlProtected =>
       DateTime.now().difference(_lastPeerMouse).inMilliseconds <
@@ -1986,7 +1990,7 @@ class CursorModel with ChangeNotifier {
   }
 
   updateCursorData(Map<String, dynamic> evt) async {
-    final id = int.parse(evt['id']);
+    final id = evt['id'];
     final hotx = double.parse(evt['hotx']);
     final hoty = double.parse(evt['hoty']);
     final width = int.parse(evt['width']);
@@ -2011,7 +2015,7 @@ class CursorModel with ChangeNotifier {
   Future<bool> _updateCache(
     Uint8List rgba,
     ui.Image image,
-    int id,
+    String id,
     double hotx,
     double hoty,
     int w,
