@@ -481,6 +481,7 @@ fn run(vs: VideoService) -> ResultType<()> {
     let mut mid_data = Vec::new();
     let mut repeat_encode_counter = 0;
     let repeat_encode_max = 10;
+    let mut encode_fail_counter = 0;
 
     while sp.ok() {
         #[cfg(windows)]
@@ -568,6 +569,7 @@ fn run(vs: VideoService) -> ResultType<()> {
                         ms,
                         &mut encoder,
                         recorder.clone(),
+                        &mut encode_fail_counter,
                     )?;
                     frame_controller.set_send(now, send_conn_ids);
                 }
@@ -622,6 +624,7 @@ fn run(vs: VideoService) -> ResultType<()> {
                             ms,
                             &mut encoder,
                             recorder.clone(),
+                            &mut encode_fail_counter,
                         )?;
                         frame_controller.set_send(now, send_conn_ids);
                     }
@@ -876,6 +879,7 @@ fn handle_one_frame(
     ms: i64,
     encoder: &mut Encoder,
     recorder: Arc<Mutex<Option<Recorder>>>,
+    encode_fail_counter: &mut usize,
 ) -> ResultType<HashSet<i32>> {
     sp.snapshot(|sps| {
         // so that new sub and old sub share the same encoder after switch
@@ -889,6 +893,7 @@ fn handle_one_frame(
     let mut send_conn_ids: HashSet<i32> = Default::default();
     match encoder.encode_to_message(frame, ms) {
         Ok(mut vf) => {
+            *encode_fail_counter = 0;
             vf.display = display as _;
             let mut msg = Message::new();
             msg.set_video_frame(vf);
@@ -899,13 +904,29 @@ fn handle_one_frame(
                 .map(|r| r.write_message(&msg));
             send_conn_ids = sp.send_video_frame(msg);
         }
-        Err(e) => match e.to_string().as_str() {
-            scrap::codec::ENCODE_NEED_SWITCH => {
-                log::info!("switch due to encoder need switch");
-                bail!("SWITCH");
+        Err(e) => {
+            let max_fail_times = if cfg!(target_os = "android") && encoder.is_hardware() {
+                12
+            } else {
+                6
+            };
+            *encode_fail_counter += 1;
+            if *encode_fail_counter >= max_fail_times {
+                *encode_fail_counter = 0;
+                if encoder.is_hardware() {
+                    encoder.disable();
+                    log::error!("switch due to encoding fails more than {max_fail_times} times");
+                    bail!("SWITCH");
+                }
             }
-            _ => {}
-        },
+            match e.to_string().as_str() {
+                scrap::codec::ENCODE_NEED_SWITCH => {
+                    log::error!("switch due to encoder need switch");
+                    bail!("SWITCH");
+                }
+                _ => {}
+            }
+        }
     }
     Ok(send_conn_ids)
 }

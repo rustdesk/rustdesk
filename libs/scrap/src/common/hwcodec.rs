@@ -15,7 +15,7 @@ use hbb_common::{
 };
 use hwcodec::{
     common::{
-        get_gpu_signature, DataFormat,
+        DataFormat,
         Quality::{self, *},
         RateControl::{self, *},
     },
@@ -209,6 +209,10 @@ impl EncoderApi for HwRamEncoder {
 
     fn is_hardware(&self) -> bool {
         true
+    }
+
+    fn disable(&self) {
+        HwCodecConfig::clear(false, true);
     }
 }
 
@@ -582,7 +586,7 @@ impl HwCodecConfig {
                 None => {
                     log::info!("try load cached hwcodec config");
                     let c = hbb_common::config::common_load::<HwCodecConfig>("_hwcodec");
-                    let new_signature = get_gpu_signature();
+                    let new_signature = hwcodec::common::get_gpu_signature();
                     if c.signature == new_signature {
                         log::debug!("load cached hwcodec config: {c:?}");
                         *CONFIG.lock().unwrap() = Some(c.clone());
@@ -647,6 +651,7 @@ impl HwCodecConfig {
                 }
             }
         }
+        crate::codec::Encoder::update(crate::codec::EncodingUpdate::Check);
     }
 }
 
@@ -679,7 +684,7 @@ pub fn check_available_hwcodec() -> String {
         vram_encode: vram.0,
         #[cfg(feature = "vram")]
         vram_decode: vram.1,
-        signature: get_gpu_signature(),
+        signature: hwcodec::common::get_gpu_signature(),
     };
     log::debug!("{c:?}");
     serde_json::to_string(&c).unwrap_or_default()
