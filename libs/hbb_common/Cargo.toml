@@ -9,7 +9,7 @@ edition = "2018"
 [dependencies]
 flexi_logger = { version = "0.27", features = ["async"] }
 protobuf = { version = "3.4", features = ["with-bytes"] }
-tokio = { version = "1.37", features = ["full"] }
+tokio = { version = "1.38", features = ["full"] }
 tokio-util = { version = "0.7", features = ["full"] }
 futures = "0.3"
 bytes = { version = "1.6", features = ["serde"] }
