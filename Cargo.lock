@@ -2917,7 +2917,7 @@ dependencies = [
  "tokio",
  "tokio-native-tls",
  "tokio-rustls 0.26.0",
- "tokio-socks 0.5.2",
+ "tokio-socks 0.5.2-1",
  "tokio-util",
  "toml 0.7.8",
  "url",
@@ -4383,8 +4383,8 @@ dependencies = [
 
 [[package]]
 name = "parity-tokio-ipc"
-version = "0.7.3-3"
-source = "git+https://github.com/rustdesk-org/parity-tokio-ipc#e8448ade10d6d972d0b2307646424b36ab202ff5"
+version = "0.7.3-4"
+source = "git+https://github.com/rustdesk-org/parity-tokio-ipc#3623ec9ebef50c9b118e03b03df831008a4d1441"
 dependencies = [
  "futures",
  "libc",
@@ -6432,8 +6432,8 @@ dependencies = [
 
 [[package]]
 name = "tokio-socks"
-version = "0.5.2"
-source = "git+https://github.com/rustdesk-org/tokio-socks#51037c93f8be34196fd2b6de9f674e8dfae3d01e"
+version = "0.5.2-1"
+source = "git+https://github.com/rustdesk-org/tokio-socks#94e97c6d7c93b0bcbfa54f2dc397c1da0a6e43d3"
 dependencies = [
  "bytes",
  "either",
