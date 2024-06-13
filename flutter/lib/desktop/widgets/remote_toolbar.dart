@@ -332,8 +332,8 @@ class RemoteToolbar extends StatefulWidget {
   final String id;
   final FFI ffi;
   final ToolbarState state;
-  final Function(Function(bool)) onEnterOrLeaveImageSetter;
-  final VoidCallback onEnterOrLeaveImageCleaner;
+  final Function(int, Function(bool)) onEnterOrLeaveImageSetter;
+  final Function(int) onEnterOrLeaveImageCleaner;
   final Function(VoidCallback) setRemoteState;
 
   RemoteToolbar({
@@ -393,7 +393,7 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
       initialValue: 0,
     );
 
-    widget.onEnterOrLeaveImageSetter((enter) {
+    widget.onEnterOrLeaveImageSetter(identityHashCode(this), (enter) {
       if (enter) {
         triggerAutoHide();
         _isCursorOverImage = true;
@@ -413,12 +413,11 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
   dispose() {
     super.dispose();
 
-    widget.onEnterOrLeaveImageCleaner();
+    widget.onEnterOrLeaveImageCleaner(identityHashCode(this));
   }
 
   @override
   Widget build(BuildContext context) {
-    // No need to use future builder here.
     return Align(
       alignment: Alignment.topCenter,
       child: Obx(() => show.value

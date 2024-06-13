@@ -85,6 +85,9 @@ class _RemotePageState extends State<RemotePage>
 
   final FocusNode _rawKeyFocusNode = FocusNode(debugLabel: "rawkeyFocusNode");
 
+  // We need `_instanceIdOnEnterOrLeaveImage4Toolbar` together with `_onEnterOrLeaveImage4Toolbar`
+  // to identify the toolbar instance and its callback function.
+  int? _instanceIdOnEnterOrLeaveImage4Toolbar;
   Function(bool)? _onEnterOrLeaveImage4Toolbar;
 
   late FFI _ffi;
@@ -268,9 +271,18 @@ class _RemotePageState extends State<RemotePage>
           id: widget.id,
           ffi: _ffi,
           state: widget.toolbarState,
-          onEnterOrLeaveImageSetter: (func) =>
-              _onEnterOrLeaveImage4Toolbar = func,
-          onEnterOrLeaveImageCleaner: () => _onEnterOrLeaveImage4Toolbar = null,
+          onEnterOrLeaveImageSetter: (id, func) {
+            _instanceIdOnEnterOrLeaveImage4Toolbar = id;
+            _onEnterOrLeaveImage4Toolbar = func;
+          },
+          onEnterOrLeaveImageCleaner: (id) {
+            // If _instanceIdOnEnterOrLeaveImage4Toolbar != id
+            // it means `_onEnterOrLeaveImage4Toolbar` is not set or it has been changed to another toolbar.
+            if (_instanceIdOnEnterOrLeaveImage4Toolbar == id) {
+              _instanceIdOnEnterOrLeaveImage4Toolbar = null;
+              _onEnterOrLeaveImage4Toolbar = null;
+            }
+          },
           setRemoteState: setState,
         );
 
