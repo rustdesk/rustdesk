@@ -35,12 +35,41 @@ class SettingsPage extends StatefulWidget implements PageShape {
 
 const url = 'https://rustdesk.com/';
 
+enum KeepScreenOn {
+  never,
+  duringControlled,
+  serviceOn,
+}
+
+String _keepScreenOnToOption(KeepScreenOn value) {
+  switch (value) {
+    case KeepScreenOn.never:
+      return 'never';
+    case KeepScreenOn.duringControlled:
+      return 'during-controlled';
+    case KeepScreenOn.serviceOn:
+      return 'service-on';
+  }
+}
+
+KeepScreenOn optionToKeepScreenOn(String value) {
+  switch (value) {
+    case 'never':
+      return KeepScreenOn.never;
+    case 'service-on':
+      return KeepScreenOn.serviceOn;
+    default:
+      return KeepScreenOn.duringControlled;
+  }
+}
+
 class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
   final _hasIgnoreBattery =
       false; //androidVersion >= 26; // remove because not work on every device
   var _ignoreBatteryOpt = false;
   var _enableStartOnBoot = false;
   var _floatingWindowDisabled = false;
+  var _keepScreenOn = KeepScreenOn.duringControlled; // relay on floating window
   var _enableAbr = false;
   var _denyLANDiscovery = false;
   var _onlyWhiteList = false;
@@ -94,6 +123,15 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
       if (floatingWindowDisabled != _floatingWindowDisabled) {
         update = true;
         _floatingWindowDisabled = floatingWindowDisabled;
+      }
+
+      final keepScreenOn = _floatingWindowDisabled
+          ? KeepScreenOn.never
+          : optionToKeepScreenOn(
+              bind.mainGetLocalOption(key: kOptionKeepScreenOn));
+      if (keepScreenOn != _keepScreenOn) {
+        update = true;
+        _keepScreenOn = keepScreenOn;
       }
 
       final enableAbrRes = option2bool(
@@ -524,6 +562,29 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
             ? null
             : onFloatingWindowChanged));
 
+    enhancementsTiles.add(_getPopupDialogRadioEntry(
+      title: 'Keep screen on',
+      list: [
+        _RadioEntry('Never', _keepScreenOnToOption(KeepScreenOn.never)),
+        _RadioEntry('During controlled',
+            _keepScreenOnToOption(KeepScreenOn.duringControlled)),
+        _RadioEntry('During service is on',
+            _keepScreenOnToOption(KeepScreenOn.serviceOn)),
+      ],
+      getter: () => _keepScreenOnToOption(_floatingWindowDisabled
+          ? KeepScreenOn.never
+          : optionToKeepScreenOn(
+              bind.mainGetLocalOption(key: kOptionKeepScreenOn))),
+      asyncSetter: isOptionFixed(kOptionKeepScreenOn) || _floatingWindowDisabled
+          ? null
+          : (value) async {
+              await bind.mainSetLocalOption(
+                  key: kOptionKeepScreenOn, value: value);
+              setState(() => _keepScreenOn = optionToKeepScreenOn(value));
+              gFFI.serverModel.androidUpdatekeepScreenOn();
+            },
+    ));
+
     final disabledSettings = bind.isDisableSettings();
     final settings = SettingsList(
       sections: [
@@ -947,7 +1008,7 @@ class _RadioEntry {
 typedef _RadioEntryGetter = String Function();
 typedef _RadioEntrySetter = Future<void> Function(String);
 
-_getPopupDialogRadioEntry({
+SettingsTile _getPopupDialogRadioEntry({
   required String title,
   required List<_RadioEntry> list,
   required _RadioEntryGetter getter,
@@ -1001,7 +1062,7 @@ _getPopupDialogRadioEntry({
 
   return SettingsTile(
     title: Text(translate(title)),
-    onPressed: (context) => showDialog(),
+    onPressed: asyncSetter == null ? null : (context) => showDialog(),
     value: Padding(
       padding: EdgeInsets.symmetric(vertical: 8),
       child: Obx(() => Text(translate(valueText.value))),

@@ -11,7 +11,9 @@ import android.graphics.PixelFormat
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
 import android.os.Build
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import android.util.Log
 import android.view.Gravity
 import android.view.MotionEvent
@@ -20,6 +22,7 @@ import android.view.WindowManager
 import android.view.WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
 import android.view.WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
 import android.view.WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
+import android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
 import android.widget.ImageView
 import android.widget.PopupMenu
 import com.caverock.androidsvg.SVG
@@ -39,6 +42,7 @@ class FloatingWindowService : Service(), View.OnTouchListener {
     private var lastDownX = 0f
     private var lastDownY = 0f
     private var viewCreated = false;
+    private var keepScreenOn = KeepScreenOn.DURING_CONTROLLED
 
     companion object {
         private val logTag = "floatingService"
@@ -69,10 +73,19 @@ class FloatingWindowService : Service(), View.OnTouchListener {
             }
             Log.d(logTag, "floating window size: $viewWidth x $viewHeight, transparency: $viewTransparency, lastLayoutX: $lastLayoutX, lastLayoutY: $lastLayoutY, customSvg: $customSvg")
             createView(windowManager)
+            handler.postDelayed(runnable, 1000)
             Log.d(logTag, "onCreate success")
         } catch (e: Exception) {
             Log.d(logTag, "onCreate failed: $e")
         }
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        if (viewCreated) {
+            windowManager.removeView(floatingView)
+        }
+        handler.removeCallbacks(runnable)
     }
 
     @SuppressLint("ClickableViewAccessibility")
@@ -151,6 +164,15 @@ class FloatingWindowService : Service(), View.OnTouchListener {
         layoutParams.x = lastLayoutX
         layoutParams.y = lastLayoutY
 
+        val keepScreenOnOption = FFI.getLocalOption("keep-screen-on").lowercase()
+        keepScreenOn = when (keepScreenOnOption) {
+            "never" -> KeepScreenOn.NEVER
+            "service-on" -> KeepScreenOn.SERVICE_ON
+            else -> KeepScreenOn.DURING_CONTROLLED
+        }
+        Log.d(logTag, "keepScreenOn option: $keepScreenOnOption, value: $keepScreenOn")
+        updateKeepScreenOnLayoutParams()
+
         windowManager.addView(floatingView, layoutParams)
         moveToScreenSide()
     }
@@ -200,12 +222,7 @@ class FloatingWindowService : Service(), View.OnTouchListener {
         lastOrientation = resources.configuration.orientation
     }
 
-    override fun onDestroy() {
-        super.onDestroy()
-        if (viewCreated) {
-            windowManager.removeView(floatingView)
-        }
-    }
+
 
     private fun performClick() {
         showPopupMenu()
@@ -325,6 +342,37 @@ class FloatingWindowService : Service(), View.OnTouchListener {
 
     private fun stopMainService() {
         MainActivity.flutterMethodChannel?.invokeMethod("stop_service", null)
+    }
+
+    enum class KeepScreenOn {
+        NEVER,
+        DURING_CONTROLLED,
+        SERVICE_ON,
+    }
+
+    private val handler = Handler(Looper.getMainLooper())
+    private val runnable = object : Runnable {
+        override fun run() {
+            if (updateKeepScreenOnLayoutParams()) {
+                windowManager.updateViewLayout(floatingView, layoutParams)
+            }
+            handler.postDelayed(this, 1000) // 1000 milliseconds = 1 second
+        }
+    }
+
+    private fun updateKeepScreenOnLayoutParams(): Boolean {
+        val oldOn = layoutParams.flags and FLAG_KEEP_SCREEN_ON != 0
+        val newOn = keepScreenOn == KeepScreenOn.SERVICE_ON ||  (keepScreenOn == KeepScreenOn.DURING_CONTROLLED  &&  MainService.isStart)
+        if (oldOn != newOn) {
+            Log.d(logTag, "change keep screen on to $newOn")
+            if (newOn) {
+                layoutParams.flags = layoutParams.flags or FLAG_KEEP_SCREEN_ON
+            } else {
+                layoutParams.flags = layoutParams.flags and FLAG_KEEP_SCREEN_ON.inv()
+            }
+            return true
+        }
+        return false
     }
 }
 
