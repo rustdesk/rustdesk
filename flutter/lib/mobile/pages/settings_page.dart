@@ -35,31 +35,31 @@ class SettingsPage extends StatefulWidget implements PageShape {
 
 const url = 'https://rustdesk.com/';
 
-enum _KeepScreenOn {
+enum KeepScreenOn {
   never,
   duringControlled,
   serviceOn,
 }
 
-String _keepScreenOnToOption(_KeepScreenOn value) {
+String _keepScreenOnToOption(KeepScreenOn value) {
   switch (value) {
-    case _KeepScreenOn.never:
+    case KeepScreenOn.never:
       return 'never';
-    case _KeepScreenOn.duringControlled:
+    case KeepScreenOn.duringControlled:
       return 'during-controlled';
-    case _KeepScreenOn.serviceOn:
+    case KeepScreenOn.serviceOn:
       return 'service-on';
   }
 }
 
-_KeepScreenOn _optionToKeepScreenOn(String value) {
+KeepScreenOn optionToKeepScreenOn(String value) {
   switch (value) {
     case 'never':
-      return _KeepScreenOn.never;
+      return KeepScreenOn.never;
     case 'service-on':
-      return _KeepScreenOn.serviceOn;
+      return KeepScreenOn.serviceOn;
     default:
-      return _KeepScreenOn.duringControlled;
+      return KeepScreenOn.duringControlled;
   }
 }
 
@@ -69,8 +69,7 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
   var _ignoreBatteryOpt = false;
   var _enableStartOnBoot = false;
   var _floatingWindowDisabled = false;
-  var _keepScreenOn =
-      _KeepScreenOn.duringControlled; // relay on floating window
+  var _keepScreenOn = KeepScreenOn.duringControlled; // relay on floating window
   var _enableAbr = false;
   var _denyLANDiscovery = false;
   var _onlyWhiteList = false;
@@ -127,8 +126,8 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
       }
 
       final keepScreenOn = _floatingWindowDisabled
-          ? _KeepScreenOn.never
-          : _optionToKeepScreenOn(
+          ? KeepScreenOn.never
+          : optionToKeepScreenOn(
               bind.mainGetLocalOption(key: kOptionKeepScreenOn));
       if (keepScreenOn != _keepScreenOn) {
         update = true;
@@ -566,22 +565,23 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
     enhancementsTiles.add(_getPopupDialogRadioEntry(
       title: 'Keep screen on',
       list: [
-        _RadioEntry('Never', _keepScreenOnToOption(_KeepScreenOn.never)),
+        _RadioEntry('Never', _keepScreenOnToOption(KeepScreenOn.never)),
         _RadioEntry('During controlled',
-            _keepScreenOnToOption(_KeepScreenOn.duringControlled)),
+            _keepScreenOnToOption(KeepScreenOn.duringControlled)),
         _RadioEntry('During service is on',
-            _keepScreenOnToOption(_KeepScreenOn.serviceOn)),
+            _keepScreenOnToOption(KeepScreenOn.serviceOn)),
       ],
       getter: () => _keepScreenOnToOption(_floatingWindowDisabled
-          ? _KeepScreenOn.never
-          : _optionToKeepScreenOn(
+          ? KeepScreenOn.never
+          : optionToKeepScreenOn(
               bind.mainGetLocalOption(key: kOptionKeepScreenOn))),
       asyncSetter: isOptionFixed(kOptionKeepScreenOn) || _floatingWindowDisabled
           ? null
           : (value) async {
               await bind.mainSetLocalOption(
                   key: kOptionKeepScreenOn, value: value);
-              setState(() => _keepScreenOn = _optionToKeepScreenOn(value));
+              setState(() => _keepScreenOn = optionToKeepScreenOn(value));
+              gFFI.serverModel.androidUpdatekeepScreenOn();
             },
     ));
 
