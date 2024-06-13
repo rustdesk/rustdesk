@@ -1058,6 +1058,7 @@ impl FlutterHandler {
         }
         drop(rgba_write_lock);
 
+        let is_multi_sessions = self.session_handlers.read().unwrap().len() > 1;
         for h in self.session_handlers.read().unwrap().values() {
             // `map_display_sessions` stores the display indices that are used by the video renderer.
             let map_display_sessions = h.renderer.map_display_sessions.read().unwrap();
@@ -1065,17 +1066,16 @@ impl FlutterHandler {
             if map_display_sessions.len() > 1 {
                 continue;
             }
-            if h.renderer
-                .map_display_sessions
-                .read()
-                .unwrap()
-                .contains_key(&display)
-            {
-                if map_display_sessions.contains_key(&display) {
-                    if let Some(stream) = &h.event_stream {
-                        stream.add(EventToUI::Rgba(display));
-                    }
+            // If there're multiple ui sessions, we only notify the ui session that has the display.
+            // We must make sure that the display is in the `map_display_sessions`.
+            // `session_start_with_displays()` can guarantee that.
+            if is_multi_sessions {
+                if !map_display_sessions.contains_key(&display) {
+                    continue;
                 }
+            }
+            if let Some(stream) = &h.event_stream {
+                stream.add(EventToUI::Rgba(display));
             }
         }
     }
