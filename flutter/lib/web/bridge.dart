@@ -89,6 +89,14 @@ class RustdeskImpl {
     return Stream.empty();
   }
 
+  Stream<EventToUI> sessionStartWithDisplays(
+      {required UuidValue sessionId,
+      required String id,
+      required Int32List displays,
+      dynamic hint}) {
+    throw UnimplementedError();
+  }
+
   Future<bool?> sessionGetRemember(
       {required UuidValue sessionId, dynamic hint}) {
     return Future(
