@@ -549,6 +549,7 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
           key: kOptionDisableFloatingWindow,
           value: disable ? 'Y' : defaultOptionNo);
       setState(() => _floatingWindowDisabled = disable);
+      gFFI.serverModel.androidUpdatekeepScreenOn();
     }
 
     enhancementsTiles.add(SettingsTile.switchTile(
