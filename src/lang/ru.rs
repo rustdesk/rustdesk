@@ -617,5 +617,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Use texture rendering", "Визуализация текстур"),
         ("Floating window", "Плавающее окно"),
         ("floating_window_tip", "Помогает поддерживать фоновую службу RustDesk"),
+        ("Keep screen on", ""),
+        ("Never", ""),
+        ("During controlled", ""),
+        ("During service is on", ""),
     ].iter().cloned().collect();
 }

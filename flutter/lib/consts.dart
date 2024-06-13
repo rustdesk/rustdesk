@@ -139,6 +139,8 @@ const String kOptionToggleViewOnly = "view-only";
 
 const String kOptionDisableFloatingWindow = "disable-floating-window";
 
+const String kOptionKeepScreenOn = "keep-screen-on";
+
 const String kUrlActionClose = "close";
 
 const String kTabLabelHomePage = "Home";
