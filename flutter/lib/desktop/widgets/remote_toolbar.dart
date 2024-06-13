@@ -26,45 +26,42 @@ import './popup_menu.dart';
 import './kb_layout_type_chooser.dart';
 
 class ToolbarState {
-  late RxBool show;
   late RxBool _pin;
 
+  bool isShowInited = false;
+  RxBool show = false.obs;
+
   ToolbarState() {
+    _pin = RxBool(false);
     final s = bind.getLocalFlutterOption(k: kOptionRemoteMenubarState);
     if (s.isEmpty) {
-      _initSet(false, false);
       return;
     }
 
     try {
       final m = jsonDecode(s);
-      if (m == null) {
-        _initSet(false, false);
-      } else {
-        _initSet(m['pin'] ?? false, m['pin'] ?? false);
+      if (m != null) {
+        _pin = RxBool(m['pin'] ?? false);
       }
     } catch (e) {
       debugPrint('Failed to decode toolbar state ${e.toString()}');
-      _initSet(false, false);
     }
-  }
-
-  _initSet(bool s, bool p) {
-    // Show remubar when connection is established.
-    show = RxBool(
-        bind.mainGetUserDefaultOption(key: kOptionCollapseToolbar) != 'Y');
-    _pin = RxBool(p);
   }
 
   bool get pin => _pin.value;
 
-  switchShow() async {
+  switchShow(SessionID sessionId) async {
+    bind.sessionToggleOption(
+        sessionId: sessionId, value: kOptionCollapseToolbar);
     show.value = !show.value;
   }
 
-  setShow(bool v) async {
-    if (show.value != v) {
-      show.value = v;
+  initShow(SessionID sessionId) async {
+    if (!isShowInited) {
+      show.value = !(await bind.sessionGetToggleOption(
+              sessionId: sessionId, arg: kOptionCollapseToolbar) ??
+          false);
+      isShowInited = true;
     }
   }
 
@@ -85,10 +82,6 @@ class ToolbarState {
   _savePin() async {
     bind.setLocalFlutterOption(
         k: kOptionRemoteMenubarState, v: jsonEncode({'pin': _pin.value}));
-  }
-
-  save() async {
-    await _savePin();
   }
 }
 
@@ -446,7 +439,7 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
               sessionId: widget.ffi.sessionId,
               dragging: _dragging,
               fractionX: _fractionX,
-              show: show,
+              toolbarState: widget.state,
               setFullscreen: _setFullscreen,
               setMinimize: _minimize,
               borderRadius: borderRadius,
@@ -2343,7 +2336,7 @@ class _DraggableShowHide extends StatefulWidget {
   final SessionID sessionId;
   final RxDouble fractionX;
   final RxBool dragging;
-  final RxBool show;
+  final ToolbarState toolbarState;
   final BorderRadius borderRadius;
 
   final Function(bool) setFullscreen;
@@ -2354,7 +2347,7 @@ class _DraggableShowHide extends StatefulWidget {
     required this.sessionId,
     required this.fractionX,
     required this.dragging,
-    required this.show,
+    required this.toolbarState,
     required this.setFullscreen,
     required this.setMinimize,
     required this.borderRadius,
@@ -2369,6 +2362,8 @@ class _DraggableShowHideState extends State<_DraggableShowHide> {
   Size size = Size.zero;
   double left = 0.0;
   double right = 1.0;
+
+  RxBool get show => widget.toolbarState.show;
 
   @override
   initState() {
@@ -2473,13 +2468,13 @@ class _DraggableShowHideState extends State<_DraggableShowHide> {
               )),
         TextButton(
           onPressed: () => setState(() {
-            widget.show.value = !widget.show.value;
+            widget.toolbarState.switchShow(widget.sessionId);
           }),
           child: Obx((() => Tooltip(
-                message: translate(
-                    widget.show.isTrue ? 'Hide Toolbar' : 'Show Toolbar'),
+                message:
+                    translate(show.isTrue ? 'Hide Toolbar' : 'Show Toolbar'),
                 child: Icon(
-                  widget.show.isTrue ? Icons.expand_less : Icons.expand_more,
+                  show.isTrue ? Icons.expand_less : Icons.expand_more,
                   size: iconSize,
                 ),
               ))),
