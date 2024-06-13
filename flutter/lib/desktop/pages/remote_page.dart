@@ -617,10 +617,11 @@ class _ImagePaintState extends State<ImagePaint> {
       final paintWidth = c.getDisplayWidth() * s;
       final paintHeight = c.getDisplayHeight() * s;
       final paintSize = Size(paintWidth, paintHeight);
-      final paintWidget = m.useTextureRender
-          ? _BuildPaintTextureRender(
-              c, s, Offset.zero, paintSize, isViewOriginal())
-          : _buildScrollbarNonTextureRender(m, paintSize, s);
+      final paintWidget =
+          m.useTextureRender || widget.ffi.ffiModel.pi.forceTextureRender
+              ? _BuildPaintTextureRender(
+                  c, s, Offset.zero, paintSize, isViewOriginal())
+              : _buildScrollbarNonTextureRender(m, paintSize, s);
       return NotificationListener<ScrollNotification>(
           onNotification: (notification) {
             c.updateScrollPercent();
@@ -638,17 +639,18 @@ class _ImagePaintState extends State<ImagePaint> {
           ));
     } else {
       if (c.size.width > 0 && c.size.height > 0) {
-        final paintWidget = m.useTextureRender
-            ? _BuildPaintTextureRender(
-                c,
-                s,
-                Offset(
-                  isLinux ? c.x.toInt().toDouble() : c.x,
-                  isLinux ? c.y.toInt().toDouble() : c.y,
-                ),
-                c.size,
-                isViewOriginal())
-            : _buildScrollAuthNonTextureRender(m, c, s);
+        final paintWidget =
+            m.useTextureRender || widget.ffi.ffiModel.pi.forceTextureRender
+                ? _BuildPaintTextureRender(
+                    c,
+                    s,
+                    Offset(
+                      isLinux ? c.x.toInt().toDouble() : c.x,
+                      isLinux ? c.y.toInt().toDouble() : c.y,
+                    ),
+                    c.size,
+                    isViewOriginal())
+                : _buildScrollAutoNonTextureRender(m, c, s);
         return mouseRegion(child: _buildListener(paintWidget));
       } else {
         return Container();
@@ -664,7 +666,7 @@ class _ImagePaintState extends State<ImagePaint> {
     );
   }
 
-  Widget _buildScrollAuthNonTextureRender(
+  Widget _buildScrollAutoNonTextureRender(
       ImageModel m, CanvasModel c, double s) {
     return CustomPaint(
       size: Size(c.size.width, c.size.height),

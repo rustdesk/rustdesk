@@ -2924,10 +2924,10 @@ openMonitorInNewTabOrWindow(int i, String peerId, PeerInfo pi,
       kMainWindowId, kWindowEventOpenMonitorSession, jsonEncode(args));
 }
 
-setNewConnectWindowFrame(int windowId, String peerId, Rect? screenRect) async {
+setNewConnectWindowFrame(int windowId, String peerId, int? display, Rect? screenRect) async {
   if (screenRect == null) {
     await restoreWindowPosition(WindowType.RemoteDesktop,
-        windowId: windowId, peerId: peerId);
+        windowId: windowId, display: display, peerId: peerId);
   } else {
     await tryMoveToScreenAndSetFullscreen(screenRect);
   }

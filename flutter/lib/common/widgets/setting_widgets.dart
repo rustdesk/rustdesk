@@ -234,12 +234,12 @@ List<(String, String)> otherDefaultSettings() {
     ('True color (4:4:4)', kOptionI444),
     ('Reverse mouse wheel', kKeyReverseMouseWheel),
     ('swap-left-right-mouse', kOptionSwapLeftRightMouse),
-    if (isDesktop && bind.mainGetUseTextureRender())
+    if (isDesktop)
       (
         'Show displays as individual windows',
         kKeyShowDisplaysAsIndividualWindows
       ),
-    if (isDesktop && bind.mainGetUseTextureRender())
+    if (isDesktop)
       (
         'Use all my displays for the remote session',
         kKeyUseAllMyDisplaysForTheRemoteSession
