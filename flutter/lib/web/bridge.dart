@@ -63,11 +63,6 @@ class RustdeskImpl {
     return '';
   }
 
-  void sessionTryAddDisplay(
-      {required UuidValue sessionId,
-      required Int32List displays,
-      dynamic hint}) {}
-
   String sessionAddSync(
       {required UuidValue sessionId,
       required String id,

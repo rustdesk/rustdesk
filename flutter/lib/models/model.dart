@@ -2394,9 +2394,10 @@ class FFI {
       cursorModel.peerId = id;
     }
 
+    final isNewPeer = tabWindowId == null;
     // If tabWindowId != null, this session is a "tab -> window" one.
     // Else this session is a new one.
-    if (tabWindowId == null) {
+    if (isNewPeer) {
       // ignore: unused_local_variable
       final addRes = bind.sessionAddSync(
         sessionId: sessionId,
@@ -2421,14 +2422,25 @@ class FFI {
             'Unreachable, failed to add existed session to $id, $addRes');
         return;
       }
-      bind.sessionTryAddDisplay(
-          sessionId: sessionId, displays: Int32List.fromList(displays));
       ffiModel.pi.currentDisplay = display;
     }
     if (isDesktop && connType == ConnType.defaultConn) {
       textureModel.updateCurrentDisplay(display ?? 0);
     }
-    final stream = bind.sessionStart(sessionId: sessionId, id: id);
+
+    // CAUTION: `sessionStart()` and `sessionStartWithDisplays()` are an async functions.
+    // Though the stream is returned immediately, the stream may not be ready.
+    // Any operations that depend on the stream should be carefully handled.
+    late final Stream<EventToUI> stream;
+    if (isNewPeer || display == null || displays == null) {
+      stream = bind.sessionStart(sessionId: sessionId, id: id);
+    } else {
+      // We have to put displays in `sessionStart()` to make sure the stream is ready
+      // and then the displays' capturing requests can be sent.
+      stream = bind.sessionStartWithDisplays(
+          sessionId: sessionId, id: id, displays: Int32List.fromList(displays));
+    }
+
     if (isWeb) {
       platformFFI.setRgbaCallback((int display, Uint8List data) {
         onEvent2UIRgba();
@@ -2438,14 +2450,6 @@ class FFI {
     }
 
     final cb = ffiModel.startEventListener(sessionId, id);
-
-    // Force refresh displays.
-    // The controlled side may not refresh the image when the (peer,display) is already subscribed.
-    if (displays != null) {
-      for (final display in displays) {
-        bind.sessionRefresh(sessionId: sessionId, display: display);
-      }
-    }
 
     imageModel.updateUserTextureRender();
     final hasGpuTextureRender = bind.mainHasGpuTextureRender();
@@ -2497,8 +2501,7 @@ class FFI {
           }
         } else if (message is EventToUI_Rgba) {
           final display = message.field0;
-          if (imageModel.useTextureRender ||
-              ffiModel.pi.currentDisplay == kAllDisplayValue) {
+          if (imageModel.useTextureRender || ffiModel.pi.forceTextureRender) {
             //debugPrint("EventToUI_Rgba display:$display");
             textureModel.setTextureType(display: display, gpuTexture: false);
             onEvent2UIRgba();
@@ -2687,6 +2690,7 @@ class PeerInfo with ChangeNotifier {
 
   bool get isSupportMultiDisplay =>
       (isDesktop || isWebDesktop) && isSupportMultiUiSession;
+  bool get forceTextureRender => currentDisplay == kAllDisplayValue;
 
   bool get cursorEmbedded => tryGetDisplay()?.cursorEmbedded ?? false;
 
