@@ -1284,6 +1284,7 @@ impl PeerConfig {
             keys::OPTION_TOUCH_MODE,
             keys::OPTION_I444,
             keys::OPTION_SWAP_LEFT_RIGHT_MOUSE,
+            keys::OPTION_COLLAPSE_TOOLBAR,
         ]
         .map(|key| {
             mp.insert(key.to_owned(), UserDefaultConfig::read(key));
