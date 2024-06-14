@@ -168,6 +168,9 @@ pub unsafe extern "C" fn get_rustdesk_app_name(buffer: *mut u16, length: i32) ->
 #[derive(Default)]
 struct SessionHandler {
     event_stream: Option<StreamSink<EventToUI>>,
+    // displays of current session.
+    // We need this variable to check if the display is in use before pushing rgba to flutter.
+    displays: Vec<usize>,
     renderer: VideoRenderer,
 }
 
@@ -408,25 +411,6 @@ impl VideoRenderer {
         }
     }
 
-    fn add_displays(&self, displays: &[i32]) {
-        let mut sessions_lock = self.map_display_sessions.write().unwrap();
-        for display in displays {
-            let d = *display as usize;
-            if !sessions_lock.contains_key(&d) {
-                sessions_lock.insert(
-                    d,
-                    DisplaySessionInfo {
-                        texture_rgba_ptr: 0,
-                        size: (0, 0),
-                        #[cfg(feature = "vram")]
-                        gpu_output_ptr: usize::default(),
-                        notify_render_type: None,
-                    },
-                );
-            }
-        }
-    }
-
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     pub fn on_rgba(&self, display: usize, rgba: &scrap::ImageRgb) -> bool {
         let mut write_lock = self.map_display_sessions.write().unwrap();
@@ -598,6 +582,7 @@ impl FlutterHandler {
     pub fn update_use_texture_render(&self) {
         self.use_texture_render
             .store(crate::ui_interface::use_texture_render(), Ordering::Relaxed);
+        self.display_rgbas.write().unwrap().clear();
     }
 }
 
@@ -1058,25 +1043,38 @@ impl FlutterHandler {
         }
         drop(rgba_write_lock);
 
-        let is_multi_sessions = self.session_handlers.read().unwrap().len() > 1;
+        let mut is_sent = false;
+        let is_multi_sessions = self.is_multi_ui_session();
         for h in self.session_handlers.read().unwrap().values() {
-            // `map_display_sessions` stores the display indices that are used by the video renderer.
-            let map_display_sessions = h.renderer.map_display_sessions.read().unwrap();
-            // The soft renderer does not support multi ui session for now.
-            if map_display_sessions.len() > 1 {
+            // The soft renderer does not support multi-displays session for now.
+            if h.displays.len() > 1 {
                 continue;
             }
             // If there're multiple ui sessions, we only notify the ui session that has the display.
-            // We must make sure that the display is in the `map_display_sessions`.
-            // `session_start_with_displays()` can guarantee that.
             if is_multi_sessions {
-                if !map_display_sessions.contains_key(&display) {
+                if !h.displays.contains(&display) {
                     continue;
                 }
             }
             if let Some(stream) = &h.event_stream {
                 stream.add(EventToUI::Rgba(display));
+                is_sent = true;
             }
+        }
+        // We need `is_sent` here. Because we use texture render for multi-displays session.
+        //
+        // Eg. We have to windows, one is display 1, the other is displays 0&1.
+        // When image of display 0 is received, we will not send the event.
+        //
+        // 1. "display 1" will not send the event.
+        // 2. "displays 0&1" will not send the event. Because it uses texutre render for now.
+        if !is_sent {
+            self.display_rgbas
+                .write()
+                .unwrap()
+                .get_mut(&display)
+                .unwrap()
+                .valid = false;
         }
     }
 
@@ -1089,8 +1087,7 @@ impl FlutterHandler {
         rgba: &mut scrap::ImageRgb,
     ) {
         for (_, session) in self.session_handlers.read().unwrap().iter() {
-            if use_texture_render || session.renderer.map_display_sessions.read().unwrap().len() > 1
-            {
+            if use_texture_render || session.displays.len() > 1 {
                 if session.renderer.on_rgba(display, rgba) {
                     if let Some(stream) = &session.event_stream {
                         stream.add(EventToUI::Rgba(display));
@@ -1102,8 +1099,12 @@ impl FlutterHandler {
 }
 
 // This function is only used for the default connection session.
-pub fn session_add_existed(peer_id: String, session_id: SessionID) -> ResultType<()> {
-    sessions::insert_peer_session_id(peer_id, ConnType::DEFAULT_CONN, session_id);
+pub fn session_add_existed(
+    peer_id: String,
+    session_id: SessionID,
+    displays: Vec<i32>,
+) -> ResultType<()> {
+    sessions::insert_peer_session_id(peer_id, ConnType::DEFAULT_CONN, session_id, displays);
     Ok(())
 }
 
@@ -1523,6 +1524,11 @@ pub fn session_set_size(session_id: SessionID, display: usize, width: usize, hei
             .unwrap()
             .get_mut(&session_id)
         {
+            // If the session is the first connection, displays is not set yet.
+            // `displays`` is set while switching displays or adding a new session.
+            if !h.displays.contains(&display) {
+                h.displays.push(display);
+            }
             h.renderer.set_size(display, width, height);
             break;
         }
@@ -1557,21 +1563,6 @@ pub fn session_register_gpu_texture(_session_id: SessionID, _display: usize, _ou
             .get(&_session_id)
         {
             h.renderer.register_gpu_output(_display, _output_ptr);
-            break;
-        }
-    }
-}
-
-pub fn session_add_displays(session_id: &SessionID, displays: &[i32]) {
-    for s in sessions::get_sessions() {
-        if let Some(h) = s
-            .ui_handler
-            .session_handlers
-            .read()
-            .unwrap()
-            .get(session_id)
-        {
-            h.renderer.add_displays(displays);
             break;
         }
     }
@@ -1898,8 +1889,9 @@ pub mod sessions {
 
     pub fn session_switch_display(is_desktop: bool, session_id: SessionID, value: Vec<i32>) {
         for s in SESSIONS.read().unwrap().values() {
-            let read_lock = s.ui_handler.session_handlers.read().unwrap();
-            if read_lock.contains_key(&session_id) {
+            let mut write_lock = s.ui_handler.session_handlers.write().unwrap();
+            if let Some(h) = write_lock.get_mut(&session_id) {
+                h.displays = value.iter().map(|x| *x as usize).collect::<_>();
                 if value.len() == 1 {
                     // Switch display.
                     // This operation will also cause the peer to send a switch display message.
@@ -1915,7 +1907,7 @@ pub mod sessions {
                                 Some(value[0] as _),
                                 &session_id,
                                 &s,
-                                &read_lock,
+                                &write_lock,
                             );
                         }
                     }
@@ -1947,9 +1939,11 @@ pub mod sessions {
         peer_id: String,
         conn_type: ConnType,
         session_id: SessionID,
+        displays: Vec<i32>,
     ) -> bool {
         if let Some(s) = SESSIONS.read().unwrap().get(&(peer_id, conn_type)) {
             let mut h = SessionHandler::default();
+            h.displays = displays.iter().map(|x| *x as usize).collect::<_>();
             #[cfg(not(any(target_os = "android", target_os = "ios")))]
             let is_support_multi_ui_session = crate::common::is_support_multi_ui_session(
                 &s.ui_handler.peer_info.read().unwrap().version,

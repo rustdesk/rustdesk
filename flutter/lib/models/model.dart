@@ -2420,7 +2420,8 @@ class FFI {
             'Unreachable, failed to add existed session to $id, the displays is null while display is $display');
         return;
       }
-      final addRes = bind.sessionAddExistedSync(id: id, sessionId: sessionId);
+      final addRes = bind.sessionAddExistedSync(
+          id: id, sessionId: sessionId, displays: Int32List.fromList(displays));
       if (addRes != '') {
         debugPrint(
             'Unreachable, failed to add existed session to $id, $addRes');
