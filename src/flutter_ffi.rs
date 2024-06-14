@@ -102,8 +102,12 @@ pub fn peer_get_default_sessions_count(id: String) -> SyncReturn<usize> {
     SyncReturn(sessions::get_session_count(id, ConnType::DEFAULT_CONN))
 }
 
-pub fn session_add_existed_sync(id: String, session_id: SessionID) -> SyncReturn<String> {
-    if let Err(e) = session_add_existed(id.clone(), session_id) {
+pub fn session_add_existed_sync(
+    id: String,
+    session_id: SessionID,
+    displays: Vec<i32>,
+) -> SyncReturn<String> {
+    if let Err(e) = session_add_existed(id.clone(), session_id, displays) {
         SyncReturn(format!("Failed to add session with id {}, {}", &id, e))
     } else {
         SyncReturn("".to_owned())
@@ -154,10 +158,6 @@ pub fn session_start_with_displays(
 ) -> ResultType<()> {
     session_start_(&session_id, &id, events2ui)?;
 
-    // `session_add_displays` is used for software rendering, multi-ui sessions.
-    // We need to add displays to the session first, then capture the displays.
-    // Otherwise, the session may not send video frames to the flutter side.
-    super::flutter::session_add_displays(&session_id, &displays);
     if let Some(session) = sessions::get_session_by_session_id(&session_id) {
         session.capture_displays(displays.clone(), vec![], vec![]);
         for display in displays {
