@@ -59,7 +59,10 @@ class RustdeskImpl {
   }
 
   String sessionAddExistedSync(
-      {required String id, required UuidValue sessionId, dynamic hint}) {
+      {required String id,
+      required UuidValue sessionId,
+      required Int32List displays,
+      dynamic hint}) {
     return '';
   }
 
