@@ -132,8 +132,10 @@ class PlatformFFI {
       _ffiBind = RustdeskImpl(dylib);
 
       if (isLinux) {
-        // Start a dbus service, no need to await
-        _ffiBind.mainStartDbusServer();
+        if (isMain) {
+          // Start a dbus service for uri links, no need to await
+          _ffiBind.mainStartDbusServer();
+        }
         if (appType == kAppTypeConnectionManager) {
           _ffiBind.mainStartPa();
         }
