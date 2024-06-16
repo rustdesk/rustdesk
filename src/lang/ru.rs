@@ -507,7 +507,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Exit", "Выход"),
         ("Open", "Открыть"),
         ("logout_tip", "Вы действительно хотите выйти?"),
-        ("Service", "Сервис"),
+        ("Service", "Служба"),
         ("Start", "Запустить"),
         ("Stop", "Остановить"),
         ("exceed_max_devices", "Достигнуто максимальное количество управляемых устройств."),
@@ -615,5 +615,11 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("android_new_voice_call_tip", "Получен новый запрос на голосовой вызов. Если вы его примите, звук переключится на голосовую связь."),
         ("texture_render_tip", "Использовать визуализацию текстур, чтобы сделать изображения более плавными."),
         ("Use texture rendering", "Визуализация текстур"),
+        ("Floating window", "Плавающее окно"),
+        ("floating_window_tip", "Помогает поддерживать фоновую службу RustDesk"),
+        ("Keep screen on", "Держать экран включённым"),
+        ("Never", "Нет"),
+        ("During controlled", "При управлении"),
+        ("During service is on", "При запущенной службе"),
     ].iter().cloned().collect();
 }

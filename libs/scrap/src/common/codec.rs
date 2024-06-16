@@ -76,6 +76,8 @@ pub trait EncoderApi {
     fn latency_free(&self) -> bool;
 
     fn is_hardware(&self) -> bool;
+
+    fn disable(&self);
 }
 
 pub struct Encoder {
@@ -144,11 +146,7 @@ impl Encoder {
                 }),
                 Err(e) => {
                     log::error!("new hw encoder failed: {e:?}, clear config");
-                    #[cfg(target_os = "android")]
-                    crate::android::ffi::clear_codec_info();
-                    #[cfg(not(target_os = "android"))]
-                    hbb_common::config::HwCodecConfig::clear_ram();
-                    Self::update(EncodingUpdate::Check);
+                    HwCodecConfig::clear(false, true);
                     *ENCODE_CODEC_FORMAT.lock().unwrap() = CodecFormat::VP9;
                     Err(e)
                 }
@@ -160,8 +158,7 @@ impl Encoder {
                 }),
                 Err(e) => {
                     log::error!("new vram encoder failed: {e:?}, clear config");
-                    hbb_common::config::HwCodecConfig::clear_vram();
-                    Self::update(EncodingUpdate::Check);
+                    HwCodecConfig::clear(true, true);
                     *ENCODE_CODEC_FORMAT.lock().unwrap() = CodecFormat::VP9;
                     Err(e)
                 }

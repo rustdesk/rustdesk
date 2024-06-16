@@ -67,37 +67,49 @@ async fn start_hbbs_sync_async() {
                     *PRO.lock().unwrap() = false;
                     continue;
                 }
-                if !Config::get_option("stop-service").is_empty() {
+                if hbb_common::config::option2bool("stop-service", &Config::get_option("stop-service")) {
                     continue;
                 }
                 let conns = Connection::alive_conns();
-                if info_uploaded.0 && (url != info_uploaded.1 || id != info_uploaded.3){
+                if info_uploaded.0 && (url != info_uploaded.1 || id != info_uploaded.3) {
                     info_uploaded.0 = false;
                     *PRO.lock().unwrap() = false;
                 }
-                if !info_uploaded.0 && info_uploaded.2.map(|x| x.elapsed() >= UPLOAD_SYSINFO_TIMEOUT).unwrap_or(true){
+                if !info_uploaded.0 && info_uploaded.2.map(|x| x.elapsed() >= UPLOAD_SYSINFO_TIMEOUT).unwrap_or(true) {
                     let mut v = crate::get_sysinfo();
-                    v["version"] = json!(crate::VERSION);
-                    v["id"] = json!(id);
-                    v["uuid"] = json!(crate::encode64(hbb_common::get_uuid()));
-                    match crate::post_request(url.replace("heartbeat", "sysinfo"), v.to_string(), "").await {
-                        Ok(x)  => {
-                            if x == "SYSINFO_UPDATED" {
-                                info_uploaded = (true, url.clone(), None, id.clone());
-                                hbb_common::log::info!("sysinfo updated");
-                                *PRO.lock().unwrap() = true;
-                            } else if x == "ID_NOT_FOUND" {
-                                info_uploaded.2 = None; // next heartbeat will upload sysinfo again
-                            } else {
+                    // username is empty in login screen of windows, but here we only upload sysinfo once, causing
+                    // real user name not uploaded after login screen. https://github.com/rustdesk/rustdesk/discussions/8031
+                    if !cfg!(windows) || !v["username"].as_str().unwrap_or_default().is_empty() {
+                        v["version"] = json!(crate::VERSION);
+                        v["id"] = json!(id);
+                        v["uuid"] = json!(crate::encode64(hbb_common::get_uuid()));
+                        let ab_name = Config::get_option("preset-address-book-name");
+                        if !ab_name.is_empty() {
+                            v["preset-address-book-name"] = json!(ab_name);
+                        }
+                        let ab_tag = Config::get_option("preset-address-book-tag");
+                        if !ab_tag.is_empty() {
+                            v["preset-address-book-tag"] = json!(ab_tag);
+                        }
+                        match crate::post_request(url.replace("heartbeat", "sysinfo"), v.to_string(), "").await {
+                            Ok(x)  => {
+                                if x == "SYSINFO_UPDATED" {
+                                    info_uploaded = (true, url.clone(), None, id.clone());
+                                    hbb_common::log::info!("sysinfo updated");
+                                    *PRO.lock().unwrap() = true;
+                                } else if x == "ID_NOT_FOUND" {
+                                    info_uploaded.2 = None; // next heartbeat will upload sysinfo again
+                                } else {
+                                    info_uploaded.2 = Some(Instant::now());
+                                }
+                            }
+                            _ => {
                                 info_uploaded.2 = Some(Instant::now());
                             }
                         }
-                        _ => {
-                            info_uploaded.2 = Some(Instant::now());
-                        }
                     }
                 }
-                if conns.is_empty() && last_sent.map(|x| x.elapsed() < TIME_HEARTBEAT).unwrap_or(false){
+                if conns.is_empty() && last_sent.map(|x| x.elapsed() < TIME_HEARTBEAT).unwrap_or(false) {
                     continue;
                 }
                 last_sent = Some(Instant::now());

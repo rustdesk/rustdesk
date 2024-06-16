@@ -1617,7 +1617,7 @@ fn read_custom_client_advanced_settings(
 
 #[inline]
 #[cfg(target_os = "macos")]
-pub fn get_dst_stride_rgba() -> usize {
+pub fn get_dst_align_rgba() -> usize {
     // https://developer.apple.com/forums/thread/712709
     // Memory alignment should be multiple of 64.
     if crate::ui_interface::use_texture_render() {
@@ -1629,7 +1629,7 @@ pub fn get_dst_stride_rgba() -> usize {
 
 #[inline]
 #[cfg(not(target_os = "macos"))]
-pub fn get_dst_stride_rgba() -> usize {
+pub fn get_dst_align_rgba() -> usize {
     1
 }
 
@@ -1698,6 +1698,15 @@ pub fn read_custom_client(config: &str) {
                 .insert(k, v.to_owned());
         };
     }
+}
+
+#[inline]
+pub fn is_empty_uni_link(arg: &str) -> bool {
+    let prefix = crate::get_uri_prefix();
+    if !arg.starts_with(&prefix) {
+        return false;
+    }
+    arg[prefix.len()..].chars().all(|c| c == '/')
 }
 
 #[cfg(test)]

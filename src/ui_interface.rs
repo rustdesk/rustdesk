@@ -172,15 +172,13 @@ pub fn get_option<T: AsRef<str>>(key: T) -> String {
 #[inline]
 #[cfg(target_os = "macos")]
 pub fn use_texture_render() -> bool {
-    cfg!(feature = "flutter")
-        && LocalConfig::get_option(config::keys::OPTION_TEXTURE_RENDER) == "Y"
+    cfg!(feature = "flutter") && LocalConfig::get_option(config::keys::OPTION_TEXTURE_RENDER) == "Y"
 }
 
 #[inline]
 #[cfg(any(target_os = "windows", target_os = "linux"))]
 pub fn use_texture_render() -> bool {
-    cfg!(feature = "flutter")
-        && LocalConfig::get_option(config::keys::OPTION_TEXTURE_RENDER) != "N"
+    cfg!(feature = "flutter") && LocalConfig::get_option(config::keys::OPTION_TEXTURE_RENDER) != "N"
 }
 
 #[inline]
@@ -1398,9 +1396,16 @@ pub fn check_hwcodec() {
     #[cfg(feature = "hwcodec")]
     #[cfg(any(target_os = "windows", target_os = "linux"))]
     {
-        scrap::hwcodec::start_check_process(true);
-        if crate::platform::is_installed() {
-            ipc::notify_server_to_check_hwcodec().ok();
-        }
+        use std::sync::Once;
+        static ONCE: Once = Once::new();
+
+        ONCE.call_once(|| {
+            if crate::platform::is_installed() {
+                ipc::notify_server_to_check_hwcodec().ok();
+                ipc::client_get_hwcodec_config_thread(3);
+            } else {
+                scrap::hwcodec::start_check_process();
+            }
+        })
     }
 }

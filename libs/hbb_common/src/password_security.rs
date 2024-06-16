@@ -79,7 +79,7 @@ pub fn approve_mode() -> ApproveMode {
 pub fn hide_cm() -> bool {
     approve_mode() == ApproveMode::Password
         && verification_method() == VerificationMethod::OnlyUsePermanentPassword
-        && !Config::get_option("allow-hide-cm").is_empty()
+        && crate::config::option2bool("allow-hide-cm", &Config::get_option("allow-hide-cm"))
 }
 
 const VERSION_LEN: usize = 2;

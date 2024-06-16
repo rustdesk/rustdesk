@@ -26,45 +26,42 @@ import './popup_menu.dart';
 import './kb_layout_type_chooser.dart';
 
 class ToolbarState {
-  late RxBool show;
   late RxBool _pin;
 
+  bool isShowInited = false;
+  RxBool show = false.obs;
+
   ToolbarState() {
+    _pin = RxBool(false);
     final s = bind.getLocalFlutterOption(k: kOptionRemoteMenubarState);
     if (s.isEmpty) {
-      _initSet(false, false);
       return;
     }
 
     try {
       final m = jsonDecode(s);
-      if (m == null) {
-        _initSet(false, false);
-      } else {
-        _initSet(m['pin'] ?? false, m['pin'] ?? false);
+      if (m != null) {
+        _pin = RxBool(m['pin'] ?? false);
       }
     } catch (e) {
       debugPrint('Failed to decode toolbar state ${e.toString()}');
-      _initSet(false, false);
     }
-  }
-
-  _initSet(bool s, bool p) {
-    // Show remubar when connection is established.
-    show = RxBool(
-        bind.mainGetUserDefaultOption(key: kOptionCollapseToolbar) != 'Y');
-    _pin = RxBool(p);
   }
 
   bool get pin => _pin.value;
 
-  switchShow() async {
+  switchShow(SessionID sessionId) async {
+    bind.sessionToggleOption(
+        sessionId: sessionId, value: kOptionCollapseToolbar);
     show.value = !show.value;
   }
 
-  setShow(bool v) async {
-    if (show.value != v) {
-      show.value = v;
+  initShow(SessionID sessionId) async {
+    if (!isShowInited) {
+      show.value = !(await bind.sessionGetToggleOption(
+              sessionId: sessionId, arg: kOptionCollapseToolbar) ??
+          false);
+      isShowInited = true;
     }
   }
 
@@ -85,10 +82,6 @@ class ToolbarState {
   _savePin() async {
     bind.setLocalFlutterOption(
         k: kOptionRemoteMenubarState, v: jsonEncode({'pin': _pin.value}));
-  }
-
-  save() async {
-    await _savePin();
   }
 }
 
@@ -332,8 +325,8 @@ class RemoteToolbar extends StatefulWidget {
   final String id;
   final FFI ffi;
   final ToolbarState state;
-  final Function(Function(bool)) onEnterOrLeaveImageSetter;
-  final VoidCallback onEnterOrLeaveImageCleaner;
+  final Function(int, Function(bool)) onEnterOrLeaveImageSetter;
+  final Function(int) onEnterOrLeaveImageCleaner;
   final Function(VoidCallback) setRemoteState;
 
   RemoteToolbar({
@@ -393,7 +386,7 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
       initialValue: 0,
     );
 
-    widget.onEnterOrLeaveImageSetter((enter) {
+    widget.onEnterOrLeaveImageSetter(identityHashCode(this), (enter) {
       if (enter) {
         triggerAutoHide();
         _isCursorOverImage = true;
@@ -413,12 +406,11 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
   dispose() {
     super.dispose();
 
-    widget.onEnterOrLeaveImageCleaner();
+    widget.onEnterOrLeaveImageCleaner(identityHashCode(this));
   }
 
   @override
   Widget build(BuildContext context) {
-    // No need to use future builder here.
     return Align(
       alignment: Alignment.topCenter,
       child: Obx(() => show.value
@@ -447,7 +439,7 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
               sessionId: widget.ffi.sessionId,
               dragging: _dragging,
               fractionX: _fractionX,
-              show: show,
+              toolbarState: widget.state,
               setFullscreen: _setFullscreen,
               setMinimize: _minimize,
               borderRadius: borderRadius,
@@ -588,7 +580,7 @@ class _MobileActionMenu extends StatelessWidget {
           assetName: 'assets/actions_mobile.svg',
           tooltip: 'Mobile Actions',
           onPressed: () =>
-              ffi.dialogManager.toggleMobileActionsOverlay(ffi: ffi),
+              ffi.dialogManager.mobileActionsOverlayVisible.toggle(),
           color: ffi.dialogManager.mobileActionsOverlayVisible.isTrue
               ? _ToolbarTheme.blueColor
               : _ToolbarTheme.inactiveColor,
@@ -643,15 +635,12 @@ class _MonitorMenu extends StatelessWidget {
   }
 
   Widget buildMonitorSubmenuWidget(BuildContext context) {
-    final m = Provider.of<ImageModel>(context);
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
         Row(children: buildMonitorList(context, false)),
-        supportIndividualWindows && m.useTextureRender ? Divider() : Offstage(),
-        supportIndividualWindows && m.useTextureRender
-            ? chooseDisplayBehavior()
-            : Offstage(),
+        supportIndividualWindows ? Divider() : Offstage(),
+        supportIndividualWindows ? chooseDisplayBehavior() : Offstage(),
       ],
     );
   }
@@ -665,7 +654,7 @@ class _MonitorMenu extends StatelessWidget {
         onChanged: (value) async {
           if (value == null) return;
           await bind.sessionSetDisplaysAsIndividualWindows(
-              sessionId: ffi.sessionId, value: value ? 'Y' : '');
+              sessionId: ffi.sessionId, value: value ? 'Y' : 'N');
         },
         ffi: ffi,
         child: Text(translate('Show displays as individual windows')));
@@ -737,10 +726,7 @@ class _MonitorMenu extends StatelessWidget {
     for (int i = 0; i < pi.displays.length; i++) {
       monitorList.add(buildMonitorButton(i));
     }
-    final m = Provider.of<ImageModel>(context);
-    if (supportIndividualWindows &&
-        m.useTextureRender &&
-        pi.displays.length > 1) {
+    if (supportIndividualWindows && pi.displays.length > 1) {
       monitorList.add(buildMonitorButton(kAllDisplayValue));
     }
     return monitorList;
@@ -824,7 +810,6 @@ class _MonitorMenu extends StatelessWidget {
     RxInt display = CurrentDisplayState.find(id);
     if (display.value != i) {
       final isChooseDisplayToOpenInNewWindow = pi.isSupportMultiDisplay &&
-          bind.mainGetUseTextureRender() &&
           bind.sessionGetDisplaysAsIndividualWindows(
                   sessionId: ffi.sessionId) ==
               'Y';
@@ -2351,7 +2336,7 @@ class _DraggableShowHide extends StatefulWidget {
   final SessionID sessionId;
   final RxDouble fractionX;
   final RxBool dragging;
-  final RxBool show;
+  final ToolbarState toolbarState;
   final BorderRadius borderRadius;
 
   final Function(bool) setFullscreen;
@@ -2362,7 +2347,7 @@ class _DraggableShowHide extends StatefulWidget {
     required this.sessionId,
     required this.fractionX,
     required this.dragging,
-    required this.show,
+    required this.toolbarState,
     required this.setFullscreen,
     required this.setMinimize,
     required this.borderRadius,
@@ -2377,6 +2362,8 @@ class _DraggableShowHideState extends State<_DraggableShowHide> {
   Size size = Size.zero;
   double left = 0.0;
   double right = 1.0;
+
+  RxBool get show => widget.toolbarState.show;
 
   @override
   initState() {
@@ -2465,28 +2452,29 @@ class _DraggableShowHideState extends State<_DraggableShowHide> {
                 ),
               ),
             )),
-        Obx(() => Offstage(
-              offstage: isFullscreen.isFalse,
-              child: TextButton(
-                onPressed: () => widget.setMinimize(),
-                child: Tooltip(
-                  message: translate('Minimize'),
-                  child: Icon(
-                    Icons.remove,
-                    size: iconSize,
+        if (!isMacOS)
+          Obx(() => Offstage(
+                offstage: isFullscreen.isFalse,
+                child: TextButton(
+                  onPressed: () => widget.setMinimize(),
+                  child: Tooltip(
+                    message: translate('Minimize'),
+                    child: Icon(
+                      Icons.remove,
+                      size: iconSize,
+                    ),
                   ),
                 ),
-              ),
-            )),
+              )),
         TextButton(
           onPressed: () => setState(() {
-            widget.show.value = !widget.show.value;
+            widget.toolbarState.switchShow(widget.sessionId);
           }),
           child: Obx((() => Tooltip(
-                message: translate(
-                    widget.show.isTrue ? 'Hide Toolbar' : 'Show Toolbar'),
+                message:
+                    translate(show.isTrue ? 'Hide Toolbar' : 'Show Toolbar'),
                 child: Icon(
-                  widget.show.isTrue ? Icons.expand_less : Icons.expand_more,
+                  show.isTrue ? Icons.expand_less : Icons.expand_more,
                   size: iconSize,
                 ),
               ))),

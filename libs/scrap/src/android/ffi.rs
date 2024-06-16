@@ -209,19 +209,38 @@ pub fn clear_codec_info() {
     *MEDIA_CODEC_INFOS.write().unwrap() = None;
 }
 
+// another way to fix "reference table overflow" error caused by new_string and call_main_service_pointer_input frequently calld
+// is below, but here I change kind from string to int for performance
+/*
+        env.with_local_frame(10, || {
+            let kind = env.new_string(kind)?;
+            env.call_method(
+                ctx,
+                "rustPointerInput",
+                "(Ljava/lang/String;III)V",
+                &[
+                    JValue::Object(&JObject::from(kind)),
+                    JValue::Int(mask),
+                    JValue::Int(x),
+                    JValue::Int(y),
+                ],
+            )?;
+            Ok(JObject::null())
+        })?;
+*/
 pub fn call_main_service_pointer_input(kind: &str, mask: i32, x: i32, y: i32) -> JniResult<()> {
     if let (Some(jvm), Some(ctx)) = (
         JVM.read().unwrap().as_ref(),
         MAIN_SERVICE_CTX.read().unwrap().as_ref(),
     ) {
         let mut env = jvm.attach_current_thread_as_daemon()?;
-        let kind = env.new_string(kind)?;
+        let kind = if kind == "touch" { 0 } else { 1 };
         env.call_method(
             ctx,
             "rustPointerInput",
-            "(Ljava/lang/String;III)V",
+            "(IIII)V",
             &[
-                JValue::Object(&JObject::from(kind)),
+                JValue::Int(kind),
                 JValue::Int(mask),
                 JValue::Int(x),
                 JValue::Int(y),
@@ -259,19 +278,22 @@ pub fn call_main_service_get_by_name(name: &str) -> JniResult<String> {
         MAIN_SERVICE_CTX.read().unwrap().as_ref(),
     ) {
         let mut env = jvm.attach_current_thread_as_daemon()?;
-        let name = env.new_string(name)?;
-        let res = env
-            .call_method(
-                ctx,
-                "rustGetByName",
-                "(Ljava/lang/String;)Ljava/lang/String;",
-                &[JValue::Object(&JObject::from(name))],
-            )?
-            .l()?;
-        let res = JString::from(res);
-        let res = env.get_string(&res)?;
-        let res = res.to_string_lossy().to_string();
-        return Ok(res);
+        let res = env.with_local_frame(10, |env| -> JniResult<String> {
+            let name = env.new_string(name)?;
+            let res = env
+                .call_method(
+                    ctx,
+                    "rustGetByName",
+                    "(Ljava/lang/String;)Ljava/lang/String;",
+                    &[JValue::Object(&JObject::from(name))],
+                )?
+                .l()?;
+            let res = JString::from(res);
+            let res = env.get_string(&res)?;
+            let res = res.to_string_lossy().to_string();
+            Ok(res)
+        })?;
+        Ok(res)
     } else {
         return Err(JniError::ThrowFailed(-1));
     }
@@ -287,20 +309,23 @@ pub fn call_main_service_set_by_name(
         MAIN_SERVICE_CTX.read().unwrap().as_ref(),
     ) {
         let mut env = jvm.attach_current_thread_as_daemon()?;
-        let name = env.new_string(name)?;
-        let arg1 = env.new_string(arg1.unwrap_or(""))?;
-        let arg2 = env.new_string(arg2.unwrap_or(""))?;
+        env.with_local_frame(10, |env| -> JniResult<()> {
+            let name = env.new_string(name)?;
+            let arg1 = env.new_string(arg1.unwrap_or(""))?;
+            let arg2 = env.new_string(arg2.unwrap_or(""))?;
 
-        env.call_method(
-            ctx,
-            "rustSetByName",
-            "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V",
-            &[
-                JValue::Object(&JObject::from(name)),
-                JValue::Object(&JObject::from(arg1)),
-                JValue::Object(&JObject::from(arg2)),
-            ],
-        )?;
+            env.call_method(
+                ctx,
+                "rustSetByName",
+                "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V",
+                &[
+                    JValue::Object(&JObject::from(name)),
+                    JValue::Object(&JObject::from(arg1)),
+                    JValue::Object(&JObject::from(arg2)),
+                ],
+            )?;
+            Ok(())
+        })?;
         return Ok(());
     } else {
         return Err(JniError::ThrowFailed(-1));

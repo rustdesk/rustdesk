@@ -613,7 +613,13 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("clear_Wayland_screen_selection_tip", "Nadat je de schermselectie hebt gewist, kun je het scherm dat je wilt delen opnieuw selecteren."),
         ("confirm_clear_Wayland_screen_selection_tip", "Weet je zeker dat je de Wayland-schermselectie wilt wissen?"),
         ("android_new_voice_call_tip", "Er is een nieuwe spraakoproep ontvangen. Als u het aanvaardt, schakelt de audio over naar spraakcommunicatie."),
-        ("texture_render_tip", ""),
-        ("Use texture rendering", ""),
+        ("texture_render_tip", "Pas textuurrendering toe om afbeeldingen vloeiender te maken."),
+        ("Use texture rendering", "Textuurrendering gebruiken"),
+        ("Floating window", ""),
+        ("floating_window_tip", ""),
+        ("Keep screen on", ""),
+        ("Never", ""),
+        ("During controlled", ""),
+        ("During service is on", ""),
     ].iter().cloned().collect();
 }

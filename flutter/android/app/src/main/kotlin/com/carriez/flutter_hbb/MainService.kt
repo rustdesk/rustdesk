@@ -64,9 +64,9 @@ class MainService : Service() {
 
     @Keep
     @RequiresApi(Build.VERSION_CODES.N)
-    fun rustPointerInput(kind: String, mask: Int, x: Int, y: Int) {
+    fun rustPointerInput(kind: Int, mask: Int, x: Int, y: Int) {
         // turn on screen with LIFT_DOWN when screen off
-        if (!powerManager.isInteractive && (kind == "touch" || mask == LIFT_DOWN)) {
+        if (!powerManager.isInteractive && (kind == 0 || mask == LIFT_DOWN)) {
             if (wakeLock.isHeld) {
                 Log.d(logTag, "Turn on Screen, WakeLock release")
                 wakeLock.release()
@@ -75,10 +75,10 @@ class MainService : Service() {
             wakeLock.acquire(5000)
         } else {
             when (kind) {
-                "touch" -> {
+                0 -> { // touch
                     InputService.ctx?.onTouchInput(mask, x, y)
                 }
-                "mouse" -> {
+                1 -> { // mouse
                     InputService.ctx?.onMouseInput(mask, x, y)
                 }
                 else -> {
@@ -191,11 +191,6 @@ class MainService : Service() {
     private val powerManager: PowerManager by lazy { applicationContext.getSystemService(Context.POWER_SERVICE) as PowerManager }
     private val wakeLock: PowerManager.WakeLock by lazy { powerManager.newWakeLock(PowerManager.ACQUIRE_CAUSES_WAKEUP or PowerManager.SCREEN_BRIGHT_WAKE_LOCK, "rustdesk:wakelock")}
 
-    private fun translate(input: String): String {
-        Log.d(logTag, "translate:$LOCAL_NAME")
-        return FFI.translateLocale(LOCAL_NAME, input)
-    }
-
     companion object {
         private var _isReady = false // media permission ready status
         private var _isStart = false // screen capture start status
@@ -252,6 +247,7 @@ class MainService : Service() {
 
     override fun onDestroy() {
         checkMediaPermission()
+        stopService(Intent(this, FloatingWindowService::class.java))
         super.onDestroy()
     }
 
@@ -486,6 +482,7 @@ class MainService : Service() {
         mediaProjection = null
         checkMediaPermission()
         stopForeground(true)
+        stopService(Intent(this, FloatingWindowService::class.java))
         stopSelf()
     }
 

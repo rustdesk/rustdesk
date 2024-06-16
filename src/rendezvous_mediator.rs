@@ -75,7 +75,7 @@ impl RendezvousMediator {
             crate::test_nat_type();
             nat_tested = true;
         }
-        if !Config::get_option("stop-service").is_empty() {
+        if config::option2bool("stop-service", &Config::get_option("stop-service")) {
             crate::test_rendezvous_server();
         }
         let server_cloned = server.clone();
@@ -96,7 +96,7 @@ impl RendezvousMediator {
         loop {
             let conn_start_time = Instant::now();
             *SOLVING_PK_MISMATCH.lock().await = "".to_owned();
-            if Config::get_option("stop-service").is_empty()
+            if !config::option2bool("stop-service", &Config::get_option("stop-service"))
                 && !crate::platform::installing_service()
             {
                 if !nat_tested {

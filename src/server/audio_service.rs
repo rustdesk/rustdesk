@@ -310,7 +310,10 @@ mod cpal_impl {
         let mut encoder = Encoder::new(sample_rate, encode_channel, LowDelay)?;
         // https://www.opus-codec.org/docs/html_api/group__opusencoder.html#gace941e4ef26ed844879fde342ffbe546
         // https://chromium.googlesource.com/chromium/deps/opus/+/1.1.1/include/opus.h
-        let frame_size = sample_rate as usize / 100; // 10 ms
+        // Do not set `frame_size = sample_rate as usize / 100;`
+        // Because we find `sample_rate as usize / 100` will cause encoder error in `encoder.encode_vec_float()` sometimes.
+        // https://github.com/xiph/opus/blob/2554a89e02c7fc30a980b4f7e635ceae1ecba5d6/src/opus_encoder.c#L725
+        let frame_size = sample_rate_0 as usize / 100; // 10 ms
         let encode_len = frame_size * encode_channel as usize;
         let rechannel_len = encode_len * device_channel as usize / encode_channel as usize;
         INPUT_BUFFER.lock().unwrap().clear();

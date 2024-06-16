@@ -37,6 +37,7 @@ use crate::{
 };
 use hbb_common::{
     anyhow::anyhow,
+    config,
     tokio::sync::{
         mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender},
         Mutex as TokioMutex,
@@ -411,7 +412,10 @@ fn run(vs: VideoService) -> ResultType<()> {
     video_qos.refresh(None);
     let mut spf;
     let mut quality = video_qos.quality();
-    let record_incoming = !Config::get_option("allow-auto-record-incoming").is_empty();
+    let record_incoming = config::option2bool(
+        "allow-auto-record-incoming",
+        &Config::get_option("allow-auto-record-incoming"),
+    );
     let client_record = video_qos.record();
     drop(video_qos);
     let (mut encoder, encoder_cfg, codec_format, use_i444, recorder) = match setup_encoder(
@@ -445,7 +449,10 @@ fn run(vs: VideoService) -> ResultType<()> {
     #[cfg(feature = "vram")]
     c.set_output_texture(encoder.input_texture());
     #[cfg(target_os = "android")]
-    check_change_scale(encoder.is_hardware())?;
+    if let Err(e) = check_change_scale(encoder.is_hardware()) {
+        try_broadcast_display_changed(&sp, display_idx, &c, true).ok();
+        bail!(e);
+    }
     VIDEO_QOS.lock().unwrap().store_bitrate(encoder.bitrate());
     VIDEO_QOS
         .lock()
@@ -474,6 +481,7 @@ fn run(vs: VideoService) -> ResultType<()> {
     let mut mid_data = Vec::new();
     let mut repeat_encode_counter = 0;
     let repeat_encode_max = 10;
+    let mut encode_fail_counter = 0;
 
     while sp.ok() {
         #[cfg(windows)]
@@ -501,7 +509,7 @@ fn run(vs: VideoService) -> ResultType<()> {
         drop(video_qos);
 
         if sp.is_option_true(OPTION_REFRESH) {
-            let _ = try_broadcast_display_changed(&sp, display_idx, &c);
+            let _ = try_broadcast_display_changed(&sp, display_idx, &c, true);
             log::info!("switch to refresh");
             bail!("SWITCH");
         }
@@ -525,6 +533,7 @@ fn run(vs: VideoService) -> ResultType<()> {
         #[cfg(all(windows, feature = "vram"))]
         if c.is_gdi() && encoder.input_texture() {
             log::info!("changed to gdi when using vram");
+            VRamEncoder::set_fallback_gdi(display_idx, true);
             bail!("SWITCH");
         }
         check_privacy_mode_changed(&sp, c.privacy_mode_id)?;
@@ -541,7 +550,7 @@ fn run(vs: VideoService) -> ResultType<()> {
             last_check_displays = now;
             // This check may be redundant, but it is better to be safe.
             // The previous check in `sp.is_option_true(OPTION_REFRESH)` block may be enough.
-            try_broadcast_display_changed(&sp, display_idx, &c)?;
+            try_broadcast_display_changed(&sp, display_idx, &c, false)?;
         }
 
         frame_controller.reset();
@@ -560,11 +569,16 @@ fn run(vs: VideoService) -> ResultType<()> {
                         ms,
                         &mut encoder,
                         recorder.clone(),
+                        &mut encode_fail_counter,
                     )?;
                     frame_controller.set_send(now, send_conn_ids);
                 }
                 #[cfg(windows)]
                 {
+                    #[cfg(feature = "vram")]
+                    if try_gdi == 1 && !c.is_gdi() {
+                        VRamEncoder::set_fallback_gdi(display_idx, false);
+                    }
                     try_gdi = 0;
                 }
                 Ok(())
@@ -610,17 +624,16 @@ fn run(vs: VideoService) -> ResultType<()> {
                             ms,
                             &mut encoder,
                             recorder.clone(),
+                            &mut encode_fail_counter,
                         )?;
                         frame_controller.set_send(now, send_conn_ids);
                     }
                 }
             }
             Err(err) => {
-                // Get display information again immediately after error.
-                crate::display_service::check_displays_changed().ok();
                 // This check may be redundant, but it is better to be safe.
                 // The previous check in `sp.is_option_true(OPTION_REFRESH)` block may be enough.
-                try_broadcast_display_changed(&sp, display_idx, &c)?;
+                try_broadcast_display_changed(&sp, display_idx, &c, true)?;
 
                 #[cfg(windows)]
                 if !c.is_gdi() {
@@ -866,6 +879,7 @@ fn handle_one_frame(
     ms: i64,
     encoder: &mut Encoder,
     recorder: Arc<Mutex<Option<Recorder>>>,
+    encode_fail_counter: &mut usize,
 ) -> ResultType<HashSet<i32>> {
     sp.snapshot(|sps| {
         // so that new sub and old sub share the same encoder after switch
@@ -879,6 +893,7 @@ fn handle_one_frame(
     let mut send_conn_ids: HashSet<i32> = Default::default();
     match encoder.encode_to_message(frame, ms) {
         Ok(mut vf) => {
+            *encode_fail_counter = 0;
             vf.display = display as _;
             let mut msg = Message::new();
             msg.set_video_frame(vf);
@@ -889,13 +904,29 @@ fn handle_one_frame(
                 .map(|r| r.write_message(&msg));
             send_conn_ids = sp.send_video_frame(msg);
         }
-        Err(e) => match e.to_string().as_str() {
-            scrap::codec::ENCODE_NEED_SWITCH => {
-                log::info!("switch due to encoder need switch");
-                bail!("SWITCH");
+        Err(e) => {
+            let max_fail_times = if cfg!(target_os = "android") && encoder.is_hardware() {
+                12
+            } else {
+                6
+            };
+            *encode_fail_counter += 1;
+            if *encode_fail_counter >= max_fail_times {
+                *encode_fail_counter = 0;
+                if encoder.is_hardware() {
+                    encoder.disable();
+                    log::error!("switch due to encoding fails more than {max_fail_times} times");
+                    bail!("SWITCH");
+                }
             }
-            _ => {}
-        },
+            match e.to_string().as_str() {
+                scrap::codec::ENCODE_NEED_SWITCH => {
+                    log::error!("switch due to encoder need switch");
+                    bail!("SWITCH");
+                }
+                _ => {}
+            }
+        }
     }
     Ok(send_conn_ids)
 }
@@ -931,7 +962,12 @@ fn try_broadcast_display_changed(
     sp: &GenericService,
     display_idx: usize,
     cap: &CapturerInfo,
+    refresh: bool,
 ) -> ResultType<()> {
+    if refresh {
+        // Get display information immediately.
+        crate::display_service::check_displays_changed().ok();
+    }
     if let Some(display) = check_display_changed(
         cap.ndisplay,
         cap.current,

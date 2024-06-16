@@ -396,6 +396,18 @@ class DesktopTab extends StatelessWidget {
                       }
                     : null,
                 onPanStart: (_) => startDragging(isMainWindow),
+                onPanCancel: () {
+                  // We want to disable dragging of the tab area in the tab bar.
+                  // Disable dragging is needed because macOS handles dragging by default.
+                  if (isMacOS) {
+                    setMovable(isMainWindow, false);
+                  }
+                },
+                onPanEnd: (_) {
+                  if (isMacOS) {
+                    setMovable(isMainWindow, false);
+                  }
+                },
                 child: Row(
                   children: [
                     Offstage(
@@ -786,6 +798,14 @@ void startDragging(bool isMainWindow) {
   }
 }
 
+void setMovable(bool isMainWindow, bool movable) {
+  if (isMainWindow) {
+    windowManager.setMovable(movable);
+  } else {
+    WindowController.fromWindowId(kWindowId!).setMovable(movable);
+  }
+}
+
 /// return true -> window will be maximize
 /// return false -> window will be unmaximize
 Future<bool> toggleMaximize(bool isMainWindow) async {
@@ -921,7 +941,7 @@ class _ListView extends StatelessWidget {
                 final label = labelGetter == null
                     ? Rx<String>(tab.label)
                     : labelGetter!(tab.label);
-                return VisibilityDetector(
+                final child = VisibilityDetector(
                   key: ValueKey(tab.key),
                   onVisibilityChanged: onVisibilityChanged,
                   child: _Tab(
@@ -953,6 +973,10 @@ class _ListView extends StatelessWidget {
                     unSelectedTabBackgroundColor: unSelectedTabBackgroundColor,
                     selectedBorderColor: selectedBorderColor,
                   ),
+                );
+                return GestureDetector(
+                  onPanStart: (e) {},
+                  child: child,
                 );
               }).toList()));
   }

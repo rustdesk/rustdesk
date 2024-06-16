@@ -46,7 +46,6 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
   static const IconData selectedIcon = Icons.desktop_windows_sharp;
   static const IconData unselectedIcon = Icons.desktop_windows_outlined;
 
-  late ToolbarState _toolbarState;
   String? peerId;
   bool _isScreenRectSet = false;
   int? _display;
@@ -54,7 +53,6 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
   var connectionMap = RxList<Widget>.empty(growable: true);
 
   _ConnectionTabPageState(Map<String, dynamic> params) {
-    _toolbarState = ToolbarState();
     RemoteCountState.init();
     peerId = params['id'];
     final sessionId = params['session_id'];
@@ -91,7 +89,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
           display: display,
           displays: displays?.cast<int>(),
           password: params['password'],
-          toolbarState: _toolbarState,
+          toolbarState: ToolbarState(),
           tabController: tabController,
           switchUuid: params['switch_uuid'],
           forceRelay: params['forceRelay'],
@@ -126,7 +124,6 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
   @override
   void dispose() {
     super.dispose();
-    _toolbarState.save();
   }
 
   @override
@@ -251,15 +248,16 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
     final pi = ffi.ffiModel.pi;
     final perms = ffi.ffiModel.permissions;
     final sessionId = ffi.sessionId;
+    final toolbarState = remotePage.toolbarState;
     menu.addAll([
       MenuEntryButton<String>(
         childBuilder: (TextStyle? style) => Obx(() => Text(
               translate(
-                  _toolbarState.show.isTrue ? 'Hide Toolbar' : 'Show Toolbar'),
+                  toolbarState.show.isTrue ? 'Hide Toolbar' : 'Show Toolbar'),
               style: style,
             )),
         proc: () {
-          _toolbarState.switchShow();
+          toolbarState.switchShow(sessionId);
           cancelFunc();
         },
         padding: padding,
@@ -420,14 +418,12 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
           await WindowController.fromWindowId(windowId()).setFullscreen(false);
           stateGlobal.setFullscreen(false, procWnd: false);
         }
-        await setNewConnectWindowFrame(windowId(), id!, screenRect);
+        await setNewConnectWindowFrame(windowId(), id!, display, screenRect);
         Future.delayed(Duration(milliseconds: isWindows ? 100 : 0), () async {
           await windowOnTop(windowId());
         });
       });
       ConnectionTypeState.init(id);
-      _toolbarState.setShow(
-          bind.mainGetUserDefaultOption(key: kOptionCollapseToolbar) != 'Y');
       tabController.add(TabInfo(
         key: id,
         label: id,
@@ -442,7 +438,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
           display: display,
           displays: displays?.cast<int>(),
           password: args['password'],
-          toolbarState: _toolbarState,
+          toolbarState: ToolbarState(),
           tabController: tabController,
           switchUuid: switchUuid,
           forceRelay: args['forceRelay'],

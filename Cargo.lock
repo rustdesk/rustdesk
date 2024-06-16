@@ -2917,7 +2917,7 @@ dependencies = [
  "tokio",
  "tokio-native-tls",
  "tokio-rustls 0.26.0",
- "tokio-socks 0.5.2",
+ "tokio-socks 0.5.2-1",
  "tokio-util",
  "toml 0.7.8",
  "url",
@@ -3037,8 +3037,8 @@ checksum = "9a3a5bfb195931eeb336b2a7b4d761daec841b97f947d34394601737a7bba5e4"
 
 [[package]]
 name = "hwcodec"
-version = "0.4.12"
-source = "git+https://github.com/21pages/hwcodec#6fbafe7dd25adad5e897b3192b2b40b720a9b118"
+version = "0.4.16"
+source = "git+https://github.com/21pages/hwcodec#0973290faddc4e22936859dd10f05610eb8d1619"
 dependencies = [
  "bindgen 0.59.2",
  "cc",
@@ -4327,7 +4327,7 @@ dependencies = [
 [[package]]
 name = "pam"
 version = "0.7.0"
-source = "git+https://github.com/fufesou/pam#10da2cbbabe32cbc9de22a66abe44738e7ec0ea0"
+source = "git+https://github.com/fufesou/pam#3a2aaa6e07b176d8e2d66a5eec38d2ddb45f009f"
 dependencies = [
  "libc",
  "pam-macros",
@@ -4349,8 +4349,7 @@ dependencies = [
 [[package]]
 name = "pam-sys"
 version = "1.0.0-alpha4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5e9dfd42858f6a6bb1081079fd9dc259ca3e2aaece6cb689fd36b1058046c969"
+source = "git+https://github.com/fufesou/pam-sys?branch=fix/v1.0.0-alpha4_gnuc_va_list#3337c9bb9a9c68d7497ec8c93cad2368c26091b7"
 dependencies = [
  "bindgen 0.59.2",
  "libc",
@@ -4383,8 +4382,8 @@ dependencies = [
 
 [[package]]
 name = "parity-tokio-ipc"
-version = "0.7.3-3"
-source = "git+https://github.com/rustdesk-org/parity-tokio-ipc#e8448ade10d6d972d0b2307646424b36ab202ff5"
+version = "0.7.3-4"
+source = "git+https://github.com/rustdesk-org/parity-tokio-ipc#3623ec9ebef50c9b118e03b03df831008a4d1441"
 dependencies = [
  "futures",
  "libc",
@@ -5289,7 +5288,7 @@ dependencies = [
 
 [[package]]
 name = "rustdesk"
-version = "1.2.5"
+version = "1.2.6"
 dependencies = [
  "android-wakelock",
  "android_logger",
@@ -5386,7 +5385,7 @@ dependencies = [
 
 [[package]]
 name = "rustdesk-portable-packer"
-version = "1.2.5"
+version = "1.2.6"
 dependencies = [
  "brotli",
  "dirs 5.0.1",
@@ -6359,9 +6358,9 @@ checksum = "1f3ccbac311fea05f86f61904b462b55fb3df8837a366dfc601a0161d0532f20"
 
 [[package]]
 name = "tokio"
-version = "1.37.0"
+version = "1.38.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1adbebffeca75fcfd058afa480fb6c0b81e165a0323f9c9d39c9697e37c46787"
+checksum = "ba4f4a02a7a80d6f274636f0aa95c7e383b912d41fe721a31f29e29698585a4a"
 dependencies = [
  "backtrace",
  "bytes",
@@ -6378,9 +6377,9 @@ dependencies = [
 
 [[package]]
 name = "tokio-macros"
-version = "2.2.0"
+version = "2.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5b8a1e28f2deaa14e508979454cb3a223b10b938b45af148bc0986de36f1923b"
+checksum = "5f5ae998a069d4b5aba8ee9dad856af7d520c3699e6159b185c2acd48155d39a"
 dependencies = [
  "proc-macro2 1.0.79",
  "quote 1.0.35",
@@ -6432,8 +6431,8 @@ dependencies = [
 
 [[package]]
 name = "tokio-socks"
-version = "0.5.2"
-source = "git+https://github.com/rustdesk-org/tokio-socks#51037c93f8be34196fd2b6de9f674e8dfae3d01e"
+version = "0.5.2-1"
+source = "git+https://github.com/rustdesk-org/tokio-socks#94e97c6d7c93b0bcbfa54f2dc397c1da0a6e43d3"
 dependencies = [
  "bytes",
  "either",

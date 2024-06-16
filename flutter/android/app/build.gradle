@@ -106,5 +106,6 @@ dependencies {
     implementation "androidx.media:media:1.6.0"
     implementation 'com.github.getActivity:XXPermissions:18.5'
     implementation("org.jetbrains.kotlin:kotlin-stdlib") { version { strictly("$kotlin_version") } }
+    implementation 'com.caverock:androidsvg-aar:1.4'
 }
 
