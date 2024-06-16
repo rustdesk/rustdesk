@@ -110,6 +110,7 @@ class _AddressBookState extends State<AddressBook> {
   }
 
   Widget _buildAddressBookMobile() {
+    const padding = 8.0;
     return Column(
       children: [
         Offstage(
@@ -120,7 +121,8 @@ class _AddressBookState extends State<AddressBook> {
                   border: Border.all(
                       color: Theme.of(context).colorScheme.background)),
               child: Container(
-                padding: const EdgeInsets.all(8.0),
+                padding:
+                    const EdgeInsets.fromLTRB(padding, 0, padding, padding),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
