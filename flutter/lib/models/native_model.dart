@@ -134,7 +134,9 @@ class PlatformFFI {
       if (isLinux) {
         // Start a dbus service, no need to await
         _ffiBind.mainStartDbusServer();
-        _ffiBind.mainStartPa();
+        if (appType == kAppTypeConnectionManager) {
+          _ffiBind.mainStartPa();
+        }
       } else if (isMacOS && isMain) {
         // Start ipc service for uri links.
         _ffiBind.mainStartIpcUrlServer();
