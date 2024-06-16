@@ -4327,7 +4327,7 @@ dependencies = [
 [[package]]
 name = "pam"
 version = "0.7.0"
-source = "git+https://github.com/fufesou/pam#10da2cbbabe32cbc9de22a66abe44738e7ec0ea0"
+source = "git+https://github.com/fufesou/pam#3a2aaa6e07b176d8e2d66a5eec38d2ddb45f009f"
 dependencies = [
  "libc",
  "pam-macros",
@@ -4349,8 +4349,7 @@ dependencies = [
 [[package]]
 name = "pam-sys"
 version = "1.0.0-alpha4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5e9dfd42858f6a6bb1081079fd9dc259ca3e2aaece6cb689fd36b1058046c969"
+source = "git+https://github.com/fufesou/pam-sys?branch=fix/v1.0.0-alpha4_gnuc_va_list#3337c9bb9a9c68d7497ec8c93cad2368c26091b7"
 dependencies = [
  "bindgen 0.59.2",
  "libc",
