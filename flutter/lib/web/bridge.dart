@@ -1412,10 +1412,6 @@ class RustdeskImpl {
     return false;
   }
 
-  Future<void> mainStartPa({dynamic hint}) {
-    throw UnimplementedError();
-  }
-
   bool mainHideDocker({dynamic hint}) {
     throw UnimplementedError();
   }
