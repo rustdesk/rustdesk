@@ -89,6 +89,27 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
 
+    _enableAbr = option2bool(
+        kOptionEnableAbr, bind.mainGetOptionSync(key: kOptionEnableAbr));
+    _denyLANDiscovery = !option2bool(kOptionEnableLanDiscovery,
+        bind.mainGetOptionSync(key: kOptionEnableLanDiscovery));
+    _onlyWhiteList = (bind.mainGetOptionSync(key: kOptionWhitelist)) !=
+        defaultOptionWhitelist;
+    _enableDirectIPAccess = option2bool(
+        kOptionDirectServer, bind.mainGetOptionSync(key: kOptionDirectServer));
+    _enableRecordSession = option2bool(kOptionEnableRecordSession,
+        bind.mainGetOptionSync(key: kOptionEnableRecordSession));
+    _enableHardwareCodec = option2bool(kOptionEnableHwcodec,
+        bind.mainGetOptionSync(key: kOptionEnableHwcodec));
+    _autoRecordIncomingSession = option2bool(kOptionAllowAutoRecordIncoming,
+        bind.mainGetOptionSync(key: kOptionAllowAutoRecordIncoming));
+    _localIP = bind.mainGetOptionSync(key: 'local-ip-addr');
+    _directAccessPort = bind.mainGetOptionSync(key: kOptionDirectAccessPort);
+    _allowAutoDisconnect = option2bool(kOptionAllowAutoDisconnect,
+        bind.mainGetOptionSync(key: kOptionAllowAutoDisconnect));
+    _autoDisconnectTimeout =
+        bind.mainGetOptionSync(key: kOptionAutoDisconnectTimeout);
+
     () async {
       var update = false;
 
@@ -134,69 +155,6 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
         _keepScreenOn = keepScreenOn;
       }
 
-      final enableAbrRes = option2bool(
-          kOptionEnableAbr, await bind.mainGetOption(key: kOptionEnableAbr));
-      if (enableAbrRes != _enableAbr) {
-        update = true;
-        _enableAbr = enableAbrRes;
-      }
-
-      final denyLanDiscovery = !option2bool(kOptionEnableLanDiscovery,
-          await bind.mainGetOption(key: kOptionEnableLanDiscovery));
-      if (denyLanDiscovery != _denyLANDiscovery) {
-        update = true;
-        _denyLANDiscovery = denyLanDiscovery;
-      }
-
-      final onlyWhiteList = (await bind.mainGetOption(key: kOptionWhitelist)) !=
-          defaultOptionWhitelist;
-      if (onlyWhiteList != _onlyWhiteList) {
-        update = true;
-        _onlyWhiteList = onlyWhiteList;
-      }
-
-      final enableDirectIPAccess = option2bool(kOptionDirectServer,
-          await bind.mainGetOption(key: kOptionDirectServer));
-      if (enableDirectIPAccess != _enableDirectIPAccess) {
-        update = true;
-        _enableDirectIPAccess = enableDirectIPAccess;
-      }
-
-      final enableRecordSession = option2bool(kOptionEnableRecordSession,
-          await bind.mainGetOption(key: kOptionEnableRecordSession));
-      if (enableRecordSession != _enableRecordSession) {
-        update = true;
-        _enableRecordSession = enableRecordSession;
-      }
-
-      final enableHardwareCodec = option2bool(kOptionEnableHwcodec,
-          await bind.mainGetOption(key: kOptionEnableHwcodec));
-      if (_enableHardwareCodec != enableHardwareCodec) {
-        update = true;
-        _enableHardwareCodec = enableHardwareCodec;
-      }
-
-      final autoRecordIncomingSession = option2bool(
-          kOptionAllowAutoRecordIncoming,
-          await bind.mainGetOption(key: kOptionAllowAutoRecordIncoming));
-      if (autoRecordIncomingSession != _autoRecordIncomingSession) {
-        update = true;
-        _autoRecordIncomingSession = autoRecordIncomingSession;
-      }
-
-      final localIP = await bind.mainGetOption(key: 'local-ip-addr');
-      if (localIP != _localIP) {
-        update = true;
-        _localIP = localIP;
-      }
-
-      final directAccessPort =
-          await bind.mainGetOption(key: kOptionDirectAccessPort);
-      if (directAccessPort != _directAccessPort) {
-        update = true;
-        _directAccessPort = directAccessPort;
-      }
-
       final fingerprint = await bind.mainGetFingerprint();
       if (_fingerprint != fingerprint) {
         update = true;
@@ -208,21 +166,6 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
         update = true;
         _buildDate = buildDate;
       }
-
-      final allowAutoDisconnect = option2bool(kOptionAllowAutoDisconnect,
-          await bind.mainGetOption(key: kOptionAllowAutoDisconnect));
-      if (allowAutoDisconnect != _allowAutoDisconnect) {
-        update = true;
-        _allowAutoDisconnect = allowAutoDisconnect;
-      }
-
-      final autoDisconnectTimeout =
-          await bind.mainGetOption(key: kOptionAutoDisconnectTimeout);
-      if (autoDisconnectTimeout != _autoDisconnectTimeout) {
-        update = true;
-        _autoDisconnectTimeout = autoDisconnectTimeout;
-      }
-
       if (update) {
         setState(() {});
       }
@@ -661,11 +604,8 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
                 title:
                     Text(translate('Automatically record incoming sessions')),
                 leading: Icon(Icons.videocam),
-                description: FutureBuilder(
-                    builder: (ctx, data) => Offstage(
-                        offstage: !data.hasData,
-                        child: Text("${translate("Directory")}: ${data.data}")),
-                    future: bind.mainVideoSaveDirectory(root: false)),
+                description: Text(
+                    "${translate("Directory")}: ${bind.mainVideoSaveDirectory(root: false)}"),
                 initialValue: _autoRecordIncomingSession,
                 onToggle: isOptionFixed(kOptionAllowAutoRecordIncoming)
                     ? null
