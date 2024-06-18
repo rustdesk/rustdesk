@@ -107,10 +107,7 @@ class _DesktopTabPageState extends State<DesktopTabPage>
         onEnter: (_) async {
           await shouldBeBlocked(_block, canBeBlocked);
         },
-        child: _block
-                .value // FocusScope cause id input not working when closing remote
-            ? tabWidget
-            : FocusScope(child: tabWidget, canRequestFocus: false));
+        child: FocusScope(child: tabWidget, canRequestFocus: !_block.value));
     return isMacOS || kUseCompatibleUiMode
         ? Obx(() => widget())
         : Obx(

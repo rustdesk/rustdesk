@@ -2692,6 +2692,8 @@ Future<void> shouldBeBlocked(RxBool block, WhetherUseRemoteBlock? use) async {
     var d = time0 - await bind.mainGetMouseTime();
     if (d < 120) {
       block.value = true;
+    } else {
+      block.value = false;
     }
   });
 }
