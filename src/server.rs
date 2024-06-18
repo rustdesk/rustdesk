@@ -467,12 +467,9 @@ pub async fn start_server(is_server: bool) {
         std::thread::spawn(move || {
             if let Err(err) = crate::ipc::start("") {
                 log::error!("Failed to start ipc: {}", err);
-                #[cfg(windows)]
-                if crate::is_server() && crate::ipc::is_ipc_file_exist("").unwrap_or(false) {
+                if crate::is_server() {
                     log::error!("ipc is occupied by another process, try kill it");
-                    if let Err(e) = crate::platform::try_kill_rustdesk_main_window_process() {
-                        log::error!("kill failed: {}", e);
-                    }
+                    std::thread::spawn(stop_main_window_process).join().ok();
                 }
                 std::process::exit(-1);
             }
@@ -635,4 +632,20 @@ async fn sync_and_watch_config_dir() {
         }
     }
     log::warn!("skipped config sync");
+}
+
+#[tokio::main(flavor = "current_thread")]
+pub async fn stop_main_window_process() {
+    // this may also kill another --server process,
+    // but --server usually can be auto restarted by --service, so it is ok
+    if let Ok(mut conn) = crate::ipc::connect(1000, "").await {
+        conn.send(&crate::ipc::Data::Close).await.ok();
+    }
+    #[cfg(windows)]
+    {
+        // in case above failure, e.g. zombie process
+        if let Err(e) = crate::platform::try_kill_rustdesk_main_window_process() {
+            log::error!("kill failed: {}", e);
+        }
+    }
 }

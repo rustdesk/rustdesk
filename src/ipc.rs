@@ -699,6 +699,9 @@ async fn check_pid(postfix: &str) {
             }
         }
     }
+    // if not remove old ipc file, the new ipc creation will fail
+    // if we remove a ipc file, but the old ipc process is still running, 
+    // new connection to the ipc will connect to new ipc, old connection to old ipc still keep alive
     std::fs::remove_file(&Config::ipc_path(postfix)).ok();
 }
 
@@ -983,31 +986,6 @@ pub async fn test_rendezvous_server() -> ResultType<()> {
     let mut c = connect(1000, "").await?;
     c.send(&Data::TestRendezvousServer).await?;
     Ok(())
-}
-
-#[cfg(windows)]
-pub fn is_ipc_file_exist(suffix: &str) -> ResultType<bool> {
-    // Not change this to std::path::Path::exists, unless it can be ensured that it can find the ipc which occupied by a process that taskkill can't kill.
-    let prefix = "\\\\.\\pipe\\";
-    let file_name = Config::ipc_path(suffix).replace(prefix, "");
-    let mut err = None;
-    for entry in std::fs::read_dir(prefix)? {
-        match entry {
-            Ok(entry) => {
-                if entry.file_name().into_string().unwrap_or_default() == file_name {
-                    return Ok(true);
-                }
-            }
-            Err(e) => {
-                err = Some(e);
-            }
-        }
-    }
-    if let Some(e) = err {
-        Err(e.into())
-    } else {
-        Ok(false)
-    }
 }
 
 #[tokio::main(flavor = "current_thread")]
