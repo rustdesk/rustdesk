@@ -110,12 +110,16 @@ extern "C" bool MacCheckAdminAuthorization() {
 }
 
 extern "C" float BackingScaleFactor(uint32_t display) {
+    NSScreen* s = [NSScreen mainScreen];
+    if (s) return [s backingScaleFactor];
+    /* on my mini mac, display==2, but only 1 screen
     display -= 1;
     NSArray<NSScreen *> *screens = [NSScreen screens];
     if (display >= 0 && display < [screens count]) {
         NSScreen* s = [screens objectAtIndex:display];
         if (s) return [s backingScaleFactor];
     }
+    */
     return 1;
 }
 
