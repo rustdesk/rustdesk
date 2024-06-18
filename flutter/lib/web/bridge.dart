@@ -943,7 +943,7 @@ class RustdeskImpl {
     throw UnimplementedError();
   }
 
-  Future<String> mainVideoSaveDirectory({required bool root, dynamic hint}) {
+  String mainVideoSaveDirectory({required bool root, dynamic hint}) {
     throw UnimplementedError();
   }
 
