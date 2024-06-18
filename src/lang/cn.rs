@@ -616,7 +616,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("texture_render_tip", "使用纹理渲染，使图片更加流畅。 如果您遭遇渲染问题，可尝试关闭此选项。"),
         ("Use texture rendering", "使用纹理渲染"),
         ("Floating window", "悬浮窗"),
-        ("floating_window_tip", "有助于保持RustDesk后台服务"),
+        ("floating_window_tip", "有助于保持 RustDesk 后台服务"),
         ("Keep screen on", "保持屏幕开启"),
         ("Never", "从不"),
         ("During controlled", "被控期间"),
