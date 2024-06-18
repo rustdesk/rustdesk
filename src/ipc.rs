@@ -358,7 +358,7 @@ async fn handle(data: Data, stream: &mut Connection) {
                 if is_server() {
                     let _ = privacy_mode::turn_off_privacy(0, Some(PrivacyModeState::OffByPeer));
                 }
-                std::process::exit(0);
+                std::process::exit(-1); // to make sure --server luauchagent process can restart because SuccessfulExit used 
             }
         }
         Data::OnlineStatus(_) => {
