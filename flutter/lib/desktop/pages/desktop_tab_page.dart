@@ -36,12 +36,24 @@ class DesktopTabPage extends StatefulWidget {
   }
 }
 
-class _DesktopTabPageState extends State<DesktopTabPage> {
+class _DesktopTabPageState extends State<DesktopTabPage>
+    with WidgetsBindingObserver {
   final tabController = DesktopTabController(tabType: DesktopTabType.main);
+
+  final RxBool _block = false.obs;
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    if (state == AppLifecycleState.resumed) {
+      shouldBeBlocked(_block, canBeBlocked);
+    } else if (state == AppLifecycleState.inactive) {}
+  }
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     Get.put<DesktopTabController>(tabController);
     RemoteCountState.init();
     tabController.add(TabInfo(
@@ -68,8 +80,10 @@ class _DesktopTabPageState extends State<DesktopTabPage> {
 
   @override
   void dispose() {
-    super.dispose();
+    WidgetsBinding.instance.removeObserver(this);
     Get.delete<DesktopTabController>();
+
+    super.dispose();
   }
 
   @override
@@ -89,12 +103,17 @@ class _DesktopTabPageState extends State<DesktopTabPage> {
                 ),
               ),
             )));
+    widget() => MouseRegion(
+        onEnter: (_) async {
+          await shouldBeBlocked(_block, canBeBlocked);
+        },
+        child: FocusScope(child: tabWidget, canRequestFocus: !_block.value));
     return isMacOS || kUseCompatibleUiMode
-        ? tabWidget
+        ? Obx(() => widget())
         : Obx(
             () => DragToResizeArea(
               resizeEdgeSize: stateGlobal.resizeEdgeSize.value,
-              child: tabWidget,
+              child: widget(),
             ),
           );
   }

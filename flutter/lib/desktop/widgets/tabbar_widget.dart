@@ -320,16 +320,7 @@ class DesktopTab extends StatelessWidget {
     if (tabType != DesktopTabType.main) {
       return child;
     }
-    return buildRemoteBlock(
-        child: child,
-        use: () async {
-          var access_mode = await bind.mainGetOption(key: kOptionAccessMode);
-          var option = option2bool(
-              kOptionAllowRemoteConfigModification,
-              await bind.mainGetOption(
-                  key: kOptionAllowRemoteConfigModification));
-          return access_mode == 'view' || (access_mode.isEmpty && !option);
-        });
+    return buildRemoteBlock(child: child, use: canBeBlocked);
   }
 
   List<Widget> _tabWidgets = [];
