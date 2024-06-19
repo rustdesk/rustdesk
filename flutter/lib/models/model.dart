@@ -182,7 +182,6 @@ class FfiModel with ChangeNotifier {
   toggleTouchMode() {
     if (!isPeerAndroid) {
       _touchMode = !_touchMode;
-      parent.target?.cursorModel.lastIsBlocked = false;
       notifyListeners();
     }
   }
@@ -1808,9 +1807,24 @@ class CursorModel with ChangeNotifier {
   // But we're now using a Container(child: Stack(...)) to wrap the KeyHelpTools,
   // and the listener is on the Container.
   Rect? _keyHelpToolsRect;
-  bool lastIsBlocked = false;
+  bool _lastIsBlocked = false;
 
-  set keyHelpToolsRect(Rect? r) => _keyHelpToolsRect = r;
+  set keyHelpToolsRect(Rect? r) {
+    _keyHelpToolsRect = r;
+    if (r == null) {
+      _lastIsBlocked = false;
+    } else {
+      // `lastIsBlocked` is only used in common/widgets/remote_input.dart -> _RawTouchGestureDetectorRegionState -> onDoubleTap()
+      // Because onDoubleTap() doesn't have the `event` parameter, we can't get the touch event's position.
+      //
+      // Block the touch event is safe here.
+      // `lastIsBlocked` is only used in onDoubleTap() to block the touch event from the KeyHelpTools. 
+      // `lastIsBlocked` will be set when the cursor is moving or touch somewhere else.
+      _lastIsBlocked = true;
+    }
+  }
+
+  get lastIsBlocked => _lastIsBlocked;
 
   ui.Image? get image => _image;
   CursorData? get cache => _cache;
@@ -1884,10 +1898,10 @@ class CursorModel with ChangeNotifier {
 
   move(double x, double y) {
     if (shouldBlock(x, y)) {
-      lastIsBlocked = true;
+      _lastIsBlocked = true;
       return false;
     }
-    lastIsBlocked = false;
+    _lastIsBlocked = false;
     moveLocal(x, y);
     parent.target?.inputModel.moveMouse(_x, _y);
     return true;
