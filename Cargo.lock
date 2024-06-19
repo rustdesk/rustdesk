@@ -6127,7 +6127,7 @@ dependencies = [
 [[package]]
 name = "tao"
 version = "0.25.0"
-source = "git+https://github.com/rustdesk-org/tao?branch=dev#8a014cdb4dd20f35d64bf992374fa40263ee86a4"
+source = "git+https://github.com/rustdesk-org/tao?branch=dev#288c219cb0527e509590c2b2d8e7072aa9feb2d3"
 dependencies = [
  "bitflags 1.3.2",
  "cc",
@@ -6167,7 +6167,7 @@ dependencies = [
 [[package]]
 name = "tao-macros"
 version = "0.1.2"
-source = "git+https://github.com/rustdesk-org/tao?branch=dev#8a014cdb4dd20f35d64bf992374fa40263ee86a4"
+source = "git+https://github.com/rustdesk-org/tao?branch=dev#288c219cb0527e509590c2b2d8e7072aa9feb2d3"
 dependencies = [
  "proc-macro2 1.0.79",
  "quote 1.0.35",
