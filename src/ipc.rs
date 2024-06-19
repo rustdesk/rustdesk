@@ -363,7 +363,8 @@ async fn handle(data: Data, stream: &mut Connection) {
                     // below part is for main windows can be reopen during rustdesk installation and installing service from UI
                     // this make new ipc server (domain socket) can be created.
                     std::fs::remove_file(&Config::ipc_path("")).ok();
-                    hbb_common::sleep((crate::platform::SERVICE_INTERVAL * 2) as f32).await;
+                    hbb_common::sleep((crate::platform::SERVICE_INTERVAL * 2) as f32 / 1000.0)
+                        .await;
                     crate::run_me::<&str>(vec![]).ok();
                 }
                 std::process::exit(-1); // to make sure --server luauchagent process can restart because SuccessfulExit used
