@@ -182,6 +182,7 @@ class FfiModel with ChangeNotifier {
   toggleTouchMode() {
     if (!isPeerAndroid) {
       _touchMode = !_touchMode;
+      parent.target?.cursorModel.lastIsBlocked = false;
       notifyListeners();
     }
   }
@@ -1807,10 +1808,9 @@ class CursorModel with ChangeNotifier {
   // But we're now using a Container(child: Stack(...)) to wrap the KeyHelpTools,
   // and the listener is on the Container.
   Rect? _keyHelpToolsRect;
-  bool _lastIsBlocked = false;
+  bool lastIsBlocked = false;
 
   set keyHelpToolsRect(Rect? r) => _keyHelpToolsRect = r;
-  get lastIsBlocked => _lastIsBlocked;
 
   ui.Image? get image => _image;
   CursorData? get cache => _cache;
@@ -1884,10 +1884,10 @@ class CursorModel with ChangeNotifier {
 
   move(double x, double y) {
     if (shouldBlock(x, y)) {
-      _lastIsBlocked = true;
+      lastIsBlocked = true;
       return false;
     }
-    _lastIsBlocked = false;
+    lastIsBlocked = false;
     moveLocal(x, y);
     parent.target?.inputModel.moveMouse(_x, _y);
     return true;
