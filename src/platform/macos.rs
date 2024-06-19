@@ -501,7 +501,7 @@ pub fn start_os_service() {
         std::fs::canonicalize(std::env::current_exe().unwrap_or_default()).unwrap_or_default();
     let mut server = get_server_start_time(&mut sys, &path);
     if server.is_none() {
-        log::error!("Agent not started yet, will restart --service to make delegate work",);
+        log::error!("Agent not started yet, please restart --server first to make delegate work",);
         std::process::exit(-1);
     }
     let my_start_time = sys
@@ -518,7 +518,7 @@ pub fn start_os_service() {
         if let Some((start_time, pid)) = server {
             if my_start_time <= start_time + 1 {
                 log::error!(
-                    "Agent start later, {my_start_time} vs {start_time}, will restart --service to make delegate work",
+                    "Agent start later, {my_start_time} vs {start_time}, please start --server first to make delegate work",
                 );
                 std::process::exit(-1);
             }
