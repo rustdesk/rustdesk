@@ -358,14 +358,27 @@ async fn handle(data: Data, stream: &mut Connection) {
                 if is_server() {
                     let _ = privacy_mode::turn_off_privacy(0, Some(PrivacyModeState::OffByPeer));
                 }
-                #[cfg(target_os = "linux")]
+                #[cfg(any(target_os = "macos", target_os = "linux"))]
                 if crate::is_main() {
                     // below part is for main windows can be reopen during rustdesk installation and installing service from UI
                     // this make new ipc server (domain socket) can be created.
                     std::fs::remove_file(&Config::ipc_path("")).ok();
-                    hbb_common::sleep((crate::platform::SERVICE_INTERVAL * 2) as f32 / 1000.0)
-                        .await;
-                    crate::run_me::<&str>(vec![]).ok();
+                    #[cfg(target_os = "linux")]
+                    {
+                        hbb_common::sleep((crate::platform::SERVICE_INTERVAL * 2) as f32 / 1000.0)
+                            .await;
+                        crate::run_me::<&str>(vec![]).ok();
+                    }
+                    #[cfg(target_os = "macos")]
+                    {
+                        // our launchagent interval is 1 second
+                        hbb_common::sleep(1.5).await;
+                        std::process::Command::new("open")
+                            .arg("-n")
+                            .arg(&format!("/Applications/{}.app", crate::get_app_name()))
+                            .spawn()
+                            .ok();
+                    }
                 }
                 std::process::exit(-1); // to make sure --server luauchagent process can restart because SuccessfulExit used
             }
