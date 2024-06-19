@@ -263,6 +263,8 @@ pub fn uninstall_service(show_new_window: bool, sync: bool) -> bool {
                             .arg(&format!("/Applications/{}.app", crate::get_app_name()))
                             .spawn()
                             .ok();
+                        // leave open a little time
+                        std::thread::sleep(std::time::Duration::from_millis(300));
                     }
                     quit_gui();
                 }
