@@ -28,7 +28,7 @@ use hwcodec::{
 };
 
 const DEFAULT_PIXFMT: AVPixelFormat = AVPixelFormat::AV_PIX_FMT_NV12;
-pub const DEFAULT_TIME_BASE: [i32; 2] = [1, 30];
+pub const DEFAULT_FPS: i32 = 30;
 const DEFAULT_GOP: i32 = i32::MAX;
 const DEFAULT_HW_QUALITY: Quality = Quality_Default;
 
@@ -82,7 +82,7 @@ impl EncoderApi for HwRamEncoder {
                     pixfmt: DEFAULT_PIXFMT,
                     align: HW_STRIDE_ALIGN as _,
                     kbs: bitrate as i32,
-                    timebase: DEFAULT_TIME_BASE,
+                    fps: DEFAULT_FPS,
                     gop,
                     quality: DEFAULT_HW_QUALITY,
                     rc,
@@ -113,16 +113,16 @@ impl EncoderApi for HwRamEncoder {
         }
     }
 
-    fn encode_to_message(&mut self, input: EncodeInput, _ms: i64) -> ResultType<VideoFrame> {
+    fn encode_to_message(&mut self, input: EncodeInput, ms: i64) -> ResultType<VideoFrame> {
         let mut vf = VideoFrame::new();
         let mut frames = Vec::new();
         for frame in self
-            .encode(input.yuv()?)
+            .encode(input.yuv()?, ms)
             .with_context(|| "Failed to encode")?
         {
             frames.push(EncodedVideoFrame {
                 data: Bytes::from(frame.data),
-                pts: frame.pts as _,
+                pts: frame.pts,
                 key: frame.key == 1,
                 ..Default::default()
             });
@@ -236,8 +236,8 @@ impl HwRamEncoder {
         info
     }
 
-    pub fn encode(&mut self, yuv: &[u8]) -> ResultType<Vec<EncodeFrame>> {
-        match self.encoder.encode(yuv) {
+    pub fn encode(&mut self, yuv: &[u8], ms: i64) -> ResultType<Vec<EncodeFrame>> {
+        match self.encoder.encode(yuv, ms) {
             Ok(v) => {
                 let mut data = Vec::<EncodeFrame>::new();
                 data.append(v);
@@ -664,7 +664,7 @@ pub fn check_available_hwcodec() -> String {
         pixfmt: DEFAULT_PIXFMT,
         align: HW_STRIDE_ALIGN as _,
         kbs: 0,
-        timebase: DEFAULT_TIME_BASE,
+        fps: DEFAULT_FPS,
         gop: DEFAULT_GOP,
         quality: DEFAULT_HW_QUALITY,
         rc: RC_CBR,
