@@ -258,12 +258,9 @@ pub fn uninstall_service(show_new_window: bool, sync: bool) -> bool {
                         .status()
                         .ok();
                     if show_new_window {
-                        std::process::Command::new("sh")
-                            .arg("-c")
-                            .arg(&format!(
-                                "sleep 0.5; open /Applications/{}.app",
-                                crate::get_app_name(),
-                            ))
+                        std::process::Command::new("open")
+                            .arg("-n")
+                            .arg(&format!("/Applications/{}.app", crate::get_app_name()))
                             .spawn()
                             .ok();
                     }
