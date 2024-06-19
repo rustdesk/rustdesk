@@ -95,8 +95,9 @@ class _RawTouchGestureDetectorRegionState
     }
     if (handleTouch) {
       // Desktop or mobile "Touch mode"
-      ffi.cursorModel.move(d.localPosition.dx, d.localPosition.dy);
-      inputModel.tapDown(MouseButtons.left);
+      if (ffi.cursorModel.move(d.localPosition.dx, d.localPosition.dy)) {
+        inputModel.tapDown(MouseButtons.left);
+      }
     }
   }
 
@@ -105,8 +106,9 @@ class _RawTouchGestureDetectorRegionState
       return;
     }
     if (handleTouch) {
-      ffi.cursorModel.move(d.localPosition.dx, d.localPosition.dy);
-      inputModel.tapUp(MouseButtons.left);
+      if (ffi.cursorModel.move(d.localPosition.dx, d.localPosition.dy)) {
+        inputModel.tapUp(MouseButtons.left);
+      }
     }
   }
 
@@ -132,6 +134,9 @@ class _RawTouchGestureDetectorRegionState
 
   onDoubleTap() {
     if (lastDeviceKind != PointerDeviceKind.touch) {
+      return;
+    }
+    if (ffiModel.touchMode && ffi.cursorModel.lastIsBlocked) {
       return;
     }
     inputModel.tap(MouseButtons.left);
@@ -222,6 +227,9 @@ class _RawTouchGestureDetectorRegionState
       return;
     }
     if (handleTouch) {
+      if (ffi.cursorModel.shouldBlock(d.localPosition.dx, d.localPosition.dy)) {
+        return;
+      }
       if (isDesktop) {
         ffi.cursorModel.trySetRemoteWindowCoords();
       }
@@ -242,6 +250,9 @@ class _RawTouchGestureDetectorRegionState
 
   onOneFingerPanUpdate(DragUpdateDetails d) {
     if (lastDeviceKind != PointerDeviceKind.touch) {
+      return;
+    }
+    if (ffi.cursorModel.shouldBlock(d.localPosition.dx, d.localPosition.dy)) {
       return;
     }
     ffi.cursorModel.updatePan(d.delta, d.localPosition, handleTouch);
