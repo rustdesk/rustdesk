@@ -1800,6 +1800,18 @@ class CursorModel with ChangeNotifier {
   String peerId = '';
   WeakReference<FFI> parent;
 
+  // Only for mobile, touch mode
+  // To block touch event above the KeyHelpTools
+  //
+  // A better way is to not listen events from the KeyHelpTools.
+  // But we're now using a Container(child: Stack(...)) to wrap the KeyHelpTools,
+  // and the listener is on the Container.
+  Rect? _keyHelpToolsRect;
+  bool _lastIsBlocked = false;
+
+  set keyHelpToolsRect(Rect? r) => _keyHelpToolsRect = r;
+  get lastIsBlocked => _lastIsBlocked;
+
   ui.Image? get image => _image;
   CursorData? get cache => _cache;
 
@@ -1844,9 +1856,10 @@ class CursorModel with ChangeNotifier {
     return Rect.fromLTWH(x0, y0, size.width / scale, size.height / scale);
   }
 
+  get keyboardHeight => MediaQueryData.fromWindow(ui.window).viewInsets.bottom;
+
   double adjustForKeyboard() {
     final m = MediaQueryData.fromWindow(ui.window);
-    var keyboardHeight = m.viewInsets.bottom;
     final size = m.size;
     if (keyboardHeight < 100) return 0;
     final s = parent.target?.canvasModel.scale ?? 1.0;
@@ -1855,9 +1868,29 @@ class CursorModel with ChangeNotifier {
     return h - thresh;
   }
 
+  // mobile Soft keyboard, block touch event from the KeyHelpTools
+  shouldBlock(double x, double y) {
+    if (!(parent.target?.ffiModel.touchMode ?? false)) {
+      return false;
+    }
+    if (_keyHelpToolsRect == null) {
+      return false;
+    }
+    if (isPointInRect(Offset(x, y), _keyHelpToolsRect!)) {
+      return true;
+    }
+    return false;
+  }
+
   move(double x, double y) {
+    if (shouldBlock(x, y)) {
+      _lastIsBlocked = true;
+      return false;
+    }
+    _lastIsBlocked = false;
     moveLocal(x, y);
     parent.target?.inputModel.moveMouse(_x, _y);
+    return true;
   }
 
   moveLocal(double x, double y) {

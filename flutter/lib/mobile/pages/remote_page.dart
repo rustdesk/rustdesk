@@ -679,6 +679,7 @@ class _KeyHelpToolsState extends State<KeyHelpTools> {
   var _fn = false;
   var _pin = false;
   final _keyboardVisibilityController = KeyboardVisibilityController();
+  final _key = GlobalKey();
 
   InputModel get inputModel => gFFI.inputModel;
 
@@ -704,6 +705,24 @@ class _KeyHelpToolsState extends State<KeyHelpTools> {
   }
 
   @override
+  void initState() {
+    super.initState();
+  }
+
+  _updateRect() {
+    RenderObject? renderObject = _key.currentContext?.findRenderObject();
+    if (renderObject == null) {
+      return;
+    }
+    if (renderObject is RenderBox) {
+      final size = renderObject.size;
+      Offset pos = renderObject.localToGlobal(Offset.zero);
+      gFFI.cursorModel.keyHelpToolsRect =
+          Rect.fromLTWH(pos.dx, pos.dy, size.width, size.height);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     final hasModifierOn = inputModel.ctrl ||
         inputModel.alt ||
@@ -711,6 +730,7 @@ class _KeyHelpToolsState extends State<KeyHelpTools> {
         inputModel.command;
 
     if (!_pin && !hasModifierOn && !widget.requestShow) {
+      gFFI.cursorModel.keyHelpToolsRect = null;
       return Offstage();
     }
     final size = MediaQuery.of(context).size;
@@ -821,7 +841,12 @@ class _KeyHelpToolsState extends State<KeyHelpTools> {
       }),
     ];
     final space = size.width > 320 ? 4.0 : 2.0;
+    // 500 ms is long enough for this widget to be built!
+    Future.delayed(Duration(milliseconds: 500), () {
+      _updateRect();
+    });
     return Container(
+        key: _key,
         color: Color(0xAA000000),
         padding: EdgeInsets.only(
             top: _keyboardVisibilityController.isVisible ? 24 : 4, bottom: 8),
