@@ -1397,8 +1397,6 @@ pub fn install_service() -> bool {
         Config::set_option("stop-service".into(), "Y".into());
         return true;
     }
-    run_me_with(2);
-    std::process::exit(0);
 }
 
 fn check_if_stop_service() {

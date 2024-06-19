@@ -12,7 +12,7 @@
         <array>
         <string>/bin/sh</string>
         <string>-c</string>
-        <string>sleep 1.5; /Applications/RustDesk.app/Contents/MacOS/RustDesk --service</string>
+        <string>sleep 3; /Applications/RustDesk.app/Contents/MacOS/RustDesk --service</string>
         </array>
         <key>RunAtLoad</key>
         <true/>

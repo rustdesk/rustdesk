@@ -500,29 +500,24 @@ pub fn start_os_service() {
     let path =
         std::fs::canonicalize(std::env::current_exe().unwrap_or_default()).unwrap_or_default();
     let mut server = get_server_start_time(&mut sys, &path);
+    if server.is_none() {
+        log::error!("Agent not started yet, will restart --service to make delegate work",);
+        std::process::exit(-1);
+    }
     let my_start_time = sys
         .process((std::process::id() as usize).into())
         .map(|p| p.start_time())
         .unwrap_or_default() as i64;
     log::info!("Startime: {my_start_time} vs {:?}", server);
 
-    let uname = get_active_username();
     std::thread::spawn(move || loop {
         std::thread::sleep(std::time::Duration::from_secs(1));
-        let tmp = get_active_username();
-        // restart my self after login to make sure --server started earlier 
-        // so that not forbid user start main window because of delegate caught by --service
-        if uname != tmp {
-            log::info!("Console user changed from {uname} to {tmp}");
-            std::process::exit(-1);
-        }
         if server.is_none() {
             server = get_server_start_time(&mut sys, &path);
         }
         if let Some((start_time, pid)) = server {
             if my_start_time <= start_time {
-                // I tried add delegate (using tao and with its main loop0, but it works in normal mode, but not work as daemon
-                log::info!(
+                log::error!(
                     "Agent start later, {my_start_time} vs {start_time}, will restart --service to make delegate work",
                 );
                 std::process::exit(-1);
