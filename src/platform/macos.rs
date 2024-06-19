@@ -514,27 +514,31 @@ pub fn start_os_service() {
         if server.is_none() {
             server = get_server_start_time(&mut sys, &path);
         }
-        if let Some((start_time, pid)) = server {
-            if my_start_time <= start_time + 1 {
-                log::error!(
+        let Some((start_time, pid)) = server else {
+            log::error!(
+                "Agent not started yet, please restart --server first to make delegate work",
+            );
+            std::process::exit(-1);
+        };
+        if my_start_time <= start_time + 1 {
+            log::error!(
                     "Agent start later, {my_start_time} vs {start_time}, please start --server first to make delegate work",
                 );
-                std::process::exit(-1);
-            }
-            // only refresh this pid and check if valid, no need to refresh all processes since refreshing all is expensive, about 10ms on my machine
-            if !sys.refresh_process_specifics(pid, ProcessRefreshKind::new()) {
-                server = None;
-                continue;
-            }
-            if let Some(p) = sys.process(pid.into()) {
-                if let Some(p) = get_server_start_time_of(p, &path) {
-                    server = Some((p, pid));
-                } else {
-                    server = None;
-                }
+            std::process::exit(-1);
+        }
+        // only refresh this pid and check if valid, no need to refresh all processes since refreshing all is expensive, about 10ms on my machine
+        if !sys.refresh_process_specifics(pid, ProcessRefreshKind::new()) {
+            server = None;
+            continue;
+        }
+        if let Some(p) = sys.process(pid.into()) {
+            if let Some(p) = get_server_start_time_of(p, &path) {
+                server = Some((p, pid));
             } else {
                 server = None;
             }
+        } else {
+            server = None;
         }
     });
 
