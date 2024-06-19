@@ -95,7 +95,7 @@ class _RawTouchGestureDetectorRegionState
     }
     if (handleTouch) {
       // Desktop or mobile "Touch mode"
-      if (ffi.cursorModel.move(d.localPosition.dx, d.localPosition.dy)) {
+      if (ffi.cursorModel.moveTapDown(d.localPosition.dx, d.localPosition.dy)) {
         inputModel.tapDown(MouseButtons.left);
       }
     }
@@ -106,7 +106,7 @@ class _RawTouchGestureDetectorRegionState
       return;
     }
     if (handleTouch) {
-      if (ffi.cursorModel.move(d.localPosition.dx, d.localPosition.dy)) {
+      if (ffi.cursorModel.moveTapUp(d.localPosition.dx, d.localPosition.dy)) {
         inputModel.tapUp(MouseButtons.left);
       }
     }
