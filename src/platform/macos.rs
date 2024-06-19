@@ -516,7 +516,7 @@ pub fn start_os_service() {
             server = get_server_start_time(&mut sys, &path);
         }
         if let Some((start_time, pid)) = server {
-            if my_start_time <= start_time {
+            if my_start_time <= start_time + 1 {
                 log::error!(
                     "Agent start later, {my_start_time} vs {start_time}, will restart --service to make delegate work",
                 );
