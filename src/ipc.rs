@@ -358,7 +358,15 @@ async fn handle(data: Data, stream: &mut Connection) {
                 if is_server() {
                     let _ = privacy_mode::turn_off_privacy(0, Some(PrivacyModeState::OffByPeer));
                 }
-                std::process::exit(-1); // to make sure --server luauchagent process can restart because SuccessfulExit used 
+                #[cfg(target_os = "linux")]
+                if crate::is_main() {
+                    // below part is for main windows can be reopen during rustdesk installation and installing service from UI
+                    // this make new ipc server (domain socket) can be created.
+                    std::fs::remove_file(&Config::ipc_path("")).ok();
+                    hbb_common::sleep(crate::platform::SERVICE_INTERVAL * 2 as _).await;
+                    crate::run_me::<&str>(vec![]).ok();
+                }
+                std::process::exit(-1); // to make sure --server luauchagent process can restart because SuccessfulExit used
             }
         }
         Data::OnlineStatus(_) => {
@@ -700,7 +708,7 @@ async fn check_pid(postfix: &str) {
         }
     }
     // if not remove old ipc file, the new ipc creation will fail
-    // if we remove a ipc file, but the old ipc process is still running, 
+    // if we remove a ipc file, but the old ipc process is still running,
     // new connection to the ipc will connect to new ipc, old connection to old ipc still keep alive
     std::fs::remove_file(&Config::ipc_path(postfix)).ok();
 }
