@@ -1807,21 +1807,22 @@ class CursorModel with ChangeNotifier {
   // But we're now using a Container(child: Stack(...)) to wrap the KeyHelpTools,
   // and the listener is on the Container.
   Rect? _keyHelpToolsRect;
+  // `lastIsBlocked` is only used in common/widgets/remote_input.dart -> _RawTouchGestureDetectorRegionState -> onDoubleTap()
+  // Because onDoubleTap() doesn't have the `event` parameter, we can't get the touch event's position.
   bool _lastIsBlocked = false;
+  double _yForKeyboardAdjust = 0;
 
-  set keyHelpToolsRect(Rect? r) {
+  keyHelpToolsVisibilityChanged(Rect? r) {
     _keyHelpToolsRect = r;
     if (r == null) {
       _lastIsBlocked = false;
     } else {
-      // `lastIsBlocked` is only used in common/widgets/remote_input.dart -> _RawTouchGestureDetectorRegionState -> onDoubleTap()
-      // Because onDoubleTap() doesn't have the `event` parameter, we can't get the touch event's position.
-      //
       // Block the touch event is safe here.
-      // `lastIsBlocked` is only used in onDoubleTap() to block the touch event from the KeyHelpTools. 
+      // `lastIsBlocked` is only used in onDoubleTap() to block the touch event from the KeyHelpTools.
       // `lastIsBlocked` will be set when the cursor is moving or touch somewhere else.
       _lastIsBlocked = true;
     }
+    _yForKeyboardAdjust = _y;
   }
 
   get lastIsBlocked => _lastIsBlocked;
@@ -1871,14 +1872,18 @@ class CursorModel with ChangeNotifier {
   }
 
   get keyboardHeight => MediaQueryData.fromWindow(ui.window).viewInsets.bottom;
+  get scale => parent.target?.canvasModel.scale ?? 1.0;
 
   double adjustForKeyboard() {
+    if (keyboardHeight < 100) {
+      return 0.0;
+    }
+
     final m = MediaQueryData.fromWindow(ui.window);
     final size = m.size;
-    if (keyboardHeight < 100) return 0;
-    final s = parent.target?.canvasModel.scale ?? 1.0;
     final thresh = (size.height - keyboardHeight) / 2;
-    var h = (_y - getVisibleRect().top) * s; // local physical display height
+    final h = (_yForKeyboardAdjust - getVisibleRect().top) *
+        scale; // local physical display height
     return h - thresh;
   }
 
@@ -1902,17 +1907,16 @@ class CursorModel with ChangeNotifier {
       return false;
     }
     _lastIsBlocked = false;
-    moveLocal(x, y);
+    moveLocal(x, y, adjust: adjustForKeyboard());
     parent.target?.inputModel.moveMouse(_x, _y);
     return true;
   }
 
-  moveLocal(double x, double y) {
-    final scale = parent.target?.canvasModel.scale ?? 1.0;
+  moveLocal(double x, double y, {double adjust = 0}) {
     final xoffset = parent.target?.canvasModel.x ?? 0;
     final yoffset = parent.target?.canvasModel.y ?? 0;
     _x = (x - xoffset) / scale + _displayOriginX;
-    _y = (y - yoffset) / scale + _displayOriginY;
+    _y = (y - yoffset + adjust) / scale + _displayOriginY;
     notifyListeners();
   }
 
