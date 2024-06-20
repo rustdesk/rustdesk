@@ -10,14 +10,14 @@ env:
   RUST_VERSION: "1.75" # https://github.com/rustdesk/rustdesk/discussions/7503
   CARGO_NDK_VERSION: "3.1.2"
   LLVM_VERSION: "15.0.6"
-  FLUTTER_VERSION: "3.16.9"
+  FLUTTER_VERSION: "3.13.9"
   FLUTTER_RUST_BRIDGE_VERSION: "1.80.1"
   # for arm64 linux because official Dart SDK does not work
   FLUTTER_ELINUX_VERSION: "3.16.9"
   TAG_NAME: "nightly"
   VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
   # vcpkg version: 2024.03.25
-  VCPKG_COMMIT_ID: "a34c873a9717a888f58dc05268dea15592c2f0ff"
+  VCPKG_COMMIT_ID: "8eb57355a4ffb410a2e94c07b4dca2dffbee8e50"
   VERSION: "1.2.6"
   NDK_VERSION: "r26d"
   #signing keys env variable checks
