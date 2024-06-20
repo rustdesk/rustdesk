@@ -287,13 +287,17 @@ mod hw {
         let mut mid_data = Vec::new();
         let mut counter = 0;
         let mut time_sum = Duration::ZERO;
+        let start = std::time::Instant::now();
         loop {
             match c.frame(std::time::Duration::from_millis(30)) {
                 Ok(frame) => {
                     let tmp_timer = Instant::now();
                     let frame = frame.to(encoder.yuvfmt(), &mut yuv, &mut mid_data).unwrap();
                     let yuv = frame.yuv().unwrap();
-                    for ref frame in encoder.encode(&yuv).unwrap() {
+                    for ref frame in encoder
+                        .encode(&yuv, start.elapsed().as_millis() as _)
+                        .unwrap()
+                    {
                         size += frame.data.len();
 
                         h26xs.push(frame.data.to_vec());

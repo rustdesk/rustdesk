@@ -331,7 +331,7 @@ impl RecorderApi for HwRecorder {
             width: ctx.width,
             height: ctx.height,
             is265: ctx.format == CodecFormat::H265,
-            framerate: crate::hwcodec::DEFAULT_TIME_BASE[1] as _,
+            framerate: crate::hwcodec::DEFAULT_FPS as _,
         })
         .map_err(|_| anyhow!("Failed to create hardware muxer"))?;
         Ok(HwRecorder {
