@@ -144,9 +144,9 @@ jobs:
         run: |
           pushd /opt
           git clone https://github.com/rustdesk-org/rustdesk_thirdparty_lib.git --depth=1
-          ls -ls /opt/artifacts/vcpkg/installed/arm64-linux/lib/
+          ls -ls /opt/artifacts/vcpkg/installed/arm64-android/lib/
           cp -rf /opt/rustdesk_thirdparty_lib/vcpkg/* /opt/artifacts/vcpkg/
-          ls -ls /opt/artifacts/vcpkg/installed/arm64-linux/lib/
+          ls -ls /opt/artifacts/vcpkg/installed/arm64-android/lib/
 
       - name: Build rustdesk lib
         env:
