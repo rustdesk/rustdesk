@@ -1807,21 +1807,30 @@ class CursorModel with ChangeNotifier {
   // But we're now using a Container(child: Stack(...)) to wrap the KeyHelpTools,
   // and the listener is on the Container.
   Rect? _keyHelpToolsRect;
+  // `lastIsBlocked` is only used in common/widgets/remote_input.dart -> _RawTouchGestureDetectorRegionState -> onDoubleTap()
+  // Because onDoubleTap() doesn't have the `event` parameter, we can't get the touch event's position.
   bool _lastIsBlocked = false;
+  // This is the flag for the touch mode.
+  // See `moveTapDown` and `moveTapUp` for more details.
+  bool _inTapDown = false;
+  // This is current adjust value for the touch mode.
+  double _adjustForKeyboard = 0.0;
+  // This is the last two adjust value for the touch mode.
+  // This value is used to avoid the cursor jumping in one tapDown and tapUp event.
+  double _adjustForKeyboard2 = 0.0;
 
-  set keyHelpToolsRect(Rect? r) {
+  keyHelpToolsVisibilityChanged(Rect? r) {
     _keyHelpToolsRect = r;
     if (r == null) {
       _lastIsBlocked = false;
     } else {
-      // `lastIsBlocked` is only used in common/widgets/remote_input.dart -> _RawTouchGestureDetectorRegionState -> onDoubleTap()
-      // Because onDoubleTap() doesn't have the `event` parameter, we can't get the touch event's position.
-      //
       // Block the touch event is safe here.
-      // `lastIsBlocked` is only used in onDoubleTap() to block the touch event from the KeyHelpTools. 
+      // `lastIsBlocked` is only used in onDoubleTap() to block the touch event from the KeyHelpTools.
       // `lastIsBlocked` will be set when the cursor is moving or touch somewhere else.
       _lastIsBlocked = true;
     }
+    _adjustForKeyboard = 0.0;
+    _adjustForKeyboard2 = 0.0;
   }
 
   get lastIsBlocked => _lastIsBlocked;
@@ -1871,15 +1880,18 @@ class CursorModel with ChangeNotifier {
   }
 
   get keyboardHeight => MediaQueryData.fromWindow(ui.window).viewInsets.bottom;
+  get scale => parent.target?.canvasModel.scale ?? 1.0;
 
-  double adjustForKeyboard() {
+  get adjustForKeyboard => _adjustForKeyboard;
+  _updateAdjustForKeyboard() {
     final m = MediaQueryData.fromWindow(ui.window);
     final size = m.size;
     if (keyboardHeight < 100) return 0;
-    final s = parent.target?.canvasModel.scale ?? 1.0;
     final thresh = (size.height - keyboardHeight) / 2;
-    var h = (_y - getVisibleRect().top) * s; // local physical display height
-    return h - thresh;
+    final h =
+        (_y - getVisibleRect().top) * scale; // local physical display height
+    _adjustForKeyboard2 = _adjustForKeyboard;
+    _adjustForKeyboard = h - thresh;
   }
 
   // mobile Soft keyboard, block touch event from the KeyHelpTools
@@ -1896,23 +1908,64 @@ class CursorModel with ChangeNotifier {
     return false;
   }
 
+  // mobile touch mode
+  // We do not update adjustForKeyboard here.
+  // Because `moveTapUp` will also trigger `moveLocal` to update the cursor position.
+  // And `moveLocal` depends on `adjustForKeyboard`.
+  // If we update `adjustForKeyboard` here, the cursor will move to the wrong position.
+  //
+  // We can trigger the update in `moveTapUp` and use `_inTapDown` to control the update.
+  // If `_inTapDown` is timeout, we suppose the touch event is a long press event, and do not update `adjustForKeyboard`.
+  moveTapDown(double x, double y) {
+    if (shouldBlock(x, y)) {
+      _lastIsBlocked = true;
+      return false;
+    }
+    _lastIsBlocked = false;
+    moveLocal(x, y, adjust: _adjustForKeyboard);
+    parent.target?.inputModel.moveMouse(_x, _y);
+    _inTapDown = true;
+    Future.delayed(Duration(milliseconds: 500), () {
+      _inTapDown = false;
+    });
+    return true;
+  }
+
+  // mobile touch mode
+  moveTapUp(double x, double y) {
+    if (shouldBlock(x, y)) {
+      _lastIsBlocked = true;
+      return false;
+    }
+    _lastIsBlocked = false;
+
+    final wasInTapDown = _inTapDown;
+    if (_inTapDown) {
+      _updateAdjustForKeyboard();
+      _inTapDown = false;
+    }
+    parent.target?.inputModel.moveMouse(_x, _y);
+    moveLocal(x, y,
+        adjust: wasInTapDown ? _adjustForKeyboard2 : _adjustForKeyboard);
+    return true;
+  }
+
   move(double x, double y) {
     if (shouldBlock(x, y)) {
       _lastIsBlocked = true;
       return false;
     }
     _lastIsBlocked = false;
-    moveLocal(x, y);
     parent.target?.inputModel.moveMouse(_x, _y);
+    moveLocal(x, y, adjust: _adjustForKeyboard);
     return true;
   }
 
-  moveLocal(double x, double y) {
-    final scale = parent.target?.canvasModel.scale ?? 1.0;
+  moveLocal(double x, double y, {double adjust = 0}) {
     final xoffset = parent.target?.canvasModel.x ?? 0;
     final yoffset = parent.target?.canvasModel.y ?? 0;
     _x = (x - xoffset) / scale + _displayOriginX;
-    _y = (y - yoffset) / scale + _displayOriginY;
+    _y = (y - yoffset + adjust) / scale + _displayOriginY;
     notifyListeners();
   }
 
