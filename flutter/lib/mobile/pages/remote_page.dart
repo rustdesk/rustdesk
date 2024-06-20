@@ -717,8 +717,8 @@ class _KeyHelpToolsState extends State<KeyHelpTools> {
     if (renderObject is RenderBox) {
       final size = renderObject.size;
       Offset pos = renderObject.localToGlobal(Offset.zero);
-      gFFI.cursorModel.keyHelpToolsVisibilityChanged(
-          Rect.fromLTWH(pos.dx, pos.dy, size.width, size.height));
+      gFFI.cursorModel.keyHelpToolsRect =
+          Rect.fromLTWH(pos.dx, pos.dy, size.width, size.height);
     }
   }
 
@@ -730,7 +730,7 @@ class _KeyHelpToolsState extends State<KeyHelpTools> {
         inputModel.command;
 
     if (!_pin && !hasModifierOn && !widget.requestShow) {
-      gFFI.cursorModel.keyHelpToolsVisibilityChanged(null);
+      gFFI.cursorModel.keyHelpToolsRect = null;
       return Offstage();
     }
     final size = MediaQuery.of(context).size;
@@ -867,7 +867,7 @@ class ImagePaint extends StatelessWidget {
   Widget build(BuildContext context) {
     final m = Provider.of<ImageModel>(context);
     final c = Provider.of<CanvasModel>(context);
-    final adjust = gFFI.cursorModel.adjustForKeyboard;
+    final adjust = gFFI.cursorModel.adjustForKeyboard();
     var s = c.scale;
     return CustomPaint(
       painter: ImagePainter(
@@ -881,7 +881,7 @@ class CursorPaint extends StatelessWidget {
   Widget build(BuildContext context) {
     final m = Provider.of<CursorModel>(context);
     final c = Provider.of<CanvasModel>(context);
-    final adjust = gFFI.cursorModel.adjustForKeyboard;
+    final adjust = gFFI.cursorModel.adjustForKeyboard();
     var s = c.scale;
     double hotx = m.hotx;
     double hoty = m.hoty;
