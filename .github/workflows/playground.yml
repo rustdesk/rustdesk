@@ -43,21 +43,16 @@ jobs:
               target: aarch64-linux-android,
               os: ubuntu-20.04,
               openssl-arch: android-arm64,
-              ref: ebb14af488f31eb651a4c3c4c873aed7303cf53a # Dec 11
+              ref: ebb14af488f31eb651a4c3c4c873aed7303cf53a, # Dec 11
+              ndk: r25c
             }
           - {
               arch: aarch64,
               target: aarch64-linux-android,
               os: ubuntu-20.04,
               openssl-arch: android-arm64,
-              ref: e57d07f7d6cd216c14bd35ab5323fcdd371de464 # Nov 10
-            }
-          - {
-              arch: aarch64,
-              target: aarch64-linux-android,
-              os: ubuntu-20.04,
-              openssl-arch: android-arm64,
-              ref: bbd7cf306a1937ed5cefa486826b46743e0339f7 # Oct 13
+              ref: e57d07f7d6cd216c14bd35ab5323fcdd371de464, # Nov 10
+              ndk: r26d
             }
     steps:
       - name: Checkout source code
@@ -94,6 +89,7 @@ jobs:
                libxfixes-dev \
                llvm-10-dev \
                nasm \
+               yasm \
                ninja-build \
                openjdk-11-jdk-headless \
                pkg-config \
@@ -122,7 +118,7 @@ jobs:
       - uses: nttld/setup-ndk@v1
         id: setup-ndk
         with:
-          ndk-version: ${{ env.NDK_VERSION }}
+          ndk-version: ${{ matrix.job.ndk }}
           add-to-path: true
 
       - name: Setup vcpkg with Github Actions binary cache
@@ -193,7 +189,7 @@ jobs:
           esac
           popd
           mkdir -p signed-apk; pushd signed-apk
-          mv ../rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}.apk ./rustdesk-test-${{ matrix.job.ref }}.apk
+          mv ../rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}.apk ./rustdesk-test-${{ matrix.job.ref }}-${{ matrix.job.ndk }}.apk
 
       - uses: r0adkll/sign-android-release@v1
         name: Sign app APK
