@@ -1,4 +1,4 @@
-name: Flutter Nightly MacOS Arm64 Build
+name: playground
 
 on:
   #schedule:
@@ -102,7 +102,7 @@ jobs:
         run: |
           git config --global core.longpaths true
           cargo install flutter_rust_bridge_codegen --version ${{ env.FLUTTER_RUST_BRIDGE_VERSION }} --features "uuid"
-          Push-Location flutter ; flutter pub get ; Pop-Location
+          pushd flutter ; flutter pub get ; popd
           ~/.cargo/bin/flutter_rust_bridge_codegen --rust-input ./src/flutter_ffi.rs --dart-output ./flutter/lib/generated_bridge.dart
 
       - uses: nttld/setup-ndk@v1
