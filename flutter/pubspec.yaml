@@ -37,9 +37,9 @@ dependencies:
   package_info_plus: ^4.2.0
   url_launcher: ^6.2.1
   toggle_switch: ^2.1.0
-  dash_chat_2: ^0.0.21 
-    #git:
-    #  url: https://github.com/rustdesk-org/Dash-Chat-2
+  dash_chat_2:
+    git:
+      url: https://github.com/rustdesk-org/Dash-Chat-2
   draggable_float_widget: ^0.1.0
   settings_ui: ^2.0.2
   flutter_breadcrumb: ^1.0.1
