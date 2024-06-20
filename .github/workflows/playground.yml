@@ -43,21 +43,14 @@ jobs:
               target: aarch64-linux-android,
               os: ubuntu-20.04,
               openssl-arch: android-arm64,
-              ref: f6612d39bf0985b0c6d91557947bf8397dac114a # apr 30
+              ref: 0d75f71d16b9712b959423f6ae8fe5de7502e8f2 # mar 30
             }
           - {
               arch: aarch64,
               target: aarch64-linux-android,
               os: ubuntu-20.04,
               openssl-arch: android-arm64,
-              ref: 0d8fe1b7b8a3a688c0c445dedc706033565cfdcf # apr 20
-            }
-          - {
-              arch: aarch64,
-              target: aarch64-linux-android,
-              os: ubuntu-20.04,
-              openssl-arch: android-arm64,
-              ref: ac79c45529138e63cae893ea9dfacae3858477d3 # apr 10
+              ref: 0540e2cf6c4292e06320222acc6c05ef09e677e4 # mar 20
             }
           - {
               arch: aarch64,
