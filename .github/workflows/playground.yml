@@ -43,35 +43,21 @@ jobs:
               target: aarch64-linux-android,
               os: ubuntu-20.04,
               openssl-arch: android-arm64,
-              ref: 0d75f71d16b9712b959423f6ae8fe5de7502e8f2 # mar 30
+              ref: ebb14af488f31eb651a4c3c4c873aed7303cf53a # Dec 11
             }
           - {
               arch: aarch64,
               target: aarch64-linux-android,
               os: ubuntu-20.04,
               openssl-arch: android-arm64,
-              ref: 0540e2cf6c4292e06320222acc6c05ef09e677e4 # mar 20
+              ref: e57d07f7d6cd216c14bd35ab5323fcdd371de464 # Nov 10
             }
           - {
               arch: aarch64,
               target: aarch64-linux-android,
               os: ubuntu-20.04,
               openssl-arch: android-arm64,
-              ref: c0e5e78d2be72d44512e08692bbe0d8e973925e8 # mar 10
-            }
-          - {
-              arch: aarch64,
-              target: aarch64-linux-android,
-              os: ubuntu-20.04,
-              openssl-arch: android-arm64,
-              ref: 633076ddd468a20ac20ef12a7e06b9945ee4fb67 # feb 10
-            }
-          - {
-              arch: aarch64,
-              target: aarch64-linux-android,
-              os: ubuntu-20.04,
-              openssl-arch: android-arm64,
-              ref: ebfbc8ce61d2e1a6a5bf9576556e1e4b75f2f2c3 # jan 10
+              ref: bbd7cf306a1937ed5cefa486826b46743e0339f7 # Oct 13
             }
     steps:
       - name: Checkout source code
