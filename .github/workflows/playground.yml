@@ -196,7 +196,6 @@ jobs:
           BUILD_TOOLS_VERSION: "30.0.2"
 
       - name: Publish signed apk package
-        if: env.ANDROID_SIGNING_KEY != null && env.UPLOAD_ARTIFACT == 'true'
         uses: softprops/action-gh-release@v1
         with:
           prerelease: true
