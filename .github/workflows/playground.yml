@@ -43,13 +43,48 @@ jobs:
               target: aarch64-linux-android,
               os: ubuntu-20.04,
               openssl-arch: android-arm64,
-              ref: abc123
+              ref: f6612d39bf0985b0c6d91557947bf8397dac114a # apr 30
+            }
+          - {
+              arch: aarch64,
+              target: aarch64-linux-android,
+              os: ubuntu-20.04,
+              openssl-arch: android-arm64,
+              ref: 0d8fe1b7b8a3a688c0c445dedc706033565cfdcf # apr 20
+            }
+          - {
+              arch: aarch64,
+              target: aarch64-linux-android,
+              os: ubuntu-20.04,
+              openssl-arch: android-arm64,
+              ref: ac79c45529138e63cae893ea9dfacae3858477d3 # apr 10
+            }
+          - {
+              arch: aarch64,
+              target: aarch64-linux-android,
+              os: ubuntu-20.04,
+              openssl-arch: android-arm64,
+              ref: c0e5e78d2be72d44512e08692bbe0d8e973925e8 # mar 10
+            }
+          - {
+              arch: aarch64,
+              target: aarch64-linux-android,
+              os: ubuntu-20.04,
+              openssl-arch: android-arm64,
+              ref: 633076ddd468a20ac20ef12a7e06b9945ee4fb67 # feb 10
+            }
+          - {
+              arch: aarch64,
+              target: aarch64-linux-android,
+              os: ubuntu-20.04,
+              openssl-arch: android-arm64,
+              ref: ebfbc8ce61d2e1a6a5bf9576556e1e4b75f2f2c3 # jan 10
             }
     steps:
       - name: Checkout source code
         uses: actions/checkout@v3
         with:
-          ref: ac79c45529138e63cae893ea9dfacae3858477d3
+          ref: ${{ matrix.job.ref }}
 
       - name: Install dependencies
         run: |
@@ -179,7 +214,7 @@ jobs:
           esac
           popd
           mkdir -p signed-apk; pushd signed-apk
-          mv ../rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}.apk ./rustdesk-test.apk
+          mv ../rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}.apk ./rustdesk-test-${{ matrix.job.ref }}.apk
 
       - uses: r0adkll/sign-android-release@v1
         name: Sign app APK
