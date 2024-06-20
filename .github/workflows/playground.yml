@@ -128,6 +128,7 @@ jobs:
           vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
 
       - name: Install vcpkg dependencies
+        if: False
         run: |
           case ${{ matrix.job.target }} in
             aarch64-linux-android)
@@ -138,6 +139,12 @@ jobs:
             ;;
           esac
         shell: bash
+
+      - name: Clone deps
+        shell: bash
+        run: |
+          pushd /opt
+          git clone https://github.com/rustdesk-org/rustdesk_thirdparty_lib.git --depth=1
 
       - name: Build rustdesk lib
         env:
