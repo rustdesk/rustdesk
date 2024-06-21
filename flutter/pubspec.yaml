@@ -114,6 +114,9 @@ dev_dependencies:
   flutter_lints: ^2.0.2
   ffigen: ^8.0.2
 
+dependency_overrides:
+  intl: ^0.19.0
+  
 # rerun: flutter pub run flutter_launcher_icons
 flutter_icons:
   image_path: "../res/icon.png"

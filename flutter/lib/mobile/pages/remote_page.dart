@@ -930,7 +930,7 @@ void showOptions(
                   border: Border.all(color: Theme.of(context).hintColor),
                   borderRadius: BorderRadius.circular(2),
                   color: i == cur
-                      ? Theme.of(context).toggleableActiveColor.withOpacity(0.6)
+                      ? Theme.of(context).primaryColor.withOpacity(0.6)
                       : null),
               child: Center(
                   child: Text((i + 1).toString(),
