@@ -305,7 +305,7 @@ class _RawTouchGestureDetectorRegionState
       }
     } else {
       // mobile
-      ffi.canvasModel.updateScale(d.scale / _scale);
+      ffi.canvasModel.updateScale(d.scale / _scale, d.focalPoint);
       _scale = d.scale;
       ffi.canvasModel.panX(d.focalPointDelta.dx);
       ffi.canvasModel.panY(d.focalPointDelta.dy);
