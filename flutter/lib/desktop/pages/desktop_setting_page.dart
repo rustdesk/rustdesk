@@ -315,11 +315,11 @@ class _GeneralState extends State<_General> {
           children: [
             service(),
             theme(),
+            _Card(title: 'Language', children: [language()]),
             hwcodec(),
             audio(context),
             record(context),
             WaylandCard(),
-            _Card(title: 'Language', children: [language()]),
             other()
           ],
         ).marginOnly(bottom: _kListViewBottomMargin));
@@ -413,6 +413,12 @@ class _GeneralState extends State<_General> {
             'Check for software update on startup',
             kOptionEnableCheckUpdate,
             isServer: false,
+          ),
+        if (isWindows && !bind.isOutgoingOnly())
+          _OptionCheckBox(
+            context,
+            'Capture screen using DirectX',
+            kOptionDirectxCapture,
           )
       ],
     ];

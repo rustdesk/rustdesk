@@ -125,7 +125,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Good image quality", "Лучшее качество изображения"),
         ("Balanced", "Баланс между качеством и откликом"),
         ("Optimize reaction time", "Лучшее время отклика"),
-        ("Custom", "Заданное пользователем"), 
+        ("Custom", "Заданное пользователем"),
         ("Show remote cursor", "Показывать удалённый курсор"),
         ("Show quality monitor", "Показывать монитор качества"),
         ("Disable clipboard", "Отключить буфер обмена"),
@@ -621,5 +621,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Never", "Нет"),
         ("During controlled", "При управлении"),
         ("During service is on", "При запущенной службе"),
+        ("Capture screen using DirectX", ""),
     ].iter().cloned().collect();
 }

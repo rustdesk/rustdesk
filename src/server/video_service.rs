@@ -407,7 +407,10 @@ fn run(vs: VideoService) -> ResultType<()> {
     let display_idx = vs.idx;
     let sp = vs.sp;
     let mut c = get_capturer(display_idx, last_portable_service_running)?;
-
+    #[cfg(windows)]
+    if !scrap::codec::enable_directx_capture() && !c.is_gdi() {
+        c.set_gdi();
+    }
     let mut video_qos = VIDEO_QOS.lock().unwrap();
     video_qos.refresh(None);
     let mut spf;
