@@ -119,21 +119,17 @@ class AudioRecordHandle(private var context: Context, private var isVideoStart: 
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
             return false
         }
-        if (isVideoStart() || isAudioStart()) {
-            if (!switchToVoiceCall(mediaProjection)) {
-                return false
-            }
-        } else {
-            if (!switchToVoiceCall(mediaProjection)) {
-                return false
-            }
+        // No need to check if video or audio is started here.
+        if (!switchToVoiceCall(mediaProjection)) {
+            return false
         }
         return true
     }
 
     fun onVoiceCallClosed(mediaProjection: MediaProjection?): Boolean {
+        // Return true if `Build.VERSION.SDK_INT < Build.VERSION_CODES.R`, because is was not started.
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
-            return false
+            return true
         }
         if (isVideoStart()) {
             switchOutVoiceCall(mediaProjection)
