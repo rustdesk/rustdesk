@@ -116,7 +116,7 @@ class AudioRecordHandle(private var context: Context, private var isVideoStart: 
     }
 
     fun onVoiceCallStarted(mediaProjection: MediaProjection?): Boolean {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
+        if (!isSupportVoiceCall()) {
             return false
         }
         // No need to check if video or audio is started here.
@@ -127,8 +127,8 @@ class AudioRecordHandle(private var context: Context, private var isVideoStart: 
     }
 
     fun onVoiceCallClosed(mediaProjection: MediaProjection?): Boolean {
-        // Return true if `Build.VERSION.SDK_INT < Build.VERSION_CODES.R`, because is was not started.
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
+        // Return true if not supported, because is was not started.
+        if (!isSupportVoiceCall()) {
             return true
         }
         if (isVideoStart()) {
@@ -176,9 +176,6 @@ class AudioRecordHandle(private var context: Context, private var isVideoStart: 
     }
 
     fun tryReleaseAudio() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
-            return
-        }
         if (isAudioStart() || isVideoStart()) {
             return
         }
