@@ -69,8 +69,6 @@ class RawTouchGestureDetectorRegion extends StatefulWidget {
 class _RawTouchGestureDetectorRegionState
     extends State<RawTouchGestureDetectorRegion> {
   Offset _cacheLongPressPosition = Offset(0, 0);
-  // Timestamp of the last long press event.
-  int _cacheLongPressPositionTs = 0;
   double _mouseScrollIntegral = 0; // mouse scroll speed controller
   double _scale = 1;
 
@@ -153,7 +151,6 @@ class _RawTouchGestureDetectorRegionState
     if (handleTouch) {
       ffi.cursorModel.move(d.localPosition.dx, d.localPosition.dy);
       _cacheLongPressPosition = d.localPosition;
-      _cacheLongPressPositionTs = DateTime.now().millisecondsSinceEpoch;
     }
   }
 
@@ -235,16 +232,6 @@ class _RawTouchGestureDetectorRegionState
       }
       if (isDesktop) {
         ffi.cursorModel.trySetRemoteWindowCoords();
-      }
-      // Workaround for the issue that the first pan event is sent a long time after the start event.
-      // If the time interval between the start event and the first pan event is less than 500ms,
-      // we consider to use the long press position as the start position.
-      //
-      // TODO: We should find a better way to send the first pan event as soon as possible.
-      if (DateTime.now().millisecondsSinceEpoch - _cacheLongPressPositionTs <
-          500) {
-        ffi.cursorModel
-            .move(_cacheLongPressPosition.dx, _cacheLongPressPosition.dy);
       }
       inputModel.sendMouse('down', MouseButtons.left);
       ffi.cursorModel.move(d.localPosition.dx, d.localPosition.dy);
