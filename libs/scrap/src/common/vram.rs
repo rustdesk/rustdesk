@@ -354,7 +354,7 @@ impl VRamDecoder {
     }
 
     pub fn possible_available_without_check() -> (bool, bool) {
-        if !enable_vram_option() {
+        if !enable_vram_option(false) {
             return (false, false);
         }
         let v = crate::hwcodec::HwCodecConfig::get().vram_decode;

@@ -407,7 +407,11 @@ fn run(vs: VideoService) -> ResultType<()> {
     let display_idx = vs.idx;
     let sp = vs.sp;
     let mut c = get_capturer(display_idx, last_portable_service_running)?;
-
+    #[cfg(windows)]
+    if !scrap::codec::enable_directx_capture() && !c.is_gdi() {
+        log::info!("disable dxgi with option, fall back to gdi");
+        c.set_gdi();
+    }
     let mut video_qos = VIDEO_QOS.lock().unwrap();
     video_qos.refresh(None);
     let mut spf;
@@ -837,16 +841,33 @@ fn get_recorder(
 
 #[cfg(target_os = "android")]
 fn check_change_scale(hardware: bool) -> ResultType<()> {
+    use hbb_common::config::keys::OPTION_ENABLE_ANDRIOD_SOFTWARE_ENCODING_HALF_SCALE as SCALE_SOFT;
+
+    // isStart flag is set at the end of startCapture() in Android, wait it to be set.
+    for i in 0..6 {
+        if scrap::is_start() == Some(true) {
+            log::info!("start flag is set");
+            break;
+        }
+        log::info!("wait for start, {i}");
+        std::thread::sleep(Duration::from_millis(50));
+        if i == 5 {
+            log::error!("wait for start timeout");
+        }
+    }
     let screen_size = scrap::screen_size();
-    log::info!("hardware: {hardware}, screen_size: {screen_size:?}",);
+    let scale_soft = hbb_common::config::option2bool(SCALE_SOFT, &Config::get_option(SCALE_SOFT));
+    let half_scale = !hardware && scale_soft;
+    log::info!("hardware: {hardware}, scale_soft: {scale_soft}, screen_size: {screen_size:?}",);
     scrap::android::call_main_service_set_by_name(
-        "is_hardware_codec",
-        Some(hardware.to_string().as_str()),
+        "half_scale",
+        Some(half_scale.to_string().as_str()),
         None,
     )
     .ok();
     let old_scale = screen_size.2;
     let new_scale = scrap::screen_size().2;
+    log::info!("old_scale: {old_scale}, new_scale: {new_scale}");
     if old_scale != new_scale {
         log::info!("switch due to scale changed, {old_scale} -> {new_scale}");
         // switch is not a must, but it is better to do so.

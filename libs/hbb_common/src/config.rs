@@ -2084,6 +2084,9 @@ pub mod keys {
     pub const OPTION_KEY: &str = "key";
     pub const OPTION_PRESET_ADDRESS_BOOK_NAME: &str = "preset-address-book-name";
     pub const OPTION_PRESET_ADDRESS_BOOK_TAG: &str = "preset-address-book-tag";
+    pub const OPTION_ENABLE_DIRECTX_CAPTURE: &str = "enable-directx-capture";
+    pub const OPTION_ENABLE_ANDRIOD_SOFTWARE_ENCODING_HALF_SCALE: &str =
+        "enable-andriod-software-encoding-half-scale";
 
     // flutter local options
     pub const OPTION_FLUTTER_REMOTE_MENUBAR_STATE: &str = "remoteMenubarState";
@@ -2206,6 +2209,8 @@ pub mod keys {
         OPTION_KEY,
         OPTION_PRESET_ADDRESS_BOOK_NAME,
         OPTION_PRESET_ADDRESS_BOOK_TAG,
+        OPTION_ENABLE_DIRECTX_CAPTURE,
+        OPTION_ENABLE_ANDRIOD_SOFTWARE_ENCODING_HALF_SCALE,
     ];
 }
 
