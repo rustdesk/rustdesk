@@ -182,3 +182,8 @@ fn get_size() -> Option<(u16, u16, u16)> {
     }
     None
 }
+
+pub fn is_start() -> Option<bool> {
+    let res = call_main_service_get_by_name("is_start").ok()?;
+    Some(res == "true")
+}

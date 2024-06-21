@@ -491,3 +491,8 @@ pub trait GoogleImage {
 pub fn screen_size() -> (u16, u16, u16) {
     SCREEN_SIZE.lock().unwrap().clone()
 }
+
+#[cfg(target_os = "android")]
+pub fn is_start() -> Option<bool> {
+    android::is_start()
+}

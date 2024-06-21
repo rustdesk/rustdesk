@@ -21,10 +21,7 @@ use crate::{
 use hbb_common::{
     anyhow::anyhow,
     bail,
-    config::{
-        keys::{OPTION_ENABLE_DIRECTX_CAPTURE, OPTION_ENABLE_HWCODEC},
-        Config, PeerConfig,
-    },
+    config::{keys::OPTION_ENABLE_HWCODEC, option2bool, Config, PeerConfig},
     lazy_static, log,
     message_proto::{
         supported_decoding::PreferCodec, video_frame, Chroma, CodecAbility, EncodedVideoFrames,
@@ -840,14 +837,20 @@ impl Decoder {
 #[cfg(any(feature = "hwcodec", feature = "mediacodec"))]
 pub fn enable_hwcodec_option() -> bool {
     if cfg!(windows) || cfg!(target_os = "linux") || cfg!(target_os = "android") {
-        return Config::get_option(OPTION_ENABLE_HWCODEC) != "N";
+        return option2bool(
+            OPTION_ENABLE_HWCODEC,
+            &Config::get_option(OPTION_ENABLE_HWCODEC),
+        );
     }
     false
 }
 #[cfg(feature = "vram")]
 pub fn enable_vram_option(encode: bool) -> bool {
     if cfg!(windows) {
-        let enable = Config::get_option(OPTION_ENABLE_HWCODEC) != "N";
+        let enable = option2bool(
+            OPTION_ENABLE_HWCODEC,
+            &Config::get_option(OPTION_ENABLE_HWCODEC),
+        );
         if encode {
             enable && enable_directx_capture()
         } else {
@@ -860,7 +863,11 @@ pub fn enable_vram_option(encode: bool) -> bool {
 
 #[cfg(windows)]
 pub fn enable_directx_capture() -> bool {
-    Config::get_option(OPTION_ENABLE_DIRECTX_CAPTURE) != "N"
+    use hbb_common::config::keys::OPTION_ENABLE_DIRECTX_CAPTURE as OPTION;
+    option2bool(
+        OPTION,
+        &Config::get_option(hbb_common::config::keys::OPTION_ENABLE_DIRECTX_CAPTURE),
+    )
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
