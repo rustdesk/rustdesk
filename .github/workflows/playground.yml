@@ -43,7 +43,7 @@ jobs:
               target: aarch64-linux-android,
               os: ubuntu-20.04,
               openssl-arch: android-arm64,
-              ref: 30bd4e1cef96c492d0cf541a59fb976e24dbbb54, # latest
+              ref: 3244395bfb37725eba6859302a17a2b4bf36dffb, # latest
             }
     steps:
       - name: Checkout source code
