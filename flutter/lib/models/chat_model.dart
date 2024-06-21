@@ -533,11 +533,12 @@ class ChatModel with ChangeNotifier {
   }
 
   void onVoiceCallClosed(String reason) {
-    if (_voiceCallStatus.value != VoiceCallStatus.notStarted) {
-      _voiceCallStatus.value = VoiceCallStatus.notStarted;
-      if (isAndroid) {
-        parent.target?.invokeMethod("on_voice_call_closed");
-      }
+    if (_voiceCallStatus.value == VoiceCallStatus.notStarted) {
+      return;
+    }
+    _voiceCallStatus.value = VoiceCallStatus.notStarted;
+    if (isAndroid) {
+      parent.target?.invokeMethod("on_voice_call_closed");
     }
   }
 
