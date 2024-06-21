@@ -1418,61 +1418,61 @@ jobs:
   #         files: |
   #           rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}-sciter.deb
 
-  build-appimage:
-    name: Build appimage ${{ matrix.job.target }}
-    needs: [build-rustdesk-linux]
-    runs-on: ubuntu-20.04
-    if: ${{ inputs.upload-artifact }}
-    strategy:
-      fail-fast: false
-      matrix:
-        job:
-          - {
-              target: x86_64-unknown-linux-gnu,
-              arch: x86_64,
-            }
-          - {
-              target: aarch64-unknown-linux-gnu,
-              arch: aarch64,
-            }
-    steps:
-      - name: Checkout source code
-        uses: actions/checkout@v3
+  # build-appimage:
+  #   name: Build appimage ${{ matrix.job.target }}
+  #   needs: [build-rustdesk-linux]
+  #   runs-on: ubuntu-20.04
+  #   if: ${{ inputs.upload-artifact }}
+  #   strategy:
+  #     fail-fast: false
+  #     matrix:
+  #       job:
+  #         - {
+  #             target: x86_64-unknown-linux-gnu,
+  #             arch: x86_64,
+  #           }
+  #         - {
+  #             target: aarch64-unknown-linux-gnu,
+  #             arch: aarch64,
+  #           }
+  #   steps:
+  #     - name: Checkout source code
+  #       uses: actions/checkout@v3
 
-      - name: Download Binary
-        uses: actions/download-artifact@master
-        with:
-          name: rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}.deb
-          path: .
+  #     - name: Download Binary
+  #       uses: actions/download-artifact@master
+  #       with:
+  #         name: rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}.deb
+  #         path: .
 
-      - name: Rename Binary
-        run: |
-          mv rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}.deb appimage/rustdesk.deb
+  #     - name: Rename Binary
+  #       run: |
+  #         mv rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}.deb appimage/rustdesk.deb
 
-      - name: Build appimage package
-        shell: bash
-        run: |
-          # install libarchive-tools for bsdtar command used in AppImageBuilder.yml
-          sudo apt-get update -y
-          sudo apt-get install -y libarchive-tools
-          # set-up appimage-builder
-          pushd /tmp
-          wget -O appimage-builder-x86_64.AppImage https://github.com/AppImageCrafters/appimage-builder/releases/download/v1.1.0/appimage-builder-1.1.0-x86_64.AppImage
-          chmod +x appimage-builder-x86_64.AppImage
-          sudo mv appimage-builder-x86_64.AppImage /usr/local/bin/appimage-builder
-          popd
-          # run appimage-builder
-          pushd appimage
-          sudo appimage-builder --skip-tests --recipe ./AppImageBuilder-${{ matrix.job.arch }}.yml
+  #     - name: Build appimage package
+  #       shell: bash
+  #       run: |
+  #         # install libarchive-tools for bsdtar command used in AppImageBuilder.yml
+  #         sudo apt-get update -y
+  #         sudo apt-get install -y libarchive-tools
+  #         # set-up appimage-builder
+  #         pushd /tmp
+  #         wget -O appimage-builder-x86_64.AppImage https://github.com/AppImageCrafters/appimage-builder/releases/download/v1.1.0/appimage-builder-1.1.0-x86_64.AppImage
+  #         chmod +x appimage-builder-x86_64.AppImage
+  #         sudo mv appimage-builder-x86_64.AppImage /usr/local/bin/appimage-builder
+  #         popd
+  #         # run appimage-builder
+  #         pushd appimage
+  #         sudo appimage-builder --skip-tests --recipe ./AppImageBuilder-${{ matrix.job.arch }}.yml
 
-      - name: Publish appimage package
-        if: env.UPLOAD_ARTIFACT == 'true'
-        uses: softprops/action-gh-release@v1
-        with:
-          prerelease: true
-          tag_name: ${{ env.TAG_NAME }}
-          files: |
-            ./appimage/rustdesk-${{ env.VERSION }}-*.AppImage
+  #     - name: Publish appimage package
+  #       if: env.UPLOAD_ARTIFACT == 'true'
+  #       uses: softprops/action-gh-release@v1
+  #       with:
+  #         prerelease: true
+  #         tag_name: ${{ env.TAG_NAME }}
+  #         files: |
+  #           ./appimage/rustdesk-${{ env.VERSION }}-*.AppImage
 
   build-flatpak:
     name: Build flatpak ${{ matrix.job.target }}
