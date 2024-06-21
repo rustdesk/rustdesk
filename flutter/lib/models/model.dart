@@ -1576,22 +1576,21 @@ class CanvasModel with ChangeNotifier {
     notifyListeners();
   }
 
-  updateScale(double v) {
+  updateScale(double v, Offset focalPoint) {
     if (parent.target?.imageModel.image == null) return;
-    final offset = parent.target?.cursorModel.offset ?? const Offset(0, 0);
-    var r = parent.target?.cursorModel.getVisibleRect() ?? Rect.zero;
-    final px0 = (offset.dx - r.left) * _scale;
-    final py0 = (offset.dy - r.top) * _scale;
+    final s = _scale;
     _scale *= v;
     final maxs = parent.target?.imageModel.maxScale ?? 1;
     final mins = parent.target?.imageModel.minScale ?? 1;
     if (_scale > maxs) _scale = maxs;
     if (_scale < mins) _scale = mins;
-    r = parent.target?.cursorModel.getVisibleRect() ?? Rect.zero;
-    final px1 = (offset.dx - r.left) * _scale;
-    final py1 = (offset.dy - r.top) * _scale;
-    _x -= px1 - px0;
-    _y -= py1 - py0;
+    // (focalPoint.dx - _x_1) / s1 + displayOriginX = (focalPoint.dx - _x_2) / s2 + displayOriginX
+    // _x_2 = focalPoint.dx - (focalPoint.dx - _x_1) / s1 * s2
+    _x = focalPoint.dx - (focalPoint.dx - _x) / s * _scale;
+    final adjustForKeyboard = parent.target?.cursorModel.adjustForKeyboard() ?? 0.0;
+    // (focalPoint.dy - _y_1 + adjust) / s1 + displayOriginY = (focalPoint.dy - _y_2 + adjust) / s2 + displayOriginY
+    // _y_2 = focalPoint.dy + adjust - (focalPoint.dy - _y_1 + adjust) / s1 * s2
+    _y = focalPoint.dy + adjustForKeyboard - (focalPoint.dy - _y + adjustForKeyboard) / s * _scale;
     notifyListeners();
   }
 
