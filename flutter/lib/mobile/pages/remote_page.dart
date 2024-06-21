@@ -105,11 +105,10 @@ class _RemotePageState extends State<RemotePage> {
     }
     await keyboardSubscription.cancel();
     removeSharedStates(widget.id);
-    if (isAndroid) {
-      // Only one client is considered here for now.
-      // TODO: take into account the case where there are multiple clients
-      gFFI.invokeMethod("on_voice_call_closed");
-    }
+    // `on_voice_call_closed` should be called when the connection is ended.
+    // The inner logic of `on_voice_call_closed` will check if the voice call is active.
+    // Only one client is considered here for now.
+    gFFI.chatModel.onVoiceCallClosed("End connetion");
   }
 
   // to-do: It should be better to use transparent color instead of the bgColor.

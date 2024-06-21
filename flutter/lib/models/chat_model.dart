@@ -535,6 +535,8 @@ class ChatModel with ChangeNotifier {
   void onVoiceCallClosed(String reason) {
     _voiceCallStatus.value = VoiceCallStatus.notStarted;
     if (isAndroid) {
+      // We can always invoke "on_voice_call_closed"
+      // no matter if the `_voiceCallStatus` was `VoiceCallStatus.notStarted` or not.
       parent.target?.invokeMethod("on_voice_call_closed");
     }
   }
