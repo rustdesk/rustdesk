@@ -917,10 +917,12 @@ class FfiModel with ChangeNotifier {
       if (parent.target?.connType == ConnType.defaultConn &&
           parent.target != null &&
           parent.target!.ffiModel.permissions['keyboard'] != false) {
-        Timer(
-            Duration(milliseconds: delayMSecs),
-            () => parent.target!.dialogManager
-                .showMobileActionsOverlay(ffi: parent.target!));
+        Timer(Duration(milliseconds: delayMSecs), () {
+          if (parent.target!.dialogManager.mobileActionsOverlayVisible.isTrue) {
+            parent.target!.dialogManager
+                .showMobileActionsOverlay(ffi: parent.target!);
+          }
+        });
       }
     }
   }
@@ -1587,10 +1589,13 @@ class CanvasModel with ChangeNotifier {
     // (focalPoint.dx - _x_1) / s1 + displayOriginX = (focalPoint.dx - _x_2) / s2 + displayOriginX
     // _x_2 = focalPoint.dx - (focalPoint.dx - _x_1) / s1 * s2
     _x = focalPoint.dx - (focalPoint.dx - _x) / s * _scale;
-    final adjustForKeyboard = parent.target?.cursorModel.adjustForKeyboard() ?? 0.0;
+    final adjustForKeyboard =
+        parent.target?.cursorModel.adjustForKeyboard() ?? 0.0;
     // (focalPoint.dy - _y_1 + adjust) / s1 + displayOriginY = (focalPoint.dy - _y_2 + adjust) / s2 + displayOriginY
     // _y_2 = focalPoint.dy + adjust - (focalPoint.dy - _y_1 + adjust) / s1 * s2
-    _y = focalPoint.dy + adjustForKeyboard - (focalPoint.dy - _y + adjustForKeyboard) / s * _scale;
+    _y = focalPoint.dy +
+        adjustForKeyboard -
+        (focalPoint.dy - _y + adjustForKeyboard) / s * _scale;
     notifyListeners();
   }
 

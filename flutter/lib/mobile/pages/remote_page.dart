@@ -82,13 +82,14 @@ class _RemotePageState extends State<RemotePage> {
         .changeCurrentKey(MessageKey(widget.id, ChatModel.clientModeID));
     gFFI.chatModel.voiceCallStatus.value = VoiceCallStatus.notStarted;
     _blockableOverlayState.applyFfi(gFFI);
+    gFFI.dialogManager.loadMobileActionsOverlayVisible();
   }
 
   @override
   Future<void> dispose() async {
     // https://github.com/flutter/flutter/issues/64935
     super.dispose();
-    gFFI.dialogManager.hideMobileActionsOverlay();
+    gFFI.dialogManager.hideMobileActionsOverlay(store: false);
     gFFI.inputModel.listenToMouse(false);
     gFFI.imageModel.disposeImage();
     gFFI.cursorModel.disposeImages();
