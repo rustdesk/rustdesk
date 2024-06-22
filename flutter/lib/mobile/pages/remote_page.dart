@@ -418,17 +418,21 @@ class _RemotePageState extends State<RemotePage> {
                   (isWeb
                       ? []
                       : <Widget>[
-                          IconButton(
-                            color: Colors.white,
-                            icon: isAndroid
-                                ? SvgPicture.asset('assets/chat.svg',
-                                    colorFilter: ColorFilter.mode(
-                                        Colors.white, BlendMode.srcIn))
-                                : Icon(Icons.message),
-                            onPressed: () => isAndroid
-                                ? showChatOptions(widget.id)
-                                : onPressedTextChat(widget.id),
-                          )
+                          futureBuilder(
+                              future: gFFI.invokeMethod(
+                                  "get_value", "KEY_IS_SUPPORT_VOICE_CALL"),
+                              hasData: (isSupportVoiceCall) => IconButton(
+                                    color: Colors.white,
+                                    icon: isAndroid && isSupportVoiceCall
+                                        ? SvgPicture.asset('assets/chat.svg',
+                                            colorFilter: ColorFilter.mode(
+                                                Colors.white, BlendMode.srcIn))
+                                        : Icon(Icons.message),
+                                    onPressed: () =>
+                                        isAndroid && isSupportVoiceCall
+                                            ? showChatOptions(widget.id)
+                                            : onPressedTextChat(widget.id),
+                                  ))
                         ]) +
                   [
                     IconButton(

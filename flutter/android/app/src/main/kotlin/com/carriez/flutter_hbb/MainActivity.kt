@@ -233,6 +233,17 @@ class MainActivity : FlutterActivity() {
                         result.success(false)
                     }
                 }
+                GET_VALUE -> {
+                    if (call.arguments is String) {
+                        if (call.arguments == KEY_IS_SUPPORT_VOICE_CALL) {
+                            result.success(isSupportVoiceCall())
+                        } else {
+                            result.error("-1", "No such key", null)
+                        }
+                    } else {
+                        result.success(null)
+                    }
+                }
                 "on_voice_call_started" -> {
                     onVoiceCallStarted()
                 }
