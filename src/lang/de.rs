@@ -573,7 +573,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("switch_display_elevated_connections_tip", "Das Umschalten auf einen sekundären Bildschirm wird mit erhöhten Rechten nicht unterstützt, wenn mehrere Verbindungen bestehen. Bitte versuchen Sie es nach der Installation erneut, wenn Sie mehrere Bildschirme steuern möchten."),
         ("input_source_1_tip", "Eingangsquelle 1"),
         ("input_source_2_tip", "Eingangsquelle 2"),
-        ("capture_display_elevated_connections_tip", "Das Erfassen mehrerer Bildschirme wird im erweiterten Benutzermodus nicht unterstützt. Bitte versuchen Sie es nach der Installation erneut, wenn Sie mehrere Bildschirme steuern möchten."),
+        ("capture_display_elevated_connections_tip", "Die Aufnahme von mehreren Bildschirmen wird im erweiterten Benutzermodus nicht unterstützt. Bitte versuchen Sie es nach der Installation erneut, wenn Sie mehrere Bildschirme steuern möchten."),
         ("Swap control-command key", "Steuerungs- und Befehlstasten tauschen"),
         ("swap-left-right-mouse", "Linke und rechte Maustaste tauschen"),
         ("2FA code", "2FA-Code"),
@@ -621,6 +621,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Never", "Niemals"),
         ("During controlled", "Wenn kontrolliert"),
         ("During service is on", "Wenn der Dienst läuft"),
-        ("Capture screen using DirectX", ""),
+        ("Capture screen using DirectX", "Bildschirm mit DirectX aufnehmen"),
     ].iter().cloned().collect();
 }
