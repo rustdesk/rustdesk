@@ -1573,6 +1573,7 @@ jobs:
             flatpak/rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}.flatpak
 
   build-rustdesk-web:
+    if: False
     name: build-rustdesk-web
     runs-on: ubuntu-20.04
     strategy:
