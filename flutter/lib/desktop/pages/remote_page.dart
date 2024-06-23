@@ -328,10 +328,8 @@ class _RemotePageState extends State<RemotePage>
                                   .mobileActionsOverlayVisible.isFalse,
                               child: Overlay(initialEntries: [
                                 makeMobileActionsOverlayEntry(
-                                  () => _ffi
-                                      .dialogManager
-                                      .mobileActionsOverlayVisible
-                                      .value = false,
+                                  () => _ffi.dialogManager
+                                      .setMobileActionsOverlayVisible(false),
                                   ffi: _ffi,
                                 )
                               ]),
