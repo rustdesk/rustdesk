@@ -569,8 +569,8 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
           SettingsTile(
             title: Text(translate(
                 Theme.of(context).brightness == Brightness.light
-                    ? 'Dark Theme'
-                    : 'Light Theme')),
+                    ? 'Light Theme'
+                    : 'Dark Theme')),
             leading: Icon(Theme.of(context).brightness == Brightness.light
                 ? Icons.dark_mode
                 : Icons.light_mode),
