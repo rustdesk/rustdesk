@@ -1692,7 +1692,7 @@ pub async fn io_loop<T: InvokeUiSession>(handler: Session<T>, round: u32) {
     let frame_count_map: Arc<RwLock<HashMap<usize, usize>>> = Default::default();
     let frame_count_map_cl = frame_count_map.clone();
     let ui_handler = handler.ui_handler.clone();
-    let (video_sender, audio_sender, video_queue_map, decode_fps_map, chroma) =
+    let (video_sender, audio_sender, video_queue_map, decode_fps, chroma) =
         start_video_audio_threads(
             handler.clone(),
             move |display: usize,
@@ -1720,7 +1720,7 @@ pub async fn io_loop<T: InvokeUiSession>(handler: Session<T>, round: u32) {
         receiver,
         sender,
         frame_count_map,
-        decode_fps_map,
+        decode_fps,
         chroma,
     );
     remote.io_loop(&key, &token, round).await;
