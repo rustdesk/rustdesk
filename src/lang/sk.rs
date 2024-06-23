@@ -621,6 +621,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Never", "Nikdy"),
         ("During controlled", "Počas kontrolovaného"),
         ("During service is on", "Počas služby je v prevádzke"),
-        ("Capture screen using DirectX", ""),
+        ("Capture screen using DirectX", "Snímanie obrazovky pomocou DirectX"),
     ].iter().cloned().collect();
 }
