@@ -579,8 +579,8 @@ class _MobileActionMenu extends StatelessWidget {
     return Obx(() => _IconMenuButton(
           assetName: 'assets/actions_mobile.svg',
           tooltip: 'Mobile Actions',
-          onPressed: () =>
-              ffi.dialogManager.mobileActionsOverlayVisible.toggle(),
+          onPressed: () => ffi.dialogManager.setMobileActionsOverlayVisible(
+              !ffi.dialogManager.mobileActionsOverlayVisible.value),
           color: ffi.dialogManager.mobileActionsOverlayVisible.isTrue
               ? _ToolbarTheme.blueColor
               : _ToolbarTheme.inactiveColor,
