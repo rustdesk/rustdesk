@@ -71,8 +71,8 @@ pub struct Remote<T: InvokeUiSession> {
     frame_count_map: Arc<RwLock<HashMap<usize, usize>>>,
     video_format: CodecFormat,
     elevation_requested: bool,
-    fps_control_map: HashMap<usize, FpsControl>,
-    decode_fps_map: Arc<RwLock<HashMap<usize, usize>>>,
+    fps_control: FpsControl,
+    decode_fps: Arc<RwLock<Option<usize>>>,
     chroma: Arc<RwLock<Option<Chroma>>>,
 }
 
@@ -85,7 +85,7 @@ impl<T: InvokeUiSession> Remote<T> {
         receiver: mpsc::UnboundedReceiver<Data>,
         sender: mpsc::UnboundedSender<Data>,
         frame_count_map: Arc<RwLock<HashMap<usize, usize>>>,
-        decode_fps: Arc<RwLock<HashMap<usize, usize>>>,
+        decode_fps: Arc<RwLock<Option<usize>>>,
         chroma: Arc<RwLock<Option<Chroma>>>,
     ) -> Self {
         Self {
@@ -110,8 +110,8 @@ impl<T: InvokeUiSession> Remote<T> {
             stop_voice_call_sender: None,
             voice_call_request_timestamp: None,
             elevation_requested: false,
-            fps_control_map: Default::default(),
-            decode_fps_map: decode_fps,
+            fps_control: Default::default(),
+            decode_fps,
             chroma,
         }
     }
@@ -971,69 +971,84 @@ impl<T: InvokeUiSession> Remote<T> {
         if custom_fps < 5 || custom_fps > 120 {
             custom_fps = 30;
         }
-        let decode_fps_read = self.decode_fps_map.read().unwrap();
-        for (display, decode_fps) in decode_fps_read.iter() {
-            let video_queue_map_read = self.video_queue_map.read().unwrap();
-            let Some(video_queue) = video_queue_map_read.get(display) else {
-                continue;
-            };
-
-            if !self.fps_control_map.contains_key(display) {
-                self.fps_control_map.insert(*display, FpsControl::default());
+        let ctl = &mut self.fps_control;
+        let len = self
+            .video_queue_map
+            .read()
+            .unwrap()
+            .iter()
+            .map(|v| v.1.len())
+            .max()
+            .unwrap_or_default();
+        let decode_fps = self.decode_fps.read().unwrap().clone();
+        let Some(mut decode_fps) = decode_fps else {
+            return;
+        };
+        if cfg!(feature = "flutter") {
+            let active_displays = ctl
+                .last_active_time
+                .iter()
+                .filter(|t| t.1.elapsed().as_secs() < 5)
+                .count();
+            if active_displays > 1 {
+                decode_fps = decode_fps / active_displays;
             }
-            let Some(ctl) = self.fps_control_map.get_mut(display) else {
-                return;
-            };
+        }
+        let mut limited_fps = if direct {
+            decode_fps * 9 / 10 // 30 got 27
+        } else {
+            decode_fps * 4 / 5 // 30 got 24
+        };
+        if limited_fps > custom_fps {
+            limited_fps = custom_fps;
+        }
+        let should_decrease = (len > 1
+            && ctl.last_auto_fps.clone().unwrap_or(custom_fps as _) > limited_fps)
+            || len > std::cmp::max(1, limited_fps / 2);
 
-            let len = video_queue.len();
-            let decode_fps = *decode_fps;
-            let mut limited_fps = if direct {
-                decode_fps * 9 / 10 // 30 got 27
-            } else {
-                decode_fps * 4 / 5 // 30 got 24
-            };
-            if limited_fps > custom_fps {
-                limited_fps = custom_fps;
-            }
-            let should_decrease = len > 1 && ctl.last_auto_fps.unwrap_or(0) > limited_fps as i32;
-
-            // increase judgement
-            if len <= 1 {
+        // increase judgement
+        if len <= 1 {
+            if ctl.idle_counter < usize::MAX {
                 ctl.idle_counter += 1;
-            } else {
-                ctl.idle_counter = 0;
             }
-            let mut should_increase = false;
-            if let Some(last_auto_fps) = ctl.last_auto_fps {
-                // ever set
-                if last_auto_fps + 3 <= limited_fps as i32 && ctl.idle_counter > 3 {
-                    // limited_fps is 5 larger than last set, and idle time is more than 3 seconds
-                    should_increase = true;
-                }
+        } else {
+            ctl.idle_counter = 0;
+        }
+        let mut should_increase = false;
+        if let Some(last_auto_fps) = ctl.last_auto_fps.clone() {
+            // ever set
+            if last_auto_fps + 3 <= limited_fps && ctl.idle_counter > 3 {
+                // limited_fps is 3 larger than last set, and idle time is more than 3 seconds
+                should_increase = true;
             }
-            if ctl.last_auto_fps.is_none() || should_decrease || should_increase {
-                // limited_fps to ensure decoding is faster than encoding
-                let mut auto_fps = limited_fps as i32;
-                if auto_fps < 1 {
-                    auto_fps = 1;
-                }
-                // send custom fps
-                let mut misc = Misc::new();
-                misc.set_option(OptionMessage {
-                    custom_fps: auto_fps,
-                    ..Default::default()
-                });
-                let mut msg = Message::new();
-                msg.set_misc(misc);
-                self.sender.send(Data::Message(msg)).ok();
-                ctl.last_queue_size = len;
-                ctl.last_auto_fps = Some(auto_fps);
+        }
+        if ctl.last_auto_fps.is_none() || should_decrease || should_increase {
+            // limited_fps to ensure decoding is faster than encoding
+            let mut auto_fps = limited_fps;
+            if should_decrease && limited_fps < len {
+                auto_fps = limited_fps / 2;
             }
-            // send refresh
+            if auto_fps < 1 {
+                auto_fps = 1;
+            }
+            let mut misc = Misc::new();
+            misc.set_option(OptionMessage {
+                custom_fps: auto_fps as _,
+                ..Default::default()
+            });
+            let mut msg = Message::new();
+            msg.set_misc(misc);
+            self.sender.send(Data::Message(msg)).ok();
+            log::info!("Set fps to {}", auto_fps);
+            ctl.last_queue_size = len;
+            ctl.last_auto_fps = Some(auto_fps);
+        }
+        // send refresh
+        for (display, video_queue) in self.video_queue_map.read().unwrap().iter() {
             let tolerable = std::cmp::min(decode_fps, video_queue.capacity() / 2);
-            if ctl.refresh_times < 10 // enough
-                && (len > tolerable
-                        && (ctl.refresh_times == 0 || ctl.last_refresh_instant.elapsed().as_secs() > 10))
+            if ctl.refresh_times < 20 // enough
+                    && (len > tolerable
+                            && (ctl.refresh_times == 0 || ctl.last_refresh_instant.elapsed().as_secs() > 10))
             {
                 // Refresh causes client set_display, left frames cause flickering.
                 while let Some(_) = video_queue.pop() {}
@@ -1086,6 +1101,9 @@ impl<T: InvokeUiSession> Remote<T> {
                         }
                         self.video_sender.send(MediaData::VideoQueue(display)).ok();
                     }
+                    self.fps_control
+                        .last_active_time
+                        .insert(display, Instant::now());
                 }
                 Some(message::Union::Hash(hash)) => {
                     self.handler
@@ -1840,8 +1858,9 @@ struct FpsControl {
     last_queue_size: usize,
     refresh_times: usize,
     last_refresh_instant: Instant,
-    last_auto_fps: Option<i32>,
+    last_auto_fps: Option<usize>,
     idle_counter: usize,
+    last_active_time: HashMap<usize, Instant>,
 }
 
 impl Default for FpsControl {
@@ -1850,8 +1869,9 @@ impl Default for FpsControl {
             last_queue_size: Default::default(),
             refresh_times: Default::default(),
             last_refresh_instant: Instant::now(),
-            last_auto_fps: None,
+            last_auto_fps: Default::default(),
             idle_counter: 0,
+            last_active_time: Default::default(),
         }
     }
 }
