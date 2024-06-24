@@ -569,9 +569,11 @@ class _RemotePageState extends State<RemotePage> {
           child: Text(translate(label), style: labelStyle),
           trailingIcon: Transform.scale(
             scale: (isDesktop || isWebDesktop) ? 0.8 : 1,
-            child: IconButton(
-              onPressed: onPressed,
-              icon: icon,
+            child: IgnorePointer(
+              child: IconButton(
+                onPressed: null,
+                icon: icon,
+              ),
             ),
           ),
           onPressed: onPressed,
