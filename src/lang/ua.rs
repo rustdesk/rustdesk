@@ -617,10 +617,10 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Use texture rendering", "Використовувати візуалізацію текстур"),
         ("Floating window", "Рухоме вікно"),
         ("floating_window_tip", "Допомагає зберегти фонову службу Rustdesk"),
-        ("Keep screen on", ""),
-        ("Never", ""),
-        ("During controlled", ""),
-        ("During service is on", ""),
-        ("Capture screen using DirectX", ""),
+        ("Keep screen on", "Тримати екран увімкненим"),
+        ("Never", "Ніколи"),
+        ("During controlled", "Коли керується"),
+        ("During service is on", "Коли запущена служба"),
+        ("Capture screen using DirectX", "Захоплення екрана з використанням DirectX"),
     ].iter().cloned().collect();
 }
