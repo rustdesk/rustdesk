@@ -1048,7 +1048,7 @@ impl<T: InvokeUiSession> Remote<T> {
         for (display, video_queue) in self.video_queue_map.read().unwrap().iter() {
             let tolerable = std::cmp::min(decode_fps, video_queue.capacity() / 2);
             if ctl.refresh_times < 20 // enough
-                    && (len > tolerable
+                    && (video_queue.len() > tolerable
                             && (ctl.refresh_times == 0 || ctl.last_refresh_instant.elapsed().as_secs() > 10))
             {
                 // Refresh causes client set_display, left frames cause flickering.
