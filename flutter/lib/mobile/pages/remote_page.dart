@@ -55,6 +55,9 @@ class _RemotePageState extends State<RemotePage> {
   InputModel get inputModel => gFFI.inputModel;
   SessionID get sessionId => gFFI.sessionId;
 
+  final TextEditingController _textController =
+      TextEditingController(text: initText);
+
   @override
   void initState() {
     super.initState();
@@ -145,37 +148,59 @@ class _RemotePageState extends State<RemotePage> {
     setState(() {});
   }
 
-  // handle mobile virtual keyboard
-  void handleSoftKeyboardInput(String newValue) {
+  void _handleIOSSoftKeyboardInput(String newValue) {
     var oldValue = _value;
     _value = newValue;
-    if (isIOS) {
-      var i = newValue.length - 1;
-      for (; i >= 0 && newValue[i] != '\1'; --i) {}
-      var j = oldValue.length - 1;
-      for (; j >= 0 && oldValue[j] != '\1'; --j) {}
-      if (i < j) j = i;
-      newValue = newValue.substring(j + 1);
-      oldValue = oldValue.substring(j + 1);
-      var common = 0;
-      for (;
-          common < oldValue.length &&
-              common < newValue.length &&
-              newValue[common] == oldValue[common];
-          ++common) {}
-      for (i = 0; i < oldValue.length - common; ++i) {
-        inputModel.inputKey('VK_BACK');
-      }
-      if (newValue.length > common) {
-        var s = newValue.substring(common);
-        if (s.length > 1) {
-          bind.sessionInputString(sessionId: sessionId, value: s);
-        } else {
-          inputChar(s);
-        }
-      }
-      return;
+    var i = newValue.length - 1;
+    for (; i >= 0 && newValue[i] != '\1'; --i) {}
+    var j = oldValue.length - 1;
+    for (; j >= 0 && oldValue[j] != '\1'; --j) {}
+    if (i < j) j = i;
+    var subNewValue = newValue.substring(j + 1);
+    var subOldValue = oldValue.substring(j + 1);
+
+    // get common prefix of subNewValue and subOldValue
+    var common = 0;
+    for (;
+        common < subOldValue.length &&
+            common < subNewValue.length &&
+            subNewValue[common] == subOldValue[common];
+        ++common) {}
+
+    // get newStr from subNewValue
+    var newStr = "";
+    if (subNewValue.length > common) {
+      newStr = subNewValue.substring(common);
     }
+
+    // Set the value to the old value and early return if is still composing. (1 && 2)
+    // 1. The composing range is valid
+    // 2. The new string is shorter than the composing range.
+    if (_textController.value.isComposingRangeValid) {
+      final composingLength = _textController.value.composing.end -
+          _textController.value.composing.start;
+      if (composingLength > newStr.length) {
+        _value = oldValue;
+        return;
+      }
+    }
+
+    // Delete the different part in the old value.
+    for (i = 0; i < subOldValue.length - common; ++i) {
+      inputModel.inputKey('VK_BACK');
+    }
+
+    // Input the new string.
+    if (newStr.length > 1) {
+      bind.sessionInputString(sessionId: sessionId, value: newStr);
+    } else {
+      inputChar(newStr);
+    }
+  }
+
+  void _handleNonIOSSoftKeyboardInput(String newValue) {
+    var oldValue = _value;
+    _value = newValue;
     if (oldValue.isNotEmpty &&
         newValue.isNotEmpty &&
         oldValue[0] == '\1' &&
@@ -214,6 +239,15 @@ class _RemotePageState extends State<RemotePage> {
     }
   }
 
+  // handle mobile virtual keyboard
+  void handleSoftKeyboardInput(String newValue) {
+    if (isIOS) {
+      _handleIOSSoftKeyboardInput(newValue);
+    } else {
+      _handleNonIOSSoftKeyboardInput(newValue);
+    }
+  }
+
   void inputChar(String char) {
     if (char == '\n') {
       char = 'VK_RETURN';
@@ -227,6 +261,7 @@ class _RemotePageState extends State<RemotePage> {
     gFFI.invokeMethod("enable_soft_keyboard", true);
     // destroy first, so that our _value trick can work
     _value = initText;
+    _textController.text = _value;
     setState(() => _showEdit = false);
     _timer?.cancel();
     _timer = Timer(kMobileDelaySoftKeyboard, () {
@@ -491,7 +526,7 @@ class _RemotePageState extends State<RemotePage> {
                       autofocus: true,
                       focusNode: _mobileFocusNode,
                       maxLines: null,
-                      initialValue: _value,
+                      controller: _textController,
                       // trick way to make backspace work always
                       keyboardType: TextInputType.multiline,
                       onChanged: handleSoftKeyboardInput,
