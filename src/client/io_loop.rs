@@ -1002,8 +1002,9 @@ impl<T: InvokeUiSession> Remote<T> {
         if limited_fps > custom_fps {
             limited_fps = custom_fps;
         }
+        let last_auto_fps = self.handler.lc.read().unwrap().last_auto_fps.clone();
         let should_decrease = (len > 1
-            && ctl.last_auto_fps.clone().unwrap_or(custom_fps as _) > limited_fps)
+            && last_auto_fps.clone().unwrap_or(custom_fps as _) > limited_fps)
             || len > std::cmp::max(1, limited_fps / 2);
 
         // increase judgement
@@ -1015,14 +1016,14 @@ impl<T: InvokeUiSession> Remote<T> {
             ctl.idle_counter = 0;
         }
         let mut should_increase = false;
-        if let Some(last_auto_fps) = ctl.last_auto_fps.clone() {
+        if let Some(last_auto_fps) = last_auto_fps.clone() {
             // ever set
             if last_auto_fps + 3 <= limited_fps && ctl.idle_counter > 3 {
                 // limited_fps is 3 larger than last set, and idle time is more than 3 seconds
                 should_increase = true;
             }
         }
-        if ctl.last_auto_fps.is_none() || should_decrease || should_increase {
+        if last_auto_fps.is_none() || should_decrease || should_increase {
             // limited_fps to ensure decoding is faster than encoding
             let mut auto_fps = limited_fps;
             if should_decrease && limited_fps < len {
@@ -1041,7 +1042,7 @@ impl<T: InvokeUiSession> Remote<T> {
             self.sender.send(Data::Message(msg)).ok();
             log::info!("Set fps to {}", auto_fps);
             ctl.last_queue_size = len;
-            ctl.last_auto_fps = Some(auto_fps);
+            self.handler.lc.write().unwrap().last_auto_fps = Some(auto_fps);
         }
         // send refresh
         for (display, video_queue) in self.video_queue_map.read().unwrap().iter() {
@@ -1858,7 +1859,6 @@ struct FpsControl {
     last_queue_size: usize,
     refresh_times: usize,
     last_refresh_instant: Instant,
-    last_auto_fps: Option<usize>,
     idle_counter: usize,
     last_active_time: HashMap<usize, Instant>,
 }
@@ -1869,7 +1869,6 @@ impl Default for FpsControl {
             last_queue_size: Default::default(),
             refresh_times: Default::default(),
             last_refresh_instant: Instant::now(),
-            last_auto_fps: Default::default(),
             idle_counter: 0,
             last_active_time: Default::default(),
         }
