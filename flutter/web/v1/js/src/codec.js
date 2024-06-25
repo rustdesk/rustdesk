@@ -25,7 +25,7 @@ export async function loadVp9(callback) {
   // Multithreading is used only if `options.threading` is true.
   // This requires browser support for the new `SharedArrayBuffer` and `Atomics` APIs,
   // currently available in Firefox and Chrome with experimental flags enabled.
-  // All major browsers disabled SharedArrayBuffer by default on January 5, 2018
+  // 所有主流浏览器均默认于2018年1月5日禁用SharedArrayBuffer
   const isSIMD = await simd();
   console.log('isSIMD: ' + isSIMD);
   window.OGVLoader.loadClass(

@@ -27,7 +27,7 @@ pub mod linux_desktop_manager;
 use hbb_common::{message_proto::CursorData, ResultType};
 use std::sync::{Arc, Mutex};
 #[cfg(not(any(target_os = "macos", target_os = "android", target_os = "ios")))]
-const SERVICE_INTERVAL: u64 = 300;
+pub const SERVICE_INTERVAL: u64 = 300;
 
 lazy_static::lazy_static! {
     static ref INSTALLING_SERVICE: Arc<Mutex<bool>>= Default::default();

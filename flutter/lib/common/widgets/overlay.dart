@@ -1,6 +1,8 @@
 import 'package:auto_size_text/auto_size_text.dart';
+import 'package:debounce_throttle/debounce_throttle.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common.dart';
+import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:get/get.dart';
 import 'package:provider/provider.dart';
 
@@ -26,9 +28,12 @@ class DraggableChatWindow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (draggablePositions.chatWindow.isInvalid()) {
+      draggablePositions.chatWindow.update(position);
+    }
     return isIOS
         ? IOSDraggable(
-            position: position,
+            position: draggablePositions.chatWindow,
             chatModel: chatModel,
             width: width,
             height: height,
@@ -45,7 +50,7 @@ class DraggableChatWindow extends StatelessWidget {
           )
         : Draggable(
             checkKeyboard: true,
-            position: SimpleWrapper(position),
+            position: draggablePositions.chatWindow,
             width: width,
             height: height,
             chatModel: chatModel,
@@ -176,7 +181,7 @@ class DraggableMobileActions extends StatelessWidget {
       required this.scale});
 
   final double scale;
-  final SimpleWrapper<Offset> position;
+  final DraggableKeyPosition position;
   final double width;
   final double height;
   final VoidCallback? onBackPressed;
@@ -241,6 +246,92 @@ class DraggableMobileActions extends StatelessWidget {
   }
 }
 
+class DraggableKeyPosition {
+  final String key;
+  Offset _pos;
+  late Debouncer<int> _debouncerStore;
+  DraggableKeyPosition(this.key)
+      : _pos = DraggablePositions.kInvalidDraggablePosition;
+
+  get pos => _pos;
+
+  _loadPosition(String k) {
+    final value = bind.getLocalFlutterOption(k: k);
+    if (value.isNotEmpty) {
+      final parts = value.split(',');
+      if (parts.length == 2) {
+        return Offset(double.parse(parts[0]), double.parse(parts[1]));
+      }
+    }
+    return DraggablePositions.kInvalidDraggablePosition;
+  }
+
+  load() {
+    _pos = _loadPosition(key);
+    _debouncerStore = Debouncer<int>(const Duration(milliseconds: 500),
+        onChanged: (v) => _store(), initialValue: 0);
+  }
+
+  update(Offset pos) {
+    _pos = pos;
+    _triggerStore();
+  }
+
+  // Adjust position to keep it in the screen
+  // Only used for desktop and web desktop
+  tryAdjust(double w, double h, double scale) {
+    final size = MediaQuery.of(Get.context!).size;
+    w = w * scale;
+    h = h * scale;
+    double x = _pos.dx;
+    double y = _pos.dy;
+    if (x + w > size.width) {
+      x = size.width - w;
+    }
+    final tabBarHeight = isDesktop ? kDesktopRemoteTabBarHeight : 0;
+    if (y + h > (size.height - tabBarHeight)) {
+      y = size.height - tabBarHeight - h;
+    }
+    if (x < 0) {
+      x = 0;
+    }
+    if (y < 0) {
+      y = 0;
+    }
+    if (x != _pos.dx || y != _pos.dy) {
+      update(Offset(x, y));
+    }
+  }
+
+  isInvalid() {
+    return _pos == DraggablePositions.kInvalidDraggablePosition;
+  }
+
+  _triggerStore() => _debouncerStore.value = _debouncerStore.value + 1;
+  _store() {
+    bind.setLocalFlutterOption(k: key, v: '${_pos.dx},${_pos.dy}');
+  }
+}
+
+class DraggablePositions {
+  static const kChatWindow = 'draggablePositionChat';
+  static const kMobileActions = 'draggablePositionMobile';
+  static const kIOSDraggable = 'draggablePositionIOS';
+
+  static const kInvalidDraggablePosition = Offset(-999999, -999999);
+  final chatWindow = DraggableKeyPosition(kChatWindow);
+  final mobileActions = DraggableKeyPosition(kMobileActions);
+  final iOSDraggable = DraggableKeyPosition(kIOSDraggable);
+
+  load() {
+    chatWindow.load();
+    mobileActions.load();
+    iOSDraggable.load();
+  }
+}
+
+DraggablePositions draggablePositions = DraggablePositions();
+
 class Draggable extends StatefulWidget {
   Draggable(
       {Key? key,
@@ -255,7 +346,7 @@ class Draggable extends StatefulWidget {
 
   final bool checkKeyboard;
   final bool checkScreenSize;
-  final SimpleWrapper<Offset> position;
+  final DraggableKeyPosition position;
   final double width;
   final double height;
   final ChatModel? chatModel;
@@ -277,7 +368,7 @@ class _DraggableState extends State<Draggable> {
     _chatModel = widget.chatModel;
   }
 
-  get position => widget.position.value;
+  get position => widget.position.pos;
 
   void onPanUpdate(DragUpdateDetails d) {
     final offset = d.delta;
@@ -301,7 +392,7 @@ class _DraggableState extends State<Draggable> {
       y = position.dy + offset.dy;
     }
     setState(() {
-      widget.position.value = Offset(x, y);
+      widget.position.update(Offset(x, y));
     });
     _chatModel?.setChatWindowPosition(position);
   }
@@ -320,7 +411,7 @@ class _DraggableState extends State<Draggable> {
     // reset
     if (_lastBottomHeight > 0 && bottomHeight == 0) {
       setState(() {
-        widget.position.value = Offset(position.dx, _saveHeight);
+        widget.position.update(Offset(position.dx, _saveHeight));
       });
     }
 
@@ -331,7 +422,7 @@ class _DraggableState extends State<Draggable> {
       if (sumHeight + position.dy > contextHeight) {
         final y = contextHeight - sumHeight;
         setState(() {
-          widget.position.value = Offset(position.dx, y);
+          widget.position.update(Offset(position.dx, y));
         });
       }
     }
@@ -362,14 +453,14 @@ class _DraggableState extends State<Draggable> {
 class IOSDraggable extends StatefulWidget {
   const IOSDraggable(
       {Key? key,
-      this.position = Offset.zero,
       this.chatModel,
+      required this.position,
       required this.width,
       required this.height,
       required this.builder})
       : super(key: key);
 
-  final Offset position;
+  final DraggableKeyPosition position;
   final ChatModel? chatModel;
   final double width;
   final double height;
@@ -380,7 +471,6 @@ class IOSDraggable extends StatefulWidget {
 }
 
 class IOSDraggableState extends State<IOSDraggable> {
-  late Offset _position;
   late ChatModel? _chatModel;
   late double _width;
   late double _height;
@@ -391,11 +481,12 @@ class IOSDraggableState extends State<IOSDraggable> {
   @override
   void initState() {
     super.initState();
-    _position = widget.position;
     _chatModel = widget.chatModel;
     _width = widget.width;
     _height = widget.height;
   }
+
+  DraggableKeyPosition get position => widget.position;
 
   checkKeyboard() {
     final bottomHeight = MediaQuery.of(context).viewInsets.bottom;
@@ -403,13 +494,13 @@ class IOSDraggableState extends State<IOSDraggable> {
 
     // save
     if (!_keyboardVisible && currentVisible) {
-      _saveHeight = _position.dy;
+      _saveHeight = position.pos.dy;
     }
 
     // reset
     if (_lastBottomHeight > 0 && bottomHeight == 0) {
       setState(() {
-        _position = Offset(_position.dx, _saveHeight);
+        position.update(Offset(position.pos.dx, _saveHeight));
       });
     }
 
@@ -417,10 +508,10 @@ class IOSDraggableState extends State<IOSDraggable> {
     if (_keyboardVisible && currentVisible) {
       final sumHeight = bottomHeight + _height;
       final contextHeight = MediaQuery.of(context).size.height;
-      if (sumHeight + _position.dy > contextHeight) {
+      if (sumHeight + position.pos.dy > contextHeight) {
         final y = contextHeight - sumHeight;
         setState(() {
-          _position = Offset(_position.dx, y);
+          position.update(Offset(position.pos.dx, y));
         });
       }
     }
@@ -435,14 +526,14 @@ class IOSDraggableState extends State<IOSDraggable> {
     return Stack(
       children: [
         Positioned(
-          left: _position.dx,
-          top: _position.dy,
+          left: position.pos.dx,
+          top: position.pos.dy,
           child: GestureDetector(
             onPanUpdate: (details) {
               setState(() {
-                _position += details.delta;
+                position.update(position.pos + details.delta);
               });
-              _chatModel?.setChatWindowPosition(_position);
+              _chatModel?.setChatWindowPosition(position.pos);
             },
             child: Material(
               child: Container(
@@ -498,8 +589,10 @@ class QualityMonitor extends StatelessWidget {
                     children: [
                       _row("Speed", qualityMonitorModel.data.speed ?? '-'),
                       _row("FPS", qualityMonitorModel.data.fps ?? '-'),
+                      // let delay be 0 if fps is 0
                       _row(
-                          "Delay", "${qualityMonitorModel.data.delay ?? '-'}ms",
+                          "Delay",
+                          "${qualityMonitorModel.data.delay == null ? '-' : (qualityMonitorModel.data.fps ?? "").replaceAll(' ', '').replaceAll('0', '').isEmpty ? 0 : qualityMonitorModel.data.delay}ms",
                           rightColor: Colors.green),
                       _row("Target Bitrate",
                           "${qualityMonitorModel.data.targetBitrate ?? '-'}kb"),

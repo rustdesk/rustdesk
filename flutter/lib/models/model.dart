@@ -917,10 +917,12 @@ class FfiModel with ChangeNotifier {
       if (parent.target?.connType == ConnType.defaultConn &&
           parent.target != null &&
           parent.target!.ffiModel.permissions['keyboard'] != false) {
-        Timer(
-            Duration(milliseconds: delayMSecs),
-            () => parent.target!.dialogManager
-                .showMobileActionsOverlay(ffi: parent.target!));
+        Timer(Duration(milliseconds: delayMSecs), () {
+          if (parent.target!.dialogManager.mobileActionsOverlayVisible.isTrue) {
+            parent.target!.dialogManager
+                .showMobileActionsOverlay(ffi: parent.target!);
+          }
+        });
       }
     }
   }
@@ -1576,22 +1578,24 @@ class CanvasModel with ChangeNotifier {
     notifyListeners();
   }
 
-  updateScale(double v) {
+  updateScale(double v, Offset focalPoint) {
     if (parent.target?.imageModel.image == null) return;
-    final offset = parent.target?.cursorModel.offset ?? const Offset(0, 0);
-    var r = parent.target?.cursorModel.getVisibleRect() ?? Rect.zero;
-    final px0 = (offset.dx - r.left) * _scale;
-    final py0 = (offset.dy - r.top) * _scale;
+    final s = _scale;
     _scale *= v;
     final maxs = parent.target?.imageModel.maxScale ?? 1;
     final mins = parent.target?.imageModel.minScale ?? 1;
     if (_scale > maxs) _scale = maxs;
     if (_scale < mins) _scale = mins;
-    r = parent.target?.cursorModel.getVisibleRect() ?? Rect.zero;
-    final px1 = (offset.dx - r.left) * _scale;
-    final py1 = (offset.dy - r.top) * _scale;
-    _x -= px1 - px0;
-    _y -= py1 - py0;
+    // (focalPoint.dx - _x_1) / s1 + displayOriginX = (focalPoint.dx - _x_2) / s2 + displayOriginX
+    // _x_2 = focalPoint.dx - (focalPoint.dx - _x_1) / s1 * s2
+    _x = focalPoint.dx - (focalPoint.dx - _x) / s * _scale;
+    final adjustForKeyboard =
+        parent.target?.cursorModel.adjustForKeyboard() ?? 0.0;
+    // (focalPoint.dy - _y_1 + adjust) / s1 + displayOriginY = (focalPoint.dy - _y_2 + adjust) / s2 + displayOriginY
+    // _y_2 = focalPoint.dy + adjust - (focalPoint.dy - _y_1 + adjust) / s1 * s2
+    _y = focalPoint.dy +
+        adjustForKeyboard -
+        (focalPoint.dy - _y + adjustForKeyboard) / s * _scale;
     notifyListeners();
   }
 
@@ -1800,6 +1804,33 @@ class CursorModel with ChangeNotifier {
   String peerId = '';
   WeakReference<FFI> parent;
 
+  // Only for mobile, touch mode
+  // To block touch event above the KeyHelpTools
+  //
+  // A better way is to not listen events from the KeyHelpTools.
+  // But we're now using a Container(child: Stack(...)) to wrap the KeyHelpTools,
+  // and the listener is on the Container.
+  Rect? _keyHelpToolsRect;
+  // `lastIsBlocked` is only used in common/widgets/remote_input.dart -> _RawTouchGestureDetectorRegionState -> onDoubleTap()
+  // Because onDoubleTap() doesn't have the `event` parameter, we can't get the touch event's position.
+  bool _lastIsBlocked = false;
+  double _yForKeyboardAdjust = 0;
+
+  keyHelpToolsVisibilityChanged(Rect? r) {
+    _keyHelpToolsRect = r;
+    if (r == null) {
+      _lastIsBlocked = false;
+    } else {
+      // Block the touch event is safe here.
+      // `lastIsBlocked` is only used in onDoubleTap() to block the touch event from the KeyHelpTools.
+      // `lastIsBlocked` will be set when the cursor is moving or touch somewhere else.
+      _lastIsBlocked = true;
+    }
+    _yForKeyboardAdjust = _y;
+  }
+
+  get lastIsBlocked => _lastIsBlocked;
+
   ui.Image? get image => _image;
   CursorData? get cache => _cache;
 
@@ -1844,28 +1875,52 @@ class CursorModel with ChangeNotifier {
     return Rect.fromLTWH(x0, y0, size.width / scale, size.height / scale);
   }
 
+  get keyboardHeight => MediaQueryData.fromWindow(ui.window).viewInsets.bottom;
+  get scale => parent.target?.canvasModel.scale ?? 1.0;
+
   double adjustForKeyboard() {
+    if (keyboardHeight < 100) {
+      return 0.0;
+    }
+
     final m = MediaQueryData.fromWindow(ui.window);
-    var keyboardHeight = m.viewInsets.bottom;
     final size = m.size;
-    if (keyboardHeight < 100) return 0;
-    final s = parent.target?.canvasModel.scale ?? 1.0;
     final thresh = (size.height - keyboardHeight) / 2;
-    var h = (_y - getVisibleRect().top) * s; // local physical display height
+    final h = (_yForKeyboardAdjust - getVisibleRect().top) *
+        scale; // local physical display height
     return h - thresh;
   }
 
-  move(double x, double y) {
-    moveLocal(x, y);
-    parent.target?.inputModel.moveMouse(_x, _y);
+  // mobile Soft keyboard, block touch event from the KeyHelpTools
+  shouldBlock(double x, double y) {
+    if (!(parent.target?.ffiModel.touchMode ?? false)) {
+      return false;
+    }
+    if (_keyHelpToolsRect == null) {
+      return false;
+    }
+    if (isPointInRect(Offset(x, y), _keyHelpToolsRect!)) {
+      return true;
+    }
+    return false;
   }
 
-  moveLocal(double x, double y) {
-    final scale = parent.target?.canvasModel.scale ?? 1.0;
+  move(double x, double y) {
+    if (shouldBlock(x, y)) {
+      _lastIsBlocked = true;
+      return false;
+    }
+    _lastIsBlocked = false;
+    moveLocal(x, y, adjust: adjustForKeyboard());
+    parent.target?.inputModel.moveMouse(_x, _y);
+    return true;
+  }
+
+  moveLocal(double x, double y, {double adjust = 0}) {
     final xoffset = parent.target?.canvasModel.x ?? 0;
     final yoffset = parent.target?.canvasModel.y ?? 0;
     _x = (x - xoffset) / scale + _displayOriginX;
-    _y = (y - yoffset) / scale + _displayOriginY;
+    _y = (y - yoffset + adjust) / scale + _displayOriginY;
     notifyListeners();
   }
 

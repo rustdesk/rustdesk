@@ -82,13 +82,14 @@ class _RemotePageState extends State<RemotePage> {
         .changeCurrentKey(MessageKey(widget.id, ChatModel.clientModeID));
     gFFI.chatModel.voiceCallStatus.value = VoiceCallStatus.notStarted;
     _blockableOverlayState.applyFfi(gFFI);
+    gFFI.dialogManager.loadMobileActionsOverlayVisible();
   }
 
   @override
   Future<void> dispose() async {
     // https://github.com/flutter/flutter/issues/64935
     super.dispose();
-    gFFI.dialogManager.hideMobileActionsOverlay();
+    gFFI.dialogManager.hideMobileActionsOverlay(store: false);
     gFFI.inputModel.listenToMouse(false);
     gFFI.imageModel.disposeImage();
     gFFI.cursorModel.disposeImages();
@@ -105,11 +106,10 @@ class _RemotePageState extends State<RemotePage> {
     }
     await keyboardSubscription.cancel();
     removeSharedStates(widget.id);
-    if (isAndroid) {
-      // Only one client is considered here for now.
-      // TODO: take into account the case where there are multiple clients
-      gFFI.invokeMethod("on_voice_call_closed");
-    }
+    // `on_voice_call_closed` should be called when the connection is ended.
+    // The inner logic of `on_voice_call_closed` will check if the voice call is active.
+    // Only one client is considered here for now.
+    gFFI.chatModel.onVoiceCallClosed("End connetion");
   }
 
   // to-do: It should be better to use transparent color instead of the bgColor.
@@ -419,17 +419,21 @@ class _RemotePageState extends State<RemotePage> {
                   (isWeb
                       ? []
                       : <Widget>[
-                          IconButton(
-                            color: Colors.white,
-                            icon: isAndroid
-                                ? SvgPicture.asset('assets/chat.svg',
-                                    colorFilter: ColorFilter.mode(
-                                        Colors.white, BlendMode.srcIn))
-                                : Icon(Icons.message),
-                            onPressed: () => isAndroid
-                                ? showChatOptions(widget.id)
-                                : onPressedTextChat(widget.id),
-                          )
+                          futureBuilder(
+                              future: gFFI.invokeMethod(
+                                  "get_value", "KEY_IS_SUPPORT_VOICE_CALL"),
+                              hasData: (isSupportVoiceCall) => IconButton(
+                                    color: Colors.white,
+                                    icon: isAndroid && isSupportVoiceCall
+                                        ? SvgPicture.asset('assets/chat.svg',
+                                            colorFilter: ColorFilter.mode(
+                                                Colors.white, BlendMode.srcIn))
+                                        : Icon(Icons.message),
+                                    onPressed: () =>
+                                        isAndroid && isSupportVoiceCall
+                                            ? showChatOptions(widget.id)
+                                            : onPressedTextChat(widget.id),
+                                  ))
                         ]) +
                   [
                     IconButton(
@@ -479,7 +483,11 @@ class _RemotePageState extends State<RemotePage> {
                   : TextFormField(
                       textInputAction: TextInputAction.newline,
                       autocorrect: false,
-                      enableSuggestions: false,
+                      // Flutter 3.16.9 Android.
+                      // `enableSuggestions` causes secure keyboard to be shown.
+                      // https://github.com/flutter/flutter/issues/139143
+                      // https://github.com/flutter/flutter/issues/146540
+                      // enableSuggestions: false,
                       autofocus: true,
                       focusNode: _mobileFocusNode,
                       maxLines: null,
@@ -561,9 +569,11 @@ class _RemotePageState extends State<RemotePage> {
           child: Text(translate(label), style: labelStyle),
           trailingIcon: Transform.scale(
             scale: (isDesktop || isWebDesktop) ? 0.8 : 1,
-            child: IconButton(
-              onPressed: onPressed,
-              icon: icon,
+            child: IgnorePointer(
+              child: IconButton(
+                onPressed: null,
+                icon: icon,
+              ),
             ),
           ),
           onPressed: onPressed,
@@ -679,6 +689,7 @@ class _KeyHelpToolsState extends State<KeyHelpTools> {
   var _fn = false;
   var _pin = false;
   final _keyboardVisibilityController = KeyboardVisibilityController();
+  final _key = GlobalKey();
 
   InputModel get inputModel => gFFI.inputModel;
 
@@ -704,6 +715,24 @@ class _KeyHelpToolsState extends State<KeyHelpTools> {
   }
 
   @override
+  void initState() {
+    super.initState();
+  }
+
+  _updateRect() {
+    RenderObject? renderObject = _key.currentContext?.findRenderObject();
+    if (renderObject == null) {
+      return;
+    }
+    if (renderObject is RenderBox) {
+      final size = renderObject.size;
+      Offset pos = renderObject.localToGlobal(Offset.zero);
+      gFFI.cursorModel.keyHelpToolsVisibilityChanged(
+          Rect.fromLTWH(pos.dx, pos.dy, size.width, size.height));
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     final hasModifierOn = inputModel.ctrl ||
         inputModel.alt ||
@@ -711,6 +740,7 @@ class _KeyHelpToolsState extends State<KeyHelpTools> {
         inputModel.command;
 
     if (!_pin && !hasModifierOn && !widget.requestShow) {
+      gFFI.cursorModel.keyHelpToolsVisibilityChanged(null);
       return Offstage();
     }
     final size = MediaQuery.of(context).size;
@@ -821,7 +851,12 @@ class _KeyHelpToolsState extends State<KeyHelpTools> {
       }),
     ];
     final space = size.width > 320 ? 4.0 : 2.0;
+    // 500 ms is long enough for this widget to be built!
+    Future.delayed(Duration(milliseconds: 500), () {
+      _updateRect();
+    });
     return Container(
+        key: _key,
         color: Color(0xAA000000),
         padding: EdgeInsets.only(
             top: _keyboardVisibilityController.isVisible ? 24 : 4, bottom: 8),
@@ -901,7 +936,7 @@ void showOptions(
                   border: Border.all(color: Theme.of(context).hintColor),
                   borderRadius: BorderRadius.circular(2),
                   color: i == cur
-                      ? Theme.of(context).toggleableActiveColor.withOpacity(0.6)
+                      ? Theme.of(context).primaryColor.withOpacity(0.6)
                       : null),
               child: Center(
                   child: Text((i + 1).toString(),

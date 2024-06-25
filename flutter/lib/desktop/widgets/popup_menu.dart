@@ -65,7 +65,7 @@ class MyPopupMenuItemState<T, W extends PopupMenuChildrenItem<T>>
     final PopupMenuThemeData popupMenuTheme = PopupMenuTheme.of(context);
     TextStyle style = widget.textStyle ??
         popupMenuTheme.textStyle ??
-        theme.textTheme.subtitle1!;
+        theme.textTheme.titleMedium!;
     return Obx(() => mod_menu.PopupMenuButton<T>(
           enabled: enabled.value,
           position: widget.position,

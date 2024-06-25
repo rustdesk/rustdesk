@@ -718,7 +718,21 @@ class OverlayDialogManager {
   int _tagCount = 0;
 
   OverlayEntry? _mobileActionsOverlayEntry;
-  RxBool mobileActionsOverlayVisible = false.obs;
+  RxBool mobileActionsOverlayVisible = true.obs;
+
+  setMobileActionsOverlayVisible(bool v, {store = true}) {
+    if (store) {
+      bind.setLocalFlutterOption(k: kOptionShowMobileAction, v: v ? 'Y' : 'N');
+    }
+    // No need to read the value from local storage after setting it.
+    // It better to toggle the value directly.
+    mobileActionsOverlayVisible.value = v;
+  }
+
+  loadMobileActionsOverlayVisible() {
+    mobileActionsOverlayVisible.value =
+        bind.getLocalFlutterOption(k: kOptionShowMobileAction) != 'N';
+  }
 
   void setOverlayState(OverlayKeyState overlayKeyState) {
     _overlayKeyState = overlayKeyState;
@@ -865,14 +879,14 @@ class OverlayDialogManager {
     );
     overlayState.insert(overlay);
     _mobileActionsOverlayEntry = overlay;
-    mobileActionsOverlayVisible.value = true;
+    setMobileActionsOverlayVisible(true);
   }
 
-  void hideMobileActionsOverlay() {
+  void hideMobileActionsOverlay({store = true}) {
     if (_mobileActionsOverlayEntry != null) {
       _mobileActionsOverlayEntry!.remove();
       _mobileActionsOverlayEntry = null;
-      mobileActionsOverlayVisible.value = false;
+      setMobileActionsOverlayVisible(false, store: store);
       return;
     }
   }
@@ -891,21 +905,27 @@ class OverlayDialogManager {
 }
 
 makeMobileActionsOverlayEntry(VoidCallback? onHide, {FFI? ffi}) {
-  final position = SimpleWrapper(Offset(0, 0));
   makeMobileActions(BuildContext context, double s) {
     final scale = s < 0.85 ? 0.85 : s;
     final session = ffi ?? gFFI;
-    // compute overlay position
-    final screenW = MediaQuery.of(context).size.width;
-    final screenH = MediaQuery.of(context).size.height;
     const double overlayW = 200;
     const double overlayH = 45;
-    final left = (screenW - overlayW * scale) / 2;
-    final top = screenH - (overlayH + 80) * scale;
-    position.value = Offset(left, top);
+    computeOverlayPosition() {
+      final screenW = MediaQuery.of(context).size.width;
+      final screenH = MediaQuery.of(context).size.height;
+      final left = (screenW - overlayW * scale) / 2;
+      final top = screenH - (overlayH + 80) * scale;
+      return Offset(left, top);
+    }
+
+    if (draggablePositions.mobileActions.isInvalid()) {
+      draggablePositions.mobileActions.update(computeOverlayPosition());
+    } else {
+      draggablePositions.mobileActions.tryAdjust(overlayW, overlayH, scale);
+    }
     return DraggableMobileActions(
       scale: scale,
-      position: position,
+      position: draggablePositions.mobileActions,
       width: overlayW,
       height: overlayH,
       onBackPressed: () => session.inputModel.tap(MouseButtons.right),

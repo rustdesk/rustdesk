@@ -358,7 +358,33 @@ async fn handle(data: Data, stream: &mut Connection) {
                 if is_server() {
                     let _ = privacy_mode::turn_off_privacy(0, Some(PrivacyModeState::OffByPeer));
                 }
-                std::process::exit(0);
+                #[cfg(any(target_os = "macos", target_os = "linux"))]
+                if crate::is_main() {
+                    // below part is for main windows can be reopen during rustdesk installation and installing service from UI
+                    // this make new ipc server (domain socket) can be created.
+                    std::fs::remove_file(&Config::ipc_path("")).ok();
+                    #[cfg(target_os = "linux")]
+                    {
+                        hbb_common::sleep((crate::platform::SERVICE_INTERVAL * 2) as f32 / 1000.0)
+                            .await;
+                        crate::run_me::<&str>(vec![]).ok();
+                    }
+                    #[cfg(target_os = "macos")]
+                    {
+                        // our launchagent interval is 1 second
+                        hbb_common::sleep(1.5).await;
+                        std::process::Command::new("open")
+                            .arg("-n")
+                            .arg(&format!("/Applications/{}.app", crate::get_app_name()))
+                            .spawn()
+                            .ok();
+                    }
+                    // leave above open a little time
+                    hbb_common::sleep(0.3).await;
+                    // in case below exit failed
+                    crate::platform::quit_gui();
+                }
+                std::process::exit(-1); // to make sure --server luauchagent process can restart because SuccessfulExit used
             }
         }
         Data::OnlineStatus(_) => {
@@ -699,6 +725,9 @@ async fn check_pid(postfix: &str) {
             }
         }
     }
+    // if not remove old ipc file, the new ipc creation will fail
+    // if we remove a ipc file, but the old ipc process is still running,
+    // new connection to the ipc will connect to new ipc, old connection to old ipc still keep alive
     std::fs::remove_file(&Config::ipc_path(postfix)).ok();
 }
 
@@ -983,31 +1012,6 @@ pub async fn test_rendezvous_server() -> ResultType<()> {
     let mut c = connect(1000, "").await?;
     c.send(&Data::TestRendezvousServer).await?;
     Ok(())
-}
-
-#[cfg(windows)]
-pub fn is_ipc_file_exist(suffix: &str) -> ResultType<bool> {
-    // Not change this to std::path::Path::exists, unless it can be ensured that it can find the ipc which occupied by a process that taskkill can't kill.
-    let prefix = "\\\\.\\pipe\\";
-    let file_name = Config::ipc_path(suffix).replace(prefix, "");
-    let mut err = None;
-    for entry in std::fs::read_dir(prefix)? {
-        match entry {
-            Ok(entry) => {
-                if entry.file_name().into_string().unwrap_or_default() == file_name {
-                    return Ok(true);
-                }
-            }
-            Err(e) => {
-                err = Some(e);
-            }
-        }
-    }
-    if let Some(e) = err {
-        Err(e.into())
-    } else {
-        Ok(false)
-    }
 }
 
 #[tokio::main(flavor = "current_thread")]

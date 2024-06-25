@@ -3037,8 +3037,8 @@ checksum = "9a3a5bfb195931eeb336b2a7b4d761daec841b97f947d34394601737a7bba5e4"
 
 [[package]]
 name = "hwcodec"
-version = "0.4.17"
-source = "git+https://github.com/21pages/hwcodec#38eb9bfc4730986ebeb519ab39027d654356ce1a"
+version = "0.4.18"
+source = "git+https://github.com/21pages/hwcodec#b84d5bbefa949194d1fc51a5c7e9d7988e315ce6"
 dependencies = [
  "bindgen 0.59.2",
  "cc",
@@ -6127,7 +6127,7 @@ dependencies = [
 [[package]]
 name = "tao"
 version = "0.25.0"
-source = "git+https://github.com/rustdesk-org/tao?branch=dev#1cad16b200485bbccc67dcee2d339eac6e1c16ad"
+source = "git+https://github.com/rustdesk-org/tao?branch=dev#288c219cb0527e509590c2b2d8e7072aa9feb2d3"
 dependencies = [
  "bitflags 1.3.2",
  "cc",
@@ -6167,7 +6167,7 @@ dependencies = [
 [[package]]
 name = "tao-macros"
 version = "0.1.2"
-source = "git+https://github.com/rustdesk-org/tao?branch=dev#1cad16b200485bbccc67dcee2d339eac6e1c16ad"
+source = "git+https://github.com/rustdesk-org/tao?branch=dev#288c219cb0527e509590c2b2d8e7072aa9feb2d3"
 dependencies = [
  "proc-macro2 1.0.79",
  "quote 1.0.35",

@@ -18,7 +18,6 @@ use core_graphics::{
     window::{kCGWindowName, kCGWindowOwnerPID},
 };
 use hbb_common::{
-    allow_err,
     anyhow::anyhow,
     bail, log,
     message_proto::{DisplayInfo, Resolution},
@@ -203,15 +202,6 @@ pub fn is_installed_daemon(prompt: bool) -> bool {
                         .args(&["load", "-w", &agent_plist_file])
                         .status()
                         .ok();
-                    std::process::Command::new("sh")
-                        .arg("-c")
-                        .arg(&format!(
-                            "sleep 0.5; open -n /Applications/{}.app",
-                            crate::get_app_name(),
-                        ))
-                        .spawn()
-                        .ok();
-                    quit_gui();
                 }
             }
         }
@@ -268,14 +258,13 @@ pub fn uninstall_service(show_new_window: bool, sync: bool) -> bool {
                         .status()
                         .ok();
                     if show_new_window {
-                        std::process::Command::new("sh")
-                            .arg("-c")
-                            .arg(&format!(
-                                "sleep 0.5; open /Applications/{}.app",
-                                crate::get_app_name(),
-                            ))
+                        std::process::Command::new("open")
+                            .arg("-n")
+                            .arg(&format!("/Applications/{}.app", crate::get_app_name()))
                             .spawn()
                             .ok();
+                        // leave open a little time
+                        std::thread::sleep(std::time::Duration::from_millis(300));
                     }
                     quit_gui();
                 }
@@ -510,6 +499,10 @@ pub fn start_os_service() {
     let path =
         std::fs::canonicalize(std::env::current_exe().unwrap_or_default()).unwrap_or_default();
     let mut server = get_server_start_time(&mut sys, &path);
+    if server.is_none() {
+        log::error!("Agent not started yet, please restart --server first to make delegate work",);
+        std::process::exit(-1);
+    }
     let my_start_time = sys
         .process((std::process::id() as usize).into())
         .map(|p| p.start_time())
@@ -521,28 +514,31 @@ pub fn start_os_service() {
         if server.is_none() {
             server = get_server_start_time(&mut sys, &path);
         }
-        if let Some((start_time, pid)) = server {
-            if my_start_time <= start_time {
-                // I tried add delegate (using tao and with its main loop0, but it works in normal mode, but not work as daemon
-                log::info!(
-                    "Agent start later, {my_start_time} vs {start_time}, will restart --service to make delegate work",
+        let Some((start_time, pid)) = server else {
+            log::error!(
+                "Agent not started yet, please restart --server first to make delegate work",
+            );
+            std::process::exit(-1);
+        };
+        if my_start_time <= start_time + 1 {
+            log::error!(
+                    "Agent start later, {my_start_time} vs {start_time}, please start --server first to make delegate work",
                 );
-                std::process::exit(0);
-            }
-            // only refresh this pid and check if valid, no need to refresh all processes since refreshing all is expensive, about 10ms on my machine
-            if !sys.refresh_process_specifics(pid, ProcessRefreshKind::new()) {
-                server = None;
-                continue;
-            }
-            if let Some(p) = sys.process(pid.into()) {
-                if let Some(p) = get_server_start_time_of(p, &path) {
-                    server = Some((p, pid));
-                } else {
-                    server = None;
-                }
+            std::process::exit(-1);
+        }
+        // only refresh this pid and check if valid, no need to refresh all processes since refreshing all is expensive, about 10ms on my machine
+        if !sys.refresh_process_specifics(pid, ProcessRefreshKind::new()) {
+            server = None;
+            continue;
+        }
+        if let Some(p) = sys.process(pid.into()) {
+            if let Some(p) = get_server_start_time_of(p, &path) {
+                server = Some((p, pid));
             } else {
                 server = None;
             }
+        } else {
+            server = None;
         }
     });
 

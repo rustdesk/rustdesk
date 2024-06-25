@@ -47,6 +47,9 @@ const val START_ACTION = "start_action"
 const val GET_START_ON_BOOT_OPT = "get_start_on_boot_opt"
 const val SET_START_ON_BOOT_OPT = "set_start_on_boot_opt"
 const val SYNC_APP_DIR_CONFIG_PATH = "sync_app_dir"
+const val GET_VALUE = "get_value"
+
+const val KEY_IS_SUPPORT_VOICE_CALL = "KEY_IS_SUPPORT_VOICE_CALL"
 
 const val KEY_SHARED_PREFERENCES = "KEY_SHARED_PREFERENCES"
 const val KEY_START_ON_BOOT_OPT = "KEY_START_ON_BOOT_OPT"
@@ -59,6 +62,11 @@ val SCREEN_INFO = Info(0, 0, 1, 200)
 data class Info(
     var width: Int, var height: Int, var scale: Int, var dpi: Int
 )
+
+fun isSupportVoiceCall(): Boolean {
+    // https://developer.android.com/reference/android/media/MediaRecorder.AudioSource#VOICE_COMMUNICATION
+    return Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
+}
 
 fun requestPermission(context: Context, type: String) {
     XXPermissions.with(context)

@@ -134,6 +134,7 @@ class _RemotePageState extends State<RemotePage>
     _ffi.ffiModel.updateEventListener(sessionId, widget.id);
     if (!isWeb) bind.pluginSyncUi(syncTo: kAppTypeDesktopRemote);
     _ffi.qualityMonitorModel.checkShowQualityMonitor(sessionId);
+    _ffi.dialogManager.loadMobileActionsOverlayVisible();
     // Session option should be set after models.dart/FFI.start
     _showRemoteCursor.value = bind.sessionGetToggleOptionSync(
         sessionId: sessionId, arg: 'show-remote-cursor');
@@ -322,22 +323,13 @@ class _RemotePageState extends State<RemotePage>
                       if (!_ffi.ffiModel.isPeerAndroid) {
                         return Offstage();
                       } else {
-                        if (_ffi.connType == ConnType.defaultConn &&
-                            _ffi.ffiModel.permissions['keyboard'] != false) {
-                          Timer(
-                              Duration(milliseconds: 10),
-                              () => _ffi.dialogManager
-                                  .mobileActionsOverlayVisible.value = true);
-                        }
                         return Obx(() => Offstage(
                               offstage: _ffi.dialogManager
                                   .mobileActionsOverlayVisible.isFalse,
                               child: Overlay(initialEntries: [
                                 makeMobileActionsOverlayEntry(
-                                  () => _ffi
-                                      .dialogManager
-                                      .mobileActionsOverlayVisible
-                                      .value = false,
+                                  () => _ffi.dialogManager
+                                      .setMobileActionsOverlayVisible(false),
                                   ffi: _ffi,
                                 )
                               ]),
