@@ -1443,7 +1443,7 @@ impl ThrottledInterval {
         let period = i.period();
         ThrottledInterval {
             interval: i,
-            next_tick: Instant::now() + period,
+            next_tick: Instant::now(),
             min_interval: Duration::from_secs_f64(period.as_secs_f64() * 0.9),
         }
     }
@@ -1456,8 +1456,9 @@ impl ThrottledInterval {
     pub fn poll_tick(&mut self, cx: &mut std::task::Context<'_>) -> Poll<Instant> {
         match self.interval.poll_tick(cx) {
             Poll::Ready(instant) => {
-                if self.next_tick <= Instant::now() {
-                    self.next_tick = Instant::now() + self.min_interval;
+                let now = Instant::now();
+                if self.next_tick <= now {
+                    self.next_tick = now + self.min_interval;
                     Poll::Ready(instant)
                 } else {
                     // This call is required since tokio 1.27
