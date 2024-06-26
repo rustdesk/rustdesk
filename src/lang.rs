@@ -57,7 +57,7 @@ pub const LANGS: &[(&str, &str)] = &[
     ("et", "Eesti keel"),
     ("hu", "Magyar"),
     ("bg", "Български"),
-    ("be", "Беларуская")
+    ("be", "Беларуская"),
     ("ru", "Русский"),
     ("sk", "Slovenčina"),
     ("id", "Indonesia"),
