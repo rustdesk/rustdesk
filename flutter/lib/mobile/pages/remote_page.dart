@@ -927,7 +927,7 @@ class CursorPaint extends StatelessWidget {
     final m = Provider.of<CursorModel>(context);
     final c = Provider.of<CanvasModel>(context);
     final adjust = gFFI.cursorModel.adjustForKeyboard();
-    var s = c.scale;
+    final s = c.scale;
     double hotx = m.hotx;
     double hoty = m.hoty;
     if (m.image == null) {
@@ -936,12 +936,22 @@ class CursorPaint extends StatelessWidget {
         hoty = preDefaultCursor.image!.height / 2;
       }
     }
+
+    final image = m.image ?? preDefaultCursor.image;
+    final minSize = 24.0;
+    double mins =
+        minSize / (image!.width > image.height ? image.width : image.height);
+    double factor = 1.0;
+    if (s < mins) {
+      factor = s / mins;
+    }
+    final s2 = s < mins ? mins : s;
     return CustomPaint(
       painter: ImagePainter(
-          image: m.image ?? preDefaultCursor.image,
-          x: m.x * s - hotx + c.x,
-          y: m.y * s - hoty + c.y - adjust,
-          scale: 1),
+          image: image,
+          x: (m.x - hotx) * factor + c.x / s2,
+          y: (m.y - hoty) * factor + (c.y - adjust) / s2,
+          scale: s2),
     );
   }
 }
