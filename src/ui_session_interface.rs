@@ -804,7 +804,54 @@ impl<T: InvokeUiSession> Session<T> {
     pub fn handle_flutter_key_event(
         &self,
         keyboard_mode: &str,
-        _name: &str,
+        name: &str,
+        platform_code: i32,
+        position_code: i32,
+        lock_modes: i32,
+        down_or_up: bool,
+    ) {
+        if name == "flutter_key" {
+            self._handle_key_flutter_simulation(keyboard_mode, platform_code, down_or_up);
+        } else {
+            self._handle_key_non_flutter_simulation(
+                keyboard_mode,
+                platform_code,
+                position_code,
+                lock_modes,
+                down_or_up,
+            );
+        }
+    }
+
+    #[cfg(not(any(target_os = "ios")))]
+    fn _handle_key_flutter_simulation(
+        &self,
+        _keyboard_mode: &str,
+        platform_code: i32,
+        down_or_up: bool,
+    ) {
+        // https://github.com/flutter/flutter/blob/master/packages/flutter/lib/src/services/keyboard_key.g.dart#L4356
+        let ctrl_key = match platform_code {
+            0x0007007f => Some(ControlKey::VolumeMute),
+            0x00070080 => Some(ControlKey::VolumeUp),
+            0x00070081 => Some(ControlKey::VolumeDown),
+            0x00070066 => Some(ControlKey::Power),
+            _ => None,
+        };
+        let Some(ctrl_key) = ctrl_key else { return };
+        let mut key_event = KeyEvent {
+            mode: KeyboardMode::Translate.into(),
+            down: down_or_up,
+            ..Default::default()
+        };
+        key_event.set_control_key(ctrl_key);
+        self.send_key_event(&key_event);
+    }
+
+    #[cfg(not(any(target_os = "ios")))]
+    fn _handle_key_non_flutter_simulation(
+        &self,
+        keyboard_mode: &str,
         platform_code: i32,
         position_code: i32,
         lock_modes: i32,

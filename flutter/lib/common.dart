@@ -3429,3 +3429,11 @@ disableWindowMovable(int? windowId) {
     WindowController.fromWindowId(windowId).setMovable(false);
   }
 }
+
+// Simulate a key press event.
+// `usbHidUsage` is the USB HID usage code of the key.
+Future<void> tapHidKey(InputModel inputModel, int usbHidUsage) async {
+  inputModel.inputRawKey(kKeyFlutterKey, usbHidUsage, 0, true);
+  await Future.delayed(Duration(milliseconds: 100));
+  inputModel.inputRawKey(kKeyFlutterKey, usbHidUsage, 0, false);
+}

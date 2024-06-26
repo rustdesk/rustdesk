@@ -129,6 +129,27 @@ List<TTextMenu> toolbarControls(BuildContext context, String id, FFI ffi) {
           }
         }));
   }
+  if (isMobile &&
+      pi.platform == kPeerPlatformAndroid &&
+      perms['keyboard'] != false) {
+    v.addAll([
+      TTextMenu(
+        child: Text(translate('Volume up')),
+        onPressed: () => tapHidKey(
+            ffi.inputModel, PhysicalKeyboardKey.audioVolumeUp.usbHidUsage),
+      ),
+      TTextMenu(
+        child: Text(translate('Volume down')),
+        onPressed: () => tapHidKey(
+            ffi.inputModel, PhysicalKeyboardKey.audioVolumeDown.usbHidUsage),
+      ),
+      TTextMenu(
+        child: Text(translate('Power')),
+        onPressed: () =>
+            tapHidKey(ffi.inputModel, PhysicalKeyboardKey.power.usbHidUsage),
+      ),
+    ]);
+  }
   // reset canvas
   if (isMobile) {
     v.add(TTextMenu(
