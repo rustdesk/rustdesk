@@ -1741,6 +1741,7 @@ class _KeyboardMenu extends StatelessWidget {
               viewMode(),
               Divider(),
               ...toolbarToggles(),
+              ...mobileActions(),
             ]);
   }
 
@@ -1876,6 +1877,30 @@ class _KeyboardMenu extends StatelessWidget {
             : null,
         ffi: ffi,
         child: Text(translate('View Mode')));
+  }
+
+  mobileActions() {
+    if (pi.platform != kPeerPlatformAndroid) return [];
+    final enabled = versionCmp(pi.version, '1.2.6') >= 0;
+    if (!enabled) return [];
+    return [
+      Divider(),
+      MenuButton(
+          child: Text(translate('Volume up')),
+          onPressed: () => tapHidKey(
+              ffi.inputModel, PhysicalKeyboardKey.audioVolumeUp.usbHidUsage),
+          ffi: ffi),
+      MenuButton(
+          child: Text(translate('Volume down')),
+          onPressed: () => tapHidKey(
+              ffi.inputModel, PhysicalKeyboardKey.audioVolumeDown.usbHidUsage),
+          ffi: ffi),
+      MenuButton(
+          child: Text(translate('Power')),
+          onPressed: () =>
+              tapHidKey(ffi.inputModel, PhysicalKeyboardKey.power.usbHidUsage),
+          ffi: ffi),
+    ];
   }
 }
 

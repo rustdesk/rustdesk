@@ -18,7 +18,9 @@ import android.widget.EditText
 import android.view.accessibility.AccessibilityEvent
 import android.view.ViewGroup.LayoutParams
 import android.view.accessibility.AccessibilityNodeInfo
+import android.view.KeyEvent as KeyEventAndroid
 import android.graphics.Rect
+import android.media.AudioManager
 import android.accessibilityservice.AccessibilityServiceInfo
 import android.accessibilityservice.AccessibilityServiceInfo.FLAG_INPUT_METHOD_EDITOR
 import android.accessibilityservice.AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS
@@ -74,6 +76,8 @@ class InputService : AccessibilityService() {
     private var isWaitingLongPress = false
 
     private var fakeEditTextForTextStateCalculation: EditText? = null
+
+    private val volumeController: VolumeController by lazy { VolumeController(applicationContext.getSystemService(AUDIO_SERVICE) as AudioManager) }
 
     @RequiresApi(Build.VERSION_CODES.N)
     fun onMouseInput(mask: Int, _x: Int, _y: Int) {
@@ -294,6 +298,18 @@ class InputService : AccessibilityService() {
 
         Log.d(logTag, "onKeyEvent $keyEvent textToCommit:$textToCommit")
 
+        var ke: KeyEventAndroid? = null
+        if (Build.VERSION.SDK_INT < 33 || textToCommit == null) {
+            ke = KeyEventConverter.toAndroidKeyEvent(keyEvent)
+        }
+        ke?.let { event ->
+            if (tryHandleVolumeKeyEvent(event)) {
+                return
+            } else if (tryHandlePowerKeyEvent(event)) {
+                return
+            }
+        }
+
         if (Build.VERSION.SDK_INT >= 33) {
             getInputMethod()?.let { inputMethod ->
                 inputMethod.getCurrentInputConnection()?.let { inputConnection ->
@@ -302,7 +318,7 @@ class InputService : AccessibilityService() {
                             inputConnection.commitText(text, 1, null)
                         }
                     } else {
-                        KeyEventConverter.toAndroidKeyEvent(keyEvent).let { event ->
+                        ke?.let { event ->
                             inputConnection.sendKeyEvent(event)
                         }
                     }
@@ -311,7 +327,7 @@ class InputService : AccessibilityService() {
         } else {
             val handler = Handler(Looper.getMainLooper())
             handler.post {
-                KeyEventConverter.toAndroidKeyEvent(keyEvent)?.let { event ->
+                ke?.let { event ->
                     val possibleNodes = possibleAccessibiltyNodes()
                     Log.d(logTag, "possibleNodes:$possibleNodes")
                     for (item in possibleNodes) {
@@ -323,6 +339,43 @@ class InputService : AccessibilityService() {
                 }
             }
         }
+    }
+
+    private fun tryHandleVolumeKeyEvent(event: KeyEventAndroid): Boolean {
+        when (event.keyCode) {
+            KeyEventAndroid.KEYCODE_VOLUME_UP -> {
+                if (event.action == KeyEventAndroid.ACTION_DOWN) {
+                    volumeController.raiseVolume(null, true, AudioManager.STREAM_SYSTEM)
+                }
+                return true
+            }
+            KeyEventAndroid.KEYCODE_VOLUME_DOWN -> {
+                if (event.action == KeyEventAndroid.ACTION_DOWN) {
+                    volumeController.lowerVolume(null, true, AudioManager.STREAM_SYSTEM)
+                }
+                return true
+            }
+            KeyEventAndroid.KEYCODE_VOLUME_MUTE -> {
+                if (event.action == KeyEventAndroid.ACTION_DOWN) {
+                    volumeController.toggleMute(true, AudioManager.STREAM_SYSTEM)
+                }
+                return true
+            }
+            else -> {
+                return false
+            }
+        }
+    }
+
+    private fun tryHandlePowerKeyEvent(event: KeyEventAndroid): Boolean {
+        if (event.keyCode == KeyEventAndroid.KEYCODE_POWER) {
+            // Perform power dialog action when action is up
+            if (event.action == KeyEventAndroid.ACTION_UP) {
+                performGlobalAction(GLOBAL_ACTION_POWER_DIALOG);
+            }
+            return true
+        }
+        return false
     }
 
     private fun insertAccessibilityNode(list: LinkedList<AccessibilityNodeInfo>, node: AccessibilityNodeInfo) {
@@ -422,7 +475,7 @@ class InputService : AccessibilityService() {
         return linkedList
     }
 
-    private fun trySendKeyEvent(event: android.view.KeyEvent, node: AccessibilityNodeInfo, textToCommit: String?): Boolean {
+    private fun trySendKeyEvent(event: KeyEventAndroid, node: AccessibilityNodeInfo, textToCommit: String?): Boolean {
         node.refresh()
         this.fakeEditTextForTextStateCalculation?.setSelection(0,0)
         this.fakeEditTextForTextStateCalculation?.setText(null)
@@ -487,10 +540,10 @@ class InputService : AccessibilityService() {
 
                 it.layout(rect.left, rect.top, rect.right, rect.bottom)
                 it.onPreDraw()
-                if (event.action == android.view.KeyEvent.ACTION_DOWN) {
+                if (event.action == KeyEventAndroid.ACTION_DOWN) {
                     val succ = it.onKeyDown(event.getKeyCode(), event)
                     Log.d(logTag, "onKeyDown $succ")
-                } else if (event.action == android.view.KeyEvent.ACTION_UP) {
+                } else if (event.action == KeyEventAndroid.ACTION_UP) {
                     val success = it.onKeyUp(event.getKeyCode(), event)
                     Log.d(logTag, "keyup $success")
                 } else {}
