@@ -939,9 +939,9 @@ class CursorPaint extends StatelessWidget {
     return CustomPaint(
       painter: ImagePainter(
           image: m.image ?? preDefaultCursor.image,
-          x: m.x * s - hotx + c.x,
-          y: m.y * s - hoty + c.y - adjust,
-          scale: 1),
+          x: m.x - hotx + c.x / s,
+          y: m.y - hoty + (c.y - adjust) / s,
+          scale: s),
     );
   }
 }
