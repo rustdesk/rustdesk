@@ -2,6 +2,7 @@ use hbb_common::regex::Regex;
 use std::ops::Deref;
 
 mod ar;
+mod be;
 mod bg;
 mod ca;
 mod cn;
@@ -56,6 +57,7 @@ pub const LANGS: &[(&str, &str)] = &[
     ("et", "Eesti keel"),
     ("hu", "Magyar"),
     ("bg", "Български"),
+    ("be", "Беларуская"),
     ("ru", "Русский"),
     ("sk", "Slovenčina"),
     ("id", "Indonesia"),
@@ -153,6 +155,7 @@ pub fn translate_locale(name: String, locale: &str) -> String {
         "lv" => lv::T.deref(),
         "ar" => ar::T.deref(),
         "bg" => bg::T.deref(),
+        "be" => be::T.deref(),
         "he" => he::T.deref(),
         "hr" => hr::T.deref(),
         _ => en::T.deref(),
