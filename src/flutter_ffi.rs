@@ -786,6 +786,13 @@ pub fn main_show_option(_key: String) -> SyncReturn<bool> {
 }
 
 pub fn main_set_option(key: String, value: String) {
+    #[cfg(target_os = "android")]
+    if key.eq(config::keys::OPTION_ENABLE_KEYBOARD) {
+        crate::ui_cm_interface::notify_input_control(config::option2bool(
+            config::keys::OPTION_ENABLE_KEYBOARD,
+            &value,
+        ));
+    }
     if key.eq("custom-rendezvous-server") {
         set_option(key, value.clone());
         #[cfg(target_os = "android")]

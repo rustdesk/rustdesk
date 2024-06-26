@@ -457,6 +457,11 @@ impl Connection {
                             conn.on_close("connection manager", true).await;
                             break;
                         }
+                        #[cfg(target_os = "android")]
+                        ipc::Data::InputControl(v) => {
+                            conn.keyboard = v;
+                            conn.send_permission(Permission::Keyboard, v).await;
+                        }
                         ipc::Data::CmErr(e) => {
                             if e != "expected" {
                                 // cm closed before connection
