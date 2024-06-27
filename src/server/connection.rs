@@ -400,6 +400,9 @@ impl Connection {
         }
         #[cfg(target_os = "android")]
         start_channel(rx_to_cm, tx_from_cm);
+        #[cfg(target_os = "android")]
+        conn.send_permission(Permission::Keyboard, conn.keyboard).await;
+        #[cfg(not(target_os = "android"))]
         if !conn.keyboard {
             conn.send_permission(Permission::Keyboard, false).await;
         }
@@ -456,6 +459,11 @@ impl Connection {
                             conn.send_close_reason_no_retry("").await;
                             conn.on_close("connection manager", true).await;
                             break;
+                        }
+                        #[cfg(target_os = "android")]
+                        ipc::Data::InputControl(v) => {
+                            conn.keyboard = v;
+                            conn.send_permission(Permission::Keyboard, v).await;
                         }
                         ipc::Data::CmErr(e) => {
                             if e != "expected" {

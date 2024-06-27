@@ -189,6 +189,8 @@ pub enum Data {
     MouseMoveTime(i64),
     Authorize,
     Close,
+    #[cfg(target_os = "android")]
+    InputControl(bool),
     #[cfg(windows)]
     SAS,
     UserSid(Option<u32>),
