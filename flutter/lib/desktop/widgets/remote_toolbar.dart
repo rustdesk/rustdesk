@@ -1888,34 +1888,27 @@ class _KeyboardMenu extends StatelessWidget {
       Divider(),
       MenuButton(
           child: Text(translate('Back')),
-          onPressed: () => ffi.inputModel.tap(MouseButtons.right),
+          onPressed: () => ffi.inputModel.onMobileBack(),
           ffi: ffi),
       MenuButton(
           child: Text(translate('Home')),
-          onPressed: () => ffi.inputModel.tap(MouseButtons.wheel),
+          onPressed: () => ffi.inputModel.onMobileHome(),
           ffi: ffi),
       MenuButton(
           child: Text(translate('Apps')),
-          onPressed: () async {
-            ffi.inputModel.sendMouse('down', MouseButtons.wheel);
-            await Future.delayed(const Duration(milliseconds: 500));
-            ffi.inputModel.sendMouse('up', MouseButtons.wheel);
-          },
+          onPressed: () => ffi.inputModel.onMobileApps(),
           ffi: ffi),
       MenuButton(
           child: Text(translate('Volume up')),
-          onPressed: () => tapHidKey(
-              ffi.inputModel, PhysicalKeyboardKey.audioVolumeUp.usbHidUsage),
+          onPressed: () => ffi.inputModel.onMobileVolumeUp(),
           ffi: ffi),
       MenuButton(
           child: Text(translate('Volume down')),
-          onPressed: () => tapHidKey(
-              ffi.inputModel, PhysicalKeyboardKey.audioVolumeDown.usbHidUsage),
+          onPressed: () => ffi.inputModel.onMobileVolumeDown(),
           ffi: ffi),
       MenuButton(
           child: Text(translate('Power')),
-          onPressed: () =>
-              tapHidKey(ffi.inputModel, PhysicalKeyboardKey.power.usbHidUsage),
+          onPressed: () => ffi.inputModel.onMobilePower(),
           ffi: ffi),
     ];
   }
