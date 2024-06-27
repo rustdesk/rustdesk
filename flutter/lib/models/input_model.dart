@@ -1161,8 +1161,8 @@ class InputModel {
     sendMouse('up', MouseButtons.wheel);
   }
 
-// Simulate a key press event.
-// `usbHidUsage` is the USB HID usage code of the key.
+  // Simulate a key press event.
+  // `usbHidUsage` is the USB HID usage code of the key.
   Future<void> tapHidKey(int usbHidUsage) async {
     inputRawKey(kKeyFlutterKey, usbHidUsage, 0, true);
     await Future.delayed(Duration(milliseconds: 100));

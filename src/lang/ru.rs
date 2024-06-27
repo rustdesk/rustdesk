@@ -621,6 +621,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Never", "Нет"),
         ("During controlled", "При управлении"),
         ("During service is on", "При запущенной службе"),
+        ("Capture screen using DirectX", "Захват экрана с помощью DirectX"),
         ("Back", ""),
         ("Apps", ""),
         ("Volume up", ""),
