@@ -1400,7 +1400,7 @@ pub fn verify_bot(token: String) -> String {
     match crate::auth_2fa::get_chatid_telegram(&token) {
         Err(err) => err.to_string(),
         Ok(None) => {
-            "To activate the bot, simply send a message beginning with a forward slash ("/") like \"hello\" to its chat.".to_owned()
+            "To activate the bot, simply send a message beginning with a forward slash (\"/\") like \"/hello\" to its chat.".to_owned()
         }
         _ => "".to_owned(),
     }
