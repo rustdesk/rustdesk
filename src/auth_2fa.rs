@@ -4,7 +4,7 @@ use hbb_common::{
     config::Config,
     get_time,
     password_security::{decrypt_vec_or_original, encrypt_vec_or_original},
-    ResultType,
+    tokio, ResultType,
 };
 use serde_derive::{Deserialize, Serialize};
 use std::sync::Mutex;
@@ -133,46 +133,61 @@ impl TelegramBot {
     fn save(&self) -> ResultType<()> {
         let s = self.into_string()?;
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
-        crate::ipc::set_option("telegram_bot", &s);
+        crate::ipc::set_option("bot", &s);
         #[cfg(any(target_os = "android", target_os = "ios"))]
-        Config::set_option("telegram_bot".to_owned(), s);
+        Config::set_option("bot".to_owned(), s);
         Ok(())
     }
 
-    fn get() -> ResultType<TelegramBot> {
-        let data = Config::get_option("telegram_bot");
+    pub fn get() -> ResultType<Option<TelegramBot>> {
+        let data = Config::get_option("bot");
+        if data.is_empty() {
+            return Ok(None);
+        }
         let mut bot = serde_json::from_str::<TelegramBot>(&data)?;
         let (token, success, _) = decrypt_vec_or_original(&bot.token, "00");
         if success {
             bot.token_str = String::from_utf8(token)?;
-            return Ok(bot);
+            return Ok(Some(bot));
         }
         bail!("decrypt_vec_or_original telegram bot token failed")
     }
 }
 
 // https://gist.github.com/dideler/85de4d64f66c1966788c1b2304b9caf1
-pub async fn send_2fa_code_to_telegram(code: &str) -> ResultType<()> {
-    let bot = TelegramBot::get()?;
+pub async fn send_2fa_code_to_telegram(text: &str, bot: TelegramBot) -> ResultType<()> {
     let url = format!("https://api.telegram.org/bot{}/sendMessage", bot.token_str);
-    let params = serde_json::json!({"chat_id": bot.chat_id, "text": code});
+    let params = serde_json::json!({"chat_id": bot.chat_id, "text": text});
     crate::post_request(url, params.to_string(), "").await?;
     Ok(())
 }
 
+#[tokio::main(flavor = "current_thread")]
 pub async fn get_chatid_telegram(bot_token: &str) -> ResultType<Option<String>> {
-    // send a message to the bot first please, otherwise the chat_id will be empty
     let url = format!("https://api.telegram.org/bot{}/getUpdates", bot_token);
     let resp = crate::post_request(url, "".to_owned(), "")
         .await
         .map_err(|e| anyhow!(e))?;
-    let res = serde_json::from_str::<serde_json::Value>(&resp)
-        .map(|x| {
-            let chat_id = x["result"][0]["message"]["chat"]["id"].as_str();
-            chat_id.map(|x| x.to_owned())
-        })
-        .map_err(|e| anyhow!(e));
-    if let Ok(Some(chat_id)) = res.as_ref() {
+    let value = serde_json::from_str::<serde_json::Value>(&resp).map_err(|e| anyhow!(e))?;
+
+    // Check for an error_code in the response
+    if let Some(error_code) = value.get("error_code").and_then(|code| code.as_i64()) {
+        // If there's an error_code, try to use the description for the error message
+        let description = value["description"]
+            .as_str()
+            .unwrap_or("Unknown error occurred");
+        return Err(anyhow!(
+            "Telegram API error: {} (error_code: {})",
+            description,
+            error_code
+        ));
+    }
+
+    let chat_id = value["result"][0]["message"]["chat"]["id"]
+        .as_str()
+        .map(|x| x.to_owned());
+
+    if let Some(chat_id) = chat_id.as_ref() {
         let bot = TelegramBot {
             token_str: bot_token.to_owned(),
             chat_id: chat_id.to_owned(),
@@ -180,5 +195,6 @@ pub async fn get_chatid_telegram(bot_token: &str) -> ResultType<Option<String>> 
         };
         bot.save()?;
     }
-    res
+
+    Ok(chat_id)
 }

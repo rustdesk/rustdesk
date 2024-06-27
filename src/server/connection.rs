@@ -401,7 +401,8 @@ impl Connection {
         #[cfg(target_os = "android")]
         start_channel(rx_to_cm, tx_from_cm);
         #[cfg(target_os = "android")]
-        conn.send_permission(Permission::Keyboard, conn.keyboard).await;
+        conn.send_permission(Permission::Keyboard, conn.keyboard)
+            .await;
         #[cfg(not(target_os = "android"))]
         if !conn.keyboard {
             conn.send_permission(Permission::Keyboard, false).await;
@@ -1079,6 +1080,33 @@ impl Connection {
             return;
         }
         if self.require_2fa.is_some() && !self.is_recent_session(true) && !self.from_switch {
+            self.require_2fa.as_ref().map(|totp| {
+                let bot = crate::auth_2fa::TelegramBot::get();
+                let bot = match bot {
+                    Ok(Some(bot)) => bot,
+                    Err(err) => {
+                        log::error!("Failed to get telegram bot: {}", err);
+                        return;
+                    }
+                    _ => return,
+                };
+                let code = totp.generate_current();
+                if let Ok(code) = code {
+                    let text = format!(
+                        "2FA code: {}\n\nA new connection has been established to your device with ID {}. The source IP address is {}.",
+                        code,
+                        Config::get_id(),
+                        self.ip,
+                    );
+                    tokio::spawn(async move {
+                        if let Err(err) =
+                            crate::auth_2fa::send_2fa_code_to_telegram(&text, bot).await
+                        {
+                            log::error!("Failed to send 2fa code to telegram bot: {}", err);
+                        }
+                    });
+                }
+            });
             self.send_login_error(crate::client::REQUIRE_2FA).await;
             return;
         }

@@ -340,7 +340,7 @@ class _ConnectionPageState extends State<ConnectionPage>
                           ?.merge(TextStyle(height: 1)),
                     ).marginOnly(right: 4),
                     Tooltip(
-                      waitDuration: Duration(milliseconds: 0),
+                      waitDuration: Duration(milliseconds: 300),
                       message: translate("id_input_tip"),
                       child: Icon(
                         Icons.help_outline_outlined,

@@ -230,5 +230,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("android_new_voice_call_tip", "A new voice call request was received. If you accept, the audio will switch to voice communication."),
         ("texture_render_tip", "Use texture rendering to make the pictures smoother. You could try disabling this option if you encounter rendering issues."),
         ("floating_window_tip", "It helps to keep RustDesk background service"),
+        ("enable-bot-tip", "If you enable this feature, you can receive the 2FA code from your bot. It can also function as a connection notification."),
+        ("enable-bot-desc", "1, Open a chat with @BotFather.\n2, Send the command \"/newbot\". You will receive a token after completing this step.\n3, Start a chat with your newly created bot. Send a message like \"hello\" to activate it.\n"),
     ].iter().cloned().collect();
 }
