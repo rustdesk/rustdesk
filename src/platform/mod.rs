@@ -104,8 +104,11 @@ pub fn get_wakelock(_display: bool) -> WakeLock {
     hbb_common::log::info!("new wakelock, require display on: {_display}");
     #[cfg(target_os = "android")]
     return crate::platform::WakeLock::new("server");
+    // display: keep screen on
+    // idle: keep cpu on
+    // sleep: prevent system from sleeping, even manually
     #[cfg(not(target_os = "android"))]
-    return crate::platform::WakeLock::new(_display, true, true);
+    return crate::platform::WakeLock::new(_display, true, false);
 }
 
 pub(crate) struct InstallingService; // please use new
