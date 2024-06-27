@@ -8,6 +8,8 @@ use std::{
 use bin_reader::BinaryReader;
 
 pub mod bin_reader;
+#[cfg(windows)]
+mod ui;
 
 #[cfg(windows)]
 const APP_METADATA: &[u8] = include_bytes!("../app_metadata.toml");
@@ -118,6 +120,11 @@ fn main() {
     }
     let click_setup = args.is_empty() && arg_exe.to_lowercase().ends_with("install.exe");
     let quick_support = args.is_empty() && arg_exe.to_lowercase().ends_with("qs.exe");
+
+    #[cfg(windows)]
+    if args.is_empty() {
+        ui::setup();
+    }
 
     let reader = BinaryReader::default();
     if let Some(exe) = setup(
