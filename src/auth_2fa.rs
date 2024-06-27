@@ -162,12 +162,13 @@ pub async fn send_2fa_code_to_telegram(text: &str, bot: TelegramBot) -> ResultTy
     Ok(())
 }
 
-#[tokio::main(flavor = "current_thread")]
-pub async fn get_chatid_telegram(bot_token: &str) -> ResultType<Option<String>> {
+pub fn get_chatid_telegram(bot_token: &str) -> ResultType<Option<String>> {
     let url = format!("https://api.telegram.org/bot{}/getUpdates", bot_token);
-    let resp = crate::post_request(url, "".to_owned(), "")
-        .await
-        .map_err(|e| anyhow!(e))?;
+    // because caller is in tokio runtime, so we must call post_request_sync in new thread.
+    let handle = std::thread::spawn(move || {
+        crate::post_request_sync(url, "".to_owned(), "")
+    });
+    let resp = handle.join().map_err(|_| anyhow!("Thread panicked"))??;
     let value = serde_json::from_str::<serde_json::Value>(&resp).map_err(|e| anyhow!(e))?;
 
     // Check for an error_code in the response
@@ -183,9 +184,14 @@ pub async fn get_chatid_telegram(bot_token: &str) -> ResultType<Option<String>> 
         ));
     }
 
-    let chat_id = value["result"][0]["message"]["chat"]["id"]
-        .as_str()
-        .map(|x| x.to_owned());
+    let chat_id = &value["result"][0]["message"]["chat"]["id"];
+    let chat_id = if let Some(id) = chat_id.as_i64() {
+        Some(id.to_string())
+    } else if let Some(id) = chat_id.as_str() {
+        Some(id.to_owned())
+    } else {
+        None
+    };
 
     if let Some(chat_id) = chat_id.as_ref() {
         let bot = TelegramBot {
