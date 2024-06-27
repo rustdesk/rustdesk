@@ -400,6 +400,9 @@ impl Connection {
         }
         #[cfg(target_os = "android")]
         start_channel(rx_to_cm, tx_from_cm);
+        #[cfg(target_os = "android")]
+        conn.send_permission(Permission::Keyboard, conn.keyboard).await;
+        #[cfg(not(target_os = "android"))]
         if !conn.keyboard {
             conn.send_permission(Permission::Keyboard, false).await;
         }
