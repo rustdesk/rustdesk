@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_hbb/common/widgets/audio_input.dart';
 import 'package:flutter_hbb/common/widgets/toolbar.dart';
 import 'package:flutter_hbb/models/chat_model.dart';
+import 'package:flutter_hbb/models/input_model.dart';
 import 'package:flutter_hbb/models/state_model.dart';
 import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/utils/multi_window_manager.dart';
@@ -1885,6 +1886,22 @@ class _KeyboardMenu extends StatelessWidget {
     if (!enabled) return [];
     return [
       Divider(),
+      MenuButton(
+          child: Text(translate('Back')),
+          onPressed: () => ffi.inputModel.tap(MouseButtons.right),
+          ffi: ffi),
+      MenuButton(
+          child: Text(translate('Home')),
+          onPressed: () => ffi.inputModel.tap(MouseButtons.wheel),
+          ffi: ffi),
+      MenuButton(
+          child: Text(translate('Apps')),
+          onPressed: () async {
+            ffi.inputModel.sendMouse('down', MouseButtons.wheel);
+            await Future.delayed(const Duration(milliseconds: 500));
+            ffi.inputModel.sendMouse('up', MouseButtons.wheel);
+          },
+          ffi: ffi),
       MenuButton(
           child: Text(translate('Volume up')),
           onPressed: () => tapHidKey(

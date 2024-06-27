@@ -6,6 +6,7 @@ import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/common/shared_state.dart';
 import 'package:flutter_hbb/common/widgets/dialog.dart';
 import 'package:flutter_hbb/consts.dart';
+import 'package:flutter_hbb/models/input_model.dart';
 import 'package:flutter_hbb/models/model.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:get/get.dart';
@@ -76,6 +77,44 @@ List<TTextMenu> toolbarControls(BuildContext context, String id, FFI ffi) {
   final sessionId = ffi.sessionId;
 
   List<TTextMenu> v = [];
+  if (isMobile &&
+      pi.platform == kPeerPlatformAndroid &&
+      perms['keyboard'] != false) {
+    v.addAll([
+      TTextMenu(
+        child: Text(translate('Back')),
+        onPressed: () => ffi.inputModel.tap(MouseButtons.right),
+      ),
+      TTextMenu(
+        child: Text(translate('Home')),
+        onPressed: () => ffi.inputModel.tap(MouseButtons.wheel),
+      ),
+      TTextMenu(
+        child: Text(translate('Apps')),
+        onPressed: () async {
+          ffi.inputModel.sendMouse('down', MouseButtons.wheel);
+          await Future.delayed(const Duration(milliseconds: 500));
+          ffi.inputModel.sendMouse('up', MouseButtons.wheel);
+        },
+      ),
+      TTextMenu(
+        child: Text(translate('Volume up')),
+        onPressed: () => tapHidKey(
+            ffi.inputModel, PhysicalKeyboardKey.audioVolumeUp.usbHidUsage),
+      ),
+      TTextMenu(
+        child: Text(translate('Volume down')),
+        onPressed: () => tapHidKey(
+            ffi.inputModel, PhysicalKeyboardKey.audioVolumeDown.usbHidUsage),
+      ),
+      TTextMenu(
+        child: Text(translate('Power')),
+        onPressed: () =>
+            tapHidKey(ffi.inputModel, PhysicalKeyboardKey.power.usbHidUsage),
+      ),
+      TTextMenu(child: Offstage(), onPressed: () => {}, divider: true),
+    ]);
+  }
   // elevation
   if (perms['keyboard'] != false && ffi.elevationModel.showRequestMenu) {
     v.add(
@@ -128,27 +167,6 @@ List<TTextMenu> toolbarControls(BuildContext context, String id, FFI ffi) {
                 sessionId: sessionId, value: data.text ?? "");
           }
         }));
-  }
-  if (isMobile &&
-      pi.platform == kPeerPlatformAndroid &&
-      perms['keyboard'] != false) {
-    v.addAll([
-      TTextMenu(
-        child: Text(translate('Volume up')),
-        onPressed: () => tapHidKey(
-            ffi.inputModel, PhysicalKeyboardKey.audioVolumeUp.usbHidUsage),
-      ),
-      TTextMenu(
-        child: Text(translate('Volume down')),
-        onPressed: () => tapHidKey(
-            ffi.inputModel, PhysicalKeyboardKey.audioVolumeDown.usbHidUsage),
-      ),
-      TTextMenu(
-        child: Text(translate('Power')),
-        onPressed: () =>
-            tapHidKey(ffi.inputModel, PhysicalKeyboardKey.power.usbHidUsage),
-      ),
-    ]);
   }
   // reset canvas
   if (isMobile) {
