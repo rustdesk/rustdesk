@@ -928,13 +928,9 @@ makeMobileActionsOverlayEntry(VoidCallback? onHide, {FFI? ffi}) {
       position: draggablePositions.mobileActions,
       width: overlayW,
       height: overlayH,
-      onBackPressed: () => session.inputModel.tap(MouseButtons.right),
-      onHomePressed: () => session.inputModel.tap(MouseButtons.wheel),
-      onRecentPressed: () async {
-        session.inputModel.sendMouse('down', MouseButtons.wheel);
-        await Future.delayed(const Duration(milliseconds: 500));
-        session.inputModel.sendMouse('up', MouseButtons.wheel);
-      },
+      onBackPressed: session.inputModel.onMobileBack,
+      onHomePressed: session.inputModel.onMobileHome,
+      onRecentPressed: session.inputModel.onMobileApps,
       onHidePressed: onHide,
     );
   }
@@ -3428,12 +3424,4 @@ disableWindowMovable(int? windowId) {
   } else {
     WindowController.fromWindowId(windowId).setMovable(false);
   }
-}
-
-// Simulate a key press event.
-// `usbHidUsage` is the USB HID usage code of the key.
-Future<void> tapHidKey(InputModel inputModel, int usbHidUsage) async {
-  inputModel.inputRawKey(kKeyFlutterKey, usbHidUsage, 0, true);
-  await Future.delayed(Duration(milliseconds: 100));
-  inputModel.inputRawKey(kKeyFlutterKey, usbHidUsage, 0, false);
 }
