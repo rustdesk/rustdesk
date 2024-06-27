@@ -942,7 +942,7 @@ class CursorPaint extends StatelessWidget {
       return Offstage();
     }
 
-    final minSize = 24.0;
+    final minSize = 12.0;
     double mins =
         minSize / (image.width > image.height ? image.width : image.height);
     double factor = 1.0;
