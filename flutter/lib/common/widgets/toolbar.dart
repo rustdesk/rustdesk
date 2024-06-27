@@ -6,7 +6,6 @@ import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/common/shared_state.dart';
 import 'package:flutter_hbb/common/widgets/dialog.dart';
 import 'package:flutter_hbb/consts.dart';
-import 'package:flutter_hbb/models/input_model.dart';
 import 'package:flutter_hbb/models/model.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:get/get.dart';
@@ -23,6 +22,20 @@ class TTextMenu {
       required this.onPressed,
       this.trailingIcon,
       this.divider = false});
+
+  Widget getChild() {
+    if (trailingIcon != null) {
+      return Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          child,
+          trailingIcon!,
+        ],
+      );
+    } else {
+      return child;
+    }
+  }
 }
 
 class TRadioMenu<T> {
@@ -77,36 +90,6 @@ List<TTextMenu> toolbarControls(BuildContext context, String id, FFI ffi) {
   final sessionId = ffi.sessionId;
 
   List<TTextMenu> v = [];
-  if (isMobile &&
-      pi.platform == kPeerPlatformAndroid &&
-      perms['keyboard'] != false) {
-    v.addAll([
-      TTextMenu(
-        child: Text(translate('Back')),
-        onPressed: () => ffi.inputModel.onMobileBack(),
-      ),
-      TTextMenu(
-        child: Text(translate('Home')),
-        onPressed: () => ffi.inputModel.onMobileHome(),
-      ),
-      TTextMenu(
-        child: Text(translate('Apps')),
-        onPressed: () => ffi.inputModel.onMobileApps(),
-      ),
-      TTextMenu(
-        child: Text(translate('Volume up')),
-        onPressed: () => ffi.inputModel.onMobileVolumeUp(),
-      ),
-      TTextMenu(
-        child: Text(translate('Volume down')),
-        onPressed: () => ffi.inputModel.onMobileVolumeDown(),
-      ),
-      TTextMenu(
-        child: Text(translate('Power')),
-        onPressed: () => ffi.inputModel.onMobilePower(),
-      ),
-    ]);
-  }
   // elevation
   if (perms['keyboard'] != false && ffi.elevationModel.showRequestMenu) {
     v.add(

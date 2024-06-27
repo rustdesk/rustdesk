@@ -553,29 +553,62 @@ class _RemotePageState extends State<RemotePage> {
         color: MyTheme.canvasColor, child: Stack(children: paints));
   }
 
+  List<TTextMenu> _getMobileActionMenus() {
+    if (gFFI.ffiModel.pi.platform != kPeerPlatformAndroid ||
+        !gFFI.ffiModel.keyboard) {
+      return [];
+    }
+    return [
+      TTextMenu(
+        child: Text(translate('Back')),
+        onPressed: () => gFFI.inputModel.onMobileBack(),
+      ),
+      TTextMenu(
+        child: Text(translate('Home')),
+        onPressed: () => gFFI.inputModel.onMobileHome(),
+      ),
+      TTextMenu(
+        child: Text(translate('Apps')),
+        onPressed: () => gFFI.inputModel.onMobileApps(),
+      ),
+      TTextMenu(
+        child: Text(translate('Volume up')),
+        onPressed: () => gFFI.inputModel.onMobileVolumeUp(),
+      ),
+      TTextMenu(
+        child: Text(translate('Volume down')),
+        onPressed: () => gFFI.inputModel.onMobileVolumeDown(),
+      ),
+      TTextMenu(
+        child: Text(translate('Power')),
+        onPressed: () => gFFI.inputModel.onMobilePower(),
+      ),
+    ];
+  }
+
   void showActions(String id) async {
     final size = MediaQuery.of(context).size;
     final x = 120.0;
     final y = size.height;
+    final mobileActionMenus = _getMobileActionMenus();
     final menus = toolbarControls(context, id, gFFI);
-    getChild(TTextMenu menu) {
-      if (menu.trailingIcon != null) {
-        return Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              menu.child,
-              menu.trailingIcon!,
-            ]);
-      } else {
-        return menu.child;
-      }
-    }
 
-    final more = menus
-        .asMap()
-        .entries
-        .map((e) => PopupMenuItem<int>(child: getChild(e.value), value: e.key))
-        .toList();
+    final List<PopupMenuEntry<int>> more = [
+      ...mobileActionMenus
+          .asMap()
+          .entries
+          .map((e) =>
+              PopupMenuItem<int>(child: e.value.getChild(), value: e.key))
+          .toList(),
+      if (mobileActionMenus.isNotEmpty) PopupMenuDivider(),
+      ...menus
+          .asMap()
+          .entries
+          .map((e) => PopupMenuItem<int>(
+              child: e.value.getChild(),
+              value: e.key + mobileActionMenus.length))
+          .toList(),
+    ];
     () async {
       var index = await showMenu(
         context: context,
@@ -583,8 +616,12 @@ class _RemotePageState extends State<RemotePage> {
         items: more,
         elevation: 8,
       );
-      if (index != null && index < menus.length) {
-        menus[index].onPressed.call();
+      if (index != null) {
+        if (index < mobileActionMenus.length) {
+          mobileActionMenus[index].onPressed.call();
+        } else if (index < mobileActionMenus.length + more.length) {
+          menus[index - mobileActionMenus.length].onPressed.call();
+        }
       }
     }();
   }
@@ -639,23 +676,11 @@ class _RemotePageState extends State<RemotePage> {
               ),
               onPressVoiceCall),
     ];
-    getChild(TTextMenu menu) {
-      if (menu.trailingIcon != null) {
-        return Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              menu.child,
-              menu.trailingIcon!,
-            ]);
-      } else {
-        return menu.child;
-      }
-    }
 
     final menuItems = menus
         .asMap()
         .entries
-        .map((e) => PopupMenuItem<int>(child: getChild(e.value), value: e.key))
+        .map((e) => PopupMenuItem<int>(child: e.value.getChild(), value: e.key))
         .toList();
     Future.delayed(Duration.zero, () async {
       final size = MediaQuery.of(context).size;
