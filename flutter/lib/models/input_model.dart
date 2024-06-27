@@ -1152,4 +1152,27 @@ class InputModel {
       platformFFI.stopDesktopWebListener();
     }
   }
+
+  void onMobileBack() => tap(MouseButtons.right);
+  void onMobileHome() => tap(MouseButtons.wheel);
+  Future<void> onMobileApps() async {
+    sendMouse('down', MouseButtons.wheel);
+    await Future.delayed(const Duration(milliseconds: 500));
+    sendMouse('up', MouseButtons.wheel);
+  }
+
+  // Simulate a key press event.
+  // `usbHidUsage` is the USB HID usage code of the key.
+  Future<void> tapHidKey(int usbHidUsage) async {
+    inputRawKey(kKeyFlutterKey, usbHidUsage, 0, true);
+    await Future.delayed(Duration(milliseconds: 100));
+    inputRawKey(kKeyFlutterKey, usbHidUsage, 0, false);
+  }
+
+  Future<void> onMobileVolumeUp() async =>
+      await tapHidKey(PhysicalKeyboardKey.audioVolumeUp.usbHidUsage);
+  Future<void> onMobileVolumeDown() async =>
+      await tapHidKey(PhysicalKeyboardKey.audioVolumeDown.usbHidUsage);
+  Future<void> onMobilePower() async =>
+      await tapHidKey(PhysicalKeyboardKey.power.usbHidUsage);
 }

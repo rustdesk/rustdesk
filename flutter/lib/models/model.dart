@@ -195,7 +195,7 @@ class FfiModel with ChangeNotifier {
     if (desktopType == DesktopType.remote) {
       KeyboardEnabledState.find(id).value = _permissions['keyboard'] != false;
     }
-    debugPrint('$_permissions');
+    debugPrint('updatePermission: $_permissions');
     notifyListeners();
   }
 

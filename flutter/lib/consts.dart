@@ -155,6 +155,8 @@ const int kWindowMainId = 0;
 const String kPointerEventKindTouch = "touch";
 const String kPointerEventKindMouse = "mouse";
 
+const String kKeyFlutterKey = "flutter_key";
+
 const String kKeyShowDisplaysAsIndividualWindows =
     'displays_as_individual_windows';
 const String kKeyUseAllMyDisplaysForTheRemoteSession =

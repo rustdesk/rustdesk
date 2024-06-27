@@ -44,7 +44,7 @@ pub(crate) const APP_TYPE_CM: &str = "main";
 pub type FlutterSession = Arc<Session<FlutterHandler>>;
 
 lazy_static::lazy_static! {
-    pub(crate) static ref CUR_SESSION_ID: RwLock<SessionID> = Default::default();
+    pub(crate) static ref CUR_SESSION_ID: RwLock<SessionID> = Default::default(); // For desktop only
     static ref GLOBAL_EVENT_STREAM: RwLock<HashMap<String, StreamSink<String>>> = Default::default(); // rust to dart event channel
 }
 
