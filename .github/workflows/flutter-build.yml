@@ -1008,6 +1008,7 @@ jobs:
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@v1
+        if: matrix.job.arch == 'x86_64' || env.UPLOAD_ARTIFACT == 'true'
         with:
           toolchain: ${{ env.RUST_VERSION }}
           targets: ${{ matrix.job.target }}
@@ -1024,19 +1025,21 @@ jobs:
           sed -i  "s/\[\"cdylib\", \"staticlib\", \"rlib\"\]/\[\"cdylib\"\]/g" Cargo.toml
 
       - name: Restore bridge files
+        if: matrix.job.arch == 'x86_64' || env.UPLOAD_ARTIFACT == 'true'
         uses: actions/download-artifact@master
         with:
           name: bridge-artifact
           path: ./
 
       - name: Setup vcpkg with Github Actions binary cache
+        if: matrix.job.arch == 'x86_64' || env.UPLOAD_ARTIFACT == 'true'
         uses: lukka/run-vcpkg@v11
         with:
           vcpkgDirectory: /opt/artifacts/vcpkg
           vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
 
       - name: Install vcpkg dependencies
-        if: env.UPLOAD_ARTIFACT == 'true'
+        if: matrix.job.arch == 'x86_64' || env.UPLOAD_ARTIFACT == 'true'
         run: |
           case ${{ matrix.job.target }} in
             aarch64-unknown-linux-gnu)
@@ -1049,6 +1052,7 @@ jobs:
         shell: bash
 
       - name: Restore bridge files
+        if: matrix.job.arch == 'x86_64' || env.UPLOAD_ARTIFACT == 'true'
         uses: actions/download-artifact@master
         with:
           name: bridge-artifact
@@ -1057,7 +1061,7 @@ jobs:
       - uses: rustdesk-org/run-on-arch-action@amd64-support
         name: Build rustdesk
         id: vcpkg
-        if: env.UPLOAD_ARTIFACT == 'true'
+        if: matrix.job.arch == 'x86_64' || env.UPLOAD_ARTIFACT == 'true'
         with:
           arch: ${{ matrix.job.arch }}
           distro: ${{ matrix.job.distro }}
