@@ -853,7 +853,32 @@ pub fn run_me<T: AsRef<std::ffi::OsStr>>(args: Vec<T>) -> std::io::Result<std::p
         }
     }
     let cmd = std::env::current_exe()?;
-    return std::process::Command::new(cmd).args(&args).spawn();
+    let mut cmd = std::process::Command::new(cmd);
+    #[cfg(windows)]
+    let mut force_foreground = false;
+    #[cfg(windows)]
+    {
+        let arg_strs = args
+            .iter()
+            .map(|x| x.as_ref().to_string_lossy())
+            .collect::<Vec<_>>();
+        if arg_strs == vec!["--install"] || arg_strs == &["--noinstall"] {
+            cmd.env(crate::platform::SET_FOREGROUND_WINDOW, "1");
+            force_foreground = true;
+        }
+    }
+    let result = cmd.args(&args).spawn();
+    match result.as_ref() {
+        Ok(_child) =>
+        {
+            #[cfg(windows)]
+            if force_foreground {
+                unsafe { winapi::um::winuser::AllowSetForegroundWindow(_child.id() as u32) };
+            }
+        }
+        Err(err) => log::error!("run_me: {err:?}"),
+    }
+    result
 }
 
 #[inline]
