@@ -260,18 +260,18 @@ dependencies = [
 
 [[package]]
 name = "arboard"
-version = "3.3.1"
-source = "git+https://github.com/fufesou/arboard?branch=feat/x11_set_conn_timeout#956b5f8693b4fc7fddd7b8cafbe1111a892b34b1"
+version = "3.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9fb4009533e8ff8f1450a5bcbc30f4242a1d34442221f72314bea1f5dc9c7f89"
 dependencies = [
  "clipboard-win",
  "core-graphics 0.23.1 (registry+https://github.com/rust-lang/crates.io-index)",
- "image",
+ "image 0.25.1",
  "log",
- "objc",
- "objc-foundation",
- "objc_id",
+ "objc2 0.5.2",
+ "objc2-app-kit",
+ "objc2-foundation",
  "parking_lot",
- "thiserror",
  "windows-sys 0.48.0",
  "wl-clipboard-rs",
  "x11rb 0.13.0",
@@ -603,7 +603,7 @@ version = "0.68.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "726e4313eb6ec35d2730258ad4e15b547ee75d6afaa1361a922e78e59b7d8078"
 dependencies = [
- "bitflags 2.4.1",
+ "bitflags 2.6.0",
  "cexpr",
  "clang-sys",
  "lazy_static",
@@ -631,9 +631,9 @@ checksum = "bef38d45163c2f1dde094a7dfd33ccf595c92905c8f8f4fdc18d06fb1037718a"
 
 [[package]]
 name = "bitflags"
-version = "2.4.1"
+version = "2.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "327762f6e5a765692301e5bb513e0d9fef63be86bbc14528052b1cd3e6f03e07"
+checksum = "b048fb63fd8b5923fc5aa7b340d8e156aec7ec02f0c78fa8a6ddc2613f6f71de"
 dependencies = [
  "serde 1.0.190",
 ]
@@ -681,7 +681,7 @@ version = "0.1.0-beta.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0fa55741ee90902547802152aaf3f8e5248aab7e21468089560d4c8840561146"
 dependencies = [
- "objc-sys",
+ "objc-sys 0.2.0-beta.2",
 ]
 
 [[package]]
@@ -691,7 +691,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8dd9e63c1744f755c2f60332b88de39d341e5e86239014ad839bd71c106dec42"
 dependencies = [
  "block-sys",
- "objc2-encode",
+ "objc2-encode 2.0.0-pre.2",
+]
+
+[[package]]
+name = "block2"
+version = "0.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2c132eebf10f5cad5289222520a4a058514204aed6d791f1cf4fe8088b82d15f"
+dependencies = [
+ "objc2 0.5.2",
 ]
 
 [[package]]
@@ -797,13 +806,13 @@ version = "0.4.0-beta2"
 source = "git+https://github.com/clslaid/cacao?branch=feat/set-file-urls#05e1536b0b43aaae308ec72c0eed703e875b7b95"
 dependencies = [
  "bitmask-enum",
- "block2",
+ "block2 0.2.0-alpha.6",
  "core-foundation 0.9.3 (git+https://github.com/madsmtm/core-foundation-rs.git?rev=7d593d016175755e492a92ef89edca68ac3bd5cd)",
  "core-graphics 0.23.1 (git+https://github.com/madsmtm/core-foundation-rs.git?rev=7d593d016175755e492a92ef89edca68ac3bd5cd)",
  "dispatch",
  "lazy_static",
  "libc",
- "objc2",
+ "objc2 0.3.0-beta.2",
  "os_info",
  "percent-encoding",
  "url",
@@ -815,7 +824,7 @@ version = "0.18.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8ca26ef0159422fb77631dc9d17b102f253b876fe1586b03b803e63a309b4ee2"
 dependencies = [
- "bitflags 2.4.1",
+ "bitflags 2.6.0",
  "cairo-sys-rs",
  "glib 0.18.5",
  "libc",
@@ -996,9 +1005,9 @@ dependencies = [
 
 [[package]]
 name = "clipboard-win"
-version = "5.1.0"
+version = "5.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3ec832972fefb8cf9313b45a0d1945e29c9c251f1d4c6eafc5fe2124c02d2e81"
+checksum = "79f4473f5144e20d9aceaf2972478f06ddf687831eafeeb434fbaf0acc4144ad"
 dependencies = [
  "error-code",
 ]
@@ -1193,7 +1202,7 @@ name = "core-foundation-sys"
 version = "0.8.6"
 source = "git+https://github.com/madsmtm/core-foundation-rs.git?rev=7d593d016175755e492a92ef89edca68ac3bd5cd#7d593d016175755e492a92ef89edca68ac3bd5cd"
 dependencies = [
- "objc2-encode",
+ "objc2-encode 2.0.0-pre.2",
 ]
 
 [[package]]
@@ -1232,7 +1241,7 @@ dependencies = [
  "core-graphics-types 0.1.2 (git+https://github.com/madsmtm/core-foundation-rs.git?rev=7d593d016175755e492a92ef89edca68ac3bd5cd)",
  "foreign-types 0.5.0",
  "libc",
- "objc2-encode",
+ "objc2-encode 2.0.0-pre.2",
 ]
 
 [[package]]
@@ -1254,7 +1263,7 @@ dependencies = [
  "bitflags 1.3.2",
  "core-foundation 0.9.3 (git+https://github.com/madsmtm/core-foundation-rs.git?rev=7d593d016175755e492a92ef89edca68ac3bd5cd)",
  "libc",
- "objc2-encode",
+ "objc2-encode 2.0.0-pre.2",
 ]
 
 [[package]]
@@ -1937,7 +1946,7 @@ version = "4.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "74351c3392ea1ff6cd2628e0042d268ac2371cb613252ff383b6dfa50d22fa79"
 dependencies = [
- "bitflags 2.4.1",
+ "bitflags 2.6.0",
  "libc",
 ]
 
@@ -2549,7 +2558,7 @@ version = "0.18.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "233daaf6e83ae6a12a52055f568f9d7cf4671dabb78ff9560ab6da230ce00ee5"
 dependencies = [
- "bitflags 2.4.1",
+ "bitflags 2.6.0",
  "futures-channel",
  "futures-core",
  "futures-executor",
@@ -3152,6 +3161,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "image"
+version = "0.25.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fd54d660e773627692c524beaad361aca785a4f9f5730ce91f42aabe5bce3d11"
+dependencies = [
+ "bytemuck",
+ "byteorder",
+ "num-traits 0.2.17",
+ "png",
+ "tiff",
+]
+
+[[package]]
 name = "impersonate_system"
 version = "0.1.0"
 source = "git+https://github.com/21pages/impersonate-system#2f429010a5a10b1fe5eceb553c6672fd53d20167"
@@ -3399,7 +3421,7 @@ version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b750dcadc39a09dbadd74e118f6dd6598df77fa01df0cfcdc52c28dece74528a"
 dependencies = [
- "bitflags 2.4.1",
+ "bitflags 2.6.0",
  "serde 1.0.190",
  "unicode-segmentation",
 ]
@@ -3946,7 +3968,7 @@ version = "0.27.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2eb04e9c688eff1c89d72b407f168cf79bb9e867a9d3323ed6c01519eb9cc053"
 dependencies = [
- "bitflags 2.4.1",
+ "bitflags 2.6.0",
  "cfg-if 1.0.0",
  "libc",
 ]
@@ -4137,14 +4159,70 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "df3b9834c1e95694a05a828b59f55fa2afec6288359cda67146126b3f90a55d7"
 
 [[package]]
+name = "objc-sys"
+version = "0.3.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cdb91bdd390c7ce1a8607f35f3ca7151b65afc0ff5ff3b34fa350f7d7c7e4310"
+
+[[package]]
 name = "objc2"
 version = "0.3.0-beta.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a49f420f16c8814efdcd6b4258664de9d9920cbc26b6f95d034a1ca9850ccc2c"
 dependencies = [
- "block2",
- "objc-sys",
- "objc2-encode",
+ "block2 0.2.0-alpha.6",
+ "objc-sys 0.2.0-beta.2",
+ "objc2-encode 2.0.0-pre.2",
+]
+
+[[package]]
+name = "objc2"
+version = "0.5.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "46a785d4eeff09c14c487497c162e92766fbb3e4059a71840cecc03d9a50b804"
+dependencies = [
+ "objc-sys 0.3.5",
+ "objc2-encode 4.0.3",
+]
+
+[[package]]
+name = "objc2-app-kit"
+version = "0.2.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e4e89ad9e3d7d297152b17d39ed92cd50ca8063a89a9fa569046d41568891eff"
+dependencies = [
+ "bitflags 2.6.0",
+ "block2 0.5.1",
+ "libc",
+ "objc2 0.5.2",
+ "objc2-core-data",
+ "objc2-core-image",
+ "objc2-foundation",
+ "objc2-quartz-core",
+]
+
+[[package]]
+name = "objc2-core-data"
+version = "0.2.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "617fbf49e071c178c0b24c080767db52958f716d9eabdf0890523aeae54773ef"
+dependencies = [
+ "bitflags 2.6.0",
+ "block2 0.5.1",
+ "objc2 0.5.2",
+ "objc2-foundation",
+]
+
+[[package]]
+name = "objc2-core-image"
+version = "0.2.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "55260963a527c99f1819c4f8e3b47fe04f9650694ef348ffd2227e8196d34c80"
+dependencies = [
+ "block2 0.5.1",
+ "objc2 0.5.2",
+ "objc2-foundation",
+ "objc2-metal",
 ]
 
 [[package]]
@@ -4153,7 +4231,50 @@ version = "2.0.0-pre.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "abfcac41015b00a120608fdaa6938c44cb983fee294351cc4bac7638b4e50512"
 dependencies = [
- "objc-sys",
+ "objc-sys 0.2.0-beta.2",
+]
+
+[[package]]
+name = "objc2-encode"
+version = "4.0.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7891e71393cd1f227313c9379a26a584ff3d7e6e7159e988851f0934c993f0f8"
+
+[[package]]
+name = "objc2-foundation"
+version = "0.2.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0ee638a5da3799329310ad4cfa62fbf045d5f56e3ef5ba4149e7452dcf89d5a8"
+dependencies = [
+ "bitflags 2.6.0",
+ "block2 0.5.1",
+ "libc",
+ "objc2 0.5.2",
+]
+
+[[package]]
+name = "objc2-metal"
+version = "0.2.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "dd0cba1276f6023976a406a14ffa85e1fdd19df6b0f737b063b95f6c8c7aadd6"
+dependencies = [
+ "bitflags 2.6.0",
+ "block2 0.5.1",
+ "objc2 0.5.2",
+ "objc2-foundation",
+]
+
+[[package]]
+name = "objc2-quartz-core"
+version = "0.2.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e42bee7bff906b14b167da2bac5efe6b6a07e6f7c0a21a7308d40c960242dc7a"
+dependencies = [
+ "bitflags 2.6.0",
+ "block2 0.5.1",
+ "objc2 0.5.2",
+ "objc2-foundation",
+ "objc2-metal",
 ]
 
 [[package]]
@@ -4218,7 +4339,7 @@ version = "0.10.62"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8cde4d2d9200ad5909f8dac647e29482e07c3a35de8a13fce7c9c7747ad9f671"
 dependencies = [
- "bitflags 2.4.1",
+ "bitflags 2.6.0",
  "cfg-if 1.0.0",
  "foreign-types 0.3.2",
  "libc",
@@ -4790,7 +4911,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1d06cb9646c7a14096231a2474d7f21e5e8c13de090c68d13bde6157cfe7f159"
 dependencies = [
  "html-escape",
- "image",
+ "image 0.24.7",
  "qrcodegen",
 ]
 
@@ -5334,7 +5455,7 @@ dependencies = [
  "hbb_common",
  "hex",
  "hound",
- "image",
+ "image 0.24.7",
  "impersonate_system",
  "include_dir",
  "jni 0.21.1",
@@ -5442,7 +5563,7 @@ version = "0.38.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2b426b0506e5d50a7d8dafcf2e81471400deb602392c7dd110815afb4eaf02a3"
 dependencies = [
- "bitflags 2.4.1",
+ "bitflags 2.6.0",
  "errno",
  "libc",
  "linux-raw-sys 0.4.10",
@@ -6152,7 +6273,7 @@ dependencies = [
  "gdkwayland-sys",
  "gdkx11-sys",
  "gtk",
- "image",
+ "image 0.24.7",
  "instant",
  "jni 0.21.1",
  "lazy_static",
@@ -7022,7 +7143,7 @@ version = "0.31.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1ca7d52347346f5473bf2f56705f360e8440873052e575e55890c4fa57843ed3"
 dependencies = [
- "bitflags 2.4.1",
+ "bitflags 2.6.0",
  "nix 0.26.4",
  "wayland-backend",
  "wayland-scanner",
@@ -7034,7 +7155,7 @@ version = "0.31.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e253d7107ba913923dc253967f35e8561a3c65f914543e46843c88ddd729e21c"
 dependencies = [
- "bitflags 2.4.1",
+ "bitflags 2.6.0",
  "wayland-backend",
  "wayland-client",
  "wayland-scanner",
@@ -7046,7 +7167,7 @@ version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ad1f61b76b6c2d8742e10f9ba5c3737f6530b4c243132c2a2ccc8aa96fe25cd6"
 dependencies = [
- "bitflags 2.4.1",
+ "bitflags 2.6.0",
  "wayland-backend",
  "wayland-client",
  "wayland-protocols",
