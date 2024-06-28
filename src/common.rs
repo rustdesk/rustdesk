@@ -1524,19 +1524,15 @@ impl ClipboardContext {
 
     #[cfg(target_os = "linux")]
     pub fn new() -> ResultType<ClipboardContext> {
-        let dur = arboard::Clipboard::get_x11_server_conn_timeout();
-        let dur_bak = dur;
-        let _restore_timeout_on_ret = SimpleCallOnReturn {
-            b: true,
-            f: Box::new(move || arboard::Clipboard::set_x11_server_conn_timeout(dur_bak)),
-        };
-
-        for i in 1..4 {
-            arboard::Clipboard::set_x11_server_conn_timeout(dur * i);
-            match arboard::Clipboard::new() {
-                Ok(c) => return Ok(ClipboardContext(c)),
-                Err(arboard::Error::X11ServerConnTimeout) => continue,
-                Err(err) => return Err(err.into()),
+        for _ in 0..3 {
+            let (tx, rx) = std::sync::mpsc::channel();
+            std::thread::spawn(move || {
+                tx.send(arboard::Clipboard::new()).ok();
+            });
+            match rx.recv_timeout(Duration::from_millis(40)) {
+                Ok(Ok(c)) => return Ok(ClipboardContext(c)),
+                Ok(Err(e)) => return Err(e.into()),
+                Err(_) => continue,
             }
         }
         bail!("Failed to create clipboard context, timeout");
@@ -1548,24 +1544,14 @@ impl ClipboardContext {
         Ok(self.0.get_text()?)
     }
 
+    // CAUTION: This function must not be called in the main thread!!! It can only be called in the clibpoard thread.
+    // There's no timeout for this function, so it may block.
+    // Because of https://github.com/1Password/arboard/blob/151e679ee5c208403b06ba02d28f92c5891f7867/src/platform/linux/x11.rs#L296
+    // We cannot use a new thread to get text because the clipboard context is `&mut self`.
+    // The crate design is somehow not good.
     #[cfg(target_os = "linux")]
     pub fn get_text(&mut self) -> ResultType<String> {
-        let dur = arboard::Clipboard::get_x11_server_conn_timeout();
-        let dur_bak = dur;
-        let _restore_timeout_on_ret = SimpleCallOnReturn {
-            b: true,
-            f: Box::new(move || arboard::Clipboard::set_x11_server_conn_timeout(dur_bak)),
-        };
-
-        for i in 1..4 {
-            arboard::Clipboard::set_x11_server_conn_timeout(dur * i);
-            match self.0.get_text() {
-                Ok(s) => return Ok(s),
-                Err(arboard::Error::X11ServerConnTimeout) => continue,
-                Err(err) => return Err(err.into()),
-            }
-        }
-        bail!("Failed to get text, timeout");
+        Ok(self.0.get_text()?)
     }
 
     #[inline]
@@ -1880,30 +1866,5 @@ mod tests {
             Duration::from_secs_f64(dur.as_secs_f64() * 0.499 * 1e-9),
             Duration::from_nanos(0)
         );
-    }
-
-    #[tokio::test]
-    #[cfg(not(any(
-        target_os = "android",
-        target_os = "ios",
-        all(target_os = "linux", feature = "unix-file-copy-paste")
-    )))]
-    async fn test_clipboard_context() {
-        #[cfg(target_os = "linux")]
-        let dur = {
-            let dur = Duration::from_micros(500);
-            arboard::Clipboard::set_x11_server_conn_timeout(dur);
-            dur
-        };
-
-        let _ctx = ClipboardContext::new();
-        #[cfg(target_os = "linux")]
-        {
-            assert_eq!(
-                arboard::Clipboard::get_x11_server_conn_timeout(),
-                dur,
-                "Failed to restore x11 server conn timeout"
-            );
-        }
     }
 }
