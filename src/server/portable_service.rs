@@ -549,9 +549,13 @@ pub mod client {
             let mut max_pixel = 0;
             let align = 64;
             for d in displays {
-                let pixel = utils::align(d.width(), align) * utils::align(d.height(), align);
-                if max_pixel < pixel {
-                    max_pixel = pixel;
+                let resolutions = crate::platform::resolutions(&d.name());
+                for r in resolutions {
+                    let pixel =
+                        utils::align(r.width as _, align) * utils::align(r.height as _, align);
+                    if max_pixel < pixel {
+                        max_pixel = pixel;
+                    }
                 }
             }
             let shmem_size = utils::align(ADDR_CAPTURE_FRAME + max_pixel * 4, align);

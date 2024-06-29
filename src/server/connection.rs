@@ -3150,6 +3150,7 @@ impl Connection {
             .map(|t| t.0 = Instant::now());
     }
 
+    #[cfg(feature = "hwcodec")]
     fn update_supported_encoding(&mut self) {
         let Some(last) = &self.last_supported_encoding else {
             return;
