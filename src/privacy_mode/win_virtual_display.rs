@@ -154,6 +154,8 @@ impl PrivacyModeImpl {
         Self::restore_displays(&self.virtual_displays);
         allow_err!(Self::commit_change_display(0));
         self.restore_plug_out_monitor();
+        self.displays.clear();
+        self.virtual_displays.clear();
     }
 
     fn restore_plug_out_monitor(&mut self) {
