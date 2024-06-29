@@ -186,9 +186,10 @@ mod utils {
             let rptr = counter.add(size_of::<i32>());
             let iw = ptr_to_i32(counter);
             let ir = ptr_to_i32(counter);
-            let v = i32_to_vec(iw + 1);
+            let iw_plus1 = if iw == i32::MAX { 0 } else { iw + 1 };
+            let v = i32_to_vec(iw_plus1);
             std::ptr::copy_nonoverlapping(v.as_ptr(), wptr, size_of::<i32>());
-            if ir == iw + 1 {
+            if ir == iw_plus1 {
                 let v = i32_to_vec(iw);
                 std::ptr::copy_nonoverlapping(v.as_ptr(), rptr, size_of::<i32>());
             }
@@ -404,15 +405,15 @@ pub mod server {
                         }
                     },
                     Some(Err(e)) => {
+                        if crate::platform::windows::desktop_changed() {
+                            crate::platform::try_change_desktop();
+                            c = None;
+                            std::thread::sleep(spf);
+                            continue;
+                        }
                         if e.kind() != std::io::ErrorKind::WouldBlock {
                             // DXGI_ERROR_INVALID_CALL after each success on Microsoft GPU driver
                             // log::error!("capture frame failed: {:?}", e);
-                            if crate::platform::windows::desktop_changed() {
-                                crate::platform::try_change_desktop();
-                                c = None;
-                                std::thread::sleep(spf);
-                                continue;
-                            }
                             if c.as_ref().map(|c| c.is_gdi()) == Some(false) {
                                 // nog gdi
                                 dxgi_failed_times += 1;
