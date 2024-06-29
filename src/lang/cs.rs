@@ -625,7 +625,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Volume down", "Snížit hlasitost"),
         ("Power", "Napájení"),
         ("Telegram bot", "Telegram bot"),
-        ("enable-bot-tip", ""),
-        ("enable-bot-desc", ""),
+        ("enable-bot-tip", "Pokud tuto funkci povolíte, můžete od svého bota obdržet kód 2FA. Může také fungovat jako oznámení o připojení."),
+        ("enable-bot-desc", "1, Otevřete chat s @BotFather.\n2, Pošlete příkaz \"/newbot\". Po dokončení tohoto kroku obdržíte token.\n3, Spusťte chat s nově vytvořeným botem. Pro jeho aktivaci odešlete zprávu začínající lomítkem vpřed (\"/\"), například \"/hello\".\n"),
     ].iter().cloned().collect();
 }
