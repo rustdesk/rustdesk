@@ -1797,7 +1797,7 @@ void changeBot({Function()? callback}) async {
       autofocus: true,
       controller: controller,
       decoration: InputDecoration(
-        hintText: translate('Token'), // 使用hintText设置占位符文本
+        hintText: translate('Token'),
       ),
     );
 
