@@ -551,7 +551,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Test", ""),
         ("display_is_plugged_out_msg", ""),
         ("No displays", ""),
-        ("elevated_switch_display_msg", ""),
         ("Open in new window", ""),
         ("Show displays as individual windows", ""),
         ("Use all my displays for the remote session", ""),
@@ -570,10 +569,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Enter privacy mode", ""),
         ("Exit privacy mode", ""),
         ("idd_not_support_under_win10_2004_tip", ""),
-        ("switch_display_elevated_connections_tip", ""),
         ("input_source_1_tip", ""),
         ("input_source_2_tip", ""),
-        ("capture_display_elevated_connections_tip", ""),
         ("Swap control-command key", ""),
         ("swap-left-right-mouse", ""),
         ("2FA code", ""),
@@ -627,5 +624,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Volume up", ""),
         ("Volume down", ""),
         ("Power", ""),
+        ("Telegram bot", ""),
+        ("enable-bot-tip", ""),
+        ("enable-bot-desc", ""),
     ].iter().cloned().collect();
 }

@@ -551,7 +551,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Test", "Тест"),
         ("display_is_plugged_out_msg", "Дисплей отключён, переключитесь на первый дисплей."),
         ("No displays", "Нет дисплеев"),
-        ("elevated_switch_display_msg", "Переключитесь на основной дисплей, поскольку в режиме повышенных прав несколько дисплеев не поддерживаются."),
         ("Open in new window", "Открыть в новом окне"),
         ("Show displays as individual windows", "Показывать дисплеи в отдельных окнах"),
         ("Use all my displays for the remote session", "Использовать все мои дисплеи для удалённого сеанса"),
@@ -570,10 +569,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Enter privacy mode", "Включить режим конфиденциальности"),
         ("Exit privacy mode", "Отключить режим конфиденциальности"),
         ("idd_not_support_under_win10_2004_tip", "Драйвер непрямого отображения не поддерживается. Требуется Windows 10 версии 2004 или новее."),
-        ("switch_display_elevated_connections_tip", "Переключение на неосновной дисплей не поддерживается в режиме повышенных прав при наличии нескольких подключений. Повторите попытку после установки, если хотите управлять несколькими дисплеями."),
         ("input_source_1_tip", "Источник ввода 1"),
         ("input_source_2_tip", "Источник ввода 2"),
-        ("capture_display_elevated_connections_tip", "Захват экрана нескольких дисплеев не поддерживается в режиме повышенных прав. Повторите попытку после установки, если хотите управлять несколькими дисплеями."),
         ("Swap control-command key", "Поменять местами значения кнопок Ctrl и Command"),
         ("swap-left-right-mouse", "Поменять местами значения левой и правой кнопок мыши"),
         ("2FA code", "Код двухфакторной аутентификации"),
@@ -627,5 +624,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Volume up", "Громкость+"),
         ("Volume down", "Громкость-"),
         ("Power", "Питание"),
+        ("Telegram bot", ""),
+        ("enable-bot-tip", ""),
+        ("enable-bot-desc", ""),
     ].iter().cloned().collect();
 }

@@ -551,7 +551,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Test", "測試"),
         ("display_is_plugged_out_msg", "螢幕已被拔除，切換到第一個螢幕。"),
         ("No displays", "沒有已連結的螢幕"),
-        ("elevated_switch_display_msg", "由於權限提升模式不支援多螢幕，所以切換至主螢幕"),
         ("Open in new window", "在新視窗中開啟"),
         ("Show displays as individual windows", "在各別的視窗開啟螢幕畫面"),
         ("Use all my displays for the remote session", "使用所有的螢幕用於遠端連線"),
@@ -570,10 +569,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Enter privacy mode", "進入隱私模式"),
         ("Exit privacy mode", "退出隱私模式"),
         ("idd_not_support_under_win10_2004_tip", "不支援 Indirect display driver。 需要 Windows 10 版本 2004 或更新的版本。"),
-        ("switch_display_elevated_connections_tip", "在有多個連線時，切換到非主螢幕在權限提升模式下不支援。如果您想要控制多個螢幕，請在安裝後再試一次。"),
         ("input_source_1_tip", "輸入源 1"),
         ("input_source_2_tip", "輸入源 2"),
-        ("capture_display_elevated_connections_tip", "不支援在權限提升模式下擷取多個螢幕畫面，如果您想要控制多個螢幕，請安裝後再試。"),
         ("Swap control-command key", "交換 Control 和 Command 按鍵"),
         ("swap-left-right-mouse", "交換滑鼠左右鍵"),
         ("2FA code", "二步驟驗證碼"),
@@ -627,5 +624,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Volume up", ""),
         ("Volume down", ""),
         ("Power", ""),
+        ("Telegram bot", ""),
+        ("enable-bot-tip", ""),
+        ("enable-bot-desc", ""),
     ].iter().cloned().collect();
 }

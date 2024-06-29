@@ -551,7 +551,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Test", "Δοκιμή"),
         ("display_is_plugged_out_msg", "Η οθόνη έχει αποσυνδεθεί, επιστρέψτε στην κύρια οθόνη προβολής"),
         ("No displays", "Δεν υπάρχουν οθόνες"),
-        ("elevated_switch_display_msg", "Δεν επιτρέπονται πολλαπλές οθόνες κατά την σύνδεση με αυξημένα δικαιώματα. Συνδεθείτε στην κύρια οθόνη."),
         ("Open in new window", "Άνοιγμα σε νέο παράθυρο"),
         ("Show displays as individual windows", "Εμφάνιση οθονών σε ξεχωριστά παράθυρα"),
         ("Use all my displays for the remote session", "Χρήση όλων των οθονών της απομακρυσμένης σύνδεσης"),
@@ -570,10 +569,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Enter privacy mode", "Ενεργοποίηση λειτουργίας απορρήτου"),
         ("Exit privacy mode", "Διακοπή λειτουργίας απορρήτου"),
         ("idd_not_support_under_win10_2004_tip", "Το πρόγραμμα οδήγησης έμμεσης οθόνης δεν υποστηρίζεται. Απαιτείτε λειτουργικό σύστημα Windows 10 έκδοση 2004 ή νεότερο."),
-        ("switch_display_elevated_connections_tip", "Αλλαγή σε οθόνη πέρα απο την κύρια δεν υποστηρίζεται σε σύνδεση με αυξημένα δικαιώματα. Αν επιθυμείτε την σύνδεση σε πολλαπλές οθόνες, παρακαλώ εγκαταστήστε την εφαρμογή και δοκιμάστε εκ νέου"),
         ("input_source_1_tip", "Πηγή εισόδου 1"),
         ("input_source_2_tip", "Πηγή εισόδου 2"),
-        ("capture_display_elevated_connections_tip", "Η καταγραφή πολλαπλών οθονών δεν υποστηρίζεται σε σύνδεση με αυξημένα δικαιώματα. Αν επιθυμείτε την καταγραφή πολλαπλών οθονών, παρακαλώ εγκαταστήστε την εφαρμογή και δοκιμάστε εκ νέου"),
         ("Swap control-command key", "Εναλλαγή κουμπιών control-command"),
         ("swap-left-right-mouse", "Εναλλαγή αριστερό-δεξί κουμπί του ποντικιού"),
         ("2FA code", "κωδικός 2FA"),
@@ -627,5 +624,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Volume up", ""),
         ("Volume down", ""),
         ("Power", ""),
+        ("Telegram bot", ""),
+        ("enable-bot-tip", ""),
+        ("enable-bot-desc", ""),
     ].iter().cloned().collect();
 }

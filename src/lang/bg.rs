@@ -551,7 +551,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Test", ""),
         ("display_is_plugged_out_msg", "Дисплеят е изключен, превключете на първия монитор."),
         ("No displays", ""),
-        ("elevated_switch_display_msg", "Превключете към основния монитор, защото множество монитори не се поддържат в потребителски режим с повишени права."),
         ("Open in new window", ""),
         ("Show displays as individual windows", ""),
         ("Use all my displays for the remote session", ""),
@@ -570,10 +569,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Enter privacy mode", ""),
         ("Exit privacy mode", ""),
         ("idd_not_support_under_win10_2004_tip", "Индиректен драйвер за дисплей не се поддържа. Изисква се Windows 10, версия 2004 или по-нова."),
-        ("switch_display_elevated_connections_tip", "Превключването към неосновен дисплей не се поддържа в режим на потребител с повишени права, когато има множество връзки. Моля, опитайте отново след инсталация, ако искате да контролирате няколко дисплея."),
         ("input_source_1_tip", "Входен източник 1"),
         ("input_source_2_tip", "Входен източник 2"),
-        ("capture_display_elevated_connections_tip", "Заснемането на множество дисплеи не се поддържа в потребителския режим с повишени права. Моля, опитайте отново след инсталация, ако искате да контролирате няколко дисплея."),
         ("Swap control-command key", ""),
         ("swap-left-right-mouse", "Разменете левия и десния бутон на мишката"),
         ("2FA code", "Код за Двуфакторна удостоверяване"),
@@ -627,5 +624,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Volume up", ""),
         ("Volume down", ""),
         ("Power", ""),
+        ("Telegram bot", ""),
+        ("enable-bot-tip", ""),
+        ("enable-bot-desc", ""),
     ].iter().cloned().collect();
 }
