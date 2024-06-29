@@ -1882,7 +1882,7 @@ class _KeyboardMenu extends StatelessWidget {
 
   mobileActions() {
     if (pi.platform != kPeerPlatformAndroid) return [];
-    final enabled = versionCmp(pi.version, '1.2.6') >= 0;
+    final enabled = versionCmp(pi.version, '1.2.7') >= 0;
     if (!enabled) return [];
     return [
       Divider(),
