@@ -1524,18 +1524,23 @@ impl ClipboardContext {
 
     #[cfg(target_os = "linux")]
     pub fn new() -> ResultType<ClipboardContext> {
-        for _ in 0..3 {
-            let (tx, rx) = std::sync::mpsc::channel();
-            std::thread::spawn(move || {
-                tx.send(arboard::Clipboard::new()).ok();
-            });
-            match rx.recv_timeout(Duration::from_millis(40)) {
-                Ok(Ok(c)) => return Ok(ClipboardContext(c)),
-                Ok(Err(e)) => return Err(e.into()),
-                Err(_) => continue,
+        let mut i = 1;
+        loop {
+            // Try 5 times to create clipboard
+            // Arboard::new() connect to X server or Wayland compositor, which shoud be ok at most time
+            // But sometimes, the connection may fail, so we retry here.
+            match arboard::Clipboard::new() {
+                Ok(x) => return Ok(ClipboardContext(x)),
+                Err(e) => {
+                    if i == 5 {
+                        return Err(e.into());
+                    } else {
+                        std::thread::sleep(std::time::Duration::from_millis(30 * i));
+                    }
+                }
             }
+            i += 1;
         }
-        bail!("Failed to create clipboard context, timeout");
     }
 
     #[inline]
@@ -1544,11 +1549,6 @@ impl ClipboardContext {
         Ok(self.0.get_text()?)
     }
 
-    // CAUTION: This function must not be called in the main thread!!! It can only be called in the clibpoard thread.
-    // There's no timeout for this function, so it may block.
-    // Because of https://github.com/1Password/arboard/blob/151e679ee5c208403b06ba02d28f92c5891f7867/src/platform/linux/x11.rs#L296
-    // We cannot use a new thread to get text because the clipboard context is `&mut self`.
-    // The crate design is somehow not good.
     #[cfg(target_os = "linux")]
     pub fn get_text(&mut self) -> ResultType<String> {
         Ok(self.0.get_text()?)
