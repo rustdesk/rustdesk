@@ -551,7 +551,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Test", "Тэст"),
         ("display_is_plugged_out_msg", "Дысплей адключаны, пераключыцеся на першы дысплей."),
         ("No displays", "Няма дысплеяў"),
-        ("elevated_switch_display_msg", "Пераключыцеся на асноўны дысплей, бо ў павышаным рэжыме не падтрымліваецца некалькі дысплеяў."),
         ("Open in new window", "Адкрыць у новым акне"),
         ("Show displays as individual windows", "Паказваць дысплеі ў асобных акнах"),
         ("Use all my displays for the remote session", "Выкарыстоўваць усе мае дысплеі для аддаленага сеансу"),
@@ -570,10 +569,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Enter privacy mode", "Уключыць рэжым канфідэнцыяльнасці"),
         ("Exit privacy mode", "Адключыць рэжым канфідэнцыяльнасці"),
         ("idd_not_support_under_win10_2004_tip", "Драйвер непрамога адлюстравання не падтрымліваецца. Патрабуецца Windows 10 версіі 2004 ці навейшая."),
-        ("switch_display_elevated_connections_tip", "Пераключэнне на неасноўны дысплей не падтрымліваецца ў рэжыме павышэння правоў пры наяўнасці некалькіх падлучэнняў. Паўтарыце спробу пасля ўстаноўкі, калі хочаце кіраваць некалькімі дысплеямі."),
         ("input_source_1_tip", "Крыніца ўводу 1"),
         ("input_source_2_tip", "Крыніца ўводу 2"),
-        ("capture_display_elevated_connections_tip", "Захоп экрана некалькіх дысплеяў не падтрымліваецца ў рэжыме павышэння правоў. Паўтарыце спробу пасля ўстаноўкі, калі хочаце кіраваць некалькімі дысплеямі."),
         ("Swap control-command key", "Памяняць месцамі значэнні кнопак Ctrl і Command"),
         ("swap-left-right-mouse", "Памяняць месцамі значэнні левай і правай кнопак мышы"),
         ("2FA code", "Код двухфактарнай аўтэнтыфікацыі"),
@@ -627,5 +624,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Volume up", ""),
         ("Volume down", ""),
         ("Power", ""),
+        ("Telegram bot", ""),
+        ("enable-bot-tip", ""),
+        ("enable-bot-desc", ""),
     ].iter().cloned().collect();
 }

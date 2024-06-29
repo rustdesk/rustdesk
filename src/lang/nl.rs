@@ -551,7 +551,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Test", "Test"),
         ("display_is_plugged_out_msg", "Beeldscherm is uitgeschakeld, schakel over naar het primaire beeldscherm."),
         ("No displays", "Geen beeldschermen"),
-        ("elevated_switch_display_msg", "Schakel over naar het primaire beeldscherm, aangezien meerdere beeldschermen niet worden ondersteund in de modus met verhoogde rechten."),
         ("Open in new window", "Open in een nieuw venster"),
         ("Show displays as individual windows", "Beeldschermen weergeven als afzonderlijke vensters"),
         ("Use all my displays for the remote session", "Gebruik al mijn beeldschermen voor de externe sessie"),
@@ -570,10 +569,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Enter privacy mode", "Privacymodus openen"),
         ("Exit privacy mode", "Privacymodus afsluiten"),
         ("idd_not_support_under_win10_2004_tip", "Het indirecte displaystuurprogramma wordt niet ondersteund. Windows 10 versie 2004 of later is vereist."),
-        ("switch_display_elevated_connections_tip", "Overschakelen naar een niet-hoofdbeeldscherm wordt niet ondersteund in de verhoogde modus wanneer er meerdere verbindingen zijn. Probeer het opnieuw na de installatie als je meerdere schermen wilt beheren."),
         ("input_source_1_tip", "Invoerbron 1"),
         ("input_source_2_tip", "Invoerbron 2"),
-        ("capture_display_elevated_connections_tip", "Scannen van meerdere schermen wordt niet ondersteund in de bevoorrechte gebruikersmodus. Als je meerdere schermen wilt bedienen, probeer het dan opnieuw na de installatie."),
         ("Swap control-command key", "Wissel controle-commando toets"),
         ("swap-left-right-mouse", "wissel-links-rechts-muis"),
         ("2FA code", "2FA-code"),
@@ -627,5 +624,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Volume up", ""),
         ("Volume down", ""),
         ("Power", ""),
+        ("Telegram bot", ""),
+        ("enable-bot-tip", ""),
+        ("enable-bot-desc", ""),
     ].iter().cloned().collect();
 }

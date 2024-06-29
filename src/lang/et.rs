@@ -551,7 +551,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Test", ""),
         ("display_is_plugged_out_msg", "See kuvar on välja lülitatud, lülita esmasele kuvarile."),
         ("No displays", ""),
-        ("elevated_switch_display_msg", "Lülita ümber esmasele kuvarile, sest kõrgendatud kasutajarežiimis ei toetata mitut kuvarit."),
         ("Open in new window", ""),
         ("Show displays as individual windows", ""),
         ("Use all my displays for the remote session", ""),
@@ -570,10 +569,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Enter privacy mode", ""),
         ("Exit privacy mode", ""),
         ("idd_not_support_under_win10_2004_tip", "Kaudse kuvari draiver ei ole toetatud. Vajalik on Windows 10, versioon 2004 või uuem."),
-        ("switch_display_elevated_connections_tip", "Mitme ühenduse korral ei toetata kõrgendatud kasutajarežiimil üleminekut muule kui primaarsele kuvale. Kui soovid juhtida mitut ekraani, palun proovi uuesti pärast paigaldamist."),
         ("input_source_1_tip", "Sisendallikas 1"),
         ("input_source_2_tip", "Sisendallikas 2"),
-        ("capture_display_elevated_connections_tip", "Mitme ekraani jäädvustamine ei ole kõrgendatud kasutajarežiimis toetatud. Kui soovid juhtida mitut ekraani, palun proovi uuesti pärast paigaldamist."),
         ("Swap control-command key", ""),
         ("swap-left-right-mouse", "Vaheta vasak ja parem hiirenupp"),
         ("2FA code", ""),
@@ -627,5 +624,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Volume up", ""),
         ("Volume down", ""),
         ("Power", ""),
+        ("Telegram bot", ""),
+        ("enable-bot-tip", ""),
+        ("enable-bot-desc", ""),
     ].iter().cloned().collect();
 }

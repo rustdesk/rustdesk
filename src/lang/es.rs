@@ -551,7 +551,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Test", "Probar"),
         ("display_is_plugged_out_msg", "La pantalla está desconectada, cambia a la principal."),
         ("No displays", "No hay pantallas"),
-        ("elevated_switch_display_msg", "Cambiar a la pantalla principal porque mútliples pantallas no están soportadas en modo elevado."),
         ("Open in new window", "Abrir en una nueva ventana"),
         ("Show displays as individual windows", "Mostrar pantallas como ventanas individuales"),
         ("Use all my displays for the remote session", "Usar todas mis pantallas para la sesión remota"),
@@ -570,10 +569,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Enter privacy mode", "Entrar al modo privado"),
         ("Exit privacy mode", "Salir del modo privado"),
         ("idd_not_support_under_win10_2004_tip", "El controlador de pantalla indirecto no está soportado. Se necesita Windows 10, versión 2004 o superior."),
-        ("switch_display_elevated_connections_tip", "Cambiar a una pantalla no principal no está soportado en el modo elevado cuando hay múltiples conexiones. Por favor, inténtalo de nuevo tras la instalación si quieres controlar múltiples pantallas."),
         ("input_source_1_tip", "Fuente de entrada 1"),
         ("input_source_2_tip", "Fuente de entrada 2"),
-        ("capture_display_elevated_connections_tip", "La captura de múltiples pantallas en el modo de usaurio con privilegios elevados no está soportada. Por favor, inténtalo de nuevo tras la instalación si quieres controlar múltiples pantallas."),
         ("Swap control-command key", "Intercambiar teclas control-comando"),
         ("swap-left-right-mouse", "Intercambiar botones derecho-izquierdo del ratón"),
         ("2FA code", "Código 2FA"),
@@ -627,5 +624,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Volume up", ""),
         ("Volume down", ""),
         ("Power", ""),
+        ("Telegram bot", ""),
+        ("enable-bot-tip", ""),
+        ("enable-bot-desc", ""),
     ].iter().cloned().collect();
 }

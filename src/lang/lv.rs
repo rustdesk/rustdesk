@@ -551,7 +551,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Test", "Pārbaudīt"),
         ("display_is_plugged_out_msg", "Displejs ir atvienots, pārslēdzieties uz pirmo displeju."),
         ("No displays", "Nav displeju"),
-        ("elevated_switch_display_msg", "Pārslēdzieties uz primāro displeju, jo paaugstinātajā režīmā netiek atbalstīti vairāki displeji."),
         ("Open in new window", "Atvērt jaunā logā"),
         ("Show displays as individual windows", "Rādīt displejus kā atsevišķus logus"),
         ("Use all my displays for the remote session", "Izmantot visus manus displejus attālajai sesijai"),
@@ -570,10 +569,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Enter privacy mode", "Ieiet privātuma režīmā"),
         ("Exit privacy mode", "Iziet no privātuma režīma"),
         ("idd_not_support_under_win10_2004_tip", "Netiešā displeja draiveris netiek atbalstīts. Nepieciešama operētājsistēma Windows 10, versija 2004 vai jaunāka."),
-        ("switch_display_elevated_connections_tip", "Pārslēgšanās uz ne primāro displeju netiek atbalstīta paaugstinātā lietotāja režīmā, ja ir vairāki savienojumi. Lūdzu, mēģiniet vēlreiz pēc instalēšanas, ja vēlaties kontrolēt vairākus displejus."),
         ("input_source_1_tip", "Ievades avots 1"),
         ("input_source_2_tip", "Ievades avots 2"),
-        ("capture_display_elevated_connections_tip", "Vairāku displeju uzņemšana netiek atbalstīta paaugstinātā lietotāja režīmā. Lūdzu, mēģiniet vēlreiz pēc instalēšanas, ja vēlaties kontrolēt vairākus displejus."),
         ("Swap control-command key", "Apmainīt vadības un komandas taustiņu"),
         ("swap-left-right-mouse", "Apmainīt kreiso un labo peles pogu"),
         ("2FA code", "2FA kods"),
@@ -627,5 +624,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Volume up", ""),
         ("Volume down", ""),
         ("Power", ""),
+        ("Telegram bot", ""),
+        ("enable-bot-tip", ""),
+        ("enable-bot-desc", ""),
     ].iter().cloned().collect();
 }

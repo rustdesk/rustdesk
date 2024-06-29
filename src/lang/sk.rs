@@ -551,7 +551,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Test", "Test"),
         ("display_is_plugged_out_msg", "Obrazovka je odpojená, prepnite na prvú obrazovku."),
         ("No displays", "Žiadne obrazovky"),
-        ("elevated_switch_display_msg", "Prepnite na primárnu obrazovku, pretože viacero obrazoviek nie je podporovaných vo zvýšenom režime."),
         ("Open in new window", "Otvoriť v novom okne"),
         ("Show displays as individual windows", "Zobraziť obrazovky ako jednotlivé okná"),
         ("Use all my displays for the remote session", "Použiť všetky moje obrazovky pre vzdialenú reláciu"),
@@ -570,10 +569,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Enter privacy mode", "Vstup do režimu súkromia"),
         ("Exit privacy mode", "Ukončiť režim súkromia"),
         ("idd_not_support_under_win10_2004_tip", "Ovládač nepriameho zobrazenia nie je podporovaný. Vyžaduje sa systém Windows 10, verzia 2004 alebo novšia."),
-        ("switch_display_elevated_connections_tip", "Prepínanie na inú ako primárnu obrazovku nie je podporované vo zvýšenom režime, ak existuje viacero pripojení. Ak chcete ovládať viacero obrazoviek, skúste to po inštalácii znova."),
         ("input_source_1_tip", "Vstupný zdroj 1"),
         ("input_source_2_tip", "Vstupný zdroj 2"),
-        ("capture_display_elevated_connections_tip", "Snímanie viacerých displejov nie je podporované v režime privilegovaného používateľa. Ak chcete ovládať viac displejov, skúste to po inštalácii znova."),
         ("Swap control-command key", "Vymeniť kláves ovládania a príkazu"),
         ("swap-left-right-mouse", "Prehodiť ľavé a pravé tlačidlo myši"),
         ("2FA code", "2FA kód"),
@@ -627,5 +624,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Volume up", ""),
         ("Volume down", ""),
         ("Power", ""),
+        ("Telegram bot", ""),
+        ("enable-bot-tip", ""),
+        ("enable-bot-desc", ""),
     ].iter().cloned().collect();
 }
