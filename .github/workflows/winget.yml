@@ -6,7 +6,7 @@ jobs:
   publish:
     runs-on: ubuntu-latest
     steps:
-      - uses: vedantmgoyal2009/winget-releaser@v2
+      - uses: vedantmgoyal9/winget-releaser@main
         with:
           identifier: RustDesk.RustDesk
           version: ${{ github.event.release.tag_name }}
