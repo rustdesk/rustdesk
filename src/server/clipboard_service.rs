@@ -4,12 +4,18 @@ pub use crate::common::{
     CONTENT,
 };
 
+#[derive(Default)]
 struct State {
     ctx: Option<ClipboardContext>,
 }
 
-impl Default for State {
-    fn default() -> Self {
+impl super::service::Reset for State {
+    fn reset(&mut self) {
+        *CONTENT.lock().unwrap() = Default::default();
+        self.ctx = None;
+    }
+
+    fn init(&mut self) {
         let ctx = match ClipboardContext::new(true) {
             Ok(ctx) => Some(ctx),
             Err(err) => {
@@ -17,13 +23,7 @@ impl Default for State {
                 None
             }
         };
-        Self { ctx }
-    }
-}
-
-impl super::service::Reset for State {
-    fn reset(&mut self) {
-        *CONTENT.lock().unwrap() = Default::default();
+        self.ctx = ctx;
     }
 }
 
