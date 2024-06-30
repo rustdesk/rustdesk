@@ -144,8 +144,8 @@ const PUBLIC_SERVER: &str = "public";
 
 #[inline]
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
-pub fn get_old_clipboard_text() -> &'static Arc<Mutex<String>> {
-    &OLD_CLIPBOARD_TEXT
+pub fn get_old_clipboard_text() -> Arc<Mutex<String>> {
+    OLD_CLIPBOARD_TEXT.clone()
 }
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]

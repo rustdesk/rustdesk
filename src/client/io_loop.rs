@@ -1180,7 +1180,7 @@ impl<T: InvokeUiSession> Remote<T> {
                 Some(message::Union::Clipboard(cb)) => {
                     if !self.handler.lc.read().unwrap().disable_clipboard.v {
                         #[cfg(not(any(target_os = "android", target_os = "ios")))]
-                        update_clipboard(cb, Some(&crate::client::get_old_clipboard_text()));
+                        update_clipboard(cb, Some(crate::client::get_old_clipboard_text()));
                         #[cfg(any(target_os = "android", target_os = "ios"))]
                         {
                             let content = if cb.compress {

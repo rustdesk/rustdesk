@@ -364,7 +364,7 @@ pub fn get_default_sound_input() -> Option<String> {
 }
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
-pub fn update_clipboard(clipboard: Clipboard, old: Option<&Arc<Mutex<String>>>) {
+fn update_clipboard_(clipboard: Clipboard, old: Option<Arc<Mutex<String>>>) {
     let content = if clipboard.compress {
         decompress(&clipboard.content)
     } else {
@@ -378,7 +378,7 @@ pub fn update_clipboard(clipboard: Clipboard, old: Option<&Arc<Mutex<String>>>) 
         match ClipboardContext::new() {
             Ok(mut ctx) => {
                 let side = if old.is_none() { "host" } else { "client" };
-                let old = if let Some(old) = old { old } else { &CONTENT };
+                let old = if let Some(old) = old { old } else { CONTENT.clone() };
                 *old.lock().unwrap() = content.clone();
                 let _lock = ARBOARD_MTX.lock().unwrap();
                 allow_err!(ctx.set_text(content));
@@ -389,6 +389,13 @@ pub fn update_clipboard(clipboard: Clipboard, old: Option<&Arc<Mutex<String>>>) 
             }
         }
     }
+}
+
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+pub fn update_clipboard(clipboard: Clipboard, old: Option<Arc<Mutex<String>>>) {
+    std::thread::spawn(move || {
+        update_clipboard_(clipboard, old);
+    });
 }
 
 #[cfg(feature = "use_rubato")]
@@ -1519,6 +1526,8 @@ impl ClipboardContext {
     #[inline]
     #[cfg(any(target_os = "windows", target_os = "macos"))]
     pub fn new() -> ResultType<ClipboardContext> {
+        let x: Option<()> = None;
+        x.unwrap();
         Ok(ClipboardContext(arboard::Clipboard::new()?))
     }
 
@@ -1543,13 +1552,6 @@ impl ClipboardContext {
         }
     }
 
-    #[inline]
-    #[cfg(any(target_os = "windows", target_os = "macos"))]
-    pub fn get_text(&mut self) -> ResultType<String> {
-        Ok(self.0.get_text()?)
-    }
-
-    #[cfg(target_os = "linux")]
     pub fn get_text(&mut self) -> ResultType<String> {
         Ok(self.0.get_text()?)
     }

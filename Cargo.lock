@@ -967,8 +967,22 @@ dependencies = [
  "serde_derive",
  "thiserror",
  "utf16string",
- "x11-clipboard",
+ "x11-clipboard 0.8.1",
  "x11rb 0.12.0",
+]
+
+[[package]]
+name = "clipboard-master"
+version = "4.0.0-beta.6"
+source = "git+https://github.com/rustdesk-org/clipboard-master#38c0a5c0e5e0cab48abf1209900e3543487fc474"
+dependencies = [
+ "objc",
+ "objc-foundation",
+ "objc_id",
+ "windows-win",
+ "wl-clipboard-rs",
+ "x11-clipboard 0.9.2",
+ "x11rb 0.13.1",
 ]
 
 [[package]]
@@ -5456,6 +5470,7 @@ dependencies = [
  "cidr-utils",
  "clap 4.5.8",
  "clipboard",
+ "clipboard-master",
  "cocoa 0.24.1",
  "core-foundation 0.9.4",
  "core-graphics 0.22.3",
@@ -5532,7 +5547,7 @@ dependencies = [
  "winreg 0.11.0",
  "winres",
  "wol-rs",
- "x11-clipboard",
+ "x11-clipboard 0.8.1",
  "x11rb 0.12.0",
  "zip",
 ]
@@ -7572,6 +7587,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "windows-win"
+version = "3.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "58e23e33622b3b52f948049acbec9bcc34bf6e26d74176b88941f213c75cf2dc"
+dependencies = [
+ "error-code",
+]
+
+[[package]]
 name = "windows_aarch64_gnullvm"
 version = "0.42.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7860,6 +7884,16 @@ version = "0.8.1"
 source = "git+https://github.com/clslaid/x11-clipboard?branch=feat/store-batch#5fc2e73bc01ada3681159b34cf3ea8f0d14cd904"
 dependencies = [
  "x11rb 0.12.0",
+]
+
+[[package]]
+name = "x11-clipboard"
+version = "0.9.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b98785a09322d7446e28a13203d2cae1059a0dd3dfb32cb06d0a225f023d8286"
+dependencies = [
+ "libc",
+ "x11rb 0.13.1",
 ]
 
 [[package]]

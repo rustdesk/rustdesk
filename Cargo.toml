@@ -91,6 +91,8 @@ clipboard = { path = "libs/clipboard" }
 ctrlc = "3.2"
 # arboard = { version = "3.4.0", features = ["wayland-data-control"] }
 arboard = { git = "https://github.com/rustdesk-org/arboard", features = ["wayland-data-control"] }
+clipboard-master = { git = "https://github.com/rustdesk-org/clipboard-master"}
+
 system_shutdown = "4.0"
 qrcode-generator = "4.1"
 
