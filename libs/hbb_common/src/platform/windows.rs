@@ -1,6 +1,5 @@
 use std::{
     collections::VecDeque,
-    os::windows::raw::HANDLE,
     sync::{Arc, Mutex},
     time::Instant,
 };
@@ -17,7 +16,7 @@ use winapi::{
         sysinfoapi::VerSetConditionMask,
         winbase::{VerifyVersionInfoW, INFINITE, WAIT_OBJECT_0},
         winnt::{
-            OSVERSIONINFOEXW, VER_BUILDNUMBER, VER_GREATER_EQUAL, VER_MAJORVERSION,
+            HANDLE, OSVERSIONINFOEXW, VER_BUILDNUMBER, VER_GREATER_EQUAL, VER_MAJORVERSION,
             VER_MINORVERSION, VER_SERVICEPACKMAJOR, VER_SERVICEPACKMINOR,
         },
     },

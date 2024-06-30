@@ -137,14 +137,23 @@ pub fn make_tray() -> hbb_common::ResultType<()> {
 
         if let Ok(_event) = tray_channel.try_recv() {
             #[cfg(target_os = "windows")]
-            if _event.click_type == tray_icon::ClickType::Left
-                || _event.click_type == tray_icon::ClickType::Double
-            {
-                if last_click.elapsed() < std::time::Duration::from_secs(1) {
-                    return;
+            match _event {
+                TrayEvent::Click {
+                    button,
+                    button_state,
+                    ..
+                } => {
+                    if button == tray_icon::MouseButton::Left
+                        && button_state == tray_icon::MouseButtonState::Up
+                    {
+                        if last_click.elapsed() < std::time::Duration::from_secs(1) {
+                            return;
+                        }
+                        open_func();
+                        last_click = std::time::Instant::now();
+                    }
                 }
-                open_func();
-                last_click = std::time::Instant::now();
+                _ => {}
             }
         }
 

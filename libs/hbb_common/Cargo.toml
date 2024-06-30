@@ -58,7 +58,7 @@ tokio-native-tls ="0.3"
 protobuf-codegen = { version = "3.4" }
 
 [target.'cfg(target_os = "windows")'.dependencies]
-winapi = { version = "0.3", features = ["winuser", "synchapi", "pdh", "memoryapi"] }
+winapi = { version = "0.3", features = ["winuser", "synchapi", "pdh", "memoryapi", "sysinfoapi"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 osascript = "0.3"
