@@ -1526,8 +1526,6 @@ impl ClipboardContext {
     #[inline]
     #[cfg(any(target_os = "windows", target_os = "macos"))]
     pub fn new() -> ResultType<ClipboardContext> {
-        let x: Option<()> = None;
-        x.unwrap();
         Ok(ClipboardContext(arboard::Clipboard::new()?))
     }
 
