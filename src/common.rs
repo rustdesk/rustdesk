@@ -1,5 +1,4 @@
 use std::{
-    borrow::Cow,
     collections::HashMap,
     future::Future,
     sync::{
@@ -10,7 +9,6 @@ use std::{
 };
 
 use clipboard_master::{CallbackResult, ClipboardHandler, Master, Shutdown};
-use scrap::libc::RUSAGE_SELF;
 use serde_json::Value;
 
 #[derive(Debug, Eq, PartialEq)]
@@ -293,10 +291,7 @@ pub fn check_clipboard(
     } else {
         CONTENT.clone()
     };
-    let content = {
-        let _lock = ARBOARD_MTX.lock().unwrap();
-        ctx2.get()
-    };
+    let content = ctx2.get();
     if let Ok(content) = content {
         if !content.is_empty() {
             let changed = content != *old.lock().unwrap();
@@ -373,9 +368,8 @@ fn update_clipboard_(clipboard: Clipboard, old: Option<Arc<Mutex<ClipboardData>>
             } else {
                 CONTENT.clone()
             };
-            *old.lock().unwrap() = content.clone();
-            let _lock = ARBOARD_MTX.lock().unwrap();
-            allow_err!(ctx.set(content));
+            allow_err!(ctx.set(&content));
+            *old.lock().unwrap() = content;
             log::debug!("{} updated on {}", CLIPBOARD_NAME, side);
         }
         Err(err) => {
@@ -1658,7 +1652,8 @@ impl ClipboardContext {
             }
         }
 
-        let change_count: Arc<AtomicU64> = Default::default();
+        // starting from 1 so that we can always get initial clipboard data no matter if change
+        let change_count: Arc<AtomicU64> = Arc::new(AtomicU64::new(1));
         let mut shutdown = None;
         if listen {
             struct Handler(Arc<AtomicU64>);
@@ -1702,6 +1697,7 @@ impl ClipboardContext {
 
     pub fn get(&mut self) -> ResultType<ClipboardData> {
         let cn = self.change_count();
+        let _lock = ARBOARD_MTX.lock().unwrap();
         // only for image for the time being,
         // because I do not want to change behavior of text clipboard for the time being
         if cn != self.1 .1 {
@@ -1715,10 +1711,11 @@ impl ClipboardContext {
         Ok(ClipboardData::Text(self.0.get_text()?))
     }
 
-    fn set(&mut self, data: ClipboardData) -> ResultType<()> {
+    fn set(&mut self, data: &ClipboardData) -> ResultType<()> {
+        let _lock = ARBOARD_MTX.lock().unwrap();
         match data {
             ClipboardData::Text(s) => self.0.set_text(s)?,
-            ClipboardData::Image(a, _) => self.0.set_image(a)?,
+            ClipboardData::Image(a, _) => self.0.set_image(a.clone())?,
             _ => {}
         }
         Ok(())
