@@ -974,7 +974,7 @@ dependencies = [
 [[package]]
 name = "clipboard-master"
 version = "4.0.0-beta.6"
-source = "git+https://github.com/rustdesk-org/clipboard-master#38c0a5c0e5e0cab48abf1209900e3543487fc474"
+source = "git+https://github.com/rustdesk-org/clipboard-master#5268c7b3d7728699566ad863da0911f249706f8c"
 dependencies = [
  "objc",
  "objc-foundation",

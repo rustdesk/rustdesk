@@ -8,6 +8,7 @@ use std::{
     task::Poll,
 };
 
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 use clipboard_master::{CallbackResult, ClipboardHandler, Master, Shutdown};
 use serde_json::Value;
 
@@ -186,6 +187,7 @@ pub mod input {
 }
 
 lazy_static::lazy_static! {
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     pub static ref CONTENT: Arc<Mutex<ClipboardData>> = Default::default();
     pub static ref SOFTWARE_UPDATE_URL: Arc<Mutex<String>> = Default::default();
 }
@@ -1497,6 +1499,7 @@ pub fn rustdesk_interval(i: Interval) -> ThrottledInterval {
     ThrottledInterval::new(i)
 }
 
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 #[derive(Clone)]
 pub enum ClipboardData {
     Text(String),
@@ -1504,12 +1507,14 @@ pub enum ClipboardData {
     Empty,
 }
 
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 impl Default for ClipboardData {
     fn default() -> Self {
         ClipboardData::Empty
     }
 }
 
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 impl ClipboardData {
     fn image(image: arboard::ImageData<'static>) -> ClipboardData {
         let hash = 0;
@@ -1595,6 +1600,7 @@ impl ClipboardData {
     }
 }
 
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 impl PartialEq for ClipboardData {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
