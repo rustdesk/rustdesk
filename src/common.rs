@@ -1,139 +1,19 @@
 use std::{
     collections::HashMap,
     future::Future,
-    sync::{
-        atomic::{AtomicU64, Ordering},
-        Arc, Mutex, RwLock,
-    },
+    sync::{Arc, Mutex, RwLock},
     task::Poll,
 };
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
-use clipboard_master::{CallbackResult, ClipboardHandler, Master, Shutdown};
 use serde_json::Value;
 
-#[derive(Debug, Eq, PartialEq)]
-pub enum GrabState {
-    Ready,
-    Run,
-    Wait,
-    Exit,
-}
-
-#[cfg(all(target_os = "linux", feature = "unix-file-copy-paste"))]
-static X11_CLIPBOARD: once_cell::sync::OnceCell<x11_clipboard::Clipboard> =
-    once_cell::sync::OnceCell::new();
-
-#[cfg(all(target_os = "linux", feature = "unix-file-copy-paste"))]
-fn get_clipboard() -> Result<&'static x11_clipboard::Clipboard, String> {
-    X11_CLIPBOARD
-        .get_or_try_init(|| x11_clipboard::Clipboard::new())
-        .map_err(|e| e.to_string())
-}
-
-#[cfg(all(target_os = "linux", feature = "unix-file-copy-paste"))]
-pub struct ClipboardContext {
-    string_setter: x11rb::protocol::xproto::Atom,
-    string_getter: x11rb::protocol::xproto::Atom,
-    text_uri_list: x11rb::protocol::xproto::Atom,
-
-    clip: x11rb::protocol::xproto::Atom,
-    prop: x11rb::protocol::xproto::Atom,
-}
-
-#[cfg(all(target_os = "linux", feature = "unix-file-copy-paste"))]
-fn parse_plain_uri_list(v: Vec<u8>) -> Result<String, String> {
-    let text = String::from_utf8(v).map_err(|_| "ConversionFailure".to_owned())?;
-    let mut list = String::new();
-    for line in text.lines() {
-        if !line.starts_with("file://") {
-            continue;
-        }
-        let decoded = percent_encoding::percent_decode_str(line)
-            .decode_utf8()
-            .map_err(|_| "ConversionFailure".to_owned())?;
-        list = list + "\n" + decoded.trim_start_matches("file://");
-    }
-    list = list.trim().to_owned();
-    Ok(list)
-}
-
-#[cfg(all(target_os = "linux", feature = "unix-file-copy-paste"))]
-impl ClipboardContext {
-    pub fn new() -> Result<Self, String> {
-        let clipboard = get_clipboard()?;
-        let string_getter = clipboard
-            .getter
-            .get_atom("UTF8_STRING")
-            .map_err(|e| e.to_string())?;
-        let string_setter = clipboard
-            .setter
-            .get_atom("UTF8_STRING")
-            .map_err(|e| e.to_string())?;
-        let text_uri_list = clipboard
-            .getter
-            .get_atom("text/uri-list")
-            .map_err(|e| e.to_string())?;
-        let prop = clipboard.getter.atoms.property;
-        let clip = clipboard.getter.atoms.clipboard;
-        Ok(Self {
-            text_uri_list,
-            string_setter,
-            string_getter,
-            clip,
-            prop,
-        })
-    }
-
-    pub fn get_text(&mut self) -> Result<String, String> {
-        let clip = self.clip;
-        let prop = self.prop;
-
-        const TIMEOUT: std::time::Duration = std::time::Duration::from_millis(120);
-
-        let text_content = get_clipboard()?
-            .load(clip, self.string_getter, prop, TIMEOUT)
-            .map_err(|e| e.to_string())?;
-
-        let file_urls = get_clipboard()?.load(clip, self.text_uri_list, prop, TIMEOUT);
-
-        if file_urls.is_err() || file_urls.as_ref().unwrap().is_empty() {
-            log::trace!("clipboard get text, no file urls");
-            return String::from_utf8(text_content).map_err(|e| e.to_string());
-        }
-
-        let file_urls = parse_plain_uri_list(file_urls.unwrap())?;
-
-        let text_content = String::from_utf8(text_content).map_err(|e| e.to_string())?;
-
-        if text_content.trim() == file_urls.trim() {
-            log::trace!("clipboard got text but polluted");
-            return Err(String::from("polluted text"));
-        }
-
-        Ok(text_content)
-    }
-
-    pub fn set_text(&mut self, content: String) -> Result<(), String> {
-        let clip = self.clip;
-
-        let value = content.clone().into_bytes();
-        get_clipboard()?
-            .store(clip, self.string_setter, value)
-            .map_err(|e| e.to_string())?;
-        Ok(())
-    }
-}
-
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
-use hbb_common::compress::decompress;
 use hbb_common::{
     allow_err,
     anyhow::{anyhow, Context},
     bail, base64,
     bytes::Bytes,
-    compress::compress as compress_func,
-    config::{self, Config, CONNECT_TIMEOUT, READ_TIMEOUT},
+    config::{self, Config, CONNECT_TIMEOUT, READ_TIMEOUT, RENDEZVOUS_PORT},
+    futures::future::join_all,
     futures_util::future::poll_fn,
     get_version_number, log,
     message_proto::*,
@@ -149,18 +29,21 @@ use hbb_common::{
     },
     ResultType,
 };
-// #[cfg(any(target_os = "android", target_os = "ios", feature = "cli"))]
-use hbb_common::{config::RENDEZVOUS_PORT, futures::future::join_all};
 
 use crate::{
     hbbs_http::create_http_client_async,
     ui_interface::{get_option, set_option},
 };
 
-pub type NotifyMessageBox = fn(String, String, String, String) -> dyn Future<Output = ()>;
+#[derive(Debug, Eq, PartialEq)]
+pub enum GrabState {
+    Ready,
+    Run,
+    Wait,
+    Exit,
+}
 
-pub const CLIPBOARD_NAME: &'static str = "clipboard";
-pub const CLIPBOARD_INTERVAL: u64 = 333;
+pub type NotifyMessageBox = fn(String, String, String, String) -> dyn Future<Output = ()>;
 
 // the executable name of the portable version
 pub const PORTABLE_APPNAME_RUNTIME_ENV_KEY: &str = "RUSTDESK_APPNAME";
@@ -186,11 +69,6 @@ pub mod input {
     pub const MOUSE_BUTTON_FORWARD: i32 = 0x10;
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
-lazy_static::lazy_static! {
-    pub static ref CONTENT: Arc<Mutex<ClipboardData>> = Default::default();
-}
-
 lazy_static::lazy_static! {
     pub static ref SOFTWARE_UPDATE_URL: Arc<Mutex<String>> = Default::default();
     pub static ref DEVICE_ID: Arc<Mutex<String>> = Default::default();
@@ -203,11 +81,6 @@ lazy_static::lazy_static! {
     // Is server logic running. The server code can invoked to run by the main process if --server is not running.
     static ref SERVER_RUNNING: Arc<RwLock<bool>> = Default::default();
     static ref IS_MAIN: bool = std::env::args().nth(1).map_or(true, |arg| !arg.starts_with("--"));
-}
-
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
-lazy_static::lazy_static! {
-    static ref ARBOARD_MTX: Arc<Mutex<()>> = Arc::new(Mutex::new(()));
 }
 
 pub struct SimpleCallOnReturn {
@@ -278,36 +151,6 @@ pub fn valid_for_numlock(evt: &KeyEvent) -> bool {
     }
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
-pub fn check_clipboard(
-    ctx: &mut Option<ClipboardContext>,
-    old: Option<Arc<Mutex<ClipboardData>>>,
-) -> Option<Message> {
-    if ctx.is_none() {
-        *ctx = ClipboardContext::new(true).ok();
-    }
-    let ctx2 = ctx.as_mut()?;
-    let side = if old.is_none() { "host" } else { "client" };
-    let old = if let Some(old) = old {
-        old
-    } else {
-        CONTENT.clone()
-    };
-    let content = ctx2.get();
-    if let Ok(content) = content {
-        if !content.is_empty() {
-            let changed = content != *old.lock().unwrap();
-            if changed {
-                log::info!("{} update found on {}", CLIPBOARD_NAME, side);
-                let msg = content.create_msg();
-                *old.lock().unwrap() = content;
-                return Some(msg);
-            }
-        }
-    }
-    None
-}
-
 /// Set sound input device.
 pub fn set_sound_input(device: String) {
     let prior_device = get_option("audio-input".to_owned());
@@ -354,37 +197,6 @@ pub fn get_default_sound_input() -> Option<String> {
 #[cfg(any(target_os = "android", target_os = "ios"))]
 pub fn get_default_sound_input() -> Option<String> {
     None
-}
-
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
-fn update_clipboard_(clipboard: Clipboard, old: Option<Arc<Mutex<ClipboardData>>>) {
-    let content = ClipboardData::from_msg(clipboard);
-    if content.is_empty() {
-        return;
-    }
-    match ClipboardContext::new(false) {
-        Ok(mut ctx) => {
-            let side = if old.is_none() { "host" } else { "client" };
-            let old = if let Some(old) = old {
-                old
-            } else {
-                CONTENT.clone()
-            };
-            allow_err!(ctx.set(&content));
-            *old.lock().unwrap() = content;
-            log::debug!("{} updated on {}", CLIPBOARD_NAME, side);
-        }
-        Err(err) => {
-            log::error!("Failed to create clipboard context: {}", err);
-        }
-    }
-}
-
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
-pub fn update_clipboard(clipboard: Clipboard, old: Option<Arc<Mutex<ClipboardData>>>) {
-    std::thread::spawn(move || {
-        update_clipboard_(clipboard, old);
-    });
 }
 
 #[cfg(feature = "use_rubato")]
@@ -1497,244 +1309,6 @@ pub type RustDeskInterval = ThrottledInterval;
 #[inline]
 pub fn rustdesk_interval(i: Interval) -> ThrottledInterval {
     ThrottledInterval::new(i)
-}
-
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
-#[derive(Clone)]
-pub enum ClipboardData {
-    Text(String),
-    Image(arboard::ImageData<'static>, u64),
-    Empty,
-}
-
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
-impl Default for ClipboardData {
-    fn default() -> Self {
-        ClipboardData::Empty
-    }
-}
-
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
-impl ClipboardData {
-    fn image(image: arboard::ImageData<'static>) -> ClipboardData {
-        let hash = 0;
-        /*
-        use std::hash::{DefaultHasher, Hash, Hasher};
-        let mut hasher = DefaultHasher::new();
-        image.bytes.hash(&mut hasher);
-        let hash = hasher.finish();
-        */
-        ClipboardData::Image(image, hash)
-    }
-
-    pub fn is_empty(&self) -> bool {
-        match self {
-            ClipboardData::Empty => true,
-            ClipboardData::Text(s) => s.is_empty(),
-            ClipboardData::Image(a, _) => a.bytes.is_empty(),
-            _ => false,
-        }
-    }
-
-    fn from_msg(clipboard: Clipboard) -> Self {
-        let data = if clipboard.compress {
-            decompress(&clipboard.content)
-        } else {
-            clipboard.content.into()
-        };
-        if clipboard.width > 0 && clipboard.height > 0 {
-            ClipboardData::Image(
-                arboard::ImageData {
-                    bytes: data.into(),
-                    width: clipboard.width as _,
-                    height: clipboard.height as _,
-                },
-                0,
-            )
-        } else {
-            if let Ok(content) = String::from_utf8(data) {
-                ClipboardData::Text(content)
-            } else {
-                ClipboardData::Empty
-            }
-        }
-    }
-
-    pub fn create_msg(&self) -> Message {
-        let mut msg = Message::new();
-
-        match self {
-            ClipboardData::Text(s) => {
-                let compressed = compress_func(s.as_bytes());
-                let compress = compressed.len() < s.as_bytes().len();
-                let content = if compress {
-                    compressed
-                } else {
-                    s.clone().into_bytes()
-                };
-                msg.set_clipboard(Clipboard {
-                    compress,
-                    content: content.into(),
-                    ..Default::default()
-                });
-            }
-            ClipboardData::Image(a, _) => {
-                let compressed = compress_func(&a.bytes);
-                let compress = compressed.len() < a.bytes.len();
-                let content = if compress {
-                    compressed
-                } else {
-                    a.bytes.to_vec()
-                };
-                msg.set_clipboard(Clipboard {
-                    compress,
-                    content: content.into(),
-                    width: a.width as _,
-                    height: a.height as _,
-                    ..Default::default()
-                });
-            }
-            _ => {}
-        }
-        msg
-    }
-}
-
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
-impl PartialEq for ClipboardData {
-    fn eq(&self, other: &Self) -> bool {
-        match (self, other) {
-            (ClipboardData::Text(a), ClipboardData::Text(b)) => a == b,
-            (ClipboardData::Image(a, _), ClipboardData::Image(b, _)) => {
-                a.width == b.width && a.height == b.height && a.bytes == b.bytes
-            }
-            (ClipboardData::Empty, ClipboardData::Empty) => true,
-            _ => false,
-        }
-    }
-}
-
-#[cfg(not(any(
-    target_os = "android",
-    target_os = "ios",
-    all(target_os = "linux", feature = "unix-file-copy-paste")
-)))]
-pub struct ClipboardContext(arboard::Clipboard, (Arc<AtomicU64>, u64), Option<Shutdown>);
-
-#[cfg(not(any(
-    target_os = "android",
-    target_os = "ios",
-    all(target_os = "linux", feature = "unix-file-copy-paste")
-)))]
-#[allow(unreachable_code)]
-impl ClipboardContext {
-    pub fn new(listen: bool) -> ResultType<ClipboardContext> {
-        let board;
-        #[cfg(not(target_os = "linux"))]
-        {
-            board = arboard::Clipboard::new()?;
-        }
-        #[cfg(target_os = "linux")]
-        {
-            let mut i = 1;
-            loop {
-                // Try 5 times to create clipboard
-                // Arboard::new() connect to X server or Wayland compositor, which shoud be ok at most time
-                // But sometimes, the connection may fail, so we retry here.
-                match arboard::Clipboard::new() {
-                    Ok(x) => {
-                        board = x;
-                        break;
-                    }
-                    Err(e) => {
-                        if i == 5 {
-                            return Err(e.into());
-                        } else {
-                            std::thread::sleep(std::time::Duration::from_millis(30 * i));
-                        }
-                    }
-                }
-                i += 1;
-            }
-        }
-
-        // starting from 1 so that we can always get initial clipboard data no matter if change
-        let change_count: Arc<AtomicU64> = Arc::new(AtomicU64::new(1));
-        let mut shutdown = None;
-        if listen {
-            struct Handler(Arc<AtomicU64>);
-            impl ClipboardHandler for Handler {
-                fn on_clipboard_change(&mut self) -> CallbackResult {
-                    self.0.fetch_add(1, Ordering::SeqCst);
-                    CallbackResult::Next
-                }
-
-                fn on_clipboard_error(&mut self, error: std::io::Error) -> CallbackResult {
-                    log::trace!("Error of clipboard listener: {}", error);
-                    CallbackResult::Next
-                }
-            }
-            match Master::new(Handler(change_count.clone())) {
-                Ok(master) => {
-                    let mut master = master;
-                    shutdown = Some(master.shutdown_channel());
-                    std::thread::spawn(move || {
-                        log::debug!("Clipboard listener started");
-                        if let Err(err) = master.run() {
-                            log::error!("Failed to run clipboard listener: {}", err);
-                        } else {
-                            log::debug!("Clipboard listener stopped");
-                        }
-                    });
-                }
-                Err(err) => {
-                    log::error!("Failed to create clipboard listener: {}", err);
-                }
-            }
-        }
-        Ok(ClipboardContext(board, (change_count, 0), shutdown))
-    }
-
-    #[inline]
-    pub fn change_count(&self) -> u64 {
-        debug_assert!(self.2.is_some());
-        self.1 .0.load(Ordering::SeqCst)
-    }
-
-    pub fn get(&mut self) -> ResultType<ClipboardData> {
-        let cn = self.change_count();
-        let _lock = ARBOARD_MTX.lock().unwrap();
-        // only for image for the time being,
-        // because I do not want to change behavior of text clipboard for the time being
-        if cn != self.1 .1 {
-            self.1 .1 = cn;
-            if let Ok(image) = self.0.get_image() {
-                if image.width > 0 && image.height > 0 {
-                    return Ok(ClipboardData::image(image));
-                }
-            }
-        }
-        Ok(ClipboardData::Text(self.0.get_text()?))
-    }
-
-    fn set(&mut self, data: &ClipboardData) -> ResultType<()> {
-        let _lock = ARBOARD_MTX.lock().unwrap();
-        match data {
-            ClipboardData::Text(s) => self.0.set_text(s)?,
-            ClipboardData::Image(a, _) => self.0.set_image(a.clone())?,
-            _ => {}
-        }
-        Ok(())
-    }
-}
-
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
-impl Drop for ClipboardContext {
-    fn drop(&mut self) {
-        if let Some(shutdown) = self.2.take() {
-            let _ = shutdown.signal();
-        }
-    }
 }
 
 pub fn load_custom_client() {

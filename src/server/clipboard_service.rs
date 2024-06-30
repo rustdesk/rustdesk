@@ -1,5 +1,5 @@
 use super::*;
-pub use crate::common::{
+pub use crate::clipboard::{
     check_clipboard, ClipboardContext, CLIPBOARD_INTERVAL as INTERVAL, CLIPBOARD_NAME as NAME,
     CONTENT,
 };
@@ -38,7 +38,7 @@ fn run(sp: EmptyExtraFieldService, state: &mut State) -> ResultType<()> {
         sp.send(msg);
     }
     sp.snapshot(|sps| {
-        let data = crate::CONTENT.lock().unwrap().clone();
+        let data = CONTENT.lock().unwrap().clone();
         if !data.is_empty() {
             let msg_out = data.create_msg();
             sps.send_shared(Arc::new(msg_out));

@@ -64,11 +64,11 @@ use crate::{
     ui_session_interface::{InvokeUiSession, Session},
 };
 
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+use crate::clipboard::{check_clipboard, CLIPBOARD_INTERVAL};
 #[cfg(not(feature = "flutter"))]
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use crate::ui_session_interface::SessionPermissionConfig;
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
-use crate::{check_clipboard, CLIPBOARD_INTERVAL};
 
 pub use super::lang::*;
 
@@ -136,7 +136,7 @@ lazy_static::lazy_static! {
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 lazy_static::lazy_static! {
     static ref ENIGO: Arc<Mutex<enigo::Enigo>> = Arc::new(Mutex::new(enigo::Enigo::new()));
-    static ref OLD_CLIPBOARD_DATA: Arc<Mutex<crate::ClipboardData>> = Default::default();
+    static ref OLD_CLIPBOARD_DATA: Arc<Mutex<crate::clipboard::ClipboardData>> = Default::default();
     static ref TEXT_CLIPBOARD_STATE: Arc<Mutex<TextClipboardState>> = Arc::new(Mutex::new(TextClipboardState::new()));
 }
 
@@ -144,7 +144,7 @@ const PUBLIC_SERVER: &str = "public";
 
 #[inline]
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
-pub fn get_old_clipboard_text() -> Arc<Mutex<crate::ClipboardData>> {
+pub fn get_old_clipboard_text() -> Arc<Mutex<crate::clipboard::ClipboardData>> {
     OLD_CLIPBOARD_DATA.clone()
 }
 

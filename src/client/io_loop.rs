@@ -41,7 +41,7 @@ use crate::client::{
     new_voice_call_request, Client, MediaData, MediaSender, QualityStatus, MILLI1, SEC30,
 };
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
-use crate::common::{self, update_clipboard};
+use crate::clipboard::{update_clipboard, CLIPBOARD_INTERVAL};
 use crate::common::{get_default_sound_input, set_sound_input};
 use crate::ui_session_interface::{InvokeUiSession, Session};
 #[cfg(not(any(target_os = "ios")))]
@@ -1135,7 +1135,7 @@ impl<T: InvokeUiSession> Remote<T> {
                             // To make sure current text clipboard data is updated.
                             #[cfg(not(any(target_os = "android", target_os = "ios")))]
                             if let Some(mut rx) = rx {
-                                timeout(common::CLIPBOARD_INTERVAL, rx.recv()).await.ok();
+                                timeout(CLIPBOARD_INTERVAL, rx.recv()).await.ok();
                             }
 
                             #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -1144,7 +1144,7 @@ impl<T: InvokeUiSession> Remote<T> {
                                 let permission_config = self.handler.get_permission_config();
                                 tokio::spawn(async move {
                                     // due to clipboard service interval time
-                                    sleep(common::CLIPBOARD_INTERVAL as f32 / 1_000.).await;
+                                    sleep(CLIPBOARD_INTERVAL as f32 / 1_000.).await;
                                     if permission_config.is_text_clipboard_required() {
                                         sender.send(Data::Message(msg_out)).ok();
                                     }
