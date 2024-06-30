@@ -186,13 +186,13 @@ pub mod input {
     pub const MOUSE_BUTTON_FORWARD: i32 = 0x10;
 }
 
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 lazy_static::lazy_static! {
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     pub static ref CONTENT: Arc<Mutex<ClipboardData>> = Default::default();
-    pub static ref SOFTWARE_UPDATE_URL: Arc<Mutex<String>> = Default::default();
 }
 
 lazy_static::lazy_static! {
+    pub static ref SOFTWARE_UPDATE_URL: Arc<Mutex<String>> = Default::default();
     pub static ref DEVICE_ID: Arc<Mutex<String>> = Default::default();
     pub static ref DEVICE_NAME: Arc<Mutex<String>> = Default::default();
 }
@@ -1728,6 +1728,7 @@ impl ClipboardContext {
     }
 }
 
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 impl Drop for ClipboardContext {
     fn drop(&mut self) {
         if let Some(shutdown) = self.2.take() {
