@@ -626,6 +626,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Power", "Stroom"),
         ("Telegram bot", "Telegram bot"),
         ("enable-bot-tip", "Als u deze functie inschakelt, kunt u een 2FA-code ontvangen van uw bot. Het kan ook fungeren als een verbindingsmelding."),
-        ("enable-bot-desc", "1, Open een chat met @BotFather.\n2, Verzend het commando \"/newbot\". Als deze stap voltooid is, ontvang je een token.\n3, Start een chat met de nieuw aangemaakte bot. Om hem te activeren stuurt u een bericht dat begint met een schuine streep (\"/\"), bijvoorbeeld \"/hello".\n"),
+        ("enable-bot-desc", "1, Open een chat met @BotFather.\n2, Verzend het commando \"/newbot\". Als deze stap voltooid is, ontvang je een token.\n3, Start een chat met de nieuw aangemaakte bot. Om hem te activeren stuurt u een bericht dat begint met een schuine streep (\"/\"), bijvoorbeeld \"/hello\".\n"),
     ].iter().cloned().collect();
 }
