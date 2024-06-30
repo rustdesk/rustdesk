@@ -63,7 +63,7 @@ class _PortForwardPageState extends State<PortForwardPage>
         isSharedPassword: widget.isSharedPassword,
         forceRelay: widget.forceRelay,
         isRdp: widget.isRDP);
-    Get.put(_ffi, tag: 'pf_${widget.id}');
+    Get.put<FFI>(_ffi, tag: 'pf_${widget.id}');
     debugPrint("Port forward page init success with id ${widget.id}");
     widget.tabController.onSelected?.call(widget.id);
   }

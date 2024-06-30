@@ -92,7 +92,7 @@ class _FileManagerPageState extends State<FileManagerPage>
       _ffi.dialogManager
           .showLoading(translate('Connecting...'), onCancel: closeConnection);
     });
-    Get.put(_ffi, tag: 'ft_${widget.id}');
+    Get.put<FFI>(_ffi, tag: 'ft_${widget.id}');
     if (!isLinux) {
       WakelockPlus.enable();
     }
