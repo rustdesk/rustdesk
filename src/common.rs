@@ -2,10 +2,15 @@ use std::{
     borrow::Cow,
     collections::HashMap,
     future::Future,
-    sync::{Arc, Mutex, RwLock},
+    sync::{
+        atomic::{AtomicU64, Ordering},
+        Arc, Mutex, RwLock,
+    },
     task::Poll,
 };
 
+use clipboard_master::{CallbackResult, ClipboardHandler, Master, Shutdown};
+use scrap::libc::RUSAGE_SELF;
 use serde_json::Value;
 
 #[derive(Debug, Eq, PartialEq)]
@@ -183,7 +188,7 @@ pub mod input {
 }
 
 lazy_static::lazy_static! {
-    pub static ref CONTENT: Arc<Mutex<String>> = Default::default();
+    pub static ref CONTENT: Arc<Mutex<ClipboardData>> = Default::default();
     pub static ref SOFTWARE_UPDATE_URL: Arc<Mutex<String>> = Default::default();
 }
 
@@ -273,42 +278,33 @@ pub fn valid_for_numlock(evt: &KeyEvent) -> bool {
     }
 }
 
-pub fn create_clipboard_msg(content: String) -> Message {
-    let bytes = content.into_bytes();
-    let compressed = compress_func(&bytes);
-    let compress = compressed.len() < bytes.len();
-    let content = if compress { compressed } else { bytes };
-    let mut msg = Message::new();
-    msg.set_clipboard(Clipboard {
-        compress,
-        content: content.into(),
-        ..Default::default()
-    });
-    msg
-}
-
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub fn check_clipboard(
     ctx: &mut Option<ClipboardContext>,
-    old: Option<&Arc<Mutex<String>>>,
+    old: Option<Arc<Mutex<ClipboardData>>>,
 ) -> Option<Message> {
     if ctx.is_none() {
-        *ctx = ClipboardContext::new().ok();
+        *ctx = ClipboardContext::new(true).ok();
     }
     let ctx2 = ctx.as_mut()?;
     let side = if old.is_none() { "host" } else { "client" };
-    let old = if let Some(old) = old { old } else { &CONTENT };
+    let old = if let Some(old) = old {
+        old
+    } else {
+        CONTENT.clone()
+    };
     let content = {
         let _lock = ARBOARD_MTX.lock().unwrap();
-        ctx2.get_text()
+        ctx2.get()
     };
     if let Ok(content) = content {
-        if content.len() < 2_000_000 && !content.is_empty() {
+        if !content.is_empty() {
             let changed = content != *old.lock().unwrap();
             if changed {
                 log::info!("{} update found on {}", CLIPBOARD_NAME, side);
-                *old.lock().unwrap() = content.clone();
-                return Some(create_clipboard_msg(content));
+                let msg = content.create_msg();
+                *old.lock().unwrap() = content;
+                return Some(msg);
             }
         }
     }
@@ -364,35 +360,32 @@ pub fn get_default_sound_input() -> Option<String> {
 }
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
-fn update_clipboard_(clipboard: Clipboard, old: Option<Arc<Mutex<String>>>) {
-    let content = if clipboard.compress {
-        decompress(&clipboard.content)
-    } else {
-        clipboard.content.into()
-    };
-    if let Ok(content) = String::from_utf8(content) {
-        if content.is_empty() {
-            // ctx.set_text may crash if content is empty
-            return;
+fn update_clipboard_(clipboard: Clipboard, old: Option<Arc<Mutex<ClipboardData>>>) {
+    let content = ClipboardData::from_msg(clipboard);
+    if content.is_empty() {
+        return;
+    }
+    match ClipboardContext::new(false) {
+        Ok(mut ctx) => {
+            let side = if old.is_none() { "host" } else { "client" };
+            let old = if let Some(old) = old {
+                old
+            } else {
+                CONTENT.clone()
+            };
+            *old.lock().unwrap() = content.clone();
+            let _lock = ARBOARD_MTX.lock().unwrap();
+            allow_err!(ctx.set(content));
+            log::debug!("{} updated on {}", CLIPBOARD_NAME, side);
         }
-        match ClipboardContext::new() {
-            Ok(mut ctx) => {
-                let side = if old.is_none() { "host" } else { "client" };
-                let old = if let Some(old) = old { old } else { CONTENT.clone() };
-                *old.lock().unwrap() = content.clone();
-                let _lock = ARBOARD_MTX.lock().unwrap();
-                allow_err!(ctx.set_text(content));
-                log::debug!("{} updated on {}", CLIPBOARD_NAME, side);
-            }
-            Err(err) => {
-                log::error!("Failed to create clipboard context: {}", err);
-            }
+        Err(err) => {
+            log::error!("Failed to create clipboard context: {}", err);
         }
     }
 }
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
-pub fn update_clipboard(clipboard: Clipboard, old: Option<Arc<Mutex<String>>>) {
+pub fn update_clipboard(clipboard: Clipboard, old: Option<Arc<Mutex<ClipboardData>>>) {
     std::thread::spawn(move || {
         update_clipboard_(clipboard, old);
     });
@@ -1510,54 +1503,233 @@ pub fn rustdesk_interval(i: Interval) -> ThrottledInterval {
     ThrottledInterval::new(i)
 }
 
-#[cfg(not(any(
-    target_os = "android",
-    target_os = "ios",
-    all(target_os = "linux", feature = "unix-file-copy-paste")
-)))]
-pub struct ClipboardContext(arboard::Clipboard);
+#[derive(Clone)]
+pub enum ClipboardData {
+    Text(String),
+    Image(arboard::ImageData<'static>, u64),
+    Empty,
+}
 
-#[cfg(not(any(
-    target_os = "android",
-    target_os = "ios",
-    all(target_os = "linux", feature = "unix-file-copy-paste")
-)))]
-impl ClipboardContext {
-    #[inline]
-    #[cfg(any(target_os = "windows", target_os = "macos"))]
-    pub fn new() -> ResultType<ClipboardContext> {
-        Ok(ClipboardContext(arboard::Clipboard::new()?))
+impl Default for ClipboardData {
+    fn default() -> Self {
+        ClipboardData::Empty
+    }
+}
+
+impl ClipboardData {
+    fn image(image: arboard::ImageData<'static>) -> ClipboardData {
+        let hash = 0;
+        /*
+        use std::hash::{DefaultHasher, Hash, Hasher};
+        let mut hasher = DefaultHasher::new();
+        image.bytes.hash(&mut hasher);
+        let hash = hasher.finish();
+        */
+        ClipboardData::Image(image, hash)
     }
 
-    #[cfg(target_os = "linux")]
-    pub fn new() -> ResultType<ClipboardContext> {
-        let mut i = 1;
-        loop {
-            // Try 5 times to create clipboard
-            // Arboard::new() connect to X server or Wayland compositor, which shoud be ok at most time
-            // But sometimes, the connection may fail, so we retry here.
-            match arboard::Clipboard::new() {
-                Ok(x) => return Ok(ClipboardContext(x)),
-                Err(e) => {
-                    if i == 5 {
-                        return Err(e.into());
-                    } else {
-                        std::thread::sleep(std::time::Duration::from_millis(30 * i));
-                    }
-                }
-            }
-            i += 1;
+    pub fn is_empty(&self) -> bool {
+        match self {
+            ClipboardData::Empty => true,
+            ClipboardData::Text(s) => s.is_empty(),
+            ClipboardData::Image(a, _) => a.bytes.is_empty(),
+            _ => false,
         }
     }
 
-    pub fn get_text(&mut self) -> ResultType<String> {
-        Ok(self.0.get_text()?)
+    fn from_msg(clipboard: Clipboard) -> Self {
+        let data = if clipboard.compress {
+            decompress(&clipboard.content)
+        } else {
+            clipboard.content.into()
+        };
+        if clipboard.width > 0 && clipboard.height > 0 {
+            ClipboardData::Image(
+                arboard::ImageData {
+                    bytes: data.into(),
+                    width: clipboard.width as _,
+                    height: clipboard.height as _,
+                },
+                0,
+            )
+        } else {
+            if let Ok(content) = String::from_utf8(data) {
+                ClipboardData::Text(content)
+            } else {
+                ClipboardData::Empty
+            }
+        }
+    }
+
+    pub fn create_msg(&self) -> Message {
+        let mut msg = Message::new();
+
+        match self {
+            ClipboardData::Text(s) => {
+                let compressed = compress_func(s.as_bytes());
+                let compress = compressed.len() < s.as_bytes().len();
+                let content = if compress {
+                    compressed
+                } else {
+                    s.clone().into_bytes()
+                };
+                msg.set_clipboard(Clipboard {
+                    compress,
+                    content: content.into(),
+                    ..Default::default()
+                });
+            }
+            ClipboardData::Image(a, _) => {
+                let compressed = compress_func(&a.bytes);
+                let compress = compressed.len() < a.bytes.len();
+                let content = if compress {
+                    compressed
+                } else {
+                    a.bytes.to_vec()
+                };
+                msg.set_clipboard(Clipboard {
+                    compress,
+                    content: content.into(),
+                    width: a.width as _,
+                    height: a.height as _,
+                    ..Default::default()
+                });
+            }
+            _ => {}
+        }
+        msg
+    }
+}
+
+impl PartialEq for ClipboardData {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (ClipboardData::Text(a), ClipboardData::Text(b)) => a == b,
+            (ClipboardData::Image(a, _), ClipboardData::Image(b, _)) => {
+                a.width == b.width && a.height == b.height && a.bytes == b.bytes
+            }
+            (ClipboardData::Empty, ClipboardData::Empty) => true,
+            _ => false,
+        }
+    }
+}
+
+#[cfg(not(any(
+    target_os = "android",
+    target_os = "ios",
+    all(target_os = "linux", feature = "unix-file-copy-paste")
+)))]
+pub struct ClipboardContext(arboard::Clipboard, (Arc<AtomicU64>, u64), Option<Shutdown>);
+
+#[cfg(not(any(
+    target_os = "android",
+    target_os = "ios",
+    all(target_os = "linux", feature = "unix-file-copy-paste")
+)))]
+#[allow(unreachable_code)]
+impl ClipboardContext {
+    pub fn new(listen: bool) -> ResultType<ClipboardContext> {
+        let board;
+        #[cfg(not(target_os = "linux"))]
+        {
+            board = arboard::Clipboard::new()?;
+        }
+        #[cfg(target_os = "linux")]
+        {
+            let mut i = 1;
+            loop {
+                // Try 5 times to create clipboard
+                // Arboard::new() connect to X server or Wayland compositor, which shoud be ok at most time
+                // But sometimes, the connection may fail, so we retry here.
+                match arboard::Clipboard::new() {
+                    Ok(x) => {
+                        board = x;
+                        break;
+                    }
+                    Err(e) => {
+                        if i == 5 {
+                            return Err(e.into());
+                        } else {
+                            std::thread::sleep(std::time::Duration::from_millis(30 * i));
+                        }
+                    }
+                }
+                i += 1;
+            }
+        }
+
+        let change_count: Arc<AtomicU64> = Default::default();
+        let mut shutdown = None;
+        if listen {
+            struct Handler(Arc<AtomicU64>);
+            impl ClipboardHandler for Handler {
+                fn on_clipboard_change(&mut self) -> CallbackResult {
+                    self.0.fetch_add(1, Ordering::SeqCst);
+                    CallbackResult::Next
+                }
+
+                fn on_clipboard_error(&mut self, error: std::io::Error) -> CallbackResult {
+                    log::trace!("Error of clipboard listener: {}", error);
+                    CallbackResult::Next
+                }
+            }
+            match Master::new(Handler(change_count.clone())) {
+                Ok(master) => {
+                    let mut master = master;
+                    shutdown = Some(master.shutdown_channel());
+                    std::thread::spawn(move || {
+                        log::debug!("Clipboard listener started");
+                        if let Err(err) = master.run() {
+                            log::error!("Failed to run clipboard listener: {}", err);
+                        } else {
+                            log::debug!("Clipboard listener stopped");
+                        }
+                    });
+                }
+                Err(err) => {
+                    log::error!("Failed to create clipboard listener: {}", err);
+                }
+            }
+        }
+        Ok(ClipboardContext(board, (change_count, 0), shutdown))
     }
 
     #[inline]
-    pub fn set_text<'a, T: Into<Cow<'a, str>>>(&mut self, text: T) -> ResultType<()> {
-        self.0.set_text(text)?;
+    pub fn change_count(&self) -> u64 {
+        debug_assert!(self.2.is_some());
+        self.1 .0.load(Ordering::SeqCst)
+    }
+
+    pub fn get(&mut self) -> ResultType<ClipboardData> {
+        let cn = self.change_count();
+        // only for image for the time being,
+        // because I do not want to change behavior of text clipboard for the time being
+        if cn != self.1 .1 {
+            self.1 .1 = cn;
+            if let Ok(image) = self.0.get_image() {
+                if image.width > 0 && image.height > 0 {
+                    return Ok(ClipboardData::image(image));
+                }
+            }
+        }
+        Ok(ClipboardData::Text(self.0.get_text()?))
+    }
+
+    fn set(&mut self, data: ClipboardData) -> ResultType<()> {
+        match data {
+            ClipboardData::Text(s) => self.0.set_text(s)?,
+            ClipboardData::Image(a, _) => self.0.set_image(a)?,
+            _ => {}
+        }
         Ok(())
+    }
+}
+
+impl Drop for ClipboardContext {
+    fn drop(&mut self) {
+        if let Some(shutdown) = self.2.take() {
+            let _ = shutdown.signal();
+        }
     }
 }
 

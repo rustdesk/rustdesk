@@ -10,7 +10,7 @@ struct State {
 
 impl Default for State {
     fn default() -> Self {
-        let ctx = match ClipboardContext::new() {
+        let ctx = match ClipboardContext::new(true) {
             Ok(ctx) => Some(ctx),
             Err(err) => {
                 log::error!("Failed to start {}: {}", NAME, err);
@@ -38,9 +38,9 @@ fn run(sp: EmptyExtraFieldService, state: &mut State) -> ResultType<()> {
         sp.send(msg);
     }
     sp.snapshot(|sps| {
-        let txt = crate::CONTENT.lock().unwrap().clone();
-        if !txt.is_empty() {
-            let msg_out = crate::create_clipboard_msg(txt);
+        let data = crate::CONTENT.lock().unwrap().clone();
+        if !data.is_empty() {
+            let msg_out = data.create_msg();
             sps.send_shared(Arc::new(msg_out));
         }
         Ok(())

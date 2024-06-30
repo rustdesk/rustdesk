@@ -1139,7 +1139,7 @@ impl<T: InvokeUiSession> Remote<T> {
                             }
 
                             #[cfg(not(any(target_os = "android", target_os = "ios")))]
-                            if let Some(msg_out) = Client::get_current_text_clipboard_msg() {
+                            if let Some(msg_out) = Client::get_current_clipboard_msg() {
                                 let sender = self.sender.clone();
                                 let permission_config = self.handler.get_permission_config();
                                 tokio::spawn(async move {

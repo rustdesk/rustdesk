@@ -136,7 +136,7 @@ lazy_static::lazy_static! {
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 lazy_static::lazy_static! {
     static ref ENIGO: Arc<Mutex<enigo::Enigo>> = Arc::new(Mutex::new(enigo::Enigo::new()));
-    static ref OLD_CLIPBOARD_TEXT: Arc<Mutex<String>> = Default::default();
+    static ref OLD_CLIPBOARD_DATA: Arc<Mutex<crate::ClipboardData>> = Default::default();
     static ref TEXT_CLIPBOARD_STATE: Arc<Mutex<TextClipboardState>> = Arc::new(Mutex::new(TextClipboardState::new()));
 }
 
@@ -144,8 +144,8 @@ const PUBLIC_SERVER: &str = "public";
 
 #[inline]
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
-pub fn get_old_clipboard_text() -> Arc<Mutex<String>> {
-    OLD_CLIPBOARD_TEXT.clone()
+pub fn get_old_clipboard_text() -> Arc<Mutex<crate::ClipboardData>> {
+    OLD_CLIPBOARD_DATA.clone()
 }
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -740,7 +740,7 @@ impl Client {
                     continue;
                 }
 
-                if let Some(msg) = check_clipboard(&mut ctx, Some(&OLD_CLIPBOARD_TEXT)) {
+                if let Some(msg) = check_clipboard(&mut ctx, Some(OLD_CLIPBOARD_DATA.clone())) {
                     #[cfg(feature = "flutter")]
                     crate::flutter::send_text_clipboard_msg(msg);
                     #[cfg(not(feature = "flutter"))]
@@ -766,12 +766,12 @@ impl Client {
 
     #[inline]
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    fn get_current_text_clipboard_msg() -> Option<Message> {
-        let txt = &*OLD_CLIPBOARD_TEXT.lock().unwrap();
-        if txt.is_empty() {
+    fn get_current_clipboard_msg() -> Option<Message> {
+        let data = &*OLD_CLIPBOARD_DATA.lock().unwrap();
+        if data.is_empty() {
             None
         } else {
-            Some(crate::create_clipboard_msg(txt.clone()))
+            Some(data.create_msg())
         }
     }
 }
