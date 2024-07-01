@@ -11,24 +11,22 @@ thread_local! {
 }
 
 pub fn compress(data: &[u8]) -> Vec<u8> {
-    COMPRESSOR.with(|c| compress_(c, data))
-}
-
-fn compress_(c: &RefCell<io::Result<Compressor<'static>>>, data: &[u8]) -> Vec<u8> {
     let mut out = Vec::new();
-    if let Ok(mut c) = c.try_borrow_mut() {
-        match &mut *c {
-            Ok(c) => match c.compress(data) {
-                Ok(res) => out = res,
+    COMPRESSOR.with(|c| {
+        if let Ok(mut c) = c.try_borrow_mut() {
+            match &mut *c {
+                Ok(c) => match c.compress(data) {
+                    Ok(res) => out = res,
+                    Err(err) => {
+                        crate::log::debug!("Failed to compress: {}", err);
+                    }
+                },
                 Err(err) => {
-                    crate::log::debug!("Failed to compress: {}", err);
+                    crate::log::debug!("Failed to get compressor: {}", err);
                 }
-            },
-            Err(err) => {
-                crate::log::debug!("Failed to get compressor: {}", err);
             }
         }
-    }
+    });
     out
 }
 
