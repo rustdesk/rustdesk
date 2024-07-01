@@ -5,11 +5,11 @@ use std::sync::{
 
 use clipboard_master::{CallbackResult, ClipboardHandler, Master, Shutdown};
 use hbb_common::{
-    ResultType,
     allow_err,
     compress::{compress as compress_func, decompress},
     log,
     message_proto::*,
+    ResultType,
 };
 
 pub const CLIPBOARD_NAME: &'static str = "clipboard";
@@ -213,17 +213,17 @@ impl ClipboardData {
             ClipboardData::Empty => true,
             ClipboardData::Text(s) => s.is_empty(),
             ClipboardData::Image(a, _) => a.bytes.is_empty(),
-            _ => false,
         }
     }
 
     fn from_msg(clipboard: Clipboard) -> Self {
+        let is_image = clipboard.width > 0 && clipboard.height > 0;
         let data = if clipboard.compress {
             decompress(&clipboard.content)
         } else {
             clipboard.content.into()
         };
-        if clipboard.width > 0 && clipboard.height > 0 {
+        if is_image {
             ClipboardData::Image(
                 arboard::ImageData {
                     bytes: data.into(),
@@ -346,22 +346,25 @@ impl ClipboardContext {
                     CallbackResult::Next
                 }
             }
-            match Master::new(Handler(change_count.clone())) {
-                Ok(master) => {
-                    let mut master = master;
-                    shutdown = Some(master.shutdown_channel());
-                    std::thread::spawn(move || {
-                        log::debug!("Clipboard listener started");
-                        if let Err(err) = master.run() {
-                            log::error!("Failed to run clipboard listener: {}", err);
-                        } else {
-                            log::debug!("Clipboard listener stopped");
-                        }
-                    });
+            let change_count_cloned = change_count.clone();
+            let (tx, rx) = std::sync::mpsc::channel();
+            // https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-getmessage#:~:text=The%20window%20must%20belong%20to%20the%20current%20thread.
+            std::thread::spawn(move || match Master::new(Handler(change_count_cloned)) {
+                Ok(mut master) => {
+                    tx.send(master.shutdown_channel()).ok();
+                    log::debug!("Clipboard listener started");
+                    if let Err(err) = master.run() {
+                        log::error!("Failed to run clipboard listener: {}", err);
+                    } else {
+                        log::debug!("Clipboard listener stopped");
+                    }
                 }
                 Err(err) => {
                     log::error!("Failed to create clipboard listener: {}", err);
                 }
+            });
+            if let Ok(st) = rx.recv() {
+                shutdown = Some(st);
             }
         }
         Ok(ClipboardContext(board, (change_count, 0), shutdown))
