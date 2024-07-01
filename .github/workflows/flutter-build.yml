@@ -968,12 +968,14 @@ jobs:
               target: x86_64-unknown-linux-gnu,
               distro: ubuntu18.04,
               on: ubuntu-20.04,
+              deb_arch: amd64,
             }
           - {
               arch: aarch64,
               target: aarch64-unknown-linux-gnu,
               distro: ubuntu18.04,
               on: [self-hosted, Linux, ARM64],
+              deb_arch: arm64,
             }
     steps:
       - name: Export GitHub Actions cache environment variables
@@ -1152,7 +1154,6 @@ jobs:
               aarch64)
                 export PATH=/opt/flutter-elinux/bin:$PATH
                 sed -i "s/flutter build linux --release/flutter-elinux build linux --verbose/g" ./build.py
-                export ARCH=arm64
                 sed -i "s/x64\/release/arm64\/release/g" ./build.py
               ;;
               x86_64)
@@ -1184,6 +1185,7 @@ jobs:
             # build flutter
             pushd /workspace
             export CARGO_INCREMENTAL=0
+            export DEB_ARCH=${{ matrix.job.deb_arch }}
             python3 ./build.py --flutter --skip-cargo
             for name in rustdesk*??.deb; do
               mv "$name" "${name%%.deb}-${{ matrix.job.arch }}.deb"
