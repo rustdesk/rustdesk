@@ -36,6 +36,7 @@ pub const READ_TIMEOUT: u64 = 18_000;
 // https://www.onsip.com/voip-resources/voip-fundamentals/what-is-nat-keepalive
 pub const REG_INTERVAL: i64 = 15_000;
 pub const COMPRESS_LEVEL: i32 = 3;
+pub const COMPRESS_LEVEL_IMAGE: i32 = 10;
 const SERIAL: i32 = 3;
 const PASSWORD_ENC_VERSION: &str = "00";
 const ENCRYPT_MAX_LEN: usize = 128;

@@ -220,7 +220,7 @@ impl ClipboardData {
     fn from_msg(clipboard: Clipboard) -> Self {
         let is_image = clipboard.width > 0 && clipboard.height > 0;
         let data = if clipboard.compress {
-            decompress_clipboard(&clipboard.content, clipboard.size as usize, is_image)
+            decompress_clipboard(&clipboard.content, is_image)
         } else {
             clipboard.content.into()
         };
@@ -257,7 +257,6 @@ impl ClipboardData {
                 msg.set_clipboard(Clipboard {
                     compress,
                     content: content.into(),
-                    size: s.as_bytes().len() as _,
                     ..Default::default()
                 });
             }
@@ -274,7 +273,6 @@ impl ClipboardData {
                     content: content.into(),
                     width: a.width as _,
                     height: a.height as _,
-                    size: a.bytes.len() as _,
                     ..Default::default()
                 });
             }
