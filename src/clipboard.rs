@@ -5,11 +5,11 @@ use std::sync::{
 
 use clipboard_master::{CallbackResult, ClipboardHandler, Master, Shutdown};
 use hbb_common::{
-    ResultType,
     allow_err,
-    compress::{compress as compress_func, decompress},
+    compress::{compress as compress_func, decompress_clipboard},
     log,
     message_proto::*,
+    ResultType,
 };
 
 pub const CLIPBOARD_NAME: &'static str = "clipboard";
@@ -218,12 +218,13 @@ impl ClipboardData {
     }
 
     fn from_msg(clipboard: Clipboard) -> Self {
+        let is_image = clipboard.width > 0 && clipboard.height > 0;
         let data = if clipboard.compress {
-            decompress(&clipboard.content)
+            decompress_clipboard(&clipboard.content, clipboard.size as usize, is_image)
         } else {
             clipboard.content.into()
         };
-        if clipboard.width > 0 && clipboard.height > 0 {
+        if is_image {
             ClipboardData::Image(
                 arboard::ImageData {
                     bytes: data.into(),
@@ -256,6 +257,7 @@ impl ClipboardData {
                 msg.set_clipboard(Clipboard {
                     compress,
                     content: content.into(),
+                    size: s.as_bytes().len() as _,
                     ..Default::default()
                 });
             }
@@ -272,6 +274,7 @@ impl ClipboardData {
                     content: content.into(),
                     width: a.width as _,
                     height: a.height as _,
+                    size: a.bytes.len() as _,
                     ..Default::default()
                 });
             }

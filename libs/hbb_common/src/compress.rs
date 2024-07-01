@@ -31,22 +31,32 @@ pub fn compress(data: &[u8]) -> Vec<u8> {
 }
 
 pub fn decompress(data: &[u8]) -> Vec<u8> {
+    const MAX: usize = 1024 * 1024 * 64;
+    const MIN: usize = 1024 * 1024;
+    let mut n = 30 * data.len();
+    n = n.clamp(MIN, MAX);
+    decompress_(data, n)
+}
+
+pub fn decompress_clipboard(data: &[u8], size: usize, is_image: bool) -> Vec<u8> {
+    if is_image && size > 0 {
+        decompress_(data, size)
+    } else {
+        decompress(data)
+    }
+}
+
+fn decompress_(data: &[u8], n: usize) -> Vec<u8> {
     let mut out = Vec::new();
     DECOMPRESSOR.with(|d| {
         if let Ok(mut d) = d.try_borrow_mut() {
             match &mut *d {
-                Ok(d) => {
-                    const MAX: usize = 1024 * 1024 * 64;
-                    const MIN: usize = 1024 * 1024;
-                    let mut n = 30 * data.len();
-                    n = n.clamp(MIN, MAX);
-                    match d.decompress(data, n) {
-                        Ok(res) => out = res,
-                        Err(err) => {
-                            crate::log::debug!("Failed to decompress: {}", err);
-                        }
+                Ok(d) => match d.decompress(data, n) {
+                    Ok(res) => out = res,
+                    Err(err) => {
+                        crate::log::debug!("Failed to decompress: {}", err);
                     }
-                }
+                },
                 Err(err) => {
                     crate::log::debug!("Failed to get decompressor: {}", err);
                 }

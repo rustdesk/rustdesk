@@ -320,6 +320,8 @@ message Clipboard {
   bytes content = 2;
   int32 width = 3;
   int32 height = 4;
+  // size before compress
+  int32 size = 5;
 }
 
 enum FileType {
