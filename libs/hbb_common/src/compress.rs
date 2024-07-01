@@ -7,16 +7,11 @@ use zstd::bulk::{Compressor, Decompressor};
 // value 0 means default, which is controlled by ZSTD_CLEVEL_DEFAULT
 thread_local! {
     static COMPRESSOR: RefCell<io::Result<Compressor<'static>>> = RefCell::new(Compressor::new(crate::config::COMPRESS_LEVEL));
-    static COMPRESSOR_IMAGE: RefCell<io::Result<Compressor<'static>>> = RefCell::new(Compressor::new(crate::config::COMPRESS_LEVEL_IMAGE));
     static DECOMPRESSOR: RefCell<io::Result<Decompressor<'static>>> = RefCell::new(Decompressor::new());
 }
 
 pub fn compress(data: &[u8]) -> Vec<u8> {
     COMPRESSOR.with(|c| compress_(c, data))
-}
-
-pub fn compress_image(data: &[u8]) -> Vec<u8> {
-    COMPRESSOR_IMAGE.with(|c| compress_(c, data))
 }
 
 fn compress_(c: &RefCell<io::Result<Compressor<'static>>>, data: &[u8]) -> Vec<u8> {
