@@ -135,7 +135,7 @@ class Header: Reactor.Component {
         return <div style={style}>
             {is_osx || is_xfce ? "" : <span #fullscreen>{svg_fullscreen}</span>}
             <div #screens>
-                <span #secure title={title_conn}>{icon_conn}</span>
+                <span #secure title={title_conn+" ("+pi.username+"@"+pi.hostname+")"}>{icon_conn}</span>
                 <div .remote-id>{get_id()}</div>
                 <div style="flow:horizontal;border-spacing: 0.5em;">{screens}</div>
                 {this.renderGlobalScreens()}

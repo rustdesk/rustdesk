@@ -44,7 +44,7 @@ class EventToUI_Texture implements EventToUI {
   int get field0 => field;
 }
 
-class RustdeskImpl {
+class IpmrmtImpl {
   Future<void> stopGlobalEventStream({required String appType, dynamic hint}) {
     throw UnimplementedError();
   }
