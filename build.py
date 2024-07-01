@@ -25,8 +25,8 @@ flutter_build_dir_2 = f'flutter/{flutter_build_dir}'
 skip_cargo = False
 
 
-def get_arch() -> str:
-    custom_arch = os.environ.get("ARCH")
+def get_deb_arch() -> str:
+    custom_arch = os.environ.get("DEB_ARCH")
     if custom_arch is None:
         return "amd64"
     return custom_arch
@@ -294,7 +294,7 @@ Homepage: https://rustdesk.com
 Depends: libgtk-3-0, libxcb-randr0, libxdo3, libxfixes3, libxcb-shape0, libxcb-xfixes0, libasound2, libsystemd0, curl, libva-drm2, libva-x11-2, libvdpau1, libgstreamer-plugins-base1.0-0, libpam0g, libappindicator3-1, gstreamer1.0-pipewire
 Description: A remote control software.
 
-""" % (version, get_arch())
+""" % (version, get_deb_arch())
     file = open(control_file_path, "w")
     file.write(content)
     file.close()
