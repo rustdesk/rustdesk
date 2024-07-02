@@ -627,5 +627,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Telegram bot", "Telegram-Bot"),
         ("enable-bot-tip", "Wenn Sie diese Funktion aktivieren, können Sie den 2FA-Code von Ihrem Bot erhalten. Er kann auch als Verbindungsbenachrichtigung dienen."),
         ("enable-bot-desc", "1. Öffnen Sie einen Chat mit @BotFather.\n2. Senden Sie den Befehl \"/newbot\". Sie erhalten ein Token, nachdem Sie diesen Schritt abgeschlossen haben.\n3. Starten Sie einen Chat mit Ihrem neu erstellten Bot. Senden Sie eine Nachricht, die mit einem Schrägstrich (\"/\") beginnt, z. B. \"/hello\", um ihn zu aktivieren.\n"),
+        ("cancel-2fa-confirm-tip", ""),
+        ("cancel-bot-confirm-tip", ""),
     ].iter().cloned().collect();
 }

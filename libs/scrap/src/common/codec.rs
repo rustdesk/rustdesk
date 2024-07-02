@@ -21,7 +21,7 @@ use crate::{
 use hbb_common::{
     anyhow::anyhow,
     bail,
-    config::{keys::OPTION_ENABLE_HWCODEC, option2bool, Config, PeerConfig},
+    config::{option2bool, Config, PeerConfig},
     lazy_static, log,
     message_proto::{
         supported_decoding::PreferCodec, video_frame, Chroma, CodecAbility, EncodedVideoFrames,
@@ -836,6 +836,8 @@ impl Decoder {
 
 #[cfg(any(feature = "hwcodec", feature = "mediacodec"))]
 pub fn enable_hwcodec_option() -> bool {
+    use hbb_common::config::keys::OPTION_ENABLE_HWCODEC;
+
     if cfg!(windows) || cfg!(target_os = "linux") || cfg!(target_os = "android") {
         return option2bool(
             OPTION_ENABLE_HWCODEC,
@@ -846,6 +848,8 @@ pub fn enable_hwcodec_option() -> bool {
 }
 #[cfg(feature = "vram")]
 pub fn enable_vram_option(encode: bool) -> bool {
+    use hbb_common::config::keys::OPTION_ENABLE_HWCODEC;
+
     if cfg!(windows) {
         let enable = option2bool(
             OPTION_ENABLE_HWCODEC,

@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_hbb/desktop/pages/desktop_home_page.dart';
 import 'package:flutter_hbb/mobile/widgets/dialog.dart';
 import 'package:flutter_hbb/models/chat_model.dart';
 import 'package:get/get.dart';
@@ -101,18 +102,27 @@ class ServerPage extends StatefulWidget implements PageShape {
               ),
           ];
         },
-        onSelected: (value) {
+        onSelected: (value) async {
           if (value == "changeID") {
             changeIdDialog();
           } else if (value == "setPermanentPassword") {
-            setPermanentPasswordDialog(gFFI.dialogManager);
+            setPasswordDialog();
           } else if (value == "setTemporaryPasswordLength") {
             setTemporaryPasswordLengthDialog(gFFI.dialogManager);
           } else if (value == kUsePermanentPassword ||
               value == kUseTemporaryPassword ||
               value == kUseBothPasswords) {
-            bind.mainSetOption(key: kOptionVerificationMethod, value: value);
-            gFFI.serverModel.updatePasswordModel();
+            callback() {
+              bind.mainSetOption(key: kOptionVerificationMethod, value: value);
+              gFFI.serverModel.updatePasswordModel();
+            }
+
+            if (value == kUsePermanentPassword &&
+                (await bind.mainGetPermanentPassword()).isEmpty) {
+              setPasswordDialog(notEmptyCallback: callback);
+            } else {
+              callback();
+            }
           } else if (value.startsWith("AcceptSessionsVia")) {
             value = value.substring("AcceptSessionsVia".length);
             if (value == "Password") {
