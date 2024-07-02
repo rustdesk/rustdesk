@@ -684,10 +684,18 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
       RxBool hasBot = bind.mainHasValidBotSync().obs;
       update() async {
         has2fa.value = bind.mainHasValid2FaSync();
+        setState(() {});
       }
 
       onChanged(bool? checked) async {
-        change2fa(callback: update);
+        if (checked == false) {
+          CommonConfirmDialog(
+              gFFI.dialogManager, translate('cancel-2fa-confirm-tip'), () {
+            change2fa(callback: update);
+          });
+        } else {
+          change2fa(callback: update);
+        }
       }
 
       final tfa = GestureDetector(
@@ -716,10 +724,18 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
       }
       updateBot() async {
         hasBot.value = bind.mainHasValidBotSync();
+        setState(() {});
       }
 
       onChangedBot(bool? checked) async {
-        changeBot(callback: updateBot);
+        if (checked == false) {
+          CommonConfirmDialog(
+              gFFI.dialogManager, translate('cancel-bot-confirm-tip'), () {
+            changeBot(callback: updateBot);
+          });
+        } else {
+          changeBot(callback: updateBot);
+        }
       }
 
       final bot = GestureDetector(
@@ -873,12 +889,22 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
                     label: value,
                     onChanged: locked
                         ? null
-                        : ((value) {
-                            () async {
+                        : ((value) async {
+                            callback() async {
                               await model.setVerificationMethod(
                                   passwordKeys[passwordValues.indexOf(value)]);
                               await model.updatePasswordModel();
-                            }();
+                            }
+
+                            if (value ==
+                                    passwordValues[passwordKeys
+                                        .indexOf(kUsePermanentPassword)] &&
+                                (await bind.mainGetPermanentPassword())
+                                    .isEmpty) {
+                              setPasswordDialog(notEmptyCallback: callback);
+                            } else {
+                              await callback();
+                            }
                           }),
                   ))
               .toList();
