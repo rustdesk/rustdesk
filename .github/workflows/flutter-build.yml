@@ -58,7 +58,7 @@ jobs:
         job:
           # - { target: i686-pc-windows-msvc        , os: windows-2022                  }
           # - { target: x86_64-pc-windows-gnu       , os: windows-2022                  }
-          - { target: x86_64-pc-windows-msvc, os: windows-2022, arch: x86_64 }
+          - { target: x86_64-pc-windows-msvc, os: windows-2022, arch: x86_64, vcpkg-triplet: x64-windows-static }
           # - { target: aarch64-pc-windows-msvc, os: windows-2022, arch: aarch64 }
     steps:
       - name: Export GitHub Actions cache environment variables
@@ -109,7 +109,7 @@ jobs:
 
       - name: Install vcpkg dependencies
         run: |
-          $VCPKG_ROOT/vcpkg install --triplet x64-windows-static --x-install-root="$VCPKG_ROOT/installed"
+          $VCPKG_ROOT/vcpkg install --triplet ${{ matrix.job.vcpkg-triplet }} --x-install-root="$VCPKG_ROOT/installed"
         shell: bash
 
       - name: Build rustdesk
@@ -212,7 +212,7 @@ jobs:
         job:
           # - { target: i686-pc-windows-msvc        , os: windows-2022                  }
           # - { target: x86_64-pc-windows-gnu       , os: windows-2022                  }
-          - { target: i686-pc-windows-msvc, os: windows-2022, arch: x86 }
+          - { target: i686-pc-windows-msvc, os: windows-2022, arch: x86, vcpkg-triplet: x86-windows-static }
           # - { target: aarch64-pc-windows-msvc, os: windows-2022 }
     steps:
       - name: Export GitHub Actions cache environment variables
@@ -249,7 +249,7 @@ jobs:
 
       - name: Install vcpkg dependencies
         run: |
-          $VCPKG_ROOT/vcpkg install --triplet x86-windows-static --x-install-root="$VCPKG_ROOT/installed"
+          $VCPKG_ROOT/vcpkg install --triplet ${{ matrix.job.vcpkg-triplet }} --x-install-root="$VCPKG_ROOT/installed"
         shell: bash
 
       - name: Build rustdesk
@@ -408,6 +408,7 @@ jobs:
               arch: aarch64,
               target: aarch64-apple-ios,
               os: macos-13,
+              vcpkg-triplet: arm64-ios,
             }
     steps:
       - name: Export GitHub Actions cache environment variables
@@ -435,7 +436,7 @@ jobs:
 
       - name: Install vcpkg dependencies
         run: |
-          $VCPKG_ROOT/vcpkg install --triplet arm64-ios --x-install-root="$VCPKG_ROOT/installed"
+          $VCPKG_ROOT/vcpkg install --triplet ${{ matrix.job.vcpkg-triplet }} --x-install-root="$VCPKG_ROOT/installed"
         shell: bash
 
       - name: Install Rust toolchain
@@ -969,6 +970,7 @@ jobs:
               distro: ubuntu18.04,
               on: ubuntu-20.04,
               deb_arch: amd64,
+              vcpkg-triplet: x64-linux,
             }
           - {
               arch: aarch64,
@@ -976,6 +978,7 @@ jobs:
               distro: ubuntu18.04,
               on: [self-hosted, Linux, ARM64],
               deb_arch: arm64,
+              vcpkg-triplet: arm64-linux,
             }
     steps:
       - name: Export GitHub Actions cache environment variables
@@ -1043,14 +1046,7 @@ jobs:
       - name: Install vcpkg dependencies
         if: matrix.job.arch == 'x86_64' || env.UPLOAD_ARTIFACT == 'true'
         run: |
-          case ${{ matrix.job.target }} in
-            aarch64-unknown-linux-gnu)
-              $VCPKG_ROOT/vcpkg install --triplet arm64-linux --x-install-root="$VCPKG_ROOT/installed"
-            ;;
-            x86_64-unknown-linux-gnu)
-              $VCPKG_ROOT/vcpkg install --x-install-root="$VCPKG_ROOT/installed"
-            ;;
-          esac
+          $VCPKG_ROOT/vcpkg install --triplet ${{ matrix.job.vcpkg-triplet }} --x-install-root="$VCPKG_ROOT/installed"
         shell: bash
 
       - name: Restore bridge files
@@ -1281,6 +1277,7 @@ jobs:
               distro: ubuntu18.04,
               deb_arch: amd64,
               sciter_arch: x64,
+              vcpkg-triplet: x64-linux,
             }
           - {
               arch: armv7,
@@ -1289,6 +1286,7 @@ jobs:
               distro: ubuntu18.04-rustdesk,
               deb_arch: armhf,
               sciter_arch: arm32,
+              vcpkg-triplet: arm-linux,
             }
     steps:
       - name: Export GitHub Actions cache environment variables
@@ -1344,7 +1342,7 @@ jobs:
       - name: Install vcpkg dependencies
         run: |
           cp $PWD/res/vcpkg/linux.cmake $VCPKG_ROOT/scripts/toolchains/linux.cmake
-          $VCPKG_ROOT/vcpkg install --triplet arm-linux --x-install-root="$VCPKG_ROOT/installed"
+          $VCPKG_ROOT/vcpkg install --triplet ${{ matrix.job.vcpkg-triplet }} --x-install-root="$VCPKG_ROOT/installed"
         shell: bash
 
       - uses: rustdesk-org/run-on-arch-action@amd64-support
