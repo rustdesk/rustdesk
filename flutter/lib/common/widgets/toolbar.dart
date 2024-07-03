@@ -22,6 +22,20 @@ class TTextMenu {
       required this.onPressed,
       this.trailingIcon,
       this.divider = false});
+
+  Widget getChild() {
+    if (trailingIcon != null) {
+      return Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          child,
+          trailingIcon!,
+        ],
+      );
+    } else {
+      return child;
+    }
+  }
 }
 
 class TRadioMenu<T> {

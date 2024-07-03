@@ -84,8 +84,10 @@ class DesktopSettingPage extends StatefulWidget {
       }
       if (Get.isRegistered<PageController>(tag: _kSettingPageControllerTag)) {
         DesktopTabPage.onAddSetting(initialPage: page);
-        PageController controller = Get.find(tag: _kSettingPageControllerTag);
-        Rx<SettingsTabKey> selected = Get.find(tag: _kSettingPageTabKeyTag);
+        PageController controller =
+            Get.find<PageController>(tag: _kSettingPageControllerTag);
+        Rx<SettingsTabKey> selected =
+            Get.find<Rx<SettingsTabKey>>(tag: _kSettingPageTabKeyTag);
         selected.value = page;
         controller.jumpToPage(index);
       } else {
@@ -679,15 +681,24 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
     // Simple temp wrapper for PR check
     tmpWrapper() {
       RxBool has2fa = bind.mainHasValid2FaSync().obs;
+      RxBool hasBot = bind.mainHasValidBotSync().obs;
       update() async {
         has2fa.value = bind.mainHasValid2FaSync();
+        setState(() {});
       }
 
       onChanged(bool? checked) async {
-        change2fa(callback: update);
+        if (checked == false) {
+          CommonConfirmDialog(
+              gFFI.dialogManager, translate('cancel-2fa-confirm-tip'), () {
+            change2fa(callback: update);
+          });
+        } else {
+          change2fa(callback: update);
+        }
       }
 
-      return GestureDetector(
+      final tfa = GestureDetector(
         child: InkWell(
           child: Obx(() => Row(
                 children: [
@@ -708,6 +719,52 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
           onChanged(!has2fa.value);
         },
       ).marginOnly(left: _kCheckBoxLeftMargin);
+      if (!has2fa.value) {
+        return tfa;
+      }
+      updateBot() async {
+        hasBot.value = bind.mainHasValidBotSync();
+        setState(() {});
+      }
+
+      onChangedBot(bool? checked) async {
+        if (checked == false) {
+          CommonConfirmDialog(
+              gFFI.dialogManager, translate('cancel-bot-confirm-tip'), () {
+            changeBot(callback: updateBot);
+          });
+        } else {
+          changeBot(callback: updateBot);
+        }
+      }
+
+      final bot = GestureDetector(
+        child: Tooltip(
+          waitDuration: Duration(milliseconds: 300),
+          message: translate("enable-bot-tip"),
+          child: InkWell(
+              child: Obx(() => Row(
+                    children: [
+                      Checkbox(
+                              value: hasBot.value,
+                              onChanged: enabled ? onChangedBot : null)
+                          .marginOnly(right: 5),
+                      Expanded(
+                          child: Text(
+                        translate('Telegram bot'),
+                        style: TextStyle(
+                            color: disabledTextColor(context, enabled)),
+                      ))
+                    ],
+                  ))),
+        ),
+        onTap: () {
+          onChangedBot(!hasBot.value);
+        },
+      ).marginOnly(left: _kCheckBoxLeftMargin + 30);
+      return Column(
+        children: [tfa, bot],
+      );
     }
 
     return tmpWrapper();
@@ -832,12 +889,22 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
                     label: value,
                     onChanged: locked
                         ? null
-                        : ((value) {
-                            () async {
+                        : ((value) async {
+                            callback() async {
                               await model.setVerificationMethod(
                                   passwordKeys[passwordValues.indexOf(value)]);
                               await model.updatePasswordModel();
-                            }();
+                            }
+
+                            if (value ==
+                                    passwordValues[passwordKeys
+                                        .indexOf(kUsePermanentPassword)] &&
+                                (await bind.mainGetPermanentPassword())
+                                    .isEmpty) {
+                              setPasswordDialog(notEmptyCallback: callback);
+                            } else {
+                              await callback();
+                            }
                           }),
                   ))
               .toList();

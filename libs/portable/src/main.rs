@@ -8,6 +8,8 @@ use std::{
 use bin_reader::BinaryReader;
 
 pub mod bin_reader;
+#[cfg(windows)]
+mod ui;
 
 #[cfg(windows)]
 const APP_METADATA: &[u8] = include_bytes!("../app_metadata.toml");
@@ -17,6 +19,8 @@ const APP_METADATA_CONFIG: &str = "meta.toml";
 const META_LINE_PREFIX_TIMESTAMP: &str = "timestamp = ";
 const APP_PREFIX: &str = "rustdesk";
 const APPNAME_RUNTIME_ENV_KEY: &str = "RUSTDESK_APPNAME";
+#[cfg(windows)]
+const SET_FOREGROUND_WINDOW_ENV_KEY: &str = "SET_FOREGROUND_WINDOW";
 
 fn is_timestamp_matches(dir: &PathBuf, ts: &mut u64) -> bool {
     let Ok(app_metadata) = std::str::from_utf8(APP_METADATA) else {
@@ -55,7 +59,13 @@ fn write_meta(dir: &PathBuf, ts: u64) {
     }
 }
 
-fn setup(reader: BinaryReader, dir: Option<PathBuf>, clear: bool) -> Option<PathBuf> {
+fn setup(
+    reader: BinaryReader,
+    dir: Option<PathBuf>,
+    clear: bool,
+    _args: &Vec<String>,
+    _ui: &mut bool,
+) -> Option<PathBuf> {
     let dir = if let Some(dir) = dir {
         dir
     } else {
@@ -70,6 +80,11 @@ fn setup(reader: BinaryReader, dir: Option<PathBuf>, clear: bool) -> Option<Path
 
     let mut ts = 0;
     if clear || !is_timestamp_matches(&dir, &mut ts) {
+        #[cfg(windows)]
+        if _args.is_empty() {
+            *_ui = true;
+            ui::setup();
+        }
         std::fs::remove_dir_all(&dir).ok();
     }
     for file in reader.files.iter() {
@@ -83,7 +98,7 @@ fn setup(reader: BinaryReader, dir: Option<PathBuf>, clear: bool) -> Option<Path
     Some(dir.join(&reader.exe))
 }
 
-fn execute(path: PathBuf, args: Vec<String>) {
+fn execute(path: PathBuf, args: Vec<String>, _ui: bool) {
     println!("executing {}", path.display());
     // setup env
     let exe = std::env::current_exe().unwrap_or_default();
@@ -95,13 +110,28 @@ fn execute(path: PathBuf, args: Vec<String>) {
     {
         use std::os::windows::process::CommandExt;
         cmd.creation_flags(winapi::um::winbase::CREATE_NO_WINDOW);
+        if _ui {
+            cmd.env(SET_FOREGROUND_WINDOW_ENV_KEY, "1");
+        }
     }
-    cmd.env(APPNAME_RUNTIME_ENV_KEY, exe_name)
+    let _child = cmd
+        .env(APPNAME_RUNTIME_ENV_KEY, exe_name)
         .stdin(Stdio::inherit())
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit())
-        .spawn()
-        .ok();
+        .spawn();
+
+    #[cfg(windows)]
+    if _ui {
+        match _child {
+            Ok(child) => unsafe {
+                winapi::um::winuser::AllowSetForegroundWindow(child.id() as u32);
+            },
+            Err(e) => {
+                eprintln!("{:?}", e);
+            }
+        }
+    }
 }
 
 fn main() {
@@ -119,18 +149,21 @@ fn main() {
     let click_setup = args.is_empty() && arg_exe.to_lowercase().ends_with("install.exe");
     let quick_support = args.is_empty() && arg_exe.to_lowercase().ends_with("qs.exe");
 
+    let mut ui = false;
     let reader = BinaryReader::default();
     if let Some(exe) = setup(
         reader,
         None,
         click_setup || args.contains(&"--silent-install".to_owned()),
+        &args,
+        &mut ui,
     ) {
         if click_setup {
             args = vec!["--install".to_owned()];
         } else if quick_support {
             args = vec!["--quick_support".to_owned()];
         }
-        execute(exe, args);
+        execute(exe, args, ui);
     }
 }
 

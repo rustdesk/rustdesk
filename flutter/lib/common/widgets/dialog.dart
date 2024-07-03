@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:bot_toast/bot_toast.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_hbb/common/shared_state.dart';
 import 'package:flutter_hbb/common/widgets/setting_widgets.dart';
 import 'package:flutter_hbb/consts.dart';
@@ -218,50 +219,53 @@ void changeWhiteList({Function()? callback}) async {
       ),
       actions: [
         dialogButton("Cancel", onPressed: close, isOutline: true),
-        if (!isOptFixed)dialogButton("Clear", onPressed: () async {
-          await bind.mainSetOption(
-              key: kOptionWhitelist, value: defaultOptionWhitelist);
-          callback?.call();
-          close();
-        }, isOutline: true),
-        if (!isOptFixed) dialogButton(
-          "OK",
-          onPressed: () async {
-            setState(() {
-              msg = "";
-              isInProgress = true;
-            });
-            newWhiteListField = controller.text.trim();
-            var newWhiteList = "";
-            if (newWhiteListField.isEmpty) {
-              // pass
-            } else {
-              final ips = newWhiteListField.trim().split(RegExp(r"[\s,;\n]+"));
-              // test ip
-              final ipMatch = RegExp(
-                  r"^(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]?|0)\.(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]?|0)\.(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]?|0)\.(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]?|0)(\/([1-9]|[1-2][0-9]|3[0-2])){0,1}$");
-              final ipv6Match = RegExp(
-                  r"^(((?:[0-9A-Fa-f]{1,4}))*((?::[0-9A-Fa-f]{1,4}))*::((?:[0-9A-Fa-f]{1,4}))*((?::[0-9A-Fa-f]{1,4}))*|((?:[0-9A-Fa-f]{1,4}))((?::[0-9A-Fa-f]{1,4})){7})(\/([1-9]|[1-9][0-9]|1[0-1][0-9]|12[0-8])){0,1}$");
-              for (final ip in ips) {
-                if (!ipMatch.hasMatch(ip) && !ipv6Match.hasMatch(ip)) {
-                  msg = "${translate("Invalid IP")} $ip";
-                  setState(() {
-                    isInProgress = false;
-                  });
-                  return;
-                }
-              }
-              newWhiteList = ips.join(',');
-            }
-            if (newWhiteList.trim().isEmpty) {
-              newWhiteList = defaultOptionWhitelist;
-            }
+        if (!isOptFixed)
+          dialogButton("Clear", onPressed: () async {
             await bind.mainSetOption(
-                key: kOptionWhitelist, value: newWhiteList);
+                key: kOptionWhitelist, value: defaultOptionWhitelist);
             callback?.call();
             close();
-          },
-        ),
+          }, isOutline: true),
+        if (!isOptFixed)
+          dialogButton(
+            "OK",
+            onPressed: () async {
+              setState(() {
+                msg = "";
+                isInProgress = true;
+              });
+              newWhiteListField = controller.text.trim();
+              var newWhiteList = "";
+              if (newWhiteListField.isEmpty) {
+                // pass
+              } else {
+                final ips =
+                    newWhiteListField.trim().split(RegExp(r"[\s,;\n]+"));
+                // test ip
+                final ipMatch = RegExp(
+                    r"^(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]?|0)\.(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]?|0)\.(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]?|0)\.(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]?|0)(\/([1-9]|[1-2][0-9]|3[0-2])){0,1}$");
+                final ipv6Match = RegExp(
+                    r"^(((?:[0-9A-Fa-f]{1,4}))*((?::[0-9A-Fa-f]{1,4}))*::((?:[0-9A-Fa-f]{1,4}))*((?::[0-9A-Fa-f]{1,4}))*|((?:[0-9A-Fa-f]{1,4}))((?::[0-9A-Fa-f]{1,4})){7})(\/([1-9]|[1-9][0-9]|1[0-1][0-9]|12[0-8])){0,1}$");
+                for (final ip in ips) {
+                  if (!ipMatch.hasMatch(ip) && !ipv6Match.hasMatch(ip)) {
+                    msg = "${translate("Invalid IP")} $ip";
+                    setState(() {
+                      isInProgress = false;
+                    });
+                    return;
+                  }
+                }
+                newWhiteList = ips.join(',');
+              }
+              if (newWhiteList.trim().isEmpty) {
+                newWhiteList = defaultOptionWhitelist;
+              }
+              await bind.mainSetOption(
+                  key: kOptionWhitelist, value: newWhiteList);
+              callback?.call();
+              close();
+            },
+          ),
       ],
       onCancel: close,
     );
@@ -1762,6 +1766,66 @@ void renameDialog(
   });
 }
 
+void changeBot({Function()? callback}) async {
+  if (bind.mainHasValidBotSync()) {
+    await bind.mainSetOption(key: "bot", value: "");
+    callback?.call();
+    return;
+  }
+  String errorText = '';
+  bool loading = false;
+  final controller = TextEditingController();
+  gFFI.dialogManager.show((setState, close, context) {
+    onVerify() async {
+      final token = controller.text.trim();
+      if (token == "") return;
+      loading = true;
+      errorText = '';
+      setState(() {});
+      final error = await bind.mainVerifyBot(token: token);
+      if (error == "") {
+        callback?.call();
+        close();
+      } else {
+        errorText = translate(error);
+        loading = false;
+        setState(() {});
+      }
+    }
+
+    final codeField = TextField(
+      autofocus: true,
+      controller: controller,
+      decoration: InputDecoration(
+        hintText: translate('Token'),
+      ),
+    );
+
+    return CustomAlertDialog(
+      title: Text(translate("Telegram bot")),
+      content: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SelectableText(translate("enable-bot-desc"),
+                  style: TextStyle(fontSize: 12))
+              .marginOnly(bottom: 12),
+          Row(children: [Expanded(child: codeField)]),
+          if (errorText != '')
+            Text(errorText, style: TextStyle(color: Colors.red))
+                .marginOnly(top: 12),
+        ],
+      ),
+      actions: [
+        dialogButton("Cancel", onPressed: close, isOutline: true),
+        loading
+            ? CircularProgressIndicator()
+            : dialogButton("OK", onPressed: onVerify),
+      ],
+      onCancel: close,
+    );
+  });
+}
+
 void change2fa({Function()? callback}) async {
   if (bind.mainHasValid2FaSync()) {
     await bind.mainSetOption(key: "2fa", value: "");
@@ -2121,6 +2185,34 @@ void setSharedAbPasswordDialog(String abName, Peer peer) {
       ],
       onSubmit: isInputEmpty.value ? null : () => change(controller.text),
       onCancel: cancel,
+    );
+  });
+}
+
+void CommonConfirmDialog(OverlayDialogManager dialogManager, String content,
+    VoidCallback onConfirm) {
+  dialogManager.show((setState, close, context) {
+    submit() {
+      close();
+      onConfirm.call();
+    }
+
+    return CustomAlertDialog(
+      content: Row(
+        children: [
+          Expanded(
+            child: Text(content,
+                style: const TextStyle(fontSize: 15),
+                textAlign: TextAlign.start),
+          ),
+        ],
+      ).marginOnly(bottom: 12),
+      actions: [
+        dialogButton(translate("Cancel"), onPressed: close, isOutline: true),
+        dialogButton(translate("OK"), onPressed: submit),
+      ],
+      onSubmit: submit,
+      onCancel: close,
     );
   });
 }

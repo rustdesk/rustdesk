@@ -195,7 +195,7 @@ class FfiModel with ChangeNotifier {
     if (desktopType == DesktopType.remote) {
       KeyboardEnabledState.find(id).value = _permissions['keyboard'] != false;
     }
-    debugPrint('$_permissions');
+    debugPrint('updatePermission: $_permissions');
     notifyListeners();
   }
 
@@ -438,20 +438,6 @@ class FfiModel with ChangeNotifier {
   _handlePortableServiceRunning(String peerId, Map<String, dynamic> evt) {
     final running = evt['running'] == 'true';
     parent.target?.elevationModel.onPortableServiceRunning(running);
-    if (running) {
-      if (pi.primaryDisplay != kInvalidDisplayIndex) {
-        if (pi.currentDisplay != pi.primaryDisplay) {
-          // Notify to switch display
-          msgBox(sessionId, 'custom-nook-nocancel-hasclose-info', 'Prompt',
-              'elevated_switch_display_msg', '', parent.target!.dialogManager);
-          bind.sessionSwitchDisplay(
-            isDesktop: isDesktop,
-            sessionId: sessionId,
-            value: Int32List.fromList([pi.primaryDisplay]),
-          );
-        }
-      }
-    }
   }
 
   handleAliasChanged(Map<String, dynamic> evt) {

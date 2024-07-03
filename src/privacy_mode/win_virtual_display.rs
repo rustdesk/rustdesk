@@ -34,7 +34,7 @@ const CONFIG_KEY_REG_RECOVERY: &str = "reg_recovery";
 struct Display {
     dm: DEVMODEW,
     name: [WCHAR; 32],
-    primary: bool,
+    _primary: bool,
 }
 
 pub struct PrivacyModeImpl {
@@ -135,7 +135,7 @@ impl PrivacyModeImpl {
             let display = Display {
                 dm,
                 name: dd.DeviceName,
-                primary,
+                _primary: primary,
             };
 
             let ds = virtual_display_manager::get_cur_device_string();
@@ -149,36 +149,9 @@ impl PrivacyModeImpl {
         }
     }
 
-    fn restore(&mut self) {
-        Self::restore_displays(&self.displays);
-        Self::restore_displays(&self.virtual_displays);
-        allow_err!(Self::commit_change_display(0));
-        self.restore_plug_out_monitor();
-    }
-
     fn restore_plug_out_monitor(&mut self) {
         let _ = virtual_display_manager::plug_out_monitor_indices(&self.virtual_displays_added);
         self.virtual_displays_added.clear();
-    }
-
-    fn restore_displays(displays: &[Display]) {
-        for display in displays {
-            unsafe {
-                let mut dm = display.dm.clone();
-                let flags = if display.primary {
-                    CDS_NORESET | CDS_UPDATEREGISTRY | CDS_SET_PRIMARY
-                } else {
-                    CDS_NORESET | CDS_UPDATEREGISTRY
-                };
-                ChangeDisplaySettingsExW(
-                    display.name.as_ptr(),
-                    &mut dm,
-                    std::ptr::null_mut(),
-                    flags,
-                    std::ptr::null_mut(),
-                );
-            }
-        }
     }
 
     fn set_primary_display(&mut self) -> ResultType<()> {
@@ -431,7 +404,7 @@ impl PrivacyMode for PrivacyModeImpl {
     ) -> ResultType<()> {
         self.check_off_conn_id(conn_id)?;
         super::win_input::unhook()?;
-        self.restore();
+        self.restore_plug_out_monitor();
         restore_reg_connectivity(false);
 
         if self.conn_id != INVALID_PRIVACY_MODE_CONN_ID {

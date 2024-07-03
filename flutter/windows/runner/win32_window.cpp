@@ -5,6 +5,9 @@
 
 #include "resource.h"
 
+#include <cstdlib> // for getenv and _putenv
+#include <cstring> // for strcmp
+
 namespace {
 
 constexpr const wchar_t kWindowClassName[] = L"FLUTTER_RUNNER_WIN32_WINDOW";
@@ -143,6 +146,25 @@ bool Win32Window::CreateAndShow(const std::wstring& title,
   return OnCreate();
 }
 
+static void trySetWindowForeground(HWND window) {
+    char* value = nullptr;
+    size_t size = 0;
+    // Use _dupenv_s to safely get the environment variable
+    _dupenv_s(&value, &size, "SET_FOREGROUND_WINDOW");
+
+    if (value != nullptr) {
+        // Correctly compare the value with "1"
+        if (strcmp(value, "1") == 0) {
+            // Clear the environment variable
+            _putenv("SET_FOREGROUND_WINDOW=");
+            // Set the window to foreground
+            SetForegroundWindow(window);
+        }
+        // Free the duplicated string
+        free(value);
+    }
+}
+
 // static
 LRESULT CALLBACK Win32Window::WndProc(HWND const window,
                                       UINT const message,
@@ -156,6 +178,7 @@ LRESULT CALLBACK Win32Window::WndProc(HWND const window,
     auto that = static_cast<Win32Window*>(window_struct->lpCreateParams);
     EnableFullDpiSupportIfAvailable(window);
     that->window_handle_ = window;
+    trySetWindowForeground(window);
   } else if (Win32Window* that = GetThisFromHandle(window)) {
     return that->MessageHandler(window, message, wparam, lparam);
   }

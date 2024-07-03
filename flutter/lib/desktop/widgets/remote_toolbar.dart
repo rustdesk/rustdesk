@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_hbb/common/widgets/audio_input.dart';
 import 'package:flutter_hbb/common/widgets/toolbar.dart';
 import 'package:flutter_hbb/models/chat_model.dart';
+import 'package:flutter_hbb/models/input_model.dart';
 import 'package:flutter_hbb/models/state_model.dart';
 import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/utils/multi_window_manager.dart';
@@ -1741,6 +1742,7 @@ class _KeyboardMenu extends StatelessWidget {
               viewMode(),
               Divider(),
               ...toolbarToggles(),
+              ...mobileActions(),
             ]);
   }
 
@@ -1876,6 +1878,39 @@ class _KeyboardMenu extends StatelessWidget {
             : null,
         ffi: ffi,
         child: Text(translate('View Mode')));
+  }
+
+  mobileActions() {
+    if (pi.platform != kPeerPlatformAndroid) return [];
+    final enabled = versionCmp(pi.version, '1.2.7') >= 0;
+    if (!enabled) return [];
+    return [
+      Divider(),
+      MenuButton(
+          child: Text(translate('Back')),
+          onPressed: () => ffi.inputModel.onMobileBack(),
+          ffi: ffi),
+      MenuButton(
+          child: Text(translate('Home')),
+          onPressed: () => ffi.inputModel.onMobileHome(),
+          ffi: ffi),
+      MenuButton(
+          child: Text(translate('Apps')),
+          onPressed: () => ffi.inputModel.onMobileApps(),
+          ffi: ffi),
+      MenuButton(
+          child: Text(translate('Volume up')),
+          onPressed: () => ffi.inputModel.onMobileVolumeUp(),
+          ffi: ffi),
+      MenuButton(
+          child: Text(translate('Volume down')),
+          onPressed: () => ffi.inputModel.onMobileVolumeDown(),
+          ffi: ffi),
+      MenuButton(
+          child: Text(translate('Power')),
+          onPressed: () => ffi.inputModel.onMobilePower(),
+          ffi: ffi),
+    ];
   }
 }
 

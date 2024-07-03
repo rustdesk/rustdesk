@@ -1,6 +1,6 @@
 [package]
 name = "rustdesk"
-version = "1.2.6"
+version = "1.2.7"
 authors = ["rustdesk <info@rustdesk.com>"]
 edition = "2021"
 build= "build.rs"
@@ -89,7 +89,10 @@ sys-locale = "0.3"
 enigo = { path = "libs/enigo", features = [ "with_serde" ] }
 clipboard = { path = "libs/clipboard" }
 ctrlc = "3.2"
-arboard = { git = "https://github.com/fufesou/arboard", branch = "feat/x11_set_conn_timeout", features = ["wayland-data-control"] }
+# arboard = { version = "3.4.0", features = ["wayland-data-control"] }
+arboard = { git = "https://github.com/rustdesk-org/arboard", features = ["wayland-data-control", "image-data"] }
+clipboard-master = { git = "https://github.com/rustdesk-org/clipboard-master" }
+
 system_shutdown = "4.0"
 qrcode-generator = "4.1"
 

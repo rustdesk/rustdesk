@@ -410,9 +410,12 @@ impl<T: InvokeUiSession> Session<T> {
             self.send(Data::Message(msg));
         }
         if value != "custom" {
-            // non custom quality use 30 fps
-            let msg = self.lc.write().unwrap().set_custom_fps(30, false);
-            self.send(Data::Message(msg));
+            let last_auto_fps = self.lc.read().unwrap().last_auto_fps;
+            if last_auto_fps.unwrap_or(usize::MAX) >= 30 {
+                // non custom quality use 30 fps
+                let msg = self.lc.write().unwrap().set_custom_fps(30, false);
+                self.send(Data::Message(msg));
+            }
         }
     }
 
@@ -801,7 +804,54 @@ impl<T: InvokeUiSession> Session<T> {
     pub fn handle_flutter_key_event(
         &self,
         keyboard_mode: &str,
-        _name: &str,
+        name: &str,
+        platform_code: i32,
+        position_code: i32,
+        lock_modes: i32,
+        down_or_up: bool,
+    ) {
+        if name == "flutter_key" {
+            self._handle_key_flutter_simulation(keyboard_mode, platform_code, down_or_up);
+        } else {
+            self._handle_key_non_flutter_simulation(
+                keyboard_mode,
+                platform_code,
+                position_code,
+                lock_modes,
+                down_or_up,
+            );
+        }
+    }
+
+    #[cfg(not(any(target_os = "ios")))]
+    fn _handle_key_flutter_simulation(
+        &self,
+        _keyboard_mode: &str,
+        platform_code: i32,
+        down_or_up: bool,
+    ) {
+        // https://github.com/flutter/flutter/blob/master/packages/flutter/lib/src/services/keyboard_key.g.dart#L4356
+        let ctrl_key = match platform_code {
+            0x0007007f => Some(ControlKey::VolumeMute),
+            0x00070080 => Some(ControlKey::VolumeUp),
+            0x00070081 => Some(ControlKey::VolumeDown),
+            0x00070066 => Some(ControlKey::Power),
+            _ => None,
+        };
+        let Some(ctrl_key) = ctrl_key else { return };
+        let mut key_event = KeyEvent {
+            mode: KeyboardMode::Translate.into(),
+            down: down_or_up,
+            ..Default::default()
+        };
+        key_event.set_control_key(ctrl_key);
+        self.send_key_event(&key_event);
+    }
+
+    #[cfg(not(any(target_os = "ios")))]
+    fn _handle_key_non_flutter_simulation(
+        &self,
+        keyboard_mode: &str,
         platform_code: i32,
         position_code: i32,
         lock_modes: i32,
@@ -1692,7 +1742,7 @@ pub async fn io_loop<T: InvokeUiSession>(handler: Session<T>, round: u32) {
     let frame_count_map: Arc<RwLock<HashMap<usize, usize>>> = Default::default();
     let frame_count_map_cl = frame_count_map.clone();
     let ui_handler = handler.ui_handler.clone();
-    let (video_sender, audio_sender, video_queue_map, decode_fps_map, chroma) =
+    let (video_sender, audio_sender, video_queue_map, decode_fps, chroma) =
         start_video_audio_threads(
             handler.clone(),
             move |display: usize,
@@ -1720,7 +1770,7 @@ pub async fn io_loop<T: InvokeUiSession>(handler: Session<T>, round: u32) {
         receiver,
         sender,
         frame_count_map,
-        decode_fps_map,
+        decode_fps,
         chroma,
     );
     remote.io_loop(&key, &token, round).await;

@@ -928,13 +928,9 @@ makeMobileActionsOverlayEntry(VoidCallback? onHide, {FFI? ffi}) {
       position: draggablePositions.mobileActions,
       width: overlayW,
       height: overlayH,
-      onBackPressed: () => session.inputModel.tap(MouseButtons.right),
-      onHomePressed: () => session.inputModel.tap(MouseButtons.wheel),
-      onRecentPressed: () async {
-        session.inputModel.sendMouse('down', MouseButtons.wheel);
-        await Future.delayed(const Duration(milliseconds: 500));
-        session.inputModel.sendMouse('up', MouseButtons.wheel);
-      },
+      onBackPressed: session.inputModel.onMobileBack,
+      onHomePressed: session.inputModel.onMobileHome,
+      onRecentPressed: session.inputModel.onMobileApps,
       onHidePressed: onHide,
     );
   }
@@ -1432,7 +1428,7 @@ Future<void> initGlobalFFI() async {
   _globalFFI = FFI(null);
   debugPrint("_globalFFI init end");
   // after `put`, can also be globally found by Get.find<FFI>();
-  Get.put(_globalFFI, permanent: true);
+  Get.put<FFI>(_globalFFI, permanent: true);
 }
 
 String translate(String name) {

@@ -43,8 +43,7 @@ use hbb_common::{
     rand,
     rendezvous_proto::*,
     socket_client,
-    sodiumoxide::base64,
-    sodiumoxide::crypto::sign,
+    sodiumoxide::{base64, crypto::sign},
     tcp::FramedStream,
     timeout,
     tokio::time::Duration,
@@ -65,11 +64,11 @@ use crate::{
     ui_session_interface::{InvokeUiSession, Session},
 };
 
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+use crate::clipboard::{check_clipboard, CLIPBOARD_INTERVAL};
 #[cfg(not(feature = "flutter"))]
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use crate::ui_session_interface::SessionPermissionConfig;
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
-use crate::{check_clipboard, CLIPBOARD_INTERVAL};
 
 pub use super::lang::*;
 
@@ -137,7 +136,7 @@ lazy_static::lazy_static! {
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 lazy_static::lazy_static! {
     static ref ENIGO: Arc<Mutex<enigo::Enigo>> = Arc::new(Mutex::new(enigo::Enigo::new()));
-    static ref OLD_CLIPBOARD_TEXT: Arc<Mutex<String>> = Default::default();
+    static ref OLD_CLIPBOARD_DATA: Arc<Mutex<crate::clipboard::ClipboardData>> = Default::default();
     static ref TEXT_CLIPBOARD_STATE: Arc<Mutex<TextClipboardState>> = Arc::new(Mutex::new(TextClipboardState::new()));
 }
 
@@ -145,8 +144,8 @@ const PUBLIC_SERVER: &str = "public";
 
 #[inline]
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
-pub fn get_old_clipboard_text() -> &'static Arc<Mutex<String>> {
-    &OLD_CLIPBOARD_TEXT
+pub fn get_old_clipboard_text() -> Arc<Mutex<crate::clipboard::ClipboardData>> {
+    OLD_CLIPBOARD_DATA.clone()
 }
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -737,10 +736,11 @@ impl Client {
                     break;
                 }
                 if !TEXT_CLIPBOARD_STATE.lock().unwrap().is_required {
+                    std::thread::sleep(Duration::from_millis(CLIPBOARD_INTERVAL));
                     continue;
                 }
 
-                if let Some(msg) = check_clipboard(&mut ctx, Some(&OLD_CLIPBOARD_TEXT)) {
+                if let Some(msg) = check_clipboard(&mut ctx, Some(OLD_CLIPBOARD_DATA.clone())) {
                     #[cfg(feature = "flutter")]
                     crate::flutter::send_text_clipboard_msg(msg);
                     #[cfg(not(feature = "flutter"))]
@@ -766,12 +766,12 @@ impl Client {
 
     #[inline]
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    fn get_current_text_clipboard_msg() -> Option<Message> {
-        let txt = &*OLD_CLIPBOARD_TEXT.lock().unwrap();
-        if txt.is_empty() {
+    fn get_current_clipboard_msg() -> Option<Message> {
+        let data = &*OLD_CLIPBOARD_DATA.lock().unwrap();
+        if data.is_empty() {
             None
         } else {
-            Some(crate::create_clipboard_msg(txt.clone()))
+            Some(data.create_msg())
         }
     }
 }
@@ -1204,6 +1204,7 @@ pub struct LoginConfigHandler {
     pub save_ab_password_to_recent: bool, // true: connected with ab password
     pub other_server: Option<(String, String, String)>,
     pub custom_fps: Arc<Mutex<Option<usize>>>,
+    pub last_auto_fps: Option<usize>,
     pub adapter_luid: Option<i64>,
     pub mark_unsupported: Vec<CodecFormat>,
     pub selected_windows_session_id: Option<u32>,
@@ -2093,8 +2094,6 @@ pub type MediaSender = mpsc::Sender<MediaData>;
 
 struct VideoHandlerController {
     handler: VideoHandler,
-    count: u128,
-    duration: std::time::Duration,
     skip_beginning: u32,
 }
 
@@ -2111,7 +2110,7 @@ pub fn start_video_audio_threads<F, T>(
     MediaSender,
     MediaSender,
     Arc<RwLock<HashMap<usize, ArrayQueue<VideoFrame>>>>,
-    Arc<RwLock<HashMap<usize, usize>>>,
+    Arc<RwLock<Option<usize>>>,
     Arc<RwLock<Option<Chroma>>>,
 )
 where
@@ -2123,8 +2122,8 @@ where
     let video_queue_map_cloned = video_queue_map.clone();
     let mut video_callback = video_callback;
 
-    let fps_map = Arc::new(RwLock::new(HashMap::new()));
-    let decode_fps_map = fps_map.clone();
+    let fps = Arc::new(RwLock::new(None));
+    let decode_fps_map = fps.clone();
     let chroma = Arc::new(RwLock::new(None));
     let chroma_cloned = chroma.clone();
     let mut last_chroma = None;
@@ -2134,9 +2133,8 @@ where
         sync_cpu_usage();
         get_hwcodec_config();
         let mut handler_controller_map = HashMap::new();
-        // let mut count = Vec::new();
-        // let mut duration = std::time::Duration::ZERO;
-        // let mut skip_beginning = Vec::new();
+        let mut count = 0;
+        let mut duration = std::time::Duration::ZERO;
         loop {
             if let Ok(data) = video_receiver.recv() {
                 match data {
@@ -2169,8 +2167,6 @@ where
                                 display,
                                 VideoHandlerController {
                                     handler: VideoHandler::new(format, display),
-                                    count: 0,
-                                    duration: std::time::Duration::ZERO,
                                     skip_beginning: 0,
                                 },
                             );
@@ -2178,6 +2174,8 @@ where
                         if let Some(handler_controller) = handler_controller_map.get_mut(&display) {
                             let mut pixelbuffer = true;
                             let mut tmp_chroma = None;
+                            let format_changed =
+                                handler_controller.handler.decoder.format() != format;
                             match handler_controller.handler.handle_frame(
                                 vf,
                                 &mut pixelbuffer,
@@ -2198,27 +2196,14 @@ where
                                     }
 
                                     // fps calculation
-                                    // The first frame will be very slow
-                                    if handler_controller.skip_beginning < 5 {
-                                        handler_controller.skip_beginning += 1;
-                                        continue;
-                                    }
-
-                                    handler_controller.duration += start.elapsed();
-                                    handler_controller.count += 1;
-                                    if handler_controller.count % 10 == 0 {
-                                        fps_map.write().unwrap().insert(
-                                            display,
-                                            (handler_controller.count * 1000
-                                                / handler_controller.duration.as_millis())
-                                                as usize,
-                                        );
-                                    }
-                                    // Clear to get real-time fps
-                                    if handler_controller.count > 150 {
-                                        handler_controller.count = 0;
-                                        handler_controller.duration = Duration::ZERO;
-                                    }
+                                    fps_calculate(
+                                        handler_controller,
+                                        &fps,
+                                        format_changed,
+                                        start.elapsed(),
+                                        &mut count,
+                                        &mut duration,
+                                    );
                                 }
                                 Err(e) => {
                                     // This is a simple workaround.
@@ -2332,6 +2317,38 @@ pub fn start_audio_thread() -> MediaSender {
         log::info!("Audio decoder loop exits");
     });
     audio_sender
+}
+
+#[inline]
+fn fps_calculate(
+    handler_controller: &mut VideoHandlerController,
+    fps: &Arc<RwLock<Option<usize>>>,
+    format_changed: bool,
+    elapsed: std::time::Duration,
+    count: &mut usize,
+    duration: &mut std::time::Duration,
+) {
+    if format_changed {
+        *count = 0;
+        *duration = std::time::Duration::ZERO;
+        handler_controller.skip_beginning = 0;
+    }
+    // // The first frame will be very slow
+    if handler_controller.skip_beginning < 3 {
+        handler_controller.skip_beginning += 1;
+        return;
+    }
+    *duration += elapsed;
+    *count += 1;
+    let ms = duration.as_millis();
+    if *count % 10 == 0 && ms > 0 {
+        *fps.write().unwrap() = Some((*count as usize) * 1000 / (ms as usize));
+    }
+    // Clear to get real-time fps
+    if *count >= 30 {
+        *count = 0;
+        *duration = Duration::ZERO;
+    }
 }
 
 fn get_hwcodec_config() {

@@ -786,6 +786,13 @@ pub fn main_show_option(_key: String) -> SyncReturn<bool> {
 }
 
 pub fn main_set_option(key: String, value: String) {
+    #[cfg(target_os = "android")]
+    if key.eq(config::keys::OPTION_ENABLE_KEYBOARD) {
+        crate::ui_cm_interface::notify_input_control(config::option2bool(
+            config::keys::OPTION_ENABLE_KEYBOARD,
+            &value,
+        ));
+    }
     if key.eq("custom-rendezvous-server") {
         set_option(key, value.clone());
         #[cfg(target_os = "android")]
@@ -2169,6 +2176,14 @@ pub fn main_verify2fa(code: String) -> bool {
 
 pub fn main_has_valid_2fa_sync() -> SyncReturn<bool> {
     SyncReturn(has_valid_2fa())
+}
+
+pub fn main_verify_bot(token: String) -> String {
+    verify_bot(token)
+}
+
+pub fn main_has_valid_bot_sync() -> SyncReturn<bool> {
+    SyncReturn(has_valid_bot())
 }
 
 pub fn main_get_hard_option(key: String) -> SyncReturn<String> {

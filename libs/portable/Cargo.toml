@@ -1,6 +1,6 @@
 [package]
 name = "rustdesk-portable-packer"
-version = "1.2.6"
+version = "1.2.7"
 edition = "2021"
 description = "RustDesk Remote Desktop"
 
@@ -13,6 +13,9 @@ brotli = "3.4"
 dirs = "5.0"
 md5 = "0.7"
 winapi = { version = "0.3", features = ["winbase"] }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+native-windows-gui = {version = "1.0", default-features = false, features = ["animation-timer", "image-decoder"]}
 
 [package.metadata.winres]
 LegalCopyright = "Copyright © 2024 Purslane Ltd. All rights reserved."
