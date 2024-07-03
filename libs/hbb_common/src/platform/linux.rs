@@ -85,40 +85,19 @@ pub fn get_display_server_of_session(session: &str) -> String {
         run_loginctl(Some(vec!["show-session", "-p", "Type", session]))
     // Check session type of the session
     {
-        let display_server = String::from_utf8_lossy(&output.stdout)
+        String::from_utf8_lossy(&output.stdout)
             .replace("Type=", "")
             .trim_end()
             .into();
-        if display_server == "tty" {
-            // If the type is tty...
-            if let Ok(output) = run_loginctl(Some(vec!["show-session", "-p", "TTY", session]))
-            // Get the tty number
-            {
-                let tty: String = String::from_utf8_lossy(&output.stdout)
-                    .replace("TTY=", "")
-                    .trim_end()
-                    .into();
-                if let Ok(xorg_results) = run_cmds(&format!("ps -e | grep \"{tty}.\\\\+Xorg\""))
-                // And check if Xorg is running on that tty
-                {
-                    if xorg_results.trim_end() != "" {
-                        // If it is, manually return "x11", otherwise return tty
-                        return "x11".to_owned();
-                    }
-                }
-            }
-        }
-        display_server
     } else {
         "".to_owned()
     };
     if display_server.is_empty() || display_server == "tty" {
-        // loginctl has not given the expected output.  try something else.
         if let Ok(sestype) = std::env::var("XDG_SESSION_TYPE") {
-            display_server = sestype;
+            if !sestype.is_empty() {
+                return sestype.to_lowercase();
+            }
         }
-    }
-    if display_server == "" {
         display_server = "x11".to_owned();
     }
     display_server.to_lowercase()
