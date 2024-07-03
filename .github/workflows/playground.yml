@@ -16,8 +16,8 @@ env:
   FLUTTER_ELINUX_VERSION: "3.16.9"
   TAG_NAME: "nightly"
   VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
-  # vcpkg version: 2024.03.25
-  VCPKG_COMMIT_ID: "a34c873a9717a888f58dc05268dea15592c2f0ff"
+  # vcpkg version: 2024.06.15
+  VCPKG_COMMIT_ID: "f7423ee180c4b7f40d43402c2feb3859161ef625"
   VERSION: "1.2.7"
   NDK_VERSION: "r26d"
   #signing keys env variable checks
