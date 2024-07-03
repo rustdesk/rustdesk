@@ -88,7 +88,7 @@ pub fn get_display_server_of_session(session: &str) -> String {
         String::from_utf8_lossy(&output.stdout)
             .replace("Type=", "")
             .trim_end()
-            .into();
+            .into()
     } else {
         "".to_owned()
     };
