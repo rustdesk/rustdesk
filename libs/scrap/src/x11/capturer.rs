@@ -17,7 +17,7 @@ impl Capturer {
     pub fn new(display: Display) -> io::Result<Capturer> {
         // Calculate dimensions.
 
-        let pixel_width = 4;
+        let pixel_width = display.pixfmt().bytes_per_pixel();
         let rect = display.rect();
         let size = (rect.w as usize) * (rect.h as usize) * pixel_width;
 

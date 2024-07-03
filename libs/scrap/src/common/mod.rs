@@ -59,6 +59,7 @@ pub enum ImageFormat {
     ABGR,
     ARGB,
 }
+
 #[repr(C)]
 pub struct ImageRgb {
     pub raw: Vec<u8>,
@@ -208,9 +209,25 @@ impl<'a> EncodeInput<'a> {
 pub enum Pixfmt {
     BGRA,
     RGBA,
+    RGB565LE,
     I420,
     NV12,
     I444,
+}
+
+impl Pixfmt {
+    pub fn bpp(&self) -> usize {
+        match self {
+            Pixfmt::BGRA | Pixfmt::RGBA => 32,
+            Pixfmt::RGB565LE => 16,
+            Pixfmt::I420 | Pixfmt::NV12 => 12,
+            Pixfmt::I444 => 24,
+        }
+    }
+
+    pub fn bytes_per_pixel(&self) -> usize {
+        (self.bpp() + 7) / 8
+    }
 }
 
 #[derive(Debug, Clone)]
