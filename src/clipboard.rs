@@ -408,6 +408,7 @@ impl ClipboardContext {
         // only for image for the time being,
         // because I do not want to change behavior of text clipboard for the time being
         if cn != self.counter.1 {
+            self.is_last_plain = false;
             self.counter.1 = cn;
             if let Ok(image) = self.inner.get_image() {
                 // Both text and image svg may be set by some applications
