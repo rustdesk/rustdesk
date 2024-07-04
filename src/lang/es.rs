@@ -547,7 +547,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("upgrade_rustdesk_server_pro_to_{}_tip", "¡Por favor, actualiza RustDesk Server Pro a la versión {} o superior"),
         ("pull_group_failed_tip", "No se ha podido refrescar el grupo"),
         ("Filter by intersection", "Filtrar por intersección"),
-        ("Remove wallpaper during incoming sessions", "Quitar el fonde de pantalla durante sesiones entrantes"),
+        ("Remove wallpaper during incoming sessions", "Quitar el fondo de pantalla durante sesiones entrantes"),
         ("Test", "Probar"),
         ("display_is_plugged_out_msg", "La pantalla está desconectada, cambia a la principal."),
         ("No displays", "No hay pantallas"),
