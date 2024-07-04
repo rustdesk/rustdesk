@@ -60,7 +60,7 @@ fn parse_plain_uri_list(v: Vec<u8>) -> Result<String, String> {
 
 #[cfg(all(target_os = "linux", feature = "unix-file-copy-paste"))]
 impl ClipboardContext {
-    pub fn new() -> Result<Self, String> {
+    pub fn new(_listen: bool) -> Result<Self, String> {
         let clipboard = get_clipboard()?;
         let string_getter = clipboard
             .getter
@@ -95,14 +95,14 @@ impl ClipboardContext {
             .load(clip, self.string_getter, prop, TIMEOUT)
             .map_err(|e| e.to_string())?;
 
-        let file_urls = get_clipboard()?.load(clip, self.text_uri_list, prop, TIMEOUT);
+        let file_urls = get_clipboard()?.load(clip, self.text_uri_list, prop, TIMEOUT)?;
 
-        if file_urls.is_err() || file_urls.as_ref().unwrap().is_empty() {
+        if file_urls.is_err() || file_urls.as_ref().is_empty() {
             log::trace!("clipboard get text, no file urls");
             return String::from_utf8(text_content).map_err(|e| e.to_string());
         }
 
-        let file_urls = parse_plain_uri_list(file_urls.unwrap())?;
+        let file_urls = parse_plain_uri_list(file_urls)?;
 
         let text_content = String::from_utf8(text_content).map_err(|e| e.to_string())?;
 

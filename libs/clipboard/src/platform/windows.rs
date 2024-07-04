@@ -5,16 +5,16 @@
 #![allow(non_snake_case)]
 #![allow(deref_nullptr)]
 
-use std::{
-    boxed::Box,
-    ffi::{CStr, CString},
-    result::Result,
-};
 use crate::{
     allow_err, send_data, ClipboardFile, CliprdrError, CliprdrServiceContext, ResultType,
     ERR_CODE_INVALID_PARAMETER, ERR_CODE_SERVER_FUNCTION_NONE, VEC_MSG_CHANNEL,
 };
 use hbb_common::log;
+use std::{
+    boxed::Box,
+    ffi::{CStr, CString},
+    result::Result,
+};
 
 // only used error code will be recorded here
 /// success
@@ -779,7 +779,7 @@ pub fn server_format_list(
                 } else {
                     let n = match CString::new(format.1) {
                         Ok(n) => n,
-                        Err(_) => CString::new("").unwrap(),
+                        Err(_) => CString::new("").unwrap_or_default(),
                     };
                     CLIPRDR_FORMAT {
                         formatId: format.0 as UINT32,

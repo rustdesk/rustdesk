@@ -360,7 +360,12 @@ impl Server {
         self.services
             .keys()
             .filter(|k| {
-                Self::is_video_service_name(k) && self.services.get(*k).unwrap().is_subed(conn_id)
+                Self::is_video_service_name(k)
+                    && self
+                        .services
+                        .get(*k)
+                        .map(|s| s.is_subed(conn_id))
+                        .unwrap_or(false)
             })
             .count()
     }
