@@ -457,16 +457,29 @@ pub fn is_letter_rdev_key(key: &rdev::Key) -> bool {
     )
 }
 
+// https://github.com/rustdesk/rustdesk/issues/8599
+// We just add these keys as letter keys.
+#[inline]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+pub fn is_letter_rdev_key_ex(key: &rdev::Key) -> bool {
+    matches!(
+        key,
+        Key::LeftBracket | Key::RightBracket | Key::SemiColon | Key::Quote | Key::Comma | Key::Dot
+    )
+}
+
 #[inline]
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 fn is_numpad_key(event: &Event) -> bool {
     matches!(event.event_type, EventType::KeyPress(key) | EventType::KeyRelease(key) if is_numpad_rdev_key(&key))
 }
 
+// Check is letter key for lock modes.
+// Only letter keys need to check and send Lock key state.
 #[inline]
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
-fn is_letter_key(event: &Event) -> bool {
-    matches!(event.event_type, EventType::KeyPress(key) | EventType::KeyRelease(key) if is_letter_rdev_key(&key))
+fn is_letter_key_4_lock_modes(event: &Event) -> bool {
+    matches!(event.event_type, EventType::KeyPress(key) | EventType::KeyRelease(key) if (is_letter_rdev_key(&key) || is_letter_rdev_key_ex(&key)))
 }
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -588,7 +601,7 @@ pub fn event_to_key_events(
     let is_numpad_key = is_numpad_key(&event);
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     if keyboard_mode != KeyboardMode::Translate || is_numpad_key {
-        let is_letter_key = is_letter_key(&event);
+        let is_letter_key = is_letter_key_4_lock_modes(&event);
         for key_event in &mut key_events {
             if let Some(lock_modes) = _lock_modes {
                 parse_add_lock_modes_modifiers(key_event, lock_modes, is_numpad_key, is_letter_key);
