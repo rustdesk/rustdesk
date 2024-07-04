@@ -7,9 +7,9 @@ use crate::CliprdrError;
 // url encode and decode is needed
 const ENCODE_SET: percent_encoding::AsciiSet = percent_encoding::CONTROLS.add(b' ').remove(b'/');
 
-pub(super) fn encode_path_to_uri(path: &PathBuf) -> String {
-    let encoded = percent_encoding::percent_encode(path.to_str().unwrap().as_bytes(), &ENCODE_SET)
-        .to_string();
+pub(super) fn encode_path_to_uri(path: &PathBuf) -> io::Result<String> {
+    let encoded =
+        percent_encoding::percent_encode(path.to_str()?.as_bytes(), &ENCODE_SET).to_string();
     format!("file://{}", encoded)
 }
 
@@ -54,7 +54,7 @@ mod uri_test {
     #[test]
     fn test_conversion() {
         let path = std::path::PathBuf::from("/home/rustdesk/pictures/🖼️.png");
-        let uri = super::encode_path_to_uri(&path);
+        let uri = super::encode_path_to_uri(&path).unwrap();
         assert_eq!(
             uri,
             "file:///home/rustdesk/pictures/%F0%9F%96%BC%EF%B8%8F.png"

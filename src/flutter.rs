@@ -1069,12 +1069,9 @@ impl FlutterHandler {
         // 1. "display 1" will not send the event.
         // 2. "displays 0&1" will not send the event. Because it uses texutre render for now.
         if !is_sent {
-            self.display_rgbas
-                .write()
-                .unwrap()
-                .get_mut(&display)
-                .unwrap()
-                .valid = false;
+            if let Some(rgba_data) = self.display_rgbas.write().unwrap().get_mut(&display) {
+                rgba_data.valid = false;
+            }
         }
     }
 

@@ -89,7 +89,13 @@ impl SysClipboard for X11Clipboard {
     fn set_file_list(&self, paths: &[PathBuf]) -> Result<(), CliprdrError> {
         *self.former_file_list.lock() = paths.to_vec();
 
-        let uri_list: Vec<String> = paths.iter().map(encode_path_to_uri).collect();
+        let uri_list: Vec<String> = {
+            let mut v = Vec::new();
+            for path in paths {
+                v.push(encode_path_to_uri(path)?);
+            }
+            v
+        };
         let uri_list = uri_list.join("\n");
         let text_uri_list_data = uri_list.as_bytes().to_vec();
         let gnome_copied_files_data = ["copy\n".as_bytes(), uri_list.as_bytes()].concat();

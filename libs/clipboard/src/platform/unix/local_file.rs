@@ -113,7 +113,7 @@ impl LocalFile {
         let win32_time = self
             .last_write_time
             .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
+            .unwrap_or_default()
             .as_nanos() as u64
             / 100
             + LDAP_EPOCH_DELTA;
@@ -188,7 +188,7 @@ impl LocalFile {
     pub fn read_exact_at(&mut self, buf: &mut [u8], offset: u64) -> Result<(), CliprdrError> {
         self.load_handle()?;
 
-        let handle = self.handle.as_mut().unwrap();
+        let handle = self.handle.as_mut()?;
 
         if offset != self.offset.load(Ordering::Relaxed) {
             handle
@@ -238,9 +238,9 @@ pub(super) fn construct_file_list(paths: &[PathBuf]) -> Result<Vec<LocalFile>, C
         })?;
 
         if mt.is_dir() {
-            let dir = std::fs::read_dir(path).unwrap();
+            let dir = std::fs::read_dir(path)?;
             for entry in dir {
-                let entry = entry.unwrap();
+                let entry = entry?;
                 let path = entry.path();
                 constr_file_lst(&path, file_list, visited)?;
             }
