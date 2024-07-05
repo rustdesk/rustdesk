@@ -3301,11 +3301,8 @@ Widget buildPresetPasswordWarning() {
         return Text(
             'Error: ${snapshot.error}'); // Show an error message if the Future completed with an error
       } else if (snapshot.hasData && snapshot.data == true) {
-        final idServer =
-            bind.mainGetOptionSync(key: 'custom-rendezvous-server');
-        if (idServer.isNotEmpty &&
-            bind.mainGetLocalOption(key: "remove-preset-password-warning-of") ==
-                idServer) {
+        if (bind.mainGetLocalOption(key: "remove-preset-password-warning") ==
+            'Y') {
           return SizedBox.shrink();
         }
         return Container(
