@@ -14,6 +14,7 @@ use hbb_common::{
 
 pub const CLIPBOARD_NAME: &'static str = "clipboard";
 pub const CLIPBOARD_INTERVAL: u64 = 333;
+const FAKE_SVG_WIDTH: usize = 999999;
 
 lazy_static::lazy_static! {
     pub static ref CONTENT: Arc<Mutex<ClipboardData>> = Default::default();
@@ -142,6 +143,13 @@ pub fn check_clipboard(
     let content = ctx2.get();
     if let Ok(content) = content {
         if !content.is_empty() {
+            if matches!(content, ClipboardData::Text(_)) {
+                // Skip the text if the last content is image-svg/html
+                if ctx2.is_last_plain {
+                    return None;
+                }
+            }
+
             let changed = content != *old.lock().unwrap();
             if changed {
                 log::info!("{} update found on {}", CLIPBOARD_NAME, side);
@@ -212,26 +220,26 @@ impl ClipboardData {
         match self {
             ClipboardData::Empty => true,
             ClipboardData::Text(s) => s.is_empty(),
-            ClipboardData::Image(a, _) => a.bytes.is_empty(),
+            ClipboardData::Image(a, _) => a.bytes().is_empty(),
         }
     }
 
     fn from_msg(clipboard: Clipboard) -> Self {
-        let is_image = clipboard.width > 0 && clipboard.height > 0;
+        let is_image = clipboard.width > 0;
         let data = if clipboard.compress {
             decompress(&clipboard.content)
         } else {
             clipboard.content.into()
         };
         if is_image {
-            ClipboardData::Image(
-                arboard::ImageData {
-                    bytes: data.into(),
-                    width: clipboard.width as _,
-                    height: clipboard.height as _,
-                },
-                0,
-            )
+            // We cannot use data.start_with(b"<svg") to check if it is svg image
+            // because svg image may starts with other bytes
+            let img = if clipboard.height == 0 && clipboard.width as usize == FAKE_SVG_WIDTH {
+                arboard::ImageData::svg(std::str::from_utf8(&data).unwrap_or_default())
+            } else {
+                arboard::ImageData::rgba(clipboard.width as _, clipboard.height as _, data.into())
+            };
+            ClipboardData::Image(img, 0)
         } else {
             if let Ok(content) = String::from_utf8(data) {
                 ClipboardData::Text(content)
@@ -260,18 +268,22 @@ impl ClipboardData {
                 });
             }
             ClipboardData::Image(a, _) => {
-                let compressed = compress_func(&a.bytes);
-                let compress = compressed.len() < a.bytes.len();
+                let compressed = compress_func(&a.bytes());
+                let compress = compressed.len() < a.bytes().len();
                 let content = if compress {
                     compressed
                 } else {
-                    a.bytes.to_vec()
+                    a.bytes().to_vec()
+                };
+                let (w, h) = match a {
+                    arboard::ImageData::Rgba(a) => (a.width, a.height),
+                    arboard::ImageData::Svg(_) => (FAKE_SVG_WIDTH as _, 0 as _),
                 };
                 msg.set_clipboard(Clipboard {
                     compress,
                     content: content.into(),
-                    width: a.width as _,
-                    height: a.height as _,
+                    width: w as _,
+                    height: h as _,
                     ..Default::default()
                 });
             }
@@ -285,9 +297,13 @@ impl PartialEq for ClipboardData {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
             (ClipboardData::Text(a), ClipboardData::Text(b)) => a == b,
-            (ClipboardData::Image(a, _), ClipboardData::Image(b, _)) => {
-                a.width == b.width && a.height == b.height && a.bytes == b.bytes
-            }
+            (ClipboardData::Image(a, _), ClipboardData::Image(b, _)) => match (a, b) {
+                (arboard::ImageData::Rgba(a), arboard::ImageData::Rgba(b)) => {
+                    a.width == b.width && a.height == b.height && a.bytes == b.bytes
+                }
+                (arboard::ImageData::Svg(a), arboard::ImageData::Svg(b)) => a == b,
+                _ => false,
+            },
             (ClipboardData::Empty, ClipboardData::Empty) => true,
             _ => false,
         }
@@ -295,7 +311,12 @@ impl PartialEq for ClipboardData {
 }
 
 #[cfg(not(any(all(target_os = "linux", feature = "unix-file-copy-paste"))))]
-pub struct ClipboardContext(arboard::Clipboard, (Arc<AtomicU64>, u64), Option<Shutdown>);
+pub struct ClipboardContext {
+    inner: arboard::Clipboard,
+    counter: (Arc<AtomicU64>, u64),
+    shutdown: Option<Shutdown>,
+    is_last_plain: bool,
+}
 
 #[cfg(not(any(all(target_os = "linux", feature = "unix-file-copy-paste"))))]
 #[allow(unreachable_code)]
@@ -367,13 +388,18 @@ impl ClipboardContext {
                 shutdown = Some(st);
             }
         }
-        Ok(ClipboardContext(board, (change_count, 0), shutdown))
+        Ok(ClipboardContext {
+            inner: board,
+            counter: (change_count, 0),
+            shutdown,
+            is_last_plain: false,
+        })
     }
 
     #[inline]
     pub fn change_count(&self) -> u64 {
-        debug_assert!(self.2.is_some());
-        self.1 .0.load(Ordering::SeqCst)
+        debug_assert!(self.shutdown.is_some());
+        self.counter.0.load(Ordering::SeqCst)
     }
 
     pub fn get(&mut self) -> ResultType<ClipboardData> {
@@ -381,22 +407,28 @@ impl ClipboardContext {
         let _lock = ARBOARD_MTX.lock().unwrap();
         // only for image for the time being,
         // because I do not want to change behavior of text clipboard for the time being
-        if cn != self.1 .1 {
-            self.1 .1 = cn;
-            if let Ok(image) = self.0.get_image() {
-                if image.width > 0 && image.height > 0 {
-                    return Ok(ClipboardData::image(image));
-                }
+        if cn != self.counter.1 {
+            self.is_last_plain = false;
+            self.counter.1 = cn;
+            if let Ok(image) = self.inner.get_image() {
+                // Both text and image svg may be set by some applications
+                // But we only want to send the svg content.
+                //
+                // We can't call `get_text()` and store current text in `old` in outer scope,
+                // because it may be updated later than svg.
+                // Then the text will still be sent and replace the image svg content.
+                self.is_last_plain = matches!(image, arboard::ImageData::Svg(_));
+                return Ok(ClipboardData::image(image));
             }
         }
-        Ok(ClipboardData::Text(self.0.get_text()?))
+        Ok(ClipboardData::Text(self.inner.get_text()?))
     }
 
     fn set(&mut self, data: &ClipboardData) -> ResultType<()> {
         let _lock = ARBOARD_MTX.lock().unwrap();
         match data {
-            ClipboardData::Text(s) => self.0.set_text(s)?,
-            ClipboardData::Image(a, _) => self.0.set_image(a.clone())?,
+            ClipboardData::Text(s) => self.inner.set_text(s)?,
+            ClipboardData::Image(a, _) => self.inner.set_image(a.clone())?,
             _ => {}
         }
         Ok(())
@@ -405,7 +437,7 @@ impl ClipboardContext {
 
 impl Drop for ClipboardContext {
     fn drop(&mut self) {
-        if let Some(shutdown) = self.2.take() {
+        if let Some(shutdown) = self.shutdown.take() {
             let _ = shutdown.signal();
         }
     }
