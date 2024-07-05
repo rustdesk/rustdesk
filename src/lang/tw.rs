@@ -626,7 +626,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Power", "電源"),
         ("Telegram bot", "Telegram 機器人"),
         ("enable-bot-tip", "如果您啟用此功能，您可以從您的機器人接收二步驟驗證碼，亦可作為連線通知之用。"),
-        ("enable-bot-desc", "1. 開啟與 @BotFather 的對話。\n2. 傳送指令 \"/newbot\"。 您將會在完成此步驟後收到權杖 (Token)。\n3. 開始與您剛創立的機器人的對話。 傳送一則以正斜槓 (\"/\") 開頭的訊息來啟用它，例如 \"/hello\。""),
+        ("enable-bot-desc", "1. 開啟與 @BotFather 的對話。\n2. 傳送指令 \"/newbot\"。 您將會在完成此步驟後收到權杖 (Token)。\n3. 開始與您剛創立的機器人的對話。 傳送一則以正斜槓 (\"/\") 開頭的訊息來啟用它，例如 \"/hello\"。"),
         ("cancel-2fa-confirm-tip", "確定要取消二步驟驗證嗎？"),
         ("cancel-bot-confirm-tip", "確定要取消 Telegram 機器人嗎？"),
     ].iter().cloned().collect();
