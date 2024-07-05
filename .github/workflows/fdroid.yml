@@ -11,8 +11,8 @@ on:
 
 jobs:
   # https://gitlab.com/fdroid/fdroiddata/-/blob/master/metadata/com.carriez.flutter_hbb.yml
-  # Finds latest release and transforms F-Droid vereion code from version as follows:
-  # X.Y.Z-A => X * 1e9 + Y * 1e6 + Z * 1e3 + A
+  # Finds latest release and transforms F-Droid version code from version as follows:
+  # X.Y.Z-A => X * 1e6 + Y * 1e4 + Z * 1e2 + A
   update-fdroid-version-file:
     name: Publish RustDesk version file for F-Droid updater
     runs-on: ubuntu-latest
@@ -20,7 +20,7 @@ jobs:
       - name: Generate RustDesk version file
         run: |
           UPSTREAM_VERNAME="$(curl https://api.github.com/repos/rustdesk/rustdesk/releases/latest  | jq -r .tag_name | sed 's/^v//')"
-          UPSTREAM_VERCODE="$(echo "$UPSTREAM_VERNAME" | tr '.' ' ' | tr '-' ' ' | while read -r MAJOR MINOR PATCH REV; do [ -z "$MAJOR" ] && MAJOR=0; [ -z "$MINOR" ] && MINOR=0; [ -z "$PATCH" ] && PATCH=0; [ -z "$REV" ] && REV=0; echo "$(( 1000000000 * $MAJOR + 1000000 * $MINOR + 1000 * $PATCH + $REV ))"; done)"
+          UPSTREAM_VERCODE="$(echo "$UPSTREAM_VERNAME" | tr '.' ' ' | tr '-' ' ' | while read -r MAJOR MINOR PATCH REV; do [ -z "$MAJOR" ] && MAJOR=0; [ -z "$MINOR" ] && MINOR=0; [ -z "$PATCH" ] && PATCH=0; [ -z "$REV" ] && REV=0; echo "$(( 1000000 * $MAJOR + 10000 * $MINOR + 100 * $PATCH + $REV ))"; done)"
           echo "versionName=$UPSTREAM_VERNAME"  > rustdesk-version.txt
           echo "versionCode=$UPSTREAM_VERCODE" >> rustdesk-version.txt
         shell: bash
