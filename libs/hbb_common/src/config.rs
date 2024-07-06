@@ -2122,6 +2122,8 @@ pub mod keys {
     pub const OPTION_DISABLE_GROUP_PANEL: &str = "disable-group-panel";
     pub const OPTION_PRE_ELEVATE_SERVICE: &str = "pre-elevate-service";
 
+    pub const OPTION_DISPLAY_NAME: &str = "display-name";
+
     // proxy settings
     // The following options are not real keys, they are just used for custom client advanced settings.
     // The real keys are in Config2::socks.
@@ -2185,6 +2187,8 @@ pub mod keys {
         OPTION_KEEP_SCREEN_ON,
         OPTION_DISABLE_GROUP_PANEL,
         OPTION_PRE_ELEVATE_SERVICE,
+        OPTION_DISPLAY_NAME,
+        "remove-preset-password-warning",
     ];
     // DEFAULT_SETTINGS, OVERWRITE_SETTINGS
     pub const KEYS_SETTINGS: &[&str] = &[

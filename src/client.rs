@@ -2019,11 +2019,15 @@ impl LoginConfigHandler {
         } else {
             (my_id, self.id.clone())
         };
+        let mut display_name = LocalConfig::get_option(&config::keys::OPTION_DISPLAY_NAME);
+        if display_name.is_empty() {
+            display_name = crate::username();
+        }
         let mut lr = LoginRequest {
             username: pure_id,
             password: password.into(),
             my_id,
-            my_name: crate::username(),
+            my_name: display_name,
             option: self.get_option_message(true).into(),
             session_id: self.session_id,
             version: crate::VERSION.to_string(),
