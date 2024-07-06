@@ -173,10 +173,15 @@ class _DesktopSettingPageState extends State<DesktopSettingPage>
   }
 
   List<Widget> _children() {
+    final hideSecurity =
+        bind.mainGetLocalOption(key: "hide-security-settings") == 'Y';
+    final hideNetwork =
+        bind.mainGetLocalOption(key: "hide-network-settings") == 'Y';
     final children = [
       _General(),
-      if (!bind.isOutgoingOnly() && !bind.isDisableSettings()) _Safety(),
-      if (!bind.isDisableSettings()) _Network(),
+      if (!bind.isOutgoingOnly() && !bind.isDisableSettings() && !hideSecurity)
+        _Safety(),
+      if (!bind.isDisableSettings() && !hideNetwork) _Network(),
       if (!bind.isIncomingOnly()) _Display(),
       if (!isWeb && !bind.isIncomingOnly() && bind.pluginFeatureIsEnabled())
         _Plugin(),
@@ -1266,6 +1271,10 @@ class _NetworkState extends State<_Network> with AutomaticKeepAliveClientMixin {
     super.build(context);
     bool enabled = !locked;
     final scrollController = ScrollController();
+    final hideServer =
+        bind.mainGetLocalOption(key: "hide-server-settings") == 'Y';
+    final hideProxy =
+        bind.mainGetLocalOption(key: "hide-proxy-settings") == 'Y';
     return DesktopScrollWrapper(
         scrollController: scrollController,
         child: ListView(
@@ -1279,11 +1288,12 @@ class _NetworkState extends State<_Network> with AutomaticKeepAliveClientMixin {
               AbsorbPointer(
                 absorbing: locked,
                 child: Column(children: [
-                  server(enabled),
-                  _Card(title: 'Proxy', children: [
-                    _Button('Socks5/Http(s) Proxy', changeSocks5Proxy,
-                        enabled: enabled),
-                  ]),
+                  if (!hideServer) server(enabled),
+                  if (!hideProxy)
+                    _Card(title: 'Proxy', children: [
+                      _Button('Socks5/Http(s) Proxy', changeSocks5Proxy,
+                          enabled: enabled),
+                    ]),
                 ]),
               ),
             ]).marginOnly(bottom: _kListViewBottomMargin));

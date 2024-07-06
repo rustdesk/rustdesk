@@ -2189,6 +2189,10 @@ pub mod keys {
         OPTION_PRE_ELEVATE_SERVICE,
         OPTION_DISPLAY_NAME,
         "remove-preset-password-warning",
+        "hide-security-settings",
+        "hide-network-settings",
+        "hide-server-settings",
+        "hide-proxy-settings",
     ];
     // DEFAULT_SETTINGS, OVERWRITE_SETTINGS
     pub const KEYS_SETTINGS: &[&str] = &[
