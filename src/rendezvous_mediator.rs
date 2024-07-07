@@ -392,7 +392,10 @@ impl RendezvousMediator {
         } else {
             false
         };
-        if (cfg!(debug_assertions) && option_env!("TEST_TCP").is_some()) || is_http_proxy {
+        if (cfg!(debug_assertions) && option_env!("TEST_TCP").is_some())
+            || is_http_proxy
+            || Config::get_option(config::keys::OPTION_DISABLE_UDP) == "Y"
+        {
             Self::start_tcp(server, host).await
         } else {
             Self::start_udp(server, host).await
