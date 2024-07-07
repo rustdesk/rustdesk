@@ -91,11 +91,24 @@ def delete(url, token, guid, id):
     return check(response)
 
 
+def assign(url, token, guid, id, type, value):
+    print("assign", id, type, value)
+    if type != "ab" and type != "strategy_name" and type != "user_name":
+        print("Invalid type, it must be 'ab', 'strategy_name' or 'user_name'")
+        return
+    data = {"type": type, "value": value}
+    headers = {"Authorization": f"Bearer {token}"}
+    response = requests.post(
+        f"{url}/api/devices/{guid}/assign", headers=headers, json=data
+    )
+    return check(response)
+
+
 def main():
     parser = argparse.ArgumentParser(description="Device manager")
     parser.add_argument(
         "command",
-        choices=["view", "disable", "enable", "delete"],
+        choices=["view", "disable", "enable", "delete", "assign"],
         help="Command to execute",
     )
     parser.add_argument("--url", required=True, help="URL of the API")
@@ -106,6 +119,10 @@ def main():
     parser.add_argument("--device_name", help="Device name")
     parser.add_argument("--user_name", help="User name")
     parser.add_argument("--group_name", help="Group name")
+    parser.add_argument(
+        "--assign_to",
+        help="<type>=<value>, e.g. user_name=mike, strategy_name=test, ab=ab1, ab=ab1,tag1",
+    )
     parser.add_argument(
         "--offline_days", type=int, help="Offline duration in days, e.g., 7"
     )
@@ -136,6 +153,16 @@ def main():
     elif args.command == "delete":
         for device in devices:
             response = delete(args.url, args.token, device["guid"], device["id"])
+            print(response)
+    elif args.command == "assign":
+        if "=" not in args.assign_to:
+            print("Invalid assign_to format, it must be <type>=<value>")
+            return
+        type, value = args.assign_to.split("=", 1)
+        for device in devices:
+            response = assign(
+                args.url, args.token, device["guid"], device["id"], type, value
+            )
             print(response)
 
 
