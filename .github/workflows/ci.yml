@@ -4,9 +4,9 @@ env:
 #   MIN_SUPPORTED_RUST_VERSION: "1.46.0"
 #   CICD_INTERMEDIATES_DIR: "_cicd-intermediates"
   VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
-  # vcpkg version: 2023.10.19
+  # vcpkg version: 2024.06.15
   # for multiarch gcc compatibility
-  VCPKG_COMMIT_ID: "8eb57355a4ffb410a2e94c07b4dca2dffbee8e50"
+  VCPKG_COMMIT_ID: "f7423ee180c4b7f40d43402c2feb3859161ef625"
 
 on:
   workflow_dispatch:
@@ -112,6 +112,8 @@ jobs:
                libgstreamer-plugins-base1.0-dev \
                libgtk-3-dev \
                libpulse-dev \
+               libva-dev \
+               libvdpau-dev \
                libxcb-randr0-dev \
                libxcb-shape0-dev \
                libxcb-xfixes0-dev \
