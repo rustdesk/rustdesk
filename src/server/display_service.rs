@@ -184,6 +184,13 @@ fn check_get_displays_changed_msg() -> Option<Message> {
 }
 
 pub fn check_displays_changed() -> ResultType<()> {
+    #[cfg(target_os = "linux")]
+    {
+        // For wayland, call Display::all() in video service will cause block, reproduced by refresh, I don't know the reason.
+        if !is_x11() {
+            return Ok(());
+        }
+    }
     check_update_displays(&try_get_displays()?);
     Ok(())
 }
@@ -394,7 +401,8 @@ pub fn try_get_displays_(add_amyuni_headless: bool) -> ResultType<Vec<Display>> 
     let mut displays = Display::all()?;
 
     // Do not add virtual display if the platform is not installed or the virtual display is not supported.
-    if !crate::platform::is_installed() || !virtual_display_manager::is_virtual_display_supported() {
+    if !crate::platform::is_installed() || !virtual_display_manager::is_virtual_display_supported()
+    {
         return Ok(displays);
     }
 
