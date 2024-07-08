@@ -104,7 +104,18 @@ class ConnectionManager extends StatefulWidget {
   State<StatefulWidget> createState() => ConnectionManagerState();
 }
 
-class ConnectionManagerState extends State<ConnectionManager> {
+class ConnectionManagerState extends State<ConnectionManager>
+    with WidgetsBindingObserver {
+  final RxBool _block = false.obs;
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    if (state == AppLifecycleState.resumed) {
+      shouldBeBlocked(_block, null);
+    }
+  }
+
   @override
   void initState() {
     gFFI.serverModel.updateClientState();
@@ -127,7 +138,14 @@ class ConnectionManagerState extends State<ConnectionManager> {
       }
     };
     gFFI.chatModel.isConnManager = true;
+    WidgetsBinding.instance.addObserver(this);
     super.initState();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
   }
 
   @override
@@ -165,6 +183,7 @@ class ConnectionManagerState extends State<ConnectionManager> {
               selectedBorderColor: MyTheme.accent,
               maxLabelWidth: 100,
               tail: null, //buildScrollJumper(),
+              blockTab: _block,
               selectedTabBackgroundColor:
                   Theme.of(context).hintColor.withOpacity(0),
               tabBuilder: (key, icon, label, themeConf) {
@@ -208,14 +227,9 @@ class ConnectionManagerState extends State<ConnectionManager> {
                           builder: (_, model, child) => SizedBox(
                                 width: realChatPageWidth,
                                 child: buildRemoteBlock(
-                                  child: Container(
-                                      decoration: BoxDecoration(
-                                          border: Border(
-                                              right: BorderSide(
-                                                  color: Theme.of(context)
-                                                      .dividerColor))),
-                                      child: buildSidePage()),
-                                ),
+                                    child: buildSidePage(),
+                                    block: _block,
+                                    mask: true),
                               )),
                     SizedBox(
                         width: realClosedWidth,
