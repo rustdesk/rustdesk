@@ -1999,6 +1999,8 @@ impl Connection {
                         if is_enter(&me) {
                             CLICK_TIME.store(get_time(), Ordering::SeqCst);
                         }
+                        // https://github.com/rustdesk/rustdesk/issues/8633
+                        MOUSE_MOVE_TIME.store(get_time(), Ordering::SeqCst);
                         // handle all down as press
                         // fix unexpected repeating key on remote linux, seems also fix abnormal alt/shift, which
                         // make sure all key are released
