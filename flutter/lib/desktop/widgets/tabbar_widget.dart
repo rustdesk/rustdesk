@@ -248,6 +248,7 @@ class DesktopTab extends StatelessWidget {
   final Color? selectedTabBackgroundColor;
   final Color? unSelectedTabBackgroundColor;
   final Color? selectedBorderColor;
+  final RxBool? blockTab;
 
   final DesktopTabController controller;
 
@@ -277,6 +278,7 @@ class DesktopTab extends StatelessWidget {
     this.selectedTabBackgroundColor,
     this.unSelectedTabBackgroundColor,
     this.selectedBorderColor,
+    this.blockTab,
   }) : super(key: key) {
     tabType = controller.tabType;
     isMainWindow = tabType == DesktopTabType.main ||
@@ -292,10 +294,10 @@ class DesktopTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Column(children: [
-      Obx(() => Offstage(
-          offstage: !stateGlobal.showTabBar.isTrue ||
-              (kUseCompatibleUiMode && isHideSingleItem()),
-          child: SizedBox(
+      Obx(() {
+        if (stateGlobal.showTabBar.isTrue &&
+            !(kUseCompatibleUiMode && isHideSingleItem())) {
+          return SizedBox(
             height: _kTabBarHeight,
             child: Column(
               children: [
@@ -308,7 +310,11 @@ class DesktopTab extends StatelessWidget {
                 ),
               ],
             ),
-          ))),
+          );
+        } else {
+          return Offstage();
+        }
+      }),
       Expanded(
           child: pageViewBuilder != null
               ? pageViewBuilder!(_buildPageView())
@@ -317,10 +323,15 @@ class DesktopTab extends StatelessWidget {
   }
 
   Widget _buildBlock({required Widget child}) {
-    if (tabType != DesktopTabType.main) {
+    if (blockTab != null) {
+      return buildRemoteBlock(
+          child: child,
+          block: blockTab!,
+          use: canBeBlocked,
+          mask: tabType == DesktopTabType.main);
+    } else {
       return child;
     }
-    return buildRemoteBlock(child: child, use: canBeBlocked);
   }
 
   List<Widget> _tabWidgets = [];
@@ -703,72 +714,69 @@ class WindowActionPanelState extends State<WindowActionPanel>
     return Row(
       mainAxisAlignment: MainAxisAlignment.end,
       children: [
-        Obx(() => Offstage(
-              offstage:
-                  !(showTabDowndown() && existingInvisibleTab().isNotEmpty),
-              child: _TabDropDownButton(
-                  controller: widget.tabController,
-                  labelGetter: widget.labelGetter,
-                  tabkeys: existingInvisibleTab()),
-            )),
-        Offstage(offstage: widget.tail == null, child: widget.tail),
-        Offstage(
-          offstage: kUseCompatibleUiMode,
-          child: Row(
+        Obx(() {
+          if (showTabDowndown() && existingInvisibleTab().isNotEmpty) {
+            return _TabDropDownButton(
+                controller: widget.tabController,
+                labelGetter: widget.labelGetter,
+                tabkeys: existingInvisibleTab());
+          } else {
+            return Offstage();
+          }
+        }),
+        if (widget.tail != null) widget.tail!,
+        if (!kUseCompatibleUiMode)
+          Row(
             children: [
-              Offstage(
-                  offstage: !widget.showMinimize || isMacOS,
-                  child: ActionIcon(
-                    message: 'Minimize',
-                    icon: IconFont.min,
-                    onTap: () {
-                      if (widget.isMainWindow) {
-                        windowManager.minimize();
-                      } else {
-                        WindowController.fromWindowId(kWindowId!).minimize();
-                      }
-                    },
-                    isClose: false,
-                  )),
-              Offstage(
-                  offstage: !widget.showMaximize || isMacOS,
-                  child: Obx(() => ActionIcon(
-                        message: stateGlobal.isMaximized.isTrue
-                            ? 'Restore'
-                            : 'Maximize',
-                        icon: stateGlobal.isMaximized.isTrue
-                            ? IconFont.restore
-                            : IconFont.max,
-                        onTap: bind.isIncomingOnly() && isInHomePage()
-                            ? null
-                            : _toggleMaximize,
-                        isClose: false,
-                      ))),
-              Offstage(
-                  offstage: !widget.showClose || isMacOS,
-                  child: ActionIcon(
-                    message: 'Close',
-                    icon: IconFont.close,
-                    onTap: () async {
-                      final res = await widget.onClose?.call() ?? true;
-                      if (res) {
-                        // hide for all window
-                        // note: the main window can be restored by tray icon
-                        Future.delayed(Duration.zero, () async {
-                          if (widget.isMainWindow) {
-                            await windowManager.close();
-                          } else {
-                            await WindowController.fromWindowId(kWindowId!)
-                                .close();
-                          }
-                        });
-                      }
-                    },
-                    isClose: true,
-                  ))
+              if (widget.showMinimize && !isMacOS)
+                ActionIcon(
+                  message: 'Minimize',
+                  icon: IconFont.min,
+                  onTap: () {
+                    if (widget.isMainWindow) {
+                      windowManager.minimize();
+                    } else {
+                      WindowController.fromWindowId(kWindowId!).minimize();
+                    }
+                  },
+                  isClose: false,
+                ),
+              if (widget.showMaximize && !isMacOS)
+                Obx(() => ActionIcon(
+                      message: stateGlobal.isMaximized.isTrue
+                          ? 'Restore'
+                          : 'Maximize',
+                      icon: stateGlobal.isMaximized.isTrue
+                          ? IconFont.restore
+                          : IconFont.max,
+                      onTap: bind.isIncomingOnly() && isInHomePage()
+                          ? null
+                          : _toggleMaximize,
+                      isClose: false,
+                    )),
+              if (widget.showClose && !isMacOS)
+                ActionIcon(
+                  message: 'Close',
+                  icon: IconFont.close,
+                  onTap: () async {
+                    final res = await widget.onClose?.call() ?? true;
+                    if (res) {
+                      // hide for all window
+                      // note: the main window can be restored by tray icon
+                      Future.delayed(Duration.zero, () async {
+                        if (widget.isMainWindow) {
+                          await windowManager.close();
+                        } else {
+                          await WindowController.fromWindowId(kWindowId!)
+                              .close();
+                        }
+                      });
+                    }
+                  },
+                  isClose: true,
+                )
             ],
           ),
-        ),
       ],
     );
   }
@@ -1172,22 +1180,26 @@ class _CloseButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-        width: _kIconSize,
-        child: Offstage(
-          offstage: !visible,
-          child: InkWell(
-            hoverColor: MyTheme.tabbar(context).closeHoverColor,
-            customBorder: const CircleBorder(),
-            onTap: () => onClose(),
-            child: Icon(
-              Icons.close,
-              size: _kIconSize,
-              color: tabSelected
-                  ? MyTheme.tabbar(context).selectedIconColor
-                  : MyTheme.tabbar(context).unSelectedIconColor,
-            ),
-          ),
-        )).paddingOnly(left: 10);
+            width: _kIconSize,
+            child: () {
+              if (visible) {
+                return InkWell(
+                  hoverColor: MyTheme.tabbar(context).closeHoverColor,
+                  customBorder: const CircleBorder(),
+                  onTap: () => onClose(),
+                  child: Icon(
+                    Icons.close,
+                    size: _kIconSize,
+                    color: tabSelected
+                        ? MyTheme.tabbar(context).selectedIconColor
+                        : MyTheme.tabbar(context).unSelectedIconColor,
+                  ),
+                );
+              } else {
+                return Offstage();
+              }
+            }())
+        .paddingOnly(left: 10);
   }
 }
 
@@ -1341,27 +1353,30 @@ class _TabDropDownButtonState extends State<_TabDropDownButton> {
                       child: InkWell(child: Text(label)),
                     ),
                     Obx(
-                      () => Offstage(
-                        offstage: !(tabInfo?.onTabCloseButton != null &&
-                            menuHover.value),
-                        child: InkWell(
-                            onTap: () {
-                              tabInfo?.onTabCloseButton?.call();
-                              if (Navigator.of(context).canPop()) {
-                                Navigator.of(context).pop();
-                              }
-                            },
-                            child: MouseRegion(
-                                cursor: SystemMouseCursors.click,
-                                onHover: (event) =>
-                                    setState(() => btnHover.value = true),
-                                onExit: (event) =>
-                                    setState(() => btnHover.value = false),
-                                child: Icon(Icons.close,
-                                    color:
-                                        btnHover.value ? Colors.red : null))),
-                      ),
-                    )
+                      () {
+                        if (tabInfo?.onTabCloseButton != null &&
+                            menuHover.value) {
+                          return InkWell(
+                              onTap: () {
+                                tabInfo?.onTabCloseButton?.call();
+                                if (Navigator.of(context).canPop()) {
+                                  Navigator.of(context).pop();
+                                }
+                              },
+                              child: MouseRegion(
+                                  cursor: SystemMouseCursors.click,
+                                  onHover: (event) =>
+                                      setState(() => btnHover.value = true),
+                                  onExit: (event) =>
+                                      setState(() => btnHover.value = false),
+                                  child: Icon(Icons.close,
+                                      color:
+                                          btnHover.value ? Colors.red : null)));
+                        } else {
+                          return Offstage();
+                        }
+                      },
+                    ),
                   ],
                 ),
               ),

@@ -116,22 +116,14 @@ class _DesktopTabPageState extends State<DesktopTabPage>
                   isClose: false,
                 ),
               ),
+              blockTab: _block,
             )));
-    widget() => MouseRegion(
-        onEnter: (_) async {
-          // mouseIn = true;
-          await shouldBeBlocked(_block, canBeBlocked);
-        },
-        onExit: (_) {
-          // mouseIn = false;
-        },
-        child: FocusScope(child: tabWidget, canRequestFocus: !_block.value));
     return isMacOS || kUseCompatibleUiMode
-        ? Obx(() => widget())
+        ? Obx(() => tabWidget)
         : Obx(
             () => DragToResizeArea(
               resizeEdgeSize: stateGlobal.resizeEdgeSize.value,
-              child: widget(),
+              child: tabWidget,
             ),
           );
   }
