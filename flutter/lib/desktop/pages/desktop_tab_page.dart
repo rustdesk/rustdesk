@@ -119,7 +119,7 @@ class _DesktopTabPageState extends State<DesktopTabPage>
               blockTab: _block,
             )));
     return isMacOS || kUseCompatibleUiMode
-        ? Obx(() => tabWidget)
+        ? tabWidget
         : Obx(
             () => DragToResizeArea(
               resizeEdgeSize: stateGlobal.resizeEdgeSize.value,
