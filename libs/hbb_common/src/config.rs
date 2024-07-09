@@ -2109,6 +2109,7 @@ pub mod keys {
     pub const OPTION_FLUTTER_PEER_TAB_VISIBLE: &str = "peer-tab-visible";
     pub const OPTION_FLUTTER_PEER_CARD_UI_TYLE: &str = "peer-card-ui-type";
     pub const OPTION_FLUTTER_CURRENT_AB_NAME: &str = "current-ab-name";
+    pub const OPTION_ALLOW_REMOTE_CM_MODIFICATION: &str = "allow-remote-cm-modification";
 
     // android floating window options
     pub const OPTION_DISABLE_FLOATING_WINDOW: &str = "disable-floating-window";
@@ -2195,6 +2196,7 @@ pub mod keys {
         "hide-server-settings",
         "hide-proxy-settings",
         "hide-username-on-card",
+        OPTION_ALLOW_REMOTE_CM_MODIFICATION,
     ];
     // DEFAULT_SETTINGS, OVERWRITE_SETTINGS
     pub const KEYS_SETTINGS: &[&str] = &[
