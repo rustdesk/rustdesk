@@ -59,6 +59,7 @@ impl Display {
         })
     }
 
+    // Call this function carefully for wayland, it may cause blocking
     pub fn all() -> io::Result<Vec<Display>> {
         Ok(if super::is_x11() {
             x11::Display::all()?
