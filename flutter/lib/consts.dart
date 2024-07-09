@@ -303,6 +303,8 @@ const kRequestIgnoreBatteryOptimizations =
 const kSystemAlertWindow = "android.permission.SYSTEM_ALERT_WINDOW";
 const kAndroid13Notification = "android.permission.POST_NOTIFICATIONS";
 
+const kHideUsernameOnCard = "hide-username-on-card";
+
 /// Android channel invoke type key
 class AndroidChannel {
   static final kStartAction = "start_action";

@@ -2194,6 +2194,7 @@ pub mod keys {
         "hide-network-settings",
         "hide-server-settings",
         "hide-proxy-settings",
+        "hide-username-on-card",
     ];
     // DEFAULT_SETTINGS, OVERWRITE_SETTINGS
     pub const KEYS_SETTINGS: &[&str] = &[
