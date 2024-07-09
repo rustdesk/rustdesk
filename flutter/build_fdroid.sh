@@ -79,45 +79,11 @@ export VCPKG_ROOT="${HOME}/vcpkg"
 
 # Now act depending on build step
 
+# NOTE: F-Droid maintainers require explicit declaration of dependencies
+# as root via `Builds.sudo` F-Droid metadata directive:
+# https://gitlab.com/fdroid/fdroiddata/-/merge_requests/15343#note_1988918695
+
 case "${BUILDSTEP}" in
-sudo-deps)
-	# sudo-deps: as root, install needed Debian packages into builder VM
-
-	set -e
-
-	export DEBIAN_FRONTEND=noninteractive
-
-	apt-get update
-
-	apt-get -yq full-upgrade
-
-	apt-get -yq install \
-		clang \
-		cmake \
-		curl \
-		fakeroot \
-		gcc \
-		g++ \
-		git \
-		libgstreamer1.0-dev \
-		libgstreamer-plugins-base1.0-dev \
-		libgtk-3-dev \
-		make \
-		nasm \
-		ninja-build \
-		openjdk-17-jdk-headless \
-		pkg-config \
-		tar \
-		unzip \
-		wget \
-		xz-utils \
-		yasm \
-		yq \
-		zip
-
-	update-alternatives --auto java
-
-	;;
 prebuild)
 	# prebuild: patch sources and do other stuff before the build
 
