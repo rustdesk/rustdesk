@@ -112,7 +112,9 @@ class ConnectionManagerState extends State<ConnectionManager>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     super.didChangeAppLifecycleState(state);
     if (state == AppLifecycleState.resumed) {
-      shouldBeBlocked(_block, null);
+      if (!allowRemoteCMModification()) {
+        shouldBeBlocked(_block, null);
+      }
     }
   }
 
@@ -183,7 +185,7 @@ class ConnectionManagerState extends State<ConnectionManager>
               selectedBorderColor: MyTheme.accent,
               maxLabelWidth: 100,
               tail: null, //buildScrollJumper(),
-              blockTab: _block,
+              blockTab: allowRemoteCMModification() ? null : _block,
               selectedTabBackgroundColor:
                   Theme.of(context).hintColor.withOpacity(0),
               tabBuilder: (key, icon, label, themeConf) {
@@ -226,10 +228,12 @@ class ConnectionManagerState extends State<ConnectionManager>
                       Consumer<ChatModel>(
                           builder: (_, model, child) => SizedBox(
                                 width: realChatPageWidth,
-                                child: buildRemoteBlock(
-                                    child: buildSidePage(),
-                                    block: _block,
-                                    mask: true),
+                                child: allowRemoteCMModification()
+                                    ? buildSidePage()
+                                    : buildRemoteBlock(
+                                        child: buildSidePage(),
+                                        block: _block,
+                                        mask: true),
                               )),
                     SizedBox(
                         width: realClosedWidth,
@@ -1057,12 +1061,21 @@ class _CmControlPanel extends StatelessWidget {
 }
 
 void checkClickTime(int id, Function() callback) async {
+  if (allowRemoteCMModification()) {
+    callback();
+    return;
+  }
   var clickCallbackTime = DateTime.now().millisecondsSinceEpoch;
   await bind.cmCheckClickTime(connId: id);
   Timer(const Duration(milliseconds: 120), () async {
     var d = clickCallbackTime - await bind.cmGetClickTime();
     if (d > 120) callback();
   });
+}
+
+bool allowRemoteCMModification() {
+  return option2bool(kOptionAllowRemoteCmModification,
+      bind.mainGetLocalOption(key: kOptionAllowRemoteCmModification));
 }
 
 class _FileTransferLogPage extends StatefulWidget {
