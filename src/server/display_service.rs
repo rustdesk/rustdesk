@@ -187,6 +187,7 @@ pub fn check_displays_changed() -> ResultType<()> {
     #[cfg(target_os = "linux")]
     {
         // For wayland, call Display::all() in video service will cause block, reproduced by refresh, I don't know the reason.
+        // block, or even crash here, https://github.com/rustdesk/rustdesk/blob/0bb4d43e9ea9d9dfb9c46c8d27d1a97cd0ad6bea/libs/scrap/src/wayland/pipewire.rs#L235
         if !is_x11() {
             return Ok(());
         }
