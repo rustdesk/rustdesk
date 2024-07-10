@@ -752,6 +752,7 @@ impl Client {
         Some(rx)
     }
 
+    #[inline]
     #[cfg(feature = "flutter")]
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     fn send_msg(_ctx: &Option<ClientClipboardContext>, msg: Message) {
