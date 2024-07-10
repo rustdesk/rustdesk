@@ -1,6 +1,6 @@
 use super::{input_service::*, *};
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
-use crate::clipboard::{update_clipboard, ClipboardSide};
+use crate::clipboard::update_clipboard;
 #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
 use crate::clipboard_file::*;
 #[cfg(target_os = "android")]
@@ -685,19 +685,8 @@ impl Connection {
                                 msg = Arc::new(new_msg);
                             }
                         }
-                        Some(message::Union::MultiClipboards(_multi_clipboards)) => {
-                            #[cfg(not(any(target_os = "android", target_os = "ios")))]
-                            if let Some(msg_out) = crate::clipboard::get_msg_if_not_support_multi_clip(&conn.lr.version, &conn.lr.my_platform, _multi_clipboards) {
-                                if let Err(err) = conn.stream.send(&msg_out).await {
-                                    conn.on_close(&err.to_string(), false).await;
-                                    break;
-                                }
-                                continue;
-                            }
-                        }
                         _ => {}
                     }
-
                     let msg: &Message = &msg;
                     if let Err(err) = conn.stream.send(msg).await {
                         conn.on_close(&err.to_string(), false).await;
@@ -2064,14 +2053,7 @@ impl Connection {
                 {
                     #[cfg(not(any(target_os = "android", target_os = "ios")))]
                     if self.clipboard {
-                        update_clipboard(vec![_cb], ClipboardSide::Host);
-                    }
-                }
-                Some(message::Union::MultiClipboards(_mcb)) =>
-                {
-                    #[cfg(not(any(target_os = "android", target_os = "ios")))]
-                    if self.clipboard {
-                        update_clipboard(_mcb.clipboards, ClipboardSide::Host);
+                        update_clipboard(_cb, None);
                     }
                 }
                 Some(message::Union::Cliprdr(_clip)) =>

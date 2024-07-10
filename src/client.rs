@@ -65,7 +65,7 @@ use crate::{
 };
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
-use crate::clipboard::{check_clipboard, ClipboardSide, CLIPBOARD_INTERVAL};
+use crate::clipboard::{check_clipboard, CLIPBOARD_INTERVAL};
 #[cfg(not(feature = "flutter"))]
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use crate::ui_session_interface::SessionPermissionConfig;
@@ -136,10 +136,17 @@ lazy_static::lazy_static! {
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 lazy_static::lazy_static! {
     static ref ENIGO: Arc<Mutex<enigo::Enigo>> = Arc::new(Mutex::new(enigo::Enigo::new()));
+    static ref OLD_CLIPBOARD_DATA: Arc<Mutex<crate::clipboard::ClipboardData>> = Default::default();
     static ref TEXT_CLIPBOARD_STATE: Arc<Mutex<TextClipboardState>> = Arc::new(Mutex::new(TextClipboardState::new()));
 }
 
 const PUBLIC_SERVER: &str = "public";
+
+#[inline]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+pub fn get_old_clipboard_text() -> Arc<Mutex<crate::clipboard::ClipboardData>> {
+    OLD_CLIPBOARD_DATA.clone()
+}
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub fn get_key_state(key: enigo::Key) -> bool {
@@ -712,9 +719,7 @@ impl Client {
     //
     // If clipboard update is detected, the text will be sent to all sessions by `send_text_clipboard_msg`.
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    fn try_start_clipboard(
-        client_clip_ctx: Option<ClientClipboardContext>,
-    ) -> Option<UnboundedReceiver<()>> {
+    fn try_start_clipboard(_ctx: Option<ClientClipboardContext>) -> Option<UnboundedReceiver<()>> {
         let mut clipboard_lock = TEXT_CLIPBOARD_STATE.lock().unwrap();
         if clipboard_lock.running {
             return None;
@@ -735,8 +740,15 @@ impl Client {
                     continue;
                 }
 
-                if let Some(msg) = check_clipboard(&mut ctx, ClipboardSide::Client) {
-                    Self::send_msg(&client_clip_ctx, msg);
+                if let Some(msg) = check_clipboard(&mut ctx, Some(OLD_CLIPBOARD_DATA.clone())) {
+                    #[cfg(feature = "flutter")]
+                    crate::flutter::send_text_clipboard_msg(msg);
+                    #[cfg(not(feature = "flutter"))]
+                    if let Some(ctx) = &_ctx {
+                        if ctx.cfg.is_text_clipboard_required() {
+                            let _ = ctx.tx.send(Data::Message(msg));
+                        }
+                    }
                 }
 
                 if !is_sent {
@@ -753,38 +765,14 @@ impl Client {
     }
 
     #[inline]
-    #[cfg(feature = "flutter")]
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    fn send_msg(_ctx: &Option<ClientClipboardContext>, msg: Message) {
-        crate::flutter::send_text_clipboard_msg(msg);
-    }
-
-    #[cfg(not(feature = "flutter"))]
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    fn send_msg(ctx: &Option<ClientClipboardContext>, msg: Message) {
-        if let Some(ctx) = &ctx {
-            if ctx.cfg.is_text_clipboard_required() {
-                if let Some(pi) = ctx.cfg.lc.read().unwrap().peer_info.as_ref() {
-                    if let Some(message::Union::MultiClipboards(multi_clipboards)) = &msg.union {
-                        if let Some(msg_out) = crate::clipboard::get_msg_if_not_support_multi_clip(
-                            &pi.version,
-                            &pi.platform,
-                            multi_clipboards,
-                        ) {
-                            let _ = ctx.tx.send(Data::Message(msg_out));
-                            return;
-                        }
-                    }
-                }
-                let _ = ctx.tx.send(Data::Message(msg));
-            }
+    fn get_current_clipboard_msg() -> Option<Message> {
+        let data = &*OLD_CLIPBOARD_DATA.lock().unwrap();
+        if data.is_empty() {
+            None
+        } else {
+            Some(data.create_msg())
         }
-    }
-
-    #[inline]
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    fn get_current_clipboard_msg(peer_version: &str, peer_platform: &str) -> Option<Message> {
-        crate::clipboard::get_cache_msg(peer_version, peer_platform)
     }
 }
 
@@ -2035,16 +2023,11 @@ impl LoginConfigHandler {
         if display_name.is_empty() {
             display_name = crate::username();
         }
-        #[cfg(not(target_os = "android"))]
-        let my_platform = whoami::platform().to_string();
-        #[cfg(target_os = "android")]
-        let my_platform = "Android".into();
         let mut lr = LoginRequest {
             username: pure_id,
             password: password.into(),
             my_id,
             my_name: display_name,
-            my_platform,
             option: self.get_option_message(true).into(),
             session_id: self.session_id,
             version: crate::VERSION.to_string(),
