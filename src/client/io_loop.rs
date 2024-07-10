@@ -41,7 +41,7 @@ use crate::client::{
     new_voice_call_request, Client, MediaData, MediaSender, QualityStatus, MILLI1, SEC30,
 };
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
-use crate::clipboard::{update_clipboard, ClipboardSide, CLIPBOARD_INTERVAL};
+use crate::clipboard::{update_clipboard, CLIPBOARD_INTERVAL};
 use crate::common::{get_default_sound_input, set_sound_input};
 use crate::ui_session_interface::{InvokeUiSession, Session};
 #[cfg(not(any(target_os = "ios")))]
@@ -1118,8 +1118,6 @@ impl<T: InvokeUiSession> Remote<T> {
                         }
                     }
                     Some(login_response::Union::PeerInfo(pi)) => {
-                        let peer_version = pi.version.clone();
-                        let peer_platform = pi.platform.clone();
                         self.handler.handle_peer_info(pi);
                         self.check_clipboard_file_context();
                         if !(self.handler.is_file_transfer() || self.handler.is_port_forward()) {
@@ -1141,9 +1139,7 @@ impl<T: InvokeUiSession> Remote<T> {
                             }
 
                             #[cfg(not(any(target_os = "android", target_os = "ios")))]
-                            if let Some(msg_out) =
-                                Client::get_current_clipboard_msg(&peer_version, &peer_platform)
-                            {
+                            if let Some(msg_out) = Client::get_current_clipboard_msg() {
                                 let sender = self.sender.clone();
                                 let permission_config = self.handler.get_permission_config();
                                 tokio::spawn(async move {
@@ -1184,7 +1180,7 @@ impl<T: InvokeUiSession> Remote<T> {
                 Some(message::Union::Clipboard(cb)) => {
                     if !self.handler.lc.read().unwrap().disable_clipboard.v {
                         #[cfg(not(any(target_os = "android", target_os = "ios")))]
-                        update_clipboard(vec![cb], ClipboardSide::Client);
+                        update_clipboard(cb, Some(crate::client::get_old_clipboard_text()));
                         #[cfg(any(target_os = "android", target_os = "ios"))]
                         {
                             let content = if cb.compress {
@@ -1196,12 +1192,6 @@ impl<T: InvokeUiSession> Remote<T> {
                                 self.handler.clipboard(content);
                             }
                         }
-                    }
-                }
-                Some(message::Union::MultiClipboards(_mcb)) => {
-                    if !self.handler.lc.read().unwrap().disable_clipboard.v {
-                        #[cfg(not(any(target_os = "android", target_os = "ios")))]
-                        update_clipboard(_mcb.clipboards, ClipboardSide::Client);
                     }
                 }
                 #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
