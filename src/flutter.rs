@@ -1256,6 +1256,19 @@ pub fn update_text_clipboard_required() {
 pub fn send_text_clipboard_msg(msg: Message) {
     for s in sessions::get_sessions() {
         if s.is_text_clipboard_required() {
+            // Check if the client supports multi clipboards
+            if let Some(message::Union::MultiClipboards(multi_clipboards)) = &msg.union {
+                let version = s.ui_handler.peer_info.read().unwrap().version.clone();
+                let platform = s.ui_handler.peer_info.read().unwrap().platform.clone();
+                if let Some(msg_out) = crate::clipboard::get_msg_if_not_support_multi_clip(
+                    &version,
+                    &platform,
+                    multi_clipboards,
+                ) {
+                    s.send(Data::Message(msg_out));
+                    continue;
+                }
+            }
             s.send(Data::Message(msg.clone()));
         }
     }
