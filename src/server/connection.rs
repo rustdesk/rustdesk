@@ -2049,11 +2049,27 @@ impl Connection {
                     }
                     self.update_auto_disconnect_timer();
                 }
-                Some(message::Union::Clipboard(_cb)) =>
-                {
-                    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+                Some(message::Union::Clipboard(cb)) => {
                     if self.clipboard {
-                        update_clipboard(_cb, None);
+                        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+                        update_clipboard(cb, None);
+                        #[cfg(all(feature = "flutter", target_os = "android"))]
+                        {
+                            let content = if cb.compress {
+                                hbb_common::compress::decompress(&cb.content)
+                            } else {
+                                cb.content.into()
+                            };
+                            if let Ok(content) = String::from_utf8(content) {
+                                let data = HashMap::from([
+                                    ("name", "clipboard"),
+                                    ("content", &content),
+                                ]);
+                                if let Ok(data) = serde_json::to_string(&data) {
+                                    let _ = crate::flutter::push_global_event(crate::flutter::APP_TYPE_MAIN, data);
+                                }
+                            }
+                        }
                     }
                 }
                 Some(message::Union::Cliprdr(_clip)) =>
