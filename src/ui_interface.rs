@@ -904,8 +904,7 @@ pub fn get_api_server() -> String {
 #[inline]
 pub fn has_hwcodec() -> bool {
     // Has real hardware codec using gpu
-    (cfg!(feature = "hwcodec") && (cfg!(windows) || cfg!(target_os = "linux")))
-        || cfg!(feature = "mediacodec")
+    (cfg!(feature = "hwcodec") && cfg!(not(target_os = "ios"))) || cfg!(feature = "mediacodec")
 }
 
 #[inline]
@@ -1408,7 +1407,7 @@ pub fn verify_bot(token: String) -> String {
 
 pub fn check_hwcodec() {
     #[cfg(feature = "hwcodec")]
-    #[cfg(any(target_os = "windows", target_os = "linux"))]
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     {
         use std::sync::Once;
         static ONCE: Once = Once::new();

@@ -553,12 +553,12 @@ async fn handle(data: Data, stream: &mut Connection) {
             );
         }
         #[cfg(feature = "hwcodec")]
-        #[cfg(any(target_os = "windows", target_os = "linux"))]
+        #[cfg(not(any(target_os = "android", target_os = "ios")))]
         Data::CheckHwcodec => {
             scrap::hwcodec::start_check_process();
         }
         #[cfg(feature = "hwcodec")]
-        #[cfg(any(target_os = "windows", target_os = "linux"))]
+        #[cfg(not(any(target_os = "android", target_os = "ios")))]
         Data::HwCodecConfig(c) => {
             match c {
                 None => {
@@ -1047,7 +1047,7 @@ pub async fn notify_server_to_check_hwcodec() -> ResultType<()> {
 }
 
 #[cfg(feature = "hwcodec")]
-#[cfg(any(target_os = "windows", target_os = "linux"))]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 #[tokio::main(flavor = "current_thread")]
 pub async fn get_hwcodec_config_from_server() -> ResultType<()> {
     if !scrap::codec::enable_hwcodec_option() || scrap::hwcodec::HwCodecConfig::already_set() {
@@ -1070,7 +1070,7 @@ pub async fn get_hwcodec_config_from_server() -> ResultType<()> {
 }
 
 #[cfg(feature = "hwcodec")]
-#[cfg(any(target_os = "windows", target_os = "linux"))]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub fn client_get_hwcodec_config_thread(wait_sec: u64) {
     static ONCE: std::sync::Once = std::sync::Once::new();
     if !crate::platform::is_installed()
