@@ -79,7 +79,7 @@ dependencies:
     git:
       url: https://github.com/rustdesk-org/flutter_improved_scrolling
   uni_links: ^0.5.1
-  uni_links_desktop: ^0.1.7
+  uni_links_desktop: ^0.1.6 # use 0.1.6 to make flutter 3.13 works
   path: ^1.8.1
   auto_size_text: ^3.0.0
   bot_toast: ^4.0.3
