@@ -838,7 +838,7 @@ impl Decoder {
 pub fn enable_hwcodec_option() -> bool {
     use hbb_common::config::keys::OPTION_ENABLE_HWCODEC;
 
-    if cfg!(windows) || cfg!(target_os = "linux") || cfg!(target_os = "android") {
+    if !cfg!(target_os = "ios") {
         return option2bool(
             OPTION_ENABLE_HWCODEC,
             &Config::get_option(OPTION_ENABLE_HWCODEC),
