@@ -333,8 +333,8 @@ jobs:
 
   build-for-macOS-arm64-selfhost:
     # use build-for-macOS instead
-    if: false
-    runs-on: [self-hosted, macOS, ARM64]
+    name: ${{ matrix.job.target }}
+    runs-on: ${{ matrix.job.os }}
     steps:
       - name: Export GitHub Actions cache environment variables
         uses: actions/github-script@v6
