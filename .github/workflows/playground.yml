@@ -181,7 +181,7 @@ jobs:
       - name: Rename rustdesk
         run: |
           for name in rustdesk*??.dmg; do
-              mv "$name" "${name%%.dmg}-${{ matrix.job.arch }}.dmg"
+              mv "$name" "${name%%.dmg}-${{ matrix.job.arch }}-flutter${{ matrix.job.flutter }}.dmg"
           done
 
       - name: Publish DMG package
@@ -190,7 +190,7 @@ jobs:
           prerelease: true
           tag_name: ${{ env.TAG_NAME }}
           files: |
-            rustdesk*-${{ matrix.job.arch }}-flutter$${{ matrix.job.flutter }}.dmg
+            rustdesk*-${{ matrix.job.arch }}*.dmg
 
 
   build-rustdesk-android:
