@@ -71,6 +71,13 @@ x86)
 	;;
 esac
 
+# Check ANDROID_SDK_ROOT and sdkmanager present on PATH
+
+if [ ! -d "${ANDROID_SDK_ROOT}" ] || ! command -v sdkmanager 1>/dev/null; then
+	echo "ERROR: Can not find Android SDK!" >&2
+	exit 1
+fi
+
 # Export necessary variables
 
 export PATH="${PATH}:${HOME}/flutter/bin:${HOME}/depot_tools"
@@ -129,8 +136,22 @@ prebuild)
 		exit 1
 	fi
 
-	export ANDROID_NDK_ROOT="${HOME}/android-ndk-${NDK_VERSION}"
-	export ANDROID_NDK_HOME="${HOME}/android-ndk-${NDK_VERSION}"
+	# Map NDK version to revision
+
+	NDK_VERSION="$(wget \
+		-qO- \
+		-H "Accept: application/vnd.github+json" \
+		-H "X-GitHub-Api-Version: 2022-11-28" \
+		'https://api.github.com/repos/android/ndk/releases' |
+		jq -r ".[] | select(.tag_name == \"${NDK_VERSION}\") | .body | match(\"ndkVersion \\\"(.*)\\\"\").captures[0].string")"
+
+	if [ -z "${NDK_VERSION}" ]; then
+		echo "ERROR: Can not map Android NDK codename to revision!" >&2
+		exit 1
+	fi
+
+	export ANDROID_NDK_HOME="${ANDROID_SDK_ROOT}/ndk/${NDK_VERSION}"
+	export ANDROID_NDK_ROOT="${ANDROID_SDK_ROOT}/ndk/${NDK_VERSION}"
 
 	#
 	# Install the components
@@ -141,17 +162,7 @@ prebuild)
 	# Install Android NDK
 
 	if [ ! -d "${ANDROID_NDK_ROOT}" ]; then
-		pushd "${HOME}"
-
-		wget \
-			-q \
-			"https://dl.google.com/android/repository/android-ndk-${NDK_VERSION}-linux.zip"
-
-		unzip "android-ndk-${NDK_VERSION}-linux.zip" 1>/dev/null
-
-		rm "android-ndk-${NDK_VERSION}-linux.zip"
-
-		popd # ${HOME}
+		sdkmanager --install "ndk;${NDK_VERSION}"
 	fi
 
 	# Install Flutter
@@ -159,27 +170,27 @@ prebuild)
 	if [ ! -f "${HOME}/flutter/bin/flutter" ]; then
 		pushd "${HOME}"
 
-		wget \
-			-q \
-			"https://storage.googleapis.com/flutter_infra_release/releases/stable/linux/flutter_linux_${FLUTTER_VERSION}-stable.tar.xz"
-		tar xf "flutter_linux_${FLUTTER_VERSION}-stable.tar.xz"
-		rm "flutter_linux_${FLUTTER_VERSION}-stable.tar.xz"
+		git clone https://github.com/flutter/flutter
+
+		pushd flutter
+
+		git reset --hard "${FLUTTER_VERSION}"
+
+		flutter config --no-analytics
+
+		popd # flutter
 
 		popd # ${HOME}
-
-		git config --global --add safe.directory "${HOME}/flutter"
-
-		flutter --disable-telemetry
-		dart --disable-telemetry
 	fi
 
 	# Install Rust
 
 	if [ ! -f "${HOME}/rustup/rustup-init.sh" ]; then
-		mkdir "${HOME}/rustup"
-		pushd "${HOME}/rustup"
-		wget -O rustup-init.sh 'https://sh.rustup.rs'
-		popd
+		pushd "${HOME}"
+
+		git clone --depth 1 https://github.com/rust-lang/rustup
+
+		popd # ${HOME}
 	fi
 
 	pushd "${HOME}/rustup"
@@ -212,12 +223,36 @@ prebuild)
 
 		git clone \
 			https://github.com/Microsoft/vcpkg.git
+		git clone \
+			https://github.com/Microsoft/vcpkg-tool.git
+
+		pushd vcpkg-tool
+
+		mkdir build
+
+		pushd build
+
+		cmake \
+			-DCMAKE_BUILD_TYPE=Release \
+			-G 'Ninja' \
+			-DVCPKG_DEVELOPMENT_WARNINGS=OFF \
+			..
+
+		cmake --build .
+
+		popd # build
+
+		popd # vcpkg-tool
 
 		pushd vcpkg
 
 		git reset --hard "${VCPKG_COMMIT_ID}"
 
-		sh bootstrap-vcpkg.sh -disableMetrics
+		cp -a ../vcpkg-tool/build/vcpkg vcpkg
+
+		# disable telemetry
+
+		touch "vcpkg.disable-metrics"
 
 		popd # vcpkg
 
@@ -314,8 +349,22 @@ build)
 		.env.NDK_VERSION \
 		.github/workflows/flutter-build.yml)"
 
-	export ANDROID_NDK_ROOT="${HOME}/android-ndk-${NDK_VERSION}"
-	export ANDROID_NDK_HOME="${HOME}/android-ndk-${NDK_VERSION}"
+	# Map NDK version to revision
+
+	NDK_VERSION="$(wget \
+		-qO- \
+		-H "Accept: application/vnd.github+json" \
+		-H "X-GitHub-Api-Version: 2022-11-28" \
+		'https://api.github.com/repos/android/ndk/releases' |
+		jq -r ".[] | select(.tag_name == \"${NDK_VERSION}\") | .body | match(\"ndkVersion \\\"(.*)\\\"\").captures[0].string")"
+
+	if [ -z "${NDK_VERSION}" ]; then
+		echo "ERROR: Can not map Android NDK codename to revision!" >&2
+		exit 1
+	fi
+
+	export ANDROID_NDK_HOME="${ANDROID_SDK_ROOT}/ndk/${NDK_VERSION}"
+	export ANDROID_NDK_ROOT="${ANDROID_SDK_ROOT}/ndk/${NDK_VERSION}"
 
 	if ! command -v cargo 1>/dev/null 2>&1; then
 		. "${HOME}/.cargo/env"
@@ -403,7 +452,7 @@ build)
 
 		echo "## Perform android engine build"
 
-		ninja -C out/android_jit_release_x86 1>/dev/null
+		ninja -C out/android_jit_release_x86
 
 		echo "## Configure host engine build"
 
@@ -413,7 +462,7 @@ build)
 
 		echo "## Perform android engine build"
 
-		ninja -C out/host_jit_release_x86 1>/dev/null
+		ninja -C out/host_jit_release_x86
 
 		echo "## Rename host engine"
 
