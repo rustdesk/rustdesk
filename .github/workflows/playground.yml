@@ -43,7 +43,7 @@ jobs:
               os: macos-13, #macos-latest or macos-14 use M1 now, https://docs.github.com/en/actions/using-github-hosted-runners/about-github-hosted-runners/about-github-hosted-runners#:~:text=14%20GB-,macos%2Dlatest%20or%20macos%2D14,-The%20macos%2Dlatestlabel
               extra-build-args: "",
               arch: x86_64,
-              flutter: "3.19.6",
+              flutter: "3.16.9",
               ref: "1ffc10e44ffdc9c8a396ec840b856bd27940b171",
               date: "20240419"
             }
@@ -61,7 +61,7 @@ jobs:
               os: macos-13, #macos-latest or macos-14 use M1 now, https://docs.github.com/en/actions/using-github-hosted-runners/about-github-hosted-runners/about-github-hosted-runners#:~:text=14%20GB-,macos%2Dlatest%20or%20macos%2D14,-The%20macos%2Dlatestlabel
               extra-build-args: "",
               arch: x86_64,
-              flutter: "3.19.6",
+              flutter: "3.16.9",
               ref: "914da2b86f73a314027833b1940784d657826503",
               date: "20240219"
             }
@@ -70,7 +70,7 @@ jobs:
               os: macos-13, #macos-latest or macos-14 use M1 now, https://docs.github.com/en/actions/using-github-hosted-runners/about-github-hosted-runners/about-github-hosted-runners#:~:text=14%20GB-,macos%2Dlatest%20or%20macos%2D14,-The%20macos%2Dlatestlabel
               extra-build-args: "",
               arch: x86_64,
-              flutter: "3.19.6",
+              flutter: "3.16.9",
               ref: "06b3894249c14610c71d565cff1634b4ebb75326",
               date: "20240119"
             }
@@ -79,7 +79,7 @@ jobs:
               os: macos-13, #macos-latest or macos-14 use M1 now, https://docs.github.com/en/actions/using-github-hosted-runners/about-github-hosted-runners/about-github-hosted-runners#:~:text=14%20GB-,macos%2Dlatest%20or%20macos%2D14,-The%20macos%2Dlatestlabel
               extra-build-args: "",
               arch: x86_64,
-              flutter: "3.19.6",
+              flutter: "3.16.9",
               ref: "f6509e3fd6917aa976bad2fc684182601ebf2434",
               date: "20231219"
             }
