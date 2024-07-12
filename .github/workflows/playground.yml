@@ -180,7 +180,7 @@ jobs:
 
       - name: Build rustdesk
         run: |
-          ./build.py --flutter --hwcodec ${{ matrix.job.extra-build-args }}
+          ./build.py --flutter ${{ matrix.job.extra-build-args }}
 
       - name: create unsigned dmg
         run: |
