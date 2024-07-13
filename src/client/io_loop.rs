@@ -387,6 +387,8 @@ impl<T: InvokeUiSession> Remote<T> {
         if self.handler.is_file_transfer() || self.handler.is_port_forward() {
             return None;
         }
+        let audio_input_device_before_voice_call =
+            crate::ui_interface::get_option("audio-input".to_owned());
         // Switch to default input device
         let default_sound_device = get_default_sound_input();
         if let Some(device) = default_sound_device {
@@ -421,6 +423,12 @@ impl<T: InvokeUiSession> Remote<T> {
                                 client_conn_inner,
                                 false,
                             );
+                            // Note(maybe todo):
+                            // 1. This may overide the audio input device set by user.
+                            // We can just assume that the user want to restore the audio input.
+                            // 2. If there're mutlitple voice call, the first one will restore the audio input device.
+                            // But it should be fine, because the user usually only have one voice call at the same time.
+                            set_sound_input(audio_input_device_before_voice_call);
                             break;
                         }
                         _ => {}

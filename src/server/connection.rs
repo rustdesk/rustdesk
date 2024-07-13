@@ -2061,12 +2061,13 @@ impl Connection {
                                 cb.content.into()
                             };
                             if let Ok(content) = String::from_utf8(content) {
-                                let data = HashMap::from([
-                                    ("name", "clipboard"),
-                                    ("content", &content),
-                                ]);
+                                let data =
+                                    HashMap::from([("name", "clipboard"), ("content", &content)]);
                                 if let Ok(data) = serde_json::to_string(&data) {
-                                    let _ = crate::flutter::push_global_event(crate::flutter::APP_TYPE_MAIN, data);
+                                    let _ = crate::flutter::push_global_event(
+                                        crate::flutter::APP_TYPE_MAIN,
+                                        data,
+                                    );
                                 }
                             }
                         }
@@ -2723,7 +2724,9 @@ impl Connection {
                 // Backup the default input device.
                 let audio_input_device = Config::get_option("audio-input");
                 log::debug!("Backup the sound input device {}", audio_input_device);
-                self.audio_input_device_before_voice_call = Some(audio_input_device);
+                if self.audio_input_device_before_voice_call.is_none() {
+                    self.audio_input_device_before_voice_call = Some(audio_input_device);
+                }
                 // Switch to default input device
                 let default_sound_device = get_default_sound_input();
                 if let Some(device) = default_sound_device {
@@ -2739,13 +2742,23 @@ impl Connection {
         }
     }
 
-    pub async fn close_voice_call(&mut self) {
-        // Restore to the prior audio device.
+    // Restore to the prior audio device.
+    // Note(maybe todo):
+    // 1. This may overide the audio input device set by user.
+    // We can just assume that the user want to restore the audio input.
+    // 2. If there're mutlitple voice call, the first one will restore the audio input device.
+    // But it should be fine, because the user usually only have one voice call at the same time.
+    #[inline]
+    fn try_restore_audio_input_device(&mut self) {
         if let Some(sound_input) =
             std::mem::replace(&mut self.audio_input_device_before_voice_call, None)
         {
             set_sound_input(sound_input);
         }
+    }
+
+    pub async fn close_voice_call(&mut self) {
+        self.try_restore_audio_input_device();
         // Notify the connection manager that the voice call has been closed.
         self.send_to_cm(Data::CloseVoiceCall("".to_owned()));
     }
@@ -3036,6 +3049,7 @@ impl Connection {
         }
         self.closed = true;
         log::info!("#{} Connection closed: {}", self.inner.id(), reason);
+        self.try_restore_audio_input_device();
         if lock && self.lock_after_session_end && self.keyboard {
             #[cfg(not(any(target_os = "android", target_os = "ios")))]
             lock_screen().await;
