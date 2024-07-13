@@ -42,7 +42,7 @@ use crate::client::{
 };
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use crate::clipboard::{update_clipboard, CLIPBOARD_INTERVAL};
-use crate::common::{get_default_sound_input, set_sound_input};
+use crate::common::get_default_sound_input;
 use crate::ui_session_interface::{InvokeUiSession, Session};
 #[cfg(not(any(target_os = "ios")))]
 use crate::{audio_service, ConnInner, CLIENT_SERVER};
@@ -387,11 +387,12 @@ impl<T: InvokeUiSession> Remote<T> {
         if self.handler.is_file_transfer() || self.handler.is_port_forward() {
             return None;
         }
-        // Switch to default input device
-        let default_sound_device = get_default_sound_input();
-        if let Some(device) = default_sound_device {
-            set_sound_input(device);
-        }
+        // NOTE:
+        // The client server and --server both use the same sound input device.
+        // It's better to distinguish the server side and client side.
+        // But it' not necessary for now, because it's not a common case.
+        // And it is immediately known when the input device is changed.
+        crate::audio_service::set_voice_call_input_device(get_default_sound_input(), false);
         // iOS does not have this server.
         #[cfg(not(any(target_os = "ios")))]
         {
@@ -421,6 +422,7 @@ impl<T: InvokeUiSession> Remote<T> {
                                 client_conn_inner,
                                 false,
                             );
+                            crate::audio_service::set_voice_call_input_device(None, true);
                             break;
                         }
                         _ => {}

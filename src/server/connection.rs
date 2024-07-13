@@ -17,7 +17,6 @@ use crate::{
     client::{
         new_voice_call_request, new_voice_call_response, start_audio_thread, MediaData, MediaSender,
     },
-    common::{get_default_sound_input, set_sound_input},
     display_service, ipc, privacy_mode, video_service, VERSION,
 };
 #[cfg(any(target_os = "android", target_os = "ios"))]
@@ -218,7 +217,6 @@ pub struct Connection {
     portable: PortableState,
     from_switch: bool,
     voice_call_request_timestamp: Option<NonZeroI64>,
-    audio_input_device_before_voice_call: Option<String>,
     options_in_login: Option<OptionMessage>,
     #[cfg(not(any(target_os = "ios")))]
     pressed_modifiers: HashSet<rdev::Key>,
@@ -367,7 +365,6 @@ impl Connection {
             from_switch: false,
             audio_sender: None,
             voice_call_request_timestamp: None,
-            audio_input_device_before_voice_call: None,
             options_in_login: None,
             #[cfg(not(any(target_os = "ios")))]
             pressed_modifiers: Default::default(),
@@ -2061,12 +2058,13 @@ impl Connection {
                                 cb.content.into()
                             };
                             if let Ok(content) = String::from_utf8(content) {
-                                let data = HashMap::from([
-                                    ("name", "clipboard"),
-                                    ("content", &content),
-                                ]);
+                                let data =
+                                    HashMap::from([("name", "clipboard"), ("content", &content)]);
                                 if let Ok(data) = serde_json::to_string(&data) {
-                                    let _ = crate::flutter::push_global_event(crate::flutter::APP_TYPE_MAIN, data);
+                                    let _ = crate::flutter::push_global_event(
+                                        crate::flutter::APP_TYPE_MAIN,
+                                        data,
+                                    );
                                 }
                             }
                         }
@@ -2720,15 +2718,10 @@ impl Connection {
         if let Some(ts) = self.voice_call_request_timestamp.take() {
             let msg = new_voice_call_response(ts.get(), accepted);
             if accepted {
-                // Backup the default input device.
-                let audio_input_device = Config::get_option("audio-input");
-                log::debug!("Backup the sound input device {}", audio_input_device);
-                self.audio_input_device_before_voice_call = Some(audio_input_device);
-                // Switch to default input device
-                let default_sound_device = get_default_sound_input();
-                if let Some(device) = default_sound_device {
-                    set_sound_input(device);
-                }
+                crate::audio_service::set_voice_call_input_device(
+                    crate::get_default_sound_input(),
+                    false,
+                );
                 self.send_to_cm(Data::StartVoiceCall);
             } else {
                 self.send_to_cm(Data::CloseVoiceCall("".to_owned()));
@@ -2740,12 +2733,7 @@ impl Connection {
     }
 
     pub async fn close_voice_call(&mut self) {
-        // Restore to the prior audio device.
-        if let Some(sound_input) =
-            std::mem::replace(&mut self.audio_input_device_before_voice_call, None)
-        {
-            set_sound_input(sound_input);
-        }
+        crate::audio_service::set_voice_call_input_device(None, true);
         // Notify the connection manager that the voice call has been closed.
         self.send_to_cm(Data::CloseVoiceCall("".to_owned()));
     }
@@ -3035,6 +3023,16 @@ impl Connection {
             return;
         }
         self.closed = true;
+        // If voice A,B -> C, and A,B has voice call
+        // B disconnects, C will reset the voice call input.
+        //
+        // It may be acceptable, because it's not a common case,
+        // and it's immediately known when the input device changes.
+        // C can change the input device manually in cm interface.
+        //
+        // We can add a (Vec<conn_id>, input device) to avoid this.
+        // But it's not necessary now and we have to consider two audio services(client, server).
+        crate::audio_service::set_voice_call_input_device(None, true);
         log::info!("#{} Connection closed: {}", self.inner.id(), reason);
         if lock && self.lock_after_session_end && self.keyboard {
             #[cfg(not(any(target_os = "android", target_os = "ios")))]
