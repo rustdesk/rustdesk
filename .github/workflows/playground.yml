@@ -53,7 +53,7 @@ jobs:
               os: macos-13, #macos-latest or macos-14 use M1 now, https://docs.github.com/en/actions/using-github-hosted-runners/about-github-hosted-runners/about-github-hosted-runners#:~:text=14%20GB-,macos%2Dlatest%20or%20macos%2D14,-The%20macos%2Dlatestlabel
               extra-build-args: "",
               arch: x86_64,
-              flutter: "3.13.9",
+              flutter: "3.10.6",
               ref: "c055ba2985516927a348900a8215983d536d1a1e",
               bridge: "1.75.3",
               date: "20231019"
@@ -63,7 +63,7 @@ jobs:
               os: macos-13, #macos-latest or macos-14 use M1 now, https://docs.github.com/en/actions/using-github-hosted-runners/about-github-hosted-runners/about-github-hosted-runners#:~:text=14%20GB-,macos%2Dlatest%20or%20macos%2D14,-The%20macos%2Dlatestlabel
               extra-build-args: "",
               arch: x86_64,
-              flutter: "3.13.9",
+              flutter: "3.10.6",
               ref: "ab982e86c391dc31aba67e9439c0bd93143b84af",
               bridge: "1.75.3",
               date: "20231010"
