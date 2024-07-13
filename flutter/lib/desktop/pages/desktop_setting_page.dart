@@ -500,7 +500,7 @@ class _GeneralState extends State<_General> {
       return const Offstage();
     }
 
-    return AudioInput(builder: (devices, currentDevice, setDevice) {
+    builder(devices, currentDevice, setDevice) {
       return _Card(title: 'Audio Input Device', children: [
         ...devices.map((device) => _Radio<String>(context,
                 value: device,
@@ -511,7 +511,9 @@ class _GeneralState extends State<_General> {
               setState(() {});
             }))
       ]);
-    });
+    }
+
+    return AudioInput(builder: builder, isCm: false, isVoiceCall: false);
   }
 
   Widget record(BuildContext context) {

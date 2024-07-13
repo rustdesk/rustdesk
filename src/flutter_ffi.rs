@@ -1319,6 +1319,25 @@ pub fn cm_close_voice_call(id: i32) {
     crate::ui_cm_interface::close_voice_call(id);
 }
 
+pub fn set_voice_call_input_device(is_cm: bool, device: String) {
+    if is_cm {
+        let _ = crate::ipc::set_config("voice-call-input", device);
+    } else {
+        crate::audio_service::set_voice_call_input_device(Some(device), true);
+    }
+}
+
+pub fn get_voice_call_input_device(is_cm: bool) -> String {
+    if is_cm {
+        match crate::ipc::get_config("voice-call-input") {
+            Ok(Some(device)) => device,
+            _ => "".to_owned(),
+        }
+    } else {
+        crate::audio_service::get_voice_call_input_device().unwrap_or_default()
+    }
+}
+
 pub fn main_get_last_remote_id() -> String {
     LocalConfig::get_remote_id()
 }

@@ -732,7 +732,7 @@ class _CmControlPanel extends StatelessWidget {
                 child: buildButton(context,
                     color: MyTheme.accent,
                     onClick: null, onTapDown: (details) async {
-                  final devicesInfo = await AudioInput.getDevicesInfo();
+                  final devicesInfo = await AudioInput.getDevicesInfo(true, true);
                   List<String> devices = devicesInfo['devices'] as List<String>;
                   if (devices.isEmpty) {
                     msgBox(
@@ -758,13 +758,13 @@ class _CmControlPanel extends StatelessWidget {
                               value: d,
                               height: 18,
                               padding: EdgeInsets.zero,
-                              onTap: () => AudioInput.setDevice(d),
+                              onTap: () => AudioInput.setDevice(d, true, true),
                               child: IgnorePointer(
                                   child: RadioMenuButton(
                                 value: d,
                                 groupValue: currentDevice,
                                 onChanged: (v) {
-                                  if (v != null) AudioInput.setDevice(v);
+                                  if (v != null) AudioInput.setDevice(v, true, true);
                                 },
                                 child: Container(
                                   child: Text(
