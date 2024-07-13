@@ -55,7 +55,7 @@ jobs:
               arch: x86_64,
               flutter: "3.13.9",
               ref: "c055ba2985516927a348900a8215983d536d1a1e",
-              bridge: "1.79.0",
+              bridge: "1.75.3",
               date: "20231019"
             }
           - {
@@ -65,7 +65,7 @@ jobs:
               arch: x86_64,
               flutter: "3.13.9",
               ref: "ab982e86c391dc31aba67e9439c0bd93143b84af",
-              bridge: "1.79.0",
+              bridge: "1.75.3",
               date: "20231010"
             }
     steps:
