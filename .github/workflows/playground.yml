@@ -53,6 +53,26 @@ jobs:
               os: macos-13, #macos-latest or macos-14 use M1 now, https://docs.github.com/en/actions/using-github-hosted-runners/about-github-hosted-runners/about-github-hosted-runners#:~:text=14%20GB-,macos%2Dlatest%20or%20macos%2D14,-The%20macos%2Dlatestlabel
               extra-build-args: "",
               arch: x86_64,
+              flutter: "3.13.9",
+              ref: "8bf57f1293abee463a935aae58f84d01b60f9b74",
+              bridge: "1.79.0",
+              date: "20231101"
+            }
+          - {
+              target: x86_64-apple-darwin,
+              os: macos-13, #macos-latest or macos-14 use M1 now, https://docs.github.com/en/actions/using-github-hosted-runners/about-github-hosted-runners/about-github-hosted-runners#:~:text=14%20GB-,macos%2Dlatest%20or%20macos%2D14,-The%20macos%2Dlatestlabel
+              extra-build-args: "",
+              arch: x86_64,
+              flutter: "3.10.6",
+              ref: "7480ead76a27eb8bc9dd19c376780cdf015c4c0f",
+              bridge: "1.75.3",
+              date: "20231030"
+            }
+          - {
+              target: x86_64-apple-darwin,
+              os: macos-13, #macos-latest or macos-14 use M1 now, https://docs.github.com/en/actions/using-github-hosted-runners/about-github-hosted-runners/about-github-hosted-runners#:~:text=14%20GB-,macos%2Dlatest%20or%20macos%2D14,-The%20macos%2Dlatestlabel
+              extra-build-args: "",
+              arch: x86_64,
               flutter: "3.10.6",
               ref: "c055ba2985516927a348900a8215983d536d1a1e",
               bridge: "1.75.3",
