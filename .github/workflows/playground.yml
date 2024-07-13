@@ -45,6 +45,7 @@ jobs:
               arch: x86_64,
               flutter: "3.13.9",
               ref: "f6509e3fd6917aa976bad2fc684182601ebf2434",
+              bridge: "1.80.1",
               date: "20231219"
             }
           - {
@@ -54,6 +55,7 @@ jobs:
               arch: x86_64,
               flutter: "3.10.6",
               ref: "f6509e3fd6917aa976bad2fc684182601ebf2434",
+              bridge: "1.80.1",
               date: "20231219"
             }
           - {
@@ -146,6 +148,7 @@ jobs:
       - name: Install flutter rust bridge deps
         shell: bash
         run: |
+          sed -i '' 's/3.1.0/2.17.0/g' flutter/pubspec.yaml;
           cargo install flutter_rust_bridge_codegen --version ${{ matrix.job.bridge }} --features "uuid"
           # below works for mac to make buildable on 3.13.9
           # pushd flutter/lib; find . -name "*.dart" | xargs -I{} sed -i '' 's/textScaler: TextScaler.linear(\(.*\)),/textScaleFactor: \1,/g' {}; popd;
