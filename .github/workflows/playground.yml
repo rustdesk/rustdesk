@@ -44,44 +44,26 @@ jobs:
               extra-build-args: "",
               arch: x86_64,
               flutter: "3.16.9",
-              ref: "1ffc10e44ffdc9c8a396ec840b856bd27940b171",
-              date: "20240419"
+              ref: "85ddfc0739f052cab0029c46b899b959ee94eeb8",
+              date: "20231119"
             }
           - {
               target: x86_64-apple-darwin,
               os: macos-13, #macos-latest or macos-14 use M1 now, https://docs.github.com/en/actions/using-github-hosted-runners/about-github-hosted-runners/about-github-hosted-runners#:~:text=14%20GB-,macos%2Dlatest%20or%20macos%2D14,-The%20macos%2Dlatestlabel
               extra-build-args: "",
               arch: x86_64,
-              flutter: "3.16.9",
-              ref: "b2290f5b4c3fd9233f6550b01c151401cdb3fed3",
-              date: "20240319"
+              flutter: "3.13.9",
+              ref: "c055ba2985516927a348900a8215983d536d1a1e",
+              date: "20231019"
             }
           - {
               target: x86_64-apple-darwin,
               os: macos-13, #macos-latest or macos-14 use M1 now, https://docs.github.com/en/actions/using-github-hosted-runners/about-github-hosted-runners/about-github-hosted-runners#:~:text=14%20GB-,macos%2Dlatest%20or%20macos%2D14,-The%20macos%2Dlatestlabel
               extra-build-args: "",
               arch: x86_64,
-              flutter: "3.16.9",
-              ref: "914da2b86f73a314027833b1940784d657826503",
-              date: "20240219"
-            }
-          - {
-              target: x86_64-apple-darwin,
-              os: macos-13, #macos-latest or macos-14 use M1 now, https://docs.github.com/en/actions/using-github-hosted-runners/about-github-hosted-runners/about-github-hosted-runners#:~:text=14%20GB-,macos%2Dlatest%20or%20macos%2D14,-The%20macos%2Dlatestlabel
-              extra-build-args: "",
-              arch: x86_64,
-              flutter: "3.16.9",
-              ref: "06b3894249c14610c71d565cff1634b4ebb75326",
-              date: "20240119"
-            }
-          - {
-              target: x86_64-apple-darwin,
-              os: macos-13, #macos-latest or macos-14 use M1 now, https://docs.github.com/en/actions/using-github-hosted-runners/about-github-hosted-runners/about-github-hosted-runners#:~:text=14%20GB-,macos%2Dlatest%20or%20macos%2D14,-The%20macos%2Dlatestlabel
-              extra-build-args: "",
-              arch: x86_64,
-              flutter: "3.16.9",
-              ref: "f6509e3fd6917aa976bad2fc684182601ebf2434",
-              date: "20231219"
+              flutter: "3.13.9",
+              ref: "ab982e86c391dc31aba67e9439c0bd93143b84af",
+              date: "20231010"
             }
     steps:
       - name: Export GitHub Actions cache environment variables
