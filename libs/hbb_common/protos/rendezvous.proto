@@ -21,6 +21,7 @@ message PunchHoleRequest {
   string licence_key = 3;
   ConnType conn_type = 4;
   string token = 5;
+  string version = 6;
 }
 
 message PunchHole { 
@@ -62,6 +63,10 @@ message RegisterPk {
   string old_id = 4;
 }
 
+message HealthCheck {
+  string token = 1;
+}
+
 message RegisterPkResponse {
   enum Result {
     OK = 0;
@@ -92,6 +97,7 @@ message PunchHoleResponse {
     bool is_local = 6;
   }
   string other_failure = 7;
+  int32 feedback = 8;
 }
 
 message ConfigUpdate {
@@ -122,6 +128,7 @@ message RelayResponse {
   string refuse_reason = 6;
   string version = 7;
   string request_region = 8;
+  int32 feedback = 9;
 }
 
 message SoftwareUpdate { string url = 1; }
@@ -190,5 +197,6 @@ message RendezvousMessage {
     OnlineRequest online_request = 23;
     OnlineResponse online_response = 24;
     KeyExchange key_exchange = 25;
+    HealthCheck hc = 26;
   }
 }
