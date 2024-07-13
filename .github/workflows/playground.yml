@@ -146,7 +146,6 @@ jobs:
       - name: Install flutter rust bridge deps
         shell: bash
         run: |
-          rm -rf Cargo.lock
           cargo install flutter_rust_bridge_codegen --version ${{ matrix.job.bridge }} --features "uuid"
           # below works for mac to make buildable on 3.13.9
           # pushd flutter/lib; find . -name "*.dart" | xargs -I{} sed -i '' 's/textScaler: TextScaler.linear(\(.*\)),/textScaleFactor: \1,/g' {}; popd;
