@@ -277,12 +277,10 @@ class _RemotePageState extends State<RemotePage> {
     });
   }
 
-  bool get keyboard => gFFI.ffiModel.permissions['keyboard'] != false;
-
   Widget _bottomWidget() => _showGestureHelp
       ? getGestureHelp()
       : (_showBar && gFFI.ffiModel.pi.displays.isNotEmpty
-          ? getBottomAppBar(keyboard)
+          ? getBottomAppBar()
           : Offstage());
 
   @override
@@ -349,7 +347,7 @@ class _RemotePageState extends State<RemotePage> {
                   return Container(
                     color: kColorCanvas,
                     child: isWebDesktop
-                        ? getBodyForDesktopWithListener(keyboard)
+                        ? getBodyForDesktopWithListener()
                         : SafeArea(
                             child:
                                 OrientationBuilder(builder: (ctx, orientation) {
@@ -381,9 +379,9 @@ class _RemotePageState extends State<RemotePage> {
   }
 
   Widget getRawPointerAndKeyBody(Widget child) {
-    final keyboard = gFFI.ffiModel.permissions['keyboard'] != false;
+    final ffiModel = Provider.of<FfiModel>(context);
     return RawPointerMouseRegion(
-      cursor: keyboard ? SystemMouseCursors.none : MouseCursor.defer,
+      cursor: ffiModel.keyboard ? SystemMouseCursors.none : MouseCursor.defer,
       inputModel: inputModel,
       // Disable RawKeyFocusScope before the connecting is established.
       // The "Delete" key on the soft keyboard may be grabbed when inputting the password dialog.
@@ -396,7 +394,8 @@ class _RemotePageState extends State<RemotePage> {
     );
   }
 
-  Widget getBottomAppBar(bool keyboard) {
+  Widget getBottomAppBar() {
+    final ffiModel = Provider.of<FfiModel>(context);
     return BottomAppBar(
       elevation: 10,
       color: MyTheme.accent,
@@ -422,7 +421,7 @@ class _RemotePageState extends State<RemotePage> {
                       },
                     )
                   ] +
-                  (isWebDesktop
+                  (isWebDesktop || ffiModel.viewOnly || !ffiModel.keyboard
                       ? []
                       : gFFI.ffiModel.isPeerAndroid
                           ? [
@@ -534,19 +533,20 @@ class _RemotePageState extends State<RemotePage> {
             ),
           ];
           if (showCursorPaint) {
-            paints.add(CursorPaint());
+            paints.add(CursorPaint(widget.id));
           }
           return paints;
         }()));
   }
 
-  Widget getBodyForDesktopWithListener(bool keyboard) {
+  Widget getBodyForDesktopWithListener() {
+    final ffiModel = Provider.of<FfiModel>(context);
     var paints = <Widget>[ImagePaint()];
     if (showCursorPaint) {
       final cursor = bind.sessionGetToggleOptionSync(
           sessionId: sessionId, arg: 'show-remote-cursor');
-      if (keyboard || cursor) {
-        paints.add(CursorPaint());
+      if (ffiModel.keyboard || cursor) {
+        paints.add(CursorPaint(widget.id));
       }
     }
     return Container(
@@ -949,22 +949,34 @@ class ImagePaint extends StatelessWidget {
 }
 
 class CursorPaint extends StatelessWidget {
+  late final String id;
+  CursorPaint(this.id);
+
   @override
   Widget build(BuildContext context) {
     final m = Provider.of<CursorModel>(context);
     final c = Provider.of<CanvasModel>(context);
+    final ffiModel = Provider.of<FfiModel>(context);
     final adjust = gFFI.cursorModel.adjustForKeyboard();
     final s = c.scale;
     double hotx = m.hotx;
     double hoty = m.hoty;
-    if (m.image == null) {
+    var image = m.image;
+    if (image == null) {
       if (preDefaultCursor.image != null) {
+        image = preDefaultCursor.image;
         hotx = preDefaultCursor.image!.width / 2;
         hoty = preDefaultCursor.image!.height / 2;
       }
     }
-
-    final image = m.image ?? preDefaultCursor.image;
+    if (preForbiddenCursor.image != null &&
+        !ffiModel.viewOnly &&
+        !ffiModel.keyboard &&
+        !ShowRemoteCursorState.find(id).value) {
+      image = preForbiddenCursor.image;
+      hotx = preForbiddenCursor.image!.width / 2;
+      hoty = preForbiddenCursor.image!.height / 2;
+    }
     if (image == null) {
       return Offstage();
     }
@@ -1060,22 +1072,40 @@ void showOptions(
     var codec = (codecRadios.isNotEmpty ? codecRadios[0].groupValue : '').obs;
     final radios = [
       for (var e in viewStyleRadios)
-        Obx(() => getRadio<String>(e.child, e.value, viewStyle.value, (v) {
-              e.onChanged?.call(v);
-              if (v != null) viewStyle.value = v;
-            })),
+        Obx(() => getRadio<String>(
+            e.child,
+            e.value,
+            viewStyle.value,
+            e.onChanged != null
+                ? (v) {
+                    e.onChanged?.call(v);
+                    if (v != null) viewStyle.value = v;
+                  }
+                : null)),
       const Divider(color: MyTheme.border),
       for (var e in imageQualityRadios)
-        Obx(() => getRadio<String>(e.child, e.value, imageQuality.value, (v) {
-              e.onChanged?.call(v);
-              if (v != null) imageQuality.value = v;
-            })),
+        Obx(() => getRadio<String>(
+            e.child,
+            e.value,
+            imageQuality.value,
+            e.onChanged != null
+                ? (v) {
+                    e.onChanged?.call(v);
+                    if (v != null) imageQuality.value = v;
+                  }
+                : null)),
       const Divider(color: MyTheme.border),
       for (var e in codecRadios)
-        Obx(() => getRadio<String>(e.child, e.value, codec.value, (v) {
-              e.onChanged?.call(v);
-              if (v != null) codec.value = v;
-            })),
+        Obx(() => getRadio<String>(
+            e.child,
+            e.value,
+            codec.value,
+            e.onChanged != null
+                ? (v) {
+                    e.onChanged?.call(v);
+                    if (v != null) codec.value = v;
+                  }
+                : null)),
       if (codecRadios.isNotEmpty) const Divider(color: MyTheme.border),
     ];
     final rxCursorToggleValues = cursorToggles.map((e) => e.value.obs).toList();
@@ -1086,10 +1116,12 @@ void showOptions(
             contentPadding: EdgeInsets.zero,
             visualDensity: VisualDensity.compact,
             value: rxCursorToggleValues[e.key].value,
-            onChanged: (v) {
-              e.value.onChanged?.call(v);
-              if (v != null) rxCursorToggleValues[e.key].value = v;
-            },
+            onChanged: e.value.onChanged != null
+                ? (v) {
+                    e.value.onChanged?.call(v);
+                    if (v != null) rxCursorToggleValues[e.key].value = v;
+                  }
+                : null,
             title: e.value.child)))
         .toList();
 
@@ -1101,10 +1133,12 @@ void showOptions(
             contentPadding: EdgeInsets.zero,
             visualDensity: VisualDensity.compact,
             value: rxToggleValues[e.key].value,
-            onChanged: (v) {
-              e.value.onChanged?.call(v);
-              if (v != null) rxToggleValues[e.key].value = v;
-            },
+            onChanged: e.value.onChanged != null
+                ? (v) {
+                    e.value.onChanged?.call(v);
+                    if (v != null) rxToggleValues[e.key].value = v;
+                  }
+                : null,
             title: e.value.child)))
         .toList();
     final toggles = [
