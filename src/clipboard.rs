@@ -3,7 +3,9 @@ use clipboard_master::{ClipboardHandler, Master, Shutdown};
 use hbb_common::{log, message_proto::*, ResultType};
 use std::{
     sync::{mpsc::Sender, Arc, Mutex},
+    thread,
     thread::JoinHandle,
+    time::Duration,
 };
 
 pub const CLIPBOARD_NAME: &'static str = "clipboard";
@@ -249,6 +251,8 @@ impl ClipboardContext {
     fn set(&mut self, data: &[ClipboardData]) -> ResultType<()> {
         let _lock = ARBOARD_MTX.lock().unwrap();
         self.inner.set_formats(data)?;
+        #[cfg(target_os = "macos")]
+        thread::sleep(Duration::from_millis(50));
         Ok(())
     }
 }
