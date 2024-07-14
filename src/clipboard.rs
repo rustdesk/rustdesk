@@ -311,10 +311,7 @@ impl ClipboardSide {
         if data.len() == 0 {
             return false;
         }
-        match self {
-            ClipboardSide::Host => data[0] & 0b01 == 0b01,
-            ClipboardSide::Client => data[0] & 0b10 == 0b10,
-        }
+        data[0] & 0b11 != 0
     }
 }
 
