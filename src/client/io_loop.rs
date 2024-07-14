@@ -390,15 +390,15 @@ impl<T: InvokeUiSession> Remote<T> {
         if self.handler.is_file_transfer() || self.handler.is_port_forward() {
             return None;
         }
-        // NOTE:
-        // The client server and --server both use the same sound input device.
-        // It's better to distinguish the server side and client side.
-        // But it' not necessary for now, because it's not a common case.
-        // And it is immediately known when the input device is changed.
-        crate::audio_service::set_voice_call_input_device(get_default_sound_input(), false);
         // iOS does not have this server.
         #[cfg(not(any(target_os = "ios")))]
         {
+            // NOTE:
+            // The client server and --server both use the same sound input device.
+            // It's better to distinguish the server side and client side.
+            // But it' not necessary for now, because it's not a common case.
+            // And it is immediately known when the input device is changed.
+            crate::audio_service::set_voice_call_input_device(get_default_sound_input(), false);
             // Create a channel to receive error or closed message
             let (tx, rx) = std::sync::mpsc::channel();
             let (tx_audio_data, mut rx_audio_data) =

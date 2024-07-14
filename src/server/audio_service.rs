@@ -163,7 +163,6 @@ mod cpal_impl {
     }
 
     fn run_restart(sp: EmptyExtraFieldService, state: &mut State) -> ResultType<()> {
-        println!("REMOVE ME ========================= run_restart");
         state.reset();
         sp.snapshot(|_sps: ServiceSwap<_>| Ok(()))?;
         match &state.stream {
