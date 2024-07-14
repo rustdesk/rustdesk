@@ -733,7 +733,7 @@ impl Client {
     // If clipboard update is detected, the text will be sent to all sessions by `send_text_clipboard_msg`.
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     fn try_start_clipboard(
-        client_clip_ctx: Option<ClientClipboardContext>,
+        _client_clip_ctx: Option<ClientClipboardContext>,
     ) -> Option<UnboundedReceiver<()>> {
         let mut clipboard_lock = TEXT_CLIPBOARD_STATE.lock().unwrap();
         if clipboard_lock.running {
@@ -744,7 +744,8 @@ impl Client {
         let handler = ClientClipboardHandler {
             ctx: None,
             tx_cb_result,
-            client_clip_ctx,
+            #[cfg(not(feature = "flutter"))]
+            client_clip_ctx: _client_clip_ctx,
         };
 
         let (tx_start_res, rx_start_res) = mpsc::channel();
@@ -820,6 +821,7 @@ impl TextClipboardState {
 struct ClientClipboardHandler {
     ctx: Option<crate::clipboard::ClipboardContext>,
     tx_cb_result: Sender<CallbackResult>,
+    #[cfg(not(feature = "flutter"))]
     client_clip_ctx: Option<ClientClipboardContext>,
 }
 
