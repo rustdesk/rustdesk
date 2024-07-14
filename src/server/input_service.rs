@@ -312,7 +312,7 @@ pub fn new_window_focus() -> GenericService {
 fn update_last_cursor_pos(x: i32, y: i32) {
     let mut lock = LATEST_SYS_CURSOR_POS.lock().unwrap();
     if lock.1 .0 != x || lock.1 .1 != y {
-        (lock.0, lock.1) = (Instant::now(), (x, y))
+        (lock.0, lock.1) = (Some(Instant::now()), (x, y))
     }
 }
 
@@ -411,7 +411,7 @@ lazy_static::lazy_static! {
     };
     static ref KEYS_DOWN: Arc<Mutex<HashMap<KeysDown, Instant>>> = Default::default();
     static ref LATEST_PEER_INPUT_CURSOR: Arc<Mutex<Input>> = Default::default();
-    static ref LATEST_SYS_CURSOR_POS: Arc<Mutex<(Instant, (i32, i32))>> = Arc::new(Mutex::new((Instant::now().sub(MOUSE_MOVE_PROTECTION_TIMEOUT), (INVALID_CURSOR_POS, INVALID_CURSOR_POS))));
+    static ref LATEST_SYS_CURSOR_POS: Arc<Mutex<(Option<Instant>, (i32, i32))>> = Arc::new(Mutex::new((None, (INVALID_CURSOR_POS, INVALID_CURSOR_POS))));
 }
 static EXITING: AtomicBool = AtomicBool::new(false);
 
@@ -808,7 +808,13 @@ fn active_mouse_(conn: i32) -> bool {
     true
     /* this method is buggy (not working on macOS, making fast moving mouse event discarded here) and added latency (this is blocking way, must do in async way), so we disable it for now
     // out of time protection
-    if LATEST_SYS_CURSOR_POS.lock().unwrap().0.elapsed() > MOUSE_MOVE_PROTECTION_TIMEOUT {
+    if LATEST_SYS_CURSOR_POS
+        .lock()
+        .unwrap()
+        .0
+        .map(|t| t.elapsed() > MOUSE_MOVE_PROTECTION_TIMEOUT)
+        .unwrap_or(true)
+    {
         return true;
     }
 
