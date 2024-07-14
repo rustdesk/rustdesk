@@ -650,6 +650,18 @@ Future<List<TToggleMenu>> toolbarDisplayToggle(
     v.addAll(toolbarKeyboardToggles(ffi));
   }
 
+  // view mode (mobile only, desktop is in keyboard menu)
+  if (isMobile && versionCmp(pi.version, '1.2.0') >= 0) {
+    v.add(TToggleMenu(
+        value: ffiModel.viewOnly,
+        onChanged: (value) async {
+          if (value == null) return;
+          await bind.sessionToggleOption(
+              sessionId: ffi.sessionId, value: kOptionToggleViewOnly);
+          ffiModel.setViewOnly(id, value);
+        },
+        child: Text(translate('View Mode'))));
+  }
   return v;
 }
 
