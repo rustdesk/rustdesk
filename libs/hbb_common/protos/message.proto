@@ -81,6 +81,7 @@ message LoginRequest {
   uint64 session_id = 10;
   string version = 11;
   OSLogin os_login = 12;
+  string my_platform = 13;
 }
 
 message Auth2FA {
@@ -315,12 +316,24 @@ message Hash {
   string challenge = 2;
 }
 
+enum ClipboardFormat {
+  Text = 0;
+  Rtf = 1;
+  Html = 2;
+  ImageRgba = 21;
+  ImagePng = 22;
+  ImageSvg = 23;
+}
+
 message Clipboard {
   bool compress = 1;
   bytes content = 2;
   int32 width = 3;
   int32 height = 4;
+  ClipboardFormat format = 5;
 }
+
+message MultiClipboards { repeated Clipboard clipboards = 1; }
 
 enum FileType {
   Dir = 0;
@@ -816,5 +829,6 @@ message Message {
     PeerInfo peer_info = 25;
     PointerDeviceEvent pointer_device_event = 26;
     Auth2FA auth_2fa = 27;
+    MultiClipboards multi_clipboards = 28;
   }
 }
