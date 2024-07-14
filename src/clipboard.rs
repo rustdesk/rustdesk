@@ -255,7 +255,7 @@ impl ClipboardContext {
 
 pub fn is_support_multi_clipboard(peer_version: &str, peer_platform: &str) -> bool {
     use hbb_common::get_version_number;
-    get_version_number(peer_version) >= get_version_number("1.2.7")
+    get_version_number(peer_version) >= get_version_number("1.3.0")
         && !["", "Android", &whoami::Platform::Ios.to_string()].contains(&peer_platform)
 }
 

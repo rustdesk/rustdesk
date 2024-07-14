@@ -7,6 +7,18 @@ use std::{
     },
 };
 
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+use crate::clipboard::{update_clipboard, ClipboardSide, CLIPBOARD_INTERVAL};
+#[cfg(not(any(target_os = "ios")))]
+use crate::{audio_service, ConnInner, CLIENT_SERVER};
+use crate::{
+    client::{
+        self, new_voice_call_request, Client, Data, Interface, MediaData, MediaSender,
+        QualityStatus, MILLI1, SEC30,
+    },
+    common::get_default_sound_input,
+    ui_session_interface::{InvokeUiSession, Session},
+};
 #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
 use clipboard::ContextSend;
 use crossbeam_queue::ArrayQueue;
@@ -34,17 +46,6 @@ use hbb_common::{
 #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
 use hbb_common::{tokio::sync::Mutex as TokioMutex, ResultType};
 use scrap::CodecFormat;
-
-use crate::client::{
-    self, new_voice_call_request, Client, MediaData, MediaSender, QualityStatus, MILLI1, SEC30,
-};
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
-use crate::clipboard::{update_clipboard, ClipboardSide, CLIPBOARD_INTERVAL};
-use crate::common::{get_default_sound_input, set_sound_input};
-use crate::ui_session_interface::{InvokeUiSession, Session};
-#[cfg(not(any(target_os = "ios")))]
-use crate::{audio_service, ConnInner, CLIENT_SERVER};
-use crate::{client::Data, client::Interface};
 
 pub struct Remote<T: InvokeUiSession> {
     handler: Session<T>,
