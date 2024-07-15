@@ -283,7 +283,7 @@ async fn handle_received_peers(mut rx: UnboundedReceiver<config::DiscoveryPeer>)
     });
 
     let mut response_set = HashSet::new();
-    let mut last_write_time = Instant::now() - std::time::Duration::from_secs(4);
+    let mut last_write_time: Option<Instant> = None;
     loop {
         tokio::select! {
             data = rx.recv() => match data {
@@ -297,11 +297,11 @@ async fn handle_received_peers(mut rx: UnboundedReceiver<config::DiscoveryPeer>)
                         }
                     }
                     peers.insert(0, peer);
-                    if last_write_time.elapsed().as_millis() > 300 {
+                    if last_write_time.map(|t| t.elapsed().as_millis() > 300).unwrap_or(true)  {
                         config::LanPeers::store(&peers);
                         #[cfg(feature = "flutter")]
                         crate::flutter_ffi::main_load_lan_peers();
-                        last_write_time = Instant::now();
+                        last_write_time = Some(Instant::now());
                     }
                 }
                 None => {

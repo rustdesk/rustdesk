@@ -428,7 +428,7 @@ pub mod amyuni_idd {
 
     lazy_static::lazy_static! {
         static ref LOCK: Arc<Mutex<()>> = Default::default();
-        static ref LAST_PLUG_IN_HEADLESS_TIME: Arc<Mutex<Instant>> = Arc::new(Mutex::new(Instant::now().sub(Duration::from_secs(100))));
+        static ref LAST_PLUG_IN_HEADLESS_TIME: Arc<Mutex<Option<Instant>>> = Arc::new(Mutex::new(None));
     }
 
     fn get_deviceinstaller64_work_dir() -> ResultType<Option<Vec<u8>>> {
@@ -573,10 +573,12 @@ pub mod amyuni_idd {
 
     pub fn plug_in_headless() -> ResultType<()> {
         let mut tm = LAST_PLUG_IN_HEADLESS_TIME.lock().unwrap();
-        if tm.elapsed() < Duration::from_secs(3) {
-            bail!("Plugging in too frequently.");
+        if let Some(tm) = &mut *tm {
+            if tm.elapsed() < Duration::from_secs(3) {
+                bail!("Plugging in too frequently.");
+            }
         }
-        *tm = Instant::now();
+        *tm = Some(Instant::now());
         drop(tm);
 
         let mut is_async = false;
