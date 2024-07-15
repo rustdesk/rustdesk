@@ -415,33 +415,44 @@ pub fn install_path() -> String {
 
 #[inline]
 pub fn get_socks() -> Vec<String> {
-    #[cfg(any(target_os = "android", target_os = "ios"))]
-    return Vec::new();
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    {
-        let s = ipc::get_socks();
-        match s {
-            None => Vec::new(),
-            Some(s) => {
-                let mut v = Vec::new();
-                v.push(s.proxy);
-                v.push(s.username);
-                v.push(s.password);
-                v
-            }
+    let s = ipc::get_socks();
+    #[cfg(target_os = "android")]
+    let s = Config::get_socks();
+    #[cfg(target_os = "ios")]
+    let s: Option<config::Socks5Server> = None;
+    match s {
+        None => Vec::new(),
+        Some(s) => {
+            let mut v = Vec::new();
+            v.push(s.proxy);
+            v.push(s.username);
+            v.push(s.password);
+            v
         }
     }
 }
 
 #[inline]
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub fn set_socks(proxy: String, username: String, password: String) {
-    ipc::set_socks(config::Socks5Server {
+    let socks = config::Socks5Server {
         proxy,
         username,
         password,
-    })
-    .ok();
+    };
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    ipc::set_socks(socks).ok();
+    #[cfg(target_os = "android")]
+    {
+        if socks.proxy.is_empty() {
+            Config::set_socks(None);
+        } else {
+            Config::set_socks(Some(socks));
+        }
+        crate::common::test_nat_type();
+        crate::RendezvousMediator::restart();
+        log::info!("socks updated");
+    }
 }
 
 #[inline]
@@ -453,9 +464,6 @@ pub fn get_proxy_status() -> bool {
     #[cfg(any(target_os = "android", target_os = "ios"))]
     return false;
 }
-
-#[cfg(any(target_os = "android", target_os = "ios"))]
-pub fn set_socks(_: String, _: String, _: String) {}
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 #[inline]

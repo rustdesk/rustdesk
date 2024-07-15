@@ -1052,15 +1052,11 @@ class _DisplayMenuState extends State<_DisplayMenu> {
           ffi: widget.ffi,
           screenAdjustor: _screenAdjustor,
         ),
-        if (pi.isRustDeskIdd)
-          _RustDeskVirtualDisplayMenu(
-            id: widget.id,
+        if (showVirtualDisplayMenu(ffi))
+          _SubmenuButton(
             ffi: widget.ffi,
-          ),
-        if (pi.isAmyuniIdd)
-          _AmyuniVirtualDisplayMenu(
-            id: widget.id,
-            ffi: widget.ffi,
+            menuChildren: getVirtualDisplayMenuChildren(ffi, id, null),
+            child: Text(translate("Virtual display")),
           ),
         cursorToggles(),
         Divider(),
@@ -1556,155 +1552,6 @@ class _ResolutionsMenuState extends State<_ResolutionsMenu> {
     }
     return bestFitResolution.width == rect?.width.toInt() &&
         bestFitResolution.height == rect?.height.toInt();
-  }
-}
-
-class _RustDeskVirtualDisplayMenu extends StatefulWidget {
-  final String id;
-  final FFI ffi;
-
-  _RustDeskVirtualDisplayMenu({
-    Key? key,
-    required this.id,
-    required this.ffi,
-  }) : super(key: key);
-
-  @override
-  State<_RustDeskVirtualDisplayMenu> createState() =>
-      _RustDeskVirtualDisplayMenuState();
-}
-
-class _RustDeskVirtualDisplayMenuState
-    extends State<_RustDeskVirtualDisplayMenu> {
-  @override
-  void initState() {
-    super.initState();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    if (widget.ffi.ffiModel.pi.platform != kPeerPlatformWindows) {
-      return Offstage();
-    }
-    if (!widget.ffi.ffiModel.pi.isInstalled) {
-      return Offstage();
-    }
-
-    final virtualDisplays = widget.ffi.ffiModel.pi.RustDeskVirtualDisplays;
-    final privacyModeState = PrivacyModeState.find(widget.id);
-
-    final children = <Widget>[];
-    for (var i = 0; i < kMaxVirtualDisplayCount; i++) {
-      children.add(Obx(() => CkbMenuButton(
-            value: virtualDisplays.contains(i + 1),
-            onChanged: privacyModeState.isNotEmpty
-                ? null
-                : (bool? value) async {
-                    if (value != null) {
-                      bind.sessionToggleVirtualDisplay(
-                          sessionId: widget.ffi.sessionId,
-                          index: i + 1,
-                          on: value);
-                    }
-                  },
-            child: Text('${translate('Virtual display')} ${i + 1}'),
-            ffi: widget.ffi,
-          )));
-    }
-    children.add(Divider());
-    children.add(Obx(() => MenuButton(
-          onPressed: privacyModeState.isNotEmpty
-              ? null
-              : () {
-                  bind.sessionToggleVirtualDisplay(
-                      sessionId: widget.ffi.sessionId,
-                      index: kAllVirtualDisplay,
-                      on: false);
-                },
-          ffi: widget.ffi,
-          child: Text(translate('Plug out all')),
-        )));
-    return _SubmenuButton(
-      ffi: widget.ffi,
-      menuChildren: children,
-      child: Text(translate("Virtual display")),
-    );
-  }
-}
-
-class _AmyuniVirtualDisplayMenu extends StatefulWidget {
-  final String id;
-  final FFI ffi;
-
-  _AmyuniVirtualDisplayMenu({
-    Key? key,
-    required this.id,
-    required this.ffi,
-  }) : super(key: key);
-
-  @override
-  State<_AmyuniVirtualDisplayMenu> createState() =>
-      _AmiyuniVirtualDisplayMenuState();
-}
-
-class _AmiyuniVirtualDisplayMenuState extends State<_AmyuniVirtualDisplayMenu> {
-  @override
-  void initState() {
-    super.initState();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    if (widget.ffi.ffiModel.pi.platform != kPeerPlatformWindows) {
-      return Offstage();
-    }
-    if (!widget.ffi.ffiModel.pi.isInstalled) {
-      return Offstage();
-    }
-
-    final count = widget.ffi.ffiModel.pi.amyuniVirtualDisplayCount;
-    final privacyModeState = PrivacyModeState.find(widget.id);
-
-    final children = <Widget>[
-      Obx(() => Row(
-            children: [
-              TextButton(
-                onPressed: privacyModeState.isNotEmpty || count == 0
-                    ? null
-                    : () => bind.sessionToggleVirtualDisplay(
-                        sessionId: widget.ffi.sessionId, index: 0, on: false),
-                child: Icon(Icons.remove),
-              ),
-              Text(count.toString()),
-              TextButton(
-                onPressed: privacyModeState.isNotEmpty || count == 4
-                    ? null
-                    : () => bind.sessionToggleVirtualDisplay(
-                        sessionId: widget.ffi.sessionId, index: 0, on: true),
-                child: Icon(Icons.add),
-              ),
-            ],
-          )),
-      Divider(),
-      Obx(() => MenuButton(
-            onPressed: privacyModeState.isNotEmpty || count == 0
-                ? null
-                : () {
-                    bind.sessionToggleVirtualDisplay(
-                        sessionId: widget.ffi.sessionId,
-                        index: kAllVirtualDisplay,
-                        on: false);
-                  },
-            ffi: widget.ffi,
-            child: Text(translate('Plug out all')),
-          )),
-    ];
-
-    return _SubmenuButton(
-      ffi: widget.ffi,
-      menuChildren: children,
-      child: Text(translate("Virtual display")),
-    );
   }
 }
 
