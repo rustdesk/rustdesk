@@ -1158,12 +1158,108 @@ void showOptions(
       );
     }
 
+    var popupDialogMenus = List<Widget>.empty(growable: true);
+    final resolution = getResolutionMenu(gFFI, id);
+    if (resolution != null) {
+      popupDialogMenus.add(ListTile(
+        contentPadding: EdgeInsets.zero,
+        visualDensity: VisualDensity.compact,
+        title: resolution.child,
+        onTap: () {
+          close();
+          resolution.onPressed();
+        },
+      ));
+    }
+    final virtualDisplayMenu = getVirtualDisplayMenu(gFFI, id);
+    if (virtualDisplayMenu != null) {
+      popupDialogMenus.add(ListTile(
+        contentPadding: EdgeInsets.zero,
+        visualDensity: VisualDensity.compact,
+        title: virtualDisplayMenu.child,
+        onTap: () {
+          close();
+          virtualDisplayMenu.onPressed();
+        },
+      ));
+    }
+    if (popupDialogMenus.isNotEmpty) {
+      popupDialogMenus.add(const Divider(color: MyTheme.border));
+    }
+
     return CustomAlertDialog(
       content: Column(
           mainAxisSize: MainAxisSize.min,
-          children: displays + radios + toggles + [privacyModeWidget]),
+          children: displays +
+              radios +
+              popupDialogMenus +
+              toggles +
+              [privacyModeWidget]),
     );
   }, clickMaskDismiss: true, backDismiss: true);
+}
+
+TTextMenu? getVirtualDisplayMenu(FFI ffi, String id) {
+  if (!showVirtualDisplayMenu(ffi)) {
+    return null;
+  }
+  return TTextMenu(
+    child: Text(translate("Virtual display")),
+    onPressed: () {
+      ffi.dialogManager.show((setState, close, context) {
+        final children = getVirtualDisplayMenuChildren(ffi, id, close);
+        return CustomAlertDialog(
+          title: Text(translate('Virtual display')),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: children,
+          ),
+        );
+      }, clickMaskDismiss: true, backDismiss: true);
+    },
+  );
+}
+
+TTextMenu? getResolutionMenu(FFI ffi, String id) {
+  final ffiModel = ffi.ffiModel;
+  final pi = ffiModel.pi;
+  final resolutions = pi.resolutions;
+  final display = pi.tryGetDisplayIfNotAllDisplay(display: pi.currentDisplay);
+
+  final visible =
+      ffiModel.keyboard && (resolutions.length > 1) && display != null;
+  if (!visible) return null;
+
+  return TTextMenu(
+    child: Text(translate("Resolution")),
+    onPressed: () {
+      ffi.dialogManager.show((setState, close, context) {
+        final children = resolutions
+            .map((e) => getRadio<String>(
+                  Text('${e.width}x${e.height}'),
+                  '${e.width}x${e.height}',
+                  '${display.width}x${display.height}',
+                  (value) {
+                    close();
+                    bind.sessionChangeResolution(
+                      sessionId: ffi.sessionId,
+                      display: pi.currentDisplay,
+                      width: e.width,
+                      height: e.height,
+                    );
+                  },
+                ))
+            .toList();
+        return CustomAlertDialog(
+          title: Text(translate('Resolution')),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: children,
+          ),
+        );
+      }, clickMaskDismiss: true, backDismiss: true);
+    },
+  );
 }
 
 void sendPrompt(bool isMac, String key) {
