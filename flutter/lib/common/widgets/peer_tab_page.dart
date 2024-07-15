@@ -399,9 +399,9 @@ class _PeerTabPageState extends State<PeerTabPage>
             final peers = model.selectedPeers;
             switch (model.currentTab) {
               case 0:
-                peers.map((p) async {
+                for (var p in peers) {
                   await bind.mainRemovePeer(id: p.id);
-                }).toList();
+                }
                 await bind.mainLoadRecentPeers();
                 break;
               case 1:
@@ -413,9 +413,9 @@ class _PeerTabPageState extends State<PeerTabPage>
                 await bind.mainLoadFavPeers();
                 break;
               case 2:
-                peers.map((p) async {
+                for (var p in peers) {
                   await bind.mainRemoveDiscovered(id: p.id);
-                }).toList();
+                }
                 await bind.mainLoadLanPeers();
                 break;
               case 3:
