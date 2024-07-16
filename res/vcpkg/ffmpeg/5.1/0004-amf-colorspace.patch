@@ -1,0 +1,172 @@
+From 7c29a6936e7b7a3a3a0bcc88894f2b739bdae9cf Mon Sep 17 00:00:00 2001
+From: 21pages <sunboeasy@gmail.com>
+Date: Thu, 11 Jul 2024 16:24:27 +0800
+Subject: [PATCH] amf colorspace
+
+Signed-off-by: 21pages <sunboeasy@gmail.com>
+---
+ libavcodec/amfenc.h      |  1 +
+ libavcodec/amfenc_h264.c | 45 ++++++++++++++++++++++++++++++++++
+ libavcodec/amfenc_hevc.c | 52 ++++++++++++++++++++++++++++++++++++++++
+ 3 files changed, 98 insertions(+)
+
+diff --git a/libavcodec/amfenc.h b/libavcodec/amfenc.h
+index 31172645f2..493e01603d 100644
+--- a/libavcodec/amfenc.h
++++ b/libavcodec/amfenc.h
+@@ -23,6 +23,7 @@
+ 
+ #include <AMF/components/VideoEncoderVCE.h>
+ #include <AMF/components/VideoEncoderHEVC.h>
++#include <AMF/components/ColorSpace.h>
+ 
+ #include "libavutil/fifo.h"
+ 
+diff --git a/libavcodec/amfenc_h264.c b/libavcodec/amfenc_h264.c
+index f55dbc80f0..a916b35f9c 100644
+--- a/libavcodec/amfenc_h264.c
++++ b/libavcodec/amfenc_h264.c
+@@ -139,6 +139,9 @@ static av_cold int amf_encode_init_h264(AVCodecContext *avctx)
+     AMFRate                          framerate;
+     AMFSize                          framesize = AMFConstructSize(avctx->width, avctx->height);
+     int                              deblocking_filter = (avctx->flags & AV_CODEC_FLAG_LOOP_FILTER) ? 1 : 0;
++    amf_int64                        color_depth;
++    amf_int64                        color_profile;
++    enum                             AVPixelFormat pix_fmt;
+ 
+     if (avctx->framerate.num > 0 && avctx->framerate.den > 0) {
+         framerate = AMFConstructRate(avctx->framerate.num, avctx->framerate.den);
+@@ -199,11 +202,53 @@ static av_cold int amf_encode_init_h264(AVCodecContext *avctx)
+         AMF_ASSIGN_PROPERTY_RATIO(res, ctx->encoder, AMF_VIDEO_ENCODER_ASPECT_RATIO, ratio);
+     }
+ 
++    color_profile = AMF_VIDEO_CONVERTER_COLOR_PROFILE_UNKNOWN;
+     /// Color Range (Partial/TV/MPEG or Full/PC/JPEG)
+     if (avctx->color_range == AVCOL_RANGE_JPEG) {
+         AMF_ASSIGN_PROPERTY_BOOL(res, ctx->encoder, AMF_VIDEO_ENCODER_FULL_RANGE_COLOR, 1);
++        /// Color Space for Full (JPEG) Range
++        switch (avctx->colorspace) {
++        case AVCOL_SPC_SMPTE170M:
++            color_profile = AMF_VIDEO_CONVERTER_COLOR_PROFILE_FULL_601;
++            break;
++        case AVCOL_SPC_BT709:
++            color_profile = AMF_VIDEO_CONVERTER_COLOR_PROFILE_FULL_709;
++            break;
++        case AVCOL_SPC_BT2020_NCL:
++        case AVCOL_SPC_BT2020_CL:
++            color_profile = AMF_VIDEO_CONVERTER_COLOR_PROFILE_FULL_2020;
++            break;
++        }
++    } else {
++        AMF_ASSIGN_PROPERTY_BOOL(res, ctx->encoder, AMF_VIDEO_ENCODER_FULL_RANGE_COLOR, 0);
++        /// Color Space for Limited (MPEG) range
++        switch (avctx->colorspace) {
++        case AVCOL_SPC_SMPTE170M:
++            color_profile = AMF_VIDEO_CONVERTER_COLOR_PROFILE_601;
++            break;
++        case AVCOL_SPC_BT709:
++            color_profile = AMF_VIDEO_CONVERTER_COLOR_PROFILE_709;
++            break;
++        case AVCOL_SPC_BT2020_NCL:
++        case AVCOL_SPC_BT2020_CL:
++            color_profile = AMF_VIDEO_CONVERTER_COLOR_PROFILE_2020;
++            break;
++        }
++    }
++    /// Color Depth
++    pix_fmt = avctx->hw_frames_ctx ? ((AVHWFramesContext*)avctx->hw_frames_ctx->data)->sw_format
++                                : avctx->pix_fmt;
++    color_depth = AMF_COLOR_BIT_DEPTH_8;
++    if (pix_fmt == AV_PIX_FMT_P010) {
++        color_depth = AMF_COLOR_BIT_DEPTH_10;
+     }
+ 
++    AMF_ASSIGN_PROPERTY_INT64(res, ctx->encoder, AMF_VIDEO_ENCODER_COLOR_BIT_DEPTH, color_depth);
++    AMF_ASSIGN_PROPERTY_INT64(res, ctx->encoder, AMF_VIDEO_ENCODER_OUTPUT_COLOR_PROFILE, color_profile);
++    /// Color Transfer Characteristics (AMF matches ISO/IEC)
++    AMF_ASSIGN_PROPERTY_INT64(res, ctx->encoder, AMF_VIDEO_ENCODER_OUTPUT_TRANSFER_CHARACTERISTIC, (amf_int64)avctx->color_trc);
++    /// Color Primaries (AMF matches ISO/IEC)
++    AMF_ASSIGN_PROPERTY_INT64(res, ctx->encoder, AMF_VIDEO_ENCODER_OUTPUT_COLOR_PRIMARIES, (amf_int64)avctx->color_primaries);
+     // autodetect rate control method
+     if (ctx->rate_control_mode == AMF_VIDEO_ENCODER_RATE_CONTROL_METHOD_UNKNOWN) {
+         if (ctx->qp_i != -1 || ctx->qp_p != -1 || ctx->qp_b != -1) {
+diff --git a/libavcodec/amfenc_hevc.c b/libavcodec/amfenc_hevc.c
+index 7a40bcad31..e7979d9aeb 100644
+--- a/libavcodec/amfenc_hevc.c
++++ b/libavcodec/amfenc_hevc.c
+@@ -106,6 +106,9 @@ static av_cold int amf_encode_init_hevc(AVCodecContext *avctx)
+     AMFRate             framerate;
+     AMFSize             framesize = AMFConstructSize(avctx->width, avctx->height);
+     int                 deblocking_filter = (avctx->flags & AV_CODEC_FLAG_LOOP_FILTER) ? 1 : 0;
++    amf_int64           color_depth;
++    amf_int64           color_profile;
++    enum                AVPixelFormat pix_fmt;
+ 
+     if (avctx->framerate.num > 0 && avctx->framerate.den > 0) {
+         framerate = AMFConstructRate(avctx->framerate.num, avctx->framerate.den);
+@@ -130,6 +133,9 @@ static av_cold int amf_encode_init_hevc(AVCodecContext *avctx)
+     case FF_PROFILE_HEVC_MAIN:
+         profile = AMF_VIDEO_ENCODER_HEVC_PROFILE_MAIN;
+         break;
++    case FF_PROFILE_HEVC_MAIN_10:
++        profile = AMF_VIDEO_ENCODER_HEVC_PROFILE_MAIN_10;
++        break;
+     default:
+         break;
+     }
+@@ -158,6 +164,52 @@ static av_cold int amf_encode_init_hevc(AVCodecContext *avctx)
+         AMF_ASSIGN_PROPERTY_RATIO(res, ctx->encoder, AMF_VIDEO_ENCODER_HEVC_ASPECT_RATIO, ratio);
+     }
+ 
++    // Color Metadata
++    color_profile = AMF_VIDEO_CONVERTER_COLOR_PROFILE_UNKNOWN;
++    if (avctx->color_range == AVCOL_RANGE_JPEG) {
++        AMF_ASSIGN_PROPERTY_BOOL(res, ctx->encoder, AMF_VIDEO_ENCODER_HEVC_NOMINAL_RANGE, 1);
++        switch (avctx->colorspace) {
++        case AVCOL_SPC_SMPTE170M:
++            color_profile = AMF_VIDEO_CONVERTER_COLOR_PROFILE_FULL_601;
++            break;
++        case AVCOL_SPC_BT709:
++            color_profile = AMF_VIDEO_CONVERTER_COLOR_PROFILE_FULL_709;
++            break;
++        case AVCOL_SPC_BT2020_NCL:
++        case AVCOL_SPC_BT2020_CL:
++            color_profile = AMF_VIDEO_CONVERTER_COLOR_PROFILE_FULL_2020;
++            break;
++        }
++    } else {
++        AMF_ASSIGN_PROPERTY_BOOL(res, ctx->encoder, AMF_VIDEO_ENCODER_HEVC_NOMINAL_RANGE, 0);
++        switch (avctx->colorspace) {
++        case AVCOL_SPC_SMPTE170M:
++            color_profile = AMF_VIDEO_CONVERTER_COLOR_PROFILE_601;
++            break;
++        case AVCOL_SPC_BT709:
++            color_profile = AMF_VIDEO_CONVERTER_COLOR_PROFILE_709;
++            break;
++        case AVCOL_SPC_BT2020_NCL:
++        case AVCOL_SPC_BT2020_CL:
++            color_profile = AMF_VIDEO_CONVERTER_COLOR_PROFILE_2020;
++            break;
++        }
++    }
++    /// Color Depth
++    pix_fmt = avctx->hw_frames_ctx ? ((AVHWFramesContext*)avctx->hw_frames_ctx->data)->sw_format
++                                    : avctx->pix_fmt;
++    color_depth = AMF_COLOR_BIT_DEPTH_8;
++    if (pix_fmt == AV_PIX_FMT_P010) {
++        color_depth = AMF_COLOR_BIT_DEPTH_10;
++    }
++
++    AMF_ASSIGN_PROPERTY_INT64(res, ctx->encoder, AMF_VIDEO_ENCODER_HEVC_COLOR_BIT_DEPTH, color_depth);
++    AMF_ASSIGN_PROPERTY_INT64(res, ctx->encoder, AMF_VIDEO_ENCODER_HEVC_OUTPUT_COLOR_PROFILE, color_profile);
++    AMF_ASSIGN_PROPERTY_INT64(res, ctx->encoder, AMF_VIDEO_ENCODER_HEVC_OUTPUT_TRANSFER_CHARACTERISTIC, (amf_int64)avctx->color_trc);
++    AMF_ASSIGN_PROPERTY_INT64(res, ctx->encoder, AMF_VIDEO_ENCODER_HEVC_OUTPUT_COLOR_PRIMARIES, (amf_int64)avctx->color_primaries);
++
++
++
+     // Picture control properties
+     AMF_ASSIGN_PROPERTY_INT64(res, ctx->encoder, AMF_VIDEO_ENCODER_HEVC_NUM_GOPS_PER_IDR, ctx->gops_per_idr);
+     AMF_ASSIGN_PROPERTY_INT64(res, ctx->encoder, AMF_VIDEO_ENCODER_HEVC_GOP_SIZE, avctx->gop_size);
+-- 
+2.39.3 (Apple Git-145)
+
