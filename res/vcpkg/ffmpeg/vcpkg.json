@@ -19,9 +19,6 @@
     }
   ],
   "default-features": [
-    "avcodec",
-    "avdevice",
-    "avformat"
   ],
   "features": {
     "amf": {
