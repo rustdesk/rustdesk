@@ -188,7 +188,7 @@ fn gen_vcpkg_package(package: &str, ffi_header: &str, generated: &str, regex: &s
     generate_bindings(&ffi_header, &includes, &ffi_rs, &exact_file, regex);
 }
 
-// If you have problems installing ffmpeg, you can disable hwcodec feature and disable this function.
+// If you have problems installing ffmpeg, you can download $VCPKG_ROOT/installed from ci
 fn ffmpeg() {
     // ffmpeg
     let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap();
