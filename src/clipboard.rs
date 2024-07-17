@@ -1,25 +1,34 @@
-use std::sync::{
-    atomic::{AtomicU64, Ordering},
-    Arc, Mutex,
-};
-
-use clipboard_master::{CallbackResult, ClipboardHandler, Master, Shutdown};
-use hbb_common::{
-    allow_err,
-    compress::{compress as compress_func, decompress},
-    log,
-    message_proto::*,
-    ResultType,
+use arboard::{ClipboardData, ClipboardFormat};
+use clipboard_master::{ClipboardHandler, Master, Shutdown};
+use hbb_common::{log, message_proto::*, ResultType};
+use std::{
+    sync::{mpsc::Sender, Arc, Mutex},
+    thread,
+    thread::JoinHandle,
+    time::Duration,
 };
 
 pub const CLIPBOARD_NAME: &'static str = "clipboard";
 pub const CLIPBOARD_INTERVAL: u64 = 333;
-const FAKE_SVG_WIDTH: usize = 999999;
+
+// This format is used to store the flag in the clipboard.
+const RUSTDESK_CLIPBOARD_OWNER_FORMAT: &'static str = "dyn.com.rustdesk.owner";
 
 lazy_static::lazy_static! {
-    pub static ref CONTENT: Arc<Mutex<ClipboardData>> = Default::default();
     static ref ARBOARD_MTX: Arc<Mutex<()>> = Arc::new(Mutex::new(()));
+    // cache the clipboard msg
+    static ref LAST_MULTI_CLIPBOARDS: Arc<Mutex<MultiClipboards>> = Arc::new(Mutex::new(MultiClipboards::new()));
 }
+
+const SUPPORTED_FORMATS: &[ClipboardFormat] = &[
+    ClipboardFormat::Text,
+    ClipboardFormat::Html,
+    ClipboardFormat::Rtf,
+    ClipboardFormat::ImageRgba,
+    ClipboardFormat::ImagePng,
+    ClipboardFormat::ImageSvg,
+    ClipboardFormat::Special(RUSTDESK_CLIPBOARD_OWNER_FORMAT),
+];
 
 #[cfg(all(target_os = "linux", feature = "unix-file-copy-paste"))]
 static X11_CLIPBOARD: once_cell::sync::OnceCell<x11_clipboard::Clipboard> =
@@ -61,7 +70,7 @@ fn parse_plain_uri_list(v: Vec<u8>) -> Result<String, String> {
 
 #[cfg(all(target_os = "linux", feature = "unix-file-copy-paste"))]
 impl ClipboardContext {
-    pub fn new(_listen: bool) -> Result<Self, String> {
+    pub fn new() -> Result<Self, String> {
         let clipboard = get_clipboard()?;
         let string_getter = clipboard
             .getter
@@ -128,56 +137,42 @@ impl ClipboardContext {
 
 pub fn check_clipboard(
     ctx: &mut Option<ClipboardContext>,
-    old: Option<Arc<Mutex<ClipboardData>>>,
+    side: ClipboardSide,
+    force: bool,
 ) -> Option<Message> {
     if ctx.is_none() {
-        *ctx = ClipboardContext::new(true).ok();
+        *ctx = ClipboardContext::new().ok();
     }
     let ctx2 = ctx.as_mut()?;
-    let side = if old.is_none() { "host" } else { "client" };
-    let old = if let Some(old) = old {
-        old
-    } else {
-        CONTENT.clone()
-    };
-    let content = ctx2.get();
+    let content = ctx2.get(side, force);
     if let Ok(content) = content {
         if !content.is_empty() {
-            if matches!(content, ClipboardData::Text(_)) {
-                // Skip the text if the last content is image-svg/html
-                if ctx2.is_last_plain {
-                    return None;
-                }
-            }
-
-            let changed = content != *old.lock().unwrap();
-            if changed {
-                log::info!("{} update found on {}", CLIPBOARD_NAME, side);
-                let msg = content.create_msg();
-                *old.lock().unwrap() = content;
-                return Some(msg);
-            }
+            let mut msg = Message::new();
+            let clipboards = proto::create_multi_clipboards(content);
+            msg.set_multi_clipboards(clipboards.clone());
+            *LAST_MULTI_CLIPBOARDS.lock().unwrap() = clipboards;
+            return Some(msg);
         }
     }
     None
 }
 
-fn update_clipboard_(clipboard: Clipboard, old: Option<Arc<Mutex<ClipboardData>>>) {
-    let content = ClipboardData::from_msg(clipboard);
-    if content.is_empty() {
+fn update_clipboard_(multi_clipboards: Vec<Clipboard>, side: ClipboardSide) {
+    let mut to_update_data = proto::from_multi_clipbards(multi_clipboards);
+    if to_update_data.is_empty() {
         return;
     }
-    match ClipboardContext::new(false) {
+    match ClipboardContext::new() {
         Ok(mut ctx) => {
-            let side = if old.is_none() { "host" } else { "client" };
-            let old = if let Some(old) = old {
-                old
+            to_update_data.push(ClipboardData::Special((
+                RUSTDESK_CLIPBOARD_OWNER_FORMAT.to_owned(),
+                side.get_owner_data(),
+            )));
+            if let Err(e) = ctx.set(&to_update_data) {
+                log::debug!("Failed to set clipboard: {}", e);
             } else {
-                CONTENT.clone()
-            };
-            allow_err!(ctx.set(&content));
-            *old.lock().unwrap() = content;
-            log::debug!("{} updated on {}", CLIPBOARD_NAME, side);
+                log::debug!("{} updated on {}", CLIPBOARD_NAME, side);
+            }
         }
         Err(err) => {
             log::error!("Failed to create clipboard context: {}", err);
@@ -185,143 +180,21 @@ fn update_clipboard_(clipboard: Clipboard, old: Option<Arc<Mutex<ClipboardData>>
     }
 }
 
-pub fn update_clipboard(clipboard: Clipboard, old: Option<Arc<Mutex<ClipboardData>>>) {
+pub fn update_clipboard(multi_clipboards: Vec<Clipboard>, side: ClipboardSide) {
     std::thread::spawn(move || {
-        update_clipboard_(clipboard, old);
+        update_clipboard_(multi_clipboards, side);
     });
-}
-
-#[derive(Clone)]
-pub enum ClipboardData {
-    Text(String),
-    Image(arboard::ImageData<'static>, u64),
-    Empty,
-}
-
-impl Default for ClipboardData {
-    fn default() -> Self {
-        ClipboardData::Empty
-    }
-}
-
-impl ClipboardData {
-    fn image(image: arboard::ImageData<'static>) -> ClipboardData {
-        let hash = 0;
-        /*
-        use std::hash::{DefaultHasher, Hash, Hasher};
-        let mut hasher = DefaultHasher::new();
-        image.bytes.hash(&mut hasher);
-        let hash = hasher.finish();
-        */
-        ClipboardData::Image(image, hash)
-    }
-
-    pub fn is_empty(&self) -> bool {
-        match self {
-            ClipboardData::Empty => true,
-            ClipboardData::Text(s) => s.is_empty(),
-            ClipboardData::Image(a, _) => a.bytes().is_empty(),
-        }
-    }
-
-    fn from_msg(clipboard: Clipboard) -> Self {
-        let is_image = clipboard.width > 0;
-        let data = if clipboard.compress {
-            decompress(&clipboard.content)
-        } else {
-            clipboard.content.into()
-        };
-        if is_image {
-            // We cannot use data.start_with(b"<svg") to check if it is svg image
-            // because svg image may starts with other bytes
-            let img = if clipboard.height == 0 && clipboard.width as usize == FAKE_SVG_WIDTH {
-                arboard::ImageData::svg(std::str::from_utf8(&data).unwrap_or_default())
-            } else {
-                arboard::ImageData::rgba(clipboard.width as _, clipboard.height as _, data.into())
-            };
-            ClipboardData::Image(img, 0)
-        } else {
-            if let Ok(content) = String::from_utf8(data) {
-                ClipboardData::Text(content)
-            } else {
-                ClipboardData::Empty
-            }
-        }
-    }
-
-    pub fn create_msg(&self) -> Message {
-        let mut msg = Message::new();
-
-        match self {
-            ClipboardData::Text(s) => {
-                let compressed = compress_func(s.as_bytes());
-                let compress = compressed.len() < s.as_bytes().len();
-                let content = if compress {
-                    compressed
-                } else {
-                    s.clone().into_bytes()
-                };
-                msg.set_clipboard(Clipboard {
-                    compress,
-                    content: content.into(),
-                    ..Default::default()
-                });
-            }
-            ClipboardData::Image(a, _) => {
-                let compressed = compress_func(&a.bytes());
-                let compress = compressed.len() < a.bytes().len();
-                let content = if compress {
-                    compressed
-                } else {
-                    a.bytes().to_vec()
-                };
-                let (w, h) = match a {
-                    arboard::ImageData::Rgba(a) => (a.width, a.height),
-                    arboard::ImageData::Svg(_) => (FAKE_SVG_WIDTH as _, 0 as _),
-                };
-                msg.set_clipboard(Clipboard {
-                    compress,
-                    content: content.into(),
-                    width: w as _,
-                    height: h as _,
-                    ..Default::default()
-                });
-            }
-            _ => {}
-        }
-        msg
-    }
-}
-
-impl PartialEq for ClipboardData {
-    fn eq(&self, other: &Self) -> bool {
-        match (self, other) {
-            (ClipboardData::Text(a), ClipboardData::Text(b)) => a == b,
-            (ClipboardData::Image(a, _), ClipboardData::Image(b, _)) => match (a, b) {
-                (arboard::ImageData::Rgba(a), arboard::ImageData::Rgba(b)) => {
-                    a.width == b.width && a.height == b.height && a.bytes == b.bytes
-                }
-                (arboard::ImageData::Svg(a), arboard::ImageData::Svg(b)) => a == b,
-                _ => false,
-            },
-            (ClipboardData::Empty, ClipboardData::Empty) => true,
-            _ => false,
-        }
-    }
 }
 
 #[cfg(not(any(all(target_os = "linux", feature = "unix-file-copy-paste"))))]
 pub struct ClipboardContext {
     inner: arboard::Clipboard,
-    counter: (Arc<AtomicU64>, u64),
-    shutdown: Option<Shutdown>,
-    is_last_plain: bool,
 }
 
 #[cfg(not(any(all(target_os = "linux", feature = "unix-file-copy-paste"))))]
 #[allow(unreachable_code)]
 impl ClipboardContext {
-    pub fn new(listen: bool) -> ResultType<ClipboardContext> {
+    pub fn new() -> ResultType<ClipboardContext> {
         let board;
         #[cfg(not(target_os = "linux"))]
         {
@@ -351,94 +224,275 @@ impl ClipboardContext {
             }
         }
 
-        // starting from 1 so that we can always get initial clipboard data no matter if change
-        let change_count: Arc<AtomicU64> = Arc::new(AtomicU64::new(1));
-        let mut shutdown = None;
-        if listen {
-            struct Handler(Arc<AtomicU64>);
-            impl ClipboardHandler for Handler {
-                fn on_clipboard_change(&mut self) -> CallbackResult {
-                    self.0.fetch_add(1, Ordering::SeqCst);
-                    CallbackResult::Next
-                }
+        Ok(ClipboardContext { inner: board })
+    }
 
-                fn on_clipboard_error(&mut self, error: std::io::Error) -> CallbackResult {
-                    log::trace!("Error of clipboard listener: {}", error);
-                    CallbackResult::Next
-                }
-            }
-            let change_count_cloned = change_count.clone();
-            let (tx, rx) = std::sync::mpsc::channel();
-            // https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-getmessage#:~:text=The%20window%20must%20belong%20to%20the%20current%20thread.
-            std::thread::spawn(move || match Master::new(Handler(change_count_cloned)) {
-                Ok(mut master) => {
-                    tx.send(master.shutdown_channel()).ok();
-                    log::debug!("Clipboard listener started");
-                    if let Err(err) = master.run() {
-                        log::error!("Failed to run clipboard listener: {}", err);
-                    } else {
-                        log::debug!("Clipboard listener stopped");
+    pub fn get(&mut self, side: ClipboardSide, force: bool) -> ResultType<Vec<ClipboardData>> {
+        let _lock = ARBOARD_MTX.lock().unwrap();
+        let data = self.inner.get_formats(SUPPORTED_FORMATS)?;
+        if data.is_empty() {
+            return Ok(data);
+        }
+        if !force {
+            for c in data.iter() {
+                if let ClipboardData::Special((_, d)) = c {
+                    if side.is_owner(d) {
+                        return Ok(vec![]);
                     }
                 }
-                Err(err) => {
-                    log::error!("Failed to create clipboard listener: {}", err);
-                }
-            });
-            if let Ok(st) = rx.recv() {
-                shutdown = Some(st);
             }
         }
-        Ok(ClipboardContext {
-            inner: board,
-            counter: (change_count, 0),
-            shutdown,
-            is_last_plain: false,
-        })
+        Ok(data
+            .into_iter()
+            .filter(|c| !matches!(c, ClipboardData::Special(_)))
+            .collect())
     }
 
-    #[inline]
-    pub fn change_count(&self) -> u64 {
-        debug_assert!(self.shutdown.is_some());
-        self.counter.0.load(Ordering::SeqCst)
-    }
-
-    pub fn get(&mut self) -> ResultType<ClipboardData> {
-        let cn = self.change_count();
+    fn set(&mut self, data: &[ClipboardData]) -> ResultType<()> {
         let _lock = ARBOARD_MTX.lock().unwrap();
-        // only for image for the time being,
-        // because I do not want to change behavior of text clipboard for the time being
-        if cn != self.counter.1 {
-            self.is_last_plain = false;
-            self.counter.1 = cn;
-            if let Ok(image) = self.inner.get_image() {
-                // Both text and image svg may be set by some applications
-                // But we only want to send the svg content.
-                //
-                // We can't call `get_text()` and store current text in `old` in outer scope,
-                // because it may be updated later than svg.
-                // Then the text will still be sent and replace the image svg content.
-                self.is_last_plain = matches!(image, arboard::ImageData::Svg(_));
-                return Ok(ClipboardData::image(image));
-            }
-        }
-        Ok(ClipboardData::Text(self.inner.get_text()?))
-    }
-
-    fn set(&mut self, data: &ClipboardData) -> ResultType<()> {
-        let _lock = ARBOARD_MTX.lock().unwrap();
-        match data {
-            ClipboardData::Text(s) => self.inner.set_text(s)?,
-            ClipboardData::Image(a, _) => self.inner.set_image(a.clone())?,
-            _ => {}
-        }
+        self.inner.set_formats(data)?;
         Ok(())
     }
 }
 
-impl Drop for ClipboardContext {
-    fn drop(&mut self) {
-        if let Some(shutdown) = self.shutdown.take() {
-            let _ = shutdown.signal();
+pub fn is_support_multi_clipboard(peer_version: &str, peer_platform: &str) -> bool {
+    use hbb_common::get_version_number;
+    get_version_number(peer_version) >= get_version_number("1.3.0")
+        && !["", "Android", &whoami::Platform::Ios.to_string()].contains(&peer_platform)
+}
+
+pub fn get_current_clipboard_msg(
+    peer_version: &str,
+    peer_platform: &str,
+    side: ClipboardSide,
+) -> Option<Message> {
+    let mut multi_clipboards = LAST_MULTI_CLIPBOARDS.lock().unwrap();
+    if multi_clipboards.clipboards.is_empty() {
+        let mut ctx = ClipboardContext::new().ok()?;
+        *multi_clipboards = proto::create_multi_clipboards(ctx.get(side, true).ok()?);
+    }
+    if multi_clipboards.clipboards.is_empty() {
+        return None;
+    }
+
+    if is_support_multi_clipboard(peer_version, peer_platform) {
+        let mut msg = Message::new();
+        msg.set_multi_clipboards(multi_clipboards.clone());
+        Some(msg)
+    } else {
+        // Find the first text clipboard and send it.
+        multi_clipboards
+            .clipboards
+            .iter()
+            .find(|c| c.format.enum_value() == Ok(hbb_common::message_proto::ClipboardFormat::Text))
+            .map(|c| {
+                let mut msg = Message::new();
+                msg.set_clipboard(c.clone());
+                msg
+            })
+    }
+}
+
+#[derive(PartialEq, Eq, Clone, Copy)]
+pub enum ClipboardSide {
+    Host,
+    Client,
+}
+
+impl ClipboardSide {
+    // 01: the clipboard is owned by the host
+    // 10: the clipboard is owned by the client
+    fn get_owner_data(&self) -> Vec<u8> {
+        match self {
+            ClipboardSide::Host => vec![0b01],
+            ClipboardSide::Client => vec![0b10],
         }
+    }
+
+    fn is_owner(&self, data: &[u8]) -> bool {
+        if data.len() == 0 {
+            return false;
+        }
+        data[0] & 0b11 != 0
+    }
+}
+
+impl std::fmt::Display for ClipboardSide {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ClipboardSide::Host => write!(f, "host"),
+            ClipboardSide::Client => write!(f, "client"),
+        }
+    }
+}
+
+pub fn start_clipbard_master_thread(
+    handler: impl ClipboardHandler + Send + 'static,
+    tx_start_res: Sender<(Option<Shutdown>, String)>,
+) -> JoinHandle<()> {
+    // https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-getmessage#:~:text=The%20window%20must%20belong%20to%20the%20current%20thread.
+    let h = std::thread::spawn(move || match Master::new(handler) {
+        Ok(mut master) => {
+            tx_start_res
+                .send((Some(master.shutdown_channel()), "".to_owned()))
+                .ok();
+            log::debug!("Clipboard listener started");
+            if let Err(err) = master.run() {
+                log::error!("Failed to run clipboard listener: {}", err);
+            } else {
+                log::debug!("Clipboard listener stopped");
+            }
+        }
+        Err(err) => {
+            tx_start_res
+                .send((
+                    None,
+                    format!("Failed to create clipboard listener: {}", err),
+                ))
+                .ok();
+        }
+    });
+    h
+}
+
+pub use proto::get_msg_if_not_support_multi_clip;
+mod proto {
+    use arboard::ClipboardData;
+    use hbb_common::{
+        compress::{compress as compress_func, decompress},
+        message_proto::{Clipboard, ClipboardFormat, Message, MultiClipboards},
+    };
+
+    fn plain_to_proto(s: String, format: ClipboardFormat) -> Clipboard {
+        let compressed = compress_func(s.as_bytes());
+        let compress = compressed.len() < s.as_bytes().len();
+        let content = if compress {
+            compressed
+        } else {
+            s.bytes().collect::<Vec<u8>>()
+        };
+        Clipboard {
+            compress,
+            content: content.into(),
+            format: format.into(),
+            ..Default::default()
+        }
+    }
+
+    fn image_to_proto(a: arboard::ImageData) -> Clipboard {
+        match &a {
+            arboard::ImageData::Rgba(rgba) => {
+                let compressed = compress_func(&a.bytes());
+                let compress = compressed.len() < a.bytes().len();
+                let content = if compress {
+                    compressed
+                } else {
+                    a.bytes().to_vec()
+                };
+                Clipboard {
+                    compress,
+                    content: content.into(),
+                    width: rgba.width as _,
+                    height: rgba.height as _,
+                    format: ClipboardFormat::ImageRgba.into(),
+                    ..Default::default()
+                }
+            }
+            arboard::ImageData::Png(png) => Clipboard {
+                compress: false,
+                content: png.to_owned().to_vec().into(),
+                format: ClipboardFormat::ImagePng.into(),
+                ..Default::default()
+            },
+            arboard::ImageData::Svg(_) => {
+                let compressed = compress_func(&a.bytes());
+                let compress = compressed.len() < a.bytes().len();
+                let content = if compress {
+                    compressed
+                } else {
+                    a.bytes().to_vec()
+                };
+                Clipboard {
+                    compress,
+                    content: content.into(),
+                    format: ClipboardFormat::ImageSvg.into(),
+                    ..Default::default()
+                }
+            }
+        }
+    }
+
+    fn clipboard_data_to_proto(data: ClipboardData) -> Option<Clipboard> {
+        let d = match data {
+            ClipboardData::Text(s) => plain_to_proto(s, ClipboardFormat::Text),
+            ClipboardData::Rtf(s) => plain_to_proto(s, ClipboardFormat::Rtf),
+            ClipboardData::Html(s) => plain_to_proto(s, ClipboardFormat::Html),
+            ClipboardData::Image(a) => image_to_proto(a),
+            _ => return None,
+        };
+        Some(d)
+    }
+
+    pub fn create_multi_clipboards(vec_data: Vec<ClipboardData>) -> MultiClipboards {
+        MultiClipboards {
+            clipboards: vec_data
+                .into_iter()
+                .filter_map(clipboard_data_to_proto)
+                .collect(),
+            ..Default::default()
+        }
+    }
+
+    fn from_clipboard(clipboard: Clipboard) -> Option<ClipboardData> {
+        let data = if clipboard.compress {
+            decompress(&clipboard.content)
+        } else {
+            clipboard.content.into()
+        };
+        match clipboard.format.enum_value() {
+            Ok(ClipboardFormat::Text) => String::from_utf8(data).ok().map(ClipboardData::Text),
+            Ok(ClipboardFormat::Rtf) => String::from_utf8(data).ok().map(ClipboardData::Rtf),
+            Ok(ClipboardFormat::Html) => String::from_utf8(data).ok().map(ClipboardData::Html),
+            Ok(ClipboardFormat::ImageRgba) => Some(ClipboardData::Image(arboard::ImageData::rgba(
+                clipboard.width as _,
+                clipboard.height as _,
+                data.into(),
+            ))),
+            Ok(ClipboardFormat::ImagePng) => {
+                Some(ClipboardData::Image(arboard::ImageData::png(data.into())))
+            }
+            Ok(ClipboardFormat::ImageSvg) => Some(ClipboardData::Image(arboard::ImageData::svg(
+                std::str::from_utf8(&data).unwrap_or_default(),
+            ))),
+            _ => None,
+        }
+    }
+
+    pub fn from_multi_clipbards(multi_clipboards: Vec<Clipboard>) -> Vec<ClipboardData> {
+        multi_clipboards
+            .into_iter()
+            .filter_map(from_clipboard)
+            .collect()
+    }
+
+    pub fn get_msg_if_not_support_multi_clip(
+        version: &str,
+        platform: &str,
+        multi_clipboards: &MultiClipboards,
+    ) -> Option<Message> {
+        if crate::clipboard::is_support_multi_clipboard(version, platform) {
+            return None;
+        }
+
+        // Find the first text clipboard and send it.
+        multi_clipboards
+            .clipboards
+            .iter()
+            .find(|c| c.format.enum_value() == Ok(ClipboardFormat::Text))
+            .map(|c| {
+                let mut msg = Message::new();
+                msg.set_clipboard(c.clone());
+                msg
+            })
     }
 }
