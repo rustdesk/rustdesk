@@ -1297,6 +1297,7 @@ jobs:
               deb_arch: amd64,
               sciter_arch: x64,
               vcpkg-triplet: x64-linux,
+              extra_features: ",hwcodec",
             }
           - {
               arch: armv7,
@@ -1306,6 +1307,7 @@ jobs:
               deb_arch: armhf,
               sciter_arch: arm32,
               vcpkg-triplet: arm-linux,
+              extra_features: "",
             }
     steps:
       - name: Export GitHub Actions cache environment variables
@@ -1436,7 +1438,7 @@ jobs:
             python3 ./res/inline-sciter.py
             export VCPKG_ROOT=/opt/artifacts/vcpkg
             export CARGO_INCREMENTAL=0
-            cargo build --features inline --release --bins --jobs 1
+            cargo build --features inline${{ matrix.job.extra_features }} --release --bins --jobs 1
             # package
             mkdir -p ./Release
             mv ./target/release/rustdesk ./Release/rustdesk

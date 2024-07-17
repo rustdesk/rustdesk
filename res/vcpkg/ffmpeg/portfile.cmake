@@ -102,6 +102,10 @@ if(VCPKG_TARGET_IS_LINUX)
     string(APPEND OPTIONS  "\
 --target-os=linux \
 --enable-pthreads \
+")
+    if(VCPKG_TARGET_ARCHITECTURE STREQUAL "arm")
+    else()
+        string(APPEND OPTIONS  "\
 --enable-cuda \
 --enable-ffnvcodec \
 --enable-encoder=h264_nvenc \
@@ -116,10 +120,11 @@ if(VCPKG_TARGET_IS_LINUX)
 --enable-encoder=h264_vaapi \
 --enable-encoder=hevc_vaapi \
 ")
-    if(VCPKG_TARGET_ARCHITECTURE STREQUAL "x64")
-        string(APPEND OPTIONS  "\
---enable-cuda_llvm \
+        if(VCPKG_TARGET_ARCHITECTURE STREQUAL "x64")
+            string(APPEND OPTIONS  "\
+    --enable-cuda_llvm \
 ")
+        endif()
     endif()
 elseif(VCPKG_TARGET_IS_WINDOWS)
     string(APPEND OPTIONS "\

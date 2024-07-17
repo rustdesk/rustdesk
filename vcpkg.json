@@ -69,12 +69,12 @@
           "platform": "(windows & static)"
         }
       ],
-      "platform": "((windows | linux | osx) & static)"
+      "platform": "((windows | (linux & !arm32) | osx) & static)"
     },
     {
       "name": "ffmpeg",
       "host": false,
-      "platform": "((android | ios) & static)"
+      "platform": "((android | ios | (linux & arm32)) & static)"
     }
   ],
   "vcpkg-configuration": {
