@@ -192,6 +192,7 @@ fn gen_vcpkg_package(package: &str, ffi_header: &str, generated: &str, regex: &s
 fn ffmpeg() {
     // ffmpeg
     let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap();
+    let target_arch = std::env::var("CARGO_CFG_TARGET_ARCH").unwrap();
     let static_libs = vec!["avcodec", "avutil", "avformat"];
     static_libs.iter().for_each(|lib| {
         find_package(lib);
@@ -201,8 +202,6 @@ fn ffmpeg() {
     }
 
     // os
-    let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap();
-    let target_arch = std::env::var("CARGO_CFG_TARGET_ARCH").unwrap();
     let dyn_libs: Vec<&str> = if target_os == "windows" {
         ["User32", "bcrypt", "ole32", "advapi32"].to_vec()
     } else if target_os == "linux" {
