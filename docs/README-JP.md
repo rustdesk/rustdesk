@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="res/logo-header.svg" alt="RustDesk - あなたのためのリモートデスクトップ"><br>
+  <img src="../res/logo-header.svg" alt="RustDesk - あなたのためのリモートデスクトップ"><br>
   <a href="#free-public-servers">Servers</a> •
   <a href="#raw-steps-to-build">Build</a> •
   <a href="#how-to-build-with-docker">Docker</a> •
