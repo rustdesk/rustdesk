@@ -1436,7 +1436,7 @@ jobs:
             python3 ./res/inline-sciter.py
             export VCPKG_ROOT=/opt/artifacts/vcpkg
             export CARGO_INCREMENTAL=0
-            cargo build --features inline --release --bins --jobs 1
+            cargo build --features inline,hwcodec --release --bins --jobs 1
             # package
             mkdir -p ./Release
             mv ./target/release/rustdesk ./Release/rustdesk
