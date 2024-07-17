@@ -1056,9 +1056,23 @@ jobs:
 
       - name: Install vcpkg dependencies
         if: matrix.job.arch == 'x86_64' || env.UPLOAD_ARTIFACT == 'true'
+        continue-on-error: true
         run: |
+          if [[ "${{ matrix.job.arch }}" == "aarch64" ]]; then
+            sudo apt-get install -y clang
+          fi
           $VCPKG_ROOT/vcpkg install --triplet ${{ matrix.job.vcpkg-triplet }} --x-install-root="$VCPKG_ROOT/installed"
         shell: bash
+
+      - name: Publish vcpkg log files
+        if: matrix.job.arch == 'aarch64'
+        uses: softprops/action-gh-release@v1
+        with:
+          prerelease: true
+          tag_name: ${{ env.TAG_NAME }}
+          files: | 
+            /opt/artifacts/vcpkg/buildtrees/ffmpeg/build-arm64-linux-rel-out.log
+            /opt/artifacts/vcpkg/buildtrees/ffmpeg/build-arm64-linux-rel-err.log
 
       - name: Restore bridge files
         if: matrix.job.arch == 'x86_64' || env.UPLOAD_ARTIFACT == 'true'
@@ -1351,10 +1365,24 @@ jobs:
           vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
 
       - name: Install vcpkg dependencies
+        continue-on-error: true
         run: |
           cp $PWD/res/vcpkg/linux.cmake $VCPKG_ROOT/scripts/toolchains/linux.cmake
+          if [[ "${{ matrix.job.arch }}" == "armv7" ]]; then
+            sudo apt-get install -y clang
+          fi
           $VCPKG_ROOT/vcpkg install --triplet ${{ matrix.job.vcpkg-triplet }} --x-install-root="$VCPKG_ROOT/installed"
         shell: bash
+
+      - name: Publish vcpkg log files
+        if: matrix.job.arch == 'armv7'
+        uses: softprops/action-gh-release@v1
+        with:
+          prerelease: true
+          tag_name: ${{ env.TAG_NAME }}
+          files: | 
+            /opt/artifacts/vcpkg/buildtrees/ffmpeg/build-arm-linux-rel-out.log
+            /opt/artifacts/vcpkg/buildtrees/ffmpeg/build-arm-linux-rel-err.log
 
       - uses: rustdesk-org/run-on-arch-action@amd64-support
         name: Build rustdesk sciter binary for ${{ matrix.job.arch }}
