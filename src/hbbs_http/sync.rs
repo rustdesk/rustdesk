@@ -7,7 +7,7 @@ use std::{
 #[cfg(not(any(target_os = "ios")))]
 use crate::Connection;
 use hbb_common::{
-    config::{Config, LocalConfig},
+    config::{keys, Config, LocalConfig},
     tokio::{self, sync::broadcast, time::Instant},
 };
 use serde::{Deserialize, Serialize};
@@ -83,13 +83,21 @@ async fn start_hbbs_sync_async() {
                         v["version"] = json!(crate::VERSION);
                         v["id"] = json!(id);
                         v["uuid"] = json!(crate::encode64(hbb_common::get_uuid()));
-                        let ab_name = Config::get_option("preset-address-book-name");
+                        let ab_name = Config::get_option(keys::OPTION_PRESET_ADDRESS_BOOK_NAME);
                         if !ab_name.is_empty() {
-                            v["preset-address-book-name"] = json!(ab_name);
+                            v[keys::OPTION_PRESET_ADDRESS_BOOK_NAME] = json!(ab_name);
                         }
-                        let ab_tag = Config::get_option("preset-address-book-tag");
+                        let ab_tag = Config::get_option(keys::OPTION_PRESET_ADDRESS_BOOK_TAG);
                         if !ab_tag.is_empty() {
-                            v["preset-address-book-tag"] = json!(ab_tag);
+                            v[keys::OPTION_PRESET_ADDRESS_BOOK_TAG] = json!(ab_tag);
+                        }
+                        let username = Config::get_option(keys::OPTION_PRESET_USERNAME);
+                        if !username.is_empty() {
+                            v[keys::OPTION_PRESET_USERNAME] = json!(username);
+                        }
+                        let strategy_name = Config::get_option(keys::OPTION_PRESET_STRATEGY_NAME);
+                        if !strategy_name.is_empty() {
+                            v[keys::OPTION_PRESET_STRATEGY_NAME] = json!(strategy_name);
                         }
                         match crate::post_request(url.replace("heartbeat", "sysinfo"), v.to_string(), "").await {
                             Ok(x)  => {
