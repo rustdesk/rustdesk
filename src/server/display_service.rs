@@ -414,10 +414,23 @@ pub fn try_get_displays_(add_amyuni_headless: bool) -> ResultType<Vec<Display>> 
         return Ok(displays);
     }
 
-    // If is switching session, no displays may be detected. But it is not a real case.
-    if displays.is_empty() && crate::platform::desktop_changed() {
-        return Ok(displays);
-    }
+    // The following code causes a bug.
+    // The virtual display cannot be added when there's no session(eg. when exiting from RDP).
+    // Because `crate::platform::desktop_changed()` always returns true at that time.
+    //
+    // The code only solves a rare case:
+    // 1. The control side is connecting.
+    // 2. The windows session is switching, no displays are detected, but they're there.
+    // Then the controlled side plugs in a virtual display for "headless".
+    //
+    // No need to do the following check. But the code is kept here for marking the issue.
+    // If there're someones reporting the issue, we may add a better check by waiting for a while. (switching session).
+    // But I don't think it's good to add the timeout check without any issue.
+    //
+    // If is switching session, no displays may be detected.
+    // if displays.is_empty() && crate::platform::desktop_changed() {
+    //     return Ok(displays);
+    // }
 
     let no_displays_v = no_displays(&displays);
     virtual_display_manager::set_can_plug_out_all(!no_displays_v);
