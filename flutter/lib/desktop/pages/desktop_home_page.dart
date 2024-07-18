@@ -410,6 +410,9 @@ class _DesktopHomePageState extends State<DesktopHomePage>
   }
 
   Future<Widget> buildHelpCards() async {
+    if (bind.mainGetLocalOption(key: 'hide-help-cards') == 'Y') {
+      return const SizedBox();
+    }
     if (!bind.isCustomClient() &&
         updateUrl.isNotEmpty &&
         !isCardClosed &&
