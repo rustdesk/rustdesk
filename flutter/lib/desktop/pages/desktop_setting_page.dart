@@ -61,9 +61,13 @@ class DesktopSettingPage extends StatefulWidget {
   final SettingsTabKey initialTabkey;
   static final List<SettingsTabKey> tabKeys = [
     SettingsTabKey.general,
-    if (!bind.isOutgoingOnly() && !bind.isDisableSettings())
+    if (!bind.isOutgoingOnly() &&
+        !bind.isDisableSettings() &&
+        bind.mainGetLocalOption(key: "hide-security-settings") != 'Y')
       SettingsTabKey.safety,
-    if (!bind.isDisableSettings()) SettingsTabKey.network,
+    if (!bind.isDisableSettings() &&
+        bind.mainGetLocalOption(key: "hide-network-settings") != 'Y')
+      SettingsTabKey.network,
     if (!bind.isIncomingOnly()) SettingsTabKey.display,
     if (!isWeb && !bind.isIncomingOnly() && bind.pluginFeatureIsEnabled())
       SettingsTabKey.plugin,
@@ -173,21 +177,32 @@ class _DesktopSettingPageState extends State<DesktopSettingPage>
   }
 
   List<Widget> _children() {
-    final hideSecurity =
-        bind.mainGetLocalOption(key: "hide-security-settings") == 'Y';
-    final hideNetwork =
-        bind.mainGetLocalOption(key: "hide-network-settings") == 'Y';
-    final children = [
-      _General(),
-      if (!bind.isOutgoingOnly() && !bind.isDisableSettings() && !hideSecurity)
-        _Safety(),
-      if (!bind.isDisableSettings() && !hideNetwork) _Network(),
-      if (!bind.isIncomingOnly()) _Display(),
-      if (!isWeb && !bind.isIncomingOnly() && bind.pluginFeatureIsEnabled())
-        _Plugin(),
-      if (!bind.isDisableAccount()) _Account(),
-      _About(),
-    ];
+    final children = List<Widget>.empty(growable: true);
+    for (final tab in DesktopSettingPage.tabKeys) {
+      switch (tab) {
+        case SettingsTabKey.general:
+          children.add(const _General());
+          break;
+        case SettingsTabKey.safety:
+          children.add(const _Safety());
+          break;
+        case SettingsTabKey.network:
+          children.add(const _Network());
+          break;
+        case SettingsTabKey.display:
+          children.add(const _Display());
+          break;
+        case SettingsTabKey.plugin:
+          children.add(const _Plugin());
+          break;
+        case SettingsTabKey.account:
+          children.add(const _Account());
+          break;
+        case SettingsTabKey.about:
+          children.add(const _About());
+          break;
+      }
+    }
     return children;
   }
 
