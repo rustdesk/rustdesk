@@ -2199,6 +2199,7 @@ pub mod keys {
         "hide-proxy-settings",
         "hide-username-on-card",
         OPTION_ALLOW_REMOTE_CM_MODIFICATION,
+        "hide-help-cards",
     ];
     // DEFAULT_SETTINGS, OVERWRITE_SETTINGS
     pub const KEYS_SETTINGS: &[&str] = &[
