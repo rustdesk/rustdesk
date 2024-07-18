@@ -141,17 +141,7 @@ class RustDeskMultiWindowManager {
       ));
     }
     if (isMacOS) {
-      Future.microtask(() {
-        windowController.show();
-        // Manually simulate the hide/show event to fix the issue 
-        // https://github.com/rustdesk/rustdesk/issues/8548
-        // https://github.com/flutter/flutter/issues/133533
-        // https://github.com/MixinNetwork/flutter-plugins/issues/289#issuecomment-1817665239
-        // https://github.com/rustdesk/rustdesk/pull/8712#issuecomment-2229912473
-        Future.delayed(const Duration(milliseconds: 300), () {
-          DesktopMultiWindow.hideShow(-1);
-        });
-      });
+      Future.microtask(() => windowController.show());
     }
     registerActiveWindow(windowId);
     windows.add(windowId);
