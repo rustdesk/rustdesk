@@ -29,6 +29,7 @@ use hbb_common::{
 use crate::{
     check_port,
     server::{check_zombie, new as new_server, ServerPtr},
+    ui_interface::get_buildin_option,
 };
 
 type Message = RendezvousMessage;
@@ -387,7 +388,7 @@ impl RendezvousMediator {
         };
         if (cfg!(debug_assertions) && option_env!("TEST_TCP").is_some())
             || is_http_proxy
-            || Config::get_option(config::keys::OPTION_DISABLE_UDP) == "Y"
+            || get_buildin_option(config::keys::OPTION_DISABLE_UDP) == "Y"
         {
             Self::start_tcp(server, host).await
         } else {

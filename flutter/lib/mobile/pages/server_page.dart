@@ -23,7 +23,22 @@ class ServerPage extends StatefulWidget implements PageShape {
   final icon = const Icon(Icons.mobile_screen_share);
 
   @override
-  final appBarActions = [
+  final appBarActions = (!bind.isDisableSettings() &&
+          bind.mainGetBuildinOption(key: kOptionHideSecuritySetting) != 'Y')
+      ? [_DropDownAction()]
+      : [];
+
+  ServerPage({Key? key}) : super(key: key);
+
+  @override
+  State<StatefulWidget> createState() => _ServerPageState();
+}
+
+class _DropDownAction extends StatelessWidget {
+  _DropDownAction();
+
+  // should only have one action
+  final actions = [
     PopupMenuButton<String>(
         tooltip: "",
         icon: const Icon(Icons.more_vert),
@@ -136,10 +151,10 @@ class ServerPage extends StatefulWidget implements PageShape {
         })
   ];
 
-  ServerPage({Key? key}) : super(key: key);
-
   @override
-  State<StatefulWidget> createState() => _ServerPageState();
+  Widget build(BuildContext context) {
+    return actions[0];
+  }
 }
 
 class _ServerPageState extends State<ServerPage> {

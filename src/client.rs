@@ -60,7 +60,7 @@ use crate::{
     check_port,
     common::input::{MOUSE_BUTTON_LEFT, MOUSE_BUTTON_RIGHT, MOUSE_TYPE_DOWN, MOUSE_TYPE_UP},
     create_symmetric_key_msg, decode_id_pk, get_rs_pk, is_keyboard_mode_supported, secure_tcp,
-    ui_interface::use_texture_render,
+    ui_interface::{get_buildin_option, use_texture_render},
     ui_session_interface::{InvokeUiSession, Session},
 };
 
@@ -2027,7 +2027,7 @@ impl LoginConfigHandler {
         } else {
             (my_id, self.id.clone())
         };
-        let mut display_name = LocalConfig::get_option(&config::keys::OPTION_DISPLAY_NAME);
+        let mut display_name = get_buildin_option(config::keys::OPTION_DISPLAY_NAME);
         if display_name.is_empty() {
             display_name = crate::username();
         }

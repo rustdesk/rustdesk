@@ -3319,7 +3319,8 @@ Widget buildPresetPasswordWarning() {
         return Text(
             'Error: ${snapshot.error}'); // Show an error message if the Future completed with an error
       } else if (snapshot.hasData && snapshot.data == true) {
-        if (bind.mainGetLocalOption(key: "remove-preset-password-warning") !=
+        if (bind.mainGetBuildinOption(
+                key: kOptionRemovePresetPasswordWarning) !=
             'N') {
           return SizedBox.shrink();
         }

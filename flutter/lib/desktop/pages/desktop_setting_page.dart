@@ -63,10 +63,10 @@ class DesktopSettingPage extends StatefulWidget {
     SettingsTabKey.general,
     if (!bind.isOutgoingOnly() &&
         !bind.isDisableSettings() &&
-        bind.mainGetLocalOption(key: "hide-security-settings") != 'Y')
+        bind.mainGetBuildinOption(key: kOptionHideSecuritySetting) != 'Y')
       SettingsTabKey.safety,
     if (!bind.isDisableSettings() &&
-        bind.mainGetLocalOption(key: "hide-network-settings") != 'Y')
+        bind.mainGetBuildinOption(key: kOptionHideNetworkSetting) != 'Y')
       SettingsTabKey.network,
     if (!bind.isIncomingOnly()) SettingsTabKey.display,
     if (!isWeb && !bind.isIncomingOnly() && bind.pluginFeatureIsEnabled())
@@ -1289,9 +1289,9 @@ class _NetworkState extends State<_Network> with AutomaticKeepAliveClientMixin {
     bool enabled = !locked;
     final scrollController = ScrollController();
     final hideServer =
-        bind.mainGetLocalOption(key: kOptionHideServerSetting) == 'Y';
+        bind.mainGetBuildinOption(key: kOptionHideServerSetting) == 'Y';
     final hideProxy =
-        bind.mainGetLocalOption(key: kOptionHideProxySetting) == 'Y';
+        bind.mainGetBuildinOption(key: kOptionHideProxySetting) == 'Y';
     return DesktopScrollWrapper(
         scrollController: scrollController,
         child: ListView(

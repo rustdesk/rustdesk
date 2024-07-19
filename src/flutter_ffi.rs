@@ -2213,6 +2213,10 @@ pub fn main_get_hard_option(key: String) -> SyncReturn<String> {
     SyncReturn(get_hard_option(key))
 }
 
+pub fn main_get_buildin_option(key: String) -> SyncReturn<String> {
+    SyncReturn(get_buildin_option(&key))
+}
+
 pub fn main_check_hwcodec() {
     check_hwcodec()
 }

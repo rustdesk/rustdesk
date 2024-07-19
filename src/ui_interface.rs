@@ -203,6 +203,16 @@ pub fn get_hard_option(key: String) -> String {
 }
 
 #[inline]
+pub fn get_buildin_option(key: &str) -> String {
+    config::BUILDIN_SETTINGS
+        .read()
+        .unwrap()
+        .get(key)
+        .cloned()
+        .unwrap_or_default()
+}
+
+#[inline]
 pub fn set_local_option(key: String, value: String) {
     LocalConfig::set_option(key, value);
 }
