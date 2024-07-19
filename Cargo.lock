@@ -3087,8 +3087,8 @@ checksum = "9a3a5bfb195931eeb336b2a7b4d761daec841b97f947d34394601737a7bba5e4"
 
 [[package]]
 name = "hwcodec"
-version = "0.6.0"
-source = "git+https://github.com/21pages/hwcodec#89879f2f02c6f74e88a4a43744a1153aec5b7e7f"
+version = "0.5.1"
+source = "git+https://github.com/21pages/hwcodec#74e8288f776a9d43861f16aa62e86b57c7209868"
 dependencies = [
  "bindgen 0.59.2",
  "cc",
@@ -3558,7 +3558,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e310b3a6b5907f99202fcdb4960ff45b93735d7c7d96b760fcff8db2dc0e103d"
 dependencies = [
  "cfg-if 1.0.0",
- "windows-targets 0.48.5",
+ "windows-targets 0.52.5",
 ]
 
 [[package]]
