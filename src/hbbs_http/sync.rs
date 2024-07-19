@@ -5,7 +5,7 @@ use std::{
 };
 
 #[cfg(not(any(target_os = "ios")))]
-use crate::Connection;
+use crate::{ui_interface::get_buildin_option, Connection};
 use hbb_common::{
     config::{keys, Config, LocalConfig},
     tokio::{self, sync::broadcast, time::Instant},
@@ -91,11 +91,11 @@ async fn start_hbbs_sync_async() {
                         if !ab_tag.is_empty() {
                             v[keys::OPTION_PRESET_ADDRESS_BOOK_TAG] = json!(ab_tag);
                         }
-                        let username = Config::get_option(keys::OPTION_PRESET_USERNAME);
+                        let username = get_buildin_option(keys::OPTION_PRESET_USERNAME);
                         if !username.is_empty() {
                             v[keys::OPTION_PRESET_USERNAME] = json!(username);
                         }
-                        let strategy_name = Config::get_option(keys::OPTION_PRESET_STRATEGY_NAME);
+                        let strategy_name = get_buildin_option(keys::OPTION_PRESET_STRATEGY_NAME);
                         if !strategy_name.is_empty() {
                             v[keys::OPTION_PRESET_STRATEGY_NAME] = json!(strategy_name);
                         }
