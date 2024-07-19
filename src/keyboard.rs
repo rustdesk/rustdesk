@@ -580,10 +580,7 @@ pub fn event_to_key_events(
     #[cfg(any(target_os = "android", target_os = "ios"))]
     let key_events;
     key_events = match keyboard_mode {
-        KeyboardMode::Map => match map_keyboard_mode(peer.as_str(), event, key_event) {
-            Some(event) => [event].to_vec(),
-            None => Vec::new(),
-        },
+        KeyboardMode::Map => map_keyboard_mode(peer.as_str(), event, key_event),
         KeyboardMode::Translate => translate_keyboard_mode(peer.as_str(), event, key_event),
         _ => {
             #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -865,7 +862,27 @@ pub fn legacy_keyboard_mode(event: &Event, mut key_event: KeyEvent) -> Vec<KeyEv
     events
 }
 
-pub fn map_keyboard_mode(_peer: &str, event: &Event, mut key_event: KeyEvent) -> Option<KeyEvent> {
+pub fn map_keyboard_mode(_peer: &str, event: &Event, key_event: KeyEvent) -> Vec<KeyEvent> {
+    match _map_keyboard_mode(_peer, event, key_event) {
+        Some(key_event) => {
+            if _peer == OS_LOWER_LINUX {
+                if let EventType::KeyPress(k) = &event.event_type {
+                    #[cfg(target_os = "ios")]
+                    let try_workaround = true;
+                    #[cfg(not(target_os = "ios"))]
+                    let try_workaround = !is_modifier(k);
+                    if try_workaround {
+                        return try_workaround_linux_long_press(key_event);
+                    }
+                }
+            }
+            vec![key_event]
+        }
+        None => Vec::new(),
+    }
+}
+
+fn _map_keyboard_mode(_peer: &str, event: &Event, mut key_event: KeyEvent) -> Option<KeyEvent> {
     match event.event_type {
         EventType::KeyPress(..) => {
             key_event.down = true;
@@ -923,6 +940,14 @@ pub fn map_keyboard_mode(_peer: &str, event: &Event, mut key_event: KeyEvent) ->
     Some(key_event)
 }
 
+// https://github.com/rustdesk/rustdesk/issues/6793
+#[inline]
+fn try_workaround_linux_long_press(key_event: KeyEvent) -> Vec<KeyEvent> {
+    let mut key_event_up = key_event.clone();
+    key_event_up.down = false;
+    vec![key_event, key_event_up]
+}
+
 #[cfg(not(any(target_os = "ios")))]
 fn try_fill_unicode(_peer: &str, event: &Event, key_event: &KeyEvent, events: &mut Vec<KeyEvent>) {
     match &event.unicode {
@@ -954,7 +979,7 @@ fn try_fill_unicode(_peer: &str, event: &Event, key_event: &KeyEvent, events: &m
 }
 
 #[cfg(target_os = "windows")]
-fn try_file_win2win_hotkey(
+fn try_fill_win2win_hotkey(
     peer: &str,
     event: &Event,
     key_event: &KeyEvent,
@@ -1041,9 +1066,7 @@ pub fn translate_keyboard_mode(peer: &str, event: &Event, key_event: KeyEvent) -
 
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     if is_numpad_key(&event) {
-        if let Some(evt) = map_keyboard_mode(peer, event, key_event) {
-            events.push(evt);
-        }
+        events.append(&mut map_keyboard_mode(peer, event, key_event));
         return events;
     }
 
@@ -1064,7 +1087,7 @@ pub fn translate_keyboard_mode(peer: &str, event: &Event, key_event: KeyEvent) -
     }
 
     #[cfg(target_os = "windows")]
-    try_file_win2win_hotkey(peer, event, &key_event, &mut events);
+    try_fill_win2win_hotkey(peer, event, &key_event, &mut events);
 
     #[cfg(any(target_os = "linux", target_os = "windows"))]
     if events.is_empty() && is_press(event) {
@@ -1085,9 +1108,7 @@ pub fn translate_keyboard_mode(peer: &str, event: &Event, key_event: KeyEvent) -
     }
 
     if events.is_empty() {
-        if let Some(evt) = map_keyboard_mode(peer, event, key_event) {
-            events.push(evt);
-        }
+        events.append(&mut map_keyboard_mode(peer, event, key_event));
     }
     events
 }

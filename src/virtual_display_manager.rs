@@ -405,7 +405,6 @@ pub mod amyuni_idd {
     use crate::platform::win_device;
     use hbb_common::{bail, lazy_static, log, tokio::time::Instant, ResultType};
     use std::{
-        ops::Sub,
         ptr::null_mut,
         sync::{Arc, Mutex},
         time::Duration,
