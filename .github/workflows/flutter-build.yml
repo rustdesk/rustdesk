@@ -1357,10 +1357,9 @@ jobs:
           vcpkgDirectory: /opt/artifacts/vcpkg
           vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
 
-      - name: Install vcpkg dependencies
+      - name: Override Linux compiler detection in vcpkg
         run: |
           cp $PWD/res/vcpkg/linux.cmake $VCPKG_ROOT/scripts/toolchains/linux.cmake
-          $VCPKG_ROOT/vcpkg install --triplet ${{ matrix.job.vcpkg-triplet }} --x-install-root="$VCPKG_ROOT/installed"
         shell: bash
 
       - uses: rustdesk-org/run-on-arch-action@amd64-support
@@ -1415,6 +1414,9 @@ jobs:
           run: |
             # disable git safe.directory
             git config --global --add safe.directory "*"
+            # vcpkg
+            export VCPKG_ROOT=/opt/artifacts/vcpkg
+            $VCPKG_ROOT/vcpkg install --triplet ${{ matrix.job.vcpkg-triplet }} --x-install-root="$VCPKG_ROOT/installed"
             # rust
             pushd /opt
             # do not use rustup, because memory overflow in qemu
@@ -1433,7 +1435,6 @@ jobs:
             # build
             pushd /workspace
             python3 ./res/inline-sciter.py
-            export VCPKG_ROOT=/opt/artifacts/vcpkg
             export CARGO_INCREMENTAL=0
             cargo build --features inline${{ matrix.job.extra_features }} --release --bins --jobs 1
             # package
