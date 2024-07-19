@@ -865,7 +865,6 @@ pub fn legacy_keyboard_mode(event: &Event, mut key_event: KeyEvent) -> Vec<KeyEv
 pub fn map_keyboard_mode(_peer: &str, event: &Event, key_event: KeyEvent) -> Vec<KeyEvent> {
     match _map_keyboard_mode(_peer, event, key_event) {
         Some(key_event) => {
-            #[cfg(not(target_os = "linux"))]
             if _peer == OS_LOWER_LINUX {
                 if let EventType::KeyPress(k) = &event.event_type {
                     #[cfg(target_os = "ios")]
@@ -943,7 +942,6 @@ fn _map_keyboard_mode(_peer: &str, event: &Event, mut key_event: KeyEvent) -> Op
 
 // https://github.com/rustdesk/rustdesk/issues/6793
 #[inline]
-#[cfg(not(target_os = "linux"))]
 fn try_workaround_linux_long_press(key_event: KeyEvent) -> Vec<KeyEvent> {
     let mut key_event_up = key_event.clone();
     key_event_up.down = false;
