@@ -1940,7 +1940,7 @@ checksum = "a0474425d51df81997e2f90a21591180b38eccf27292d755f3e30750225c175b"
 [[package]]
 name = "evdev"
 version = "0.11.5"
-source = "git+https://github.com/fufesou/evdev#cec616e37790293d2cd2aa54a96601ed6b1b35a9"
+source = "git+https://github.com/rustdesk-org/evdev#cec616e37790293d2cd2aa54a96601ed6b1b35a9"
 dependencies = [
  "bitvec",
  "libc",
@@ -3850,7 +3850,7 @@ dependencies = [
 [[package]]
 name = "mouce"
 version = "0.2.1"
-source = "git+https://github.com/fufesou/mouce.git#ed83800d532b95d70e39915314f6052aa433e9b9"
+source = "git+https://github.com/rustdesk-org/mouce.git#ed83800d532b95d70e39915314f6052aa433e9b9"
 dependencies = [
  "glob",
 ]
@@ -4551,7 +4551,7 @@ dependencies = [
 [[package]]
 name = "pam"
 version = "0.7.0"
-source = "git+https://github.com/fufesou/pam#3a2aaa6e07b176d8e2d66a5eec38d2ddb45f009f"
+source = "git+https://github.com/rustdesk-org/pam#7bfd25510202cd269292cbdd7c71f3977a6fd762"
 dependencies = [
  "libc",
  "pam-macros",
@@ -4573,7 +4573,7 @@ dependencies = [
 [[package]]
 name = "pam-sys"
 version = "1.0.0-alpha4"
-source = "git+https://github.com/fufesou/pam-sys?branch=fix/v1.0.0-alpha4_gnuc_va_list#3337c9bb9a9c68d7497ec8c93cad2368c26091b7"
+source = "git+https://github.com/rustdesk-org/pam-sys?branch=fix/v1.0.0-alpha4_gnuc_va_list#3337c9bb9a9c68d7497ec8c93cad2368c26091b7"
 dependencies = [
  "bindgen 0.59.2",
  "libc",
@@ -5260,7 +5260,7 @@ dependencies = [
 [[package]]
 name = "rdev"
 version = "0.5.0-2"
-source = "git+https://github.com/fufesou/rdev#b3434caee84c92412b45a2f655a15ac5dad33488"
+source = "git+https://github.com/rustdesk-org/rdev#b3434caee84c92412b45a2f655a15ac5dad33488"
 dependencies = [
  "cocoa 0.24.1",
  "core-foundation 0.9.4",
@@ -6594,7 +6594,7 @@ dependencies = [
 [[package]]
 name = "tfc"
 version = "0.6.1"
-source = "git+https://github.com/fufesou/The-Fat-Controller#9dd86151525fd010dc93f6bc9b6aedd1a75cc342"
+source = "git+https://github.com/rustdesk-org/The-Fat-Controller#9dd86151525fd010dc93f6bc9b6aedd1a75cc342"
 dependencies = [
  "anyhow",
  "core-graphics 0.22.3",

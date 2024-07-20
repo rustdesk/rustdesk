@@ -1046,7 +1046,7 @@ fn is_press(event: &Event) -> bool {
     matches!(event.event_type, EventType::KeyPress(_))
 }
 
-// https://github.com/fufesou/rustdesk/wiki/Keyboard-mode----Translate-Mode
+// https://github.com/rustdesk/rustdesk/wiki/FAQ#keyboard-translation-modes
 pub fn translate_keyboard_mode(peer: &str, event: &Event, key_event: KeyEvent) -> Vec<KeyEvent> {
     let mut events: Vec<KeyEvent> = Vec::new();
 

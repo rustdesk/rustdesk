@@ -57,11 +57,12 @@ static PLUGIN_SOURCE_LOCAL: &str = "local";
 
 fn get_plugin_source_list() -> Vec<PluginSource> {
     // Only one source for now.
-    vec![PluginSource {
-        name: "rustdesk".to_string(),
-        url: "https://raw.githubusercontent.com/fufesou/rustdesk-plugins/main".to_string(),
-        description: "".to_string(),
-    }]
+    // vec![PluginSource {
+    //     name: "rustdesk".to_string(),
+    //     url: "https://raw.githubusercontent.com/fufesou/rustdesk-plugins/main".to_string(),
+    //     description: "".to_string(),
+    // }]
+    vec![]
 }
 
 fn get_source_plugins() -> HashMap<String, PluginInfo> {
