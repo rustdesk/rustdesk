@@ -66,7 +66,7 @@ default-net = "0.14"
 wol-rs = "1.0"
 flutter_rust_bridge = { version = "=1.80", features = ["uuid"], optional = true}
 errno = "0.3"
-rdev = { git = "https://github.com/fufesou/rdev" }
+rdev = { git = "https://github.com/rustdesk-org/rdev" }
 url = { version = "2.3", features = ["serde"] }
 crossbeam-queue = "0.3"
 hex = "0.4"
@@ -152,11 +152,11 @@ psimple = { package = "libpulse-simple-binding", version = "2.27" }
 pulse = { package = "libpulse-binding", version = "2.27" }
 rust-pulsectl = { git = "https://github.com/open-trade/pulsectl" }
 async-process = "1.7"
-mouce = { git="https://github.com/fufesou/mouce.git" }
-evdev = { git="https://github.com/fufesou/evdev" }
+mouce = { git="https://github.com/rustdesk-org/mouce.git" }
+evdev = { git="https://github.com/rustdesk-org/evdev" }
 dbus = "0.9"
 dbus-crossroads = "0.5"
-pam = { git="https://github.com/fufesou/pam" }
+pam = { git="https://github.com/rustdesk-org/pam" }
 users = { version = "0.11" }
 x11-clipboard = {git="https://github.com/clslaid/x11-clipboard", branch = "feat/store-batch", optional = true}
 x11rb =  {version = "0.12", features = ["all-extensions"], optional = true}

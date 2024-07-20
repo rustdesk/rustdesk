@@ -85,7 +85,7 @@ impl PrivacyModeImpl {
         }
     }
 
-    // mainly from https://github.com/fufesou/rustdesk/blob/44c3a52ca8502cf53b58b59db130611778d34dbe/libs/scrap/src/dxgi/mod.rs#L365
+    // mainly from https://github.com/rustdesk-org/rustdesk/blob/44c3a52ca8502cf53b58b59db130611778d34dbe/libs/scrap/src/dxgi/mod.rs#L365
     fn set_displays(&mut self) {
         self.displays.clear();
         self.virtual_displays.clear();
