@@ -14,6 +14,7 @@ vcpkg_from_git(
     REF 8ad484f8a18ed1853c094e7d3a4e023b2a92df28 # 3.9.1
     PATCHES
         aom-uninitialized-pointer.diff
+        aom-avx2.diff
         # Can be dropped when https://bugs.chromium.org/p/aomedia/issues/detail?id=3029 is merged into the upstream
         aom-install.diff
 )
