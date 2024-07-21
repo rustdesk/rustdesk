@@ -730,7 +730,7 @@ pub fn block_input(_v: bool) -> (bool, String) {
 
 pub fn is_installed() -> bool {
     if let Ok(p) = std::env::current_exe() {
-        p.to_str().unwrap_or_default().starts_with("/usr")
+        p.to_str().unwrap_or_default().starts_with("/usr") || p.to_str().unwrap_or_default().starts_with("/nix/store")
     } else {
         false
     }
