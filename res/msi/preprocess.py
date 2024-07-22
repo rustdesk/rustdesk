@@ -423,6 +423,12 @@ def init_global_vars(dist_dir, app_name, args):
         )
         output, _ = process.communicate()
         return output.decode("utf-8").strip()
+    
+    # https://github.com/dotnet/runtime/blob/5535e31a712343a63f5d7d796cd874e563e5ac14/src/libraries/System.Private.CoreLib/src/System/Version.cs
+    if args.revision_version:
+        int_version = int(args.revision_version)
+        if int_version < 0 or int_version > 2147483647:
+            raise ValueError(f"Invalid revision version: {args.revision_version}")            
 
     global g_version
     global g_build_date
