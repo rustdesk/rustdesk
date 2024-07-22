@@ -97,8 +97,7 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
         kOptionEnableAbr, bind.mainGetOptionSync(key: kOptionEnableAbr));
     _denyLANDiscovery = !option2bool(kOptionEnableLanDiscovery,
         bind.mainGetOptionSync(key: kOptionEnableLanDiscovery));
-    _onlyWhiteList = (bind.mainGetOptionSync(key: kOptionWhitelist)) !=
-        defaultOptionWhitelist;
+    _onlyWhiteList = whitelistNotEmpty();
     _enableDirectIPAccess = option2bool(
         kOptionDirectServer, bind.mainGetOptionSync(key: kOptionDirectServer));
     _enableRecordSession = option2bool(kOptionEnableRecordSession,
@@ -282,9 +281,7 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
         initialValue: _onlyWhiteList,
         onToggle: (_) async {
           update() async {
-            final onlyWhiteList =
-                (await bind.mainGetOption(key: kOptionWhitelist)) !=
-                    defaultOptionWhitelist;
+            final onlyWhiteList = whitelistNotEmpty();
             if (onlyWhiteList != _onlyWhiteList) {
               setState(() {
                 _onlyWhiteList = onlyWhiteList;

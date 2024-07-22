@@ -1119,12 +1119,9 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
     bool enabled = !locked;
     // Simple temp wrapper for PR check
     tmpWrapper() {
-      RxBool hasWhitelist = (bind.mainGetOptionSync(key: kOptionWhitelist) !=
-              defaultOptionWhitelist)
-          .obs;
+      RxBool hasWhitelist = whitelistNotEmpty().obs;
       update() async {
-        hasWhitelist.value = bind.mainGetOptionSync(key: kOptionWhitelist) !=
-            defaultOptionWhitelist;
+        hasWhitelist.value = whitelistNotEmpty();
       }
 
       onChanged(bool? checked) async {
