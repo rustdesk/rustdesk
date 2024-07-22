@@ -37,6 +37,8 @@ g_arpsystemcomponent = {
     },
 }
 
+def default_revision_version():
+    return int(datetime.datetime.now().timestamp() / 60)
 
 def make_parser():
     parser = argparse.ArgumentParser(description="Msi preprocess script.")
@@ -67,6 +69,9 @@ def make_parser():
     )
     parser.add_argument(
         "-v", "--version", type=str, default="", help="The app version."
+    )
+    parser.add_argument(
+        "--revision-version", type=int, default=default_revision_version(), help="The revision version."
     )
     parser.add_argument(
         "-m",
@@ -430,6 +435,11 @@ def init_global_vars(dist_dir, app_name, args):
     if not version_pattern.match(g_version):
         print(f"Error: version {g_version} not found in {dist_app}")
         return False
+    if g_version.count(".") == 2:
+        # https://github.com/dotnet/runtime/blob/5535e31a712343a63f5d7d796cd874e563e5ac14/src/libraries/System.Private.CoreLib/src/System/Version.cs
+        if args.revision_version < 0 or args.revision_version > 2147483647:
+            raise ValueError(f"Invalid revision version: {args.revision_version}")    
+        g_version = f"{g_version}.{args.revision_version}"
 
     g_build_date = read_process_output("--build-date")
     build_date_pattern = re.compile(r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}")
