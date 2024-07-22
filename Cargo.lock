@@ -3850,7 +3850,7 @@ dependencies = [
 [[package]]
 name = "mouce"
 version = "0.2.1"
-source = "git+https://github.com/rustdesk-org/mouce.git#ed83800d532b95d70e39915314f6052aa433e9b9"
+source = "git+https://github.com/rustdesk-org/mouce.git#177625a395cd8fa73964714d0039535cb9b47893"
 dependencies = [
  "glob",
 ]
