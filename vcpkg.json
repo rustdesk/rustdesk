@@ -51,13 +51,44 @@
     {
       "name": "libyuv",
       "host": false
+    },
+    {
+      "name": "ffmpeg",
+      "host": true,
+      "features": [
+        {
+          "name": "amf",
+          "platform": "((windows | linux) & static)"
+        },
+        {
+          "name": "nvcodec",
+          "platform": "((windows | linux) & static)"
+        },
+        {
+          "name": "qsv",
+          "platform": "(windows & static)"
+        }
+      ],
+      "platform": "((windows | (linux & !arm32) | osx) & static)"
+    },
+    {
+      "name": "ffmpeg",
+      "host": false,
+      "platform": "((android | ios | (linux & arm32)) & static)"
     }
   ],
   "vcpkg-configuration": {
     "default-registry": {
       "kind": "builtin",
-      "baseline": ""
+      "baseline": "f7423ee180c4b7f40d43402c2feb3859161ef625"
     },
-    "overlay-ports": [ "./res/vcpkg" ]
-  }
+    "overlay-ports": [
+      "./res/vcpkg"
+    ]
+  },
+  "overrides": [
+    { "name": "ffnvcodec", "version": "11.1.5.2" },
+    { "name": "amd-amf", "version": "1.4.29" },
+    { "name": "mfx-dispatch", "version": "1.35.1" }
+  ]
 }

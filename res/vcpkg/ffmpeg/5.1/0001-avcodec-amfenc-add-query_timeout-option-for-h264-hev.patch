@@ -1,0 +1,71 @@
+From f0b694749b38b2cfd94df4eed10e667342c234e5 Mon Sep 17 00:00:00 2001
+From: 21pages <pages21@163.com>
+Date: Sat, 24 Feb 2024 15:33:24 +0800
+Subject: [PATCH 1/2] avcodec/amfenc: add query_timeout option for h264/hevc
+
+Signed-off-by: 21pages <pages21@163.com>
+---
+ libavcodec/amfenc.h      | 1 +
+ libavcodec/amfenc_h264.c | 4 ++++
+ libavcodec/amfenc_hevc.c | 4 ++++
+ 3 files changed, 9 insertions(+)
+
+diff --git a/libavcodec/amfenc.h b/libavcodec/amfenc.h
+index 1ab98d2f78..e92120ea39 100644
+--- a/libavcodec/amfenc.h
++++ b/libavcodec/amfenc.h
+@@ -87,6 +87,7 @@ typedef struct AmfContext {
+     int                 quality;
+     int                 b_frame_delta_qp;
+     int                 ref_b_frame_delta_qp;
++    int64_t             query_timeout;
+ 
+     // Dynamic options, can be set after Init() call
+ 
+diff --git a/libavcodec/amfenc_h264.c b/libavcodec/amfenc_h264.c
+index efb04589f6..f55dbc80f0 100644
+--- a/libavcodec/amfenc_h264.c
++++ b/libavcodec/amfenc_h264.c
+@@ -121,6 +121,7 @@ static const AVOption options[] = {
+     { "aud",            "Inserts AU Delimiter NAL unit",        OFFSET(aud)          ,AV_OPT_TYPE_BOOL,  { .i64 = 0 }, 0, 1, VE },
+ 
+     { "log_to_dbg",     "Enable AMF logging to debug output",   OFFSET(log_to_dbg)    , AV_OPT_TYPE_BOOL, { .i64 = 0 }, 0, 1, VE },
++    { "query_timeout", "Timeout for QueryOutput call in ms", OFFSET(query_timeout), AV_OPT_TYPE_INT64, { .i64 = -1 }, -1, 1000, VE },
+ 
+     { NULL }
+ };
+@@ -155,6 +156,9 @@ static av_cold int amf_encode_init_h264(AVCodecContext *avctx)
+ 
+     AMF_ASSIGN_PROPERTY_RATE(res, ctx->encoder, AMF_VIDEO_ENCODER_FRAMERATE, framerate);
+ 
++    if (ctx->query_timeout >= 0)
++        AMF_ASSIGN_PROPERTY_INT64(res, ctx->encoder, AMF_VIDEO_ENCODER_QUERY_TIMEOUT, ctx->query_timeout);
++
+     switch (avctx->profile) {
+     case FF_PROFILE_H264_BASELINE:
+         profile = AMF_VIDEO_ENCODER_PROFILE_BASELINE;
+diff --git a/libavcodec/amfenc_hevc.c b/libavcodec/amfenc_hevc.c
+index 8ab9330730..7a40bcad31 100644
+--- a/libavcodec/amfenc_hevc.c
++++ b/libavcodec/amfenc_hevc.c
+@@ -89,6 +89,7 @@ static const AVOption options[] = {
+     { "aud",            "Inserts AU Delimiter NAL unit",            OFFSET(aud)           ,AV_OPT_TYPE_BOOL,{ .i64 = 0 }, 0, 1, VE },
+ 
+     { "log_to_dbg",     "Enable AMF logging to debug output",   OFFSET(log_to_dbg), AV_OPT_TYPE_BOOL,{ .i64 = 0 }, 0, 1, VE },
++    { "query_timeout", "Timeout for QueryOutput call in ms", OFFSET(query_timeout), AV_OPT_TYPE_INT64, { .i64 = -1 }, -1, 1000, VE },
+     { NULL }
+ };
+ 
+@@ -122,6 +123,9 @@ static av_cold int amf_encode_init_hevc(AVCodecContext *avctx)
+ 
+     AMF_ASSIGN_PROPERTY_RATE(res, ctx->encoder, AMF_VIDEO_ENCODER_HEVC_FRAMERATE, framerate);
+ 
++    if (ctx->query_timeout >= 0)
++        AMF_ASSIGN_PROPERTY_INT64(res, ctx->encoder, AMF_VIDEO_ENCODER_HEVC_QUERY_TIMEOUT, ctx->query_timeout);
++
+     switch (avctx->profile) {
+     case FF_PROFILE_HEVC_MAIN:
+         profile = AMF_VIDEO_ENCODER_HEVC_PROFILE_MAIN;
+-- 
+2.43.0.windows.1
+

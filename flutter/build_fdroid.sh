@@ -43,15 +43,13 @@ arm64-v8a)
 	FLUTTER_TARGET=android-arm64
 	NDK_TARGET=aarch64-linux-android
 	RUST_TARGET=aarch64-linux-android
-#	RUSTDESK_FEATURES='flutter,hwcodec'
-	RUSTDESK_FEATURES='flutter'
+	RUSTDESK_FEATURES='flutter,hwcodec'
 	;;
 armeabi-v7a)
 	FLUTTER_TARGET=android-arm
 	NDK_TARGET=arm-linux-androideabi
 	RUST_TARGET=armv7-linux-androideabi
-#	RUSTDESK_FEATURES='flutter,hwcodec'
-	RUSTDESK_FEATURES='flutter'
+	RUSTDESK_FEATURES='flutter,hwcodec'
 	;;
 x86_64)
 	FLUTTER_TARGET=android-x64

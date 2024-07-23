@@ -29,8 +29,8 @@ env:
   FLUTTER_ELINUX_VERSION: "3.16.9"
   TAG_NAME: "${{ inputs.upload-tag }}"
   VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
-  # vcpkg version: 2024.06.15
-  VCPKG_COMMIT_ID: "f7423ee180c4b7f40d43402c2feb3859161ef625"
+  # vcpkg version: 2024.07.12
+  VCPKG_COMMIT_ID: "1de2026f28ead93ff1773e6e680387643e914ea1"
   VERSION: "1.2.7"
   NDK_VERSION: "r26d"
   #signing keys env variable checks
@@ -115,6 +115,8 @@ jobs:
           vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
 
       - name: Install vcpkg dependencies
+        env:
+          VCPKG_DEFAULT_HOST_TRIPLET: ${{ matrix.job.vcpkg-triplet }}
         run: |
           $VCPKG_ROOT/vcpkg install --triplet ${{ matrix.job.vcpkg-triplet }} --x-install-root="$VCPKG_ROOT/installed"
         shell: bash
@@ -255,6 +257,8 @@ jobs:
           vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
 
       - name: Install vcpkg dependencies
+        env:
+          VCPKG_DEFAULT_HOST_TRIPLET: ${{ matrix.job.vcpkg-triplet }}
         run: |
           $VCPKG_ROOT/vcpkg install --triplet ${{ matrix.job.vcpkg-triplet }} --x-install-root="$VCPKG_ROOT/installed"
         shell: bash
@@ -424,7 +428,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          brew install nasm
+          brew install nasm yasm
       - name: Checkout source code
         uses: actions/checkout@v3
       - name: Install flutter
@@ -1290,6 +1294,7 @@ jobs:
               deb_arch: amd64,
               sciter_arch: x64,
               vcpkg-triplet: x64-linux,
+              extra_features: ",hwcodec",
             }
           - {
               arch: armv7,
@@ -1299,6 +1304,7 @@ jobs:
               deb_arch: armhf,
               sciter_arch: arm32,
               vcpkg-triplet: arm-linux,
+              extra_features: "",
             }
     steps:
       - name: Export GitHub Actions cache environment variables
@@ -1313,7 +1319,6 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y \
                cmake \
-               crossbuild-essential-armhf \
                curl \
                g++ \
                gcc \
@@ -1351,10 +1356,9 @@ jobs:
           vcpkgDirectory: /opt/artifacts/vcpkg
           vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
 
-      - name: Install vcpkg dependencies
+      - name: Override Linux compiler detection in vcpkg
         run: |
           cp $PWD/res/vcpkg/linux.cmake $VCPKG_ROOT/scripts/toolchains/linux.cmake
-          $VCPKG_ROOT/vcpkg install --triplet ${{ matrix.job.vcpkg-triplet }} --x-install-root="$VCPKG_ROOT/installed"
         shell: bash
 
       - uses: rustdesk-org/run-on-arch-action@amd64-support
@@ -1371,7 +1375,7 @@ jobs:
             --volume "/opt/artifacts:/opt/artifacts"
           shell: /bin/bash
           install: |
-            apt-get update -y
+            apt-get update
             apt-get install -y \
                build-essential \
                clang \
@@ -1398,17 +1402,26 @@ jobs:
                libxcb-xfixes0-dev \
                libxdo-dev \
                libxfixes-dev \
-               nasm \
                ninja-build \
                pkg-config \
                python3 \
+               python3.7 \
                rpm \
                unzip \
                wget \
                xz-utils
+            # install newer nasm for aom
+            wget --output-document nasm.deb "http://ftp.us.debian.org/debian/pool/main/n/nasm/nasm_2.14-1_${{ matrix.job.deb_arch }}.deb"
+            dpkg -i nasm.deb
+            rm -f nasm.deb
           run: |
             # disable git safe.directory
             git config --global --add safe.directory "*"
+            # Set python3.7 as default python3
+            update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.7 1
+            # vcpkg
+            export VCPKG_ROOT=/opt/artifacts/vcpkg
+            $VCPKG_ROOT/vcpkg install --triplet ${{ matrix.job.vcpkg-triplet }} --x-install-root="$VCPKG_ROOT/installed"
             # rust
             pushd /opt
             # do not use rustup, because memory overflow in qemu
@@ -1427,9 +1440,8 @@ jobs:
             # build
             pushd /workspace
             python3 ./res/inline-sciter.py
-            export VCPKG_ROOT=/opt/artifacts/vcpkg
             export CARGO_INCREMENTAL=0
-            cargo build --features inline --release --bins --jobs 1
+            cargo build --features inline${{ matrix.job.extra_features }} --release --bins --jobs 1
             # package
             mkdir -p ./Release
             mv ./target/release/rustdesk ./Release/rustdesk
