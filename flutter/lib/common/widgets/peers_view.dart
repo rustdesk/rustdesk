@@ -82,7 +82,7 @@ class _PeersViewState extends State<_PeersView> with WindowListener {
   final _curPeers = <String>{};
   var _lastChangeTime = DateTime.now();
   var _lastQueryPeers = <String>{};
-  var _lastQueryTime = DateTime.now().add(const Duration(seconds: 30));
+  var _lastQueryTime = DateTime.now();
   var _queryCount = 0;
   var _exit = false;
 
@@ -253,10 +253,14 @@ class _PeersViewState extends State<_PeersView> with WindowListener {
     return body;
   }
 
-  final _queryInterval = const Duration(seconds: 20);
+  var _queryInterval = const Duration(seconds: 20);
 
   void _startCheckOnlines() {
     () async {
+      final p = await bind.mainIsUsingPublicServer();
+      if (!p) {
+        _queryInterval = const Duration(seconds: 6);
+      }
       while (!_exit) {
         final now = DateTime.now();
         if (!setEquals(_curPeers, _lastQueryPeers)) {
@@ -264,7 +268,7 @@ class _PeersViewState extends State<_PeersView> with WindowListener {
             _queryOnlines(false);
           }
         } else {
-          if (_queryCount < _maxQueryCount) {
+          if (_queryCount < _maxQueryCount || !p) {
             if (now.difference(_lastQueryTime) >= _queryInterval) {
               if (_curPeers.isNotEmpty) {
                 bind.queryOnlines(ids: _curPeers.toList(growable: false));
