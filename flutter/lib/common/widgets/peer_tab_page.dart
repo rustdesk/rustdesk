@@ -875,11 +875,14 @@ class _PeerSortDropdownState extends State<PeerSortDropdown> {
   @override
   void initState() {
     if (!PeerSortType.values.contains(peerSort.value)) {
-      peerSort.value = PeerSortType.remoteId;
-      bind.setLocalFlutterOption(
-        k: kOptionPeerSorting,
-        v: peerSort.value,
-      );
+      Future.delayed(Duration.zero, () {
+        // do not change obx directly in initState, so do in future.
+        peerSort.value = PeerSortType.remoteId;
+        bind.setLocalFlutterOption(
+          k: kOptionPeerSorting,
+          v: peerSort.value,
+        );
+      });
     }
     super.initState();
   }

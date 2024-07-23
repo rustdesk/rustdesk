@@ -384,7 +384,7 @@ class FfiModel with ChangeNotifier {
       } else if (name == 'use_texture_render') {
         _handleUseTextureRender(evt, sessionId, peerId);
       } else {
-        debugPrint('Unknown event name: $name');
+        debugPrint('Event is not handled in the fixed branch: $name');
       }
     };
   }
