@@ -87,7 +87,7 @@ class _PeerTabPageState extends State<PeerTabPage>
               : PeerUiType.list;
     }
     hideAbTagsPanel.value =
-        bind.mainGetLocalOption(key: kOptionHideAbTagsPanel).isNotEmpty;
+        bind.mainGetLocalOption(key: kOptionHideAbTagsPanel) == 'Y';
     super.initState();
   }
 
