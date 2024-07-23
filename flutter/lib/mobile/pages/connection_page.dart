@@ -395,7 +395,7 @@ class _WebMenuState extends State<WebMenu> {
               [
                 PopupMenuItem(
                   value: "about",
-                  child: Text('${translate('About')} RustDesk'),
+                  child: Text(translate('About RustDesk')),
                 )
               ];
         },

@@ -629,5 +629,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("enable-bot-desc", "1, Abre un chat con @BotFather.\n2, Envía el comando \"/newbot\". Recibirás un token tras completar esta paso.\n3, Inicia un chat con tu bot recién creado. Envía un mensaje que comience con una barra (\"/\") como \"/hola\" para activarlo.\n"),
         ("cancel-2fa-confirm-tip", "¿Seguro que quieres cancelar 2FA?"),
         ("cancel-bot-confirm-tip", "¿Seguro que quieres cancelar el bot de Telegram?"),
+        ("About RustDesk", ""),
     ].iter().cloned().collect();
 }

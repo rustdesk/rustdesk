@@ -231,5 +231,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("enable-bot-desc", "1. Open a chat with @BotFather.\n2. Send the command \"/newbot\". You will receive a token after completing this step.\n3. Start a chat with your newly created bot. Send a message beginning with a forward slash (\"/\") like \"/hello\" to activate it.\n"),
         ("cancel-2fa-confirm-tip", "Are you sure you want to cancel 2FA?"),
         ("cancel-bot-confirm-tip", "Are you sure you want to cancel Telegram bot?"),
+        ("About RustDesk", ""),
     ].iter().cloned().collect();
 }
