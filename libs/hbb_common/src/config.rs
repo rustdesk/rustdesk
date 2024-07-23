@@ -2113,6 +2113,7 @@ pub mod keys {
     pub const OPTION_HIDE_PROXY_SETTINGS: &str = "hide-proxy-settings";
     pub const OPTION_HIDE_USERNAME_ON_CARD: &str = "hide-username-on-card";
     pub const OPTION_HIDE_HELP_CARDS: &str = "hide-help-cards";
+    pub const OPTION_DEFAULT_CONNECT_PASSWORD: &str = "default-connect-password";
 
     // flutter local options
     pub const OPTION_FLUTTER_REMOTE_MENUBAR_STATE: &str = "remoteMenubarState";
@@ -2254,6 +2255,7 @@ pub mod keys {
         OPTION_HIDE_PROXY_SETTINGS,
         OPTION_HIDE_USERNAME_ON_CARD,
         OPTION_HIDE_HELP_CARDS,
+        OPTION_DEFAULT_CONNECT_PASSWORD,
     ];
 }
 
