@@ -630,6 +630,7 @@ lazy_static::lazy_static! {
             ("Telegram bot", "Telegrameko bot-a"),
             ("enable-bot-tip", "Ezaugarri hau gaitzen baduzu, zure bot-etik 2FA kodea jaso dezakezu. Konexio jakinarazpenetarako ere balio dezake."),
             ("enable-bot-desc", "1, Ireki txat bat @BotFather bot-arekin.\n2, Bidali \"/newbot\" agindua. Token bat jasoko duzu urrats honen ostean.\n3, Hasi txat bat zure bot berriarekin. Bidali mezu bat aurreko barra batekin (\"/\") \"/kaixo\" bezala gaitzeko.\n"),
-        ].iter().cloned().collect();
+            ("About RustDesk", ""),
+    ].iter().cloned().collect();
     }
     

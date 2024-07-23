@@ -629,5 +629,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("enable-bot-desc", "1. Atveriet tērzēšanu ar @BotFather.\n2. Nosūtiet komandu \"/newbot\". Pēc šīs darbības pabeigšanas jūs saņemsit pilnvaru.\n3. Sāciet tērzēšanu ar jaunizveidoto robotprogrammatūru. Lai to aktivizētu, nosūtiet ziņojumu, kas sākas ar slīpsvītru (\"/\"), piemēram, \"/hello\".\n"),
         ("cancel-2fa-confirm-tip", "Vai tiešām vēlaties atcelt 2FA?"),
         ("cancel-bot-confirm-tip", "Vai tiešām vēlaties atcelt Telegram robotu?"),
+        ("About RustDesk", ""),
     ].iter().cloned().collect();
 }
