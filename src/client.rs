@@ -2374,7 +2374,7 @@ fn get_hwcodec_config() {
             let start = std::time::Instant::now();
             if let Err(e) = crate::ipc::get_hwcodec_config_from_server() {
                 log::error!(
-                    "failed to get hwcodec config: {e:?}, elapsed: {:?}",
+                    "Failed to get hwcodec config: {e:?}, elapsed: {:?}",
                     start.elapsed()
                 );
             } else {
@@ -2994,7 +2994,9 @@ pub trait Interface: Send + Clone + 'static + Sized {
         log::error!("Connection closed: {err}({errno})");
         if direct == Some(true)
             && ((cfg!(windows) && (errno == 10054 || err.contains("10054")))
-                || (!cfg!(windows) && (errno == 104 || err.contains("104"))))
+                || (!cfg!(windows) && (errno == 104 || err.contains("104")))
+                || (!err.contains("Failed") && err.contains("deadline")))
+        // deadline: https://github.com/rustdesk/rustdesk-server-pro/discussions/325, most likely comes from secure tcp timeout
         {
             relay_hint = true;
             if !received {
