@@ -1173,6 +1173,8 @@ class ImageModel with ChangeNotifier {
 
   addCallbackOnFirstImage(Function(String) cb) => callbacksOnFirstImage.add(cb);
 
+  clearImage() => _image = null;
+
   onRgba(int display, Uint8List rgba) {
     final pid = parent.target?.id;
     final rect = parent.target?.ffiModel.pi.getDisplayRect(display);

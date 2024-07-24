@@ -68,6 +68,8 @@ use std::{
 pub const NAME: &'static str = "video";
 pub const OPTION_REFRESH: &'static str = "refresh";
 
+const REFRESH_MIN_INTERVAL_MILLIS: u128 = 300;
+
 lazy_static::lazy_static! {
     static ref FRAME_FETCHED_NOTIFIER: (UnboundedSender<(i32, Option<Instant>)>, Arc<TokioMutex<UnboundedReceiver<(i32, Option<Instant>)>>>) = {
         let (tx, rx) = unbounded_channel();
@@ -76,6 +78,8 @@ lazy_static::lazy_static! {
     pub static ref VIDEO_QOS: Arc<Mutex<VideoQoS>> = Default::default();
     pub static ref IS_UAC_RUNNING: Arc<Mutex<bool>> = Default::default();
     pub static ref IS_FOREGROUND_WINDOW_ELEVATED: Arc<Mutex<bool>> = Default::default();
+    // Avoid refreshing too frequently
+    static ref LAST_REFRESH_TIME: Arc<Mutex<HashMap<usize, Instant>>> = Default::default();
 }
 
 #[inline]
@@ -513,9 +517,17 @@ fn run(vs: VideoService) -> ResultType<()> {
         drop(video_qos);
 
         if sp.is_option_true(OPTION_REFRESH) {
-            let _ = try_broadcast_display_changed(&sp, display_idx, &c, true);
-            log::info!("switch to refresh");
-            bail!("SWITCH");
+            let mut last_refresh_lock = LAST_REFRESH_TIME.lock().unwrap();
+            if last_refresh_lock
+                .get(&vs.idx)
+                .map(|x| x.elapsed().as_millis() > REFRESH_MIN_INTERVAL_MILLIS)
+                .unwrap_or(true)
+            {
+                let _ = try_broadcast_display_changed(&sp, display_idx, &c, true);
+                last_refresh_lock.insert(vs.idx, Instant::now());
+                log::info!("switch to refresh");
+                bail!("SWITCH");
+            }
         }
         if codec_format != Encoder::negotiated_codec() {
             log::info!(
