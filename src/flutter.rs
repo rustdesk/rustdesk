@@ -1914,6 +1914,12 @@ pub mod sessions {
                     // Try capture all displays.
                     s.capture_displays(vec![], vec![], value);
                 }
+                // When switching display, we also need to send "Refresh display" message.
+                // On the controlled side:
+                // 1. If this display is not currently captured -> Refresh -> Message "Refresh display" is not required.
+                // One more key frame (first frame) will be sent because the refresh message.
+                // 2. If this display is currently captured -> Not refresh -> Message "Refresh display" is required.
+                // Without the message, the control side cannot see the latest display image.
                 #[cfg(not(any(target_os = "android", target_os = "ios")))]
                 {
                     let is_support_multi_ui_session = crate::common::is_support_multi_ui_session(
