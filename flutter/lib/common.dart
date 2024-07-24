@@ -3326,6 +3326,42 @@ bool isInHomePage() {
   return controller.state.value.selected == 0;
 }
 
+Widget _buildPresetPasswordWarning() {
+  if (bind.mainGetBuildinOption(key: kOptionRemovePresetPasswordWarning) !=
+      'N') {
+    return SizedBox.shrink();
+  }
+  return Container(
+    color: Colors.yellow,
+    child: Column(
+      children: [
+        Align(
+            child: Text(
+          translate("Security Alert"),
+          style: TextStyle(
+            color: Colors.red,
+            fontSize:
+                18, // https://github.com/rustdesk/rustdesk-server-pro/issues/261
+            fontWeight: FontWeight.bold,
+          ),
+        )).paddingOnly(bottom: 8),
+        Text(
+          translate("preset_password_warning"),
+          style: TextStyle(color: Colors.red),
+        )
+      ],
+    ).paddingAll(8),
+  ); // Show a warning message if the Future completed with true
+}
+
+Widget buildPresetPasswordWarningMobile() {
+  if (bind.isPresetPasswordMobileOnly()) {
+    return _buildPresetPasswordWarning();
+  } else {
+    return SizedBox.shrink();
+  }
+}
+
 Widget buildPresetPasswordWarning() {
   return FutureBuilder<bool>(
     future: bind.isPresetPassword(),
@@ -3336,32 +3372,7 @@ Widget buildPresetPasswordWarning() {
         return Text(
             'Error: ${snapshot.error}'); // Show an error message if the Future completed with an error
       } else if (snapshot.hasData && snapshot.data == true) {
-        if (bind.mainGetBuildinOption(
-                key: kOptionRemovePresetPasswordWarning) !=
-            'N') {
-          return SizedBox.shrink();
-        }
-        return Container(
-          color: Colors.yellow,
-          child: Column(
-            children: [
-              Align(
-                  child: Text(
-                translate("Security Alert"),
-                style: TextStyle(
-                  color: Colors.red,
-                  fontSize:
-                      18, // https://github.com/rustdesk/rustdesk-server-pro/issues/261
-                  fontWeight: FontWeight.bold,
-                ),
-              )).paddingOnly(bottom: 8),
-              Text(
-                translate("preset_password_warning"),
-                style: TextStyle(color: Colors.red),
-              )
-            ],
-          ).paddingAll(8),
-        ); // Show a warning message if the Future completed with true
+        return _buildPresetPasswordWarning();
       } else {
         return SizedBox
             .shrink(); // Show nothing if the Future completed with false or null
