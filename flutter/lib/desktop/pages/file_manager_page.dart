@@ -98,7 +98,10 @@ class _FileManagerPageState extends State<FileManagerPage>
     }
     debugPrint("File manager page init success with id ${widget.id}");
     _ffi.dialogManager.setOverlayState(_overlayKeyState);
-    widget.tabController.onSelected?.call(widget.id);
+    // Call onSelected in future, since we cannot guarantee that the callback will not call setState.
+    Future.delayed(Duration.zero, () {
+      widget.tabController.onSelected?.call(widget.id);
+    });
   }
 
   @override

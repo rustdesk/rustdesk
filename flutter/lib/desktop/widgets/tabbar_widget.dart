@@ -1271,12 +1271,12 @@ class ActionIcon extends StatefulWidget {
 }
 
 class _ActionIconState extends State<ActionIcon> {
-  var hover = false.obs;
+  final hover = false.obs;
 
   @override
   void initState() {
     super.initState();
-    hover.value = false;
+    Future.delayed(Duration.zero, () => hover.value = false);
   }
 
   @override

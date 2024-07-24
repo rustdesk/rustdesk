@@ -48,6 +48,10 @@ class MyPopupMenuItemState<T, W extends PopupMenuChildrenItem<T>>
   @override
   void initState() {
     super.initState();
+    Future.delayed(Duration.zero, _initEnabled);
+  }
+
+  Future<void> _initEnabled() async {
     if (widget.enabled != null) {
       enabled.value = widget.enabled!.value;
     }

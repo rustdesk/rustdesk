@@ -399,7 +399,10 @@ class _CmHeaderState extends State<_CmHeader>
         _time.value = _time.value + 1;
       }
     });
-    gFFI.serverModel.tabController.onSelected?.call(client.id.toString());
+    // Call onSelected in future, since we cannot guarantee that the callback will not call setState.
+    Future.delayed(Duration.zero, () {
+      gFFI.serverModel.tabController.onSelected?.call(client.id.toString());
+    });
   }
 
   @override
@@ -732,7 +735,8 @@ class _CmControlPanel extends StatelessWidget {
                 child: buildButton(context,
                     color: MyTheme.accent,
                     onClick: null, onTapDown: (details) async {
-                  final devicesInfo = await AudioInput.getDevicesInfo(true, true);
+                  final devicesInfo =
+                      await AudioInput.getDevicesInfo(true, true);
                   List<String> devices = devicesInfo['devices'] as List<String>;
                   if (devices.isEmpty) {
                     msgBox(
@@ -764,7 +768,8 @@ class _CmControlPanel extends StatelessWidget {
                                 value: d,
                                 groupValue: currentDevice,
                                 onChanged: (v) {
-                                  if (v != null) AudioInput.setDevice(v, true, true);
+                                  if (v != null)
+                                    AudioInput.setDevice(v, true, true);
                                 },
                                 child: Container(
                                   child: Text(

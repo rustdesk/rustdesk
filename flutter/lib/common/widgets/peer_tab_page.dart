@@ -78,6 +78,11 @@ class _PeerTabPageState extends State<PeerTabPage>
 
   @override
   void initState() {
+    Future.delayed(Duration.zero, _loadLocalOptions);
+    super.initState();
+  }
+
+  Future<void> _loadLocalOptions() async {
     final uiType = bind.getLocalFlutterOption(k: kOptionPeerCardUiType);
     if (uiType != '') {
       peerCardUiType.value = int.parse(uiType) == 0
@@ -88,7 +93,6 @@ class _PeerTabPageState extends State<PeerTabPage>
     }
     hideAbTagsPanel.value =
         bind.mainGetLocalOption(key: kOptionHideAbTagsPanel) == 'Y';
-    super.initState();
   }
 
   Future<void> handleTabSelection(int tabIndex) async {
@@ -875,16 +879,18 @@ class _PeerSortDropdownState extends State<PeerSortDropdown> {
   @override
   void initState() {
     if (!PeerSortType.values.contains(peerSort.value)) {
-      Future.delayed(Duration.zero, () {
-        // do not change obx directly in initState, so do in future.
-        peerSort.value = PeerSortType.remoteId;
-        bind.setLocalFlutterOption(
-          k: kOptionPeerSorting,
-          v: peerSort.value,
-        );
-      });
+      // do not change obx directly in initState, so do in future.
+      Future.delayed(Duration.zero, _loadLocalOptions);
     }
     super.initState();
+  }
+
+  Future<void> _loadLocalOptions() async {
+    peerSort.value = PeerSortType.remoteId;
+    bind.setLocalFlutterOption(
+      k: kOptionPeerSorting,
+      v: peerSort.value,
+    );
   }
 
   @override
