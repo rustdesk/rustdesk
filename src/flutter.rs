@@ -1063,7 +1063,7 @@ impl FlutterHandler {
         }
         // We need `is_sent` here. Because we use texture render for multi-displays session.
         //
-        // Eg. We have to windows, one is display 1, the other is displays 0&1.
+        // Eg. We have two windows, one is display 1, the other is displays 0&1.
         // When image of display 0 is received, we will not send the event.
         //
         // 1. "display 1" will not send the event.

@@ -517,16 +517,22 @@ fn run(vs: VideoService) -> ResultType<()> {
         drop(video_qos);
 
         if sp.is_option_true(OPTION_REFRESH) {
-            let mut last_refresh_lock = LAST_REFRESH_TIME.lock().unwrap();
-            if last_refresh_lock
+            if LAST_REFRESH_TIME
+                .lock()
+                .unwrap()
                 .get(&vs.idx)
                 .map(|x| x.elapsed().as_millis() > REFRESH_MIN_INTERVAL_MILLIS)
                 .unwrap_or(true)
             {
                 let _ = try_broadcast_display_changed(&sp, display_idx, &c, true);
-                last_refresh_lock.insert(vs.idx, Instant::now());
+                LAST_REFRESH_TIME
+                    .lock()
+                    .unwrap()
+                    .insert(vs.idx, Instant::now());
                 log::info!("switch to refresh");
                 bail!("SWITCH");
+            } else {
+                sp.set_option_bool(OPTION_REFRESH, false);
             }
         }
         if codec_format != Encoder::negotiated_codec() {
