@@ -1966,6 +1966,12 @@ pub fn is_preset_password() -> bool {
         })
 }
 
+// Don't call this function for desktop version.
+// We need this function because we want a sync return for mobile version.
+pub fn is_preset_password_mobile_only() -> SyncReturn<bool> {
+    SyncReturn(is_preset_password())
+}
+
 /// Send a url scheme through the ipc.
 ///
 /// * macOS only
