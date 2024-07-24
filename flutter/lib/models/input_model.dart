@@ -801,14 +801,14 @@ class InputModel {
       var dx = e.scrollDelta.dx.toInt();
       var dy = e.scrollDelta.dy.toInt();
       if (dx > 0) {
-        dx = -1;
-      } else if (dx < 0) {
         dx = 1;
+      } else if (dx < 0) {
+        dx = -1;
       }
       if (dy > 0) {
-        dy = -1;
-      } else if (dy < 0) {
         dy = 1;
+      } else if (dy < 0) {
+        dy = -1;
       }
       bind.sessionSendMouse(
           sessionId: sessionId,
