@@ -1396,6 +1396,7 @@ jobs:
             # vcpkg
             export VCPKG_ROOT=/opt/artifacts/vcpkg
             pushd /opt/artifacts
+            rm -rf vcpkg
             git clone https://github.com/microsoft/vcpkg
             pushd vcpkg
             git reset --hard ${{ env.VCPKG_COMMIT_ID }}
