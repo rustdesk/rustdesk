@@ -636,8 +636,8 @@ abstract class BasePeerCard extends StatelessWidget {
 
   @protected
   Future<bool> _isForceAlwaysRelay(String id) async {
-    return (await bind.mainGetPeerOption(id: id, key: kOptionForceAlwaysRelay))
-        .isNotEmpty;
+    return option2bool(kOptionForceAlwaysRelay,
+        (await bind.mainGetPeerOption(id: id, key: kOptionForceAlwaysRelay)));
   }
 
   @protected

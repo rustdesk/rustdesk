@@ -17,17 +17,17 @@ import '../common.dart';
 
 final syncAbOption = 'sync-ab-with-recent-sessions';
 bool shouldSyncAb() {
-  return bind.mainGetLocalOption(key: syncAbOption).isNotEmpty;
+  return bind.mainGetLocalOption(key: syncAbOption) == 'Y';
 }
 
 final sortAbTagsOption = 'sync-ab-tags';
 bool shouldSortTags() {
-  return bind.mainGetLocalOption(key: sortAbTagsOption).isNotEmpty;
+  return bind.mainGetLocalOption(key: sortAbTagsOption) == 'Y';
 }
 
 final filterAbTagOption = 'filter-ab-by-intersection';
 bool filterAbTagByIntersection() {
-  return bind.mainGetLocalOption(key: filterAbTagOption).isNotEmpty;
+  return bind.mainGetLocalOption(key: filterAbTagOption) == 'Y';
 }
 
 const _personalAddressBookName = "My address book";
@@ -815,8 +815,6 @@ abstract class BaseAb {
 }
 
 class LegacyAb extends BaseAb {
-  final sortTags = shouldSortTags().obs;
-  final filterByIntersection = filterAbTagByIntersection().obs;
   bool get emtpy => peers.isEmpty && tags.isEmpty;
   // licensedDevices is obtained from personal ab, shared ab restrict it in server
   var licensedDevices = 0;
@@ -1209,8 +1207,6 @@ class LegacyAb extends BaseAb {
 class Ab extends BaseAb {
   AbProfile profile;
   late final bool personal;
-  final sortTags = shouldSortTags().obs;
-  final filterByIntersection = filterAbTagByIntersection().obs;
   bool get emtpy => peers.isEmpty && tags.isEmpty;
 
   Ab(this.profile, this.personal);
