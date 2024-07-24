@@ -1889,6 +1889,7 @@ pub mod sessions {
             let mut write_lock = s.ui_handler.session_handlers.write().unwrap();
             if let Some(h) = write_lock.get_mut(&session_id) {
                 h.displays = value.iter().map(|x| *x as usize).collect::<_>();
+                #[cfg(not(any(target_os = "android", target_os = "ios")))]
                 let displays_refresh = value.clone();
                 if value.len() == 1 {
                     // Switch display.
