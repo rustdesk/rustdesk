@@ -83,9 +83,11 @@ class _RemotePageState extends State<RemotePage> {
     initSharedStates(widget.id);
     gFFI.chatModel
         .changeCurrentKey(MessageKey(widget.id, ChatModel.clientModeID));
-    gFFI.chatModel.voiceCallStatus.value = VoiceCallStatus.notStarted;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      gFFI.chatModel.voiceCallStatus.value = VoiceCallStatus.notStarted;
+      gFFI.dialogManager.loadMobileActionsOverlayVisible();
+    });
     _blockableOverlayState.applyFfi(gFFI);
-    gFFI.dialogManager.loadMobileActionsOverlayVisible();
   }
 
   @override

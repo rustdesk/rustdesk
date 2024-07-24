@@ -135,11 +135,13 @@ class _RemotePageState extends State<RemotePage>
     if (!isWeb) bind.pluginSyncUi(syncTo: kAppTypeDesktopRemote);
     _ffi.qualityMonitorModel.checkShowQualityMonitor(sessionId);
     _ffi.dialogManager.loadMobileActionsOverlayVisible();
-    // Session option should be set after models.dart/FFI.start
-    _showRemoteCursor.value = bind.sessionGetToggleOptionSync(
-        sessionId: sessionId, arg: 'show-remote-cursor');
-    _zoomCursor.value = bind.sessionGetToggleOptionSync(
-        sessionId: sessionId, arg: kOptionZoomCursor);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      // Session option should be set after models.dart/FFI.start
+      _showRemoteCursor.value = bind.sessionGetToggleOptionSync(
+          sessionId: sessionId, arg: 'show-remote-cursor');
+      _zoomCursor.value = bind.sessionGetToggleOptionSync(
+          sessionId: sessionId, arg: kOptionZoomCursor);
+    });
     DesktopMultiWindow.addListener(this);
     // if (!_isCustomCursorInited) {
     //   customCursorController.registerNeedUpdateCursorCallback(
@@ -154,7 +156,10 @@ class _RemotePageState extends State<RemotePage>
     // }
 
     _blockableOverlayState.applyFfi(_ffi);
-    widget.tabController?.onSelected?.call(widget.id);
+    // Call onSelected in post frame callback, since we cannot guarantee that the callback will not call setState.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      widget.tabController?.onSelected?.call(widget.id);
+    });
   }
 
   @override

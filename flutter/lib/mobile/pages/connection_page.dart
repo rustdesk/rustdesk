@@ -55,14 +55,14 @@ class _ConnectionPageState extends State<ConnectionPage> {
     super.initState();
     if (!isWeb) _uniLinksSubscription = listenUniLinks();
     if (_idController.text.isEmpty) {
-      () async {
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
         final lastRemoteId = await bind.mainGetLastRemoteId();
         if (lastRemoteId != _idController.id) {
           setState(() {
             _idController.id = lastRemoteId;
           });
         }
-      }();
+      });
     }
     if (isAndroid) {
       if (!bind.isCustomClient()) {
