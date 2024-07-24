@@ -79,6 +79,10 @@ lazy_static::lazy_static! {
     pub static ref IS_UAC_RUNNING: Arc<Mutex<bool>> = Default::default();
     pub static ref IS_FOREGROUND_WINDOW_ELEVATED: Arc<Mutex<bool>> = Default::default();
     // Avoid refreshing too frequently
+    // When the control side try switching display, it will send "Switch display" and "Refresh display".
+    //
+    // 1. If this display is not currently captured -> Refresh -> Message "Refresh display" is not required.
+    // 2. If this display is currently captured -> Not refresh -> Message "Refresh display" is required.
     static ref LAST_REFRESH_TIME: Arc<Mutex<HashMap<usize, Instant>>> = Default::default();
 }
 
@@ -471,6 +475,10 @@ fn run(vs: VideoService) -> ResultType<()> {
     if sp.is_option_true(OPTION_REFRESH) {
         sp.set_option_bool(OPTION_REFRESH, false);
     }
+    LAST_REFRESH_TIME
+        .lock()
+        .unwrap()
+        .insert(vs.idx, Instant::now());
 
     let mut frame_controller = VideoFrameController::new();
 
@@ -525,10 +533,6 @@ fn run(vs: VideoService) -> ResultType<()> {
                 .unwrap_or(true)
             {
                 let _ = try_broadcast_display_changed(&sp, display_idx, &c, true);
-                LAST_REFRESH_TIME
-                    .lock()
-                    .unwrap()
-                    .insert(vs.idx, Instant::now());
                 log::info!("switch to refresh");
                 bail!("SWITCH");
             } else {
