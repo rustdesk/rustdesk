@@ -118,7 +118,7 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
     _hideNetwork =
         bind.mainGetBuildinOption(key: kOptionHideNetworkSetting) == 'Y';
 
-    () async {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
       var update = false;
 
       if (_hasIgnoreBattery) {
@@ -177,7 +177,7 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
       if (update) {
         setState(() {});
       }
-    }();
+    });
   }
 
   @override
