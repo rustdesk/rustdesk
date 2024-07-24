@@ -160,9 +160,6 @@ pub fn session_start_with_displays(
 
     if let Some(session) = sessions::get_session_by_session_id(&session_id) {
         session.capture_displays(displays.clone(), vec![], vec![]);
-        for display in displays {
-            session.refresh_video(display as _);
-        }
     }
     Ok(())
 }

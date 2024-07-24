@@ -386,6 +386,10 @@ impl Server {
             if Self::is_video_service_name(&name) {
                 if displays.contains(&name) {
                     if include {
+                        // Try unsubscribe first
+                        // 1. No effect if is not previously subscribed.
+                        // 2. Cause refresh if unsbuscribe and then subscribe. ( from all displays to one display )
+                        self.subscribe(&name, conn.clone(), false);
                         self.subscribe(&name, conn.clone(), true);
                     }
                 } else {

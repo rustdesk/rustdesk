@@ -1889,8 +1889,6 @@ pub mod sessions {
             let mut write_lock = s.ui_handler.session_handlers.write().unwrap();
             if let Some(h) = write_lock.get_mut(&session_id) {
                 h.displays = value.iter().map(|x| *x as usize).collect::<_>();
-                #[cfg(not(any(target_os = "android", target_os = "ios")))]
-                let displays_refresh = value.clone();
                 if value.len() == 1 {
                     // Switch display.
                     // This operation will also cause the peer to send a switch display message.
@@ -1901,29 +1899,16 @@ pub mod sessions {
                         s.capture_displays(vec![], vec![], value);
                     } else {
                         // Check if other displays are needed.
-                        if value.len() == 1 {
-                            check_remove_unused_displays(
-                                Some(value[0] as _),
-                                &session_id,
-                                &s,
-                                &write_lock,
-                            );
-                        }
+                        check_remove_unused_displays(
+                            Some(value[0] as _),
+                            &session_id,
+                            &s,
+                            &write_lock,
+                        );
                     }
                 } else {
                     // Try capture all displays.
                     s.capture_displays(vec![], vec![], value);
-                }
-                #[cfg(not(any(target_os = "android", target_os = "ios")))]
-                {
-                    let is_support_multi_ui_session = crate::common::is_support_multi_ui_session(
-                        &s.ui_handler.peer_info.read().unwrap().version,
-                    );
-                    if is_support_multi_ui_session {
-                        for display in displays_refresh.iter() {
-                            s.refresh_video(*display);
-                        }
-                    }
                 }
                 break;
             }
