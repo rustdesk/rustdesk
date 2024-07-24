@@ -196,7 +196,7 @@ class ServerModel with ChangeNotifier {
       bind.mainSetOption(key: kOptionEnableAudio, value: "N");
     } else {
       final audioOption = await bind.mainGetOption(key: kOptionEnableAudio);
-      _audioOk = audioOption.isEmpty;
+      _audioOk = audioOption != 'N';
     }
 
     // file
@@ -206,7 +206,7 @@ class ServerModel with ChangeNotifier {
     } else {
       final fileOption =
           await bind.mainGetOption(key: kOptionEnableFileTransfer);
-      _fileOk = fileOption.isEmpty;
+      _fileOk = fileOption != 'N';
     }
 
     notifyListeners();

@@ -12,7 +12,10 @@ use uuid::Uuid;
 use hbb_common::{
     allow_err,
     anyhow::{self, bail},
-    config::{self, Config, CONNECT_TIMEOUT, READ_TIMEOUT, REG_INTERVAL, RENDEZVOUS_PORT},
+    config::{
+        self, keys::*, option2bool, Config, CONNECT_TIMEOUT, READ_TIMEOUT, REG_INTERVAL,
+        RENDEZVOUS_PORT,
+    },
     futures::future::join_all,
     log,
     protobuf::Message as _,
@@ -637,8 +640,10 @@ async fn direct_server(server: ServerPtr) {
     let mut listener = None;
     let mut port = 0;
     loop {
-        let disabled = Config::get_option("direct-server").is_empty()
-            || !Config::get_option("stop-service").is_empty();
+        let disabled = !option2bool(
+            OPTION_DIRECT_SERVER,
+            &Config::get_option(OPTION_DIRECT_SERVER),
+        ) || option2bool("stop-service", &Config::get_option("stop-service"));
         if !disabled && listener.is_none() {
             port = get_direct_port();
             match hbb_common::tcp::listen_any(port as _).await {
