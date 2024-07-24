@@ -48,12 +48,6 @@ class MyPopupMenuItemState<T, W extends PopupMenuChildrenItem<T>>
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _initEnabled();
-    });
-  }
-
-  Future<void> _initEnabled() async {
     if (widget.enabled != null) {
       enabled.value = widget.enabled!.value;
     }

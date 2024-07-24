@@ -50,10 +50,17 @@ class _ConnectionPageState extends State<ConnectionPage> {
   bool isPeersLoaded = false;
   StreamSubscription? _uniLinksSubscription;
 
+  _ConnectionPageState() {
+    if (!isWeb) _uniLinksSubscription = listenUniLinks();
+    _idController.addListener(() {
+      _idEmpty.value = _idController.text.isEmpty;
+    });
+    Get.put<IDTextEditingController>(_idController);
+  }
+
   @override
   void initState() {
     super.initState();
-    if (!isWeb) _uniLinksSubscription = listenUniLinks();
     if (_idController.text.isEmpty) {
       WidgetsBinding.instance.addPostFrameCallback((_) async {
         final lastRemoteId = await bind.mainGetLastRemoteId();
@@ -72,11 +79,6 @@ class _ConnectionPageState extends State<ConnectionPage> {
         });
       }
     }
-
-    _idController.addListener(() {
-      _idEmpty.value = _idController.text.isEmpty;
-    });
-    Get.put<IDTextEditingController>(_idController);
   }
 
   @override

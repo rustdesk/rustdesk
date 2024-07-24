@@ -34,6 +34,7 @@ class _FileManagerTabPageState extends State<FileManagerTabPage> {
       WindowController.fromWindowId(windowId())
           .setTitle(getWindowNameWithId(id));
     };
+    tabController.onRemoved = (_, id) => onRemoveId(id);
     tabController.add(TabInfo(
         key: params['id'],
         label: params['id'],
@@ -53,8 +54,6 @@ class _FileManagerTabPageState extends State<FileManagerTabPage> {
   @override
   void initState() {
     super.initState();
-
-    tabController.onRemoved = (_, id) => onRemoveId(id);
 
     rustDeskWinManager.setMethodHandler((call, fromWindowId) async {
       print(

@@ -76,15 +76,16 @@ class _PeerTabPageState extends State<PeerTabPage>
 
   final isOptVisiableFixed = isOptionFixed(kOptionPeerTabVisible);
 
+  _PeerTabPageState() {
+    _loadLocalOptions();
+  }
+
   @override
   void initState() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _loadLocalOptions();
-    });
     super.initState();
   }
 
-  Future<void> _loadLocalOptions() async {
+  void _loadLocalOptions() {
     final uiType = bind.getLocalFlutterOption(k: kOptionPeerCardUiType);
     if (uiType != '') {
       peerCardUiType.value = int.parse(uiType) == 0
@@ -878,18 +879,18 @@ class PeerSortDropdown extends StatefulWidget {
 }
 
 class _PeerSortDropdownState extends State<PeerSortDropdown> {
+  _PeerSortDropdownState() {
+    if (!PeerSortType.values.contains(peerSort.value)) {
+      _loadLocalOptions();
+    }
+  }
+
   @override
   void initState() {
-    if (!PeerSortType.values.contains(peerSort.value)) {
-      // do not change obx directly in initState, so do in future.
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        _loadLocalOptions();
-      });
-    }
     super.initState();
   }
 
-  Future<void> _loadLocalOptions() async {
+  void _loadLocalOptions() {
     peerSort.value = PeerSortType.remoteId;
     bind.setLocalFlutterOption(
       k: kOptionPeerSorting,

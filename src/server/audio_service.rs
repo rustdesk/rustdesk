@@ -230,7 +230,6 @@ mod cpal_impl {
     #[cfg(windows)]
     fn get_device() -> ResultType<(Device, SupportedStreamConfig)> {
         let audio_input = super::get_audio_input();
-        println!("REMOVE ME =============================== use audio input: {}", &audio_input);
         if !audio_input.is_empty() {
             return get_audio_input(&audio_input);
         }

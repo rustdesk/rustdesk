@@ -88,11 +88,7 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
   var _hideProxy = false;
   var _hideNetwork = false;
 
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addObserver(this);
-
+  _SettingsState() {
     _enableAbr = option2bool(
         kOptionEnableAbr, bind.mainGetOptionSync(key: kOptionEnableAbr));
     _denyLANDiscovery = !option2bool(kOptionEnableLanDiscovery,
@@ -117,6 +113,12 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
     _hideProxy = bind.mainGetBuildinOption(key: kOptionHideProxySetting) == 'Y';
     _hideNetwork =
         bind.mainGetBuildinOption(key: kOptionHideNetworkSetting) == 'Y';
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
 
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       var update = false;

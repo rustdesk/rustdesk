@@ -44,21 +44,9 @@ class _DesktopTabPageState extends State<DesktopTabPage>
   final RxBool _block = false.obs;
   // bool mouseIn = false;
 
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    super.didChangeAppLifecycleState(state);
-    if (state == AppLifecycleState.resumed) {
-      shouldBeBlocked(_block, canBeBlocked);
-    } else if (state == AppLifecycleState.inactive) {}
-  }
-
-  @override
-  void initState() {
-    super.initState();
-    // HardwareKeyboard.instance.addHandler(_handleKeyEvent);
-    WidgetsBinding.instance.addObserver(this);
-    Get.put<DesktopTabController>(tabController);
+  _DesktopTabPageState() {
     RemoteCountState.init();
+    Get.put<DesktopTabController>(tabController);
     tabController.add(TabInfo(
         key: kTabLabelHomePage,
         label: kTabLabelHomePage,
@@ -79,6 +67,21 @@ class _DesktopTabPageState extends State<DesktopTabPage>
         }
       };
     }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    if (state == AppLifecycleState.resumed) {
+      shouldBeBlocked(_block, canBeBlocked);
+    } else if (state == AppLifecycleState.inactive) {}
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    // HardwareKeyboard.instance.addHandler(_handleKeyEvent);
+    WidgetsBinding.instance.addObserver(this);
   }
 
   /*

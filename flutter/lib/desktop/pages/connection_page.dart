@@ -212,14 +212,14 @@ class _ConnectionPageState extends State<ConnectionPage>
   void initState() {
     super.initState();
     if (_idController.text.isEmpty) {
-      () async {
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
         final lastRemoteId = await bind.mainGetLastRemoteId();
         if (lastRemoteId != _idController.id) {
           setState(() {
             _idController.id = lastRemoteId;
           });
         }
-      }();
+      });
     }
     Get.put<IDTextEditingController>(_idController);
     windowManager.addListener(this);
