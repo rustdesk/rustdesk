@@ -1314,22 +1314,6 @@ jobs:
             core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
             core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
 
-      - name: Install dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-               cmake \
-               curl \
-               g++ \
-               gcc \
-               git \
-               nasm \
-               ninja-build \
-               pkg-config \
-               unzip \
-               xz-utils \
-               zip
-
       - name: Checkout source code
         uses: actions/checkout@v3
 
@@ -1349,17 +1333,6 @@ jobs:
         run: |
           RUST_TOOLCHAIN_VERSION=$(cargo --version | awk '{print $2}')
           echo "RUST_TOOLCHAIN_VERSION=$RUST_TOOLCHAIN_VERSION" >> $GITHUB_ENV
-
-      - name: Setup vcpkg with Github Actions binary cache
-        uses: lukka/run-vcpkg@v11
-        with:
-          vcpkgDirectory: /opt/artifacts/vcpkg
-          vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
-
-      - name: Override Linux compiler detection in vcpkg
-        run: |
-          cp $PWD/res/vcpkg/linux.cmake $VCPKG_ROOT/scripts/toolchains/linux.cmake
-        shell: bash
 
       - uses: rustdesk-org/run-on-arch-action@amd64-support
         name: Build rustdesk sciter binary for ${{ matrix.job.arch }}
@@ -1409,7 +1382,8 @@ jobs:
                rpm \
                unzip \
                wget \
-               xz-utils
+               xz-utils \
+               zip
             # install newer nasm for aom
             wget --output-document nasm.deb "http://ftp.us.debian.org/debian/pool/main/n/nasm/nasm_2.14-1_${{ matrix.job.deb_arch }}.deb"
             dpkg -i nasm.deb
@@ -1421,6 +1395,15 @@ jobs:
             update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.7 1
             # vcpkg
             export VCPKG_ROOT=/opt/artifacts/vcpkg
+            pushd /opt/artifacts
+            git clone https://github.com/microsoft/vcpkg
+            pushd vcpkg
+            git reset --hard ${{ env.VCPKG_COMMIT_ID }}
+            sh bootstrap-vcpkg.sh -disableMetrics
+            popd
+            popd
+            # override Linux compiler detection in vcpkg
+            cp $PWD/res/vcpkg/linux.cmake $VCPKG_ROOT/scripts/toolchains/linux.cmake
             $VCPKG_ROOT/vcpkg install --triplet ${{ matrix.job.vcpkg-triplet }} --x-install-root="$VCPKG_ROOT/installed"
             # rust
             pushd /opt
