@@ -38,19 +38,22 @@ class PopupMenuChildrenItem<T> extends mod_menu.PopupMenuEntry<T> {
 
   @override
   MyPopupMenuItemState<T, PopupMenuChildrenItem<T>> createState() =>
-      MyPopupMenuItemState<T, PopupMenuChildrenItem<T>>();
+      MyPopupMenuItemState<T, PopupMenuChildrenItem<T>>(enabled?.value);
 }
 
 class MyPopupMenuItemState<T, W extends PopupMenuChildrenItem<T>>
     extends State<W> {
   RxBool enabled = true.obs;
 
+  MyPopupMenuItemState(bool? e) {
+    if (e != null) {
+      enabled.value = e;
+    }
+  }
+
   @override
   void initState() {
     super.initState();
-    if (widget.enabled != null) {
-      enabled.value = widget.enabled!.value;
-    }
   }
 
   @protected
