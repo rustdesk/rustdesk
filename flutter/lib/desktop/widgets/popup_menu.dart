@@ -51,11 +51,6 @@ class MyPopupMenuItemState<T, W extends PopupMenuChildrenItem<T>>
     }
   }
 
-  @override
-  void initState() {
-    super.initState();
-  }
-
   @protected
   void handleTap(T value) {
     widget.onTap?.call();

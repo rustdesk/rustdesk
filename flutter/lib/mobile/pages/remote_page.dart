@@ -779,11 +779,6 @@ class _KeyHelpToolsState extends State<KeyHelpTools> {
         onPressed: onPressed);
   }
 
-  @override
-  void initState() {
-    super.initState();
-  }
-
   _updateRect() {
     RenderObject? renderObject = _key.currentContext?.findRenderObject();
     if (renderObject == null) {

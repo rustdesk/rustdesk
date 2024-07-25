@@ -54,11 +54,6 @@ class _GestureHelpState extends State<GestureHelp> {
   }
 
   @override
-  void initState() {
-    super.initState();
-  }
-
-  @override
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
     final space = 12.0;

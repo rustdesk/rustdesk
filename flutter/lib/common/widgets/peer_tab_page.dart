@@ -80,11 +80,6 @@ class _PeerTabPageState extends State<PeerTabPage>
     _loadLocalOptions();
   }
 
-  @override
-  void initState() {
-    super.initState();
-  }
-
   void _loadLocalOptions() {
     final uiType = bind.getLocalFlutterOption(k: kOptionPeerCardUiType);
     if (uiType != '') {
@@ -883,11 +878,6 @@ class _PeerSortDropdownState extends State<PeerSortDropdown> {
     if (!PeerSortType.values.contains(peerSort.value)) {
       _loadLocalOptions();
     }
-  }
-
-  @override
-  void initState() {
-    super.initState();
   }
 
   void _loadLocalOptions() {

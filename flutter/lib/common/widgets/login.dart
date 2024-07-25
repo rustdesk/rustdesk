@@ -143,11 +143,6 @@ class _WidgetOPState extends State<WidgetOP> {
   String _url = '';
 
   @override
-  void initState() {
-    super.initState();
-  }
-
-  @override
   void dispose() {
     super.dispose();
     _updateTimer?.cancel();

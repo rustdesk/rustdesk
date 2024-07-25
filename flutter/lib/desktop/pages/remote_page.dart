@@ -574,11 +574,6 @@ class _ImagePaintState extends State<ImagePaint> {
   Widget Function(Widget)? get listenerBuilder => widget.listenerBuilder;
 
   @override
-  void initState() {
-    super.initState();
-  }
-
-  @override
   Widget build(BuildContext context) {
     final m = Provider.of<ImageModel>(context);
     var c = Provider.of<CanvasModel>(context);

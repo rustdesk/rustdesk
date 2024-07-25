@@ -24,11 +24,6 @@ class _MyGroupState extends State<MyGroup> {
   static TextEditingController searchUserController = TextEditingController();
 
   @override
-  void initState() {
-    super.initState();
-  }
-
-  @override
   Widget build(BuildContext context) {
     return Obx(() {
       if (!gFFI.userModel.isLogin) {

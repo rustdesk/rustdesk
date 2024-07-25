@@ -121,11 +121,6 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
   }
 
   @override
-  void dispose() {
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
     final child = Scaffold(
       backgroundColor: Theme.of(context).colorScheme.background,
