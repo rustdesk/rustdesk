@@ -2981,11 +2981,15 @@ openMonitorInNewTabOrWindow(int i, String peerId, PeerInfo pi,
       kMainWindowId, kWindowEventOpenMonitorSession, jsonEncode(args));
 }
 
-setNewConnectWindowFrame(
-    int windowId, String peerId, int? display, Rect? screenRect) async {
+setNewConnectWindowFrame(int windowId, String peerId, int preSessionCount,
+    int? display, Rect? screenRect) async {
   if (screenRect == null) {
-    await restoreWindowPosition(WindowType.RemoteDesktop,
-        windowId: windowId, display: display, peerId: peerId);
+    // Do not restore window position to new connection if there's a pre-session.
+    // https://github.com/rustdesk/rustdesk/discussions/8825
+    if (preSessionCount == 0) {
+      await restoreWindowPosition(WindowType.RemoteDesktop,
+          windowId: windowId, display: display, peerId: peerId);
+    }
   } else {
     await tryMoveToScreenAndSetFullscreen(screenRect);
   }

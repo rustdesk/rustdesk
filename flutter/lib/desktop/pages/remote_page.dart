@@ -45,7 +45,9 @@ class RemotePage extends StatefulWidget {
     this.switchUuid,
     this.forceRelay,
     this.isSharedPassword,
-  }) : super(key: key);
+  }) : super(key: key) {
+    initSharedStates(id);
+  }
 
   final String id;
   final SessionID? sessionId;
@@ -99,7 +101,6 @@ class _RemotePageState extends State<RemotePage>
   }
 
   void _initStates(String id) {
-    initSharedStates(id);
     _zoomCursor = PeerBoolOption.find(id, kOptionZoomCursor);
     _showRemoteCursor = ShowRemoteCursorState.find(id);
     _keyboardEnabled = KeyboardEnabledState.find(id);
