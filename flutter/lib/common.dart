@@ -3434,7 +3434,7 @@ isOptionFixed(String key) => bind.mainIsOptionFixed(key: key);
 
 bool? _isCustomClient;
 bool get isCustomClient {
-  _isCustomClient = _isCustomClient ?? bind.isCustomClient();
+  _isCustomClient ??= bind.isCustomClient();
   return _isCustomClient!;
 }
 
