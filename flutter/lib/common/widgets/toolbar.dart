@@ -130,12 +130,9 @@ List<TTextMenu> toolbarControls(BuildContext context, String id, FFI ffi) {
     );
   }
   // paste
-  if (isMobile &&
-      pi.platform != kPeerPlatformAndroid &&
-      perms['keyboard'] != false &&
-      perms['clipboard'] != false) {
+  if (pi.platform != kPeerPlatformAndroid && perms['keyboard'] != false) {
     v.add(TTextMenu(
-        child: Text(translate('Paste')),
+        child: Text(translate('Send clipboard keystrokes')),
         onPressed: () async {
           ClipboardData? data = await Clipboard.getData(Clipboard.kTextPlain);
           if (data != null && data.text != null) {

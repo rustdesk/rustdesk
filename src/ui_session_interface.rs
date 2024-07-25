@@ -779,7 +779,6 @@ impl<T: InvokeUiSession> Session<T> {
         }
     }
 
-    // flutter only TODO new input
     pub fn input_string(&self, value: &str) {
         let mut key_event = KeyEvent::new();
         key_event.set_seq(value.to_owned());

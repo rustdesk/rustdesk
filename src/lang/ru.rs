@@ -630,5 +630,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("cancel-2fa-confirm-tip", "Отключить двухфакторную аутентификацию?"),
         ("cancel-bot-confirm-tip", "Отключить Telegram-бота?"),
         ("About RustDesk", ""),
+        ("Send clipboard keystrokes", ""),
     ].iter().cloned().collect();
 }
