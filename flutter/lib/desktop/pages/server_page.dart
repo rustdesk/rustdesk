@@ -32,14 +32,18 @@ class DesktopServerPage extends StatefulWidget {
 class _DesktopServerPageState extends State<DesktopServerPage>
     with WindowListener, AutomaticKeepAliveClientMixin {
   final tabController = gFFI.serverModel.tabController;
-  @override
-  void initState() {
+
+  _DesktopServerPageState() {
     gFFI.ffiModel.updateEventListener(gFFI.sessionId, "");
-    windowManager.addListener(this);
     Get.put<DesktopTabController>(tabController);
     tabController.onRemoved = (_, id) {
       onRemoveId(id);
     };
+  }
+
+  @override
+  void initState() {
+    windowManager.addListener(this);
     super.initState();
   }
 
@@ -108,19 +112,7 @@ class ConnectionManagerState extends State<ConnectionManager>
     with WidgetsBindingObserver {
   final RxBool _block = false.obs;
 
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    super.didChangeAppLifecycleState(state);
-    if (state == AppLifecycleState.resumed) {
-      if (!allowRemoteCMModification()) {
-        shouldBeBlocked(_block, null);
-      }
-    }
-  }
-
-  @override
-  void initState() {
-    gFFI.serverModel.updateClientState();
+  ConnectionManagerState() {
     gFFI.serverModel.tabController.onSelected = (client_id_str) {
       final client_id = int.tryParse(client_id_str);
       if (client_id != null) {
@@ -140,6 +132,21 @@ class ConnectionManagerState extends State<ConnectionManager>
       }
     };
     gFFI.chatModel.isConnManager = true;
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    if (state == AppLifecycleState.resumed) {
+      if (!allowRemoteCMModification()) {
+        shouldBeBlocked(_block, null);
+      }
+    }
+  }
+
+  @override
+  void initState() {
+    gFFI.serverModel.updateClientState();
     WidgetsBinding.instance.addObserver(this);
     super.initState();
   }

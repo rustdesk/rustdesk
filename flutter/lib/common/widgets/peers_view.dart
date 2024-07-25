@@ -45,10 +45,14 @@ class LoadEvent {
 final peerSearchText = "".obs;
 
 /// for peer sort, global obs value
-final peerSort = bind.getLocalFlutterOption(k: kOptionPeerSorting).obs;
+RxString? _peerSort;
+RxString get peerSort {
+  _peerSort ??= bind.getLocalFlutterOption(k: kOptionPeerSorting).obs;
+  return _peerSort!;
+}
 
 // list for listener
-final obslist = [peerSearchText, peerSort].obs;
+RxList<RxString> get obslist => [peerSearchText, peerSort].obs;
 
 final peerSearchTextController =
     TextEditingController(text: peerSearchText.value);

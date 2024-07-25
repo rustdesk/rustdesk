@@ -353,7 +353,7 @@ class Draggable extends StatefulWidget {
   final Widget Function(BuildContext, GestureDragUpdateCallback) builder;
 
   @override
-  State<StatefulWidget> createState() => _DraggableState();
+  State<StatefulWidget> createState() => _DraggableState(chatModel);
 }
 
 class _DraggableState extends State<Draggable> {
@@ -362,10 +362,8 @@ class _DraggableState extends State<Draggable> {
   double _saveHeight = 0;
   double _lastBottomHeight = 0;
 
-  @override
-  void initState() {
-    super.initState();
-    _chatModel = widget.chatModel;
+  _DraggableState(ChatModel? chatModel) {
+    _chatModel = chatModel;
   }
 
   get position => widget.position.pos;
@@ -467,7 +465,8 @@ class IOSDraggable extends StatefulWidget {
   final Widget Function(BuildContext) builder;
 
   @override
-  IOSDraggableState createState() => IOSDraggableState();
+  IOSDraggableState createState() =>
+      IOSDraggableState(chatModel, width, height);
 }
 
 class IOSDraggableState extends State<IOSDraggable> {
@@ -478,12 +477,10 @@ class IOSDraggableState extends State<IOSDraggable> {
   double _saveHeight = 0;
   double _lastBottomHeight = 0;
 
-  @override
-  void initState() {
-    super.initState();
-    _chatModel = widget.chatModel;
-    _width = widget.width;
-    _height = widget.height;
+  IOSDraggableState(ChatModel? chatModel, double w, double h) {
+    _chatModel = chatModel;
+    _width = w;
+    _height = h;
   }
 
   DraggableKeyPosition get position => widget.position;

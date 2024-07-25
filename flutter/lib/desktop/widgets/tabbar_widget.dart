@@ -227,8 +227,7 @@ typedef TabMenuBuilder = Widget Function(String key);
 typedef LabelGetter = Rx<String> Function(String key);
 
 /// [_lastClickTime], help to handle double click
-int _lastClickTime =
-    DateTime.now().millisecondsSinceEpoch - bind.getDoubleClickTime() - 1000;
+int _lastClickTime = 0;
 
 class DesktopTab extends StatefulWidget {
   final bool showLogo;
@@ -727,16 +726,6 @@ class WindowActionPanel extends StatefulWidget {
 }
 
 class WindowActionPanelState extends State<WindowActionPanel> {
-  @override
-  void initState() {
-    super.initState();
-  }
-
-  @override
-  void dispose() {
-    super.dispose();
-  }
-
   bool showTabDowndown() {
     return widget.tabController.state.value.tabs.length > 1 &&
         (widget.tabController.tabType == DesktopTabType.remoteScreen ||
@@ -1272,14 +1261,6 @@ class ActionIcon extends StatefulWidget {
 
 class _ActionIconState extends State<ActionIcon> {
   final hover = false.obs;
-
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      hover.value = false;
-    });
-  }
 
   @override
   Widget build(BuildContext context) {

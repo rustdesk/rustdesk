@@ -34,7 +34,7 @@ class RemotePage extends StatefulWidget {
   final bool? isSharedPassword;
 
   @override
-  State<RemotePage> createState() => _RemotePageState();
+  State<RemotePage> createState() => _RemotePageState(id);
 }
 
 class _RemotePageState extends State<RemotePage> {
@@ -58,6 +58,12 @@ class _RemotePageState extends State<RemotePage> {
   final TextEditingController _textController =
       TextEditingController(text: initText);
 
+  _RemotePageState(String id) {
+    initSharedStates(id);
+    gFFI.chatModel.voiceCallStatus.value = VoiceCallStatus.notStarted;
+    gFFI.dialogManager.loadMobileActionsOverlayVisible();
+  }
+
   @override
   void initState() {
     super.initState();
@@ -80,13 +86,8 @@ class _RemotePageState extends State<RemotePage> {
     gFFI.qualityMonitorModel.checkShowQualityMonitor(sessionId);
     keyboardSubscription =
         keyboardVisibilityController.onChange.listen(onSoftKeyboardChanged);
-    initSharedStates(widget.id);
     gFFI.chatModel
         .changeCurrentKey(MessageKey(widget.id, ChatModel.clientModeID));
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      gFFI.chatModel.voiceCallStatus.value = VoiceCallStatus.notStarted;
-      gFFI.dialogManager.loadMobileActionsOverlayVisible();
-    });
     _blockableOverlayState.applyFfi(gFFI);
   }
 
@@ -776,11 +777,6 @@ class _KeyHelpToolsState extends State<KeyHelpTools> {
             : Text(translate(text),
                 style: TextStyle(color: Colors.white, fontSize: 11)),
         onPressed: onPressed);
-  }
-
-  @override
-  void initState() {
-    super.initState();
   }
 
   _updateRect() {

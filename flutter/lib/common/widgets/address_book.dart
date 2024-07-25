@@ -36,11 +36,6 @@ class _AddressBookState extends State<AddressBook> {
   var menuPos = RelativeRect.fill;
 
   @override
-  void initState() {
-    super.initState();
-  }
-
-  @override
   Widget build(BuildContext context) => Obx(() {
         if (!gFFI.userModel.isLogin) {
           return Center(

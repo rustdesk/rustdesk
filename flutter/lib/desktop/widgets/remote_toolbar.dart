@@ -1033,11 +1033,6 @@ class _DisplayMenuState extends State<_DisplayMenu> {
   String get id => widget.id;
 
   @override
-  void initState() {
-    super.initState();
-  }
-
-  @override
   Widget build(BuildContext context) {
     _screenAdjustor.updateScreen();
     menuChildrenGetter() {

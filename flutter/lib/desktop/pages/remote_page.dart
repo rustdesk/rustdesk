@@ -64,7 +64,7 @@ class RemotePage extends StatefulWidget {
 
   @override
   State<RemotePage> createState() {
-    final state = _RemotePageState();
+    final state = _RemotePageState(id);
     _lastState.value = state;
     return state;
   }
@@ -94,6 +94,10 @@ class _RemotePageState extends State<RemotePage>
 
   SessionID get sessionId => _ffi.sessionId;
 
+  _RemotePageState(String id) {
+    _initStates(id);
+  }
+
   void _initStates(String id) {
     initSharedStates(id);
     _zoomCursor = PeerBoolOption.find(id, kOptionZoomCursor);
@@ -105,7 +109,6 @@ class _RemotePageState extends State<RemotePage>
   @override
   void initState() {
     super.initState();
-    _initStates(widget.id);
     _ffi = FFI(widget.sessionId);
     Get.put<FFI>(_ffi, tag: widget.id);
     _ffi.imageModel.addCallbackOnFirstImage((String peerId) {
@@ -569,11 +572,6 @@ class _ImagePaintState extends State<ImagePaint> {
   RxBool get keyboardEnabled => widget.keyboardEnabled;
   RxBool get remoteCursorMoved => widget.remoteCursorMoved;
   Widget Function(Widget)? get listenerBuilder => widget.listenerBuilder;
-
-  @override
-  void initState() {
-    super.initState();
-  }
 
   @override
   Widget build(BuildContext context) {

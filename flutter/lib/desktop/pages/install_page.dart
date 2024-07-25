@@ -19,9 +19,7 @@ class InstallPage extends StatefulWidget {
 class _InstallPageState extends State<InstallPage> {
   final tabController = DesktopTabController(tabType: DesktopTabType.main);
 
-  @override
-  void initState() {
-    super.initState();
+  _InstallPageState() {
     Get.put<DesktopTabController>(tabController);
     const label = "install";
     tabController.add(TabInfo(
@@ -73,10 +71,13 @@ class _InstallPageBodyState extends State<_InstallPageBody>
     padding: EdgeInsets.symmetric(vertical: 15, horizontal: 12),
   );
 
+  _InstallPageBodyState() {
+    controller = TextEditingController(text: bind.installInstallPath());
+  }
+
   @override
   void initState() {
     windowManager.addListener(this);
-    controller = TextEditingController(text: bind.installInstallPath());
     super.initState();
   }
 

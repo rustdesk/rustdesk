@@ -41,18 +41,16 @@ class GestureHelp extends StatefulWidget {
   final OnTouchModeChange onTouchModeChange;
 
   @override
-  State<StatefulWidget> createState() => _GestureHelpState();
+  State<StatefulWidget> createState() => _GestureHelpState(touchMode);
 }
 
 class _GestureHelpState extends State<GestureHelp> {
-  var _selectedIndex;
-  var _touchMode;
+  late int _selectedIndex;
+  late bool _touchMode;
 
-  @override
-  void initState() {
-    _touchMode = widget.touchMode;
+  _GestureHelpState(bool touchMode) {
+    _touchMode = touchMode;
     _selectedIndex = _touchMode ? 1 : 0;
-    super.initState();
   }
 
   @override
