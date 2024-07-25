@@ -973,12 +973,11 @@ pub fn handle_mouse_(evt: &MouseEvent, conn: i32) {
         },
         MOUSE_TYPE_WHEEL | MOUSE_TYPE_TRACKPAD => {
             #[allow(unused_mut)]
-            let mut x = evt.x;
+            let mut x = -evt.x;
             #[allow(unused_mut)]
             let mut y = evt.y;
             #[cfg(not(windows))]
             {
-                x = -x;
                 y = -y;
             }
 
