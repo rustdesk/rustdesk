@@ -78,6 +78,9 @@ jobs:
       - name: Checkout source code
         uses: actions/checkout@v4
 
+      - name: Setup tmate session
+        uses: mxschmitt/action-tmate@v3
+
       - name: Install LLVM and Clang
         uses: KyleMayes/install-llvm-action@v1
         with:
