@@ -105,6 +105,7 @@ class _PortForwardTabPageState extends State<PortForwardTabPage> {
           return true;
         },
         tail: AddButton(),
+        selectedBorderColor: MyTheme.accent,
         labelGetter: DesktopTab.tablabelGetter,
       ),
     );
