@@ -65,12 +65,6 @@ class _InstallPageBodyState extends State<_InstallPageBody>
   final RxBool showProgress = false.obs;
   final RxBool btnEnabled = true.obs;
 
-  // todo move to theme.
-  final buttonStyle = OutlinedButton.styleFrom(
-    textStyle: TextStyle(fontSize: 14, fontWeight: FontWeight.normal),
-    padding: EdgeInsets.symmetric(vertical: 15, horizontal: 12),
-  );
-
   _InstallPageBodyState() {
     controller = TextEditingController(text: bind.installInstallPath());
   }
@@ -120,6 +114,8 @@ class _InstallPageBodyState extends State<_InstallPageBody>
 
   @override
   Widget build(BuildContext context) {
+    final buttonStyle = Theme.of(context).outlinedButtonTheme.style;
+
     final double em = 13;
     final isDarkTheme = MyTheme.currentThemeMode() == ThemeMode.dark;
     return Scaffold(
@@ -249,6 +245,7 @@ class _InstallPageBodyState extends State<_InstallPageBody>
       if (desktopicon.value) args += ' desktopicon';
       bind.installInstallMe(options: args, path: controller.text);
     }
+
     do_install();
   }
 
