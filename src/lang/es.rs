@@ -631,5 +631,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("cancel-bot-confirm-tip", "¿Seguro que quieres cancelar el bot de Telegram?"),
         ("About RustDesk", ""),
         ("Send clipboard keystrokes", ""),
+        ("network_error_tip", ""),
     ].iter().cloned().collect();
 }

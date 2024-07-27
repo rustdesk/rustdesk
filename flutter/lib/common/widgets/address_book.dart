@@ -41,6 +41,8 @@ class _AddressBookState extends State<AddressBook> {
           return Center(
               child: ElevatedButton(
                   onPressed: loginDialog, child: Text(translate("Login"))));
+        } else if (gFFI.userModel.networkError.isNotEmpty) {
+          return netWorkErrorWidget();
         } else {
           return Column(
             children: [
