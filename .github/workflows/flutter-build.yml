@@ -21,6 +21,7 @@ env:
   WIN_RUST_VERSION: "1.75" # https://github.com/rustdesk/rustdesk/discussions/7503, also 1.78 has ABI change which causes our sciter version not working, https://blog.rust-lang.org/2024/03/30/i128-layout-update.html
   RUST_VERSION: "1.75" # sciter failed on m1 with 1.78 because of https://blog.rust-lang.org/2024/03/30/i128-layout-update.html
   CARGO_NDK_VERSION: "3.1.2"
+  SCITER_ARMV7_CMAKE_VERSION: "3.29.7"
   LLVM_VERSION: "15.0.6"
   FLUTTER_VERSION: "3.19.6"
   ANDROID_FLUTTER_VERSION: "3.13.9" # >= 3.16 is very slow on my android phone, but work well on most of others. We may switch to new flutter after changing to texture rendering (I believe it can solve my problem).
@@ -1352,7 +1353,6 @@ jobs:
             apt-get install -y \
                build-essential \
                clang \
-               cmake \
                curl \
                gcc \
                git \
@@ -1388,6 +1388,18 @@ jobs:
             wget --output-document nasm.deb "http://ftp.us.debian.org/debian/pool/main/n/nasm/nasm_2.14-1_${{ matrix.job.deb_arch }}.deb"
             dpkg -i nasm.deb
             rm -f nasm.deb
+            # install {gcc,g++}-8 and prebuilt cmake to build vcpkg executable on arm-linux
+            if [ "${{ matrix.job.vcpkg-triplet }}" = "arm-linux" ]; then
+              apt-get install -y gcc-8 g++-8
+              apt-get install -y libssl-dev
+              git clone --depth 1 https://github.com/kitware/cmake -b "v${{ env.SCITER_ARMV7_CMAKE_VERSION }}" /tmp/cmake
+              pushd /tmp/cmake
+              ./bootstrap --generator='Unix Makefiles' "--prefix=/opt/cmake-${{ env.SCITER_ARMV7_CMAKE_VERSION }}-linux-armhf" --parallel="$(nproc)"
+              make -j install
+              popd
+              rm -rf /tmp/cmake
+              export PATH="/opt/cmake-${{ env.SCITER_ARMV7_CMAKE_VERSION }}-linux-armhf/bin:$PATH"
+            fi
           run: |
             # disable git safe.directory
             git config --global --add safe.directory "*"
@@ -1400,11 +1412,15 @@ jobs:
             git clone https://github.com/microsoft/vcpkg
             pushd vcpkg
             git reset --hard ${{ env.VCPKG_COMMIT_ID }}
-            sh bootstrap-vcpkg.sh -disableMetrics
+            # Build vcpkg helper executable with gcc-8 for arm-linux but use prebuilt one on x64-linux
+            if [ "${{ matrix.job.vcpkg-triplet }}" = "arm-linux" ]; then
+              CC=/usr/bin/gcc-8 CXX=/usr/bin/g++-8 sh bootstrap-vcpkg.sh -disableMetrics
+              export VCPKG_FORCE_SYSTEM_BINARIES=1
+            else
+              sh bootstrap-vcpkg.sh -disableMetrics
+            fi
             popd
             popd
-            # override Linux compiler detection in vcpkg
-            cp $PWD/res/vcpkg/linux.cmake $VCPKG_ROOT/scripts/toolchains/linux.cmake
             $VCPKG_ROOT/vcpkg install --triplet ${{ matrix.job.vcpkg-triplet }} --x-install-root="$VCPKG_ROOT/installed"
             # rust
             pushd /opt
