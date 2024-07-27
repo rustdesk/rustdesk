@@ -1409,7 +1409,6 @@ jobs:
             # build vcpkg helper executable with gcc-8 for arm-linux but use prebuilt one on x64-linux
             if [ "${{ matrix.job.vcpkg-triplet }}" = "arm-linux" ]; then
               CC=/usr/bin/gcc-8 CXX=/usr/bin/g++-8 sh bootstrap-vcpkg.sh -disableMetrics
-              export VCPKG_FORCE_SYSTEM_BINARIES=1
             else
               sh bootstrap-vcpkg.sh -disableMetrics
             fi
@@ -1434,9 +1433,10 @@ jobs:
             git config --global --add safe.directory "*"
             # set python3.7 as default python3
             update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.7 1
-            # add built CMake to PATH for arm-linux
+            # add built CMake to PATH and set VCPKG_FORCE_SYSTEM_BINARIES Afor arm-linux
             if [ "${{ matrix.job.vcpkg-triplet }}" = "arm-linux" ]; then
               export PATH="/opt/cmake-${{ env.SCITER_ARMV7_CMAKE_VERSION }}-linux-armhf/bin:$PATH"
+              export VCPKG_FORCE_SYSTEM_BINARIES=1
             fi
             # edit cargo config
             mkdir -p ~/.cargo/
