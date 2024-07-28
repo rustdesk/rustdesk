@@ -17,13 +17,23 @@ bool refreshingUser = false;
 class UserModel {
   final RxString userName = ''.obs;
   final RxBool isAdmin = false.obs;
+  final RxString networkError = ''.obs;
   bool get isLogin => userName.isNotEmpty;
   WeakReference<FFI> parent;
 
-  UserModel(this.parent);
+  UserModel(this.parent) {
+    userName.listen((p0) {
+      // When user name becomes empty, show login button
+      // When user name becomes non-empty:
+      //  For _updateLocalUserInfo, network error will be set later
+      //  For login success, should clear network error
+      networkError.value = '';
+    });
+  }
 
   void refreshCurrentUser() async {
     if (bind.isDisableAccount()) return;
+    networkError.value = '';
     final token = bind.mainGetLocalOption(key: 'access_token');
     if (token == '') {
       await updateOtherModels();
@@ -38,12 +48,18 @@ class UserModel {
     if (refreshingUser) return;
     try {
       refreshingUser = true;
-      final response = await http.post(Uri.parse('$url/api/currentUser'),
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': 'Bearer $token'
-          },
-          body: json.encode(body));
+      final http.Response response;
+      try {
+        response = await http.post(Uri.parse('$url/api/currentUser'),
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': 'Bearer $token'
+            },
+            body: json.encode(body));
+      } catch (e) {
+        networkError.value = e.toString();
+        rethrow;
+      }
       refreshingUser = false;
       final status = response.statusCode;
       if (status == 401 || status == 400) {

@@ -112,6 +112,7 @@ class AbModel {
       {required ForcePullAb? force, required bool quiet}) async {
     if (bind.isDisableAb()) return;
     if (!gFFI.userModel.isLogin) return;
+    if (gFFI.userModel.networkError.isNotEmpty) return;
     if (force == null && listInitialized && current.initialized) return;
     debugPrint("pullAb, force: $force, quiet: $quiet");
     if (!listInitialized || force == ForcePullAb.listAndCurrent) {
