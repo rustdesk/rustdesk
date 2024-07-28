@@ -630,7 +630,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("cancel-2fa-confirm-tip", "Sind Sie sicher, dass Sie 2FA abbrechen möchten?"),
         ("cancel-bot-confirm-tip", "Sind Sie sicher, dass Sie Telegram-Bot abbrechen möchten?"),
         ("About RustDesk", "Über RustDesk"),
-        ("Send clipboard keystrokes", ""),
-        ("network_error_tip", ""),
+        ("Send clipboard keystrokes", "Tastenanschläge aus der Zwischenablage senden"),
+        ("network_error_tip", "Bitte überprüfen Sie Ihre Netzwerkverbindung und versuchen Sie es dann erneut."),
     ].iter().cloned().collect();
 }
