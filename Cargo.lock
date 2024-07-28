@@ -6593,11 +6593,11 @@ dependencies = [
 
 [[package]]
 name = "tfc"
-version = "0.6.1"
-source = "git+https://github.com/rustdesk-org/The-Fat-Controller#9dd86151525fd010dc93f6bc9b6aedd1a75cc342"
+version = "0.7.0"
+source = "git+https://github.com/rustdesk-org/The-Fat-Controller?branch=history/rebase_upstream_20240722#de9c8ba480f166a9fc90aaa47bb0e84b443ea9c6"
 dependencies = [
  "anyhow",
- "core-graphics 0.22.3",
+ "core-graphics 0.23.2",
  "unicode-segmentation",
  "winapi 0.3.9",
  "x11 2.19.0",
