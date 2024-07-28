@@ -629,8 +629,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("enable-bot-desc", "1, Otvorte chat s @BotFather.\n2, Odošlite príkaz \"/newbot\". Po dokončení tohto kroku dostanete token.\n3, Spustite chat s novo vytvoreným botom. Odošlite správu začínajúcu lomítkom vpred (\"/\"), napríklad \"/hello\", aby ste ho aktivovali.\n"),
         ("cancel-2fa-confirm-tip", "Ste si istí, že chcete zrušiť službu 2FA?"),
         ("cancel-bot-confirm-tip", "Ste si istí, že chcete zrušiť bota Telegramu?"),
-        ("About RustDesk", ""),
-        ("Send clipboard keystrokes", ""),
-        ("network_error_tip", ""),
+        ("About RustDesk", "O RustDesk"),
+        ("Send clipboard keystrokes", "Odoslať stlačenia klávesov zo schránky"),
+        ("network_error_tip", "Skontrolujte svoje sieťové pripojenie a potom kliknite na tlačidlo Opakovať."),
     ].iter().cloned().collect();
 }
