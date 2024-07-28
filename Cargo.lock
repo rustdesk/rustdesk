@@ -3778,14 +3778,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "mouce"
-version = "0.2.1"
-source = "git+https://github.com/rustdesk-org/mouce.git#177625a395cd8fa73964714d0039535cb9b47893"
-dependencies = [
- "glob",
-]
-
-[[package]]
 name = "muda"
 version = "0.13.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5514,7 +5506,6 @@ dependencies = [
  "libpulse-simple-binding",
  "mac_address",
  "magnum-opus",
- "mouce",
  "num_cpus",
  "objc",
  "objc_id",
