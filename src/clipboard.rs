@@ -3,9 +3,7 @@ use clipboard_master::{ClipboardHandler, Master, Shutdown};
 use hbb_common::{log, message_proto::*, ResultType};
 use std::{
     sync::{mpsc::Sender, Arc, Mutex},
-    thread,
     thread::JoinHandle,
-    time::Duration,
 };
 
 pub const CLIPBOARD_NAME: &'static str = "clipboard";
@@ -186,12 +184,12 @@ pub fn update_clipboard(multi_clipboards: Vec<Clipboard>, side: ClipboardSide) {
     });
 }
 
-#[cfg(not(any(all(target_os = "linux", feature = "unix-file-copy-paste"))))]
+#[cfg(not(all(target_os = "linux", feature = "unix-file-copy-paste")))]
 pub struct ClipboardContext {
     inner: arboard::Clipboard,
 }
 
-#[cfg(not(any(all(target_os = "linux", feature = "unix-file-copy-paste"))))]
+#[cfg(not(all(target_os = "linux", feature = "unix-file-copy-paste")))]
 #[allow(unreachable_code)]
 impl ClipboardContext {
     pub fn new() -> ResultType<ClipboardContext> {
@@ -355,7 +353,7 @@ pub fn start_clipbard_master_thread(
     h
 }
 
-pub use proto::get_msg_if_not_support_multi_clip;
+pub use proto::{create_multi_clipboards, get_msg_if_not_support_multi_clip};
 mod proto {
     use arboard::ClipboardData;
     use hbb_common::{

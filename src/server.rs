@@ -33,7 +33,6 @@ use crate::ipc::Data;
 pub mod audio_service;
 cfg_if::cfg_if! {
 if #[cfg(not(any(target_os = "android", target_os = "ios")))] {
-mod clipboard_service;
 #[cfg(target_os = "linux")]
 pub(crate) mod wayland;
 #[cfg(target_os = "linux")]
@@ -44,9 +43,6 @@ pub mod rdp_input;
 pub mod dbus;
 pub mod input_service;
 } else {
-mod clipboard_service {
-pub const NAME: &'static str = "";
-}
 pub mod input_service {
 pub const NAME_CURSOR: &'static str = "";
 pub const NAME_POS: &'static str = "";
@@ -102,7 +98,6 @@ pub fn new() -> ServerPtr {
     server.add_service(Box::new(display_service::new()));
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     {
-        server.add_service(Box::new(clipboard_service::new()));
         if !display_service::capture_cursor_embedded() {
             server.add_service(Box::new(input_service::new_cursor()));
             server.add_service(Box::new(input_service::new_pos()));

@@ -1,6 +1,8 @@
 use super::{input_service::*, *};
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
-use crate::clipboard::{update_clipboard, ClipboardSide};
+use crate::clipboard::{
+    create_multi_clipboards, get_msg_if_not_support_multi_clip, update_clipboard, ClipboardSide,
+};
 #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
 use crate::clipboard_file::*;
 #[cfg(target_os = "android")]
@@ -494,10 +496,12 @@ impl Connection {
                             } else if &name == "clipboard" {
                                 conn.clipboard = enabled;
                                 conn.send_permission(Permission::Clipboard, enabled).await;
-                                if let Some(s) = conn.server.upgrade() {
-                                    s.write().unwrap().subscribe(
-                                        super::clipboard_service::NAME,
-                                        conn.inner.clone(), conn.clipboard_enabled() && conn.peer_keyboard_enabled());
+                                // We have already disabled the clipboard permission in the `cm` side, if `enabled` is false.
+                                // So we only need to handle the case when `enabled` is true.
+                                if enabled {
+                                    conn.send_to_cm(ipc::Data::ClipboardNonFileEnabled(
+                                        conn.clipboard_enabled() && conn.peer_keyboard_enabled(),
+                                    ));
                                 }
                             } else if &name == "audio" {
                                 conn.audio = enabled;
@@ -527,6 +531,16 @@ impl Connection {
                         #[cfg(any(target_os="windows", target_os="linux", target_os = "macos"))]
                         ipc::Data::ClipboardFile(clip) => {
                             allow_err!(conn.stream.send(&clip_2_msg(clip)).await);
+                        }
+                        #[cfg(any(target_os="windows", target_os="linux", target_os = "macos"))]
+                        ipc::Data::ClipboardNonFile(clip) => {
+                            let multi_clipboards = create_multi_clipboards(clip);
+                            let msg_out = get_msg_if_not_support_multi_clip(&conn.lr.version, &conn.lr.my_platform, &multi_clipboards).unwrap_or({
+                                let mut msg_out = Message::new();
+                                msg_out.set_multi_clipboards(multi_clipboards);
+                                msg_out
+                            });
+                            conn.send(msg_out).await;
                         }
                         ipc::Data::PrivacyModeState((_, state, impl_key)) => {
                             let msg_out = match state {
@@ -680,16 +694,6 @@ impl Connection {
                             #[cfg(target_os = "macos")]
                             if let Some(new_msg) = conn.retina.on_cursor_pos(&pos, conn.display_idx) {
                                 msg = Arc::new(new_msg);
-                            }
-                        }
-                        Some(message::Union::MultiClipboards(_multi_clipboards)) => {
-                            #[cfg(not(any(target_os = "android", target_os = "ios")))]
-                            if let Some(msg_out) = crate::clipboard::get_msg_if_not_support_multi_clip(&conn.lr.version, &conn.lr.my_platform, _multi_clipboards) {
-                                if let Err(err) = conn.stream.send(&msg_out).await {
-                                    conn.on_close(&err.to_string(), false).await;
-                                    break;
-                                }
-                                continue;
                             }
                         }
                         _ => {}
@@ -1345,6 +1349,11 @@ impl Connection {
             }
         } else if sub_service {
             if !wait_session_id_confirm {
+                if self.file_transfer.is_none() && self.port_forward_socket.is_none() {
+                    self.send_to_cm(ipc::Data::ClipboardNonFileEnabled(
+                        self.clipboard_enabled() && self.peer_keyboard_enabled(),
+                    ));
+                }
                 self.try_sub_services();
             }
         }
@@ -1364,9 +1373,6 @@ impl Connection {
                 }
                 if !self.follow_remote_window {
                     noperms.push(NAME_WINDOW_FOCUS);
-                }
-                if !self.clipboard_enabled() || !self.peer_keyboard_enabled() {
-                    noperms.push(super::clipboard_service::NAME);
                 }
                 if !self.audio_enabled() {
                     noperms.push(super::audio_service::NAME);
@@ -2421,6 +2427,11 @@ impl Connection {
                                     self.read_dir(&dir, show_hidden);
                                 }
                             } else {
+                                if self.port_forward_socket.is_none() {
+                                    self.send_to_cm(ipc::Data::ClipboardNonFileEnabled(
+                                        self.clipboard_enabled() && self.peer_keyboard_enabled(),
+                                    ));
+                                }
                                 self.try_sub_services();
                             }
                         }
@@ -2850,24 +2861,18 @@ impl Connection {
         if let Ok(q) = o.disable_clipboard.enum_value() {
             if q != BoolOption::NotSet {
                 self.disable_clipboard = q == BoolOption::Yes;
-                if let Some(s) = self.server.upgrade() {
-                    s.write().unwrap().subscribe(
-                        super::clipboard_service::NAME,
-                        self.inner.clone(),
-                        self.clipboard_enabled() && self.peer_keyboard_enabled(),
-                    );
-                }
+                self.send_to_cm(ipc::Data::ClipboardNonFileEnabled(
+                    self.clipboard_enabled() && self.peer_keyboard_enabled(),
+                ));
             }
         }
         if let Ok(q) = o.disable_keyboard.enum_value() {
             if q != BoolOption::NotSet {
                 self.disable_keyboard = q == BoolOption::Yes;
                 if let Some(s) = self.server.upgrade() {
-                    s.write().unwrap().subscribe(
-                        super::clipboard_service::NAME,
-                        self.inner.clone(),
+                    self.send_to_cm(ipc::Data::ClipboardNonFileEnabled(
                         self.clipboard_enabled() && self.peer_keyboard_enabled(),
-                    );
+                    ));
                     s.write().unwrap().subscribe(
                         NAME_CURSOR,
                         self.inner.clone(),

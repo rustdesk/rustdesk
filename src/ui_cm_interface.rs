@@ -74,6 +74,7 @@ struct IpcTaskRunner<T: InvokeUiCM> {
     file_transfer_enabled: bool,
     #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
     file_transfer_enabled_peer: bool,
+    clipboard_non_file_enabled_peer: bool,
 }
 
 lazy_static::lazy_static! {
@@ -379,6 +380,8 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
         }
         let (tx_log, mut rx_log) = mpsc::unbounded_channel::<String>();
 
+        let mut rx_clipboard_non_file = clipboard_non_file::get_new_receiver();
+
         self.running = false;
         loop {
             tokio::select! {
@@ -467,6 +470,12 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
                                         self.file_transfer_enabled_peer = _enabled;
                                     }
                                 }
+                                Data::ClipboardNonFileEnabled(_enabled) => {
+                                    #[cfg(any(target_os= "windows",target_os ="linux", target_os = "macos"))]
+                                    {
+                                        self.clipboard_non_file_enabled_peer = _enabled;
+                                    }
+                                }
                                 Data::Theme(dark) => {
                                     self.cm.change_theme(dark);
                                 }
@@ -504,6 +513,10 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
                             #[cfg(any(target_os="linux", target_os="windows", target_os = "macos"))]
                             if _name == "file" {
                                 self.file_transfer_enabled = *_enabled;
+                            } else if _name == "clipboard" || _name == "keyboard" {
+                                if !_enabled {
+                                    self.clipboard_non_file_enabled_peer = false;
+                                }
                             }
                         }
                         Data::Authorize => {
@@ -537,6 +550,11 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
                         //
                     }
                 },
+                Some(clip_non_file) = rx_clipboard_non_file.recv() => {
+                    if self.clipboard_non_file_enabled_peer {
+                        allow_err!(self.tx.send(Data::ClipboardNonFile(clip_non_file)));
+                    }
+                }
                 Some(job_log) = rx_log.recv() => {
                     self.cm.ui_handler.file_transfer_log("transfer", &job_log);
                 }
@@ -559,6 +577,7 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
             file_transfer_enabled: false,
             #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
             file_transfer_enabled_peer: false,
+            clipboard_non_file_enabled_peer: true,
         };
 
         while task_runner.running {
@@ -588,6 +607,10 @@ pub async fn start_ipc<T: InvokeUiCM>(cm: ConnectionManager<T>) {
         &Config::get_option(OPTION_ENABLE_FILE_TRANSFER),
     ));
 
+    std::thread::spawn(|| {
+        clipboard_non_file::start();
+    });
+
     match ipc::new_listener("_cm").await {
         Ok(mut incoming) => {
             while let Some(result) = incoming.next().await {
@@ -609,7 +632,132 @@ pub async fn start_ipc<T: InvokeUiCM>(cm: ConnectionManager<T>) {
             log::error!("Failed to start cm ipc server: {}", err);
         }
     }
+
+    clipboard_non_file::stop();
     crate::platform::quit_gui();
+}
+
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+mod clipboard_non_file {
+    use crate::clipboard::{ClipboardContext, ClipboardSide, CLIPBOARD_INTERVAL as INTERVAL};
+    use arboard::ClipboardData;
+    use clipboard_master::{CallbackResult, ClipboardHandler};
+    use hbb_common::{
+        bail, log,
+        tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender},
+        ResultType,
+    };
+    use std::{
+        io,
+        sync::mpsc::{channel, Receiver, RecvTimeoutError, Sender},
+        sync::{
+            atomic::{AtomicBool, Ordering},
+            Arc, Mutex,
+        },
+        time::Duration,
+    };
+
+    lazy_static::lazy_static! {
+        static ref VEC_MSG_CHANNEL: Arc<Mutex<Vec<UnboundedSender<Vec<ClipboardData>>>>> = Default::default();
+        static ref RX_STOPPED: Arc<Mutex<Option<Receiver<()>>>> = Default::default();
+    }
+
+    static RUNNING: AtomicBool = AtomicBool::new(true);
+
+    struct Handler {
+        ctx: ClipboardContext,
+        tx_cb_result: Sender<CallbackResult>,
+    }
+
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    impl ClipboardHandler for Handler {
+        fn on_clipboard_change(&mut self) -> CallbackResult {
+            let content = self.ctx.get(ClipboardSide::Host, false);
+            if let Ok(content) = content {
+                if !content.is_empty() {
+                    let mut txs = VEC_MSG_CHANNEL.lock().unwrap();
+                    for i in (0..txs.len()).rev() {
+                        if let Err(_e) = txs[i].send(content.clone()) {
+                            txs.remove(i);
+                        }
+                    }
+                }
+            }
+            CallbackResult::Next
+        }
+
+        fn on_clipboard_error(&mut self, error: io::Error) -> CallbackResult {
+            self.tx_cb_result
+                .send(CallbackResult::StopWithError(error))
+                .ok();
+            CallbackResult::Next
+        }
+    }
+
+    pub fn get_new_receiver() -> UnboundedReceiver<Vec<ClipboardData>> {
+        let (tx, rx) = unbounded_channel();
+        VEC_MSG_CHANNEL.lock().unwrap().push(tx);
+        rx
+    }
+
+    pub fn start() {
+        let (tx, rx) = channel();
+        *RX_STOPPED.lock().unwrap() = Some(rx);
+        loop {
+            run().ok();
+            if !RUNNING.load(Ordering::SeqCst) {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(300));
+        }
+        tx.send(()).ok();
+    }
+
+    fn run() -> ResultType<()> {
+        let (tx_cb_result, rx_cb_result) = channel();
+        let handler = Handler {
+            ctx: ClipboardContext::new()?,
+            tx_cb_result,
+        };
+
+        let (tx_start_res, rx_start_res) = channel();
+        let jh = crate::clipboard::start_clipbard_master_thread(handler, tx_start_res);
+        let shutdown = match rx_start_res.recv() {
+            Ok((Some(s), _)) => s,
+            Ok((None, err)) => {
+                bail!(err);
+            }
+            Err(e) => {
+                bail!("Failed to create clipboard listener: {}", e);
+            }
+        };
+
+        while RUNNING.load(Ordering::SeqCst) {
+            match rx_cb_result.recv_timeout(Duration::from_millis(INTERVAL)) {
+                Ok(CallbackResult::Stop) => {
+                    log::debug!("Clipboard listener stopped");
+                    break;
+                }
+                Ok(CallbackResult::StopWithError(err)) => {
+                    log::debug!("Clipboard listener stopped with error: {}", err);
+                    break;
+                }
+                Err(RecvTimeoutError::Timeout) => {}
+                _ => {}
+            }
+        }
+
+        shutdown.signal();
+        jh.join().ok();
+        Ok(())
+    }
+
+    pub fn stop() {
+        RUNNING.store(false, Ordering::SeqCst);
+        if let Some(rx) = RX_STOPPED.lock().unwrap().take() {
+            rx.recv().ok();
+        }
+    }
 }
 
 #[cfg(target_os = "android")]

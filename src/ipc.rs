@@ -9,6 +9,8 @@ use crate::{
     privacy_mode::PrivacyModeState,
     ui_interface::{get_local_option, set_local_option},
 };
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+use arboard::ClipboardData;
 use bytes::Bytes;
 use parity_tokio_ipc::{
     Connection as Conn, ConnectionClient as ConnClient, Endpoint, Incoming, SecurityAttributes,
@@ -26,8 +28,11 @@ use hbb_common::{
     config::{self, Config, Config2},
     futures::StreamExt as _,
     futures_util::sink::SinkExt,
-    log, password_security as password, timeout, tokio,
-    tokio::io::{AsyncRead, AsyncWrite},
+    log, password_security as password, timeout,
+    tokio::{
+        self,
+        io::{AsyncRead, AsyncWrite},
+    },
     tokio_util::codec::Framed,
     ResultType,
 };
@@ -207,6 +212,9 @@ pub enum Data {
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     ClipboardFile(ClipboardFile),
     ClipboardFileEnabled(bool),
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    ClipboardNonFile(Vec<ClipboardData>),
+    ClipboardNonFileEnabled(bool),
     PrivacyModeState((i32, PrivacyModeState, String)),
     TestRendezvousServer,
     #[cfg(not(any(target_os = "android", target_os = "ios")))]

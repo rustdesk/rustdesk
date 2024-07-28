@@ -224,7 +224,7 @@ checksum = "b3d1d046238990b9cf5bcde22a3fb3584ee5cf65fb2765f454ed428c7a0063da"
 [[package]]
 name = "arboard"
 version = "3.4.0"
-source = "git+https://github.com/rustdesk-org/arboard#75166f255bf2fd6c662269029f5130b11d024f46"
+source = "git+https://github.com/fufesou/arboard?branch=refact/derive_serialize_for_data#16022004e545750d440033644c774ea8d052d854"
 dependencies = [
  "clipboard-win",
  "core-graphics 0.23.2",
@@ -234,6 +234,8 @@ dependencies = [
  "objc2-app-kit",
  "objc2-foundation",
  "parking_lot",
+ "serde 1.0.203",
+ "serde_derive",
  "windows-sys 0.48.0",
  "wl-clipboard-rs",
  "x11rb 0.13.1",
