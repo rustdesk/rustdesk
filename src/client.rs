@@ -2111,6 +2111,13 @@ impl LoginConfigHandler {
         };
         let mut display_name = get_buildin_option(config::keys::OPTION_DISPLAY_NAME);
         if display_name.is_empty() {
+            display_name = serde_json::from_str::<HashMap<String, String>>(
+                &LocalConfig::get_option("user_info"),
+            )
+            .map(|mut x| x.remove("name").unwrap_or_default())
+            .unwrap_or_default();
+        }
+        if display_name.is_empty() {
             display_name = crate::username();
         }
         #[cfg(not(target_os = "android"))]
