@@ -3,9 +3,7 @@ use clipboard_master::{ClipboardHandler, Master, Shutdown};
 use hbb_common::{log, message_proto::*, ResultType};
 use std::{
     sync::{mpsc::Sender, Arc, Mutex},
-    thread,
     thread::JoinHandle,
-    time::Duration,
 };
 
 pub const CLIPBOARD_NAME: &'static str = "clipboard";
@@ -18,6 +16,10 @@ lazy_static::lazy_static! {
     static ref ARBOARD_MTX: Arc<Mutex<()>> = Arc::new(Mutex::new(()));
     // cache the clipboard msg
     static ref LAST_MULTI_CLIPBOARDS: Arc<Mutex<MultiClipboards>> = Arc::new(Mutex::new(MultiClipboards::new()));
+    // Clipboard on Linux is "server--clients" mode. 
+    // The clipboard content is owned by the server and passed to the clients when requested.
+    // Plain text is the only exception, it does not require the server to be present.
+    static ref CLIPBOARD_UPDATE_CTX: Arc<Mutex<Option<ClipboardContext>>> = Arc::new(Mutex::new(None));
 }
 
 const SUPPORTED_FORMATS: &[ClipboardFormat] = &[
@@ -162,20 +164,27 @@ fn update_clipboard_(multi_clipboards: Vec<Clipboard>, side: ClipboardSide) {
     if to_update_data.is_empty() {
         return;
     }
-    match ClipboardContext::new() {
-        Ok(mut ctx) => {
-            to_update_data.push(ClipboardData::Special((
-                RUSTDESK_CLIPBOARD_OWNER_FORMAT.to_owned(),
-                side.get_owner_data(),
-            )));
-            if let Err(e) = ctx.set(&to_update_data) {
-                log::debug!("Failed to set clipboard: {}", e);
-            } else {
-                log::debug!("{} updated on {}", CLIPBOARD_NAME, side);
+    let mut ctx = CLIPBOARD_UPDATE_CTX.lock().unwrap();
+    if ctx.is_none() {
+        match ClipboardContext::new() {
+            Ok(x) => {
+                *ctx = Some(x);
+            }
+            Err(e) => {
+                log::error!("Failed to create clipboard context: {}", e);
+                return;
             }
         }
-        Err(err) => {
-            log::error!("Failed to create clipboard context: {}", err);
+    }
+    if let Some(ctx) = ctx.as_mut() {
+        to_update_data.push(ClipboardData::Special((
+            RUSTDESK_CLIPBOARD_OWNER_FORMAT.to_owned(),
+            side.get_owner_data(),
+        )));
+        if let Err(e) = ctx.set(&to_update_data) {
+            log::debug!("Failed to set clipboard: {}", e);
+        } else {
+            log::debug!("{} updated on {}", CLIPBOARD_NAME, side);
         }
     }
 }
