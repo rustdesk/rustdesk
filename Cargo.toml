@@ -1,11 +1,11 @@
 [package]
-name = "rustdesk"
+name = "fernwartungstool"
 version = "1.3.0"
 authors = ["rustdesk <info@rustdesk.com>"]
 edition = "2021"
 build= "build.rs"
-description = "RustDesk Remote Desktop"
-default-run = "rustdesk"
+description = "fernwartungstool Remote Desktop"
+default-run = "fernwartungstool"
 rust-version = "1.75"
 
 [lib]
@@ -190,8 +190,8 @@ os-version = "0.2"
 hound = "3.5"
 
 [package.metadata.bundle]
-name = "RustDesk"
-identifier = "com.carriez.rustdesk"
+name = "fernwartungstool"
+identifier = "com.lx.fernwartungstool"
 icon = ["res/32x32.png", "res/128x128.png", "res/128x128@2x.png"]
 osx_minimum_system_version = "10.14"
 
