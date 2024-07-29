@@ -3,6 +3,8 @@ pub use crate::clipboard::{
     check_clipboard, ClipboardContext, ClipboardSide, CLIPBOARD_INTERVAL as INTERVAL,
     CLIPBOARD_NAME as NAME,
 };
+#[cfg(windows)]
+use crate::ipc::{ClipboardFile, ClipboardNonFile, Data};
 use clipboard_master::{CallbackResult, ClipboardHandler};
 use std::{
     io,
@@ -64,8 +66,10 @@ fn run(sp: EmptyExtraFieldService) -> ResultType<()> {
 impl ClipboardHandler for Handler {
     fn on_clipboard_change(&mut self) -> CallbackResult {
         self.sp.snapshot(|_sps| Ok(())).ok();
-        if let Some(msg) = check_clipboard(&mut self.ctx, ClipboardSide::Host, false) {
-            self.sp.send(msg);
+        if self.sp.ok() {
+            if let Some(msg) = self.get_clipboard_msg() {
+                self.sp.send(msg);
+            }
         }
         CallbackResult::Next
     }
@@ -75,5 +79,68 @@ impl ClipboardHandler for Handler {
             .send(CallbackResult::StopWithError(error))
             .ok();
         CallbackResult::Next
+    }
+}
+
+impl Handler {
+    fn get_clipboard_msg(&mut self) -> Option<Message> {
+        #[cfg(target_os = "windows")]
+        if crate::common::is_server() && crate::platform::is_root() {
+            match Self::read_clipboard_from_cm_ipc() {
+                Err(e) => {
+                    log::error!("Failed to read clipboard from cm: {}", e);
+                }
+                Ok(data) => {
+                    let mut msg = Message::new();
+                    let multi_clipboards = MultiClipboards {
+                        clipboards: data
+                            .into_iter()
+                            .map(|c| Clipboard {
+                                compress: c.compress,
+                                content: c.content,
+                                width: c.width,
+                                height: c.height,
+                                format: ClipboardFormat::from_i32(c.format)
+                                    .unwrap_or(ClipboardFormat::Text)
+                                    .into(),
+                                ..Default::default()
+                            })
+                            .collect(),
+                        ..Default::default()
+                    };
+                    msg.set_multi_clipboards(multi_clipboards);
+                    return Some(msg);
+                }
+            }
+        }
+        check_clipboard(&mut self.ctx, ClipboardSide::Host, false)
+    }
+
+    #[inline]
+    #[cfg(windows)]
+    #[tokio::main(flavor = "current_thread")]
+    async fn read_clipboard_from_cm_ipc() -> ResultType<Vec<ClipboardNonFile>> {
+        // It's ok to use 1000ms timeout here, because
+        // 1. the clipboard is not used frequently.
+        // 2. the clipboard handle is sync and will not block the main thread.
+        let mut stream = crate::ipc::connect(100, "_cm").await?;
+        timeout(100, stream.send(&Data::ClipboardNonFile(None))).await??;
+        loop {
+            match stream.next_timeout(800).await? {
+                Some(Data::ClipboardNonFile(Some((err, contents)))) => {
+                    if !err.is_empty() {
+                        bail!("{}", err);
+                    } else {
+                        return Ok(contents);
+                    }
+                }
+                Some(Data::ClipboardFile(ClipboardFile::MonitorReady)) => {
+                    // ClipboardFile::MonitorReady is the first message sent by cm.
+                }
+                _ => {
+                    bail!("failed to get clipboard data from cm");
+                }
+            }
+        }
     }
 }

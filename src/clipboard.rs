@@ -16,10 +16,11 @@ lazy_static::lazy_static! {
     static ref ARBOARD_MTX: Arc<Mutex<()>> = Arc::new(Mutex::new(()));
     // cache the clipboard msg
     static ref LAST_MULTI_CLIPBOARDS: Arc<Mutex<MultiClipboards>> = Arc::new(Mutex::new(MultiClipboards::new()));
-    // Clipboard on Linux is "server--clients" mode. 
+    // For updating in server and getting content in cm.
+    // Clipboard on Linux is "server--clients" mode.
     // The clipboard content is owned by the server and passed to the clients when requested.
     // Plain text is the only exception, it does not require the server to be present.
-    static ref CLIPBOARD_UPDATE_CTX: Arc<Mutex<Option<ClipboardContext>>> = Arc::new(Mutex::new(None));
+    static ref CLIPBOARD_CTX: Arc<Mutex<Option<ClipboardContext>>> = Arc::new(Mutex::new(None));
 }
 
 const SUPPORTED_FORMATS: &[ClipboardFormat] = &[
@@ -159,12 +160,34 @@ pub fn check_clipboard(
     None
 }
 
+#[cfg(target_os = "windows")]
+pub fn check_clipboard_cm() -> ResultType<MultiClipboards> {
+    let mut ctx = CLIPBOARD_CTX.lock().unwrap();
+    if ctx.is_none() {
+        match ClipboardContext::new() {
+            Ok(x) => {
+                *ctx = Some(x);
+            }
+            Err(e) => {
+                hbb_common::bail!("Failed to create clipboard context: {}", e);
+            }
+        }
+    }
+    if let Some(ctx) = ctx.as_mut() {
+        let content = ctx.get(ClipboardSide::Host, false)?;
+        let clipboards = proto::create_multi_clipboards(content);
+        Ok(clipboards)
+    } else {
+        hbb_common::bail!("Failed to create clipboard context");
+    }
+}
+
 fn update_clipboard_(multi_clipboards: Vec<Clipboard>, side: ClipboardSide) {
     let mut to_update_data = proto::from_multi_clipbards(multi_clipboards);
     if to_update_data.is_empty() {
         return;
     }
-    let mut ctx = CLIPBOARD_UPDATE_CTX.lock().unwrap();
+    let mut ctx = CLIPBOARD_CTX.lock().unwrap();
     if ctx.is_none() {
         match ClipboardContext::new() {
             Ok(x) => {

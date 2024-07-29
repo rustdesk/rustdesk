@@ -1,16 +1,5 @@
-#[cfg(any(target_os = "android", target_os = "ios", feature = "flutter"))]
-use std::iter::FromIterator;
-#[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
-use std::sync::Arc;
-use std::{
-    collections::HashMap,
-    ops::{Deref, DerefMut},
-    sync::{
-        atomic::{AtomicI64, Ordering},
-        RwLock,
-    },
-};
-
+#[cfg(target_os = "windows")]
+use crate::ipc::ClipboardNonFile;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use crate::ipc::Connection;
 #[cfg(not(any(target_os = "ios")))]
@@ -36,6 +25,18 @@ use hbb_common::{
 #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
 use hbb_common::{tokio::sync::Mutex as TokioMutex, ResultType};
 use serde_derive::Serialize;
+#[cfg(any(target_os = "android", target_os = "ios", feature = "flutter"))]
+use std::iter::FromIterator;
+#[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
+use std::sync::Arc;
+use std::{
+    collections::HashMap,
+    ops::{Deref, DerefMut},
+    sync::{
+        atomic::{AtomicI64, Ordering},
+        RwLock,
+    },
+};
 
 #[derive(Serialize, Clone)]
 pub struct Client {
@@ -485,6 +486,24 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
                                 }
                                 Data::CloseVoiceCall(reason) => {
                                     self.cm.voice_call_closed(self.conn_id, reason.as_str());
+                                }
+                                #[cfg(target_os = "windows")]
+                                Data::ClipboardNonFile(_) => {
+                                    match crate::clipboard::check_clipboard_cm() {
+                                        Ok(multi_clipoards) => {
+                                            let data = multi_clipoards.clipboards.into_iter().map(|c| ClipboardNonFile {
+                                                compress: c.compress,
+                                                content: c.content,
+                                                width: c.width,
+                                                height: c.height,
+                                                format: c.format.value(),
+                                            }).collect();
+                                            allow_err!(self.stream.send(&Data::ClipboardNonFile(Some(("".to_owned(), data)))).await);
+                                        }
+                                        Err(e) => {
+                                            allow_err!(self.stream.send(&Data::ClipboardNonFile(Some((format!("{}", e), vec![])))).await);
+                                        }
+                                    }
                                 }
                                 _ => {
 
