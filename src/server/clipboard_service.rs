@@ -126,25 +126,16 @@ impl Handler {
     #[cfg(windows)]
     #[tokio::main(flavor = "current_thread")]
     async fn read_clipboard_from_cm_ipc(&mut self) -> ResultType<Vec<ClipboardNonFile>> {
-        let mut is_new_created = false;
-        if self.stream.is_none() {
-            is_new_created = true;
-            self.stream = Some(crate::ipc::connect(100, "_cm").await?);
+        let mut is_sent = false;
+        if let Some(stream) = &mut self.stream {
+            // If previous stream is still alive, reuse it.
+            // If the previous stream is dead, `is_sent` will trigger reconnect.
+            is_sent = stream.send(&Data::ClipboardNonFile(None)).await.is_ok();
         }
-        loop {
-            if let Some(stream) = &mut self.stream {
-                if stream.send(&Data::ClipboardNonFile(None)).await.is_ok() {
-                    break;
-                } else {
-                    if is_new_created {
-                        bail!("failed to get clipboard data from cm");
-                    } else {
-                        // try to reconnect
-                        self.stream = Some(crate::ipc::connect(100, "_cm").await?);
-                        is_new_created = false;
-                    }
-                }
-            }
+        if !is_sent {
+            let mut stream = crate::ipc::connect(100, "_cm").await?;
+            stream.send(&Data::ClipboardNonFile(None)).await?;
+            self.stream = Some(stream);
         }
 
         if let Some(stream) = &mut self.stream {
@@ -176,7 +167,7 @@ impl Handler {
                                         bail!("failed to get raw clipboard data: {}", e);
                                     }
                                     Err(e) => {
-                                        // Reconnect the next time to avoid the next raw data remaining in the buffer.
+                                        // Reconnect to avoid the next raw data remaining in the buffer.
                                         self.stream = None;
                                         log::debug!("failed to get raw clipboard data: {}", e);
                                     }
