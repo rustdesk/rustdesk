@@ -593,7 +593,7 @@ pub fn request_remote_desktop() -> Result<
         }
     }
     Err(Box::new(DBusError(
-        "Failed to obtain screen capture.".into(),
+"Failed to obtain screen capture. You may need to upgrade the PipeWire library for better compatibility. Please check https://github.com/rustdesk/rustdesk/issues/8600#issuecomment-2254720954 for more details.".into()
     )))
 }
 
