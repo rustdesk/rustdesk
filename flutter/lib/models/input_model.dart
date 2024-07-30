@@ -906,9 +906,7 @@ class InputModel {
     }
 
     if (!cursorModel.gotMouseControl) {
-      bool selfGetControl =
-          (x - lastMousePos.dx).abs() > kMouseControlDistance ||
-              (y - lastMousePos.dy).abs() > kMouseControlDistance;
+      bool selfGetControl = x != lastMousePos.dx || y != lastMousePos.dy;
       if (selfGetControl) {
         cursorModel.gotMouseControl = true;
       } else {
