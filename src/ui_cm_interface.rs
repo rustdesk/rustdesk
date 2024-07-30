@@ -494,14 +494,14 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
                                             let mut raw_contents = bytes::BytesMut::new();
                                             let mut main_data = vec![];
                                             for c in multi_clipoards.clipboards.into_iter() {
-                                                let (content, content_len, next_raw) = {
+                                                let content_len = c.content.len();
+                                                let (content, next_raw) = {
                                                     // TODO: find out a better threshold
-                                                    let content_len = c.content.len();
                                                     if content_len > 1024 * 3 {
-                                                        (c.content, content_len, false)
+                                                        (c.content, false)
                                                     } else {
                                                         raw_contents.extend(c.content);
-                                                        (bytes::Bytes::new(), content_len, true)
+                                                        (bytes::Bytes::new(), true)
                                                     }
                                                 };
                                                 main_data.push(ClipboardNonFile {
