@@ -31,6 +31,11 @@ def get_deb_arch() -> str:
         return "amd64"
     return custom_arch
 
+def get_deb_extra_depends() -> str:
+    custom_arch = os.environ.get("DEB_ARCH")
+    if custom_arch == "armhf": # for arm32v7 libsciter-gtk.so
+        return ", libatomic1"
+    return ""
 
 def system2(cmd):
     exit_code = os.system(cmd)
@@ -282,10 +287,10 @@ Version: %s
 Architecture: %s
 Maintainer: rustdesk <info@rustdesk.com>
 Homepage: https://rustdesk.com
-Depends: libgtk-3-0, libxcb-randr0, libxdo3, libxfixes3, libxcb-shape0, libxcb-xfixes0, libasound2, libsystemd0, curl, libva-drm2, libva-x11-2, libvdpau1, libgstreamer-plugins-base1.0-0, libpam0g, libappindicator3-1, gstreamer1.0-pipewire
+Depends: libgtk-3-0, libxcb-randr0, libxdo3, libxfixes3, libxcb-shape0, libxcb-xfixes0, libasound2, libsystemd0, curl, libva-drm2, libva-x11-2, libvdpau1, libgstreamer-plugins-base1.0-0, libpam0g, libappindicator3-1, gstreamer1.0-pipewire%s
 Description: A remote control software.
 
-""" % (version, get_deb_arch())
+""" % (version, get_deb_arch(), get_deb_extra_depends())
     file = open(control_file_path, "w")
     file.write(content)
     file.close()
