@@ -108,6 +108,7 @@ pub enum FS {
 pub struct ClipboardNonFile {
     pub compress: bool,
     pub content: bytes::Bytes,
+    pub content_len: usize,
     pub next_raw: bool,
     pub width: i32,
     pub height: i32,

@@ -491,21 +491,23 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
                                 Data::ClipboardNonFile(_) => {
                                     match crate::clipboard::check_clipboard_cm() {
                                         Ok(multi_clipoards) => {
-                                            let mut raw_contents = vec![];
+                                            let mut raw_contents = bytes::BytesMut::new();
                                             let mut main_data = vec![];
                                             for c in multi_clipoards.clipboards.into_iter() {
-                                                let (content, next_raw) = {
+                                                let (content, content_len, next_raw) = {
                                                     // TODO: find out a better threshold
-                                                    if c.content.len() > 1024 * 3 {
-                                                        (c.content, false)
+                                                    let content_len = c.content.len();
+                                                    if content_len > 1024 * 3 {
+                                                        (c.content, content_len, false)
                                                     } else {
-                                                        raw_contents.push(c.content);
-                                                        (bytes::Bytes::new(), true)
+                                                        raw_contents.extend(c.content);
+                                                        (bytes::Bytes::new(), content_len, true)
                                                     }
                                                 };
                                                 main_data.push(ClipboardNonFile {
                                                     compress: c.compress,
                                                     content,
+                                                    content_len,
                                                     next_raw,
                                                     width: c.width,
                                                     height: c.height,
@@ -513,9 +515,7 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
                                                 });
                                             }
                                             allow_err!(self.stream.send(&Data::ClipboardNonFile(Some(("".to_owned(), main_data)))).await);
-                                            for content in raw_contents.into_iter() {
-                                                allow_err!(self.stream.send_raw(content).await);
-                                            }
+                                            allow_err!(self.stream.send_raw(raw_contents.into()).await);
                                         }
                                         Err(e) => {
                                             allow_err!(self.stream.send(&Data::ClipboardNonFile(Some((format!("{}", e), vec![])))).await);

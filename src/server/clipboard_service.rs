@@ -120,12 +120,12 @@ impl Handler {
         check_clipboard(&mut self.ctx, ClipboardSide::Host, false)
     }
 
+    // It's ok to do async operation in the clipboard service because:
+    // 1. the clipboard is not used frequently.
+    // 2. the clipboard handle is sync and will not block the main thread.
     #[cfg(windows)]
     #[tokio::main(flavor = "current_thread")]
     async fn read_clipboard_from_cm_ipc(&mut self) -> ResultType<Vec<ClipboardNonFile>> {
-        // It's ok to use 800ms timeout here, because
-        // 1. the clipboard is not used frequently.
-        // 2. the clipboard handle is sync and will not block the main thread.
         let mut is_new_created = false;
         if self.stream.is_none() {
             is_new_created = true;
@@ -147,31 +147,54 @@ impl Handler {
             }
         }
 
-        let Some(stream) = &mut self.stream else {
-            // unreachable!
-            bail!("failed to get clipboard data from cm");
-        };
-        loop {
-            match stream.next_timeout(800).await? {
-                Some(Data::ClipboardNonFile(Some((err, mut contents)))) => {
-                    if !err.is_empty() {
-                        bail!("{}", err);
-                    } else {
-                        for c in contents.iter_mut() {
-                            if c.next_raw {
-                                c.content = stream.next_raw().await?.into();
+        if let Some(stream) = &mut self.stream {
+            loop {
+                match stream.next_timeout(800).await? {
+                    Some(Data::ClipboardNonFile(Some((err, mut contents)))) => {
+                        if !err.is_empty() {
+                            bail!("{}", err);
+                        } else {
+                            if contents.iter().any(|c| c.next_raw) {
+                                match timeout(1000, stream.next_raw()).await {
+                                    Ok(Ok(mut data)) => {
+                                        for c in &mut contents {
+                                            if c.next_raw {
+                                                if c.content_len <= data.len() {
+                                                    c.content =
+                                                        data.split_off(c.content_len).into();
+                                                } else {
+                                                    // Reconnect the next time to avoid the next raw data mismatch.
+                                                    self.stream = None;
+                                                    bail!("failed to get raw clipboard data: invalid size");
+                                                }
+                                            }
+                                        }
+                                    }
+                                    Ok(Err(e)) => {
+                                        // reset by peer
+                                        self.stream = None;
+                                        bail!("failed to get raw clipboard data: {}", e);
+                                    }
+                                    Err(e) => {
+                                        // Reconnect the next time to avoid the next raw data remaining in the buffer.
+                                        self.stream = None;
+                                        log::debug!("failed to get raw clipboard data: {}", e);
+                                    }
+                                }
                             }
+                            return Ok(contents);
                         }
-                        return Ok(contents);
                     }
-                }
-                Some(Data::ClipboardFile(ClipboardFile::MonitorReady)) => {
-                    // ClipboardFile::MonitorReady is the first message sent by cm.
-                }
-                _ => {
-                    bail!("failed to get clipboard data from cm");
+                    Some(Data::ClipboardFile(ClipboardFile::MonitorReady)) => {
+                        // ClipboardFile::MonitorReady is the first message sent by cm.
+                    }
+                    _ => {
+                        bail!("failed to get clipboard data from cm");
+                    }
                 }
             }
         }
+        // unreachable!
+        bail!("failed to get clipboard data from cm");
     }
 }
