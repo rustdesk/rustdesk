@@ -491,14 +491,31 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
                                 Data::ClipboardNonFile(_) => {
                                     match crate::clipboard::check_clipboard_cm() {
                                         Ok(multi_clipoards) => {
-                                            let data = multi_clipoards.clipboards.into_iter().map(|c| ClipboardNonFile {
-                                                compress: c.compress,
-                                                content: c.content,
-                                                width: c.width,
-                                                height: c.height,
-                                                format: c.format.value(),
-                                            }).collect();
-                                            allow_err!(self.stream.send(&Data::ClipboardNonFile(Some(("".to_owned(), data)))).await);
+                                            let mut raw_contents = vec![];
+                                            let mut main_data = vec![];
+                                            for c in multi_clipoards.clipboards.into_iter() {
+                                                let (content, next_raw) = {
+                                                    // TODO: find out a better threshold
+                                                    if c.content.len() > 1024 * 3 {
+                                                        (c.content, false)
+                                                    } else {
+                                                        raw_contents.push(c.content);
+                                                        (bytes::Bytes::new(), true)
+                                                    }
+                                                };
+                                                main_data.push(ClipboardNonFile {
+                                                    compress: c.compress,
+                                                    content,
+                                                    next_raw,
+                                                    width: c.width,
+                                                    height: c.height,
+                                                    format: c.format.value(),
+                                                });
+                                            }
+                                            allow_err!(self.stream.send(&Data::ClipboardNonFile(Some(("".to_owned(), main_data)))).await);
+                                            for content in raw_contents.into_iter() {
+                                                allow_err!(self.stream.send_raw(content).await);
+                                            }
                                         }
                                         Err(e) => {
                                             allow_err!(self.stream.send(&Data::ClipboardNonFile(Some((format!("{}", e), vec![])))).await);

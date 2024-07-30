@@ -4,7 +4,7 @@ pub use crate::clipboard::{
     CLIPBOARD_NAME as NAME,
 };
 #[cfg(windows)]
-use crate::ipc::{ClipboardFile, ClipboardNonFile, Data};
+use crate::ipc::{self, ClipboardFile, ClipboardNonFile, Data};
 use clipboard_master::{CallbackResult, ClipboardHandler};
 use std::{
     io,
@@ -16,6 +16,8 @@ struct Handler {
     sp: EmptyExtraFieldService,
     ctx: Option<ClipboardContext>,
     tx_cb_result: Sender<CallbackResult>,
+    #[cfg(target_os = "windows")]
+    stream: Option<ipc::ConnectionTmpl<parity_tokio_ipc::ConnectionClient>>,
 }
 
 pub fn new() -> GenericService {
@@ -30,6 +32,8 @@ fn run(sp: EmptyExtraFieldService) -> ResultType<()> {
         sp: sp.clone(),
         ctx: Some(ClipboardContext::new()?),
         tx_cb_result,
+        #[cfg(target_os = "windows")]
+        stream: None,
     };
 
     let (tx_start_res, rx_start_res) = channel();
@@ -86,7 +90,7 @@ impl Handler {
     fn get_clipboard_msg(&mut self) -> Option<Message> {
         #[cfg(target_os = "windows")]
         if crate::common::is_server() && crate::platform::is_root() {
-            match Self::read_clipboard_from_cm_ipc() {
+            match self.read_clipboard_from_cm_ipc() {
                 Err(e) => {
                     log::error!("Failed to read clipboard from cm: {}", e);
                 }
@@ -116,21 +120,48 @@ impl Handler {
         check_clipboard(&mut self.ctx, ClipboardSide::Host, false)
     }
 
-    #[inline]
     #[cfg(windows)]
     #[tokio::main(flavor = "current_thread")]
-    async fn read_clipboard_from_cm_ipc() -> ResultType<Vec<ClipboardNonFile>> {
-        // It's ok to use 1000ms timeout here, because
+    async fn read_clipboard_from_cm_ipc(&mut self) -> ResultType<Vec<ClipboardNonFile>> {
+        // It's ok to use 800ms timeout here, because
         // 1. the clipboard is not used frequently.
         // 2. the clipboard handle is sync and will not block the main thread.
-        let mut stream = crate::ipc::connect(100, "_cm").await?;
-        timeout(100, stream.send(&Data::ClipboardNonFile(None))).await??;
+        let mut is_new_created = false;
+        if self.stream.is_none() {
+            is_new_created = true;
+            self.stream = Some(crate::ipc::connect(100, "_cm").await?);
+        }
+        loop {
+            if let Some(stream) = &mut self.stream {
+                if stream.send(&Data::ClipboardNonFile(None)).await.is_ok() {
+                    break;
+                } else {
+                    if is_new_created {
+                        bail!("failed to get clipboard data from cm");
+                    } else {
+                        // try to reconnect
+                        self.stream = Some(crate::ipc::connect(100, "_cm").await?);
+                        is_new_created = false;
+                    }
+                }
+            }
+        }
+
+        let Some(stream) = &mut self.stream else {
+            // unreachable!
+            bail!("failed to get clipboard data from cm");
+        };
         loop {
             match stream.next_timeout(800).await? {
-                Some(Data::ClipboardNonFile(Some((err, contents)))) => {
+                Some(Data::ClipboardNonFile(Some((err, mut contents)))) => {
                     if !err.is_empty() {
                         bail!("{}", err);
                     } else {
+                        for c in contents.iter_mut() {
+                            if c.next_raw {
+                                c.content = stream.next_raw().await?.into();
+                            }
+                        }
                         return Ok(contents);
                     }
                 }
