@@ -37,6 +37,8 @@ mod clipboard_service;
 #[cfg(target_os = "linux")]
 pub(crate) mod wayland;
 #[cfg(target_os = "linux")]
+pub mod gnome;
+#[cfg(target_os = "linux")]
 pub mod uinput;
 #[cfg(target_os = "linux")]
 pub mod rdp_input;
