@@ -92,14 +92,14 @@ dependencies:
   dropdown_button2: ^2.0.0
   flutter_gpu_texture_renderer:
     git:
-      url: https://github.com/21pages/flutter_gpu_texture_renderer
+      url: https://github.com/rustdesk-org/flutter_gpu_texture_renderer
       ref: 38951317afe79d953ab25733667bd96e172a80d3
   uuid: ^3.0.7
   auto_size_text_field: ^2.2.1
   flex_color_picker: ^3.3.0
   dynamic_layouts:
     git:
-      url: https://github.com/21pages/dynamic_layouts.git
+      url: https://github.com/rustdesk-org/dynamic_layouts.git
       ref: 24cb88413fa5181d949ddacbb30a65d5c459e7d9
   pull_down_button: ^0.9.3
   device_info_plus: ^9.1.0

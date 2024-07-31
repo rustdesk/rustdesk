@@ -123,7 +123,7 @@ checksum = "e999941b234f3131b00bc13c22d06e8c5ff726d1b6318ac7eb276997bbb4fef0"
 [[package]]
 name = "android-wakelock"
 version = "0.1.0"
-source = "git+https://github.com/21pages/android-wakelock#d0292e5a367e627c4fa6f1ca6bdfad005dca7d90"
+source = "git+https://github.com/rustdesk-org/android-wakelock#d0292e5a367e627c4fa6f1ca6bdfad005dca7d90"
 dependencies = [
  "jni 0.21.1",
  "log",
@@ -3044,8 +3044,8 @@ checksum = "9a3a5bfb195931eeb336b2a7b4d761daec841b97f947d34394601737a7bba5e4"
 
 [[package]]
 name = "hwcodec"
-version = "0.5.1"
-source = "git+https://github.com/21pages/hwcodec#74e8288f776a9d43861f16aa62e86b57c7209868"
+version = "0.7.0"
+source = "git+https://github.com/rustdesk-org/hwcodec#97522dfcd10b46af4c2ac1a66b769d69f8fd582a"
 dependencies = [
  "bindgen 0.59.2",
  "cc",
@@ -3173,7 +3173,7 @@ dependencies = [
 [[package]]
 name = "impersonate_system"
 version = "0.1.0"
-source = "git+https://github.com/21pages/impersonate-system#2f429010a5a10b1fe5eceb553c6672fd53d20167"
+source = "git+https://github.com/rustdesk-org/impersonate-system#2f429010a5a10b1fe5eceb553c6672fd53d20167"
 dependencies = [
  "cc",
 ]
@@ -3674,7 +3674,7 @@ dependencies = [
 [[package]]
 name = "machine-uid"
 version = "0.3.0"
-source = "git+https://github.com/21pages/machine-uid#381ff579c1dc3a6c54db9dfec47c44bcb0246542"
+source = "git+https://github.com/rustdesk-org/machine-uid#381ff579c1dc3a6c54db9dfec47c44bcb0246542"
 dependencies = [
  "bindgen 0.59.2",
  "cc",
@@ -7050,7 +7050,7 @@ dependencies = [
 [[package]]
 name = "wallpaper"
 version = "3.2.0"
-source = "git+https://github.com/21pages/wallpaper.rs#ce4a0cd3f58327c7cc44d15a63706fb0c022bacf"
+source = "git+https://github.com/rustdesk-org/wallpaper.rs#ce4a0cd3f58327c7cc44d15a63706fb0c022bacf"
 dependencies = [
  "dirs 5.0.1",
  "enquote",
@@ -7239,7 +7239,7 @@ dependencies = [
 [[package]]
 name = "webm"
 version = "1.1.0"
-source = "git+https://github.com/21pages/rust-webm#d2c4d3ac133c7b0e4c0f656da710b48391981e64"
+source = "git+https://github.com/rustdesk-org/rust-webm#d2c4d3ac133c7b0e4c0f656da710b48391981e64"
 dependencies = [
  "webm-sys",
 ]
@@ -7247,7 +7247,7 @@ dependencies = [
 [[package]]
 name = "webm-sys"
 version = "1.0.4"
-source = "git+https://github.com/21pages/rust-webm#d2c4d3ac133c7b0e4c0f656da710b48391981e64"
+source = "git+https://github.com/rustdesk-org/rust-webm#d2c4d3ac133c7b0e4c0f656da710b48391981e64"
 dependencies = [
  "cc",
 ]
