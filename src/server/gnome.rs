@@ -24,26 +24,24 @@ type Res = (u32,
 // Reference https://wiki.gnome.org/Initiatives/Wayland/Gaps/DisplayConfig
 pub fn gnome_wayland_get_resolution() -> Option<(i32, i32)> {
     if !is_gnome_wayland() {
-        log::info!("DEBUG POINT: is not gnome wayland.");
         return None;
     }
     let conn = Connection::new_session();
-    if conn.is_err() {
-        return None;
-    }
-    let conn = conn.unwrap();
+    if let Ok(conn) = conn {
+        // Open a proxy to the Mutter DisplayConfig
+        let proxy = conn.with_proxy(
+            "org.gnome.Mutter.DisplayConfig",
+            "/org/gnome/Mutter/DisplayConfig",
+            Duration::from_millis(5000),
+        );
 
-    // Open a proxy to the Mutter DisplayConfig
-    let proxy = conn.with_proxy(
-        "org.gnome.Mutter.DisplayConfig",
-        "/org/gnome/Mutter/DisplayConfig",
-        Duration::from_millis(5000),
-    );
-
-    let res = proxy.method_call("org.gnome.Mutter.DisplayConfig", "GetResources", ("max_screen_width", "max_screen_height"));
-    if res.is_err() {
-        return None
+        let res: Result<Res, _> = proxy.method_call("org.gnome.Mutter.DisplayConfig", "GetResources", ("max_screen_width", "max_screen_height"));
+        if let Ok(res) = res {
+            Some((res.4, res.5))
+        } else {
+            None
+        }
+    } else {
+        None
     }
-    let res: Res = res.unwrap();
-    Some((res.4, res.5))
 }
