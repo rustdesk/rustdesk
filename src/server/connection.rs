@@ -502,10 +502,12 @@ impl Connection {
                             } else if &name == "audio" {
                                 conn.audio = enabled;
                                 conn.send_permission(Permission::Audio, enabled).await;
-                                if let Some(s) = conn.server.upgrade() {
-                                    s.write().unwrap().subscribe(
-                                        super::audio_service::NAME,
-                                        conn.inner.clone(), conn.audio_enabled());
+                                if conn.authorized {
+                                    if let Some(s) = conn.server.upgrade() {
+                                        s.write().unwrap().subscribe(
+                                            super::audio_service::NAME,
+                                            conn.inner.clone(), conn.audio_enabled());
+                                    }
                                 }
                             } else if &name == "file" {
                                 conn.file = enabled;
