@@ -46,7 +46,7 @@ def view(
                 devices.append(device)
                 continue
             last_online = datetime.strptime(
-                device["last_online"], "%Y-%m-%dT%H:%M:%S"
+                device["last_online"].split(".")[0], "%Y-%m-%dT%H:%M:%S"
             )  # assuming date is in this format
             if (datetime.utcnow() - last_online).days >= offline_days:
                 devices.append(device)
