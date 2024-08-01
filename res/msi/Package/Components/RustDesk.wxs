@@ -17,7 +17,7 @@
 		<CustomAction Id="RemoveFirewallRules.SetParam" Return="check" Property="RemoveFirewallRules" Value="0[INSTALLFOLDER]$(var.Product).exe" />
 		<CustomAction Id="CreateStartService.SetParam" Return="check" Property="CreateStartService" Value="$(var.Product);&quot;[INSTALLFOLDER]$(var.Product).exe&quot; --service" />
 		<CustomAction Id="TryStopDeleteService.SetParam" Return="check" Property="TryStopDeleteService" Value="$(var.Product)" />
-		
+
 		<CustomAction Id="LaunchApp" ExeCommand="" Return="asyncNoWait" FileRef="App.exe" />
 		<CustomAction Id="LaunchAppTray" ExeCommand=" --tray" Return="asyncNoWait" FileRef="App.exe" />
 		<Property Id="TerminateProcesses" Value="AppTest.exe" />
@@ -40,7 +40,7 @@
 			<Custom Action="SetPropertyServiceStop.SetParam.ConfigFile" Before="SetPropertyServiceStop" Condition="NOT Installed" />
 			<Custom Action="SetPropertyServiceStop.SetParam.ConfigKey" Before="SetPropertyServiceStop" Condition="NOT Installed" />
 			<Custom Action="SetPropertyServiceStop.SetParam.PropertyName" Before="SetPropertyServiceStop" Condition="NOT Installed" />
-			
+
 			<!-- Do not call CreateStartService if is uninstalling. -->
 			<!-- (Installed AND REMOVE AND NOT UPGRADINGPRODUCTCODE) means uninstalling. -->
 			<Custom Action="CreateStartService" Before="InstallFinalize" Condition="(NOT (Installed AND REMOVE AND NOT UPGRADINGPRODUCTCODE)) AND (NOT STOP_SERVICE=&quot;&apos;Y&apos;&quot;) AND (NOT CC_CONNECTION_TYPE=&quot;outgoing&quot;)" />
@@ -127,7 +127,7 @@
 			<!--<ComponentRef Id="App.UninstallShortcut" />-->
 			<ComponentRef Id="App.StartMenu.Shortcut" />
 			<ComponentRef Id="App.StartMenu.ShortcutUninstall" />
-			<ComponentRef Id="App.StartupFolder.ShortcutTray"/>
+			<ComponentRef Id="App.StartupFolder.ShortcutTray" />
 
 			<!--$AutoComonentStart$-->
 			<!--$AutoComponentEnd$-->
