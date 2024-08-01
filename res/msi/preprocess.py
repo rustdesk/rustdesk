@@ -65,6 +65,12 @@ def make_parser():
         "-c", "--custom", action="store_true", help="Is custom client", default=False
     )
     parser.add_argument(
+        "--custom-client-props",
+        type=str,
+        default="{}",
+        help='Custom client properties, e.g. \'{"connection-type": "outgoing"}\'',
+    )
+    parser.add_argument(
         "--app-name", type=str, default="RustDesk", help="The app name."
     )
     parser.add_argument(
@@ -385,6 +391,33 @@ def gen_custom_ARPSYSTEMCOMPONENT(args, dist_dir):
     else:
         return gen_custom_ARPSYSTEMCOMPONENT_False(args)
 
+def gen_custom_client_properties(args):
+    try:
+        props = json.loads(args.custom_client_props)
+    except json.JSONDecodeError as e:
+        print(f"Failed to decode custom props: {e}")
+        return False
+
+    def func(lines, index_start):
+        indent = g_indent_unit * 3
+
+        lines_new = []
+
+        if 'connection-type' in props:
+            lines_new.append(
+                f"""{indent}<Property Id="CC_CONNECTION_TYPE" Value="{props['connection-type']}" />\n"""
+            )
+
+        for i, line in enumerate(lines_new):
+            lines.insert(index_start + i + 1, line)
+        return lines
+
+    return gen_content_between_tags(
+        "Package/Fragments/AddRemoveProperties.wxs",
+        "<!--$CustomClientPropsStart$-->",
+        "<!--$CustomClientPropsEnd$-->",
+        func,
+    )
 
 def gen_content_between_tags(filename, tag_start, tag_end, func):
     target_file = Path(sys.argv[0]).parent.joinpath(filename)
@@ -504,6 +537,9 @@ if __name__ == "__main__":
         sys.exit(-1)
 
     if not gen_custom_ARPSYSTEMCOMPONENT(args, dist_dir):
+        sys.exit(-1)
+
+    if not gen_custom_client_properties(args):
         sys.exit(-1)
 
     if not gen_auto_component(app_name, dist_dir):
