@@ -17,7 +17,7 @@
 		<CustomAction Id="RemoveFirewallRules.SetParam" Return="check" Property="RemoveFirewallRules" Value="0[INSTALLFOLDER]$(var.Product).exe" />
 		<CustomAction Id="CreateStartService.SetParam" Return="check" Property="CreateStartService" Value="$(var.Product);&quot;[INSTALLFOLDER]$(var.Product).exe&quot; --service" />
 		<CustomAction Id="TryStopDeleteService.SetParam" Return="check" Property="TryStopDeleteService" Value="$(var.Product)" />
-		
+
 		<CustomAction Id="LaunchApp" ExeCommand="" Return="asyncNoWait" FileRef="App.exe" />
 		<CustomAction Id="LaunchAppTray" ExeCommand=" --tray" Return="asyncNoWait" FileRef="App.exe" />
 		<Property Id="TerminateProcesses" Value="AppTest.exe" />
@@ -40,11 +40,11 @@
 			<Custom Action="SetPropertyServiceStop.SetParam.ConfigFile" Before="SetPropertyServiceStop" Condition="NOT Installed" />
 			<Custom Action="SetPropertyServiceStop.SetParam.ConfigKey" Before="SetPropertyServiceStop" Condition="NOT Installed" />
 			<Custom Action="SetPropertyServiceStop.SetParam.PropertyName" Before="SetPropertyServiceStop" Condition="NOT Installed" />
-			
+
 			<!-- Do not call CreateStartService if is uninstalling. -->
 			<!-- (Installed AND REMOVE AND NOT UPGRADINGPRODUCTCODE) means uninstalling. -->
-			<Custom Action="CreateStartService" Before="InstallFinalize" Condition="(NOT (Installed AND REMOVE AND NOT UPGRADINGPRODUCTCODE)) AND (NOT STOP_SERVICE=&quot;&apos;Y&apos;&quot;)" />
-			<Custom Action="CreateStartService.SetParam" Before="CreateStartService" Condition="(NOT (Installed AND REMOVE AND NOT UPGRADINGPRODUCTCODE)) AND (NOT STOP_SERVICE=&quot;&apos;Y&apos;&quot;)" />
+			<Custom Action="CreateStartService" Before="InstallFinalize" Condition="(NOT (Installed AND REMOVE AND NOT UPGRADINGPRODUCTCODE)) AND (NOT STOP_SERVICE=&quot;&apos;Y&apos;&quot;) AND (NOT CC_CONNECTION_TYPE=&quot;outgoing&quot;)" />
+			<Custom Action="CreateStartService.SetParam" Before="CreateStartService" Condition="(NOT (Installed AND REMOVE AND NOT UPGRADINGPRODUCTCODE)) AND (NOT STOP_SERVICE=&quot;&apos;Y&apos;&quot;) AND (NOT CC_CONNECTION_TYPE=&quot;outgoing&quot;)" />
 
 			<Custom Action="CustomActionHello" Before="InstallFinalize" />
 
@@ -54,14 +54,14 @@
 
 			<!-- Launch ClientLauncher if installing or already installed and not uninstalling -->
 			<Custom Action="LaunchApp" After="InstallFinalize" Condition="NOT (Installed AND REMOVE AND NOT UPGRADINGPRODUCTCODE)"/>
-			<Custom Action="LaunchAppTray" After="InstallFinalize" Condition="(NOT (Installed AND REMOVE AND NOT UPGRADINGPRODUCTCODE)) AND (NOT STOP_SERVICE=&quot;&apos;Y&apos;&quot;)"/>
+			<Custom Action="LaunchAppTray" After="InstallFinalize" Condition="(NOT (Installed AND REMOVE AND NOT UPGRADINGPRODUCTCODE)) AND (NOT STOP_SERVICE=&quot;&apos;Y&apos;&quot;) AND (NOT CC_CONNECTION_TYPE=&quot;outgoing&quot;)"/>
 
 			<!--Workaround of "fire:FirewallException". If Outbound="Yes" or Outbound="true", the following error occurs.-->
 			<!--ExecFirewallExceptions: Error 0x80070057: failed to add app to the authorized apps list-->
 			<Custom Action="AddFirewallRules" Before="InstallFinalize" Condition="NOT (Installed AND REMOVE AND NOT UPGRADINGPRODUCTCODE)"/>
 			<Custom Action="AddFirewallRules.SetParam" Before="AddFirewallRules" Condition="NOT (Installed AND REMOVE AND NOT UPGRADINGPRODUCTCODE)"/>
 
-			<Custom Action="AddRegSoftwareSASGeneration" Before="InstallFinalize" Condition="NOT (Installed AND REMOVE AND NOT UPGRADINGPRODUCTCODE)"/>
+			<Custom Action="AddRegSoftwareSASGeneration" Before="InstallFinalize" Condition="NOT (Installed AND REMOVE AND NOT UPGRADINGPRODUCTCODE) AND (NOT CC_CONNECTION_TYPE=&quot;outgoing&quot;)"/>
 
 			<Custom Action="RemoveInstallFolder" Before="RemoveFiles"/>
 			<Custom Action="RemoveInstallFolder.SetParam" Before="RemoveInstallFolder"/>
@@ -109,7 +109,7 @@
 			</Component>
 		</StandardDirectory>
 		<StandardDirectory Id="StartupFolder">
-			<Component Id="App.StartupFolder.ShortcutTray" Guid="B1D1E2BB-E53E-E159-DB7C-744D5C726A8C" Condition="STARTUPSHORTCUTS = 1">
+			<Component Id="App.StartupFolder.ShortcutTray" Guid="B1D1E2BB-E53E-E159-DB7C-744D5C726A8C" Condition="STARTUPSHORTCUTS = 1 AND (NOT CC_CONNECTION_TYPE=&quot;outgoing&quot;)">
 				<Shortcut Id="App.StartupFolder.ShortcutTray" Name="!(loc.SC_Client_Tray)" Description="!(loc.SC_Client_Tray_Desc)" Target="[!App.exe]" Arguments="--tray" Icon="AppIcon" WorkingDirectory="INSTALLFOLDER" />
 				<RegistryValue Root="HKCU" Key="Software\$(var.Product)" Name="App.StartupFolder.ShortcutTray" Type="string" Value="1" KeyPath="yes" />
 			</Component>
