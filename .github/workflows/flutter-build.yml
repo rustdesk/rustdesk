@@ -58,7 +58,7 @@ jobs:
       fail-fast: false
 
   build-for-windows-flutter:
-    name: ${{ matrix.job.target }} 
+    name: ${{ matrix.job.target }}
     needs: [build-RustDeskTempTopMostWindow]
     runs-on: ${{ matrix.job.os }}
     strategy:
@@ -67,7 +67,12 @@ jobs:
         job:
           # - { target: i686-pc-windows-msvc        , os: windows-2022                  }
           # - { target: x86_64-pc-windows-gnu       , os: windows-2022                  }
-          - { target: x86_64-pc-windows-msvc, os: windows-2022, arch: x86_64, vcpkg-triplet: x64-windows-static }
+          - {
+              target: x86_64-pc-windows-msvc,
+              os: windows-2022,
+              arch: x86_64,
+              vcpkg-triplet: x64-windows-static,
+            }
           # - { target: aarch64-pc-windows-msvc, os: windows-2022, arch: aarch64 }
     steps:
       - name: Export GitHub Actions cache environment variables
@@ -160,7 +165,7 @@ jobs:
         if: env.UPLOAD_ARTIFACT == 'true'
         uses: actions/upload-artifact@master
         with:
-          name: rustdesk-unsigned-windows-${{ matrix.job.arch }}         
+          name: rustdesk-unsigned-windows-${{ matrix.job.arch }}
           path: rustdesk
 
       - name: Sign rustdesk files
@@ -223,7 +228,12 @@ jobs:
         job:
           # - { target: i686-pc-windows-msvc        , os: windows-2022                  }
           # - { target: x86_64-pc-windows-gnu       , os: windows-2022                  }
-          - { target: i686-pc-windows-msvc, os: windows-2022, arch: x86, vcpkg-triplet: x86-windows-static }
+          - {
+              target: i686-pc-windows-msvc,
+              os: windows-2022,
+              arch: x86,
+              vcpkg-triplet: x86-windows-static,
+            }
           # - { target: aarch64-pc-windows-msvc, os: windows-2022 }
     steps:
       - name: Export GitHub Actions cache environment variables
@@ -234,7 +244,7 @@ jobs:
             core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
 
       - name: Checkout source code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Install LLVM and Clang
         uses: rustdesk-org/install-llvm-action-32bit@master
@@ -282,7 +292,7 @@ jobs:
           # Do not remove x64 files, because the user may run the 32bit version on a 64bit system.
           # Do not remove ./usbmmidd_v2/deviceinstaller64.exe, as x86 exe cannot install and uninstall drivers when running on x64,
           # we need the x64 exe to install and uninstall the driver.
-          rm -rf ./usbmmidd_v2/deviceinstaller.exe ./usbmmidd_v2/usbmmidd.bat 
+          rm -rf ./usbmmidd_v2/deviceinstaller.exe ./usbmmidd_v2/usbmmidd.bat
           mv ./usbmmidd_v2 ./Release || true
 
       - name: find Runner.res
@@ -347,7 +357,7 @@ jobs:
             core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
 
       - name: Checkout source code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Install flutter rust bridge deps
         shell: bash
@@ -432,7 +442,7 @@ jobs:
         run: |
           brew install nasm yasm
       - name: Checkout source code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
       - name: Install flutter
         uses: subosito/flutter-action@v2
         with:
@@ -512,7 +522,7 @@ jobs:
             core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
 
       - name: Checkout source code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       # $VCPKG_ROOT/vcpkg install --triplet arm64-ios --x-install-root="$VCPKG_ROOT/installed"
 
@@ -582,7 +592,7 @@ jobs:
             core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
 
       - name: Checkout source code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Import the codesign cert
         if: env.MACOS_P12_BASE64 != null
@@ -837,7 +847,7 @@ jobs:
                wget
 
       - name: Checkout source code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
       - name: Install flutter
         uses: subosito/flutter-action@v2
         with:
@@ -1018,7 +1028,7 @@ jobs:
 
   build-rustdesk-linux:
     needs: [generate-bridge-linux]
-    name: build rustdesk linux ${{ matrix.job.target }} 
+    name: build rustdesk linux ${{ matrix.job.target }}
     runs-on: ${{ matrix.job.on }}
     strategy:
       fail-fast: false
@@ -1059,7 +1069,7 @@ jobs:
           sudo apt-get install -y nasm qemu-user-static
 
       - name: Checkout source code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Set Swap Space
         if: ${{ matrix.job.arch == 'x86_64' }}
@@ -1286,16 +1296,16 @@ jobs:
             rustdesk-*.deb
             rustdesk-*.rpm
 
-      - name: Upload deb 
+      - name: Upload deb
         uses: actions/upload-artifact@master
         if: env.UPLOAD_ARTIFACT == 'true'
         with:
           name: rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}.deb
           path: rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}.deb
-      
+
       # only x86_64 for arch since we can not find newest arm64 docker image to build
       # old arch image does not make sense for arch since it is "arch" which always update to date
-      # and failed to makepkg arm64 on x86_64 
+      # and failed to makepkg arm64 on x86_64
       - name: Patch archlinux PKGBUILD
         if: matrix.job.arch == 'x86_64' && env.UPLOAD_ARTIFACT == 'true'
         run: |
@@ -1360,7 +1370,7 @@ jobs:
             core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
 
       - name: Checkout source code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Free Space
         run: |
@@ -1519,7 +1529,7 @@ jobs:
           files: |
             rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}-sciter.deb
 
-      - name: Upload deb 
+      - name: Upload deb
         uses: actions/upload-artifact@master
         if: env.UPLOAD_ARTIFACT == 'true'
         with:
@@ -1535,17 +1545,11 @@ jobs:
       fail-fast: false
       matrix:
         job:
-          - {
-              target: x86_64-unknown-linux-gnu,
-              arch: x86_64,
-            }
-          - {
-              target: aarch64-unknown-linux-gnu,
-              arch: aarch64,
-            }
+          - { target: x86_64-unknown-linux-gnu, arch: x86_64 }
+          - { target: aarch64-unknown-linux-gnu, arch: aarch64 }
     steps:
       - name: Checkout source code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Download Binary
         uses: actions/download-artifact@master
@@ -1584,7 +1588,7 @@ jobs:
 
   build-flatpak:
     name: Build flatpak ${{ matrix.job.target }}${{ matrix.job.suffix }}
-    needs: 
+    needs:
       - build-rustdesk-linux
       - build-rustdesk-linux-sciter
     runs-on: ${{ matrix.job.on }}
@@ -1617,7 +1621,7 @@ jobs:
             }
     steps:
       - name: Checkout source code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Download Binary
         uses: actions/download-artifact@master
@@ -1652,7 +1656,7 @@ jobs:
             # disable git safe.directory
             git config --global --add safe.directory "*"
             pushd /workspace
-            # install 
+            # install
             apt-get update -y
             apt-get install -y \
                cmake \
@@ -1693,7 +1697,7 @@ jobs:
       RELEASE_NAME: web-basic
     steps:
       - name: Checkout source code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Prepare env
         run: |
