@@ -41,7 +41,7 @@ mod sv;
 mod th;
 mod tr;
 mod tw;
-mod ua;
+mod uk;
 mod vn;
 
 pub const LANGS: &[(&str, &str)] = &[
@@ -144,7 +144,7 @@ pub fn translate_locale(name: String, locale: &str) -> String {
         "ja" => ja::T.deref(),
         "ko" => ko::T.deref(),
         "kz" => kz::T.deref(),
-        "uk" => ua::T.deref(),
+        "uk" => uk::T.deref(),
         "fa" => fa::T.deref(),
         "ca" => ca::T.deref(),
         "el" => el::T.deref(),
