@@ -151,8 +151,7 @@ impl Handler {
                                         for c in &mut contents {
                                             if c.next_raw {
                                                 if c.content_len <= data.len() {
-                                                    c.content =
-                                                        data.split_off(c.content_len).into();
+                                                    c.content = data.split_to(c.content_len).into();
                                                 } else {
                                                     // Reconnect the next time to avoid the next raw data mismatch.
                                                     self.stream = None;
