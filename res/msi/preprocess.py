@@ -65,10 +65,10 @@ def make_parser():
         "-c", "--custom", action="store_true", help="Is custom client", default=False
     )
     parser.add_argument(
-        "--custom-client-props",
+        "--conn-type",
         type=str,
-        default="{}",
-        help='Custom client properties, e.g. \'{"connection-type": "outgoing"}\'',
+        default="",
+        help='Connection type, e.g. "incoming", "outgoing". Default is empty, means incoming-outgoing',
     )
     parser.add_argument(
         "--app-name", type=str, default="RustDesk", help="The app name."
@@ -391,21 +391,14 @@ def gen_custom_ARPSYSTEMCOMPONENT(args, dist_dir):
     else:
         return gen_custom_ARPSYSTEMCOMPONENT_False(args)
 
-def gen_custom_client_properties(args):
-    try:
-        props = json.loads(args.custom_client_props)
-    except json.JSONDecodeError as e:
-        print(f"Failed to decode custom props: {e}")
-        return False
-
+def gen_conn_type(args):
     def func(lines, index_start):
         indent = g_indent_unit * 3
 
         lines_new = []
-
-        if 'connection-type' in props:
+        if args.conn_type != "":
             lines_new.append(
-                f"""{indent}<Property Id="CC_CONNECTION_TYPE" Value="{props['connection-type']}" />\n"""
+                f"""{indent}<Property Id="CC_CONNECTION_TYPE" Value="{args.conn_type}" />\n"""
             )
 
         for i, line in enumerate(lines_new):
@@ -539,7 +532,7 @@ if __name__ == "__main__":
     if not gen_custom_ARPSYSTEMCOMPONENT(args, dist_dir):
         sys.exit(-1)
 
-    if not gen_custom_client_properties(args):
+    if not gen_conn_type(args):
         sys.exit(-1)
 
     if not gen_auto_component(app_name, dist_dir):
