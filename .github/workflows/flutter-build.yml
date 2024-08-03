@@ -1197,7 +1197,7 @@ jobs:
           pushd flutter
           flutter build apk "--${{ env.reltype }}" --target-platform android-arm64,android-arm,android-x64
           mkdir -p signed-apk
-          mv build/app/outputs/flutter-apk/app-${{ matrix.job.reltype }}.apk ../signed-apk/rustdesk-${{ env.VERSION }}-universal.apk
+          mv build/app/outputs/flutter-apk/app-${{ env.reltype }}.apk ../signed-apk/rustdesk-${{ env.VERSION }}-universal.apk
 
       - uses: r0adkll/sign-android-release@v1
         name: Sign app APK
