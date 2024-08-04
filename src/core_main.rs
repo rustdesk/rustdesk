@@ -398,9 +398,9 @@ pub fn core_main() -> Option<Vec<String>> {
                         "uuid": uuid,
                     });
                     let header = "Authorization: Bearer ".to_owned() + &token;
-                    if user_name.is_none() && strategy_name.is_none() {
+                    if user_name.is_none() && strategy_name.is_none() && address_book_name.is_none() {
                         println!(
-                            "--user_name or --strategy_name or address_book_name is required!"
+                            "--user_name or --strategy_name or --address_book_name is required!"
                         );
                     } else {
                         if let Some(name) = user_name {
