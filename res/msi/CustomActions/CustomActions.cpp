@@ -31,6 +31,11 @@ LExit:
     return WcaFinalize(er);
 }
 
+// CAUTION: We can't simply remove the install folder here, because silent repair/upgrade will fail.
+// `RemoveInstallFolder()` is a deferred custom action, it will be executed after the files are copied.
+// `msiexec /i package.msi /qn`
+//
+// So we need to delete the files separately in install folder.
 UINT __stdcall RemoveInstallFolder(
     __in MSIHANDLE hInstall)
 {
@@ -41,6 +46,7 @@ UINT __stdcall RemoveInstallFolder(
     LPWSTR installFolder = NULL;
     LPWSTR pwz = NULL;
     LPWSTR pwzData = NULL;
+    WCHAR runtimeBroker[1024] = { 0, };
 
     hr = WcaInitialize(hInstall, "RemoveInstallFolder");
     ExitOnFailure(hr, "Failed to initialize");
@@ -52,21 +58,22 @@ UINT __stdcall RemoveInstallFolder(
     hr = WcaReadStringFromCaData(&pwz, &installFolder);
     ExitOnFailure(hr, "failed to read database key from custom action data: %ls", pwz);
 
+    StringCchPrintfW(runtimeBroker, sizeof(runtimeBroker) / sizeof(runtimeBroker[0]), L"%ls\\RuntimeBroker_rustdesk.exe", installFolder);
+
     SHFILEOPSTRUCTW fileOp;
     ZeroMemory(&fileOp, sizeof(SHFILEOPSTRUCT));
-
     fileOp.wFunc = FO_DELETE;
-    fileOp.pFrom = installFolder;
+    fileOp.pFrom = runtimeBroker;
     fileOp.fFlags = FOF_NOCONFIRMATION | FOF_SILENT;
 
     nResult = SHFileOperationW(&fileOp);
     if (nResult == 0)
     {
-        WcaLog(LOGMSG_STANDARD, "The directory \"%ls\" has been deleted.", installFolder);
+        WcaLog(LOGMSG_STANDARD, "The external file \"%ls\" has been deleted.", runtimeBroker);
     }
     else
     {
-        WcaLog(LOGMSG_STANDARD, "The directory \"%ls\" has not been deleted, error code: 0x%02X. Please refer to https://learn.microsoft.com/en-us/windows/win32/api/shellapi/nf-shellapi-shfileoperationa for the error codes.", installFolder, nResult);
+        WcaLog(LOGMSG_STANDARD, "The external file \"%ls\" has not been deleted, error code: 0x%02X. Please refer to https://learn.microsoft.com/en-us/windows/win32/api/shellapi/nf-shellapi-shfileoperationa for the error codes.", runtimeBroker, nResult);
     }
 
 LExit:
