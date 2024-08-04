@@ -88,7 +88,7 @@
 		</DirectoryRef>
 
 		<DirectoryRef Id="App.StartMenu">
-			<Component Id="App.StartMenu.Shortcut" Guid="43ABCAC7-E47D-42D8-A408-25EC70DBB993" Condition="STARTMENUSHORTCUTS = 1">
+			<Component Id="App.StartMenu.Shortcut" Guid="43ABCAC7-E47D-42D8-A408-25EC70DBB993" Condition="STARTMENUSHORTCUTS = 1 OR STARTMENUSHORTCUTS = &quot;Y&quot; OR STARTMENUSHORTCUTS = &quot;y&quot;">
 				<Shortcut Id="App.StartMenu.Shortcut" Name="!(loc.SC_Client)" Description="!(loc.SC_Client_Desc)" Target="[!App.exe]" Icon="AppIcon" WorkingDirectory="INSTALLFOLDER" />
 				<!--
 					Fix ICE 38 by adding a dummy registry key that is the key for this shortcut.
@@ -97,13 +97,13 @@
 				<RegistryValue Root="HKCU" Key="Software\$(var.Product)" Name="App.StartMenu.Shortcut" Type="string" Value="1" KeyPath="yes" />
 			</Component>
 
-			<Component Id="App.StartMenu.ShortcutUninstall" Guid="E100D7F8-D607-4513-28DA-2C95E5EA698E" Condition="STARTMENUSHORTCUTS = 1">
+			<Component Id="App.StartMenu.ShortcutUninstall" Guid="E100D7F8-D607-4513-28DA-2C95E5EA698E" Condition="STARTMENUSHORTCUTS = 1 OR STARTMENUSHORTCUTS = &quot;Y&quot; OR STARTMENUSHORTCUTS = &quot;y&quot;">
 				<Shortcut Id="App.StartMenu.ShortcutUninstall" Name="!(loc.SC_Uninstall)" Description="!(loc.SC_Uninstall_Desc)" Target="[System6432Folder]msiexec.exe" Arguments="/x [ProductCode]" Icon="AppIcon" />
 				<RegistryValue Root="HKCU" Key="Software\$(var.Product)" Name="App.StartMenu.ShortcutUninstall" Type="string" Value="1" KeyPath="yes" />
 			</Component>
 		</DirectoryRef>
 		<StandardDirectory Id="DesktopFolder">
-			<Component Id="App.Desktop.Shortcut" Guid="CA8FB7AA-17F7-4E36-A58A-5A016A303709" Condition="DESKTOPSHORTCUTS = 1">
+			<Component Id="App.Desktop.Shortcut" Guid="CA8FB7AA-17F7-4E36-A58A-5A016A303709" Condition="DESKTOPSHORTCUTS = 1 OR DESKTOPSHORTCUTS = &quot;Y&quot; OR DESKTOPSHORTCUTS = &quot;y&quot;">
 				<Shortcut Id="App.Desktop.Shortcut" Name="!(loc.SC_Client)" Description="!(loc.SC_Client_Desc)" Target="[!App.exe]" Icon="AppIcon" WorkingDirectory="INSTALLFOLDER" />
 				<RegistryValue Root="HKCU" Key="Software\$(var.Product)" Name="App.Desktop.Shortcut" Type="string" Value="1" KeyPath="yes" />
 			</Component>
