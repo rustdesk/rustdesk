@@ -1,7 +1,7 @@
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
 	<Fragment>
 		<UI>
-			<Dialog Id="AnotherAppDialog" Width="370" Height="270" Title="!(loc.ExitDialog_Title)">
+			<Dialog Id="UI_AnotherAppDialog" Width="370" Height="270" Title="!(loc.ExitDialog_Title)">
 				<Control Id="Cancel" Type="PushButton" X="304" Y="243" Width="56" Height="17" Default="yes" Cancel="yes" Text="!(loc.WixUICancel)">
 					<Publish Event="EndDialog" Value="ErrorAbort" />
 				</Control>

@@ -49,4 +49,7 @@ This file contains the declaration of all the localizable strings.
 	<String Id="AnotherAppDialogTitle" Value="Cancel installation."/>
 	<String Id="AnotherAppDialogDescription" Value="The application is installed by self-installation method, please uninstall it first."/>
 
+	<String Id="MyInstallDirDlgDesktopShortcuts" Value="Create desktop icon" />
+	<String Id="MyInstallDirDlgStartMenuShortcuts" Value="Create start menu shortcuts" />
+
 </WixLocalization>

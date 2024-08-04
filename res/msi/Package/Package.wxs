@@ -18,11 +18,11 @@
 		<!-- User Interface -->
 		<WixVariable Id="WixUILicenseRtf" Value="License.rtf" />
 
-		<ui:WixUI Id="WixUI_InstallDir" InstallDirectory="INSTALLFOLDER" />
+		<ui:WixUI Id="UI_MyInstallDialog" InstallDirectory="INSTALLFOLDER" />
 		<UIRef Id="WixUI_ErrorProgressText" />
 
 		<InstallUISequence>
-			<Show Dialog="AnotherAppDialog" Before="WelcomeDlg" Condition="Not installed AND APP_WINDOWS_INSTALLER=&quot;#0&quot;"/>
+			<Show Dialog="UI_AnotherAppDialog" Before="WelcomeDlg" Condition="Not installed AND APP_WINDOWS_INSTALLER=&quot;#0&quot;"/>
 		</InstallUISequence>
 
 		<InstallExecuteSequence>
