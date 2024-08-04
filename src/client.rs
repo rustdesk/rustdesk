@@ -928,7 +928,7 @@ impl AudioBuffer {
         let full = self.0.lock().unwrap().is_full();
         if full {
             self.0.lock().unwrap().clear();
-            log::info!("Audio buffer cleared");
+            log::trace!("Audio buffer cleared");
         }
     }
 }
