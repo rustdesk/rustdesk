@@ -1106,6 +1106,7 @@ jobs:
             signed-apk/rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}.apk
 
   build-rustdesk-android-universal:
+    if: false
     needs: [build-rustdesk-android]
     name: build rustdesk android universal apk
     runs-on: ubuntu-20.04
