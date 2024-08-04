@@ -377,19 +377,43 @@ pub fn core_main() -> Option<Vec<String>> {
                     if pos < max {
                         strategy_name = Some(args[pos + 1].to_owned());
                     }
+                    let mut address_book_name = None;
+                    let pos = args
+                        .iter()
+                        .position(|x| x == "--address_book_name")
+                        .unwrap_or(max);
+                    if pos < max {
+                        address_book_name = Some(args[pos + 1].to_owned());
+                    }
+                    let mut address_book_tag = None;
+                    let pos = args
+                        .iter()
+                        .position(|x| x == "--address_book_tag")
+                        .unwrap_or(max);
+                    if pos < max {
+                        address_book_tag = Some(args[pos + 1].to_owned());
+                    }
                     let mut body = serde_json::json!({
                         "id": id,
                         "uuid": uuid,
                     });
                     let header = "Authorization: Bearer ".to_owned() + &token;
                     if user_name.is_none() && strategy_name.is_none() {
-                        println!("--user_name or --strategy_name is required!");
+                        println!(
+                            "--user_name or --strategy_name or address_book_name is required!"
+                        );
                     } else {
                         if let Some(name) = user_name {
                             body["user_name"] = serde_json::json!(name);
                         }
                         if let Some(name) = strategy_name {
                             body["strategy_name"] = serde_json::json!(name);
+                        }
+                        if let Some(name) = address_book_name {
+                            body["address_book_name"] = serde_json::json!(name);
+                            if let Some(name) = address_book_tag {
+                                body["address_book_tag"] = serde_json::json!(name);
+                            }
                         }
                         let url = crate::ui_interface::get_api_server() + "/api/devices/cli";
                         match crate::post_request_sync(url, body.to_string(), &header) {
