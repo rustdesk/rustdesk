@@ -18,7 +18,7 @@
 		<!-- User Interface -->
 		<WixVariable Id="WixUILicenseRtf" Value="License.rtf" />
 
-		<ui:WixUI Id="UI_MyInstallDialog" InstallDirectory="INSTALLFOLDER" />
+		<ui:WixUI Id="UI_MyInstallDialog" InstallDirectory="INSTALLFOLDER_INNER" />
 		<UIRef Id="WixUI_ErrorProgressText" />
 
 		<InstallUISequence>
