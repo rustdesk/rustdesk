@@ -4,7 +4,7 @@
 
 		<?include ../Includes.wxi?>
 
-		<DirectoryRef Id="INSTALLFOLDER" FileSource="$(var.BuildDir)">
+		<DirectoryRef Id="INSTALLFOLDER_INNER" FileSource="$(var.BuildDir)">
 			<Component Id="App.exe" Guid="620F0F69-4C17-4320-A619-495E329712A4">
 				<File Id="App.exe" Name="$(var.Product).exe" KeyPath="yes" Checksum="yes">
 					<!--<fire:FirewallException Id="AppEx" Name="$(var.Product) Service" Scope="any" IgnoreFailure="yes" />-->
@@ -12,10 +12,10 @@
 			</Component>
 		</DirectoryRef>
 
-		<CustomAction Id="RemoveInstallFolder.SetParam" Return="check" Property="RemoveInstallFolder" Value="[INSTALLFOLDER]" />
-		<CustomAction Id="AddFirewallRules.SetParam" Return="check" Property="AddFirewallRules" Value="1[INSTALLFOLDER]$(var.Product).exe" />
-		<CustomAction Id="RemoveFirewallRules.SetParam" Return="check" Property="RemoveFirewallRules" Value="0[INSTALLFOLDER]$(var.Product).exe" />
-		<CustomAction Id="CreateStartService.SetParam" Return="check" Property="CreateStartService" Value="$(var.Product);&quot;[INSTALLFOLDER]$(var.Product).exe&quot; --service" />
+		<CustomAction Id="RemoveInstallFolder.SetParam" Return="check" Property="RemoveInstallFolder" Value="[INSTALLFOLDER_INNER]" />
+		<CustomAction Id="AddFirewallRules.SetParam" Return="check" Property="AddFirewallRules" Value="1[INSTALLFOLDER_INNER]$(var.Product).exe" />
+		<CustomAction Id="RemoveFirewallRules.SetParam" Return="check" Property="RemoveFirewallRules" Value="0[INSTALLFOLDER_INNER]$(var.Product).exe" />
+		<CustomAction Id="CreateStartService.SetParam" Return="check" Property="CreateStartService" Value="$(var.Product);&quot;[INSTALLFOLDER_INNER]$(var.Product).exe&quot; --service" />
 		<CustomAction Id="TryStopDeleteService.SetParam" Return="check" Property="TryStopDeleteService" Value="$(var.Product)" />
 
 		<CustomAction Id="LaunchApp" ExeCommand="" Return="asyncNoWait" FileRef="App.exe" />
@@ -29,7 +29,7 @@
 		<CustomAction Id="SetPropertyServiceStop.SetParam.ConfigKey" Return="check" Property="ConfigKey" Value="stop-service" />
 		<CustomAction Id="SetPropertyServiceStop.SetParam.PropertyName" Return="check" Property="PropertyName" Value="STOP_SERVICE" />
 		<CustomAction Id="TryDeleteStartupShortcut.SetParam" Return="check" Property="ShortcutName" Value="$(var.Product) Tray" />
-		<CustomAction Id="RemoveAmyuniIdd.SetParam" Return="check" Property="RemoveAmyuniIdd" Value="[INSTALLFOLDER]" />
+		<CustomAction Id="RemoveAmyuniIdd.SetParam" Return="check" Property="RemoveAmyuniIdd" Value="[INSTALLFOLDER_INNER]" />
 		<InstallExecuteSequence>
 
 			<Custom Action="SetPropertyIsServiceRunning" After="InstallInitialize" Condition="Installed" />
@@ -88,8 +88,8 @@
 		</DirectoryRef>
 
 		<DirectoryRef Id="App.StartMenu">
-			<Component Id="App.StartMenu.Shortcut" Guid="43ABCAC7-E47D-42D8-A408-25EC70DBB993" Condition="STARTMENUSHORTCUTS = 1">
-				<Shortcut Id="App.StartMenu.Shortcut" Name="!(loc.SC_Client)" Description="!(loc.SC_Client_Desc)" Target="[!App.exe]" Icon="AppIcon" WorkingDirectory="INSTALLFOLDER" />
+			<Component Id="App.StartMenu.Shortcut" Guid="43ABCAC7-E47D-42D8-A408-25EC70DBB993" Condition="STARTMENUSHORTCUTS = 1 OR STARTMENUSHORTCUTS = &quot;Y&quot; OR STARTMENUSHORTCUTS = &quot;y&quot;">
+				<Shortcut Id="App.StartMenu.Shortcut" Name="!(loc.SC_Client)" Description="!(loc.SC_Client_Desc)" Target="[!App.exe]" Icon="AppIcon" WorkingDirectory="INSTALLFOLDER_INNER" />
 				<!--
 					Fix ICE 38 by adding a dummy registry key that is the key for this shortcut.
 					https://learn.microsoft.com/en-us/windows/win32/msi/ice38
@@ -97,31 +97,31 @@
 				<RegistryValue Root="HKCU" Key="Software\$(var.Product)" Name="App.StartMenu.Shortcut" Type="string" Value="1" KeyPath="yes" />
 			</Component>
 
-			<Component Id="App.StartMenu.ShortcutUninstall" Guid="E100D7F8-D607-4513-28DA-2C95E5EA698E" Condition="STARTMENUSHORTCUTS = 1">
+			<Component Id="App.StartMenu.ShortcutUninstall" Guid="E100D7F8-D607-4513-28DA-2C95E5EA698E" Condition="STARTMENUSHORTCUTS = 1 OR STARTMENUSHORTCUTS = &quot;Y&quot; OR STARTMENUSHORTCUTS = &quot;y&quot;">
 				<Shortcut Id="App.StartMenu.ShortcutUninstall" Name="!(loc.SC_Uninstall)" Description="!(loc.SC_Uninstall_Desc)" Target="[System6432Folder]msiexec.exe" Arguments="/x [ProductCode]" Icon="AppIcon" />
 				<RegistryValue Root="HKCU" Key="Software\$(var.Product)" Name="App.StartMenu.ShortcutUninstall" Type="string" Value="1" KeyPath="yes" />
 			</Component>
 		</DirectoryRef>
 		<StandardDirectory Id="DesktopFolder">
-			<Component Id="App.Desktop.Shortcut" Guid="CA8FB7AA-17F7-4E36-A58A-5A016A303709" Condition="DESKTOPSHORTCUTS = 1">
-				<Shortcut Id="App.Desktop.Shortcut" Name="!(loc.SC_Client)" Description="!(loc.SC_Client_Desc)" Target="[!App.exe]" Icon="AppIcon" WorkingDirectory="INSTALLFOLDER" />
+			<Component Id="App.Desktop.Shortcut" Guid="CA8FB7AA-17F7-4E36-A58A-5A016A303709" Condition="DESKTOPSHORTCUTS = 1 OR DESKTOPSHORTCUTS = &quot;Y&quot; OR DESKTOPSHORTCUTS = &quot;y&quot;">
+				<Shortcut Id="App.Desktop.Shortcut" Name="!(loc.SC_Client)" Description="!(loc.SC_Client_Desc)" Target="[!App.exe]" Icon="AppIcon" WorkingDirectory="INSTALLFOLDER_INNER" />
 				<RegistryValue Root="HKCU" Key="Software\$(var.Product)" Name="App.Desktop.Shortcut" Type="string" Value="1" KeyPath="yes" />
 			</Component>
 		</StandardDirectory>
 		<StandardDirectory Id="StartupFolder">
 			<Component Id="App.StartupFolder.ShortcutTray" Guid="B1D1E2BB-E53E-E159-DB7C-744D5C726A8C" Condition="STARTUPSHORTCUTS = 1 AND (NOT CC_CONNECTION_TYPE=&quot;outgoing&quot;)">
-				<Shortcut Id="App.StartupFolder.ShortcutTray" Name="!(loc.SC_Client_Tray)" Description="!(loc.SC_Client_Tray_Desc)" Target="[!App.exe]" Arguments="--tray" Icon="AppIcon" WorkingDirectory="INSTALLFOLDER" />
+				<Shortcut Id="App.StartupFolder.ShortcutTray" Name="!(loc.SC_Client_Tray)" Description="!(loc.SC_Client_Tray_Desc)" Target="[!App.exe]" Arguments="--tray" Icon="AppIcon" WorkingDirectory="INSTALLFOLDER_INNER" />
 				<RegistryValue Root="HKCU" Key="Software\$(var.Product)" Name="App.StartupFolder.ShortcutTray" Type="string" Value="1" KeyPath="yes" />
 			</Component>
 		</StandardDirectory>
 
-		<!--<DirectoryRef Id="INSTALLFOLDER">
+		<!--<DirectoryRef Id="INSTALLFOLDER_INNER">
 			<Component Id="App.UninstallShortcut" Guid="FB0F2AC7-2AE5-4C54-B860-5E472620B6B1">
 				<Shortcut Id="App.UninstallShortcut" Name="!(loc.SC_Uninstall)" Description="!(loc.SC_Uninstall_Desc)" Target="[System6432Folder]msiexec.exe" Arguments="/x [ProductCode]" Icon="AppIcon" />
 			</Component>
 		</DirectoryRef>-->
 
-		<ComponentGroup Id="Components" Directory="INSTALLFOLDER">
+		<ComponentGroup Id="Components" Directory="INSTALLFOLDER_INNER">
 			<ComponentRef Id="App.exe" />
 			<ComponentRef Id="App.Desktop.Shortcut" />
 			<!--<ComponentRef Id="App.UninstallShortcut" />-->

@@ -18,11 +18,11 @@
 		<!-- User Interface -->
 		<WixVariable Id="WixUILicenseRtf" Value="License.rtf" />
 
-		<ui:WixUI Id="WixUI_InstallDir" InstallDirectory="INSTALLFOLDER" />
+		<ui:WixUI Id="UI_MyInstallDialog" InstallDirectory="INSTALLFOLDER_INNER" />
 		<UIRef Id="WixUI_ErrorProgressText" />
 
 		<InstallUISequence>
-			<Show Dialog="AnotherAppDialog" Before="WelcomeDlg" Condition="Not installed AND APP_WINDOWS_INSTALLER=&quot;#0&quot;"/>
+			<Show Dialog="UI_AnotherAppDialog" Before="WelcomeDlg" Condition="Not installed AND APP_WINDOWS_INSTALLER=&quot;#0&quot;"/>
 		</InstallUISequence>
 
 		<InstallExecuteSequence>
@@ -40,14 +40,17 @@
 		<Feature Id="App" Level="1" AllowAdvertise="no" Display="expand" Title="!(loc.F_App)" Description="!(loc.F_App_Desc)" AllowAbsent="no">
 			<ComponentGroupRef Id="Components" />
 
-			<ComponentRef Id="Product.Registry.InstallDir" />
+			<ComponentRef Id="Product.Registry.InstallFolder" />
 			<ComponentRef Id="Product.Registry.DefaultIcon" />
 			<ComponentRef Id="Product.Registry.CommandPlay" />
 			<ComponentRef Id="Product.Registry.URLProtocol" />
 			<ComponentRef Id="Product.Registry.Command" />
 			<ComponentRef Id="Product.Registry.UninstallApp" />
 			<ComponentRef Id="App.StartMenu" />
-			<ComponentRef Id="Product.Registry.PersistedShortcutProperties" />
+			<ComponentRef Id="Product.Registry.PersistedStartMenuShortcutProperties1" />
+			<ComponentRef Id="Product.Registry.PersistedStartMenuShortcutProperties0" />
+			<ComponentRef Id="Product.Registry.PersistedDesktopShortcutProperties1" />
+			<ComponentRef Id="Product.Registry.PersistedDesktopShortcutProperties0" />
 		</Feature>
 
 		<!--https://wixtoolset.org/docs/tools/wixext/wixui/#customizing-a-dialog-set-->

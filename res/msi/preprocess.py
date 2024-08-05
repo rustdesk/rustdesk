@@ -90,7 +90,7 @@ def make_parser():
 
 
 def read_lines_and_start_index(file_path, tag_start, tag_end):
-    with open(file_path, "r") as f:
+    with open(file_path, "r", encoding="utf-8") as f:
         lines = f.readlines()
     index_start = -1
     index_end = -1
@@ -180,11 +180,11 @@ def gen_pre_vars(args, dist_dir):
 def replace_app_name_in_langs(app_name):
     langs_dir = Path(sys.argv[0]).parent.joinpath("Package/Language")
     for file_path in langs_dir.glob("*.wxl"):
-        with open(file_path, "r") as f:
+        with open(file_path, "r", encoding="utf-8") as f:
             lines = f.readlines()
         for i, line in enumerate(lines):
             lines[i] = line.replace("RustDesk", app_name)
-        with open(file_path, "w") as f:
+        with open(file_path, "w", encoding="utf-8") as f:
             f.writelines(lines)
 
 
@@ -301,7 +301,7 @@ def gen_custom_ARPSYSTEMCOMPONENT_True(args, dist_dir):
             f'{indent}<RegistryValue Type="string" Name="DisplayName" Value="{args.app_name}" />\n'
         )
         lines_new.append(
-            f'{indent}<RegistryValue Type="string" Name="DisplayIcon" Value="[INSTALLFOLDER]{args.app_name}.exe" />\n'
+            f'{indent}<RegistryValue Type="string" Name="DisplayIcon" Value="[INSTALLFOLDER_INNER]{args.app_name}.exe" />\n'
         )
         lines_new.append(
             f'{indent}<RegistryValue Type="string" Name="DisplayVersion" Value="{g_version}" />\n'
@@ -314,7 +314,7 @@ def gen_custom_ARPSYSTEMCOMPONENT_True(args, dist_dir):
             f'{indent}<RegistryValue Type="string" Name="InstallDate" Value="{installDate}" />\n'
         )
         lines_new.append(
-            f'{indent}<RegistryValue Type="string" Name="InstallLocation" Value="[INSTALLFOLDER]" />\n'
+            f'{indent}<RegistryValue Type="string" Name="InstallLocation" Value="[INSTALLFOLDER_INNER]" />\n'
         )
         lines_new.append(
             f'{indent}<RegistryValue Type="string" Name="InstallSource" Value="[InstallSource]" />\n'
@@ -420,7 +420,7 @@ def gen_content_between_tags(filename, tag_start, tag_end, func):
 
     func(lines, index_start)
 
-    with open(target_file, "w") as f:
+    with open(target_file, "w", encoding="utf-8") as f:
         f.writelines(lines)
 
     return True
@@ -480,19 +480,19 @@ def update_license_file(app_name):
     if app_name == "RustDesk":
         return
     license_file = Path(sys.argv[0]).parent.joinpath("Package/License.rtf")
-    with open(license_file, "r") as f:
+    with open(license_file, "r", encoding="utf-8") as f:
         license_content = f.read()
     license_content = license_content.replace("website rustdesk.com and other ", "")
     license_content = license_content.replace("RustDesk", app_name)
     license_content = re.sub("Purslane Ltd", app_name, license_content, flags=re.IGNORECASE)
-    with open(license_file, "w") as f:
+    with open(license_file, "w", encoding="utf-8") as f:
         f.write(license_content)
 
 
 def replace_component_guids_in_wxs():
     langs_dir = Path(sys.argv[0]).parent.joinpath("Package")
     for file_path in langs_dir.glob("**/*.wxs"):
-        with open(file_path, "r") as f:
+        with open(file_path, "r", encoding="utf-8") as f:
             lines = f.readlines()
 
         # <Component Id="Product.Registry.DefaultIcon" Guid="6DBF2690-0955-4C6A-940F-634DDA503F49">
@@ -501,7 +501,7 @@ def replace_component_guids_in_wxs():
             if match:
                 lines[i] = re.sub(r'Guid="[^"]+"', f'Guid="{uuid.uuid4()}"', line)
 
-        with open(file_path, "w") as f:
+        with open(file_path, "w", encoding="utf-8") as f:
             f.writelines(lines)
 
 

@@ -25,11 +25,25 @@
 		</Property>
 
 		<!-- Component that persists the property values to the registry so they are available during an upgrade/modify -->
-		<DirectoryRef Id="INSTALLFOLDER">
-			<Component Id="Product.Registry.PersistedShortcutProperties" Guid="1BBAD054-6EC2-4362-BF1B-E8BDE988B597">
+		<DirectoryRef Id="INSTALLFOLDER_INNER">
+			<Component Id="Product.Registry.PersistedStartMenuShortcutProperties1" Guid="62F79BCF-3367-4ACF-950F-F8BCABACDDC0" Condition="STARTMENUSHORTCUTS = 1 OR STARTMENUSHORTCUTS = &quot;Y&quot; OR STARTMENUSHORTCUTS = &quot;y&quot;">
 				<RegistryKey Root="HKCR" Key="$(var.RegKeyRoot)">
-					<RegistryValue Type="string" Name="STARTMENUSHORTCUTS" Value="[STARTMENUSHORTCUTS]" KeyPath="yes" />
-					<RegistryValue Type="string" Name="DESKTOPSHORTCUTS" Value="[DESKTOPSHORTCUTS]" />
+					<RegistryValue Type="string" Name="STARTMENUSHORTCUTS" Value="1" KeyPath="yes" />
+				</RegistryKey>
+			</Component>
+			<Component Id="Product.Registry.PersistedStartMenuShortcutProperties0" Guid="8EA2D5A8-6E5D-4BDD-9019-2099297FF519"  Condition="NOT (STARTMENUSHORTCUTS = 1 OR STARTMENUSHORTCUTS = &quot;Y&quot; OR STARTMENUSHORTCUTS = &quot;y&quot;)">
+				<RegistryKey Root="HKCR" Key="$(var.RegKeyRoot)">
+					<RegistryValue Type="string" Name="STARTMENUSHORTCUTS" Value="0" KeyPath="yes" />
+				</RegistryKey>
+			</Component>
+			<Component Id="Product.Registry.PersistedDesktopShortcutProperties1" Guid="1BBAD054-6EC2-4362-BF1B-E8BDE988B597" Condition="DESKTOPSHORTCUTS = 1 OR DESKTOPSHORTCUTS = &quot;Y&quot; OR DESKTOPSHORTCUTS = &quot;y&quot;">
+				<RegistryKey Root="HKCR" Key="$(var.RegKeyRoot)">
+					<RegistryValue Type="string" Name="DESKTOPSHORTCUTS" Value="1" />
+				</RegistryKey>
+			</Component>
+			<Component Id="Product.Registry.PersistedDesktopShortcutProperties0" Guid="FA992614-D2E1-4795-9696-D45A5EF1B9C8" Condition="NOT (DESKTOPSHORTCUTS = 1 OR DESKTOPSHORTCUTS = &quot;Y&quot; OR DESKTOPSHORTCUTS = &quot;y&quot;)">
+				<RegistryKey Root="HKCR" Key="$(var.RegKeyRoot)">
+					<RegistryValue Type="string" Name="DESKTOPSHORTCUTS" Value="0" />
 				</RegistryKey>
 			</Component>
 		</DirectoryRef>
@@ -45,8 +59,8 @@
 		<SetProperty Action="RestoreSavedDesktopShortcutsValue" Id="CREATEDESKTOPSHORTCUTS" Value="[SavedDesktopShortcutsCmdLineValue]" After="AppSearch" Sequence="first" Condition="SavedDesktopShortcutsCmdLineValue" />
 
 		<!-- If a command line value or registry value was set, update the main properties with the value -->
-		<SetProperty Id="STARTMENUSHORTCUTS" Value="[CREATESTARTMENUSHORTCUTS]" After="RestoreSavedStartMenuShortcutsValue" Sequence="first" Condition="CREATESTARTMENUSHORTCUTS" />
-		<SetProperty Id="DESKTOPSHORTCUTS" Value="[CREATEDESKTOPSHORTCUTS]" After="RestoreSavedDesktopShortcutsValue" Sequence="first" Condition="CREATEDESKTOPSHORTCUTS" />
+		<SetProperty Id="STARTMENUSHORTCUTS" Value="" After="RestoreSavedStartMenuShortcutsValue" Sequence="first" Condition="CREATESTARTMENUSHORTCUTS AND NOT (CREATESTARTMENUSHORTCUTS = 1 OR CREATESTARTMENUSHORTCUTS = &quot;Y&quot; OR CREATESTARTMENUSHORTCUTS = &quot;y&quot;)" />
+		<SetProperty Id="DESKTOPSHORTCUTS" Value="" After="RestoreSavedDesktopShortcutsValue" Sequence="first" Condition="CREATEDESKTOPSHORTCUTS AND NOT (CREATEDESKTOPSHORTCUTS = 1 OR CREATEDESKTOPSHORTCUTS = &quot;Y&quot; OR CREATEDESKTOPSHORTCUTS = &quot;y&quot;)" />
 
 	</Fragment>
 </Wix>
