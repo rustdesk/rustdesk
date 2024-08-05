@@ -632,5 +632,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("About RustDesk", "O RustDesk"),
         ("Send clipboard keystrokes", "Odoslať stlačenia klávesov zo schránky"),
         ("network_error_tip", "Skontrolujte svoje sieťové pripojenie a potom kliknite na tlačidlo Opakovať."),
+        ("Unlock with PIN", ""),
+        ("Requires at least {} characters", ""),
+        ("Wrong PIN", ""),
+        ("Set PIN", ""),
     ].iter().cloned().collect();
 }
