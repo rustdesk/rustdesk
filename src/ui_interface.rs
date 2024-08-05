@@ -33,6 +33,9 @@ use crate::hbbs_http::account;
 #[cfg(not(any(target_os = "ios")))]
 use crate::ipc;
 
+#[cfg(target_os = "windows")]
+pub const AUDIO_ASIO_SUFFIX: &str = " (ASIO)";
+
 type Message = RendezvousMessage;
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -317,29 +320,62 @@ pub fn test_if_valid_server(host: String, test_with_proxy: bool) -> String {
 }
 
 #[inline]
+#[cfg(target_os = "windows")]
+fn get_sound_inputs_asio_() -> Vec<String> {
+    if crate::server::audio_service::is_cpal_asio_supported() {
+        asio_sys::Asio::new().driver_names()
+    } else {
+        Vec::new()
+    }
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "android", target_os = "ios")))]
+fn get_sound_inputs_() -> Vec<String> {
+    let mut out = Vec::new();
+    use cpal::traits::{DeviceTrait, HostTrait};
+    let host = cpal::default_host();
+    if let Ok(devices) = host.devices() {
+        for device in devices {
+            if device.default_input_config().is_err() {
+                continue;
+            }
+            if let Ok(name) = device.name() {
+                out.push(name);
+            }
+        }
+    }
+    #[cfg(target_os = "windows")]
+    out.extend(
+        get_sound_inputs_asio_()
+            .into_iter()
+            .map(|x| format!("{}{}", x, AUDIO_ASIO_SUFFIX)),
+    );
+    out
+}
+
+#[inline]
+#[cfg(not(feature = "flutter"))]
+#[cfg(not(any(target_os = "linux", target_os = "android", target_os = "ios")))]
+pub fn get_sound_inputs() -> Vec<String> {
+    get_sound_inputs_()
+}
+
+#[inline]
+#[cfg(target_os = "linux")]
+pub fn get_sound_inputs() -> Vec<String> {
+    crate::platform::linux::get_pa_sources()
+        .drain(..)
+        .map(|x| x.1)
+        .collect()
+}
+
+#[inline]
 #[cfg(feature = "flutter")]
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(any(target_os = "linux", target_os = "android", target_os = "ios")))]
 pub fn get_sound_inputs() -> Vec<String> {
     let mut a = Vec::new();
     #[cfg(not(target_os = "linux"))]
     {
-        fn get_sound_inputs_() -> Vec<String> {
-            let mut out = Vec::new();
-            use cpal::traits::{DeviceTrait, HostTrait};
-            let host = cpal::default_host();
-            if let Ok(devices) = host.devices() {
-                for device in devices {
-                    if device.default_input_config().is_err() {
-                        continue;
-                    }
-                    if let Ok(name) = device.name() {
-                        out.push(name);
-                    }
-                }
-            }
-            out
-        }
-
         let inputs = Arc::new(Mutex::new(Vec::new()));
         let cloned = inputs.clone();
         // can not call below in UI thread, because conflict with sciter sound com initialization
@@ -347,17 +383,6 @@ pub fn get_sound_inputs() -> Vec<String> {
             .join()
             .ok();
         for name in inputs.lock().unwrap().drain(..) {
-            a.push(name);
-        }
-    }
-    #[cfg(target_os = "linux")]
-    {
-        let inputs: Vec<String> = crate::platform::linux::get_pa_sources()
-            .drain(..)
-            .map(|x| x.1)
-            .collect();
-
-        for name in inputs {
             a.push(name);
         }
     }

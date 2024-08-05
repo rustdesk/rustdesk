@@ -78,8 +78,8 @@ zip = "0.6"
 shutdown_hooks = "0.1"
 totp-rs = { version = "5.4", default-features = false, features = ["gen_secret", "otpauth"] }
 
-[target.'cfg(not(any(target_os = "android", target_os = "linux")))'.dependencies]
-cpal = "0.15"
+[target.'cfg(not(any(target_os = "android", target_os = "linux", target_os = "windows")))'.dependencies]
+cpal = { git = "https://github.com/rustdesk-org/cpal", branch = "refact/asio_message_reset_request_callback" }
 ringbuf = "0.3"
 
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
@@ -118,6 +118,12 @@ impersonate_system = { git = "https://github.com/rustdesk-org/impersonate-system
 shared_memory = "0.12"
 tauri-winrt-notification = "0.1.2"
 runas = "1.2"
+cpal = { git = "https://github.com/rustdesk-org/cpal", branch = "refact/asio_message_reset_request_callback", features = [ "asio" ] }
+ringbuf = "0.3"
+# asio-sys is added for 
+# 1. The workaround https://github.com/RustAudio/cpal/issues/798
+# 2. Add callback of asio message "reset request".
+asio-sys = { git = "https://github.com/rustdesk-org/cpal", branch = "refact/asio_message_reset_request_callback" }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc = "0.2"

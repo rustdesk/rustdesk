@@ -625,10 +625,6 @@ class RustdeskImpl {
     throw UnimplementedError();
   }
 
-  Future<String?> mainGetDefaultSoundInput({dynamic hint}) {
-    throw UnimplementedError();
-  }
-
   String mainGetLoginDeviceInfo({dynamic hint}) {
     throw UnimplementedError();
   }

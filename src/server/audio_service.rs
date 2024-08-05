@@ -13,6 +13,8 @@
 // https://github.com/krruzic/pulsectl
 
 use super::*;
+#[cfg(target_os = "windows")]
+use crate::ui_interface::AUDIO_ASIO_SUFFIX;
 #[cfg(not(any(target_os = "linux", target_os = "android")))]
 use hbb_common::anyhow::anyhow;
 use magnum_opus::{Application::*, Channels::*, Encoder};
@@ -20,6 +22,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 pub const NAME: &'static str = "audio";
 pub const AUDIO_DATA_SIZE_U8: usize = 960 * 4; // 10ms in 48000 stereo
+const SERVICE_REPEAT_INTERVAL_MSEC: u64 = 33;
 static RESTARTING: AtomicBool = AtomicBool::new(false);
 
 lazy_static::lazy_static! {
@@ -29,7 +32,11 @@ lazy_static::lazy_static! {
 #[cfg(not(any(target_os = "linux", target_os = "android")))]
 pub fn new() -> GenericService {
     let svc = EmptyExtraFieldService::new(NAME.to_owned(), true);
-    GenericService::repeat::<cpal_impl::State, _, _>(&svc.clone(), 33, cpal_impl::run);
+    GenericService::repeat::<cpal_impl::State, _, _>(
+        &svc.clone(),
+        SERVICE_REPEAT_INTERVAL_MSEC,
+        cpal_impl::run,
+    );
     svc.sp
 }
 
@@ -137,6 +144,8 @@ mod pa_impl {
     }
 }
 
+#[cfg(target_os = "windows")]
+pub use cpal_impl::is_asio_supported as is_cpal_asio_supported;
 #[cfg(not(any(target_os = "linux", target_os = "android")))]
 mod cpal_impl {
     use self::service::{Reset, ServiceSwap};
@@ -145,10 +154,25 @@ mod cpal_impl {
         traits::{DeviceTrait, HostTrait, StreamTrait},
         BufferSize, Device, Host, InputCallbackInfo, StreamConfig, SupportedStreamConfig,
     };
+    #[cfg(target_os = "windows")]
+    use std::sync::mpsc;
 
     lazy_static::lazy_static! {
         static ref HOST: Host = cpal::default_host();
         static ref INPUT_BUFFER: Arc<Mutex<std::collections::VecDeque<f32>>> = Default::default();
+    }
+
+    #[cfg(target_os = "windows")]
+    lazy_static::lazy_static! {
+        static ref IS_EXITING: Arc<AtomicBool> = Arc::new(AtomicBool::new(false));
+        static ref HOST_ASIO: Mutex<Option<Host>> = {
+            let s = "audio asio cleanup".to_string();
+            shutdown_hooks::add_shutdown_hook(exit_callback);
+            crate::common::add_exit_callback(s, ||exit_callback());
+            asio_sys::set_reset_request_handle(restart);
+            Mutex::new(None)
+        };
+        static ref EXIT_NOTIFIER: Arc<Mutex<Option<mpsc::Sender<()>>>> = Default::default();
     }
 
     #[derive(Default)]
@@ -160,6 +184,29 @@ mod cpal_impl {
         fn reset(&mut self) {
             self.stream.take();
         }
+    }
+
+    #[cfg(target_os = "windows")]
+    extern "C" fn exit_callback() {
+        if HOST_ASIO.lock().unwrap().is_none() {
+            return;
+        }
+        IS_EXITING.store(true, Ordering::SeqCst);
+        let (tx, rx) = mpsc::channel();
+        *EXIT_NOTIFIER.lock().unwrap() = Some(tx);
+        // 1. The audio service `repeat` interval
+        // 2. The state to be reset (drop the stream)
+        rx.recv_timeout(std::time::Duration::from_millis(
+            SERVICE_REPEAT_INTERVAL_MSEC * 3,
+        ))
+        .ok();
+    }
+
+    #[inline]
+    #[cfg(target_os = "windows")]
+    pub fn is_asio_supported() -> bool {
+        crate::common::try_create_audio_host_asio(&HOST_ASIO);
+        HOST_ASIO.lock().unwrap().is_some()
     }
 
     fn run_restart(sp: EmptyExtraFieldService, state: &mut State) -> ResultType<()> {
@@ -195,6 +242,16 @@ mod cpal_impl {
     }
 
     pub fn run(sp: EmptyExtraFieldService, state: &mut State) -> ResultType<()> {
+        #[cfg(target_os = "windows")]
+        if IS_EXITING.load(Ordering::SeqCst) {
+            state.reset();
+            if let Some(tx) = &*EXIT_NOTIFIER.lock().unwrap() {
+                tx.send(()).ok();
+            }
+            let _ = HOST_ASIO.lock().unwrap().take();
+            return Ok(());
+        }
+
         if !RESTARTING.load(Ordering::SeqCst) {
             run_serv_snapshot(sp, state)
         } else {
@@ -254,7 +311,30 @@ mod cpal_impl {
         get_audio_input(&audio_input)
     }
 
-    fn get_audio_input(audio_input: &str) -> ResultType<(Device, SupportedStreamConfig)> {
+    #[cfg(target_os = "windows")]
+    fn get_audio_input_asio(audio_input: &str) -> ResultType<Device> {
+        crate::common::try_create_audio_host_asio(&HOST_ASIO);
+        if let Some(host) = &*HOST_ASIO.lock().unwrap() {
+            let real_input = audio_input.trim_end_matches(AUDIO_ASIO_SUFFIX);
+            for d in host
+                .devices()
+                .with_context(|| "Failed to get audio devices")?
+            {
+                if d.name().unwrap_or("".to_owned()) == real_input {
+                    return Ok(d);
+                }
+            }
+            bail!(
+                "Failed to get audio devices of audio input: {}",
+                audio_input
+            );
+        } else {
+            // TODO: show error message box to user ?
+            bail!("Failed to get audio devices, host unavailable");
+        }
+    }
+
+    fn get_audio_input_non_asio(audio_input: &str) -> ResultType<Device> {
         let mut device = None;
         if !audio_input.is_empty() {
             for d in HOST
@@ -271,6 +351,18 @@ mod cpal_impl {
             HOST.default_input_device()
                 .with_context(|| "Failed to get default input device for loopback")?,
         );
+        Ok(device)
+    }
+
+    fn get_audio_input(audio_input: &str) -> ResultType<(Device, SupportedStreamConfig)> {
+        #[cfg(target_os = "windows")]
+        let device = if audio_input.ends_with(AUDIO_ASIO_SUFFIX) {
+            get_audio_input_asio(audio_input)?
+        } else {
+            get_audio_input_non_asio(audio_input)?
+        };
+        #[cfg(not(target_os = "windows"))]
+        let device = get_audio_input_non_asio(audio_input)?;
         log::info!("Input device: {}", device.name().unwrap_or("".to_owned()));
         let format = device
             .default_input_config()

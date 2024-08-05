@@ -350,6 +350,7 @@ impl UI {
     fn closing(&mut self, x: i32, y: i32, w: i32, h: i32) {
         crate::server::input_service::fix_key_down_timeout_at_exit();
         LocalConfig::set_size(x, y, w, h);
+        crate::on_exit_callback();
     }
 
     fn get_size(&mut self) -> Value {
@@ -741,32 +742,6 @@ impl sciter::host::HostHandler for UIHostHandler {
     fn on_graphics_critical_failure(&mut self) {
         log::error!("Critical rendering error: e.g. DirectX gfx driver error. Most probably bad gfx drivers.");
     }
-}
-
-#[cfg(not(target_os = "linux"))]
-fn get_sound_inputs() -> Vec<String> {
-    let mut out = Vec::new();
-    use cpal::traits::{DeviceTrait, HostTrait};
-    let host = cpal::default_host();
-    if let Ok(devices) = host.devices() {
-        for device in devices {
-            if device.default_input_config().is_err() {
-                continue;
-            }
-            if let Ok(name) = device.name() {
-                out.push(name);
-            }
-        }
-    }
-    out
-}
-
-#[cfg(target_os = "linux")]
-fn get_sound_inputs() -> Vec<String> {
-    crate::platform::linux::get_pa_sources()
-        .drain(..)
-        .map(|x| x.1)
-        .collect()
 }
 
 // sacrifice some memory

@@ -1,3 +1,5 @@
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+use crate::keyboard::input_source::{change_input_source, get_cur_session_input_source};
 use crate::{
     client::file_trait::FileManager,
     common::{is_keyboard_mode_supported, make_fd_to_json},
@@ -6,11 +8,6 @@ use crate::{
     },
     input::*,
     ui_interface::{self, *},
-};
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
-use crate::{
-    common::get_default_sound_input,
-    keyboard::input_source::{change_input_source, get_cur_session_input_source},
 };
 use flutter_rust_bridge::{StreamSink, SyncReturn};
 #[cfg(feature = "plugin_framework")]
@@ -740,13 +737,6 @@ pub fn main_get_sound_inputs() -> Vec<String> {
     return get_sound_inputs();
     #[cfg(any(target_os = "android", target_os = "ios"))]
     vec![String::from("")]
-}
-
-pub fn main_get_default_sound_input() -> Option<String> {
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    return get_default_sound_input();
-    #[cfg(any(target_os = "android", target_os = "ios"))]
-    None
 }
 
 pub fn main_get_login_device_info() -> SyncReturn<String> {
@@ -1857,8 +1847,7 @@ pub fn main_account_auth_result() -> String {
 
 pub fn main_on_main_window_close() {
     // may called more than one times
-    #[cfg(windows)]
-    crate::portable_service::client::drop_portable_service_shared_memory();
+    crate::common::on_exit_callback();
 }
 
 pub fn main_current_is_wayland() -> SyncReturn<bool> {

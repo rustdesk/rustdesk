@@ -76,6 +76,7 @@ lazy_static::lazy_static! {
     pub static ref SOFTWARE_UPDATE_URL: Arc<Mutex<String>> = Default::default();
     pub static ref DEVICE_ID: Arc<Mutex<String>> = Default::default();
     pub static ref DEVICE_NAME: Arc<Mutex<String>> = Default::default();
+    static ref EXIT_CALLBACKS: Arc<Mutex<Vec<(String, Box<dyn Fn() + Send + Sync>)>>> = Default::default();
 }
 
 lazy_static::lazy_static! {
@@ -151,6 +152,14 @@ pub fn valid_for_numlock(evt: &KeyEvent) -> bool {
             || v == ControlKey::Decimal.value()
     } else {
         false
+    }
+}
+
+#[inline]
+#[cfg(target_os = "windows")]
+pub fn try_create_audio_host_asio(host: &Mutex<Option<cpal::Host>>) {
+    if host.lock().unwrap().is_none() {
+        *host.lock().unwrap() = cpal::host_from_id(cpal::HostId::Asio).ok();
     }
 }
 
@@ -1492,6 +1501,21 @@ pub fn is_empty_uni_link(arg: &str) -> bool {
         return false;
     }
     arg[prefix.len()..].chars().all(|c| c == '/')
+}
+
+pub fn add_exit_callback<F: Fn() + Sync + Send + 'static>(s: String, f: F) {
+    log::info!("Add exit callback: \"{}\"", s);
+    EXIT_CALLBACKS.lock().unwrap().push((s, Box::new(f)));
+}
+
+#[inline]
+pub fn on_exit_callback() {
+    let mut lock = EXIT_CALLBACKS.lock().unwrap();
+    for (s, f) in lock.iter() {
+        log::info!("Run exit callback: \"{}\"", s);
+        f();
+    }
+    lock.clear();
 }
 
 #[cfg(test)]

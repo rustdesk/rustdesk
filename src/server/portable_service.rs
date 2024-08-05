@@ -565,6 +565,8 @@ pub mod client {
                 shmem_size,
             )?);
             shutdown_hooks::add_shutdown_hook(drop_portable_service_shared_memory);
+            let s = "portable service cleanup".to_string();
+            crate::common::add_exit_callback(s, || drop_portable_service_shared_memory());
         }
         if let Some(shmem) = SHMEM.lock().unwrap().as_mut() {
             unsafe {

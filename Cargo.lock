@@ -242,6 +242,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "asio-sys"
+version = "0.2.2"
+source = "git+https://github.com/rustdesk-org/cpal?branch=refact/asio_message_reset_request_callback#f2538a48b3f2650e87020e48de3b7b34ea7f85c5"
+dependencies = [
+ "bindgen 0.69.4",
+ "cc",
+ "num-derive 0.4.2",
+ "num-traits 0.2.19",
+ "parse_cfg",
+ "walkdir",
+]
+
+[[package]]
 name = "async-broadcast"
 version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -581,12 +594,15 @@ dependencies = [
  "itertools 0.12.1",
  "lazy_static",
  "lazycell",
+ "log",
+ "prettyplease",
  "proc-macro2 1.0.86",
  "quote 1.0.36",
  "regex",
  "rustc-hash",
  "shlex",
  "syn 2.0.68",
+ "which",
 ]
 
 [[package]]
@@ -1270,10 +1286,10 @@ dependencies = [
 [[package]]
 name = "cpal"
 version = "0.15.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "873dab07c8f743075e57f524c583985fbaf745602acbe916a01539364369a779"
+source = "git+https://github.com/rustdesk-org/cpal?branch=refact/asio_message_reset_request_callback#f2538a48b3f2650e87020e48de3b7b34ea7f85c5"
 dependencies = [
  "alsa",
+ "asio-sys",
  "core-foundation-sys 0.8.6 (registry+https://github.com/rust-lang/crates.io-index)",
  "coreaudio-rs",
  "dasp_sample",
@@ -1283,6 +1299,7 @@ dependencies = [
  "mach2",
  "ndk 0.8.0",
  "ndk-context",
+ "num-traits 0.2.19",
  "oboe",
  "wasm-bindgen",
  "wasm-bindgen-futures",
@@ -4571,6 +4588,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "parse_cfg"
+version = "4.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "905787a434a2c721408e7c9a252e85f3d93ca0f118a5283022636c0e05a7ea49"
+dependencies = [
+ "nom",
+]
+
+[[package]]
 name = "password-hash"
 version = "0.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5467,6 +5493,7 @@ dependencies = [
  "android-wakelock",
  "android_logger",
  "arboard",
+ "asio-sys",
  "async-process",
  "async-trait",
  "bytes",
@@ -5778,7 +5805,7 @@ dependencies = [
 [[package]]
 name = "sciter-rs"
 version = "0.5.57"
-source = "git+https://github.com/open-trade/rust-sciter?branch=dyn#5322f3a755a0e6bf999fbc60d1efc35246c0f821"
+source = "git+https://github.com/open-trade/rust-sciter?branch=dyn#fab913b7c2e779b05c249b0c5de5a08759b2c15d"
 dependencies = [
  "lazy_static",
  "libc",
