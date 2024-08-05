@@ -11,16 +11,16 @@
 				 install start menu shortcuts, they are initialized with a default value to install shortcuts.
 				 They should not be set directly from the command line or registry, instead the CREATE* properties
 				 below should be set, then they will update these properties with their values only if set. -->
-		<Property Id="STARTMENUSHORTCUTS" Value="1" Secure="yes"></Property>
-		<Property Id="DESKTOPSHORTCUTS" Value="1" Secure="yes"></Property>
-		<Property Id="STARTUPSHORTCUTS" Value="1" Secure="yes"></Property>
+		<Property Id="STARTMENUSHORTCUTS" Value="1"></Property>
+		<Property Id="DESKTOPSHORTCUTS" Value="1"></Property>
+		<Property Id="STARTUPSHORTCUTS" Value="1"></Property>
 
 		<!-- These properties get set from either the command line, bundle or registry value,
 				 if set they update the properties above with their value. -->
-		<Property Id="CREATESTARTMENUSHORTCUTS" Secure="yes">
+		<Property Id="CREATESTARTMENUSHORTCUTS">
 			<RegistrySearch Id="CreateStartMenuShortcutsSearch" Root="HKCR" Key="$(var.RegKeyRoot)" Name="STARTMENUSHORTCUTS" Type="raw" />
 		</Property>
-		<Property Id="CREATEDESKTOPSHORTCUTS" Secure="yes">
+		<Property Id="CREATEDESKTOPSHORTCUTS">
 			<RegistrySearch Id="CreateDesktopShortcutsSearch" Root="HKCR" Key="$(var.RegKeyRoot)" Name="DESKTOPSHORTCUTS" Type="raw" />
 		</Property>
 
