@@ -48,9 +48,9 @@
 			<ComponentRef Id="Product.Registry.UninstallApp" />
 			<ComponentRef Id="App.StartMenu" />
 			<ComponentRef Id="Product.Registry.PersistedStartMenuShortcutProperties1" />
-			<ComponentRef Id="Product.Registry.PersistedStartMenuShortcutProperties" />
+			<ComponentRef Id="Product.Registry.PersistedStartMenuShortcutProperties0" />
 			<ComponentRef Id="Product.Registry.PersistedDesktopShortcutProperties1" />
-			<ComponentRef Id="Product.Registry.PersistedDesktopShortcutProperties" />
+			<ComponentRef Id="Product.Registry.PersistedDesktopShortcutProperties0" />
 		</Feature>
 
 		<!--https://wixtoolset.org/docs/tools/wixext/wixui/#customizing-a-dialog-set-->
