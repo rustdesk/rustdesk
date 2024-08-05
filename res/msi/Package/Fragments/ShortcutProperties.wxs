@@ -59,7 +59,7 @@
 		<SetProperty Action="RestoreSavedDesktopShortcutsValue" Id="CREATEDESKTOPSHORTCUTS" Value="[SavedDesktopShortcutsCmdLineValue]" After="AppSearch" Sequence="first" Condition="SavedDesktopShortcutsCmdLineValue" />
 
 		<!-- If a command line value or registry value was set, update the main properties with the value -->
-		<SetProperty Id="STARTMENUSHORTCUTS" Value="" After="RestoreSavedStartMenuShortcutsValue" Sequence="first" Condition="CREATESTARTMENUSHORTCUTS = 0 OR STARTMENUSHORTCUTS = &quot;N&quot; OR STARTMENUSHORTCUTS = &quot;n&quot;" />
+		<SetProperty Id="STARTMENUSHORTCUTS" Value="" After="RestoreSavedStartMenuShortcutsValue" Sequence="first" Condition="CREATESTARTMENUSHORTCUTS = 0 OR CREATESTARTMENUSHORTCUTS = &quot;N&quot; OR CREATESTARTMENUSHORTCUTS = &quot;n&quot;" />
 		<SetProperty Id="DESKTOPSHORTCUTS" Value="" After="RestoreSavedDesktopShortcutsValue" Sequence="first" Condition="CREATEDESKTOPSHORTCUTS = 0 OR CREATEDESKTOPSHORTCUTS = &quot;N&quot; OR CREATEDESKTOPSHORTCUTS = &quot;n&quot;" />
 
 	</Fragment>
