@@ -1442,8 +1442,7 @@ jobs:
                rpm \
                unzip \
                wget \
-               xz-utils \
-               libglib2.0-dev
+               xz-utils
             # we have libopus compiled by us.
             apt-get remove -y libopus-dev || true
             # output devs
@@ -1702,8 +1701,7 @@ jobs:
                unzip \
                wget \
                xz-utils \
-               zip \
-               libglib2.0-dev
+               zip
             # arm-linux needs CMake and vcokg built from source as there
             # are no prebuilts available from Kitware and Microsoft
             if [ "${{ matrix.job.vcpkg-triplet }}" = "arm-linux" ]; then
@@ -1945,8 +1943,7 @@ jobs:
                g++ \
                libgtk-3-dev \
                nasm \
-               wget \
-               libglib2.0-dev
+               wget
             # flatpak deps
             flatpak --user remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
             flatpak --user install -y flathub org.freedesktop.Platform/${{ matrix.job.arch }}/23.08
