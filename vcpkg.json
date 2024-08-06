@@ -9,6 +9,14 @@
       "host": false
     },
     {
+      "name": "glib",
+      "host": true
+    },
+    {
+      "name": "glib",
+      "host": false
+    },
+    {
       "name": "cpu-features",
       "platform": "android"
     },
