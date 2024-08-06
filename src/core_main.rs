@@ -261,6 +261,16 @@ pub fn core_main() -> Option<Vec<String>> {
             return None;
         } else if args[0] == "--server" {
             log::info!("start --server with user {}", crate::username());
+            #[cfg(target_os = "linux")]
+            {
+                hbb_common::allow_err!(crate::platform::check_autostart_config());
+                std::process::Command::new("pkill")
+                    .arg("-f")
+                    .arg(&format!("%s --tray", crate::get_app_name().to_lowercase()))
+                    .status()
+                    .ok();
+                allow_err!(crate::crate::platform::run_as_user(vec!["--tray"]));
+            }
             #[cfg(windows)]
             crate::privacy_mode::restore_reg_connectivity(true);
             #[cfg(any(target_os = "linux", target_os = "windows"))]
@@ -398,7 +408,8 @@ pub fn core_main() -> Option<Vec<String>> {
                         "uuid": uuid,
                     });
                     let header = "Authorization: Bearer ".to_owned() + &token;
-                    if user_name.is_none() && strategy_name.is_none() && address_book_name.is_none() {
+                    if user_name.is_none() && strategy_name.is_none() && address_book_name.is_none()
+                    {
                         println!(
                             "--user_name or --strategy_name or --address_book_name is required!"
                         );

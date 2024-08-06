@@ -730,7 +730,8 @@ pub fn block_input(_v: bool) -> (bool, String) {
 
 pub fn is_installed() -> bool {
     if let Ok(p) = std::env::current_exe() {
-        p.to_str().unwrap_or_default().starts_with("/usr") || p.to_str().unwrap_or_default().starts_with("/nix/store")
+        p.to_str().unwrap_or_default().starts_with("/usr")
+            || p.to_str().unwrap_or_default().starts_with("/nix/store")
     } else {
         false
     }
@@ -1413,22 +1414,26 @@ pub fn check_autostart_config() -> ResultType<()> {
     let app_name = crate::get_app_name().to_lowercase();
     let path = format!("{home}/.config/autostart");
     let file = format!("{path}/{app_name}.desktop");
-    std::fs::create_dir_all(&path).ok();
-    if !Path::new(&file).exists() {
-        // write text to the desktop file
-        let mut file = std::fs::File::create(&file)?;
-        file.write_all(
-            format!(
-                "
-[Desktop Entry]
-Type=Application
-Exec={app_name} --tray
-NoDisplay=false
-        "
-            )
-            .as_bytes(),
-        )?;
-    }
+    // https://github.com/rustdesk/rustdesk/issues/4863
+    std::fs::remove_file(&file).ok();
+    /*
+        std::fs::create_dir_all(&path).ok();
+        if !Path::new(&file).exists() {
+            // write text to the desktop file
+            let mut file = std::fs::File::create(&file)?;
+            file.write_all(
+                format!(
+                    "
+    [Desktop Entry]
+    Type=Application
+    Exec={app_name} --tray
+    NoDisplay=false
+            "
+                )
+                .as_bytes(),
+            )?;
+        }
+        */
     Ok(())
 }
 
