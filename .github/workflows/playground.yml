@@ -285,7 +285,8 @@ jobs:
                openjdk-11-jdk-headless \
                pkg-config \
                tree \
-               wget
+               wget \
+               libglib2.0-dev
 
       - name: Install flutter
         uses: subosito/flutter-action@v2
