@@ -1359,7 +1359,7 @@ fn read_custom_client_advanced_settings(
     } else {
         config::DEFAULT_SETTINGS.write().unwrap()
     };
-    let mut buildin_settings = config::BUILDIN_SETTINGS.write().unwrap();
+    let mut buildin_settings = config::BUILTIN_SETTINGS.write().unwrap();
 
     if let Some(settings) = settings.as_object() {
         for (k, v) in settings {

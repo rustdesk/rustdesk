@@ -2220,7 +2220,7 @@ pub fn main_get_hard_option(key: String) -> SyncReturn<String> {
 }
 
 pub fn main_get_buildin_option(key: String) -> SyncReturn<String> {
-    SyncReturn(get_buildin_option(&key))
+    SyncReturn(get_builtin_option(&key))
 }
 
 pub fn main_check_hwcodec() {

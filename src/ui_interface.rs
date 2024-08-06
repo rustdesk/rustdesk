@@ -206,8 +206,8 @@ pub fn get_hard_option(key: String) -> String {
 }
 
 #[inline]
-pub fn get_buildin_option(key: &str) -> String {
-    config::BUILDIN_SETTINGS
+pub fn get_builtin_option(key: &str) -> String {
+    config::BUILTIN_SETTINGS
         .read()
         .unwrap()
         .get(key)
@@ -781,6 +781,7 @@ pub fn http_request(url: String, method: String, body: Option<String>, header: S
         current_request.lock().unwrap().insert(url, res);
     });
 }
+
 #[inline]
 pub fn get_async_http_status(url: String) -> Option<String> {
     match ASYNC_HTTP_STATUS.lock().unwrap().get(&url) {
