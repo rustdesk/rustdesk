@@ -81,10 +81,10 @@ android {
 
     signingConfigs {
       release {
-        keyAlias keystoreProperties['keyAlias']
-        keyPassword keystoreProperties['keyPassword']
-        storeFile keystoreProperties['storeFile'] ? file(keystoreProperties['storeFile']) : null
-        storePassword keystoreProperties['storePassword']
+        keyAlias "rustdesk_ci_runner"
+        keyPassword "rustdesk_ci_runner"
+        storeFile file('../rustdesk_ci_runner')
+        storePassword "rustdesk_ci_runner"
       }
     }
 
