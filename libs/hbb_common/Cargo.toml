@@ -37,8 +37,8 @@ libc = "0.2"
 dlopen = "0.1"
 toml = "0.7"
 uuid = { version = "1.3", features = ["v4"] }
-# crash, versions >= 0.29.1 are affected by #GuillaumeGomez/sysinfo/1052
-sysinfo = { git = "https://github.com/rustdesk-org/sysinfo" }
+# new sysinfo issue: https://github.com/rustdesk/rustdesk/pull/6330#issuecomment-2270871442
+sysinfo = { git = "https://github.com/rustdesk-org/sysinfo", branch = "rlim_max" }
 thiserror = "1.0"
 httparse = "1.5"
 base64 = "0.22"
