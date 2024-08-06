@@ -266,10 +266,10 @@ pub fn core_main() -> Option<Vec<String>> {
                 hbb_common::allow_err!(crate::platform::check_autostart_config());
                 std::process::Command::new("pkill")
                     .arg("-f")
-                    .arg(&format!("%s --tray", crate::get_app_name().to_lowercase()))
+                    .arg(&format!("{} --tray", crate::get_app_name().to_lowercase()))
                     .status()
                     .ok();
-                allow_err!(crate::crate::platform::run_as_user(vec!["--tray"]));
+                hbb_common::allow_err!(crate::crate::platform::run_as_user(vec!["--tray"]));
             }
             #[cfg(windows)]
             crate::privacy_mode::restore_reg_connectivity(true);
