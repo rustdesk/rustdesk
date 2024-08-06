@@ -6,6 +6,7 @@ if [ "$1" = configure ]; then
 
 	INITSYS=$(ls -al /proc/1/exe | awk -F' ' '{print $NF}' | awk -F'/' '{print $NF}')
     ln -s /usr/lib/rustdesk/rustdesk /usr/bin/rustdesk
+    ln -s /usr/lib/rustdesk/get_scale /usr/bin/get_scale
 	
 	if [ "systemd" == "$INITSYS" ]; then
 

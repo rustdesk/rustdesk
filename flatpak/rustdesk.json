@@ -29,7 +29,7 @@
         "bsdtar -zxvf rustdesk.deb",
         "tar -xvf ./data.tar.xz",
         "cp -r ./usr/*  /app/",
-        "mkdir -p /app/bin && ln -s /app/lib/rustdesk/rustdesk /app/bin/rustdesk",
+        "mkdir -p /app/bin && ln -s /app/lib/rustdesk/rustdesk /app/bin/rustdesk && ln -s /app/lib/rustdesk/get_scale /app/bin/get_scale",
         "mv /app/share/applications/rustdesk.desktop /app/share/applications/com.rustdesk.RustDesk.desktop",
         "mv /app/share/applications/rustdesk-link.desktop /app/share/applications/com.rustdesk.RustDesk-link.desktop",
         "sed -i '/^Icon=/ c\\Icon=com.rustdesk.RustDesk' /app/share/applications/*.desktop",

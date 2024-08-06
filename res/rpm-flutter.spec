@@ -56,6 +56,7 @@ cp /usr/share/rustdesk/files/rustdesk.service /etc/systemd/system/rustdesk.servi
 cp /usr/share/rustdesk/files/rustdesk.desktop /usr/share/applications/
 cp /usr/share/rustdesk/files/rustdesk-link.desktop /usr/share/applications/
 ln -s /usr/lib/rustdesk/rustdesk /usr/bin/rustdesk
+ln -s /usr/lib/rustdesk/get_scale /usr/bin/get_scale
 systemctl daemon-reload
 systemctl enable rustdesk
 systemctl start rustdesk
@@ -81,6 +82,7 @@ case "$1" in
     rm /usr/share/applications/rustdesk.desktop || true
     rm /usr/share/applications/rustdesk-link.desktop || true
     rm /usr/bin/rustdesk || true
+    rm /usr/bin/get_scale || true
     update-desktop-database
   ;;
   1)

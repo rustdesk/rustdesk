@@ -6,6 +6,7 @@ case $1 in
     remove|upgrade)
 		INITSYS=$(ls -al /proc/1/exe | awk -F' ' '{print $NF}' | awk -F'/' '{print $NF}')
         rm /usr/bin/rustdesk
+		rm /usr/bin/get_scale
 		
 		if [ "systemd" == "${INITSYS}" ]; then
 
