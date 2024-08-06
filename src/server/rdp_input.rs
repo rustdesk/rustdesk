@@ -6,6 +6,7 @@ use scrap::wayland::pipewire::{get_portal, PwStreamInfo};
 use scrap::wayland::remote_desktop_portal::OrgFreedesktopPortalRemoteDesktop as remote_desktop_portal;
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::process::Command;
 
 pub mod client {
     use super::*;
@@ -67,6 +68,20 @@ pub mod client {
         conn: Arc<SyncConnection>,
         session: Path<'static>,
         stream: PwStreamInfo,
+        scale: f64,
+    }
+
+    fn get_fractional_scale() -> f64 {
+        // avoid gdk4 conflict with current gdk3
+        let output = Command::new("get_scale")
+            .output();
+        if let Ok(output) = output {
+            if output.status.success() {
+                let result = String::from_utf8_lossy(&output.stdout);
+                return result.parse::<f64>().unwrap_or(1.0)
+            }
+        }
+        1.0
     }
 
     impl RdpInputMouse {
@@ -79,6 +94,7 @@ pub mod client {
                 conn,
                 session,
                 stream,
+                scale: get_fractional_scale(),
             })
         }
     }
@@ -93,6 +109,8 @@ pub mod client {
         }
 
         fn mouse_move_to(&mut self, x: i32, y: i32) {
+            let x: i32 = (x as f64 / self.scale) as i32;
+            let y: i32 = (y as f64 / self.scale) as i32;
             let portal = get_portal(&self.conn);
             let _ = remote_desktop_portal::notify_pointer_motion_absolute(
                 &portal,
@@ -104,6 +122,8 @@ pub mod client {
             );
         }
         fn mouse_move_relative(&mut self, x: i32, y: i32) {
+            let x: i32 = (x as f64 / self.scale) as i32;
+            let y: i32 = (y as f64 / self.scale) as i32;
             let portal = get_portal(&self.conn);
             let _ = remote_desktop_portal::notify_pointer_motion(
                 &portal,
