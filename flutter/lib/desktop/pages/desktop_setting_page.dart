@@ -515,16 +515,16 @@ class _GeneralState extends State<_General> {
     }
 
     builder(devices, currentDevice, setDevice) {
-      return _Card(title: 'Audio Input Device', children: [
-        ...devices.map((device) => _Radio<String>(context,
-                value: device,
-                groupValue: currentDevice,
-                autoNewLine: false,
-                label: device, onChanged: (value) {
-              setDevice(value);
-              setState(() {});
-            }))
-      ]);
+      final child = ComboBox(
+        keys: devices,
+        values: devices,
+        initialKey: currentDevice,
+        onChanged: (key) async {
+          setDevice(key);
+          setState(() {});
+        },
+      ).marginOnly(left: _kContentHMargin);
+      return _Card(title: 'Audio Input Device', children: [child]);
     }
 
     return AudioInput(builder: builder, isCm: false, isVoiceCall: false);
