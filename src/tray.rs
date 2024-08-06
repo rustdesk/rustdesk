@@ -10,12 +10,15 @@ use std::time::Duration;
 
 pub fn start_tray() {
     if crate::ui_interface::get_builtin_option(hbb_common::config::keys::OPTION_HIDE_TRAY) == "Y" {
-        if cfg!(target_os = "macos") {
+        #[cfg(target_os = "macos")]
+        {
             crate::platform::macos::hide_dock();
             loop {
                 std::thread::sleep(std::time::Duration::from_secs(1));
             }
-        } else {
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
             return;
         }
     }
