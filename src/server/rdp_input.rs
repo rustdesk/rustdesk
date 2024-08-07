@@ -72,15 +72,25 @@ pub mod client {
     }
 
     fn get_fractional_scale() -> f64 {
-        // avoid gdk4 conflict with current gdk3
-        let output = Command::new("get_scale")
-            .output();
-        if let Ok(output) = output {
-            if output.status.success() {
-                let result = String::from_utf8_lossy(&output.stdout);
-                return result.parse::<f64>().unwrap_or(1.0)
+        #[cfg(target_os = "linux")]
+        {
+            let binary_path = hbb_common::fs::get_binary_path();
+            if let Ok(mut binary_path) = binary_path {
+                binary_path.pop();
+                binary_path.push("get_scale");
+                // avoid gdk4 conflict with current gdk3
+                let output = Command::new(binary_path)
+                    .output();
+                if let Ok(output) = output {
+                    if output.status.success() {
+                        let result = String::from_utf8_lossy(&output.stdout);
+                        return result.parse::<f64>().unwrap_or(1.0)
+                    }
+                }
             }
+            1.0
         }
+        #[cfg(not(target_os = "linux"))]
         1.0
     }
 
