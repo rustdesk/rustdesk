@@ -128,6 +128,8 @@ def main():
     )
 
     args = parser.parse_args()
+    
+    while args.url.endswith("/"): args.url = args.url[:-1]
 
     devices = view(
         args.url,

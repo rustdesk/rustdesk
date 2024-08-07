@@ -25,7 +25,7 @@ pub fn start_tray() {
     allow_err!(make_tray());
 }
 
-pub fn make_tray() -> hbb_common::ResultType<()> {
+fn make_tray() -> hbb_common::ResultType<()> {
     // https://github.com/tauri-apps/tray-icon/blob/dev/examples/tao.rs
     use hbb_common::anyhow::Context;
     use tao::event_loop::{ControlFlow, EventLoopBuilder};
