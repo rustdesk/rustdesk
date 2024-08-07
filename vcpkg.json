@@ -9,36 +9,6 @@
       "host": false
     },
     {
-      "name": "glib",
-      "host": true,
-      "platform": "linux"
-    },
-    {
-      "name": "glib",
-      "host": false,
-      "platform": "linux"
-    },
-    {
-      "name": "pango",
-      "host": true,
-      "platform": "linux"
-    },
-    {
-      "name": "pango",
-      "host": false,
-      "platform": "linux"
-    },
-    {
-      "name": "graphene",
-      "host": true,
-      "platform": "linux"
-    },
-    {
-      "name": "graphene",
-      "host": false,
-      "platform": "linux"
-    },
-    {
       "name": "gtk",
       "host": true,
       "platform": "linux"
