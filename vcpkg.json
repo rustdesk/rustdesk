@@ -29,6 +29,16 @@
       "platform": "linux"
     },
     {
+      "name": "graphene",
+      "host": true,
+      "platform": "linux"
+    },
+    {
+      "name": "graphene",
+      "host": false,
+      "platform": "linux"
+    },
+    {
       "name": "cpu-features",
       "platform": "android"
     },
