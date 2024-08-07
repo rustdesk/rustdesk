@@ -19,6 +19,16 @@
       "platform": "linux"
     },
     {
+      "name": "pango",
+      "host": true,
+      "platform": "linux"
+    },
+    {
+      "name": "pango",
+      "host": false,
+      "platform": "linux"
+    },
+    {
       "name": "cpu-features",
       "platform": "android"
     },
