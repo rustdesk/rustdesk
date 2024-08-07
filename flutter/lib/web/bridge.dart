@@ -1622,5 +1622,13 @@ class RustdeskImpl {
     throw UnimplementedError();
   }
 
+  String mainGetUnlockPin({dynamic hint}) {
+    throw UnimplementedError();
+  }
+
+  String mainSetUnlockPin({required String pin, dynamic hint}) {
+    throw UnimplementedError();
+  }
+
   void dispose() {}
 }
