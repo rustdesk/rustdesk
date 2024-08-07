@@ -10,11 +10,13 @@
     },
     {
       "name": "glib",
-      "host": true
+      "host": true,
+      "platform": "linux"
     },
     {
       "name": "glib",
-      "host": false
+      "host": false,
+      "platform": "linux"
     },
     {
       "name": "cpu-features",
