@@ -39,6 +39,16 @@
       "platform": "linux"
     },
     {
+      "name": "gtk",
+      "host": true,
+      "platform": "linux"
+    },
+    {
+      "name": "gtk",
+      "host": false,
+      "platform": "linux"
+    },
+    {
       "name": "cpu-features",
       "platform": "android"
     },
