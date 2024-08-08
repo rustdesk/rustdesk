@@ -1849,6 +1849,10 @@ pub fn install_install_path() -> SyncReturn<String> {
     SyncReturn(install_path())
 }
 
+pub fn install_install_options() -> SyncReturn<String> {
+    SyncReturn(install_options())
+}
+
 pub fn main_account_auth(op: String, remember_me: bool) {
     let id = get_id();
     let uuid = get_uuid();

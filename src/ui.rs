@@ -312,6 +312,10 @@ impl UI {
         install_path()
     }
 
+    fn install_options(&self) -> String {
+        install_options()
+    }
+
     fn get_socks(&self) -> Value {
         Value::from_iter(get_socks())
     }
@@ -683,6 +687,7 @@ impl sciter::EventHandler for UI {
         fn set_share_rdp(bool);
         fn is_installed_lower_version();
         fn install_path();
+        fn install_options();
         fn goto_install();
         fn is_process_trusted(bool);
         fn is_can_screen_recording(bool);
