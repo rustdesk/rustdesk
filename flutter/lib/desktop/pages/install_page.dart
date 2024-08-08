@@ -76,7 +76,6 @@ class _InstallPageBodyState extends State<_InstallPageBody>
   _InstallPageBodyState() {
     controller = TextEditingController(text: bind.installInstallPath());
     final installOptions = jsonDecode(bind.installInstallOptions());
-    debugPrint('RECEIVED INSTALL OPTIONS: $installOptions');
     startmenu.value = installOptions['STARTMENUSHORTCUTS'] != '0';
     desktopicon.value = installOptions['DESKTOPSHORTCUTS'] != '0';
   }
