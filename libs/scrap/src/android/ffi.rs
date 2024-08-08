@@ -153,7 +153,7 @@ pub extern "system" fn Java_ffi_FFI_setFrameRawEnable(
 
 #[no_mangle]
 pub extern "system" fn Java_ffi_FFI_init(env: JNIEnv, _class: JClass, ctx: JObject) {
-    log::debug!("MainService init from java");
+    log::debug!("Init FFI from java");
     if let Ok(jvm) = env.get_java_vm() {
         *JVM.write().unwrap() = Some(jvm);
         if let Ok(context) = env.new_global_ref(ctx) {

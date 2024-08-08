@@ -14,6 +14,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.ServiceConnection
 import android.os.Build
+import android.os.Bundle
 import android.os.IBinder
 import android.util.Log
 import android.view.WindowManager
@@ -58,6 +59,12 @@ class MainActivity : FlutterActivity() {
         )
         initFlutterChannel(flutterMethodChannel!!)
         thread { setCodecInfo() }
+    }
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        Log.d(logTag,"MainActivity onCreate, sdk int:${Build.VERSION.SDK_INT}")
+        FFIInitSingleton.INSTANCE.init(this)
     }
 
     override fun onResume() {
