@@ -187,6 +187,7 @@ fn get_supported_impl(impl_key: &str) -> String {
     if supported_impls.iter().any(|(k, _)| k == &impl_key) {
         return impl_key.to_owned();
     };
+    // TODO: Is it a good idea to use fallback here? Because user do not know the fallback.
     // fallback
     let mut cur_impl = get_option("privacy-mode-impl-key".to_owned());
     if !get_supported_privacy_mode_impl()
@@ -223,6 +224,8 @@ async fn turn_on_privacy_async(impl_key: String, conn_id: i32) -> Option<ResultT
         let res = turn_on_privacy_sync(&impl_key, conn_id);
         let _ = tx.send(res);
     });
+    // Wait at most 5 seconds for the result.
+    // Because it may take a long time to turn on the privacy mode with amyuni idd.
     match hbb_common::timeout(5000, rx).await {
         Ok(res) => match res {
             Ok(res) => res,
