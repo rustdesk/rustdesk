@@ -349,6 +349,10 @@ fn init_ndk_context() -> JniResult<()> {
                 jvm.get_java_vm_pointer() as _,
                 ctx.as_obj().as_raw() as _,
             );
+            #[cfg(feature = "hwcodec")]
+            hwcodec::android::ffmpeg_set_java_vm(
+                jvm.get_java_vm_pointer() as _,
+            );
         }
         *lock = true;
         return Ok(());
