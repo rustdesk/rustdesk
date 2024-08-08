@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common.dart';
@@ -73,6 +75,10 @@ class _InstallPageBodyState extends State<_InstallPageBody>
 
   _InstallPageBodyState() {
     controller = TextEditingController(text: bind.installInstallPath());
+    jsonDecode(bind.installInstallOptions()).forEach((k, v) {
+      if (k == 'STARTMENUSHORTCUTS') startmenu.value = v == '1';
+      if (k == 'DESKTOPSHORTCUTS') desktopicon.value = v == '1';
+    });
   }
 
   @override
@@ -249,6 +255,7 @@ class _InstallPageBodyState extends State<_InstallPageBody>
       if (desktopicon.value) args += ' desktopicon';
       bind.installInstallMe(options: args, path: controller.text);
     }
+
     do_install();
   }
 

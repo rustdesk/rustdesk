@@ -1,21 +1,20 @@
 use super::{CursorData, ResultType};
-use crate::common::PORTABLE_APPNAME_RUNTIME_ENV_KEY;
 use crate::{
+    common::PORTABLE_APPNAME_RUNTIME_ENV_KEY,
     custom_server::*,
     ipc,
     privacy_mode::win_topmost_window::{self, WIN_TOPMOST_INJECTED_PROCESS_EXE},
 };
-use hbb_common::libc::{c_int, wchar_t};
 use hbb_common::{
     allow_err,
     anyhow::anyhow,
     bail,
     config::{self, Config},
+    libc::{c_int, wchar_t},
     log,
     message_proto::{DisplayInfo, Resolution, WindowsSession},
     sleep, timeout, tokio,
 };
-use std::process::{Command, Stdio};
 use std::{
     collections::HashMap,
     ffi::{CString, OsString},
@@ -24,15 +23,16 @@ use std::{
     mem,
     os::windows::process::CommandExt,
     path::*,
+    process::{Command, Stdio},
     ptr::null_mut,
     sync::{atomic::Ordering, Arc, Mutex},
     time::{Duration, Instant},
 };
 use wallpaper;
-use winapi::um::sysinfoapi::{GetNativeSystemInfo, SYSTEM_INFO};
 use winapi::{
     ctypes::c_void,
     shared::{minwindef::*, ntdef::NULL, windef::*, winerror::*},
+    um::sysinfoapi::{GetNativeSystemInfo, SYSTEM_INFO},
     um::{
         errhandlingapi::GetLastError,
         handleapi::CloseHandle,
@@ -63,12 +63,14 @@ use windows_service::{
     },
     service_control_handler::{self, ServiceControlHandlerResult},
 };
-use winreg::enums::*;
-use winreg::RegKey;
+use winreg::{enums::*, RegKey};
 
 pub const FLUTTER_RUNNER_WIN32_WINDOW_CLASS: &'static str = "FLUTTER_RUNNER_WIN32_WINDOW"; // main window, install window
 pub const EXPLORER_EXE: &'static str = "explorer.exe";
 pub const SET_FOREGROUND_WINDOW: &'static str = "SET_FOREGROUND_WINDOW";
+
+const REG_NAME_INSTALL_DESKTOPSHORTCUTS: &str = "DESKTOPSHORTCUTS";
+const REG_NAME_INSTALL_STARTMENUSHORTCUTS: &str = "STARTMENUSHORTCUTS";
 
 pub fn get_focused_display(displays: Vec<DisplayInfo>) -> Option<usize> {
     unsafe {
@@ -992,6 +994,32 @@ fn get_valid_subkey() -> String {
     return get_subkey(&app_name, false);
 }
 
+// Return install options other than InstallLocation.
+pub fn get_install_options() -> String {
+    let app_name = crate::get_app_name();
+    let subkey = format!(".{}", app_name.to_lowercase());
+    let mut opts = HashMap::new();
+
+    let desktop_shortcuts = get_reg_of_hkcr(&subkey, REG_NAME_INSTALL_DESKTOPSHORTCUTS);
+    if let Some(desktop_shortcuts) = desktop_shortcuts {
+        opts.insert(REG_NAME_INSTALL_DESKTOPSHORTCUTS, desktop_shortcuts);
+    }
+    let start_menu_shortcuts = get_reg_of_hkcr(&subkey, REG_NAME_INSTALL_STARTMENUSHORTCUTS);
+    if let Some(start_menu_shortcuts) = start_menu_shortcuts {
+        opts.insert(REG_NAME_INSTALL_STARTMENUSHORTCUTS, start_menu_shortcuts);
+    }
+    serde_json::to_string(&opts).unwrap_or("{}".to_owned())
+}
+
+// This function return Option<String>, because some registry value may be empty.
+fn get_reg_of_hkcr(subkey: &str, name: &str) -> Option<String> {
+    let hkcr = RegKey::predef(HKEY_CLASSES_ROOT);
+    if let Ok(tmp) = hkcr.open_subkey(subkey.replace("HKEY_CLASSES_ROOT\\", "")) {
+        return tmp.get_value(name).ok();
+    }
+    None
+}
+
 pub fn get_install_info() -> (String, String, String, String) {
     get_install_info_with_subkey(get_valid_subkey())
 }
@@ -1101,7 +1129,11 @@ pub fn copy_exe_cmd(src_exe: &str, exe: &str, path: &str) -> ResultType<String> 
     ))
 }
 
-fn get_after_install(exe: &str) -> String {
+fn get_after_install(
+    exe: &str,
+    reg_value_start_menu_shortcuts: Option<String>,
+    reg_value_desktop_shortcuts: Option<String>,
+) -> String {
     let app_name = crate::get_app_name();
     let ext = app_name.to_lowercase();
 
@@ -1112,9 +1144,24 @@ fn get_after_install(exe: &str) -> String {
     hcu.delete_subkey_all(format!("Software\\Classes\\{}", exe))
         .ok();
 
+    let desktop_shortcuts = reg_value_desktop_shortcuts
+        .map(|v| {
+            format!("reg add HKEY_CLASSES_ROOT\\.{ext} /f /v {REG_NAME_INSTALL_DESKTOPSHORTCUTS} /t REG_SZ /d \"{v}\"")
+        })
+        .unwrap_or_default();
+    let start_menu_shortcuts = reg_value_start_menu_shortcuts
+        .map(|v| {
+            format!(
+                "reg add HKEY_CLASSES_ROOT\\.{ext} /f /v {REG_NAME_INSTALL_STARTMENUSHORTCUTS} /t REG_SZ /d \"{v}\""
+            )
+        })
+        .unwrap_or_default();
+
     format!("
     chcp 65001
     reg add HKEY_CLASSES_ROOT\\.{ext} /f
+    {desktop_shortcuts}
+    {start_menu_shortcuts}
     reg add HKEY_CLASSES_ROOT\\.{ext}\\DefaultIcon /f
     reg add HKEY_CLASSES_ROOT\\.{ext}\\DefaultIcon /f /ve /t REG_SZ  /d \"\\\"{exe}\\\",0\"
     reg add HKEY_CLASSES_ROOT\\.{ext}\\shell /f
@@ -1197,6 +1244,8 @@ oLink.Save
     .unwrap_or("")
     .to_owned();
     let tray_shortcut = get_tray_shortcut(&exe, &tmp_path)?;
+    let mut reg_value_desktop_shortcuts = "0".to_owned();
+    let mut reg_value_start_menu_shortcuts = "0".to_owned();
     let mut shortcuts = Default::default();
     if options.contains("desktopicon") {
         shortcuts = format!(
@@ -1204,6 +1253,7 @@ oLink.Save
             tmp_path,
             crate::get_app_name()
         );
+        reg_value_desktop_shortcuts = "1".to_owned();
     }
     if options.contains("startmenu") {
         shortcuts = format!(
@@ -1213,6 +1263,7 @@ copy /Y \"{tmp_path}\\{app_name}.lnk\" \"{start_menu}\\\"
 copy /Y \"{tmp_path}\\Uninstall {app_name}.lnk\" \"{start_menu}\\\"
      "
         );
+        reg_value_start_menu_shortcuts = "1".to_owned();
     }
 
     let meta = std::fs::symlink_metadata(std::env::current_exe()?)?;
@@ -1281,7 +1332,11 @@ copy /Y \"{tmp_path}\\Uninstall {app_name}.lnk\" \"{path}\\\"
     ",
         version = crate::VERSION.replace("-", "."),
         build_date = crate::BUILD_DATE,
-        after_install = get_after_install(&exe),
+        after_install = get_after_install(
+            &exe,
+            Some(reg_value_start_menu_shortcuts),
+            Some(reg_value_desktop_shortcuts)
+        ),
         sleep = if debug { "timeout 300" } else { "" },
         dels = if debug { "" } else { &dels },
         copy_exe = copy_exe_cmd(&src_exe, &exe, &path)?,
@@ -1294,7 +1349,7 @@ copy /Y \"{tmp_path}\\Uninstall {app_name}.lnk\" \"{path}\\\"
 
 pub fn run_after_install() -> ResultType<()> {
     let (_, _, _, exe) = get_install_info();
-    run_cmds(get_after_install(&exe), true, "after_install")
+    run_cmds(get_after_install(&exe, None, None), true, "after_install")
 }
 
 pub fn run_before_uninstall() -> ResultType<()> {
