@@ -1421,6 +1421,10 @@ pub fn verify2fa(code: String) -> bool {
     res
 }
 
+pub fn verify_existing_2fa(code: String) -> bool {
+    crate::auth_2fa::verify_existing_2fa(code)
+}
+
 pub fn has_valid_bot() -> bool {
     crate::auth_2fa::TelegramBot::get().map_or(false, |bot| bot.is_some())
 }
@@ -1433,6 +1437,10 @@ pub fn verify_bot(token: String) -> String {
         }
         _ => "".to_owned(),
     }
+}
+
+pub fn send_trust_this_device_to_bot() {
+    crate::auth_2fa::send_trust_this_device_to_bot();
 }
 
 pub fn check_hwcodec() {
@@ -1470,4 +1478,16 @@ pub fn set_unlock_pin(pin: String) -> String {
         Ok(_) => String::default(),
         Err(err) => err.to_string(),
     }
+}
+
+pub fn get_trusted_devices() -> String {
+    ipc::get_trusted_devices()
+}
+
+pub fn remove_trusted_device(hwid: Bytes) {
+    ipc::remove_trusted_device(hwid);
+}
+
+pub fn clear_trusted_devices() {
+    ipc::clear_trusted_devices();
 }

@@ -703,6 +703,9 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
     tmpWrapper() {
       RxBool has2fa = bind.mainHasValid2FaSync().obs;
       RxBool hasBot = bind.mainHasValidBotSync().obs;
+      RxBool hasTrust = option2bool(kOptionAllowTrustThisDevice,
+              bind.mainGetOptionSync(key: kOptionAllowTrustThisDevice))
+          .obs;
       update() async {
         has2fa.value = bind.mainHasValid2FaSync();
         setState(() {});
@@ -783,8 +786,66 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
           onChangedBot(!hasBot.value);
         },
       ).marginOnly(left: _kCheckBoxLeftMargin + 30);
+
+      updateTrust() async {
+        hasTrust.value = option2bool(kOptionAllowTrustThisDevice,
+            bind.mainGetOptionSync(key: kOptionAllowTrustThisDevice));
+        setState(() {});
+      }
+
+      onChangeTrust(bool? checked) async {
+        if (checked == false) {
+          CommonConfirmDialog(gFFI.dialogManager,
+              translate('cancel-trust-this-device-confirm-tip'), () {
+            bind.mainSetOption(key: kOptionAllowTrustThisDevice, value: '');
+            updateTrust();
+          });
+        } else {
+          checkTrustThisDeviceCode(gFFI.dialogManager, hasBot.value,
+              callback: () {
+            bind.mainSetOption(key: kOptionAllowTrustThisDevice, value: 'Y');
+            updateTrust();
+          });
+        }
+      }
+
+      final trust = Row(
+        children: [
+          Flexible(
+              child: GestureDetector(
+            child: Tooltip(
+              waitDuration: Duration(milliseconds: 300),
+              message: translate("trust-this-device-tip"),
+              child: InkWell(
+                  child: Obx(() => Row(
+                        children: [
+                          Checkbox(
+                                  value: hasTrust.value,
+                                  onChanged: enabled ? onChangeTrust : null)
+                              .marginOnly(right: 5),
+                          Expanded(
+                              child: Text(
+                            translate('Trust this device'),
+                            style: TextStyle(
+                                color: disabledTextColor(context, enabled)),
+                          ))
+                        ],
+                      ))),
+            ),
+            onTap: () {
+              onChangeTrust(!hasTrust.value);
+            },
+          ).marginOnly(left: _kCheckBoxLeftMargin + 30)),
+          ElevatedButton(
+              onPressed: () {
+                manageTrustedDeviceDialog();
+              },
+              child: Text(translate('Manage trusted devices')))
+        ],
+      );
+
       return Column(
-        children: [tfa, bot],
+        children: [tfa, bot, trust],
       );
     }
 

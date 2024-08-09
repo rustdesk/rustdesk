@@ -25,7 +25,9 @@ use hbb_common::{
     config::{self, Config, Config2},
     futures::StreamExt as _,
     futures_util::sink::SinkExt,
-    log, password_security as password, timeout,
+    log, password_security as password,
+    sodiumoxide::base64,
+    timeout,
     tokio::{
         self,
         io::{AsyncRead, AsyncWrite},
@@ -486,6 +488,8 @@ async fn handle(data: Data, stream: &mut Connection) {
                     value = crate::audio_service::get_voice_call_input_device();
                 } else if name == "unlock-pin" {
                     value = Some(Config::get_unlock_pin());
+                } else if name == "trusted-devices" {
+                    value = Some(Config::get_trusted_devices_field());
                 } else {
                     value = None;
                 }
@@ -505,6 +509,12 @@ async fn handle(data: Data, stream: &mut Connection) {
                     crate::audio_service::set_voice_call_input_device(Some(value), true);
                 } else if name == "unlock-pin" {
                     Config::set_unlock_pin(&value);
+                } else if name == "remove-trusted-device" {
+                    if let Ok(hwid) = base64::decode(value, base64::Variant::Original) {
+                        Config::remove_trusted_device(&Bytes::from(hwid));
+                    }
+                } else if name == "clear-trusted-devices" {
+                    Config::clear_trusted_devices();
                 } else {
                     return;
                 }
@@ -923,6 +933,34 @@ pub fn get_unlock_pin() -> String {
         v
     } else {
         Config::get_unlock_pin()
+    }
+}
+
+pub fn get_trusted_devices() -> String {
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    return Config::get_trusted_devices_field();
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    if let Ok(Some(v)) = get_config("trusted-devices") {
+        v
+    } else {
+        Config::get_trusted_devices_field()
+    }
+}
+
+pub fn remove_trusted_device(hwid: Bytes) {
+    Config::remove_trusted_device(&hwid);
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    {
+        let v = base64::encode(&hwid, base64::Variant::Original);
+        allow_err!(set_config("remove-trusted-device", v));
+    }
+}
+
+pub fn clear_trusted_devices() {
+    Config::clear_trusted_devices();
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    {
+        allow_err!(set_config("clear-trusted-devices", "".to_owned()));
     }
 }
 

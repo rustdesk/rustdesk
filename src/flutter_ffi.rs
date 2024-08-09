@@ -208,9 +208,9 @@ pub fn session_login(
     }
 }
 
-pub fn session_send2fa(session_id: SessionID, code: String) {
+pub fn session_send2fa(session_id: SessionID, code: String, trust: bool) {
     if let Some(session) = sessions::get_session_by_session_id(&session_id) {
-        session.send2fa(code);
+        session.send2fa(code, trust);
     }
 }
 
@@ -2215,6 +2215,10 @@ pub fn main_verify2fa(code: String) -> bool {
     verify2fa(code)
 }
 
+pub fn main_verify_existing_2fa(code: String) -> bool {
+    verify_existing_2fa(code)
+}
+
 pub fn main_has_valid_2fa_sync() -> SyncReturn<bool> {
     SyncReturn(has_valid_2fa())
 }
@@ -2227,6 +2231,10 @@ pub fn main_has_valid_bot_sync() -> SyncReturn<bool> {
     SyncReturn(has_valid_bot())
 }
 
+pub fn main_send_trust_this_device_to_bot() {
+    send_trust_this_device_to_bot()
+}
+
 pub fn main_get_hard_option(key: String) -> SyncReturn<String> {
     SyncReturn(get_hard_option(key))
 }
@@ -2237,6 +2245,18 @@ pub fn main_get_buildin_option(key: String) -> SyncReturn<String> {
 
 pub fn main_check_hwcodec() {
     check_hwcodec()
+}
+
+pub fn main_get_trusted_devices() -> String {
+    get_trusted_devices()
+}
+
+pub fn main_remove_trusted_device(hwid: Vec<u8>) {
+    remove_trusted_device(bytes::Bytes::from(hwid))
+}
+
+pub fn main_clear_trusted_devices() {
+    clear_trusted_devices()
 }
 
 pub fn session_request_new_display_init_msgs(session_id: SessionID, display: usize) {

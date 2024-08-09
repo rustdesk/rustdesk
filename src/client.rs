@@ -30,7 +30,6 @@ pub use file_trait::FileManager;
 #[cfg(not(feature = "flutter"))]
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use hbb_common::tokio::sync::mpsc::UnboundedSender;
-use hbb_common::tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver};
 use hbb_common::{
     allow_err,
     anyhow::{anyhow, Context},
@@ -53,6 +52,10 @@ use hbb_common::{
         time::{interval, Duration, Instant},
     },
     AddrMangle, ResultType, Stream,
+};
+use hbb_common::{
+    config::option2bool,
+    tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver},
 };
 pub use helper::*;
 use scrap::{
@@ -2156,6 +2159,14 @@ impl LoginConfigHandler {
         let my_platform = whoami::platform().to_string();
         #[cfg(target_os = "android")]
         let my_platform = "Android".into();
+        let hwid = if option2bool(
+            "allow-trust-this-device",
+            &Config::get_option("allow-trust-this-device"),
+        ) {
+            crate::get_hwid()
+        } else {
+            Bytes::new()
+        };
         let mut lr = LoginRequest {
             username: pure_id,
             password: password.into(),
@@ -2171,6 +2182,7 @@ impl LoginConfigHandler {
                 ..Default::default()
             })
             .into(),
+            hwid,
             ..Default::default()
         };
         match self.conn_type {

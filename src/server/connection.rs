@@ -27,7 +27,7 @@ use hbb_common::platform::linux::run_cmds;
 #[cfg(target_os = "android")]
 use hbb_common::protobuf::EnumOrUnknown;
 use hbb_common::{
-    config::{self, Config},
+    config::{self, Config, TrustedDevice},
     fs::{self, can_enable_overwrite_detection},
     futures::{SinkExt, StreamExt},
     get_time, get_version_number,
@@ -1628,6 +1628,20 @@ impl Connection {
         if let Some(o) = lr.option.as_ref() {
             self.options_in_login = Some(o.clone());
         }
+        if self.require_2fa.is_some() && !lr.hwid.is_empty() {
+            let devices = Config::get_trusted_devices();
+            let encrypted_hwid = TrustedDevice::encrypt_hwid(&lr.hwid);
+            if let Some(device) = devices.iter().find(|d| d.hwid == encrypted_hwid) {
+                if !device.outdate()
+                    && device.id == lr.my_id
+                    && device.name == lr.my_name
+                    && device.platform == lr.my_platform
+                {
+                    log::info!("2FA bypassed by trusted device");
+                    self.require_2fa = None;
+                }
+            }
+        }
         self.video_ack_required = lr.video_ack_required;
     }
 
@@ -1840,6 +1854,15 @@ impl Connection {
                                     tfa: true,
                                 },
                             );
+                        }
+                        if !tfa.hwid.is_empty() {
+                            Config::add_trusted_device(TrustedDevice {
+                                hwid: TrustedDevice::encrypt_hwid(&tfa.hwid),
+                                time: hbb_common::get_time(),
+                                id: self.lr.my_id.clone(),
+                                name: self.lr.my_name.clone(),
+                                platform: self.lr.my_platform.clone(),
+                            });
                         }
                     } else {
                         self.update_failure(failure, false, 1);
