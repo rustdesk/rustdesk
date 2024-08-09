@@ -2,7 +2,7 @@ use hbb_common::{
     anyhow::anyhow,
     bail,
     config::Config,
-    get_time,
+    get_time, log,
     password_security::{decrypt_vec_or_original, encrypt_vec_or_original},
     tokio, ResultType,
 };
@@ -105,6 +105,45 @@ pub fn verify2fa(code: String) -> bool {
     false
 }
 
+pub fn verify_existing_2fa(code: String) -> bool {
+    if let Some(totp) = crate::auth_2fa::get_2fa(None) {
+        if let Ok(res) = totp.check_current(&code) {
+            return res;
+        }
+    }
+    false
+}
+
+#[tokio::main(flavor = "current_thread")]
+async fn send_trust_this_device_to_bot_async() {
+    if let Some(totp) = crate::auth_2fa::get_2fa(None) {
+        let bot = crate::auth_2fa::TelegramBot::get();
+        let bot = match bot {
+            Ok(Some(bot)) => bot,
+            Err(err) => {
+                log::error!("Failed to get telegram bot: {}", err);
+                return;
+            }
+            _ => return,
+        };
+        let code = totp.generate_current();
+        if let Ok(code) = code {
+            let text = format!(
+                "2FA code: {}\n\nDevice with ID {} is requesting to be trusted.",
+                code,
+                Config::get_id(),
+            );
+            if let Err(err) = crate::auth_2fa::send_2fa_code_to_telegram(&text, bot).await {
+                log::error!("Failed to send 2fa code to telegram bot: {}", err);
+            }
+        }
+    }
+}
+
+pub fn send_trust_this_device_to_bot() {
+    std::thread::spawn(|| send_trust_this_device_to_bot_async());
+}
+
 pub fn get_2fa(raw: Option<String>) -> Option<TOTP> {
     TOTPInfo::from_str(&raw.unwrap_or(Config::get_option("2fa")))
         .map(|x| Some(x))
@@ -165,9 +204,7 @@ pub async fn send_2fa_code_to_telegram(text: &str, bot: TelegramBot) -> ResultTy
 pub fn get_chatid_telegram(bot_token: &str) -> ResultType<Option<String>> {
     let url = format!("https://api.telegram.org/bot{}/getUpdates", bot_token);
     // because caller is in tokio runtime, so we must call post_request_sync in new thread.
-    let handle = std::thread::spawn(move || {
-        crate::post_request_sync(url, "".to_owned(), "")
-    });
+    let handle = std::thread::spawn(move || crate::post_request_sync(url, "".to_owned(), ""));
     let resp = handle.join().map_err(|_| anyhow!("Thread panicked"))??;
     let value = serde_json::from_str::<serde_json::Value>(&resp).map_err(|e| anyhow!(e))?;
 

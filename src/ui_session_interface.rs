@@ -1156,10 +1156,16 @@ impl<T: InvokeUiSession> Session<T> {
         self.send(Data::Login((os_username, os_password, password, remember)));
     }
 
-    pub fn send2fa(&self, code: String) {
+    pub fn send2fa(&self, code: String, trust: bool) {
         let mut msg_out = Message::new();
+        let hwid = if trust {
+            crate::get_hwid()
+        } else {
+            Bytes::new()
+        };
         msg_out.set_auth_2fa(Auth2FA {
             code,
+            hwid,
             ..Default::default()
         });
         self.send(Data::Message(msg_out));
