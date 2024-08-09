@@ -1329,6 +1329,7 @@ pub struct LoginConfigHandler {
     pub peer_info: Option<PeerInfo>,
     password_source: PasswordSource, // where the sent password comes from
     shared_password: Option<String>, // Store the shared password
+    pub enable_trusted_devices: bool,
 }
 
 impl Deref for LoginConfigHandler {
@@ -2156,6 +2157,11 @@ impl LoginConfigHandler {
         let my_platform = whoami::platform().to_string();
         #[cfg(target_os = "android")]
         let my_platform = "Android".into();
+        let hwid = if self.get_option("trust-this-device") == "Y" {
+            crate::get_hwid()
+        } else {
+            Bytes::new()
+        };
         let mut lr = LoginRequest {
             username: pure_id,
             password: password.into(),
@@ -2171,6 +2177,7 @@ impl LoginConfigHandler {
                 ..Default::default()
             })
             .into(),
+            hwid,
             ..Default::default()
         };
         match self.conn_type {
@@ -2827,6 +2834,12 @@ pub fn handle_login_error(
         interface.msgbox("re-input-password", err, "Do you want to enter again?", "");
         true
     } else if err == LOGIN_MSG_2FA_WRONG || err == REQUIRE_2FA {
+        let enabled = lc.read().unwrap().get_option("trust-this-device") == "Y";
+        if enabled {
+            lc.write()
+                .unwrap()
+                .set_option("trust-this-device".to_string(), "".to_string());
+        }
         interface.msgbox("input-2fa", err, "", "");
         true
     } else if LOGIN_ERROR_MAP.contains_key(err) {

@@ -1494,6 +1494,15 @@ pub fn is_empty_uni_link(arg: &str) -> bool {
     arg[prefix.len()..].chars().all(|c| c == '/')
 }
 
+pub fn get_hwid() -> Bytes {
+    use sha2::{Digest, Sha256};
+
+    let uuid = hbb_common::get_uuid();
+    let mut hasher = Sha256::new();
+    hasher.update(&uuid);
+    Bytes::from(hasher.finalize().to_vec())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
