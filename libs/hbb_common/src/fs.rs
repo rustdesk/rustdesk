@@ -898,3 +898,9 @@ pub fn serialize_transfer_job(job: &TransferJob, done: bool, cancel: bool, error
     value["error"] = json!(error);
     serde_json::to_string(&value).unwrap_or_default()
 }
+
+#[cfg(target_os = "linux")]
+#[inline]
+pub fn get_binary_path() -> std::io::Result<PathBuf> {
+    std::fs::read_link("/proc/self/exe")
+}

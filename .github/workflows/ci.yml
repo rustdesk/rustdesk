@@ -162,7 +162,8 @@ jobs:
         use-cross: ${{ matrix.job.use-cross }}
         command: build
         args: --locked --target=${{ matrix.job.target }}
-
+      env:
+        PKG_CONFIG_PATH: "${{ env.PKG_CONFIG_PATH }}:${{ env.VCPKG_ROOT }}/installed/x64-linux/lib/pkgconfig"
     - name: clean
       shell: bash
       run: |

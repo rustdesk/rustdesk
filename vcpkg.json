@@ -9,6 +9,18 @@
       "host": false
     },
     {
+      "name": "gtk",
+      "host": true,
+      "platform": "linux",
+      "version>=": "4.14.0"
+    },
+    {
+      "name": "gtk",
+      "host": false,
+      "platform": "linux",
+      "version>=": "4.14.0"
+    },
+    {
       "name": "cpu-features",
       "platform": "android"
     },
