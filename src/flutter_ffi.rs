@@ -1568,6 +1568,7 @@ pub fn session_on_waiting_for_image_dialog_show(session_id: SessionID) {
 pub fn session_toggle_virtual_display(session_id: SessionID, index: i32, on: bool) {
     if let Some(session) = sessions::get_session_by_session_id(&session_id) {
         session.toggle_virtual_display(index, on);
+        flutter::session_update_virtual_display(&session, index, on);
     }
 }
 
