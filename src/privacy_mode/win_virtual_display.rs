@@ -1,5 +1,5 @@
 use super::{PrivacyMode, PrivacyModeState, INVALID_PRIVACY_MODE_CONN_ID, NO_PHYSICAL_DISPLAYS};
-use crate::virtual_display_manager;
+use crate::{platform::windows::reg_display_settings, virtual_display_manager};
 use hbb_common::{allow_err, bail, config::Config, log, ResultType};
 use std::{
     io::Error,
@@ -150,7 +150,8 @@ impl PrivacyModeImpl {
     }
 
     fn restore_plug_out_monitor(&mut self) {
-        let _ = virtual_display_manager::plug_out_monitor_indices(&self.virtual_displays_added);
+        let _ =
+            virtual_display_manager::plug_out_monitor_indices(&self.virtual_displays_added, true);
         self.virtual_displays_added.clear();
     }
 
@@ -296,7 +297,7 @@ impl PrivacyModeImpl {
 
             // No physical displays, no need to use the privacy mode.
             if self.displays.is_empty() {
-                virtual_display_manager::plug_out_monitor_indices(&displays)?;
+                virtual_display_manager::plug_out_monitor_indices(&displays, false)?;
                 bail!(NO_PHYSICAL_DISPLAYS);
             }
 
@@ -414,8 +415,14 @@ impl PrivacyMode for PrivacyModeImpl {
     ) -> ResultType<()> {
         self.check_off_conn_id(conn_id)?;
         super::win_input::unhook()?;
-        self.restore_plug_out_monitor();
+        let virtual_display_added = self.virtual_displays_added.len() > 0;
+        if virtual_display_added {
+            self.restore_plug_out_monitor();
+        }
         restore_reg_connectivity(false);
+        if !virtual_display_added {
+            Self::commit_change_display(CDS_RESET)?;
+        }
 
         if self.conn_id != INVALID_PRIVACY_MODE_CONN_ID {
             if let Some(state) = state {
@@ -462,7 +469,7 @@ pub fn restore_reg_connectivity(plug_out_monitors: bool) {
         return;
     }
     if plug_out_monitors {
-        let _ = virtual_display_manager::plug_out_monitor(-1);
+        let _ = virtual_display_manager::plug_out_monitor(-1, true);
     }
     if let Ok(reg_recovery) =
         serde_json::from_str::<reg_display_settings::RegRecovery>(&config_recovery_value)
@@ -472,108 +479,4 @@ pub fn restore_reg_connectivity(plug_out_monitors: bool) {
         }
     }
     reset_config_reg_connectivity();
-}
-
-mod reg_display_settings {
-    use hbb_common::ResultType;
-    use serde_derive::{Deserialize, Serialize};
-    use std::collections::HashMap;
-    use winreg::{enums::*, RegValue};
-    const REG_GRAPHICS_DRIVERS_PATH: &str = "SYSTEM\\CurrentControlSet\\Control\\GraphicsDrivers";
-    const REG_CONNECTIVITY_PATH: &str = "Connectivity";
-
-    #[derive(Serialize, Deserialize, Debug)]
-    pub(super) struct RegRecovery {
-        path: String,
-        key: String,
-        old: (Vec<u8>, isize),
-        new: (Vec<u8>, isize),
-    }
-
-    pub(super) fn read_reg_connectivity() -> ResultType<HashMap<String, HashMap<String, RegValue>>>
-    {
-        let hklm = winreg::RegKey::predef(HKEY_LOCAL_MACHINE);
-        let reg_connectivity = hklm.open_subkey_with_flags(
-            format!("{}\\{}", REG_GRAPHICS_DRIVERS_PATH, REG_CONNECTIVITY_PATH),
-            KEY_READ,
-        )?;
-
-        let mut map_connectivity = HashMap::new();
-        for key in reg_connectivity.enum_keys() {
-            let key = key?;
-            let mut map_item = HashMap::new();
-            let reg_item = reg_connectivity.open_subkey_with_flags(&key, KEY_READ)?;
-            for value in reg_item.enum_values() {
-                let (name, value) = value?;
-                map_item.insert(name, value);
-            }
-            map_connectivity.insert(key, map_item);
-        }
-        Ok(map_connectivity)
-    }
-
-    pub(super) fn diff_recent_connectivity(
-        map1: HashMap<String, HashMap<String, RegValue>>,
-        map2: HashMap<String, HashMap<String, RegValue>>,
-    ) -> Option<RegRecovery> {
-        for (subkey, map_item2) in map2 {
-            if let Some(map_item1) = map1.get(&subkey) {
-                let key = "Recent";
-                if let Some(value1) = map_item1.get(key) {
-                    if let Some(value2) = map_item2.get(key) {
-                        if value1 != value2 {
-                            return Some(RegRecovery {
-                                path: format!(
-                                    "{}\\{}\\{}",
-                                    REG_GRAPHICS_DRIVERS_PATH, REG_CONNECTIVITY_PATH, subkey
-                                ),
-                                key: key.to_owned(),
-                                old: (value1.bytes.clone(), value1.vtype.clone() as isize),
-                                new: (value2.bytes.clone(), value2.vtype.clone() as isize),
-                            });
-                        }
-                    }
-                }
-            }
-        }
-        None
-    }
-
-    pub(super) fn restore_reg_connectivity(reg_recovery: RegRecovery) -> ResultType<()> {
-        let hklm = winreg::RegKey::predef(HKEY_LOCAL_MACHINE);
-        let reg_item = hklm.open_subkey_with_flags(&reg_recovery.path, KEY_READ | KEY_WRITE)?;
-        let cur_reg_value = reg_item.get_raw_value(&reg_recovery.key)?;
-        let new_reg_value = RegValue {
-            bytes: reg_recovery.new.0,
-            vtype: isize_to_reg_type(reg_recovery.new.1),
-        };
-        if cur_reg_value != new_reg_value {
-            return Ok(());
-        }
-        let reg_value = RegValue {
-            bytes: reg_recovery.old.0,
-            vtype: isize_to_reg_type(reg_recovery.old.1),
-        };
-        reg_item.set_raw_value(&reg_recovery.key, &reg_value)?;
-        Ok(())
-    }
-
-    #[inline]
-    fn isize_to_reg_type(i: isize) -> RegType {
-        match i {
-            0 => RegType::REG_NONE,
-            1 => RegType::REG_SZ,
-            2 => RegType::REG_EXPAND_SZ,
-            3 => RegType::REG_BINARY,
-            4 => RegType::REG_DWORD,
-            5 => RegType::REG_DWORD_BIG_ENDIAN,
-            6 => RegType::REG_LINK,
-            7 => RegType::REG_MULTI_SZ,
-            8 => RegType::REG_RESOURCE_LIST,
-            9 => RegType::REG_FULL_RESOURCE_DESCRIPTOR,
-            10 => RegType::REG_RESOURCE_REQUIREMENTS_LIST,
-            11 => RegType::REG_QWORD,
-            _ => RegType::REG_NONE,
-        }
-    }
 }
