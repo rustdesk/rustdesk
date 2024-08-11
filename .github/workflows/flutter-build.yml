@@ -286,6 +286,7 @@ jobs:
         env:
           VCPKG_DEFAULT_HOST_TRIPLET: ${{ matrix.job.vcpkg-triplet }}
         run: |
+          export RUSTFLAGS="-C link-arg=/NODEFAULTLIB:MSVCRT -C link-arg=/NODEFAULTLIB:LIBCMT"
           if ! $VCPKG_ROOT/vcpkg \
             install \
             --triplet ${{ matrix.job.vcpkg-triplet }} \
@@ -305,6 +306,7 @@ jobs:
         id: build
         shell: bash
         run: |
+          export RUSTFLAGS="-C link-arg=/NODEFAULTLIB:MSVCRT -C link-arg=/NODEFAULTLIB:LIBCMT"
           python3 res/inline-sciter.py
           # Patch sciter x86
           sed -i 's/branch = "dyn"/branch = "dyn_x86"/g' ./Cargo.toml
