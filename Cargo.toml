@@ -161,6 +161,9 @@ x11-clipboard = {git="https://github.com/clslaid/x11-clipboard", branch = "feat/
 x11rb =  {version = "0.12", features = ["all-extensions"], optional = true}
 percent-encoding = {version = "2.3", optional = true}
 once_cell = {version = "1.18", optional = true}
+wayland-protocols = {version = "0.32.3", features = ["staging", "client"]}
+wayland-client = {version = "0.31.5"}
+
 
 [target.'cfg(target_os = "android")'.dependencies]
 android_logger = "0.13"

@@ -1,4 +1,6 @@
 use crate::uinput::service::map_key;
+#[cfg(target_os = "linux")]
+use crate::get_scale::get_scale;
 use dbus::{blocking::SyncConnection, Path};
 use enigo::{Key, KeyboardControllable, MouseButton, MouseControllable};
 use hbb_common::ResultType;
@@ -67,6 +69,16 @@ pub mod client {
         conn: Arc<SyncConnection>,
         session: Path<'static>,
         stream: PwStreamInfo,
+        scale: f64,
+    }
+
+    fn get_fractional_scale() -> f64 {
+        #[cfg(target_os = "linux")]
+        {
+            get_scale()
+        }
+        #[cfg(not(target_os = "linux"))]
+        1.0
     }
 
     impl RdpInputMouse {
@@ -79,6 +91,7 @@ pub mod client {
                 conn,
                 session,
                 stream,
+                scale: get_fractional_scale(),
             })
         }
     }
@@ -93,6 +106,8 @@ pub mod client {
         }
 
         fn mouse_move_to(&mut self, x: i32, y: i32) {
+            let x: i32 = (x as f64 / self.scale) as i32;
+            let y: i32 = (y as f64 / self.scale) as i32;
             let portal = get_portal(&self.conn);
             let _ = remote_desktop_portal::notify_pointer_motion_absolute(
                 &portal,
@@ -104,6 +119,8 @@ pub mod client {
             );
         }
         fn mouse_move_relative(&mut self, x: i32, y: i32) {
+            let x: i32 = (x as f64 / self.scale) as i32;
+            let y: i32 = (y as f64 / self.scale) as i32;
             let portal = get_portal(&self.conn);
             let _ = remote_desktop_portal::notify_pointer_motion(
                 &portal,
