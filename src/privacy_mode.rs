@@ -38,14 +38,9 @@ pub const TURN_OFF_OTHER_ID: &'static str =
     "Failed to turn off privacy mode that belongs to someone else.";
 pub const NO_PHYSICAL_DISPLAYS: &'static str = "no_need_privacy_mode_no_physical_displays_tip";
 
-#[cfg(windows)]
-pub const PRIVACY_MODE_IMPL_WIN_MAG: &str = win_mag::PRIVACY_MODE_IMPL;
-#[cfg(windows)]
-pub const PRIVACY_MODE_IMPL_WIN_EXCLUDE_FROM_CAPTURE: &str =
-    win_exclude_from_capture::PRIVACY_MODE_IMPL;
-
-#[cfg(windows)]
-pub const PRIVACY_MODE_IMPL_WIN_VIRTUAL_DISPLAY: &str = win_virtual_display::PRIVACY_MODE_IMPL;
+pub const PRIVACY_MODE_IMPL_WIN_MAG: &str = "privacy_mode_impl_mag";
+pub const PRIVACY_MODE_IMPL_WIN_EXCLUDE_FROM_CAPTURE: &str = "privacy_mode_impl_exclude_from_capture";
+pub const PRIVACY_MODE_IMPL_WIN_VIRTUAL_DISPLAY: &str = "privacy_mode_impl_virtual_display";
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(tag = "t", content = "c")]
