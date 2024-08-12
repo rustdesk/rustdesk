@@ -268,6 +268,25 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
       ),
       if (enable2fa)
         SettingsTile.switchTile(
+          title: Text(translate('Telegram bot')),
+          initialValue: bind.mainHasValidBotSync(),
+          onToggle: (v) async {
+            update() async {
+              setState(() {});
+            }
+
+            if (v == false) {
+              CommonConfirmDialog(
+                  gFFI.dialogManager, translate('cancel-bot-confirm-tip'), () {
+                changeBot(callback: update);
+              });
+            } else {
+              changeBot(callback: update);
+            }
+          },
+        ),
+      if (enable2fa)
+        SettingsTile.switchTile(
           title: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
