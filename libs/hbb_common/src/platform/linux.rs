@@ -7,7 +7,7 @@ lazy_static::lazy_static! {
 
 pub const DISPLAY_SERVER_WAYLAND: &str = "wayland";
 pub const DISPLAY_SERVER_X11: &str = "x11";
-pub const DISPLAY_DESKTOP_GNOME: &str = "GNOME";
+pub const DISPLAY_DESKTOP_KDE: &str = "KDE";
 
 pub const XDG_CURRENT_DESKTOP: &str = "XDG_CURRENT_DESKTOP";
 
@@ -49,9 +49,9 @@ pub fn is_x11_or_headless() -> bool {
 }
 
 #[inline]
-pub fn is_gnome() -> bool {
+pub fn is_kde() -> bool {
     if let Ok(env) = std::env::var(XDG_CURRENT_DESKTOP) {
-        env == DISPLAY_DESKTOP_GNOME
+        env == DISPLAY_DESKTOP_KDE
     } else {
         false
     }
