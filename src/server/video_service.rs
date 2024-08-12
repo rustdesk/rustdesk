@@ -540,7 +540,7 @@ fn run(vs: VideoService) -> ResultType<()> {
             VRamEncoder::set_fallback_gdi(display_idx, true);
             bail!("SWITCH");
         }
-        check_privacy_mode_changed(&sp, c.privacy_mode_id)?;
+        check_privacy_mode_changed(&sp, display_idx, &c)?;
         #[cfg(windows)]
         {
             if crate::platform::windows::desktop_changed()
@@ -659,7 +659,7 @@ fn run(vs: VideoService) -> ResultType<()> {
         let timeout_millis = 3_000u64;
         let wait_begin = Instant::now();
         while wait_begin.elapsed().as_millis() < timeout_millis as _ {
-            check_privacy_mode_changed(&sp, c.privacy_mode_id)?;
+            check_privacy_mode_changed(&sp, display_idx, &c)?;
             frame_controller.try_wait_next(&mut fetched_conn_ids, 300);
             // break if all connections have received current frame
             if fetched_conn_ids.len() >= frame_controller.send_conn_ids.len() {
@@ -876,9 +876,13 @@ fn check_change_scale(hardware: bool) -> ResultType<()> {
     Ok(())
 }
 
-fn check_privacy_mode_changed(sp: &GenericService, privacy_mode_id: i32) -> ResultType<()> {
+fn check_privacy_mode_changed(
+    sp: &GenericService,
+    display_idx: usize,
+    ci: &CapturerInfo,
+) -> ResultType<()> {
     let privacy_mode_id_2 = get_privacy_mode_conn_id().unwrap_or(INVALID_PRIVACY_MODE_CONN_ID);
-    if privacy_mode_id != privacy_mode_id_2 {
+    if ci.privacy_mode_id != privacy_mode_id_2 {
         if privacy_mode_id_2 != INVALID_PRIVACY_MODE_CONN_ID {
             let msg_out = crate::common::make_privacy_mode_msg(
                 back_notification::PrivacyModeState::PrvOnByOther,
@@ -887,6 +891,7 @@ fn check_privacy_mode_changed(sp: &GenericService, privacy_mode_id: i32) -> Resu
             sp.send_to_others(msg_out, privacy_mode_id_2);
         }
         log::info!("switch due to privacy mode changed");
+        try_broadcast_display_changed(&sp, display_idx, ci, true).ok();
         bail!("SWITCH");
     }
     Ok(())
