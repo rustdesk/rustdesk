@@ -4,6 +4,7 @@ use crate::get_scale::get_scale;
 use dbus::{blocking::SyncConnection, Path};
 use enigo::{Key, KeyboardControllable, MouseButton, MouseControllable};
 use hbb_common::ResultType;
+use hbb_common::platform::linux::is_gnome;
 use scrap::wayland::pipewire::{get_portal, PwStreamInfo};
 use scrap::wayland::remote_desktop_portal::OrgFreedesktopPortalRemoteDesktop as remote_desktop_portal;
 use std::collections::HashMap;
@@ -91,7 +92,7 @@ pub mod client {
                 conn,
                 session,
                 stream,
-                scale: get_fractional_scale(),
+                scale: if is_gnome() { 1.0 } else { get_fractional_scale() },
             })
         }
     }
