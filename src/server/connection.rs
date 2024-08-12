@@ -1628,13 +1628,10 @@ impl Connection {
 
     #[inline]
     fn enable_trusted_devices() -> bool {
-        #[cfg(feature = "flutter")]
-        return config::option2bool(
+        config::option2bool(
             config::keys::OPTION_ENABLE_TRUSTED_DEVICES,
             &Config::get_option(config::keys::OPTION_ENABLE_TRUSTED_DEVICES),
-        );
-        #[cfg(not(feature = "flutter"))]
-        return false;
+        )
     }
 
     async fn handle_login_request_without_validation(&mut self, lr: &LoginRequest) {
