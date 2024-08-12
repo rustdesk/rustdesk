@@ -27,7 +27,7 @@ use winapi::{
     },
 };
 
-pub(super) const PRIVACY_MODE_IMPL: &str = "privacy_mode_impl_virtual_display";
+pub(super) const PRIVACY_MODE_IMPL: &str = super::PRIVACY_MODE_IMPL_WIN_VIRTUAL_DISPLAY;
 
 const CONFIG_KEY_REG_RECOVERY: &str = "reg_recovery";
 
