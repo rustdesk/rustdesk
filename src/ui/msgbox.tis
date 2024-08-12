@@ -66,9 +66,11 @@ class MsgboxComponent: Reactor.Component {
     }
 
     function get2faContent() {
+        var enable_trusted_devices = handler.get_enable_trusted_devices();
         return <div .form>
             <div>{translate('enter-2fa-title')}</div>
             <div .code><input name='code' type='text' .outline-focus /></div>
+            {enable_trusted_devices ? <div><button|checkbox(trust_this_device) {ts}>{translate('Trust this device')}</button></div> : ""}
         </div>;
     }
 

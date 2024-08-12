@@ -82,10 +82,12 @@ message LoginRequest {
   string version = 11;
   OSLogin os_login = 12;
   string my_platform = 13;
+  bytes hwid = 14;
 }
 
 message Auth2FA {
   string code = 1;
+  bytes hwid = 2;
 }
 
 message ChatMessage { string text = 1; }
@@ -137,6 +139,7 @@ message LoginResponse {
     string error = 1;
     PeerInfo peer_info = 2;
   }
+  bool enable_trusted_devices = 3;
 }
 
 message TouchScaleUpdate {

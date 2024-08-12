@@ -4,7 +4,7 @@ use hbb_common::{
     config::Config,
     get_time,
     password_security::{decrypt_vec_or_original, encrypt_vec_or_original},
-    tokio, ResultType,
+    ResultType,
 };
 use serde_derive::{Deserialize, Serialize};
 use std::sync::Mutex;
@@ -165,9 +165,7 @@ pub async fn send_2fa_code_to_telegram(text: &str, bot: TelegramBot) -> ResultTy
 pub fn get_chatid_telegram(bot_token: &str) -> ResultType<Option<String>> {
     let url = format!("https://api.telegram.org/bot{}/getUpdates", bot_token);
     // because caller is in tokio runtime, so we must call post_request_sync in new thread.
-    let handle = std::thread::spawn(move || {
-        crate::post_request_sync(url, "".to_owned(), "")
-    });
+    let handle = std::thread::spawn(move || crate::post_request_sync(url, "".to_owned(), ""));
     let resp = handle.join().map_err(|_| anyhow!("Thread panicked"))??;
     let value = serde_json::from_str::<serde_json::Value>(&resp).map_err(|e| anyhow!(e))?;
 

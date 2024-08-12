@@ -783,8 +783,33 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
           onChangedBot(!hasBot.value);
         },
       ).marginOnly(left: _kCheckBoxLeftMargin + 30);
+
+      final trust = Row(
+        children: [
+          Flexible(
+            child: Tooltip(
+              waitDuration: Duration(milliseconds: 300),
+              message: translate("enable-trusted-devices-tip"),
+              child: _OptionCheckBox(context, "Enable trusted devices",
+                  kOptionEnableTrustedDevices,
+                  enabled: !locked, update: (v) {
+                setState(() {});
+              }),
+            ),
+          ),
+          if (mainGetBoolOptionSync(kOptionEnableTrustedDevices))
+            ElevatedButton(
+                onPressed: locked
+                    ? null
+                    : () {
+                        manageTrustedDeviceDialog();
+                      },
+                child: Text(translate('Manage trusted devices')))
+        ],
+      ).marginOnly(left: 30);
+
       return Column(
-        children: [tfa, bot],
+        children: [tfa, bot, trust],
       );
     }
 

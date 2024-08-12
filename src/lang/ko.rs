@@ -636,5 +636,11 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Requires at least {} characters", ""),
         ("Wrong PIN", ""),
         ("Set PIN", ""),
+        ("Enable trusted devices", ""),
+        ("Manage trusted devices", ""),
+        ("Trust this device", "이 장치 신뢰"),
+        ("Platform", ""),
+        ("Days remaining", ""),
+        ("enable-trusted-devices-tip", ""),
     ].iter().cloned().collect();
 }

@@ -27,7 +27,7 @@ use hbb_common::platform::linux::run_cmds;
 #[cfg(target_os = "android")]
 use hbb_common::protobuf::EnumOrUnknown;
 use hbb_common::{
-    config::{self, Config},
+    config::{self, Config, TrustedDevice},
     fs::{self, can_enable_overwrite_detection},
     futures::{SinkExt, StreamExt},
     get_time, get_version_number,
@@ -1482,6 +1482,9 @@ impl Connection {
         let mut msg_out = Message::new();
         let mut res = LoginResponse::new();
         res.set_error(err.to_string());
+        if err.to_string() == crate::client::REQUIRE_2FA {
+            res.enable_trusted_devices = Self::enable_trusted_devices();
+        }
         msg_out.set_login_response(res);
         self.send(msg_out).await;
     }
@@ -1623,10 +1626,31 @@ impl Connection {
         }
     }
 
+    #[inline]
+    fn enable_trusted_devices() -> bool {
+        config::option2bool(
+            config::keys::OPTION_ENABLE_TRUSTED_DEVICES,
+            &Config::get_option(config::keys::OPTION_ENABLE_TRUSTED_DEVICES),
+        )
+    }
+
     async fn handle_login_request_without_validation(&mut self, lr: &LoginRequest) {
         self.lr = lr.clone();
         if let Some(o) = lr.option.as_ref() {
             self.options_in_login = Some(o.clone());
+        }
+        if self.require_2fa.is_some() && !lr.hwid.is_empty() && Self::enable_trusted_devices() {
+            let devices = Config::get_trusted_devices();
+            if let Some(device) = devices.iter().find(|d| d.hwid == lr.hwid) {
+                if !device.outdate()
+                    && device.id == lr.my_id
+                    && device.name == lr.my_name
+                    && device.platform == lr.my_platform
+                {
+                    log::info!("2FA bypassed by trusted devices");
+                    self.require_2fa = None;
+                }
+            }
         }
         self.video_ack_required = lr.video_ack_required;
     }
@@ -1840,6 +1864,15 @@ impl Connection {
                                     tfa: true,
                                 },
                             );
+                        }
+                        if !tfa.hwid.is_empty() && Self::enable_trusted_devices() {
+                            Config::add_trusted_device(TrustedDevice {
+                                hwid: tfa.hwid,
+                                time: hbb_common::get_time(),
+                                id: self.lr.my_id.clone(),
+                                name: self.lr.my_name.clone(),
+                                platform: self.lr.my_platform.clone(),
+                            });
                         }
                     } else {
                         self.update_failure(failure, false, 1);
