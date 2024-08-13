@@ -638,7 +638,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Set PIN", "PIN festlegen"),
         ("Enable trusted devices", ""),
         ("Manage trusted devices", ""),
-        ("Trust this device", "Diesem Gerät vertrauen"),
         ("Platform", ""),
         ("Days remaining", ""),
         ("enable-trusted-devices-tip", ""),
