@@ -638,7 +638,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Set PIN", "设置 PIN 码"),
         ("Enable trusted devices", "启用信任设备"),
         ("Manage trusted devices", "管理信任设备"),
-        ("Trust this device", "信任此设备"),
         ("Platform", "平台"),
         ("Days remaining", "剩余天数"),
         ("enable-trusted-devices-tip", "允许受信任的设备跳过 2FA 验证"),
