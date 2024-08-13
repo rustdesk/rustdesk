@@ -636,10 +636,10 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Requires at least {} characters", "Richiede almeno {} caratteri"),
         ("Wrong PIN", "PIN errato"),
         ("Set PIN", "Imposta PIN"),
-        ("Enable trusted devices", ""),
-        ("Manage trusted devices", ""),
-        ("Platform", ""),
-        ("Days remaining", ""),
-        ("enable-trusted-devices-tip", ""),
+        ("Enable trusted devices", "Abilita dispositivi attendibili"),
+        ("Manage trusted devices", "Gestisci dispositivi attendibili"),
+        ("Platform", "Piattaforma"),
+        ("Days remaining", "Giorni rimanenti"),
+        ("enable-trusted-devices-tip", "Salta verifica 2FA nei dispositivi attendibili"),
     ].iter().cloned().collect();
 }
