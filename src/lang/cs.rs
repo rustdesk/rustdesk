@@ -160,7 +160,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Create desktop icon", "Vytvořit ikonu na ploše"),
         ("agreement_tip", "Spuštěním instalace přijímáte licenční ujednání."),
         ("Accept and Install", "Přijmout a nainstalovat"),
-        ("End-user license agreement", "Licencenční ujednání s koncovým uživatelem"),
+        ("End-user license agreement", "Licenční ujednání s koncovým uživatelem"),
         ("Generating ...", "Vytváření ..."),
         ("Your installation is lower version.", "Máte nainstalovanou starší verzi"),
         ("not_close_tcp_tip", "Po dobu, po kterou tunel potřebujete, nezavírejte toto okno"),
