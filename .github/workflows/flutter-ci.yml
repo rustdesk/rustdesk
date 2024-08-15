@@ -19,6 +19,6 @@ on:
 
 jobs:
   run-ci:
-    uses: ./.github/workflows/flutter-build.yml
+    uses: ./.github/workflows/flutter-build_new.yml
     with:
       upload-artifact: false
