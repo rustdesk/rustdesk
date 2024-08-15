@@ -505,17 +505,20 @@ class _DesktopTabState extends State<DesktopTab>
       Obx(() {
         if (stateGlobal.showTabBar.isTrue &&
             !(kUseCompatibleUiMode && isHideSingleItem())) {
+          final showBottomDivider = _showTabBarBottomDivider(tabType);
           return SizedBox(
             height: _kTabBarHeight,
             child: Column(
               children: [
                 SizedBox(
-                  height: _kTabBarHeight - 1,
+                  height:
+                      showBottomDivider ? _kTabBarHeight - 1 : _kTabBarHeight,
                   child: _buildBar(),
                 ),
-                const Divider(
-                  height: 1,
-                ),
+                if (showBottomDivider)
+                  const Divider(
+                    height: 1,
+                  ),
               ],
             ),
           );
@@ -1161,7 +1164,10 @@ class _TabState extends State<_Tab> with RestorationMixin {
               child: Row(
                 children: [
                   SizedBox(
-                      height: _kTabBarHeight,
+                      // _kTabBarHeight also displays normally
+                      height: _showTabBarBottomDivider(widget.tabType)
+                          ? _kTabBarHeight - 1
+                          : _kTabBarHeight,
                       child: Row(
                           crossAxisAlignment: CrossAxisAlignment.center,
                           children: [
@@ -1412,6 +1418,10 @@ class _TabDropDownButtonState extends State<_TabDropDownButton> {
       },
     );
   }
+}
+
+bool _showTabBarBottomDivider(DesktopTabType tabType) {
+  return tabType == DesktopTabType.main || tabType == DesktopTabType.install;
 }
 
 class TabbarTheme extends ThemeExtension<TabbarTheme> {
