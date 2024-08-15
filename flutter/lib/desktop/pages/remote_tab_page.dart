@@ -228,6 +228,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
               // Specially configured for a better resize area and remote control.
               childPadding: kDragToResizeAreaPadding,
               resizeEdgeSize: stateGlobal.resizeEdgeSize.value,
+              enableResizeEdges: subWindowManagerEnableResizeEdges,
               windowId: stateGlobal.windowId,
             ));
   }
