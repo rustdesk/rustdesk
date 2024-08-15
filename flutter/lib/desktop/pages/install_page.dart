@@ -43,6 +43,7 @@ class _InstallPageState extends State<InstallPage> {
   Widget build(BuildContext context) {
     return DragToResizeArea(
       resizeEdgeSize: stateGlobal.resizeEdgeSize.value,
+      enableResizeEdges: windowManagerEnableResizeEdges,
       child: Container(
         child: Scaffold(
             backgroundColor: Theme.of(context).colorScheme.background,
