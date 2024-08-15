@@ -1,4 +1,4 @@
-use hbb_common::{fs, message_proto::*, log};
+use hbb_common::{fs, log, message_proto::*};
 
 use super::{Data, Interface};
 
@@ -7,7 +7,12 @@ pub trait FileManager: Interface {
         fs::get_home_as_string()
     }
 
-    #[cfg(not(any(target_os = "android", target_os = "ios", feature = "cli", feature = "flutter")))]
+    #[cfg(not(any(
+        target_os = "android",
+        target_os = "ios",
+        feature = "cli",
+        feature = "flutter"
+    )))]
     fn read_dir(&self, path: String, include_hidden: bool) -> sciter::Value {
         match fs::read_dir(&fs::get_path(&path), include_hidden) {
             Err(_) => sciter::Value::null(),
@@ -20,7 +25,12 @@ pub trait FileManager: Interface {
         }
     }
 
-    #[cfg(any(target_os = "android", target_os = "ios", feature = "cli", feature = "flutter"))]
+    #[cfg(any(
+        target_os = "android",
+        target_os = "ios",
+        feature = "cli",
+        feature = "flutter"
+    ))]
     fn read_dir(&self, path: &str, include_hidden: bool) -> String {
         use crate::common::make_fd_to_json;
         match fs::read_dir(&fs::get_path(path), include_hidden) {
@@ -135,5 +145,9 @@ pub trait FileManager: Interface {
             remember,
             is_upload,
         )));
+    }
+
+    fn rename_file(&self, act_id: i32, path: String, new_name: String, is_remote: bool) {
+        self.send(Data::RenameFile((act_id, path, new_name, is_remote)));
     }
 }

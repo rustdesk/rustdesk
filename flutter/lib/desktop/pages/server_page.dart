@@ -1157,6 +1157,16 @@ class __FileTransferLogPageState extends State<_FileTransferLogPage> {
             Text(translate('Create Folder'))
           ],
         );
+      case CmFileAction.rename:
+        return Column(
+          children: [
+            Icon(
+              Icons.drive_file_move_outlined,
+              color: Theme.of(context).tabBarTheme.labelColor,
+            ),
+            Text(translate('Rename'))
+          ],
+        );
     }
   }
 

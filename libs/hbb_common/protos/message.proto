@@ -371,6 +371,12 @@ message ReadAllFiles {
   bool include_hidden = 3;
 }
 
+message FileRename {
+  int32 id = 1;
+  string path = 2;
+  string new_name = 3;
+}
+
 message FileAction {
   oneof union {
     ReadDir read_dir = 1;
@@ -382,6 +388,7 @@ message FileAction {
     ReadAllFiles all_files = 7;
     FileTransferCancel cancel = 8;
     FileTransferSendConfirmRequest send_confirm = 9;
+    FileRename rename = 10;
   }
 }
 

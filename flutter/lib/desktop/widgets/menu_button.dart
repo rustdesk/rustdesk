@@ -34,6 +34,7 @@ class _MenuButtonState extends State<MenuButton> {
     return Padding(
       padding: widget.padding,
       child: Tooltip(
+        waitDuration: Duration(milliseconds: 300),
         message: widget.tooltip,
         child: Material(
           type: MaterialType.transparency,
