@@ -3492,7 +3492,8 @@ Widget buildVirtualWindowFrame(BuildContext context, Widget child) {
   );
 }
 
-get windowEdgeSize => isLinux && !_linuxWindowResizable ? 0.0 : kWindowEdgeSize;
+get windowResizeEdgeSize =>
+    isLinux && !_linuxWindowResizable ? 0.0 : kWindowResizeEdgeSize;
 
 // `windowManager.setResizable(false)` will reset the window size to the default size on Linux and then set unresizable.
 // See _linuxWindowResizable for more details.
