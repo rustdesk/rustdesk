@@ -59,30 +59,30 @@ pub fn get_custom_server_from_string(s: &str) -> ResultType<CustomServer> {
     if s.contains("host=") {
         let stripped = &s[s.find("host=").unwrap_or(0)..s.len()];
         let strs: Vec<&str> = stripped.split(",").collect();
-        let mut host = "";
-        let mut key = "";
-        let mut api = "";
-        let mut relay = "";
+        let mut host = String::default();
+        let mut key = String::default();
+        let mut api = String::default();
+        let mut relay = String::default();
         let strs_iter = strs.iter();
         for el in strs_iter {
             if el.starts_with("host=") {
-                host = &el[5..el.len()];
+                host = el.chars().skip(5).collect();
             }
             if el.starts_with("key=") {
-                key = &el[4..el.len()];
+                key = el.chars().skip(4).collect();
             }
             if el.starts_with("api=") {
-                api = &el[4..el.len()];
+                api = el.chars().skip(4).collect();
             }
             if el.starts_with("relay=") {
-                relay = &el[4..el.len()];
+                relay = el.chars().skip(6).collect();
             }
         }
         return Ok(CustomServer {
-            host: host.to_owned(),
-            key: key.to_owned(),
-            api: api.to_owned(),
-            relay: relay.to_owned(),
+            host,
+            key,
+            api,
+            relay,
         });
     } else {
         let s = s
@@ -146,13 +146,27 @@ mod test {
             }
         );
         assert_eq!(
-            get_custom_server_from_string("rustdesk-host=server.example.net,key=Zm9vYmFyLiwyCg==,.exe")
-                .unwrap(),
+            get_custom_server_from_string(
+                "rustdesk-host=server.example.net,key=Zm9vYmFyLiwyCg==,.exe"
+            )
+            .unwrap(),
             CustomServer {
                 host: "server.example.net".to_owned(),
                 key: "Zm9vYmFyLiwyCg==".to_owned(),
                 api: "".to_owned(),
                 relay: "".to_owned(),
+            }
+        );
+        assert_eq!(
+            get_custom_server_from_string(
+                "rustdesk-host=server.example.net,key=Zm9vYmFyLiwyCg==,relay=server.example.net.exe"
+            )
+            .unwrap(),
+            CustomServer {
+                host: "server.example.net".to_owned(),
+                key: "Zm9vYmFyLiwyCg==".to_owned(),
+                api: "".to_owned(),
+                relay: "server.example.net".to_owned(),
             }
         );
         let lic = CustomServer {
