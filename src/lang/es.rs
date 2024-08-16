@@ -641,5 +641,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Platform", "Plataforma"),
         ("Days remaining", "Días restantes"),
         ("enable-trusted-devices-tip", ""),
+        ("Parent directory", ""),
+        ("Resume", ""),
+        ("Invalid file name", ""),
     ].iter().cloned().collect();
 }
