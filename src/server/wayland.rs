@@ -134,7 +134,7 @@ pub(super) async fn check_init() -> ResultType<()> {
         let mut minx = 0;
         let mut maxx = 0;
         let mut miny = 0;
-        let mut maxy: i32 = 0;
+        let mut maxy = 0;
         let use_uinput = crate::input_service::wayland_use_uinput();
 
         if *CAP_DISPLAY_INFO.read().unwrap() == 0 {
