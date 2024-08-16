@@ -1636,6 +1636,18 @@ async fn send_sas() -> ResultType<()> {
     Ok(())
 }
 
+#[inline]
+#[cfg(target_os = "linux")]
+pub fn wayland_use_uinput() -> bool {
+    !crate::platform::is_x11() && crate::is_server()
+}
+
+#[inline]
+#[cfg(target_os = "linux")]
+pub fn wayland_use_rdp_input() -> bool {
+    !crate::platform::is_x11() && !crate::is_server()
+}
+
 lazy_static::lazy_static! {
     static ref MODIFIER_MAP: HashMap<i32, Key> = [
         (ControlKey::Alt, Key::Alt),
