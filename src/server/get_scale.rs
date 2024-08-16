@@ -142,7 +142,9 @@ pub fn get_scale() -> f64 {
             return scale;
         }
 
-        scale = data.physical_width as f64 / data.logical_width as f64;
+        if data.logical_width != 0 {
+            scale = data.physical_width as f64 / data.logical_width as f64;
+        }
     }
 
     scale
