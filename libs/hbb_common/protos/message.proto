@@ -82,10 +82,12 @@ message LoginRequest {
   string version = 11;
   OSLogin os_login = 12;
   string my_platform = 13;
+  bytes hwid = 14;
 }
 
 message Auth2FA {
   string code = 1;
+  bytes hwid = 2;
 }
 
 message ChatMessage { string text = 1; }
@@ -137,6 +139,7 @@ message LoginResponse {
     string error = 1;
     PeerInfo peer_info = 2;
   }
+  bool enable_trusted_devices = 3;
 }
 
 message TouchScaleUpdate {
@@ -368,6 +371,12 @@ message ReadAllFiles {
   bool include_hidden = 3;
 }
 
+message FileRename {
+  int32 id = 1;
+  string path = 2;
+  string new_name = 3;
+}
+
 message FileAction {
   oneof union {
     ReadDir read_dir = 1;
@@ -379,6 +388,7 @@ message FileAction {
     ReadAllFiles all_files = 7;
     FileTransferCancel cancel = 8;
     FileTransferSendConfirmRequest send_confirm = 9;
+    FileRename rename = 10;
   }
 }
 

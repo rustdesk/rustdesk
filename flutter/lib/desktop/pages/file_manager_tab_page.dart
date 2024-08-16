@@ -111,6 +111,7 @@ class _FileManagerTabPageState extends State<FileManagerTabPage> {
         : SubWindowDragToResizeArea(
             child: tabWidget,
             resizeEdgeSize: stateGlobal.resizeEdgeSize.value,
+            enableResizeEdges: subWindowManagerEnableResizeEdges,
             windowId: stateGlobal.windowId,
           );
   }

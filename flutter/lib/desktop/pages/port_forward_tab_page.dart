@@ -127,6 +127,7 @@ class _PortForwardTabPageState extends State<PortForwardTabPage> {
             () => SubWindowDragToResizeArea(
               child: tabWidget,
               resizeEdgeSize: stateGlobal.resizeEdgeSize.value,
+              enableResizeEdges: subWindowManagerEnableResizeEdges,
               windowId: stateGlobal.windowId,
             ),
           );

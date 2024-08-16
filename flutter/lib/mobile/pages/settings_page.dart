@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common/widgets/setting_widgets.dart';
@@ -87,6 +88,7 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
   var _hideServer = false;
   var _hideProxy = false;
   var _hideNetwork = false;
+  var _enableTrustedDevices = false;
 
   _SettingsState() {
     _enableAbr = option2bool(
@@ -113,6 +115,7 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
     _hideProxy = bind.mainGetBuildinOption(key: kOptionHideProxySetting) == 'Y';
     _hideNetwork =
         bind.mainGetBuildinOption(key: kOptionHideNetworkSetting) == 'Y';
+    _enableTrustedDevices = mainGetBoolOptionSync(kOptionEnableTrustedDevices);
   }
 
   @override
@@ -243,18 +246,76 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
       ],
     ));
     final List<AbstractSettingsTile> enhancementsTiles = [];
-    final List<AbstractSettingsTile> shareScreenTiles = [
+    final enable2fa = bind.mainHasValid2FaSync();
+    final List<AbstractSettingsTile> tfaTiles = [
       SettingsTile.switchTile(
         title: Text(translate('enable-2fa-title')),
-        initialValue: bind.mainHasValid2FaSync(),
-        onToggle: (_) async {
+        initialValue: enable2fa,
+        onToggle: (v) async {
           update() async {
             setState(() {});
           }
 
-          change2fa(callback: update);
+          if (v == false) {
+            CommonConfirmDialog(
+                gFFI.dialogManager, translate('cancel-2fa-confirm-tip'), () {
+              change2fa(callback: update);
+            });
+          } else {
+            change2fa(callback: update);
+          }
         },
       ),
+      if (enable2fa)
+        SettingsTile.switchTile(
+          title: Text(translate('Telegram bot')),
+          initialValue: bind.mainHasValidBotSync(),
+          onToggle: (v) async {
+            update() async {
+              setState(() {});
+            }
+
+            if (v == false) {
+              CommonConfirmDialog(
+                  gFFI.dialogManager, translate('cancel-bot-confirm-tip'), () {
+                changeBot(callback: update);
+              });
+            } else {
+              changeBot(callback: update);
+            }
+          },
+        ),
+      if (enable2fa)
+        SettingsTile.switchTile(
+          title: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(translate('Enable trusted devices')),
+              Text('* ${translate('enable-trusted-devices-tip')}',
+                  style: Theme.of(context).textTheme.bodySmall),
+            ],
+          ),
+          initialValue: _enableTrustedDevices,
+          onToggle: isOptionFixed(kOptionEnableTrustedDevices)
+              ? null
+              : (v) async {
+                  mainSetBoolOption(kOptionEnableTrustedDevices, v);
+                  setState(() {
+                    _enableTrustedDevices = v;
+                  });
+                },
+        ),
+      if (enable2fa && _enableTrustedDevices)
+        SettingsTile(
+            title: Text(translate('Manage trusted devices')),
+            trailing: Icon(Icons.arrow_forward_ios),
+            onPressed: (context) {
+              Navigator.push(context, MaterialPageRoute(builder: (context) {
+                return _ManageTrustedDevices();
+              }));
+            })
+    ];
+    final List<AbstractSettingsTile> shareScreenTiles = [
       SettingsTile.switchTile(
         title: Text(translate('Deny LAN discovery')),
         initialValue: _denyLANDiscovery,
@@ -646,6 +707,11 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
             !disabledSettings &&
             !outgoingOnly &&
             !hideSecuritySettings)
+          SettingsSection(title: Text('2FA'), tiles: tfaTiles),
+        if (isAndroid &&
+            !disabledSettings &&
+            !outgoingOnly &&
+            !hideSecuritySettings)
           SettingsSection(
             title: Text(translate("Share Screen")),
             tiles: shareScreenTiles,
@@ -959,6 +1025,51 @@ class __DisplayPageState extends State<_DisplayPage> {
                   key: key, value: b ? 'Y' : defaultOptionNo);
               setState(() {});
             },
+    );
+  }
+}
+
+class _ManageTrustedDevices extends StatefulWidget {
+  const _ManageTrustedDevices();
+
+  @override
+  State<_ManageTrustedDevices> createState() => __ManageTrustedDevicesState();
+}
+
+class __ManageTrustedDevicesState extends State<_ManageTrustedDevices> {
+  RxList<TrustedDevice> trustedDevices = RxList.empty(growable: true);
+  RxList<Uint8List> selectedDevices = RxList.empty();
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(translate('Manage trusted devices')),
+        centerTitle: true,
+        actions: [
+          Obx(() => IconButton(
+              icon: Icon(Icons.delete, color: Colors.white),
+              onPressed: selectedDevices.isEmpty
+                  ? null
+                  : () {
+                      confrimDeleteTrustedDevicesDialog(
+                          trustedDevices, selectedDevices);
+                    }))
+        ],
+      ),
+      body: FutureBuilder(
+          future: TrustedDevice.get(),
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return Center(child: CircularProgressIndicator());
+            }
+            if (snapshot.hasError) {
+              return Center(child: Text('Error: ${snapshot.error}'));
+            }
+            final devices = snapshot.data as List<TrustedDevice>;
+            trustedDevices = devices.obs;
+            return trustedDevicesTable(trustedDevices, selectedDevices);
+          }),
     );
   }
 }

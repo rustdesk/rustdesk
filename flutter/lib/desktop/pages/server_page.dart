@@ -83,7 +83,7 @@ class _DesktopServerPageState extends State<DesktopServerPage>
       child: Consumer<ServerModel>(
         builder: (context, serverModel, child) {
           final body = Scaffold(
-            backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+            backgroundColor: Theme.of(context).colorScheme.background,
             body: ConnectionManager(),
           );
           return isLinux
@@ -193,8 +193,6 @@ class ConnectionManagerState extends State<ConnectionManager>
               maxLabelWidth: 100,
               tail: null, //buildScrollJumper(),
               blockTab: allowRemoteCMModification() ? null : _block,
-              selectedTabBackgroundColor:
-                  Theme.of(context).hintColor.withOpacity(0),
               tabBuilder: (key, icon, label, themeConf) {
                 final client = serverModel.clients
                     .firstWhereOrNull((client) => client.id.toString() == key);
@@ -229,7 +227,7 @@ class ConnectionManagerState extends State<ConnectionManager>
                           borderWidth;
                   final realChatPageWidth =
                       constrains.maxWidth - realClosedWidth;
-                  return Row(children: [
+                  final row = Row(children: [
                     if (constrains.maxWidth >
                         kConnectionManagerWindowSizeClosedChat.width)
                       Consumer<ChatModel>(
@@ -247,6 +245,10 @@ class ConnectionManagerState extends State<ConnectionManager>
                         child:
                             SizedBox(width: realClosedWidth, child: pageView)),
                   ]);
+                  return Container(
+                    color: Theme.of(context).scaffoldBackgroundColor,
+                    child: row,
+                  );
                 },
               ),
             ),
@@ -1153,6 +1155,16 @@ class __FileTransferLogPageState extends State<_FileTransferLogPage> {
               color: Theme.of(context).tabBarTheme.labelColor,
             ),
             Text(translate('Create Folder'))
+          ],
+        );
+      case CmFileAction.rename:
+        return Column(
+          children: [
+            Icon(
+              Icons.drive_file_move_outlined,
+              color: Theme.of(context).tabBarTheme.labelColor,
+            ),
+            Text(translate('Rename'))
           ],
         );
     }

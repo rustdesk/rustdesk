@@ -268,7 +268,7 @@ function msgbox(type, title, content, link="", callback=null, height=180, width=
                 view.close();
                 return;
             }
-            handler.send2fa(res.code); 
+            handler.send2fa(res.code, res.trust_this_device || false); 
             msgbox("connecting", "Connecting...", "Logging in...");
         };
     } else if (type == "session-login" || type == "session-re-login") {

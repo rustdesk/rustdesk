@@ -881,6 +881,9 @@ async fn handle_fs(
                 }
             }
         }
+        ipc::FS::Rename { id, path, new_name } => {
+            rename_file(path, new_name, id, tx).await;
+        }
         _ => {}
     }
 }
@@ -938,6 +941,17 @@ async fn remove_file(path: String, id: i32, file_num: i32, tx: &UnboundedSender<
 async fn create_dir(path: String, id: i32, tx: &UnboundedSender<Data>) {
     handle_result(
         spawn_blocking(move || fs::create_dir(&path)).await,
+        id,
+        0,
+        tx,
+    )
+    .await;
+}
+
+#[cfg(not(any(target_os = "ios")))]
+async fn rename_file(path: String, new_name: String, id: i32, tx: &UnboundedSender<Data>) {
+    handle_result(
+        spawn_blocking(move || fs::rename_file(&path, &new_name)).await,
         id,
         0,
         tx,

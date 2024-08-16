@@ -433,7 +433,6 @@ pub fn try_get_displays_(add_amyuni_headless: bool) -> ResultType<Vec<Display>> 
     // }
 
     let no_displays_v = no_displays(&displays);
-    virtual_display_manager::set_can_plug_out_all(!no_displays_v);
     if no_displays_v {
         log::debug!("no displays, create virtual display");
         if let Err(e) = virtual_display_manager::plug_in_headless() {
