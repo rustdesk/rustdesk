@@ -76,7 +76,7 @@ pub mod client {
     fn get_fractional_scale() -> f64 {
         #[cfg(target_os = "linux")]
         {
-            get_scale()
+            get_scale().unwrap_or(1.0)
         }
         #[cfg(not(target_os = "linux"))]
         1.0

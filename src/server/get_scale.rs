@@ -1,5 +1,6 @@
 use wayland_client::{protocol::{wl_output, wl_registry}, Connection, Dispatch, QueueHandle};
 use wayland_protocols::xdg;
+use hbb_common::anyhow;
 
 type ZxdgOutputManager = xdg::xdg_output::zv1::client::zxdg_output_manager_v1::ZxdgOutputManagerV1;
 type ZxdgOutputManagerEvent = xdg::xdg_output::zv1::client::zxdg_output_manager_v1::Event;
@@ -104,48 +105,38 @@ impl Dispatch<ZxdgOutput, ()> for AppData {
 }
 
 // The main function of our program
-pub fn get_scale() -> f64 {
-    let mut scale = 1.0;
+pub fn get_scale() -> anyhow::Result<f64> {
     // Create a Wayland connection by connecting to the server through the
     // environment-provided configuration.
-    let conn = Connection::connect_to_env();
-    if let Ok(conn) = conn {
-        // Retrieve the WlDisplay Wayland object from the connection. This object is
-        // the starting point of any Wayland program, from which all other objects will
-        // be created.
-        let display = conn.display();
+    let conn = Connection::connect_to_env()?;
+    // Retrieve the WlDisplay Wayland object from the connection. This object is
+    // the starting point of any Wayland program, from which all other objects will
+    // be created.
+    let display = conn.display();
 
-        // Create an event queue for our event processing
-        let mut event_queue = conn.new_event_queue();
-        // And get its handle to associated new objects to it
-        let qh = event_queue.handle();
+    // Create an event queue for our event processing
+    let mut event_queue = conn.new_event_queue();
+    // And get its handle to associated new objects to it
+    let qh = event_queue.handle();
 
-        // Create a wl_registry object by sending the wl_display.get_registry request
-        // This method takes two arguments: a handle to the queue the newly created
-        // wl_registry will be assigned to, and the user-data that should be associated
-        // with this registry (here it is () as we don't need user-data).
-        let _registry = display.get_registry(&qh, ());
+    // Create a wl_registry object by sending the wl_display.get_registry request
+    // This method takes two arguments: a handle to the queue the newly created
+    // wl_registry will be assigned to, and the user-data that should be associated
+    // with this registry (here it is () as we don't need user-data).
+    let _registry = display.get_registry(&qh, ());
 
-        let mut data = AppData::default();
+    let mut data = AppData::default();
 
-        let ret = event_queue.blocking_dispatch(&mut data);
-        if ret.is_err() {
-            return scale;
-        }
+    event_queue.blocking_dispatch(&mut data)?;
 
-        if let (Some(wl_output), Some(xdg_output_manager)) = (&data.wl_output, &data.xdg_output_manager) {
-            xdg_output_manager.get_xdg_output(&wl_output, &qh, ());
-        }
-
-        let ret = event_queue.blocking_dispatch(&mut data);
-        if ret.is_err() {
-            return scale;
-        }
-
-        if data.logical_width != 0 {
-            scale = data.physical_width as f64 / data.logical_width as f64;
-        }
+    if let (Some(wl_output), Some(xdg_output_manager)) = (&data.wl_output, &data.xdg_output_manager) {
+        xdg_output_manager.get_xdg_output(&wl_output, &qh, ());
     }
 
-    scale
+    event_queue.blocking_dispatch(&mut data)?;
+
+    if data.logical_width == 0 {
+        return Err(anyhow::anyhow!("Can't divide zero logical width."));
+    }
+    Ok(data.physical_width as f64 / data.logical_width as f64)
 }
