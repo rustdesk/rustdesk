@@ -641,8 +641,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Platform", "Piattaforma"),
         ("Days remaining", "Giorni rimanenti"),
         ("enable-trusted-devices-tip", "Salta verifica 2FA nei dispositivi attendibili"),
-        ("Parent directory", ""),
-        ("Resume", ""),
-        ("Invalid file name", ""),
+        ("Parent directory", "Cartella principale"),
+        ("Resume", "Riprendi"),
+        ("Invalid file name", "Nome file non valido"),
     ].iter().cloned().collect();
 }
