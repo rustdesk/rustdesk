@@ -493,7 +493,6 @@ pub fn lock_screen() {
 }
 
 pub fn start_os_service() {
-    crate::platform::macos::hide_dock();
     log::info!("Username: {}", crate::username());
     let mut sys = System::new();
     let path =
