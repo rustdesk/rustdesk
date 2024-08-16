@@ -1320,7 +1320,7 @@ impl Connection {
                     #[cfg(target_os = "linux")]
                     {
                         // use rdp_input when uinput is not available in wayland. Ex: flatpak
-                        if !is_x11() && !crate::is_server() {
+                        if input_service::wayland_use_rdp_input() {
                             let _ = setup_rdp_input().await;
                         }
                     }
