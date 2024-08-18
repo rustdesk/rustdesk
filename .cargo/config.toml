@@ -7,7 +7,8 @@ rustflags = [
     "-C", "link-args=-sectcreate __CGPreLoginApp __cgpreloginapp /dev/null",
 ]
 #[target.'cfg(target_os="linux")']
-# glibc-static required, this may fix https://github.com/rustdesk/rustdesk/issues/9103, but I do not wanna to this big change
+# glibc-static required, this may fix https://github.com/rustdesk/rustdesk/issues/9103, but I do not want this big change
+# this is unlikely to help also, because the other so files still use libc dynamically
 #rustflags = [
 #    "-C", "link-args=-Wl,-Bstatic -lc -Wl,-Bdynamic"
 #]

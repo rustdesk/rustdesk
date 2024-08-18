@@ -38,7 +38,8 @@ AppDir:
         universe multiverse
     include:
     # https://github.com/rustdesk/rustdesk/issues/9103
-    # because of APPDIR_LIBRARY_PATH, this libc6 is not used, use LD_PRELOAD: $APPDIR/usr/lib/x86_64-linux-gnu/libc.so.6 may help, but I do not wanna try.
+    # Because of APPDIR_LIBRARY_PATH, this libc6 is not used, use LD_PRELOAD: $APPDIR/usr/lib/x86_64-linux-gnu/libc.so.6 may help, If you have time, please have a try.
+    # We modify APPDIR_LIBRARY_PATH to use system lib first because gst crashed if not doing so, but you can try to change it.
     - libc6:amd64
     - libgtk-3-0
     - libxcb-randr0
