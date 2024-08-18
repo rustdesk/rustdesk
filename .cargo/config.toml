@@ -6,3 +6,5 @@ rustflags = ["-C", "target-feature=+crt-static", "-C", "link-args=/NODEFAULTLIB:
 rustflags = [
     "-C", "link-args=-sectcreate __CGPreLoginApp __cgpreloginapp /dev/null",
 ]
+[target.'cfg(target_os="linux")']
+rustflags = ["-Ctarget-feature=+crt-static"]

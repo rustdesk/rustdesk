@@ -37,7 +37,6 @@ AppDir:
     - sourceline: deb http://archive.ubuntu.com/ubuntu/ focal-security main restricted
         universe multiverse
     include:
-    - libc6:amd64
     - libgtk-3-0
     - libxcb-randr0
     - libxdo3
