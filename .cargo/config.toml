@@ -6,5 +6,8 @@ rustflags = ["-C", "target-feature=+crt-static", "-C", "link-args=/NODEFAULTLIB:
 rustflags = [
     "-C", "link-args=-sectcreate __CGPreLoginApp __cgpreloginapp /dev/null",
 ]
-[target.'cfg(target_os="linux")']
-rustflags = ["-Ctarget-feature=+crt-static"]
+#[target.'cfg(target_os="linux")']
+# glibc-static required, this may fix https://github.com/rustdesk/rustdesk/issues/9103, but I do not wanna to this big change
+#rustflags = [
+#    "-C", "link-args=-Wl,-Bstatic -lc -Wl,-Bdynamic"
+#]

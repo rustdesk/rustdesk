@@ -37,6 +37,9 @@ AppDir:
     - sourceline: deb http://archive.ubuntu.com/ubuntu/ focal-security main restricted
         universe multiverse
     include:
+    # https://github.com/rustdesk/rustdesk/issues/9103
+    # because of APPDIR_LIBRARY_PATH, this libc6 is not used, use LD_PRELOAD: $APPDIR/usr/lib/x86_64-linux-gnu/libc.so.6 may help, but I do not wanna try.
+    - libc6:amd64
     - libgtk-3-0
     - libxcb-randr0
     - libxdo3
