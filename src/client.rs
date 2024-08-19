@@ -3180,6 +3180,7 @@ pub enum Data {
     NewVoiceCall,
     CloseVoiceCall,
     ResetDecoder(Option<usize>),
+    RenameFile((i32, String, String, bool)),
 }
 
 /// Keycode for key events.

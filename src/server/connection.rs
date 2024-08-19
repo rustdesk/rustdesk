@@ -1320,7 +1320,7 @@ impl Connection {
                     #[cfg(target_os = "linux")]
                     {
                         // use rdp_input when uinput is not available in wayland. Ex: flatpak
-                        if !is_x11() && !crate::is_server() {
+                        if input_service::wayland_use_rdp_input() {
                             let _ = setup_rdp_input().await;
                         }
                     }
@@ -2273,6 +2273,22 @@ impl Connection {
                                 if let Some(job) = fs::get_job(r.id, &mut self.read_jobs) {
                                     job.confirm(&r);
                                 }
+                            }
+                            Some(file_action::Union::Rename(r)) => {
+                                self.send_fs(ipc::FS::Rename {
+                                    id: r.id,
+                                    path: r.path.clone(),
+                                    new_name: r.new_name.clone(),
+                                });
+                                self.send_to_cm(ipc::Data::FileTransferLog((
+                                    "rename".to_string(),
+                                    serde_json::to_string(&FileRenameLog {
+                                        conn_id: self.inner.id(),
+                                        path: r.path,
+                                        new_name: r.new_name,
+                                    })
+                                    .unwrap_or_default(),
+                                )));
                             }
                             _ => {}
                         }
@@ -3449,6 +3465,14 @@ struct FileActionLog {
     conn_id: i32,
     path: String,
     dir: bool,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct FileRenameLog {
+    conn_id: i32,
+    path: String,
+    new_name: String,
 }
 
 struct FileRemoveLogControl {

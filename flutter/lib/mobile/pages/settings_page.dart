@@ -291,7 +291,7 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(translate('Enable trusted devices')),
-              Text(translate('enable-trusted-devices-tip'),
+              Text('* ${translate('enable-trusted-devices-tip')}',
                   style: Theme.of(context).textTheme.bodySmall),
             ],
           ),

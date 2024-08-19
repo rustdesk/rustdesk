@@ -1415,7 +1415,7 @@ class RustdeskImpl {
     return false;
   }
 
-  bool mainHideDocker({dynamic hint}) {
+  bool mainHideDock({dynamic hint}) {
     throw UnimplementedError();
   }
 

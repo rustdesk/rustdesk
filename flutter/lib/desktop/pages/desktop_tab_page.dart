@@ -126,6 +126,7 @@ class _DesktopTabPageState extends State<DesktopTabPage>
         : Obx(
             () => DragToResizeArea(
               resizeEdgeSize: stateGlobal.resizeEdgeSize.value,
+              enableResizeEdges: windowManagerEnableResizeEdges,
               child: tabWidget,
             ),
           );

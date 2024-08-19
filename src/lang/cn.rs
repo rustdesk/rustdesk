@@ -641,5 +641,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Platform", "平台"),
         ("Days remaining", "剩余天数"),
         ("enable-trusted-devices-tip", "允许受信任的设备跳过 2FA 验证"),
+        ("Parent directory", "父目录"),
+        ("Resume", "继续"),
+        ("Invalid file name", "无效文件名"),
     ].iter().cloned().collect();
 }

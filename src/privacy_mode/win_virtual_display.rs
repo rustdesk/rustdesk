@@ -21,8 +21,8 @@ use winapi::{
         winuser::{
             ChangeDisplaySettingsExW, EnumDisplayDevicesW, EnumDisplaySettingsExW,
             EnumDisplaySettingsW, CDS_NORESET, CDS_RESET, CDS_SET_PRIMARY, CDS_UPDATEREGISTRY,
-            DISP_CHANGE_SUCCESSFUL, EDD_GET_DEVICE_INTERFACE_NAME, ENUM_CURRENT_SETTINGS,
-            ENUM_REGISTRY_SETTINGS,
+            DISP_CHANGE_FAILED, DISP_CHANGE_SUCCESSFUL, EDD_GET_DEVICE_INTERFACE_NAME,
+            ENUM_CURRENT_SETTINGS, ENUM_REGISTRY_SETTINGS,
         },
     },
 };
@@ -155,6 +155,19 @@ impl PrivacyModeImpl {
         self.virtual_displays_added.clear();
     }
 
+    #[inline]
+    fn change_display_settings_ex_err_msg(rc: i32) -> String {
+        if rc != DISP_CHANGE_FAILED {
+            format!("ret: {}", rc)
+        } else {
+            format!(
+                "ret: {}, last error: {:?}",
+                rc,
+                std::io::Error::last_os_error()
+            )
+        }
+    }
+
     fn set_primary_display(&mut self) -> ResultType<()> {
         let display = &self.virtual_displays[0];
 
@@ -224,13 +237,14 @@ impl PrivacyModeImpl {
                     NULL,
                 );
                 if rc != DISP_CHANGE_SUCCESSFUL {
+                    let err = Self::change_display_settings_ex_err_msg(rc);
                     log::error!(
-                        "Failed ChangeDisplaySettingsEx, device name: {:?}, flags: {}, ret: {}",
+                        "Failed ChangeDisplaySettingsEx, device name: {:?}, flags: {}, {}",
                         std::string::String::from_utf16(&dd.DeviceName),
                         flags,
-                        rc
+                        &err
                     );
-                    bail!("Failed ChangeDisplaySettingsEx, ret: {}", rc);
+                    bail!("Failed ChangeDisplaySettingsEx, {}", err);
                 }
 
                 // If we want to set dpi, the following references may be helpful.
@@ -264,13 +278,14 @@ impl PrivacyModeImpl {
                     NULL as _,
                 );
                 if rc != DISP_CHANGE_SUCCESSFUL {
+                    let err = Self::change_display_settings_ex_err_msg(rc);
                     log::error!(
-                        "Failed ChangeDisplaySettingsEx, device name: {:?}, flags: {}, ret: {}",
+                        "Failed ChangeDisplaySettingsEx, device name: {:?}, flags: {}, {}",
                         std::string::String::from_utf16(&display.name),
                         flags,
-                        rc
+                        &err
                     );
-                    bail!("Failed ChangeDisplaySettingsEx, ret: {}", rc);
+                    bail!("Failed ChangeDisplaySettingsEx, {}", err);
                 }
             }
         }
@@ -327,9 +342,10 @@ impl PrivacyModeImpl {
             //     }
             // }
 
-            let ret = ChangeDisplaySettingsExW(NULL as _, NULL as _, NULL as _, flags, NULL as _);
-            if ret != DISP_CHANGE_SUCCESSFUL {
-                bail!("Failed ChangeDisplaySettingsEx, ret: {}", ret);
+            let rc = ChangeDisplaySettingsExW(NULL as _, NULL as _, NULL as _, flags, NULL as _);
+            if rc != DISP_CHANGE_SUCCESSFUL {
+                let err = Self::change_display_settings_ex_err_msg(rc);
+                bail!("Failed ChangeDisplaySettingsEx, {}", err);
             }
 
             // if !desk_current.is_null() {

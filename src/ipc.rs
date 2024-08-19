@@ -102,6 +102,11 @@ pub enum FS {
         last_modified: u64,
         is_upload: bool,
     },
+    Rename {
+        id: i32,
+        path: String,
+        new_name: String,
+    },
 }
 
 #[cfg(target_os = "windows")]

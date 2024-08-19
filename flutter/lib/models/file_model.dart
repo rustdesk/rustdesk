@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common.dart';
+import 'package:flutter_hbb/common/widgets/dialog.dart';
 import 'package:flutter_hbb/utils/event_loop.dart';
 import 'package:get/get.dart';
 import 'package:path/path.dart' as path;
@@ -642,6 +643,77 @@ class FileController {
         path: path,
         isRemote: !isLocal);
   }
+
+  Future<void> renameAction(Entry item, bool isLocal) async {
+    final textEditingController = TextEditingController(text: item.name);
+    String? errorText;
+    dialogManager?.show((setState, close, context) {
+      textEditingController.addListener(() {
+        if (errorText != null) {
+          setState(() {
+            errorText = null;
+          });
+        }
+      });
+      submit() async {
+        final newName = textEditingController.text;
+        if (newName.isEmpty || newName == item.name) {
+          close();
+          return;
+        }
+        if (directory.value.entries.any((e) => e.name == newName)) {
+          setState(() {
+            errorText = translate("Already exists");
+          });
+          return;
+        }
+        if (!PathUtil.validName(newName, options.value.isWindows)) {
+          setState(() {
+            if (item.isDirectory) {
+              errorText = translate("Invalid folder name");
+            } else {
+              errorText = translate("Invalid file name");
+            }
+          });
+          return;
+        }
+        await bind.sessionRenameFile(
+            sessionId: sessionId,
+            actId: JobController.jobID.next(),
+            path: item.path,
+            newName: newName,
+            isRemote: !isLocal);
+        close();
+      }
+
+      return CustomAlertDialog(
+        content: Column(
+          children: [
+            DialogTextField(
+              title: '${translate('Rename')} ${item.name}',
+              controller: textEditingController,
+              errorText: errorText,
+            ),
+          ],
+        ),
+        actions: [
+          dialogButton(
+            "Cancel",
+            icon: Icon(Icons.close_rounded),
+            onPressed: close,
+            isOutline: true,
+          ),
+          dialogButton(
+            "OK",
+            icon: Icon(Icons.done_rounded),
+            onPressed: submit,
+          ),
+        ],
+        onSubmit: submit,
+        onCancel: close,
+      );
+    });
+  }
 }
 
 class JobController {
@@ -1082,6 +1154,13 @@ class PathUtil {
   static String dirname(String path, bool isWindows) {
     final pathUtil = isWindows ? windowsContext : posixContext;
     return pathUtil.dirname(path);
+  }
+
+  static bool validName(String name, bool isWindows) {
+    final unixFileNamePattern = RegExp(r'^[^/\0]+$');
+    final windowsFileNamePattern = RegExp(r'^[^<>:"/\\|?*]+$');
+    final reg = isWindows ? windowsFileNamePattern : unixFileNamePattern;
+    return reg.hasMatch(name);
   }
 }
 
