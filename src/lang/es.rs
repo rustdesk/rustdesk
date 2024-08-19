@@ -631,7 +631,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("cancel-bot-confirm-tip", "¿Seguro que quieres cancelar el bot de Telegram?"),
         ("About RustDesk", "Acerca de RustDesk"),
         ("Send clipboard keystrokes", "Enviar pulsaciones de teclas"),
-        ("network_error_tip", "Por fvor, comprueba tu conexión de red e inténtalo de nuevo.""),
+        ("network_error_tip", "Por fvor, comprueba tu conexión de red e inténtalo de nuevo."),
         ("Unlock with PIN", "Desbloquear con PIN"),
         ("Requires at least {} characters", "Se necesitan al menos {} caracteres"),
         ("Wrong PIN", "PIN erróneo"),
