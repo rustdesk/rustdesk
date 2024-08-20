@@ -552,6 +552,13 @@ class _DesktopTabState extends State<DesktopTab>
             controller: state.value.pageController,
             physics: NeverScrollableScrollPhysics(),
             children: () {
+              if (DesktopTabType.cm == tabType) {
+                // Fix when adding a new tab still showing closed tabs with the same peer id, which would happen after the DesktopTab was stateful.
+                return state.value.tabs.map((tab) {
+                  return tab.page;
+                }).toList();
+              }
+
               /// to-do refactor, separate connection state and UI state for remote session.
               /// [workaround] PageView children need an immutable list, after it has been passed into PageView
               final tabLen = state.value.tabs.length;
