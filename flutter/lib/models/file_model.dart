@@ -451,7 +451,7 @@ class FileController {
     final isWindows = otherSideData.options.isWindows;
     final showHidden = otherSideData.options.showHidden;
     for (var from in items.items) {
-      final jobID = jobController.add(from, isRemoteToLocal);
+      final jobID = jobController.addTransferJob(from, isRemoteToLocal);
       bind.sessionSendFiles(
           sessionId: sessionId,
           actId: jobID,
@@ -494,19 +494,34 @@ class FileController {
         fd.format(isWindows);
         dialogManager?.dismissAll();
         if (fd.entries.isEmpty) {
+          var deleteJobId = jobController.addDeleteDirJob(item, !isLocal, 0);
           final confirm = await showRemoveDialog(
               translate(
                   "Are you sure you want to delete this empty directory?"),
               item.name,
               false);
           if (confirm == true) {
-            sendRemoveEmptyDir(item.path, 0);
+            sendRemoveEmptyDir(
+              item.path,
+              0,
+              deleteJobId,
+            );
+          } else {
+            jobController.updateJobStatus(deleteJobId,
+                error: "cancel", state: JobState.done);
           }
           return;
         }
         entries = fd.entries;
       } else {
         entries = [];
+      }
+      int deleteJobId;
+      if (item.isDirectory) {
+        deleteJobId =
+            jobController.addDeleteDirJob(item, !isLocal, entries.length);
+      } else {
+        deleteJobId = jobController.addDeleteFileJob(item, !isLocal);
       }
 
       for (var i = 0; i < entries.length; i++) {
@@ -522,24 +537,32 @@ class FileController {
         );
         try {
           if (confirm == true) {
-            sendRemoveFile(entries[i].path, i);
+            sendRemoveFile(entries[i].path, i, deleteJobId);
             final res = await jobController.jobResultListener.start();
             // handle remove res;
             if (item.isDirectory &&
                 res['file_num'] == (entries.length - 1).toString()) {
-              sendRemoveEmptyDir(item.path, i);
+              sendRemoveEmptyDir(item.path, i, deleteJobId);
             }
+          } else {
+            jobController.updateJobStatus(deleteJobId,
+                file_num: i, error: "cancel");
           }
           if (_removeCheckboxRemember) {
             if (confirm == true) {
               for (var j = i + 1; j < entries.length; j++) {
-                sendRemoveFile(entries[j].path, j);
+                sendRemoveFile(entries[j].path, j, deleteJobId);
                 final res = await jobController.jobResultListener.start();
                 if (item.isDirectory &&
                     res['file_num'] == (entries.length - 1).toString()) {
-                  sendRemoveEmptyDir(item.path, i);
+                  sendRemoveEmptyDir(item.path, i, deleteJobId);
                 }
               }
+            } else {
+              jobController.updateJobStatus(deleteJobId,
+                  error: "cancel",
+                  file_num: entries.length,
+                  state: JobState.done);
             }
             break;
           }
@@ -618,22 +641,19 @@ class FileController {
     }, useAnimation: false);
   }
 
-  void sendRemoveFile(String path, int fileNum) {
+  void sendRemoveFile(String path, int fileNum, int actId) {
     bind.sessionRemoveFile(
         sessionId: sessionId,
-        actId: JobController.jobID.next(),
+        actId: actId,
         path: path,
         isRemote: !isLocal,
         fileNum: fileNum);
   }
 
-  void sendRemoveEmptyDir(String path, int fileNum) {
+  void sendRemoveEmptyDir(String path, int fileNum, int actId) {
     history.removeWhere((element) => element.contains(path));
     bind.sessionRemoveAllEmptyDirs(
-        sessionId: sessionId,
-        actId: JobController.jobID.next(),
-        path: path,
-        isRemote: !isLocal);
+        sessionId: sessionId, actId: actId, path: path, isRemote: !isLocal);
   }
 
   Future<void> createDir(String path) async {
@@ -729,20 +749,44 @@ class JobController {
     return jobTable.indexWhere((element) => element.id == id);
   }
 
-  // JobProgress? getJob(int id) {
-  //   return jobTable.firstWhere((element) => element.id == id);
-  // }
-
   // return jobID
-  int add(Entry from, bool isRemoteToLocal) {
+  int addTransferJob(Entry from, bool isRemoteToLocal) {
     final jobID = JobController.jobID.next();
     jobTable.add(JobProgress()
+      ..type = JobType.transfer
       ..fileName = path.basename(from.path)
       ..jobName = from.path
       ..totalSize = from.size
       ..state = JobState.inProgress
       ..id = jobID
       ..isRemoteToLocal = isRemoteToLocal);
+    return jobID;
+  }
+
+  int addDeleteFileJob(Entry file, bool isRemote) {
+    final jobID = JobController.jobID.next();
+    jobTable.add(JobProgress()
+      ..type = JobType.deleteFile
+      ..fileName = path.basename(file.path)
+      ..jobName = file.path
+      ..totalSize = file.size
+      ..state = JobState.none
+      ..id = jobID
+      ..isRemoteToLocal = isRemote);
+    return jobID;
+  }
+
+  int addDeleteDirJob(Entry file, bool isRemote, int fileCount) {
+    final jobID = JobController.jobID.next();
+    jobTable.add(JobProgress()
+      ..type = JobType.deleteDir
+      ..fileName = path.basename(file.path)
+      ..jobName = file.path
+      ..fileCount = fileCount
+      ..totalSize = file.size
+      ..state = JobState.none
+      ..id = jobID
+      ..isRemoteToLocal = isRemote);
     return jobID;
   }
 
@@ -756,6 +800,7 @@ class JobController {
         job.fileNum = int.parse(evt['file_num']);
         job.speed = double.parse(evt['speed']);
         job.finishedSize = int.parse(evt['finished_size']);
+        job.recvJobRes = true;
         debugPrint("update job $id with $evt");
         jobTable.refresh();
       }
@@ -764,20 +809,48 @@ class JobController {
     }
   }
 
-  void jobDone(Map<String, dynamic> evt) async {
+  Future<bool> jobDone(Map<String, dynamic> evt) async {
     if (jobResultListener.isListening) {
       jobResultListener.complete(evt);
-      return;
+      // return;
     }
-
-    int id = int.parse(evt['id']);
+    int id = -1;
+    int? fileNum = 0;
+    double? speed = 0;
+    try {
+      id = int.parse(evt['id']);
+    } catch (_) {}
     final jobIndex = getJob(id);
-    if (jobIndex != -1) {
-      final job = jobTable[jobIndex];
-      job.finishedSize = job.totalSize;
+    if (jobIndex == -1) return true;
+    final job = jobTable[jobIndex];
+    job.recvJobRes = true;
+    if (job.type == JobType.deleteFile) {
       job.state = JobState.done;
-      job.fileNum = int.parse(evt['file_num']);
-      jobTable.refresh();
+    } else if (job.type == JobType.deleteDir) {
+      try {
+        fileNum = int.tryParse(evt['file_num']);
+      } catch (_) {}
+      if (fileNum != null) {
+        if (fileNum < job.fileNum) return true; // file_num can be 0 at last
+        job.fileNum = fileNum;
+        if (fileNum >= job.fileCount - 1) {
+          job.state = JobState.done;
+        }
+      }
+    } else {
+      try {
+        fileNum = int.tryParse(evt['file_num']);
+        speed = double.tryParse(evt['speed']);
+      } catch (_) {}
+      if (fileNum != null) job.fileNum = fileNum;
+      if (speed != null) job.speed = speed;
+      job.state = JobState.done;
+    }
+    jobTable.refresh();
+    if (job.type == JobType.deleteDir) {
+      return job.state == JobState.done;
+    } else {
+      return true;
     }
   }
 
@@ -788,14 +861,50 @@ class JobController {
       final job = jobTable[jobIndex];
       job.state = JobState.error;
       job.err = err;
-      job.fileNum = int.parse(evt['file_num']);
-      if (err == "skipped") {
-        job.state = JobState.done;
-        job.finishedSize = job.totalSize;
+      job.recvJobRes = true;
+      if (job.type == JobType.transfer) {
+        int? fileNum = int.tryParse(evt['file_num']);
+        if (fileNum != null) job.fileNum = fileNum;
+        if (err == "skipped") {
+          job.state = JobState.done;
+          job.finishedSize = job.totalSize;
+        }
+      } else if (job.type == JobType.deleteDir) {
+        if (jobResultListener.isListening) {
+          jobResultListener.complete(evt);
+        }
+        int? fileNum = int.tryParse(evt['file_num']);
+        if (fileNum != null) job.fileNum = fileNum;
+      } else if (job.type == JobType.deleteFile) {
+        if (jobResultListener.isListening) {
+          jobResultListener.complete(evt);
+        }
       }
       jobTable.refresh();
     }
     debugPrint("jobError $evt");
+  }
+
+  void updateJobStatus(int id,
+      {int? file_num, String? error, JobState? state}) {
+    final jobIndex = getJob(id);
+    if (jobIndex < 0) return;
+    final job = jobTable[jobIndex];
+    job.recvJobRes = true;
+    if (file_num != null) {
+      job.fileNum = file_num;
+    }
+    if (error != null) {
+      job.err = error;
+      job.state = JobState.error;
+    }
+    if (state != null) {
+      job.state = state;
+    }
+    if (job.type == JobType.deleteFile && error == null) {
+      job.state = JobState.done;
+    }
+    jobTable.refresh();
   }
 
   Future<void> cancelJob(int id) async {
@@ -814,6 +923,7 @@ class JobController {
     final currJobId = JobController.jobID.next();
     String fileName = path.basename(isRemote ? remote : to);
     var jobProgress = JobProgress()
+      ..type = JobType.transfer
       ..fileName = fileName
       ..jobName = isRemote ? remote : to
       ..id = currJobId
@@ -1088,8 +1198,12 @@ extension JobStateDisplay on JobState {
   }
 }
 
+enum JobType { none, transfer, deleteFile, deleteDir }
+
 class JobProgress {
+  JobType type = JobType.none;
   JobState state = JobState.none;
+  var recvJobRes = false;
   var id = 0;
   var fileNum = 0;
   var speed = 0.0;
@@ -1109,7 +1223,9 @@ class JobProgress {
   int lastTransferredSize = 0;
 
   clear() {
+    type = JobType.none;
     state = JobState.none;
+    recvJobRes = false;
     id = 0;
     fileNum = 0;
     speed = 0;
@@ -1123,10 +1239,80 @@ class JobProgress {
   }
 
   String display() {
-    if (state == JobState.done && err == "skipped") {
-      return translate("Skipped");
+    if (type == JobType.transfer) {
+      if (state == JobState.done && err == "skipped") {
+        return translate("Skipped");
+      }
+    } else if (type == JobType.deleteFile) {
+      if (err == "cancel") {
+        return translate("Cancel");
+      }
     }
+
     return state.display();
+  }
+
+  String getStatus() {
+    int handledFileCount = recvJobRes ? fileNum + 1 : fileNum;
+    if (handledFileCount >= fileCount) {
+      handledFileCount = fileCount;
+    }
+    if (state == JobState.done) {
+      handledFileCount = fileCount;
+      finishedSize = totalSize;
+    }
+    final filesStr = "$handledFileCount/$fileCount files";
+    final sizeStr = totalSize > 0 ? readableFileSize(totalSize.toDouble()) : "";
+    final sizePercentStr = totalSize > 0 && finishedSize > 0
+        ? "${readableFileSize(finishedSize.toDouble())} / ${readableFileSize(totalSize.toDouble())}"
+        : "";
+    if (type == JobType.deleteFile) {
+      return display();
+    } else if (type == JobType.deleteDir) {
+      var res = '';
+      if (state == JobState.done || state == JobState.error) {
+        res = display();
+      }
+      if (filesStr.isNotEmpty) {
+        if (res.isNotEmpty) {
+          res += " ";
+        }
+        res += filesStr;
+      }
+
+      if (sizeStr.isNotEmpty) {
+        if (res.isNotEmpty) {
+          res += ", ";
+        }
+        res += sizeStr;
+      }
+      return res;
+    } else if (type == JobType.transfer) {
+      var res = "";
+      if (state != JobState.inProgress && state != JobState.none) {
+        res += display();
+      }
+      if (filesStr.isNotEmpty) {
+        if (res.isNotEmpty) {
+          res += ", ";
+        }
+        res += filesStr;
+      }
+      if (sizeStr.isNotEmpty && state != JobState.inProgress) {
+        if (res.isNotEmpty) {
+          res += ", ";
+        }
+        res += sizeStr;
+      }
+      if (sizePercentStr.isNotEmpty && state == JobState.inProgress) {
+        if (res.isNotEmpty) {
+          res += ", ";
+        }
+        res += sizePercentStr;
+      }
+      return res;
+    }
+    return '';
   }
 }
 
