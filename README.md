@@ -1,6 +1,6 @@
 <p align="center">
   <img src="res/logo-header.svg" alt="RustDesk - Your remote desktop"><br>
-  <a href="#free-public-servers">Servers</a> •
+  <a href="#public-servers">Servers</a> •
   <a href="#raw-steps-to-build">Build</a> •
   <a href="#how-to-build-with-docker">Docker</a> •
   <a href="#file-structure">Structure</a> •
@@ -171,3 +171,13 @@ Please ensure that you are running these commands from the root of the RustDesk 
 ![File Transfer](https://github.com/rustdesk/rustdesk/assets/28412477/39511ad3-aa9a-4f8c-8947-1cce286a46ad)
 
 ![TCP Tunneling](https://github.com/rustdesk/rustdesk/assets/28412477/78e8708f-e87e-4570-8373-1360033ea6c5)
+
+## [Public Servers](#public-servers)
+
+RustDesk is supported by a free EU server, graciously provided by Codext GmbH
+
+<p align="center">
+  <a href="https://codext.link/rustdesk?utm_source=github">
+    <img src="https://camo.githubusercontent.com/aaf1c033d7b35f067414edd769a63320d028e9edf256789641aab5f02786c370/68747470733a2f2f6f70656e636f6c6c6563746976652e636f6d2f636f6f6c6c616273696f2f6f7267616e697a6174696f6e2f342f6176617461722e737667" alt="Codext GmbH">
+  </a>
+</p>
