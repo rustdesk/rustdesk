@@ -3484,7 +3484,6 @@ pub mod peer_online {
             ..Default::default()
         });
 
-        // TODO: Use long connections to avoid socket creation
         loop {
             let mut socket = match create_online_stream().await {
                 Ok(s) => s,
@@ -3493,6 +3492,10 @@ pub mod peer_online {
                     return Ok((vec![], ids.clone()));
                 }
             };
+            // TODO: Use long connections to avoid socket creation
+            // If we use a Arc<Mutex<Option<FramedStream>>> to hold and reuse the previous socket,
+            // we may face the following error:
+            // An established connection was aborted by the software in your host machine. (os error 10053)
             if let Err(e) = socket.send(&msg_out).await {
                 log::debug!("Failed to send peers online states query, {e}");
                 return Ok((vec![], ids.clone()));
