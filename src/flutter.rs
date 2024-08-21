@@ -2093,8 +2093,7 @@ pub(super) mod async_tasks {
                 ids = rx_onlines.recv() => {
                     match ids {
                         Some(_ids) => {
-                            #[cfg(not(any(target_os = "ios")))]
-                            crate::rendezvous_mediator::query_online_states(_ids, handle_query_onlines).await
+                            crate::client::peer_online::query_online_states(_ids, handle_query_onlines).await
                         }
                         None => {
                             break;
