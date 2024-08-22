@@ -118,7 +118,8 @@ impl Default for Enigo {
         let is_x11 = hbb_common::platform::linux::is_x11_or_headless();
         Self {
             is_x11,
-            tfc: if is_x11 {
+            // FIXME(Shaohua): Disable tfc, as ffi::XkbKeycodeToKeysym() returns nullptr
+            tfc: if is_x11 && false {
                 match TFC_Context::new() {
                     Ok(ctx) => Some(ctx),
                     Err(..) => {
