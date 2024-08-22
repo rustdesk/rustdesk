@@ -34,7 +34,7 @@ const CONFIG_KEY_REG_RECOVERY: &str = "reg_recovery";
 struct Display {
     dm: DEVMODEW,
     name: [WCHAR; 32],
-    _primary: bool,
+    primary: bool,
 }
 
 pub struct PrivacyModeImpl {
@@ -135,7 +135,7 @@ impl PrivacyModeImpl {
             let display = Display {
                 dm,
                 name: dd.DeviceName,
-                _primary: primary,
+                primary,
             };
 
             let ds = virtual_display_manager::get_cur_device_string();
@@ -357,6 +357,35 @@ impl PrivacyModeImpl {
         }
         Ok(())
     }
+
+    fn restore(&mut self) {
+        Self::restore_displays(&self.displays);
+        Self::restore_displays(&self.virtual_displays);
+        allow_err!(Self::commit_change_display(0));
+        self.restore_plug_out_monitor();
+        self.displays.clear();
+        self.virtual_displays.clear();
+    }
+
+    fn restore_displays(displays: &[Display]) {
+        for display in displays {
+            unsafe {
+                let mut dm = display.dm.clone();
+                let flags = if display.primary {
+                    CDS_NORESET | CDS_UPDATEREGISTRY | CDS_SET_PRIMARY
+                } else {
+                    CDS_NORESET | CDS_UPDATEREGISTRY
+                };
+                ChangeDisplaySettingsExW(
+                    display.name.as_ptr(),
+                    &mut dm,
+                    std::ptr::null_mut(),
+                    flags,
+                    std::ptr::null_mut(),
+                );
+            }
+        }
+    }
 }
 
 impl PrivacyMode for PrivacyModeImpl {
@@ -431,14 +460,9 @@ impl PrivacyMode for PrivacyModeImpl {
     ) -> ResultType<()> {
         self.check_off_conn_id(conn_id)?;
         super::win_input::unhook()?;
-        let virtual_display_added = self.virtual_displays_added.len() > 0;
-        if virtual_display_added {
-            self.restore_plug_out_monitor();
-        }
+        let _tmp_ignore_changed_holder = crate::display_service::temp_ignore_displays_changed();
+        self.restore();
         restore_reg_connectivity(false);
-        if !virtual_display_added {
-            Self::commit_change_display(CDS_RESET)?;
-        }
 
         if self.conn_id != INVALID_PRIVACY_MODE_CONN_ID {
             if let Some(state) = state {
