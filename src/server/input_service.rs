@@ -21,6 +21,7 @@ use std::{
     convert::TryFrom,
     ops::{Deref, DerefMut, Sub},
     sync::atomic::{AtomicBool, Ordering},
+    sync::mpsc,
     thread,
     time::{self, Duration, Instant},
 };
@@ -411,9 +412,12 @@ lazy_static::lazy_static! {
     };
     static ref KEYS_DOWN: Arc<Mutex<HashMap<KeysDown, Instant>>> = Default::default();
     static ref LATEST_PEER_INPUT_CURSOR: Arc<Mutex<Input>> = Default::default();
+    // TODO(Shaohua): Remove cursor pos
     static ref LATEST_SYS_CURSOR_POS: Arc<Mutex<(Option<Instant>, (i32, i32))>> = Arc::new(Mutex::new((None, (INVALID_CURSOR_POS, INVALID_CURSOR_POS))));
+    static ref LAST_REMOTE_MOUSE_EVENT: Arc<Mutex<MouseEvent>> = Default::default();
 }
 static EXITING: AtomicBool = AtomicBool::new(false);
+static HAS_LOCAL_MOUSE_EVENT: AtomicBool = AtomicBool::new(false);
 
 const MOUSE_MOVE_PROTECTION_TIMEOUT: Duration = Duration::from_millis(1_000);
 // Actual diff of (x,y) is (1,1) here. But 5 may be tolerant.
@@ -427,23 +431,60 @@ pub fn try_start_record_cursor_pos() -> Option<thread::JoinHandle<()>> {
     }
 
     RECORD_CURSOR_POS_RUNNING.store(true, Ordering::SeqCst);
-    let handle = thread::spawn(|| {
-        let interval = time::Duration::from_millis(33);
-        loop {
-            if !RECORD_CURSOR_POS_RUNNING.load(Ordering::SeqCst) {
-                break;
-            }
 
-            let now = time::Instant::now();
-            if let Some((x, y)) = crate::get_cursor_pos() {
-                update_last_cursor_pos(x, y);
-            }
-            let elapsed = now.elapsed();
-            if elapsed < interval {
-                thread::sleep(interval - elapsed);
+    let (tx_timer, rx_timer) = mpsc::channel::<bool>();
+    let timer_handle = thread::spawn(move || {
+        const WAIT_TIMEOUT: u64 = 500;
+        loop {
+            // TODO(Shaohua): Add a condvar
+            match rx_timer.recv_timeout(Duration::from_millis(WAIT_TIMEOUT)) {
+                Ok(true) => {
+                    // restart timer
+                }
+                Ok(false) => {
+                    // Quit thread
+                    break;
+                }
+                Err(_err) => {
+                    // waiting timeout, reset flag.
+                    HAS_LOCAL_MOUSE_EVENT.store(false, Ordering::Release);
+                }
             }
         }
-        update_last_cursor_pos(INVALID_CURSOR_POS, INVALID_CURSOR_POS);
+
+        // reset on thread exit.
+        HAS_LOCAL_MOUSE_EVENT.store(false, Ordering::Release);
+    });
+
+    let handle = thread::spawn(move || {
+        let tx_timer_clone = tx_timer.clone();
+        if let Err(error) = rdev::listen(move |event: rdev::Event | {
+            match event.event_type {
+                EventType::MouseMove { x, y } => {
+                    let x = x as i32;
+                    let y = y as i32;
+                    if let Ok(guard) = LAST_REMOTE_MOUSE_EVENT.try_lock() {
+                        if guard.x != x || guard.y != y {
+                            // this event is not from remote peer.
+                            // 1. set atomic flag.
+                            HAS_LOCAL_MOUSE_EVENT.store(true, Ordering::Release);
+                            // 2. start or restart timer.
+                            let _ret = tx_timer.send(true);
+                        }
+                    }
+                }
+                _ => {
+                    // ignore all the other events
+                }
+            }
+        }) {
+            log::warn!("Failed to listen to local mouse event! err: {error:?}");
+        }
+
+        // Cleanup
+        HAS_LOCAL_MOUSE_EVENT.store(false, Ordering::Release);
+        let _ret = tx_timer_clone.send(false);
+        let _ret = timer_handle.join();
     });
     Some(handle)
 }
@@ -804,74 +845,15 @@ fn get_last_input_cursor_pos() -> (i32, i32) {
 }
 
 // check if mouse is moved by the controlled side user to make controlled side has higher mouse priority than remote.
-fn active_mouse_(conn: i32) -> bool {
-    true
-    /* this method is buggy (not working on macOS, making fast moving mouse event discarded here) and added latency (this is blocking way, must do in async way), so we disable it for now
-    // out of time protection
-    if LATEST_SYS_CURSOR_POS
-        .lock()
-        .unwrap()
-        .0
-        .map(|t| t.elapsed() > MOUSE_MOVE_PROTECTION_TIMEOUT)
-        .unwrap_or(true)
-    {
-        return true;
-    }
-
-    // last conn input may be protected
-    if LATEST_PEER_INPUT_CURSOR.lock().unwrap().conn != conn {
-        return false;
-    }
-
-    let in_active_dist = |a: i32, b: i32| -> bool { (a - b).abs() < MOUSE_ACTIVE_DISTANCE };
-
-    // Check if input is in valid range
-    match crate::get_cursor_pos() {
-        Some((x, y)) => {
-            let (last_in_x, last_in_y) = get_last_input_cursor_pos();
-            let mut can_active = in_active_dist(last_in_x, x) && in_active_dist(last_in_y, y);
-            // The cursor may not have been moved to last input position if system is busy now.
-            // While this is not a common case, we check it again after some time later.
-            if !can_active {
-                // 100 micros may be enough for system to move cursor.
-                // Mouse inputs on macOS are asynchronous. 1. Put in a queue to process in main thread. 2. Send event async.
-                // More reties are needed on macOS.
-                #[cfg(not(target_os = "macos"))]
-                let retries = 10;
-                #[cfg(target_os = "macos")]
-                let retries = 100;
-                #[cfg(not(target_os = "macos"))]
-                let sleep_interval: u64 = 10;
-                #[cfg(target_os = "macos")]
-                let sleep_interval: u64 = 30;
-                for _retry in 0..retries {
-                    std::thread::sleep(std::time::Duration::from_micros(sleep_interval));
-                    // Sleep here can also somehow suppress delay accumulation.
-                    if let Some((x2, y2)) = crate::get_cursor_pos() {
-                        let (last_in_x, last_in_y) = get_last_input_cursor_pos();
-                        can_active = in_active_dist(last_in_x, x2) && in_active_dist(last_in_y, y2);
-                        if can_active {
-                            break;
-                        }
-                    }
-                }
-            }
-            if !can_active {
-                let mut lock = LATEST_PEER_INPUT_CURSOR.lock().unwrap();
-                lock.x = INVALID_CURSOR_POS / 2;
-                lock.y = INVALID_CURSOR_POS / 2;
-            }
-            can_active
-        }
-        None => true,
-    }
-    */
+fn has_local_mouse_event(_conn: i32) -> bool {
+    HAS_LOCAL_MOUSE_EVENT.load(Ordering::Acquire)
 }
 
-pub fn handle_pointer_(evt: &PointerDeviceEvent, conn: i32) {
-    if !active_mouse_(conn) {
-        return;
-    }
+pub fn handle_pointer_(evt: &PointerDeviceEvent, _conn: i32) {
+    // TODO(Shaohua): Check local mouse event
+    // if !active_mouse_(conn) {
+    //     return;
+    // }
 
     if EXITING.load(Ordering::SeqCst) {
         return;
@@ -890,12 +872,20 @@ pub fn handle_pointer_(evt: &PointerDeviceEvent, conn: i32) {
 }
 
 pub fn handle_mouse_(evt: &MouseEvent, conn: i32) {
-    if !active_mouse_(conn) {
+    if has_local_mouse_event(conn) {
         return;
     }
 
     if EXITING.load(Ordering::SeqCst) {
         return;
+    }
+
+    // 1. save current event to shared state
+    if let Ok(mut guard) = LAST_REMOTE_MOUSE_EVENT.try_lock() {
+        guard.mask = evt.mask;
+        guard.x = evt.x;
+        guard.y = evt.y;
+        // TODO(Shaohua): Copy modifiers and special fields if necessary.
     }
 
     #[cfg(windows)]
