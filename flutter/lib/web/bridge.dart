@@ -23,6 +23,7 @@ sealed class EventToUI {
   ) = EventToUI_Rgba;
   const factory EventToUI.texture(
     int field0,
+    bool field1,
   ) = EventToUI_Texture;
 }
 
@@ -33,15 +34,19 @@ class EventToUI_Event implements EventToUI {
 }
 
 class EventToUI_Rgba implements EventToUI {
-  const EventToUI_Rgba(final int field0) : this.field = field0;
+  const EventToUI_Rgba(final int field0) : field = field0;
   final int field;
   int get field0 => field;
 }
 
 class EventToUI_Texture implements EventToUI {
-  const EventToUI_Texture(final int field0) : this.field = field0;
-  final int field;
-  int get field0 => field;
+  const EventToUI_Texture(final int field0, final bool field1)
+      : f0 = field0,
+        f1 = field1;
+  final int f0;
+  final bool f1;
+  int get field0 => f0;
+  bool get field1 => f1;
 }
 
 class RustdeskImpl {
@@ -394,14 +399,20 @@ class RustdeskImpl {
 
   Future<void> sessionHandleFlutterKeyEvent(
       {required UuidValue sessionId,
-      required String name,
-      required int platformCode,
-      required int positionCode,
+      required String character,
+      required int usbHid,
       required int lockModes,
       required bool downOrUp,
       dynamic hint}) {
-    // TODO: map mode
-    throw UnimplementedError();
+    return Future(() => js.context.callMethod('setByName', [
+          'flutter_key_event',
+          jsonEncode({
+            'name': character,
+            'usb_hid': usbHid,
+            'lock_modes': lockModes,
+            if (downOrUp) 'down': 'true',
+          })
+        ]));
   }
 
   void sessionEnterOrLeave(
@@ -702,11 +713,11 @@ class RustdeskImpl {
   }
 
   Future<String> mainGetAppName({dynamic hint}) {
-    throw UnimplementedError();
+    return Future.value(mainGetAppNameSync(hint: hint));
   }
 
   String mainGetAppNameSync({dynamic hint}) {
-    throw UnimplementedError();
+    return 'RustDesk';
   }
 
   String mainUriPrefixSync({dynamic hint}) {
@@ -758,8 +769,9 @@ class RustdeskImpl {
   }
 
   Future<bool> mainIsUsingPublicServer({dynamic hint}) {
-    return Future(
-        () => js.context.callMethod('setByName', ["is_using_public_server"]));
+    return Future(() =>
+        js.context.callMethod('getByName', ["is_using_public_server"]) ==
+        'true');
   }
 
   Future<void> mainDiscover({dynamic hint}) {
@@ -1610,7 +1622,7 @@ class RustdeskImpl {
   }
 
   bool mainIsOptionFixed({required String key, dynamic hint}) {
-    throw UnimplementedError();
+    return false;
   }
 
   bool mainGetUseTextureRender({dynamic hint}) {
@@ -1647,6 +1659,37 @@ class RustdeskImpl {
   }
 
   Future<void> mainClearTrustedDevices({dynamic hint}) {
+    throw UnimplementedError();
+  }
+
+  Future<String> getVoiceCallInputDevice({required bool isCm, dynamic hint}) {
+    throw UnimplementedError();
+  }
+
+  Future<void> setVoiceCallInputDevice(
+      {required bool isCm, required String device, dynamic hint}) {
+    throw UnimplementedError();
+  }
+
+  bool isPresetPasswordMobileOnly({dynamic hint}) {
+    throw UnimplementedError();
+  }
+
+  String mainGetBuildinOption({required String key, dynamic hint}) {
+    return '';
+  }
+
+  String installInstallOptions({dynamic hint}) {
+    throw UnimplementedError();
+  }
+
+  sessionRenameFile(
+      {required UuidValue sessionId,
+      required int actId,
+      required String path,
+      required String newName,
+      required bool isRemote,
+      dynamic hint}) {
     throw UnimplementedError();
   }
 
