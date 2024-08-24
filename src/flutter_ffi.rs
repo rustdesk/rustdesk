@@ -508,6 +508,27 @@ pub fn session_handle_flutter_key_event(
     }
 }
 
+pub fn session_handle_flutter_raw_key_event(
+    session_id: SessionID,
+    name: String,
+    platform_code: i32,
+    position_code: i32,
+    lock_modes: i32,
+    down_or_up: bool,
+) {
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
+        let keyboard_mode = session.get_keyboard_mode();
+        session.handle_flutter_raw_key_event(
+            &keyboard_mode,
+            &name,
+            platform_code,
+            position_code,
+            lock_modes,
+            down_or_up,
+        );
+    }
+}
+
 // SyncReturn<()> is used to make sure enter() and leave() are executed in the sequence this function is called.
 //
 // If the cursor jumps between remote page of two connections, leave view and enter view will be called.
