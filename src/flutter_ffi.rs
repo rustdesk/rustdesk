@@ -491,9 +491,8 @@ pub fn session_switch_display(is_desktop: bool, session_id: SessionID, value: Ve
 
 pub fn session_handle_flutter_key_event(
     session_id: SessionID,
-    name: String,
-    platform_code: i32,
-    position_code: i32,
+    character: String,
+    usb_hid: i32,
     lock_modes: i32,
     down_or_up: bool,
 ) {
@@ -501,9 +500,8 @@ pub fn session_handle_flutter_key_event(
         let keyboard_mode = session.get_keyboard_mode();
         session.handle_flutter_key_event(
             &keyboard_mode,
-            &name,
-            platform_code,
-            position_code,
+            &character,
+            usb_hid,
             lock_modes,
             down_or_up,
         );
