@@ -380,6 +380,22 @@ packages:
       url: "https://github.com/rustdesk-org/dynamic_layouts.git"
     source: git
     version: "0.0.1+1"
+  extended_text:
+    dependency: "direct main"
+    description:
+      name: extended_text
+      sha256: "7f382de3af12992e34bd72ddd36becf90c4720900af126cb9859f0189af71ffe"
+      url: "https://pub.dev"
+    source: hosted
+    version: "13.0.0"
+  extended_text_library:
+    dependency: transitive
+    description:
+      name: extended_text_library
+      sha256: "55d09098ec56fab0d9a8a68950ca0bbf2efa1327937f7cec6af6dfa066234829"
+      url: "https://pub.dev"
+    source: hosted
+    version: "12.0.0"
   external_path:
     dependency: "direct main"
     description:
@@ -1613,5 +1629,5 @@ packages:
     source: hosted
     version: "0.2.1"
 sdks:
-  dart: ">=3.2.0 <4.0.0"
-  flutter: ">=3.16.0"
+  dart: ">=3.3.0 <4.0.0"
+  flutter: ">=3.19.0"
