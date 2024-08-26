@@ -508,7 +508,7 @@ class InputModel {
     }
 
     // * Currently mobile does not enable map mode
-    if ((isDesktop || isWebDesktop) && keyboardMode == 'map') {
+    if ((isDesktop || isWebDesktop) && keyboardMode == kKeyMapMode) {
       mapKeyboardModeRaw(e);
     } else {
       legacyKeyboardModeRaw(e);
@@ -537,7 +537,7 @@ class InputModel {
     }
 
     // * Currently mobile does not enable map mode
-    if ((isDesktop || isWebDesktop)) {
+    if ((isDesktop || isWebDesktop) && keyboardMode == kKeyMapMode) {
       // FIXME: e.character is wrong for dead keys, eg: ^ in de
       newKeyboardMode(
           e.character ?? '',
