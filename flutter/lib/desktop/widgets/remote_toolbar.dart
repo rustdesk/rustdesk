@@ -1612,7 +1612,9 @@ class _KeyboardMenu extends StatelessWidget {
       // If use flutter to grab keys, we can only use one mode.
       // Map mode and Legacy mode, at least one of them is supported.
       String? modeOnly;
-      if (isInputSourceFlutter) {
+      // Keep both map and legacy mode on web at the moment.
+      // TODO: Remove legacy mode after web supports translate mode on web.
+      if (isInputSourceFlutter && isDesktop) {
         if (bind.sessionIsKeyboardModeSupported(
             sessionId: ffi.sessionId, mode: kKeyMapMode)) {
           modeOnly = kKeyMapMode;
