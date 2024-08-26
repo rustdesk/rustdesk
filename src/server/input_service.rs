@@ -385,6 +385,9 @@ fn run_cursor(sp: MouseCursorService, state: &mut StateCursor) -> ResultType<()>
 
 fn run_window_focus(sp: EmptyExtraFieldService, state: &mut StateWindowFocus) -> ResultType<()> {
     let displays = super::display_service::get_sync_displays();
+    if displays.len() <= 1 {
+        return Ok(());
+    }
     let disp_idx = crate::get_focused_display(displays);
     if let Some(disp_idx) = disp_idx.map(|id| id as i32) {
         if state.is_changed(disp_idx) {
