@@ -234,7 +234,7 @@ class RustdeskImpl {
   }
 
   String getLocalKbLayoutType({dynamic hint}) {
-    throw js.context.callMethod('getByName', ['option:local', 'kb_layout']);
+    return js.context.callMethod('getByName', ['option:local', 'kb_layout']);
   }
 
   Future<void> setLocalKbLayoutType(
@@ -413,6 +413,17 @@ class RustdeskImpl {
             if (downOrUp) 'down': 'true',
           })
         ]));
+  }
+
+  Future<void> sessionHandleFlutterRawKeyEvent(
+      {required UuidValue sessionId,
+      required String name,
+      required int platformCode,
+      required int positionCode,
+      required int lockModes,
+      required bool downOrUp,
+      dynamic hint}) {
+    throw UnimplementedError();
   }
 
   void sessionEnterOrLeave(
