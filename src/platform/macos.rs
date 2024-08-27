@@ -507,10 +507,6 @@ pub fn start_os_service() {
         .map(|p| p.start_time())
         .unwrap_or_default() as i64;
     log::info!("Startime: {my_start_time} vs {:?}", server);
-    if my_start_time < server.unwrap().0 + 3 {
-        log::error!("Please start --server first to make delegate work, earlier more 3 seconds",);
-        std::process::exit(-1);
-    }
 
     std::thread::spawn(move || loop {
         std::thread::sleep(std::time::Duration::from_secs(1));
@@ -523,7 +519,7 @@ pub fn start_os_service() {
             );
             std::process::exit(-1);
         };
-        if my_start_time < start_time + 3 {
+        if my_start_time <= start_time + 3 {
             log::error!(
                     "Agent start later, {my_start_time} vs {start_time}, please start --server first to make delegate work, earlier more 3 seconds",
                 );
