@@ -784,7 +784,7 @@ class InputModel {
     if (!isInputSourceFlutter) {
       bind.sessionEnterOrLeave(sessionId: sessionId, enter: enter);
     }
-    if (enter) {
+    if (!isWeb && enter) {
       bind.setCurSessionId(sessionId: sessionId);
     }
   }
