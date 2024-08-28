@@ -650,11 +650,12 @@ function download(from, to, args..) {
 class UpgradeMe: Reactor.Component {
     function render() {
         var update_or_download = is_osx ? "download" : "update";
-        return <div .install-me>
+       /*  return <div .install-me>
             <div>{translate('Status')}</div>
             <div>{translate('Your installation is lower version.')}</div>
             <div #install-me.link>{translate('Click to upgrade')}</div>
-        </div>;
+        </div>; */
+        return <div></div>;
     }
 
     event click $(#install-me) {
