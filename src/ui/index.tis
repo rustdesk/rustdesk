@@ -571,8 +571,8 @@ class App: Reactor.Component
                         <PasswordArea />
                     </div>
                     {!is_win || handler.is_installed() ? "": <InstallMe />}
-                    {software_update_url ? "" : ""}
-                    {is_win && handler.is_installed() && !software_update_url && handler.is_installed_lower_version() ? "" : ""}
+                    {software_update_url ? <UpdateMe /> : ""}
+                    {is_win && handler.is_installed() && !software_update_url && handler.is_installed_lower_version() ? <UpgradeMe /> : ""}
                     {is_can_screen_recording ? "": <CanScreenRecording />}
                     {is_can_screen_recording && !handler.is_process_trusted(false) ? <TrustMe /> : ""}
                     {!service_stopped && is_can_screen_recording && handler.is_process_trusted(false) && handler.is_installed() && !handler.is_installed_daemon(false) ? <InstallDaemon /> : ""}
@@ -650,12 +650,11 @@ function download(from, to, args..) {
 class UpgradeMe: Reactor.Component {
     function render() {
         var update_or_download = is_osx ? "download" : "update";
-       /*  return <div .install-me>
+        return <div .install-me>
             <div>{translate('Status')}</div>
             <div>{translate('Your installation is lower version.')}</div>
             <div #install-me.link>{translate('Click to upgrade')}</div>
-        </div>; */
-        return <div></div>;
+        </div>;
     }
 
     event click $(#install-me) {
