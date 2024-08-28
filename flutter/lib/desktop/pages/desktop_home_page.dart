@@ -421,7 +421,6 @@ class _DesktopHomePageState extends State<DesktopHomePage>
         final Uri url = Uri.parse('https://rustdesk.com/download');
         await launchUrl(url);
       }, closeButton: true); */
-      return buildInstallCard("", "", "", () {});
     }
     if (systemError.isNotEmpty) {
       return buildInstallCard("", systemError, "", () {});
@@ -442,7 +441,6 @@ class _DesktopHomePageState extends State<DesktopHomePage>
           await rustDeskWinManager.closeAllSubWindows();
           bind.mainUpdateMe();
         }); */
-        return buildInstallCard("", "", "", () {});
       }
     } else if (isMacOS) {
       final isOutgoingOnly = bind.isOutgoingOnly();
