@@ -452,8 +452,8 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
 
   Widget _buildToolbar(BuildContext context) {
     final List<Widget> toolbarItems = [];
+    toolbarItems.add(_PinMenu(state: widget.state));
     if (!isWebDesktop) {
-      toolbarItems.add(_PinMenu(state: widget.state));
       toolbarItems.add(_MobileActionMenu(ffi: widget.ffi));
     }
 
