@@ -190,9 +190,20 @@ fn send_query() -> ResultType<Vec<UdpSocket>> {
     }
 
     let mut msg_out = Message::new();
+    // We may not be able to get the mac address on mobile platforms.
+    // So we need to use the id to avoid discovering ourselves.
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    let id = crate::ui_interface::get_id();
+    // `crate::ui_interface::get_id()` will cause error:
+    // `get_id()` uses async code with `current_thread`, which is not allowed in this context.
+    //
+    // No need to get id for desktop platforms.
+    // We can use the mac address to identify the device.
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    let id = "".to_owned();
     let peer = PeerDiscovery {
         cmd: "ping".to_owned(),
-        id: crate::ui_interface::get_id(),
+        id,
         ..Default::default()
     };
     msg_out.set_peer_discovery(peer);
