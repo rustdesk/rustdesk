@@ -61,7 +61,8 @@ class DesktopSettingPage extends StatefulWidget {
   final SettingsTabKey initialTabkey;
   static final List<SettingsTabKey> tabKeys = [
     SettingsTabKey.general,
-    if (!bind.isOutgoingOnly() &&
+    if (!isWeb &&
+        !bind.isOutgoingOnly() &&
         !bind.isDisableSettings() &&
         bind.mainGetBuildinOption(key: kOptionHideSecuritySetting) != 'Y')
       SettingsTabKey.safety,
@@ -216,7 +217,7 @@ class _DesktopSettingPageState extends State<DesktopSettingPage>
             width: _kTabWidth,
             child: Column(
               children: [
-                _header(),
+                _header(context),
                 Flexible(child: _listView(tabs: _settingTabs())),
               ],
             ),
@@ -239,21 +240,40 @@ class _DesktopSettingPageState extends State<DesktopSettingPage>
     );
   }
 
-  Widget _header() {
+  Widget _header(BuildContext context) {
+    final settingsText = Text(
+      translate('Settings'),
+      textAlign: TextAlign.left,
+      style: const TextStyle(
+        color: _accentColor,
+        fontSize: _kTitleFontSize,
+        fontWeight: FontWeight.w400,
+      ),
+    );
     return Row(
       children: [
-        SizedBox(
-          height: 62,
-          child: Text(
-            translate('Settings'),
-            textAlign: TextAlign.left,
-            style: const TextStyle(
-              color: _accentColor,
-              fontSize: _kTitleFontSize,
-              fontWeight: FontWeight.w400,
+        if (isWeb)
+          IconButton(
+            onPressed: () {
+              if (Navigator.canPop(context)) {
+                Navigator.pop(context);
+              }
+            },
+            icon: Icon(Icons.arrow_back),
+          ).marginOnly(left: 5),
+        if (isWeb)
+          SizedBox(
+            height: 62,
+            child: Align(
+              alignment: Alignment.center,
+              child: settingsText,
             ),
-          ),
-        ).marginOnly(left: 20, top: 10),
+          ).marginOnly(left: 20),
+        if (!isWeb)
+          SizedBox(
+            height: 62,
+            child: settingsText,
+          ).marginOnly(left: 20, top: 10),
         const Spacer(),
       ],
     );
@@ -322,7 +342,8 @@ class _General extends StatefulWidget {
 }
 
 class _GeneralState extends State<_General> {
-  final RxBool serviceStop = Get.find<RxBool>(tag: 'stop-service');
+  final RxBool serviceStop =
+      isWeb ? RxBool(false) : Get.find<RxBool>(tag: 'stop-service');
   RxBool serviceBtnEnabled = true.obs;
 
   @override
@@ -334,13 +355,13 @@ class _GeneralState extends State<_General> {
           physics: DraggableNeverScrollableScrollPhysics(),
           controller: scrollController,
           children: [
-            service(),
+            if (!isWeb) service(),
             theme(),
             _Card(title: 'Language', children: [language()]),
-            hwcodec(),
-            audio(context),
-            record(context),
-            WaylandCard(),
+            if (!isWeb) hwcodec(),
+            if (!isWeb) audio(context),
+            if (!isWeb) record(context),
+            if (!isWeb) WaylandCard(),
             other()
           ],
         ).marginOnly(bottom: _kListViewBottomMargin));
@@ -394,13 +415,13 @@ class _GeneralState extends State<_General> {
 
   Widget other() {
     final children = <Widget>[
-      if (!bind.isIncomingOnly())
+      if (!isWeb && !bind.isIncomingOnly())
         _OptionCheckBox(context, 'Confirm before closing multiple tabs',
             kOptionEnableConfirmClosingTabs,
             isServer: false),
       _OptionCheckBox(context, 'Adaptive bitrate', kOptionEnableAbr),
-      wallpaper(),
-      if (!bind.isIncomingOnly()) ...[
+      if (!isWeb) wallpaper(),
+      if (!isWeb && !bind.isIncomingOnly()) ...[
         _OptionCheckBox(
           context,
           'Open connection in new tab',
@@ -417,18 +438,19 @@ class _GeneralState extends State<_General> {
               kOptionAllowAlwaysSoftwareRender,
             ),
           ),
-        Tooltip(
-          message: translate('texture_render_tip'),
-          child: _OptionCheckBox(
-            context,
-            "Use texture rendering",
-            kOptionTextureRender,
-            optGetter: bind.mainGetUseTextureRender,
-            optSetter: (k, v) async =>
-                await bind.mainSetLocalOption(key: k, value: v ? 'Y' : 'N'),
+        if (!isWeb)
+          Tooltip(
+            message: translate('texture_render_tip'),
+            child: _OptionCheckBox(
+              context,
+              "Use texture rendering",
+              kOptionTextureRender,
+              optGetter: bind.mainGetUseTextureRender,
+              optSetter: (k, v) async =>
+                  await bind.mainSetLocalOption(key: k, value: v ? 'Y' : 'N'),
+            ),
           ),
-        ),
-        if (!bind.isCustomClient())
+        if (!isWeb && !bind.isCustomClient())
           _OptionCheckBox(
             context,
             'Check for software update on startup',
@@ -443,7 +465,7 @@ class _GeneralState extends State<_General> {
           )
       ],
     ];
-    if (bind.mainShowOption(key: kOptionAllowLinuxHeadless)) {
+    if (!isWeb && bind.mainShowOption(key: kOptionAllowLinuxHeadless)) {
       children.add(_OptionCheckBox(
           context, 'Allow linux headless', kOptionAllowLinuxHeadless));
     }
@@ -641,8 +663,9 @@ class _GeneralState extends State<_General> {
         initialKey: currentKey,
         onChanged: (key) async {
           await bind.mainSetLocalOption(key: kCommConfKeyLang, value: key);
-          reloadAllWindows();
-          bind.mainChangeLanguage(lang: key);
+          if (isWeb) reloadCurrentWindow();
+          if (!isWeb) reloadAllWindows();
+          if (!isWeb) bind.mainChangeLanguage(lang: key);
         },
         enabled: !isOptFixed,
       ).marginOnly(left: _kContentHMargin);
@@ -1337,7 +1360,7 @@ class _Network extends StatefulWidget {
 class _NetworkState extends State<_Network> with AutomaticKeepAliveClientMixin {
   @override
   bool get wantKeepAlive => true;
-  bool locked = bind.mainIsInstalled();
+  bool locked = !isWeb && bind.mainIsInstalled();
 
   @override
   Widget build(BuildContext context) {
@@ -1346,8 +1369,9 @@ class _NetworkState extends State<_Network> with AutomaticKeepAliveClientMixin {
     final scrollController = ScrollController();
     final hideServer =
         bind.mainGetBuildinOption(key: kOptionHideServerSetting) == 'Y';
+    // TODO: support web proxy
     final hideProxy =
-        bind.mainGetBuildinOption(key: kOptionHideProxySetting) == 'Y';
+        isWeb || bind.mainGetBuildinOption(key: kOptionHideProxySetting) == 'Y';
     return DesktopScrollWrapper(
         scrollController: scrollController,
         child: ListView(
@@ -1467,7 +1491,7 @@ class _DisplayState extends State<_Display> {
               scrollStyle(context),
               imageQuality(context),
               codec(context),
-              privacyModeImpl(context),
+              if (!isWeb) privacyModeImpl(context),
               other(context),
             ]).marginOnly(bottom: _kListViewBottomMargin));
   }
