@@ -1,6 +1,6 @@
 use crate::{
     client::file_trait::FileManager,
-    common::{is_keyboard_mode_supported, make_fd_to_json},
+    common::make_fd_to_json,
     flutter::{
         self, session_add, session_add_existed, session_start_, sessions, try_sync_peer_option,
     },
@@ -19,13 +19,11 @@ use hbb_common::allow_err;
 use hbb_common::{
     config::{self, LocalConfig, PeerConfig, PeerInfoSerde},
     fs, lazy_static, log,
-    message_proto::KeyboardMode,
     rendezvous_proto::ConnType,
     ResultType,
 };
 use std::{
     collections::HashMap,
-    str::FromStr,
     sync::{
         atomic::{AtomicI32, Ordering},
         Arc,
@@ -447,15 +445,7 @@ pub fn session_get_custom_image_quality(session_id: SessionID) -> Option<Vec<i32
 
 pub fn session_is_keyboard_mode_supported(session_id: SessionID, mode: String) -> SyncReturn<bool> {
     if let Some(session) = sessions::get_session_by_session_id(&session_id) {
-        if let Ok(mode) = KeyboardMode::from_str(&mode[..]) {
-            SyncReturn(is_keyboard_mode_supported(
-                &mode,
-                session.get_peer_version(),
-                &session.peer_platform(),
-            ))
-        } else {
-            SyncReturn(false)
-        }
+        SyncReturn(session.is_keyboard_mode_supported(mode))
     } else {
         SyncReturn(false)
     }

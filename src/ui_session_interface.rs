@@ -252,6 +252,18 @@ impl<T: InvokeUiSession> Session<T> {
         self.fallback_keyboard_mode()
     }
 
+    pub fn is_keyboard_mode_supported(&self, mode: String) -> bool {
+        if let Ok(mode) = KeyboardMode::from_str(&mode[..]) {
+            crate::common::is_keyboard_mode_supported(
+                &mode,
+                self.get_peer_version(),
+                &self.peer_platform(),
+            )
+        } else {
+            false
+        }
+    }
+
     pub fn save_keyboard_mode(&self, value: String) {
         self.lc.write().unwrap().save_keyboard_mode(value);
     }
