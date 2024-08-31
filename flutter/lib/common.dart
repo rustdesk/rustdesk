@@ -350,6 +350,9 @@ class MyTheme {
     hoverColor: Color.fromARGB(255, 224, 224, 224),
     scaffoldBackgroundColor: Colors.white,
     dialogBackgroundColor: Colors.white,
+    appBarTheme: AppBarTheme(
+      shadowColor: Colors.transparent,
+    ),
     dialogTheme: DialogTheme(
       elevation: 15,
       shape: RoundedRectangleBorder(
@@ -445,6 +448,9 @@ class MyTheme {
     hoverColor: Color.fromARGB(255, 45, 46, 53),
     scaffoldBackgroundColor: Color(0xFF18191E),
     dialogBackgroundColor: Color(0xFF18191E),
+    appBarTheme: AppBarTheme(
+      shadowColor: Colors.transparent,
+    ),
     dialogTheme: DialogTheme(
       elevation: 15,
       shape: RoundedRectangleBorder(
