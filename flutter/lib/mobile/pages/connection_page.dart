@@ -9,19 +9,16 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter_hbb/models/peer_model.dart';
 
 import '../../common.dart';
-import '../../common/widgets/login.dart';
 import '../../common/widgets/peer_tab_page.dart';
 import '../../common/widgets/autocomplete.dart';
 import '../../consts.dart';
 import '../../models/model.dart';
 import '../../models/platform_model.dart';
 import 'home_page.dart';
-import 'scan_page.dart';
-import 'settings_page.dart';
 
 /// Connection page for connecting to a remote peer.
 class ConnectionPage extends StatefulWidget implements PageShape {
-  ConnectionPage({Key? key}) : super(key: key);
+  ConnectionPage({Key? key, required this.appBarActions}) : super(key: key);
 
   @override
   final icon = const Icon(Icons.connected_tv);
@@ -30,7 +27,7 @@ class ConnectionPage extends StatefulWidget implements PageShape {
   final title = translate("Connection");
 
   @override
-  final appBarActions = isWeb ? <Widget>[const WebMenu()] : <Widget>[];
+  final List<Widget> appBarActions;
 
   @override
   State<ConnectionPage> createState() => _ConnectionPageState();
@@ -354,75 +351,5 @@ class _ConnectionPageState extends State<ConnectionPage> {
       Get.delete<IDTextEditingController>();
     }
     super.dispose();
-  }
-}
-
-class WebMenu extends StatefulWidget {
-  const WebMenu({Key? key}) : super(key: key);
-
-  @override
-  State<WebMenu> createState() => _WebMenuState();
-}
-
-class _WebMenuState extends State<WebMenu> {
-  @override
-  Widget build(BuildContext context) {
-    Provider.of<FfiModel>(context);
-    return PopupMenuButton<String>(
-        tooltip: "",
-        icon: const Icon(Icons.more_vert),
-        itemBuilder: (context) {
-          return (isIOS
-                  ? [
-                      const PopupMenuItem(
-                        value: "scan",
-                        child: Icon(Icons.qr_code_scanner, color: Colors.black),
-                      )
-                    ]
-                  : <PopupMenuItem<String>>[]) +
-              [
-                PopupMenuItem(
-                  value: "server",
-                  child: Text(translate('ID/Relay Server')),
-                )
-              ] +
-              [
-                PopupMenuItem(
-                  value: "login",
-                  child: Text(gFFI.userModel.userName.value.isEmpty
-                      ? translate("Login")
-                      : '${translate("Logout")} (${gFFI.userModel.userName.value})'),
-                )
-              ] +
-              [
-                PopupMenuItem(
-                  value: "about",
-                  child: Text(translate('About RustDesk')),
-                )
-              ];
-        },
-        onSelected: (value) {
-          if (value == 'server') {
-            showServerSettings(gFFI.dialogManager);
-          }
-          if (value == 'about') {
-            showAbout(gFFI.dialogManager);
-          }
-          if (value == 'login') {
-            if (gFFI.userModel.userName.value.isEmpty) {
-              loginDialog();
-            } else {
-              logOutConfirmDialog();
-            }
-          }
-          if (value == 'scan') {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (BuildContext context) => ScanPage(),
-              ),
-            );
-          }
-        });
   }
 }
