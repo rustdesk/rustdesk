@@ -1075,7 +1075,7 @@ class RustdeskImpl {
   }
 
   Future<String> mainGetFingerprint({dynamic hint}) {
-    return Future(() => js.context.callMethod('getByName', ['fingerprint']));
+    return Future.value('');
   }
 
   Future<String> cmGetClientsState({dynamic hint}) {
