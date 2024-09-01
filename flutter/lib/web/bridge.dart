@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
+import 'dart:html' as html;
 
 import 'package:flutter_hbb/consts.dart';
 
@@ -655,7 +656,15 @@ class RustdeskImpl {
   }
 
   String mainGetLoginDeviceInfo({dynamic hint}) {
-    throw UnimplementedError();
+    String userAgent = html.window.navigator.userAgent;
+    String appName = html.window.navigator.appName;
+    String appVersion = html.window.navigator.appVersion;
+    String? platform = html.window.navigator.platform;
+    return jsonEncode({
+      'os': '$userAgent, $appName $appVersion ($platform)',
+      'type': 'Web client',
+      'name': js.context.callMethod('getByName', ['my_name']),
+    });
   }
 
   Future<void> mainChangeId({required String newId, dynamic hint}) {
@@ -850,11 +859,11 @@ class RustdeskImpl {
   }
 
   Future<String> mainGetMyId({dynamic hint}) {
-    throw UnimplementedError();
+    return Future(() => js.context.callMethod('getByName', ['my_id']));
   }
 
   Future<String> mainGetUuid({dynamic hint}) {
-    throw UnimplementedError();
+    return Future(() => js.context.callMethod('getByName', ['uuid']));
   }
 
   Future<String> mainGetPeerOption(
@@ -1066,8 +1075,7 @@ class RustdeskImpl {
   }
 
   Future<String> mainGetFingerprint({dynamic hint}) {
-    // TODO: implement
-    return Future.value('');
+    return Future(() => js.context.callMethod('getByName', ['fingerprint']));
   }
 
   Future<String> cmGetClientsState({dynamic hint}) {
