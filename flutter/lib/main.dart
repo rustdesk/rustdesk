@@ -412,6 +412,8 @@ class _AppState extends State<App> with WidgetsBindingObserver {
   }
 
   void _updateOrientation() {
+    if (isDesktop) return;
+
     // https://github.com/flutter/flutter/issues/60899
     // stateGlobal.isPortrait.value =
     //     MediaQuery.of(context).orientation == Orientation.portrait;
