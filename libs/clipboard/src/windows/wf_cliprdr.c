@@ -1446,6 +1446,36 @@ static UINT cliprdr_send_format_list(wfClipboard *clipboard, UINT32 connID)
 	return rc;
 }
 
+// Ensure the event is not signaled, and reset it if it is.
+UINT try_reset_event(HANDLE event)
+{
+	if (!event)
+	{
+		return ERROR_INTERNAL_ERROR;
+	}
+
+	DWORD result = WaitForSingleObject(event, 0);
+	if (result == WAIT_OBJECT_0)
+	{
+		if (!ResetEvent(event))
+		{
+			return GetLastError();
+		}
+		else
+		{
+			return ERROR_SUCCESS;
+		}
+	}
+	else if (result == WAIT_TIMEOUT)
+	{
+		return ERROR_SUCCESS;
+	}
+	else
+	{
+		return ERROR_INTERNAL_ERROR;
+	}
+}
+
 UINT wait_response_event(UINT32 connID, wfClipboard *clipboard, HANDLE event, BOOL* recvedFlag, void **data)
 {
 	UINT rc = ERROR_SUCCESS;
@@ -1468,6 +1498,11 @@ UINT wait_response_event(UINT32 connID, wfClipboard *clipboard, HANDLE event, BO
 			}
 		}
 
+		if (!ResetEvent(event))
+		{
+			// NOTE: critical error here, crash may be better
+		}
+
 		if (clipboard->context->IsStopped == TRUE)
 		{
 			wf_do_empty_cliprdr(clipboard);
@@ -1477,12 +1512,6 @@ UINT wait_response_event(UINT32 connID, wfClipboard *clipboard, HANDLE event, BO
 		if (waitRes != WAIT_OBJECT_0)
 		{
 			return ERROR_INTERNAL_ERROR;
-		}
-
-		if (!ResetEvent(event))
-		{
-			// NOTE: critical error here, crash may be better
-			rc = ERROR_INTERNAL_ERROR;
 		}
 
 		if ((*data) == NULL)
@@ -1528,12 +1557,18 @@ static UINT cliprdr_send_data_request(UINT32 connID, wfClipboard *clipboard, UIN
 	if (!clipboard || !clipboard->context || !clipboard->context->ClientFormatDataRequest)
 		return ERROR_INTERNAL_ERROR;
 
+	rc = try_reset_event(clipboard->formatDataRespEvent);
+	if (rc != ERROR_SUCCESS)
+	{
+		return rc;
+	}
+	clipboard->formatDataRespReceived = FALSE;
+
 	remoteFormatId = get_remote_format_id(clipboard, formatId);
 
 	formatDataRequest.connID = connID;
 	formatDataRequest.requestedFormatId = remoteFormatId;
 	clipboard->requestedFormatId = formatId;
-	clipboard->formatDataRespReceived = FALSE;
 	rc = clipboard->context->ClientFormatDataRequest(clipboard->context, &formatDataRequest);
 	if (rc != ERROR_SUCCESS)
 	{
@@ -1553,6 +1588,13 @@ UINT cliprdr_send_request_filecontents(wfClipboard *clipboard, UINT32 connID, co
 	if (!clipboard || !clipboard->context || !clipboard->context->ClientFileContentsRequest)
 		return ERROR_INTERNAL_ERROR;
 
+	rc = try_reset_event(clipboard->req_fevent);
+	if (rc != ERROR_SUCCESS)
+	{
+		return rc;
+	}
+	clipboard->req_f_received = FALSE;
+
 	fileContentsRequest.connID = connID;
 	fileContentsRequest.streamId = (UINT32)(ULONG_PTR)streamid;
 	fileContentsRequest.listIndex = index;
@@ -1562,7 +1604,6 @@ UINT cliprdr_send_request_filecontents(wfClipboard *clipboard, UINT32 connID, co
 	fileContentsRequest.cbRequested = nreq;
 	fileContentsRequest.clipDataId = 0;
 	fileContentsRequest.msgFlags = 0;
-	clipboard->req_f_received = FALSE;
 	rc = clipboard->context->ClientFileContentsRequest(clipboard->context, &fileContentsRequest);
 	if (rc != ERROR_SUCCESS)
 	{
