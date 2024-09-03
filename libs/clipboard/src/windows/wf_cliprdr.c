@@ -1462,6 +1462,8 @@ UINT wait_response_event(UINT32 connID, wfClipboard *clipboard, HANDLE event, BO
 				// The data has been received, but the event is still not signaled.
 				// We just skip the rest of the waiting and reset the flag.
 				*recvedFlag = FALSE;
+				// Explicitly set the waitRes to WAIT_OBJECT_0, because we have received the data.
+				waitRes = WAIT_OBJECT_0;
 			} else {
 				// The data has not been received yet, we should continue to wait.
 				continue;
