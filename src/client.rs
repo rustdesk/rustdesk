@@ -84,7 +84,7 @@ pub mod io_loop;
 pub const MILLI1: Duration = Duration::from_millis(1);
 pub const SEC30: Duration = Duration::from_secs(30);
 pub const VIDEO_QUEUE_SIZE: usize = 120;
-const MAX_DECODE_FAIL_COUNTER: usize = 10; // Currently, failed decode cause refresh_video, so make it small
+const MAX_DECODE_FAIL_COUNTER: usize = 3;
 
 #[cfg(target_os = "linux")]
 pub const LOGIN_MSG_DESKTOP_NOT_INITED: &str = "Desktop env is not inited";
@@ -1151,6 +1151,7 @@ pub struct VideoHandler {
     record: bool,
     _display: usize, // useful for debug
     fail_counter: usize,
+    first_frame: bool,
 }
 
 impl VideoHandler {
@@ -1176,6 +1177,7 @@ impl VideoHandler {
             record: false,
             _display,
             fail_counter: 0,
+            first_frame: true,
         }
     }
 
@@ -1204,9 +1206,19 @@ impl VideoHandler {
                     self.fail_counter = 0;
                 } else {
                     if self.fail_counter < usize::MAX {
-                        self.fail_counter += 1
+                        if self.first_frame && self.fail_counter < MAX_DECODE_FAIL_COUNTER {
+                            log::error!("decode first frame failed");
+                            self.fail_counter = MAX_DECODE_FAIL_COUNTER;
+                        } else {
+                            self.fail_counter += 1;
+                        }
+                        log::error!(
+                            "Failed to handle video frame, fail counter: {}",
+                            self.fail_counter
+                        );
                     }
                 }
+                self.first_frame = false;
                 if self.record {
                     self.recorder
                         .lock()
@@ -1222,12 +1234,17 @@ impl VideoHandler {
 
     /// Reset the decoder, change format if it is Some
     pub fn reset(&mut self, format: Option<CodecFormat>) {
+        log::info!(
+            "reset video handler for display #{}, format: {format:?}",
+            self._display
+        );
         #[cfg(target_os = "macos")]
         self.rgb.set_align(crate::get_dst_align_rgba());
         let luid = Self::get_adapter_luid();
         let format = format.unwrap_or(self.decoder.format());
         self.decoder = Decoder::new(format, luid);
         self.fail_counter = 0;
+        self.first_frame = true;
     }
 
     /// Start or stop screen record.
