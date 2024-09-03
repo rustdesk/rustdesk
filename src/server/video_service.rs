@@ -486,6 +486,7 @@ fn run(vs: VideoService) -> ResultType<()> {
     let mut repeat_encode_counter = 0;
     let repeat_encode_max = 10;
     let mut encode_fail_counter = 0;
+    let mut first_frame = true;
 
     while sp.ok() {
         #[cfg(windows)]
@@ -574,6 +575,7 @@ fn run(vs: VideoService) -> ResultType<()> {
                         &mut encoder,
                         recorder.clone(),
                         &mut encode_fail_counter,
+                        &mut first_frame,
                     )?;
                     frame_controller.set_send(now, send_conn_ids);
                 }
@@ -629,6 +631,7 @@ fn run(vs: VideoService) -> ResultType<()> {
                             &mut encoder,
                             recorder.clone(),
                             &mut encode_fail_counter,
+                            &mut first_frame,
                         )?;
                         frame_controller.set_send(now, send_conn_ids);
                     }
@@ -906,6 +909,7 @@ fn handle_one_frame(
     encoder: &mut Encoder,
     recorder: Arc<Mutex<Option<Recorder>>>,
     encode_fail_counter: &mut usize,
+    first_frame: &mut bool,
 ) -> ResultType<HashSet<i32>> {
     sp.snapshot(|sps| {
         // so that new sub and old sub share the same encoder after switch
@@ -917,6 +921,8 @@ fn handle_one_frame(
     })?;
 
     let mut send_conn_ids: HashSet<i32> = Default::default();
+    let first = *first_frame;
+    *first_frame = false;
     match encoder.encode_to_message(frame, ms) {
         Ok(mut vf) => {
             *encode_fail_counter = 0;
@@ -931,17 +937,21 @@ fn handle_one_frame(
             send_conn_ids = sp.send_video_frame(msg);
         }
         Err(e) => {
-            let max_fail_times = if cfg!(target_os = "android") && encoder.is_hardware() {
-                12
-            } else {
-                6
-            };
             *encode_fail_counter += 1;
-            if *encode_fail_counter >= max_fail_times {
+            // Encoding errors are not frequent except on Android
+            if !cfg!(target_os = "android") {
+                log::error!("encode fail: {e:?}, times: {}", *encode_fail_counter,);
+            }
+            let max_fail_times = if cfg!(target_os = "android") && encoder.is_hardware() {
+                9
+            } else {
+                3
+            };
+            if first || *encode_fail_counter >= max_fail_times {
                 *encode_fail_counter = 0;
                 if encoder.is_hardware() {
                     encoder.disable();
-                    log::error!("switch due to encoding fails more than {max_fail_times} times");
+                    log::error!("switch due to encoding fails, first frame: {first}, error: {e:?}");
                     bail!("SWITCH");
                 }
             }
