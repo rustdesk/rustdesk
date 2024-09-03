@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/desktop/widgets/scroll_wrapper.dart';
+import 'package:flutter_hbb/models/state_model.dart';
 import 'package:get/get.dart';
 import 'package:provider/provider.dart';
 import 'package:visibility_detector/visibility_detector.dart';
@@ -128,7 +129,7 @@ class _PeersViewState extends State<_PeersView>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     super.didChangeAppLifecycleState(state);
-    if (isDesktop) return;
+    if (isDesktop || isWebDesktop) return;
     if (state == AppLifecycleState.resumed) {
       _isActive = true;
       _queryCount = 0;
@@ -194,7 +195,7 @@ class _PeersViewState extends State<_PeersView>
             var peers = snapshot.data!;
             if (peers.length > 1000) peers = peers.sublist(0, 1000);
             gFFI.peerTabModel.setCurrentTabCachedPeers(peers);
-            buildOnePeer(Peer peer) {
+            buildOnePeer(Peer peer, bool isPortrait) {
               final visibilityChild = VisibilityDetector(
                 key: ValueKey(_cardId(peer.id)),
                 onVisibilityChanged: onVisibilityChanged,
@@ -206,7 +207,7 @@ class _PeersViewState extends State<_PeersView>
               // No need to listen the currentTab change event.
               // Because the currentTab change event will trigger the peers change event,
               // and the peers change event will trigger _buildPeersView().
-              return (isDesktop || isWebDesktop)
+              return !isPortrait
                   ? Obx(() => peerCardUiType.value == PeerUiType.list
                       ? Container(height: 45, child: visibilityChild)
                       : peerCardUiType.value == PeerUiType.grid
@@ -217,44 +218,41 @@ class _PeersViewState extends State<_PeersView>
                   : Container(child: visibilityChild);
             }
 
-            final Widget child;
-            if (isMobile) {
-              child = ListView.builder(
-                itemCount: peers.length,
-                itemBuilder: (BuildContext context, int index) {
-                  return buildOnePeer(peers[index]).marginOnly(
-                      top: index == 0 ? 0 : space / 2, bottom: space / 2);
-                },
-              );
-            } else {
-              child = Obx(() => peerCardUiType.value == PeerUiType.list
-                  ? DesktopScrollWrapper(
-                      scrollController: _scrollController,
-                      child: ListView.builder(
-                          controller: _scrollController,
-                          physics: DraggableNeverScrollableScrollPhysics(),
-                          itemCount: peers.length,
-                          itemBuilder: (BuildContext context, int index) {
-                            return buildOnePeer(peers[index]).marginOnly(
-                                right: space,
-                                top: index == 0 ? 0 : space / 2,
-                                bottom: space / 2);
-                          }),
-                    )
-                  : DesktopScrollWrapper(
-                      scrollController: _scrollController,
-                      child: DynamicGridView.builder(
-                          controller: _scrollController,
-                          physics: DraggableNeverScrollableScrollPhysics(),
-                          gridDelegate: SliverGridDelegateWithWrapping(
-                              mainAxisSpacing: space / 2,
-                              crossAxisSpacing: space),
-                          itemCount: peers.length,
-                          itemBuilder: (BuildContext context, int index) {
-                            return buildOnePeer(peers[index]);
-                          }),
-                    ));
-            }
+            final Widget child = Obx(() => stateGlobal.isPortrait.isTrue
+                ? ListView.builder(
+                    itemCount: peers.length,
+                    itemBuilder: (BuildContext context, int index) {
+                      return buildOnePeer(peers[index], true).marginOnly(
+                          top: index == 0 ? 0 : space / 2, bottom: space / 2);
+                    },
+                  )
+                : peerCardUiType.value == PeerUiType.list
+                    ? DesktopScrollWrapper(
+                        scrollController: _scrollController,
+                        child: ListView.builder(
+                            controller: _scrollController,
+                            physics: DraggableNeverScrollableScrollPhysics(),
+                            itemCount: peers.length,
+                            itemBuilder: (BuildContext context, int index) {
+                              return buildOnePeer(peers[index], false).marginOnly(
+                                  right: space,
+                                  top: index == 0 ? 0 : space / 2,
+                                  bottom: space / 2);
+                            }),
+                      )
+                    : DesktopScrollWrapper(
+                        scrollController: _scrollController,
+                        child: DynamicGridView.builder(
+                            controller: _scrollController,
+                            physics: DraggableNeverScrollableScrollPhysics(),
+                            gridDelegate: SliverGridDelegateWithWrapping(
+                                mainAxisSpacing: space / 2,
+                                crossAxisSpacing: space),
+                            itemCount: peers.length,
+                            itemBuilder: (BuildContext context, int index) {
+                              return buildOnePeer(peers[index], false);
+                            }),
+                      ));
 
             if (updateEvent == UpdateEvent.load) {
               _curPeers.clear();
