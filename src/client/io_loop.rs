@@ -353,6 +353,7 @@ impl<T: InvokeUiSession> Remote<T> {
                     } else {
                         if let Err(e) = ContextSend::make_sure_enabled() {
                             log::error!("failed to restart clipboard context: {}", e);
+                            // to-do: Show msgbox with "Don't show again" option
                         };
                         log::debug!("Send system clipboard message to remote");
                         let msg = crate::clipboard_file::clip_2_msg(clip);

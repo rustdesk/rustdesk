@@ -220,7 +220,8 @@ struct wf_clipboard
 	HWND hwnd;
 	HANDLE hmem;
 	HANDLE thread;
-	HANDLE response_data_event;
+	HANDLE formatDataRespEvent;
+	BOOL formatDataRespReceived;
 
 	LPDATAOBJECT data_obj;
 	HANDLE data_obj_mutex;
@@ -228,6 +229,7 @@ struct wf_clipboard
 	ULONG req_fsize;
 	char *req_fdata;
 	HANDLE req_fevent;
+	BOOL req_f_received;
 
 	size_t nFiles;
 	size_t file_array_size;
@@ -1444,7 +1446,7 @@ static UINT cliprdr_send_format_list(wfClipboard *clipboard, UINT32 connID)
 	return rc;
 }
 
-UINT wait_response_event(UINT32 connID, wfClipboard *clipboard, HANDLE event, void **data)
+UINT wait_response_event(UINT32 connID, wfClipboard *clipboard, HANDLE event, BOOL* recvedFlag, void **data)
 {
 	UINT rc = ERROR_SUCCESS;
 	clipboard->context->IsStopped = FALSE;
@@ -1456,7 +1458,14 @@ UINT wait_response_event(UINT32 connID, wfClipboard *clipboard, HANDLE event, vo
 		DWORD waitRes = WaitForSingleObject(event, waitOnceTimeoutMillis);
 		if (waitRes == WAIT_TIMEOUT && clipboard->context->IsStopped == FALSE)
 		{
-			continue;
+			if ((*recvedFlag) == TRUE) {
+				// The data has been received, but the event is still not signaled.
+				// We just skip the rest of the waiting and reset the flag.
+				*recvedFlag = FALSE;
+			} else {
+				// The data has not been received yet, we should continue to wait.
+				continue;
+			}
 		}
 
 		if (clipboard->context->IsStopped == TRUE)
@@ -1524,13 +1533,14 @@ static UINT cliprdr_send_data_request(UINT32 connID, wfClipboard *clipboard, UIN
 	formatDataRequest.connID = connID;
 	formatDataRequest.requestedFormatId = remoteFormatId;
 	clipboard->requestedFormatId = formatId;
+	clipboard->formatDataRespReceived = FALSE;
 	rc = clipboard->context->ClientFormatDataRequest(clipboard->context, &formatDataRequest);
 	if (rc != ERROR_SUCCESS)
 	{
 		return rc;
 	}
 
-	wait_response_event(connID, clipboard, clipboard->response_data_event, &clipboard->hmem);
+	return wait_response_event(connID, clipboard, clipboard->formatDataRespEvent, &clipboard->formatDataRespReceived, &clipboard->hmem);
 }
 
 UINT cliprdr_send_request_filecontents(wfClipboard *clipboard, UINT32 connID, const void *streamid, ULONG index,
@@ -1552,13 +1562,14 @@ UINT cliprdr_send_request_filecontents(wfClipboard *clipboard, UINT32 connID, co
 	fileContentsRequest.cbRequested = nreq;
 	fileContentsRequest.clipDataId = 0;
 	fileContentsRequest.msgFlags = 0;
+	clipboard->req_f_received = FALSE;
 	rc = clipboard->context->ClientFileContentsRequest(clipboard->context, &fileContentsRequest);
 	if (rc != ERROR_SUCCESS)
 	{
 		return rc;
 	}
 
-	return wait_response_event(connID, clipboard, clipboard->req_fevent, (void **)&clipboard->req_fdata);
+	return wait_response_event(connID, clipboard, clipboard->req_fevent, &clipboard->req_f_received, (void **)&clipboard->req_fdata);
 }
 
 static UINT cliprdr_send_response_filecontents(
@@ -2545,7 +2556,7 @@ exit:
 	response.requestedFormatData = (BYTE *)buff;
 	if (ERROR_SUCCESS != clipboard->context->ClientFormatDataResponse(clipboard->context, &response))
 	{
-		// CAUTION: if failed to send, server will wait a long time
+		// CAUTION: if failed to send, server will wait a long time, default 30 seconds.
 	}
 
 	if (buff)
@@ -2621,9 +2632,11 @@ wf_cliprdr_server_format_data_response(CliprdrClientContext *context,
 		rc = CHANNEL_RC_OK;
 	} while (0);
 
-	if (!SetEvent(clipboard->response_data_event))
+	if (!SetEvent(clipboard->formatDataRespEvent))
 	{
-		// CAUTION: critical error here, process will hang up until wait timeout default 3min.
+		// If failed to set event, set flag to indicate the event is received.
+		DEBUG_CLIPRDR("wf_cliprdr_server_format_data_response(), SetEvent failed with 0x%x", GetLastError());
+		clipboard->formatDataRespReceived = TRUE;
 		rc = ERROR_INTERNAL_ERROR;
 	}
 	return rc;
@@ -2899,7 +2912,9 @@ wf_cliprdr_server_file_contents_response(CliprdrClientContext *context,
 
 	if (!SetEvent(clipboard->req_fevent))
 	{
-		// CAUTION: critical error here, process will hang up until wait timeout default 3min.
+		// If failed to set event, set flag to indicate the event is received.
+		DEBUG_CLIPRDR("wf_cliprdr_server_file_contents_response(), SetEvent failed with 0x%x", GetLastError());
+		clipboard->req_f_received = TRUE;
 	}
 	return rc;
 }
@@ -2934,14 +2949,16 @@ BOOL wf_cliprdr_init(wfClipboard *clipboard, CliprdrClientContext *cliprdr)
 			  (formatMapping *)calloc(clipboard->map_capacity, sizeof(formatMapping))))
 		goto error;
 
-	if (!(clipboard->response_data_event = CreateEvent(NULL, TRUE, FALSE, NULL)))
+	if (!(clipboard->formatDataRespEvent = CreateEvent(NULL, TRUE, FALSE, NULL)))
 		goto error;
+	clipboard->formatDataRespReceived = FALSE;
 
 	if (!(clipboard->data_obj_mutex = CreateMutex(NULL, FALSE, "data_obj_mutex")))
 		goto error;
 
 	if (!(clipboard->req_fevent = CreateEvent(NULL, TRUE, FALSE, NULL)))
 		goto error;
+	clipboard->req_f_received = FALSE;
 
 	if (!(clipboard->thread = CreateThread(NULL, 0, cliprdr_thread_func, clipboard, 0, NULL)))
 		goto error;
@@ -3002,8 +3019,8 @@ BOOL wf_cliprdr_uninit(wfClipboard *clipboard, CliprdrClientContext *cliprdr)
 		clipboard->data_obj = NULL;
 	}
 
-	if (clipboard->response_data_event)
-		CloseHandle(clipboard->response_data_event);
+	if (clipboard->formatDataRespEvent)
+		CloseHandle(clipboard->formatDataRespEvent);
 
 	if (clipboard->data_obj_mutex)
 		CloseHandle(clipboard->data_obj_mutex);
