@@ -12,6 +12,9 @@ pub const CLIPBOARD_INTERVAL: u64 = 333;
 // This format is used to store the flag in the clipboard.
 const RUSTDESK_CLIPBOARD_OWNER_FORMAT: &'static str = "dyn.com.rustdesk.owner";
 
+// Add special format for Excel XML Spreadsheet
+const CLIPBOARD_FORMAT_EXCEL_XML_SPREADSHEET: &'static str = "XML Spreadsheet";
+
 lazy_static::lazy_static! {
     static ref ARBOARD_MTX: Arc<Mutex<()>> = Arc::new(Mutex::new(()));
     // cache the clipboard msg
@@ -30,6 +33,7 @@ const SUPPORTED_FORMATS: &[ClipboardFormat] = &[
     ClipboardFormat::ImageRgba,
     ClipboardFormat::ImagePng,
     ClipboardFormat::ImageSvg,
+    ClipboardFormat::Special(CLIPBOARD_FORMAT_EXCEL_XML_SPREADSHEET),
     ClipboardFormat::Special(RUSTDESK_CLIPBOARD_OWNER_FORMAT),
 ];
 
@@ -267,8 +271,8 @@ impl ClipboardContext {
         }
         if !force {
             for c in data.iter() {
-                if let ClipboardData::Special((_, d)) = c {
-                    if side.is_owner(d) {
+                if let ClipboardData::Special((s, d)) = c {
+                    if s == RUSTDESK_CLIPBOARD_OWNER_FORMAT && side.is_owner(d) {
                         return Ok(vec![]);
                     }
                 }
@@ -276,7 +280,10 @@ impl ClipboardContext {
         }
         Ok(data
             .into_iter()
-            .filter(|c| !matches!(c, ClipboardData::Special(_)))
+            .filter(|c| match c {
+                ClipboardData::Special((s, _)) => s != RUSTDESK_CLIPBOARD_OWNER_FORMAT,
+                _ => true,
+            })
             .collect())
     }
 
@@ -454,12 +461,30 @@ mod proto {
         }
     }
 
+    fn special_to_proto(d: Vec<u8>, s: String) -> Clipboard {
+        let compressed = compress_func(&d);
+        let compress = compressed.len() < d.len();
+        let content = if compress {
+            compressed
+        } else {
+            s.bytes().collect::<Vec<u8>>()
+        };
+        Clipboard {
+            compress,
+            content: content.into(),
+            format: ClipboardFormat::Special.into(),
+            special_name: s,
+            ..Default::default()
+        }
+    }
+
     fn clipboard_data_to_proto(data: ClipboardData) -> Option<Clipboard> {
         let d = match data {
             ClipboardData::Text(s) => plain_to_proto(s, ClipboardFormat::Text),
             ClipboardData::Rtf(s) => plain_to_proto(s, ClipboardFormat::Rtf),
             ClipboardData::Html(s) => plain_to_proto(s, ClipboardFormat::Html),
             ClipboardData::Image(a) => image_to_proto(a),
+            ClipboardData::Special((s, d)) => special_to_proto(d, s),
             _ => return None,
         };
         Some(d)
@@ -496,6 +521,9 @@ mod proto {
             Ok(ClipboardFormat::ImageSvg) => Some(ClipboardData::Image(arboard::ImageData::svg(
                 std::str::from_utf8(&data).unwrap_or_default(),
             ))),
+            Ok(ClipboardFormat::Special) => {
+                Some(ClipboardData::Special((clipboard.special_name, data)))
+            }
             _ => None,
         }
     }

@@ -326,6 +326,7 @@ enum ClipboardFormat {
   ImageRgba = 21;
   ImagePng = 22;
   ImageSvg = 23;
+  Special = 31;
 }
 
 message Clipboard {
@@ -334,6 +335,8 @@ message Clipboard {
   int32 width = 3;
   int32 height = 4;
   ClipboardFormat format = 5;
+  // Special format name, only used when format is Special.
+  string special_name = 6;
 }
 
 message MultiClipboards { repeated Clipboard clipboards = 1; }
