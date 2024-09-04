@@ -249,6 +249,9 @@ class _ConnectionPageState extends State<ConnectionPage> {
                           ),
                         ),
                         inputFormatters: [IDTextInputFormatter()],
+                        onSubmitted: (_) {
+                          onConnect();
+                        },
                       );
                     },
                     onSelected: (option) {
