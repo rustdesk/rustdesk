@@ -1495,3 +1495,8 @@ pub fn clear_trusted_devices() {
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     ipc::clear_trusted_devices();
 }
+
+#[cfg(feature = "flutter")]
+pub fn max_encrypt_len() -> usize {
+    hbb_common::config::ENCRYPT_MAX_LEN
+}

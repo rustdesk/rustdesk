@@ -2282,6 +2282,10 @@ pub fn main_clear_trusted_devices() {
     clear_trusted_devices()
 }
 
+pub fn main_max_encrypt_len() -> SyncReturn<usize> {
+    SyncReturn(max_encrypt_len())
+}
+
 pub fn session_request_new_display_init_msgs(session_id: SessionID, display: usize) {
     if let Some(session) = sessions::get_session_by_session_id(&session_id) {
         session.request_init_msgs(display);

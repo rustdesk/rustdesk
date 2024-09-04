@@ -2512,6 +2512,7 @@ void changeSocks5Proxy() async {
                                     : Icons.visibility))),
                         controller: pwdController,
                         enabled: !isOptFixed,
+                        maxLength: bind.mainMaxEncryptLen(),
                       )),
                 ),
               ],
