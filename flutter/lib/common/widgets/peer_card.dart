@@ -1200,6 +1200,7 @@ class MyGroupPeerCard extends BasePeerCard {
 }
 
 void _rdpDialog(String id) async {
+  final maxLength = bind.mainMaxEncryptLen();
   final port = await bind.mainGetPeerOption(id: id, key: 'rdp_port');
   final username = await bind.mainGetPeerOption(id: id, key: 'rdp_username');
   final portController = TextEditingController(text: port);
@@ -1288,6 +1289,7 @@ void _rdpDialog(String id) async {
                 Expanded(
                   child: Obx(() => TextField(
                         obscureText: secure.value,
+                        maxLength: maxLength,
                         decoration: InputDecoration(
                             labelText: isDesktop
                                 ? null
