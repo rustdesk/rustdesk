@@ -187,7 +187,7 @@ class RustdeskImpl {
   Future<void> sessionToggleOption(
       {required UuidValue sessionId, required String value, dynamic hint}) {
     return Future(
-        () => js.context.callMethod('setByName', ['toggle_option', value]));
+        () => js.context.callMethod('setByName', ['option:toggle', value]));
   }
 
   Future<void> sessionTogglePrivacyMode(
@@ -196,7 +196,7 @@ class RustdeskImpl {
       required bool on,
       dynamic hint}) {
     return Future(() => js.context.callMethod('setByName', [
-          'toggle_option',
+          'option:toggle',
           jsonEncode({implKey, on})
         ]));
   }
@@ -1701,6 +1701,10 @@ class RustdeskImpl {
   }
 
   String installInstallOptions({dynamic hint}) {
+    throw UnimplementedError();
+  }
+
+  int mainMaxEncryptLen({dynamic hint}) {
     throw UnimplementedError();
   }
 
