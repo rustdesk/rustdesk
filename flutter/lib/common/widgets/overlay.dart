@@ -595,7 +595,8 @@ class QualityMonitor extends StatelessWidget {
                           "${qualityMonitorModel.data.targetBitrate ?? '-'}kb"),
                       _row(
                           "Codec", qualityMonitorModel.data.codecFormat ?? '-'),
-                      _row("Chroma", qualityMonitorModel.data.chroma ?? '-'),
+                      if (!isWeb)
+                        _row("Chroma", qualityMonitorModel.data.chroma ?? '-'),
                     ],
                   ),
                 )
