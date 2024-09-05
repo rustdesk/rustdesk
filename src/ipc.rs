@@ -401,7 +401,8 @@ async fn handle(data: Data, stream: &mut Connection) {
                     std::fs::remove_file(&Config::ipc_path("")).ok();
                     #[cfg(target_os = "linux")]
                     {
-                        hbb_common::sleep((crate::platform::SERVICE_INTERVAL * 2) as f32 / 1000.0)
+                        // https://github.com/rustdesk/rustdesk/discussions/9254, slow on some machines
+                        hbb_common::sleep((crate::platform::SERVICE_INTERVAL * 2) as f32 / 1000.0 + 1.2)
                             .await;
                         crate::run_me::<&str>(vec![]).ok();
                     }
