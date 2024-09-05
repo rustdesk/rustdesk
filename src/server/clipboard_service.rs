@@ -95,25 +95,30 @@ impl Handler {
                     log::error!("Failed to read clipboard from cm: {}", e);
                 }
                 Ok(data) => {
-                    let mut msg = Message::new();
-                    let multi_clipboards = MultiClipboards {
-                        clipboards: data
-                            .into_iter()
-                            .map(|c| Clipboard {
-                                compress: c.compress,
-                                content: c.content,
-                                width: c.width,
-                                height: c.height,
-                                format: ClipboardFormat::from_i32(c.format)
-                                    .unwrap_or(ClipboardFormat::Text)
-                                    .into(),
-                                ..Default::default()
-                            })
-                            .collect(),
-                        ..Default::default()
-                    };
-                    msg.set_multi_clipboards(multi_clipboards);
-                    return Some(msg);
+                    // Skip sending empty clipboard data.
+                    // Maybe there's something wrong reading the clipboard data in cm, but no error msg is returned.
+                    // The clipboard data should not be empty, the last line will try again to get the clipboard data.
+                    if !data.is_empty() {
+                        let mut msg = Message::new();
+                        let multi_clipboards = MultiClipboards {
+                            clipboards: data
+                                .into_iter()
+                                .map(|c| Clipboard {
+                                    compress: c.compress,
+                                    content: c.content,
+                                    width: c.width,
+                                    height: c.height,
+                                    format: ClipboardFormat::from_i32(c.format)
+                                        .unwrap_or(ClipboardFormat::Text)
+                                        .into(),
+                                    ..Default::default()
+                                })
+                                .collect(),
+                            ..Default::default()
+                        };
+                        msg.set_multi_clipboards(multi_clipboards);
+                        return Some(msg);
+                    }
                 }
             }
         }
