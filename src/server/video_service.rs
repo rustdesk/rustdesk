@@ -947,7 +947,9 @@ fn handle_one_frame(
             } else {
                 3
             };
-            if first || *encode_fail_counter >= max_fail_times {
+            let repeat = !encoder.latency_free();
+            // repeat encoders can reach max_fail_times on the first frame
+            if (first && !repeat) || *encode_fail_counter >= max_fail_times {
                 *encode_fail_counter = 0;
                 if encoder.is_hardware() {
                     encoder.disable();
