@@ -87,7 +87,7 @@
     ]
   },
   "overrides": [
-    { "name": "ffnvcodec", "version": "11.1.5.2" },
+    { "name": "ffnvcodec", "version": "12.1.14.0" },
     { "name": "amd-amf", "version": "1.4.29" },
     { "name": "mfx-dispatch", "version": "1.35.1" }
   ]
