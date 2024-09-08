@@ -131,9 +131,12 @@ impl Handler {
         check_clipboard(&mut self.ctx, ClipboardSide::Host, false)
     }
 
-    // It's ok to do async operation in the clipboard service because:
-    // 1. the clipboard is not used frequently.
-    // 2. the clipboard handle is sync and will not block the main thread.
+    // Read clipboard data from cm using ipc.
+    //
+    // We cannot use `#[tokio::main(flavor = "current_thread")]` here, 
+    // because the auto-managed tokio runtime (async context) will be dropped after the call.
+    // The next call will create a new runtime, which will cause the previous stream to be unusable.
+    // So we need to manage the tokio runtime manually.
     #[cfg(windows)]
     fn read_clipboard_from_cm_ipc(&mut self) -> ResultType<Vec<ClipboardNonFile>> {
         if self.rt.is_none() {

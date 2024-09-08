@@ -272,6 +272,15 @@ impl ClipboardContext {
     }
 
     fn get_formats(&mut self, formats: &[ClipboardFormat]) -> ResultType<Vec<ClipboardData>> {
+        // If there're multiple threads or processes trying to access the clipboard at the same time,
+        // the previous clipboard owner will fail to access the clipboard.
+        // `GetLastError()` will return `ERROR_CLIPBOARD_NOT_OPEN` (OSError(1418): Thread does not have a clipboard open) at this time.
+        // See https://github.com/rustdesk-org/arboard/blob/747ab2d9b40a5c9c5102051cf3b0bb38b4845e60/src/platform/windows.rs#L34
+        //
+        // This is a common case on Windows, so we retry here.
+        // Related issues:
+        // https://github.com/rustdesk/rustdesk/issues/9263
+        // https://github.com/rustdesk/rustdesk/issues/9222#issuecomment-2329233175
         for i in 0..CLIPBOARD_GET_MAX_RETRY {
             match self.inner.get_formats(SUPPORTED_FORMATS) {
                 Ok(data) => {
