@@ -477,7 +477,10 @@ pub fn core_main() -> Option<Vec<String>> {
         } else if args[0] == "--cm-no-ui" {
             #[cfg(feature = "flutter")]
             #[cfg(not(any(target_os = "android", target_os = "ios", target_os = "windows")))]
-            crate::flutter::connection_manager::start_cm_no_ui();
+            {
+                crate::ui_interface::start_option_status_sync();
+                crate::flutter::connection_manager::start_cm_no_ui();
+            }
             return None;
         } else {
             #[cfg(all(feature = "flutter", feature = "plugin_framework"))]
