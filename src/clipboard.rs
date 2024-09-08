@@ -1,9 +1,10 @@
 use arboard::{ClipboardData, ClipboardFormat};
 use clipboard_master::{ClipboardHandler, Master, Shutdown};
-use hbb_common::{log, message_proto::*, ResultType};
+use hbb_common::{bail, log, message_proto::*, ResultType};
 use std::{
     sync::{mpsc::Sender, Arc, Mutex},
     thread::JoinHandle,
+    time::Duration,
 };
 
 pub const CLIPBOARD_NAME: &'static str = "clipboard";
@@ -25,6 +26,9 @@ lazy_static::lazy_static! {
     // Plain text is the only exception, it does not require the server to be present.
     static ref CLIPBOARD_CTX: Arc<Mutex<Option<ClipboardContext>>> = Arc::new(Mutex::new(None));
 }
+
+const CLIPBOARD_GET_MAX_RETRY: usize = 3;
+const CLIPBOARD_GET_RETRY_INTERVAL_DUR: Duration = Duration::from_millis(33);
 
 const SUPPORTED_FORMATS: &[ClipboardFormat] = &[
     ClipboardFormat::Text,
@@ -151,14 +155,18 @@ pub fn check_clipboard(
         *ctx = ClipboardContext::new().ok();
     }
     let ctx2 = ctx.as_mut()?;
-    let content = ctx2.get(side, force);
-    if let Ok(content) = content {
-        if !content.is_empty() {
-            let mut msg = Message::new();
-            let clipboards = proto::create_multi_clipboards(content);
-            msg.set_multi_clipboards(clipboards.clone());
-            *LAST_MULTI_CLIPBOARDS.lock().unwrap() = clipboards;
-            return Some(msg);
+    match ctx2.get(side, force) {
+        Ok(content) => {
+            if !content.is_empty() {
+                let mut msg = Message::new();
+                let clipboards = proto::create_multi_clipboards(content);
+                msg.set_multi_clipboards(clipboards.clone());
+                *LAST_MULTI_CLIPBOARDS.lock().unwrap() = clipboards;
+                return Some(msg);
+            }
+        }
+        Err(e) => {
+            log::error!("Failed to get clipboard content. {}", e);
         }
     }
     None
@@ -263,9 +271,33 @@ impl ClipboardContext {
         Ok(ClipboardContext { inner: board })
     }
 
+    fn get_formats(&mut self, formats: &[ClipboardFormat]) -> ResultType<Vec<ClipboardData>> {
+        for i in 0..CLIPBOARD_GET_MAX_RETRY {
+            match self.inner.get_formats(SUPPORTED_FORMATS) {
+                Ok(data) => {
+                    return Ok(data
+                        .into_iter()
+                        .filter(|c| !matches!(c, arboard::ClipboardData::None))
+                        .collect())
+                }
+                Err(e) => match e {
+                    arboard::Error::ClipboardOccupied => {
+                        log::debug!("Failed to get clipboard formats, clipboard is occupied, retrying... {}", i + 1);
+                        std::thread::sleep(CLIPBOARD_GET_RETRY_INTERVAL_DUR);
+                    }
+                    _ => {
+                        log::error!("Failed to get clipboard formats, {}", e);
+                        return Err(e.into());
+                    }
+                },
+            }
+        }
+        bail!("Failed to get clipboard formats, clipboard is occupied, {CLIPBOARD_GET_MAX_RETRY} retries failed");
+    }
+
     pub fn get(&mut self, side: ClipboardSide, force: bool) -> ResultType<Vec<ClipboardData>> {
         let _lock = ARBOARD_MTX.lock().unwrap();
-        let data = self.inner.get_formats(SUPPORTED_FORMATS)?;
+        let data = self.get_formats(SUPPORTED_FORMATS)?;
         if data.is_empty() {
             return Ok(data);
         }

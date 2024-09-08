@@ -520,6 +520,7 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
                                             }
                                         }
                                         Err(e) => {
+                                            log::debug!("Failed to get clipboard content. {}", e);
                                             allow_err!(self.stream.send(&Data::ClipboardNonFile(Some((format!("{}", e), vec![])))).await);
                                         }
                                     }
