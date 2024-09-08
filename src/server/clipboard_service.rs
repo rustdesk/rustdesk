@@ -150,7 +150,7 @@ impl Handler {
             is_sent = match rt.block_on(stream.send(&Data::ClipboardNonFile(None))) {
                 Ok(_) => true,
                 Err(e) => {
-                    log::debug!("failed to send to cm: {}", e);
+                    log::debug!("Failed to send to cm: {}", e);
                     false
                 }
             };
@@ -186,7 +186,7 @@ impl Handler {
                                     Err(e) => {
                                         // Reconnect to avoid the next raw data remaining in the buffer.
                                         self.stream = None;
-                                        log::debug!("failed to get raw clipboard data: {}", e);
+                                        log::debug!("Failed to get raw clipboard data: {}", e);
                                     }
                                 }
                             }

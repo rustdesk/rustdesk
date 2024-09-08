@@ -155,17 +155,21 @@ pub fn check_clipboard(
         *ctx = ClipboardContext::new().ok();
     }
     let ctx2 = ctx.as_mut()?;
-    let content = ctx2.get(side, force);
-    if let Ok(content) = content {
-        if content
-            .iter()
-            .any(|x| !(matches!(x, arboard::ClipboardData::None)))
-        {
-            let mut msg = Message::new();
-            let clipboards = proto::create_multi_clipboards(content);
-            msg.set_multi_clipboards(clipboards.clone());
-            *LAST_MULTI_CLIPBOARDS.lock().unwrap() = clipboards;
-            return Some(msg);
+    match ctx2.get(side, force) {
+        Ok(content) => {
+            if content
+                .iter()
+                .any(|x| !(matches!(x, arboard::ClipboardData::None)))
+            {
+                let mut msg = Message::new();
+                let clipboards = proto::create_multi_clipboards(content);
+                msg.set_multi_clipboards(clipboards.clone());
+                *LAST_MULTI_CLIPBOARDS.lock().unwrap() = clipboards;
+                return Some(msg);
+            }
+        }
+        Err(e) => {
+            log::error!("Failed to get clipboard content. {}", e);
         }
     }
     None
@@ -276,17 +280,17 @@ impl ClipboardContext {
                 Ok(data) => return Ok(data),
                 Err(e) => match e {
                     arboard::Error::ClipboardOccupied => {
-                        log::debug!("Clipboard is occupied, retrying... {}", i + 1);
+                        log::debug!("Failed to get clipboard formats, clipboard is occupied, retrying... {}", i + 1);
                         std::thread::sleep(CLIPBOARD_GET_RETRY_INTERVAL_DUR);
                     }
                     _ => {
-                        log::error!("Failed to get clipboard: {}", e);
+                        log::error!("Failed to get clipboard formats, {}", e);
                         return Err(e.into());
                     }
                 },
             }
         }
-        bail!("Clipboard is occupied, {CLIPBOARD_GET_MAX_RETRY} retries failed");
+        bail!("Failed to get clipboard formats, clipboard is occupied, {CLIPBOARD_GET_MAX_RETRY} retries failed");
     }
 
     pub fn get(&mut self, side: ClipboardSide, force: bool) -> ResultType<Vec<ClipboardData>> {
