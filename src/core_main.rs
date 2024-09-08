@@ -476,7 +476,7 @@ pub fn core_main() -> Option<Vec<String>> {
             crate::ui_interface::start_option_status_sync();
         } else if args[0] == "--cm-no-ui" {
             #[cfg(feature = "flutter")]
-            #[cfg(not(any(target_os = "android", target_os = "ios", target_os = "windows")))]
+            #[cfg(not(any(target_os = "android", target_os = "ios")))]
             {
                 crate::ui_interface::start_option_status_sync();
                 crate::flutter::connection_manager::start_cm_no_ui();
