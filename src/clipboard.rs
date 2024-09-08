@@ -157,10 +157,7 @@ pub fn check_clipboard(
     let ctx2 = ctx.as_mut()?;
     match ctx2.get(side, force) {
         Ok(content) => {
-            if content
-                .iter()
-                .any(|x| !(matches!(x, arboard::ClipboardData::None)))
-            {
+            if !content.is_empty() {
                 let mut msg = Message::new();
                 let clipboards = proto::create_multi_clipboards(content);
                 msg.set_multi_clipboards(clipboards.clone());
@@ -277,7 +274,12 @@ impl ClipboardContext {
     fn get_formats(&mut self, formats: &[ClipboardFormat]) -> ResultType<Vec<ClipboardData>> {
         for i in 0..CLIPBOARD_GET_MAX_RETRY {
             match self.inner.get_formats(SUPPORTED_FORMATS) {
-                Ok(data) => return Ok(data),
+                Ok(data) => {
+                    return Ok(data
+                        .into_iter()
+                        .filter(|c| !matches!(c, arboard::ClipboardData::None))
+                        .collect())
+                }
                 Err(e) => match e {
                     arboard::Error::ClipboardOccupied => {
                         log::debug!("Failed to get clipboard formats, clipboard is occupied, retrying... {}", i + 1);
