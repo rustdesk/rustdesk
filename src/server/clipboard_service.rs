@@ -133,7 +133,7 @@ impl Handler {
 
     // Read clipboard data from cm using ipc.
     //
-    // We cannot use `#[tokio::main(flavor = "current_thread")]` here, 
+    // We cannot use `#[tokio::main(flavor = "current_thread")]` here,
     // because the auto-managed tokio runtime (async context) will be dropped after the call.
     // The next call will create a new runtime, which will cause the previous stream to be unusable.
     // So we need to manage the tokio runtime manually.
@@ -172,7 +172,13 @@ impl Handler {
                             bail!("{}", err);
                         } else {
                             if contents.iter().any(|c| c.next_raw) {
-                                match rt.block_on(timeout(1000, stream.next_raw())) {
+                                // Wrap the future with a `Timeout` in an async block to avoid panic.
+                                // We cannot use `rt.block_on(timeout(1000, stream.next_raw()))` here, because it causes panic:
+                                // thread '<unnamed>' panicked at D:\Projects\rust\rustdesk\libs\hbb_common\src\lib.rs:98:5:
+                                // there is no reactor running, must be called from the context of a Tokio 1.x runtime
+                                // note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+                                match rt.block_on(async { timeout(1000, stream.next_raw()).await })
+                                {
                                     Ok(Ok(mut data)) => {
                                         for c in &mut contents {
                                             if c.next_raw {
