@@ -196,8 +196,8 @@ class RustdeskImpl {
       required bool on,
       dynamic hint}) {
     return Future(() => js.context.callMethod('setByName', [
-          'option:toggle',
-          jsonEncode({implKey, on})
+          'toggle_privacy_mode',
+          jsonEncode({'impl_key': implKey, 'on': on})
         ]));
   }
 
