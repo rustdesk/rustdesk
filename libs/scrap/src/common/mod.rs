@@ -316,7 +316,7 @@ impl ToString for CodecFormat {
             CodecFormat::AV1 => "AV1".into(),
             CodecFormat::H264 => "H264".into(),
             CodecFormat::H265 => "H265".into(),
-            CodecFormat::Unknown => "Unknow".into(),
+            CodecFormat::Unknown => "Unknown".into(),
         }
     }
 }
