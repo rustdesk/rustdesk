@@ -391,9 +391,9 @@ class RustdeskImpl {
     return Future(() => js.context.callMethod('setByName', [
           'switch_display',
           jsonEncode({
-            isDesktop: isDesktop,
-            sessionId: sessionId.toString(),
-            value: value
+            'isDesktop': isDesktop,
+            'sessionId': sessionId.toString(),
+            'value': value
           })
         ]));
   }
