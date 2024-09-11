@@ -1800,28 +1800,6 @@ impl LoginConfigHandler {
         )
     }
 
-    pub fn get_option_message_after_login(&self) -> Option<OptionMessage> {
-        if self.conn_type.eq(&ConnType::FILE_TRANSFER)
-            || self.conn_type.eq(&ConnType::PORT_FORWARD)
-            || self.conn_type.eq(&ConnType::RDP)
-        {
-            return None;
-        }
-        let mut n = 0;
-        let mut msg = OptionMessage::new();
-        if self.version < hbb_common::get_version_number("1.2.4") {
-            if self.get_toggle_option("privacy-mode") {
-                msg.privacy_mode = BoolOption::Yes.into();
-                n += 1;
-            }
-        }
-        if n > 0 {
-            Some(msg)
-        } else {
-            None
-        }
-    }
-
     /// Parse the image quality option.
     /// Return [`ImageQuality`] if the option is valid, otherwise return `None`.
     ///

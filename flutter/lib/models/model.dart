@@ -497,10 +497,12 @@ class FfiModel with ChangeNotifier {
     newDisplay.width = int.tryParse(evt['width']) ?? newDisplay.width;
     newDisplay.height = int.tryParse(evt['height']) ?? newDisplay.height;
     newDisplay.cursorEmbedded = int.tryParse(evt['cursor_embedded']) == 1;
-    newDisplay.originalWidth =
-        int.tryParse(evt['original_width']) ?? kInvalidResolutionValue;
-    newDisplay.originalHeight =
-        int.tryParse(evt['original_height']) ?? kInvalidResolutionValue;
+    newDisplay.originalWidth = int.tryParse(
+            evt['original_width'] ?? kInvalidResolutionValue.toString()) ??
+        kInvalidResolutionValue;
+    newDisplay.originalHeight = int.tryParse(
+            evt['original_height'] ?? kInvalidResolutionValue.toString()) ??
+        kInvalidResolutionValue;
     newDisplay._scale = _pi.scaleOfDisplay(display);
     _pi.displays[display] = newDisplay;
 
@@ -793,7 +795,7 @@ class FfiModel with ChangeNotifier {
         isRefreshing = false;
       }
       Map<String, dynamic> features = json.decode(evt['features']);
-      _pi.features.privacyMode = features['privacy_mode'] == 1;
+      _pi.features.privacyMode = features['privacy_mode'] == true;
       if (!isCache) {
         handleResolutions(peerId, evt["resolutions"]);
       }
@@ -2509,6 +2511,7 @@ class FFI {
         onEvent2UIRgba();
         imageModel.onRgba(display, data);
       });
+      this.id = id;
       return;
     }
 

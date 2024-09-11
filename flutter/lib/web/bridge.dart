@@ -196,8 +196,8 @@ class RustdeskImpl {
       required bool on,
       dynamic hint}) {
     return Future(() => js.context.callMethod('setByName', [
-          'option:toggle',
-          jsonEncode({implKey, on})
+          'toggle_privacy_mode',
+          jsonEncode({'impl_key': implKey, 'on': on})
         ]));
   }
 
@@ -391,9 +391,9 @@ class RustdeskImpl {
     return Future(() => js.context.callMethod('setByName', [
           'switch_display',
           jsonEncode({
-            isDesktop: isDesktop,
-            sessionId: sessionId.toString(),
-            value: value
+            'isDesktop': isDesktop,
+            'sessionId': sessionId.toString(),
+            'value': value
           })
         ]));
   }
@@ -1204,8 +1204,10 @@ class RustdeskImpl {
       required int index,
       required bool on,
       dynamic hint}) {
-    // TODO
-    throw UnimplementedError();
+    return Future(() => js.context.callMethod('setByName', [
+          'toggle_virtual_display',
+          jsonEncode({'index': index, 'on': on})
+        ]));
   }
 
   Future<void> mainSetHomeDir({required String home, dynamic hint}) {

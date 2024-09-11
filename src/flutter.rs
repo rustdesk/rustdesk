@@ -802,13 +802,13 @@ impl InvokeUiSession for FlutterHandler {
 
     fn set_peer_info(&self, pi: &PeerInfo) {
         let displays = Self::make_displays_msg(&pi.displays);
-        let mut features: HashMap<&str, i32> = Default::default();
+        let mut features: HashMap<&str, bool> = Default::default();
         for ref f in pi.features.iter() {
-            features.insert("privacy_mode", if f.privacy_mode { 1 } else { 0 });
+            features.insert("privacy_mode", f.privacy_mode);
         }
         // compatible with 1.1.9
         if get_version_number(&pi.version) < get_version_number("1.2.0") {
-            features.insert("privacy_mode", 0);
+            features.insert("privacy_mode", false);
         }
         let features = serde_json::ser::to_string(&features).unwrap_or("".to_owned());
         let resolutions = serialize_resolutions(&pi.resolutions.resolutions);
