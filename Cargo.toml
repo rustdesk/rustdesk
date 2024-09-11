@@ -175,7 +175,7 @@ exclude = ["vdi/host", "examples/custom_plugin"]
 LegalCopyright = "Copyright © 2024 ondental. All rights reserved."
 ProductName = "ondental"
 FileDescription = "ondental Remote Desktop"
-OriginalFilename = "rustdesk.exe"
+OriginalFilename = "ondental.exe"
 
 [target.'cfg(target_os="windows")'.build-dependencies]
 winres = "0.1"
