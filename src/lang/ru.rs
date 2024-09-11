@@ -645,5 +645,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Resume", "Продолжить"),
         ("Invalid file name", "Неверное имя файла"),
         ("one-way-file-transfer-tip", ""),
+        ("Authentication Required", ""),
+        ("Authenticate", ""),
     ].iter().cloned().collect();
 }
