@@ -1,11 +1,11 @@
 [package]
-name = "rustdesk"
+name = "ondental"
 version = "1.3.1"
-authors = ["rustdesk <info@rustdesk.com>"]
+authors = ["ondental <info@ondental.de>"]
 edition = "2021"
 build= "build.rs"
-description = "RustDesk Remote Desktop"
-default-run = "rustdesk"
+description = "ondental Remote Desktop"
+default-run = "ondental"
 rust-version = "1.75"
 
 [lib]
@@ -172,10 +172,10 @@ members = ["libs/scrap", "libs/hbb_common", "libs/enigo", "libs/clipboard", "lib
 exclude = ["vdi/host", "examples/custom_plugin"]
 
 [package.metadata.winres]
-LegalCopyright = "Copyright © 2024 Purslane Ltd. All rights reserved."
-ProductName = "RustDesk"
-FileDescription = "RustDesk Remote Desktop"
-OriginalFilename = "rustdesk.exe"
+LegalCopyright = "Copyright © 2024 ondental. All rights reserved."
+ProductName = "ondental"
+FileDescription = "ondental Remote Desktop"
+OriginalFilename = "ondental.exe"
 
 [target.'cfg(target_os="windows")'.build-dependencies]
 winres = "0.1"
@@ -190,7 +190,7 @@ os-version = "0.2"
 hound = "3.5"
 
 [package.metadata.bundle]
-name = "RustDesk"
+name = "ondental"
 identifier = "com.carriez.rustdesk"
 icon = ["res/32x32.png", "res/128x128.png", "res/128x128@2x.png"]
 osx_minimum_system_version = "10.14"
