@@ -519,9 +519,9 @@ pub fn start_os_service() {
             );
             std::process::exit(-1);
         };
-        if my_start_time <= start_time + 1 {
+        if my_start_time <= start_time + 3 {
             log::error!(
-                    "Agent start later, {my_start_time} vs {start_time}, please start --server first to make delegate work",
+                    "Agent start later, {my_start_time} vs {start_time}, please start --server first to make delegate work, earlier more 3 seconds",
                 );
             std::process::exit(-1);
         }

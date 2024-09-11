@@ -100,6 +100,7 @@ impl WakeLock {
     }
 }
 
+#[cfg(not(target_os = "ios"))]
 pub fn get_wakelock(_display: bool) -> WakeLock {
     hbb_common::log::info!("new wakelock, require display on: {_display}");
     #[cfg(target_os = "android")]

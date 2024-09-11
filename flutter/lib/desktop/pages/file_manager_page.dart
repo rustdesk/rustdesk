@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:math';
 
+import 'package:extended_text/extended_text.dart';
 import 'package:flutter_hbb/desktop/widgets/dragable_divider.dart';
 import 'package:percent_indicator/percent_indicator.dart';
 import 'package:desktop_drop/desktop_drop.dart';
@@ -68,7 +69,7 @@ class FileManagerPage extends StatefulWidget {
 }
 
 class _FileManagerPageState extends State<FileManagerPage>
-    with AutomaticKeepAliveClientMixin {
+    with AutomaticKeepAliveClientMixin, WidgetsBindingObserver {
   final _mouseFocusScope = Rx<MouseFocusScope>(MouseFocusScope.none);
 
   final _dropMaskVisible = false.obs; // TODO impl drop mask
@@ -102,6 +103,7 @@ class _FileManagerPageState extends State<FileManagerPage>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       widget.tabController.onSelected?.call(widget.id);
     });
+    WidgetsBinding.instance.addObserver(this);
   }
 
   @override
@@ -114,11 +116,20 @@ class _FileManagerPageState extends State<FileManagerPage>
       }
       Get.delete<FFI>(tag: 'ft_${widget.id}');
     });
+    WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
 
   @override
   bool get wantKeepAlive => true;
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    if (state == AppLifecycleState.resumed) {
+      jobController.jobTable.refresh();
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -211,10 +222,13 @@ class _FileManagerPageState extends State<FileManagerPage>
                               Tooltip(
                                 waitDuration: Duration(milliseconds: 500),
                                 message: item.jobName,
-                                child: Text(
+                                child: ExtendedText(
                                   item.jobName,
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
+                                  overflowWidget: TextOverflowWidget(
+                                      child: Text("..."),
+                                      position: TextOverflowPosition.start),
                                 ),
                               ),
                               Tooltip(

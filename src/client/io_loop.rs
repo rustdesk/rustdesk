@@ -353,6 +353,7 @@ impl<T: InvokeUiSession> Remote<T> {
                     } else {
                         if let Err(e) = ContextSend::make_sure_enabled() {
                             log::error!("failed to restart clipboard context: {}", e);
+                            // to-do: Show msgbox with "Don't show again" option
                         };
                         log::debug!("Send system clipboard message to remote");
                         let msg = crate::clipboard_file::clip_2_msg(clip);
@@ -957,22 +958,6 @@ impl<T: InvokeUiSession> Remote<T> {
         true
     }
 
-    async fn send_opts_after_login(&self, peer: &mut Stream) {
-        if let Some(opts) = self
-            .handler
-            .lc
-            .read()
-            .unwrap()
-            .get_option_message_after_login()
-        {
-            let mut misc = Misc::new();
-            misc.set_option(opts);
-            let mut msg_out = Message::new();
-            msg_out.set_misc(misc);
-            allow_err!(peer.send(&msg_out).await);
-        }
-    }
-
     async fn send_toggle_virtual_display_msg(&self, peer: &mut Stream) {
         if !self.peer_info.is_support_virtual_display() {
             return;
@@ -1134,7 +1119,6 @@ impl<T: InvokeUiSession> Remote<T> {
                         self.first_frame = true;
                         self.handler.close_success();
                         self.handler.adapt_size();
-                        self.send_opts_after_login(peer).await;
                         self.send_toggle_virtual_display_msg(peer).await;
                         self.send_toggle_privacy_mode_msg(peer).await;
                     }

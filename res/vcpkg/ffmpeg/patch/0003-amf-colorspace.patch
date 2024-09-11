@@ -1,32 +1,32 @@
-From 8fd62e4ecd058b09abf8847be5fbbf0eef44a90f Mon Sep 17 00:00:00 2001
+From 14b77216106eaaff9cf701528039ae4264eaf420 Mon Sep 17 00:00:00 2001
 From: 21pages <sunboeasy@gmail.com>
-Date: Tue, 16 Jul 2024 14:58:33 +0800
-Subject: [PATCH] amf colorspace
+Date: Thu, 5 Sep 2024 16:41:59 +0800
+Subject: [PATCH 3/3] amf colorspace
 
 Signed-off-by: 21pages <sunboeasy@gmail.com>
 ---
  libavcodec/amfenc.h      |  1 +
- libavcodec/amfenc_h264.c | 39 +++++++++++++++++++++++++++++++++
+ libavcodec/amfenc_h264.c | 40 ++++++++++++++++++++++++++++++++++
  libavcodec/amfenc_hevc.c | 47 ++++++++++++++++++++++++++++++++++++++++
- 3 files changed, 87 insertions(+)
+ 3 files changed, 88 insertions(+)
 
 diff --git a/libavcodec/amfenc.h b/libavcodec/amfenc.h
-index 31172645f2..493e01603d 100644
+index 09506ee2e0..7f458b14f7 100644
 --- a/libavcodec/amfenc.h
 +++ b/libavcodec/amfenc.h
-@@ -23,6 +23,7 @@
- 
+@@ -24,6 +24,7 @@
  #include <AMF/components/VideoEncoderVCE.h>
  #include <AMF/components/VideoEncoderHEVC.h>
+ #include <AMF/components/VideoEncoderAV1.h>
 +#include <AMF/components/ColorSpace.h>
  
  #include "libavutil/fifo.h"
  
 diff --git a/libavcodec/amfenc_h264.c b/libavcodec/amfenc_h264.c
-index f55dbc80f0..5a6b6e164f 100644
+index 415828f005..7da5a96c71 100644
 --- a/libavcodec/amfenc_h264.c
 +++ b/libavcodec/amfenc_h264.c
-@@ -139,6 +139,9 @@ static av_cold int amf_encode_init_h264(AVCodecContext *avctx)
+@@ -200,6 +200,9 @@ static av_cold int amf_encode_init_h264(AVCodecContext *avctx)
      AMFRate                          framerate;
      AMFSize                          framesize = AMFConstructSize(avctx->width, avctx->height);
      int                              deblocking_filter = (avctx->flags & AV_CODEC_FLAG_LOOP_FILTER) ? 1 : 0;
@@ -36,7 +36,7 @@ index f55dbc80f0..5a6b6e164f 100644
  
      if (avctx->framerate.num > 0 && avctx->framerate.den > 0) {
          framerate = AMFConstructRate(avctx->framerate.num, avctx->framerate.den);
-@@ -199,11 +202,47 @@ static av_cold int amf_encode_init_h264(AVCodecContext *avctx)
+@@ -266,10 +269,47 @@ FF_ENABLE_DEPRECATION_WARNINGS
          AMF_ASSIGN_PROPERTY_RATIO(res, ctx->encoder, AMF_VIDEO_ENCODER_ASPECT_RATIO, ratio);
      }
  
@@ -70,25 +70,25 @@ index f55dbc80f0..5a6b6e164f 100644
 +            color_profile = AMF_VIDEO_CONVERTER_COLOR_PROFILE_2020;
 +            break;
 +        }
-+    }
+     }
 +    pix_fmt = avctx->hw_frames_ctx ? ((AVHWFramesContext*)avctx->hw_frames_ctx->data)->sw_format : avctx->pix_fmt;
 +    color_depth = AMF_COLOR_BIT_DEPTH_8;
 +    if (pix_fmt == AV_PIX_FMT_P010) {
 +        color_depth = AMF_COLOR_BIT_DEPTH_10;
-     }
- 
++    }
++
 +    AMF_ASSIGN_PROPERTY_INT64(res, ctx->encoder, AMF_VIDEO_ENCODER_COLOR_BIT_DEPTH, color_depth);
 +    AMF_ASSIGN_PROPERTY_INT64(res, ctx->encoder, AMF_VIDEO_ENCODER_OUTPUT_COLOR_PROFILE, color_profile);
 +    AMF_ASSIGN_PROPERTY_INT64(res, ctx->encoder, AMF_VIDEO_ENCODER_OUTPUT_TRANSFER_CHARACTERISTIC, (amf_int64)avctx->color_trc);
 +    AMF_ASSIGN_PROPERTY_INT64(res, ctx->encoder, AMF_VIDEO_ENCODER_OUTPUT_COLOR_PRIMARIES, (amf_int64)avctx->color_primaries);
+ 
      // autodetect rate control method
      if (ctx->rate_control_mode == AMF_VIDEO_ENCODER_RATE_CONTROL_METHOD_UNKNOWN) {
-         if (ctx->qp_i != -1 || ctx->qp_p != -1 || ctx->qp_b != -1) {
 diff --git a/libavcodec/amfenc_hevc.c b/libavcodec/amfenc_hevc.c
-index 7a40bcad31..0260f43c81 100644
+index 65259d7153..7c930d3ccc 100644
 --- a/libavcodec/amfenc_hevc.c
 +++ b/libavcodec/amfenc_hevc.c
-@@ -106,6 +106,9 @@ static av_cold int amf_encode_init_hevc(AVCodecContext *avctx)
+@@ -161,6 +161,9 @@ static av_cold int amf_encode_init_hevc(AVCodecContext *avctx)
      AMFRate             framerate;
      AMFSize             framesize = AMFConstructSize(avctx->width, avctx->height);
      int                 deblocking_filter = (avctx->flags & AV_CODEC_FLAG_LOOP_FILTER) ? 1 : 0;
@@ -98,17 +98,17 @@ index 7a40bcad31..0260f43c81 100644
  
      if (avctx->framerate.num > 0 && avctx->framerate.den > 0) {
          framerate = AMFConstructRate(avctx->framerate.num, avctx->framerate.den);
-@@ -130,6 +133,9 @@ static av_cold int amf_encode_init_hevc(AVCodecContext *avctx)
-     case FF_PROFILE_HEVC_MAIN:
+@@ -191,6 +194,9 @@ FF_ENABLE_DEPRECATION_WARNINGS
+     case AV_PROFILE_HEVC_MAIN:
          profile = AMF_VIDEO_ENCODER_HEVC_PROFILE_MAIN;
          break;
-+    case FF_PROFILE_HEVC_MAIN_10:
++    case AV_PROFILE_HEVC_MAIN_10:
 +        profile = AMF_VIDEO_ENCODER_HEVC_PROFILE_MAIN_10;
 +        break;
      default:
          break;
      }
-@@ -158,6 +164,47 @@ static av_cold int amf_encode_init_hevc(AVCodecContext *avctx)
+@@ -219,6 +225,47 @@ FF_ENABLE_DEPRECATION_WARNINGS
          AMF_ASSIGN_PROPERTY_RATIO(res, ctx->encoder, AMF_VIDEO_ENCODER_HEVC_ASPECT_RATIO, ratio);
      }
  

@@ -1378,6 +1378,7 @@ pub fn uninstall_service(show_new_window: bool, _: bool) -> bool {
         Config::set_option("stop-service".into(), "".into());
         return true;
     }
+    // systemctl stop will kill child processes, below may not be executed.
     if show_new_window {
         run_me_with(2);
     }

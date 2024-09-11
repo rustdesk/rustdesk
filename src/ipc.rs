@@ -403,7 +403,8 @@ async fn handle(data: Data, stream: &mut Connection) {
                     {
                         hbb_common::sleep((crate::platform::SERVICE_INTERVAL * 2) as f32 / 1000.0)
                             .await;
-                        crate::run_me::<&str>(vec![]).ok();
+                        // https://github.com/rustdesk/rustdesk/discussions/9254
+                        crate::run_me::<&str>(vec!["--no-server"]).ok();
                     }
                     #[cfg(target_os = "macos")]
                     {
@@ -928,16 +929,23 @@ pub fn set_permanent_password(v: String) -> ResultType<()> {
 pub fn set_unlock_pin(v: String, translate: bool) -> ResultType<()> {
     let v = v.trim().to_owned();
     let min_len = 4;
-    if !v.is_empty() && v.len() < min_len {
-        let err = if translate {
-            crate::lang::translate(
-                "Requires at least {".to_string() + &format!("{min_len}") + "} characters",
-            )
-        } else {
-            // Sometimes, translated can't show normally in command line
-            format!("Requires at least {} characters", min_len)
-        };
-        bail!(err);
+    let max_len = crate::ui_interface::max_encrypt_len();
+    let len = v.chars().count();
+    if !v.is_empty() {
+        if len < min_len {
+            let err = if translate {
+                crate::lang::translate(
+                    "Requires at least {".to_string() + &format!("{min_len}") + "} characters",
+                )
+            } else {
+                // Sometimes, translated can't show normally in command line
+                format!("Requires at least {} characters", min_len)
+            };
+            bail!(err);
+        }
+        if len > max_len {
+            bail!("No more than {max_len} characters");
+        }
     }
     Config::set_unlock_pin(&v);
     set_config("unlock-pin", v)

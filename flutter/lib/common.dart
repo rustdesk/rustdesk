@@ -50,6 +50,9 @@ final isLinux = isLinux_;
 final isDesktop = isDesktop_;
 final isWeb = isWeb_;
 final isWebDesktop = isWebDesktop_;
+final isWebOnWindows = isWebOnWindows_;
+final isWebOnLinux = isWebOnLinux_;
+final isWebOnMacOs = isWebOnMacOS_;
 var isMobile = isAndroid || isIOS;
 var version = '';
 int androidVersion = 0;
@@ -347,6 +350,9 @@ class MyTheme {
     hoverColor: Color.fromARGB(255, 224, 224, 224),
     scaffoldBackgroundColor: Colors.white,
     dialogBackgroundColor: Colors.white,
+    appBarTheme: AppBarTheme(
+      shadowColor: Colors.transparent,
+    ),
     dialogTheme: DialogTheme(
       elevation: 15,
       shape: RoundedRectangleBorder(
@@ -442,6 +448,9 @@ class MyTheme {
     hoverColor: Color.fromARGB(255, 45, 46, 53),
     scaffoldBackgroundColor: Color(0xFF18191E),
     dialogBackgroundColor: Color(0xFF18191E),
+    appBarTheme: AppBarTheme(
+      shadowColor: Colors.transparent,
+    ),
     dialogTheme: DialogTheme(
       elevation: 15,
       shape: RoundedRectangleBorder(
@@ -547,7 +556,7 @@ class MyTheme {
 
   static void changeDarkMode(ThemeMode mode) async {
     Get.changeThemeMode(mode);
-    if (desktopType == DesktopType.main || isAndroid || isIOS) {
+    if (desktopType == DesktopType.main || isAndroid || isIOS || isWeb) {
       if (mode == ThemeMode.system) {
         await bind.mainSetLocalOption(
             key: kCommConfKeyTheme, value: defaultOptionTheme);
@@ -555,7 +564,7 @@ class MyTheme {
         await bind.mainSetLocalOption(
             key: kCommConfKeyTheme, value: mode.toShortString());
       }
-      await bind.mainChangeTheme(dark: mode.toShortString());
+      if (!isWeb) await bind.mainChangeTheme(dark: mode.toShortString());
       // Synchronize the window theme of the system.
       updateSystemWindowTheme();
     }

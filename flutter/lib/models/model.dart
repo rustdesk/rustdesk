@@ -497,10 +497,12 @@ class FfiModel with ChangeNotifier {
     newDisplay.width = int.tryParse(evt['width']) ?? newDisplay.width;
     newDisplay.height = int.tryParse(evt['height']) ?? newDisplay.height;
     newDisplay.cursorEmbedded = int.tryParse(evt['cursor_embedded']) == 1;
-    newDisplay.originalWidth =
-        int.tryParse(evt['original_width']) ?? kInvalidResolutionValue;
-    newDisplay.originalHeight =
-        int.tryParse(evt['original_height']) ?? kInvalidResolutionValue;
+    newDisplay.originalWidth = int.tryParse(
+            evt['original_width'] ?? kInvalidResolutionValue.toString()) ??
+        kInvalidResolutionValue;
+    newDisplay.originalHeight = int.tryParse(
+            evt['original_height'] ?? kInvalidResolutionValue.toString()) ??
+        kInvalidResolutionValue;
     newDisplay._scale = _pi.scaleOfDisplay(display);
     _pi.displays[display] = newDisplay;
 
@@ -793,7 +795,7 @@ class FfiModel with ChangeNotifier {
         isRefreshing = false;
       }
       Map<String, dynamic> features = json.decode(evt['features']);
-      _pi.features.privacyMode = features['privacy_mode'] == 1;
+      _pi.features.privacyMode = features['privacy_mode'] == true;
       if (!isCache) {
         handleResolutions(peerId, evt["resolutions"]);
       }
@@ -2183,6 +2185,7 @@ class CursorModel with ChangeNotifier {
       debugPrint("deleting cursor with key $k");
       deleteCustomCursor(k);
     }
+    resetSystemCursor();
   }
 
   trySetRemoteWindowCoords() {
@@ -2229,8 +2232,10 @@ class QualityMonitorModel with ChangeNotifier {
 
   updateQualityStatus(Map<String, dynamic> evt) {
     try {
-      if ((evt['speed'] as String).isNotEmpty) _data.speed = evt['speed'];
-      if ((evt['fps'] as String).isNotEmpty) {
+      if (evt.containsKey('speed') && (evt['speed'] as String).isNotEmpty) {
+        _data.speed = evt['speed'];
+      }
+      if (evt.containsKey('fps') && (evt['fps'] as String).isNotEmpty) {
         final fps = jsonDecode(evt['fps']) as Map<String, dynamic>;
         final pi = parent.target?.ffiModel.pi;
         if (pi != null) {
@@ -2251,14 +2256,18 @@ class QualityMonitorModel with ChangeNotifier {
           _data.fps = null;
         }
       }
-      if ((evt['delay'] as String).isNotEmpty) _data.delay = evt['delay'];
-      if ((evt['target_bitrate'] as String).isNotEmpty) {
+      if (evt.containsKey('delay') && (evt['delay'] as String).isNotEmpty) {
+        _data.delay = evt['delay'];
+      }
+      if (evt.containsKey('target_bitrate') &&
+          (evt['target_bitrate'] as String).isNotEmpty) {
         _data.targetBitrate = evt['target_bitrate'];
       }
-      if ((evt['codec_format'] as String).isNotEmpty) {
+      if (evt.containsKey('codec_format') &&
+          (evt['codec_format'] as String).isNotEmpty) {
         _data.codecFormat = evt['codec_format'];
       }
-      if ((evt['chroma'] as String).isNotEmpty) {
+      if (evt.containsKey('chroma') && (evt['chroma'] as String).isNotEmpty) {
         _data.chroma = evt['chroma'];
       }
       notifyListeners();
@@ -2502,6 +2511,7 @@ class FFI {
         onEvent2UIRgba();
         imageModel.onRgba(display, data);
       });
+      this.id = id;
       return;
     }
 
