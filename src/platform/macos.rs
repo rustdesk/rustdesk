@@ -24,6 +24,7 @@ use hbb_common::{
     sysinfo::{Pid, Process, ProcessRefreshKind, System},
 };
 use include_dir::{include_dir, Dir};
+use objc::rc::autoreleasepool;
 use objc::{class, msg_send, sel, sel_impl};
 use scrap::{libc::c_void, quartz::ffi::*};
 use std::path::PathBuf;
@@ -60,6 +61,10 @@ pub fn major_version() -> u32 {
 }
 
 pub fn is_process_trusted(prompt: bool) -> bool {
+    autoreleasepool(|| unsafe_is_process_trusted(prompt))
+}
+
+fn unsafe_is_process_trusted(prompt: bool) -> bool {
     unsafe {
         let value = if prompt { YES } else { NO };
         let value: id = msg_send![class!(NSNumber), numberWithBool: value];
@@ -79,10 +84,14 @@ pub fn is_can_input_monitoring(prompt: bool) -> bool {
     }
 }
 
+pub fn is_can_screen_recording(prompt: bool) -> bool {
+    autoreleasepool(|| unsafe_is_can_screen_recording(prompt))
+}
+
 // macOS >= 10.15
 // https://stackoverflow.com/questions/56597221/detecting-screen-recording-settings-on-macos-catalina/
 // remove just one app from all the permissions: tccutil reset All com.carriez.rustdesk
-pub fn is_can_screen_recording(prompt: bool) -> bool {
+fn unsafe_is_can_screen_recording(prompt: bool) -> bool {
     // we got some report that we show no permission even after set it, so we try to use new api for screen recording check
     // the new api is only available on macOS >= 10.15, but on stackoverflow, some people said it works on >= 10.16 (crash on 10.15),
     // but also some said it has bug on 10.16, so we just use it on 11.0.
@@ -297,6 +306,10 @@ pub fn get_cursor_pos() -> Option<(i32, i32)> {
 }
 
 pub fn get_focused_display(displays: Vec<DisplayInfo>) -> Option<usize> {
+    autoreleasepool(|| unsafe_get_focused_display(displays))
+}
+
+fn unsafe_get_focused_display(displays: Vec<DisplayInfo>) -> Option<usize> {
     unsafe {
         let main_screen: id = msg_send![class!(NSScreen), mainScreen];
         let screen: id = msg_send![main_screen, deviceDescription];
@@ -311,6 +324,10 @@ pub fn get_focused_display(displays: Vec<DisplayInfo>) -> Option<usize> {
 }
 
 pub fn get_cursor() -> ResultType<Option<u64>> {
+    autoreleasepool(|| unsafe_get_cursor())
+}
+
+fn unsafe_get_cursor() -> ResultType<Option<u64>> {
     unsafe {
         let seed = CGSCurrentCursorSeed();
         if seed == LATEST_SEED {
@@ -375,8 +392,12 @@ fn get_cursor_id() -> ResultType<(id, u64)> {
     }
 }
 
-// https://github.com/stweil/OSXvnc/blob/master/OSXvnc-server/mousecursor.c
 pub fn get_cursor_data(hcursor: u64) -> ResultType<CursorData> {
+    autoreleasepool(|| unsafe_get_cursor_data(hcursor))
+}
+
+// https://github.com/stweil/OSXvnc/blob/master/OSXvnc-server/mousecursor.c
+fn unsafe_get_cursor_data(hcursor: u64) -> ResultType<CursorData> {
     unsafe {
         let (c, hcursor2) = get_cursor_id()?;
         if hcursor != hcursor2 {
