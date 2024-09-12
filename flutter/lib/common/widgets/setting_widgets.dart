@@ -184,7 +184,7 @@ List<Widget> ServerConfigImportExportWidgets(
 ) {
   import() {
     Clipboard.getData(Clipboard.kTextPlain).then((value) {
-      importConfig(controllers, errMsgs, value?.text);
+      importConfig(controllers, errMsgs, value?.text.trim());
     });
   }
 
