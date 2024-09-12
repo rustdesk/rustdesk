@@ -123,18 +123,22 @@ class _PeersViewState extends State<_PeersView>
 
   @override
   void onWindowBlur() {
-    // We need this comparison because window restore also triggers `onWindowBlur()`.
+    // We need this comparison because window restore (on Windows) also triggers `onWindowBlur()`.
     // Although `onWindowRestore()` is called after `onWindowBlur()` in my test,
     // we need the following comparison to ensure that `_isActive` is true in the end.
     if (DateTime.now().difference(_lastWindowRestoreTime) <
         const Duration(milliseconds: 300)) {
       return;
     }
+    _queryCount = _maxQueryCount;
     _isActive = false;
   }
 
   @override
   void onWindowRestore() {
+    // Window restore (on MacOS and Linux) also triggers `onWindowFocus()`.
+    if (!isWindows) return;
+
     _queryCount = 0;
     _isActive = true;
     _lastWindowRestoreTime = DateTime.now();
@@ -142,6 +146,8 @@ class _PeersViewState extends State<_PeersView>
 
   @override
   void onWindowMinimize() {
+    // Window minimize (on MacOS and Linux) also triggers `onWindowBlur()`.
+    if (!isWindows) return;
     _queryCount = _maxQueryCount;
     _isActive = false;
   }
