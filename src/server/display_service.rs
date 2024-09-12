@@ -344,7 +344,7 @@ pub fn is_inited_msg() -> Option<Message> {
     None
 }
 
-pub async fn update_get_sync_displays() -> ResultType<Vec<DisplayInfo>> {
+pub async fn update_get_sync_displays_on_login() -> ResultType<Vec<DisplayInfo>> {
     #[cfg(target_os = "linux")]
     {
         if !is_x11() {
