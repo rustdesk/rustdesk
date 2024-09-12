@@ -351,7 +351,11 @@ pub async fn update_get_sync_displays() -> ResultType<Vec<DisplayInfo>> {
             return super::wayland::get_displays().await;
         }
     }
-    check_update_displays(&try_get_displays()?);
+    #[cfg(not(windows))]
+    let displays = display_service::try_get_displays();
+    #[cfg(windows)]
+    let displays = display_service::try_get_displays_add_amyuni_headless();
+    check_update_displays(&displays?);
     Ok(SYNC_DISPLAYS.lock().unwrap().displays.clone())
 }
 
