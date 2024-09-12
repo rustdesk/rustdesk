@@ -117,10 +117,17 @@ class _PeersViewState extends State<_PeersView>
   @override
   void onWindowFocus() {
     _queryCount = 0;
+    _isActive = true;
+  }
+
+  @override
+  void onWindowBlur() {
+    _isActive = false;
   }
 
   @override
   void onWindowRestore() {
+    _queryCount = 0;
     _isActive = true;
   }
 
