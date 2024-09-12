@@ -89,6 +89,7 @@ class _PeersViewState extends State<_PeersView>
   var _lastChangeTime = DateTime.now();
   var _lastQueryPeers = <String>{};
   var _lastQueryTime = DateTime.now();
+  var _lastWindowRestoreTime = DateTime.now();
   var _queryCount = 0;
   var _exit = false;
   bool _isActive = true;
@@ -122,6 +123,13 @@ class _PeersViewState extends State<_PeersView>
 
   @override
   void onWindowBlur() {
+    // We need this comparison because window restore also triggers `onWindowBlur()`.
+    // Although `onWindowRestore()` is called after `onWindowBlur()` in my test,
+    // we need the following comparison to ensure that `_isActive` is true in the end.
+    if (DateTime.now().difference(_lastWindowRestoreTime) <
+        const Duration(milliseconds: 300)) {
+      return;
+    }
     _isActive = false;
   }
 
@@ -129,6 +137,7 @@ class _PeersViewState extends State<_PeersView>
   void onWindowRestore() {
     _queryCount = 0;
     _isActive = true;
+    _lastWindowRestoreTime = DateTime.now();
   }
 
   @override
@@ -247,10 +256,11 @@ class _PeersViewState extends State<_PeersView>
                             physics: DraggableNeverScrollableScrollPhysics(),
                             itemCount: peers.length,
                             itemBuilder: (BuildContext context, int index) {
-                              return buildOnePeer(peers[index], false).marginOnly(
-                                  right: space,
-                                  top: index == 0 ? 0 : space / 2,
-                                  bottom: space / 2);
+                              return buildOnePeer(peers[index], false)
+                                  .marginOnly(
+                                      right: space,
+                                      top: index == 0 ? 0 : space / 2,
+                                      bottom: space / 2);
                             }),
                       )
                     : DesktopScrollWrapper(
