@@ -120,8 +120,14 @@ class _PeersViewState extends State<_PeersView>
   }
 
   @override
+  void onWindowRestore() {
+    _isActive = true;
+  }
+
+  @override
   void onWindowMinimize() {
     _queryCount = _maxQueryCount;
+    _isActive = false;
   }
 
   // This function is required for mobile.
