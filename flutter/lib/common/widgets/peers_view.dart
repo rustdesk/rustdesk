@@ -139,6 +139,7 @@ class _PeersViewState extends State<_PeersView>
   @override
   void onWindowRestore() {
     // Window restore (on MacOS and Linux) also triggers `onWindowFocus()`.
+    // But on Windows, it triggers `onWindowBlur()`, mybe it's a bug of the window manager.
     if (!isWindows) return;
     _queryCount = 0;
     _isActive = true;
@@ -147,10 +148,7 @@ class _PeersViewState extends State<_PeersView>
 
   @override
   void onWindowMinimize() {
-    // Window minimize (on MacOS and Linux) also triggers `onWindowBlur()`.
-    if (!isWindows) return;
-    _queryCount = _maxQueryCount;
-    _isActive = false;
+    // Window minimize also triggers `onWindowBlur()`.
   }
 
   // This function is required for mobile.
