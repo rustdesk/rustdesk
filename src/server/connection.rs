@@ -1279,29 +1279,9 @@ impl Connection {
                 self.send(msg_out).await;
             }
 
-            #[cfg(not(any(target_os = "android", target_os = "ios")))]
-            {
-                #[cfg(not(windows))]
-                let displays = display_service::try_get_displays();
-                #[cfg(windows)]
-                let displays = display_service::try_get_displays_add_amyuni_headless();
-                pi.resolutions = Some(SupportedResolutions {
-                    resolutions: displays
-                        .map(|displays| {
-                            displays
-                                .get(self.display_idx)
-                                .map(|d| crate::platform::resolutions(&d.name()))
-                                .unwrap_or(vec![])
-                        })
-                        .unwrap_or(vec![]),
-                    ..Default::default()
-                })
-                .into();
-            }
-
             try_activate_screen();
 
-            match super::display_service::update_get_sync_displays().await {
+            match super::display_service::update_get_sync_displays_on_login().await {
                 Err(err) => {
                     res.set_error(format!("{}", err));
                 }
@@ -1314,6 +1294,18 @@ impl Connection {
                     }
                     pi.displays = displays;
                     pi.current_display = self.display_idx as _;
+                    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+                    {
+                        pi.resolutions = Some(SupportedResolutions {
+                            resolutions: pi
+                                .displays
+                                .get(self.display_idx)
+                                .map(|d| crate::platform::resolutions(&d.name))
+                                .unwrap_or(vec![]),
+                            ..Default::default()
+                        })
+                        .into();
+                    }
                     res.set_peer_info(pi);
                     sub_service = true;
 
