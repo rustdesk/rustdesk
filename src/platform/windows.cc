@@ -549,6 +549,7 @@ extern "C"
                         continue;
                     if (!stricmp(info.pWinStationName, "console"))
                     {
+                        WTSFreeMemory(pInfos);
                         return info.SessionId;
                     }
                     if (!strnicmp(info.pWinStationName, rdp, nrdp))
