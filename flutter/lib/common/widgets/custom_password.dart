@@ -28,7 +28,11 @@ class LowercaseValidationRule extends ValidationRule {
 
   @override
   bool validate(String value) {
-    return value.contains(RegExp(r'[a-z]'));
+    return value.runes.any((int rune) {
+      var character = String.fromCharCode(rune);
+      return character.toLowerCase() == character &&
+          character.toUpperCase() != character;
+    });
   }
 }
 
