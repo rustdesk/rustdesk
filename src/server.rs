@@ -106,7 +106,10 @@ pub fn new() -> ServerPtr {
         if !display_service::capture_cursor_embedded() {
             server.add_service(Box::new(input_service::new_cursor()));
             server.add_service(Box::new(input_service::new_pos()));
-            server.add_service(Box::new(input_service::new_window_focus()));
+            if scrap::is_x11() {
+                // wayland does not support multiple displays currently
+                server.add_service(Box::new(input_service::new_window_focus()));
+            }
         }
     }
     Arc::new(RwLock::new(server))
