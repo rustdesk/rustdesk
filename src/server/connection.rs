@@ -2713,7 +2713,7 @@ impl Connection {
                 }
             }
         } else {
-            if let Err(e) = virtual_display_manager::plug_out_monitor(t.display, false) {
+            if let Err(e) = virtual_display_manager::plug_out_monitor(t.display, false, true) {
                 log::error!("Failed to plug out virtual display {}: {}", t.display, e);
                 self.send(make_msg(format!(
                     "Failed to plug out virtual displays: {}",

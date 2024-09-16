@@ -77,7 +77,7 @@ pub fn plug_in_monitor(idx: u32, modes: Vec<virtual_display::MonitorMode>) -> Re
     }
 }
 
-pub fn plug_out_monitor(index: i32, force_all: bool) -> ResultType<()> {
+pub fn plug_out_monitor(index: i32, force_all: bool, force_one: bool) -> ResultType<()> {
     match IDD_IMPL {
         IDD_IMPL_RUSTDESK => {
             let indices = if index == IDD_PLUG_OUT_ALL_INDEX {
@@ -87,7 +87,7 @@ pub fn plug_out_monitor(index: i32, force_all: bool) -> ResultType<()> {
             };
             rustdesk_idd::plug_out_peer_request(&indices)
         }
-        IDD_IMPL_AMYUNI => amyuni_idd::plug_out_monitor(index, force_all),
+        IDD_IMPL_AMYUNI => amyuni_idd::plug_out_monitor(index, force_all, force_one),
         _ => bail!("Unsupported virtual display implementation."),
     }
 }
@@ -103,12 +103,16 @@ pub fn plug_in_peer_request(modes: Vec<Vec<virtual_display::MonitorMode>>) -> Re
     }
 }
 
-pub fn plug_out_monitor_indices(indices: &[u32], force_all: bool) -> ResultType<()> {
+pub fn plug_out_monitor_indices(
+    indices: &[u32],
+    force_all: bool,
+    force_one: bool,
+) -> ResultType<()> {
     match IDD_IMPL {
         IDD_IMPL_RUSTDESK => rustdesk_idd::plug_out_peer_request(indices),
         IDD_IMPL_AMYUNI => {
             for _idx in indices.iter() {
-                amyuni_idd::plug_out_monitor(0, force_all)?;
+                amyuni_idd::plug_out_monitor(0, force_all, force_one)?;
             }
             Ok(())
         }
@@ -519,7 +523,7 @@ pub mod amyuni_idd {
 
     pub fn reset_all() -> ResultType<()> {
         let _ = crate::privacy_mode::turn_off_privacy(0, None);
-        let _ = plug_out_monitor(super::IDD_PLUG_OUT_ALL_INDEX, true);
+        let _ = plug_out_monitor(super::IDD_PLUG_OUT_ALL_INDEX, true, false);
         *LAST_PLUG_IN_HEADLESS_TIME.lock().unwrap() = None;
         Ok(())
     }
@@ -535,12 +539,12 @@ pub mod amyuni_idd {
         if add {
             // If the monitor is plugged in, increase the count.
             // Though there's already a check of `VIRTUAL_DISPLAY_MAX_COUNT`, it's still better to check here for double ensure.
-            if VIRTUAL_DISPLAY_COUNT.load(atomic::Ordering::Relaxed) < VIRTUAL_DISPLAY_MAX_COUNT {
-                VIRTUAL_DISPLAY_COUNT.fetch_add(1, atomic::Ordering::Relaxed);
+            if VIRTUAL_DISPLAY_COUNT.load(atomic::Ordering::SeqCst) < VIRTUAL_DISPLAY_MAX_COUNT {
+                VIRTUAL_DISPLAY_COUNT.fetch_add(1, atomic::Ordering::SeqCst);
             }
         } else {
-            if VIRTUAL_DISPLAY_COUNT.load(atomic::Ordering::Relaxed) > 0 {
-                VIRTUAL_DISPLAY_COUNT.fetch_sub(1, atomic::Ordering::Relaxed);
+            if VIRTUAL_DISPLAY_COUNT.load(atomic::Ordering::SeqCst) > 0 {
+                VIRTUAL_DISPLAY_COUNT.fetch_sub(1, atomic::Ordering::SeqCst);
             }
         }
         Ok(())
@@ -635,7 +639,11 @@ pub mod amyuni_idd {
         plug_in_monitor_(true, is_async)
     }
 
-    pub fn plug_out_monitor(index: i32, force_all: bool) -> ResultType<()> {
+    // `index` the display index to plug out. -1 means plug out all.
+    // `force_all` is used to forcibly plug out all virtual displays.
+    // `force_one` is used to forcibly plug out one virtual display managed by other processes
+    //             if there're no virtual displays managed by RustDesk.
+    pub fn plug_out_monitor(index: i32, force_all: bool, force_one: bool) -> ResultType<()> {
         let plug_out_all = index == super::IDD_PLUG_OUT_ALL_INDEX;
         // If `plug_out_all and force_all` is true, forcibly plug out all virtual displays.
         // Though the driver may be controlled by other processes,
@@ -647,11 +655,15 @@ pub mod amyuni_idd {
         // 4. RustDesk plug out all virtual displays in this call. (RustDesk disconnect)
         //
         // This is not a normal scenario, RustDesk will plug out virtual display unexpectedly.
-        let plug_in_count = VIRTUAL_DISPLAY_COUNT.load(atomic::Ordering::Relaxed);
+        let mut plug_in_count = VIRTUAL_DISPLAY_COUNT.load(atomic::Ordering::Relaxed);
         let amyuni_count = get_monitor_count();
         if !plug_out_all {
             if plug_in_count == 0 && amyuni_count > 0 {
-                bail!("The virtual display is managed by other processes.");
+                if force_one {
+                    plug_in_count = 1;
+                } else {
+                    bail!("The virtual display is managed by other processes.");
+                }
             }
         } else {
             // Ignore the message if trying to plug out all virtual displays.

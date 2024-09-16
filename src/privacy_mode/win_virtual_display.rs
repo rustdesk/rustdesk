@@ -150,8 +150,11 @@ impl PrivacyModeImpl {
     }
 
     fn restore_plug_out_monitor(&mut self) {
-        let _ =
-            virtual_display_manager::plug_out_monitor_indices(&self.virtual_displays_added, true);
+        let _ = virtual_display_manager::plug_out_monitor_indices(
+            &self.virtual_displays_added,
+            true,
+            false,
+        );
         self.virtual_displays_added.clear();
     }
 
@@ -312,7 +315,7 @@ impl PrivacyModeImpl {
 
             // No physical displays, no need to use the privacy mode.
             if self.displays.is_empty() {
-                virtual_display_manager::plug_out_monitor_indices(&displays, false)?;
+                virtual_display_manager::plug_out_monitor_indices(&displays, false, false)?;
                 bail!(NO_PHYSICAL_DISPLAYS);
             }
 
@@ -509,7 +512,7 @@ pub fn restore_reg_connectivity(plug_out_monitors: bool) {
         return;
     }
     if plug_out_monitors {
-        let _ = virtual_display_manager::plug_out_monitor(-1, true);
+        let _ = virtual_display_manager::plug_out_monitor(-1, true, false);
     }
     if let Ok(reg_recovery) =
         serde_json::from_str::<reg_display_settings::RegRecovery>(&config_recovery_value)
