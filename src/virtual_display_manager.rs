@@ -8,6 +8,7 @@ pub const AMYUNI_IDD_DEVICE_STRING: &'static str = "USB Mobile Monitor Virtual D
 const IDD_IMPL: &str = IDD_IMPL_AMYUNI;
 const IDD_IMPL_RUSTDESK: &str = "rustdesk_idd";
 const IDD_IMPL_AMYUNI: &str = "amyuni_idd";
+const IDD_PLUG_OUT_ALL_INDEX: i32 = -1;
 
 pub fn is_amyuni_idd() -> bool {
     IDD_IMPL == IDD_IMPL_AMYUNI
@@ -79,7 +80,7 @@ pub fn plug_in_monitor(idx: u32, modes: Vec<virtual_display::MonitorMode>) -> Re
 pub fn plug_out_monitor(index: i32, force_all: bool) -> ResultType<()> {
     match IDD_IMPL {
         IDD_IMPL_RUSTDESK => {
-            let indices = if index == -1 {
+            let indices = if index == IDD_PLUG_OUT_ALL_INDEX {
                 rustdesk_idd::get_virtual_displays()
             } else {
                 vec![index as _]
@@ -382,7 +383,7 @@ pub mod amyuni_idd {
     use hbb_common::{bail, lazy_static, log, tokio::time::Instant, ResultType};
     use std::{
         ptr::null_mut,
-        sync::{Arc, Mutex},
+        sync::{atomic, Arc, Mutex},
         time::Duration,
     };
     use winapi::{
@@ -405,6 +406,14 @@ pub mod amyuni_idd {
         static ref LOCK: Arc<Mutex<()>> = Default::default();
         static ref LAST_PLUG_IN_HEADLESS_TIME: Arc<Mutex<Option<Instant>>> = Arc::new(Mutex::new(None));
     }
+    const VIRTUAL_DISPLAY_MAX_COUNT: usize = 4;
+    // The count of virtual displays plugged in.
+    // This count is not accurate, because:
+    // 1. The virtual display driver may also be controlled by other processes.
+    // 2. RustDesk may crash and restart, but the virtual displays are kept.
+    //
+    // to-do: Maybe a better way is to add an option asking the user if plug out all virtual displays on disconnect.
+    static VIRTUAL_DISPLAY_COUNT: atomic::AtomicUsize = atomic::AtomicUsize::new(0);
 
     fn get_deviceinstaller64_work_dir() -> ResultType<Option<Vec<u8>>> {
         let cur_exe = std::env::current_exe()?;
@@ -510,7 +519,7 @@ pub mod amyuni_idd {
 
     pub fn reset_all() -> ResultType<()> {
         let _ = crate::privacy_mode::turn_off_privacy(0, None);
-        let _ = plug_out_monitor(-1, true);
+        let _ = plug_out_monitor(super::IDD_PLUG_OUT_ALL_INDEX, true);
         *LAST_PLUG_IN_HEADLESS_TIME.lock().unwrap() = None;
         Ok(())
     }
@@ -521,6 +530,18 @@ pub mod amyuni_idd {
         let cmd = [cmd, 0x00, 0x00, 0x00];
         unsafe {
             win_device::device_io_control(&INTERFACE_GUID, PLUG_MONITOR_IO_CONTROL_CDOE, &cmd, 0)?;
+        }
+        // No need to consider concurrency here.
+        if add {
+            // If the monitor is plugged in, increase the count.
+            // Though there's already a check of `VIRTUAL_DISPLAY_MAX_COUNT`, it's still better to check here for double ensure.
+            if VIRTUAL_DISPLAY_COUNT.load(atomic::Ordering::Relaxed) < VIRTUAL_DISPLAY_MAX_COUNT {
+                VIRTUAL_DISPLAY_COUNT.fetch_add(1, atomic::Ordering::Relaxed);
+            }
+        } else {
+            if VIRTUAL_DISPLAY_COUNT.load(atomic::Ordering::Relaxed) > 0 {
+                VIRTUAL_DISPLAY_COUNT.fetch_sub(1, atomic::Ordering::Relaxed);
+            }
         }
         Ok(())
     }
@@ -607,44 +628,65 @@ pub mod amyuni_idd {
             bail!("Failed to install driver.");
         }
 
-        if get_monitor_count() == 4 {
-            bail!("There are already 4 monitors plugged in.");
+        if get_monitor_count() == VIRTUAL_DISPLAY_MAX_COUNT {
+            bail!("There are already {VIRTUAL_DISPLAY_MAX_COUNT} monitors plugged in.");
         }
 
         plug_in_monitor_(true, is_async)
     }
 
     pub fn plug_out_monitor(index: i32, force_all: bool) -> ResultType<()> {
-        let all_count = windows::get_device_names(None).len();
+        let plug_out_all = index == super::IDD_PLUG_OUT_ALL_INDEX;
+        // If `plug_out_all and force_all` is true, forcibly plug out all virtual displays.
+        // Though the driver may be controlled by other processes,
+        // we still forcibly plug out all virtual displays.
+        //
+        // 1. RustDesk plug in 2 virtual displays. (RustDesk)
+        // 2. Other process plug out all virtual displays. (User mannually)
+        // 3. Other process plug in 1 virtual display. (User mannually)
+        // 4. RustDesk plug out all virtual displays in this call. (RustDesk disconnect)
+        //
+        // This is not a normal scenario, RustDesk will plug out virtual display unexpectedly.
+        let plug_in_count = VIRTUAL_DISPLAY_COUNT.load(atomic::Ordering::Relaxed);
         let amyuni_count = get_monitor_count();
+        if !plug_out_all {
+            if plug_in_count == 0 && amyuni_count > 0 {
+                bail!("The virtual display is managed by other processes.");
+            }
+        } else {
+            // Ignore the message if trying to plug out all virtual displays.
+        }
+
+        let all_count = windows::get_device_names(None).len();
         let mut to_plug_out_count = match all_count {
             0 => return Ok(()),
             1 => {
-                if amyuni_count == 0 {
+                if plug_in_count == 0 {
                     bail!("No virtual displays to plug out.")
                 } else {
                     if force_all {
                         1
                     } else {
-                        bail!("This only virtual display cannot be pulled out.")
+                        bail!("This only virtual display cannot be plugged out.")
                     }
                 }
             }
             _ => {
-                if all_count == amyuni_count {
+                if all_count == plug_in_count {
                     if force_all {
                         all_count
                     } else {
                         all_count - 1
                     }
                 } else {
-                    amyuni_count
+                    plug_in_count
                 }
             }
         };
-        if to_plug_out_count != 0 && index != -1 {
+        if to_plug_out_count != 0 && !plug_out_all {
             to_plug_out_count = 1;
         }
+
         for _i in 0..to_plug_out_count {
             let _ = plug_monitor_(false);
         }
