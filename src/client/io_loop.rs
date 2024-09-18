@@ -1895,7 +1895,7 @@ impl<T: InvokeUiSession> Remote<T> {
             return;
         };
 
-        let is_stopping_allowed = clip.is_stopping_allowed_from_peer();
+        let is_stopping_allowed = clip.is_beginning_message();
         let file_transfer_enabled = self.handler.lc.read().unwrap().enable_file_copy_paste.v;
         let stop = is_stopping_allowed && !file_transfer_enabled;
         log::debug!(
