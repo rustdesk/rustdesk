@@ -27,7 +27,7 @@ use hbb_common::platform::linux::run_cmds;
 #[cfg(target_os = "android")]
 use hbb_common::protobuf::EnumOrUnknown;
 use hbb_common::{
-    config::{self, Config, TrustedDevice},
+    config::{self, keys, Config, TrustedDevice},
     fs::{self, can_enable_overwrite_detection},
     futures::{SinkExt, StreamExt},
     get_time, get_version_number,
@@ -335,7 +335,7 @@ impl Connection {
             clipboard: Connection::permission("enable-clipboard"),
             audio: Connection::permission("enable-audio"),
             // to-do: make sure is the option correct here
-            file: Connection::permission(config::keys::OPTION_ENABLE_FILE_TRANSFER),
+            file: Connection::permission(keys::OPTION_ENABLE_FILE_TRANSFER),
             restart: Connection::permission("enable-remote-restart"),
             recording: Connection::permission("enable-record-session"),
             block_input: Connection::permission("enable-block-input"),
@@ -1359,7 +1359,10 @@ impl Connection {
                 if !self.follow_remote_window {
                     noperms.push(NAME_WINDOW_FOCUS);
                 }
-                if !self.clipboard_enabled() || !self.peer_keyboard_enabled() {
+                if !self.clipboard_enabled()
+                    || !self.peer_keyboard_enabled()
+                    || crate::get_builtin_option(keys::OPTION_ONE_WAY_CLIPBOARD_REDIRECTION) == "Y"
+                {
                     noperms.push(super::clipboard_service::NAME);
                 }
                 if !self.audio_enabled() {
@@ -1621,8 +1624,8 @@ impl Connection {
     #[inline]
     fn enable_trusted_devices() -> bool {
         config::option2bool(
-            config::keys::OPTION_ENABLE_TRUSTED_DEVICES,
-            &Config::get_option(config::keys::OPTION_ENABLE_TRUSTED_DEVICES),
+            keys::OPTION_ENABLE_TRUSTED_DEVICES,
+            &Config::get_option(keys::OPTION_ENABLE_TRUSTED_DEVICES),
         )
     }
 
@@ -1689,7 +1692,7 @@ impl Connection {
             }
             match lr.union {
                 Some(login_request::Union::FileTransfer(ft)) => {
-                    if !Connection::permission(config::keys::OPTION_ENABLE_FILE_TRANSFER) {
+                    if !Connection::permission(keys::OPTION_ENABLE_FILE_TRANSFER) {
                         self.send_login_error("No permission of file transfer")
                             .await;
                         sleep(1.).await;
@@ -1762,7 +1765,9 @@ impl Connection {
                 self.send_login_error(crate::client::LOGIN_MSG_OFFLINE)
                     .await;
                 return false;
-            } else if password::approve_mode() == ApproveMode::Click
+            } else if (password::approve_mode() == ApproveMode::Click
+                && !(crate::platform::is_prelogin()
+                    && crate::get_builtin_option(keys::OPTION_ALLOW_LOGON_SCREEN_PASSWORD) == "Y"))
                 || password::approve_mode() == ApproveMode::Both && !password::has_valid_password()
             {
                 self.try_start_cm(lr.my_id, lr.my_name, false);
@@ -2132,6 +2137,24 @@ impl Connection {
                                 self.delayed_read_dir = Some((rd.path, rd.include_hidden));
                             }
                             return true;
+                        }
+                        if crate::get_builtin_option(keys::OPTION_ONE_WAY_FILE_TRANSFER) == "Y" {
+                            match fa.union {
+                                Some(file_action::Union::Send(_))
+                                | Some(file_action::Union::RemoveFile(_))
+                                | Some(file_action::Union::Rename(_))
+                                | Some(file_action::Union::Create(_))
+                                | Some(file_action::Union::RemoveDir(_)) => {
+                                    self.send(fs::new_error(
+                                        0,
+                                        "One-way file transfer is enabled on controlled side",
+                                        0,
+                                    ))
+                                    .await;
+                                    return true;
+                                }
+                                _ => {}
+                            }
                         }
                         match fa.union {
                             Some(file_action::Union::ReadDir(rd)) => {

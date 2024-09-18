@@ -26,7 +26,7 @@ use crossbeam_queue::ArrayQueue;
 use hbb_common::tokio::sync::mpsc::error::TryRecvError;
 use hbb_common::{
     allow_err,
-    config::{PeerConfig, TransferSerde},
+    config::{self, PeerConfig, TransferSerde},
     fs::{
         self, can_enable_overwrite_detection, get_job, get_string, new_send_confirm,
         DigestCheckResult, RemoveJobMeta,
@@ -1201,13 +1201,18 @@ impl<T: InvokeUiSession> Remote<T> {
                                 &peer_platform,
                                 crate::clipboard::ClipboardSide::Client,
                             ) {
-                                let sender = self.sender.clone();
-                                let permission_config = self.handler.get_permission_config();
-                                tokio::spawn(async move {
-                                    if permission_config.is_text_clipboard_required() {
-                                        sender.send(Data::Message(msg_out)).ok();
-                                    }
-                                });
+                                if crate::get_builtin_option(
+                                    config::keys::OPTION_ENABLE_CLIPBOARD_INIT_SYNC,
+                                ) != "N"
+                                {
+                                    let sender = self.sender.clone();
+                                    let permission_config = self.handler.get_permission_config();
+                                    tokio::spawn(async move {
+                                        if permission_config.is_text_clipboard_required() {
+                                            sender.send(Data::Message(msg_out)).ok();
+                                        }
+                                    });
+                                }
                             }
 
                             // on connection established client
@@ -1618,7 +1623,7 @@ impl<T: InvokeUiSession> Remote<T> {
                 },
                 Some(message::Union::MessageBox(msgbox)) => {
                     let mut link = msgbox.link;
-                    if let Some(v) = hbb_common::config::HELPER_URL.get(&link as &str) {
+                    if let Some(v) = config::HELPER_URL.get(&link as &str) {
                         link = v.to_string();
                     } else {
                         log::warn!("Message box ignore link {} for security", &link);

@@ -565,7 +565,7 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
                             log::debug!(
                                 "Process clipboard message from clip, stop: {}, is_stopping_allowed: {}, is_clipboard_enabled: {}, file_transfer_enabled: {}, file_transfer_enabled_peer: {}",
                                 stop, is_stopping_allowed, is_clipboard_enabled, file_transfer_enabled, file_transfer_enabled_peer);
-                            if stop {
+                            if stop || crate::get_builtin_option(OPTION_ONE_WAY_FILE_TRANSFER) == "Y"{
                                 ContextSend::set_is_stopped();
                             } else {
                                 allow_err!(self.tx.send(Data::ClipboardFile(_clip)));

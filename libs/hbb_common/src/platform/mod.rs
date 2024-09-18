@@ -79,3 +79,9 @@ where
         libc::signal(libc::SIGSEGV, breakdown_signal_handler as _);
     }
 }
+
+#[cfg(any(target_os = "android", target_os = "ios"))]
+#[inline]
+fn is_prelogin() -> bool {
+    false
+}
