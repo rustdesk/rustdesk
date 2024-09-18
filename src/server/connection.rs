@@ -2139,21 +2139,33 @@ impl Connection {
                             return true;
                         }
                         if crate::get_builtin_option(keys::OPTION_ONE_WAY_FILE_TRANSFER) == "Y" {
-                            match fa.union {
-                                Some(file_action::Union::Send(_))
-                                | Some(file_action::Union::RemoveFile(_))
-                                | Some(file_action::Union::Rename(_))
-                                | Some(file_action::Union::Create(_))
-                                | Some(file_action::Union::RemoveDir(_)) => {
-                                    self.send(fs::new_error(
-                                        0,
-                                        "One-way file transfer is enabled on controlled side",
-                                        0,
-                                    ))
-                                    .await;
-                                    return true;
+                            let mut job_id = None;
+                            match &fa.union {
+                                Some(file_action::Union::Send(s)) => {
+                                    job_id = Some(s.id);
+                                }
+                                Some(file_action::Union::RemoveFile(rf)) => {
+                                    job_id = Some(rf.id);
+                                }
+                                Some(file_action::Union::Rename(r)) => {
+                                    job_id = Some(r.id);
+                                }
+                                Some(file_action::Union::Create(c)) => {
+                                    job_id = Some(c.id);
+                                }
+                                Some(file_action::Union::RemoveDir(rd)) => {
+                                    job_id = Some(rd.id);
                                 }
                                 _ => {}
+                            }
+                            if let Some(job_id) = job_id {
+                                self.send(fs::new_error(
+                                    job_id,
+                                    "one-way-file-transfer-tip",
+                                    0,
+                                ))
+                                .await;
+                                return true;
                             }
                         }
                         match fa.union {
