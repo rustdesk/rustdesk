@@ -128,6 +128,12 @@ impl Drop for InstallingService {
     }
 }
 
+#[cfg(any(target_os = "android", target_os = "ios"))]
+#[inline]
+fn is_prelogin() -> bool {
+    false
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
