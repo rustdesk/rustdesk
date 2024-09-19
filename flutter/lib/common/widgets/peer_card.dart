@@ -250,6 +250,9 @@ class _PeerCardState extends State<_PeerCard>
       color: Colors.transparent,
       elevation: 0,
       margin: EdgeInsets.zero,
+      // to-do: memory leak here, more investigation needed.
+      // Continious rebuilds of `Obx()` will cause memory leak here.
+      // The simple demo does not have this issue.
       child: Obx(
         () => Container(
           foregroundDecoration: deco.value,
