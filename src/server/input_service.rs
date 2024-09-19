@@ -16,7 +16,7 @@ use rdev::{self, EventType, Key as RdevKey, KeyCode, RawKey};
 #[cfg(target_os = "macos")]
 use rdev::{CGEventSourceStateID, CGEventTapLocation, VirtualInput};
 #[cfg(target_os = "linux")]
-use scrap::wayland::pipewire::RDP_RESPONSE;
+use scrap::wayland::pipewire::RDP_SESSION_INFO;
 use std::{
     convert::TryFrom,
     ops::{Deref, DerefMut, Sub},
@@ -521,15 +521,25 @@ pub async fn setup_uinput(minx: i32, maxx: i32, miny: i32, maxy: i32) -> ResultT
 #[cfg(target_os = "linux")]
 pub async fn setup_rdp_input() -> ResultType<(), Box<dyn std::error::Error>> {
     let mut en = ENIGO.lock()?;
-    let rdp_res_lock = RDP_RESPONSE.lock()?;
-    let rdp_res = rdp_res_lock.as_ref().ok_or("RDP response is None")?;
+    let rdp_info_lock = RDP_SESSION_INFO.lock()?;
+    let rdp_info = rdp_info_lock.as_ref().ok_or("RDP session is None")?;
 
-    let keyboard = RdpInputKeyboard::new(rdp_res.conn.clone(), rdp_res.session.clone())?;
+    let keyboard = RdpInputKeyboard::new(rdp_info.conn.clone(), rdp_info.session.clone())?;
     en.set_custom_keyboard(Box::new(keyboard));
     log::info!("RdpInput keyboard created");
 
-    if let Some(stream) = rdp_res.streams.clone().into_iter().next() {
-        let mouse = RdpInputMouse::new(rdp_res.conn.clone(), rdp_res.session.clone(), stream)?;
+    if let Some(stream) = rdp_info.streams.clone().into_iter().next() {
+        let resolution = rdp_info
+            .resolution
+            .lock()
+            .unwrap()
+            .unwrap_or(stream.get_size());
+        let mouse = RdpInputMouse::new(
+            rdp_info.conn.clone(),
+            rdp_info.session.clone(),
+            stream,
+            resolution,
+        )?;
         en.set_custom_mouse(Box::new(mouse));
         log::info!("RdpInput mouse created");
     }
