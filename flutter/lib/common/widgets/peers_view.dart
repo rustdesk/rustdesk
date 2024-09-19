@@ -167,6 +167,9 @@ class _PeersViewState extends State<_PeersView>
 
   @override
   Widget build(BuildContext context) {
+    // We should avoid too many rebuilds. MacOS(m1, 14.6.1) on Flutter 3.19.6.
+    // Continious rebuilds of `ChangeNotifierProvider` will cause memory leak.
+    // Simple demo can reproduce this issue.
     return ChangeNotifierProvider<Peers>(
       create: (context) => widget.peers,
       child: Consumer<Peers>(builder: (context, peers, child) {
@@ -245,6 +248,9 @@ class _PeersViewState extends State<_PeersView>
                   : Container(child: visibilityChild);
             }
 
+            // We should avoid too many rebuilds. Win10(Some machines) on Flutter 3.19.6.
+            // Continious rebuilds of `ListView.builder` will cause memory leak.
+            // Simple demo can reproduce this issue.
             final Widget child = Obx(() => stateGlobal.isPortrait.isTrue
                 ? ListView.builder(
                     itemCount: peers.length,
