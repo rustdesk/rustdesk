@@ -1196,15 +1196,12 @@ impl<T: InvokeUiSession> Remote<T> {
                             }
 
                             #[cfg(not(any(target_os = "android", target_os = "ios")))]
-                            if let Some(msg_out) = crate::clipboard::get_current_clipboard_msg(
-                                &peer_version,
-                                &peer_platform,
-                                crate::clipboard::ClipboardSide::Client,
-                            ) {
-                                if crate::get_builtin_option(
-                                    config::keys::OPTION_ENABLE_CLIPBOARD_INIT_SYNC,
-                                ) != "N"
-                                {
+                            if self.handler.lc.read().unwrap().sync_init_clipboard.v {
+                                if let Some(msg_out) = crate::clipboard::get_current_clipboard_msg(
+                                    &peer_version,
+                                    &peer_platform,
+                                    crate::clipboard::ClipboardSide::Client,
+                                ) {
                                     let sender = self.sender.clone();
                                     let permission_config = self.handler.get_permission_config();
                                     tokio::spawn(async move {
