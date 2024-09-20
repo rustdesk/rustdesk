@@ -30,7 +30,7 @@ use std::{
 const EXIT_CODE: i32 = -1;
 
 enum Message {
-    PasswordPrompt(String),
+    PasswordPrompt((String, bool)),
     Password((String, String)),
     ErrorDialog(String),
     Cancel,
@@ -107,24 +107,20 @@ fn ui(args: Vec<String>) {
 
     let username = Arc::new(Mutex::new(crate::platform::get_active_username()));
     let username_clone = username.clone();
-    let first_prompt = Arc::new(Mutex::new(true));
 
     application.connect_activate(glib::clone!(@weak application =>move |_| {
         let rx_to_ui = rx_to_ui_clone.clone();
         let tx_from_ui = tx_from_ui_clone.clone();
         let last_password = Arc::new(Mutex::new(String::new()));
         let username = username_clone.clone();
-        let first_prompt = first_prompt.clone();
 
         glib::timeout_add_local(std::time::Duration::from_millis(50), move || {
             if let Ok(msg) = rx_to_ui.lock().unwrap().try_recv() {
                 match msg {
-                    Message::PasswordPrompt(err_msg) => {
+                    Message::PasswordPrompt((err_msg, show_edit)) => {
                         let last_pwd = last_password.lock().unwrap().clone();
                         let username = username.lock().unwrap().clone();
-                        let first = first_prompt.lock().unwrap().clone();
-                        *first_prompt.lock().unwrap() = false;
-                        if let Some((username, password)) = password_prompt(&username, &last_pwd, &err_msg, first) {
+                        if let Some((username, password)) = password_prompt(&username, &last_pwd, &err_msg, show_edit) {
                                 *last_password.lock().unwrap() = password.clone();
                                 if let Err(e) = tx_from_ui
                                     .lock()
@@ -157,7 +153,7 @@ fn ui(args: Vec<String>) {
         let acitve_user = crate::platform::get_active_username();
         let mut initial_password = None;
         if acitve_user != "root" {
-            if let Err(e) = tx_to_ui_clone.send(Message::PasswordPrompt("".to_string())) {
+            if let Err(e) = tx_to_ui_clone.send(Message::PasswordPrompt(("".to_string(), true))) {
                 log::error!("Channel error: {e:?}");
                 std::process::exit(EXIT_CODE);
             }
@@ -385,7 +381,7 @@ fn ui_parent(
                             let err_msg = if first { "" } else { "Sorry, try again." };
                             first = false;
                             if let Err(e) =
-                                tx_to_ui.send(Message::PasswordPrompt(err_msg.to_string()))
+                                tx_to_ui.send(Message::PasswordPrompt((err_msg.to_string(), false)))
                             {
                                 log::error!("Channel error: {e:?}");
                                 kill_child(child);
@@ -627,6 +623,7 @@ fn password_prompt(
     user_box.add(&user_entry);
     user_box.set_halign(gtk::Align::Center);
     user_box.set_valign(gtk::Align::Center);
+    user_box.set_vexpand(true);
     content_area.add(&user_box);
 
     edit_button.connect_clicked(
@@ -690,21 +687,21 @@ fn password_prompt(
 
     let cancel_button = gtk::Button::builder()
         .label(translate("Cancel".to_string()))
-        .expand(true)
+        .hexpand(true)
         .build();
     cancel_button.connect_clicked(glib::clone!(@weak dialog => move |_| {
         dialog.response(gtk::ResponseType::Cancel);
     }));
     let authenticate_button = gtk::Button::builder()
         .label(translate("Authenticate".to_string()))
-        .expand(true)
+        .hexpand(true)
         .build();
     authenticate_button.connect_clicked(glib::clone!(@weak dialog => move |_| {
         dialog.response(gtk::ResponseType::Ok);
     }));
     let button_box = gtk::Box::builder()
         .orientation(gtk::Orientation::Horizontal)
-        .expand(true)
+        .hexpand(true)
         .homogeneous(true)
         .spacing(10)
         .margin_top(10)
