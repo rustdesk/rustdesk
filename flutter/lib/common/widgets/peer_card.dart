@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_hbb/common/widgets/dialog.dart';
 import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/models/peer_tab_model.dart';
+import 'package:flutter_hbb/models/state_model.dart';
 import 'package:get/get.dart';
 import 'package:provider/provider.dart';
 
@@ -53,14 +54,11 @@ class _PeerCardState extends State<_PeerCard>
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    if (isDesktop || isWebDesktop) {
-      return _buildDesktop();
-    } else {
-      return _buildMobile();
-    }
+    return Obx(() =>
+        stateGlobal.isPortrait.isTrue ? _buildPortrait() : _buildLandscape());
   }
 
-  Widget _buildMobile() {
+  Widget _buildPortrait() {
     final peer = super.widget.peer;
     final PeerTabModel peerTabModel = Provider.of(context);
     return Card(
@@ -87,7 +85,7 @@ class _PeerCardState extends State<_PeerCard>
         ));
   }
 
-  Widget _buildDesktop() {
+  Widget _buildLandscape() {
     final PeerTabModel peerTabModel = Provider.of(context);
     final peer = super.widget.peer;
     var deco = Rx<BoxDecoration?>(
@@ -140,13 +138,13 @@ class _PeerCardState extends State<_PeerCard>
     final greyStyle = TextStyle(
         fontSize: 11,
         color: Theme.of(context).textTheme.titleLarge?.color?.withOpacity(0.6));
-    final child = Row(
+    makeChild(bool isPortrait) => Row(
       mainAxisSize: MainAxisSize.max,
       children: [
         Container(
             decoration: BoxDecoration(
               color: str2color('${peer.id}${peer.platform}', 0x7f),
-              borderRadius: isMobile
+              borderRadius: isPortrait
                   ? BorderRadius.circular(_tileRadius)
                   : BorderRadius.only(
                       topLeft: Radius.circular(_tileRadius),
@@ -154,11 +152,11 @@ class _PeerCardState extends State<_PeerCard>
                     ),
             ),
             alignment: Alignment.center,
-            width: isMobile ? 50 : 42,
-            height: isMobile ? 50 : null,
+            width: isPortrait ? 50 : 42,
+            height: isPortrait ? 50 : null,
             child: Stack(
               children: [
-                getPlatformImage(peer.platform, size: isMobile ? 38 : 30)
+                getPlatformImage(peer.platform, size: isPortrait ? 38 : 30)
                     .paddingAll(6),
                 if (_shouldBuildPasswordIcon(peer))
                   Positioned(
@@ -183,19 +181,19 @@ class _PeerCardState extends State<_PeerCard>
                   child: Column(
                     children: [
                       Row(children: [
-                        getOnline(isMobile ? 4 : 8, peer.online),
+                        getOnline(isPortrait ? 4 : 8, peer.online),
                         Expanded(
                             child: Text(
                           peer.alias.isEmpty ? formatID(peer.id) : peer.alias,
                           overflow: TextOverflow.ellipsis,
                           style: Theme.of(context).textTheme.titleSmall,
                         )),
-                      ]).marginOnly(top: isMobile ? 0 : 2),
+                      ]).marginOnly(top: isPortrait ? 0 : 2),
                       Align(
                         alignment: Alignment.centerLeft,
                         child: Text(
                           name,
-                          style: isMobile ? null : greyStyle,
+                          style: isPortrait ? null : greyStyle,
                           textAlign: TextAlign.start,
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -203,9 +201,9 @@ class _PeerCardState extends State<_PeerCard>
                     ],
                   ).marginOnly(top: 2),
                 ),
-                isMobile
-                    ? checkBoxOrActionMoreMobile(peer)
-                    : checkBoxOrActionMoreDesktop(peer, isTile: true),
+                isPortrait
+                    ? checkBoxOrActionMorePortrait(peer)
+                    : checkBoxOrActionMoreLandscape(peer, isTile: true),
               ],
             ).paddingOnly(left: 10.0, top: 3.0),
           ),
@@ -216,28 +214,27 @@ class _PeerCardState extends State<_PeerCard>
         .map((e) => gFFI.abModel.getCurrentAbTagColor(e))
         .toList();
     return Tooltip(
-      message: isMobile
+      message: !(isDesktop || isWebDesktop)
           ? ''
           : peer.tags.isNotEmpty
               ? '${translate('Tags')}: ${peer.tags.join(', ')}'
               : '',
       child: Stack(children: [
-        deco == null
-            ? child
-            : Obx(
-                () => Container(
+        Obx(() => deco == null
+            ? makeChild(stateGlobal.isPortrait.isTrue)
+            : Container(
                   foregroundDecoration: deco.value,
-                  child: child,
+                  child: makeChild(stateGlobal.isPortrait.isTrue),
                 ),
               ),
         if (colors.isNotEmpty)
-          Positioned(
+          Obx(()=> Positioned(
             top: 2,
-            right: isMobile ? 20 : 10,
+            right: stateGlobal.isPortrait.isTrue ? 20 : 10,
             child: CustomPaint(
               painter: TagPainter(radius: 3, colors: colors),
             ),
-          )
+          ))
       ]),
     );
   }
@@ -253,6 +250,9 @@ class _PeerCardState extends State<_PeerCard>
       color: Colors.transparent,
       elevation: 0,
       margin: EdgeInsets.zero,
+      // to-do: memory leak here, more investigation needed.
+      // Continious rebuilds of `Obx()` will cause memory leak here.
+      // The simple demo does not have this issue.
       child: Obx(
         () => Container(
           foregroundDecoration: deco.value,
@@ -316,7 +316,7 @@ class _PeerCardState extends State<_PeerCard>
                           style: Theme.of(context).textTheme.titleSmall,
                         )),
                       ]).paddingSymmetric(vertical: 8)),
-                      checkBoxOrActionMoreDesktop(peer, isTile: false),
+                      checkBoxOrActionMoreLandscape(peer, isTile: false),
                     ],
                   ).paddingSymmetric(horizontal: 12.0),
                 )
@@ -362,7 +362,7 @@ class _PeerCardState extends State<_PeerCard>
     }
   }
 
-  Widget checkBoxOrActionMoreMobile(Peer peer) {
+  Widget checkBoxOrActionMorePortrait(Peer peer) {
     final PeerTabModel peerTabModel = Provider.of(context);
     final selected = peerTabModel.isPeerSelected(peer.id);
     if (peerTabModel.multiSelectionMode) {
@@ -390,7 +390,7 @@ class _PeerCardState extends State<_PeerCard>
     }
   }
 
-  Widget checkBoxOrActionMoreDesktop(Peer peer, {required bool isTile}) {
+  Widget checkBoxOrActionMoreLandscape(Peer peer, {required bool isTile}) {
     final PeerTabModel peerTabModel = Provider.of(context);
     final selected = peerTabModel.isPeerSelected(peer.id);
     if (peerTabModel.multiSelectionMode) {
@@ -1203,6 +1203,7 @@ class MyGroupPeerCard extends BasePeerCard {
 }
 
 void _rdpDialog(String id) async {
+  final maxLength = bind.mainMaxEncryptLen();
   final port = await bind.mainGetPeerOption(id: id, key: 'rdp_port');
   final username = await bind.mainGetPeerOption(id: id, key: 'rdp_username');
   final portController = TextEditingController(text: port);
@@ -1257,9 +1258,9 @@ void _rdpDialog(String id) async {
                 ),
               ],
             ).marginOnly(bottom: isDesktop ? 8 : 0),
-            Row(
+            Obx(() => Row(
               children: [
-                (isDesktop || isWebDesktop)
+                stateGlobal.isPortrait.isFalse
                     ? ConstrainedBox(
                         constraints: const BoxConstraints(minWidth: 140),
                         child: Text(
@@ -1270,17 +1271,17 @@ void _rdpDialog(String id) async {
                 Expanded(
                   child: TextField(
                     decoration: InputDecoration(
-                        labelText: (isDesktop || isWebDesktop)
+                        labelText: isDesktop
                             ? null
                             : translate('Username')),
                     controller: userController,
                   ),
                 ),
               ],
-            ).marginOnly(bottom: (isDesktop || isWebDesktop) ? 8 : 0),
-            Row(
+            ).marginOnly(bottom: stateGlobal.isPortrait.isFalse ? 8 : 0)),
+            Obx(() => Row(
               children: [
-                (isDesktop || isWebDesktop)
+                stateGlobal.isPortrait.isFalse
                     ? ConstrainedBox(
                         constraints: const BoxConstraints(minWidth: 140),
                         child: Text(
@@ -1291,8 +1292,9 @@ void _rdpDialog(String id) async {
                 Expanded(
                   child: Obx(() => TextField(
                         obscureText: secure.value,
+                        maxLength: maxLength,
                         decoration: InputDecoration(
-                            labelText: (isDesktop || isWebDesktop)
+                            labelText: isDesktop
                                 ? null
                                 : translate('Password'),
                             suffixIcon: IconButton(
@@ -1304,7 +1306,7 @@ void _rdpDialog(String id) async {
                       )),
                 ),
               ],
-            )
+            ))
           ],
         ),
       ),

@@ -20,6 +20,8 @@ class StateGlobal {
   final svcStatus = SvcStatus.notReady.obs;
   final RxBool isFocused = false.obs;
 
+  final isPortrait = false.obs;
+
   String _inputSource = '';
 
   // Use for desktop -> remote toolbar -> resolution

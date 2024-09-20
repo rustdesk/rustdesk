@@ -207,12 +207,7 @@ pub fn get_hard_option(key: String) -> String {
 
 #[inline]
 pub fn get_builtin_option(key: &str) -> String {
-    config::BUILTIN_SETTINGS
-        .read()
-        .unwrap()
-        .get(key)
-        .cloned()
-        .unwrap_or_default()
+    crate::get_builtin_option(key)
 }
 
 #[inline]
@@ -692,7 +687,6 @@ pub fn create_shortcut(_id: String) {
 #[cfg(any(target_os = "android", target_os = "ios", feature = "flutter"))]
 #[inline]
 pub fn discover() {
-    #[cfg(not(any(target_os = "ios")))]
     std::thread::spawn(move || {
         allow_err!(crate::lan::discover());
     });
@@ -1139,6 +1133,7 @@ async fn check_connect_status_(reconnect: bool, rx: mpsc::UnboundedReceiver<ipc:
         )
     ))]
     let mut enable_file_transfer = "".to_owned();
+    let is_cm = crate::common::is_cm();
 
     loop {
         if let Ok(mut c) = ipc::connect(1000, "").await {
@@ -1149,6 +1144,9 @@ async fn check_connect_status_(reconnect: bool, rx: mpsc::UnboundedReceiver<ipc:
                         match res {
                             Err(err) => {
                                 log::error!("ipc connection closed: {}", err);
+                                if is_cm {
+                                    crate::ui_cm_interface::quit_cm();
+                                }
                                 break;
                             }
                             #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -1495,4 +1493,9 @@ pub fn clear_trusted_devices() {
     Config::clear_trusted_devices();
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     ipc::clear_trusted_devices();
+}
+
+#[cfg(feature = "flutter")]
+pub fn max_encrypt_len() -> usize {
+    hbb_common::config::ENCRYPT_MAX_LEN
 }

@@ -644,5 +644,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Parent directory", "父目錄"),
         ("Resume", "繼續"),
         ("Invalid file name", "無效文件名"),
+        ("one-way-file-transfer-tip", ""),
+        ("Authentication Required", ""),
+        ("Authenticate", ""),
     ].iter().cloned().collect();
 }
