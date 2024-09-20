@@ -8,6 +8,8 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 pub mod client {
+    use hbb_common::platform::linux::is_kde;
+
     use super::*;
 
     const EVDEV_MOUSE_LEFT: i32 = 272;
@@ -67,6 +69,8 @@ pub mod client {
         conn: Arc<SyncConnection>,
         session: Path<'static>,
         stream: PwStreamInfo,
+        resolution: (usize, usize),
+        scale: Option<f64>,
     }
 
     impl RdpInputMouse {
@@ -74,11 +78,32 @@ pub mod client {
             conn: Arc<SyncConnection>,
             session: Path<'static>,
             stream: PwStreamInfo,
+            resolution: (usize, usize),
         ) -> ResultType<Self> {
+            // https://github.com/rustdesk/rustdesk/pull/9019#issuecomment-2295252388
+            // There may be a bug in Rdp input on Gnome util Ubuntu 24.04 (Gnome 46)
+            //
+            // eg. Resultion 800x600, Fractional scale: 200% (logic size: 400x300)
+            // https://flatpak.github.io/xdg-desktop-portal/docs/doc-org.freedesktop.impl.portal.RemoteDesktop.html#:~:text=new%20pointer%20position-,in%20the%20streams%20logical%20coordinate%20space,-.
+            // Then (x,y) in `mouse_move_to()` and `mouse_move_relative()` should be scaled to the logic size(stream.get_size()), which is from (0,0) to (400,300).
+            // For Ubuntu 24.04(Gnome 46), (x,y) is restricted from (0,0) to (400,300), but the actual range in screen is:
+            // Logic coordinate from (0,0) to (200x150).
+            // Or physical coordinate from (0,0) to (400,300).
+            let scale = if is_kde() {
+                if resolution.0 == 0 || stream.get_size().0 == 0 {
+                    Some(1.0f64)
+                } else {
+                    Some(resolution.0 as f64 / stream.get_size().0 as f64)
+                }
+            } else {
+                None
+            };
             Ok(Self {
                 conn,
                 session,
                 stream,
+                resolution,
+                scale,
             })
         }
     }
@@ -93,24 +118,44 @@ pub mod client {
         }
 
         fn mouse_move_to(&mut self, x: i32, y: i32) {
+            let x = if let Some(s) = self.scale {
+                x as f64 / s
+            } else {
+                x as f64
+            };
+            let y = if let Some(s) = self.scale {
+                y as f64 / s
+            } else {
+                y as f64
+            };
             let portal = get_portal(&self.conn);
             let _ = remote_desktop_portal::notify_pointer_motion_absolute(
                 &portal,
                 &self.session,
                 HashMap::new(),
                 self.stream.path as u32,
-                x as f64,
-                y as f64,
+                x,
+                y,
             );
         }
         fn mouse_move_relative(&mut self, x: i32, y: i32) {
+            let x = if let Some(s) = self.scale {
+                x as f64 / s
+            } else {
+                x as f64
+            };
+            let y = if let Some(s) = self.scale {
+                y as f64 / s
+            } else {
+                y as f64
+            };
             let portal = get_portal(&self.conn);
             let _ = remote_desktop_portal::notify_pointer_motion(
                 &portal,
                 &self.session,
                 HashMap::new(),
-                x as f64,
-                y as f64,
+                x,
+                y,
             );
         }
         fn mouse_down(&mut self, button: MouseButton) -> enigo::ResultType {
