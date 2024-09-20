@@ -554,7 +554,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Open in new window", "Открыть в новом окне"),
         ("Show displays as individual windows", "Показывать дисплеи в отдельных окнах"),
         ("Use all my displays for the remote session", "Использовать все мои дисплеи для удалённого сеанса"),
-        ("selinux_tip", "На вашем устройстве включён SELinux, что может помешать правильной работе RustDesk на контролируемой стороне."),
+        ("selinux_tip", "На вашем устройстве включён SELinux, что может помешать правильной работе RustDesk на управляемой стороне."),
         ("Change view", "Вид"),
         ("Big tiles", "Большие значки"),
         ("Small tiles", "Маленькие значки"),
@@ -641,8 +641,11 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Platform", "Платформа"),
         ("Days remaining", "Дней осталось"),
         ("enable-trusted-devices-tip", "Разрешить доверенным устройствам пропускать проверку подлинности 2FA"),
-        ("Parent directory", "Родительская директория"),
+        ("Parent directory", "Родительская папка"),
         ("Resume", "Продолжить"),
-        ("Invalid file name", "Неверное имя файла"),
+        ("Invalid file name", "Неправильное имя файла"),
+        ("one-way-file-transfer-tip", "На управляемой стороне включена односторонняя передача файлов."),
+        ("Authentication Required", ""),
+        ("Authenticate", ""),
     ].iter().cloned().collect();
 }

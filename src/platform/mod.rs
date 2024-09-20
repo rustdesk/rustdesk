@@ -23,6 +23,9 @@ pub mod linux;
 #[cfg(target_os = "linux")]
 pub mod linux_desktop_manager;
 
+#[cfg(target_os = "linux")]
+pub mod gtk_sudo;
+
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use hbb_common::{message_proto::CursorData, ResultType};
 use std::sync::{Arc, Mutex};
@@ -126,6 +129,12 @@ impl Drop for InstallingService {
     fn drop(&mut self) {
         *INSTALLING_SERVICE.lock().unwrap() = false;
     }
+}
+
+#[cfg(any(target_os = "android", target_os = "ios"))]
+#[inline]
+pub fn is_prelogin() -> bool {
+    false
 }
 
 #[cfg(test)]

@@ -440,7 +440,7 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
                                 Data::ClipboardFile(_clip) => {
                                     #[cfg(any(target_os = "windows", target_os="linux", target_os = "macos"))]
                                     {
-                                        let is_stopping_allowed = _clip.is_stopping_allowed_from_peer();
+                                        let is_stopping_allowed = _clip.is_beginning_message();
                                         let is_clipboard_enabled = ContextSend::is_enabled();
                                         let file_transfer_enabled = self.file_transfer_enabled;
                                         let stop = !is_stopping_allowed && !(is_clipboard_enabled && file_transfer_enabled);
@@ -568,7 +568,12 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
                             if stop {
                                 ContextSend::set_is_stopped();
                             } else {
-                                allow_err!(self.tx.send(Data::ClipboardFile(_clip)));
+                                if _clip.is_beginning_message() && crate::get_builtin_option(OPTION_ONE_WAY_FILE_TRANSFER) == "Y" {
+                                    // If one way file transfer is enabled, don't send clipboard file to client
+                                    // Don't call `ContextSend::set_is_stopped()`, because it will stop bidirectional file copy&paste.
+                                } else {
+                                    allow_err!(self.tx.send(Data::ClipboardFile(_clip)));
+                                }
                             }
                         }
                     }

@@ -2218,6 +2218,10 @@ pub mod keys {
     pub const OPTION_HIDE_HELP_CARDS: &str = "hide-help-cards";
     pub const OPTION_DEFAULT_CONNECT_PASSWORD: &str = "default-connect-password";
     pub const OPTION_HIDE_TRAY: &str = "hide-tray";
+    pub const OPTION_ONE_WAY_CLIPBOARD_REDIRECTION: &str = "one-way-clipboard-redirection";
+    pub const OPTION_ENABLE_CLIPBOARD_INIT_SYNC: &str = "enable-clipboard-init-sync";
+    pub const OPTION_ALLOW_LOGON_SCREEN_PASSWORD: &str = "allow-logon-screen-password";
+    pub const OPTION_ONE_WAY_FILE_TRANSFER: &str = "one-way-file-transfer";
 
     // flutter local options
     pub const OPTION_FLUTTER_REMOTE_MENUBAR_STATE: &str = "remoteMenubarState";
@@ -2362,6 +2366,10 @@ pub mod keys {
         OPTION_HIDE_HELP_CARDS,
         OPTION_DEFAULT_CONNECT_PASSWORD,
         OPTION_HIDE_TRAY,
+        OPTION_ONE_WAY_CLIPBOARD_REDIRECTION,
+        OPTION_ENABLE_CLIPBOARD_INIT_SYNC,
+        OPTION_ALLOW_LOGON_SCREEN_PASSWORD,
+        OPTION_ONE_WAY_FILE_TRANSFER,
     ];
 }
 

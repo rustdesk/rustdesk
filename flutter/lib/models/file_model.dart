@@ -34,6 +34,7 @@ class JobID {
 }
 
 typedef GetSessionID = SessionID Function();
+typedef GetDialogManager = OverlayDialogManager? Function();
 
 class FileModel {
   final WeakReference<FFI> parent;
@@ -45,13 +46,15 @@ class FileModel {
   late final FileController remoteController;
 
   late final GetSessionID getSessionID;
+  late final GetDialogManager getDialogManager;
   SessionID get sessionId => getSessionID();
   late final FileDialogEventLoop evtLoop;
 
   FileModel(this.parent) {
     getSessionID = () => parent.target!.sessionId;
+    getDialogManager = () => parent.target?.dialogManager;
     fileFetcher = FileFetcher(getSessionID);
-    jobController = JobController(getSessionID);
+    jobController = JobController(getSessionID, getDialogManager);
     localController = FileController(
         isLocal: true,
         getSessionID: getSessionID,
@@ -736,14 +739,19 @@ class FileController {
   }
 }
 
+const _kOneWayFileTransferError = 'one-way-file-transfer-tip';
+
 class JobController {
   static final JobID jobID = JobID();
   final jobTable = List<JobProgress>.empty(growable: true).obs;
   final jobResultListener = JobResultListener<Map<String, dynamic>>();
   final GetSessionID getSessionID;
+  final GetDialogManager getDialogManager;
   SessionID get sessionId => getSessionID();
+  OverlayDialogManager? get alogManager => getDialogManager();
+  int _lastTimeShowMsgbox = DateTime.now().millisecondsSinceEpoch;
 
-  JobController(this.getSessionID);
+  JobController(this.getSessionID, this.getDialogManager);
 
   int getJob(int id) {
     return jobTable.indexWhere((element) => element.id == id);
@@ -881,6 +889,15 @@ class JobController {
         }
       }
       jobTable.refresh();
+    }
+    if (err == _kOneWayFileTransferError) {
+      if (DateTime.now().millisecondsSinceEpoch - _lastTimeShowMsgbox > 3000) {
+        final dm = alogManager;
+        if (dm != null) {
+          _lastTimeShowMsgbox = DateTime.now().millisecondsSinceEpoch;
+          msgBox(sessionId, 'custom-nocancel', 'Error', err, '', dm);
+        }
+      }
     }
     debugPrint("jobError $evt");
   }

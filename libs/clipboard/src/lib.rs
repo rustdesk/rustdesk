@@ -132,7 +132,7 @@ impl ClipboardFile {
         )
     }
 
-    pub fn is_stopping_allowed_from_peer(&self) -> bool {
+    pub fn is_beginning_message(&self) -> bool {
         matches!(
             self,
             ClipboardFile::MonitorReady | ClipboardFile::FormatList { .. }
