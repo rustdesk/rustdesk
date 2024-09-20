@@ -90,7 +90,11 @@ pub mod client {
             // Logic coordinate from (0,0) to (200x150).
             // Or physical coordinate from (0,0) to (400,300).
             let scale = if is_kde() {
-                Some(resolution.0 as f64 / stream.get_size().0 as f64)
+                if resolution.0 == 0 || stream.get_size().0 == 0 {
+                    Some(1.0f64)
+                } else {
+                    Some(resolution.0 as f64 / stream.get_size().0 as f64)
+                }
             } else {
                 None
             };
