@@ -1448,17 +1448,27 @@ fn translate_keyboard_mode(evt: &KeyEvent) {
             en.key_sequence(seq);
             #[cfg(any(target_os = "linux", target_os = "windows"))]
             {
-                if get_modifier_state(Key::Shift, &mut en) {
-                    simulate_(&EventType::KeyRelease(RdevKey::ShiftLeft));
-                }
-                if get_modifier_state(Key::RightShift, &mut en) {
-                    simulate_(&EventType::KeyRelease(RdevKey::ShiftRight));
+                #[cfg(target_os = "windows")]
+                let simulate_win_hot_key = is_hot_key_modifiers_down(&mut en);
+                #[cfg(target_os = "linux")]
+                let simulate_win_hot_key = false;
+                if !simulate_win_hot_key {
+                    if get_modifier_state(Key::Shift, &mut en) {
+                        simulate_(&EventType::KeyRelease(RdevKey::ShiftLeft));
+                    }
+                    if get_modifier_state(Key::RightShift, &mut en) {
+                        simulate_(&EventType::KeyRelease(RdevKey::ShiftRight));
+                    }
                 }
                 for chr in seq.chars() {
                     // char in rust is 4 bytes.
                     // But for this case, char comes from keyboard. We only need 2 bytes.
                     #[cfg(target_os = "windows")]
-                    rdev::simulate_unicode(chr as _).ok();
+                    if simulate_win_hot_key {
+                        rdev::simulate_char(chr, true).ok();
+                    } else {
+                        rdev::simulate_unicode(chr as _).ok();
+                    }
                     #[cfg(target_os = "linux")]
                     en.key_click(Key::Layout(chr));
                 }
@@ -1481,6 +1491,17 @@ fn translate_keyboard_mode(evt: &KeyEvent) {
             log::debug!("Unreachable. Unexpected key event {:?}", &evt);
         }
     }
+}
+
+#[inline]
+#[cfg(target_os = "windows")]
+fn is_hot_key_modifiers_down(en: &mut Enigo) -> bool {
+    en.get_key_state(Key::Control)
+        || en.get_key_state(Key::RightControl)
+        || en.get_key_state(Key::Alt)
+        || en.get_key_state(Key::RightAlt)
+        || en.get_key_state(Key::Meta)
+        || en.get_key_state(Key::RWin)
 }
 
 #[cfg(target_os = "windows")]
