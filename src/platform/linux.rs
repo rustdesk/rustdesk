@@ -1,4 +1,4 @@
-use super::{CursorData, ResultType};
+use super::{gtk_sudo, CursorData, ResultType};
 use desktop::Desktop;
 use hbb_common::config::keys::OPTION_ALLOW_LINUX_HEADLESS;
 pub use hbb_common::platform::linux::*;
@@ -15,8 +15,6 @@ use hbb_common::{
 use std::{
     cell::RefCell,
     ffi::OsStr,
-    fs::File,
-    io::{BufRead, BufReader, Write},
     path::{Path, PathBuf},
     process::{Child, Command},
     string::String,
@@ -766,30 +764,18 @@ pub fn quit_gui() {
     unsafe { gtk_main_quit() };
 }
 
+/*
 pub fn exec_privileged(args: &[&str]) -> ResultType<Child> {
     Ok(Command::new("pkexec").args(args).spawn()?)
 }
+*/
 
 pub fn check_super_user_permission() -> ResultType<bool> {
-    let file = format!(
-        "/usr/share/{}/files/polkit",
-        crate::get_app_name().to_lowercase()
-    );
-    let arg;
-    if Path::new(&file).is_file() {
-        arg = file.as_str();
-    } else {
-        arg = "echo";
-    }
-    // https://github.com/rustdesk/rustdesk/issues/2756
-    if let Ok(status) = Command::new("pkexec").arg(arg).status() {
-        // https://github.com/rustdesk/rustdesk/issues/5205#issuecomment-1658059657s
-        Ok(status.code() != Some(126) && status.code() != Some(127))
-    } else {
-        Ok(true)
-    }
+    gtk_sudo::run(vec!["echo"])?;
+    Ok(true)
 }
 
+/*
 pub fn elevate(args: Vec<&str>) -> ResultType<bool> {
     let cmd = std::env::current_exe()?;
     match cmd.to_str() {
@@ -824,6 +810,7 @@ pub fn elevate(args: Vec<&str>) -> ResultType<bool> {
         }
     }
 }
+*/
 
 type GtkSettingsPtr = *mut c_void;
 type GObjectPtr = *mut c_void;
@@ -1324,21 +1311,8 @@ fn has_cmd(cmd: &str) -> bool {
         .unwrap_or_default()
 }
 
-pub fn run_cmds_pkexec(cmds: &str) -> bool {
-    const DONE: &str = "RUN_CMDS_PKEXEC_DONE";
-    if let Ok(output) = std::process::Command::new("pkexec")
-        .arg("sh")
-        .arg("-c")
-        .arg(&format!("{cmds} echo {DONE}"))
-        .output()
-    {
-        let out = String::from_utf8_lossy(&output.stdout);
-        log::debug!("cmds: {cmds}");
-        log::debug!("output: {out}");
-        out.contains(DONE)
-    } else {
-        false
-    }
+pub fn run_cmds_privileged(cmds: &str) -> bool {
+    crate::platform::gtk_sudo::run(vec![cmds]).is_ok()
 }
 
 pub fn run_me_with(secs: u32) {
@@ -1367,13 +1341,15 @@ fn switch_service(stop: bool) -> String {
 
 pub fn uninstall_service(show_new_window: bool, _: bool) -> bool {
     if !has_cmd("systemctl") {
+        // Failed when installed + flutter run + started by `show_new_window`.
         return false;
     }
     log::info!("Uninstalling service...");
     let cp = switch_service(true);
     let app_name = crate::get_app_name().to_lowercase();
-    if !run_cmds_pkexec(&format!(
-        "systemctl disable {app_name}; systemctl stop {app_name}; {cp}"
+    // systemctl kill rustdesk --tray, execute cp first
+    if !run_cmds_privileged(&format!(
+        "{cp} systemctl disable {app_name}; systemctl stop {app_name};"
     )) {
         Config::set_option("stop-service".into(), "".into());
         return true;
@@ -1393,8 +1369,8 @@ pub fn install_service() -> bool {
     log::info!("Installing service...");
     let cp = switch_service(false);
     let app_name = crate::get_app_name().to_lowercase();
-    if !run_cmds_pkexec(&format!(
-        "{cp} systemctl enable {app_name}; systemctl stop {app_name}; systemctl start {app_name};"
+    if !run_cmds_privileged(&format!(
+        "{cp} systemctl enable {app_name}; systemctl start {app_name};"
     )) {
         Config::set_option("stop-service".into(), "Y".into());
     }
@@ -1404,9 +1380,9 @@ pub fn install_service() -> bool {
 fn check_if_stop_service() {
     if Config::get_option("stop-service".into()) == "Y" {
         let app_name = crate::get_app_name().to_lowercase();
-        allow_err!(run_cmds(
+        allow_err!(run_cmds(&format!(
             "systemctl disable {app_name}; systemctl stop {app_name}"
-        ));
+        )));
     }
 }
 

@@ -108,7 +108,7 @@ class _PeerTabPageState extends State<PeerTabPage>
   Widget build(BuildContext context) {
     final model = Provider.of<PeerTabModel>(context);
     Widget selectionWrap(Widget widget) {
-      return model.multiSelectionMode ? createMultiSelectionBar() : widget;
+      return model.multiSelectionMode ? createMultiSelectionBar(model) : widget;
     }
 
     return Column(
@@ -362,8 +362,7 @@ class _PeerTabPageState extends State<PeerTabPage>
             .toList());
   }
 
-  Widget createMultiSelectionBar() {
-    final model = Provider.of<PeerTabModel>(context);
+  Widget createMultiSelectionBar(PeerTabModel model) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
@@ -381,7 +380,7 @@ class _PeerTabPageState extends State<PeerTabPage>
         Row(
           children: [
             selectionCount(model.selectedPeers.length),
-            selectAll(),
+            selectAll(model),
             closeSelection(),
           ],
         )
@@ -512,8 +511,7 @@ class _PeerTabPageState extends State<PeerTabPage>
     );
   }
 
-  Widget selectAll() {
-    final model = Provider.of<PeerTabModel>(context);
+  Widget selectAll(PeerTabModel model) {
     return Offstage(
       offstage:
           model.selectedPeers.length >= model.currentTabCachedPeers.length,
