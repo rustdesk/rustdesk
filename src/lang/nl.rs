@@ -644,8 +644,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Parent directory", "Hoofdmap"),
         ("Resume", "Hervatten"),
         ("Invalid file name", "Ongeldige bestandsnaam"),
-        ("one-way-file-transfer-tip", ""),
-        ("Authentication Required", ""),
-        ("Authenticate", ""),
+        ("one-way-file-transfer-tip", "Eenzijdige bestandsoverdracht is ingeschakeld aan de gecontroleerde kant."),
+        ("Authentication Required", "Verificatie vereist"),
+        ("Authenticate", "Verificatie"),
     ].iter().cloned().collect();
 }
