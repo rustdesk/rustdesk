@@ -608,7 +608,7 @@ class RustdeskImpl {
 
   Future<void> sessionElevateDirect(
       {required UuidValue sessionId, dynamic hint}) {
-    throw UnimplementedError();
+    return Future(() => js.context.callMethod('setByName', ['elevate_direct']));
   }
 
   Future<void> sessionElevateWithLogon(
@@ -618,7 +618,7 @@ class RustdeskImpl {
       dynamic hint}) {
     return Future(() => js.context.callMethod('setByName', [
           'elevate_with_logon',
-          jsonEncode({username, password})
+          jsonEncode({'username': username, 'password': password})
         ]));
   }
 
