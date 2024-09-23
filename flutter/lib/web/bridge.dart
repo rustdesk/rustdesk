@@ -352,7 +352,11 @@ class RustdeskImpl {
 
   bool sessionIsKeyboardModeSupported(
       {required UuidValue sessionId, required String mode, dynamic hint}) {
-    return [kKeyLegacyMode, kKeyMapMode].contains(mode);
+    if (mainGetInputSource(hint: hint) == 'Input source 1') {
+      return [kKeyMapMode, kKeyTranslateMode].contains(mode);
+    } else {
+      return [kKeyLegacyMode, kKeyMapMode].contains(mode);
+    }
   }
 
   bool sessionIsMultiUiSession({required UuidValue sessionId, dynamic hint}) {
@@ -429,7 +433,7 @@ class RustdeskImpl {
 
   void sessionEnterOrLeave(
       {required UuidValue sessionId, required bool enter, dynamic hint}) {
-    throw UnimplementedError();
+    js.context.callMethod('setByName', ['enter_or_leave', enter]);
   }
 
   Future<void> sessionInputKey(
@@ -846,16 +850,21 @@ class RustdeskImpl {
   }
 
   String mainGetInputSource({dynamic hint}) {
-    // // rdev grab mode
-    // const CONFIG_INPUT_SOURCE_1 = "Input source 1";
+    final inputSource =
+        js.context.callMethod('getByName', ['option:local', 'input-source']);
+    // // js grab mode
+    // export const CONFIG_INPUT_SOURCE_1 = "Input source 1";
     // // flutter grab mode
-    // const CONFIG_INPUT_SOURCE_2 = "Input source 2";
-    return 'Input source 2';
+    // export const CONFIG_INPUT_SOURCE_2 = "Input source 2";
+    return inputSource != '' ? inputSource : 'Input source 1';
   }
 
   Future<void> mainSetInputSource(
       {required UuidValue sessionId, required String value, dynamic hint}) {
-    return Future.value();
+    return Future(() => js.context.callMethod('setByName', [
+          'option:local',
+          jsonEncode({'name': 'input-source', 'value': value})
+        ]));
   }
 
   Future<String> mainGetMyId({dynamic hint}) {
@@ -1610,6 +1619,7 @@ class RustdeskImpl {
 
   String mainSupportedInputSource({dynamic hint}) {
     return jsonEncode([
+      ['Input source 1', 'input_source_1_tip'],
       ['Input source 2', 'input_source_2_tip']
     ]);
   }
