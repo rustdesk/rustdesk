@@ -472,7 +472,7 @@ class RustdeskImpl {
       required String name,
       required String value,
       dynamic hint}) {
-    return Future(() => js.context.callMethod('SetByName', [
+    return Future(() => js.context.callMethod('setByName', [
           'option:session',
           jsonEncode({'name': name, 'value': value})
         ]));
