@@ -1225,7 +1225,7 @@ Color? _msgboxColor(String type) {
   if (type.contains("error") || type == "re-input-password") {
     return Color(0xFFE04F5F);
   }
-  return Color(0xFF2C8CFF);
+  return Color(0xFF485938);
 }
 
 Widget msgboxIcon(String type) {
