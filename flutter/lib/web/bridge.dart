@@ -1063,7 +1063,7 @@ class RustdeskImpl {
         () => js.context.callMethod('getByName', ['option', 'last_remote_id']));
   }
 
-  Future<String> mainGetSoftwareUpdateUrl({dynamic hint}) {
+  Future<void> mainGetSoftwareUpdateUrl({dynamic hint}) {
     throw UnimplementedError();
   }
 
