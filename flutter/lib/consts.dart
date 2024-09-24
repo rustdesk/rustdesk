@@ -570,3 +570,5 @@ enum WindowsTarget {
 extension WindowsTargetExt on int {
   WindowsTarget get windowsVersion => getWindowsTarget(this);
 }
+
+const kCheckSoftwareUpdateFinish = 'check_software_update_finish';

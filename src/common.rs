@@ -830,6 +830,16 @@ async fn check_software_update_() -> hbb_common::ResultType<()> {
     if get_version_number(&latest_release_version) > get_version_number(crate::VERSION) {
         *SOFTWARE_UPDATE_URL.lock().unwrap() = response_url;
     }
+    #[cfg(feature = "flutter")]
+    {
+        let mut m = HashMap::new();
+        m.insert("name", "check_software_update_finish");
+        let url = SOFTWARE_UPDATE_URL.lock().unwrap().clone();
+        m.insert("url", url.as_str());
+        if let Ok(data) = serde_json::to_string(&m) {
+            let _ = crate::flutter::push_global_event(crate::flutter::APP_TYPE_MAIN, data);
+        }
+    }
     Ok(())
 }
 
