@@ -1934,15 +1934,9 @@ class _AboutState extends State<_About> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                'Copyright © ${DateTime.now().toString().substring(0, 4)} ondental.\n$license',
+                                'Copyright © ${DateTime.now().toString().substring(0, 4)} Brinkhoff Consulting GmbH.\n$license',
                                 style: const TextStyle(color: Colors.white),
                               ),
-                              Text(
-                                translate('Slogan_tip'),
-                                style: TextStyle(
-                                    fontWeight: FontWeight.w800,
-                                    color: Colors.white),
-                              )
                             ],
                           ),
                         ),
