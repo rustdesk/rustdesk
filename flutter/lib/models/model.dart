@@ -839,7 +839,7 @@ class FfiModel with ChangeNotifier {
       for (final mode in [kKeyMapMode, kKeyLegacyMode]) {
         if (bind.sessionIsKeyboardModeSupported(
             sessionId: sessionId, mode: mode)) {
-          bind.sessionSetKeyboardMode(sessionId: sessionId, value: mode);
+          await bind.sessionSetKeyboardMode(sessionId: sessionId, value: mode);
           break;
         }
       }

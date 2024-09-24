@@ -70,9 +70,17 @@ class _ConnectionPageState extends State<ConnectionPage> {
     }
     if (isAndroid) {
       if (!bind.isCustomClient()) {
+        platformFFI.registerEventHandler(
+            kCheckSoftwareUpdateFinish, kCheckSoftwareUpdateFinish,
+            (Map<String, dynamic> evt) async {
+          if (evt['url'] is String) {
+            setState(() {
+              _updateUrl = evt['url'];
+            });
+          }
+        });
         Timer(const Duration(seconds: 1), () async {
-          _updateUrl = await bind.mainGetSoftwareUpdateUrl();
-          if (_updateUrl.isNotEmpty) setState(() {});
+          bind.mainGetSoftwareUpdateUrl();
         });
       }
     }
@@ -352,6 +360,10 @@ class _ConnectionPageState extends State<ConnectionPage> {
     _idController.dispose();
     if (Get.isRegistered<IDTextEditingController>()) {
       Get.delete<IDTextEditingController>();
+    }
+    if (!bind.isCustomClient()) {
+      platformFFI.unregisterEventHandler(
+          kCheckSoftwareUpdateFinish, kCheckSoftwareUpdateFinish);
     }
     super.dispose();
   }

@@ -664,9 +664,17 @@ class _DesktopHomePageState extends State<DesktopHomePage>
   void initState() {
     super.initState();
     if (!bind.isCustomClient()) {
+      platformFFI.registerEventHandler(
+          kCheckSoftwareUpdateFinish, kCheckSoftwareUpdateFinish,
+          (Map<String, dynamic> evt) async {
+        if (evt['url'] is String) {
+          setState(() {
+            updateUrl = evt['url'];
+          });
+        }
+      });
       Timer(const Duration(seconds: 1), () async {
-        updateUrl = await bind.mainGetSoftwareUpdateUrl();
-        if (updateUrl.isNotEmpty) setState(() {});
+        bind.mainGetSoftwareUpdateUrl();
       });
     }
     _updateTimer = periodic_immediate(const Duration(seconds: 1), () async {
@@ -824,6 +832,10 @@ class _DesktopHomePageState extends State<DesktopHomePage>
     _uniLinksSubscription?.cancel();
     Get.delete<RxBool>(tag: 'stop-service');
     _updateTimer?.cancel();
+    if (!bind.isCustomClient()) {
+      platformFFI.unregisterEventHandler(
+          kCheckSoftwareUpdateFinish, kCheckSoftwareUpdateFinish);
+    }
     super.dispose();
   }
 

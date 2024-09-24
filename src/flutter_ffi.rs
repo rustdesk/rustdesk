@@ -61,7 +61,6 @@ fn initialize(app_dir: &str, custom_client_config: &str) {
         scrap::mediacodec::check_mediacodec();
         crate::common::test_rendezvous_server();
         crate::common::test_nat_type();
-        crate::common::check_software_update();
     }
     #[cfg(target_os = "ios")]
     {
@@ -1376,11 +1375,10 @@ pub fn main_get_last_remote_id() -> String {
     LocalConfig::get_remote_id()
 }
 
-pub fn main_get_software_update_url() -> String {
+pub fn main_get_software_update_url() {
     if get_local_option("enable-check-update".to_string()) != "N" {
         crate::common::check_software_update();
     }
-    crate::common::SOFTWARE_UPDATE_URL.lock().unwrap().clone()
 }
 
 pub fn main_get_home_dir() -> String {
