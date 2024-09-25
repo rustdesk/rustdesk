@@ -184,10 +184,17 @@ class PeerTabModel with ChangeNotifier {
     notifyListeners();
   }
 
+  // `notifyListeners()` will cause many rebuilds.
+  // So, we need to reduce the calls to "notifyListeners()" only when necessary.
+  // A better way is to use a new model.
   setCurrentTabCachedPeers(List<Peer> peers) {
     Future.delayed(Duration.zero, () {
+      final isPreEmpty = _currentTabCachedPeers.isEmpty;
       _currentTabCachedPeers = peers;
-      notifyListeners();
+      final isNowEmpty = _currentTabCachedPeers.isEmpty;
+      if (isPreEmpty != isNowEmpty) {
+        notifyListeners();
+      }
     });
   }
 

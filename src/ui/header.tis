@@ -152,10 +152,13 @@ class Header: Reactor.Component {
     }
 
     function renderKeyboardPop(){
+        const is_map_mode_supported = handler.is_keyboard_mode_supported("map");
+        const is_translate_mode_supported = handler.is_keyboard_mode_supported("translate");
         return <popup>
             <menu.context #keyboard-options>
-                <li #legacy><span>{svg_checkmark}</span>{translate('Legacy mode')}</li> 
-                <li #map><span>{svg_checkmark}</span>{translate('Map mode')}</li> 
+                <li #legacy><span>{svg_checkmark}</span>{translate('Legacy mode')}</li>
+                { is_map_mode_supported && <li #map><span>{svg_checkmark}</span>{translate('Map mode')}</li> }
+                { is_translate_mode_supported && <li #translate><span>{svg_checkmark}</span>{translate('Translate mode')}</li> }
             </menu>
         </popup>;
     }

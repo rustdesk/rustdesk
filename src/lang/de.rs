@@ -548,7 +548,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("pull_group_failed_tip", "Aktualisierung der Gruppe fehlgeschlagen"),
         ("Filter by intersection", "Nach Schnittmenge filtern"),
         ("Remove wallpaper during incoming sessions", "Hintergrundbild bei eingehenden Sitzungen entfernen"),
-        ("Test", "Test"),
+        ("Test", "Testen"),
         ("display_is_plugged_out_msg", "Der Bildschirm ist nicht angeschlossen, schalten Sie auf den ersten Bildschirm um."),
         ("No displays", "Keine Bildschirme"),
         ("Open in new window", "In einem neuen Fenster öffnen"),
@@ -644,5 +644,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Parent directory", "Übergeordnetes Verzeichnis"),
         ("Resume", "Fortsetzen"),
         ("Invalid file name", "Ungültiger Dateiname"),
+        ("one-way-file-transfer-tip", "Die einseitige Dateiübertragung ist auf der kontrollierten Seite aktiviert."),
+        ("Authentication Required", "Authentifizierung erforderlich"),
+        ("Authenticate", "Authentifizieren"),
     ].iter().cloned().collect();
 }
