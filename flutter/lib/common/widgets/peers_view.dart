@@ -128,9 +128,8 @@ class _PeersViewState extends State<_PeersView>
     //
     // Although `onWindowRestore()` is called after `onWindowBlur()` in my test,
     // we need the following comparison to ensure that `_isActive` is true in the end.
-    if (isWindows &&
-        DateTime.now().difference(_lastWindowRestoreTime) <
-            const Duration(milliseconds: 300)) {
+    if (isWindows && DateTime.now().difference(_lastWindowRestoreTime) <
+        const Duration(milliseconds: 300)) {
       return;
     }
     _queryCount = _maxQueryCount;
@@ -171,9 +170,8 @@ class _PeersViewState extends State<_PeersView>
     // We should avoid too many rebuilds. MacOS(m1, 14.6.1) on Flutter 3.19.6.
     // Continious rebuilds of `ChangeNotifierProvider` will cause memory leak.
     // Simple demo can reproduce this issue.
-    return ChangeNotifierProvider<Peers>.value(
-      // https://pub.dev/packages/provider: If you already have an object instance and want to expose it, it would be best to use the .value constructor of a provider.
-      value: widget.peers,
+    return ChangeNotifierProvider<Peers>(
+      create: (context) => widget.peers,
       child: Consumer<Peers>(builder: (context, peers, child) {
         if (peers.peers.isEmpty) {
           gFFI.peerTabModel.setCurrentTabCachedPeers([]);
@@ -188,7 +186,7 @@ class _PeersViewState extends State<_PeersView>
                 ).paddingOnly(bottom: 10),
                 Text(
                   translate(
-                    _emptyMessages[peers.loadEvent] ?? 'Empty',
+                    _emptyMessages[widget.peers.loadEvent] ?? 'Empty',
                   ),
                   textAlign: TextAlign.center,
                   style: TextStyle(
