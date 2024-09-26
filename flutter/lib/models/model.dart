@@ -7,12 +7,14 @@ import 'dart:ui' as ui;
 import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_hbb/common/widgets/peers_view.dart';
 import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/models/ab_model.dart';
 import 'package:flutter_hbb/models/chat_model.dart';
 import 'package:flutter_hbb/models/cm_file_model.dart';
 import 'package:flutter_hbb/models/file_model.dart';
 import 'package:flutter_hbb/models/group_model.dart';
+import 'package:flutter_hbb/models/peer_model.dart';
 import 'package:flutter_hbb/models/peer_tab_model.dart';
 import 'package:flutter_hbb/models/server_model.dart';
 import 'package:flutter_hbb/models/user_model.dart';
@@ -2397,6 +2399,9 @@ class FFI {
   late final ElevationModel elevationModel; // session
   late final CmFileModel cmFileModel; // cm
   late final TextureModel textureModel; //session
+  late final Peers recentPeersModel; // global
+  late final Peers favoritePeersModel; // global
+  late final Peers lanPeersModel; // global
 
   FFI(SessionID? sId) {
     sessionId = sId ?? (isDesktop ? Uuid().v4obj() : _constSessionId);
@@ -2417,6 +2422,16 @@ class FFI {
     elevationModel = ElevationModel(WeakReference(this));
     cmFileModel = CmFileModel(WeakReference(this));
     textureModel = TextureModel(WeakReference(this));
+    recentPeersModel = Peers(
+        name: PeersModelName.recent,
+        loadEvent: LoadEvent.recent,
+        getInitPeers: null);
+    favoritePeersModel = Peers(
+        name: PeersModelName.favorite,
+        loadEvent: LoadEvent.favorite,
+        getInitPeers: null);
+    lanPeersModel = Peers(
+        name: PeersModelName.lan, loadEvent: LoadEvent.lan, getInitPeers: null);
   }
 
   /// Mobile reuse FFI

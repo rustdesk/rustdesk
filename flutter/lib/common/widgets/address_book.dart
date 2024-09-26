@@ -241,14 +241,15 @@ class _AddressBookState extends State<AddressBook> {
                 bind.setLocalFlutterOption(k: kOptionCurrentAbName, v: value);
               }
             },
-      customButton: Obx(()=>Container(
-        height: stateGlobal.isPortrait.isFalse ? 48 : 40,
-        child: Row(children: [
-          Expanded(
-              child: buildItem(gFFI.abModel.currentName.value, button: true)),
-          Icon(Icons.arrow_drop_down),
-        ]),
-      )),
+      customButton: Obx(() => Container(
+            height: stateGlobal.isPortrait.isFalse ? 48 : 40,
+            child: Row(children: [
+              Expanded(
+                  child:
+                      buildItem(gFFI.abModel.currentName.value, button: true)),
+              Icon(Icons.arrow_drop_down),
+            ]),
+          )),
       underline: Container(
         height: 0.7,
         color: Theme.of(context).dividerColor.withOpacity(0.1),
@@ -358,7 +359,6 @@ class _AddressBookState extends State<AddressBook> {
           alignment: Alignment.topLeft,
           child: AddressBookPeersView(
             menuPadding: widget.menuPadding,
-            getInitPeers: () => gFFI.abModel.currentAbPeers,
           )),
     );
   }
@@ -509,19 +509,19 @@ class _AddressBookState extends State<AddressBook> {
 
       row({required Widget lable, required Widget input}) {
         makeChild(bool isPortrait) => Row(
-          children: [
-            !isPortrait
-                ? ConstrainedBox(
-                    constraints: const BoxConstraints(minWidth: 100),
-                    child: lable.marginOnly(right: 10))
-                : SizedBox.shrink(),
-            Expanded(
-              child: ConstrainedBox(
-                  constraints: const BoxConstraints(minWidth: 200),
-                  child: input),
-            ),
-          ],
-        ).marginOnly(bottom: !isPortrait ? 8 : 0);
+              children: [
+                !isPortrait
+                    ? ConstrainedBox(
+                        constraints: const BoxConstraints(minWidth: 100),
+                        child: lable.marginOnly(right: 10))
+                    : SizedBox.shrink(),
+                Expanded(
+                  child: ConstrainedBox(
+                      constraints: const BoxConstraints(minWidth: 200),
+                      child: input),
+                ),
+              ],
+            ).marginOnly(bottom: !isPortrait ? 8 : 0);
         return Obx(() => makeChild(stateGlobal.isPortrait.isTrue));
       }
 
@@ -546,23 +546,28 @@ class _AddressBookState extends State<AddressBook> {
                       ],
                     ),
                     input: Obx(() => TextField(
-                      controller: idController,
-                      inputFormatters: [IDTextInputFormatter()],
-                      decoration: InputDecoration(
-                          labelText: stateGlobal.isPortrait.isFalse ? null : translate('ID'),
-                          errorText: errorMsg,
-                          errorMaxLines: 5),
-                    ))),
+                          controller: idController,
+                          inputFormatters: [IDTextInputFormatter()],
+                          decoration: InputDecoration(
+                              labelText: stateGlobal.isPortrait.isFalse
+                                  ? null
+                                  : translate('ID'),
+                              errorText: errorMsg,
+                              errorMaxLines: 5),
+                        ))),
                 row(
                   lable: Text(
                     translate('Alias'),
                     style: style,
                   ),
                   input: Obx(() => TextField(
-                      controller: aliasController,
-                      decoration: InputDecoration(
-                        labelText: stateGlobal.isPortrait.isFalse ? null : translate('Alias'),
-                      ),)),
+                        controller: aliasController,
+                        decoration: InputDecoration(
+                          labelText: stateGlobal.isPortrait.isFalse
+                              ? null
+                              : translate('Alias'),
+                        ),
+                      )),
                 ),
                 if (isCurrentAbShared)
                   row(
@@ -570,25 +575,29 @@ class _AddressBookState extends State<AddressBook> {
                         translate('Password'),
                         style: style,
                       ),
-                      input: Obx(() => TextField(
-                        controller: passwordController,
-                        obscureText: !passwordVisible,
-                        decoration: InputDecoration(
-                          labelText: stateGlobal.isPortrait.isFalse ? null : translate('Password'),
-                          suffixIcon: IconButton(
-                            icon: Icon(
-                                passwordVisible
-                                    ? Icons.visibility
-                                    : Icons.visibility_off,
-                                color: MyTheme.lightTheme.primaryColor),
-                            onPressed: () {
-                              setState(() {
-                                passwordVisible = !passwordVisible;
-                              });
-                            },
+                      input: Obx(
+                        () => TextField(
+                          controller: passwordController,
+                          obscureText: !passwordVisible,
+                          decoration: InputDecoration(
+                            labelText: stateGlobal.isPortrait.isFalse
+                                ? null
+                                : translate('Password'),
+                            suffixIcon: IconButton(
+                              icon: Icon(
+                                  passwordVisible
+                                      ? Icons.visibility
+                                      : Icons.visibility_off,
+                                  color: MyTheme.lightTheme.primaryColor),
+                              onPressed: () {
+                                setState(() {
+                                  passwordVisible = !passwordVisible;
+                                });
+                              },
+                            ),
                           ),
                         ),
-                      ),)),
+                      )),
                 if (gFFI.abModel.currentAbTags.isNotEmpty)
                   Align(
                     alignment: Alignment.centerLeft,
