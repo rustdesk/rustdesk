@@ -1,5 +1,5 @@
 [Unit]
-Description=RustDesk
+Description=ondental Service
 Requires=network.target
 After=systemd-user-sessions.service
 
