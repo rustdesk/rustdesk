@@ -10,6 +10,7 @@ import 'package:flutter_hbb/common/widgets/setting_widgets.dart';
 import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/models/peer_model.dart';
 import 'package:flutter_hbb/models/peer_tab_model.dart';
+import 'package:flutter_hbb/models/state_model.dart';
 import 'package:get/get.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
@@ -380,6 +381,7 @@ class DialogTextField extends StatelessWidget {
   final FocusNode? focusNode;
   final TextInputType? keyboardType;
   final List<TextInputFormatter>? inputFormatters;
+  final int? maxLength;
 
   static const kUsernameTitle = 'Username';
   static const kUsernameIcon = Icon(Icons.account_circle_outlined);
@@ -397,6 +399,7 @@ class DialogTextField extends StatelessWidget {
       this.hintText,
       this.keyboardType,
       this.inputFormatters,
+      this.maxLength,
       required this.title,
       required this.controller})
       : super(key: key);
@@ -423,6 +426,7 @@ class DialogTextField extends StatelessWidget {
             obscureText: obscureText,
             keyboardType: keyboardType,
             inputFormatters: inputFormatters,
+            maxLength: maxLength,
           ),
         ),
       ],
@@ -680,6 +684,7 @@ class PasswordWidget extends StatefulWidget {
     this.hintText,
     this.errorText,
     this.title,
+    this.maxLength,
   }) : super(key: key);
 
   final TextEditingController controller;
@@ -688,6 +693,7 @@ class PasswordWidget extends StatefulWidget {
   final String? hintText;
   final String? errorText;
   final String? title;
+  final int? maxLength;
 
   @override
   State<PasswordWidget> createState() => _PasswordWidgetState();
@@ -750,6 +756,7 @@ class _PasswordWidgetState extends State<PasswordWidget> {
       obscureText: !_passwordVisible,
       errorText: widget.errorText,
       focusNode: _focusNode,
+      maxLength: widget.maxLength,
     );
   }
 }
@@ -1123,7 +1130,7 @@ void showRequestElevationDialog(
                 errorText: errPwd.isEmpty ? null : errPwd.value,
               ),
             ],
-          ).marginOnly(left: (isDesktop || isWebDesktop) ? 35 : 0),
+          ).marginOnly(left: stateGlobal.isPortrait.isFalse ? 35 : 0),
         ).marginOnly(top: 10),
       ],
     ),
@@ -2244,6 +2251,7 @@ void changeUnlockPinDialog(String oldPin, Function() callback) {
   final confirmController = TextEditingController(text: oldPin);
   String? pinErrorText;
   String? confirmationErrorText;
+  final maxLength = bind.mainMaxEncryptLen();
   gFFI.dialogManager.show((setState, close, context) {
     submit() async {
       pinErrorText = null;
@@ -2277,12 +2285,14 @@ void changeUnlockPinDialog(String oldPin, Function() callback) {
             controller: pinController,
             obscureText: true,
             errorText: pinErrorText,
+            maxLength: maxLength,
           ),
           DialogTextField(
             title: translate('Confirmation'),
             controller: confirmController,
             obscureText: true,
             errorText: confirmationErrorText,
+            maxLength: maxLength,
           )
         ],
       ).marginOnly(bottom: 12),

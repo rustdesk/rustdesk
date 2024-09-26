@@ -1,9 +1,10 @@
 use arboard::{ClipboardData, ClipboardFormat};
 use clipboard_master::{ClipboardHandler, Master, Shutdown};
-use hbb_common::{log, message_proto::*, ResultType};
+use hbb_common::{bail, log, message_proto::*, ResultType};
 use std::{
     sync::{mpsc::Sender, Arc, Mutex},
     thread::JoinHandle,
+    time::Duration,
 };
 
 pub const CLIPBOARD_NAME: &'static str = "clipboard";
@@ -11,6 +12,9 @@ pub const CLIPBOARD_INTERVAL: u64 = 333;
 
 // This format is used to store the flag in the clipboard.
 const RUSTDESK_CLIPBOARD_OWNER_FORMAT: &'static str = "dyn.com.rustdesk.owner";
+
+// Add special format for Excel XML Spreadsheet
+const CLIPBOARD_FORMAT_EXCEL_XML_SPREADSHEET: &'static str = "XML Spreadsheet";
 
 lazy_static::lazy_static! {
     static ref ARBOARD_MTX: Arc<Mutex<()>> = Arc::new(Mutex::new(()));
@@ -23,6 +27,9 @@ lazy_static::lazy_static! {
     static ref CLIPBOARD_CTX: Arc<Mutex<Option<ClipboardContext>>> = Arc::new(Mutex::new(None));
 }
 
+const CLIPBOARD_GET_MAX_RETRY: usize = 3;
+const CLIPBOARD_GET_RETRY_INTERVAL_DUR: Duration = Duration::from_millis(33);
+
 const SUPPORTED_FORMATS: &[ClipboardFormat] = &[
     ClipboardFormat::Text,
     ClipboardFormat::Html,
@@ -30,6 +37,7 @@ const SUPPORTED_FORMATS: &[ClipboardFormat] = &[
     ClipboardFormat::ImageRgba,
     ClipboardFormat::ImagePng,
     ClipboardFormat::ImageSvg,
+    ClipboardFormat::Special(CLIPBOARD_FORMAT_EXCEL_XML_SPREADSHEET),
     ClipboardFormat::Special(RUSTDESK_CLIPBOARD_OWNER_FORMAT),
 ];
 
@@ -147,14 +155,18 @@ pub fn check_clipboard(
         *ctx = ClipboardContext::new().ok();
     }
     let ctx2 = ctx.as_mut()?;
-    let content = ctx2.get(side, force);
-    if let Ok(content) = content {
-        if !content.is_empty() {
-            let mut msg = Message::new();
-            let clipboards = proto::create_multi_clipboards(content);
-            msg.set_multi_clipboards(clipboards.clone());
-            *LAST_MULTI_CLIPBOARDS.lock().unwrap() = clipboards;
-            return Some(msg);
+    match ctx2.get(side, force) {
+        Ok(content) => {
+            if !content.is_empty() {
+                let mut msg = Message::new();
+                let clipboards = proto::create_multi_clipboards(content);
+                msg.set_multi_clipboards(clipboards.clone());
+                *LAST_MULTI_CLIPBOARDS.lock().unwrap() = clipboards;
+                return Some(msg);
+            }
+        }
+        Err(e) => {
+            log::error!("Failed to get clipboard content. {}", e);
         }
     }
     None
@@ -259,16 +271,49 @@ impl ClipboardContext {
         Ok(ClipboardContext { inner: board })
     }
 
+    fn get_formats(&mut self, formats: &[ClipboardFormat]) -> ResultType<Vec<ClipboardData>> {
+        // If there're multiple threads or processes trying to access the clipboard at the same time,
+        // the previous clipboard owner will fail to access the clipboard.
+        // `GetLastError()` will return `ERROR_CLIPBOARD_NOT_OPEN` (OSError(1418): Thread does not have a clipboard open) at this time.
+        // See https://github.com/rustdesk-org/arboard/blob/747ab2d9b40a5c9c5102051cf3b0bb38b4845e60/src/platform/windows.rs#L34
+        //
+        // This is a common case on Windows, so we retry here.
+        // Related issues:
+        // https://github.com/rustdesk/rustdesk/issues/9263
+        // https://github.com/rustdesk/rustdesk/issues/9222#issuecomment-2329233175
+        for i in 0..CLIPBOARD_GET_MAX_RETRY {
+            match self.inner.get_formats(SUPPORTED_FORMATS) {
+                Ok(data) => {
+                    return Ok(data
+                        .into_iter()
+                        .filter(|c| !matches!(c, arboard::ClipboardData::None))
+                        .collect())
+                }
+                Err(e) => match e {
+                    arboard::Error::ClipboardOccupied => {
+                        log::debug!("Failed to get clipboard formats, clipboard is occupied, retrying... {}", i + 1);
+                        std::thread::sleep(CLIPBOARD_GET_RETRY_INTERVAL_DUR);
+                    }
+                    _ => {
+                        log::error!("Failed to get clipboard formats, {}", e);
+                        return Err(e.into());
+                    }
+                },
+            }
+        }
+        bail!("Failed to get clipboard formats, clipboard is occupied, {CLIPBOARD_GET_MAX_RETRY} retries failed");
+    }
+
     pub fn get(&mut self, side: ClipboardSide, force: bool) -> ResultType<Vec<ClipboardData>> {
         let _lock = ARBOARD_MTX.lock().unwrap();
-        let data = self.inner.get_formats(SUPPORTED_FORMATS)?;
+        let data = self.get_formats(SUPPORTED_FORMATS)?;
         if data.is_empty() {
             return Ok(data);
         }
         if !force {
             for c in data.iter() {
-                if let ClipboardData::Special((_, d)) = c {
-                    if side.is_owner(d) {
+                if let ClipboardData::Special((s, d)) = c {
+                    if s == RUSTDESK_CLIPBOARD_OWNER_FORMAT && side.is_owner(d) {
                         return Ok(vec![]);
                     }
                 }
@@ -276,7 +321,10 @@ impl ClipboardContext {
         }
         Ok(data
             .into_iter()
-            .filter(|c| !matches!(c, ClipboardData::Special(_)))
+            .filter(|c| match c {
+                ClipboardData::Special((s, _)) => s != RUSTDESK_CLIPBOARD_OWNER_FORMAT,
+                _ => true,
+            })
             .collect())
     }
 
@@ -454,12 +502,30 @@ mod proto {
         }
     }
 
+    fn special_to_proto(d: Vec<u8>, s: String) -> Clipboard {
+        let compressed = compress_func(&d);
+        let compress = compressed.len() < d.len();
+        let content = if compress {
+            compressed
+        } else {
+            s.bytes().collect::<Vec<u8>>()
+        };
+        Clipboard {
+            compress,
+            content: content.into(),
+            format: ClipboardFormat::Special.into(),
+            special_name: s,
+            ..Default::default()
+        }
+    }
+
     fn clipboard_data_to_proto(data: ClipboardData) -> Option<Clipboard> {
         let d = match data {
             ClipboardData::Text(s) => plain_to_proto(s, ClipboardFormat::Text),
             ClipboardData::Rtf(s) => plain_to_proto(s, ClipboardFormat::Rtf),
             ClipboardData::Html(s) => plain_to_proto(s, ClipboardFormat::Html),
             ClipboardData::Image(a) => image_to_proto(a),
+            ClipboardData::Special((s, d)) => special_to_proto(d, s),
             _ => return None,
         };
         Some(d)
@@ -496,6 +562,9 @@ mod proto {
             Ok(ClipboardFormat::ImageSvg) => Some(ClipboardData::Image(arboard::ImageData::svg(
                 std::str::from_utf8(&data).unwrap_or_default(),
             ))),
+            Ok(ClipboardFormat::Special) => {
+                Some(ClipboardData::Special((clipboard.special_name, data)))
+            }
             _ => None,
         }
     }

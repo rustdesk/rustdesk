@@ -6,6 +6,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/desktop/widgets/scroll_wrapper.dart';
+import 'package:flutter_hbb/models/peer_tab_model.dart';
+import 'package:flutter_hbb/models/state_model.dart';
 import 'package:get/get.dart';
 import 'package:provider/provider.dart';
 import 'package:visibility_detector/visibility_detector.dart';
@@ -39,6 +41,14 @@ class LoadEvent {
   static const String lan = 'load_lan_peers';
   static const String addressBook = 'load_address_book_peers';
   static const String group = 'load_group_peers';
+}
+
+class PeersModelName {
+  static const String recent = 'recent peer';
+  static const String favorite = 'fav peer';
+  static const String lan = 'discovered peer';
+  static const String addressBook = 'address book peer';
+  static const String group = 'group peer';
 }
 
 /// for peer search text, global obs value
@@ -88,6 +98,7 @@ class _PeersViewState extends State<_PeersView>
   var _lastChangeTime = DateTime.now();
   var _lastQueryPeers = <String>{};
   var _lastQueryTime = DateTime.now();
+  var _lastWindowRestoreTime = DateTime.now();
   var _queryCount = 0;
   var _exit = false;
   bool _isActive = true;
@@ -116,11 +127,38 @@ class _PeersViewState extends State<_PeersView>
   @override
   void onWindowFocus() {
     _queryCount = 0;
+    _isActive = true;
+  }
+
+  @override
+  void onWindowBlur() {
+    // We need this comparison because window restore (on Windows) also triggers `onWindowBlur()`.
+    // Maybe it's a bug of the window manager, but the source code seems to be correct.
+    //
+    // Although `onWindowRestore()` is called after `onWindowBlur()` in my test,
+    // we need the following comparison to ensure that `_isActive` is true in the end.
+    if (isWindows &&
+        DateTime.now().difference(_lastWindowRestoreTime) <
+            const Duration(milliseconds: 300)) {
+      return;
+    }
+    _queryCount = _maxQueryCount;
+    _isActive = false;
+  }
+
+  @override
+  void onWindowRestore() {
+    // Window restore (on MacOS and Linux) also triggers `onWindowFocus()`.
+    // But on Windows, it triggers `onWindowBlur()`, mybe it's a bug of the window manager.
+    if (!isWindows) return;
+    _queryCount = 0;
+    _isActive = true;
+    _lastWindowRestoreTime = DateTime.now();
   }
 
   @override
   void onWindowMinimize() {
-    _queryCount = _maxQueryCount;
+    // Window minimize also triggers `onWindowBlur()`.
   }
 
   // This function is required for mobile.
@@ -128,7 +166,7 @@ class _PeersViewState extends State<_PeersView>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     super.didChangeAppLifecycleState(state);
-    if (isDesktop) return;
+    if (isDesktop || isWebDesktop) return;
     if (state == AppLifecycleState.resumed) {
       _isActive = true;
       _queryCount = 0;
@@ -139,8 +177,11 @@ class _PeersViewState extends State<_PeersView>
 
   @override
   Widget build(BuildContext context) {
-    return ChangeNotifierProvider<Peers>(
-      create: (context) => widget.peers,
+    // We should avoid too many rebuilds. MacOS(m1, 14.6.1) on Flutter 3.19.6.
+    // Continious rebuilds of `ChangeNotifierProvider` will cause memory leak.
+    // Simple demo can reproduce this issue.
+    return ChangeNotifierProvider<Peers>.value(
+      value: widget.peers,
       child: Consumer<Peers>(builder: (context, peers, child) {
         if (peers.peers.isEmpty) {
           gFFI.peerTabModel.setCurrentTabCachedPeers([]);
@@ -194,7 +235,7 @@ class _PeersViewState extends State<_PeersView>
             var peers = snapshot.data!;
             if (peers.length > 1000) peers = peers.sublist(0, 1000);
             gFFI.peerTabModel.setCurrentTabCachedPeers(peers);
-            buildOnePeer(Peer peer) {
+            buildOnePeer(Peer peer, bool isPortrait) {
               final visibilityChild = VisibilityDetector(
                 key: ValueKey(_cardId(peer.id)),
                 onVisibilityChanged: onVisibilityChanged,
@@ -206,7 +247,7 @@ class _PeersViewState extends State<_PeersView>
               // No need to listen the currentTab change event.
               // Because the currentTab change event will trigger the peers change event,
               // and the peers change event will trigger _buildPeersView().
-              return (isDesktop || isWebDesktop)
+              return !isPortrait
                   ? Obx(() => peerCardUiType.value == PeerUiType.list
                       ? Container(height: 45, child: visibilityChild)
                       : peerCardUiType.value == PeerUiType.grid
@@ -217,44 +258,45 @@ class _PeersViewState extends State<_PeersView>
                   : Container(child: visibilityChild);
             }
 
-            final Widget child;
-            if (isMobile) {
-              child = ListView.builder(
-                itemCount: peers.length,
-                itemBuilder: (BuildContext context, int index) {
-                  return buildOnePeer(peers[index]).marginOnly(
-                      top: index == 0 ? 0 : space / 2, bottom: space / 2);
-                },
-              );
-            } else {
-              child = Obx(() => peerCardUiType.value == PeerUiType.list
-                  ? DesktopScrollWrapper(
-                      scrollController: _scrollController,
-                      child: ListView.builder(
-                          controller: _scrollController,
-                          physics: DraggableNeverScrollableScrollPhysics(),
-                          itemCount: peers.length,
-                          itemBuilder: (BuildContext context, int index) {
-                            return buildOnePeer(peers[index]).marginOnly(
-                                right: space,
-                                top: index == 0 ? 0 : space / 2,
-                                bottom: space / 2);
-                          }),
-                    )
-                  : DesktopScrollWrapper(
-                      scrollController: _scrollController,
-                      child: DynamicGridView.builder(
-                          controller: _scrollController,
-                          physics: DraggableNeverScrollableScrollPhysics(),
-                          gridDelegate: SliverGridDelegateWithWrapping(
-                              mainAxisSpacing: space / 2,
-                              crossAxisSpacing: space),
-                          itemCount: peers.length,
-                          itemBuilder: (BuildContext context, int index) {
-                            return buildOnePeer(peers[index]);
-                          }),
-                    ));
-            }
+            // We should avoid too many rebuilds. Win10(Some machines) on Flutter 3.19.6.
+            // Continious rebuilds of `ListView.builder` will cause memory leak.
+            // Simple demo can reproduce this issue.
+            final Widget child = Obx(() => stateGlobal.isPortrait.isTrue
+                ? ListView.builder(
+                    itemCount: peers.length,
+                    itemBuilder: (BuildContext context, int index) {
+                      return buildOnePeer(peers[index], true).marginOnly(
+                          top: index == 0 ? 0 : space / 2, bottom: space / 2);
+                    },
+                  )
+                : peerCardUiType.value == PeerUiType.list
+                    ? DesktopScrollWrapper(
+                        scrollController: _scrollController,
+                        child: ListView.builder(
+                            controller: _scrollController,
+                            physics: DraggableNeverScrollableScrollPhysics(),
+                            itemCount: peers.length,
+                            itemBuilder: (BuildContext context, int index) {
+                              return buildOnePeer(peers[index], false)
+                                  .marginOnly(
+                                      right: space,
+                                      top: index == 0 ? 0 : space / 2,
+                                      bottom: space / 2);
+                            }),
+                      )
+                    : DesktopScrollWrapper(
+                        scrollController: _scrollController,
+                        child: DynamicGridView.builder(
+                            controller: _scrollController,
+                            physics: DraggableNeverScrollableScrollPhysics(),
+                            gridDelegate: SliverGridDelegateWithWrapping(
+                                mainAxisSpacing: space / 2,
+                                crossAxisSpacing: space),
+                            itemCount: peers.length,
+                            itemBuilder: (BuildContext context, int index) {
+                              return buildOnePeer(peers[index], false);
+                            }),
+                      ));
 
             if (updateEvent == UpdateEvent.load) {
               _curPeers.clear();
@@ -371,28 +413,39 @@ class _PeersViewState extends State<_PeersView>
 }
 
 abstract class BasePeersView extends StatelessWidget {
-  final String name;
-  final String loadEvent;
+  final PeerTabIndex peerTabIndex;
   final PeerFilter? peerFilter;
   final PeerCardBuilder peerCardBuilder;
-  final GetInitPeers? getInitPeers;
 
   const BasePeersView({
     Key? key,
-    required this.name,
-    required this.loadEvent,
+    required this.peerTabIndex,
     this.peerFilter,
     required this.peerCardBuilder,
-    required this.getInitPeers,
   }) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
+    Peers peers;
+    switch (peerTabIndex) {
+      case PeerTabIndex.recent:
+        peers = gFFI.recentPeersModel;
+        break;
+      case PeerTabIndex.fav:
+        peers = gFFI.favoritePeersModel;
+        break;
+      case PeerTabIndex.lan:
+        peers = gFFI.lanPeersModel;
+        break;
+      case PeerTabIndex.ab:
+        peers = gFFI.abModel.peersModel;
+        break;
+      case PeerTabIndex.group:
+        peers = gFFI.groupModel.peersModel;
+        break;
+    }
     return _PeersView(
-        peers:
-            Peers(name: name, loadEvent: loadEvent, getInitPeers: getInitPeers),
-        peerFilter: peerFilter,
-        peerCardBuilder: peerCardBuilder);
+        peers: peers, peerFilter: peerFilter, peerCardBuilder: peerCardBuilder);
   }
 }
 
@@ -401,13 +454,11 @@ class RecentPeersView extends BasePeersView {
       {Key? key, EdgeInsets? menuPadding, ScrollController? scrollController})
       : super(
           key: key,
-          name: 'recent peer',
-          loadEvent: LoadEvent.recent,
+          peerTabIndex: PeerTabIndex.recent,
           peerCardBuilder: (Peer peer) => RecentPeerCard(
             peer: peer,
             menuPadding: menuPadding,
           ),
-          getInitPeers: null,
         );
 
   @override
@@ -423,13 +474,11 @@ class FavoritePeersView extends BasePeersView {
       {Key? key, EdgeInsets? menuPadding, ScrollController? scrollController})
       : super(
           key: key,
-          name: 'favorite peer',
-          loadEvent: LoadEvent.favorite,
+          peerTabIndex: PeerTabIndex.fav,
           peerCardBuilder: (Peer peer) => FavoritePeerCard(
             peer: peer,
             menuPadding: menuPadding,
           ),
-          getInitPeers: null,
         );
 
   @override
@@ -445,13 +494,11 @@ class DiscoveredPeersView extends BasePeersView {
       {Key? key, EdgeInsets? menuPadding, ScrollController? scrollController})
       : super(
           key: key,
-          name: 'discovered peer',
-          loadEvent: LoadEvent.lan,
+          peerTabIndex: PeerTabIndex.lan,
           peerCardBuilder: (Peer peer) => DiscoveredPeerCard(
             peer: peer,
             menuPadding: menuPadding,
           ),
-          getInitPeers: null,
         );
 
   @override
@@ -464,21 +511,16 @@ class DiscoveredPeersView extends BasePeersView {
 
 class AddressBookPeersView extends BasePeersView {
   AddressBookPeersView(
-      {Key? key,
-      EdgeInsets? menuPadding,
-      ScrollController? scrollController,
-      required GetInitPeers getInitPeers})
+      {Key? key, EdgeInsets? menuPadding, ScrollController? scrollController})
       : super(
           key: key,
-          name: 'address book peer',
-          loadEvent: LoadEvent.addressBook,
+          peerTabIndex: PeerTabIndex.ab,
           peerFilter: (Peer peer) =>
               _hitTag(gFFI.abModel.selectedTags, peer.tags),
           peerCardBuilder: (Peer peer) => AddressBookPeerCard(
             peer: peer,
             menuPadding: menuPadding,
           ),
-          getInitPeers: getInitPeers,
         );
 
   static bool _hitTag(List<dynamic> selectedTags, List<dynamic> idents) {
@@ -505,20 +547,15 @@ class AddressBookPeersView extends BasePeersView {
 
 class MyGroupPeerView extends BasePeersView {
   MyGroupPeerView(
-      {Key? key,
-      EdgeInsets? menuPadding,
-      ScrollController? scrollController,
-      required GetInitPeers getInitPeers})
+      {Key? key, EdgeInsets? menuPadding, ScrollController? scrollController})
       : super(
           key: key,
-          name: 'group peer',
-          loadEvent: LoadEvent.group,
+          peerTabIndex: PeerTabIndex.group,
           peerFilter: filter,
           peerCardBuilder: (Peer peer) => MyGroupPeerCard(
             peer: peer,
             menuPadding: menuPadding,
           ),
-          getInitPeers: getInitPeers,
         );
 
   static bool filter(Peer peer) {

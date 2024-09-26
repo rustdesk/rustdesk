@@ -452,8 +452,8 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
 
   Widget _buildToolbar(BuildContext context) {
     final List<Widget> toolbarItems = [];
+    toolbarItems.add(_PinMenu(state: widget.state));
     if (!isWebDesktop) {
-      toolbarItems.add(_PinMenu(state: widget.state));
       toolbarItems.add(_MobileActionMenu(ffi: widget.ffi));
     }
 
@@ -1612,7 +1612,9 @@ class _KeyboardMenu extends StatelessWidget {
       // If use flutter to grab keys, we can only use one mode.
       // Map mode and Legacy mode, at least one of them is supported.
       String? modeOnly;
-      if (isInputSourceFlutter) {
+      // Keep both map and legacy mode on web at the moment.
+      // TODO: Remove legacy mode after web supports translate mode on web.
+      if (isInputSourceFlutter && isDesktop) {
         if (bind.sessionIsKeyboardModeSupported(
             sessionId: ffi.sessionId, mode: kKeyMapMode)) {
           modeOnly = kKeyMapMode;
@@ -1716,7 +1718,9 @@ class _KeyboardMenu extends StatelessWidget {
                 if (value == null) return;
                 await bind.sessionToggleOption(
                     sessionId: ffi.sessionId, value: kOptionToggleViewOnly);
-                ffiModel.setViewOnly(id, value);
+                final viewOnly = await bind.sessionGetToggleOption(
+                    sessionId: ffi.sessionId, arg: kOptionToggleViewOnly);
+                ffiModel.setViewOnly(id, viewOnly ?? value);
               }
             : null,
         ffi: ffi,
