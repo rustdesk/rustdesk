@@ -647,5 +647,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("one-way-file-transfer-tip", "단방향 파일 전송은 제어되는 쪽에서 활성화됩니다."),
         ("Authentication Required", "인증 필요함"),
         ("Authenticate", "인증"),
+        ("web_id_input_tip", ""),
     ].iter().cloned().collect();
 }
