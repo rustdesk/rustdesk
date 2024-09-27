@@ -879,7 +879,7 @@ class RecentPeerCard extends BasePeerCard {
       BuildContext context) async {
     final List<MenuEntryBase<String>> menuItems = [
       _connectAction(context),
-      if (!isWeb) _transferFileAction(context),
+      _transferFileAction(context),
     ];
 
     final List favs = (await bind.mainGetFav()).toList();
