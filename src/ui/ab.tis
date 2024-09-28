@@ -15,7 +15,7 @@ class AddressBook: Reactor.Component
     }();
     
     function render() {
-        if (!handler.get_local_option("access_token")) {
+        if (!handler.get_local_option("access_token1")) {
             return <div style="margin: *"><div #login-link .link style="margin: *; width: 100px; text-align: center; font-size: 1.2em;">{translate("Login")}</div></div>;
         }
         if (abLoading) {
