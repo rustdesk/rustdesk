@@ -305,7 +305,7 @@ class MyIdMenu: Reactor.Component {
     }
 
     function renderPop() {
-        var username = handler.get_local_option("access_token") ? getUserName() : '';
+        var username = handler.get_local_option("access_token1") ? getUserName() : '';
         return <popup>
             <menu.context #config-options>
                 <li #enable-keyboard><span>{svg_checkmark}</span>{translate('Enable keyboard/mouse')}</li>
@@ -1354,7 +1354,7 @@ function logout() {
 }
 
 function refreshCurrentUser() {
-    if (!handler.get_local_option("access_token")) return;
+    if (!handler.get_local_option("access_token1")) return;
     abLoading = true;
     abError = "";
     app.update();
@@ -1378,7 +1378,7 @@ function refreshCurrentUser() {
 } 
 
 function getHttpHeaders() {
-    return "Authorization: Bearer " + handler.get_local_option("access_token");
+    return "Authorization: Bearer " + handler.get_local_option("access_token1");
 }
 
 function getDeviceInfo() {
