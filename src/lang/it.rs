@@ -559,7 +559,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Big tiles", "Icone grandi"),
         ("Small tiles", "Icone piccole"),
         ("List", "Elenco"),
-        ("Virtual display", "Scehrmo virtuale"),
+        ("Virtual display", "Schermo virtuale"),
         ("Plug out all", "Scollega tutto"),
         ("True color (4:4:4)", "Colore reale (4:4:4)"),
         ("Enable blocking user input", "Abilita blocco input utente"),
