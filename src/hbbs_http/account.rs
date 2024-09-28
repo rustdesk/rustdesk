@@ -243,10 +243,10 @@ impl OidcSession {
         while OIDC_SESSION.read().unwrap().keep_querying && begin.elapsed() < query_timeout {
             match Self::query(&api_server, &code_url.code, &id, &uuid) {
                 Ok(HbbHttpResponse::<_>::Data(auth_body)) => {
-                    if auth_body.r#type == "access_token" {
+                    if auth_body.r#type == "access_token1" {
                         if remember_me {
                             LocalConfig::set_option(
-                                "access_token".to_owned(),
+                                "access_token1".to_owned(),
                                 auth_body.access_token.clone(),
                             );
                             LocalConfig::set_option(

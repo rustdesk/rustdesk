@@ -14,7 +14,7 @@ class HttpType {
   static const kAuthReqTypeEmailCode = "email_code";
   static const kAuthReqTypeTfaCode = "tfa_code";
 
-  static const kAuthResTypeToken = "access_token";
+  static const kAuthResTypeToken = "access_token1";
   static const kAuthResTypeEmailCheck = "email_check";
   static const kAuthResTypeTfaCheck = "tfa_check";
 }

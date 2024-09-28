@@ -1263,7 +1263,7 @@ function login() {
                 on_2fa_check(data);
                 return;
             }
-            handler.set_local_option("access_token", data.access_token);
+            handler.set_local_option("access_token1", data.access_token);
             set_local_user_info(data.user);
             show_progress(-1);
             myIdMenu.update();
@@ -1315,7 +1315,7 @@ function on_2fa_check(last_msg) {
                         show_progress(false, data.error);
                         return;
                     }
-                    handler.set_local_option("access_token", data.access_token);
+                    handler.set_local_option("access_token1", data.access_token);
                     set_local_user_info(data.user);
                     show_progress(-1);
                     myIdMenu.update();
@@ -1334,7 +1334,7 @@ function on_2fa_check(last_msg) {
 }
 
 function reset_token() {
-    handler.set_local_option("access_token", "");
+    handler.set_local_option("access_token1", "");
     handler.set_local_option("user_info", "");
     handler.set_local_option("selected-tags", "");
     myIdMenu.update();
