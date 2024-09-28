@@ -369,7 +369,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Stop session recording", "Ferma registrazione sessione"),
         ("Enable recording session", "Abilita registrazione sessione"),
         ("Enable LAN discovery", "Abilita rilevamento LAN"),
-        ("Deny LAN discovery", "Disabilita rilevamento LAN"),
+        ("Deny LAN discovery", "Non effettuare rilevamento LAN"),
         ("Write a message", "Scrivi un messaggio"),
         ("Prompt", "Richiedi"),
         ("Please wait for confirmation of UAC...", "Attendi la conferma dell'UAC..."),
@@ -559,7 +559,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Big tiles", "Icone grandi"),
         ("Small tiles", "Icone piccole"),
         ("List", "Elenco"),
-        ("Virtual display", "Scehrmo virtuale"),
+        ("Virtual display", "Schermo virtuale"),
         ("Plug out all", "Scollega tutto"),
         ("True color (4:4:4)", "Colore reale (4:4:4)"),
         ("Enable blocking user input", "Abilita blocco input utente"),
@@ -647,5 +647,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("one-way-file-transfer-tip", "Sul lato controllato  è abilitato il trasferimento file unidirezionale."),
         ("Authentication Required", "Richiesta autenticazione"),
         ("Authenticate", "Autentica"),
+        ("web_id_input_tip", "È possibile inserire un ID nello stesso server, nel client web non è supportato l'accesso con IP diretto.\nSe vuoi accedere ad un dispositivo in un altro server, aggiungi l'indirizzo del server (<id>@<indirizzo_server>?key=<valore_chiave >), ad esempio,\n9123456234@192.168.16.1:21117?key=5Qbwsde3unUcJBtrx9ZkvUmwFNoExHzpryHuPUdqlWM=.\nSe vuoi accedere ad un dispositivo in un server pubblico, inserisci \"<id>@public\", la chiave non è necessaria per il server pubblico."),
     ].iter().cloned().collect();
 }

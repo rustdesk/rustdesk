@@ -647,5 +647,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("one-way-file-transfer-tip", ""),
         ("Authentication Required", ""),
         ("Authenticate", ""),
+        ("web_id_input_tip", ""),
     ].iter().cloned().collect();
 }
