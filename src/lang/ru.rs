@@ -647,5 +647,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("one-way-file-transfer-tip", "На управляемой стороне включена односторонняя передача файлов."),
         ("Authentication Required", "Требуется аутентификация"),
         ("Authenticate", "Аутентификация"),
+        ("web_id_input_tip", ""),
     ].iter().cloned().collect();
 }
