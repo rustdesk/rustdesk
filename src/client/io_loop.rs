@@ -26,7 +26,7 @@ use crossbeam_queue::ArrayQueue;
 use hbb_common::tokio::sync::mpsc::error::TryRecvError;
 use hbb_common::{
     allow_err,
-    config::{PeerConfig, TransferSerde},
+    config::{self, PeerConfig, TransferSerde},
     fs::{
         self, can_enable_overwrite_detection, get_job, get_string, new_send_confirm,
         DigestCheckResult, RemoveJobMeta,
@@ -353,6 +353,7 @@ impl<T: InvokeUiSession> Remote<T> {
                     } else {
                         if let Err(e) = ContextSend::make_sure_enabled() {
                             log::error!("failed to restart clipboard context: {}", e);
+                            // to-do: Show msgbox with "Don't show again" option
                         };
                         log::debug!("Send system clipboard message to remote");
                         let msg = crate::clipboard_file::clip_2_msg(clip);
@@ -957,22 +958,6 @@ impl<T: InvokeUiSession> Remote<T> {
         true
     }
 
-    async fn send_opts_after_login(&self, peer: &mut Stream) {
-        if let Some(opts) = self
-            .handler
-            .lc
-            .read()
-            .unwrap()
-            .get_option_message_after_login()
-        {
-            let mut misc = Misc::new();
-            misc.set_option(opts);
-            let mut msg_out = Message::new();
-            msg_out.set_misc(misc);
-            allow_err!(peer.send(&msg_out).await);
-        }
-    }
-
     async fn send_toggle_virtual_display_msg(&self, peer: &mut Stream) {
         if !self.peer_info.is_support_virtual_display() {
             return;
@@ -1134,7 +1119,6 @@ impl<T: InvokeUiSession> Remote<T> {
                         self.first_frame = true;
                         self.handler.close_success();
                         self.handler.adapt_size();
-                        self.send_opts_after_login(peer).await;
                         self.send_toggle_virtual_display_msg(peer).await;
                         self.send_toggle_privacy_mode_msg(peer).await;
                     }
@@ -1212,18 +1196,20 @@ impl<T: InvokeUiSession> Remote<T> {
                             }
 
                             #[cfg(not(any(target_os = "android", target_os = "ios")))]
-                            if let Some(msg_out) = crate::clipboard::get_current_clipboard_msg(
-                                &peer_version,
-                                &peer_platform,
-                                crate::clipboard::ClipboardSide::Client,
-                            ) {
-                                let sender = self.sender.clone();
-                                let permission_config = self.handler.get_permission_config();
-                                tokio::spawn(async move {
-                                    if permission_config.is_text_clipboard_required() {
-                                        sender.send(Data::Message(msg_out)).ok();
-                                    }
-                                });
+                            if self.handler.lc.read().unwrap().sync_init_clipboard.v {
+                                if let Some(msg_out) = crate::clipboard::get_current_clipboard_msg(
+                                    &peer_version,
+                                    &peer_platform,
+                                    crate::clipboard::ClipboardSide::Client,
+                                ) {
+                                    let sender = self.sender.clone();
+                                    let permission_config = self.handler.get_permission_config();
+                                    tokio::spawn(async move {
+                                        if permission_config.is_text_clipboard_required() {
+                                            sender.send(Data::Message(msg_out)).ok();
+                                        }
+                                    });
+                                }
                             }
 
                             // on connection established client
@@ -1634,7 +1620,7 @@ impl<T: InvokeUiSession> Remote<T> {
                 },
                 Some(message::Union::MessageBox(msgbox)) => {
                     let mut link = msgbox.link;
-                    if let Some(v) = hbb_common::config::HELPER_URL.get(&link as &str) {
+                    if let Some(v) = config::HELPER_URL.get(&link as &str) {
                         link = v.to_string();
                     } else {
                         log::warn!("Message box ignore link {} for security", &link);
@@ -1906,7 +1892,7 @@ impl<T: InvokeUiSession> Remote<T> {
             return;
         };
 
-        let is_stopping_allowed = clip.is_stopping_allowed_from_peer();
+        let is_stopping_allowed = clip.is_beginning_message();
         let file_transfer_enabled = self.handler.lc.read().unwrap().enable_file_copy_paste.v;
         let stop = is_stopping_allowed && !file_transfer_enabled;
         log::debug!(

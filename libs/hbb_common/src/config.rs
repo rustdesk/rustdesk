@@ -39,7 +39,7 @@ pub const REG_INTERVAL: i64 = 15_000;
 pub const COMPRESS_LEVEL: i32 = 3;
 const SERIAL: i32 = 3;
 const PASSWORD_ENC_VERSION: &str = "00";
-const ENCRYPT_MAX_LEN: usize = 128;
+pub const ENCRYPT_MAX_LEN: usize = 128; // used for password, pin, etc, not for all
 
 #[cfg(target_os = "macos")]
 lazy_static::lazy_static! {
@@ -296,6 +296,8 @@ pub struct PeerConfig {
     pub keyboard_mode: String,
     #[serde(flatten)]
     pub view_only: ViewOnly,
+    #[serde(flatten)]
+    pub sync_init_clipboard: SyncInitClipboard,
     // Mouse wheel or touchpad scroll mode
     #[serde(
         default = "PeerConfig::default_reverse_mouse_wheel",
@@ -373,6 +375,7 @@ impl Default for PeerConfig {
             ui_flutter: Default::default(),
             info: Default::default(),
             transfer: Default::default(),
+            sync_init_clipboard: Default::default(),
         }
     }
 }
@@ -1462,6 +1465,13 @@ serde_field_bool!(
     "ViewOnly::default_view_only"
 );
 
+serde_field_bool!(
+    SyncInitClipboard,
+    "sync-init-clipboard",
+    default_sync_init_clipboard,
+    "SyncInitClipboard::default_sync_init_clipboard"
+);
+
 #[derive(Debug, Default, Serialize, Deserialize, Clone)]
 pub struct LocalConfig {
     #[serde(default, deserialize_with = "deserialize_string")]
@@ -2156,6 +2166,7 @@ pub mod keys {
     pub const OPTION_CUSTOM_IMAGE_QUALITY: &str = "custom_image_quality";
     pub const OPTION_CUSTOM_FPS: &str = "custom-fps";
     pub const OPTION_CODEC_PREFERENCE: &str = "codec-preference";
+    pub const OPTION_SYNC_INIT_CLIPBOARD: &str = "sync-init-clipboard";
     pub const OPTION_THEME: &str = "theme";
     pub const OPTION_LANGUAGE: &str = "lang";
     pub const OPTION_REMOTE_MENUBAR_DRAG_LEFT: &str = "remote-menubar-drag-left";
@@ -2218,6 +2229,9 @@ pub mod keys {
     pub const OPTION_HIDE_HELP_CARDS: &str = "hide-help-cards";
     pub const OPTION_DEFAULT_CONNECT_PASSWORD: &str = "default-connect-password";
     pub const OPTION_HIDE_TRAY: &str = "hide-tray";
+    pub const OPTION_ONE_WAY_CLIPBOARD_REDIRECTION: &str = "one-way-clipboard-redirection";
+    pub const OPTION_ALLOW_LOGON_SCREEN_PASSWORD: &str = "allow-logon-screen-password";
+    pub const OPTION_ONE_WAY_FILE_TRANSFER: &str = "one-way-file-transfer";
 
     // flutter local options
     pub const OPTION_FLUTTER_REMOTE_MENUBAR_STATE: &str = "remoteMenubarState";
@@ -2276,6 +2290,7 @@ pub mod keys {
         OPTION_CUSTOM_IMAGE_QUALITY,
         OPTION_CUSTOM_FPS,
         OPTION_CODEC_PREFERENCE,
+        OPTION_SYNC_INIT_CLIPBOARD,
     ];
     // DEFAULT_LOCAL_SETTINGS, OVERWRITE_LOCAL_SETTINGS
     pub const KEYS_LOCAL_SETTINGS: &[&str] = &[
@@ -2362,6 +2377,9 @@ pub mod keys {
         OPTION_HIDE_HELP_CARDS,
         OPTION_DEFAULT_CONNECT_PASSWORD,
         OPTION_HIDE_TRAY,
+        OPTION_ONE_WAY_CLIPBOARD_REDIRECTION,
+        OPTION_ALLOW_LOGON_SCREEN_PASSWORD,
+        OPTION_ONE_WAY_FILE_TRANSFER,
     ];
 }
 

@@ -33,8 +33,8 @@ env:
   VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
   # vcpkg version: 2024.07.12
   VCPKG_COMMIT_ID: "1de2026f28ead93ff1773e6e680387643e914ea1"
-  VERSION: "1.3.0"
-  NDK_VERSION: "r27"
+  VERSION: "1.3.2"
+  NDK_VERSION: "r27b"
   #signing keys env variable checks
   ANDROID_SIGNING_KEY: "${{ secrets.ANDROID_SIGNING_KEY }}"
   MACOS_P12_BASE64: "${{ secrets.MACOS_P12_BASE64 }}"
@@ -884,7 +884,7 @@ jobs:
                git \
                g++ \
                g++-multilib \
-               libappindicator3-dev \
+               libayatana-appindicator3-dev \
                libasound2-dev \
                libc6-dev \
                libclang-10-dev \
@@ -976,8 +976,11 @@ jobs:
       - name: fix android for flutter 3.13
         if: $${{ env.ANDROID_FLUTTER_VERSION == '3.13.9' }}
         run: |
-          sed -i 's/uni_links_desktop/#uni_links_desktop/g' flutter/pubspec.yaml
-          cd flutter/lib
+          cd flutter
+          sed -i 's/uni_links_desktop/#uni_links_desktop/g' pubspec.yaml
+          sed -i 's/extended_text: .*/extended_text: 11.1.0/' pubspec.yaml
+          flutter pub get
+          cd lib
           find . | grep dart | xargs sed -i 's/textScaler: TextScaler.linear(\(.*\)),/textScaleFactor: \1,/g'
 
       - name: Build rustdesk lib
@@ -1144,7 +1147,7 @@ jobs:
                git \
                g++ \
                g++-multilib \
-               libappindicator3-dev \
+               libayatana-appindicator3-dev \
                libasound2-dev \
                libc6-dev \
                libclang-10-dev \
@@ -1210,8 +1213,11 @@ jobs:
       - name: fix android for flutter 3.13
         if: $${{ env.ANDROID_FLUTTER_VERSION == '3.13.9' }}
         run: |
-          sed -i 's/uni_links_desktop/#uni_links_desktop/g' flutter/pubspec.yaml
-          cd flutter/lib
+          cd flutter
+          sed -i 's/uni_links_desktop/#uni_links_desktop/g' pubspec.yaml
+          sed -i 's/extended_text: .*/extended_text: 11.1.0/' pubspec.yaml
+          flutter pub get
+          cd lib
           find . | grep dart | xargs sed -i 's/textScaler: TextScaler.linear(\(.*\)),/textScaleFactor: \1,/g'
 
       - name: Build rustdesk
@@ -1418,7 +1424,7 @@ jobs:
                gcc \
                git \
                g++ \
-               libappindicator3-dev \
+               libayatana-appindicator3-dev \
                libasound2-dev \
                libclang-10-dev \
                libgstreamer1.0-dev \
@@ -1675,7 +1681,7 @@ jobs:
                gcc \
                git \
                g++ \
-               libappindicator3-dev \
+               libayatana-appindicator3-dev \
                libasound2-dev \
                libclang-dev \
                libdbus-1-dev \

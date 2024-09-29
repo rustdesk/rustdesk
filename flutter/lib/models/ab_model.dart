@@ -66,10 +66,16 @@ class AbModel {
   var listInitialized = false;
   var _maxPeerOneAb = 0;
 
+  late final Peers peersModel;
+
   WeakReference<FFI> parent;
 
   AbModel(this.parent) {
     addressbooks.clear();
+    peersModel = Peers(
+        name: PeersModelName.addressBook,
+        getInitPeers: () => currentAbPeers,
+        loadEvent: LoadEvent.addressBook);
     if (desktopType == DesktopType.main) {
       Timer.periodic(Duration(milliseconds: 500), (timer) async {
         if (_timerCounter++ % 6 == 0) {

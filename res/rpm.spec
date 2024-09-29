@@ -1,9 +1,10 @@
 Name:       rustdesk
-Version:    1.3.0
+Version:    1.3.2
 Release:    0
 Summary:    RPM package
 License:    GPL-3.0
-Requires:   gtk3 libxcb libxdo libXfixes alsa-lib libappindicator libvdpau1 libva2 pam gstreamer1-plugins-base
+Requires:   gtk3 libxcb libxdo libXfixes alsa-lib libvdpau1 libva2 pam gstreamer1-plugins-base
+Recommends: libayatana-appindicator-gtk3
 
 %description
 The best open-source remote desktop client software, written in Rust.

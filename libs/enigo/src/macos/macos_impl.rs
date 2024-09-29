@@ -37,6 +37,9 @@ const kUCKeyActionDisplay: u16 = 3;
 const kUCKeyTranslateDeadKeysBit: OptionBits = 1 << 31;
 const BUF_LEN: usize = 4;
 
+const MOUSE_EVENT_BUTTON_NUMBER_BACK: i64 = 3;
+const MOUSE_EVENT_BUTTON_NUMBER_FORWARD: i64 = 4;
+
 /// The event source user data value of cgevent.
 pub const ENIGO_INPUT_EXTRA_VALUE: i64 = 100;
 
@@ -226,14 +229,24 @@ impl MouseControllable for Enigo {
         }
         self.last_click_time = Some(now);
         let (current_x, current_y) = Self::mouse_location();
-        let (button, event_type) = match button {
-            MouseButton::Left => (CGMouseButton::Left, CGEventType::LeftMouseDown),
-            MouseButton::Middle => (CGMouseButton::Center, CGEventType::OtherMouseDown),
-            MouseButton::Right => (CGMouseButton::Right, CGEventType::RightMouseDown),
+        let (button, event_type, btn_value) = match button {
+            MouseButton::Left => (CGMouseButton::Left, CGEventType::LeftMouseDown, None),
+            MouseButton::Middle => (CGMouseButton::Center, CGEventType::OtherMouseDown, None),
+            MouseButton::Right => (CGMouseButton::Right, CGEventType::RightMouseDown, None),
+            MouseButton::Back => (
+                CGMouseButton::Left,
+                CGEventType::OtherMouseDown,
+                Some(MOUSE_EVENT_BUTTON_NUMBER_BACK),
+            ),
+            MouseButton::Forward => (
+                CGMouseButton::Left,
+                CGEventType::OtherMouseDown,
+                Some(MOUSE_EVENT_BUTTON_NUMBER_FORWARD),
+            ),
             _ => {
                 log::info!("Unsupported button {:?}", button);
                 return Ok(());
-            },
+            }
         };
         let dest = CGPoint::new(current_x as f64, current_y as f64);
         if let Some(src) = self.event_source.as_ref() {
@@ -244,6 +257,9 @@ impl MouseControllable for Enigo {
                         self.multiple_click,
                     );
                 }
+                if let Some(v) = btn_value {
+                    event.set_integer_value_field(EventField::MOUSE_EVENT_BUTTON_NUMBER, v);
+                }
                 self.post(event);
             }
         }
@@ -252,14 +268,24 @@ impl MouseControllable for Enigo {
 
     fn mouse_up(&mut self, button: MouseButton) {
         let (current_x, current_y) = Self::mouse_location();
-        let (button, event_type) = match button {
-            MouseButton::Left => (CGMouseButton::Left, CGEventType::LeftMouseUp),
-            MouseButton::Middle => (CGMouseButton::Center, CGEventType::OtherMouseUp),
-            MouseButton::Right => (CGMouseButton::Right, CGEventType::RightMouseUp),
+        let (button, event_type, btn_value) = match button {
+            MouseButton::Left => (CGMouseButton::Left, CGEventType::LeftMouseUp, None),
+            MouseButton::Middle => (CGMouseButton::Center, CGEventType::OtherMouseUp, None),
+            MouseButton::Right => (CGMouseButton::Right, CGEventType::RightMouseUp, None),
+            MouseButton::Back => (
+                CGMouseButton::Left,
+                CGEventType::OtherMouseUp,
+                Some(MOUSE_EVENT_BUTTON_NUMBER_BACK),
+            ),
+            MouseButton::Forward => (
+                CGMouseButton::Left,
+                CGEventType::OtherMouseUp,
+                Some(MOUSE_EVENT_BUTTON_NUMBER_FORWARD),
+            ),
             _ => {
                 log::info!("Unsupported button {:?}", button);
                 return;
-            },
+            }
         };
         let dest = CGPoint::new(current_x as f64, current_y as f64);
         if let Some(src) = self.event_source.as_ref() {
@@ -269,6 +295,9 @@ impl MouseControllable for Enigo {
                         EventField::MOUSE_EVENT_CLICK_STATE,
                         self.multiple_click,
                     );
+                }
+                if let Some(v) = btn_value {
+                    event.set_integer_value_field(EventField::MOUSE_EVENT_BUTTON_NUMBER, v);
                 }
                 self.post(event);
             }
@@ -345,7 +374,7 @@ impl KeyboardControllable for Enigo {
     fn as_mut_any(&mut self) -> &mut dyn std::any::Any {
         self
     }
-    
+
     fn key_sequence(&mut self, sequence: &str) {
         // NOTE(dustin): This is a fix for issue https://github.com/enigo-rs/enigo/issues/68
         // TODO(dustin): This could be improved by aggregating 20 bytes worth of graphemes at a time
@@ -382,12 +411,10 @@ impl KeyboardControllable for Enigo {
     fn key_down(&mut self, key: Key) -> crate::ResultType {
         let code = self.key_to_keycode(key);
         if code == u16::MAX {
-            return Err("".into()); 
+            return Err("".into());
         }
         if let Some(src) = self.event_source.as_ref() {
-            if let Ok(event) =
-                CGEvent::new_keyboard_event(src.clone(), code, true)
-            {
+            if let Ok(event) = CGEvent::new_keyboard_event(src.clone(), code, true) {
                 self.post(event);
             }
         }

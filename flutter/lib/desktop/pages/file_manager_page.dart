@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:math';
 
+import 'package:extended_text/extended_text.dart';
 import 'package:flutter_hbb/desktop/widgets/dragable_divider.dart';
 import 'package:percent_indicator/percent_indicator.dart';
 import 'package:desktop_drop/desktop_drop.dart';
@@ -68,7 +69,7 @@ class FileManagerPage extends StatefulWidget {
 }
 
 class _FileManagerPageState extends State<FileManagerPage>
-    with AutomaticKeepAliveClientMixin {
+    with AutomaticKeepAliveClientMixin, WidgetsBindingObserver {
   final _mouseFocusScope = Rx<MouseFocusScope>(MouseFocusScope.none);
 
   final _dropMaskVisible = false.obs; // TODO impl drop mask
@@ -102,6 +103,7 @@ class _FileManagerPageState extends State<FileManagerPage>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       widget.tabController.onSelected?.call(widget.id);
     });
+    WidgetsBinding.instance.addObserver(this);
   }
 
   @override
@@ -114,11 +116,20 @@ class _FileManagerPageState extends State<FileManagerPage>
       }
       Get.delete<FFI>(tag: 'ft_${widget.id}');
     });
+    WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
 
   @override
   bool get wantKeepAlive => true;
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    if (state == AppLifecycleState.resumed) {
+      jobController.jobTable.refresh();
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -211,10 +222,13 @@ class _FileManagerPageState extends State<FileManagerPage>
                               Tooltip(
                                 waitDuration: Duration(milliseconds: 500),
                                 message: item.jobName,
-                                child: Text(
+                                child: ExtendedText(
                                   item.jobName,
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
+                                  overflowWidget: TextOverflowWidget(
+                                      child: Text("..."),
+                                      position: TextOverflowPosition.start),
                                 ),
                               ),
                               Tooltip(
@@ -930,6 +944,7 @@ class _FileManagerViewState extends State<FileManagerView> {
       BuildContext context, ScrollController scrollController) {
     final fd = controller.directory.value;
     final entries = fd.entries;
+    Rx<Entry?> rightClickEntry = Rx(null);
 
     return ListSearchActionListener(
       node: _keyboardNode,
@@ -989,6 +1004,53 @@ class _FileManagerViewState extends State<FileManagerView> {
               ? " "
               : "${entry.lastModified().toString().replaceAll(".000", "")}   ";
           var secondaryPosition = RelativeRect.fromLTRB(0, 0, 0, 0);
+          onTap() {
+            final items = selectedItems;
+            // handle double click
+            if (_checkDoubleClick(entry)) {
+              controller.openDirectory(entry.path);
+              items.clear();
+              return;
+            }
+            _onSelectedChanged(items, filteredEntries, entry, isLocal);
+          }
+
+          onSecondaryTap() {
+            final items = [
+              if (!entry.isDrive &&
+                  versionCmp(_ffi.ffiModel.pi.version, "1.3.0") >= 0)
+                mod_menu.PopupMenuItem(
+                  child: Text("Rename"),
+                  height: CustomPopupMenuTheme.height,
+                  onTap: () {
+                    controller.renameAction(entry, isLocal);
+                  },
+                )
+            ];
+            if (items.isNotEmpty) {
+              rightClickEntry.value = entry;
+              final future = mod_menu.showMenu(
+                context: context,
+                position: secondaryPosition,
+                items: items,
+              );
+              future.then((value) {
+                rightClickEntry.value = null;
+              });
+              future.onError((error, stackTrace) {
+                rightClickEntry.value = null;
+              });
+            }
+          }
+
+          onSecondaryTapDown(details) {
+            secondaryPosition = RelativeRect.fromLTRB(
+                details.globalPosition.dx,
+                details.globalPosition.dy,
+                details.globalPosition.dx,
+                details.globalPosition.dy);
+          }
+
           return Padding(
             padding: EdgeInsets.symmetric(vertical: 1),
             child: Obx(() => Container(
@@ -999,6 +1061,12 @@ class _FileManagerViewState extends State<FileManagerView> {
                   borderRadius: BorderRadius.all(
                     Radius.circular(5.0),
                   ),
+                  border: rightClickEntry.value == entry
+                      ? Border.all(
+                          color: MyTheme.button,
+                          width: 1.0,
+                        )
+                      : null,
                 ),
                 key: ValueKey(entry.name),
                 height: kDesktopFileTransferRowHeight,
@@ -1047,46 +1115,9 @@ class _FileManagerViewState extends State<FileManagerView> {
                                       ]),
                                     )),
                               ),
-                              onTap: () {
-                                final items = selectedItems;
-                                // handle double click
-                                if (_checkDoubleClick(entry)) {
-                                  controller.openDirectory(entry.path);
-                                  items.clear();
-                                  return;
-                                }
-                                _onSelectedChanged(
-                                    items, filteredEntries, entry, isLocal);
-                              },
-                              onSecondaryTap: () {
-                                final items = [
-                                  if (!entry.isDrive &&
-                                      versionCmp(_ffi.ffiModel.pi.version,
-                                              "1.3.0") >=
-                                          0)
-                                    mod_menu.PopupMenuItem(
-                                      child: Text("Rename"),
-                                      height: CustomPopupMenuTheme.height,
-                                      onTap: () {
-                                        controller.renameAction(entry, isLocal);
-                                      },
-                                    )
-                                ];
-                                if (items.isNotEmpty) {
-                                  mod_menu.showMenu(
-                                    context: context,
-                                    position: secondaryPosition,
-                                    items: items,
-                                  );
-                                }
-                              },
-                              onSecondaryTapDown: (details) {
-                                secondaryPosition = RelativeRect.fromLTRB(
-                                    details.globalPosition.dx,
-                                    details.globalPosition.dy,
-                                    details.globalPosition.dx,
-                                    details.globalPosition.dy);
-                              },
+                              onTap: onTap,
+                              onSecondaryTap: onSecondaryTap,
+                              onSecondaryTapDown: onSecondaryTapDown,
                             ),
                             SizedBox(
                               width: 2.0,
@@ -1111,6 +1142,9 @@ class _FileManagerViewState extends State<FileManagerView> {
                                       )),
                                 ),
                               ),
+                              onTap: onTap,
+                              onSecondaryTap: onSecondaryTap,
+                              onSecondaryTapDown: onSecondaryTapDown,
                             ),
                             // Divider from header.
                             SizedBox(
@@ -1133,6 +1167,9 @@ class _FileManagerViewState extends State<FileManagerView> {
                                                 : MyTheme.darkGray),
                                   ),
                                 ),
+                                onTap: onTap,
+                                onSecondaryTap: onSecondaryTap,
+                                onSecondaryTapDown: onSecondaryTapDown,
                               ),
                             ),
                           ],

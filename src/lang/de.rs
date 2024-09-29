@@ -548,7 +548,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("pull_group_failed_tip", "Aktualisierung der Gruppe fehlgeschlagen"),
         ("Filter by intersection", "Nach Schnittmenge filtern"),
         ("Remove wallpaper during incoming sessions", "Hintergrundbild bei eingehenden Sitzungen entfernen"),
-        ("Test", "Test"),
+        ("Test", "Testen"),
         ("display_is_plugged_out_msg", "Der Bildschirm ist nicht angeschlossen, schalten Sie auf den ersten Bildschirm um."),
         ("No displays", "Keine Bildschirme"),
         ("Open in new window", "In einem neuen Fenster öffnen"),
@@ -563,7 +563,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Plug out all", "Alle ausschalten"),
         ("True color (4:4:4)", "True Color (4:4:4)"),
         ("Enable blocking user input", "Blockieren von Benutzereingaben aktivieren"),
-        ("id_input_tip", "Sie können eine ID, eine direkte IP oder eine Domäne mit einem Port (<domain>:<port>) eingeben.\nWenn Sie auf ein Gerät auf einem anderen Server zugreifen möchten, fügen Sie bitte die Serveradresse (<id>@<server_address>?key=<key_value>) hinzu, zum Beispiel\n9123456234@192.168.16.1:21117?key=5Qbwsde3unUcJBtrx9ZkvUmwFNoExHzpryHuPUdqlWM=.\nWenn Sie auf ein Gerät auf einem öffentlichen Server zugreifen wollen, geben Sie bitte \"<id>@public\" ein. Der Schlüssel wird für öffentliche Server nicht benötigt.\n\nWenn Sie bei der ersten Verbindung die Verwendung einer Relay-Verbindung erzwingen wollen, fügen Sie \"/r\" am Ende der ID hinzu, zum Beispiel \"9123456234/r\"."),
+        ("id_input_tip", "Sie können eine ID, eine direkte IP oder eine Domäne mit einem Port (<domain>:<port>) eingeben.\nWenn Sie auf ein Gerät auf einem anderen Server zugreifen wollen, fügen Sie bitte die Serveradresse (<id>@<server_address>?key=<key_value>) hinzu, zum Beispiel\n9123456234@192.168.16.1:21117?key=5Qbwsde3unUcJBtrx9ZkvUmwFNoExHzpryHuPUdqlWM=.\nWenn Sie auf ein Gerät auf einem öffentlichen Server zugreifen wollen, geben Sie bitte \"<id>@public\" ein. Der Schlüssel wird für öffentliche Server nicht benötigt.\n\nWenn Sie bei der ersten Verbindung die Verwendung einer Relay-Verbindung erzwingen wollen, fügen Sie \"/r\" am Ende der ID hinzu, zum Beispiel \"9123456234/r\"."),
         ("privacy_mode_impl_mag_tip", "Modus 1"),
         ("privacy_mode_impl_virtual_display_tip", "Modus 2"),
         ("Enter privacy mode", "Datenschutzmodus aktivieren"),
@@ -644,5 +644,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Parent directory", "Übergeordnetes Verzeichnis"),
         ("Resume", "Fortsetzen"),
         ("Invalid file name", "Ungültiger Dateiname"),
+        ("one-way-file-transfer-tip", "Die einseitige Dateiübertragung ist auf der kontrollierten Seite aktiviert."),
+        ("Authentication Required", "Authentifizierung erforderlich"),
+        ("Authenticate", "Authentifizieren"),
+        ("web_id_input_tip", "Sie können eine ID auf demselben Server eingeben, direkter IP-Zugriff wird im Web-Client nicht unterstützt.\nWenn Sie auf ein Gerät auf einem anderen Server zugreifen wollen, fügen Sie bitte die Serveradresse (<id>@<server_address>?key=<key_value>) hinzu, zum Beispiel\n9123456234@192.168.16.1:21117?key=5Qbwsde3unUcJBtrx9ZkvUmwFNoExHzpryHuPUdqlWM=.\nWenn Sie auf ein Gerät auf einem öffentlichen Server zugreifen wollen, geben Sie bitte \"<id>@public\" ein. Der Schlüssel wird für öffentliche Server nicht benötigt."),
     ].iter().cloned().collect();
 }

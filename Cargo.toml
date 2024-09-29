@@ -1,6 +1,6 @@
 [package]
 name = "rustdesk"
-version = "1.3.0"
+version = "1.3.2"
 authors = ["rustdesk <info@rustdesk.com>"]
 edition = "2021"
 build= "build.rs"
@@ -161,6 +161,9 @@ x11-clipboard = {git="https://github.com/clslaid/x11-clipboard", branch = "feat/
 x11rb =  {version = "0.12", features = ["all-extensions"], optional = true}
 percent-encoding = {version = "2.3", optional = true}
 once_cell = {version = "1.18", optional = true}
+nix = { version = "0.29", features = ["term", "process"]}
+gtk = "0.18"
+termios = "0.3"
 
 [target.'cfg(target_os = "android")'.dependencies]
 android_logger = "0.13"

@@ -11,6 +11,7 @@ import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/desktop/widgets/popup_menu.dart';
 import 'package:flutter_hbb/models/ab_model.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
+import 'package:flutter_hbb/models/state_model.dart';
 import 'package:url_launcher/url_launcher_string.dart';
 import '../../desktop/widgets/material_mod_popup_menu.dart' as mod_menu;
 import 'package:get/get.dart';
@@ -61,15 +62,16 @@ class _AddressBookState extends State<AddressBook> {
                   retry: null, // remove retry
                   close: () => gFFI.abModel.currentAbPushError.value = ''),
               Expanded(
-                  child: (isDesktop || isWebDesktop)
-                      ? _buildAddressBookDesktop()
-                      : _buildAddressBookMobile())
+                child: Obx(() => stateGlobal.isPortrait.isTrue
+                    ? _buildAddressBookPortrait()
+                    : _buildAddressBookLandscape()),
+              ),
             ],
           );
         }
       });
 
-  Widget _buildAddressBookDesktop() {
+  Widget _buildAddressBookLandscape() {
     return Row(
       children: [
         Offstage(
@@ -106,7 +108,7 @@ class _AddressBookState extends State<AddressBook> {
     );
   }
 
-  Widget _buildAddressBookMobile() {
+  Widget _buildAddressBookPortrait() {
     const padding = 8.0;
     return Column(
       children: [
@@ -239,14 +241,15 @@ class _AddressBookState extends State<AddressBook> {
                 bind.setLocalFlutterOption(k: kOptionCurrentAbName, v: value);
               }
             },
-      customButton: Container(
-        height: isDesktop ? 48 : 40,
-        child: Row(children: [
-          Expanded(
-              child: buildItem(gFFI.abModel.currentName.value, button: true)),
-          Icon(Icons.arrow_drop_down),
-        ]),
-      ),
+      customButton: Obx(() => Container(
+            height: stateGlobal.isPortrait.isFalse ? 48 : 40,
+            child: Row(children: [
+              Expanded(
+                  child:
+                      buildItem(gFFI.abModel.currentName.value, button: true)),
+              Icon(Icons.arrow_drop_down),
+            ]),
+          )),
       underline: Container(
         height: 0.7,
         color: Theme.of(context).dividerColor.withOpacity(0.1),
@@ -335,8 +338,8 @@ class _AddressBookState extends State<AddressBook> {
             showActionMenu: editPermission);
       }
 
-      final gridView = DynamicGridView.builder(
-          shrinkWrap: isMobile,
+      gridView(bool isPortrait) => DynamicGridView.builder(
+          shrinkWrap: isPortrait,
           gridDelegate: SliverGridDelegateWithWrapping(),
           itemCount: tags.length,
           itemBuilder: (BuildContext context, int index) {
@@ -344,9 +347,9 @@ class _AddressBookState extends State<AddressBook> {
             return tagBuilder(e);
           });
       final maxHeight = max(MediaQuery.of(context).size.height / 6, 100.0);
-      return (isDesktop || isWebDesktop)
-          ? gridView
-          : LimitedBox(maxHeight: maxHeight, child: gridView);
+      return Obx(() => stateGlobal.isPortrait.isFalse
+          ? gridView(false)
+          : LimitedBox(maxHeight: maxHeight, child: gridView(true)));
     });
   }
 
@@ -356,7 +359,6 @@ class _AddressBookState extends State<AddressBook> {
           alignment: Alignment.topLeft,
           child: AddressBookPeersView(
             menuPadding: widget.menuPadding,
-            getInitPeers: () => gFFI.abModel.currentAbPeers,
           )),
     );
   }
@@ -506,20 +508,21 @@ class _AddressBookState extends State<AddressBook> {
       double marginBottom = 4;
 
       row({required Widget lable, required Widget input}) {
-        return Row(
-          children: [
-            !isMobile
-                ? ConstrainedBox(
-                    constraints: const BoxConstraints(minWidth: 100),
-                    child: lable.marginOnly(right: 10))
-                : SizedBox.shrink(),
-            Expanded(
-              child: ConstrainedBox(
-                  constraints: const BoxConstraints(minWidth: 200),
-                  child: input),
-            ),
-          ],
-        ).marginOnly(bottom: !isMobile ? 8 : 0);
+        makeChild(bool isPortrait) => Row(
+              children: [
+                !isPortrait
+                    ? ConstrainedBox(
+                        constraints: const BoxConstraints(minWidth: 100),
+                        child: lable.marginOnly(right: 10))
+                    : SizedBox.shrink(),
+                Expanded(
+                  child: ConstrainedBox(
+                      constraints: const BoxConstraints(minWidth: 200),
+                      child: input),
+                ),
+              ],
+            ).marginOnly(bottom: !isPortrait ? 8 : 0);
+        return Obx(() => makeChild(stateGlobal.isPortrait.isTrue));
       }
 
       return CustomAlertDialog(
@@ -542,23 +545,28 @@ class _AddressBookState extends State<AddressBook> {
                         ),
                       ],
                     ),
-                    input: TextField(
-                      controller: idController,
-                      inputFormatters: [IDTextInputFormatter()],
-                      decoration: InputDecoration(
-                          labelText: !isMobile ? null : translate('ID'),
-                          errorText: errorMsg,
-                          errorMaxLines: 5),
-                    )),
+                    input: Obx(() => TextField(
+                          controller: idController,
+                          inputFormatters: [IDTextInputFormatter()],
+                          decoration: InputDecoration(
+                              labelText: stateGlobal.isPortrait.isFalse
+                                  ? null
+                                  : translate('ID'),
+                              errorText: errorMsg,
+                              errorMaxLines: 5),
+                        ))),
                 row(
                   lable: Text(
                     translate('Alias'),
                     style: style,
                   ),
-                  input: TextField(
-                      controller: aliasController,
-                      decoration: InputDecoration(
-                        labelText: !isMobile ? null : translate('Alias'),
+                  input: Obx(() => TextField(
+                        controller: aliasController,
+                        decoration: InputDecoration(
+                          labelText: stateGlobal.isPortrait.isFalse
+                              ? null
+                              : translate('Alias'),
+                        ),
                       )),
                 ),
                 if (isCurrentAbShared)
@@ -567,22 +575,26 @@ class _AddressBookState extends State<AddressBook> {
                         translate('Password'),
                         style: style,
                       ),
-                      input: TextField(
-                        controller: passwordController,
-                        obscureText: !passwordVisible,
-                        decoration: InputDecoration(
-                          labelText: !isMobile ? null : translate('Password'),
-                          suffixIcon: IconButton(
-                            icon: Icon(
-                                passwordVisible
-                                    ? Icons.visibility
-                                    : Icons.visibility_off,
-                                color: MyTheme.lightTheme.primaryColor),
-                            onPressed: () {
-                              setState(() {
-                                passwordVisible = !passwordVisible;
-                              });
-                            },
+                      input: Obx(
+                        () => TextField(
+                          controller: passwordController,
+                          obscureText: !passwordVisible,
+                          decoration: InputDecoration(
+                            labelText: stateGlobal.isPortrait.isFalse
+                                ? null
+                                : translate('Password'),
+                            suffixIcon: IconButton(
+                              icon: Icon(
+                                  passwordVisible
+                                      ? Icons.visibility
+                                      : Icons.visibility_off,
+                                  color: MyTheme.lightTheme.primaryColor),
+                              onPressed: () {
+                                setState(() {
+                                  passwordVisible = !passwordVisible;
+                                });
+                              },
+                            ),
                           ),
                         ),
                       )),

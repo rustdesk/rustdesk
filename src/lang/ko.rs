@@ -641,8 +641,12 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Platform", "플랫폼"),
         ("Days remaining", "일 남음"),
         ("enable-trusted-devices-tip", "신뢰할 수 있는 기기에서 2FA 검증 건너뛰기"),
-        ("Parent directory", ""),
-        ("Resume", ""),
-        ("Invalid file name", ""),
+        ("Parent directory", "상위 디렉토리"),
+        ("Resume", "재개"),
+        ("Invalid file name", "잘못된 파일 이름"),
+        ("one-way-file-transfer-tip", "단방향 파일 전송은 제어되는 쪽에서 활성화됩니다."),
+        ("Authentication Required", "인증 필요함"),
+        ("Authenticate", "인증"),
+        ("web_id_input_tip", ""),
     ].iter().cloned().collect();
 }
