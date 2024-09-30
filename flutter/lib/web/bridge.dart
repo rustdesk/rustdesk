@@ -936,7 +936,7 @@ class RustdeskImpl {
   }
 
   Future<void> mainForgetPassword({required String id, dynamic hint}) {
-    return Future(() => js.context.callMethod('setByName', ['forget']));
+    return mainSetPeerOption(id: id, key: 'password', value: '');
   }
 
   Future<bool> mainPeerHasPassword({required String id, dynamic hint}) {
