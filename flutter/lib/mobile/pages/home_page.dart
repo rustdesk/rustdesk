@@ -160,7 +160,7 @@ class WebHomePage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    stateGlobal.isInWebMainPage = true;
+    stateGlobal.isInMainPage = true;
     return Scaffold(
       // backgroundColor: MyTheme.grayBg,
       appBar: AppBar(
