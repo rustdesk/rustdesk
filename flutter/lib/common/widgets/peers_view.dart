@@ -332,7 +332,11 @@ class _PeersViewState extends State<_PeersView>
             _queryOnlines(false);
           }
         } else {
-          if (_isActive && (_queryCount < _maxQueryCount || !p)) {
+          final skipIfIsWeb = isWeb &&
+              !(stateGlobal.isWebVisible && stateGlobal.isInWebMainPage);
+          if (!skipIfIsWeb &&
+              _isActive &&
+              (_queryCount < _maxQueryCount || !p)) {
             if (now.difference(_lastQueryTime) >= _queryInterval) {
               if (_curPeers.isNotEmpty) {
                 bind.queryOnlines(ids: _curPeers.toList(growable: false));

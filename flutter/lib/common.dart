@@ -684,6 +684,7 @@ closeConnection({String? id}) {
   } else {
     if (isWeb) {
       Navigator.popUntil(globalKey.currentContext!, ModalRoute.withName("/"));
+      stateGlobal.isInWebMainPage = true;
     } else {
       final controller = Get.find<DesktopTabController>();
       controller.closeBy(id);
@@ -2324,6 +2325,10 @@ connect(BuildContext context, String id,
     bool forceRelay = false,
     String? password,
     bool? isSharedPassword}) async {
+  if (isWeb) {
+    stateGlobal.isInWebMainPage = false;
+  }
+
   if (id == '') return;
   if (!isDesktop || desktopType == DesktopType.main) {
     try {

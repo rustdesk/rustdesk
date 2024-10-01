@@ -23,6 +23,7 @@ import 'package:flutter_hbb/desktop/widgets/scroll_wrapper.dart';
 
 import '../../common/widgets/dialog.dart';
 import '../../common/widgets/login.dart';
+import '../../models/state_model.dart';
 
 const double _kTabWidth = 200;
 const double _kTabHeight = 42;
@@ -209,34 +210,50 @@ class _DesktopSettingPageState extends State<DesktopSettingPage>
   @override
   Widget build(BuildContext context) {
     super.build(context);
+
+    final child = Row(
+      children: <Widget>[
+        SizedBox(
+          width: _kTabWidth,
+          child: Column(
+            children: [
+              _header(context),
+              Flexible(child: _listView(tabs: _settingTabs())),
+            ],
+          ),
+        ),
+        const VerticalDivider(width: 1),
+        Expanded(
+          child: Container(
+            color: Theme.of(context).scaffoldBackgroundColor,
+            child: DesktopScrollWrapper(
+                scrollController: controller,
+                child: PageView(
+                  controller: controller,
+                  physics: NeverScrollableScrollPhysics(),
+                  children: _children(),
+                )),
+          ),
+        )
+      ],
+    );
+
+    final Widget body;
+    if (isWeb) {
+      body = PopScope(
+          onPopInvoked: (bool didPop) {
+            if (didPop) {
+              stateGlobal.isInWebMainPage = true;
+            }
+          },
+          child: child);
+    } else {
+      body = child;
+    }
+
     return Scaffold(
       backgroundColor: Theme.of(context).colorScheme.background,
-      body: Row(
-        children: <Widget>[
-          SizedBox(
-            width: _kTabWidth,
-            child: Column(
-              children: [
-                _header(context),
-                Flexible(child: _listView(tabs: _settingTabs())),
-              ],
-            ),
-          ),
-          const VerticalDivider(width: 1),
-          Expanded(
-            child: Container(
-              color: Theme.of(context).scaffoldBackgroundColor,
-              child: DesktopScrollWrapper(
-                  scrollController: controller,
-                  child: PageView(
-                    controller: controller,
-                    physics: NeverScrollableScrollPhysics(),
-                    children: _children(),
-                  )),
-            ),
-          )
-        ],
-      ),
+      body: body,
     );
   }
 

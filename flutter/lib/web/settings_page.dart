@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 import '../../common.dart';
 import '../../common/widgets/login.dart';
 import '../../models/model.dart';
+import '../models/state_model.dart';
 
 class WebSettingsPage extends StatelessWidget {
   const WebSettingsPage({Key? key}) : super(key: key);
@@ -24,6 +25,7 @@ class WebSettingsPage extends StatelessWidget {
     return IconButton(
       icon: const Icon(Icons.more_vert),
       onPressed: () {
+        stateGlobal.isInWebMainPage = false;
         Navigator.push(
           context,
           MaterialPageRoute(
