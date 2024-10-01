@@ -2326,8 +2326,6 @@ connect(BuildContext context, String id,
     bool forceRelay = false,
     String? password,
     bool? isSharedPassword}) async {
-  stateGlobal.isInMainPage = false;
-
   if (id == '') return;
   if (!isDesktop || desktopType == DesktopType.main) {
     try {
@@ -2409,6 +2407,7 @@ connect(BuildContext context, String id,
         );
       }
     }
+    stateGlobal.isInMainPage = false;
   }
 
   FocusScopeNode currentFocus = FocusScope.of(context);
