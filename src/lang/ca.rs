@@ -626,7 +626,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Power", "Encesa"),
         ("Telegram bot", "Bot del Telegram"),
         ("enable-bot-tip", "Si habiliteu aquesta característica, podreu rebre el codi 2FA mitjançant el vostre bot. També funciona com a notificador de la connexió."),
-        ("enable-bot-desc", "1. Obriu un xat amb @BotFather.\n2. Envieu l'ordre \"/newbot\". Rebreu un testimoni en acompletar aquest pas.\n3. Inicieu una conversa amb el vostre bot nou que acabeu de crear, enviant un missatge que comenci amb (\"/\"), com ara \"/hello\" per a activar-lo.\n"),"),
+        ("enable-bot-desc", "1. Obriu un xat amb @BotFather.\n2. Envieu l'ordre \"/newbot\". Rebreu un testimoni en acompletar aquest pas.\n3. Inicieu una conversa amb el vostre bot nou que acabeu de crear, enviant un missatge que comenci amb (\"/\"), com ara \"/hello\" per a activar-lo.\n"),
         ("cancel-2fa-confirm-tip", "Segur que voleu cancel·lar l'autenticació 2FA?"),
         ("cancel-bot-confirm-tip", "Segur que voleu cancel·lar el bot de Telegram?"),
         ("About RustDesk", "Quant al RustDesk"),
