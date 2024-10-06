@@ -48,6 +48,12 @@ class PlatformFFI {
 
   static get isMain => instance._appType == kAppTypeMain;
 
+  static String getByName(String name, [String arg = '']) {
+    return '';
+  }
+
+  static void setByName(String name, [String value = '']) {}
+
   static Future<String> getVersion() async {
     PackageInfo packageInfo = await PackageInfo.fromPlatform();
     return packageInfo.version;
@@ -276,4 +282,6 @@ class PlatformFFI {
   void syncAndroidServiceAppDirConfigPath() {
     invokeMethod(AndroidChannel.kSyncAppDirConfigPath, _dir);
   }
+
+  void setFullscreenCallback(void Function(bool) fun) {}
 }

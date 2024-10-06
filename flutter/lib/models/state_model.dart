@@ -2,6 +2,7 @@ import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common.dart';
 import 'package:get/get.dart';
+import 'native_model.dart' if (dart.library.html) 'web_model.dart';
 
 import '../consts.dart';
 import './platform_model.dart';
@@ -73,24 +74,44 @@ class StateGlobal {
     if (_fullscreen.value != v) {
       _fullscreen.value = v;
       _showTabBar.value = !_fullscreen.value;
-      refreshResizeEdgeSize();
-      print(
-          "fullscreen: $fullscreen, resizeEdgeSize: ${_resizeEdgeSize.value}");
-      _windowBorderWidth.value = fullscreen.isTrue ? 0 : kWindowBorderWidth;
-      if (procWnd) {
-        final wc = WindowController.fromWindowId(windowId);
-        wc.setFullscreen(_fullscreen.isTrue).then((_) {
-          // https://github.com/leanflutter/window_manager/issues/131#issuecomment-1111587982
-          if (isWindows && !v) {
-            Future.delayed(Duration.zero, () async {
-              final frame = await wc.getFrame();
-              final newRect = Rect.fromLTWH(
-                  frame.left, frame.top, frame.width + 1, frame.height + 1);
-              await wc.setFrame(newRect);
-            });
-          }
-        });
+      if (isWebDesktop) {
+        procFullscreenWeb();
+      } else {
+        procFullscreenNative(procWnd);
       }
+    }
+  }
+
+  procFullscreenWeb() {
+    final isFullscreen = PlatformFFI.getByName('fullscreen') == 'Y';
+    String fullscreenValue = '';
+    if (isFullscreen && _fullscreen.isFalse) {
+      fullscreenValue = 'N';
+    } else if (!isFullscreen && fullscreen.isTrue) {
+      fullscreenValue = 'Y';
+    }
+    if (fullscreenValue.isNotEmpty) {
+      PlatformFFI.setByName('fullscreen', fullscreenValue);
+    }
+  }
+
+  procFullscreenNative(bool procWnd) {
+    refreshResizeEdgeSize();
+    print("fullscreen: $fullscreen, resizeEdgeSize: ${_resizeEdgeSize.value}");
+    _windowBorderWidth.value = fullscreen.isTrue ? 0 : kWindowBorderWidth;
+    if (procWnd) {
+      final wc = WindowController.fromWindowId(windowId);
+      wc.setFullscreen(_fullscreen.isTrue).then((_) {
+        // https://github.com/leanflutter/window_manager/issues/131#issuecomment-1111587982
+        if (isWindows && _fullscreen.isFalse) {
+          Future.delayed(Duration.zero, () async {
+            final frame = await wc.getFrame();
+            final newRect = Rect.fromLTWH(
+                frame.left, frame.top, frame.width + 1, frame.height + 1);
+            await wc.setFrame(newRect);
+          });
+        }
+      });
     }
   }
 
@@ -112,7 +133,13 @@ class StateGlobal {
     _inputSource = bind.mainGetInputSource();
   }
 
-  StateGlobal._();
+  StateGlobal._() {
+    if (isWebDesktop) {
+      platformFFI.setFullscreenCallback((v) {
+        _fullscreen.value = v;
+      });
+    }
+  }
 
   static final StateGlobal instance = StateGlobal._();
 }
