@@ -512,6 +512,7 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
                                                     width: c.width,
                                                     height: c.height,
                                                     format: c.format.value(),
+                                                    special_name: c.special_name,
                                                 });
                                             }
                                             allow_err!(self.stream.send(&Data::ClipboardNonFile(Some(("".to_owned(), main_data)))).await);
