@@ -436,6 +436,7 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
             shadowColor: MyTheme.color(context).shadow,
             borderRadius: borderRadius,
             child: _DraggableShowHide(
+              id: widget.id,
               sessionId: widget.ffi.sessionId,
               dragging: _dragging,
               fractionX: _fractionX,
@@ -2218,6 +2219,7 @@ class RdoMenuButton<T> extends StatelessWidget {
 }
 
 class _DraggableShowHide extends StatefulWidget {
+  final String id;
   final SessionID sessionId;
   final RxDouble fractionX;
   final RxBool dragging;
@@ -2229,6 +2231,7 @@ class _DraggableShowHide extends StatefulWidget {
 
   const _DraggableShowHide({
     Key? key,
+    required this.id,
     required this.sessionId,
     required this.fractionX,
     required this.dragging,
@@ -2364,6 +2367,24 @@ class _DraggableShowHideState extends State<_DraggableShowHide> {
                 ),
               ))),
         ),
+        if (isWebDesktop)
+          Obx(() {
+            if (show.isTrue) {
+              return Offstage();
+            } else {
+              return TextButton(
+                onPressed: () => closeConnection(id: widget.id),
+                child: Tooltip(
+                  message: translate('Close'),
+                  child: Icon(
+                    Icons.close,
+                    size: iconSize,
+                    color: _ToolbarTheme.redColor,
+                  ),
+                ),
+              );
+            }
+          })
       ],
     );
     return TextButtonTheme(
