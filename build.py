@@ -283,6 +283,7 @@ def generate_control_file(version):
     system2('/bin/rm -rf %s' % control_file_path)
 
     content = """Package: rustdesk
+Section: net
 Version: %s
 Architecture: %s
 Maintainer: rustdesk <info@rustdesk.com>
