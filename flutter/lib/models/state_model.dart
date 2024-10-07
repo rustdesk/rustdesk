@@ -2,7 +2,6 @@ import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common.dart';
 import 'package:get/get.dart';
-import 'native_model.dart' if (dart.library.html) 'web_model.dart';
 
 import '../consts.dart';
 import './platform_model.dart';
@@ -83,7 +82,7 @@ class StateGlobal {
   }
 
   procFullscreenWeb() {
-    final isFullscreen = PlatformFFI.getByName('fullscreen') == 'Y';
+    final isFullscreen = ffiGetByName('fullscreen') == 'Y';
     String fullscreenValue = '';
     if (isFullscreen && _fullscreen.isFalse) {
       fullscreenValue = 'N';
@@ -91,7 +90,7 @@ class StateGlobal {
       fullscreenValue = 'Y';
     }
     if (fullscreenValue.isNotEmpty) {
-      PlatformFFI.setByName('fullscreen', fullscreenValue);
+      ffiSetByName('fullscreen', fullscreenValue);
     }
   }
 
