@@ -284,6 +284,7 @@ def generate_control_file(version):
 
     content = """Package: rustdesk
 Section: net
+Priority: optional
 Version: %s
 Architecture: %s
 Maintainer: rustdesk <info@rustdesk.com>
