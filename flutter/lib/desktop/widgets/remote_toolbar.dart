@@ -2340,7 +2340,7 @@ class _DraggableShowHideState extends State<_DraggableShowHide> {
                 ),
               ),
             )),
-        if (!isMacOS)
+        if (!isMacOS && !isWebDesktop)
           Obx(() => Offstage(
                 offstage: isFullscreen.isFalse,
                 child: TextButton(
