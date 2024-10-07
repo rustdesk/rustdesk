@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>com.rustdesk.RustDesk</id>
+  <developer_name>RustDesk</developer_name>
+  <launchable type="desktop-id">com.rustdesk.RustDesk.desktop</launchable>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>AGPL-3.0-only</project_license>
+  <name>RustDesk</name>
+  <summary>An open-source remote desktop application designed for self-hosting, as an alternative to TeamViewer.</summary>
+  <description>
+    <p>
+        RustDesk is a full-featured open source remote control alternative for self-hosting and security with minimal configuration.
+    </p>
+    <ul>
+      <li> Works on Windows, macOS, Linux, iOS, Android, Web. </li>
+      <li> Supports VP8 / VP9 / AV1 software codecs, and H264 / H265 hardware codecs. </li>
+      <li> Own your data, easily set up self-hosting solution on your infrastructure. </li>
+      <li> P2P connection with end-to-end encryption based on NaCl. </li>
+      <li> No administrative privileges or installation needed for Windows, elevate priviledge locally or from remote on demand. </li>
+      <li> We like to keep things simple and will strive to make simpler where possible. </li>
+    </ul>
+    <p>
+        For self-hosting setup instructions please go to our home page.
+    </p>
+  </description>
+  <categories>
+    <category>Utility</category>
+  </categories>
+  <screenshots>
+    <screenshot type="default">
+      <image>https://user-images.githubusercontent.com/71636191/171661982-430285f0-2e12-4b1d-9957-4a58e375304d.png</image>
+    </screenshot>
+  </screenshots>
+  <url type="homepage">https://rustdesk.com</url>
+  <url type="bugtracker">https://github.com/rustdesk/rustdesk/issues</url>
+  <releases>
+    <release version="v1.3.1" date="2024-09-20"/>
+  </releases>
+  <content_rating type="oars-1.1"/>
+</component>
