@@ -611,9 +611,7 @@ pub fn get_env_var(k: &str) -> String {
 }
 
 fn is_flatpak() -> bool {
-    std::env::var("FLATPAK_SANDBOX_DIR").is_ok() ||
-    std::env::var("FLATPAK_ID").is_ok() ||
-    std::env::var("FLATPAK_SESSION_BUS_ADDRESS").is_ok()
+    std::path::PathBuf::from("/.flatpak-info").exists()
 }
 
 // Headless is enabled, always return true.
