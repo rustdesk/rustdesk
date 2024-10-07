@@ -1188,7 +1188,7 @@ class RustdeskImpl {
 
   Future<void> sessionSendNote(
       {required UuidValue sessionId, required String note, dynamic hint}) {
-    throw UnimplementedError();
+    return Future(() => js.context.callMethod('setByName', ['send_note', note]));
   }
 
   Future<String> sessionAlternativeCodecs(
