@@ -468,7 +468,8 @@ class RustdeskImpl {
 
   Future<void> sessionSendChat(
       {required UuidValue sessionId, required String text, dynamic hint}) {
-    throw UnimplementedError();
+    return Future(
+        () => js.context.callMethod('setByName', ['send_chat', text]));
   }
 
   Future<void> sessionPeerOption(
@@ -1188,7 +1189,8 @@ class RustdeskImpl {
 
   Future<void> sessionSendNote(
       {required UuidValue sessionId, required String note, dynamic hint}) {
-    return Future(() => js.context.callMethod('setByName', ['send_note', note]));
+    return Future(
+        () => js.context.callMethod('setByName', ['send_note', note]));
   }
 
   Future<String> sessionAlternativeCodecs(
