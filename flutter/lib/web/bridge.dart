@@ -152,7 +152,10 @@ class RustdeskImpl {
       required String code,
       required bool trustThisDevice,
       dynamic hint}) {
-    return Future(() => js.context.callMethod('setByName', ['send_2fa', code]));
+    return Future(() => js.context.callMethod('setByName', [
+          'send_2fa',
+          jsonEncode({'code': code, 'trust_this_device': trustThisDevice})
+        ]));
   }
 
   Future<void> sessionClose({required UuidValue sessionId, dynamic hint}) {
@@ -1682,7 +1685,8 @@ class RustdeskImpl {
 
   bool sessionGetEnableTrustedDevices(
       {required UuidValue sessionId, dynamic hint}) {
-    throw UnimplementedError();
+    return js.context.callMethod('getByName', ['enable_trusted_devices']) ==
+        'Y';
   }
 
   Future<String> mainGetTrustedDevices({dynamic hint}) {
