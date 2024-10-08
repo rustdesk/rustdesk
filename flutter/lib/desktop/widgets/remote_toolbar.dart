@@ -479,8 +479,8 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
       setFullscreen: _setFullscreen,
     ));
     toolbarItems.add(_KeyboardMenu(id: widget.id, ffi: widget.ffi));
+    toolbarItems.add(_ChatMenu(id: widget.id, ffi: widget.ffi));
     if (!isWeb) {
-      toolbarItems.add(_ChatMenu(id: widget.id, ffi: widget.ffi));
       toolbarItems.add(_VoiceCallMenu(id: widget.id, ffi: widget.ffi));
     }
     if (!isWeb) toolbarItems.add(_RecordMenu());
@@ -1781,34 +1781,49 @@ class _ChatMenuState extends State<_ChatMenu> {
 
   @override
   Widget build(BuildContext context) {
-    return _IconSubmenuButton(
-        tooltip: 'Chat',
-        key: chatButtonKey,
-        svg: 'assets/chat.svg',
-        ffi: widget.ffi,
-        color: _ToolbarTheme.blueColor,
-        hoverColor: _ToolbarTheme.hoverBlueColor,
-        menuChildrenGetter: () => [textChat(), voiceCall()]);
+    if (isWeb) {
+      return buildTextChatButton();
+    } else {
+      return _IconSubmenuButton(
+          tooltip: 'Chat',
+          key: chatButtonKey,
+          svg: 'assets/chat.svg',
+          ffi: widget.ffi,
+          color: _ToolbarTheme.blueColor,
+          hoverColor: _ToolbarTheme.hoverBlueColor,
+          menuChildrenGetter: () => [textChat(), voiceCall()]);
+    }
+  }
+
+  buildTextChatButton() {
+    return _IconMenuButton(
+      assetName: 'assets/message_24dp_5F6368.svg',
+      tooltip: 'Text chat',
+      key: chatButtonKey,
+      onPressed: _textChatOnPressed,
+      color: _ToolbarTheme.blueColor,
+      hoverColor: _ToolbarTheme.hoverBlueColor,
+    );
   }
 
   textChat() {
     return MenuButton(
         child: Text(translate('Text chat')),
         ffi: widget.ffi,
-        onPressed: () {
-          RenderBox? renderBox =
-              chatButtonKey.currentContext?.findRenderObject() as RenderBox?;
+        onPressed: _textChatOnPressed);
+  }
 
-          Offset? initPos;
-          if (renderBox != null) {
-            final pos = renderBox.localToGlobal(Offset.zero);
-            initPos = Offset(pos.dx, pos.dy + _ToolbarTheme.dividerHeight);
-          }
-
-          widget.ffi.chatModel.changeCurrentKey(
-              MessageKey(widget.ffi.id, ChatModel.clientModeID));
-          widget.ffi.chatModel.toggleChatOverlay(chatInitPos: initPos);
-        });
+  _textChatOnPressed() {
+    RenderBox? renderBox =
+        chatButtonKey.currentContext?.findRenderObject() as RenderBox?;
+    Offset? initPos;
+    if (renderBox != null) {
+      final pos = renderBox.localToGlobal(Offset.zero);
+      initPos = Offset(pos.dx, pos.dy + _ToolbarTheme.dividerHeight);
+    }
+    widget.ffi.chatModel
+        .changeCurrentKey(MessageKey(widget.ffi.id, ChatModel.clientModeID));
+    widget.ffi.chatModel.toggleChatOverlay(chatInitPos: initPos);
   }
 
   voiceCall() {
