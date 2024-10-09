@@ -310,7 +310,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Start the screen sharing service on boot, requires special permissions", "開機時啟動螢幕分享服務，需要特殊權限。"),
         ("Connection not allowed", "不允許連線"),
         ("Legacy mode", "傳統模式"),
-        ("Map mode", "1：1 傳輸模式"),
+        ("Map mode", "1:1 傳輸模式"),
         ("Translate mode", "翻譯模式"),
         ("Use permanent password", "使用固定密碼"),
         ("Use both passwords", "同時使用兩種密碼"),
