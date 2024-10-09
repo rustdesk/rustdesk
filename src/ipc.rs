@@ -121,6 +121,7 @@ pub struct ClipboardNonFile {
     pub height: i32,
     // message.proto: ClipboardFormat
     pub format: i32,
+    pub special_name: String,
 }
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]

@@ -235,13 +235,14 @@ class ChatModel with ChangeNotifier {
     }
   }
 
-  _isChatOverlayHide() => ((!isDesktop && chatIconOverlayEntry == null) ||
-      chatWindowOverlayEntry == null);
+  _isChatOverlayHide() =>
+      ((!(isDesktop || isWebDesktop) && chatIconOverlayEntry == null) ||
+          chatWindowOverlayEntry == null);
 
   toggleChatOverlay({Offset? chatInitPos}) {
     if (_isChatOverlayHide()) {
       gFFI.invokeMethod("enable_soft_keyboard", true);
-      if (!isDesktop) {
+      if (!(isDesktop || isWebDesktop)) {
         showChatIconOverlay();
       }
       showChatWindowOverlay(chatInitPos: chatInitPos);

@@ -152,7 +152,10 @@ class RustdeskImpl {
       required String code,
       required bool trustThisDevice,
       dynamic hint}) {
-    return Future(() => js.context.callMethod('setByName', ['send_2fa', code]));
+    return Future(() => js.context.callMethod('setByName', [
+          'send_2fa',
+          jsonEncode({'code': code, 'trust_this_device': trustThisDevice})
+        ]));
   }
 
   Future<void> sessionClose({required UuidValue sessionId, dynamic hint}) {
@@ -468,7 +471,8 @@ class RustdeskImpl {
 
   Future<void> sessionSendChat(
       {required UuidValue sessionId, required String text, dynamic hint}) {
-    throw UnimplementedError();
+    return Future(
+        () => js.context.callMethod('setByName', ['send_chat', text]));
   }
 
   Future<void> sessionPeerOption(
@@ -1188,7 +1192,8 @@ class RustdeskImpl {
 
   Future<void> sessionSendNote(
       {required UuidValue sessionId, required String note, dynamic hint}) {
-    throw UnimplementedError();
+    return Future(
+        () => js.context.callMethod('setByName', ['send_note', note]));
   }
 
   Future<String> sessionAlternativeCodecs(
@@ -1680,7 +1685,8 @@ class RustdeskImpl {
 
   bool sessionGetEnableTrustedDevices(
       {required UuidValue sessionId, dynamic hint}) {
-    throw UnimplementedError();
+    return js.context.callMethod('getByName', ['enable_trusted_devices']) ==
+        'Y';
   }
 
   Future<String> mainGetTrustedDevices({dynamic hint}) {
