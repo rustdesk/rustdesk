@@ -373,7 +373,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Write a message", "Tulis pesan"),
         ("Prompt", ""),
         ("Please wait for confirmation of UAC...", "Harap tunggu konfirmasi UAC"),
-        ("elevated_foreground_window_tip", "Jendela remote desktop ini memerlukan hak akses khusus, jadi anda tidak bisa menggunakan mouse dan keyboard untuk sementara. Anda bisa meminta pihak pengguna yang diremote untuk menyembunyikan jendela ini atau klik tombol elevasi di jendela pengaturan koneksi. Untuk menghindari masalah ini, direkomendasikan untuk menginstall aplikasi secara permanen"),
+        ("elevated_foreground_window_tip", "Jendela yang sedang aktif di remote desktop memerlukan hak istimewa yang lebih tinggi untuk beroperasi, sehingga mouse dan keyboard tidak dapat digunakan sementara waktu. Kamu bisa meminta pengguna jarak jauh untuk meminimalkan jendela saat ini, atau klik tombol elevasi di jendela manajemen koneksi. Untuk menghindari masalah ini, disarankan untuk menginstal software di perangkat remote secara permanen."),
         ("Disconnected", "Terputus"),
         ("Other", "Lainnya"),
         ("Confirm before closing multiple tabs", "Konfirmasi sebelum menutup banyak tab"),
