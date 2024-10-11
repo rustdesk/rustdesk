@@ -85,7 +85,11 @@ class RustdeskImpl {
       dynamic hint}) {
     return js.context.callMethod('setByName', [
       'session_add_sync',
-      jsonEncode({'id': id, 'password': password})
+      jsonEncode({
+        'id': id,
+        'password': password,
+        'is_shared_password': isSharedPassword
+      })
     ]);
   }
 
@@ -1118,7 +1122,8 @@ class RustdeskImpl {
   }
 
   Future<void> mainRemovePeer({required String id, dynamic hint}) {
-    return Future(() => js.context.callMethod('setByName', ['remove', id]));
+    return Future(
+        () => js.context.callMethod('setByName', ['remove_peer', id]));
   }
 
   bool mainHasHwcodec({dynamic hint}) {
@@ -1146,27 +1151,28 @@ class RustdeskImpl {
   }
 
   Future<void> mainSaveAb({required String json, dynamic hint}) {
-    throw UnimplementedError();
+    return Future(() => js.context.callMethod('setByName', ['save_ab', json]));
   }
 
   Future<void> mainClearAb({dynamic hint}) {
-    throw UnimplementedError();
+    return Future(() => js.context.callMethod('setByName', ['clear_ab']));
   }
 
   Future<String> mainLoadAb({dynamic hint}) {
-    throw UnimplementedError();
+    return Future(() => js.context.callMethod('getByName', ['load_ab']));
   }
 
   Future<void> mainSaveGroup({required String json, dynamic hint}) {
-    throw UnimplementedError();
+    return Future(
+        () => js.context.callMethod('setByName', ['save_group', json]));
   }
 
   Future<void> mainClearGroup({dynamic hint}) {
-    throw UnimplementedError();
+    return Future(() => js.context.callMethod('setByName', ['clear_group']));
   }
 
   Future<String> mainLoadGroup({dynamic hint}) {
-    throw UnimplementedError();
+    return Future(() => js.context.callMethod('getByName', ['load_group']));
   }
 
   Future<void> sessionSendPointer(

@@ -1,6 +1,7 @@
 // ignore_for_file: avoid_web_libraries_in_flutter
 
 import 'dart:convert';
+import 'dart:js_interop';
 import 'dart:typed_data';
 import 'dart:js';
 import 'dart:html';
@@ -107,6 +108,10 @@ class PlatformFFI {
           sessionId: sessionId, display: display, ptr: ptr);
 
   Future<void> init(String appType) async {
+    Completer completer = Completer();
+    context["onInitFinished"] = () {
+      completer.complete();
+    };
     context.callMethod('init');
     version = getByName('version');
     window.onContextMenu.listen((event) {
@@ -121,6 +126,7 @@ class PlatformFFI {
         print('json.decode fail(): $e');
       }
     };
+    return completer.future;
   }
 
   void setEventCallback(void Function(Map<String, dynamic>) fun) {
