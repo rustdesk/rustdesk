@@ -62,7 +62,7 @@ class _PeerCardState extends State<_PeerCard>
     final PeerTabModel peerTabModel = Provider.of(context);
     final peer = super.widget.peer;
     return GestureDetector(
-        onDoubleTap: peerTabModel.multiSelectionMode || peerTabModel.isShiftDown
+        onDoubleTap: peerTabModel.multiSelectionMode
             ? null
             : () => widget.connect(context, peer.id),
         onTap: () {
