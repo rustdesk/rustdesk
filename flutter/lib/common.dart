@@ -2383,7 +2383,7 @@ connect(BuildContext context, String id,
         ),
       );
     } else {
-      if (isWebDesktop) {
+      if (isWeb) {
         Navigator.push(
           context,
           MaterialPageRoute(
