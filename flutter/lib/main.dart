@@ -475,7 +475,8 @@ class _AppState extends State<App> with WidgetsBindingObserver {
               : (context, child) {
                   child = _keepScaleBuilder(context, child);
                   child = botToastBuilder(context, child);
-                  if (isDesktop && desktopType == DesktopType.main) {
+                  if ((isDesktop && desktopType == DesktopType.main) ||
+                      isWebDesktop) {
                     child = keyListenerBuilder(context, child);
                   }
                   if (isLinux) {
