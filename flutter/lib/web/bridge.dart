@@ -284,16 +284,14 @@ class RustdeskImpl {
 
   Future<String?> sessionGetImageQuality(
       {required UuidValue sessionId, dynamic hint}) {
-    return Future(() => js.context
-        .callMethod('getByName', ['option:session', 'image_quality']));
+    return Future(() => js.context.callMethod('getByName', ['image_quality']));
   }
 
   Future<void> sessionSetImageQuality(
       {required UuidValue sessionId, required String value, dynamic hint}) {
-    return Future(() => js.context.callMethod('setByName', [
-          'option:session',
-          jsonEncode({'name': 'image_quality', 'value': value})
-        ]));
+    print('set image quality: $value');
+    return Future(
+        () => js.context.callMethod('setByName', ['image_quality', value]));
   }
 
   Future<String?> sessionGetKeyboardMode(
@@ -374,17 +372,15 @@ class RustdeskImpl {
   Future<void> sessionSetCustomImageQuality(
       {required UuidValue sessionId, required int value, dynamic hint}) {
     return Future(() => js.context.callMethod('setByName', [
-          'option:session',
-          jsonEncode({'name': 'custom_image_quality', 'value': value})
+          'custom_image_quality',
+          value,
         ]));
   }
 
   Future<void> sessionSetCustomFps(
       {required UuidValue sessionId, required int fps, dynamic hint}) {
-    return Future(() => js.context.callMethod('setByName', [
-          'option:session',
-          jsonEncode({'name': 'custom_fps', 'value': fps})
-        ]));
+    return Future(
+        () => js.context.callMethod('setByName', ['custom-fps', fps]));
   }
 
   Future<void> sessionLockScreen({required UuidValue sessionId, dynamic hint}) {
@@ -694,7 +690,10 @@ class RustdeskImpl {
       required int height,
       dynamic hint}) {
     // note: restore on disconnected
-    throw UnimplementedError("sessionChangeResolution");
+    return Future(() => js.context.callMethod('setByName', [
+          'change_resolution',
+          jsonEncode({'display': display, 'width': width, 'height': height})
+        ]));
   }
 
   Future<void> sessionSetSize(
@@ -1119,8 +1118,7 @@ class RustdeskImpl {
   }
 
   Future<String> mainGetLastRemoteId({dynamic hint}) {
-    return Future(
-        () => js.context.callMethod('getByName', ['option', 'last_remote_id']));
+    return Future(() => mainGetLocalOption(key: 'last_remote_id'));
   }
 
   Future<void> mainGetSoftwareUpdateUrl({dynamic hint}) {
