@@ -36,6 +36,7 @@ WindowType? kWindowType;
 late List<String> kBootArgs;
 
 Future<void> main(List<String> args) async {
+  earlyAssert();
   WidgetsFlutterBinding.ensureInitialized();
 
   debugPrint("launch args: $args");

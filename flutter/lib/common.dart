@@ -3616,3 +3616,7 @@ List<SubWindowResizeEdge>? get subWindowManagerEnableResizeEdges => isWindows
         SubWindowResizeEdge.topRight,
       ]
     : null;
+
+void earlyAssert() {
+  assert('\1' == '1');
+}
