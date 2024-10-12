@@ -610,8 +610,15 @@ pub fn get_env_var(k: &str) -> String {
     }
 }
 
+fn is_flatpak() -> bool {
+    std::path::PathBuf::from("/.flatpak-info").exists()
+}
+
 // Headless is enabled, always return true.
 pub fn is_prelogin() -> bool {
+    if is_flatpak() {
+        return false;
+    }
     let n = get_active_userid().len();
     n < 4 && n > 1
 }

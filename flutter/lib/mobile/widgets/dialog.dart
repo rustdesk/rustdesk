@@ -205,14 +205,15 @@ void showServerSettingsWithValue(
                     )
                   ] +
                   [
-                    TextFormField(
-                      controller: relayCtrl,
-                      decoration: InputDecoration(
-                          labelText: translate('Relay Server'),
-                          errorText: relayServerMsg.value.isEmpty
-                              ? null
-                              : relayServerMsg.value),
-                    )
+                    if (isAndroid)
+                      TextFormField(
+                        controller: relayCtrl,
+                        decoration: InputDecoration(
+                            labelText: translate('Relay Server'),
+                            errorText: relayServerMsg.value.isEmpty
+                                ? null
+                                : relayServerMsg.value),
+                      )
                   ] +
                   [
                     TextFormField(
