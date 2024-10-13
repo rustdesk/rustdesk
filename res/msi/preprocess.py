@@ -236,8 +236,8 @@ def gen_custom_dialog_bitmaps():
         for var in vars:
             if Path(f"Package/Resources/{var}.bmp").exists():
                 to_insert_lines.append(
-                    f'{indent}<WixVariable Id="{
-                        var}" Value="Resources\\{var}.bmp" />\n'
+                    f'{indent}<WixVariable Id="{var}"'
+                    f' Value="Resources\\{var}.bmp" />\n'
                 )
 
         for i, line in enumerate(to_insert_lines):
@@ -257,9 +257,7 @@ def gen_custom_ARPSYSTEMCOMPONENT_False(args):
         indent = g_indent_unit * 2
 
         lines_new = []
-        lines_new.append(
-            f"{indent}<!--https://learn.microsoft.com/en-us/windows/win32/msi/arpsystemcomponent?redirectedfrom=MSDN-->\n"
-        )
+        lines_new.append(f"{indent}<!--https://learn.microsoft.com/en-us/windows/win32/msi/arpsystemcomponent?redirectedfrom=MSDN-->\n")
         lines_new.append(
             f'{indent}<!--<Property Id="ARPSYSTEMCOMPONENT" Value="1" />-->\n\n'
         )
@@ -269,9 +267,7 @@ def gen_custom_ARPSYSTEMCOMPONENT_False(args):
         )
         for _, v in g_arpsystemcomponent.items():
             if "msi" in v and "v" in v:
-                lines_new.append(
-                    f'{indent}<Property Id="{v["msi"]}" Value="{v["v"]}" />\n'
-                )
+                lines_new.append(f'{indent}<Property Id="{v["msi"]}" Value="{v["v"]}" />\n')
 
         for i, line in enumerate(lines_new):
             lines.insert(index_start + i + 1, line)
@@ -305,25 +301,20 @@ def gen_custom_ARPSYSTEMCOMPONENT_True(args, dist_dir):
             f"{indent}<!--https://learn.microsoft.com/en-us/windows/win32/msi/property-reference-->\n"
         )
         lines_new.append(
-            f'{indent}<RegistryValue Type="string" Name="DisplayName" Value="{
-                args.app_name}" />\n'
+            f'{indent}<RegistryValue Type="string" Name="DisplayName" Value="{args.app_name}" />\n'
         )
         lines_new.append(
-            f'{indent}<RegistryValue Type="string" Name="DisplayIcon" Value="[INSTALLFOLDER_INNER]{
-                args.app_name}.exe" />\n'
+            f'{indent}<RegistryValue Type="string" Name="DisplayIcon" Value="[INSTALLFOLDER_INNER]{args.app_name}.exe" />\n'
         )
         lines_new.append(
-            f'{indent}<RegistryValue Type="string" Name="DisplayVersion" Value="{
-                g_version}" />\n'
+            f'{indent}<RegistryValue Type="string" Name="DisplayVersion" Value="{g_version}" />\n'
         )
         lines_new.append(
-            f'{indent}<RegistryValue Type="string" Name="Publisher" Value="{
-                args.manufacturer}" />\n'
+            f'{indent}<RegistryValue Type="string" Name="Publisher" Value="{args.manufacturer}" />\n'
         )
         installDate = datetime.datetime.now().strftime("%Y%m%d")
         lines_new.append(
-            f'{indent}<RegistryValue Type="string" Name="InstallDate" Value="{
-                installDate}" />\n'
+            f'{indent}<RegistryValue Type="string" Name="InstallDate" Value="{installDate}" />\n'
         )
         lines_new.append(
             f'{indent}<RegistryValue Type="string" Name="InstallLocation" Value="[INSTALLFOLDER_INNER]" />\n'
@@ -337,8 +328,7 @@ def gen_custom_ARPSYSTEMCOMPONENT_True(args, dist_dir):
 
         estimated_size = get_folder_size(dist_dir)
         lines_new.append(
-            f'{indent}<RegistryValue Type="integer" Name="EstimatedSize" Value="{
-                estimated_size}" />\n'
+            f'{indent}<RegistryValue Type="integer" Name="EstimatedSize" Value="{estimated_size}" />\n'
         )
 
         lines_new.append(
@@ -357,20 +347,16 @@ def gen_custom_ARPSYSTEMCOMPONENT_True(args, dist_dir):
         vs = g_version.split(".")
         major, minor, build = vs[0], vs[1], vs[2]
         lines_new.append(
-            f'{indent}<RegistryValue Type="string" Name="Version" Value="{
-                g_version}" />\n'
+            f'{indent}<RegistryValue Type="string" Name="Version" Value="{g_version}" />\n'
         )
         lines_new.append(
-            f'{indent}<RegistryValue Type="integer" Name="VersionMajor" Value="{
-                major}" />\n'
+            f'{indent}<RegistryValue Type="integer" Name="VersionMajor" Value="{major}" />\n'
         )
         lines_new.append(
-            f'{indent}<RegistryValue Type="integer" Name="VersionMinor" Value="{
-                minor}" />\n'
+            f'{indent}<RegistryValue Type="integer" Name="VersionMinor" Value="{minor}" />\n'
         )
         lines_new.append(
-            f'{indent}<RegistryValue Type="integer" Name="VersionBuild" Value="{
-                build}" />\n'
+            f'{indent}<RegistryValue Type="integer" Name="VersionBuild" Value="{build}" />\n'
         )
 
         lines_new.append(
@@ -380,8 +366,7 @@ def gen_custom_ARPSYSTEMCOMPONENT_True(args, dist_dir):
             if "v" in v:
                 t = v["t"] if "t" in v is None else "string"
                 lines_new.append(
-                    f'{indent}<RegistryValue Type="{
-                        t}" Name="{k}" Value="{v["v"]}" />\n'
+                    f'{indent}<RegistryValue Type="{t}" Name="{k}" Value="{v["v"]}" />\n'
                 )
 
         for i, line in enumerate(lines_new):
@@ -417,8 +402,7 @@ def gen_conn_type(args):
         lines_new = []
         if args.conn_type != "":
             lines_new.append(
-                f"""{indent}<Property Id="CC_CONNECTION_TYPE" Value="{
-                    args.conn_type}" />\n"""
+                f"""{indent}<Property Id="CC_CONNECTION_TYPE" Value="{args.conn_type}" />\n"""
             )
 
         for i, line in enumerate(lines_new):
@@ -486,8 +470,7 @@ def init_global_vars(dist_dir, app_name, args):
     if g_version.count(".") == 2:
         # https://github.com/dotnet/runtime/blob/5535e31a712343a63f5d7d796cd874e563e5ac14/src/libraries/System.Private.CoreLib/src/System/Version.cs
         if args.revision_version < 0 or args.revision_version > 2147483647:
-            raise ValueError(f"Invalid revision version: {
-                             args.revision_version}")
+            raise ValueError(f"Invalid revision version: {args.revision_version}")
         g_version = f"{g_version}.{args.revision_version}"
 
     g_build_date = read_process_output("--build-date")
