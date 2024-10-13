@@ -13,7 +13,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Service is running", "Tjänsten är startad"),
         ("Service is not running", "Tjänsten är ej startad"),
         ("not_ready_status", "Ej redo. Kontrollera din nätverksanslutning"),
-        ("Control Remote Desktop", "Kontrollera fjärrskrivbord"),
+        ("Manage External Devices", "Kontrollera fjärrskrivbord"),
         ("Transfer file", "Överför fil"),
         ("Connect", "Anslut"),
         ("Recent sessions", "Dina senaste sessioner"),

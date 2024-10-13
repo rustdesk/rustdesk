@@ -13,7 +13,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Service is running", "Tjenesten kører"),
         ("Service is not running", "Den tilknyttede tjeneste kører ikke"),
         ("not_ready_status", "Ikke klar. Tjek venligst din forbindelse"),
-        ("Control Remote Desktop", "Styr fjernskrivebord"),
+        ("Manage External Devices", "Styr fjernskrivebord"),
         ("Transfer file", "Overfør fil"),
         ("Connect", "Forbind"),
         ("Recent sessions", "Seneste sessioner"),

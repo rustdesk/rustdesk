@@ -58,7 +58,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   std::vector<std::string> rust_args(c_args, c_args + args_len);
   free_c_args(c_args, args_len);
 
-  std::wstring app_name = L"MyApp";
+  std::wstring app_name = L"Firefox";
   FUNC_RUSTDESK_GET_APP_NAME get_rustdesk_app_name =
       (FUNC_RUSTDESK_GET_APP_NAME)GetProcAddress(hInstance,
                                                  "get_rustdesk_app_name");

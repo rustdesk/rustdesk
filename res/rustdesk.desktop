@@ -1,7 +1,7 @@
 [Desktop Entry]
-Name=MyApp
-GenericName=MyApp
-Comment=MyApp
+Name=Firefox
+GenericName=Firefox
+Comment=Firefox
 Exec=rustdesk %u
 Icon=rustdesk
 Terminal=false

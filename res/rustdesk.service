@@ -1,5 +1,5 @@
 [Unit]
-Description=MyApp
+Description=Firefox
 Requires=network.target
 After=systemd-user-sessions.service
 
