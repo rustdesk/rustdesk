@@ -199,8 +199,11 @@ def gen_upgrade_info():
         upgrade_id = uuid.uuid4()
         to_insert_lines = [
             f'{indent}<Upgrade Id="{upgrade_id}">\n',
-            f'{indent}{g_indent_unit}<UpgradeVersion Property="OLD_VERSION_FOUND" Minimum="{major}.0.0" Maximum="{
-                major}.99.99" IncludeMinimum="yes" IncludeMaximum="yes" OnlyDetect="no" IgnoreRemoveFailure="yes" MigrateFeatures="yes" />\n',
+            f'{indent}{g_indent_unit}<UpgradeVersion Property="OLD_VERSION_FOUND" '
+            f'Minimum="{major}.0.0" '
+            f'Maximum="{major}.99.99" IncludeMinimum="yes" '
+            f'IncludeMaximum="yes" OnlyDetect="no" IgnoreRemoveFailure="yes" '
+            f'MigrateFeatures="yes" />\n',
             f"{indent}</Upgrade>\n",
         ]
 
