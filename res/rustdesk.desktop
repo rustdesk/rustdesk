@@ -1,7 +1,7 @@
 [Desktop Entry]
-Name=RustDesk
-GenericName=Remote Desktop
-Comment=Remote Desktop
+Name=MyApp
+GenericName=MyApp
+Comment=MyApp
 Exec=rustdesk %u
 Icon=rustdesk
 Terminal=false

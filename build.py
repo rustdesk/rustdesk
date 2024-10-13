@@ -13,7 +13,7 @@ import sys
 windows = platform.platform().startswith('Windows')
 osx = platform.platform().startswith(
     'Darwin') or platform.platform().startswith("macOS")
-hbb_name = 'rustdesk' + ('.exe' if windows else '')
+hbb_name = 'myapp' + ('.exe' if windows else '')
 exe_path = 'target/release/' + hbb_name
 if windows:
     flutter_build_dir = 'build/windows/x64/runner/Release/'
@@ -31,11 +31,13 @@ def get_deb_arch() -> str:
         return "amd64"
     return custom_arch
 
+
 def get_deb_extra_depends() -> str:
     custom_arch = os.environ.get("DEB_ARCH")
-    if custom_arch == "armhf": # for arm32v7 libsciter-gtk.so
+    if custom_arch == "armhf":  # for arm32v7 libsciter-gtk.so
         return ", libatomic1"
     return ""
+
 
 def system2(cmd):
     exit_code = os.system(cmd)
@@ -200,9 +202,11 @@ def download_extract_features(features, res_dir):
             return r
 
     for (feat, feat_info) in features.items():
-        includes = feat_info['include'] if 'include' in feat_info and feat_info['include'] else []
+        includes = feat_info['include'] if 'include' in feat_info and feat_info['include'] else [
+        ]
         includes = [re.compile(p) for p in includes]
-        excludes = feat_info['exclude'] if 'exclude' in feat_info and feat_info['exclude'] else []
+        excludes = feat_info['exclude'] if 'exclude' in feat_info and feat_info['exclude'] else [
+        ]
         excludes = [re.compile(p) for p in excludes]
 
         print(f'{feat} download begin')
@@ -491,7 +495,8 @@ def main():
         if pa:
             # https://certera.com/kb/tutorial-guide-for-safenet-authentication-client-for-code-signing/
             system2(
-                f'signtool sign /a /v /p {pa} /debug /f .\\cert.pfx /t http://timestamp.digicert.com  '
+                f'signtool sign /a /v /p {pa} /debug /f'
+                ' .\\cert.pfx /t http://timestamp.digicert.com  '
                 'target\\release\\rustdesk.exe')
         else:
             print('Not signed')
