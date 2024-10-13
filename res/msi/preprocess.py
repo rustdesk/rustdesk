@@ -37,8 +37,10 @@ g_arpsystemcomponent = {
     },
 }
 
+
 def default_revision_version():
     return int(datetime.datetime.now().timestamp() / 60)
+
 
 def make_parser():
     parser = argparse.ArgumentParser(description="Msi preprocess script.")
@@ -71,7 +73,7 @@ def make_parser():
         help='Connection type, e.g. "incoming", "outgoing". Default is empty, means incoming-outgoing',
     )
     parser.add_argument(
-        "--app-name", type=str, default="RustDesk", help="The app name."
+        "--app-name", type=str, default="MyApp", help="The app name."
     )
     parser.add_argument(
         "-v", "--version", type=str, default="", help="The app version."
@@ -197,7 +199,8 @@ def gen_upgrade_info():
         upgrade_id = uuid.uuid4()
         to_insert_lines = [
             f'{indent}<Upgrade Id="{upgrade_id}">\n',
-            f'{indent}{g_indent_unit}<UpgradeVersion Property="OLD_VERSION_FOUND" Minimum="{major}.0.0" Maximum="{major}.99.99" IncludeMinimum="yes" IncludeMaximum="yes" OnlyDetect="no" IgnoreRemoveFailure="yes" MigrateFeatures="yes" />\n',
+            f'{indent}{g_indent_unit}<UpgradeVersion Property="OLD_VERSION_FOUND" Minimum="{major}.0.0" Maximum="{
+                major}.99.99" IncludeMinimum="yes" IncludeMaximum="yes" OnlyDetect="no" IgnoreRemoveFailure="yes" MigrateFeatures="yes" />\n',
             f"{indent}</Upgrade>\n",
         ]
 
@@ -230,7 +233,8 @@ def gen_custom_dialog_bitmaps():
         for var in vars:
             if Path(f"Package/Resources/{var}.bmp").exists():
                 to_insert_lines.append(
-                    f'{indent}<WixVariable Id="{var}" Value="Resources\\{var}.bmp" />\n'
+                    f'{indent}<WixVariable Id="{
+                        var}" Value="Resources\\{var}.bmp" />\n'
                 )
 
         for i, line in enumerate(to_insert_lines):
@@ -298,20 +302,25 @@ def gen_custom_ARPSYSTEMCOMPONENT_True(args, dist_dir):
             f"{indent}<!--https://learn.microsoft.com/en-us/windows/win32/msi/property-reference-->\n"
         )
         lines_new.append(
-            f'{indent}<RegistryValue Type="string" Name="DisplayName" Value="{args.app_name}" />\n'
+            f'{indent}<RegistryValue Type="string" Name="DisplayName" Value="{
+                args.app_name}" />\n'
         )
         lines_new.append(
-            f'{indent}<RegistryValue Type="string" Name="DisplayIcon" Value="[INSTALLFOLDER_INNER]{args.app_name}.exe" />\n'
+            f'{indent}<RegistryValue Type="string" Name="DisplayIcon" Value="[INSTALLFOLDER_INNER]{
+                args.app_name}.exe" />\n'
         )
         lines_new.append(
-            f'{indent}<RegistryValue Type="string" Name="DisplayVersion" Value="{g_version}" />\n'
+            f'{indent}<RegistryValue Type="string" Name="DisplayVersion" Value="{
+                g_version}" />\n'
         )
         lines_new.append(
-            f'{indent}<RegistryValue Type="string" Name="Publisher" Value="{args.manufacturer}" />\n'
+            f'{indent}<RegistryValue Type="string" Name="Publisher" Value="{
+                args.manufacturer}" />\n'
         )
         installDate = datetime.datetime.now().strftime("%Y%m%d")
         lines_new.append(
-            f'{indent}<RegistryValue Type="string" Name="InstallDate" Value="{installDate}" />\n'
+            f'{indent}<RegistryValue Type="string" Name="InstallDate" Value="{
+                installDate}" />\n'
         )
         lines_new.append(
             f'{indent}<RegistryValue Type="string" Name="InstallLocation" Value="[INSTALLFOLDER_INNER]" />\n'
@@ -325,7 +334,8 @@ def gen_custom_ARPSYSTEMCOMPONENT_True(args, dist_dir):
 
         estimated_size = get_folder_size(dist_dir)
         lines_new.append(
-            f'{indent}<RegistryValue Type="integer" Name="EstimatedSize" Value="{estimated_size}" />\n'
+            f'{indent}<RegistryValue Type="integer" Name="EstimatedSize" Value="{
+                estimated_size}" />\n'
         )
 
         lines_new.append(
@@ -344,16 +354,20 @@ def gen_custom_ARPSYSTEMCOMPONENT_True(args, dist_dir):
         vs = g_version.split(".")
         major, minor, build = vs[0], vs[1], vs[2]
         lines_new.append(
-            f'{indent}<RegistryValue Type="string" Name="Version" Value="{g_version}" />\n'
+            f'{indent}<RegistryValue Type="string" Name="Version" Value="{
+                g_version}" />\n'
         )
         lines_new.append(
-            f'{indent}<RegistryValue Type="integer" Name="VersionMajor" Value="{major}" />\n'
+            f'{indent}<RegistryValue Type="integer" Name="VersionMajor" Value="{
+                major}" />\n'
         )
         lines_new.append(
-            f'{indent}<RegistryValue Type="integer" Name="VersionMinor" Value="{minor}" />\n'
+            f'{indent}<RegistryValue Type="integer" Name="VersionMinor" Value="{
+                minor}" />\n'
         )
         lines_new.append(
-            f'{indent}<RegistryValue Type="integer" Name="VersionBuild" Value="{build}" />\n'
+            f'{indent}<RegistryValue Type="integer" Name="VersionBuild" Value="{
+                build}" />\n'
         )
 
         lines_new.append(
@@ -363,7 +377,8 @@ def gen_custom_ARPSYSTEMCOMPONENT_True(args, dist_dir):
             if "v" in v:
                 t = v["t"] if "t" in v is None else "string"
                 lines_new.append(
-                    f'{indent}<RegistryValue Type="{t}" Name="{k}" Value="{v["v"]}" />\n'
+                    f'{indent}<RegistryValue Type="{
+                        t}" Name="{k}" Value="{v["v"]}" />\n'
                 )
 
         for i, line in enumerate(lines_new):
@@ -391,6 +406,7 @@ def gen_custom_ARPSYSTEMCOMPONENT(args, dist_dir):
     else:
         return gen_custom_ARPSYSTEMCOMPONENT_False(args)
 
+
 def gen_conn_type(args):
     def func(lines, index_start):
         indent = g_indent_unit * 3
@@ -398,7 +414,8 @@ def gen_conn_type(args):
         lines_new = []
         if args.conn_type != "":
             lines_new.append(
-                f"""{indent}<Property Id="CC_CONNECTION_TYPE" Value="{args.conn_type}" />\n"""
+                f"""{indent}<Property Id="CC_CONNECTION_TYPE" Value="{
+                    args.conn_type}" />\n"""
             )
 
         for i, line in enumerate(lines_new):
@@ -412,9 +429,11 @@ def gen_conn_type(args):
         func,
     )
 
+
 def gen_content_between_tags(filename, tag_start, tag_end, func):
     target_file = Path(sys.argv[0]).parent.joinpath(filename)
-    lines, index_start = read_lines_and_start_index(target_file, tag_start, tag_end)
+    lines, index_start = read_lines_and_start_index(
+        target_file, tag_start, tag_end)
     if lines is None:
         return False
 
@@ -464,7 +483,8 @@ def init_global_vars(dist_dir, app_name, args):
     if g_version.count(".") == 2:
         # https://github.com/dotnet/runtime/blob/5535e31a712343a63f5d7d796cd874e563e5ac14/src/libraries/System.Private.CoreLib/src/System/Version.cs
         if args.revision_version < 0 or args.revision_version > 2147483647:
-            raise ValueError(f"Invalid revision version: {args.revision_version}")    
+            raise ValueError(f"Invalid revision version: {
+                             args.revision_version}")
         g_version = f"{g_version}.{args.revision_version}"
 
     g_build_date = read_process_output("--build-date")
@@ -482,9 +502,11 @@ def update_license_file(app_name):
     license_file = Path(sys.argv[0]).parent.joinpath("Package/License.rtf")
     with open(license_file, "r", encoding="utf-8") as f:
         license_content = f.read()
-    license_content = license_content.replace("website rustdesk.com and other ", "")
+    license_content = license_content.replace(
+        "website rustdesk.com and other ", "")
     license_content = license_content.replace("RustDesk", app_name)
-    license_content = re.sub("Purslane Ltd", app_name, license_content, flags=re.IGNORECASE)
+    license_content = re.sub("Purslane Ltd", app_name,
+                             license_content, flags=re.IGNORECASE)
     with open(license_file, "w", encoding="utf-8") as f:
         f.write(license_content)
 
@@ -499,7 +521,8 @@ def replace_component_guids_in_wxs():
         for i, line in enumerate(lines):
             match = re.search(r'Component.+Guid="([^"]+)"', line)
             if match:
-                lines[i] = re.sub(r'Guid="[^"]+"', f'Guid="{uuid.uuid4()}"', line)
+                lines[i] = re.sub(
+                    r'Guid="[^"]+"', f'Guid="{uuid.uuid4()}"', line)
 
         with open(file_path, "w", encoding="utf-8") as f:
             f.writelines(lines)
