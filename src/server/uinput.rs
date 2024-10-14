@@ -431,8 +431,8 @@ pub mod service {
                 allow_err!(keyboard.emit(&[down_event]));
             }
             DataKeyboard::KeyUp(enigo::Key::Raw(code)) => {
-                let down_event = InputEvent::new(EventType::KEY, *code - 8, 0);
-                allow_err!(keyboard.emit(&[down_event]));
+                let up_event = InputEvent::new(EventType::KEY, *code - 8, 0);
+                allow_err!(keyboard.emit(&[up_event]));
             }
             DataKeyboard::KeyDown(key) => {
                 if let Ok((k, is_shift)) = map_key(key) {

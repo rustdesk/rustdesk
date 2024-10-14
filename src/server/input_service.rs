@@ -175,6 +175,22 @@ impl LockModesHandler {
         }
     }
 
+    #[cfg(target_os = "linux")]
+    fn sleep_to_ensure_locked(v: bool, k: enigo::Key, en: &mut Enigo) {
+        if wayland_use_uinput() {
+            // Sleep at most 500ms to ensure the lock state is applied.
+            for _ in 0..50 {
+                std::thread::sleep(std::time::Duration::from_millis(10));
+                if en.get_key_state(k) == v {
+                    break;
+                }
+            }
+        } else if wayland_use_rdp_input() {
+            // We can't call `en.get_key_state(k)` because there's no api for this.
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
+    }
+
     #[cfg(any(target_os = "windows", target_os = "linux"))]
     fn new(key_event: &KeyEvent, is_numpad_key: bool) -> Self {
         let mut en = ENIGO.lock().unwrap();
@@ -183,12 +199,15 @@ impl LockModesHandler {
         let caps_lock_changed = event_caps_enabled != local_caps_enabled;
         if caps_lock_changed {
             en.key_click(enigo::Key::CapsLock);
+            #[cfg(target_os = "linux")]
+            Self::sleep_to_ensure_locked(event_caps_enabled, enigo::Key::CapsLock, &mut en);
         }
 
         let mut num_lock_changed = false;
+        let mut event_num_enabled = false;
         if is_numpad_key {
             let local_num_enabled = en.get_key_state(enigo::Key::NumLock);
-            let event_num_enabled = Self::is_modifier_enabled(key_event, ControlKey::NumLock);
+            event_num_enabled = Self::is_modifier_enabled(key_event, ControlKey::NumLock);
             num_lock_changed = event_num_enabled != local_num_enabled;
         } else if is_legacy_mode(key_event) {
             #[cfg(target_os = "windows")]
@@ -199,6 +218,8 @@ impl LockModesHandler {
         }
         if num_lock_changed {
             en.key_click(enigo::Key::NumLock);
+            #[cfg(target_os = "linux")]
+            Self::sleep_to_ensure_locked(event_num_enabled, enigo::Key::NumLock, &mut en);
         }
 
         Self {
@@ -236,6 +257,14 @@ impl LockModesHandler {
 #[cfg(any(target_os = "windows", target_os = "linux"))]
 impl Drop for LockModesHandler {
     fn drop(&mut self) {
+        // Do not change led state if is Wayland uinput.
+        // Because there must be a delay to ensure the lock state is applied on Wayland uinput,
+        // which may affect the user experience.
+        #[cfg(target_os = "linux")]
+        if wayland_use_uinput() {
+            return;
+        }
+
         let mut en = ENIGO.lock().unwrap();
         if self.caps_lock_changed {
             en.key_click(enigo::Key::CapsLock);
@@ -1633,12 +1662,13 @@ pub fn handle_key_(evt: &KeyEvent) {
                     let is_numpad_key = false;
                     #[cfg(any(target_os = "windows", target_os = "linux"))]
                     let is_numpad_key = crate::keyboard::is_numpad_rdev_key(&key);
-                    _lock_mode_handler = Some(LockModesHandler::new_handler(evt, is_numpad_key));
+                    _lock_mode_handler =
+                        Some(LockModesHandler::new_handler(evt, is_numpad_key));
                 }
             }
         }
         _ => {}
-    };
+    }
 
     match evt.mode.enum_value() {
         Ok(KeyboardMode::Map) => {
