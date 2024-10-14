@@ -1638,7 +1638,6 @@ pub fn handle_key_(evt: &KeyEvent) {
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     let mut _lock_mode_handler = None;
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    if evt.down {
     match &evt.union {
         Some(key_event::Union::Unicode(..)) | Some(key_event::Union::Seq(..)) => {
             _lock_mode_handler = Some(LockModesHandler::new_handler(&evt, false));
@@ -1669,7 +1668,6 @@ pub fn handle_key_(evt: &KeyEvent) {
             }
         }
         _ => {}
-    }
     }
 
     match evt.mode.enum_value() {
