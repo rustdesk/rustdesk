@@ -648,5 +648,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Authentication Required", "인증 필요함"),
         ("Authenticate", "인증"),
         ("web_id_input_tip", ""),
+        ("Download", ""),
+        ("Upload folder", ""),
+        ("Upload files", ""),
     ].iter().cloned().collect();
 }

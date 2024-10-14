@@ -648,5 +648,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Authentication Required", "Autenticació requerida"),
         ("Authenticate", "Autentica"),
         ("web_id_input_tip", "Podeu inserir el número ID al propi servidor; l'accés directe per IP no és compatible amb el client web.\nSi voleu accedir a un dispositiu d'un altre servidor, afegiu l'adreça del servidor, com ara <id>@<adreça_del_servidor>?key=<valor_de_la_clau> (p. ex.\n9123456234@192.168.16.1:21117?key=5Qbwsde3unUcJBtrx9ZkvUmwFNoExHzpryHuPUdqlWM=.\nSi voleu accedir a un dispositiu en un servidor públic, no cal que inseriu la clau pública «<id>@» per al servidor públic."),
+        ("Download", ""),
+        ("Upload folder", ""),
+        ("Upload files", ""),
     ].iter().cloned().collect();
 }
