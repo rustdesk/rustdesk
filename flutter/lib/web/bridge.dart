@@ -1209,7 +1209,12 @@ class RustdeskImpl {
   }
 
   Future<String> mainLoadAb({dynamic hint}) {
-    return Future(() => js.context.callMethod('getByName', ['load_ab']));
+    Completer<String> completer = Completer();
+    js.context["onLoadAbFinished"] = (String s) {
+      completer.complete(s);
+    };
+    js.context.callMethod('setByName', ['load_ab']);
+    return completer.future;
   }
 
   Future<void> mainSaveGroup({required String json, dynamic hint}) {
@@ -1222,7 +1227,12 @@ class RustdeskImpl {
   }
 
   Future<String> mainLoadGroup({dynamic hint}) {
-    return Future(() => js.context.callMethod('getByName', ['load_group']));
+    Completer<String> completer = Completer();
+    js.context["onLoadGroupFinished"] = (String s) {
+      completer.complete(s);
+    };
+    js.context.callMethod('setByName', ['load_group']);
+    return completer.future;
   }
 
   Future<void> sessionSendPointer(
