@@ -531,7 +531,13 @@ class _RemotePageState extends State<RemotePage> {
                       controller: _textController,
                       // trick way to make backspace work always
                       keyboardType: TextInputType.multiline,
-                      onChanged: handleSoftKeyboardInput,
+                      // onChanged: handleSoftKeyboardInput,
+                      onChanged: (newValue) async {
+                        await Future.delayed(const Duration(milliseconds: 10));
+
+                        if (newValue != _textController.text) return;
+                        return handleSoftKeyboardInput(_textController.text);
+                      },
                     ),
             ),
           ];
