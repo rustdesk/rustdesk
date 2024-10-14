@@ -648,5 +648,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Authentication Required", "Diperlukan autentikasi"),
         ("Authenticate", "Autentikasi"),
         ("web_id_input_tip", "Kamu bisa memasukkan ID pada server yang sama, akses IP langsung tidak didukung di klien web.\nJika Anda ingin mengakses perangkat di server lain, silakan tambahkan alamat server (<id>@<server_address>?key=<key_value>), contohnya:\n9123456234@192.168.16.1:21117?key=5Qbwsde3unUcJBtrx9ZkvUmwFNoExHzpryHuPUdqlWM=.\nUntuk mengakses perangkat di server publik, cukup masukkan \"<id>@public\", tanpa kunci/key."),
+        ("Download", ""),
+        ("Upload folder", ""),
+        ("Upload files", ""),
     ].iter().cloned().collect();
 }

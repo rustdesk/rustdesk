@@ -490,6 +490,9 @@ class _FileManagerViewState extends State<FileManagerView> {
   }
 
   Widget headTools() {
+    var uploadButtonTapPosition = RelativeRect.fill;
+    RxBool isUploadFolder =
+        (bind.mainGetLocalOption(key: 'upload-folder-button') == 'Y').obs;
     return Container(
       child: Column(
         children: [
@@ -814,48 +817,64 @@ class _FileManagerViewState extends State<FileManagerView> {
               ),
               if (isWeb)
                 Obx(() => ElevatedButton.icon(
-                    style: ButtonStyle(
-                      padding: MaterialStateProperty.all<EdgeInsetsGeometry>(
-                          isLocal
-                              ? EdgeInsets.only(left: 10)
-                              : EdgeInsets.only(right: 10)),
-                      backgroundColor: MaterialStateProperty.all(
-                        selectedItems.items.isEmpty
-                            ? MyTheme.accent80
-                            : MyTheme.accent,
+                      style: ButtonStyle(
+                        padding: MaterialStateProperty.all<EdgeInsetsGeometry>(
+                            isLocal
+                                ? EdgeInsets.only(left: 10)
+                                : EdgeInsets.only(right: 10)),
+                        backgroundColor: MaterialStateProperty.all(
+                          selectedItems.items.isEmpty
+                              ? MyTheme.accent80
+                              : MyTheme.accent,
+                        ),
                       ),
-                    ),
-                    onPressed: () => {webselectFiles(is_folder: true)},
-                    icon: Offstage(),
-                    label: Text(
-                      translate('Upload folder'),
-                      textAlign: TextAlign.right,
-                      style: TextStyle(
-                        color: Colors.white,
+                      onPressed: () =>
+                          {webselectFiles(is_folder: isUploadFolder.value)},
+                      label: InkWell(
+                        hoverColor: Colors.transparent,
+                        splashColor: Colors.transparent,
+                        highlightColor: Colors.transparent,
+                        focusColor: Colors.transparent,
+                        onTapDown: (e) {
+                          final x = e.globalPosition.dx;
+                          final y = e.globalPosition.dy;
+                          uploadButtonTapPosition =
+                              RelativeRect.fromLTRB(x, y, x, y);
+                        },
+                        onTap: () async {
+                          final value = await showMenu<bool>(
+                              context: context,
+                              position: uploadButtonTapPosition,
+                              items: [
+                                PopupMenuItem<bool>(
+                                  value: false,
+                                  child: Text(translate('Upload files')),
+                                ),
+                                PopupMenuItem<bool>(
+                                  value: true,
+                                  child: Text(translate('Upload folder')),
+                                ),
+                              ]);
+                          if (value != null) {
+                            isUploadFolder.value = value;
+                            bind.mainSetLocalOption(
+                                key: 'upload-folder-button',
+                                value: value ? 'Y' : '');
+                            webselectFiles(is_folder: value);
+                          }
+                        },
+                        child: Icon(Icons.arrow_drop_down),
                       ),
-                    ))).marginOnly(left: 16),
-              if (isWeb)
-                Obx(() => ElevatedButton.icon(
-                    style: ButtonStyle(
-                      padding: MaterialStateProperty.all<EdgeInsetsGeometry>(
-                          isLocal
-                              ? EdgeInsets.only(left: 10)
-                              : EdgeInsets.only(right: 10)),
-                      backgroundColor: MaterialStateProperty.all(
-                        selectedItems.items.isEmpty
-                            ? MyTheme.accent80
-                            : MyTheme.accent,
-                      ),
-                    ),
-                    onPressed: () => {webselectFiles(is_folder: false)},
-                    icon: Offstage(),
-                    label: Text(
-                      translate('Upload files'),
-                      textAlign: TextAlign.right,
-                      style: TextStyle(
-                        color: Colors.white,
-                      ),
-                    ))).marginOnly(left: 16),
+                      icon: Text(
+                        translate(isUploadFolder.isTrue
+                            ? 'Upload folder'
+                            : 'Upload files'),
+                        textAlign: TextAlign.right,
+                        style: TextStyle(
+                          color: Colors.white,
+                        ),
+                      ).marginOnly(left: 8),
+                    )).marginOnly(left: 16),
               Obx(() => ElevatedButton.icon(
                     style: ButtonStyle(
                       padding: MaterialStateProperty.all<EdgeInsetsGeometry>(

@@ -648,5 +648,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Authentication Required", "需要身份验证"),
         ("Authenticate", "认证"),
         ("web_id_input_tip", "可以输入同一个服务器内的 ID，web 客户端不支持直接 IP 访问。\n要访问另一台服务器上的设备，请附加服务器地址（<ID>@<服务器地址>?key=<密钥>）。比如，\n9123456234@192.168.16.1:21117?key=5Qbwsde3unUcJBtrx9ZkvUmwFNoExHzpryHuPUdqlWM=。\n要访问公共服务器上的设备，请输入 \"<ID>@public\"，无需密钥。"),
+        ("Download", "下载"),
+        ("Upload folder", "上传文件夹"),
+        ("Upload files", "上传文件"),
     ].iter().cloned().collect();
 }
