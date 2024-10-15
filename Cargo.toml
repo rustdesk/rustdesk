@@ -77,8 +77,6 @@ fon = "0.6"
 zip = "0.6"
 shutdown_hooks = "0.1"
 totp-rs = { version = "5.4", default-features = false, features = ["gen_secret", "otpauth"] }
-# https://github.com/rustdesk/rustdesk-server-pro/issues/189, using native-tls for better tls support
-reqwest = { git = "https://github.com/rustdesk-org/reqwest", features = ["blocking", "socks", "json", "native-tls", "rustls-tls", "rustls-tls-native-roots", "gzip"], default-features=false }
 
 [target.'cfg(not(any(target_os = "android", target_os = "linux")))'.dependencies]
 cpal = "0.15"
@@ -141,6 +139,13 @@ keepawake = { git = "https://github.com/rustdesk-org/keepawake-rs" }
 
 [target.'cfg(any(target_os = "windows", target_os = "linux"))'.dependencies]
 wallpaper = { git = "https://github.com/rustdesk-org/wallpaper.rs" }
+
+[target.'cfg(any(target_os = "macos", target_os = "windows"))'.dependencies]
+# https://github.com/rustdesk/rustdesk-server-pro/issues/189, using native-tls for better tls support
+reqwest = { git = "https://github.com/rustdesk-org/reqwest", features = ["blocking", "socks", "json", "native-tls", "rustls-tls", "rustls-tls-native-roots", "gzip"], default-features=false }
+
+[target.'cfg(not(any(target_os = "macos", target_os = "windows")))'.dependencies]
+reqwest = { git = "https://github.com/rustdesk-org/reqwest", features = ["blocking", "socks", "json", "rustls-tls", "rustls-tls-native-roots", "gzip"], default-features=false }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 psimple = { package = "libpulse-simple-binding", version = "2.27" }

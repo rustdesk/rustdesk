@@ -9,9 +9,8 @@ use std::sync::atomic::{AtomicI8, Ordering};
 macro_rules! configure_http_client {
     ($builder:expr, $Client: ty) => {{
         let mut builder = $builder;
-        if is_use_native_tls() {
-            builder = builder.use_native_tls();
-        } else {
+        #[cfg(any(target_os = "windows", target_os = "macos"))]
+        if !is_use_native_tls() {
             builder = builder.use_rustls_tls();
         }
         let client = if let Some(conf) = Config::get_socks() {
@@ -71,12 +70,9 @@ macro_rules! configure_http_client {
 
 static USE_NATIVE_TLS: AtomicI8 = AtomicI8::new(0);
 
+#[cfg(any(target_os = "windows", target_os = "macos"))]
 fn is_use_native_tls() -> bool {
-    let mut use_native_tls = true;
-    #[cfg(any(target_os = "windows", target_os = "macos"))]
-    if LocalConfig::get_option(OPTION_TLS) == "rustls" {
-        use_native_tls = false;
-    }
+    let use_native_tls = LocalConfig::get_option(OPTION_TLS) != "rustls";
 
     let last_use_native_tls = USE_NATIVE_TLS.load(Ordering::SeqCst);
     if use_native_tls && last_use_native_tls != 1 {
@@ -86,6 +82,7 @@ fn is_use_native_tls() -> bool {
         USE_NATIVE_TLS.store(2, Ordering::SeqCst);
        info!("Use native TLS: {}", use_native_tls);
     }
+
     use_native_tls
 }
 
