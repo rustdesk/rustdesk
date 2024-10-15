@@ -524,6 +524,8 @@ class _RemotePageState extends State<RemotePage> {
                       keyboardType: TextInputType.multiline,
                       onChanged: (newValue) async {
                         if (isIOS) {
+                          // fix: TextFormField onChanged event triggered multiple times when Korean input
+                          // https://github.com/rustdesk/rustdesk/pull/9644
                           await Future.delayed(const Duration(milliseconds: 10));
 
                           if (newValue != _textController.text) return;
