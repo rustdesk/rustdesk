@@ -2214,6 +2214,7 @@ pub mod keys {
     pub const OPTION_ENABLE_ANDROID_SOFTWARE_ENCODING_HALF_SCALE: &str =
         "enable-android-software-encoding-half-scale";
     pub const OPTION_ENABLE_TRUSTED_DEVICES: &str = "enable-trusted-devices";
+    pub const OPTION_TLS: &str = "tls";
 
     // buildin options
     pub const OPTION_DISPLAY_NAME: &str = "display-name";

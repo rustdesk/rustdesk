@@ -212,7 +212,11 @@ pub fn get_builtin_option(key: &str) -> String {
 
 #[inline]
 pub fn set_local_option(key: String, value: String) {
+    let is_tls_key = key == OPTION_TLS;
     LocalConfig::set_option(key, value);
+    if is_tls_key {
+        crate::hbbs_http::on_tls_opt_changed();
+    }
 }
 
 #[cfg(any(target_os = "android", target_os = "ios", feature = "flutter"))]

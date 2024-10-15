@@ -37,3 +37,10 @@ impl<T: DeserializeOwned> TryFrom<Response> for HbbHttpResponse<T> {
         }
     }
 }
+
+#[inline]
+pub fn on_tls_opt_changed() {
+    #[cfg(feature = "flutter")]
+    account::on_tls_opt_changed();
+    record_upload::on_tls_opt_changed();
+}

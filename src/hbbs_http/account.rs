@@ -142,6 +142,10 @@ impl OidcSession {
         }
     }
 
+    fn reset_client(&mut self) {
+        self.client = create_http_client();
+    }
+
     fn auth(
         api_server: &str,
         op: &str,
@@ -338,4 +342,9 @@ impl OidcSession {
     pub fn get_result() -> AuthResult {
         OIDC_SESSION.read().unwrap().get_result_()
     }
+}
+
+#[inline]
+pub fn on_tls_opt_changed() {
+    OIDC_SESSION.write().unwrap().reset_client();
 }

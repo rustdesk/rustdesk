@@ -8,7 +8,11 @@ use serde_json::Map;
 use std::{
     fs::File,
     io::{prelude::*, SeekFrom},
-    sync::{mpsc::Receiver, Arc, Mutex},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        mpsc::Receiver,
+        Arc, Mutex,
+    },
     time::{Duration, Instant},
 };
 
@@ -19,6 +23,7 @@ const SHOULD_SEND_SIZE: u64 = 1024 * 1024;
 lazy_static::lazy_static! {
     static ref ENABLE: Arc<Mutex<bool>> = Default::default();
 }
+static TLS_OPT_CHANGED: AtomicBool = AtomicBool::new(false);
 
 pub fn is_enable() -> bool {
     ENABLE.lock().unwrap().clone()
@@ -38,7 +43,12 @@ pub fn run(rx: Receiver<RecordState>) {
         last_send: Instant::now(),
     };
     std::thread::spawn(move || loop {
-        if let Err(e) = match rx.recv() {
+        let msg = rx.recv();
+        if TLS_OPT_CHANGED.load(Ordering::SeqCst) {
+            uploader.client = create_http_client();
+            TLS_OPT_CHANGED.store(false, Ordering::SeqCst);
+        }
+        if let Err(e) = match msg {
             Ok(state) => match state {
                 RecordState::NewFile(filepath) => uploader.handle_new_file(filepath),
                 RecordState::NewFrame => {
@@ -202,4 +212,9 @@ impl RecordUploader {
         )?;
         Ok(())
     }
+}
+
+#[inline]
+pub fn on_tls_opt_changed() {
+    TLS_OPT_CHANGED.store(true, Ordering::SeqCst);
 }

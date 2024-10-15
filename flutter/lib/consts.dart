@@ -258,6 +258,9 @@ const kInvalidValueStr = 'InvalidValueStr';
 const kCommConfKeyTheme = 'theme';
 const kCommConfKeyLang = 'lang';
 
+// tls feature used by rust reqwest
+const kOptionTls = 'tls';
+
 const kMobilePageConstraints = BoxConstraints(maxWidth: 600);
 
 /// [kMouseControlDistance] indicates the distance that self-side move to get control of mouse.

@@ -1,12 +1,19 @@
-use hbb_common::config::Config;
-use hbb_common::log::info;
-use hbb_common::proxy::{Proxy, ProxyScheme};
-use reqwest::blocking::Client as SyncClient;
-use reqwest::Client as AsyncClient;
+use hbb_common::{
+    config::{keys::OPTION_TLS, Config, LocalConfig},
+    log::info,
+    proxy::{Proxy, ProxyScheme},
+};
+use reqwest::{blocking::Client as SyncClient, Client as AsyncClient};
+use std::sync::atomic::{AtomicI8, Ordering};
 
 macro_rules! configure_http_client {
     ($builder:expr, $Client: ty) => {{
         let mut builder = $builder;
+        if is_use_native_tls() {
+            builder = builder.use_native_tls();
+        } else {
+            builder = builder.use_rustls_tls();
+        }
         let client = if let Some(conf) = Config::get_socks() {
             let proxy_result = Proxy::from_conf(&conf, None);
 
@@ -60,6 +67,26 @@ macro_rules! configure_http_client {
 
         client
     }};
+}
+
+static USE_NATIVE_TLS: AtomicI8 = AtomicI8::new(0);
+
+fn is_use_native_tls() -> bool {
+    let mut use_native_tls = true;
+    #[cfg(any(target_os = "windows", target_os = "macos"))]
+    if LocalConfig::get_option(OPTION_TLS) == "rustls" {
+        use_native_tls = false;
+    }
+
+    let last_use_native_tls = USE_NATIVE_TLS.load(Ordering::SeqCst);
+    if use_native_tls && last_use_native_tls != 1 {
+        USE_NATIVE_TLS.store(1, Ordering::SeqCst);
+       info!("Use native TLS: {}", use_native_tls);
+    } else if !use_native_tls && last_use_native_tls != 2 {
+        USE_NATIVE_TLS.store(2, Ordering::SeqCst);
+       info!("Use native TLS: {}", use_native_tls);
+    }
+    use_native_tls
 }
 
 pub fn create_http_client() -> SyncClient {

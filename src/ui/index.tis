@@ -274,6 +274,38 @@ class Enhancements: Reactor.Component {
     }
 }
 
+class Tls: Reactor.Component {
+    function render() {
+        const opts = [["native", "native-tls"], ["rustls", "rustls-tls"]];
+        var me = this;
+        self.timer(1ms, function() { me.toggleMenuState() });
+        return <li>{translate('Tls')}
+            <menu #tls key={opts.length}>
+                {opts.map(function(o) {
+                return <li id={o[0]}><span>{svg_checkmark}</span>{o[1]}</li>;
+                })}
+            </menu>
+        </li>;
+    }
+
+
+    function toggleMenuState() {
+        var cur = handler.get_local_option("tls") || "native";
+        for (var el in this.$$(menu#tls>li)) {
+            var selected = cur == el.id;
+            el.attributes.toggleClass("selected", selected);
+        }
+    }
+
+    event click $(menu#tls>li) (_, me) {
+        var v = me.id;
+        if (v == "native") v = "";
+        handler.set_local_option("tls", v);
+        app.update();
+        this.toggleMenuState();
+    }
+}
+
 function getUserName() {
     try {
         return JSON.parse(handler.get_local_option("user_info")).name;
@@ -322,6 +354,7 @@ class MyIdMenu: Reactor.Component {
                 <li #custom-server>{translate('ID/Relay Server')}</li>
                 <li #whitelist title={translate('whitelist_tip')}>{translate('IP Whitelisting')}</li>
                 <li #socks5-server>{translate('Socks5 Proxy')}</li>
+                { (is_win || is_osx) ? <Tls /> : "" } 
                 <div .separator />
                 <li #stop-service class={service_stopped ? "line-through" : "selected"}><span>{svg_checkmark}</span>{translate("Enable service")}</li>
                 {is_win && handler.is_installed() ? <ShareRdp /> : ""}

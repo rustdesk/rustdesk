@@ -1369,7 +1369,6 @@ class _NetworkState extends State<_Network> with AutomaticKeepAliveClientMixin {
     final scrollController = ScrollController();
     final hideServer =
         bind.mainGetBuildinOption(key: kOptionHideServerSetting) == 'Y';
-    // TODO: support web proxy
     final hideProxy =
         isWeb || bind.mainGetBuildinOption(key: kOptionHideProxySetting) == 'Y';
     return DesktopScrollWrapper(
@@ -1393,6 +1392,7 @@ class _NetworkState extends State<_Network> with AutomaticKeepAliveClientMixin {
                     ]),
                 ]),
               ),
+              if (isWindows || isMacOS) tls(),
             ]).marginOnly(bottom: _kListViewBottomMargin));
   }
 
@@ -1468,6 +1468,31 @@ class _NetworkState extends State<_Network> with AutomaticKeepAliveClientMixin {
     }
 
     return tmpWrapper();
+  }
+
+  Widget tls() {
+    onChanged(String value) async {
+      await bind.mainSetLocalOption(key: kOptionTls, value: value);
+      setState(() {});
+    }
+
+    var current = bind.mainGetLocalOption(key: kOptionTls);
+    if (current.isEmpty) {
+      current = 'native';
+    }
+
+    return _Card(title: 'Tls', children: [
+      _Radio<String>(context,
+          value: 'native',
+          groupValue: current,
+          label: 'native-tls',
+          onChanged: onChanged),
+      _Radio<String>(context,
+          value: 'rustls',
+          groupValue: current,
+          label: 'rustls-tls',
+          onChanged: onChanged),
+    ]);
   }
 }
 
