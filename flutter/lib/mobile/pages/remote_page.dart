@@ -242,6 +242,19 @@ class _RemotePageState extends State<RemotePage> {
     }
   }
 
+  async void handleSoftKeyboardInput(String newValue) {
+    if (isIOS) {
+      // fix: TextFormField onChanged event triggered multiple times when Korean input
+      // https://github.com/rustdesk/rustdesk/pull/9644
+      await Future.delayed(const Duration(milliseconds: 10));
+
+      if (newValue != _textController.text) return;
+      return _handleIOSSoftKeyboardInput(_textController.text);
+    } else {
+      return _handleNonIOSSoftKeyboardInput(newValue);
+    }
+  }
+
   void inputChar(String char) {
     if (char == '\n') {
       char = 'VK_RETURN';
@@ -522,18 +535,7 @@ class _RemotePageState extends State<RemotePage> {
                       controller: _textController,
                       // trick way to make backspace work always
                       keyboardType: TextInputType.multiline,
-                      onChanged: (newValue) async {
-                        if (isIOS) {
-                          // fix: TextFormField onChanged event triggered multiple times when Korean input
-                          // https://github.com/rustdesk/rustdesk/pull/9644
-                          await Future.delayed(const Duration(milliseconds: 10));
-
-                          if (newValue != _textController.text) return;
-                          return _handleIOSSoftKeyboardInput(_textController.text);
-                        } else {
-                          return _handleNonIOSSoftKeyboardInput(newValue);
-                        }
-                      },
+                      onChanged: handleSoftKeyboardInput,
                     ),
             ),
           ];
