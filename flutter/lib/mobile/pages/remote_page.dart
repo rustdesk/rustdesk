@@ -242,15 +242,6 @@ class _RemotePageState extends State<RemotePage> {
     }
   }
 
-  // handle mobile virtual keyboard
-  void handleSoftKeyboardInput(String newValue) {
-    if (isIOS) {
-      _handleIOSSoftKeyboardInput(newValue);
-    } else {
-      _handleNonIOSSoftKeyboardInput(newValue);
-    }
-  }
-
   void inputChar(String char) {
     if (char == '\n') {
       char = 'VK_RETURN';
@@ -531,12 +522,15 @@ class _RemotePageState extends State<RemotePage> {
                       controller: _textController,
                       // trick way to make backspace work always
                       keyboardType: TextInputType.multiline,
-                      // onChanged: handleSoftKeyboardInput,
                       onChanged: (newValue) async {
-                        await Future.delayed(const Duration(milliseconds: 10));
+                        if (isIOS) {
+                          await Future.delayed(const Duration(milliseconds: 10));
 
-                        if (newValue != _textController.text) return;
-                        return handleSoftKeyboardInput(_textController.text);
+                          if (newValue != _textController.text) return;
+                          return _handleIOSSoftKeyboardInput(_textController.text);
+                        } else {
+                          return _handleNonIOSSoftKeyboardInput(newValue);
+                        }
                       },
                     ),
             ),
