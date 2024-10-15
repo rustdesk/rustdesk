@@ -57,6 +57,9 @@ class _RemotePageState extends State<RemotePage> {
 
   final TextEditingController _textController =
       TextEditingController(text: initText);
+  // This timer is used to check the composing status of the soft keyboard.
+  // It is used for Android, Korean(and other similar) input method.
+  Timer? _composingTimer;
 
   _RemotePageState(String id) {
     initSharedStates(id);
@@ -104,6 +107,7 @@ class _RemotePageState extends State<RemotePage> {
     _physicalFocusNode.dispose();
     await gFFI.close();
     _timer?.cancel();
+    _composingTimer?.cancel();
     gFFI.dialogManager.dismissAll();
     await SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual,
         overlays: SystemUiOverlay.values);
@@ -139,6 +143,7 @@ class _RemotePageState extends State<RemotePage> {
           gFFI.ffiModel.pi.version.isNotEmpty) {
         gFFI.invokeMethod("enable_soft_keyboard", false);
       }
+      _composingTimer?.cancel();
     } else {
       _timer?.cancel();
       _timer = Timer(kMobileDelaySoftKeyboardFocus, () {
@@ -202,6 +207,13 @@ class _RemotePageState extends State<RemotePage> {
   }
 
   void _handleNonIOSSoftKeyboardInput(String newValue) {
+        _composingTimer?.cancel();
+    if (_textController.value.isComposingRangeValid) {
+      _composingTimer = Timer(Duration(milliseconds: 25), () {
+        _handleNonIOSSoftKeyboardInput(_textController.value.text);
+      });
+      return;
+    }
     var oldValue = _value;
     _value = newValue;
     if (oldValue.isNotEmpty &&
