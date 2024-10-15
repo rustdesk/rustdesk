@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common.dart';
@@ -16,12 +14,16 @@ class StateGlobal {
   bool _isMinimized = false;
   final RxBool isMaximized = false.obs;
   final RxBool _showTabBar = true.obs;
-  final RxDouble _resizeEdgeSize = RxDouble(kWindowEdgeSize);
+  final RxDouble _resizeEdgeSize = RxDouble(windowResizeEdgeSize);
   final RxDouble _windowBorderWidth = RxDouble(kWindowBorderWidth);
   final RxBool showRemoteToolBar = false.obs;
   final svcStatus = SvcStatus.notReady.obs;
-  // Only used for macOS
-  bool? closeOnFullscreen;
+  final RxBool isFocused = false.obs;
+  // for mobile and web
+  bool isInMainPage = true;
+  bool isWebVisible = true;
+
+  final isPortrait = false.obs;
 
   String _inputSource = '';
 
@@ -57,10 +59,9 @@ class StateGlobal {
     if (!_fullscreen.isTrue) {
       if (isMaximized.value != v) {
         isMaximized.value = v;
-        _resizeEdgeSize.value =
-            isMaximized.isTrue ? kMaximizeEdgeSize : kWindowEdgeSize;
+        refreshResizeEdgeSize();
       }
-      if (!Platform.isMacOS) {
+      if (!isMacOS) {
         _windowBorderWidth.value = v ? 0 : kWindowBorderWidth;
       }
     }
@@ -72,30 +73,52 @@ class StateGlobal {
     if (_fullscreen.value != v) {
       _fullscreen.value = v;
       _showTabBar.value = !_fullscreen.value;
-      _resizeEdgeSize.value = fullscreen.isTrue
-          ? kFullScreenEdgeSize
-          : isMaximized.isTrue
-              ? kMaximizeEdgeSize
-              : kWindowEdgeSize;
-      print(
-          "fullscreen: $fullscreen, resizeEdgeSize: ${_resizeEdgeSize.value}");
-      _windowBorderWidth.value = fullscreen.isTrue ? 0 : kWindowBorderWidth;
-      if (procWnd) {
-        final wc = WindowController.fromWindowId(windowId);
-        wc.setFullscreen(_fullscreen.isTrue).then((_) {
-          // https://github.com/leanflutter/window_manager/issues/131#issuecomment-1111587982
-          if (Platform.isWindows && !v) {
-            Future.delayed(Duration.zero, () async {
-              final frame = await wc.getFrame();
-              final newRect = Rect.fromLTWH(
-                  frame.left, frame.top, frame.width + 1, frame.height + 1);
-              await wc.setFrame(newRect);
-            });
-          }
-        });
+      if (isWebDesktop) {
+        procFullscreenWeb();
+      } else {
+        procFullscreenNative(procWnd);
       }
     }
   }
+
+  procFullscreenWeb() {
+    final isFullscreen = ffiGetByName('fullscreen') == 'Y';
+    String fullscreenValue = '';
+    if (isFullscreen && _fullscreen.isFalse) {
+      fullscreenValue = 'N';
+    } else if (!isFullscreen && fullscreen.isTrue) {
+      fullscreenValue = 'Y';
+    }
+    if (fullscreenValue.isNotEmpty) {
+      ffiSetByName('fullscreen', fullscreenValue);
+    }
+  }
+
+  procFullscreenNative(bool procWnd) {
+    refreshResizeEdgeSize();
+    print("fullscreen: $fullscreen, resizeEdgeSize: ${_resizeEdgeSize.value}");
+    _windowBorderWidth.value = fullscreen.isTrue ? 0 : kWindowBorderWidth;
+    if (procWnd) {
+      final wc = WindowController.fromWindowId(windowId);
+      wc.setFullscreen(_fullscreen.isTrue).then((_) {
+        // https://github.com/leanflutter/window_manager/issues/131#issuecomment-1111587982
+        if (isWindows && _fullscreen.isFalse) {
+          Future.delayed(Duration.zero, () async {
+            final frame = await wc.getFrame();
+            final newRect = Rect.fromLTWH(
+                frame.left, frame.top, frame.width + 1, frame.height + 1);
+            await wc.setFrame(newRect);
+          });
+        }
+      });
+    }
+  }
+
+  refreshResizeEdgeSize() => _resizeEdgeSize.value = fullscreen.isTrue
+      ? kFullScreenEdgeSize
+      : isMaximized.isTrue
+          ? kMaximizeEdgeSize
+          : windowResizeEdgeSize;
 
   String getInputSource({bool force = false}) {
     if (force || _inputSource.isEmpty) {
@@ -109,9 +132,16 @@ class StateGlobal {
     _inputSource = bind.mainGetInputSource();
   }
 
-  StateGlobal._();
+  StateGlobal._() {
+    if (isWebDesktop) {
+      platformFFI.setFullscreenCallback((v) {
+        _fullscreen.value = v;
+      });
+    }
+  }
 
   static final StateGlobal instance = StateGlobal._();
 }
 
+// This final variable is initialized when the first time it is accessed.
 final stateGlobal = StateGlobal.instance;

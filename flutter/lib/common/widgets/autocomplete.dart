@@ -7,15 +7,11 @@ import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/common/widgets/peer_card.dart';
 
 Future<List<Peer>> getAllPeers() async {
-  Map<String, dynamic> recentPeers =
-      jsonDecode(await bind.mainLoadRecentPeersSync());
-  Map<String, dynamic> lanPeers = jsonDecode(await bind.mainLoadLanPeersSync());
-  Map<String, dynamic> abPeers = jsonDecode(await bind.mainLoadAbSync());
-  Map<String, dynamic> groupPeers = jsonDecode(await bind.mainLoadGroupSync());
-
+  Map<String, dynamic> recentPeers = jsonDecode(bind.mainLoadRecentPeersSync());
+  Map<String, dynamic> lanPeers = jsonDecode(bind.mainLoadLanPeersSync());
   Map<String, dynamic> combinedPeers = {};
 
-  void _mergePeers(Map<String, dynamic> peers) {
+  void mergePeers(Map<String, dynamic> peers) {
     if (peers.containsKey("peers")) {
       dynamic peerData = peers["peers"];
 
@@ -41,10 +37,18 @@ Future<List<Peer>> getAllPeers() async {
     }
   }
 
-  _mergePeers(recentPeers);
-  _mergePeers(lanPeers);
-  _mergePeers(abPeers);
-  _mergePeers(groupPeers);
+  mergePeers(recentPeers);
+  mergePeers(lanPeers);
+  for (var p in gFFI.abModel.allPeers()) {
+    if (!combinedPeers.containsKey(p.id)) {
+      combinedPeers[p.id] = p.toJson();
+    }
+  }
+  for (var p in gFFI.groupModel.peers.map((e) => Peer.copy(e)).toList()) {
+    if (!combinedPeers.containsKey(p.id)) {
+      combinedPeers[p.id] = p.toJson();
+    }
+  }
 
   List<Peer> parsedPeers = [];
 
@@ -65,10 +69,10 @@ class AutocompletePeerTile extends StatefulWidget {
   }) : super(key: key);
 
   @override
-  _AutocompletePeerTileState createState() => _AutocompletePeerTileState();
+  AutocompletePeerTileState createState() => AutocompletePeerTileState();
 }
 
-class _AutocompletePeerTileState extends State<AutocompletePeerTile> {
+class AutocompletePeerTileState extends State<AutocompletePeerTile> {
   List _frontN<T>(List list, int n) {
     if (list.length <= n) {
       return list;
@@ -79,7 +83,7 @@ class _AutocompletePeerTileState extends State<AutocompletePeerTile> {
 
   @override
   Widget build(BuildContext context) {
-    final double _tileRadius = 5;
+    final double tileRadius = 5;
     final name =
         '${widget.peer.username}${widget.peer.username.isNotEmpty && widget.peer.hostname.isNotEmpty ? '@' : ''}${widget.peer.hostname}';
     final greyStyle = TextStyle(
@@ -100,8 +104,8 @@ class _AutocompletePeerTileState extends State<AutocompletePeerTile> {
                           color: str2color(
                               '${widget.peer.id}${widget.peer.platform}', 0x7f),
                           borderRadius: BorderRadius.only(
-                            topLeft: Radius.circular(_tileRadius),
-                            bottomLeft: Radius.circular(_tileRadius),
+                            topLeft: Radius.circular(tileRadius),
+                            bottomLeft: Radius.circular(tileRadius),
                           ),
                         ),
                         alignment: Alignment.center,
@@ -117,8 +121,8 @@ class _AutocompletePeerTileState extends State<AutocompletePeerTile> {
                           decoration: BoxDecoration(
                             color: Theme.of(context).colorScheme.background,
                             borderRadius: BorderRadius.only(
-                              topRight: Radius.circular(_tileRadius),
-                              bottomRight: Radius.circular(_tileRadius),
+                              topRight: Radius.circular(tileRadius),
+                              bottomRight: Radius.circular(tileRadius),
                             ),
                           ),
                           child: Row(
@@ -148,7 +152,7 @@ class _AutocompletePeerTileState extends State<AutocompletePeerTile> {
                                                           .textTheme
                                                           .titleSmall,
                                                     )),
-                                                    !widget.peer.alias.isEmpty
+                                                    widget.peer.alias.isNotEmpty
                                                         ? Padding(
                                                             padding:
                                                                 const EdgeInsets
@@ -182,10 +186,10 @@ class _AutocompletePeerTileState extends State<AutocompletePeerTile> {
                   ],
                 ))));
     final colors = _frontN(widget.peer.tags, 25)
-        .map((e) => gFFI.abModel.getTagColor(e))
+        .map((e) => gFFI.abModel.getCurrentAbTagColor(e))
         .toList();
     return Tooltip(
-      message: isMobile
+      message: !(isDesktop || isWebDesktop)
           ? ''
           : widget.peer.tags.isNotEmpty
               ? '${translate('Tags')}: ${widget.peer.tags.join(', ')}'

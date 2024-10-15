@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+    <dict>
+        <key>Label</key>
+        <string>com.carriez.RustDesk_service</string>
+        <key>KeepAlive</key>
+        <true/>
+        <key>ThrottleInterval</key>
+        <integer>1</integer>
+        <key>ProgramArguments</key>
+        <array>
+        <string>/bin/sh</string>
+        <string>-c</string>
+        <string>sleep 3; if pgrep -f '/Applications/RustDesk.app/Contents/MacOS/RustDesk --server' > /dev/null; then /Applications/RustDesk.app/Contents/MacOS/RustDesk --service; fi</string>
+        </array>
+        <key>RunAtLoad</key>
+        <true/>
+        <key>WorkingDirectory</key>
+        <string>/Applications/RustDesk.app/Contents/MacOS/</string>
+        <key>StandardErrorPath</key>
+        <string>/tmp/rustdesk_service.err</string>
+        <key>StandardOutPath</key>
+        <string>/tmp/rustdesk_service.out</string>
+    </dict>
+</plist>

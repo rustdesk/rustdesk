@@ -1,16 +1,5 @@
-#[cfg(any(target_os = "android", target_os = "ios", feature = "flutter"))]
-use std::iter::FromIterator;
-#[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
-use std::sync::Arc;
-use std::{
-    collections::HashMap,
-    ops::{Deref, DerefMut},
-    sync::{
-        atomic::{AtomicI64, Ordering},
-        RwLock,
-    },
-};
-
+#[cfg(target_os = "windows")]
+use crate::ipc::ClipboardNonFile;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use crate::ipc::Connection;
 #[cfg(not(any(target_os = "ios")))]
@@ -21,7 +10,7 @@ use clipboard::ContextSend;
 use hbb_common::tokio::sync::mpsc::unbounded_channel;
 use hbb_common::{
     allow_err,
-    config::Config,
+    config::{keys::*, option2bool, Config},
     fs::is_write_need_confirmation,
     fs::{self, get_string, new_send_confirm, DigestCheckResult},
     log,
@@ -36,6 +25,18 @@ use hbb_common::{
 #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
 use hbb_common::{tokio::sync::Mutex as TokioMutex, ResultType};
 use serde_derive::Serialize;
+#[cfg(any(target_os = "android", target_os = "ios", feature = "flutter"))]
+use std::iter::FromIterator;
+#[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
+use std::sync::Arc;
+use std::{
+    collections::HashMap,
+    ops::{Deref, DerefMut},
+    sync::{
+        atomic::{AtomicI64, Ordering},
+        RwLock,
+    },
+};
 
 #[derive(Serialize, Clone)]
 pub struct Client {
@@ -78,8 +79,9 @@ struct IpcTaskRunner<T: InvokeUiCM> {
 
 lazy_static::lazy_static! {
     static ref CLIENTS: RwLock<HashMap<i32, Client>> = Default::default();
-    static ref CLICK_TIME: AtomicI64 = AtomicI64::new(0);
 }
+
+static CLICK_TIME: AtomicI64 = AtomicI64::new(0);
 
 #[derive(Clone)]
 pub struct ConnectionManager<T: InvokeUiCM> {
@@ -220,7 +222,7 @@ impl<T: InvokeUiCM> ConnectionManager<T> {
         self.ui_handler.show_elevation(show);
     }
 
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(not(target_os = "ios"))]
     fn voice_call_started(&self, id: i32) {
         if let Some(client) = CLIENTS.write().unwrap().get_mut(&id) {
             client.incoming_voice_call = false;
@@ -229,7 +231,7 @@ impl<T: InvokeUiCM> ConnectionManager<T> {
         }
     }
 
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(not(target_os = "ios"))]
     fn voice_call_incoming(&self, id: i32) {
         if let Some(client) = CLIENTS.write().unwrap().get_mut(&id) {
             client.incoming_voice_call = true;
@@ -238,7 +240,7 @@ impl<T: InvokeUiCM> ConnectionManager<T> {
         }
     }
 
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(not(target_os = "ios"))]
     fn voice_call_closed(&self, id: i32, _reason: &str) {
         if let Some(client) = CLIENTS.write().unwrap().get_mut(&id) {
             client.incoming_voice_call = false;
@@ -276,6 +278,15 @@ pub fn close(id: i32) {
     if let Some(client) = CLIENTS.read().unwrap().get(&id) {
         allow_err!(client.tx.send(Data::Close));
     };
+}
+
+#[inline]
+#[cfg(target_os = "android")]
+pub fn notify_input_control(v: bool) {
+    for (_, mut client) in CLIENTS.write().unwrap().iter_mut() {
+        client.keyboard = v;
+        allow_err!(client.tx.send(Data::InputControl(v)));
+    }
 }
 
 #[inline]
@@ -429,7 +440,7 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
                                 Data::ClipboardFile(_clip) => {
                                     #[cfg(any(target_os = "windows", target_os="linux", target_os = "macos"))]
                                     {
-                                        let is_stopping_allowed = _clip.is_stopping_allowed_from_peer();
+                                        let is_stopping_allowed = _clip.is_beginning_message();
                                         let is_clipboard_enabled = ContextSend::is_enabled();
                                         let file_transfer_enabled = self.file_transfer_enabled;
                                         let stop = !is_stopping_allowed && !(is_clipboard_enabled && file_transfer_enabled);
@@ -476,6 +487,45 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
                                 Data::CloseVoiceCall(reason) => {
                                     self.cm.voice_call_closed(self.conn_id, reason.as_str());
                                 }
+                                #[cfg(target_os = "windows")]
+                                Data::ClipboardNonFile(_) => {
+                                    match crate::clipboard::check_clipboard_cm() {
+                                        Ok(multi_clipoards) => {
+                                            let mut raw_contents = bytes::BytesMut::new();
+                                            let mut main_data = vec![];
+                                            for c in multi_clipoards.clipboards.into_iter() {
+                                                let content_len = c.content.len();
+                                                let (content, next_raw) = {
+                                                    // TODO: find out a better threshold
+                                                    if content_len > 1024 * 3 {
+                                                        raw_contents.extend(c.content);
+                                                        (bytes::Bytes::new(), true)
+                                                    } else {
+                                                        (c.content, false)
+                                                    }
+                                                };
+                                                main_data.push(ClipboardNonFile {
+                                                    compress: c.compress,
+                                                    content,
+                                                    content_len,
+                                                    next_raw,
+                                                    width: c.width,
+                                                    height: c.height,
+                                                    format: c.format.value(),
+                                                    special_name: c.special_name,
+                                                });
+                                            }
+                                            allow_err!(self.stream.send(&Data::ClipboardNonFile(Some(("".to_owned(), main_data)))).await);
+                                            if !raw_contents.is_empty() {
+                                                allow_err!(self.stream.send_raw(raw_contents.into()).await);
+                                            }
+                                        }
+                                        Err(e) => {
+                                            log::debug!("Failed to get clipboard content. {}", e);
+                                            allow_err!(self.stream.send(&Data::ClipboardNonFile(Some((format!("{}", e), vec![])))).await);
+                                        }
+                                    }
+                                }
                                 _ => {
 
                                 }
@@ -519,7 +569,12 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
                             if stop {
                                 ContextSend::set_is_stopped();
                             } else {
-                                allow_err!(self.tx.send(Data::ClipboardFile(_clip)));
+                                if _clip.is_beginning_message() && crate::get_builtin_option(OPTION_ONE_WAY_FILE_TRANSFER) == "Y" {
+                                    // If one way file transfer is enabled, don't send clipboard file to client
+                                    // Don't call `ContextSend::set_is_stopped()`, because it will stop bidirectional file copy&paste.
+                                } else {
+                                    allow_err!(self.tx.send(Data::ClipboardFile(_clip)));
+                                }
                             }
                         }
                     }
@@ -573,8 +628,10 @@ pub async fn start_ipc<T: InvokeUiCM>(cm: ConnectionManager<T>) {
             feature = "unix-file-copy-paste"
         ),
     ))]
-    ContextSend::enable(Config::get_option("enable-file-transfer").is_empty());
-
+    ContextSend::enable(option2bool(
+        OPTION_ENABLE_FILE_TRANSFER,
+        &Config::get_option(OPTION_ENABLE_FILE_TRANSFER),
+    ));
     match ipc::new_listener("_cm").await {
         Ok(mut incoming) => {
             while let Some(result) = incoming.next().await {
@@ -596,7 +653,7 @@ pub async fn start_ipc<T: InvokeUiCM>(cm: ConnectionManager<T>) {
             log::error!("Failed to start cm ipc server: {}", err);
         }
     }
-    crate::platform::quit_gui();
+    quit_cm();
 }
 
 #[cfg(target_os = "android")]
@@ -654,6 +711,15 @@ pub async fn start_listen<T: InvokeUiCM>(
             }
             Some(Data::Close) => {
                 break;
+            }
+            Some(Data::StartVoiceCall) => {
+                cm.voice_call_started(current_id);
+            }
+            Some(Data::VoiceCallIncoming) => {
+                cm.voice_call_incoming(current_id);
+            }
+            Some(Data::CloseVoiceCall(reason)) => {
+                cm.voice_call_closed(current_id, reason.as_str());
             }
             None => {
                 break;
@@ -823,6 +889,9 @@ async fn handle_fs(
                 }
             }
         }
+        ipc::FS::Rename { id, path, new_name } => {
+            rename_file(path, new_name, id, tx).await;
+        }
         _ => {}
     }
 }
@@ -880,6 +949,17 @@ async fn remove_file(path: String, id: i32, file_num: i32, tx: &UnboundedSender<
 async fn create_dir(path: String, id: i32, tx: &UnboundedSender<Data>) {
     handle_result(
         spawn_blocking(move || fs::create_dir(&path)).await,
+        id,
+        0,
+        tx,
+    )
+    .await;
+}
+
+#[cfg(not(any(target_os = "ios")))]
+async fn rename_file(path: String, new_name: String, id: i32, tx: &UnboundedSender<Data>) {
+    handle_result(
+        spawn_blocking(move || fs::rename_file(&path, &new_name)).await,
         id,
         0,
         tx,
@@ -967,4 +1047,12 @@ pub fn close_voice_call(id: i32) {
         #[cfg(not(any(target_os = "ios")))]
         allow_err!(client.tx.send(Data::CloseVoiceCall("".to_owned())));
     };
+}
+
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+pub fn quit_cm() {
+    // in case of std::process::exit not work
+    log::info!("quit cm");
+    CLIENTS.write().unwrap().clear();
+    crate::platform::quit_gui();
 }

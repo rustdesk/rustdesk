@@ -7,7 +7,7 @@ import 'package:flutter_hbb/models/peer_model.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:get/get.dart';
 import 'dart:convert';
-import 'package:http/http.dart' as http;
+import '../utils/http_service.dart' as http;
 
 class GroupModel {
   final RxBool groupLoading = false.obs;
@@ -23,10 +23,19 @@ class GroupModel {
 
   bool get emtpy => users.isEmpty && peers.isEmpty;
 
-  GroupModel(this.parent);
+  late final Peers peersModel;
+
+  GroupModel(this.parent) {
+    peersModel = Peers(
+        name: PeersModelName.group,
+        getInitPeers: () => peers,
+        loadEvent: LoadEvent.group);
+  }
 
   Future<void> pull({force = true, quiet = false}) async {
+    if (bind.isDisableGroupPanel()) return;
     if (!gFFI.userModel.isLogin || groupLoading.value) return;
+    if (gFFI.userModel.networkError.isNotEmpty) return;
     if (!force && initialized) return;
     if (!quiet) {
       groupLoading.value = true;

@@ -1,12 +1,9 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:ffi' hide Size;
-import 'dart:io';
 import 'dart:math';
 
 import 'package:back_button_interceptor/back_button_interceptor.dart';
 import 'package:desktop_multi_window/desktop_multi_window.dart';
-import 'package:ffi/ffi.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -15,17 +12,16 @@ import 'package:flutter_hbb/common/formatter/id_formatter.dart';
 import 'package:flutter_hbb/desktop/widgets/refresh_wrapper.dart';
 import 'package:flutter_hbb/desktop/widgets/tabbar_widget.dart';
 import 'package:flutter_hbb/main.dart';
-import 'package:flutter_hbb/models/desktop_render_texture.dart';
 import 'package:flutter_hbb/models/peer_model.dart';
 import 'package:flutter_hbb/models/state_model.dart';
 import 'package:flutter_hbb/utils/multi_window_manager.dart';
 import 'package:flutter_hbb/utils/platform_channel.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:get/get.dart';
+import 'package:provider/provider.dart';
 import 'package:uni_links/uni_links.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:uuid/uuid.dart';
-import 'package:win32/win32.dart' as win32;
 import 'package:window_manager/window_manager.dart';
 import 'package:window_size/window_size.dart' as window_size;
 
@@ -33,21 +29,40 @@ import '../consts.dart';
 import 'common/widgets/overlay.dart';
 import 'mobile/pages/file_manager_page.dart';
 import 'mobile/pages/remote_page.dart';
-import 'models/input_model.dart';
+import 'desktop/pages/remote_page.dart' as desktop_remote;
+import 'desktop/pages/file_manager_page.dart' as desktop_file_manager;
+import 'package:flutter_hbb/desktop/widgets/remote_toolbar.dart';
 import 'models/model.dart';
 import 'models/platform_model.dart';
+
+import 'package:flutter_hbb/native/win32.dart'
+    if (dart.library.html) 'package:flutter_hbb/web/win32.dart';
+import 'package:flutter_hbb/native/common.dart'
+    if (dart.library.html) 'package:flutter_hbb/web/common.dart';
 
 final globalKey = GlobalKey<NavigatorState>();
 final navigationBarKey = GlobalKey();
 
-final isAndroid = Platform.isAndroid;
-final isIOS = Platform.isIOS;
-final isDesktop = Platform.isWindows || Platform.isMacOS || Platform.isLinux;
-var isWeb = false;
-var isWebDesktop = false;
+final isAndroid = isAndroid_;
+final isIOS = isIOS_;
+final isWindows = isWindows_;
+final isMacOS = isMacOS_;
+final isLinux = isLinux_;
+final isDesktop = isDesktop_;
+final isWeb = isWeb_;
+final isWebDesktop = isWebDesktop_;
+final isWebOnWindows = isWebOnWindows_;
+final isWebOnLinux = isWebOnLinux_;
+final isWebOnMacOs = isWebOnMacOS_;
 var isMobile = isAndroid || isIOS;
-var version = "";
+var version = '';
 int androidVersion = 0;
+
+// Only used on Linux.
+// `windowManager.setResizable(false)` will reset the window size to the default size on Linux.
+// https://stackoverflow.com/questions/8193613/gtk-window-resize-disable-without-going-back-to-default
+// So we need to use this flag to enable/disable resizable.
+bool _linuxWindowResizable = true;
 
 /// only available for Windows target
 int windowsBuildNumber = 0;
@@ -55,6 +70,8 @@ DesktopType? desktopType;
 
 bool get isMainDesktopWindow =>
     desktopType == DesktopType.main || desktopType == DesktopType.cm;
+
+String get screenInfo => screenInfo_;
 
 /// Check if the app is running with single view mode.
 bool isSingleViewApp() {
@@ -229,11 +246,13 @@ class MyTheme {
   );
 
   static SwitchThemeData switchTheme() {
-    return SwitchThemeData(splashRadius: isDesktop ? 0 : kRadialReactionRadius);
+    return SwitchThemeData(
+        splashRadius: (isDesktop || isWebDesktop) ? 0 : kRadialReactionRadius);
   }
 
   static RadioThemeData radioTheme() {
-    return RadioThemeData(splashRadius: isDesktop ? 0 : kRadialReactionRadius);
+    return RadioThemeData(
+        splashRadius: (isDesktop || isWebDesktop) ? 0 : kRadialReactionRadius);
   }
 
   // Checkbox
@@ -282,7 +301,7 @@ class MyTheme {
   static EdgeInsets dialogContentPadding({bool actions = true}) {
     final double p = dialogPadding;
 
-    return isDesktop
+    return (isDesktop || isWebDesktop)
         ? EdgeInsets.fromLTRB(p, p, p, actions ? (p - 4) : p)
         : EdgeInsets.fromLTRB(p, p, p, actions ? (p / 2) : p);
   }
@@ -290,12 +309,12 @@ class MyTheme {
   static EdgeInsets dialogActionsPadding() {
     final double p = dialogPadding;
 
-    return isDesktop
+    return (isDesktop || isWebDesktop)
         ? EdgeInsets.fromLTRB(p, 0, p, (p - 4))
         : EdgeInsets.fromLTRB(p, 0, (p - mobileTextButtonPaddingLR), (p / 2));
   }
 
-  static EdgeInsets dialogButtonPadding = isDesktop
+  static EdgeInsets dialogButtonPadding = (isDesktop || isWebDesktop)
       ? EdgeInsets.only(left: dialogPadding)
       : EdgeInsets.only(left: dialogPadding / 3);
 
@@ -326,10 +345,15 @@ class MyTheme {
   );
 
   static ThemeData lightTheme = ThemeData(
+    // https://stackoverflow.com/questions/77537315/after-upgrading-to-flutter-3-16-the-app-bar-background-color-button-size-and
+    useMaterial3: false,
     brightness: Brightness.light,
     hoverColor: Color.fromARGB(255, 224, 224, 224),
     scaffoldBackgroundColor: Colors.white,
     dialogBackgroundColor: Colors.white,
+    appBarTheme: AppBarTheme(
+      shadowColor: Colors.transparent,
+    ),
     dialogTheme: DialogTheme(
       elevation: 15,
       shape: RoundedRectangleBorder(
@@ -365,10 +389,10 @@ class MyTheme {
       labelColor: Colors.black87,
     ),
     tooltipTheme: tooltipTheme(),
-    splashColor: isDesktop ? Colors.transparent : null,
-    highlightColor: isDesktop ? Colors.transparent : null,
-    splashFactory: isDesktop ? NoSplash.splashFactory : null,
-    textButtonTheme: isDesktop
+    splashColor: (isDesktop || isWebDesktop) ? Colors.transparent : null,
+    highlightColor: (isDesktop || isWebDesktop) ? Colors.transparent : null,
+    splashFactory: (isDesktop || isWebDesktop) ? NoSplash.splashFactory : null,
+    textButtonTheme: (isDesktop || isWebDesktop)
         ? TextButtonThemeData(
             style: TextButton.styleFrom(
               splashFactory: NoSplash.splashFactory,
@@ -408,7 +432,9 @@ class MyTheme {
         color: Colors.white,
         shape: RoundedRectangleBorder(
           side: BorderSide(
-              color: isDesktop ? Color(0xFFECECEC) : Colors.transparent),
+              color: (isDesktop || isWebDesktop)
+                  ? Color(0xFFECECEC)
+                  : Colors.transparent),
           borderRadius: BorderRadius.all(Radius.circular(8.0)),
         )),
   ).copyWith(
@@ -418,10 +444,14 @@ class MyTheme {
     ],
   );
   static ThemeData darkTheme = ThemeData(
+    useMaterial3: false,
     brightness: Brightness.dark,
     hoverColor: Color.fromARGB(255, 45, 46, 53),
     scaffoldBackgroundColor: Color(0xFF18191E),
     dialogBackgroundColor: Color(0xFF18191E),
+    appBarTheme: AppBarTheme(
+      shadowColor: Colors.transparent,
+    ),
     dialogTheme: DialogTheme(
       elevation: 15,
       shape: RoundedRectangleBorder(
@@ -433,7 +463,7 @@ class MyTheme {
       ),
     ),
     scrollbarTheme: scrollbarThemeDark,
-    inputDecorationTheme: isDesktop
+    inputDecorationTheme: (isDesktop || isWebDesktop)
         ? InputDecorationTheme(
             fillColor: Color(0xFF24252B),
             filled: true,
@@ -460,10 +490,10 @@ class MyTheme {
       labelColor: Colors.white70,
     ),
     tooltipTheme: tooltipTheme(),
-    splashColor: isDesktop ? Colors.transparent : null,
-    highlightColor: isDesktop ? Colors.transparent : null,
-    splashFactory: isDesktop ? NoSplash.splashFactory : null,
-    textButtonTheme: isDesktop
+    splashColor: (isDesktop || isWebDesktop) ? Colors.transparent : null,
+    highlightColor: (isDesktop || isWebDesktop) ? Colors.transparent : null,
+    splashFactory: (isDesktop || isWebDesktop) ? NoSplash.splashFactory : null,
+    textButtonTheme: (isDesktop || isWebDesktop)
         ? TextButtonThemeData(
             style: TextButton.styleFrom(
               splashFactory: NoSplash.splashFactory,
@@ -525,16 +555,17 @@ class MyTheme {
     return themeModeFromString(bind.mainGetLocalOption(key: kCommConfKeyTheme));
   }
 
-  static void changeDarkMode(ThemeMode mode) async {
+  static Future<void> changeDarkMode(ThemeMode mode) async {
     Get.changeThemeMode(mode);
-    if (desktopType == DesktopType.main || isAndroid || isIOS) {
+    if (desktopType == DesktopType.main || isAndroid || isIOS || isWeb) {
       if (mode == ThemeMode.system) {
-        await bind.mainSetLocalOption(key: kCommConfKeyTheme, value: '');
+        await bind.mainSetLocalOption(
+            key: kCommConfKeyTheme, value: defaultOptionTheme);
       } else {
         await bind.mainSetLocalOption(
             key: kCommConfKeyTheme, value: mode.toShortString());
       }
-      await bind.mainChangeTheme(dark: mode.toShortString());
+      if (!isWeb) await bind.mainChangeTheme(dark: mode.toShortString());
       // Synchronize the window theme of the system.
       updateSystemWindowTheme();
     }
@@ -608,10 +639,30 @@ List<Locale> supportedLocales = const [
   Locale('da'),
   Locale('eo'),
   Locale('tr'),
-  Locale('vi'),
-  Locale('pl'),
   Locale('kz'),
   Locale('es'),
+  Locale('nl'),
+  Locale('nb'),
+  Locale('et'),
+  Locale('eu'),
+  Locale('bg'),
+  Locale('be'),
+  Locale('vn'),
+  Locale('uk'),
+  Locale('fa'),
+  Locale('ca'),
+  Locale('el'),
+  Locale('sv'),
+  Locale('sq'),
+  Locale('sr'),
+  Locale('th'),
+  Locale('sl'),
+  Locale('ro'),
+  Locale('lt'),
+  Locale('lv'),
+  Locale('ar'),
+  Locale('he'),
+  Locale('hr'),
 ];
 
 String formatDurationToTime(Duration duration) {
@@ -625,11 +676,21 @@ String formatDurationToTime(Duration duration) {
 
 closeConnection({String? id}) {
   if (isAndroid || isIOS) {
-    gFFI.chatModel.hideChatOverlay();
-    Navigator.popUntil(globalKey.currentContext!, ModalRoute.withName("/"));
+    () async {
+      await SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual,
+          overlays: SystemUiOverlay.values);
+      gFFI.chatModel.hideChatOverlay();
+      Navigator.popUntil(globalKey.currentContext!, ModalRoute.withName("/"));
+      stateGlobal.isInMainPage = true;
+    }();
   } else {
-    final controller = Get.find<DesktopTabController>();
-    controller.closeBy(id);
+    if (isWeb) {
+      Navigator.popUntil(globalKey.currentContext!, ModalRoute.withName("/"));
+      stateGlobal.isInMainPage = true;
+    } else {
+      final controller = Get.find<DesktopTabController>();
+      controller.closeBy(id);
+    }
   }
 }
 
@@ -692,7 +753,21 @@ class OverlayDialogManager {
   int _tagCount = 0;
 
   OverlayEntry? _mobileActionsOverlayEntry;
-  RxBool mobileActionsOverlayVisible = false.obs;
+  RxBool mobileActionsOverlayVisible = true.obs;
+
+  setMobileActionsOverlayVisible(bool v, {store = true}) {
+    if (store) {
+      bind.setLocalFlutterOption(k: kOptionShowMobileAction, v: v ? 'Y' : 'N');
+    }
+    // No need to read the value from local storage after setting it.
+    // It better to toggle the value directly.
+    mobileActionsOverlayVisible.value = v;
+  }
+
+  loadMobileActionsOverlayVisible() {
+    mobileActionsOverlayVisible.value =
+        bind.getLocalFlutterOption(k: kOptionShowMobileAction) != 'N';
+  }
 
   void setOverlayState(OverlayKeyState overlayKeyState) {
     _overlayKeyState = overlayKeyState;
@@ -807,7 +882,7 @@ class OverlayDialogManager {
                   Offstage(
                       offstage: !showCancel,
                       child: Center(
-                          child: isDesktop
+                          child: (isDesktop || isWebDesktop)
                               ? dialogButton('Cancel', onPressed: cancel)
                               : TextButton(
                                   style: flatButtonStyle,
@@ -833,40 +908,20 @@ class OverlayDialogManager {
     final overlayState = _overlayKeyState.state;
     if (overlayState == null) return;
 
-    // compute overlay position
-    final screenW = MediaQuery.of(globalKey.currentContext!).size.width;
-    final screenH = MediaQuery.of(globalKey.currentContext!).size.height;
-    const double overlayW = 200;
-    const double overlayH = 45;
-    final left = (screenW - overlayW) / 2;
-    final top = screenH - overlayH - 80;
-
-    final overlay = OverlayEntry(builder: (context) {
-      final session = ffi ?? gFFI;
-      return DraggableMobileActions(
-        position: Offset(left, top),
-        width: overlayW,
-        height: overlayH,
-        onBackPressed: () => session.inputModel.tap(MouseButtons.right),
-        onHomePressed: () => session.inputModel.tap(MouseButtons.wheel),
-        onRecentPressed: () async {
-          session.inputModel.sendMouse('down', MouseButtons.wheel);
-          await Future.delayed(const Duration(milliseconds: 500));
-          session.inputModel.sendMouse('up', MouseButtons.wheel);
-        },
-        onHidePressed: () => hideMobileActionsOverlay(),
-      );
-    });
+    final overlay = makeMobileActionsOverlayEntry(
+      () => hideMobileActionsOverlay(),
+      ffi: ffi,
+    );
     overlayState.insert(overlay);
     _mobileActionsOverlayEntry = overlay;
-    mobileActionsOverlayVisible.value = true;
+    setMobileActionsOverlayVisible(true);
   }
 
-  void hideMobileActionsOverlay() {
+  void hideMobileActionsOverlay({store = true}) {
     if (_mobileActionsOverlayEntry != null) {
       _mobileActionsOverlayEntry!.remove();
       _mobileActionsOverlayEntry = null;
-      mobileActionsOverlayVisible.value = false;
+      setMobileActionsOverlayVisible(false, store: store);
       return;
     }
   }
@@ -882,6 +937,47 @@ class OverlayDialogManager {
   bool existing(String tag) {
     return _dialogs.keys.contains(tag);
   }
+}
+
+makeMobileActionsOverlayEntry(VoidCallback? onHide, {FFI? ffi}) {
+  makeMobileActions(BuildContext context, double s) {
+    final scale = s < 0.85 ? 0.85 : s;
+    final session = ffi ?? gFFI;
+    const double overlayW = 200;
+    const double overlayH = 45;
+    computeOverlayPosition() {
+      final screenW = MediaQuery.of(context).size.width;
+      final screenH = MediaQuery.of(context).size.height;
+      final left = (screenW - overlayW * scale) / 2;
+      final top = screenH - (overlayH + 80) * scale;
+      return Offset(left, top);
+    }
+
+    if (draggablePositions.mobileActions.isInvalid()) {
+      draggablePositions.mobileActions.update(computeOverlayPosition());
+    } else {
+      draggablePositions.mobileActions.tryAdjust(overlayW, overlayH, scale);
+    }
+    return DraggableMobileActions(
+      scale: scale,
+      position: draggablePositions.mobileActions,
+      width: overlayW,
+      height: overlayH,
+      onBackPressed: session.inputModel.onMobileBack,
+      onHomePressed: session.inputModel.onMobileHome,
+      onRecentPressed: session.inputModel.onMobileApps,
+      onHidePressed: onHide,
+    );
+  }
+
+  return OverlayEntry(builder: (context) {
+    if (isDesktop) {
+      final c = Provider.of<CanvasModel>(context);
+      return makeMobileActions(context, c.scale * 2.0);
+    } else {
+      return makeMobileActions(globalKey.currentContext!, 1.0);
+    }
+  });
 }
 
 void showToast(String text, {Duration timeout = const Duration(seconds: 3)}) {
@@ -963,7 +1059,8 @@ class CustomAlertDialog extends StatelessWidget {
           return KeyEventResult.handled; // avoid TextField exception on escape
         } else if (!tabTapped &&
             onSubmit != null &&
-            key.logicalKey == LogicalKeyboardKey.enter) {
+            (key.logicalKey == LogicalKeyboardKey.enter ||
+                key.logicalKey == LogicalKeyboardKey.numpadEnter)) {
           if (key is RawKeyDownEvent) onSubmit?.call();
           return KeyEventResult.handled;
         } else if (key.logicalKey == LogicalKeyboardKey.tab) {
@@ -992,6 +1089,49 @@ class CustomAlertDialog extends StatelessWidget {
   }
 }
 
+Widget createDialogContent(String text) {
+  final RegExp linkRegExp = RegExp(r'(https?://[^\s]+)');
+  final List<TextSpan> spans = [];
+  int start = 0;
+  bool hasLink = false;
+
+  linkRegExp.allMatches(text).forEach((match) {
+    hasLink = true;
+    if (match.start > start) {
+      spans.add(TextSpan(text: text.substring(start, match.start)));
+    }
+    spans.add(TextSpan(
+      text: match.group(0) ?? '',
+      style: TextStyle(
+        color: Colors.blue,
+        decoration: TextDecoration.underline,
+      ),
+      recognizer: TapGestureRecognizer()
+        ..onTap = () {
+          String linkText = match.group(0) ?? '';
+          linkText = linkText.replaceAll(RegExp(r'[.,;!?]+$'), '');
+          launchUrl(Uri.parse(linkText));
+        },
+    ));
+    start = match.end;
+  });
+
+  if (start < text.length) {
+    spans.add(TextSpan(text: text.substring(start)));
+  }
+
+  if (!hasLink) {
+    return SelectableText(text, style: const TextStyle(fontSize: 15));
+  }
+
+  return SelectableText.rich(
+    TextSpan(
+      style: TextStyle(color: Colors.black, fontSize: 15),
+      children: spans,
+    ),
+  );
+}
+
 void msgBox(SessionID sessionId, String type, String title, String text,
     String link, OverlayDialogManager dialogManager,
     {bool? hasCancel, ReconnectHandle? reconnect, int? reconnectTimeout}) {
@@ -1000,7 +1140,7 @@ void msgBox(SessionID sessionId, String type, String title, String text,
   bool hasOk = false;
   submit() {
     dialogManager.dismissAll();
-    // https://github.com/fufesou/rustdesk/blob/5e9a31340b899822090a3731769ae79c6bf5f3e5/src/ui/common.tis#L263
+    // https://github.com/rustdesk/rustdesk/blob/5e9a31340b899822090a3731769ae79c6bf5f3e5/src/ui/common.tis#L263
     if (!type.contains("custom") && desktopType != DesktopType.portForward) {
       closeConnection();
     }
@@ -1034,21 +1174,33 @@ void msgBox(SessionID sessionId, String type, String title, String text,
           dialogManager.dismissAll();
         }));
   }
-  if (reconnect != null &&
-      title == "Connection Error" &&
-      reconnectTimeout != null) {
+  if (reconnect != null && title == "Connection Error") {
     // `enabled` is used to disable the dialog button once the button is clicked.
     final enabled = true.obs;
-    final button = Obx(() => _ReconnectCountDownButton(
-          second: reconnectTimeout,
-          onPressed: enabled.isTrue
-              ? () {
-                  // Disable the button
-                  enabled.value = false;
-                  reconnect(dialogManager, sessionId, false);
-                }
-              : null,
-        ));
+    final button = reconnectTimeout != null
+        ? Obx(() => _ReconnectCountDownButton(
+              second: reconnectTimeout,
+              onPressed: enabled.isTrue
+                  ? () {
+                      // Disable the button
+                      enabled.value = false;
+                      reconnect(dialogManager, sessionId, false);
+                    }
+                  : null,
+            ))
+        : Obx(
+            () => dialogButton(
+              'Reconnect',
+              isOutline: true,
+              onPressed: enabled.isTrue
+                  ? () {
+                      // Disable the button
+                      enabled.value = false;
+                      reconnect(dialogManager, sessionId, false);
+                    }
+                  : null,
+            ),
+          );
     buttons.insert(0, button);
   }
   if (link.isNotEmpty) {
@@ -1137,7 +1289,7 @@ Widget msgboxContent(String type, String title, String text) {
               translate(title),
               style: TextStyle(fontSize: 21),
             ).marginOnly(bottom: 10),
-            Text(translateText(text), style: const TextStyle(fontSize: 15)),
+            createDialogContent(translateText(text)),
           ],
         ),
       ),
@@ -1282,7 +1434,7 @@ class AndroidPermissionManager {
   }
 
   static Future<bool> check(String type) {
-    if (isDesktop) {
+    if (isDesktop || isWeb) {
       return Future.value(true);
     }
     return gFFI.invokeMethod("check_permission", type);
@@ -1296,7 +1448,7 @@ class AndroidPermissionManager {
   /// We use XXPermissions to request permissions,
   /// for supported types, see https://github.com/getActivity/XXPermissions/blob/e46caea32a64ad7819df62d448fb1c825481cd28/library/src/main/java/com/hjq/permissions/Permission.java
   static Future<bool> request(String type) {
-    if (isDesktop) {
+    if (isDesktop || isWeb) {
       return Future.value(true);
     }
 
@@ -1332,14 +1484,10 @@ class AndroidPermissionManager {
   }
 }
 
-// TODO move this to mobile/widgets.
-// Used only for mobile, pages remote, settings, dialog
-// TODO remove argument contentPadding, it’s not used, getToggle() has not
 RadioListTile<T> getRadio<T>(
     Widget title, T toValue, T curValue, ValueChanged<T?>? onChange,
-    {EdgeInsetsGeometry? contentPadding, bool? dense}) {
+    {bool? dense}) {
   return RadioListTile<T>(
-    contentPadding: contentPadding ?? EdgeInsets.zero,
     visualDensity: VisualDensity.compact,
     controlAffinity: ListTileControlAffinity.trailing,
     title: title,
@@ -1366,7 +1514,7 @@ Future<void> initGlobalFFI() async {
   _globalFFI = FFI(null);
   debugPrint("_globalFFI init end");
   // after `put`, can also be globally found by Get.find<FFI>();
-  Get.put(_globalFFI, permanent: true);
+  Get.put<FFI>(_globalFFI, permanent: true);
 }
 
 String translate(String name) {
@@ -1376,14 +1524,16 @@ String translate(String name) {
   return platformFFI.translate(name, localeName);
 }
 
+// This function must be kept the same as the one in rust and sciter code.
+// rust: libs/hbb_common/src/config.rs -> option2bool()
+// sciter: Does not have the function, but it should be kept the same.
 bool option2bool(String option, String value) {
   bool res;
   if (option.startsWith("enable-")) {
     res = value != "N";
   } else if (option.startsWith("allow-") ||
-      option == "stop-service" ||
-      option == "direct-server" ||
-      option == "stop-rendezvous-service" ||
+      option == kOptionStopService ||
+      option == kOptionDirectServer ||
       option == kOptionForceAlwaysRelay) {
     res = value == "Y";
   } else {
@@ -1396,13 +1546,12 @@ bool option2bool(String option, String value) {
 String bool2option(String option, bool b) {
   String res;
   if (option.startsWith('enable-')) {
-    res = b ? '' : 'N';
+    res = b ? defaultOptionYes : 'N';
   } else if (option.startsWith('allow-') ||
-      option == "stop-service" ||
-      option == "direct-server" ||
-      option == "stop-rendezvous-service" ||
+      option == kOptionStopService ||
+      option == kOptionDirectServer ||
       option == kOptionForceAlwaysRelay) {
-    res = b ? 'Y' : '';
+    res = b ? 'Y' : defaultOptionNo;
   } else {
     assert(false);
     res = b ? 'Y' : 'N';
@@ -1436,9 +1585,9 @@ bool mainGetPeerBoolOptionSync(String id, String key) {
   return option2bool(key, bind.mainGetPeerOptionSync(id: id, key: key));
 }
 
-mainSetPeerBoolOptionSync(String id, String key, bool v) {
-  bind.mainSetPeerOptionSync(id: id, key: key, value: bool2option(key, v));
-}
+// Don't use `option2bool()` and `bool2option()` to convert the session option.
+// Use `sessionGetToggleOption()` and `sessionToggleOption()` instead.
+// Because all session options use `Y` and `<Empty>` as values.
 
 Future<bool> matchPeer(String searchText, Peer peer) async {
   if (searchText.isEmpty) {
@@ -1472,6 +1621,12 @@ Widget getPlatformImage(String platform, {double size = 50}) {
     platform = platform.toLowerCase();
   }
   return SvgPicture.asset('assets/$platform.svg', height: size, width: size);
+}
+
+class OffsetDevicePixelRatio {
+  Offset offset;
+  final double devicePixelRatio;
+  OffsetDevicePixelRatio(this.offset, this.devicePixelRatio);
 }
 
 class LastWindowPosition {
@@ -1518,6 +1673,12 @@ class LastWindowPosition {
   }
 }
 
+String get windowFramePrefix =>
+    kWindowPrefix +
+    (bind.isIncomingOnly()
+        ? "incoming_"
+        : (bind.isOutgoingOnly() ? "outgoing_" : ""));
+
 /// Save window position and size on exit
 /// Note that windowId must be provided if it's subwindow
 Future<void> saveWindowPosition(WindowType type, {int? windowId}) async {
@@ -1529,41 +1690,51 @@ Future<void> saveWindowPosition(WindowType type, {int? windowId}) async {
   late Offset position;
   late Size sz;
   late bool isMaximized;
-  bool isFullscreen = stateGlobal.fullscreen.isTrue ||
-      (Platform.isMacOS && stateGlobal.closeOnFullscreen == true);
-  setFrameIfMaximized() {
-    if (isMaximized) {
-      final pos = bind.getLocalFlutterOption(k: kWindowPrefix + type.name);
-      var lpos = LastWindowPosition.loadFromString(pos);
-      position = Offset(
-          lpos?.offsetWidth ?? position.dx, lpos?.offsetHeight ?? position.dy);
-      sz = Size(lpos?.width ?? sz.width, lpos?.height ?? sz.height);
-    }
+  bool isFullscreen = stateGlobal.fullscreen.isTrue;
+  setPreFrame() {
+    final pos = bind.getLocalFlutterOption(k: windowFramePrefix + type.name);
+    var lpos = LastWindowPosition.loadFromString(pos);
+    position = Offset(
+        lpos?.offsetWidth ?? position.dx, lpos?.offsetHeight ?? position.dy);
+    sz = Size(lpos?.width ?? sz.width, lpos?.height ?? sz.height);
   }
 
   switch (type) {
     case WindowType.Main:
-      isMaximized = await windowManager.isMaximized();
-      position = await windowManager.getPosition();
-      sz = await windowManager.getSize();
-      setFrameIfMaximized();
+      // Checking `bind.isIncomingOnly()` is a simple workaround for MacOS.
+      // `await windowManager.isMaximized()` will always return true
+      // if is not resizable. The reason is unknown.
+      //
+      // `setResizable(!bind.isIncomingOnly());` in main.dart
+      isMaximized =
+          bind.isIncomingOnly() ? false : await windowManager.isMaximized();
+      if (isFullscreen || isMaximized) {
+        setPreFrame();
+      } else {
+        position = await windowManager.getPosition();
+        sz = await windowManager.getSize();
+      }
       break;
     default:
       final wc = WindowController.fromWindowId(windowId!);
       isMaximized = await wc.isMaximized();
-      final Rect frame;
-      try {
-        frame = await wc.getFrame();
-      } catch (e) {
-        debugPrint("Failed to get frame of window $windowId, it may be hidden");
-        return;
+      if (isFullscreen || isMaximized) {
+        setPreFrame();
+      } else {
+        final Rect frame;
+        try {
+          frame = await wc.getFrame();
+        } catch (e) {
+          debugPrint(
+              "Failed to get frame of window $windowId, it may be hidden");
+          return;
+        }
+        position = frame.topLeft;
+        sz = frame.size;
       }
-      position = frame.topLeft;
-      sz = frame.size;
-      setFrameIfMaximized();
       break;
   }
-  if (Platform.isWindows) {
+  if (isWindows) {
     const kMinOffset = -10000;
     const kMaxOffset = 10000;
     if (position.dx < kMinOffset ||
@@ -1581,7 +1752,7 @@ Future<void> saveWindowPosition(WindowType type, {int? windowId}) async {
       "Saving frame: $windowId: ${pos.width}/${pos.height}, offset:${pos.offsetWidth}/${pos.offsetHeight}, isMaximized:${pos.isMaximized}, isFullscreen:${pos.isFullscreen}");
 
   await bind.setLocalFlutterOption(
-      k: kWindowPrefix + type.name, v: pos.toString());
+      k: windowFramePrefix + type.name, v: pos.toString());
 
   if (type == WindowType.RemoteDesktop && windowId != null) {
     await _saveSessionWindowPosition(
@@ -1594,9 +1765,9 @@ Future _saveSessionWindowPosition(WindowType windowType, int windowId,
   final remoteList = await DesktopMultiWindow.invokeMethod(
       windowId, kWindowEventGetRemoteList, null);
   getPeerPos(String peerId) {
-    if (isMaximized) {
+    if (isMaximized || isFullscreen) {
       final peerPos = bind.mainGetPeerFlutterOptionSync(
-          id: peerId, k: kWindowPrefix + windowType.name);
+          id: peerId, k: windowFramePrefix + windowType.name);
       var lpos = LastWindowPosition.loadFromString(peerPos);
       return LastWindowPosition(
               lpos?.width ?? pos.offsetWidth,
@@ -1615,7 +1786,7 @@ Future _saveSessionWindowPosition(WindowType windowType, int windowId,
     for (final peerId in remoteList.split(',')) {
       bind.mainSetPeerFlutterOptionSync(
           id: peerId,
-          k: kWindowPrefix + windowType.name,
+          k: windowFramePrefix + windowType.name,
           v: getPeerPos(peerId));
     }
   }
@@ -1651,8 +1822,15 @@ Future<Size> _adjustRestoreMainWindowSize(double? width, double? height) async {
   return Size(restoreWidth, restoreHeight);
 }
 
+bool isPointInRect(Offset point, Rect rect) {
+  return point.dx >= rect.left &&
+      point.dx <= rect.right &&
+      point.dy >= rect.top &&
+      point.dy <= rect.bottom;
+}
+
 /// return null means center
-Future<Offset?> _adjustRestoreMainWindowOffset(
+Future<OffsetDevicePixelRatio?> _adjustRestoreMainWindowOffset(
   double? left,
   double? top,
   double? width,
@@ -1666,9 +1844,13 @@ Future<Offset?> _adjustRestoreMainWindowOffset(
   double? frameTop;
   double? frameRight;
   double? frameBottom;
+  double devicePixelRatio = 1.0;
 
   if (isDesktop || isWebDesktop) {
     for (final screen in await window_size.getScreenList()) {
+      if (isPointInRect(Offset(left, top), screen.visibleFrame)) {
+        devicePixelRatio = screen.scaleFactor;
+      }
       frameLeft = frameLeft == null
           ? screen.visibleFrame.left
           : min(screen.visibleFrame.left, frameLeft);
@@ -1702,7 +1884,7 @@ Future<Offset?> _adjustRestoreMainWindowOffset(
       top < frameTop!) {
     return null;
   } else {
-    return Offset(left, top);
+    return OffsetDevicePixelRatio(Offset(left, top), devicePixelRatio);
   }
 }
 
@@ -1728,19 +1910,14 @@ Future<bool> restoreWindowPosition(WindowType type,
   // No need to check mainGetLocalBoolOptionSync(kOptionOpenNewConnInTabs)
   // Though "open in tabs" is true and the new window restore peer position, it's ok.
   if (type == WindowType.RemoteDesktop && windowId != null && peerId != null) {
-    // If the restore position is called by main window, and the peer id is not null
-    // then we may need to get the position by reading the peer config.
-    // Because the session may not be read at this time.
-    if (desktopType == DesktopType.main) {
-      pos = bind.mainGetPeerFlutterOptionSync(
-          id: peerId, k: kWindowPrefix + type.name);
-    } else {
-      pos = await bind.sessionGetFlutterOptionByPeerId(
-          id: peerId, k: kWindowPrefix + type.name);
+    final peerPos = bind.mainGetPeerFlutterOptionSync(
+        id: peerId, k: windowFramePrefix + type.name);
+    if (peerPos.isNotEmpty) {
+      pos = peerPos;
     }
     isRemotePeerPos = pos != null;
   }
-  pos ??= bind.getLocalFlutterOption(k: kWindowPrefix + type.name);
+  pos ??= bind.getLocalFlutterOption(k: windowFramePrefix + type.name);
 
   var lpos = LastWindowPosition.loadFromString(pos);
   if (lpos == null) {
@@ -1767,48 +1944,85 @@ Future<bool> restoreWindowPosition(WindowType type,
   }
 
   final size = await _adjustRestoreMainWindowSize(lpos.width, lpos.height);
-  final offset = await _adjustRestoreMainWindowOffset(
+  final offsetDevicePixelRatio = await _adjustRestoreMainWindowOffset(
     lpos.offsetWidth,
     lpos.offsetHeight,
     size.width,
     size.height,
   );
   debugPrint(
-      "restore lpos: ${size.width}/${size.height}, offset:${offset?.dx}/${offset?.dy}");
+      "restore lpos: ${size.width}/${size.height}, offset:${offsetDevicePixelRatio?.offset.dx}/${offsetDevicePixelRatio?.offset.dy}, devicePixelRatio:${offsetDevicePixelRatio?.devicePixelRatio}, isMaximized: ${lpos.isMaximized}, isFullscreen: ${lpos.isFullscreen}");
 
   switch (type) {
     case WindowType.Main:
+      // https://github.com/rustdesk/rustdesk/issues/8038
+      // `setBounds()` in `window_manager` will use the current devicePixelRatio.
+      // So we need to adjust the offset by the scale factor.
+      // https://github.com/rustdesk-org/window_manager/blob/f19acdb008645366339444a359a45c3257c8b32e/windows/window_manager.cpp#L701
+      if (isWindows) {
+        double? curDevicePixelRatio;
+        Offset curPos = await windowManager.getPosition();
+        for (final screen in await window_size.getScreenList()) {
+          if (isPointInRect(curPos, screen.visibleFrame)) {
+            curDevicePixelRatio = screen.scaleFactor;
+          }
+        }
+        if (curDevicePixelRatio != null &&
+            curDevicePixelRatio != 0 &&
+            offsetDevicePixelRatio != null) {
+          if (offsetDevicePixelRatio.devicePixelRatio != 0) {
+            final scale =
+                offsetDevicePixelRatio.devicePixelRatio / curDevicePixelRatio;
+            offsetDevicePixelRatio.offset =
+                offsetDevicePixelRatio.offset.scale(scale, scale);
+            debugPrint(
+                "restore new offset: ${offsetDevicePixelRatio.offset.dx}/${offsetDevicePixelRatio.offset.dy}, scale:$scale");
+          }
+        }
+      }
       restorePos() async {
-        if (offset == null) {
+        if (offsetDevicePixelRatio == null) {
           await windowManager.center();
         } else {
-          await windowManager.setPosition(offset);
+          await windowManager.setPosition(offsetDevicePixelRatio.offset);
         }
       }
       if (lpos.isMaximized == true) {
         await restorePos();
-        await windowManager.maximize();
+        if (!(bind.isIncomingOnly() || bind.isOutgoingOnly())) {
+          await windowManager.maximize();
+        }
       } else {
-        await windowManager.setSize(size);
+        if (!bind.isIncomingOnly() || bind.isOutgoingOnly()) {
+          await windowManager.setSize(size);
+        }
         await restorePos();
       }
       return true;
     default:
       final wc = WindowController.fromWindowId(windowId!);
       restoreFrame() async {
-        if (offset == null) {
+        if (offsetDevicePixelRatio == null) {
           await wc.center();
         } else {
-          final frame =
-              Rect.fromLTWH(offset.dx, offset.dy, size.width, size.height);
+          final frame = Rect.fromLTWH(offsetDevicePixelRatio.offset.dx,
+              offsetDevicePixelRatio.offset.dy, size.width, size.height);
           await wc.setFrame(frame);
         }
       }
       if (lpos.isFullscreen == true) {
-        await restoreFrame();
+        if (!isMacOS) {
+          await restoreFrame();
+        }
         // An duration is needed to avoid the window being restored after fullscreen.
         Future.delayed(Duration(milliseconds: 300), () async {
-          stateGlobal.setFullscreen(true);
+          if (kWindowId == windowId) {
+            stateGlobal.setFullscreen(true);
+          } else {
+            // If is not current window, we need to send a fullscreen message to `windowId`
+            DesktopMultiWindow.invokeMethod(
+                windowId, kWindowEventSetFullscreen, 'true');
+          }
         });
       } else if (lpos.isMaximized == true) {
         await restoreFrame();
@@ -1830,13 +2044,14 @@ Future<bool> restoreWindowPosition(WindowType type,
 /// initUniLinks should only be used on macos/windows.
 /// we use dbus for linux currently.
 Future<bool> initUniLinks() async {
-  if (Platform.isLinux) {
+  if (isLinux) {
     return false;
   }
   // check cold boot
   try {
     final initialLink = await getInitialLink();
-    if (initialLink == null) {
+    print("initialLink: $initialLink");
+    if (initialLink == null || initialLink.isEmpty) {
       return false;
     }
     return handleUriLink(uriString: initialLink);
@@ -1852,7 +2067,7 @@ Future<bool> initUniLinks() async {
 ///
 /// Returns a [StreamSubscription] which can listen the uni links.
 StreamSubscription? listenUniLinks({handleByFlutter = true}) {
-  if (Platform.isLinux) {
+  if (isLinux) {
     return null;
   }
 
@@ -1886,7 +2101,7 @@ bool handleUriLink({List<String>? cmdArgs, Uri? uri, String? uriString}) {
   if (cmdArgs != null && cmdArgs.isNotEmpty) {
     args = cmdArgs;
     // rustdesk <uri link>
-    if (args[0].startsWith(kUniLinksPrefix)) {
+    if (args[0].startsWith(bind.mainUriPrefixSync())) {
       final uri = Uri.tryParse(args[0]);
       if (uri != null) {
         args = urlLinkToCmdArgs(uri);
@@ -2000,7 +2215,7 @@ List<String>? urlLinkToCmdArgs(Uri uri) {
     command = '--connect';
     id = uri.path.substring("/new/".length);
   } else if (uri.authority == "config") {
-    if (Platform.isAndroid || Platform.isIOS) {
+    if (isAndroid || isIOS) {
       final config = uri.path.substring("/".length);
       // add a timer to make showToast work
       Timer(Duration(seconds: 1), () {
@@ -2009,7 +2224,7 @@ List<String>? urlLinkToCmdArgs(Uri uri) {
     }
     return null;
   } else if (uri.authority == "password") {
-    if (Platform.isAndroid || Platform.isIOS) {
+    if (isAndroid || isIOS) {
       final password = uri.path.substring("/".length);
       if (password.isNotEmpty) {
         Timer(Duration(seconds: 1), () async {
@@ -2076,19 +2291,28 @@ List<String>? urlLinkToCmdArgs(Uri uri) {
   return null;
 }
 
-connectMainDesktop(
-  String id, {
-  required bool isFileTransfer,
-  required bool isTcpTunneling,
-  required bool isRDP,
-  bool? forceRelay,
-}) async {
+connectMainDesktop(String id,
+    {required bool isFileTransfer,
+    required bool isTcpTunneling,
+    required bool isRDP,
+    bool? forceRelay,
+    String? password,
+    bool? isSharedPassword}) async {
   if (isFileTransfer) {
-    await rustDeskWinManager.newFileTransfer(id, forceRelay: forceRelay);
+    await rustDeskWinManager.newFileTransfer(id,
+        password: password,
+        isSharedPassword: isSharedPassword,
+        forceRelay: forceRelay);
   } else if (isTcpTunneling || isRDP) {
-    await rustDeskWinManager.newPortForward(id, isRDP, forceRelay: forceRelay);
+    await rustDeskWinManager.newPortForward(id, isRDP,
+        password: password,
+        isSharedPassword: isSharedPassword,
+        forceRelay: forceRelay);
   } else {
-    await rustDeskWinManager.newRemoteDesktop(id, forceRelay: forceRelay);
+    await rustDeskWinManager.newRemoteDesktop(id,
+        password: password,
+        isSharedPassword: isSharedPassword,
+        forceRelay: forceRelay);
   }
 }
 
@@ -2096,14 +2320,13 @@ connectMainDesktop(
 /// If [isFileTransfer], starts a session only for file transfer.
 /// If [isTcpTunneling], starts a session only for tcp tunneling.
 /// If [isRDP], starts a session only for rdp.
-connect(
-  BuildContext context,
-  String id, {
-  bool isFileTransfer = false,
-  bool isTcpTunneling = false,
-  bool isRDP = false,
-  bool forceRelay = false,
-}) async {
+connect(BuildContext context, String id,
+    {bool isFileTransfer = false,
+    bool isTcpTunneling = false,
+    bool isRDP = false,
+    bool forceRelay = false,
+    String? password,
+    bool? isSharedPassword}) async {
   if (id == '') return;
   if (!isDesktop || desktopType == DesktopType.main) {
     try {
@@ -2131,6 +2354,8 @@ connect(
         isFileTransfer: isFileTransfer,
         isTcpTunneling: isTcpTunneling,
         isRDP: isRDP,
+        password: password,
+        isSharedPassword: isSharedPassword,
         forceRelay: forceRelay2,
       );
     } else {
@@ -2139,30 +2364,66 @@ connect(
         'isFileTransfer': isFileTransfer,
         'isTcpTunneling': isTcpTunneling,
         'isRDP': isRDP,
+        'password': password,
+        'isSharedPassword': isSharedPassword,
         'forceRelay': forceRelay,
       });
     }
   } else {
     if (isFileTransfer) {
-      if (!await AndroidPermissionManager.check(kManageExternalStorage)) {
-        if (!await AndroidPermissionManager.request(kManageExternalStorage)) {
-          return;
+      if (isAndroid) {
+        if (!await AndroidPermissionManager.check(kManageExternalStorage)) {
+          if (!await AndroidPermissionManager.request(kManageExternalStorage)) {
+            return;
+          }
         }
       }
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (BuildContext context) => FileManagerPage(id: id),
-        ),
-      );
+      if (isWeb) {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (BuildContext context) =>
+                desktop_file_manager.FileManagerPage(
+                    id: id,
+                    password: password,
+                    isSharedPassword: isSharedPassword),
+          ),
+        );
+      } else {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (BuildContext context) => FileManagerPage(
+                id: id, password: password, isSharedPassword: isSharedPassword),
+          ),
+        );
+      }
     } else {
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (BuildContext context) => RemotePage(id: id),
-        ),
-      );
+      if (isWeb) {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (BuildContext context) => desktop_remote.RemotePage(
+              key: ValueKey(id),
+              id: id,
+              toolbarState: ToolbarState(),
+              password: password,
+              forceRelay: forceRelay,
+              isSharedPassword: isSharedPassword,
+            ),
+          ),
+        );
+      } else {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (BuildContext context) => RemotePage(
+                id: id, password: password, isSharedPassword: isSharedPassword),
+          ),
+        );
+      }
     }
+    stateGlobal.isInMainPage = false;
   }
 
   FocusScopeNode currentFocus = FocusScope.of(context);
@@ -2215,7 +2476,7 @@ Future<void> reloadAllWindows() async {
 /// [Note]
 /// Portable build is only available on Windows.
 bool isRunningInPortableMode() {
-  if (!Platform.isWindows) {
+  if (!isWindows) {
     return false;
   }
   return bool.hasEnvironment(kEnvPortableExecutable);
@@ -2228,7 +2489,7 @@ Future<void> onActiveWindowChanged() async {
   if (rustDeskWinManager.getActiveWindows().isEmpty) {
     // close all sub windows
     try {
-      if (Platform.isLinux) {
+      if (isLinux) {
         await Future.wait([
           saveWindowPosition(WindowType.Main),
           rustDeskWinManager.closeAllSubWindows()
@@ -2242,8 +2503,14 @@ Future<void> onActiveWindowChanged() async {
       debugPrint("Start closing RustDesk...");
       await windowManager.setPreventClose(false);
       await windowManager.close();
-      if (Platform.isMacOS) {
-        RdPlatformChannel.instance.terminate();
+      if (isMacOS) {
+        // If we call without delay, `flutter/macos/Runner/MainFlutterWindow.swift` can handle the "terminate" event.
+        // But the app will not close.
+        //
+        // No idea why we need to delay here, `terminate()` itself is also an async function.
+        Future.delayed(Duration.zero, () {
+          RdPlatformChannel.instance.terminate();
+        });
       }
     }
   }
@@ -2258,7 +2525,7 @@ Timer periodic_immediate(Duration duration, Future<void> Function() callback) {
 
 /// return a human readable windows version
 WindowsTarget getWindowsTarget(int buildNumber) {
-  if (!Platform.isWindows) {
+  if (!isWindows) {
     return WindowsTarget.naw;
   }
   if (buildNumber >= 22000) {
@@ -2284,35 +2551,7 @@ WindowsTarget getWindowsTarget(int buildNumber) {
 /// [Note]
 /// Please use this function wrapped with `Platform.isWindows`.
 int getWindowsTargetBuildNumber() {
-  final rtlGetVersion = DynamicLibrary.open('ntdll.dll').lookupFunction<
-      Void Function(Pointer<win32.OSVERSIONINFOEX>),
-      void Function(Pointer<win32.OSVERSIONINFOEX>)>('RtlGetVersion');
-  final osVersionInfo = getOSVERSIONINFOEXPointer();
-  rtlGetVersion(osVersionInfo);
-  int buildNumber = osVersionInfo.ref.dwBuildNumber;
-  calloc.free(osVersionInfo);
-  return buildNumber;
-}
-
-/// Get Windows OS version pointer
-///
-/// [Note]
-/// Please use this function wrapped with `Platform.isWindows`.
-Pointer<win32.OSVERSIONINFOEX> getOSVERSIONINFOEXPointer() {
-  final pointer = calloc<win32.OSVERSIONINFOEX>();
-  pointer.ref
-    ..dwOSVersionInfoSize = sizeOf<win32.OSVERSIONINFOEX>()
-    ..dwBuildNumber = 0
-    ..dwMajorVersion = 0
-    ..dwMinorVersion = 0
-    ..dwPlatformId = 0
-    ..szCSDVersion = ''
-    ..wServicePackMajor = 0
-    ..wServicePackMinor = 0
-    ..wSuiteMask = 0
-    ..wProductType = 0
-    ..wReserved = 0;
-  return pointer;
+  return getWindowsTargetBuildNumber_();
 }
 
 /// Indicating we need to use compatible ui mode.
@@ -2320,7 +2559,7 @@ Pointer<win32.OSVERSIONINFOEX> getOSVERSIONINFOEXPointer() {
 /// [Conditions]
 /// - Windows 7, window will overflow when we use frameless ui.
 bool get kUseCompatibleUiMode =>
-    Platform.isWindows &&
+    isWindows &&
     const [WindowsTarget.w7].contains(windowsBuildNumber.windowsVersion);
 
 class ServerConfig {
@@ -2384,7 +2623,7 @@ Widget dialogButton(String text,
     Widget? icon,
     TextStyle? style,
     ButtonStyle? buttonStyle}) {
-  if (isDesktop) {
+  if (isDesktop || isWebDesktop) {
     if (isOutline) {
       return icon == null
           ? OutlinedButton(
@@ -2426,19 +2665,20 @@ int versionCmp(String v1, String v2) {
 }
 
 String getWindowName({WindowType? overrideType}) {
+  final name = bind.mainGetAppNameSync();
   switch (overrideType ?? kWindowType) {
     case WindowType.Main:
-      return "RustDesk";
+      return name;
     case WindowType.FileTransfer:
-      return "File Transfer - RustDesk";
+      return "File Transfer - $name";
     case WindowType.PortForward:
-      return "Port Forward - RustDesk";
+      return "Port Forward - $name";
     case WindowType.RemoteDesktop:
-      return "Remote Desktop - RustDesk";
+      return "Remote Desktop - $name";
     default:
       break;
   }
-  return "RustDesk";
+  return name;
 }
 
 String getWindowNameWithId(String id, {WindowType? overrideType}) {
@@ -2449,7 +2689,7 @@ Future<void> updateSystemWindowTheme() async {
   // Set system window theme for macOS.
   final userPreference = MyTheme.getThemeModePreference();
   if (userPreference != ThemeMode.system) {
-    if (Platform.isMacOS) {
+    if (isMacOS) {
       await RdPlatformChannel.instance.changeSystemWindowTheme(
           userPreference == ThemeMode.light
               ? SystemWindowTheme.light
@@ -2537,7 +2777,7 @@ void onCopyFingerprint(String value) {
 
 Future<bool> callMainCheckSuperUserPermission() async {
   bool checked = await bind.mainCheckSuperUserPermission();
-  if (Platform.isMacOS) {
+  if (isMacOS) {
     await windowManager.show();
   }
   return checked;
@@ -2545,39 +2785,58 @@ Future<bool> callMainCheckSuperUserPermission() async {
 
 Future<void> start_service(bool is_start) async {
   bool checked = !bind.mainIsInstalled() ||
-      !Platform.isMacOS ||
+      !isMacOS ||
       await callMainCheckSuperUserPermission();
   if (checked) {
-    bind.mainSetOption(key: "stop-service", value: is_start ? "" : "Y");
+    mainSetBoolOption(kOptionStopService, !is_start);
   }
 }
 
-typedef Future<bool> WhetherUseRemoteBlock();
-Widget buildRemoteBlock({required Widget child, WhetherUseRemoteBlock? use}) {
-  var block = false.obs;
+Future<bool> canBeBlocked() async {
+  var access_mode = await bind.mainGetOption(key: kOptionAccessMode);
+  var option = option2bool(kOptionAllowRemoteConfigModification,
+      await bind.mainGetOption(key: kOptionAllowRemoteConfigModification));
+  return access_mode == 'view' || (access_mode.isEmpty && !option);
+}
+
+Future<void> shouldBeBlocked(RxBool block, WhetherUseRemoteBlock? use) async {
+  if (use != null && !await use()) {
+    block.value = false;
+    return;
+  }
+  var time0 = DateTime.now().millisecondsSinceEpoch;
+  await bind.mainCheckMouseTime();
+  Timer(const Duration(milliseconds: 120), () async {
+    var d = time0 - await bind.mainGetMouseTime();
+    if (d < 120) {
+      block.value = true;
+    } else {
+      block.value = false;
+    }
+  });
+}
+
+typedef WhetherUseRemoteBlock = Future<bool> Function();
+Widget buildRemoteBlock(
+    {required Widget child,
+    required RxBool block,
+    required bool mask,
+    WhetherUseRemoteBlock? use}) {
   return Obx(() => MouseRegion(
         onEnter: (_) async {
-          if (use != null && !await use()) {
-            block.value = false;
-            return;
-          }
-          var time0 = DateTime.now().millisecondsSinceEpoch;
-          await bind.mainCheckMouseTime();
-          Timer(const Duration(milliseconds: 120), () async {
-            var d = time0 - await bind.mainGetMouseTime();
-            if (d < 120) {
-              block.value = true;
-            }
-          });
+          await shouldBeBlocked(block, use);
         },
         onExit: (event) => block.value = false,
         child: Stack(children: [
-          child,
-          Offstage(
-              offstage: !block.value,
-              child: Container(
-                color: Colors.black.withOpacity(0.5),
-              )),
+          // scope block tab
+          FocusScope(child: child, canRequestFocus: !block.value),
+          // mask block click, cm not block click and still use check_click_time to avoid block local click
+          if (mask)
+            Offstage(
+                offstage: !block.value,
+                child: Container(
+                  color: Colors.black.withOpacity(0.5),
+                )),
         ]),
       ));
 }
@@ -2625,12 +2884,10 @@ Widget buildErrorBanner(BuildContext context,
     required RxString err,
     required Function? retry,
     required Function close}) {
-  const double height = 25;
   return Obx(() => Offstage(
         offstage: !(!loading.value && err.value.isNotEmpty),
         child: Center(
             child: Container(
-          height: height,
           color: MyTheme.color(context).errorBannerBg,
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -2647,9 +2904,8 @@ Widget buildErrorBanner(BuildContext context,
                     alignment: Alignment.centerLeft,
                     child: Tooltip(
                       message: translate(err.value),
-                      child: Text(
+                      child: SelectableText(
                         translate(err.value),
-                        overflow: TextOverflow.ellipsis,
                       ),
                     )).marginSymmetric(vertical: 2),
               ),
@@ -2703,11 +2959,6 @@ sessionRefreshVideo(SessionID sessionId, PeerInfo pi) async {
     await bind.sessionRefresh(sessionId: sessionId, display: pi.currentDisplay);
   }
 }
-
-bool isChooseDisplayToOpenInNewWindow(PeerInfo pi, SessionID sessionId) =>
-    pi.isSupportMultiDisplay &&
-    useTextureRender &&
-    bind.sessionGetDisplaysAsIndividualWindows(sessionId: sessionId) == 'Y';
 
 Future<List<Rect>> getScreenListWayland() async {
   final screenRectList = <Rect>[];
@@ -2774,6 +3025,16 @@ openMonitorInTheSameTab(int i, FFI ffi, PeerInfo pi,
   final displays = i == kAllDisplayValue
       ? List.generate(pi.displays.length, (index) => index)
       : [i];
+  // Try clear image model before switching from all displays
+  // 1. The remote side has multiple displays.
+  // 2. Do not use texture render.
+  // 3. Connect to Display 1.
+  // 4. Switch to multi-displays `kAllDisplayValue`
+  // 5. Switch to Display 2.
+  // Then the remote page will display last picture of Display 1 at the beginning.
+  if (pi.forceTextureRender && i != kAllDisplayValue) {
+    ffi.imageModel.clearImage();
+  }
   bind.sessionSwitchDisplay(
     isDesktop: isDesktop,
     sessionId: ffi.sessionId,
@@ -2805,6 +3066,20 @@ openMonitorInNewTabOrWindow(int i, String peerId, PeerInfo pi,
   }
   DesktopMultiWindow.invokeMethod(
       kMainWindowId, kWindowEventOpenMonitorSession, jsonEncode(args));
+}
+
+setNewConnectWindowFrame(int windowId, String peerId, int preSessionCount,
+    int? display, Rect? screenRect) async {
+  if (screenRect == null) {
+    // Do not restore window position to new connection if there's a pre-session.
+    // https://github.com/rustdesk/rustdesk/discussions/8825
+    if (preSessionCount == 0) {
+      await restoreWindowPosition(WindowType.RemoteDesktop,
+          windowId: windowId, display: display, peerId: peerId);
+    }
+  } else {
+    await tryMoveToScreenAndSetFullscreen(screenRect);
+  }
 }
 
 tryMoveToScreenAndSetFullscreen(Rect? screenRect) async {
@@ -2898,6 +3173,7 @@ class _ReconnectCountDownButtonState extends State<_ReconnectCountDownButton> {
 
 importConfig(List<TextEditingController>? controllers, List<RxString>? errMsgs,
     String? text) {
+  text = text?.trim();
   if (text != null && text.isNotEmpty) {
     try {
       final sc = ServerConfig.decode(text);
@@ -2927,9 +3203,16 @@ Future<bool> setServerConfig(
   List<RxString>? errMsgs,
   ServerConfig config,
 ) async {
-  config.idServer = config.idServer.trim();
-  config.relayServer = config.relayServer.trim();
-  config.apiServer = config.apiServer.trim();
+  String removeEndSlash(String input) {
+    if (input.endsWith('/')) {
+      return input.substring(0, input.length - 1);
+    }
+    return input;
+  }
+
+  config.idServer = removeEndSlash(config.idServer.trim());
+  config.relayServer = removeEndSlash(config.relayServer.trim());
+  config.apiServer = removeEndSlash(config.apiServer.trim());
   config.key = config.key.trim();
   if (controllers != null) {
     controllers[0].text = config.idServer;
@@ -2939,16 +3222,16 @@ Future<bool> setServerConfig(
   }
   // id
   if (config.idServer.isNotEmpty && errMsgs != null) {
-    errMsgs[0].value =
-        translate(await bind.mainTestIfValidServer(server: config.idServer));
+    errMsgs[0].value = translate(await bind.mainTestIfValidServer(
+        server: config.idServer, testWithProxy: true));
     if (errMsgs[0].isNotEmpty) {
       return false;
     }
   }
   // relay
   if (config.relayServer.isNotEmpty && errMsgs != null) {
-    errMsgs[1].value =
-        translate(await bind.mainTestIfValidServer(server: config.relayServer));
+    errMsgs[1].value = translate(await bind.mainTestIfValidServer(
+        server: config.relayServer, testWithProxy: true));
     if (errMsgs[1].isNotEmpty) {
       return false;
     }
@@ -2970,7 +3253,6 @@ Future<bool> setServerConfig(
   await bind.mainSetOption(key: 'relay-server', value: config.relayServer);
   await bind.mainSetOption(key: 'api-server', value: config.apiServer);
   await bind.mainSetOption(key: 'key', value: config.key);
-
   final newApiServer = await bind.mainGetApiServer();
   if (oldApiServer.isNotEmpty &&
       oldApiServer != newApiServer &&
@@ -2978,4 +3260,363 @@ Future<bool> setServerConfig(
     gFFI.userModel.logOut(apiServer: oldApiServer);
   }
   return true;
+}
+
+ColorFilter? svgColor(Color? color) {
+  if (color == null) {
+    return null;
+  } else {
+    return ColorFilter.mode(color, BlendMode.srcIn);
+  }
+}
+
+// ignore: must_be_immutable
+class ComboBox extends StatelessWidget {
+  late final List<String> keys;
+  late final List<String> values;
+  late final String initialKey;
+  late final Function(String key) onChanged;
+  late final bool enabled;
+  late String current;
+
+  ComboBox({
+    Key? key,
+    required this.keys,
+    required this.values,
+    required this.initialKey,
+    required this.onChanged,
+    this.enabled = true,
+  }) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    var index = keys.indexOf(initialKey);
+    if (index < 0) {
+      index = 0;
+    }
+    var ref = values[index].obs;
+    current = keys[index];
+    return Container(
+      decoration: BoxDecoration(
+        border: Border.all(
+          color: enabled
+              ? MyTheme.color(context).border2 ?? MyTheme.border
+              : MyTheme.border,
+        ),
+        borderRadius:
+            BorderRadius.circular(8), //border raiuds of dropdown button
+      ),
+      height: 42, // should be the height of a TextField
+      child: Obx(() => DropdownButton<String>(
+            isExpanded: true,
+            value: ref.value,
+            elevation: 16,
+            underline: Container(),
+            style: TextStyle(
+                color: enabled
+                    ? Theme.of(context).textTheme.titleMedium?.color
+                    : disabledTextColor(context, enabled)),
+            icon: const Icon(
+              Icons.expand_more_sharp,
+              size: 20,
+            ).marginOnly(right: 15),
+            onChanged: enabled
+                ? (String? newValue) {
+                    if (newValue != null && newValue != ref.value) {
+                      ref.value = newValue;
+                      current = newValue;
+                      onChanged(keys[values.indexOf(newValue)]);
+                    }
+                  }
+                : null,
+            items: values.map<DropdownMenuItem<String>>((String value) {
+              return DropdownMenuItem<String>(
+                value: value,
+                child: Text(
+                  value,
+                  style: const TextStyle(fontSize: 15),
+                  overflow: TextOverflow.ellipsis,
+                ).marginOnly(left: 15),
+              );
+            }).toList(),
+          )),
+    ).marginOnly(bottom: 5);
+  }
+}
+
+Color? disabledTextColor(BuildContext context, bool enabled) {
+  return enabled
+      ? null
+      : Theme.of(context).textTheme.titleLarge?.color?.withOpacity(0.6);
+}
+
+Widget loadPowered(BuildContext context) {
+  return MouseRegion(
+    cursor: SystemMouseCursors.click,
+    child: GestureDetector(
+      onTap: () {
+        launchUrl(Uri.parse('https://rustdesk.com'));
+      },
+      child: Opacity(
+          opacity: 0.5,
+          child: Text(
+            translate("powered_by_me"),
+            overflow: TextOverflow.clip,
+            style: Theme.of(context)
+                .textTheme
+                .bodySmall
+                ?.copyWith(fontSize: 9, decoration: TextDecoration.underline),
+          )),
+    ),
+  ).marginOnly(top: 6);
+}
+
+// max 300 x 60
+Widget loadLogo() {
+  return FutureBuilder<ByteData>(
+      future: rootBundle.load('assets/logo.png'),
+      builder: (BuildContext context, AsyncSnapshot<ByteData> snapshot) {
+        if (snapshot.hasData) {
+          final image = Image.asset(
+            'assets/logo.png',
+            fit: BoxFit.contain,
+            errorBuilder: (ctx, error, stackTrace) {
+              return Container();
+            },
+          );
+          return Container(
+            constraints: BoxConstraints(maxWidth: 300, maxHeight: 60),
+            child: image,
+          ).marginOnly(left: 12, right: 12, top: 12);
+        }
+        return const Offstage();
+      });
+}
+
+Widget loadIcon(double size) {
+  return Image.asset('assets/icon.png',
+      width: size,
+      height: size,
+      errorBuilder: (ctx, error, stackTrace) => SvgPicture.asset(
+            'assets/icon.svg',
+            width: size,
+            height: size,
+          ));
+}
+
+var imcomingOnlyHomeSize = Size(280, 300);
+Size getIncomingOnlyHomeSize() {
+  final magicWidth = isWindows ? 11.0 : 2.0;
+  final magicHeight = 10.0;
+  return imcomingOnlyHomeSize +
+      Offset(magicWidth, kDesktopRemoteTabBarHeight + magicHeight);
+}
+
+Size getIncomingOnlySettingsSize() {
+  return Size(768, 600);
+}
+
+bool isInHomePage() {
+  final controller = Get.find<DesktopTabController>();
+  return controller.state.value.selected == 0;
+}
+
+Widget _buildPresetPasswordWarning() {
+  if (bind.mainGetBuildinOption(key: kOptionRemovePresetPasswordWarning) !=
+      'N') {
+    return SizedBox.shrink();
+  }
+  return Container(
+    color: Colors.yellow,
+    child: Column(
+      children: [
+        Align(
+            child: Text(
+          translate("Security Alert"),
+          style: TextStyle(
+            color: Colors.red,
+            fontSize:
+                18, // https://github.com/rustdesk/rustdesk-server-pro/issues/261
+            fontWeight: FontWeight.bold,
+          ),
+        )).paddingOnly(bottom: 8),
+        Text(
+          translate("preset_password_warning"),
+          style: TextStyle(color: Colors.red),
+        )
+      ],
+    ).paddingAll(8),
+  ); // Show a warning message if the Future completed with true
+}
+
+Widget buildPresetPasswordWarningMobile() {
+  if (bind.isPresetPasswordMobileOnly()) {
+    return _buildPresetPasswordWarning();
+  } else {
+    return SizedBox.shrink();
+  }
+}
+
+Widget buildPresetPasswordWarning() {
+  return FutureBuilder<bool>(
+    future: bind.isPresetPassword(),
+    builder: (BuildContext context, AsyncSnapshot<bool> snapshot) {
+      if (snapshot.connectionState == ConnectionState.waiting) {
+        return CircularProgressIndicator(); // Show a loading spinner while waiting for the Future to complete
+      } else if (snapshot.hasError) {
+        return Text(
+            'Error: ${snapshot.error}'); // Show an error message if the Future completed with an error
+      } else if (snapshot.hasData && snapshot.data == true) {
+        return _buildPresetPasswordWarning();
+      } else {
+        return SizedBox
+            .shrink(); // Show nothing if the Future completed with false or null
+      }
+    },
+  );
+}
+
+// https://github.com/leanflutter/window_manager/blob/87dd7a50b4cb47a375b9fc697f05e56eea0a2ab3/lib/src/widgets/virtual_window_frame.dart#L44
+Widget buildVirtualWindowFrame(BuildContext context, Widget child) {
+  boxShadow() => isMainDesktopWindow
+      ? <BoxShadow>[
+          if (stateGlobal.fullscreen.isFalse || stateGlobal.isMaximized.isFalse)
+            BoxShadow(
+              color: Colors.black.withOpacity(0.1),
+              offset: Offset(
+                  0.0,
+                  stateGlobal.isFocused.isTrue
+                      ? kFrameBoxShadowOffsetFocused
+                      : kFrameBoxShadowOffsetUnfocused),
+              blurRadius: kFrameBoxShadowBlurRadius,
+            ),
+        ]
+      : null;
+  return Obx(
+    () => Container(
+      decoration: BoxDecoration(
+        color: isMainDesktopWindow
+            ? Colors.transparent
+            : Theme.of(context).colorScheme.background,
+        border: Border.all(
+          color: Theme.of(context).dividerColor,
+          width: stateGlobal.windowBorderWidth.value,
+        ),
+        borderRadius: BorderRadius.circular(
+          (stateGlobal.fullscreen.isTrue || stateGlobal.isMaximized.isTrue)
+              ? 0
+              : kFrameBorderRadius,
+        ),
+        boxShadow: boxShadow(),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(
+          (stateGlobal.fullscreen.isTrue || stateGlobal.isMaximized.isTrue)
+              ? 0
+              : kFrameClipRRectBorderRadius,
+        ),
+        child: child,
+      ),
+    ),
+  );
+}
+
+get windowResizeEdgeSize =>
+    isLinux && !_linuxWindowResizable ? 0.0 : kWindowResizeEdgeSize;
+
+// `windowManager.setResizable(false)` will reset the window size to the default size on Linux and then set unresizable.
+// See _linuxWindowResizable for more details.
+// So we use `setResizable()` instead of `windowManager.setResizable()`.
+//
+// We can only call `windowManager.setResizable(false)` if we need the default size on Linux.
+setResizable(bool resizable) {
+  if (isLinux) {
+    _linuxWindowResizable = resizable;
+    stateGlobal.refreshResizeEdgeSize();
+  } else {
+    windowManager.setResizable(resizable);
+  }
+}
+
+isOptionFixed(String key) => bind.mainIsOptionFixed(key: key);
+
+bool? _isCustomClient;
+bool get isCustomClient {
+  _isCustomClient ??= bind.isCustomClient();
+  return _isCustomClient!;
+}
+
+get defaultOptionLang => isCustomClient ? 'default' : '';
+get defaultOptionTheme => isCustomClient ? 'system' : '';
+get defaultOptionYes => isCustomClient ? 'Y' : '';
+get defaultOptionNo => isCustomClient ? 'N' : '';
+get defaultOptionWhitelist => isCustomClient ? ',' : '';
+get defaultOptionAccessMode => isCustomClient ? 'custom' : '';
+get defaultOptionApproveMode => isCustomClient ? 'password-click' : '';
+
+bool whitelistNotEmpty() {
+  // https://rustdesk.com/docs/en/self-host/client-configuration/advanced-settings/#whitelist
+  final v = bind.mainGetOptionSync(key: kOptionWhitelist);
+  return v != '' && v != ',';
+}
+
+// `setMovable()` is only supported on macOS.
+//
+// On macOS, the window can be dragged by the tab bar by default.
+// We need to disable the movable feature to prevent the window from being dragged by the tabs in the tab bar.
+//
+// When we drag the blank tab bar (not the tab), the window will be dragged normally by adding the `onPanStart` handle.
+//
+// See the following code for more details:
+// https://github.com/rustdesk/rustdesk/blob/ce1dac3b8613596b4d8ae981275f9335489eb935/flutter/lib/desktop/widgets/tabbar_widget.dart#L385
+// https://github.com/rustdesk/rustdesk/blob/ce1dac3b8613596b4d8ae981275f9335489eb935/flutter/lib/desktop/widgets/tabbar_widget.dart#L399
+//
+// @platforms macos
+disableWindowMovable(int? windowId) {
+  if (!isMacOS) {
+    return;
+  }
+
+  if (windowId == null) {
+    windowManager.setMovable(false);
+  } else {
+    WindowController.fromWindowId(windowId).setMovable(false);
+  }
+}
+
+Widget netWorkErrorWidget() {
+  return Center(
+      child: Column(
+    mainAxisAlignment: MainAxisAlignment.center,
+    crossAxisAlignment: CrossAxisAlignment.center,
+    children: [
+      Text(translate("network_error_tip")),
+      ElevatedButton(
+              onPressed: gFFI.userModel.refreshCurrentUser,
+              child: Text(translate("Retry")))
+          .marginSymmetric(vertical: 16),
+      SelectableText(gFFI.userModel.networkError.value,
+          style: TextStyle(fontSize: 11, color: Colors.red)),
+    ],
+  ));
+}
+
+List<ResizeEdge>? get windowManagerEnableResizeEdges => isWindows
+    ? [
+        ResizeEdge.topLeft,
+        ResizeEdge.top,
+        ResizeEdge.topRight,
+      ]
+    : null;
+
+List<SubWindowResizeEdge>? get subWindowManagerEnableResizeEdges => isWindows
+    ? [
+        SubWindowResizeEdge.topLeft,
+        SubWindowResizeEdge.top,
+        SubWindowResizeEdge.topRight,
+      ]
+    : null;
+
+void earlyAssert() {
+  assert('\1' == '1');
 }

@@ -1,8 +1,8 @@
 use super::{CursorData, ResultType};
-use crate::common::PORTABLE_APPNAME_RUNTIME_ENV_KEY;
 use crate::{
+    common::PORTABLE_APPNAME_RUNTIME_ENV_KEY,
+    custom_server::*,
     ipc,
-    license::*,
     privacy_mode::win_topmost_window::{self, WIN_TOPMOST_INJECTED_PROCESS_EXE},
 };
 use hbb_common::{
@@ -10,19 +10,20 @@ use hbb_common::{
     anyhow::anyhow,
     bail,
     config::{self, Config},
+    libc::{c_int, wchar_t},
     log,
-    message_proto::Resolution,
+    message_proto::{DisplayInfo, Resolution, WindowsSession},
     sleep, timeout, tokio,
 };
-use std::process::{Command, Stdio};
 use std::{
     collections::HashMap,
-    ffi::OsString,
+    ffi::{CString, OsString},
     fs, io,
     io::prelude::*,
     mem,
     os::windows::process::CommandExt,
     path::*,
+    process::{Command, Stdio},
     ptr::null_mut,
     sync::{atomic::Ordering, Arc, Mutex},
     time::{Duration, Instant},
@@ -31,13 +32,15 @@ use wallpaper;
 use winapi::{
     ctypes::c_void,
     shared::{minwindef::*, ntdef::NULL, windef::*, winerror::*},
+    um::sysinfoapi::{GetNativeSystemInfo, SYSTEM_INFO},
     um::{
         errhandlingapi::GetLastError,
         handleapi::CloseHandle,
+        libloaderapi::{GetProcAddress, LoadLibraryA},
         minwinbase::STILL_ACTIVE,
         processthreadsapi::{
             GetCurrentProcess, GetCurrentProcessId, GetExitCodeProcess, OpenProcess,
-            OpenProcessToken, PROCESS_INFORMATION, STARTUPINFOW,
+            OpenProcessToken, ProcessIdToSessionId, PROCESS_INFORMATION, STARTUPINFOW,
         },
         securitybaseapi::GetTokenInformation,
         shellapi::ShellExecuteW,
@@ -45,8 +48,8 @@ use winapi::{
         wingdi::*,
         winnt::{
             TokenElevation, ES_AWAYMODE_REQUIRED, ES_CONTINUOUS, ES_DISPLAY_REQUIRED,
-            ES_SYSTEM_REQUIRED, HANDLE, PROCESS_QUERY_LIMITED_INFORMATION, TOKEN_ELEVATION,
-            TOKEN_QUERY,
+            ES_SYSTEM_REQUIRED, HANDLE, PROCESS_ALL_ACCESS, PROCESS_QUERY_LIMITED_INFORMATION,
+            TOKEN_ELEVATION, TOKEN_QUERY,
         },
         winreg::HKEY_CURRENT_USER,
         winuser::*,
@@ -60,10 +63,32 @@ use windows_service::{
     },
     service_control_handler::{self, ServiceControlHandlerResult},
 };
-use winreg::enums::*;
-use winreg::RegKey;
+use winreg::{enums::*, RegKey};
 
-pub const DRIVER_CERT_FILE: &str = "RustDeskIddDriver.cer";
+pub const FLUTTER_RUNNER_WIN32_WINDOW_CLASS: &'static str = "FLUTTER_RUNNER_WIN32_WINDOW"; // main window, install window
+pub const EXPLORER_EXE: &'static str = "explorer.exe";
+pub const SET_FOREGROUND_WINDOW: &'static str = "SET_FOREGROUND_WINDOW";
+
+const REG_NAME_INSTALL_DESKTOPSHORTCUTS: &str = "DESKTOPSHORTCUTS";
+const REG_NAME_INSTALL_STARTMENUSHORTCUTS: &str = "STARTMENUSHORTCUTS";
+
+pub fn get_focused_display(displays: Vec<DisplayInfo>) -> Option<usize> {
+    unsafe {
+        let hwnd = GetForegroundWindow();
+        let mut rect: RECT = mem::zeroed();
+        if GetWindowRect(hwnd, &mut rect as *mut RECT) == 0 {
+            return None;
+        }
+        displays.iter().position(|display| {
+            let center_x = rect.left + (rect.right - rect.left) / 2;
+            let center_y = rect.top + (rect.bottom - rect.top) / 2;
+            center_x >= display.x
+                && center_x <= display.x + display.width
+                && center_y >= display.y
+                && center_y <= display.y + display.height
+        })
+    }
+}
 
 pub fn get_cursor_pos() -> Option<(i32, i32)> {
     unsafe {
@@ -438,10 +463,19 @@ pub fn start_os_service() {
 const SERVICE_TYPE: ServiceType = ServiceType::OWN_PROCESS;
 
 extern "C" {
-    fn has_rdp_service() -> BOOL;
     fn get_current_session(rdp: BOOL) -> DWORD;
-    fn LaunchProcessWin(cmd: *const u16, session_id: DWORD, as_user: BOOL) -> HANDLE;
-    fn GetSessionUserTokenWin(lphUserToken: LPHANDLE, dwSessionId: DWORD, as_user: BOOL) -> BOOL;
+    fn LaunchProcessWin(
+        cmd: *const u16,
+        session_id: DWORD,
+        as_user: BOOL,
+        token_pid: &mut DWORD,
+    ) -> HANDLE;
+    fn GetSessionUserTokenWin(
+        lphUserToken: LPHANDLE,
+        dwSessionId: DWORD,
+        as_user: BOOL,
+        token_pid: &mut DWORD,
+    ) -> BOOL;
     fn selectInputDesktop() -> BOOL;
     fn inputDesktopSelected() -> BOOL;
     fn is_windows_server() -> BOOL;
@@ -462,6 +496,7 @@ extern "C" {
     fn is_win_down() -> BOOL;
     fn is_local_system() -> BOOL;
     fn alloc_console_and_redirect();
+    fn is_service_running_w(svc_name: *const u16) -> bool;
 }
 
 extern "system" {
@@ -508,7 +543,19 @@ async fn run_service(_arguments: Vec<OsString>) -> ResultType<()> {
     log::info!("session id {}", session_id);
     let mut h_process = launch_server(session_id, true).await.unwrap_or(NULL);
     let mut incoming = ipc::new_listener(crate::POSTFIX_SERVICE).await?;
+    let mut stored_usid = None;
     loop {
+        let sids: Vec<_> = get_available_sessions(false)
+            .iter()
+            .map(|e| e.sid)
+            .collect();
+        if !sids.contains(&session_id) || !is_share_rdp() {
+            let current_active_session = unsafe { get_current_session(share_rdp()) };
+            if session_id != current_active_session {
+                session_id = current_active_session;
+                h_process = launch_server(session_id, true).await.unwrap_or(NULL);
+            }
+        }
         let res = timeout(super::SERVICE_INTERVAL, incoming.next()).await;
         match res {
             Ok(res) => match res {
@@ -522,6 +569,21 @@ async fn run_service(_arguments: Vec<OsString>) -> ResultType<()> {
                             }
                             ipc::Data::SAS => {
                                 send_sas();
+                            }
+                            ipc::Data::UserSid(usid) => {
+                                if let Some(usid) = usid {
+                                    if session_id != usid {
+                                        log::info!(
+                                            "session changed from {} to {}",
+                                            session_id,
+                                            usid
+                                        );
+                                        session_id = usid;
+                                        stored_usid = Some(session_id);
+                                        h_process =
+                                            launch_server(session_id, true).await.unwrap_or(NULL);
+                                    }
+                                }
                             }
                             _ => {}
                         }
@@ -537,7 +599,7 @@ async fn run_service(_arguments: Vec<OsString>) -> ResultType<()> {
                         continue;
                     }
                     let mut close_sent = false;
-                    if tmp != session_id {
+                    if tmp != session_id && stored_usid != Some(session_id) {
                         log::info!("session changed from {} to {}", session_id, tmp);
                         session_id = tmp;
                         send_close_async("").await.ok();
@@ -596,9 +658,13 @@ async fn launch_server(session_id: DWORD, close_first: bool) -> ResultType<HANDL
         .chain(Some(0).into_iter())
         .collect();
     let wstr = wstr.as_ptr();
-    let h = unsafe { LaunchProcessWin(wstr, session_id, FALSE) };
+    let mut token_pid = 0;
+    let h = unsafe { LaunchProcessWin(wstr, session_id, FALSE, &mut token_pid) };
     if h.is_null() {
         log::error!("Failed to launch server: {}", io::Error::last_os_error());
+        if token_pid == 0 {
+            log::error!("No process winlogon.exe");
+        }
     }
     Ok(h)
 }
@@ -609,15 +675,26 @@ pub fn run_as_user(arg: Vec<&str>) -> ResultType<Option<std::process::Child>> {
         std::env::current_exe()?.to_str().unwrap_or(""),
         arg.join(" "),
     );
-    let session_id = unsafe { get_current_session(share_rdp()) };
+    let Some(session_id) = get_current_process_session_id() else {
+        bail!("Failed to get current process session id");
+    };
     use std::os::windows::ffi::OsStrExt;
     let wstr: Vec<u16> = std::ffi::OsStr::new(&cmd)
         .encode_wide()
         .chain(Some(0).into_iter())
         .collect();
     let wstr = wstr.as_ptr();
-    let h = unsafe { LaunchProcessWin(wstr, session_id, TRUE) };
+    let mut token_pid = 0;
+    let h = unsafe { LaunchProcessWin(wstr, session_id, TRUE, &mut token_pid) };
     if h.is_null() {
+        if token_pid == 0 {
+            bail!(
+                "Failed to launch {:?} with session id {}: no process {}",
+                arg,
+                session_id,
+                EXPLORER_EXE
+            );
+        }
         bail!(
             "Failed to launch {:?} with session id {}: {}",
             arg,
@@ -645,7 +722,7 @@ async fn send_close_async(postfix: &str) -> ResultType<()> {
 
 // https://docs.microsoft.com/en-us/windows/win32/api/sas/nf-sas-sendsas
 // https://www.cnblogs.com/doutu/p/4892726.html
-fn send_sas() {
+pub fn send_sas() {
     #[link(name = "sas")]
     extern "system" {
         pub fn SendSAS(AsUser: BOOL);
@@ -684,10 +761,10 @@ pub fn try_change_desktop() -> bool {
 }
 
 fn share_rdp() -> BOOL {
-    if get_reg("share_rdp") != "true" {
-        FALSE
-    } else {
+    if get_reg("share_rdp") != "false" {
         TRUE
+    } else {
+        FALSE
     }
 }
 
@@ -705,7 +782,31 @@ pub fn set_share_rdp(enable: bool) {
     run_cmds(cmd, false, "share_rdp").ok();
 }
 
+pub fn get_current_process_session_id() -> Option<u32> {
+    let mut sid = 0;
+    if unsafe { ProcessIdToSessionId(GetCurrentProcessId(), &mut sid) == TRUE } {
+        Some(sid)
+    } else {
+        None
+    }
+}
+
+pub fn is_physical_console_session() -> Option<bool> {
+    if let Some(sid) = get_current_process_session_id() {
+        let physical_console_session_id = unsafe { get_current_session(FALSE) };
+        if physical_console_session_id == u32::MAX {
+            return None;
+        }
+        return Some(physical_console_session_id == sid);
+    }
+    None
+}
+
 pub fn get_active_username() -> String {
+    // get_active_user will give console username higher priority
+    if let Some(name) = get_current_session_username() {
+        return name;
+    }
     if !is_root() {
         return crate::username();
     }
@@ -727,6 +828,108 @@ pub fn get_active_username() -> String {
         .to_owned()
 }
 
+fn get_current_session_username() -> Option<String> {
+    let Some(sid) = get_current_process_session_id() else {
+        log::error!("get_current_process_session_id failed");
+        return None;
+    };
+    Some(get_session_username(sid))
+}
+
+fn get_session_username(session_id: u32) -> String {
+    extern "C" {
+        fn get_session_user_info(path: *mut u16, n: u32, session_id: u32) -> u32;
+    }
+    let buff_size = 256;
+    let mut buff: Vec<u16> = Vec::with_capacity(buff_size);
+    buff.resize(buff_size, 0);
+    let n = unsafe { get_session_user_info(buff.as_mut_ptr(), buff_size as _, session_id) };
+    if n == 0 {
+        return "".to_owned();
+    }
+    let sl = unsafe { std::slice::from_raw_parts(buff.as_ptr(), n as _) };
+    String::from_utf16(sl)
+        .unwrap_or("".to_owned())
+        .trim_end_matches('\0')
+        .to_owned()
+}
+
+pub fn get_available_sessions(name: bool) -> Vec<WindowsSession> {
+    extern "C" {
+        fn get_available_session_ids(buf: *mut wchar_t, buf_size: c_int, include_rdp: bool);
+    }
+    const BUF_SIZE: c_int = 1024;
+    let mut buf: Vec<wchar_t> = vec![0; BUF_SIZE as usize];
+
+    let station_session_id_array = unsafe {
+        get_available_session_ids(buf.as_mut_ptr(), BUF_SIZE, true);
+        let session_ids = String::from_utf16_lossy(&buf);
+        session_ids.trim_matches(char::from(0)).trim().to_string()
+    };
+    let mut v: Vec<WindowsSession> = vec![];
+    // https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-wtsgetactiveconsolesessionid
+    let physical_console_sid = unsafe { get_current_session(FALSE) };
+    if physical_console_sid != u32::MAX {
+        let physical_console_name = if name {
+            let physical_console_username = get_session_username(physical_console_sid);
+            if physical_console_username.is_empty() {
+                "Console".to_owned()
+            } else {
+                format!("Console: {physical_console_username}")
+            }
+        } else {
+            "".to_owned()
+        };
+        v.push(WindowsSession {
+            sid: physical_console_sid,
+            name: physical_console_name,
+            ..Default::default()
+        });
+    }
+    // https://learn.microsoft.com/en-us/previous-versions//cc722458(v=technet.10)?redirectedfrom=MSDN
+    for type_session_id in station_session_id_array.split(",") {
+        let split: Vec<_> = type_session_id.split(":").collect();
+        if split.len() == 2 {
+            if let Ok(sid) = split[1].parse::<u32>() {
+                if !v.iter().any(|e| (*e).sid == sid) {
+                    let name = if name {
+                        let name = get_session_username(sid);
+                        if name.is_empty() {
+                            split[0].to_string()
+                        } else {
+                            format!("{}: {}", split[0], name)
+                        }
+                    } else {
+                        "".to_owned()
+                    };
+                    v.push(WindowsSession {
+                        sid,
+                        name,
+                        ..Default::default()
+                    });
+                }
+            }
+        }
+    }
+    if name {
+        let mut name_count: HashMap<String, usize> = HashMap::new();
+        for session in &v {
+            *name_count.entry(session.name.clone()).or_insert(0) += 1;
+        }
+        let current_sid = get_current_process_session_id().unwrap_or_default();
+        for e in v.iter_mut() {
+            let running = e.sid == current_sid && current_sid != 0;
+            if name_count.get(&e.name).map(|v| *v).unwrap_or_default() > 1 {
+                e.name = format!("{} (sid = {})", e.name, e.sid);
+            }
+            if running {
+                e.name = format!("{} (running)", e.name);
+            }
+        }
+    }
+    v
+}
+
 pub fn get_active_user_home() -> Option<PathBuf> {
     let username = get_active_username();
     if !username.is_empty() {
@@ -740,7 +943,9 @@ pub fn get_active_user_home() -> Option<PathBuf> {
 }
 
 pub fn is_prelogin() -> bool {
-    let username = get_active_username();
+    let Some(username) = get_current_session_username() else {
+        return false;
+    };
     username.is_empty() || username == "SYSTEM"
 }
 
@@ -787,6 +992,32 @@ fn get_valid_subkey() -> String {
         return subkey;
     }
     return get_subkey(&app_name, false);
+}
+
+// Return install options other than InstallLocation.
+pub fn get_install_options() -> String {
+    let app_name = crate::get_app_name();
+    let subkey = format!(".{}", app_name.to_lowercase());
+    let mut opts = HashMap::new();
+
+    let desktop_shortcuts = get_reg_of_hkcr(&subkey, REG_NAME_INSTALL_DESKTOPSHORTCUTS);
+    if let Some(desktop_shortcuts) = desktop_shortcuts {
+        opts.insert(REG_NAME_INSTALL_DESKTOPSHORTCUTS, desktop_shortcuts);
+    }
+    let start_menu_shortcuts = get_reg_of_hkcr(&subkey, REG_NAME_INSTALL_STARTMENUSHORTCUTS);
+    if let Some(start_menu_shortcuts) = start_menu_shortcuts {
+        opts.insert(REG_NAME_INSTALL_STARTMENUSHORTCUTS, start_menu_shortcuts);
+    }
+    serde_json::to_string(&opts).unwrap_or("{}".to_owned())
+}
+
+// This function return Option<String>, because some registry value may be empty.
+fn get_reg_of_hkcr(subkey: &str, name: &str) -> Option<String> {
+    let hkcr = RegKey::predef(HKEY_CLASSES_ROOT);
+    if let Ok(tmp) = hkcr.open_subkey(subkey.replace("HKEY_CLASSES_ROOT\\", "")) {
+        return tmp.get_value(name).ok();
+    }
+    None
 }
 
 pub fn get_install_info() -> (String, String, String, String) {
@@ -898,7 +1129,11 @@ pub fn copy_exe_cmd(src_exe: &str, exe: &str, path: &str) -> ResultType<String> 
     ))
 }
 
-fn get_after_install(exe: &str) -> String {
+fn get_after_install(
+    exe: &str,
+    reg_value_start_menu_shortcuts: Option<String>,
+    reg_value_desktop_shortcuts: Option<String>,
+) -> String {
     let app_name = crate::get_app_name();
     let ext = app_name.to_lowercase();
 
@@ -909,9 +1144,24 @@ fn get_after_install(exe: &str) -> String {
     hcu.delete_subkey_all(format!("Software\\Classes\\{}", exe))
         .ok();
 
+    let desktop_shortcuts = reg_value_desktop_shortcuts
+        .map(|v| {
+            format!("reg add HKEY_CLASSES_ROOT\\.{ext} /f /v {REG_NAME_INSTALL_DESKTOPSHORTCUTS} /t REG_SZ /d \"{v}\"")
+        })
+        .unwrap_or_default();
+    let start_menu_shortcuts = reg_value_start_menu_shortcuts
+        .map(|v| {
+            format!(
+                "reg add HKEY_CLASSES_ROOT\\.{ext} /f /v {REG_NAME_INSTALL_STARTMENUSHORTCUTS} /t REG_SZ /d \"{v}\""
+            )
+        })
+        .unwrap_or_default();
+
     format!("
     chcp 65001
     reg add HKEY_CLASSES_ROOT\\.{ext} /f
+    {desktop_shortcuts}
+    {start_menu_shortcuts}
     reg add HKEY_CLASSES_ROOT\\.{ext}\\DefaultIcon /f
     reg add HKEY_CLASSES_ROOT\\.{ext}\\DefaultIcon /f /ve /t REG_SZ  /d \"\\\"{exe}\\\",0\"
     reg add HKEY_CLASSES_ROOT\\.{ext}\\shell /f
@@ -994,6 +1244,8 @@ oLink.Save
     .unwrap_or("")
     .to_owned();
     let tray_shortcut = get_tray_shortcut(&exe, &tmp_path)?;
+    let mut reg_value_desktop_shortcuts = "0".to_owned();
+    let mut reg_value_start_menu_shortcuts = "0".to_owned();
     let mut shortcuts = Default::default();
     if options.contains("desktopicon") {
         shortcuts = format!(
@@ -1001,6 +1253,7 @@ oLink.Save
             tmp_path,
             crate::get_app_name()
         );
+        reg_value_desktop_shortcuts = "1".to_owned();
     }
     if options.contains("startmenu") {
         shortcuts = format!(
@@ -1010,6 +1263,7 @@ copy /Y \"{tmp_path}\\{app_name}.lnk\" \"{start_menu}\\\"
 copy /Y \"{tmp_path}\\Uninstall {app_name}.lnk\" \"{start_menu}\\\"
      "
         );
+        reg_value_start_menu_shortcuts = "1".to_owned();
     }
 
     let meta = std::fs::symlink_metadata(std::env::current_exe()?)?;
@@ -1030,23 +1284,21 @@ if exist \"{tmp_path}\\{app_name} Tray.lnk\" del /f /q \"{tmp_path}\\{app_name} 
     );
     let src_exe = std::env::current_exe()?.to_str().unwrap_or("").to_string();
 
-    let install_cert = if options.contains("driverCert") {
-        let s = format!(r#""{}" --install-cert"#, src_exe);
-        if silent {
-            format!("{} silent", s)
-        } else {
-            s
-        }
-    } else {
-        "".to_owned()
-    };
-
     // potential bug here: if run_cmd cancelled, but config file is changed.
     if let Some(lic) = get_license() {
         Config::set_option("key".into(), lic.key);
         Config::set_option("custom-rendezvous-server".into(), lic.host);
         Config::set_option("api-server".into(), lic.api);
     }
+
+    let tray_shortcuts = if config::is_outgoing_only() {
+        "".to_owned()
+    } else {
+        format!("
+cscript \"{tray_shortcut}\"
+copy /Y \"{tmp_path}\\{app_name} Tray.lnk\" \"%PROGRAMDATA%\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\\"
+")
+    };
 
     let cmds = format!(
         "
@@ -1070,29 +1322,23 @@ reg add {subkey} /f /v EstimatedSize /t REG_DWORD /d {size}
 reg add {subkey} /f /v WindowsInstaller /t REG_DWORD /d 0
 cscript \"{mk_shortcut}\"
 cscript \"{uninstall_shortcut}\"
-cscript \"{tray_shortcut}\"
-copy /Y \"{tmp_path}\\{app_name} Tray.lnk\" \"%PROGRAMDATA%\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\\"
+{tray_shortcuts}
 {shortcuts}
 copy /Y \"{tmp_path}\\Uninstall {app_name}.lnk\" \"{path}\\\"
 {dels}
 {import_config}
-{install_cert}
 {after_install}
 {sleep}
     ",
-        version=crate::VERSION,
-        build_date=crate::BUILD_DATE,
-        after_install=get_after_install(&exe),
-        sleep=if debug {
-            "timeout 300"
-        } else {
-            ""
-        },
-        dels=if debug {
-            ""
-        } else {
-            &dels
-        },
+        version = crate::VERSION.replace("-", "."),
+        build_date = crate::BUILD_DATE,
+        after_install = get_after_install(
+            &exe,
+            Some(reg_value_start_menu_shortcuts),
+            Some(reg_value_desktop_shortcuts)
+        ),
+        sleep = if debug { "timeout 300" } else { "" },
+        dels = if debug { "" } else { &dels },
         copy_exe = copy_exe_cmd(&src_exe, &exe, &path)?,
         import_config = get_import_config(&exe),
     );
@@ -1103,7 +1349,7 @@ copy /Y \"{tmp_path}\\Uninstall {app_name}.lnk\" \"{path}\\\"
 
 pub fn run_after_install() -> ResultType<()> {
     let (_, _, _, exe) = get_install_info();
-    run_cmds(get_after_install(&exe), true, "after_install")
+    run_cmds(get_after_install(&exe, None, None), true, "after_install")
 }
 
 pub fn run_before_uninstall() -> ResultType<()> {
@@ -1134,6 +1380,11 @@ fn get_before_uninstall(kill_self: bool) -> String {
 }
 
 fn get_uninstall(kill_self: bool) -> String {
+    let reg_uninstall_string = get_reg("UninstallString");
+    if reg_uninstall_string.to_lowercase().contains("msiexec.exe") {
+        return reg_uninstall_string;
+    }
+
     let mut uninstall_cert_cmd = "".to_string();
     if let Ok(exe) = std::env::current_exe() {
         if let Some(exe_path) = exe.to_str() {
@@ -1146,12 +1397,14 @@ fn get_uninstall(kill_self: bool) -> String {
     {before_uninstall}
     {uninstall_cert_cmd}
     reg delete {subkey} /f
+    {uninstall_amyuni_idd}
     if exist \"{path}\" rd /s /q \"{path}\"
     if exist \"{start_menu}\" rd /s /q \"{start_menu}\"
     if exist \"%PUBLIC%\\Desktop\\{app_name}.lnk\" del /f /q \"%PUBLIC%\\Desktop\\{app_name}.lnk\"
     if exist \"%PROGRAMDATA%\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\{app_name} Tray.lnk\" del /f /q \"%PROGRAMDATA%\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\{app_name} Tray.lnk\"
     ",
         before_uninstall=get_before_uninstall(kill_self),
+        uninstall_amyuni_idd=get_uninstall_amyuni_idd(),
         app_name = crate::get_app_name(),
     )
 }
@@ -1275,24 +1528,6 @@ pub fn add_recent_document(path: &str) {
 pub fn is_installed() -> bool {
     let (_, _, _, exe) = get_install_info();
     std::fs::metadata(exe).is_ok()
-    /*
-    use windows_service::{
-        service::ServiceAccess,
-        service_manager::{ServiceManager, ServiceManagerAccess},
-    };
-    if !std::fs::metadata(exe).is_ok() {
-        return false;
-    }
-    let manager_access = ServiceManagerAccess::CONNECT;
-    if let Ok(service_manager) = ServiceManager::local_computer(None::<&str>, manager_access) {
-        if let Ok(_) =
-            service_manager.open_service(crate::get_app_name(), ServiceAccess::QUERY_CONFIG)
-        {
-            return true;
-        }
-    }
-    return false;
-    */
 }
 
 pub fn get_reg(name: &str) -> String {
@@ -1310,13 +1545,13 @@ fn get_reg_of(subkey: &str, name: &str) -> String {
     "".to_owned()
 }
 
-pub fn get_license_from_exe_name() -> ResultType<License> {
+pub fn get_license_from_exe_name() -> ResultType<CustomServer> {
     let mut exe = std::env::current_exe()?.to_str().unwrap_or("").to_owned();
     // if defined portable appname entry, replace original executable name with it.
     if let Ok(portable_exe) = std::env::var(PORTABLE_APPNAME_RUNTIME_ENV_KEY) {
         exe = portable_exe;
     }
-    get_license_from_string(&exe)
+    get_custom_server_from_string(&exe)
 }
 
 #[inline]
@@ -1328,10 +1563,6 @@ pub fn bootstrap() {
     if let Ok(lic) = get_license_from_exe_name() {
         *config::EXE_RENDEZVOUS_SERVER.write().unwrap() = lic.host.clone();
     }
-}
-
-pub fn is_rdp_service_open() -> bool {
-    unsafe { has_rdp_service() == TRUE }
 }
 
 pub fn create_shortcut(id: &str) -> ResultType<()> {
@@ -1390,11 +1621,13 @@ pub fn quit_gui() {
 pub fn get_user_token(session_id: u32, as_user: bool) -> HANDLE {
     let mut token = NULL as HANDLE;
     unsafe {
+        let mut _token_pid = 0;
         if FALSE
             == GetSessionUserTokenWin(
                 &mut token as _,
                 session_id,
                 if as_user { TRUE } else { FALSE },
+                &mut _token_pid,
             )
         {
             NULL as _
@@ -1595,7 +1828,7 @@ pub fn get_double_click_time() -> u32 {
     unsafe { GetDoubleClickTime() }
 }
 
-fn wide_string(s: &str) -> Vec<u16> {
+pub fn wide_string(s: &str) -> Vec<u16> {
     use std::os::windows::prelude::OsStrExt;
     std::ffi::OsStr::new(s)
         .encode_wide()
@@ -1746,7 +1979,7 @@ pub fn current_resolution(name: &str) -> ResultType<Resolution> {
         dm.dmSize = std::mem::size_of::<DEVMODEW>() as _;
         if EnumDisplaySettingsW(device_name.as_ptr(), ENUM_CURRENT_SETTINGS, &mut dm) == 0 {
             bail!(
-                "failed to get currrent resolution, error {}",
+                "failed to get current resolution, error {}",
                 io::Error::last_os_error()
             );
         }
@@ -1806,250 +2039,19 @@ pub fn user_accessible_folder() -> ResultType<PathBuf> {
 }
 
 #[inline]
-pub fn install_cert(cert_file: &str) -> ResultType<()> {
-    let exe_file = std::env::current_exe()?;
-    if let Some(cur_dir) = exe_file.parent() {
-        allow_err!(cert::install_cert(cur_dir.join(cert_file)));
-    } else {
-        bail!(
-            "Invalid exe parent for {}",
-            exe_file.to_string_lossy().as_ref()
-        );
-    }
-    Ok(())
-}
-
-#[inline]
 pub fn uninstall_cert() -> ResultType<()> {
     cert::uninstall_cert()
 }
 
 mod cert {
-    use hbb_common::{bail, log, ResultType};
-    use std::{ffi::OsStr, io::Error, os::windows::ffi::OsStrExt, path::Path, str::from_utf8};
-    use winapi::{
-        shared::{
-            minwindef::{BYTE, DWORD, FALSE, TRUE},
-            ntdef::NULL,
-        },
-        um::{
-            wincrypt::{
-                CertAddEncodedCertificateToStore, CertCloseStore, CertDeleteCertificateFromStore,
-                CertEnumCertificatesInStore, CertNameToStrA, CertOpenStore, CryptHashCertificate,
-                ALG_ID, CALG_SHA1, CERT_ID_SHA1_HASH, CERT_STORE_ADD_REPLACE_EXISTING,
-                CERT_STORE_PROV_SYSTEM_W, CERT_SYSTEM_STORE_LOCAL_MACHINE, CERT_X500_NAME_STR,
-                PCCERT_CONTEXT, PKCS_7_ASN_ENCODING, X509_ASN_ENCODING,
-            },
-            winreg::HKEY_LOCAL_MACHINE,
-        },
-    };
-    use winreg::{
-        enums::{KEY_WRITE, REG_BINARY},
-        RegKey,
-    };
+    use hbb_common::ResultType;
 
-    const ROOT_CERT_STORE_PATH: &str =
-        "SOFTWARE\\Microsoft\\SystemCertificates\\ROOT\\Certificates\\";
-    const THUMBPRINT_ALG: ALG_ID = CALG_SHA1;
-    const THUMBPRINT_LEN: DWORD = 20;
-    const CERT_ISSUER_1: &str = "CN=\"WDKTestCert admin,133225435702113567\"\0";
-    const CERT_ENCODING_TYPE: DWORD = X509_ASN_ENCODING | PKCS_7_ASN_ENCODING;
-
-    lazy_static::lazy_static! {
-        static ref CERT_STORE_LOC: Vec<u16> =  OsStr::new("ROOT\0").encode_wide().collect::<Vec<_>>();
+    extern "C" {
+        fn DeleteRustDeskTestCertsW();
     }
-
-    #[inline]
-    unsafe fn compute_thumbprint(pb_encoded: *const BYTE, cb_encoded: DWORD) -> (Vec<u8>, String) {
-        let mut size = THUMBPRINT_LEN;
-        let mut thumbprint = [0u8; THUMBPRINT_LEN as usize];
-        if CryptHashCertificate(
-            0,
-            THUMBPRINT_ALG,
-            0,
-            pb_encoded,
-            cb_encoded,
-            thumbprint.as_mut_ptr(),
-            &mut size,
-        ) == TRUE
-        {
-            (
-                thumbprint.to_vec(),
-                hex::encode(thumbprint).to_ascii_uppercase(),
-            )
-        } else {
-            (thumbprint.to_vec(), "".to_owned())
-        }
-    }
-
-    #[inline]
-    unsafe fn open_reg_cert_store() -> ResultType<RegKey> {
-        let hklm = winreg::RegKey::predef(HKEY_LOCAL_MACHINE);
-        Ok(hklm.open_subkey_with_flags(ROOT_CERT_STORE_PATH, KEY_WRITE)?)
-    }
-
-    // https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-gpef/6a9e35fa-2ac7-4c10-81e1-eabe8d2472f1
-    fn create_cert_blob(thumbprint: Vec<u8>, encoded: Vec<u8>) -> Vec<u8> {
-        let mut blob = Vec::new();
-
-        let mut property_id = (CERT_ID_SHA1_HASH as u32).to_le_bytes().to_vec();
-        let mut pro_reserved = [0x01, 0x00, 0x00, 0x00].to_vec();
-        let mut pro_length = (THUMBPRINT_LEN as u32).to_le_bytes().to_vec();
-        let mut pro_val = thumbprint;
-        blob.append(&mut property_id);
-        blob.append(&mut pro_reserved);
-        blob.append(&mut pro_length);
-        blob.append(&mut pro_val);
-
-        let mut blob_reserved = [0x20, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00].to_vec();
-        let mut blob_length = (encoded.len() as u32).to_le_bytes().to_vec();
-        let mut blob_val = encoded;
-        blob.append(&mut blob_reserved);
-        blob.append(&mut blob_length);
-        blob.append(&mut blob_val);
-
-        blob
-    }
-
-    pub fn install_cert<P: AsRef<Path>>(path: P) -> ResultType<()> {
-        let mut cert_bytes = std::fs::read(path)?;
-        install_cert_reg(&mut cert_bytes)?;
-        install_cert_add_cert_store(&mut cert_bytes)?;
-        Ok(())
-    }
-
-    fn install_cert_reg(cert_bytes: &mut [u8]) -> ResultType<()> {
-        unsafe {
-            let thumbprint = compute_thumbprint(cert_bytes.as_mut_ptr(), cert_bytes.len() as _);
-            log::debug!("Thumbprint of cert {}", &thumbprint.1);
-
-            let reg_cert_key = open_reg_cert_store()?;
-            let (cert_key, _) = reg_cert_key.create_subkey(&thumbprint.1)?;
-            let data = winreg::RegValue {
-                vtype: REG_BINARY,
-                bytes: create_cert_blob(thumbprint.0, cert_bytes.to_vec()),
-            };
-            cert_key.set_raw_value("Blob", &data)?;
-        }
-        Ok(())
-    }
-
-    fn install_cert_add_cert_store(cert_bytes: &mut [u8]) -> ResultType<()> {
-        unsafe {
-            let store_handle = CertOpenStore(
-                CERT_STORE_PROV_SYSTEM_W,
-                0,
-                0,
-                CERT_SYSTEM_STORE_LOCAL_MACHINE,
-                CERT_STORE_LOC.as_ptr() as _,
-            );
-            if store_handle.is_null() {
-                bail!(
-                    "Error opening certificate store: {}",
-                    Error::last_os_error()
-                );
-            }
-
-            // Create the certificate context
-            let cert_context = winapi::um::wincrypt::CertCreateCertificateContext(
-                CERT_ENCODING_TYPE,
-                cert_bytes.as_ptr(),
-                cert_bytes.len() as DWORD,
-            );
-            if cert_context.is_null() {
-                bail!(
-                    "Error creating certificate context: {}",
-                    Error::last_os_error()
-                );
-            }
-
-            if FALSE
-                == CertAddEncodedCertificateToStore(
-                    store_handle,
-                    CERT_ENCODING_TYPE,
-                    (*cert_context).pbCertEncoded,
-                    (*cert_context).cbCertEncoded,
-                    CERT_STORE_ADD_REPLACE_EXISTING,
-                    std::ptr::null_mut(),
-                )
-            {
-                log::error!(
-                    "Failed to call CertAddEncodedCertificateToStore: {}",
-                    Error::last_os_error()
-                );
-            } else {
-                log::info!("Add cert to store successfully");
-            }
-
-            CertCloseStore(store_handle, 0);
-        }
-        Ok(())
-    }
-
-    fn get_thumbprints_to_rm() -> ResultType<Vec<String>> {
-        let issuers_to_rm = [CERT_ISSUER_1];
-
-        let mut thumbprints = Vec::new();
-        let mut buf = [0u8; 1024];
-
-        unsafe {
-            let store_handle = CertOpenStore(
-                CERT_STORE_PROV_SYSTEM_W,
-                0,
-                0,
-                CERT_SYSTEM_STORE_LOCAL_MACHINE,
-                CERT_STORE_LOC.as_ptr() as _,
-            );
-            if store_handle.is_null() {
-                bail!(
-                    "Error opening certificate store: {}",
-                    Error::last_os_error()
-                );
-            }
-
-            let mut cert_ctx: PCCERT_CONTEXT = CertEnumCertificatesInStore(store_handle, NULL as _);
-            while !cert_ctx.is_null() {
-                // https://stackoverflow.com/a/66432736
-                let cb_size = CertNameToStrA(
-                    (*cert_ctx).dwCertEncodingType,
-                    &mut ((*(*cert_ctx).pCertInfo).Issuer) as _,
-                    CERT_X500_NAME_STR,
-                    buf.as_mut_ptr() as _,
-                    buf.len() as _,
-                );
-                if cb_size != 1 {
-                    if let Ok(issuer) = from_utf8(&buf[..cb_size as _]) {
-                        for iss in issuers_to_rm.iter() {
-                            if issuer == *iss {
-                                let (_, thumbprint) = compute_thumbprint(
-                                    (*cert_ctx).pbCertEncoded,
-                                    (*cert_ctx).cbCertEncoded,
-                                );
-                                if !thumbprint.is_empty() {
-                                    thumbprints.push(thumbprint);
-                                }
-                                // Delete current cert context and re-enumerate.
-                                CertDeleteCertificateFromStore(cert_ctx);
-                                cert_ctx = CertEnumCertificatesInStore(store_handle, NULL as _);
-                            }
-                        }
-                    }
-                }
-                cert_ctx = CertEnumCertificatesInStore(store_handle, cert_ctx);
-            }
-            CertCloseStore(store_handle, 0);
-        }
-
-        Ok(thumbprints)
-    }
-
     pub fn uninstall_cert() -> ResultType<()> {
-        let thumbprints = get_thumbprints_to_rm()?;
-        let reg_cert_key = unsafe { open_reg_cert_store()? };
-        log::info!("Found {} certs to remove", thumbprints.len());
-        for thumbprint in thumbprints.iter() {
-            // Deleting cert from registry may fail, because the CertDeleteCertificateFromStore() is called before.
-            let _ = reg_cert_key.delete_subkey(thumbprint);
+        unsafe {
+            DeleteRustDeskTestCertsW();
         }
         Ok(())
     }
@@ -2081,7 +2083,7 @@ pub fn get_unicode_from_vk(vk: u32) -> Option<u16> {
         let current_window_thread_id = GetWindowThreadProcessId(GetForegroundWindow(), null_mut());
         let layout = GetKeyboardLayout(current_window_thread_id);
 
-        // refs: https://github.com/fufesou/rdev/blob/25a99ce71ab42843ad253dd51e6a35e83e87a8a4/src/windows/keyboard.rs#L115
+        // refs: https://github.com/rustdesk-org/rdev/blob/25a99ce71ab42843ad253dd51e6a35e83e87a8a4/src/windows/keyboard.rs#L115
         let press_state = 129;
         let mut state: [BYTE; 256] = [0; 256];
         let shift_left = rdev::get_modifier(rdev::Key::ShiftLeft);
@@ -2111,6 +2113,7 @@ pub fn is_process_consent_running() -> ResultType<bool> {
         .output()?;
     Ok(output.status.success() && !output.stdout.is_empty())
 }
+
 pub struct WakeLock(u32);
 // Failed to compile keepawake-rs on i686
 impl WakeLock {
@@ -2149,7 +2152,7 @@ impl Drop for WakeLock {
     }
 }
 
-pub fn uninstall_service(show_new_window: bool) -> bool {
+pub fn uninstall_service(show_new_window: bool, _: bool) -> bool {
     log::info!("Uninstalling service...");
     let filter = format!(" /FI \"PID ne {}\"", get_current_pid());
     Config::set_option("stop-service".into(), "Y".into());
@@ -2230,6 +2233,9 @@ oLink.Save
 }
 
 fn get_import_config(exe: &str) -> String {
+    if config::is_outgoing_only() {
+        return "".to_string();
+    }
     format!("
 sc stop {app_name}
 sc delete {app_name}
@@ -2244,6 +2250,9 @@ sc delete {app_name}
 }
 
 fn get_create_service(exe: &str) -> String {
+    if config::is_outgoing_only() {
+        return "".to_string();
+    }
     let stop = Config::get_option("stop-service") == "Y";
     if stop {
         format!("
@@ -2263,8 +2272,7 @@ fn run_after_run_cmds(silent: bool) {
     if !silent {
         log::debug!("Spawn new window");
         allow_err!(std::process::Command::new("cmd")
-            .arg("/c")
-            .arg("timeout /t 2 & start rustdesk://")
+            .args(&["/c", "timeout", "/t", "2", "&", &format!("{exe}")])
             .creation_flags(winapi::um::winbase::CREATE_NO_WINDOW)
             .spawn());
     }
@@ -2289,14 +2297,6 @@ pub fn try_kill_broker() {
 #[cfg(test)]
 mod tests {
     use super::*;
-    #[test]
-    fn test_install_cert() {
-        println!(
-            "install driver cert: {:?}",
-            cert::install_cert("RustDeskIddDriver.cer")
-        );
-    }
-
     #[test]
     fn test_uninstall_cert() {
         println!("uninstall driver certs: {:?}", cert::uninstall_cert());
@@ -2354,8 +2354,8 @@ pub fn alloc_console() {
     }
 }
 
-fn get_license() -> Option<License> {
-    let mut lic: License = Default::default();
+fn get_license() -> Option<CustomServer> {
+    let mut lic: CustomServer = Default::default();
     if let Ok(tmp) = get_license_from_exe_name() {
         lic = tmp;
     } else {
@@ -2368,34 +2368,6 @@ fn get_license() -> Option<License> {
         return None;
     }
     Some(lic)
-}
-
-fn get_sid_of_user(username: &str) -> ResultType<String> {
-    let mut output = Command::new("wmic")
-        .args(&[
-            "useraccount",
-            "where",
-            &format!("name='{}'", username),
-            "get",
-            "sid",
-            "/value",
-        ])
-        .creation_flags(CREATE_NO_WINDOW)
-        .stdout(Stdio::piped())
-        .spawn()?
-        .stdout
-        .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "Failed to open stdout"))?;
-    let mut result = String::new();
-    output.read_to_string(&mut result)?;
-    let sid_start_index = result
-        .find('=')
-        .map(|i| i + 1)
-        .ok_or(anyhow!("bad output format"))?;
-    if sid_start_index > 0 && sid_start_index < result.len() + 1 {
-        Ok(result[sid_start_index..].trim().to_string())
-    } else {
-        bail!("bad output format");
-    }
 }
 
 pub struct WallPaperRemover {
@@ -2433,9 +2405,7 @@ impl WallPaperRemover {
         // https://www.makeuseof.com/find-desktop-wallpapers-file-location-windows-11/
         // https://superuser.com/questions/1218413/write-to-current-users-registry-through-a-different-admin-account
         let (hkcu, sid) = if is_root() {
-            let username = get_active_username();
-            let sid = get_sid_of_user(&username)?;
-            log::info!("username: {username}, sid: {sid}");
+            let sid = get_current_process_session_id().ok_or(anyhow!("failed to get sid"))?;
             (RegKey::predef(HKEY_USERS), format!("{}\\", sid))
         } else {
             (RegKey::predef(HKEY_CURRENT_USER), "".to_string())
@@ -2466,5 +2436,232 @@ impl Drop for WallPaperRemover {
     fn drop(&mut self) {
         // If the old background is a slideshow, it will be converted into an image. AnyDesk does the same.
         allow_err!(Self::set_wallpaper(Some(self.old_path.clone())));
+    }
+}
+
+fn get_uninstall_amyuni_idd() -> String {
+    match std::env::current_exe() {
+        Ok(path) => format!("\"{}\" --uninstall-amyuni-idd", path.to_str().unwrap_or("")),
+        Err(e) => {
+            log::warn!("Failed to get current exe path, cannot get command of uninstalling idd, Zzerror: {:?}", e);
+            "".to_string()
+        }
+    }
+}
+
+#[inline]
+pub fn is_self_service_running() -> bool {
+    is_service_running(&crate::get_app_name())
+}
+
+pub fn is_service_running(service_name: &str) -> bool {
+    unsafe {
+        let service_name = wide_string(service_name);
+        is_service_running_w(service_name.as_ptr() as _)
+    }
+}
+
+pub fn is_x64() -> bool {
+    const PROCESSOR_ARCHITECTURE_AMD64: u16 = 9;
+
+    let mut sys_info = SYSTEM_INFO::default();
+    unsafe {
+        GetNativeSystemInfo(&mut sys_info as _);
+    }
+    unsafe { sys_info.u.s().wProcessorArchitecture == PROCESSOR_ARCHITECTURE_AMD64 }
+}
+
+pub fn try_kill_rustdesk_main_window_process() -> ResultType<()> {
+    // Kill rustdesk.exe without extra arg, should only be called by --server
+    // We can find the exact process which occupies the ipc, see more from https://github.com/winsiderss/systeminformer
+    log::info!("try kill rustdesk main window process");
+    use hbb_common::sysinfo::System;
+    let mut sys = System::new();
+    sys.refresh_processes();
+    let my_uid = sys
+        .process((std::process::id() as usize).into())
+        .map(|x| x.user_id())
+        .unwrap_or_default();
+    let my_pid = std::process::id();
+    let app_name = crate::get_app_name().to_lowercase();
+    if app_name.is_empty() {
+        bail!("app name is empty");
+    }
+    for (_, p) in sys.processes().iter() {
+        let p_name = p.name().to_lowercase();
+        // name equal
+        if !(p_name == app_name || p_name == app_name.clone() + ".exe") {
+            continue;
+        }
+        // arg more than 1
+        if p.cmd().len() < 1 {
+            continue;
+        }
+        // first arg contain app name
+        if !p.cmd()[0].to_lowercase().contains(&p_name) {
+            continue;
+        }
+        // only one arg or the second arg is empty uni link
+        let is_empty_uni = p.cmd().len() == 2 && crate::common::is_empty_uni_link(&p.cmd()[1]);
+        if !(p.cmd().len() == 1 || is_empty_uni) {
+            continue;
+        }
+        // skip self
+        if p.pid().as_u32() == my_pid {
+            continue;
+        }
+        // because we call it with --server, so we can check user_id, remove this if call it with user process
+        if p.user_id() == my_uid {
+            log::info!("user id equal, continue");
+            continue;
+        }
+        log::info!("try kill process: {:?}, pid = {:?}", p.cmd(), p.pid());
+        nt_terminate_process(p.pid().as_u32())?;
+        log::info!("kill process success: {:?}, pid = {:?}", p.cmd(), p.pid());
+        return Ok(());
+    }
+    bail!("failed to find rustdesk main window process");
+}
+
+fn nt_terminate_process(process_id: DWORD) -> ResultType<()> {
+    type NtTerminateProcess = unsafe extern "system" fn(HANDLE, DWORD) -> DWORD;
+    unsafe {
+        let h_module = LoadLibraryA(CString::new("ntdll.dll")?.as_ptr());
+        if !h_module.is_null() {
+            let f_nt_terminate_process: NtTerminateProcess = std::mem::transmute(GetProcAddress(
+                h_module,
+                CString::new("NtTerminateProcess")?.as_ptr(),
+            ));
+            let h_token = OpenProcess(PROCESS_ALL_ACCESS, 0, process_id);
+            if !h_token.is_null() {
+                if f_nt_terminate_process(h_token, 1) == 0 {
+                    log::info!("terminate process {} success", process_id);
+                    CloseHandle(h_token);
+                    return Ok(());
+                } else {
+                    CloseHandle(h_token);
+                    bail!("NtTerminateProcess {} failed", process_id);
+                }
+            } else {
+                bail!("OpenProcess {} failed", process_id);
+            }
+        } else {
+            bail!("Failed to load ntdll.dll");
+        }
+    }
+}
+
+pub fn try_set_window_foreground(window: HWND) {
+    let env_key = SET_FOREGROUND_WINDOW;
+    if let Ok(value) = std::env::var(env_key) {
+        if value == "1" {
+            unsafe {
+                SetForegroundWindow(window);
+            }
+            std::env::remove_var(env_key);
+        }
+    }
+}
+
+pub mod reg_display_settings {
+    use hbb_common::ResultType;
+    use serde_derive::{Deserialize, Serialize};
+    use std::collections::HashMap;
+    use winreg::{enums::*, RegValue};
+    const REG_GRAPHICS_DRIVERS_PATH: &str = "SYSTEM\\CurrentControlSet\\Control\\GraphicsDrivers";
+    const REG_CONNECTIVITY_PATH: &str = "Connectivity";
+
+    #[derive(Serialize, Deserialize, Debug)]
+    pub struct RegRecovery {
+        path: String,
+        key: String,
+        old: (Vec<u8>, isize),
+        new: (Vec<u8>, isize),
+    }
+
+    pub fn read_reg_connectivity() -> ResultType<HashMap<String, HashMap<String, RegValue>>> {
+        let hklm = winreg::RegKey::predef(HKEY_LOCAL_MACHINE);
+        let reg_connectivity = hklm.open_subkey_with_flags(
+            format!("{}\\{}", REG_GRAPHICS_DRIVERS_PATH, REG_CONNECTIVITY_PATH),
+            KEY_READ,
+        )?;
+
+        let mut map_connectivity = HashMap::new();
+        for key in reg_connectivity.enum_keys() {
+            let key = key?;
+            let mut map_item = HashMap::new();
+            let reg_item = reg_connectivity.open_subkey_with_flags(&key, KEY_READ)?;
+            for value in reg_item.enum_values() {
+                let (name, value) = value?;
+                map_item.insert(name, value);
+            }
+            map_connectivity.insert(key, map_item);
+        }
+        Ok(map_connectivity)
+    }
+
+    pub fn diff_recent_connectivity(
+        map1: HashMap<String, HashMap<String, RegValue>>,
+        map2: HashMap<String, HashMap<String, RegValue>>,
+    ) -> Option<RegRecovery> {
+        for (subkey, map_item2) in map2 {
+            if let Some(map_item1) = map1.get(&subkey) {
+                let key = "Recent";
+                if let Some(value1) = map_item1.get(key) {
+                    if let Some(value2) = map_item2.get(key) {
+                        if value1 != value2 {
+                            return Some(RegRecovery {
+                                path: format!(
+                                    "{}\\{}\\{}",
+                                    REG_GRAPHICS_DRIVERS_PATH, REG_CONNECTIVITY_PATH, subkey
+                                ),
+                                key: key.to_owned(),
+                                old: (value1.bytes.clone(), value1.vtype.clone() as isize),
+                                new: (value2.bytes.clone(), value2.vtype.clone() as isize),
+                            });
+                        }
+                    }
+                }
+            }
+        }
+        None
+    }
+
+    pub fn restore_reg_connectivity(reg_recovery: RegRecovery) -> ResultType<()> {
+        let hklm = winreg::RegKey::predef(HKEY_LOCAL_MACHINE);
+        let reg_item = hklm.open_subkey_with_flags(&reg_recovery.path, KEY_READ | KEY_WRITE)?;
+        let cur_reg_value = reg_item.get_raw_value(&reg_recovery.key)?;
+        let new_reg_value = RegValue {
+            bytes: reg_recovery.new.0,
+            vtype: isize_to_reg_type(reg_recovery.new.1),
+        };
+        if cur_reg_value != new_reg_value {
+            return Ok(());
+        }
+        let reg_value = RegValue {
+            bytes: reg_recovery.old.0,
+            vtype: isize_to_reg_type(reg_recovery.old.1),
+        };
+        reg_item.set_raw_value(&reg_recovery.key, &reg_value)?;
+        Ok(())
+    }
+
+    #[inline]
+    fn isize_to_reg_type(i: isize) -> RegType {
+        match i {
+            0 => RegType::REG_NONE,
+            1 => RegType::REG_SZ,
+            2 => RegType::REG_EXPAND_SZ,
+            3 => RegType::REG_BINARY,
+            4 => RegType::REG_DWORD,
+            5 => RegType::REG_DWORD_BIG_ENDIAN,
+            6 => RegType::REG_LINK,
+            7 => RegType::REG_MULTI_SZ,
+            8 => RegType::REG_RESOURCE_LIST,
+            9 => RegType::REG_FULL_RESOURCE_DESCRIPTOR,
+            10 => RegType::REG_RESOURCE_REQUIREMENTS_LIST,
+            11 => RegType::REG_QWORD,
+            _ => RegType::REG_NONE,
+        }
     }
 }

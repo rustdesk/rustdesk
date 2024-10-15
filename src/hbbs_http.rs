@@ -4,8 +4,11 @@ use serde_json::{Map, Value};
 
 #[cfg(feature = "flutter")]
 pub mod account;
+mod http_client;
 pub mod record_upload;
 pub mod sync;
+pub use http_client::create_http_client;
+pub use http_client::create_http_client_async;
 
 #[derive(Debug)]
 pub enum HbbHttpResponse<T> {

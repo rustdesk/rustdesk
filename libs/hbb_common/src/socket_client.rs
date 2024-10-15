@@ -49,19 +49,27 @@ pub fn increase_port<T: std::string::ToString>(host: T, offset: i32) -> String {
     host
 }
 
-pub fn test_if_valid_server(host: &str) -> String {
+pub fn test_if_valid_server(host: &str, test_with_proxy: bool) -> String {
     let host = check_port(host, 0);
-
     use std::net::ToSocketAddrs;
-    match Config::get_network_type() {
-        NetworkType::Direct => match host.to_socket_addrs() {
+
+    if test_with_proxy && NetworkType::ProxySocks == Config::get_network_type() {
+        test_if_valid_server_for_proxy_(&host)
+    } else {
+        match host.to_socket_addrs() {
             Err(err) => err.to_string(),
             Ok(_) => "".to_owned(),
-        },
-        NetworkType::ProxySocks => match &host.into_target_addr() {
-            Err(err) => err.to_string(),
-            Ok(_) => "".to_owned(),
-        },
+        }
+    }
+}
+
+#[inline]
+pub fn test_if_valid_server_for_proxy_(host: &str) -> String {
+    // `&host.into_target_addr()` is defined in `tokio-socs`, but is a common pattern for testing,
+    // it can be used for both `socks` and `http` proxy.
+    match &host.into_target_addr() {
+        Err(err) => err.to_string(),
+        Ok(_) => "".to_owned(),
     }
 }
 
@@ -107,15 +115,7 @@ pub async fn connect_tcp_local<
     ms_timeout: u64,
 ) -> ResultType<FramedStream> {
     if let Some(conf) = Config::get_socks() {
-        return FramedStream::connect(
-            conf.proxy.as_str(),
-            target,
-            local,
-            conf.username.as_str(),
-            conf.password.as_str(),
-            ms_timeout,
-        )
-        .await;
+        return FramedStream::connect(target, local, &conf, ms_timeout).await;
     }
     if let Some(target) = target.resolve() {
         if let Some(local) = local {
@@ -255,10 +255,20 @@ mod tests {
 
     #[test]
     fn test_test_if_valid_server() {
-        assert!(!test_if_valid_server("a").is_empty());
+        assert!(!test_if_valid_server("a", false).is_empty());
         // on Linux, "1" is resolved to "0.0.0.1"
-        assert!(test_if_valid_server("1.1.1.1").is_empty());
-        assert!(test_if_valid_server("1.1.1.1:1").is_empty());
+        assert!(test_if_valid_server("1.1.1.1", false).is_empty());
+        assert!(test_if_valid_server("1.1.1.1:1", false).is_empty());
+        assert!(test_if_valid_server("microsoft.com", false).is_empty());
+        assert!(test_if_valid_server("microsoft.com:1", false).is_empty());
+
+        // with proxy
+        // `:0` indicates `let host = check_port(host, 0);` is called.
+        assert!(test_if_valid_server_for_proxy_("a:0").is_empty());
+        assert!(test_if_valid_server_for_proxy_("1.1.1.1:0").is_empty());
+        assert!(test_if_valid_server_for_proxy_("1.1.1.1:1").is_empty());
+        assert!(test_if_valid_server_for_proxy_("abc.com:0").is_empty());
+        assert!(test_if_valid_server_for_proxy_("abcd.com:1").is_empty());
     }
 
     #[test]

@@ -1,3 +1,4 @@
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 use crate::{CliprdrError, CliprdrServiceContext};
 
 #[cfg(target_os = "windows")]
@@ -52,9 +53,9 @@ pub fn create_cliprdr_context(
             log::warn!("umount {:?} may fail: {:?}", mnt_path, e);
         }
 
-        let unix_ctx = unix::ClipboardContext::new(timeout, mnt_path.parse().unwrap())?;
+        let unix_ctx = unix::ClipboardContext::new(timeout, mnt_path.parse()?)?;
         log::debug!("start cliprdr FUSE");
-        unix_ctx.run().expect("failed to start cliprdr FUSE");
+        unix_ctx.run()?;
 
         Ok(Box::new(unix_ctx) as Box<_>)
     }
@@ -63,8 +64,10 @@ pub fn create_cliprdr_context(
     return Ok(Box::new(DummyCliprdrContext {}) as Box<_>);
 }
 
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 struct DummyCliprdrContext {}
 
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 impl CliprdrServiceContext for DummyCliprdrContext {
     fn set_is_stopped(&mut self) -> Result<(), CliprdrError> {
         Ok(())

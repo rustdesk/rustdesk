@@ -1,5 +1,7 @@
 package com.carriez.flutter_hbb
 
+import ffi.FFI
+
 /**
  * Capture screen,get video and audio,send to rust.
  * Dispatch notifications
@@ -52,27 +54,19 @@ const val NOTIFY_ID_OFFSET = 100
 const val MIME_TYPE = MediaFormat.MIMETYPE_VIDEO_VP9
 
 // video const
+
 const val MAX_SCREEN_SIZE = 1200
 
 const val VIDEO_KEY_BIT_RATE = 1024_000
 const val VIDEO_KEY_FRAME_RATE = 30
 
-// audio const
-const val AUDIO_ENCODING = AudioFormat.ENCODING_PCM_FLOAT //  ENCODING_OPUS need API 30
-const val AUDIO_SAMPLE_RATE = 48000
-const val AUDIO_CHANNEL_MASK = AudioFormat.CHANNEL_IN_STEREO
-
 class MainService : Service() {
-
-    init {
-        System.loadLibrary("rustdesk")
-    }
 
     @Keep
     @RequiresApi(Build.VERSION_CODES.N)
-    fun rustPointerInput(kind: String, mask: Int, x: Int, y: Int) {
+    fun rustPointerInput(kind: Int, mask: Int, x: Int, y: Int) {
         // turn on screen with LIFT_DOWN when screen off
-        if (!powerManager.isInteractive && (kind == "touch" || mask == LIFT_DOWN)) {
+        if (!powerManager.isInteractive && (kind == 0 || mask == LIFT_DOWN)) {
             if (wakeLock.isHeld) {
                 Log.d(logTag, "Turn on Screen, WakeLock release")
                 wakeLock.release()
@@ -81,10 +75,10 @@ class MainService : Service() {
             wakeLock.acquire(5000)
         } else {
             when (kind) {
-                "touch" -> {
+                0 -> { // touch
                     InputService.ctx?.onTouchInput(mask, x, y)
                 }
-                "mouse" -> {
+                1 -> { // mouse
                     InputService.ctx?.onMouseInput(mask, x, y)
                 }
                 else -> {
@@ -108,6 +102,9 @@ class MainService : Service() {
                     put("height",SCREEN_INFO.height)
                     put("scale",SCREEN_INFO.scale)
                 }.toString()
+            }
+            "is_start" -> {
+                isStart.toString()
             }
             else -> ""
         }
@@ -141,9 +138,50 @@ class MainService : Service() {
                     e.printStackTrace()
                 }
             }
+            "update_voice_call_state" -> {
+                try {
+                    val jsonObject = JSONObject(arg1)
+                    val id = jsonObject["id"] as Int
+                    val username = jsonObject["name"] as String
+                    val peerId = jsonObject["peer_id"] as String
+                    val inVoiceCall = jsonObject["in_voice_call"] as Boolean
+                    val incomingVoiceCall = jsonObject["incoming_voice_call"] as Boolean
+                    if (!inVoiceCall) {
+                        if (incomingVoiceCall) {
+                            voiceCallRequestNotification(id, "Voice Call Request", username, peerId)
+                        } else {
+                            if (!audioRecordHandle.switchOutVoiceCall(mediaProjection)) {
+                                Log.e(logTag, "switchOutVoiceCall fail")
+                                MainActivity.flutterMethodChannel?.invokeMethod("msgbox", mapOf(
+                                    "type" to "custom-nook-nocancel-hasclose-error",
+                                    "title" to "Voice call",
+                                    "text" to "Failed to switch out voice call."))
+                            }
+                        }
+                    } else {
+                        if (!audioRecordHandle.switchToVoiceCall(mediaProjection)) {
+                            Log.e(logTag, "switchToVoiceCall fail")
+                            MainActivity.flutterMethodChannel?.invokeMethod("msgbox", mapOf(
+                                "type" to "custom-nook-nocancel-hasclose-error",
+                                "title" to "Voice call",
+                                "text" to "Failed to switch to voice call."))
+                        }
+                    }
+                } catch (e: JSONException) {
+                    e.printStackTrace()
+                }
+            }
             "stop_capture" -> {
                 Log.d(logTag, "from rust:stop_capture")
                 stopCapture()
+            }
+            "half_scale" -> {
+                val halfScale = arg1.toBoolean()
+                if (isHalfScale != halfScale) {
+                    isHalfScale = halfScale
+                    updateScreenInfo(resources.configuration.orientation)
+                }
+                
             }
             else -> {
             }
@@ -156,38 +194,23 @@ class MainService : Service() {
     private val powerManager: PowerManager by lazy { applicationContext.getSystemService(Context.POWER_SERVICE) as PowerManager }
     private val wakeLock: PowerManager.WakeLock by lazy { powerManager.newWakeLock(PowerManager.ACQUIRE_CAUSES_WAKEUP or PowerManager.SCREEN_BRIGHT_WAKE_LOCK, "rustdesk:wakelock")}
 
-    // jvm call rust
-    private external fun init(ctx: Context)
-
-    /// When app start on boot, app_dir will not be passed from flutter
-    /// so pass a app_dir here to rust server
-    private external fun startServer(app_dir: String)
-    private external fun startService()
-    private external fun onVideoFrameUpdate(buf: ByteBuffer)
-    private external fun onAudioFrameUpdate(buf: ByteBuffer)
-    private external fun translateLocale(localeName: String, input: String): String
-    private external fun refreshScreen()
-    private external fun setFrameRawEnable(name: String, value: Boolean)
-    // private external fun sendVp9(data: ByteArray)
-
-    private fun translate(input: String): String {
-        Log.d(logTag, "translate:$LOCAL_NAME")
-        return translateLocale(LOCAL_NAME, input)
-    }
-
     companion object {
         private var _isReady = false // media permission ready status
         private var _isStart = false // screen capture start status
+        private var _isAudioStart = false // audio capture start status
         val isReady: Boolean
             get() = _isReady
         val isStart: Boolean
             get() = _isStart
+        val isAudioStart: Boolean
+            get() = _isAudioStart
     }
 
     private val logTag = "LOG_SERVICE"
     private val useVP9 = false
     private val binder = LocalBinder()
 
+    private var reuseVirtualDisplay = Build.VERSION.SDK_INT > 33
 
     // video
     private var mediaProjection: MediaProjection? = null
@@ -198,10 +221,7 @@ class MainService : Service() {
     private var virtualDisplay: VirtualDisplay? = null
 
     // audio
-    private var audioRecorder: AudioRecord? = null
-    private var audioReader: AudioReader? = null
-    private var minBufferSize = 0
-    private var audioRecordStat = false
+    private val audioRecordHandle = AudioRecordHandle(this, { isStart }, { isAudioStart })
 
     // notification
     private lateinit var notificationManager: NotificationManager
@@ -210,8 +230,8 @@ class MainService : Service() {
 
     override fun onCreate() {
         super.onCreate()
-        Log.d(logTag,"MainService onCreate")
-        init(this)
+        Log.d(logTag,"MainService onCreate, sdk int:${Build.VERSION.SDK_INT} reuseVirtualDisplay:$reuseVirtualDisplay")
+        FFI.init(this)
         HandlerThread("Service", Process.THREAD_PRIORITY_BACKGROUND).apply {
             start()
             serviceLooper = looper
@@ -223,16 +243,18 @@ class MainService : Service() {
         // keep the config dir same with flutter
         val prefs = applicationContext.getSharedPreferences(KEY_SHARED_PREFERENCES, FlutterActivity.MODE_PRIVATE)
         val configPath = prefs.getString(KEY_APP_DIR_CONFIG_PATH, "") ?: ""
-        startServer(configPath)
+        FFI.startServer(configPath, "")
 
         createForegroundNotification()
     }
 
     override fun onDestroy() {
         checkMediaPermission()
+        stopService(Intent(this, FloatingWindowService::class.java))
         super.onDestroy()
     }
 
+    private var isHalfScale: Boolean? = null;
     private fun updateScreenInfo(orientation: Int) {
         var w: Int
         var h: Int
@@ -265,7 +287,7 @@ class MainService : Service() {
         Log.d(logTag,"updateScreenInfo:w:$w,h:$h")
         var scale = 1
         if (w != 0 && h != 0) {
-            if (w > MAX_SCREEN_SIZE || h > MAX_SCREEN_SIZE) {
+            if (isHalfScale == true && (w > MAX_SCREEN_SIZE || h > MAX_SCREEN_SIZE)) {
                 scale = 2
                 w /= scale
                 h /= scale
@@ -278,7 +300,7 @@ class MainService : Service() {
                 SCREEN_INFO.dpi = dpi
                 if (isStart) {
                     stopCapture()
-                    refreshScreen()
+                    FFI.refreshScreen()
                     startCapture()
                 }
             }
@@ -306,7 +328,7 @@ class MainService : Service() {
             createForegroundNotification()
 
             if (intent.getBooleanExtra(EXT_INIT_FROM_BOOT, false)) {
-                startService()
+                FFI.startService()
             }
             Log.d(logTag, "service starting: ${startId}:${Thread.currentThread()}")
             val mediaProjectionManager =
@@ -354,12 +376,13 @@ class MainService : Service() {
                 ).apply {
                     setOnImageAvailableListener({ imageReader: ImageReader ->
                         try {
+                            // If not call acquireLatestImage, listener will not be called again
                             imageReader.acquireLatestImage().use { image ->
-                                if (image == null) return@setOnImageAvailableListener
+                                if (image == null || !isStart) return@setOnImageAvailableListener
                                 val planes = image.planes
                                 val buffer = planes[0].buffer
                                 buffer.rewind()
-                                onVideoFrameUpdate(buffer)
+                                FFI.onVideoFrameUpdate(buffer)
                             }
                         } catch (ignored: java.lang.Exception) {
                         }
@@ -370,6 +393,14 @@ class MainService : Service() {
         }
     }
 
+    fun onVoiceCallStarted(): Boolean {
+        return audioRecordHandle.onVoiceCallStarted(mediaProjection)
+    }
+
+    fun onVoiceCallClosed(): Boolean {
+        return audioRecordHandle.onVoiceCallClosed(mediaProjection)
+    }
+
     fun startCapture(): Boolean {
         if (isStart) {
             return true
@@ -378,6 +409,7 @@ class MainService : Service() {
             Log.w(logTag, "startCapture fail,mediaProjection is null")
             return false
         }
+        
         updateScreenInfo(resources.configuration.orientation)
         Log.d(logTag, "Start Capture")
         surface = createSurface()
@@ -389,51 +421,71 @@ class MainService : Service() {
         }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            startAudioRecorder()
+            if (!audioRecordHandle.createAudioRecorder(false, mediaProjection)) {
+                Log.d(logTag, "createAudioRecorder fail")
+            } else {
+                Log.d(logTag, "audio recorder start")
+                audioRecordHandle.startAudioRecorder()
+            }
         }
         checkMediaPermission()
         _isStart = true
-        setFrameRawEnable("video",true)
-        setFrameRawEnable("audio",true)
+        FFI.setFrameRawEnable("video",true)
         return true
     }
 
     @Synchronized
     fun stopCapture() {
         Log.d(logTag, "Stop Capture")
-        setFrameRawEnable("video",false)
-        setFrameRawEnable("audio",false)
+        FFI.setFrameRawEnable("video",false)
         _isStart = false
         // release video
-        virtualDisplay?.release()
-        surface?.release()
+        if (reuseVirtualDisplay) {
+            // The virtual display video projection can be paused by calling `setSurface(null)`.
+            // https://developer.android.com/reference/android/hardware/display/VirtualDisplay.Callback
+            // https://learn.microsoft.com/en-us/dotnet/api/android.hardware.display.virtualdisplay.callback.onpaused?view=net-android-34.0
+            virtualDisplay?.setSurface(null)
+        } else {
+            virtualDisplay?.release()
+        }
+        // suface needs to be release after `imageReader.close()` to imageReader access released surface
+        // https://github.com/rustdesk/rustdesk/issues/4118#issuecomment-1515666629
         imageReader?.close()
+        imageReader = null
         videoEncoder?.let {
             it.signalEndOfInputStream()
             it.stop()
             it.release()
         }
-        virtualDisplay = null
+        if (!reuseVirtualDisplay) {
+            virtualDisplay = null
+        }
         videoEncoder = null
+        // suface needs to be release after `imageReader.close()` to imageReader access released surface
+        // https://github.com/rustdesk/rustdesk/issues/4118#issuecomment-1515666629
+        surface?.release()
 
         // release audio
-        audioRecordStat = false
-        audioRecorder?.release()
-        audioRecorder = null
-        minBufferSize = 0
+        _isAudioStart = false
+        audioRecordHandle.tryReleaseAudio()
     }
 
     fun destroy() {
         Log.d(logTag, "destroy service")
         _isReady = false
+        _isAudioStart = false
 
         stopCapture()
-        imageReader?.close()
-        imageReader = null
+
+        if (reuseVirtualDisplay) {
+            virtualDisplay?.release()
+            virtualDisplay = null
+        }
 
         mediaProjection = null
         checkMediaPermission()
         stopForeground(true)
+        stopService(Intent(this, FloatingWindowService::class.java))
         stopSelf()
     }
 
@@ -459,11 +511,7 @@ class MainService : Service() {
             Log.d(logTag, "startRawVideoRecorder failed,surface is null")
             return
         }
-        virtualDisplay = mp.createVirtualDisplay(
-            "RustDeskVD",
-            SCREEN_INFO.width, SCREEN_INFO.height, SCREEN_INFO.dpi, VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
-            surface, null, null
-        )
+        createOrSetVirtualDisplay(mp, surface!!)
     }
 
     private fun startVP9VideoRecorder(mp: MediaProjection) {
@@ -475,11 +523,28 @@ class MainService : Service() {
             }
             it.setCallback(cb)
             it.start()
-            virtualDisplay = mp.createVirtualDisplay(
-                "RustDeskVD",
-                SCREEN_INFO.width, SCREEN_INFO.height, SCREEN_INFO.dpi, VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
-                surface, null, null
-            )
+            createOrSetVirtualDisplay(mp, surface!!)
+        }
+    }
+
+    // https://github.com/bk138/droidVNC-NG/blob/b79af62db5a1c08ed94e6a91464859ffed6f4e97/app/src/main/java/net/christianbeier/droidvnc_ng/MediaProjectionService.java#L250
+    // Reuse virtualDisplay if it exists, to avoid media projection confirmation dialog every connection.
+    private fun createOrSetVirtualDisplay(mp: MediaProjection, s: Surface) {
+        try {
+            virtualDisplay?.let {
+                it.resize(SCREEN_INFO.width, SCREEN_INFO.height, SCREEN_INFO.dpi)
+                it.setSurface(s)
+            } ?: let {
+                virtualDisplay = mp.createVirtualDisplay(
+                    "RustDeskVD",
+                    SCREEN_INFO.width, SCREEN_INFO.height, SCREEN_INFO.dpi, VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
+                    s, null, null
+                )
+            }
+        } catch (e: SecurityException) {
+            Log.w(logTag, "createOrSetVirtualDisplay: got SecurityException, re-requesting confirmation");
+            // This initiates a prompt dialog for the user to confirm screen projection.
+            requestMediaProjection()
         }
     }
 
@@ -507,7 +572,6 @@ class MainService : Service() {
         }
     }
 
-
     private fun createMediaCodec() {
         Log.d(logTag, "MediaFormat.MIMETYPE_VIDEO_VP9 :$MIME_TYPE")
         videoEncoder = MediaCodec.createEncoderByType(MIME_TYPE)
@@ -525,76 +589,6 @@ class MainService : Service() {
         } catch (e: Exception) {
             Log.e(logTag, "mEncoder.configure fail!")
         }
-    }
-
-    @RequiresApi(Build.VERSION_CODES.M)
-    private fun startAudioRecorder() {
-        checkAudioRecorder()
-        if (audioReader != null && audioRecorder != null && minBufferSize != 0) {
-            try {
-                audioRecorder!!.startRecording()
-                audioRecordStat = true
-                thread {
-                    while (audioRecordStat) {
-                        audioReader!!.readSync(audioRecorder!!)?.let {
-                            onAudioFrameUpdate(it)
-                        }
-                    }
-                    Log.d(logTag, "Exit audio thread")
-                }
-            } catch (e: Exception) {
-                Log.d(logTag, "startAudioRecorder fail:$e")
-            }
-        } else {
-            Log.d(logTag, "startAudioRecorder fail")
-        }
-    }
-
-    @RequiresApi(Build.VERSION_CODES.M)
-    private fun checkAudioRecorder() {
-        if (audioRecorder != null && audioRecorder != null && minBufferSize != 0) {
-            return
-        }
-        // read f32 to byte , length * 4
-        minBufferSize = 2 * 4 * AudioRecord.getMinBufferSize(
-            AUDIO_SAMPLE_RATE,
-            AUDIO_CHANNEL_MASK,
-            AUDIO_ENCODING
-        )
-        if (minBufferSize == 0) {
-            Log.d(logTag, "get min buffer size fail!")
-            return
-        }
-        audioReader = AudioReader(minBufferSize, 4)
-        Log.d(logTag, "init audioData len:$minBufferSize")
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            mediaProjection?.let {
-                val apcc = AudioPlaybackCaptureConfiguration.Builder(it)
-                    .addMatchingUsage(AudioAttributes.USAGE_MEDIA)
-                    .addMatchingUsage(AudioAttributes.USAGE_ALARM)
-                    .addMatchingUsage(AudioAttributes.USAGE_GAME)
-                    .addMatchingUsage(AudioAttributes.USAGE_UNKNOWN).build()
-                if (ActivityCompat.checkSelfPermission(
-                        this,
-                        Manifest.permission.RECORD_AUDIO
-                    ) != PackageManager.PERMISSION_GRANTED
-                ) {
-                    return
-                }
-                audioRecorder = AudioRecord.Builder()
-                    .setAudioFormat(
-                        AudioFormat.Builder()
-                            .setEncoding(AUDIO_ENCODING)
-                            .setSampleRate(AUDIO_SAMPLE_RATE)
-                            .setChannelMask(AUDIO_CHANNEL_MASK).build()
-                    )
-                    .setAudioPlaybackCaptureConfig(apcc)
-                    .setBufferSizeInBytes(minBufferSize).build()
-                Log.d(logTag, "createAudioRecorder done,minBufferSize:$minBufferSize")
-                return
-            }
-        }
-        Log.d(logTag, "createAudioRecorder fail")
     }
 
     private fun initNotification() {
@@ -677,6 +671,21 @@ class MainService : Service() {
             .setPriority(NotificationCompat.PRIORITY_MAX)
             .setContentTitle("$type ${translate("Established")}")
             .setContentText("$username - $peerId")
+            .build()
+        notificationManager.notify(getClientNotifyID(clientID), notification)
+    }
+
+    private fun voiceCallRequestNotification(
+        clientID: Int,
+        type: String,
+        username: String,
+        peerId: String
+    ) {
+        val notification = notificationBuilder
+            .setOngoing(false)
+            .setPriority(NotificationCompat.PRIORITY_MAX)
+            .setContentTitle(translate("Do you accept?"))
+            .setContentText("$type:$username-$peerId")
             .build()
         notificationManager.notify(getClientNotifyID(clientID), notification)
     }

@@ -37,13 +37,13 @@ cfg_if! {
 
 pub mod codec;
 pub mod convert;
-#[cfg(feature = "gpucodec")]
-pub mod gpucodec;
 #[cfg(feature = "hwcodec")]
 pub mod hwcodec;
 #[cfg(feature = "mediacodec")]
 pub mod mediacodec;
 pub mod vpxcodec;
+#[cfg(feature = "vram")]
+pub mod vram;
 pub use self::convert::*;
 pub const STRIDE_ALIGN: usize = 64; // commonly used in libvpx vpx_img_alloc caller
 pub const HW_STRIDE_ALIGN: usize = 0; // recommended by av_frame_get_buffer
@@ -53,29 +53,30 @@ pub mod record;
 mod vpx;
 
 #[repr(usize)]
-#[derive(Copy, Clone)]
+#[derive(Debug, Copy, Clone)]
 pub enum ImageFormat {
     Raw,
     ABGR,
     ARGB,
 }
+
 #[repr(C)]
 pub struct ImageRgb {
     pub raw: Vec<u8>,
     pub w: usize,
     pub h: usize,
     pub fmt: ImageFormat,
-    pub stride: usize,
+    pub align: usize,
 }
 
 impl ImageRgb {
-    pub fn new(fmt: ImageFormat, stride: usize) -> Self {
+    pub fn new(fmt: ImageFormat, align: usize) -> Self {
         Self {
             raw: Vec::new(),
             w: 0,
             h: 0,
             fmt,
-            stride,
+            align,
         }
     }
 
@@ -85,8 +86,13 @@ impl ImageRgb {
     }
 
     #[inline]
-    pub fn stride(&self) -> usize {
-        self.stride
+    pub fn align(&self) -> usize {
+        self.align
+    }
+
+    #[inline]
+    pub fn set_align(&mut self, align: usize) {
+        self.align = align;
     }
 }
 
@@ -111,10 +117,10 @@ pub trait TraitCapturer {
     #[cfg(windows)]
     fn set_gdi(&mut self) -> bool;
 
-    #[cfg(feature = "gpucodec")]
+    #[cfg(feature = "vram")]
     fn device(&self) -> AdapterDevice;
 
-    #[cfg(feature = "gpucodec")]
+    #[cfg(feature = "vram")]
     fn set_output_texture(&mut self, texture: bool);
 }
 
@@ -203,9 +209,25 @@ impl<'a> EncodeInput<'a> {
 pub enum Pixfmt {
     BGRA,
     RGBA,
+    RGB565LE,
     I420,
     NV12,
     I444,
+}
+
+impl Pixfmt {
+    pub fn bpp(&self) -> usize {
+        match self {
+            Pixfmt::BGRA | Pixfmt::RGBA => 32,
+            Pixfmt::RGB565LE => 16,
+            Pixfmt::I420 | Pixfmt::NV12 => 12,
+            Pixfmt::I444 => 24,
+        }
+    }
+
+    pub fn bytes_per_pixel(&self) -> usize {
+        (self.bpp() + 7) / 8
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -245,10 +267,10 @@ pub enum CodecName {
     VP8,
     VP9,
     AV1,
-    H264HW(String),
-    H265HW(String),
-    H264GPU,
-    H265GPU,
+    H264RAM(String),
+    H265RAM(String),
+    H264VRAM,
+    H265VRAM,
 }
 
 #[derive(PartialEq, Debug, Clone, Copy)]
@@ -280,8 +302,8 @@ impl From<&CodecName> for CodecFormat {
             CodecName::VP8 => Self::VP8,
             CodecName::VP9 => Self::VP9,
             CodecName::AV1 => Self::AV1,
-            CodecName::H264HW(_) | CodecName::H264GPU => Self::H264,
-            CodecName::H265HW(_) | CodecName::H265GPU => Self::H265,
+            CodecName::H264RAM(_) | CodecName::H264VRAM => Self::H264,
+            CodecName::H265RAM(_) | CodecName::H265VRAM => Self::H265,
         }
     }
 }
@@ -294,7 +316,7 @@ impl ToString for CodecFormat {
             CodecFormat::AV1 => "AV1".into(),
             CodecFormat::H264 => "H264".into(),
             CodecFormat::H265 => "H265".into(),
-            CodecFormat::Unknown => "Unknow".into(),
+            CodecFormat::Unknown => "Unknown".into(),
         }
     }
 }
@@ -373,20 +395,20 @@ pub trait GoogleImage {
     fn stride(&self) -> Vec<i32>;
     fn planes(&self) -> Vec<*mut u8>;
     fn chroma(&self) -> Chroma;
-    fn get_bytes_per_row(w: usize, fmt: ImageFormat, stride: usize) -> usize {
+    fn get_bytes_per_row(w: usize, fmt: ImageFormat, align: usize) -> usize {
         let bytes_per_pixel = match fmt {
             ImageFormat::Raw => 3,
             ImageFormat::ARGB | ImageFormat::ABGR => 4,
         };
         // https://github.com/lemenkov/libyuv/blob/6900494d90ae095d44405cd4cc3f346971fa69c9/source/convert_argb.cc#L128
         // https://github.com/lemenkov/libyuv/blob/6900494d90ae095d44405cd4cc3f346971fa69c9/source/convert_argb.cc#L129
-        (w * bytes_per_pixel + stride - 1) & !(stride - 1)
+        (w * bytes_per_pixel + align - 1) & !(align - 1)
     }
     // rgb [in/out] fmt and stride must be set in ImageRgb
     fn to(&self, rgb: &mut ImageRgb) {
         rgb.w = self.width();
         rgb.h = self.height();
-        let bytes_per_row = Self::get_bytes_per_row(rgb.w, rgb.fmt, rgb.stride());
+        let bytes_per_row = Self::get_bytes_per_row(rgb.w, rgb.fmt, rgb.align());
         rgb.raw.resize(rgb.h * bytes_per_row, 0);
         let stride = self.stride();
         let planes = self.planes();
@@ -480,4 +502,14 @@ pub trait GoogleImage {
             (y, u, v)
         }
     }
+}
+
+#[cfg(target_os = "android")]
+pub fn screen_size() -> (u16, u16, u16) {
+    SCREEN_SIZE.lock().unwrap().clone()
+}
+
+#[cfg(target_os = "android")]
+pub fn is_start() -> Option<bool> {
+    android::is_start()
 }

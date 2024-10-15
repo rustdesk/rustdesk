@@ -61,7 +61,7 @@ BOOL DeviceCreate(PHSWDEVICE hSwDevice);
 /**
  * @brief Create device and set the lifetime.
  *        Only one device should be created.
- *        If device is installed ealier, this function returns FALSE.
+ *        If device is installed earlier, this function returns FALSE.
  *
  * @param lifetime [in] The lifetime to set after creating the device. NULL means do not set the lifetime.
  *                      https://learn.microsoft.com/en-us/windows/win32/api/swdevice/nf-swdevice-swdevicesetlifetime

@@ -59,6 +59,7 @@ impl Display {
         })
     }
 
+    // Currently, wayland need to call wayland::clear() before call Display::all()
     pub fn all() -> io::Result<Vec<Display>> {
         Ok(if super::is_x11() {
             x11::Display::all()?

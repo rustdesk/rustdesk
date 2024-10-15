@@ -3,15 +3,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/consts.dart';
-import 'package:flutter_hbb/models/desktop_render_texture.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:get/get.dart';
 
 customImageQualityWidget(
     {required double initQuality,
     required double initFps,
-    required Function(double) setQuality,
-    required Function(double) setFps,
+    required Function(double)? setQuality,
+    required Function(double)? setFps,
     required bool showFps,
     required bool showMoreQuality}) {
   if (initQuality < kMinQuality ||
@@ -27,16 +26,12 @@ customImageQualityWidget(
   final RxBool moreQualityChecked = RxBool(qualityValue.value > kMaxQuality);
   final debouncerQuality = Debouncer<double>(
     Duration(milliseconds: 1000),
-    onChanged: (double v) {
-      setQuality(v);
-    },
+    onChanged: setQuality,
     initialValue: qualityValue.value,
   );
   final debouncerFps = Debouncer<double>(
     Duration(milliseconds: 1000),
-    onChanged: (double v) {
-      setFps(v);
-    },
+    onChanged: setFps,
     initialValue: fpsValue.value,
   );
 
@@ -62,10 +57,12 @@ customImageQualityWidget(
                   divisions: moreQualityChecked.value
                       ? ((kMaxMoreQuality - kMinQuality) / 10).round()
                       : ((kMaxQuality - kMinQuality) / 5).round(),
-                  onChanged: (double value) async {
-                    qualityValue.value = value;
-                    debouncerQuality.value = value;
-                  },
+                  onChanged: setQuality == null
+                      ? null
+                      : (double value) async {
+                          qualityValue.value = value;
+                          debouncerQuality.value = value;
+                        },
                 ),
               ),
               Expanded(
@@ -124,10 +121,12 @@ customImageQualityWidget(
                     min: kMinFps,
                     max: kMaxFps,
                     divisions: ((kMaxFps - kMinFps) / 5).round(),
-                    onChanged: (double value) async {
-                      fpsValue.value = value;
-                      debouncerFps.value = value;
-                    },
+                    onChanged: setFps == null
+                        ? null
+                        : (double value) async {
+                            fpsValue.value = value;
+                            debouncerFps.value = value;
+                          },
                   ),
                 ),
                 Expanded(
@@ -152,21 +151,29 @@ customImageQualitySetting() {
   final qualityKey = 'custom_image_quality';
   final fpsKey = 'custom-fps';
 
-  var initQuality =
+  final initQuality =
       (double.tryParse(bind.mainGetUserDefaultOption(key: qualityKey)) ??
           kDefaultQuality);
-  var initFps = (double.tryParse(bind.mainGetUserDefaultOption(key: fpsKey)) ??
-      kDefaultFps);
+  final isQuanlityFixed = isOptionFixed(qualityKey);
+  final initFps =
+      (double.tryParse(bind.mainGetUserDefaultOption(key: fpsKey)) ??
+          kDefaultFps);
+  final isFpsFixed = isOptionFixed(fpsKey);
 
   return customImageQualityWidget(
       initQuality: initQuality,
       initFps: initFps,
-      setQuality: (v) {
-        bind.mainSetUserDefaultOption(key: qualityKey, value: v.toString());
-      },
-      setFps: (v) {
-        bind.mainSetUserDefaultOption(key: fpsKey, value: v.toString());
-      },
+      setQuality: isQuanlityFixed
+          ? null
+          : (v) {
+              bind.mainSetUserDefaultOption(
+                  key: qualityKey, value: v.toString());
+            },
+      setFps: isFpsFixed
+          ? null
+          : (v) {
+              bind.mainSetUserDefaultOption(key: fpsKey, value: v.toString());
+            },
       showFps: true,
       showMoreQuality: true);
 }
@@ -208,27 +215,31 @@ List<Widget> ServerConfigImportExportWidgets(
 
 List<(String, String)> otherDefaultSettings() {
   List<(String, String)> v = [
-    ('View Mode', 'view_only'),
-    if (isDesktop) ('show_monitors_tip', kKeyShowMonitorsToolbar),
-    if (isDesktop) ('Collapse toolbar', 'collapse_toolbar'),
-    ('Show remote cursor', 'show_remote_cursor'),
-    if (isDesktop) ('Zoom cursor', 'zoom-cursor'),
-    ('Show quality monitor', 'show_quality_monitor'),
-    ('Mute', 'disable_audio'),
-    if (isDesktop) ('Enable file copy and paste', 'enable_file_transfer'),
-    ('Disable clipboard', 'disable_clipboard'),
-    ('Lock after session end', 'lock_after_session_end'),
-    ('Privacy mode', 'privacy_mode'),
-    if (isMobile) ('Touch mode', 'touch-mode'),
-    ('True color (4:4:4)', 'i444'),
-    ('Reverse mouse wheel', 'reverse_mouse_wheel'),
-    ('swap-left-right-mouse', 'swap-left-right-mouse'),
-    if (isDesktop && useTextureRender)
+    ('View Mode', kOptionViewOnly),
+    if ((isDesktop || isWebDesktop))
+      ('show_monitors_tip', kKeyShowMonitorsToolbar),
+    if ((isDesktop || isWebDesktop))
+      ('Collapse toolbar', kOptionCollapseToolbar),
+    ('Show remote cursor', kOptionShowRemoteCursor),
+    ('Follow remote cursor', kOptionFollowRemoteCursor),
+    ('Follow remote window focus', kOptionFollowRemoteWindow),
+    if ((isDesktop || isWebDesktop)) ('Zoom cursor', kOptionZoomCursor),
+    ('Show quality monitor', kOptionShowQualityMonitor),
+    ('Mute', kOptionDisableAudio),
+    if (isDesktop) ('Enable file copy and paste', kOptionEnableFileCopyPaste),
+    ('Disable clipboard', kOptionDisableClipboard),
+    ('Lock after session end', kOptionLockAfterSessionEnd),
+    ('Privacy mode', kOptionPrivacyMode),
+    if (isMobile) ('Touch mode', kOptionTouchMode),
+    ('True color (4:4:4)', kOptionI444),
+    ('Reverse mouse wheel', kKeyReverseMouseWheel),
+    ('swap-left-right-mouse', kOptionSwapLeftRightMouse),
+    if (isDesktop)
       (
         'Show displays as individual windows',
         kKeyShowDisplaysAsIndividualWindows
       ),
-    if (isDesktop && useTextureRender)
+    if (isDesktop)
       (
         'Use all my displays for the remote session',
         kKeyUseAllMyDisplaysForTheRemoteSession

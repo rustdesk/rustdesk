@@ -14,6 +14,7 @@ pub trait Service: Send + Sync {
     fn join(&self);
     fn get_option(&self, opt: &str) -> Option<String>;
     fn set_option(&self, opt: &str, val: &str) -> Option<String>;
+    fn ok(&self) -> bool;
 }
 
 pub trait Subscriber: Default + Send + Sync + 'static {
@@ -34,6 +35,7 @@ pub struct ServiceInner<T: Subscriber + From<ConnInner>> {
 
 pub trait Reset {
     fn reset(&mut self);
+    fn init(&mut self) {}
 }
 
 pub struct ServiceTmpl<T: Subscriber + From<ConnInner>>(Arc<RwLock<ServiceInner<T>>>);
@@ -142,6 +144,12 @@ impl<T: Subscriber + From<ConnInner>> Service for ServiceTmpl<T> {
             .options
             .insert(opt.to_string(), val.to_string())
     }
+
+    #[inline]
+    fn ok(&self) -> bool {
+        let lock = self.0.read().unwrap();
+        lock.active && lock.has_subscribes()
+    }
 }
 
 impl<T: Subscriber + From<ConnInner>> Clone for ServiceTmpl<T> {
@@ -178,12 +186,6 @@ impl<T: Subscriber + From<ConnInner>> ServiceTmpl<T> {
     #[inline]
     pub fn has_subscribes(&self) -> bool {
         self.0.read().unwrap().has_subscribes()
-    }
-
-    #[inline]
-    pub fn ok(&self) -> bool {
-        let lock = self.0.read().unwrap();
-        lock.active && lock.has_subscribes()
     }
 
     pub fn snapshot<F>(&self, callback: F) -> ResultType<()>
@@ -265,14 +267,15 @@ impl<T: Subscriber + From<ConnInner>> ServiceTmpl<T> {
             while sp.active() {
                 let now = time::Instant::now();
                 if sp.has_subscribes() {
+                    if !may_reset {
+                        may_reset = true;
+                        state.init();
+                    }
                     if let Err(err) = callback(sp.clone(), &mut state) {
                         log::error!("Error of {} service: {}", sp.name(), err);
                         thread::sleep(time::Duration::from_millis(MAX_ERROR_TIMEOUT));
                         #[cfg(windows)]
                         crate::platform::windows::try_change_desktop();
-                    }
-                    if !may_reset {
-                        may_reset = true;
                     }
                 } else if may_reset {
                     state.reset();

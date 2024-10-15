@@ -27,14 +27,40 @@ use super::screencast_portal::OrgFreedesktopPortalScreenCast as screencast_porta
 use lazy_static::lazy_static;
 
 lazy_static! {
-    pub static ref RDP_RESPONSE: Mutex<Option<RdpResponse>> = Mutex::new(None);
+    pub static ref RDP_SESSION_INFO: Mutex<Option<RdpSessionInfo>> = Mutex::new(None);
 }
 
-pub struct RdpResponse {
+#[inline]
+pub fn close_session() {
+    let _ = RDP_SESSION_INFO.lock().unwrap().take();
+}
+
+#[inline]
+pub fn is_rdp_session_hold() -> bool {
+    RDP_SESSION_INFO.lock().unwrap().is_some()
+}
+
+pub fn try_close_session() {
+    let mut rdp_info = RDP_SESSION_INFO.lock().unwrap();
+    let mut close = false;
+    if let Some(rdp_info) = &*rdp_info {
+        // If is server running and restore token is supported, there's no need to keep the session.
+        if is_server_running() && rdp_info.is_support_restore_token {
+            close = true;
+        }
+    }
+    if close {
+        *rdp_info = None;
+    }
+}
+
+pub struct RdpSessionInfo {
     pub conn: Arc<SyncConnection>,
     pub streams: Vec<PwStreamInfo>,
     pub fd: OwnedFd,
     pub session: dbus::Path<'static>,
+    pub is_support_restore_token: bool,
+    pub resolution: Arc<Mutex<Option<(usize, usize)>>>,
 }
 #[derive(Debug, Clone, Copy)]
 pub struct PwStreamInfo {
@@ -42,6 +68,12 @@ pub struct PwStreamInfo {
     source_type: u64,
     position: (i32, i32),
     size: (usize, usize),
+}
+
+impl PwStreamInfo {
+    pub fn get_size(&self) -> (usize, usize) {
+        self.size
+    }
 }
 
 #[derive(Debug)]
@@ -80,24 +112,31 @@ pub struct PipeWireCapturable {
 }
 
 impl PipeWireCapturable {
-    fn new(conn: Arc<SyncConnection>, fd: OwnedFd, stream: PwStreamInfo) -> Self {
+    fn new(
+        conn: Arc<SyncConnection>,
+        fd: OwnedFd,
+        resolution: Arc<Mutex<Option<(usize, usize)>>>,
+        stream: PwStreamInfo,
+    ) -> Self {
         // alternative to get screen resolution as stream.size is not always correct ex: on fractional scaling
         // https://github.com/rustdesk/rustdesk/issues/6116#issuecomment-1817724244
-        let res = get_res(Self {
+        let size = get_res(Self {
             dbus_conn: conn.clone(),
             fd: fd.clone(),
             path: stream.path,
             source_type: stream.source_type,
             position: stream.position,
             size: stream.size,
-        });
+        })
+        .unwrap_or(stream.size);
+        *resolution.lock().unwrap() = Some(size);
         Self {
             dbus_conn: conn,
             fd,
             path: stream.path,
             source_type: stream.source_type,
             position: stream.position,
-            size: res.unwrap_or(stream.size),
+            size,
         }
     }
 }
@@ -476,6 +515,7 @@ pub fn request_remote_desktop() -> Result<
         OwnedFd,
         Vec<PwStreamInfo>,
         dbus::Path<'static>,
+        bool,
     ),
     Box<dyn Error>,
 > {
@@ -504,6 +544,14 @@ pub fn request_remote_desktop() -> Result<
         "handle_token".to_string(),
         Variant(Box::new("u1".to_string())),
     );
+
+    let mut is_support_restore_token = false;
+    if let Ok(version) = screencast_portal::version(&portal) {
+        if version >= 4 {
+            is_support_restore_token = true;
+        }
+    }
+
     // The following code may be improved.
     // https://flatpak.github.io/xdg-desktop-portal/#:~:text=To%20avoid%20a%20race%20condition
     // To avoid a race condition
@@ -524,6 +572,7 @@ pub fn request_remote_desktop() -> Result<
             streams.clone(),
             session.clone(),
             failure.clone(),
+            is_support_restore_token,
         ),
         failure_res.clone(),
     )?;
@@ -547,12 +596,18 @@ pub fn request_remote_desktop() -> Result<
     if let Some(fd_res) = fd_res.clone() {
         if let Some(session) = session_res.clone() {
             if !streams_res.is_empty() {
-                return Ok((conn, fd_res, streams_res.clone(), session));
+                return Ok((
+                    conn,
+                    fd_res,
+                    streams_res.clone(),
+                    session,
+                    is_support_restore_token,
+                ));
             }
         }
     }
     Err(Box::new(DBusError(
-        "Failed to obtain screen capture.".into(),
+"Failed to obtain screen capture. You may need to upgrade the PipeWire library for better compatibility. Please check https://github.com/rustdesk/rustdesk/issues/8600#issuecomment-2254720954 for more details.".into()
     )))
 }
 
@@ -561,6 +616,7 @@ fn on_create_session_response(
     streams: Arc<Mutex<Vec<PwStreamInfo>>>,
     session: Arc<Mutex<Option<dbus::Path<'static>>>>,
     failure: Arc<AtomicBool>,
+    is_support_restore_token: bool,
 ) -> impl Fn(
     OrgFreedesktopPortalRequestResponse,
     &SyncConnection,
@@ -589,33 +645,41 @@ fn on_create_session_response(
 
         let portal = get_portal(c);
         let mut args: PropMap = HashMap::new();
+        // See `is_server_running()` to understand the following code.
         if is_server_running() {
-            if let Ok(version) = screencast_portal::version(&portal) {
-                if version >= 4 {
-                    let restore_token = config::LocalConfig::get_option(RESTORE_TOKEN_CONF_KEY);
-                    if !restore_token.is_empty() {
-                        args.insert(RESTORE_TOKEN.to_string(), Variant(Box::new(restore_token)));
-                    }
-                    // persist_mode may be configured by the user.
-                    args.insert("persist_mode".to_string(), Variant(Box::new(2u32)));
+            if is_support_restore_token {
+                let restore_token = config::LocalConfig::get_option(RESTORE_TOKEN_CONF_KEY);
+                if !restore_token.is_empty() {
+                    args.insert(RESTORE_TOKEN.to_string(), Variant(Box::new(restore_token)));
                 }
+                // persist_mode may be configured by the user.
+                args.insert("persist_mode".to_string(), Variant(Box::new(2u32)));
             }
             args.insert(
                 "handle_token".to_string(),
                 Variant(Box::new("u3".to_string())),
             );
-            // https://flatpak.github.io/xdg-desktop-portal/portal-docs.html#gdbus-method-org-freedesktop-portal-ScreenCast.SelectSources
-            args.insert("multiple".into(), Variant(Box::new(true)));
+            // https://flatpak.github.io/xdg-desktop-portal/docs/doc-org.freedesktop.portal.ScreenCast.html
+            // args.insert("multiple".into(), Variant(Box::new(true)));
             args.insert("types".into(), Variant(Box::new(1u32))); //| 2u32)));
 
             let path = portal.select_sources(ses.clone(), args)?;
             handle_response(
                 c,
                 path,
-                on_select_sources_response(fd.clone(), streams.clone(), failure.clone(), ses),
+                on_select_sources_response(
+                    fd.clone(),
+                    streams.clone(),
+                    failure.clone(),
+                    ses,
+                    is_support_restore_token,
+                ),
                 failure.clone(),
             )?;
         } else {
+            // TODO: support persist_mode for remote_desktop_portal
+            // https://flatpak.github.io/xdg-desktop-portal/docs/doc-org.freedesktop.portal.RemoteDesktop.html
+
             args.insert(
                 "handle_token".to_string(),
                 Variant(Box::new("u2".to_string())),
@@ -626,7 +690,13 @@ fn on_create_session_response(
             handle_response(
                 c,
                 path,
-                on_select_devices_response(fd.clone(), streams.clone(), failure.clone(), ses),
+                on_select_devices_response(
+                    fd.clone(),
+                    streams.clone(),
+                    failure.clone(),
+                    ses,
+                    is_support_restore_token,
+                ),
                 failure.clone(),
             )?;
         }
@@ -640,6 +710,7 @@ fn on_select_devices_response(
     streams: Arc<Mutex<Vec<PwStreamInfo>>>,
     failure: Arc<AtomicBool>,
     session: dbus::Path<'static>,
+    is_support_restore_token: bool,
 ) -> impl Fn(
     OrgFreedesktopPortalRequestResponse,
     &SyncConnection,
@@ -652,8 +723,8 @@ fn on_select_devices_response(
             "handle_token".to_string(),
             Variant(Box::new("u3".to_string())),
         );
-        // https://flatpak.github.io/xdg-desktop-portal/portal-docs.html#gdbus-method-org-freedesktop-portal-ScreenCast.SelectSources
-        args.insert("multiple".into(), Variant(Box::new(true)));
+        // https://flatpak.github.io/xdg-desktop-portal/docs/doc-org.freedesktop.portal.ScreenCast.html
+        // args.insert("multiple".into(), Variant(Box::new(true)));
         args.insert("types".into(), Variant(Box::new(1u32))); //| 2u32)));
 
         let session = session.clone();
@@ -661,7 +732,13 @@ fn on_select_devices_response(
         handle_response(
             c,
             path,
-            on_select_sources_response(fd.clone(), streams.clone(), failure.clone(), session),
+            on_select_sources_response(
+                fd.clone(),
+                streams.clone(),
+                failure.clone(),
+                session,
+                is_support_restore_token,
+            ),
             failure.clone(),
         )?;
 
@@ -674,6 +751,7 @@ fn on_select_sources_response(
     streams: Arc<Mutex<Vec<PwStreamInfo>>>,
     failure: Arc<AtomicBool>,
     session: dbus::Path<'static>,
+    is_support_restore_token: bool,
 ) -> impl Fn(
     OrgFreedesktopPortalRequestResponse,
     &SyncConnection,
@@ -695,7 +773,12 @@ fn on_select_sources_response(
         handle_response(
             c,
             path,
-            on_start_response(fd.clone(), streams.clone(), session.clone()),
+            on_start_response(
+                fd.clone(),
+                streams.clone(),
+                session.clone(),
+                is_support_restore_token,
+            ),
             failure.clone(),
         )?;
 
@@ -707,6 +790,7 @@ fn on_start_response(
     fd: Arc<Mutex<Option<OwnedFd>>>,
     streams: Arc<Mutex<Vec<PwStreamInfo>>>,
     session: dbus::Path<'static>,
+    is_support_restore_token: bool,
 ) -> impl Fn(
     OrgFreedesktopPortalRequestResponse,
     &SyncConnection,
@@ -714,16 +798,15 @@ fn on_start_response(
 ) -> Result<(), Box<dyn Error>> {
     move |r: OrgFreedesktopPortalRequestResponse, c, _| {
         let portal = get_portal(c);
+        // See `is_server_running()` to understand the following code.
         if is_server_running() {
-            if let Ok(version) = screencast_portal::version(&portal) {
-                if version >= 4 {
-                    if let Some(restore_token) = r.results.get(RESTORE_TOKEN) {
-                        if let Some(restore_token) = restore_token.as_str() {
-                            config::LocalConfig::set_option(
-                                RESTORE_TOKEN_CONF_KEY.to_owned(),
-                                restore_token.to_owned(),
-                            );
-                        }
+            if is_support_restore_token {
+                if let Some(restore_token) = r.results.get(RESTORE_TOKEN) {
+                    if let Some(restore_token) = restore_token.as_str() {
+                        config::LocalConfig::set_option(
+                            RESTORE_TOKEN_CONF_KEY.to_owned(),
+                            restore_token.to_owned(),
+                        );
                     }
                 }
             }
@@ -744,43 +827,62 @@ fn on_start_response(
 }
 
 pub fn get_capturables() -> Result<Vec<PipeWireCapturable>, Box<dyn Error>> {
-    let mut rdp_connection = match RDP_RESPONSE.lock() {
+    let mut rdp_connection = match RDP_SESSION_INFO.lock() {
         Ok(conn) => conn,
         Err(err) => return Err(Box::new(err)),
     };
 
     if rdp_connection.is_none() {
-        let (conn, fd, streams, session) = request_remote_desktop()?;
+        let (conn, fd, streams, session, is_support_restore_token) = request_remote_desktop()?;
         let conn = Arc::new(conn);
 
-        let rdp_res = RdpResponse {
+        let rdp_info = RdpSessionInfo {
             conn,
             streams,
             fd,
             session,
+            is_support_restore_token,
+            resolution: Arc::new(Mutex::new(None)),
         };
-        *rdp_connection = Some(rdp_res);
+        *rdp_connection = Some(rdp_info);
     }
 
-    let rdp_res = match rdp_connection.as_ref() {
+    let rdp_info = match rdp_connection.as_ref() {
         Some(res) => res,
         None => {
             return Err(Box::new(DBusError("RDP response is None.".into())));
         }
     };
 
-    Ok(rdp_res
+    Ok(rdp_info
         .streams
         .clone()
         .into_iter()
-        .map(|s| PipeWireCapturable::new(rdp_res.conn.clone(), rdp_res.fd.clone(), s))
+        .map(|s| {
+            PipeWireCapturable::new(
+                rdp_info.conn.clone(),
+                rdp_info.fd.clone(),
+                rdp_info.resolution.clone(),
+                s,
+            )
+        })
         .collect())
 }
 
+// If `is_server_running()` is true, then `screencast_portal::start` is called.
+// Otherwise, `remote_desktop_portal::start` is called.
+//
+// If `is_server_running()` is true, `--service` process is running,
+// then we can use uinput as the input method.
+// Otherwise, we have to use remote_desktop_portal's input method.
+//
+// `screencast_portal` supports restore_token and persist_mode if the version is greater than or equal to 4.
+// `remote_desktop_portal` does not support restore_token and persist_mode.
 fn is_server_running() -> bool {
+    let app_name = config::APP_NAME.read().unwrap().clone().to_lowercase();
     let output = match Command::new("sh")
         .arg("-c")
-        .arg("ps aux | grep rustdesk")
+        .arg(&format!("ps aux | grep {}", app_name))
         .output()
     {
         Ok(output) => output,
@@ -790,6 +892,6 @@ fn is_server_running() -> bool {
     };
 
     let output_str = String::from_utf8_lossy(&output.stdout);
-    let is_running = output_str.contains("rustdesk --server");
+    let is_running = output_str.contains(&format!("{} --server", app_name));
     is_running
 }

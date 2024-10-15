@@ -13,6 +13,9 @@ on:
       - ".github/**"
       - "docs/**"
       - "README.md"
+      - "res/**"
+      - "appimage/**"
+      - "flatpak/**"
 
 jobs:
   run-ci:

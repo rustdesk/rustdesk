@@ -37,6 +37,8 @@ object KeyEventConverter {
             action = KeyEvent.ACTION_UP
         }
 
+        // FIXME: The last parameter is the repeat count, not modifiers ?
+        // https://developer.android.com/reference/android/view/KeyEvent#KeyEvent(long,%20long,%20int,%20int,%20int)
         return KeyEvent(0, 0, action, chrValue, 0, modifiers)
     }
 
@@ -112,6 +114,10 @@ object KeyEventConverter {
             ControlKey.Delete -> KeyEvent.KEYCODE_FORWARD_DEL
             ControlKey.Clear -> KeyEvent.KEYCODE_CLEAR
             ControlKey.Pause -> KeyEvent.KEYCODE_BREAK
+            ControlKey.VolumeMute -> KeyEvent.KEYCODE_VOLUME_MUTE
+            ControlKey.VolumeUp -> KeyEvent.KEYCODE_VOLUME_UP
+            ControlKey.VolumeDown -> KeyEvent.KEYCODE_VOLUME_DOWN
+            ControlKey.Power -> KeyEvent.KEYCODE_POWER
             else -> 0 // Default to unknown.
         }
     }

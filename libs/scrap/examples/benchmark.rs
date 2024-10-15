@@ -239,22 +239,21 @@ fn test_av1(
 
 #[cfg(feature = "hwcodec")]
 mod hw {
-    use hwcodec::ffmpeg::CodecInfo;
+    use hwcodec::ffmpeg_ram::CodecInfo;
     use scrap::{
-        hwcodec::{HwDecoder, HwEncoder, HwEncoderConfig},
+        hwcodec::{HwRamDecoder, HwRamEncoder, HwRamEncoderConfig},
         CodecFormat,
     };
 
     use super::*;
 
     pub fn test(c: &mut Capturer, width: usize, height: usize, quality: Q, yuv_count: usize) {
-        let best = HwEncoder::best();
         let mut h264s = Vec::new();
         let mut h265s = Vec::new();
-        if let Some(info) = best.h264 {
+        if let Some(info) = HwRamEncoder::try_get(CodecFormat::H264) {
             test_encoder(width, height, quality, info, c, yuv_count, &mut h264s);
         }
-        if let Some(info) = best.h265 {
+        if let Some(info) = HwRamEncoder::try_get(CodecFormat::H265) {
             test_encoder(width, height, quality, info, c, yuv_count, &mut h265s);
         }
         test_decoder(CodecFormat::H264, &h264s);
@@ -270,9 +269,10 @@ mod hw {
         yuv_count: usize,
         h26xs: &mut Vec<Vec<u8>>,
     ) {
-        let mut encoder = HwEncoder::new(
-            EncoderCfg::HW(HwEncoderConfig {
+        let mut encoder = HwRamEncoder::new(
+            EncoderCfg::HWRAM(HwRamEncoderConfig {
                 name: info.name.clone(),
+                mc_name: None,
                 width,
                 height,
                 quality,
@@ -287,13 +287,17 @@ mod hw {
         let mut mid_data = Vec::new();
         let mut counter = 0;
         let mut time_sum = Duration::ZERO;
+        let start = std::time::Instant::now();
         loop {
             match c.frame(std::time::Duration::from_millis(30)) {
                 Ok(frame) => {
                     let tmp_timer = Instant::now();
                     let frame = frame.to(encoder.yuvfmt(), &mut yuv, &mut mid_data).unwrap();
                     let yuv = frame.yuv().unwrap();
-                    for ref frame in encoder.encode(&yuv).unwrap() {
+                    for ref frame in encoder
+                        .encode(&yuv, start.elapsed().as_millis() as _)
+                        .unwrap()
+                    {
                         size += frame.data.len();
 
                         h26xs.push(frame.data.to_vec());
@@ -321,7 +325,7 @@ mod hw {
     }
 
     fn test_decoder(format: CodecFormat, h26xs: &Vec<Vec<u8>>) {
-        let mut decoder = HwDecoder::new(format).unwrap();
+        let mut decoder = HwRamDecoder::new(format).unwrap();
         let start = Instant::now();
         let mut cnt = 0;
         for h26x in h26xs {

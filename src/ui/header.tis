@@ -152,10 +152,13 @@ class Header: Reactor.Component {
     }
 
     function renderKeyboardPop(){
+        const is_map_mode_supported = handler.is_keyboard_mode_supported("map");
+        const is_translate_mode_supported = handler.is_keyboard_mode_supported("translate");
         return <popup>
             <menu.context #keyboard-options>
-                <li #legacy><span>{svg_checkmark}</span>{translate('Legacy mode')}</li> 
-                <li #map><span>{svg_checkmark}</span>{translate('Map mode')}</li> 
+                <li #legacy><span>{svg_checkmark}</span>{translate('Legacy mode')}</li>
+                { is_map_mode_supported && <li #map><span>{svg_checkmark}</span>{translate('Map mode')}</li> }
+                { is_translate_mode_supported && <li #translate><span>{svg_checkmark}</span>{translate('Translate mode')}</li> }
             </menu>
         </popup>;
     }
@@ -194,9 +197,11 @@ class Header: Reactor.Component {
                 </div> : ""}
                 <div .separator />
                 {!cursor_embedded && <li #show-remote-cursor .toggle-option><span>{svg_checkmark}</span>{translate('Show remote cursor')}</li>}
+                {<li #follow-remote-cursor .toggle-option><span>{svg_checkmark}</span>{translate('Follow remote cursor')}</li>}
+                {<li #follow-remote-window .toggle-option><span>{svg_checkmark}</span>{translate('Follow remote window focus')}</li>}
                 <li #show-quality-monitor .toggle-option><span>{svg_checkmark}</span>{translate('Show quality monitor')}</li> 
                 {audio_enabled ? <li #disable-audio .toggle-option><span>{svg_checkmark}</span>{translate('Mute')}</li> : ""}
-                {(is_win && pi.platform == "Windows") && file_enabled ? <li #enable-file-transfer .toggle-option><span>{svg_checkmark}</span>{translate('Enable file copy and paste')}</li> : ""}
+                {(is_win && pi.platform == "Windows") && file_enabled ? <li #enable-file-copy-paste .toggle-option><span>{svg_checkmark}</span>{translate('Enable file copy and paste')}</li> : ""}
                 {keyboard_enabled && clipboard_enabled ? <li #disable-clipboard .toggle-option><span>{svg_checkmark}</span>{translate('Disable clipboard')}</li> : ""} 
                 {keyboard_enabled ? <li #lock-after-session-end .toggle-option><span>{svg_checkmark}</span>{translate('Lock after session end')}</li> : ""} 
                 {keyboard_enabled && pi.platform == "Windows" ? <li #privacy-mode><span>{svg_checkmark}</span>{translate('Privacy mode')}</li> : ""}
@@ -441,7 +446,7 @@ function handle_custom_image_quality() {
     var extendedBitrate = bitrate > 100;
     var maxRate = extendedBitrate ? 2000 : 100;
     msgbox("custom-image-quality", "Custom Image Quality", "<div .form> \
-          <div><input #bitrate-slider type=\"hslider\" style=\"width: 50%\" name=\"bitrate\" max=\"" + maxRate + "\" min=\"10\" value=\"" + bitrate + "\"/ buddy=\"bitrate-buddy\"><b #bitrate-buddy>x</b>% Bitrate <button|checkbox #extended-slider .custom-event " + (extendedBitrate ? "checked" : "") + ">More</button></div> \
+          <div><input #bitrate-slider type=\"hslider\" style=\"width: 50%\" name=\"bitrate\" max=\"" + maxRate + "\" min=\"5\" value=\"" + bitrate + "\"/ buddy=\"bitrate-buddy\"><b #bitrate-buddy>x</b>% Bitrate <button|checkbox #extended-slider .custom-event " + (extendedBitrate ? "checked" : "") + ">More</button></div> \
       </div>", "", function(res=null) {
         if (!res) return;
         if (res.id === "extended-slider") {
@@ -479,7 +484,7 @@ function toggleMenuState() {
     for (var el in $$(menu#keyboard-options>li)) {
         el.attributes.toggleClass("selected", values.indexOf(el.id) >= 0);
     }
-    for (var id in ["show-remote-cursor", "show-quality-monitor", "disable-audio", "enable-file-transfer", "disable-clipboard", "lock-after-session-end", "allow_swap_key", "i444"]) {
+    for (var id in ["show-remote-cursor", "follow-remote-cursor", "follow-remote-window", "show-quality-monitor", "disable-audio", "enable-file-copy-paste", "disable-clipboard", "lock-after-session-end", "allow_swap_key", "i444"]) {
         var el = self.select('#' + id);
         if (el) {
             var value = handler.get_toggle_option(id);
@@ -521,6 +526,26 @@ handler.updatePi = function(v) {
 
 handler.updateDisplays = function(v) {
     pi.displays = v;
+    header.update();
+    if (is_port_forward) {
+        view.windowState = View.WINDOW_MINIMIZED;
+    }
+}
+
+handler.setMultipleWindowsSession = function(sessions) {
+    // It will be covered by other message box if the timer is not used, 
+    self.timer(1000ms, function() {
+        msgbox("multiple-sessions-nocancel", translate("Multiple Windows sessions found"), <MultipleSessionComponent sessions={sessions} />, "", function(res) {
+            if (res && res.sid) {
+                handler.set_selected_windows_session_id("" + res.sid);
+            }
+        }, 230);
+    });
+}
+
+handler.setCurrentDisplay = function(v) {
+    pi.current_display = v;
+    handler.switch_display(v);
     header.update();
     if (is_port_forward) {
         view.windowState = View.WINDOW_MINIMIZED;

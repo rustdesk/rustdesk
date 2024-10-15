@@ -2,7 +2,7 @@
 version: 1
 script:
  - rm -rf ./AppDir || true
- - bsdtar -zxvf ../rustdesk-1.2.4.deb
+ - bsdtar -zxvf rustdesk.deb
  - tar -xvf ./data.tar.xz
  - mkdir ./AppDir
  - mv ./usr ./AppDir/usr
@@ -18,7 +18,7 @@ AppDir:
     id: rustdesk
     name: rustdesk
     icon: rustdesk
-    version: 1.2.4
+    version: 1.3.2
     exec: usr/lib/rustdesk/rustdesk
     exec_args: $@
   apt:
@@ -26,18 +26,18 @@ AppDir:
     - arm64
     allow_unauthenticated: true
     sources:
-    - sourceline: deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports/ bionic main restricted universe multiverse
+    - sourceline: deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports/ focal main restricted universe multiverse
       key_url: 'http://keyserver.ubuntu.com/pks/lookup?op=get&search=0x3b4fe6acc0b21f32'
-    - sourceline: deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports/ bionic-updates main restricted universe multiverse
+    - sourceline: deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports/ focal-updates main restricted universe multiverse
       key_url: 'http://keyserver.ubuntu.com/pks/lookup?op=get&search=0x3b4fe6acc0b21f32'
-    - sourceline: deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports/ bionic-backports main restricted
+    - sourceline: deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports/ focal-backports main restricted
         universe multiverse
       key_url: 'http://keyserver.ubuntu.com/pks/lookup?op=get&search=0x3b4fe6acc0b21f32'
-    - sourceline: deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports/ bionic-security main restricted
+    - sourceline: deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports/ focal-security main restricted
         universe multiverse
       key_url: 'http://keyserver.ubuntu.com/pks/lookup?op=get&search=0x3b4fe6acc0b21f32'
     include:
-    - libc6
+    - libc6:arm64
     - libgtk-3-0
     - libxcb-randr0
     - libxdo3
@@ -51,9 +51,15 @@ AppDir:
     - libva-x11-2
     - libvdpau1
     - libgstreamer-plugins-base1.0-0
+    - gstreamer1.0-pipewire
+    - libwayland-client0
     - libwayland-cursor0
     - libwayland-egl1
     - libpulse0
+    - packagekit-gtk3-module
+    - libcanberra-gtk3-module
+    - libpam0g
+    - libdrm2
     exclude:
     - humanity-icon-theme
     - hicolor-icon-theme
@@ -69,8 +75,11 @@ AppDir:
     - usr/share/doc/*/TODO.*
   runtime:
     env:
-      GIO_MODULE_DIR: $APPDIR/usr/lib/x86_64-linux-gnu/gio/modules/
+      GIO_MODULE_DIR: /lib64/gio/modules:/usr/lib/aarch64-linux-gnu/gio/modules:$APPDIR/usr/lib/aarch64-linux-gnu/gio/modules
       GDK_BACKEND: x11
+      APPDIR_LIBRARY_PATH: /lib64:/usr/lib/aarch64-linux-gnu:$APPDIR/lib/aarch64-linux-gnu:$APPDIR/lib/aarch64-linux-gnu/security:$APPDIR/lib/systemd:$APPDIR/usr/lib/aarch64-linux-gnu:$APPDIR/usr/lib/aarch64-linux-gnu/gdk-pixbuf-2.0/2.10.0/loaders:$APPDIR/usr/lib/aarch64-linux-gnu/gstreamer-1.0:$APPDIR/usr/lib/aarch64-linux-gnu/gtk-3.0/3.0.0/immodules:$APPDIR/usr/lib/aarch64-linux-gnu/gtk-3.0/3.0.0/printbackends:$APPDIR/usr/lib/aarch64-linux-gnu/krb5/plugins/preauth:$APPDIR/usr/lib/aarch64-linux-gnu/libcanberra-0.30:$APPDIR/usr/lib/aarch64-linux-gnu/pulseaudio:$APPDIR/usr/lib/aarch64-linux-gnu/sasl2:$APPDIR/usr/lib/aarch64-linux-gnu/vdpau:$APPDIR/usr/lib/rustdesk/lib:$APPDIR/lib/aarch64
+      GST_PLUGIN_PATH: /lib64/gstreamer-1.0:/usr/lib/aarch64-linux-gnu/gstreamer-1.0:$APPDIR/usr/lib/aarch64-linux-gnu/gstreamer-1.0
+      GST_PLUGIN_SYSTEM_PATH: /lib64/gstreamer-1.0:/usr/lib/aarch64-linux-gnu/gstreamer-1.0:$APPDIR/usr/lib/aarch64-linux-gnu/gstreamer-1.0
   test:
     fedora-30:
       image: appimagecrafters/tests-env:fedora-30

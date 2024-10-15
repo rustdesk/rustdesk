@@ -12,9 +12,11 @@
 
 typedef char** (*FUNC_RUSTDESK_CORE_MAIN)(int*);
 typedef void (*FUNC_RUSTDESK_FREE_ARGS)( char**, int);
-const char* uniLinksPrefix = "rustdesk://";
+typedef int (*FUNC_RUSTDESK_GET_APP_NAME)(wchar_t*, int);
 /// Note: `--server`, `--service` are already handled in [core_main.rs].
 const std::vector<std::string> parameters_white_list = {"--install", "--cm"};
+
+const wchar_t* getWindowClassName();
 
 int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
                       _In_ wchar_t *command_line, _In_ int show_command)
@@ -60,8 +62,17 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   std::vector<std::string> rust_args(c_args, c_args + args_len);
   free_c_args(c_args, args_len);
 
+  std::wstring app_name = L"RustDesk";
+  FUNC_RUSTDESK_GET_APP_NAME get_rustdesk_app_name = (FUNC_RUSTDESK_GET_APP_NAME)GetProcAddress(hInstance, "get_rustdesk_app_name");
+  if (get_rustdesk_app_name) {
+    wchar_t app_name_buffer[512] = {0};
+    if (get_rustdesk_app_name(app_name_buffer, 512) == 0) {
+      app_name = std::wstring(app_name_buffer);
+    }
+  }
+
   // Uri links dispatch
-  HWND hwnd = ::FindWindow(_T("FLUTTER_RUNNER_WIN32_WINDOW"), _T("RustDesk"));
+  HWND hwnd = ::FindWindowW(getWindowClassName(), app_name.c_str());
   if (hwnd != NULL) {
     // Allow multiple flutter instances when being executed by parameters
     // contained in whitelists.
@@ -105,15 +116,27 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   if (!command_line_arguments.empty() && command_line_arguments.front().compare(0, cmParam.size(), cmParam.c_str()) == 0) {
     is_cm_page = true;
   }
+  bool is_install_page = false;
+  auto installParam = std::string("--install");
+  if (!command_line_arguments.empty() && command_line_arguments.front().compare(0, installParam.size(), installParam.c_str()) == 0) {
+    is_install_page = true;
+  }
+
   command_line_arguments.insert(command_line_arguments.end(), rust_args.begin(), rust_args.end());
   project.set_dart_entrypoint_arguments(std::move(command_line_arguments));
 
   FlutterWindow window(project);
   Win32Window::Point origin(10, 10);
   Win32Window::Size size(800, 600);
-  if (!window.CreateAndShow(
-          is_cm_page ? L"RustDesk - Connection Manager" : L"RustDesk", origin,
-          size, !is_cm_page)) {
+  std::wstring window_title;
+  if (is_cm_page) {
+    window_title = app_name + L" - Connection Manager";
+  } else if (is_install_page) {
+    window_title = app_name + L" - Install";
+  } else {
+    window_title = app_name;
+  }
+  if (!window.CreateAndShow(window_title, origin, size, !is_cm_page)) {
       return EXIT_FAILURE;
   }
   window.SetQuitOnClose(true);

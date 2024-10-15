@@ -112,6 +112,8 @@ class CustomTouchGestureRecognizer extends ScaleGestureRecognizer {
     };
   }
 
+  // FIXME: This debounce logic is not working properly.
+  // If we move our finger very fast, we won't be able to detect the "oneFingerPan" event sometimes.
   void onOneFingerStartDebounce(ScaleUpdateDetails d) {
     start(ScaleUpdateDetails d) {
       _currentState = GestureState.oneFingerPan;

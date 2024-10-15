@@ -38,7 +38,7 @@ impl Display {
         let w = unsafe { CGDisplayPixelsWide(self.0) };
         let s = self.scale();
         if s > 1.0 {
-           ((w as f64) * s).round() as usize
+            ((w as f64) * s).round() as usize
         } else {
             w
         }
@@ -48,7 +48,7 @@ impl Display {
         let h = unsafe { CGDisplayPixelsHigh(self.0) };
         let s = self.scale();
         if s > 1.0 {
-           ((h as f64) * s).round() as usize
+            ((h as f64) * s).round() as usize
         } else {
             h
         }
@@ -71,7 +71,13 @@ impl Display {
     }
 
     pub fn scale(self) -> f64 {
-        // unsafe { BackingScaleFactor() as _ }
+        let s = unsafe { BackingScaleFactor(self.0) as _ };
+        if s > 1. {
+            let enable_retina = super::ENABLE_RETINA.lock().unwrap().clone();
+            if enable_retina {
+                return s;
+            }
+        }
         1.
     }
 

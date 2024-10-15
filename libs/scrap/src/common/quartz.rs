@@ -128,6 +128,10 @@ impl Display {
         self.0.height()
     }
 
+    pub fn scale(&self) -> f64 {
+        self.0.scale()
+    }
+
     pub fn name(&self) -> String {
         self.0.id().to_string()
     }

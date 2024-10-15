@@ -6,8 +6,9 @@ on:
   workflow_call:
 
 env:
-  FLUTTER_VERSION: "3.13.9"
+  FLUTTER_VERSION: "3.19.6"
   FLUTTER_RUST_BRIDGE_VERSION: "1.80.1"
+  RUST_VERSION: "1.75" # https://github.com/rustdesk/rustdesk/discussions/7503
 
 jobs:
   generate_bridge:
@@ -37,10 +38,8 @@ jobs:
             git \
             g++ \
             libclang-10-dev \
-            libclang-dev \
             libgtk-3-dev \
             llvm-10-dev \
-            llvm-dev \
             nasm \
             ninja-build \
             pkg-config \
@@ -49,9 +48,9 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@v1
         with:
-          toolchain: stable
+          toolchain: ${{ env.RUST_VERSION }}
           targets: ${{ matrix.job.target }}
-          components: ''
+          components: "rustfmt"
 
       - uses: Swatinem/rust-cache@v2
         with:

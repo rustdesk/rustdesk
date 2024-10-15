@@ -49,6 +49,7 @@ message DisplayInfo {
   bool online = 6;
   bool cursor_embedded = 7;
   Resolution original_resolution = 8;
+  double scale = 9;
 }
 
 message PortForward {
@@ -80,10 +81,13 @@ message LoginRequest {
   uint64 session_id = 10;
   string version = 11;
   OSLogin os_login = 12;
+  string my_platform = 13;
+  bytes hwid = 14;
 }
 
 message Auth2FA {
   string code = 1;
+  bytes hwid = 2;
 }
 
 message ChatMessage { string text = 1; }
@@ -122,13 +126,20 @@ message PeerInfo {
   // Use JSON's key-value format which is friendly for peer to handle.
   // NOTE: Only support one-level dictionaries (for peer to update), and the key is of type string.
   string platform_additions = 12;
+  WindowsSessions windows_sessions = 13;
 }
+
+message WindowsSession {  
+  uint32 sid = 1;  
+  string name = 2;  
+}  
 
 message LoginResponse {
   oneof union {
     string error = 1;
     PeerInfo peer_info = 2;
   }
+  bool enable_trusted_devices = 3;
 }
 
 message TouchScaleUpdate {
@@ -264,6 +275,10 @@ enum ControlKey {
   RShift = 73;
   RControl = 74;
   RAlt = 75;
+  VolumeMute = 76; // mainly used on mobile devices as controlled side
+  VolumeUp = 77;
+  VolumeDown = 78;
+  Power = 79; // mainly used on mobile devices as controlled side
   CtrlAltDel = 100;
   LockScreen = 101;
 }
@@ -304,10 +319,27 @@ message Hash {
   string challenge = 2;
 }
 
+enum ClipboardFormat {
+  Text = 0;
+  Rtf = 1;
+  Html = 2;
+  ImageRgba = 21;
+  ImagePng = 22;
+  ImageSvg = 23;
+  Special = 31;
+}
+
 message Clipboard {
   bool compress = 1;
   bytes content = 2;
+  int32 width = 3;
+  int32 height = 4;
+  ClipboardFormat format = 5;
+  // Special format name, only used when format is Special.
+  string special_name = 6;
 }
+
+message MultiClipboards { repeated Clipboard clipboards = 1; }
 
 enum FileType {
   Dir = 0;
@@ -342,6 +374,12 @@ message ReadAllFiles {
   bool include_hidden = 3;
 }
 
+message FileRename {
+  int32 id = 1;
+  string path = 2;
+  string new_name = 3;
+}
+
 message FileAction {
   oneof union {
     ReadDir read_dir = 1;
@@ -353,6 +391,7 @@ message FileAction {
     ReadAllFiles all_files = 7;
     FileTransferCancel cancel = 8;
     FileTransferSendConfirmRequest send_confirm = 9;
+    FileRename rename = 10;
   }
 }
 
@@ -497,6 +536,11 @@ message Resolution {
   int32 height = 2;
 }
 
+message DisplayResolution {
+  int32 display = 1;
+  Resolution resolution = 2;
+}
+
 message SupportedResolutions { repeated Resolution resolutions = 1; }
 
 message SwitchDisplay {
@@ -589,6 +633,10 @@ message OptionMessage {
   BoolOption disable_keyboard = 12;
 // Position 13 is used for Resolution. Remove later.
 // Resolution custom_resolution = 13;
+// BoolOption support_windows_specific_session = 14;
+  // starting from 15 please, do not use removed fields
+  BoolOption follow_remote_cursor = 15;
+  BoolOption follow_remote_window = 16;
 }
 
 message TestDelay {
@@ -703,6 +751,18 @@ message PluginFailure {
   string msg = 3;
 }
 
+message WindowsSessions {
+  repeated WindowsSession sessions = 1;
+  uint32 current_sid = 2;
+}
+
+// Query messages from peer.
+message MessageQuery {
+  // The SwitchDisplay message of the target display.
+  // If the target display is not found, the message will be ignored.
+  int32 switch_display = 1;
+}
+
 message Misc {
   oneof union {
     ChatMessage chat_message = 4;
@@ -723,6 +783,8 @@ message Misc {
     bool portable_service_running = 20;
     SwitchSidesRequest switch_sides_request = 21;
     SwitchBack switch_back = 22;
+    // Deprecated since 1.2.4, use `change_display_resolution` (36) instead.
+    // But we must keep it for compatibility when peer version < 1.2.4.
     Resolution change_resolution = 24;
     PluginRequest plugin_request = 25;
     PluginFailure plugin_failure = 26;
@@ -734,6 +796,10 @@ message Misc {
     ToggleVirtualDisplay toggle_virtual_display = 32;
     TogglePrivacyMode toggle_privacy_mode = 33;
     SupportedEncoding supported_encoding = 34;
+    uint32 selected_sid = 35;
+    DisplayResolution change_display_resolution = 36;
+    MessageQuery message_query = 37;
+    int32 follow_current_display = 38;
   }
 }
 
@@ -776,5 +842,6 @@ message Message {
     PeerInfo peer_info = 25;
     PointerDeviceEvent pointer_device_event = 26;
     Auth2FA auth_2fa = 27;
+    MultiClipboards multi_clipboards = 28;
   }
 }

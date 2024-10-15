@@ -66,9 +66,11 @@ class MsgboxComponent: Reactor.Component {
     }
 
     function get2faContent() {
+        var enable_trusted_devices = handler.get_enable_trusted_devices();
         return <div .form>
             <div>{translate('enter-2fa-title')}</div>
             <div .code><input name='code' type='text' .outline-focus /></div>
+            {enable_trusted_devices ? <div><button|checkbox(trust_this_device) {ts}>{translate('Trust this device')}</button></div> : ""}
         </div>;
     }
 
@@ -311,6 +313,9 @@ class MsgboxComponent: Reactor.Component {
             if (!values.osusername || !values.ospassword || !values.password) {
                 return;
             }
+        }
+        if (this.type == "multiple-sessions-nocancel") {
+            values.sid = (this.$$(select))[0].value;
         }
         return values;
     }

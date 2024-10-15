@@ -50,6 +50,7 @@ pub const NAME: &'static str = "";
 pub mod input_service {
 pub const NAME_CURSOR: &'static str = "";
 pub const NAME_POS: &'static str = "";
+pub const NAME_WINDOW_FOCUS: &'static str = "";
 }
 }
 }
@@ -105,6 +106,11 @@ pub fn new() -> ServerPtr {
         if !display_service::capture_cursor_embedded() {
             server.add_service(Box::new(input_service::new_cursor()));
             server.add_service(Box::new(input_service::new_pos()));
+            #[cfg(target_os = "linux")]
+            if scrap::is_x11() {
+                // wayland does not support multiple displays currently
+                server.add_service(Box::new(input_service::new_window_focus()));
+            }
         }
     }
     Arc::new(RwLock::new(server))
@@ -283,6 +289,8 @@ impl Server {
                 s.on_subscribe(conn.clone());
             }
         }
+        #[cfg(target_os = "macos")]
+        self.update_enable_retina();
         self.connections.insert(conn.id(), conn);
         *CONN_COUNT.lock().unwrap() = self.connections.len();
     }
@@ -293,6 +301,8 @@ impl Server {
         }
         self.connections.remove(&conn.id());
         *CONN_COUNT.lock().unwrap() = self.connections.len();
+        #[cfg(target_os = "macos")]
+        self.update_enable_retina();
     }
 
     pub fn close_connections(&mut self) {
@@ -325,6 +335,8 @@ impl Server {
             } else {
                 s.on_unsubscribe(conn.id());
             }
+            #[cfg(target_os = "macos")]
+            self.update_enable_retina();
         }
     }
 
@@ -346,6 +358,20 @@ impl Server {
                 v.set_option(opt, value);
             }
         }
+    }
+
+    fn get_subbed_displays_count(&self, conn_id: i32) -> usize {
+        self.services
+            .keys()
+            .filter(|k| {
+                Self::is_video_service_name(k)
+                    && self
+                        .services
+                        .get(*k)
+                        .map(|s| s.is_subed(conn_id))
+                        .unwrap_or(false)
+            })
+            .count()
     }
 
     fn capture_displays(
@@ -373,6 +399,17 @@ impl Server {
                 }
             }
         }
+    }
+
+    #[cfg(target_os = "macos")]
+    fn update_enable_retina(&self) {
+        let mut video_service_count = 0;
+        for (name, service) in self.services.iter() {
+            if Self::is_video_service_name(&name) && service.ok() {
+                video_service_count += 1;
+            }
+        }
+        *scrap::quartz::ENABLE_RETINA.lock().unwrap() = video_service_count < 2;
     }
 }
 
@@ -423,38 +460,46 @@ pub async fn start_server(_is_server: bool) {
 /// * `is_server` - Whether the current client is definitely the server.
 /// If true, the server will be started.
 /// Otherwise, client will check if there's already a server and start one if not.
+/// * `no_server` - If `is_server` is false, whether to start a server if not found.
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 #[tokio::main]
-pub async fn start_server(is_server: bool) {
-    #[cfg(target_os = "linux")]
-    {
-        log::info!("DISPLAY={:?}", std::env::var("DISPLAY"));
-        log::info!("XAUTHORITY={:?}", std::env::var("XAUTHORITY"));
-    }
-    #[cfg(feature = "hwcodec")]
-    scrap::hwcodec::hwcodec_new_check_process();
-    #[cfg(feature = "gpucodec")]
-    scrap::gpucodec::gpucodec_new_check_process();
-    #[cfg(windows)]
-    hbb_common::platform::windows::start_cpu_performance_monitor();
+pub async fn start_server(is_server: bool, no_server: bool) {
+    use std::sync::Once;
+    static ONCE: Once = Once::new();
+    ONCE.call_once(|| {
+        #[cfg(target_os = "linux")]
+        {
+            log::info!("DISPLAY={:?}", std::env::var("DISPLAY"));
+            log::info!("XAUTHORITY={:?}", std::env::var("XAUTHORITY"));
+        }
+        #[cfg(windows)]
+        hbb_common::platform::windows::start_cpu_performance_monitor();
+    });
 
     if is_server {
         crate::common::set_server_running(true);
         std::thread::spawn(move || {
             if let Err(err) = crate::ipc::start("") {
                 log::error!("Failed to start ipc: {}", err);
+                if crate::is_server() {
+                    log::error!("ipc is occupied by another process, try kill it");
+                    std::thread::spawn(stop_main_window_process).join().ok();
+                }
                 std::process::exit(-1);
             }
         });
         input_service::fix_key_down_timeout_loop();
         #[cfg(target_os = "linux")]
-        if crate::platform::current_is_wayland() {
+        if input_service::wayland_use_uinput() {
             allow_err!(input_service::setup_uinput(0, 1920, 0, 1080).await);
         }
         #[cfg(any(target_os = "macos", target_os = "linux"))]
         tokio::spawn(async { sync_and_watch_config_dir().await });
         #[cfg(target_os = "windows")]
         crate::platform::try_kill_broker();
+        #[cfg(feature = "hwcodec")]
+        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+        scrap::hwcodec::start_check_process();
         crate::RendezvousMediator::start_all().await;
     } else {
         match crate::ipc::connect(1000, "").await {
@@ -475,10 +520,19 @@ pub async fn start_server(is_server: bool) {
                         }
                     }
                 }
+                #[cfg(feature = "hwcodec")]
+                #[cfg(any(target_os = "windows", target_os = "linux"))]
+                crate::ipc::client_get_hwcodec_config_thread(0);
             }
             Err(err) => {
-                log::info!("server not started (will try to start): {}", err);
-                std::thread::spawn(|| start_server(true));
+                log::info!("server not started: {err:?}, no_server: {no_server}");
+                if no_server {
+                    hbb_common::sleep(1.0).await;
+                    std::thread::spawn(|| start_server(false, true));
+                } else {
+                    log::info!("try start server");
+                    std::thread::spawn(|| start_server(true, false));
+                }
             }
         }
     }
@@ -533,12 +587,7 @@ async fn sync_and_watch_config_dir() {
 
     let mut cfg0 = (Config::get(), Config2::get());
     let mut synced = false;
-    let tries =
-        if std::env::args().len() == 2 && std::env::args().nth(1) == Some("--server".to_owned()) {
-            30
-        } else {
-            3
-        };
+    let tries = if crate::is_server() { 30 } else { 3 };
     log::debug!("#tries of ipc service connection: {}", tries);
     use hbb_common::sleep;
     for i in 1..=tries {
@@ -580,7 +629,14 @@ async fn sync_and_watch_config_dir() {
                         match conn.send(&Data::SyncConfig(Some(cfg.clone().into()))).await {
                             Err(e) => {
                                 log::error!("sync config to root failed: {}", e);
-                                break;
+                                match crate::ipc::connect(1000, "_service").await {
+                                    Ok(mut _conn) => {
+                                        conn = _conn;
+                                        log::info!("reconnected to ipc_service");
+                                        break;
+                                    }
+                                    _ => {}
+                                }
                             }
                             _ => {
                                 cfg0 = cfg;
@@ -596,4 +652,20 @@ async fn sync_and_watch_config_dir() {
         }
     }
     log::warn!("skipped config sync");
+}
+
+#[tokio::main(flavor = "current_thread")]
+pub async fn stop_main_window_process() {
+    // this may also kill another --server process,
+    // but --server usually can be auto restarted by --service, so it is ok
+    if let Ok(mut conn) = crate::ipc::connect(1000, "").await {
+        conn.send(&crate::ipc::Data::Close).await.ok();
+    }
+    #[cfg(windows)]
+    {
+        // in case above failure, e.g. zombie process
+        if let Err(e) = crate::platform::try_kill_rustdesk_main_window_process() {
+            log::error!("kill failed: {}", e);
+        }
+    }
 }

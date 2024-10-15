@@ -23,9 +23,10 @@ impl TraitCapturer for Capturer {
     fn frame<'a>(&'a mut self, _timeout: Duration) -> io::Result<Frame<'a>> {
         let width = self.width();
         let height = self.height();
+        let pixfmt = self.0.display().pixfmt();
         Ok(Frame::PixelBuffer(PixelBuffer::new(
             self.0.frame()?,
-            Pixfmt::BGRA,
+            pixfmt,
             width,
             height,
         )))
@@ -41,7 +42,7 @@ pub struct PixelBuffer<'a> {
 }
 
 impl<'a> PixelBuffer<'a> {
-    pub fn new(data: &'a [u8], pixfmt: Pixfmt, width:usize, height: usize) -> Self {
+    pub fn new(data: &'a [u8], pixfmt: Pixfmt, width: usize, height: usize) -> Self {
         let stride0 = data.len() / height;
         let mut stride = Vec::new();
         stride.push(stride0);
@@ -130,5 +131,9 @@ impl Display {
 
     pub fn name(&self) -> String {
         self.0.name()
+    }
+
+    pub fn get_shm_status(&self) -> Result<(), x11::Error> {
+        self.0.server().get_shm_status()
     }
 }

@@ -11,8 +11,12 @@ import '../../common.dart';
 import '../../common/widgets/dialog.dart';
 
 class FileManagerPage extends StatefulWidget {
-  FileManagerPage({Key? key, required this.id}) : super(key: key);
+  FileManagerPage(
+      {Key? key, required this.id, this.password, this.isSharedPassword})
+      : super(key: key);
   final String id;
+  final String? password;
+  final bool? isSharedPassword;
 
   @override
   State<StatefulWidget> createState() => _FileManagerPageState();
@@ -67,7 +71,10 @@ class _FileManagerPageState extends State<FileManagerPage> {
   @override
   void initState() {
     super.initState();
-    gFFI.start(widget.id, isFileTransfer: true);
+    gFFI.start(widget.id,
+        isFileTransfer: true,
+        password: widget.password,
+        isSharedPassword: widget.isSharedPassword);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       gFFI.dialogManager
           .showLoading(translate('Connecting...'), onCancel: closeConnection);
@@ -197,36 +204,54 @@ class _FileManagerPageState extends State<FileManagerPage> {
                     setState(() {});
                   } else if (v == "folder") {
                     final name = TextEditingController();
-                    gFFI.dialogManager
-                        .show((setState, close, context) => CustomAlertDialog(
-                                title: Text(translate("Create Folder")),
-                                content: Column(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    TextFormField(
-                                      decoration: InputDecoration(
-                                        labelText: translate(
-                                            "Please enter the folder name"),
-                                      ),
-                                      controller: name,
-                                    ),
-                                  ],
+                    String? errorText;
+                    gFFI.dialogManager.show((setState, close, context) {
+                      name.addListener(() {
+                        if (errorText != null) {
+                          setState(() {
+                            errorText = null;
+                          });
+                        }
+                      });
+                      return CustomAlertDialog(
+                          title: Text(translate("Create Folder")),
+                          content: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              TextFormField(
+                                decoration: InputDecoration(
+                                  labelText:
+                                      translate("Please enter the folder name"),
+                                  errorText: errorText,
                                 ),
-                                actions: [
-                                  dialogButton("Cancel",
-                                      onPressed: () => close(false),
-                                      isOutline: true),
-                                  dialogButton("OK", onPressed: () {
-                                    if (name.value.text.isNotEmpty) {
-                                      currentFileController.createDir(
-                                          PathUtil.join(
-                                              currentDir.path,
-                                              name.value.text,
-                                              currentOptions.isWindows));
-                                      close();
-                                    }
-                                  })
-                                ]));
+                                controller: name,
+                              ),
+                            ],
+                          ),
+                          actions: [
+                            dialogButton("Cancel",
+                                onPressed: () => close(false), isOutline: true),
+                            dialogButton("OK", onPressed: () {
+                              if (name.value.text.isNotEmpty) {
+                                if (!PathUtil.validName(
+                                    name.value.text,
+                                    currentFileController
+                                        .options.value.isWindows)) {
+                                  setState(() {
+                                    errorText =
+                                        translate("Invalid folder name");
+                                  });
+                                  return;
+                                }
+                                currentFileController.createDir(PathUtil.join(
+                                    currentDir.path,
+                                    name.value.text,
+                                    currentOptions.isWindows));
+                                close();
+                              }
+                            })
+                          ]);
+                    });
                   } else if (v == "hidden") {
                     currentFileController.toggleShowHidden();
                   }
@@ -490,7 +515,15 @@ class _FileManagerViewState extends State<FileManagerView> {
                                   child: Text(translate("Properties")),
                                   value: "properties",
                                   enabled: false,
-                                )
+                                ),
+                                if (!entries[index].isDrive &&
+                                    versionCmp(gFFI.ffiModel.pi.version,
+                                            "1.3.0") >=
+                                        0)
+                                  PopupMenuItem(
+                                    child: Text(translate("Rename")),
+                                    value: "rename",
+                                  )
                               ];
                             },
                             onSelected: (v) {
@@ -502,6 +535,9 @@ class _FileManagerViewState extends State<FileManagerView> {
                                 _selectedItems.clear();
                                 widget.selectMode.toggle(isLocal);
                                 setState(() {});
+                              } else if (v == "rename") {
+                                controller.renameAction(
+                                    entries[index], isLocal);
                               }
                             }),
                 onTap: () {
@@ -661,6 +697,7 @@ class BottomSheetBody extends StatelessWidget {
 
   @override
   BottomSheet build(BuildContext context) {
+    // ignore: no_leading_underscores_for_local_identifiers
     final _actions = actions ?? [];
     return BottomSheet(
       builder: (BuildContext context) {

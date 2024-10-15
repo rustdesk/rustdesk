@@ -1,4 +1,4 @@
-#[cfg(feature = "gpucodec")]
+#[cfg(feature = "vram")]
 use crate::AdapterDevice;
 use crate::{common::TraitCapturer, dxgi, Frame, Pixfmt};
 use std::{
@@ -57,12 +57,12 @@ impl TraitCapturer for Capturer {
         self.inner.set_gdi()
     }
 
-    #[cfg(feature = "gpucodec")]
+    #[cfg(feature = "vram")]
     fn device(&self) -> AdapterDevice {
         self.inner.device()
     }
 
-    #[cfg(feature = "gpucodec")]
+    #[cfg(feature = "vram")]
     fn set_output_texture(&mut self, texture: bool) {
         self.inner.set_output_texture(texture);
     }
@@ -197,7 +197,7 @@ impl Display {
         self.origin() == (0, 0)
     }
 
-    #[cfg(feature = "gpucodec")]
+    #[cfg(feature = "vram")]
     pub fn adapter_luid(&self) -> Option<i64> {
         self.0.adapter_luid()
     }
@@ -247,11 +247,11 @@ impl TraitCapturer for CapturerMag {
         false
     }
 
-    #[cfg(feature = "gpucodec")]
+    #[cfg(feature = "vram")]
     fn device(&self) -> AdapterDevice {
         AdapterDevice::default()
     }
 
-    #[cfg(feature = "gpucodec")]
+    #[cfg(feature = "vram")]
     fn set_output_texture(&mut self, _texture: bool) {}
 }
