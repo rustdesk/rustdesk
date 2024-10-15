@@ -1481,7 +1481,7 @@ class _NetworkState extends State<_Network> with AutomaticKeepAliveClientMixin {
       current = 'native';
     }
 
-    return _Card(title: 'Tls', children: [
+    return _Card(title: 'TLS', children: [
       _Radio<String>(context,
           value: 'native',
           groupValue: current,

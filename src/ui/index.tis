@@ -274,12 +274,12 @@ class Enhancements: Reactor.Component {
     }
 }
 
-class Tls: Reactor.Component {
+class TLS: Reactor.Component {
     function render() {
         const opts = [["native", "native-tls"], ["rustls", "rustls-tls"]];
         var me = this;
         self.timer(1ms, function() { me.toggleMenuState() });
-        return <li>{translate('Tls')}
+        return <li>{translate('TLS')}
             <menu #tls key={opts.length}>
                 {opts.map(function(o) {
                 return <li id={o[0]}><span>{svg_checkmark}</span>{o[1]}</li>;
@@ -354,7 +354,7 @@ class MyIdMenu: Reactor.Component {
                 <li #custom-server>{translate('ID/Relay Server')}</li>
                 <li #whitelist title={translate('whitelist_tip')}>{translate('IP Whitelisting')}</li>
                 <li #socks5-server>{translate('Socks5 Proxy')}</li>
-                { (is_win || is_osx) ? <Tls /> : "" } 
+                { (is_win || is_osx) ? <TLS /> : "" } 
                 <div .separator />
                 <li #stop-service class={service_stopped ? "line-through" : "selected"}><span>{svg_checkmark}</span>{translate("Enable service")}</li>
                 {is_win && handler.is_installed() ? <ShareRdp /> : ""}
@@ -1303,6 +1303,10 @@ function login() {
             getAb();
         }, function(err, status) {
             abLoading = false;
+            if (is_win && err.indexOf('os error -2146893018') >= 0 ||
+                is_mac && err.indexOf('bad protocol version') >= 0) {
+                err += ' ' + translate('try-to-change-tls-tip');
+            }
             err = translate(err);
             if (url.indexOf('rustdesk') < 0) err = url + ', ' + err;
             show_progress(false, err);

@@ -181,6 +181,10 @@ class _WidgetOPState extends State<WidgetOP> {
         setState(() {
           _stateMsg = stateMsg;
           _failedMsg = failedMsg;
+          if (isWindows && _failedMsg.contains('os error -2146893018') ||
+              isMacOS && _failedMsg.contains('bad protocol version')) {
+            _failedMsg += '\n${translate('try-to-change-tls-tip')}';
+          }
           if (failedMsg.isNotEmpty) {
             widget.curOP.value = '';
             _updateTimer?.cancel();

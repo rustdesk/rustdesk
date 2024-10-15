@@ -651,5 +651,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Download", "下载"),
         ("Upload folder", "上传文件夹"),
         ("Upload files", "上传文件"),
+        ("try-to-change-tls-tip", "请尝试在 \"设置\" -> \"网络\" -> \"TLS\" 中修改 TLS 选项。")
     ].iter().cloned().collect();
 }

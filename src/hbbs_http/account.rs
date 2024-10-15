@@ -228,27 +228,10 @@ impl OidcSession {
                 return;
             }
             Err(err) => {
-                let mut err_str = err.to_string();
-                #[cfg(not(any(target_os = "windows", target_os = "macos")))]
-                let try_change_tls = false;
-                #[cfg(any(target_os = "windows", target_os = "macos"))]
-                let mut try_change_tls = false;
-                #[cfg(target_os = "windows")]
-                if err_str.contains("os error -2146893018") {
-                    try_change_tls = true;
-                }
-                #[cfg(target_os = "macos")]
-                if err_str.contains("bad protocol version") {
-                    try_change_tls = true;
-                }
-                if try_change_tls {
-                    err_str += "\nPlease try to change the TLS option in \"Settings -> Network -> Tls\".";
-                }
-
                 OIDC_SESSION
                     .write()
                     .unwrap()
-                    .set_state(REQUESTING_ACCOUNT_AUTH, err_str);
+                    .set_state(REQUESTING_ACCOUNT_AUTH, err.to_string());
                 return;
             }
         };

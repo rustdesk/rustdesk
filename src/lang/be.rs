@@ -651,5 +651,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Download", ""),
         ("Upload folder", ""),
         ("Upload files", ""),
+        ("try-to-change-tls-tip", "")
     ].iter().cloned().collect();
 }
