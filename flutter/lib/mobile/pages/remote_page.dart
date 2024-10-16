@@ -242,7 +242,7 @@ class _RemotePageState extends State<RemotePage> {
     }
   }
 
-  async void handleSoftKeyboardInput(String newValue) {
+  Future<void> handleSoftKeyboardInput(String newValue) async {
     if (isIOS) {
       // fix: TextFormField onChanged event triggered multiple times when Korean input
       // https://github.com/rustdesk/rustdesk/pull/9644
