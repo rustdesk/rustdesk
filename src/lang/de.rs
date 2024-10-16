@@ -648,8 +648,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Authentication Required", "Authentifizierung erforderlich"),
         ("Authenticate", "Authentifizieren"),
         ("web_id_input_tip", "Sie können eine ID auf demselben Server eingeben, direkter IP-Zugriff wird im Web-Client nicht unterstützt.\nWenn Sie auf ein Gerät auf einem anderen Server zugreifen wollen, fügen Sie bitte die Serveradresse (<id>@<server_address>?key=<key_value>) hinzu, zum Beispiel\n9123456234@192.168.16.1:21117?key=5Qbwsde3unUcJBtrx9ZkvUmwFNoExHzpryHuPUdqlWM=.\nWenn Sie auf ein Gerät auf einem öffentlichen Server zugreifen wollen, geben Sie bitte \"<id>@public\" ein. Der Schlüssel wird für öffentliche Server nicht benötigt."),
-        ("Download", ""),
-        ("Upload folder", ""),
-        ("Upload files", ""),
+        ("Download", "Herunterladen"),
+        ("Upload folder", "Ordner hochladen"),
+        ("Upload files", "Dateien hochladen"),
     ].iter().cloned().collect();
 }
