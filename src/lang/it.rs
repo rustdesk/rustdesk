@@ -651,5 +651,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Download", "Download"),
         ("Upload folder", "Cartella upload"),
         ("Upload files", "File upload"),
+        ("Clipboard", ""),
+        ("web-clipboard-unfocus-failed-tip", ""),
     ].iter().cloned().collect();
 }

@@ -651,5 +651,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Download", "下载"),
         ("Upload folder", "上传文件夹"),
         ("Upload files", "上传文件"),
+        ("Clipboard", "粘贴板"),
+        ("web-clipboard-unfocus-failed-tip", "无法写入剪贴板。RustDesk 网页未激活。要同步受控端的剪贴板，请再次激活 RustDesk 网页。\n对于图像，请稍等片刻以确保剪贴板已写入。"),
     ].iter().cloned().collect();
 }
