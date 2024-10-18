@@ -1225,6 +1225,27 @@ class ImageModel with ChangeNotifier {
 
   clearImage() => _image = null;
 
+  bool _webDecodingRgba = false;
+  final List<Uint8List> _webRgbaList = List.empty(growable: true);
+  webOnRgba(int display, Uint8List rgba) async {
+    // deep copy needed, otherwise "instantiateCodec failed: TypeError: Cannot perform Construct on a detached ArrayBuffer"
+    _webRgbaList.add(Uint8List.fromList(rgba));
+    if (_webDecodingRgba) {
+      return;
+    }
+    _webDecodingRgba = true;
+    try {
+      while (_webRgbaList.isNotEmpty) {
+        final rgba2 = _webRgbaList.last;
+        _webRgbaList.clear();
+        await decodeAndUpdate(display, rgba2);
+      }
+    } catch (e) {
+      debugPrint('onRgba error: $e');
+    }
+    _webDecodingRgba = false;
+  }
+
   onRgba(int display, Uint8List rgba) async {
     try {
       await decodeAndUpdate(display, rgba);
