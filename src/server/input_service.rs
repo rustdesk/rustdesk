@@ -185,9 +185,6 @@ impl LockModesHandler {
                     break;
                 }
             }
-        } else if wayland_use_rdp_input() {
-            // We can't call `en.get_key_state(k)` because there's no api for this.
-            std::thread::sleep(std::time::Duration::from_millis(50));
         }
     }
 
@@ -1635,39 +1632,61 @@ pub fn handle_key_(evt: &KeyEvent) {
         return;
     }
 
+    // handle_lock_mode is used to handle lock mode, such as CapsLock, NumLock.
+    // If the value is true, we should handle lock state and ignore the key events if key is CapsLock or NumLock.
+    // If the value is false, we should not handle lock state and handle all key events, including CapsLock and NumLock.
+    #[cfg(not(target_os = "linux"))]
+    let handle_lock_mode = true;
+    #[cfg(target_os = "linux")]
+    let handle_lock_mode = !wayland_use_rdp_input();
+
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     let mut _lock_mode_handler = None;
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    match &evt.union {
-        Some(key_event::Union::Unicode(..)) | Some(key_event::Union::Seq(..)) => {
-            _lock_mode_handler = Some(LockModesHandler::new_handler(&evt, false));
-        }
-        Some(key_event::Union::ControlKey(ck)) => {
-            let key = ck.enum_value_or(ControlKey::Unknown);
-            if !skip_led_sync_control_key(&key) {
-                #[cfg(target_os = "macos")]
-                let is_numpad_key = false;
-                #[cfg(any(target_os = "windows", target_os = "linux"))]
-                let is_numpad_key = is_numpad_control_key(&key);
-                _lock_mode_handler = Some(LockModesHandler::new_handler(&evt, is_numpad_key));
+    if handle_lock_mode {
+        match &evt.union {
+            Some(key_event::Union::Unicode(..)) | Some(key_event::Union::Seq(..)) => {
+                _lock_mode_handler = Some(LockModesHandler::new_handler(&evt, false));
             }
-        }
-        Some(key_event::Union::Chr(code)) => {
-            if is_legacy_mode(&evt) {
-                _lock_mode_handler = Some(LockModesHandler::new_handler(evt, false));
-            } else {
-                let key = crate::keyboard::keycode_to_rdev_key(*code);
-                if !skip_led_sync_rdev_key(&key) {
+            Some(key_event::Union::ControlKey(ck)) => {
+                let key = ck.enum_value_or(ControlKey::Unknown);
+                if matches!(key, ControlKey::CapsLock | ControlKey::NumLock) {
+                    return;
+                }
+                if !skip_led_sync_control_key(&key) {
                     #[cfg(target_os = "macos")]
                     let is_numpad_key = false;
                     #[cfg(any(target_os = "windows", target_os = "linux"))]
-                    let is_numpad_key = crate::keyboard::is_numpad_rdev_key(&key);
-                    _lock_mode_handler =
-                        Some(LockModesHandler::new_handler(evt, is_numpad_key));
+                    let is_numpad_key = is_numpad_control_key(&key);
+                    _lock_mode_handler = Some(LockModesHandler::new_handler(&evt, is_numpad_key));
                 }
             }
+            Some(key_event::Union::Chr(code)) => {
+                // If we handle lock mode, but the key is CapsLock or NumLock, we should skip it.
+                for key in [rdev::Key::CapsLock, rdev::Key::NumLock].into_iter() {
+                    if let Some(c) = rdev::linux_keycode_from_key(key) {
+                        if *code == c {
+                            return;
+                        }
+                    }
+                }
+
+                if is_legacy_mode(&evt) {
+                    _lock_mode_handler = Some(LockModesHandler::new_handler(evt, false));
+                } else {
+                    let key = crate::keyboard::keycode_to_rdev_key(*code);
+                    if !skip_led_sync_rdev_key(&key) {
+                        #[cfg(target_os = "macos")]
+                        let is_numpad_key = false;
+                        #[cfg(any(target_os = "windows", target_os = "linux"))]
+                        let is_numpad_key = crate::keyboard::is_numpad_rdev_key(&key);
+                        _lock_mode_handler =
+                            Some(LockModesHandler::new_handler(evt, is_numpad_key));
+                    }
+                }
+            }
+            _ => {}
         }
-        _ => {}
     }
 
     match evt.mode.enum_value() {
