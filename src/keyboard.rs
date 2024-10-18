@@ -249,21 +249,35 @@ fn get_keyboard_mode() -> String {
     "legacy".to_string()
 }
 
+#[inline]
+pub fn should_send_lock_key(peer: &str) -> bool {
+    // We need to send `CapsLock` and `NumLock` keys to the controlled side if the peer is Linux.
+    // Because Linux(Wayland, rdp input) may not be able to get the lock key state,
+    // so it cannot handle the lock key state within the key events.
+    // We have to simulate the lock key by sending the lock key events (not the lock state).
+    peer == OS_LOWER_LINUX
+}
+
 fn start_grab_loop() {
     std::env::set_var("KEYBOARD_ONLY", "y");
     #[cfg(any(target_os = "windows", target_os = "macos"))]
     std::thread::spawn(move || {
         let try_handle_keyboard = move |event: Event, key: Key, is_press: bool| -> Option<Event> {
-            // fix #2211：CAPS LOCK don't work
-            if key == Key::CapsLock || key == Key::NumLock {
-                return Some(event);
+            let is_lock_key = key == Key::CapsLock || key == Key::NumLock;
+            if is_lock_key {
+                let mut peer = get_peer_platform().to_lowercase();
+                peer.retain(|c| !c.is_whitespace());
+                // fix #2211：CAPS LOCK don't work
+                if !should_send_lock_key(&peer) {
+                    return Some(event);
+                }
             }
 
             let _scan_code = event.position_code;
             let _code = event.platform_code as KeyCode;
             let res = if KEYBOARD_HOOKED.load(Ordering::SeqCst) {
                 client::process_event(&get_keyboard_mode(), &event, None);
-                if is_press {
+                if is_press && !is_lock_key {
                     None
                 } else {
                     Some(event)
