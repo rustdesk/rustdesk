@@ -4,6 +4,7 @@ import 'dart:math';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
+import 'package:bot_toast/bot_toast.dart';
 import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -269,6 +270,8 @@ class FfiModel with ChangeNotifier {
       var name = evt['name'];
       if (name == 'msgbox') {
         handleMsgBox(evt, sessionId, peerId);
+      } else if (name == 'toast') {
+        handleToast(evt, sessionId, peerId);
       } else if (name == 'set_multiple_windows_session') {
         handleMultipleWindowsSession(evt, sessionId, peerId);
       } else if (name == 'peer_info') {
@@ -592,6 +595,37 @@ class FfiModel with ChangeNotifier {
     } else {
       final hasRetry = evt['hasRetry'] == 'true';
       showMsgBox(sessionId, type, title, text, link, hasRetry, dialogManager);
+    }
+  }
+
+  handleToast(Map<String, dynamic> evt, SessionID sessionId, String peerId) {
+    final type = evt['type'] ?? 'info';
+    final text = evt['text'] ?? '';
+    final durMsc = evt['dur_msec'] ?? 2000;
+    final duration = Duration(milliseconds: durMsc);
+    if ((text).isEmpty) {
+      BotToast.showLoading(
+        duration: duration,
+        clickClose: true,
+        allowClick: true,
+      );
+    } else {
+      if (type.contains('error')) {
+        BotToast.showText(
+          contentColor: Colors.red,
+          text: translate(text),
+          duration: duration,
+          clickClose: true,
+          onlyOne: true,
+        );
+      } else {
+        BotToast.showText(
+          text: translate(text),
+          duration: duration,
+          clickClose: true,
+          onlyOne: true,
+        );
+      }
     }
   }
 
@@ -1190,6 +1224,27 @@ class ImageModel with ChangeNotifier {
   addCallbackOnFirstImage(Function(String) cb) => callbacksOnFirstImage.add(cb);
 
   clearImage() => _image = null;
+
+  bool _webDecodingRgba = false;
+  final List<Uint8List> _webRgbaList = List.empty(growable: true);
+  webOnRgba(int display, Uint8List rgba) async {
+    // deep copy needed, otherwise "instantiateCodec failed: TypeError: Cannot perform Construct on a detached ArrayBuffer"
+    _webRgbaList.add(Uint8List.fromList(rgba));
+    if (_webDecodingRgba) {
+      return;
+    }
+    _webDecodingRgba = true;
+    try {
+      while (_webRgbaList.isNotEmpty) {
+        final rgba2 = _webRgbaList.last;
+        _webRgbaList.clear();
+        await decodeAndUpdate(display, rgba2);
+      }
+    } catch (e) {
+      debugPrint('onRgba error: $e');
+    }
+    _webDecodingRgba = false;
+  }
 
   onRgba(int display, Uint8List rgba) async {
     try {

@@ -369,8 +369,8 @@ class _GeneralState extends State<_General> {
 
   Widget theme() {
     final current = MyTheme.getThemeModePreference().toShortString();
-    onChanged(String value) {
-      MyTheme.changeDarkMode(MyTheme.themeModeFromString(value));
+    onChanged(String value) async {
+      await MyTheme.changeDarkMode(MyTheme.themeModeFromString(value));
       setState(() {});
     }
 

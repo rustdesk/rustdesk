@@ -212,6 +212,8 @@ class _ConnectionPageState extends State<ConnectionPage> {
                         FocusNode fieldFocusNode,
                         VoidCallback onFieldSubmitted) {
                       fieldTextEditingController.text = _idController.text;
+                      Get.put<TextEditingController>(
+                          fieldTextEditingController);
                       fieldFocusNode.addListener(() async {
                         _idEmpty.value =
                             fieldTextEditingController.text.isEmpty;
@@ -352,7 +354,8 @@ class _ConnectionPageState extends State<ConnectionPage> {
     );
     final child = Column(children: [
       if (isWebDesktop)
-        getConnectionPageTitle(context, true).marginOnly(bottom: 10, top: 15, left: 12),
+        getConnectionPageTitle(context, true)
+            .marginOnly(bottom: 10, top: 15, left: 12),
       w
     ]);
     return Align(
@@ -366,6 +369,9 @@ class _ConnectionPageState extends State<ConnectionPage> {
     _idController.dispose();
     if (Get.isRegistered<IDTextEditingController>()) {
       Get.delete<IDTextEditingController>();
+    }
+    if (Get.isRegistered<TextEditingController>()) {
+      Get.delete<TextEditingController>();
     }
     if (!bind.isCustomClient()) {
       platformFFI.unregisterEventHandler(

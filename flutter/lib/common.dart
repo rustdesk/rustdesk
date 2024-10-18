@@ -555,7 +555,7 @@ class MyTheme {
     return themeModeFromString(bind.mainGetLocalOption(key: kCommConfKeyTheme));
   }
 
-  static void changeDarkMode(ThemeMode mode) async {
+  static Future<void> changeDarkMode(ThemeMode mode) async {
     Get.changeThemeMode(mode);
     if (desktopType == DesktopType.main || isAndroid || isIOS || isWeb) {
       if (mode == ThemeMode.system) {
@@ -3177,6 +3177,9 @@ importConfig(List<TextEditingController>? controllers, List<RxString>? errMsgs,
   if (text != null && text.isNotEmpty) {
     try {
       final sc = ServerConfig.decode(text);
+      if (isWeb || isIOS) {
+        sc.relayServer = '';
+      }
       if (sc.idServer.isNotEmpty) {
         Future<bool> success = setServerConfig(controllers, errMsgs, sc);
         success.then((value) {
@@ -3616,3 +3619,7 @@ List<SubWindowResizeEdge>? get subWindowManagerEnableResizeEdges => isWindows
         SubWindowResizeEdge.topRight,
       ]
     : null;
+
+void earlyAssert() {
+  assert('\1' == '1');
+}

@@ -648,5 +648,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Authentication Required", "Требуется аутентификация"),
         ("Authenticate", "Аутентификация"),
         ("web_id_input_tip", "Можно ввести ID на том же сервере, прямой доступ по IP в веб-клиенте не поддерживается.\nЕсли вы хотите получить доступ к устройству на другом сервере, добавьте адрес сервера (<id>@<адрес_сервера>?key=<ключ>), например,\n9123456234@192.168.16.1:21117?key=5Qbwsde3unUcJBtrx9ZkvUmwFNoExHzpryHuPUdqlWM=.\nЕсли вы хотите получить доступ к устройству на публичном сервере, введите \"<id>@public\", для публичного сервера ключ не нужен."),
+        ("Download", ""),
+        ("Upload folder", ""),
+        ("Upload files", ""),
+        ("Clipboard is synchronized", ""),
     ].iter().cloned().collect();
 }
