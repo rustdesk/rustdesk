@@ -647,10 +647,10 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("one-way-file-transfer-tip", "Kontrolējamajā pusē ir iespējota vienvirziena failu pārsūtīšana."),
         ("Authentication Required", "Nepieciešama autentifikācija"),
         ("Authenticate", "Autentificēt"),
-        ("web_id_input_tip", ""),
-        ("Download", ""),
-        ("Upload folder", ""),
-        ("Upload files", ""),
-        ("Clipboard is synchronized", ""),
+        ("web_id_input_tip", "Varat ievadīt ID tajā pašā serverī, tīmekļa klientā tiešā IP piekļuve netiek atbalstīta.\nJa vēlaties piekļūt ierīcei citā serverī, lūdzu, pievienojiet servera adresi (<id>@<server_address>?key=<key_value>), piemēram,\n9123456234@192.168.16.1:21117?key=5Qbwsde3unUcJBtrx9ZkvUmwFNoExHzpryHuPUdqlWM=.\nJa vēlaties piekļūt ierīcei publiskajā serverī, lūdzu, ievadiet \"<id>@public\", publiskajam serverim atslēga nav nepieciešama."),
+        ("Download", "Lejupielādēt"),
+        ("Upload folder", "Augšupielādēt mapi"),
+        ("Upload files", "Augšupielādēt failus"),
+        ("Clipboard is synchronized", "Starpliktuve ir sinhronizēta"),
     ].iter().cloned().collect();
 }

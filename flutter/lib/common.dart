@@ -2038,6 +2038,8 @@ Future<bool> restoreWindowPosition(WindowType type,
   return false;
 }
 
+var webInitialLink = "";
+
 /// Initialize uni links for macos/windows
 ///
 /// [Availability]
@@ -2054,7 +2056,12 @@ Future<bool> initUniLinks() async {
     if (initialLink == null || initialLink.isEmpty) {
       return false;
     }
-    return handleUriLink(uriString: initialLink);
+    if (isWeb) {
+      webInitialLink = initialLink;
+      return false;
+    } else {
+      return handleUriLink(uriString: initialLink);
+    }
   } catch (err) {
     debugPrintStack(label: "$err");
     return false;
@@ -2067,7 +2074,7 @@ Future<bool> initUniLinks() async {
 ///
 /// Returns a [StreamSubscription] which can listen the uni links.
 StreamSubscription? listenUniLinks({handleByFlutter = true}) {
-  if (isLinux) {
+  if (isLinux || isWeb) {
     return null;
   }
 

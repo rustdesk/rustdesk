@@ -162,7 +162,7 @@ void runMobileApp() async {
   await Future.wait([gFFI.abModel.loadCache(), gFFI.groupModel.loadCache()]);
   gFFI.userModel.refreshCurrentUser();
   runApp(App());
-  if (!isWeb) await initUniLinks();
+  await initUniLinks();
 }
 
 void runMultiWindow(
