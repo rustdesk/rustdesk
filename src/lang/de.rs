@@ -651,6 +651,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Download", "Herunterladen"),
         ("Upload folder", "Ordner hochladen"),
         ("Upload files", "Dateien hochladen"),
-        ("Clipboard is synchronized", ""),
+        ("Clipboard is synchronized", "Zwischenablage ist synchronisiert"),
     ].iter().cloned().collect();
 }

@@ -101,15 +101,8 @@ class StateGlobal {
     if (procWnd) {
       final wc = WindowController.fromWindowId(windowId);
       wc.setFullscreen(_fullscreen.isTrue).then((_) {
-        // https://github.com/leanflutter/window_manager/issues/131#issuecomment-1111587982
-        if (isWindows && _fullscreen.isFalse) {
-          Future.delayed(Duration.zero, () async {
-            final frame = await wc.getFrame();
-            final newRect = Rect.fromLTWH(
-                frame.left, frame.top, frame.width + 1, frame.height + 1);
-            await wc.setFrame(newRect);
-          });
-        }
+        // We remove the redraw (width + 1, height + 1), because this issue cannot be reproduced.
+        // https://github.com/rustdesk/rustdesk/issues/9675
       });
     }
   }
