@@ -580,7 +580,8 @@ class _GeneralState extends State<_General> {
               kOptionAllowAutoRecordIncoming),
         if (!bind.isIncomingOnly())
           _OptionCheckBox(context, 'Automatically record outgoing sessions',
-              kOptionAllowAutoRecordOutgoing),
+              kOptionAllowAutoRecordOutgoing,
+              isServer: false),
         if (showRootDir && !bind.isOutgoingOnly())
           Row(
             children: [
@@ -635,7 +636,7 @@ class _GeneralState extends State<_General> {
                                   await FilePicker.platform.getDirectoryPath(
                                       initialDirectory: initialDirectory);
                               if (selectedDirectory != null) {
-                                await bind.mainSetOption(
+                                await bind.mainSetLocalOption(
                                     key: kOptionVideoSaveDirectory,
                                     value: selectedDirectory);
                                 setState(() {});

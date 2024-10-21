@@ -1442,7 +1442,7 @@ impl LoginConfigHandler {
         self.adapter_luid = adapter_luid;
         self.selected_windows_session_id = None;
         self.shared_password = shared_password;
-        self.record = Config::get_bool_option(OPTION_ALLOW_AUTO_RECORD_OUTGOING);
+        self.record = LocalConfig::get_bool_option(OPTION_ALLOW_AUTO_RECORD_OUTGOING);
     }
 
     /// Check if the client should auto login.
