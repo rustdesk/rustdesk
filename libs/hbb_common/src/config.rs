@@ -1562,6 +1562,10 @@ impl LocalConfig {
         .unwrap_or_default()
     }
 
+    pub fn get_bool_option(k: &str) -> bool {
+        option2bool(k, &Self::get_option(k))
+    }
+
     pub fn set_option(k: String, v: String) {
         if !is_option_can_save(&OVERWRITE_LOCAL_SETTINGS, &k, &DEFAULT_LOCAL_SETTINGS, &v) {
             return;
@@ -2326,6 +2330,8 @@ pub mod keys {
         OPTION_DISABLE_GROUP_PANEL,
         OPTION_PRE_ELEVATE_SERVICE,
         OPTION_ALLOW_REMOTE_CM_MODIFICATION,
+        OPTION_ALLOW_AUTO_RECORD_OUTGOING,
+        OPTION_VIDEO_SAVE_DIRECTORY,
     ];
     // DEFAULT_SETTINGS, OVERWRITE_SETTINGS
     pub const KEYS_SETTINGS: &[&str] = &[
@@ -2347,8 +2353,6 @@ pub mod keys {
         OPTION_AUTO_DISCONNECT_TIMEOUT,
         OPTION_ALLOW_ONLY_CONN_WINDOW_OPEN,
         OPTION_ALLOW_AUTO_RECORD_INCOMING,
-        OPTION_ALLOW_AUTO_RECORD_OUTGOING,
-        OPTION_VIDEO_SAVE_DIRECTORY,
         OPTION_ENABLE_ABR,
         OPTION_ALLOW_REMOVE_WALLPAPER,
         OPTION_ALLOW_ALWAYS_SOFTWARE_RENDER,

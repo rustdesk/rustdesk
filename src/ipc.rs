@@ -270,6 +270,7 @@ pub enum Data {
     HwCodecConfig(Option<String>),
     RemoveTrustedDevices(Vec<Bytes>),
     ClearTrustedDevices,
+    LocalOption((String, Option<String>)),
 }
 
 #[tokio::main(flavor = "current_thread")]
@@ -657,6 +658,15 @@ async fn handle(data: Data, stream: &mut Connection) {
         Data::ClearTrustedDevices => {
             Config::clear_trusted_devices();
         }
+        Data::LocalOption((k, v)) => match v {
+            None => {
+                let v = get_local_option(k.clone());
+                allow_err!(stream.send(&Data::LocalOption((k, Some(v)))).await);
+            }
+            Some(v) => {
+                set_local_option(k, v);
+            }
+        },
         _ => {}
     }
 }
@@ -890,7 +900,7 @@ pub async fn set_data(data: &Data) -> ResultType<()> {
     set_data_async(data).await
 }
 
-pub async fn set_data_async(data: &Data) -> ResultType<()> {
+async fn set_data_async(data: &Data) -> ResultType<()> {
     let mut c = connect(1000, "").await?;
     c.send(data).await?;
     Ok(())
