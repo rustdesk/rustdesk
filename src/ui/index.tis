@@ -253,10 +253,12 @@ class Enhancements: Reactor.Component {
             var root_dir = show_root_dir ? handler.video_save_directory(true) : "";
             var ts0 = handler.get_option("enable-record-session") == '' ? { checked: true } : {};
             var ts1 = handler.get_option("allow-auto-record-incoming") == 'Y' ? { checked: true } : {};
+            var ts2 = handler.get_option("allow-auto-record-outgoing") == 'Y' ? { checked: true } : {};
             msgbox("custom-recording", translate('Recording'),
                 <div .form>
                     <div><button|checkbox(enable_record_session) {ts0}>{translate('Enable recording session')}</button></div>
                     <div><button|checkbox(auto_record_incoming) {ts1}>{translate('Automatically record incoming sessions')}</button></div>
+                    <div><button|checkbox(auto_record_outgoing) {ts2}>{translate('Automatically record outgoing sessions')}</button></div>
                     <div>
                         {show_root_dir ? <div style="word-wrap:break-word"><span>{translate("Incoming")}:&nbsp;&nbsp;</span><span>{root_dir}</span></div> : ""}
                         <div style="word-wrap:break-word"><span>{translate(show_root_dir ? "Outgoing" : "Directory")}:&nbsp;&nbsp;</span><span #folderPath>{user_dir}</span></div>
@@ -267,6 +269,7 @@ class Enhancements: Reactor.Component {
                 if (!res) return;
                 handler.set_option("enable-record-session", res.enable_record_session ? '' : 'N');
                 handler.set_option("allow-auto-record-incoming", res.auto_record_incoming ? 'Y' : '');
+                handler.set_option("allow-auto-record-outgoing", res.auto_record_outgoing ? 'Y' : '');
                 handler.set_option("video-save-directory", $(#folderPath).text);
             });
         }

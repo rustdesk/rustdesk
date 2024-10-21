@@ -15,7 +15,7 @@ use crate::{
     aom::{self, AomDecoder, AomEncoder, AomEncoderConfig},
     common::GoogleImage,
     vpxcodec::{self, VpxDecoder, VpxDecoderConfig, VpxEncoder, VpxEncoderConfig, VpxVideoCodecId},
-    CodecFormat, EncodeInput, EncodeYuvFormat, ImageRgb,
+    CodecFormat, EncodeInput, EncodeYuvFormat, ImageRgb, ImageTexture,
 };
 
 use hbb_common::{
@@ -623,7 +623,7 @@ impl Decoder {
         &mut self,
         frame: &video_frame::Union,
         rgb: &mut ImageRgb,
-        _texture: &mut *mut c_void,
+        _texture: &mut ImageTexture,
         _pixelbuffer: &mut bool,
         chroma: &mut Option<Chroma>,
     ) -> ResultType<bool> {
@@ -777,12 +777,16 @@ impl Decoder {
     fn handle_vram_video_frame(
         decoder: &mut VRamDecoder,
         frames: &EncodedVideoFrames,
-        texture: &mut *mut c_void,
+        texture: &mut ImageTexture,
     ) -> ResultType<bool> {
         let mut ret = false;
         for h26x in frames.frames.iter() {
             for image in decoder.decode(&h26x.data)? {
-                *texture = image.frame.texture;
+                *texture = ImageTexture {
+                    texture: image.frame.texture,
+                    w: image.frame.width as _,
+                    h: image.frame.height as _,
+                };
                 ret = true;
             }
         }

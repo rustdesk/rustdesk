@@ -62,4 +62,3 @@ gstreamer-video = { version = "0.16", optional = true }
 git = "https://github.com/rustdesk-org/hwcodec"
 optional = true
 
-

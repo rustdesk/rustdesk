@@ -17,7 +17,7 @@ use serde::Serialize;
 use serde_json::json;
 
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     ffi::CString,
     os::raw::{c_char, c_int, c_void},
     str::FromStr,
@@ -1010,6 +1010,10 @@ impl InvokeUiSession for FlutterHandler {
             rgba_data.valid = false;
         }
     }
+
+    fn update_record_status(&self, start: bool) {
+        self.push_event("record_status", &[("start", &start.to_string())], &[]);
+    }
 }
 
 impl FlutterHandler {
@@ -1830,7 +1834,6 @@ pub(super) fn session_update_virtual_display(session: &FlutterSession, index: i3
 
 // sessions mod is used to avoid the big lock of sessions' map.
 pub mod sessions {
-    use std::collections::HashSet;
 
     use super::*;
 

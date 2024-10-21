@@ -92,6 +92,13 @@ class _RemotePageState extends State<RemotePage> {
     gFFI.chatModel
         .changeCurrentKey(MessageKey(widget.id, ChatModel.clientModeID));
     _blockableOverlayState.applyFfi(gFFI);
+    gFFI.imageModel.addCallbackOnFirstImage((String peerId) {
+      gFFI.recordingModel
+          .updateStatus(bind.sessionGetIsRecording(sessionId: gFFI.sessionId));
+      if (gFFI.recordingModel.start) {
+        showToast(translate('Automatically record outgoing sessions'));
+      }
+    });
   }
 
   @override
@@ -207,7 +214,7 @@ class _RemotePageState extends State<RemotePage> {
   }
 
   void _handleNonIOSSoftKeyboardInput(String newValue) {
-        _composingTimer?.cancel();
+    _composingTimer?.cancel();
     if (_textController.value.isComposingRangeValid) {
       _composingTimer = Timer(Duration(milliseconds: 25), () {
         _handleNonIOSSoftKeyboardInput(_textController.value.text);

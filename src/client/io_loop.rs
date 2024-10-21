@@ -837,10 +837,8 @@ impl<T: InvokeUiSession> Remote<T> {
                     self.handle_job_status(id, -1, err);
                 }
             }
-            Data::RecordScreen(start, display, w, h, id) => {
-                let _ = self
-                    .video_sender
-                    .send(MediaData::RecordScreen(start, display, w, h, id));
+            Data::RecordScreen(start) => {
+                let _ = self.video_sender.send(MediaData::RecordScreen(start));
             }
             Data::ElevateDirect => {
                 let mut request = ElevationRequest::new();
@@ -1218,7 +1216,7 @@ impl<T: InvokeUiSession> Remote<T> {
                             crate::plugin::handle_listen_event(
                                 crate::plugin::EVENT_ON_CONN_CLIENT.to_owned(),
                                 self.handler.get_id(),
-                            )
+                            );
                         }
 
                         if self.handler.is_file_transfer() {

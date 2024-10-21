@@ -30,7 +30,6 @@ pub use file_trait::FileManager;
 #[cfg(not(feature = "flutter"))]
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use hbb_common::tokio::sync::mpsc::UnboundedSender;
-use hbb_common::tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver};
 use hbb_common::{
     allow_err,
     anyhow::{anyhow, Context},
@@ -54,11 +53,15 @@ use hbb_common::{
     },
     AddrMangle, ResultType, Stream,
 };
+use hbb_common::{
+    config::keys::OPTION_ALLOW_AUTO_RECORD_OUTGOING,
+    tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver},
+};
 pub use helper::*;
 use scrap::{
     codec::Decoder,
     record::{Recorder, RecorderContext},
-    CodecFormat, ImageFormat, ImageRgb,
+    CodecFormat, ImageFormat, ImageRgb, ImageTexture,
 };
 
 use crate::{
@@ -1146,7 +1149,7 @@ impl AudioHandler {
 pub struct VideoHandler {
     decoder: Decoder,
     pub rgb: ImageRgb,
-    pub texture: *mut c_void,
+    pub texture: ImageTexture,
     recorder: Arc<Mutex<Option<Recorder>>>,
     record: bool,
     _display: usize, // useful for debug
@@ -1172,7 +1175,7 @@ impl VideoHandler {
         VideoHandler {
             decoder: Decoder::new(format, luid),
             rgb: ImageRgb::new(ImageFormat::ARGB, crate::get_dst_align_rgba()),
-            texture: std::ptr::null_mut(),
+            texture: Default::default(),
             recorder: Default::default(),
             record: false,
             _display,
@@ -1220,11 +1223,14 @@ impl VideoHandler {
                 }
                 self.first_frame = false;
                 if self.record {
-                    self.recorder
-                        .lock()
-                        .unwrap()
-                        .as_mut()
-                        .map(|r| r.write_frame(frame));
+                    self.recorder.lock().unwrap().as_mut().map(|r| {
+                        let (w, h) = if *pixelbuffer {
+                            (self.rgb.w, self.rgb.h)
+                        } else {
+                            (self.texture.w, self.texture.h)
+                        };
+                        r.write_frame(frame, w, h).ok();
+                    });
                 }
                 res
             }
@@ -1248,17 +1254,14 @@ impl VideoHandler {
     }
 
     /// Start or stop screen record.
-    pub fn record_screen(&mut self, start: bool, w: i32, h: i32, id: String) {
+    pub fn record_screen(&mut self, start: bool, id: String, display: usize) {
         self.record = false;
         if start {
             self.recorder = Recorder::new(RecorderContext {
                 server: false,
                 id,
                 dir: crate::ui_interface::video_save_directory(false),
-                filename: "".to_owned(),
-                width: w as _,
-                height: h as _,
-                format: scrap::CodecFormat::VP9,
+                display,
                 tx: None,
             })
             .map_or(Default::default(), |r| Arc::new(Mutex::new(Some(r))));
@@ -1347,6 +1350,7 @@ pub struct LoginConfigHandler {
     password_source: PasswordSource, // where the sent password comes from
     shared_password: Option<String>, // Store the shared password
     pub enable_trusted_devices: bool,
+    pub record: bool,
 }
 
 impl Deref for LoginConfigHandler {
@@ -1438,6 +1442,7 @@ impl LoginConfigHandler {
         self.adapter_luid = adapter_luid;
         self.selected_windows_session_id = None;
         self.shared_password = shared_password;
+        self.record = Config::get_bool_option(OPTION_ALLOW_AUTO_RECORD_OUTGOING);
     }
 
     /// Check if the client should auto login.
@@ -2227,7 +2232,7 @@ pub enum MediaData {
     AudioFrame(Box<AudioFrame>),
     AudioFormat(AudioFormat),
     Reset(Option<usize>),
-    RecordScreen(bool, usize, i32, i32, String),
+    RecordScreen(bool),
 }
 
 pub type MediaSender = mpsc::Sender<MediaData>;
@@ -2303,10 +2308,16 @@ where
                         let start = std::time::Instant::now();
                         let format = CodecFormat::from(&vf);
                         if !handler_controller_map.contains_key(&display) {
+                            let mut handler = VideoHandler::new(format, display);
+                            let record = session.lc.read().unwrap().record;
+                            let id = session.lc.read().unwrap().id.clone();
+                            if record {
+                                handler.record_screen(record, id, display);
+                            }
                             handler_controller_map.insert(
                                 display,
                                 VideoHandlerController {
-                                    handler: VideoHandler::new(format, display),
+                                    handler,
                                     skip_beginning: 0,
                                 },
                             );
@@ -2325,7 +2336,7 @@ where
                                     video_callback(
                                         display,
                                         &mut handler_controller.handler.rgb,
-                                        handler_controller.handler.texture,
+                                        handler_controller.handler.texture.texture,
                                         pixelbuffer,
                                     );
 
@@ -2399,18 +2410,19 @@ where
                             }
                         }
                     }
-                    MediaData::RecordScreen(start, display, w, h, id) => {
-                        log::info!("record screen command: start: {start}, display: {display}");
-                        // Compatible with the sciter version(single ui session).
-                        // For the sciter version, there're no multi-ui-sessions for one connection.
-                        // The display is always 0, video_handler_controllers.len() is always 1. So we use the first video handler.
-                        if let Some(handler_controler) = handler_controller_map.get_mut(&display) {
-                            handler_controler.handler.record_screen(start, w, h, id);
-                        } else if handler_controller_map.len() == 1 {
-                            if let Some(handler_controler) =
-                                handler_controller_map.values_mut().next()
-                            {
-                                handler_controler.handler.record_screen(start, w, h, id);
+                    MediaData::RecordScreen(start) => {
+                        log::info!("record screen command: start: {start}");
+                        let record = session.lc.read().unwrap().record;
+                        session.update_record_status(start);
+                        if record != start {
+                            session.lc.write().unwrap().record = start;
+                            let id = session.lc.read().unwrap().id.clone();
+                            for (display, handler_controler) in handler_controller_map.iter_mut() {
+                                handler_controler.handler.record_screen(
+                                    start,
+                                    id.clone(),
+                                    *display,
+                                );
                             }
                         }
                     }
@@ -3169,7 +3181,7 @@ pub enum Data {
     SetConfirmOverrideFile((i32, i32, bool, bool, bool)),
     AddJob((i32, String, String, i32, bool, bool)),
     ResumeJob((i32, bool)),
-    RecordScreen(bool, usize, i32, i32, String),
+    RecordScreen(bool),
     ElevateDirect,
     ElevateWithLogon(String, String),
     NewVoiceCall,

@@ -364,6 +364,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Recording", "การบันทึก"),
         ("Directory", "ไดเรกทอรี่"),
         ("Automatically record incoming sessions", "บันทึกเซสชันขาเข้าโดยอัตโนมัติ"),
+        ("Automatically record outgoing sessions", ""),
         ("Change", "เปลี่ยน"),
         ("Start session recording", "เริ่มต้นการบันทึกเซสชัน"),
         ("Stop session recording", "หยุดการบันทึกเซสซัน"),

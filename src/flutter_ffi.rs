@@ -241,21 +241,17 @@ pub fn session_is_multi_ui_session(session_id: SessionID) -> SyncReturn<bool> {
     }
 }
 
-pub fn session_record_screen(
-    session_id: SessionID,
-    start: bool,
-    display: usize,
-    width: usize,
-    height: usize,
-) {
+pub fn session_record_screen(session_id: SessionID, start: bool) {
     if let Some(session) = sessions::get_session_by_session_id(&session_id) {
-        session.record_screen(start, display as _, width as _, height as _);
+        session.record_screen(start);
     }
 }
 
-pub fn session_record_status(session_id: SessionID, status: bool) {
+pub fn session_get_is_recording(session_id: SessionID) -> SyncReturn<bool> {
     if let Some(session) = sessions::get_session_by_session_id(&session_id) {
-        session.record_status(status);
+        SyncReturn(session.is_recording())
+    } else {
+        SyncReturn(false)
     }
 }
 
