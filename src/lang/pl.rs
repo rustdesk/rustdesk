@@ -648,7 +648,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("one-way-file-transfer-tip", "Jednokierunkowy transfer plików jest włączony po stronie kontrolowanej."),
         ("Authentication Required", "Wymagana autoryzacja"),
         ("Authenticate", "Uwierzytelnienie"),
-        ("web_id_input_tip", "Jeśli chcesz uzyskać dostęp do urządzenia na innym serwerze, dodaj adres serwera (<id>@<adres_serwera>?key=<wartosc_klucza>) na przykład, \n9123456234@192.168.16.1:21117?key=5Qbwsde3unUcJBtrx9ZkvUmwFNoExHzpryHuPUdqlWM=.\nJeśli chcesz uzyskać dostęp do urządzenia na serwerze publicznym, wprowadź \„<id>@public\”, klucz nie jest wymagany dla serwera publicznego."),
+        ("web_id_input_tip", "Jeśli chcesz uzyskać dostęp do urządzenia na innym serwerze, dodaj adres serwera (<id>@<adres_serwera>?key=<wartosc_klucza>) na przykład, \n9123456234@192.168.16.1:21117?key=5Qbwsde3unUcJBtrx9ZkvUmwFNoExHzpryHuPUdqlWM=.\nJeśli chcesz uzyskać dostęp do urządzenia na serwerze publicznym, wprowadź \"<id>@public\", klucz nie jest wymagany dla serwera publicznego."),
         ("Download", "Pobierz"),
         ("Upload folder", "Wyślij folder"),
         ("Upload files", "Wyślij pliki"),
