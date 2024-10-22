@@ -212,7 +212,7 @@ pub fn get_builtin_option(key: &str) -> String {
 
 #[inline]
 pub fn set_local_option(key: String, value: String) {
-    LocalConfig::set_option(key, value);
+    LocalConfig::set_option(key.clone(), value.clone());
 }
 
 #[cfg(any(target_os = "android", target_os = "ios", feature = "flutter"))]
@@ -844,7 +844,11 @@ pub fn video_save_directory(root: bool) -> String {
             return dir.to_string_lossy().to_string();
         }
     }
-    let dir = Config::get_option("video-save-directory");
+    // Get directory from config file otherwise --server will use the old value from global var.
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    let dir = LocalConfig::get_option_from_file(OPTION_VIDEO_SAVE_DIRECTORY);
+    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+    let dir = LocalConfig::get_option(OPTION_VIDEO_SAVE_DIRECTORY);
     if !dir.is_empty() {
         return dir;
     }

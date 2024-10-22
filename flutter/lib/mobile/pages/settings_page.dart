@@ -106,7 +106,7 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
     _autoRecordIncomingSession = option2bool(kOptionAllowAutoRecordIncoming,
         bind.mainGetOptionSync(key: kOptionAllowAutoRecordIncoming));
     _autoRecordOutgoingSession = option2bool(kOptionAllowAutoRecordOutgoing,
-        bind.mainGetOptionSync(key: kOptionAllowAutoRecordOutgoing));
+        bind.mainGetLocalOption(key: kOptionAllowAutoRecordOutgoing));
     _localIP = bind.mainGetOptionSync(key: 'local-ip-addr');
     _directAccessPort = bind.mainGetOptionSync(key: kOptionDirectAccessPort);
     _allowAutoDisconnect = option2bool(kOptionAllowAutoDisconnect,
@@ -711,13 +711,13 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
                   onToggle: isOptionFixed(kOptionAllowAutoRecordOutgoing)
                       ? null
                       : (v) async {
-                          await bind.mainSetOption(
+                          await bind.mainSetLocalOption(
                               key: kOptionAllowAutoRecordOutgoing,
                               value: bool2option(
                                   kOptionAllowAutoRecordOutgoing, v));
                           final newValue = option2bool(
                               kOptionAllowAutoRecordOutgoing,
-                              await bind.mainGetOption(
+                              bind.mainGetLocalOption(
                                   key: kOptionAllowAutoRecordOutgoing));
                           setState(() {
                             _autoRecordOutgoingSession = newValue;
