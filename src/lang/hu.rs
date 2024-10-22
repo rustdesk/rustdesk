@@ -364,6 +364,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Recording", "Felvétel"),
         ("Directory", "Könyvtár"),
         ("Automatically record incoming sessions", "A bejövő munkamenetek automatikus rögzítése"),
+        ("Automatically record outgoing sessions", ""),
         ("Change", "Változtatás"),
         ("Start session recording", "Munkamenet rögzítés indítása"),
         ("Stop session recording", "Munkamenet rögzítés leállítása"),

@@ -364,6 +364,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Recording", "Запис"),
         ("Directory", "Директорія"),
         ("Automatically record incoming sessions", "Автоматично записувати вхідні сеанси"),
+        ("Automatically record outgoing sessions", ""),
         ("Change", "Змінити"),
         ("Start session recording", "Розпочати запис сеансу"),
         ("Stop session recording", "Закінчити запис сеансу"),
