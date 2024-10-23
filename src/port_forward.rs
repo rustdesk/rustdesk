@@ -118,11 +118,14 @@ async fn connect_and_login(
     } else {
         ConnType::PORT_FORWARD
     };
-    let (mut stream, direct, _pk) =
+    let ((mut stream, direct, _pk), (feedback, rendezvous_server)) =
         Client::start(id, key, token, conn_type, interface.clone()).await?;
     interface.update_direct(Some(direct));
     let mut buffer = Vec::new();
     let mut received = false;
+
+    let _keep_it = hc_connection(feedback, rendezvous_server, token).await;
+
     loop {
         tokio::select! {
             res = timeout(READ_TIMEOUT, stream.next()) => match res {

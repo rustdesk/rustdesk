@@ -21,7 +21,6 @@ static void my_application_activate(GApplication* application) {
   MyApplication* self = MY_APPLICATION(application);
   GtkWindow* window =
       GTK_WINDOW(gtk_application_window_new(GTK_APPLICATION(application)));
-  // we have custom window frame
   gtk_window_set_decorated(window, FALSE);
   // try setting icon for rustdesk, which uses the system cache 
   GtkIconTheme* theme = gtk_icon_theme_get_default();
@@ -75,12 +74,7 @@ static void my_application_activate(GApplication* application) {
 
   FlView* view = fl_view_new(project);
   gtk_widget_show(GTK_WIDGET(view));
-  
-  auto border_frame = gtk_frame_new(nullptr);
-  gtk_frame_set_shadow_type(GTK_FRAME(border_frame), GTK_SHADOW_ETCHED_IN);
-  gtk_container_add(GTK_CONTAINER(border_frame), GTK_WIDGET(view));
-  gtk_widget_show(GTK_WIDGET(border_frame));
-  gtk_container_add(GTK_CONTAINER(window), GTK_WIDGET(border_frame));
+  gtk_container_add(GTK_CONTAINER(window), GTK_WIDGET(view));
 
   fl_register_plugins(FL_PLUGIN_REGISTRY(view));
 

@@ -135,6 +135,7 @@ pub(super) async fn check_init() -> ResultType<()> {
         let mut maxx = 0;
         let mut miny = 0;
         let mut maxy = 0;
+        let use_uinput = crate::input_service::wayland_use_uinput();
 
         if *CAP_DISPLAY_INFO.read().unwrap() == 0 {
             let mut lock = CAP_DISPLAY_INFO.write().unwrap();
@@ -167,28 +168,29 @@ pub(super) async fn check_init() -> ResultType<()> {
                     num_cpus::get(),
                 );
 
-                let (max_width, max_height) = match get_max_desktop_resolution() {
-                    Some(result) if !result.is_empty() => {
-                        let resolution: Vec<&str> = result.split(" ").collect();
-                        let w: i32 = resolution[0].parse().unwrap_or(origin.0 + width as i32);
-                        let h: i32 = resolution[2]
-                            .trim_end_matches(",")
-                            .parse()
-                            .unwrap_or(origin.1 + height as i32);
-                        if w < origin.0 + width as i32 || h < origin.1 + height as i32 {
-                            (origin.0 + width as i32, origin.1 + height as i32)
+                if use_uinput {
+                    let (max_width, max_height) = match get_max_desktop_resolution() {
+                        Some(result) if !result.is_empty() => {
+                            let resolution: Vec<&str> = result.split(" ").collect();
+                            let w: i32 = resolution[0].parse().unwrap_or(origin.0 + width as i32);
+                            let h: i32 = resolution[2]
+                                .trim_end_matches(",")
+                                .parse()
+                                .unwrap_or(origin.1 + height as i32);
+                            if w < origin.0 + width as i32 || h < origin.1 + height as i32 {
+                                (origin.0 + width as i32, origin.1 + height as i32)
+                            } else {
+                                (w, h)
+                            }
                         }
-                        else{
-                            (w, h)
-                        }
-                    }
-                    _ => (origin.0 + width as i32, origin.1 + height as i32),
-                };
+                        _ => (origin.0 + width as i32, origin.1 + height as i32),
+                    };
 
-                minx = 0;
-                maxx = max_width;
-                miny = 0;
-                maxy = max_height;
+                    minx = 0;
+                    maxx = max_width;
+                    miny = 0;
+                    maxy = max_height;
+                }
 
                 let capturer = Box::into_raw(Box::new(
                     Capturer::new(display).with_context(|| "Failed to create capturer")?,
@@ -206,15 +208,17 @@ pub(super) async fn check_init() -> ResultType<()> {
             }
         }
 
-        if minx != maxx && miny != maxy {
-            log::info!(
-                "update mouse resolution: ({}, {}), ({}, {})",
-                minx,
-                maxx,
-                miny,
-                maxy
-            );
-            allow_err!(input_service::update_mouse_resolution(minx, maxx, miny, maxy).await);
+        if use_uinput {
+            if minx != maxx && miny != maxy {
+                log::info!(
+                    "update mouse resolution: ({}, {}), ({}, {})",
+                    minx,
+                    maxx,
+                    miny,
+                    maxy
+                );
+                allow_err!(input_service::update_mouse_resolution(minx, maxx, miny, maxy).await);
+            }
         }
     }
     Ok(())

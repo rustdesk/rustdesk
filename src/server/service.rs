@@ -35,6 +35,7 @@ pub struct ServiceInner<T: Subscriber + From<ConnInner>> {
 
 pub trait Reset {
     fn reset(&mut self);
+    fn init(&mut self) {}
 }
 
 pub struct ServiceTmpl<T: Subscriber + From<ConnInner>>(Arc<RwLock<ServiceInner<T>>>);
@@ -266,14 +267,15 @@ impl<T: Subscriber + From<ConnInner>> ServiceTmpl<T> {
             while sp.active() {
                 let now = time::Instant::now();
                 if sp.has_subscribes() {
+                    if !may_reset {
+                        may_reset = true;
+                        state.init();
+                    }
                     if let Err(err) = callback(sp.clone(), &mut state) {
                         log::error!("Error of {} service: {}", sp.name(), err);
                         thread::sleep(time::Duration::from_millis(MAX_ERROR_TIMEOUT));
                         #[cfg(windows)]
                         crate::platform::windows::try_change_desktop();
-                    }
-                    if !may_reset {
-                        may_reset = true;
                     }
                 } else if may_reset {
                     state.reset();

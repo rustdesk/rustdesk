@@ -1,4 +1,4 @@
-#[cfg(all(windows, feature = "virtual_display_driver"))]
+#[cfg(windows)]
 use crate::platform::is_installed;
 use crate::ui_interface::get_option;
 #[cfg(windows)]
@@ -6,9 +6,12 @@ use crate::{
     display_service,
     ipc::{connect, Data},
 };
-#[cfg(windows)]
-use hbb_common::tokio;
-use hbb_common::{anyhow::anyhow, bail, lazy_static, ResultType};
+use hbb_common::{
+    anyhow::anyhow,
+    bail, lazy_static,
+    tokio::{self, sync::oneshot},
+    ResultType,
+};
 use serde_derive::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
@@ -24,25 +27,20 @@ pub mod win_mag;
 #[cfg(windows)]
 pub mod win_topmost_window;
 
-#[cfg(all(windows, feature = "virtual_display_driver"))]
+#[cfg(windows)]
 mod win_virtual_display;
-#[cfg(all(windows, feature = "virtual_display_driver"))]
+#[cfg(windows)]
 pub use win_virtual_display::restore_reg_connectivity;
 
 pub const INVALID_PRIVACY_MODE_CONN_ID: i32 = 0;
-pub const OCCUPIED: &'static str = "Privacy occupied by another one";
+pub const OCCUPIED: &'static str = "Privacy occupied by another one.";
 pub const TURN_OFF_OTHER_ID: &'static str =
-    "Failed to turn off privacy mode that belongs to someone else";
-pub const NO_DISPLAYS: &'static str = "No displays";
+    "Failed to turn off privacy mode that belongs to someone else.";
+pub const NO_PHYSICAL_DISPLAYS: &'static str = "no_need_privacy_mode_no_physical_displays_tip";
 
-#[cfg(windows)]
-pub const PRIVACY_MODE_IMPL_WIN_MAG: &str = win_mag::PRIVACY_MODE_IMPL;
-#[cfg(windows)]
-pub const PRIVACY_MODE_IMPL_WIN_EXCLUDE_FROM_CAPTURE: &str =
-    win_exclude_from_capture::PRIVACY_MODE_IMPL;
-
-#[cfg(all(windows, feature = "virtual_display_driver"))]
-pub const PRIVACY_MODE_IMPL_WIN_VIRTUAL_DISPLAY: &str = win_virtual_display::PRIVACY_MODE_IMPL;
+pub const PRIVACY_MODE_IMPL_WIN_MAG: &str = "privacy_mode_impl_mag";
+pub const PRIVACY_MODE_IMPL_WIN_EXCLUDE_FROM_CAPTURE: &str = "privacy_mode_impl_exclude_from_capture";
+pub const PRIVACY_MODE_IMPL_WIN_VIRTUAL_DISPLAY: &str = "privacy_mode_impl_virtual_display";
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(tag = "t", content = "c")]
@@ -53,6 +51,8 @@ pub enum PrivacyModeState {
 }
 
 pub trait PrivacyMode: Sync + Send {
+    fn is_async_privacy_mode(&self) -> bool;
+
     fn init(&self) -> ResultType<()>;
     fn clear(&mut self);
     fn turn_on_privacy(&mut self, conn_id: i32) -> ResultType<bool>;
@@ -98,16 +98,9 @@ lazy_static::lazy_static! {
                 if display_service::is_privacy_mode_mag_supported() {
                     PRIVACY_MODE_IMPL_WIN_MAG
                 } else {
-                    #[cfg(feature = "virtual_display_driver")]
-                    {
-                        if is_installed() {
-                            PRIVACY_MODE_IMPL_WIN_VIRTUAL_DISPLAY
-                        } else {
-                            ""
-                        }
-                    }
-                    #[cfg(not(feature = "virtual_display_driver"))]
-                    {
+                    if is_installed() {
+                        PRIVACY_MODE_IMPL_WIN_VIRTUAL_DISPLAY
+                    } else {
                         ""
                     }
                 }
@@ -152,7 +145,6 @@ lazy_static::lazy_static! {
                 });
             }
 
-            #[cfg(feature = "virtual_display_driver")]
             map.insert(win_virtual_display::PRIVACY_MODE_IMPL, |impl_key: &str| {
                     Box::new(win_virtual_display::PrivacyModeImpl::new(impl_key))
                 });
@@ -190,6 +182,7 @@ fn get_supported_impl(impl_key: &str) -> String {
     if supported_impls.iter().any(|(k, _)| k == &impl_key) {
         return impl_key.to_owned();
     };
+    // TODO: Is it a good idea to use fallback here? Because user do not know the fallback.
     // fallback
     let mut cur_impl = get_option("privacy-mode-impl-key".to_owned());
     if !get_supported_privacy_mode_impl()
@@ -202,8 +195,42 @@ fn get_supported_impl(impl_key: &str) -> String {
     cur_impl
 }
 
+pub async fn turn_on_privacy(impl_key: &str, conn_id: i32) -> Option<ResultType<bool>> {
+    if is_async_privacy_mode() {
+        turn_on_privacy_async(impl_key.to_string(), conn_id).await
+    } else {
+        turn_on_privacy_sync(impl_key, conn_id)
+    }
+}
+
 #[inline]
-pub fn turn_on_privacy(impl_key: &str, conn_id: i32) -> Option<ResultType<bool>> {
+fn is_async_privacy_mode() -> bool {
+    PRIVACY_MODE
+        .lock()
+        .unwrap()
+        .as_ref()
+        .map_or(false, |m| m.is_async_privacy_mode())
+}
+
+#[inline]
+async fn turn_on_privacy_async(impl_key: String, conn_id: i32) -> Option<ResultType<bool>> {
+    let (tx, rx) = oneshot::channel();
+    std::thread::spawn(move || {
+        let res = turn_on_privacy_sync(&impl_key, conn_id);
+        let _ = tx.send(res);
+    });
+    // Wait at most 5 seconds for the result.
+    // Because it may take a long time to turn on the privacy mode with amyuni idd.
+    match hbb_common::timeout(5000, rx).await {
+        Ok(res) => match res {
+            Ok(res) => res,
+            Err(e) => Some(Err(anyhow!(e.to_string()))),
+        },
+        Err(e) => Some(Err(anyhow!(e.to_string()))),
+    }
+}
+
+fn turn_on_privacy_sync(impl_key: &str, conn_id: i32) -> Option<ResultType<bool>> {
     // Check if privacy mode is already on or occupied by another one
     let mut privacy_mode_lock = PRIVACY_MODE.lock().unwrap();
 
@@ -299,8 +326,7 @@ pub fn get_supported_privacy_mode_impl() -> Vec<(&'static str, &'static str)> {
             }
         }
 
-        #[cfg(feature = "virtual_display_driver")]
-        if is_installed() {
+        if is_installed() && crate::platform::windows::is_self_service_running() {
             vec_impls.push((
                 PRIVACY_MODE_IMPL_WIN_VIRTUAL_DISPLAY,
                 "privacy_mode_impl_virtual_display_tip",

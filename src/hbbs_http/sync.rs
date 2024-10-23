@@ -5,9 +5,9 @@ use std::{
 };
 
 #[cfg(not(any(target_os = "ios")))]
-use crate::Connection;
+use crate::{ui_interface::get_builtin_option, Connection};
 use hbb_common::{
-    config::{Config, LocalConfig},
+    config::{keys, Config, LocalConfig},
     tokio::{self, sync::broadcast, time::Instant},
 };
 use serde::{Deserialize, Serialize};
@@ -56,51 +56,73 @@ async fn start_hbbs_sync_async() {
         TIME_CONN,
     ));
     let mut last_sent: Option<Instant> = None;
-    let mut info_uploaded: (bool, String, Option<Instant>) = (false, "".to_owned(), None);
+    let mut info_uploaded: (bool, String, Option<Instant>, String) =
+        (false, "".to_owned(), None, "".to_owned());
     loop {
         tokio::select! {
             _ = interval.tick() => {
                 let url = heartbeat_url();
+                let id = Config::get_id();
                 if url.is_empty() {
                     *PRO.lock().unwrap() = false;
                     continue;
                 }
-                if !Config::get_option("stop-service").is_empty() {
+                if hbb_common::config::option2bool("stop-service", &Config::get_option("stop-service")) {
                     continue;
                 }
                 let conns = Connection::alive_conns();
-                if info_uploaded.0 && url != info_uploaded.1 {
+                if info_uploaded.0 && (url != info_uploaded.1 || id != info_uploaded.3) {
                     info_uploaded.0 = false;
                     *PRO.lock().unwrap() = false;
                 }
-                if !info_uploaded.0 && info_uploaded.2.map(|x| x.elapsed() >= UPLOAD_SYSINFO_TIMEOUT).unwrap_or(true){
+                if !info_uploaded.0 && info_uploaded.2.map(|x| x.elapsed() >= UPLOAD_SYSINFO_TIMEOUT).unwrap_or(true) {
                     let mut v = crate::get_sysinfo();
-                    v["version"] = json!(crate::VERSION);
-                    v["id"] = json!(Config::get_id());
-                    v["uuid"] = json!(crate::encode64(hbb_common::get_uuid()));
-                    match crate::post_request(url.replace("heartbeat", "sysinfo"), v.to_string(), "").await {
-                        Ok(x)  => {
-                            if x == "SYSINFO_UPDATED" {
-                                info_uploaded = (true, url.clone(), None);
-                                hbb_common::log::info!("sysinfo updated");
-                                *PRO.lock().unwrap() = true;
-                            } else if x == "ID_NOT_FOUND" {
-                                info_uploaded.2 = None; // next heartbeat will upload sysinfo again
-                            } else {
+                    // username is empty in login screen of windows, but here we only upload sysinfo once, causing
+                    // real user name not uploaded after login screen. https://github.com/rustdesk/rustdesk/discussions/8031
+                    if !cfg!(windows) || !v["username"].as_str().unwrap_or_default().is_empty() {
+                        v["version"] = json!(crate::VERSION);
+                        v["id"] = json!(id);
+                        v["uuid"] = json!(crate::encode64(hbb_common::get_uuid()));
+                        let ab_name = Config::get_option(keys::OPTION_PRESET_ADDRESS_BOOK_NAME);
+                        if !ab_name.is_empty() {
+                            v[keys::OPTION_PRESET_ADDRESS_BOOK_NAME] = json!(ab_name);
+                        }
+                        let ab_tag = Config::get_option(keys::OPTION_PRESET_ADDRESS_BOOK_TAG);
+                        if !ab_tag.is_empty() {
+                            v[keys::OPTION_PRESET_ADDRESS_BOOK_TAG] = json!(ab_tag);
+                        }
+                        let username = get_builtin_option(keys::OPTION_PRESET_USERNAME);
+                        if !username.is_empty() {
+                            v[keys::OPTION_PRESET_USERNAME] = json!(username);
+                        }
+                        let strategy_name = get_builtin_option(keys::OPTION_PRESET_STRATEGY_NAME);
+                        if !strategy_name.is_empty() {
+                            v[keys::OPTION_PRESET_STRATEGY_NAME] = json!(strategy_name);
+                        }
+                        match crate::post_request(url.replace("heartbeat", "sysinfo"), v.to_string(), "").await {
+                            Ok(x)  => {
+                                if x == "SYSINFO_UPDATED" {
+                                    info_uploaded = (true, url.clone(), None, id.clone());
+                                    hbb_common::log::info!("sysinfo updated");
+                                    *PRO.lock().unwrap() = true;
+                                } else if x == "ID_NOT_FOUND" {
+                                    info_uploaded.2 = None; // next heartbeat will upload sysinfo again
+                                } else {
+                                    info_uploaded.2 = Some(Instant::now());
+                                }
+                            }
+                            _ => {
                                 info_uploaded.2 = Some(Instant::now());
                             }
                         }
-                        _ => {
-                            info_uploaded.2 = Some(Instant::now());
-                        }
                     }
                 }
-                if conns.is_empty() && last_sent.map(|x| x.elapsed() < TIME_HEARTBEAT).unwrap_or(false){
+                if conns.is_empty() && last_sent.map(|x| x.elapsed() < TIME_HEARTBEAT).unwrap_or(false) {
                     continue;
                 }
                 last_sent = Some(Instant::now());
                 let mut v = Value::default();
-                v["id"] = json!(Config::get_id());
+                v["id"] = json!(id);
                 v["uuid"] = json!(crate::encode64(hbb_common::get_uuid()));
                 v["ver"] = json!(hbb_common::get_version_number(crate::VERSION));
                 if !conns.is_empty() {

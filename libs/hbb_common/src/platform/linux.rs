@@ -7,6 +7,9 @@ lazy_static::lazy_static! {
 
 pub const DISPLAY_SERVER_WAYLAND: &str = "wayland";
 pub const DISPLAY_SERVER_X11: &str = "x11";
+pub const DISPLAY_DESKTOP_KDE: &str = "KDE";
+
+pub const XDG_CURRENT_DESKTOP: &str = "XDG_CURRENT_DESKTOP";
 
 pub struct Distro {
     pub name: String,
@@ -30,6 +33,15 @@ impl Distro {
 }
 
 #[inline]
+pub fn is_kde() -> bool {
+    if let Ok(env) = std::env::var(XDG_CURRENT_DESKTOP) {
+        env == DISPLAY_DESKTOP_KDE
+    } else {
+        false
+    }
+}
+
+#[inline]
 pub fn is_gdm_user(username: &str) -> bool {
     username == "gdm"
     // || username == "lightgdm"
@@ -49,6 +61,16 @@ pub fn is_x11_or_headless() -> bool {
 const INVALID_SESSION: &str = "4294967295";
 
 pub fn get_display_server() -> String {
+    // Check for forced display server environment variable first
+    if let Ok(forced_display) = std::env::var("RUSTDESK_FORCED_DISPLAY_SERVER") {
+        return forced_display;
+    }
+
+    // Check if `loginctl` can be called successfully
+    if run_loginctl(None).is_err() {
+        return DISPLAY_SERVER_X11.to_owned();
+    }
+
     let mut session = get_values_of_seat0(&[0])[0].clone();
     if session.is_empty() {
         // loginctl has not given the expected output.  try something else.
@@ -64,7 +86,7 @@ pub fn get_display_server() -> String {
         }
     }
     if session.is_empty() {
-        "".to_owned()
+        std::env::var("XDG_SESSION_TYPE").unwrap_or("x11".to_owned())
     } else {
         get_display_server_of_session(&session)
     }
@@ -75,40 +97,19 @@ pub fn get_display_server_of_session(session: &str) -> String {
         run_loginctl(Some(vec!["show-session", "-p", "Type", session]))
     // Check session type of the session
     {
-        let display_server = String::from_utf8_lossy(&output.stdout)
+        String::from_utf8_lossy(&output.stdout)
             .replace("Type=", "")
             .trim_end()
-            .into();
-        if display_server == "tty" {
-            // If the type is tty...
-            if let Ok(output) = run_loginctl(Some(vec!["show-session", "-p", "TTY", session]))
-            // Get the tty number
-            {
-                let tty: String = String::from_utf8_lossy(&output.stdout)
-                    .replace("TTY=", "")
-                    .trim_end()
-                    .into();
-                if let Ok(xorg_results) = run_cmds(&format!("ps -e | grep \"{tty}.\\\\+Xorg\""))
-                // And check if Xorg is running on that tty
-                {
-                    if xorg_results.trim_end() != "" {
-                        // If it is, manually return "x11", otherwise return tty
-                        return "x11".to_owned();
-                    }
-                }
-            }
-        }
-        display_server
+            .into()
     } else {
         "".to_owned()
     };
     if display_server.is_empty() || display_server == "tty" {
-        // loginctl has not given the expected output.  try something else.
         if let Ok(sestype) = std::env::var("XDG_SESSION_TYPE") {
-            display_server = sestype;
+            if !sestype.is_empty() {
+                return sestype.to_lowercase();
+            }
         }
-    }
-    if display_server == "" {
         display_server = "x11".to_owned();
     }
     display_server.to_lowercase()
@@ -132,9 +133,17 @@ pub fn get_values_of_seat0_with_gdm_wayland(indices: &[usize]) -> Vec<String> {
     _get_values_of_seat0(indices, false)
 }
 
+// Ignore "3 sessions listed."
+fn ignore_loginctl_line(line: &str) -> bool {
+    line.contains("sessions") || line.split(" ").count() < 4
+}
+
 fn _get_values_of_seat0(indices: &[usize], ignore_gdm_wayland: bool) -> Vec<String> {
     if let Ok(output) = run_loginctl(None) {
         for line in String::from_utf8_lossy(&output.stdout).lines() {
+            if ignore_loginctl_line(line) {
+                continue;
+            }
             if line.contains("seat0") {
                 if let Some(sid) = line.split_whitespace().next() {
                     if is_active(sid) {
@@ -153,6 +162,9 @@ fn _get_values_of_seat0(indices: &[usize], ignore_gdm_wayland: bool) -> Vec<Stri
 
         // some case, there is no seat0 https://github.com/rustdesk/rustdesk/issues/73
         for line in String::from_utf8_lossy(&output.stdout).lines() {
+            if ignore_loginctl_line(line) {
+                continue;
+            }
             if let Some(sid) = line.split_whitespace().next() {
                 if is_active(sid) {
                     let d = get_display_server_of_session(sid);
@@ -192,6 +204,8 @@ pub fn is_active_and_seat0(sid: &str) -> bool {
     }
 }
 
+// **Note** that the return value here, the last character is '\n'.
+// Use `run_cmds_trim_newline()` if you want to remove '\n' at the end.
 pub fn run_cmds(cmds: &str) -> ResultType<String> {
     let output = std::process::Command::new("sh")
         .args(vec!["-c", cmds])
@@ -199,24 +213,36 @@ pub fn run_cmds(cmds: &str) -> ResultType<String> {
     Ok(String::from_utf8_lossy(&output.stdout).to_string())
 }
 
-#[cfg(not(feature = "flatpak"))]
+pub fn run_cmds_trim_newline(cmds: &str) -> ResultType<String> {
+    let output = std::process::Command::new("sh")
+        .args(vec!["-c", cmds])
+        .output()?;
+    let out = String::from_utf8_lossy(&output.stdout);
+    Ok(if out.ends_with('\n') {
+        out[..out.len() - 1].to_string()
+    } else {
+        out.to_string()
+    })
+}
+
 fn run_loginctl(args: Option<Vec<&str>>) -> std::io::Result<std::process::Output> {
+    if std::env::var("FLATPAK_ID").is_ok() {
+        let mut l_args = String::from("loginctl");
+        if let Some(a) = args.as_ref() {
+            l_args = format!("{} {}", l_args, a.join(" "));
+        }
+        let res = std::process::Command::new("flatpak-spawn")
+            .args(vec![String::from("--host"), l_args])
+            .output();
+        if res.is_ok() {
+            return res;
+        }
+    }
     let mut cmd = std::process::Command::new("loginctl");
     if let Some(a) = args {
         return cmd.args(a).output();
     }
     cmd.output()
-}
-
-#[cfg(feature = "flatpak")]
-fn run_loginctl(args: Option<Vec<&str>>) -> std::io::Result<std::process::Output> {
-    let mut l_args = String::from("loginctl");
-    if let Some(a) = args {
-        l_args = format!("{} {}", l_args, a.join(" "));
-    }
-    std::process::Command::new("flatpak-spawn")
-        .args(vec![String::from("--host"), l_args])
-        .output()
 }
 
 /// forever: may not work
@@ -256,4 +282,19 @@ pub fn system_message(title: &str, msg: &str, forever: bool) -> ResultType<()> {
         }
     }
     crate::bail!("failed to post system message");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_run_cmds_trim_newline() {
+        assert_eq!(run_cmds_trim_newline("echo -n 123").unwrap(), "123");
+        assert_eq!(run_cmds_trim_newline("echo 123").unwrap(), "123");
+        assert_eq!(
+            run_cmds_trim_newline("whoami").unwrap() + "\n",
+            run_cmds("whoami").unwrap()
+        );
+    }
 }

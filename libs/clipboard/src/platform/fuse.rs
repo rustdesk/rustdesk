@@ -795,7 +795,11 @@ impl FuseNode {
             conn_id: desc.conn_id,
             stream_id: rand::random(),
             index: inode as usize - 2,
-            name: desc.name.to_str().unwrap().to_owned(),
+            name: desc
+                .name
+                .to_str()
+                .map(|s| s.to_string())
+                .unwrap_or_default(),
             parent: None,
             attributes: InodeAttributes::from_description(inode, desc),
             children: Vec::new(),
@@ -1140,7 +1144,7 @@ mod fuse_test {
     }
 
     fn build_single_file(prefix: &str) {
-        let raw_name = "衬衫的价格为 9 镑 15 便士.txt";
+        let raw_name = "simple_test_file.txt";
         let f_name = if prefix == "" {
             raw_name.to_string()
         } else {

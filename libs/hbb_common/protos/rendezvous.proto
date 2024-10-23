@@ -21,13 +21,13 @@ message PunchHoleRequest {
   string licence_key = 3;
   ConnType conn_type = 4;
   string token = 5;
+  string version = 6;
 }
 
 message PunchHole { 
   bytes socket_addr = 1;
   string relay_server = 2;
   NatType nat_type = 3;
-  string request_region = 4;
 }
 
 message TestNatRequest {
@@ -52,7 +52,6 @@ message PunchHoleSent {
   string relay_server = 3;
   NatType nat_type = 4;
   string version = 5;
-  string request_region = 6;
 }
 
 message RegisterPk {
@@ -92,6 +91,7 @@ message PunchHoleResponse {
     bool is_local = 6;
   }
   string other_failure = 7;
+  int32 feedback = 8;
 }
 
 message ConfigUpdate {
@@ -108,7 +108,6 @@ message RequestRelay {
   string licence_key = 6;
   ConnType conn_type = 7;
   string token = 8;
-  string request_region = 9;
 }
 
 message RelayResponse {
@@ -121,7 +120,7 @@ message RelayResponse {
   }
   string refuse_reason = 6;
   string version = 7;
-  string request_region = 8;
+  int32 feedback = 9;
 }
 
 message SoftwareUpdate { string url = 1; }
@@ -133,7 +132,6 @@ message SoftwareUpdate { string url = 1; }
 message FetchLocalAddr { 
   bytes socket_addr = 1; 
   string relay_server = 2;
-  string request_region = 3;
 }
 
 message LocalAddr {
@@ -142,7 +140,6 @@ message LocalAddr {
   string relay_server = 3;
   string id = 4;
   string version = 5;
-  string request_region = 6;
 }
 
 message PeerDiscovery {
@@ -168,6 +165,10 @@ message KeyExchange {
   repeated bytes keys = 1; 
 }
 
+message HealthCheck {
+  string token = 1;
+}
+
 message RendezvousMessage {
   oneof union {
     RegisterPeer register_peer = 6;
@@ -190,5 +191,6 @@ message RendezvousMessage {
     OnlineRequest online_request = 23;
     OnlineResponse online_response = 24;
     KeyExchange key_exchange = 25;
+    HealthCheck hc = 26;
   }
 }

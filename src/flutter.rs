@@ -4,7 +4,7 @@ use crate::{
     ui_session_interface::{io_loop, InvokeUiSession, Session},
 };
 use flutter_rust_bridge::StreamSink;
-#[cfg(any(feature = "flutter_texture_render", feature = "gpucodec"))]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 use hbb_common::dlopen::{
     symbor::{Library, Symbol},
     Error as LibError,
@@ -16,15 +16,15 @@ use hbb_common::{
 use serde::Serialize;
 use serde_json::json;
 
-#[cfg(any(feature = "flutter_texture_render", feature = "gpucodec"))]
-use std::os::raw::c_void;
-
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     ffi::CString,
-    os::raw::{c_char, c_int},
+    os::raw::{c_char, c_int, c_void},
     str::FromStr,
-    sync::{Arc, RwLock},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc, RwLock,
+    },
 };
 
 /// tag "main" for [Desktop Main Page] and [Mobile (Client and Server)] (the mobile don't need multiple windows, only one global event stream is needed)
@@ -44,26 +44,26 @@ pub(crate) const APP_TYPE_CM: &str = "main";
 pub type FlutterSession = Arc<Session<FlutterHandler>>;
 
 lazy_static::lazy_static! {
-    pub(crate) static ref CUR_SESSION_ID: RwLock<SessionID> = Default::default();
+    pub(crate) static ref CUR_SESSION_ID: RwLock<SessionID> = Default::default(); // For desktop only
     static ref GLOBAL_EVENT_STREAM: RwLock<HashMap<String, StreamSink<String>>> = Default::default(); // rust to dart event channel
 }
 
-#[cfg(all(target_os = "windows", feature = "flutter_texture_render"))]
+#[cfg(target_os = "windows")]
 lazy_static::lazy_static! {
     pub static ref TEXTURE_RGBA_RENDERER_PLUGIN: Result<Library, LibError> = Library::open("texture_rgba_renderer_plugin.dll");
 }
 
-#[cfg(all(target_os = "linux", feature = "flutter_texture_render"))]
+#[cfg(target_os = "linux")]
 lazy_static::lazy_static! {
     pub static ref TEXTURE_RGBA_RENDERER_PLUGIN: Result<Library, LibError> = Library::open("libtexture_rgba_renderer_plugin.so");
 }
 
-#[cfg(all(target_os = "macos", feature = "flutter_texture_render"))]
+#[cfg(target_os = "macos")]
 lazy_static::lazy_static! {
     pub static ref TEXTURE_RGBA_RENDERER_PLUGIN: Result<Library, LibError> = Library::open_self();
 }
 
-#[cfg(all(target_os = "windows", feature = "gpucodec"))]
+#[cfg(target_os = "windows")]
 lazy_static::lazy_static! {
     pub static ref TEXTURE_GPU_RENDERER_PLUGIN: Result<Library, LibError> = Library::open("flutter_gpu_texture_renderer_plugin.dll");
 }
@@ -168,34 +168,45 @@ pub unsafe extern "C" fn get_rustdesk_app_name(buffer: *mut u16, length: i32) ->
 #[derive(Default)]
 struct SessionHandler {
     event_stream: Option<StreamSink<EventToUI>>,
-    #[cfg(any(feature = "flutter_texture_render", feature = "gpucodec"))]
+    // displays of current session.
+    // We need this variable to check if the display is in use before pushing rgba to flutter.
+    displays: Vec<usize>,
     renderer: VideoRenderer,
 }
 
-#[cfg(any(feature = "flutter_texture_render", feature = "gpucodec"))]
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 enum RenderType {
     PixelBuffer,
-    #[cfg(feature = "gpucodec")]
+    #[cfg(feature = "vram")]
     Texture,
 }
 
-#[derive(Default, Clone)]
+#[derive(Clone)]
 pub struct FlutterHandler {
     // ui session id -> display handler data
     session_handlers: Arc<RwLock<HashMap<SessionID, SessionHandler>>>,
-    #[cfg(not(feature = "flutter_texture_render"))]
     display_rgbas: Arc<RwLock<HashMap<usize, RgbaData>>>,
     peer_info: Arc<RwLock<PeerInfo>>,
-    #[cfg(any(
-        not(feature = "flutter_texture_render"),
-        all(feature = "flutter_texture_render", feature = "plugin_framework")
-    ))]
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     hooks: Arc<RwLock<HashMap<String, SessionHook>>>,
+    use_texture_render: Arc<AtomicBool>,
 }
 
-#[cfg(not(feature = "flutter_texture_render"))]
+impl Default for FlutterHandler {
+    fn default() -> Self {
+        Self {
+            session_handlers: Default::default(),
+            display_rgbas: Default::default(),
+            peer_info: Default::default(),
+            #[cfg(not(any(target_os = "android", target_os = "ios")))]
+            hooks: Default::default(),
+            use_texture_render: Arc::new(
+                AtomicBool::new(crate::ui_interface::use_texture_render()),
+            ),
+        }
+    }
+}
+
 #[derive(Default, Clone)]
 struct RgbaData {
     // SAFETY: [rgba] is guarded by [rgba_valid], and it's safe to reach [rgba] with `rgba_valid == true`.
@@ -204,7 +215,6 @@ struct RgbaData {
     valid: bool,
 }
 
-#[cfg(feature = "flutter_texture_render")]
 pub type FlutterRgbaRendererPluginOnRgba = unsafe extern "C" fn(
     texture_rgba: *mut c_void,
     buffer: *const u8,
@@ -214,44 +224,38 @@ pub type FlutterRgbaRendererPluginOnRgba = unsafe extern "C" fn(
     dst_rgba_stride: c_int,
 );
 
-#[cfg(feature = "gpucodec")]
+#[cfg(feature = "vram")]
 pub type FlutterGpuTextureRendererPluginCApiSetTexture =
     unsafe extern "C" fn(output: *mut c_void, texture: *mut c_void);
 
-#[cfg(feature = "gpucodec")]
+#[cfg(feature = "vram")]
 pub type FlutterGpuTextureRendererPluginCApiGetAdapterLuid = unsafe extern "C" fn() -> i64;
 
-#[cfg(feature = "flutter_texture_render")]
 pub(super) type TextureRgbaPtr = usize;
 
-#[cfg(any(feature = "flutter_texture_render", feature = "gpucodec"))]
 struct DisplaySessionInfo {
     // TextureRgba pointer in flutter native.
-    #[cfg(feature = "flutter_texture_render")]
     texture_rgba_ptr: TextureRgbaPtr,
-    #[cfg(feature = "flutter_texture_render")]
     size: (usize, usize),
-    #[cfg(feature = "gpucodec")]
+    #[cfg(feature = "vram")]
     gpu_output_ptr: usize,
     notify_render_type: Option<RenderType>,
 }
 
 // Video Texture Renderer in Flutter
-#[cfg(any(feature = "flutter_texture_render", feature = "gpucodec"))]
 #[derive(Clone)]
 struct VideoRenderer {
     is_support_multi_ui_session: bool,
     map_display_sessions: Arc<RwLock<HashMap<usize, DisplaySessionInfo>>>,
-    #[cfg(feature = "flutter_texture_render")]
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     on_rgba_func: Option<Symbol<'static, FlutterRgbaRendererPluginOnRgba>>,
-    #[cfg(feature = "gpucodec")]
+    #[cfg(feature = "vram")]
     on_texture_func: Option<Symbol<'static, FlutterGpuTextureRendererPluginCApiSetTexture>>,
 }
 
-#[cfg(any(feature = "flutter_texture_render", feature = "gpucodec"))]
 impl Default for VideoRenderer {
     fn default() -> Self {
-        #[cfg(feature = "flutter_texture_render")]
+        #[cfg(not(any(target_os = "android", target_os = "ios")))]
         let on_rgba_func = match &*TEXTURE_RGBA_RENDERER_PLUGIN {
             Ok(lib) => {
                 let find_sym_res = unsafe {
@@ -270,7 +274,7 @@ impl Default for VideoRenderer {
                 None
             }
         };
-        #[cfg(feature = "gpucodec")]
+        #[cfg(feature = "vram")]
         let on_texture_func = match &*TEXTURE_GPU_RENDERER_PLUGIN {
             Ok(lib) => {
                 let find_sym_res = unsafe {
@@ -295,18 +299,16 @@ impl Default for VideoRenderer {
         Self {
             map_display_sessions: Default::default(),
             is_support_multi_ui_session: false,
-            #[cfg(feature = "flutter_texture_render")]
+            #[cfg(not(any(target_os = "android", target_os = "ios")))]
             on_rgba_func,
-            #[cfg(feature = "gpucodec")]
+            #[cfg(feature = "vram")]
             on_texture_func,
         }
     }
 }
 
-#[cfg(any(feature = "flutter_texture_render", feature = "gpucodec"))]
 impl VideoRenderer {
     #[inline]
-    #[cfg(feature = "flutter_texture_render")]
     fn set_size(&mut self, display: usize, width: usize, height: usize) {
         let mut sessions_lock = self.map_display_sessions.write().unwrap();
         if let Some(info) = sessions_lock.get_mut(&display) {
@@ -318,7 +320,7 @@ impl VideoRenderer {
                 DisplaySessionInfo {
                     texture_rgba_ptr: usize::default(),
                     size: (width, height),
-                    #[cfg(feature = "gpucodec")]
+                    #[cfg(feature = "vram")]
                     gpu_output_ptr: usize::default(),
                     notify_render_type: None,
                 },
@@ -326,15 +328,29 @@ impl VideoRenderer {
         }
     }
 
-    #[cfg(feature = "flutter_texture_render")]
     fn register_pixelbuffer_texture(&self, display: usize, ptr: usize) {
         let mut sessions_lock = self.map_display_sessions.write().unwrap();
         if ptr == 0 {
+            if let Some(info) = sessions_lock.get_mut(&display) {
+                if info.texture_rgba_ptr != usize::default() {
+                    info.texture_rgba_ptr = usize::default();
+                }
+                #[cfg(feature = "vram")]
+                if info.gpu_output_ptr != usize::default() {
+                    return;
+                }
+            }
             sessions_lock.remove(&display);
         } else {
             if let Some(info) = sessions_lock.get_mut(&display) {
-                if info.texture_rgba_ptr != 0 && info.texture_rgba_ptr != ptr as TextureRgbaPtr {
-                    log::error!("unreachable, texture_rgba_ptr is not null and not equal to ptr");
+                if info.texture_rgba_ptr != usize::default()
+                    && info.texture_rgba_ptr != ptr as TextureRgbaPtr
+                {
+                    log::warn!(
+                        "texture_rgba_ptr is not null and not equal to ptr, replace {} to {}",
+                        info.texture_rgba_ptr,
+                        ptr
+                    );
                 }
                 info.texture_rgba_ptr = ptr as _;
                 info.notify_render_type = None;
@@ -345,7 +361,7 @@ impl VideoRenderer {
                         DisplaySessionInfo {
                             texture_rgba_ptr: ptr as _,
                             size: (0, 0),
-                            #[cfg(feature = "gpucodec")]
+                            #[cfg(feature = "vram")]
                             gpu_output_ptr: usize::default(),
                             notify_render_type: None,
                         },
@@ -355,26 +371,36 @@ impl VideoRenderer {
         }
     }
 
-    #[cfg(feature = "gpucodec")]
+    #[cfg(feature = "vram")]
     pub fn register_gpu_output(&self, display: usize, ptr: usize) {
         let mut sessions_lock = self.map_display_sessions.write().unwrap();
         if ptr == 0 {
+            if let Some(info) = sessions_lock.get_mut(&display) {
+                if info.gpu_output_ptr != usize::default() {
+                    info.gpu_output_ptr = usize::default();
+                }
+                if info.texture_rgba_ptr != usize::default() {
+                    return;
+                }
+            }
             sessions_lock.remove(&display);
         } else {
             if let Some(info) = sessions_lock.get_mut(&display) {
-                if info.gpu_output_ptr != 0 && info.gpu_output_ptr != ptr {
-                    log::error!("unreachable, gpu_output_ptr is not null and not equal to ptr");
+                if info.gpu_output_ptr != usize::default() && info.gpu_output_ptr != ptr {
+                    log::error!(
+                        "gpu_output_ptr is not null and not equal to ptr, relace {} to {}",
+                        info.gpu_output_ptr,
+                        ptr
+                    );
                 }
                 info.gpu_output_ptr = ptr as _;
                 info.notify_render_type = None;
             } else {
-                if ptr != 0 {
+                if ptr != usize::default() {
                     sessions_lock.insert(
                         display,
                         DisplaySessionInfo {
-                            #[cfg(feature = "flutter_texture_render")]
-                            texture_rgba_ptr: 0,
-                            #[cfg(feature = "flutter_texture_render")]
+                            texture_rgba_ptr: usize::default(),
                             size: (0, 0),
                             gpu_output_ptr: ptr,
                             notify_render_type: None,
@@ -385,7 +411,7 @@ impl VideoRenderer {
         }
     }
 
-    #[cfg(feature = "flutter_texture_render")]
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     pub fn on_rgba(&self, display: usize, rgba: &scrap::ImageRgb) -> bool {
         let mut write_lock = self.map_display_sessions.write().unwrap();
         let opt_info = if !self.is_support_multi_ui_session {
@@ -400,7 +426,6 @@ impl VideoRenderer {
             return false;
         }
 
-        // It is also Ok to skip this check.
         if info.size.0 != rgba.w || info.size.1 != rgba.h {
             log::error!(
                 "width/height mismatch: ({},{}) != ({},{})",
@@ -409,7 +434,11 @@ impl VideoRenderer {
                 rgba.w,
                 rgba.h
             );
-            return false;
+            // Peer info's handling is async and may be late than video frame's handling
+            // Allow peer info not set, but not allow wrong width/height for correct local cursor position
+            if info.size != (0, 0) {
+                return false;
+            }
         }
         if let Some(func) = &self.on_rgba_func {
             unsafe {
@@ -419,7 +448,7 @@ impl VideoRenderer {
                     rgba.raw.len() as _,
                     rgba.w as _,
                     rgba.h as _,
-                    rgba.stride() as _,
+                    rgba.align() as _,
                 )
             };
         }
@@ -431,7 +460,7 @@ impl VideoRenderer {
         }
     }
 
-    #[cfg(feature = "gpucodec")]
+    #[cfg(feature = "vram")]
     pub fn on_texture(&self, display: usize, texture: *mut c_void) -> bool {
         let mut write_lock = self.map_display_sessions.write().unwrap();
         let opt_info = if !self.is_support_multi_ui_session {
@@ -467,10 +496,7 @@ impl VideoRenderer {
 
 impl SessionHandler {
     pub fn on_waiting_for_image_dialog_show(&self) {
-        #[cfg(any(feature = "flutter_texture_render"))]
-        {
-            self.renderer.reset_all_display_render_type();
-        }
+        self.renderer.reset_all_display_render_type();
         // rgba array render will notify every frame
     }
 }
@@ -551,6 +577,12 @@ impl FlutterHandler {
         }
         let _ = hooks.remove(key);
         true
+    }
+
+    pub fn update_use_texture_render(&self) {
+        self.use_texture_render
+            .store(crate::ui_interface::use_texture_render(), Ordering::Relaxed);
+        self.display_rgbas.write().unwrap().clear();
     }
 }
 
@@ -738,63 +770,31 @@ impl InvokeUiSession for FlutterHandler {
     fn adapt_size(&self) {}
 
     #[inline]
-    #[cfg(not(feature = "flutter_texture_render"))]
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     fn on_rgba(&self, display: usize, rgba: &mut scrap::ImageRgb) {
-        // Give a chance for plugins or etc to hook a rgba data.
-        #[cfg(not(any(target_os = "android", target_os = "ios")))]
-        for (key, hook) in self.hooks.read().unwrap().iter() {
-            match hook {
-                SessionHook::OnSessionRgba(cb) => {
-                    cb(key.to_owned(), rgba);
-                }
-            }
-        }
-        // If the current rgba is not fetched by flutter, i.e., is valid.
-        // We give up sending a new event to flutter.
-        let mut rgba_write_lock = self.display_rgbas.write().unwrap();
-        if let Some(rgba_data) = rgba_write_lock.get_mut(&display) {
-            if rgba_data.valid {
-                return;
-            } else {
-                rgba_data.valid = true;
-            }
-            // Return the rgba buffer to the video handler for reusing allocated rgba buffer.
-            std::mem::swap::<Vec<u8>>(&mut rgba.raw, &mut rgba_data.data);
-        } else {
-            let mut rgba_data = RgbaData::default();
-            std::mem::swap::<Vec<u8>>(&mut rgba.raw, &mut rgba_data.data);
-            rgba_write_lock.insert(display, rgba_data);
-        }
-        drop(rgba_write_lock);
-
-        // Non-texture-render UI does not support multiple displays in the one UI session.
-        // It's Ok to notify each session for now.
-        for h in self.session_handlers.read().unwrap().values() {
-            if let Some(stream) = &h.event_stream {
-                stream.add(EventToUI::Rgba(display));
-            }
+        let use_texture_render = self.use_texture_render.load(Ordering::Relaxed);
+        self.on_rgba_flutter_texture_render(use_texture_render, display, rgba);
+        if !use_texture_render {
+            self.on_rgba_soft_render(display, rgba);
         }
     }
 
     #[inline]
-    #[cfg(feature = "flutter_texture_render")]
+    #[cfg(any(target_os = "android", target_os = "ios"))]
     fn on_rgba(&self, display: usize, rgba: &mut scrap::ImageRgb) {
-        for (_, session) in self.session_handlers.read().unwrap().iter() {
-            if session.renderer.on_rgba(display, rgba) {
-                if let Some(stream) = &session.event_stream {
-                    stream.add(EventToUI::Rgba(display));
-                }
-            }
-        }
+        self.on_rgba_soft_render(display, rgba);
     }
 
     #[inline]
-    #[cfg(feature = "gpucodec")]
+    #[cfg(feature = "vram")]
     fn on_texture(&self, display: usize, texture: *mut c_void) {
+        if !self.use_texture_render.load(Ordering::Relaxed) {
+            return;
+        }
         for (_, session) in self.session_handlers.read().unwrap().iter() {
             if session.renderer.on_texture(display, texture) {
                 if let Some(stream) = &session.event_stream {
-                    stream.add(EventToUI::Texture(display));
+                    stream.add(EventToUI::Texture(display, true));
                 }
             }
         }
@@ -802,28 +802,28 @@ impl InvokeUiSession for FlutterHandler {
 
     fn set_peer_info(&self, pi: &PeerInfo) {
         let displays = Self::make_displays_msg(&pi.displays);
-        let mut features: HashMap<&str, i32> = Default::default();
+        let mut features: HashMap<&str, bool> = Default::default();
         for ref f in pi.features.iter() {
-            features.insert("privacy_mode", if f.privacy_mode { 1 } else { 0 });
+            features.insert("privacy_mode", f.privacy_mode);
         }
         // compatible with 1.1.9
         if get_version_number(&pi.version) < get_version_number("1.2.0") {
-            features.insert("privacy_mode", 0);
+            features.insert("privacy_mode", false);
         }
         let features = serde_json::ser::to_string(&features).unwrap_or("".to_owned());
         let resolutions = serialize_resolutions(&pi.resolutions.resolutions);
         *self.peer_info.write().unwrap() = pi.clone();
-        #[cfg(feature = "flutter_texture_render")]
-        {
-            self.session_handlers
-                .write()
-                .unwrap()
-                .values_mut()
-                .for_each(|h| {
-                    h.renderer.is_support_multi_ui_session =
-                        crate::common::is_support_multi_ui_session(&pi.version);
-                });
-        }
+        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+        let is_support_multi_ui_session = crate::common::is_support_multi_ui_session(&pi.version);
+        #[cfg(any(target_os = "android", target_os = "ios"))]
+        let is_support_multi_ui_session = false;
+        self.session_handlers
+            .write()
+            .unwrap()
+            .values_mut()
+            .for_each(|h| {
+                h.renderer.is_support_multi_ui_session = is_support_multi_ui_session;
+            });
         self.push_event(
             "peer_info",
             &[
@@ -874,6 +874,21 @@ impl InvokeUiSession for FlutterHandler {
                 "windows_sessions",
                 &serde_json::ser::to_string(&msg_vec).unwrap_or("".to_owned()),
             )],
+            &[],
+        );
+    }
+
+    fn is_multi_ui_session(&self) -> bool {
+        self.session_handlers.read().unwrap().len() > 1
+    }
+
+    fn set_current_display(&self, disp_idx: i32) {
+        if self.is_multi_ui_session() {
+            return;
+        }
+        self.push_event(
+            "follow_current_display",
+            &[("display_idx", &disp_idx.to_string())],
             &[],
         );
     }
@@ -981,7 +996,6 @@ impl InvokeUiSession for FlutterHandler {
 
     #[inline]
     fn get_rgba(&self, _display: usize) -> *const u8 {
-        #[cfg(not(feature = "flutter_texture_render"))]
         if let Some(rgba_data) = self.display_rgbas.read().unwrap().get(&_display) {
             if rgba_data.valid {
                 return rgba_data.data.as_ptr();
@@ -992,16 +1006,106 @@ impl InvokeUiSession for FlutterHandler {
 
     #[inline]
     fn next_rgba(&self, _display: usize) {
-        #[cfg(not(feature = "flutter_texture_render"))]
         if let Some(rgba_data) = self.display_rgbas.write().unwrap().get_mut(&_display) {
             rgba_data.valid = false;
+        }
+    }
+
+    fn update_record_status(&self, start: bool) {
+        self.push_event("record_status", &[("start", &start.to_string())], &[]);
+    }
+}
+
+impl FlutterHandler {
+    #[inline]
+    fn on_rgba_soft_render(&self, display: usize, rgba: &mut scrap::ImageRgb) {
+        // Give a chance for plugins or etc to hook a rgba data.
+        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+        for (key, hook) in self.hooks.read().unwrap().iter() {
+            match hook {
+                SessionHook::OnSessionRgba(cb) => {
+                    cb(key.to_owned(), rgba);
+                }
+            }
+        }
+        // If the current rgba is not fetched by flutter, i.e., is valid.
+        // We give up sending a new event to flutter.
+        let mut rgba_write_lock = self.display_rgbas.write().unwrap();
+        if let Some(rgba_data) = rgba_write_lock.get_mut(&display) {
+            if rgba_data.valid {
+                return;
+            } else {
+                rgba_data.valid = true;
+            }
+            // Return the rgba buffer to the video handler for reusing allocated rgba buffer.
+            std::mem::swap::<Vec<u8>>(&mut rgba.raw, &mut rgba_data.data);
+        } else {
+            let mut rgba_data = RgbaData::default();
+            std::mem::swap::<Vec<u8>>(&mut rgba.raw, &mut rgba_data.data);
+            rgba_data.valid = true;
+            rgba_write_lock.insert(display, rgba_data);
+        }
+        drop(rgba_write_lock);
+
+        let mut is_sent = false;
+        let is_multi_sessions = self.is_multi_ui_session();
+        for h in self.session_handlers.read().unwrap().values() {
+            // The soft renderer does not support multi-displays session for now.
+            if h.displays.len() > 1 {
+                continue;
+            }
+            // If there're multiple ui sessions, we only notify the ui session that has the display.
+            if is_multi_sessions {
+                if !h.displays.contains(&display) {
+                    continue;
+                }
+            }
+            if let Some(stream) = &h.event_stream {
+                stream.add(EventToUI::Rgba(display));
+                is_sent = true;
+            }
+        }
+        // We need `is_sent` here. Because we use texture render for multi-displays session.
+        //
+        // Eg. We have two windows, one is display 1, the other is displays 0&1.
+        // When image of display 0 is received, we will not send the event.
+        //
+        // 1. "display 1" will not send the event.
+        // 2. "displays 0&1" will not send the event. Because it uses texutre render for now.
+        if !is_sent {
+            if let Some(rgba_data) = self.display_rgbas.write().unwrap().get_mut(&display) {
+                rgba_data.valid = false;
+            }
+        }
+    }
+
+    #[inline]
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    fn on_rgba_flutter_texture_render(
+        &self,
+        use_texture_render: bool,
+        display: usize,
+        rgba: &mut scrap::ImageRgb,
+    ) {
+        for (_, session) in self.session_handlers.read().unwrap().iter() {
+            if use_texture_render || session.displays.len() > 1 {
+                if session.renderer.on_rgba(display, rgba) {
+                    if let Some(stream) = &session.event_stream {
+                        stream.add(EventToUI::Texture(display, false));
+                    }
+                }
+            }
         }
     }
 }
 
 // This function is only used for the default connection session.
-pub fn session_add_existed(peer_id: String, session_id: SessionID) -> ResultType<()> {
-    sessions::insert_peer_session_id(peer_id, ConnType::DEFAULT_CONN, session_id);
+pub fn session_add_existed(
+    peer_id: String,
+    session_id: SessionID,
+    displays: Vec<i32>,
+) -> ResultType<()> {
+    sessions::insert_peer_session_id(peer_id, ConnType::DEFAULT_CONN, session_id, displays);
     Ok(())
 }
 
@@ -1021,6 +1125,7 @@ pub fn session_add(
     switch_uuid: &str,
     force_relay: bool,
     password: String,
+    is_shared_password: bool,
 ) -> ResultType<FlutterSession> {
     let conn_type = if is_file_transfer {
         ConnType::FILE_TRANSFER
@@ -1045,8 +1150,17 @@ pub fn session_add(
 
     LocalConfig::set_remote_id(&id);
 
+    let mut preset_password = password.clone();
+    let shared_password = if is_shared_password {
+        // To achieve a flexible password application order, we don't treat shared password as a preset password.
+        preset_password = Default::default();
+        Some(password)
+    } else {
+        None
+    };
+
     let session: Session<FlutterHandler> = Session {
-        password,
+        password: preset_password,
         server_keyboard_enabled: Arc::new(RwLock::new(true)),
         server_file_transfer_enabled: Arc::new(RwLock::new(true)),
         server_clipboard_enabled: Arc::new(RwLock::new(true)),
@@ -1059,17 +1173,13 @@ pub fn session_add(
         Some(switch_uuid.to_string())
     };
 
-    #[cfg(feature = "gpucodec")]
-    let adapter_luid = get_adapter_luid();
-    #[cfg(not(feature = "gpucodec"))]
-    let adapter_luid = None;
-
     session.lc.write().unwrap().initialize(
         id.to_owned(),
         conn_type,
         switch_uuid,
         force_relay,
-        adapter_luid,
+        get_adapter_luid(),
+        shared_password,
     );
 
     let session = Arc::new(session.clone());
@@ -1091,7 +1201,7 @@ pub fn session_start_(
 ) -> ResultType<()> {
     // is_connected is used to indicate whether to start a peer connection. For two cases:
     // 1. "Move tab to new window"
-    // 2. multi ui session within the same peer connnection.
+    // 2. multi ui session within the same peer connection.
     let mut is_connected = false;
     let mut is_found = false;
     for s in sessions::get_sessions() {
@@ -1114,14 +1224,11 @@ pub fn session_start_(
     if let Some(session) = sessions::get_session_by_session_id(session_id) {
         let is_first_ui_session = session.session_handlers.read().unwrap().len() == 1;
         if !is_connected && is_first_ui_session {
-            #[cfg(feature = "flutter_texture_render")]
             log::info!(
-                "Session {} start, render by flutter texture rgba plugin",
-                id
+                "Session {} start, use texture render: {}",
+                id,
+                session.use_texture_render.load(Ordering::Relaxed)
             );
-            #[cfg(not(feature = "flutter_texture_render"))]
-            log::info!("Session {} start, render by flutter paint widget", id);
-
             let session = (*session).clone();
             std::thread::spawn(move || {
                 let round = session.connection_round_state.lock().unwrap().new_round();
@@ -1153,6 +1260,19 @@ pub fn update_text_clipboard_required() {
 pub fn send_text_clipboard_msg(msg: Message) {
     for s in sessions::get_sessions() {
         if s.is_text_clipboard_required() {
+            // Check if the client supports multi clipboards
+            if let Some(message::Union::MultiClipboards(multi_clipboards)) = &msg.union {
+                let version = s.ui_handler.peer_info.read().unwrap().version.clone();
+                let platform = s.ui_handler.peer_info.read().unwrap().platform.clone();
+                if let Some(msg_out) = crate::clipboard::get_msg_if_not_support_multi_clip(
+                    &version,
+                    &platform,
+                    multi_clipboards,
+                ) {
+                    s.send(Data::Message(msg_out));
+                    continue;
+                }
+            }
             s.send(Data::Message(msg.clone()));
         }
     }
@@ -1181,11 +1301,11 @@ pub mod connection_manager {
         fn add_connection(&self, client: &crate::ui_cm_interface::Client) {
             let client_json = serde_json::to_string(&client).unwrap_or("".into());
             // send to Android service, active notification no matter UI is shown or not.
-            #[cfg(any(target_os = "android"))]
+            #[cfg(target_os = "android")]
             if let Err(e) =
                 call_main_service_set_by_name("add_connection", Some(&client_json), None)
             {
-                log::debug!("call_service_set_by_name fail,{}", e);
+                log::debug!("call_main_service_set_by_name fail,{}", e);
             }
             // send to UI, refresh widget
             self.push_event("add_connection", &[("client", &client_json)]);
@@ -1219,6 +1339,13 @@ pub mod connection_manager {
 
         fn update_voice_call_state(&self, client: &crate::ui_cm_interface::Client) {
             let client_json = serde_json::to_string(&client).unwrap_or("".into());
+            // send to Android service, active notification no matter UI is shown or not.
+            #[cfg(target_os = "android")]
+            if let Err(e) =
+                call_main_service_set_by_name("update_voice_call_state", Some(&client_json), None)
+            {
+                log::debug!("call_main_service_set_by_name fail,{}", e);
+            }
             self.push_event("update_voice_call_state", &[("client", &client_json)]);
         }
 
@@ -1372,14 +1499,13 @@ fn char_to_session_id(c: *const char) -> ResultType<SessionID> {
     SessionID::from_str(str).map_err(|e| anyhow!("{:?}", e))
 }
 
-pub fn session_get_rgba_size(_session_id: SessionID, _display: usize) -> usize {
-    #[cfg(not(feature = "flutter_texture_render"))]
-    if let Some(session) = sessions::get_session_by_session_id(&_session_id) {
+pub fn session_get_rgba_size(session_id: SessionID, display: usize) -> usize {
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
         return session
             .display_rgbas
             .read()
             .unwrap()
-            .get(&_display)
+            .get(&display)
             .map_or(0, |rgba| rgba.data.len());
     }
     0
@@ -1403,34 +1529,37 @@ pub fn session_next_rgba(session_id: SessionID, display: usize) {
 }
 
 #[inline]
-pub fn session_set_size(_session_id: SessionID, _display: usize, _width: usize, _height: usize) {
-    #[cfg(feature = "flutter_texture_render")]
+pub fn session_set_size(session_id: SessionID, display: usize, width: usize, height: usize) {
     for s in sessions::get_sessions() {
         if let Some(h) = s
             .ui_handler
             .session_handlers
             .write()
             .unwrap()
-            .get_mut(&_session_id)
+            .get_mut(&session_id)
         {
-            h.renderer.set_size(_display, _width, _height);
+            // If the session is the first connection, displays is not set yet.
+            // `displays`` is set while switching displays or adding a new session.
+            if !h.displays.contains(&display) {
+                h.displays.push(display);
+            }
+            h.renderer.set_size(display, width, height);
             break;
         }
     }
 }
 
 #[inline]
-pub fn session_register_pixelbuffer_texture(_session_id: SessionID, _display: usize, _ptr: usize) {
-    #[cfg(feature = "flutter_texture_render")]
+pub fn session_register_pixelbuffer_texture(session_id: SessionID, display: usize, ptr: usize) {
     for s in sessions::get_sessions() {
         if let Some(h) = s
             .ui_handler
             .session_handlers
             .read()
             .unwrap()
-            .get(&_session_id)
+            .get(&session_id)
         {
-            h.renderer.register_pixelbuffer_texture(_display, _ptr);
+            h.renderer.register_pixelbuffer_texture(display, ptr);
             break;
         }
     }
@@ -1438,7 +1567,7 @@ pub fn session_register_pixelbuffer_texture(_session_id: SessionID, _display: us
 
 #[inline]
 pub fn session_register_gpu_texture(_session_id: SessionID, _display: usize, _output_ptr: usize) {
-    #[cfg(feature = "gpucodec")]
+    #[cfg(feature = "vram")]
     for s in sessions::get_sessions() {
         if let Some(h) = s
             .ui_handler
@@ -1453,8 +1582,17 @@ pub fn session_register_gpu_texture(_session_id: SessionID, _display: usize, _ou
     }
 }
 
-#[cfg(feature = "gpucodec")]
+#[inline]
+#[cfg(not(feature = "vram"))]
 pub fn get_adapter_luid() -> Option<i64> {
+    None
+}
+
+#[cfg(feature = "vram")]
+pub fn get_adapter_luid() -> Option<i64> {
+    if !crate::ui_interface::use_texture_render() {
+        return None;
+    }
     let get_adapter_luid_func = match &*TEXTURE_GPU_RENDERER_PLUGIN {
         Ok(lib) => {
             let find_sym_res = unsafe {
@@ -1646,10 +1784,56 @@ pub fn try_sync_peer_option(
     }
 }
 
+pub(super) fn session_update_virtual_display(session: &FlutterSession, index: i32, on: bool) {
+    let virtual_display_key = "virtual-display";
+    let displays = session.get_option(virtual_display_key.to_owned());
+    if !on {
+        if index == -1 {
+            if !displays.is_empty() {
+                session.set_option(virtual_display_key.to_owned(), "".to_owned());
+            }
+        } else {
+            let mut vdisplays = displays.split(',').collect::<Vec<_>>();
+            let len = vdisplays.len();
+            if index == 0 {
+                // 0 means we cann't toggle the virtual display by index.
+                vdisplays.remove(vdisplays.len() - 1);
+            } else {
+                if let Some(i) = vdisplays.iter().position(|&x| x == index.to_string()) {
+                    vdisplays.remove(i);
+                }
+            }
+            if vdisplays.len() != len {
+                session.set_option(
+                    virtual_display_key.to_owned(),
+                    vdisplays.join(",").to_owned(),
+                );
+            }
+        }
+    } else {
+        let mut vdisplays = displays
+            .split(',')
+            .map(|x| x.to_string())
+            .collect::<Vec<_>>();
+        let len = vdisplays.len();
+        if index == 0 {
+            vdisplays.push(index.to_string());
+        } else {
+            if !vdisplays.iter().any(|x| *x == index.to_string()) {
+                vdisplays.push(index.to_string());
+            }
+        }
+        if vdisplays.len() != len {
+            session.set_option(
+                virtual_display_key.to_owned(),
+                vdisplays.join(",").to_owned(),
+            );
+        }
+    }
+}
+
 // sessions mod is used to avoid the big lock of sessions' map.
 pub mod sessions {
-    #[cfg(feature = "flutter_texture_render")]
-    use std::collections::HashSet;
 
     use super::*;
 
@@ -1716,14 +1900,6 @@ pub mod sessions {
         for (peer_key, s) in SESSIONS.write().unwrap().iter_mut() {
             let mut write_lock = s.ui_handler.session_handlers.write().unwrap();
             let remove_ret = write_lock.remove(id);
-            #[cfg(not(feature = "flutter_texture_render"))]
-            if remove_ret.is_some() {
-                if write_lock.is_empty() {
-                    remove_peer_key = Some(peer_key.clone());
-                }
-                break;
-            }
-            #[cfg(feature = "flutter_texture_render")]
             match remove_ret {
                 Some(_) => {
                     if write_lock.is_empty() {
@@ -1739,7 +1915,6 @@ pub mod sessions {
         SESSIONS.write().unwrap().remove(&remove_peer_key?)
     }
 
-    #[cfg(feature = "flutter_texture_render")]
     fn check_remove_unused_displays(
         current: Option<usize>,
         session_id: &SessionID,
@@ -1775,8 +1950,11 @@ pub mod sessions {
 
     pub fn session_switch_display(is_desktop: bool, session_id: SessionID, value: Vec<i32>) {
         for s in SESSIONS.read().unwrap().values() {
-            let read_lock = s.ui_handler.session_handlers.read().unwrap();
-            if read_lock.contains_key(&session_id) {
+            let mut write_lock = s.ui_handler.session_handlers.write().unwrap();
+            if let Some(h) = write_lock.get_mut(&session_id) {
+                h.displays = value.iter().map(|x| *x as usize).collect::<_>();
+                #[cfg(not(any(target_os = "android", target_os = "ios")))]
+                let displays_refresh = value.clone();
                 if value.len() == 1 {
                     // Switch display.
                     // This operation will also cause the peer to send a switch display message.
@@ -1787,19 +1965,35 @@ pub mod sessions {
                         s.capture_displays(vec![], vec![], value);
                     } else {
                         // Check if other displays are needed.
-                        #[cfg(feature = "flutter_texture_render")]
                         if value.len() == 1 {
                             check_remove_unused_displays(
                                 Some(value[0] as _),
                                 &session_id,
                                 &s,
-                                &read_lock,
+                                &write_lock,
                             );
                         }
                     }
                 } else {
                     // Try capture all displays.
                     s.capture_displays(vec![], vec![], value);
+                }
+                // When switching display, we also need to send "Refresh display" message.
+                // On the controlled side:
+                // 1. If this display is not currently captured -> Refresh -> Message "Refresh display" is not required.
+                // One more key frame (first frame) will be sent because the refresh message.
+                // 2. If this display is currently captured -> Not refresh -> Message "Refresh display" is required.
+                // Without the message, the control side cannot see the latest display image.
+                #[cfg(not(any(target_os = "android", target_os = "ios")))]
+                {
+                    let is_support_multi_ui_session = crate::common::is_support_multi_ui_session(
+                        &s.ui_handler.peer_info.read().unwrap().version,
+                    );
+                    if is_support_multi_ui_session {
+                        for display in displays_refresh.iter() {
+                            s.refresh_video(*display);
+                        }
+                    }
                 }
                 break;
             }
@@ -1825,18 +2019,18 @@ pub mod sessions {
         peer_id: String,
         conn_type: ConnType,
         session_id: SessionID,
+        displays: Vec<i32>,
     ) -> bool {
         if let Some(s) = SESSIONS.read().unwrap().get(&(peer_id, conn_type)) {
-            #[cfg(not(feature = "flutter_texture_render"))]
-            let h = SessionHandler::default();
-            #[cfg(feature = "flutter_texture_render")]
             let mut h = SessionHandler::default();
-            #[cfg(feature = "flutter_texture_render")]
-            {
-                h.renderer.is_support_multi_ui_session = crate::common::is_support_multi_ui_session(
-                    &s.ui_handler.peer_info.read().unwrap().version,
-                );
-            }
+            h.displays = displays.iter().map(|x| *x as usize).collect::<_>();
+            #[cfg(not(any(target_os = "android", target_os = "ios")))]
+            let is_support_multi_ui_session = crate::common::is_support_multi_ui_session(
+                &s.ui_handler.peer_info.read().unwrap().version,
+            );
+            #[cfg(any(target_os = "android", target_os = "ios"))]
+            let is_support_multi_ui_session = false;
+            h.renderer.is_support_multi_ui_session = is_support_multi_ui_session;
             let _ = s
                 .ui_handler
                 .session_handlers
@@ -1866,18 +2060,18 @@ pub mod sessions {
 pub(super) mod async_tasks {
     use hbb_common::{
         bail,
-        tokio::{
-            self, select,
-            sync::mpsc::{unbounded_channel, UnboundedSender},
-        },
+        tokio::{self, select},
         ResultType,
     };
     use std::{
         collections::HashMap,
-        sync::{Arc, Mutex},
+        sync::{
+            mpsc::{sync_channel, SyncSender},
+            Arc, Mutex,
+        },
     };
 
-    type TxQueryOnlines = UnboundedSender<Vec<String>>;
+    type TxQueryOnlines = SyncSender<Vec<String>>;
     lazy_static::lazy_static! {
         static ref TX_QUERY_ONLINES: Arc<Mutex<Option<TxQueryOnlines>>> = Default::default();
     }
@@ -1894,21 +2088,18 @@ pub(super) mod async_tasks {
 
     #[tokio::main(flavor = "current_thread")]
     async fn start_flutter_async_runner_() {
-        let (tx_onlines, mut rx_onlines) = unbounded_channel::<Vec<String>>();
+        // Only one task is allowed to run at the same time.
+        let (tx_onlines, rx_onlines) = sync_channel::<Vec<String>>(1);
         TX_QUERY_ONLINES.lock().unwrap().replace(tx_onlines);
 
         loop {
-            select! {
-                ids = rx_onlines.recv() => {
-                    match ids {
-                        Some(_ids) => {
-                            #[cfg(not(any(target_os = "ios")))]
-                            crate::rendezvous_mediator::query_online_states(_ids, handle_query_onlines).await
-                        }
-                        None => {
-                            break;
-                        }
-                    }
+            match rx_onlines.recv() {
+                Ok(ids) => {
+                    crate::client::peer_online::query_online_states(ids, handle_query_onlines).await
+                }
+                _ => {
+                    // unreachable!
+                    break;
                 }
             }
         }
@@ -1916,7 +2107,8 @@ pub(super) mod async_tasks {
 
     pub fn query_onlines(ids: Vec<String>) -> ResultType<()> {
         if let Some(tx) = TX_QUERY_ONLINES.lock().unwrap().as_ref() {
-            let _ = tx.send(ids)?;
+            // Ignore if the channel is full.
+            let _ = tx.try_send(ids)?;
         } else {
             bail!("No tx_query_onlines");
         }

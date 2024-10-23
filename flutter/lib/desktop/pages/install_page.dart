@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common.dart';
@@ -19,9 +21,7 @@ class InstallPage extends StatefulWidget {
 class _InstallPageState extends State<InstallPage> {
   final tabController = DesktopTabController(tabType: DesktopTabType.main);
 
-  @override
-  void initState() {
-    super.initState();
+  _InstallPageState() {
     Get.put<DesktopTabController>(tabController);
     const label = "install";
     tabController.add(TabInfo(
@@ -43,6 +43,7 @@ class _InstallPageState extends State<InstallPage> {
   Widget build(BuildContext context) {
     return DragToResizeArea(
       resizeEdgeSize: stateGlobal.resizeEdgeSize.value,
+      enableResizeEdges: windowManagerEnableResizeEdges,
       child: Container(
         child: Scaffold(
             backgroundColor: Theme.of(context).colorScheme.background,
@@ -73,10 +74,16 @@ class _InstallPageBodyState extends State<_InstallPageBody>
     padding: EdgeInsets.symmetric(vertical: 15, horizontal: 12),
   );
 
+  _InstallPageBodyState() {
+    controller = TextEditingController(text: bind.installInstallPath());
+    final installOptions = jsonDecode(bind.installInstallOptions());
+    startmenu.value = installOptions['STARTMENUSHORTCUTS'] != '0';
+    desktopicon.value = installOptions['DESKTOPSHORTCUTS'] != '0';
+  }
+
   @override
   void initState() {
     windowManager.addListener(this);
-    controller = TextEditingController(text: bind.installInstallPath());
     super.initState();
   }
 
@@ -248,6 +255,7 @@ class _InstallPageBodyState extends State<_InstallPageBody>
       if (desktopicon.value) args += ' desktopicon';
       bind.installInstallMe(options: args, path: controller.text);
     }
+
     do_install();
   }
 

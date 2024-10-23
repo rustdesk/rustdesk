@@ -1,12 +1,16 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 
+import 'package:bot_toast/bot_toast.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_hbb/common/shared_state.dart';
 import 'package:flutter_hbb/common/widgets/setting_widgets.dart';
 import 'package:flutter_hbb/consts.dart';
+import 'package:flutter_hbb/models/peer_model.dart';
+import 'package:flutter_hbb/models/peer_tab_model.dart';
+import 'package:flutter_hbb/models/state_model.dart';
 import 'package:get/get.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
@@ -78,7 +82,7 @@ void changeIdDialog() {
       final Iterable violations = rules.where((r) => !r.validate(newId));
       if (violations.isNotEmpty) {
         setState(() {
-          msg = isDesktop
+          msg = (isDesktop || isWebDesktop)
               ? '${translate('Prompt')}:  ${violations.map((r) => r.name).join(', ')}'
               : violations.map((r) => r.name).join(', ');
         });
@@ -103,7 +107,7 @@ void changeIdDialog() {
       }
       setState(() {
         isInProgress = false;
-        msg = isDesktop
+        msg = (isDesktop || isWebDesktop)
             ? '${translate('Prompt')}: ${translate(status)}'
             : translate(status);
       });
@@ -140,7 +144,7 @@ void changeIdDialog() {
           const SizedBox(
             height: 8.0,
           ),
-          isDesktop
+          (isDesktop || isWebDesktop)
               ? Obx(() => Wrap(
                     runSpacing: 8,
                     spacing: 4,
@@ -175,11 +179,14 @@ void changeIdDialog() {
 }
 
 void changeWhiteList({Function()? callback}) async {
-  var newWhiteList = (await bind.mainGetOption(key: 'whitelist')).split(',');
-  var newWhiteListField = newWhiteList.join('\n');
+  final curWhiteList = await bind.mainGetOption(key: kOptionWhitelist);
+  var newWhiteListField = curWhiteList == defaultOptionWhitelist
+      ? ''
+      : curWhiteList.split(',').join('\n');
   var controller = TextEditingController(text: newWhiteListField);
   var msg = "";
   var isInProgress = false;
+  final isOptFixed = isOptionFixed(kOptionWhitelist);
   gFFI.dialogManager.show((setState, close, context) {
     return CustomAlertDialog(
       title: Text(translate("IP Whitelisting")),
@@ -199,6 +206,7 @@ void changeWhiteList({Function()? callback}) async {
                       errorText: msg.isEmpty ? null : translate(msg),
                     ),
                     controller: controller,
+                    enabled: !isOptFixed,
                     autofocus: true),
               ),
             ],
@@ -212,45 +220,53 @@ void changeWhiteList({Function()? callback}) async {
       ),
       actions: [
         dialogButton("Cancel", onPressed: close, isOutline: true),
-        dialogButton("Clear", onPressed: () async {
-          await bind.mainSetOption(key: 'whitelist', value: '');
-          callback?.call();
-          close();
-        }, isOutline: true),
-        dialogButton(
-          "OK",
-          onPressed: () async {
-            setState(() {
-              msg = "";
-              isInProgress = true;
-            });
-            newWhiteListField = controller.text.trim();
-            var newWhiteList = "";
-            if (newWhiteListField.isEmpty) {
-              // pass
-            } else {
-              final ips = newWhiteListField.trim().split(RegExp(r"[\s,;\n]+"));
-              // test ip
-              final ipMatch = RegExp(
-                  r"^(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]?|0)\.(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]?|0)\.(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]?|0)\.(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]?|0)(\/([1-9]|[1-2][0-9]|3[0-2])){0,1}$");
-              final ipv6Match = RegExp(
-                  r"^(((?:[0-9A-Fa-f]{1,4}))*((?::[0-9A-Fa-f]{1,4}))*::((?:[0-9A-Fa-f]{1,4}))*((?::[0-9A-Fa-f]{1,4}))*|((?:[0-9A-Fa-f]{1,4}))((?::[0-9A-Fa-f]{1,4})){7})(\/([1-9]|[1-9][0-9]|1[0-1][0-9]|12[0-8])){0,1}$");
-              for (final ip in ips) {
-                if (!ipMatch.hasMatch(ip) && !ipv6Match.hasMatch(ip)) {
-                  msg = "${translate("Invalid IP")} $ip";
-                  setState(() {
-                    isInProgress = false;
-                  });
-                  return;
-                }
-              }
-              newWhiteList = ips.join(',');
-            }
-            await bind.mainSetOption(key: 'whitelist', value: newWhiteList);
+        if (!isOptFixed)
+          dialogButton("Clear", onPressed: () async {
+            await bind.mainSetOption(
+                key: kOptionWhitelist, value: defaultOptionWhitelist);
             callback?.call();
             close();
-          },
-        ),
+          }, isOutline: true),
+        if (!isOptFixed)
+          dialogButton(
+            "OK",
+            onPressed: () async {
+              setState(() {
+                msg = "";
+                isInProgress = true;
+              });
+              newWhiteListField = controller.text.trim();
+              var newWhiteList = "";
+              if (newWhiteListField.isEmpty) {
+                // pass
+              } else {
+                final ips =
+                    newWhiteListField.trim().split(RegExp(r"[\s,;\n]+"));
+                // test ip
+                final ipMatch = RegExp(
+                    r"^(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]?|0)\.(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]?|0)\.(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]?|0)\.(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]?|0)(\/([1-9]|[1-2][0-9]|3[0-2])){0,1}$");
+                final ipv6Match = RegExp(
+                    r"^(((?:[0-9A-Fa-f]{1,4}))*((?::[0-9A-Fa-f]{1,4}))*::((?:[0-9A-Fa-f]{1,4}))*((?::[0-9A-Fa-f]{1,4}))*|((?:[0-9A-Fa-f]{1,4}))((?::[0-9A-Fa-f]{1,4})){7})(\/([1-9]|[1-9][0-9]|1[0-1][0-9]|12[0-8])){0,1}$");
+                for (final ip in ips) {
+                  if (!ipMatch.hasMatch(ip) && !ipv6Match.hasMatch(ip)) {
+                    msg = "${translate("Invalid IP")} $ip";
+                    setState(() {
+                      isInProgress = false;
+                    });
+                    return;
+                  }
+                }
+                newWhiteList = ips.join(',');
+              }
+              if (newWhiteList.trim().isEmpty) {
+                newWhiteList = defaultOptionWhitelist;
+              }
+              await bind.mainSetOption(
+                  key: kOptionWhitelist, value: newWhiteList);
+              callback?.call();
+              close();
+            },
+          ),
       ],
       onCancel: close,
     );
@@ -296,7 +312,7 @@ Future<String> changeDirectAccessPort(
         dialogButton("Cancel", onPressed: close, isOutline: true),
         dialogButton("OK", onPressed: () async {
           await bind.mainSetOption(
-              key: 'direct-access-port', value: controller.text);
+              key: kOptionDirectAccessPort, value: controller.text);
           close();
         }),
       ],
@@ -343,7 +359,7 @@ Future<String> changeAutoDisconnectTimeout(String old) async {
         dialogButton("Cancel", onPressed: close, isOutline: true),
         dialogButton("OK", onPressed: () async {
           await bind.mainSetOption(
-              key: 'auto-disconnect-timeout', value: controller.text);
+              key: kOptionAutoDisconnectTimeout, value: controller.text);
           close();
         }),
       ],
@@ -365,6 +381,7 @@ class DialogTextField extends StatelessWidget {
   final FocusNode? focusNode;
   final TextInputType? keyboardType;
   final List<TextInputFormatter>? inputFormatters;
+  final int? maxLength;
 
   static const kUsernameTitle = 'Username';
   static const kUsernameIcon = Icon(Icons.account_circle_outlined);
@@ -382,6 +399,7 @@ class DialogTextField extends StatelessWidget {
       this.hintText,
       this.keyboardType,
       this.inputFormatters,
+      this.maxLength,
       required this.title,
       required this.controller})
       : super(key: key);
@@ -408,6 +426,7 @@ class DialogTextField extends StatelessWidget {
             obscureText: obscureText,
             keyboardType: keyboardType,
             inputFormatters: inputFormatters,
+            maxLength: maxLength,
           ),
         ),
       ],
@@ -622,7 +641,7 @@ class _DialogVerificationCodeField extends State<DialogVerificationCodeField> {
 
     // software secure keyboard will take the focus since flutter 3.13
     // request focus again when android account password obtain focus
-    if (Platform.isAndroid && widget.reRequestFocus) {
+    if (isAndroid && widget.reRequestFocus) {
       _focusNode.addListener(() {
         if (_focusNode.hasFocus) {
           _timerReRequestFocus?.cancel();
@@ -664,6 +683,8 @@ class PasswordWidget extends StatefulWidget {
     this.reRequestFocus = false,
     this.hintText,
     this.errorText,
+    this.title,
+    this.maxLength,
   }) : super(key: key);
 
   final TextEditingController controller;
@@ -671,6 +692,8 @@ class PasswordWidget extends StatefulWidget {
   final bool reRequestFocus;
   final String? hintText;
   final String? errorText;
+  final String? title;
+  final int? maxLength;
 
   @override
   State<PasswordWidget> createState() => _PasswordWidgetState();
@@ -691,7 +714,7 @@ class _PasswordWidgetState extends State<PasswordWidget> {
     }
     // software secure keyboard will take the focus since flutter 3.13
     // request focus again when android account password obtain focus
-    if (Platform.isAndroid && widget.reRequestFocus) {
+    if (isAndroid && widget.reRequestFocus) {
       _focusNode.addListener(() {
         if (_focusNode.hasFocus) {
           _timerReRequestFocus?.cancel();
@@ -714,7 +737,7 @@ class _PasswordWidgetState extends State<PasswordWidget> {
   @override
   Widget build(BuildContext context) {
     return DialogTextField(
-      title: translate(DialogTextField.kPasswordTitle),
+      title: translate(widget.title ?? DialogTextField.kPasswordTitle),
       hintText: translate(widget.hintText ?? 'Enter your password'),
       controller: widget.controller,
       prefixIcon: DialogTextField.kPasswordIcon,
@@ -733,6 +756,7 @@ class _PasswordWidgetState extends State<PasswordWidget> {
       obscureText: !_passwordVisible,
       errorText: widget.errorText,
       focusNode: _focusNode,
+      maxLength: widget.maxLength,
     );
   }
 }
@@ -1106,7 +1130,7 @@ void showRequestElevationDialog(
                 errorText: errPwd.isEmpty ? null : errPwd.value,
               ),
             ],
-          ).marginOnly(left: isDesktop ? 35 : 0),
+          ).marginOnly(left: stateGlobal.isPortrait.isFalse ? 35 : 0),
         ).marginOnly(top: 10),
       ],
     ),
@@ -1583,7 +1607,7 @@ customImageQualityDialog(SessionID sessionId, String id, FFI ffi) async {
   msgBoxCommon(ffi.dialogManager, 'Custom Image Quality', content, [btnClose]);
 }
 
-void deletePeerConfirmDialog(Function onSubmit, String title) async {
+void deleteConfirmDialog(Function onSubmit, String title) async {
   gFFI.dialogManager.show(
     (setState, close, context) {
       submit() async {
@@ -1631,7 +1655,7 @@ void editAbTagDialog(
     List<dynamic> currentTags, Function(List<dynamic>) onSubmit) {
   var isInProgress = false;
 
-  final tags = List.of(gFFI.abModel.tags);
+  final tags = List.of(gFFI.abModel.currentAbTags);
   var selectedTag = currentTags.obs;
 
   gFFI.dialogManager.show((setState, close, context) {
@@ -1751,9 +1775,70 @@ void renameDialog(
   });
 }
 
+void changeBot({Function()? callback}) async {
+  if (bind.mainHasValidBotSync()) {
+    await bind.mainSetOption(key: "bot", value: "");
+    callback?.call();
+    return;
+  }
+  String errorText = '';
+  bool loading = false;
+  final controller = TextEditingController();
+  gFFI.dialogManager.show((setState, close, context) {
+    onVerify() async {
+      final token = controller.text.trim();
+      if (token == "") return;
+      loading = true;
+      errorText = '';
+      setState(() {});
+      final error = await bind.mainVerifyBot(token: token);
+      if (error == "") {
+        callback?.call();
+        close();
+      } else {
+        errorText = translate(error);
+        loading = false;
+        setState(() {});
+      }
+    }
+
+    final codeField = TextField(
+      autofocus: true,
+      controller: controller,
+      decoration: InputDecoration(
+        hintText: translate('Token'),
+      ),
+    );
+
+    return CustomAlertDialog(
+      title: Text(translate("Telegram bot")),
+      content: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SelectableText(translate("enable-bot-desc"),
+                  style: TextStyle(fontSize: 12))
+              .marginOnly(bottom: 12),
+          Row(children: [Expanded(child: codeField)]),
+          if (errorText != '')
+            Text(errorText, style: TextStyle(color: Colors.red))
+                .marginOnly(top: 12),
+        ],
+      ),
+      actions: [
+        dialogButton("Cancel", onPressed: close, isOutline: true),
+        loading
+            ? CircularProgressIndicator()
+            : dialogButton("OK", onPressed: onVerify),
+      ],
+      onCancel: close,
+    );
+  });
+}
+
 void change2fa({Function()? callback}) async {
   if (bind.mainHasValid2FaSync()) {
     await bind.mainSetOption(key: "2fa", value: "");
+    await bind.mainClearTrustedDevices();
     callback?.call();
     return;
   }
@@ -1821,6 +1906,7 @@ void enter2FaDialog(
     SessionID sessionId, OverlayDialogManager dialogManager) async {
   final controller = TextEditingController();
   final RxBool submitReady = false.obs;
+  final RxBool trustThisDevice = false.obs;
 
   dialogManager.dismissAll();
   dialogManager.show((setState, close, context) {
@@ -1830,7 +1916,7 @@ void enter2FaDialog(
     }
 
     submit() {
-      gFFI.send2FA(sessionId, controller.text.trim());
+      gFFI.send2FA(sessionId, controller.text.trim(), trustThisDevice.value);
       close();
       dialogManager.showLoading(translate('Logging in...'),
           onCancel: closeConnection);
@@ -1844,9 +1930,27 @@ void enter2FaDialog(
       onChanged: () => submitReady.value = codeField.isReady,
     );
 
+    final trustField = Obx(() => CheckboxListTile(
+          contentPadding: const EdgeInsets.all(0),
+          dense: true,
+          controlAffinity: ListTileControlAffinity.leading,
+          title: Text(translate("Trust this device")),
+          value: trustThisDevice.value,
+          onChanged: (value) {
+            if (value == null) return;
+            trustThisDevice.value = value;
+          },
+        ));
+
     return CustomAlertDialog(
         title: Text(translate('enter-2fa-title')),
-        content: codeField,
+        content: Column(
+          children: [
+            codeField,
+            if (bind.sessionGetEnableTrustedDevices(sessionId: sessionId))
+              trustField,
+          ],
+        ),
         actions: [
           dialogButton('Cancel',
               onPressed: cancel,
@@ -1908,4 +2012,488 @@ void showWindowsSessionsDialog(
       ],
     );
   });
+}
+
+void addPeersToAbDialog(
+  List<Peer> peers,
+) async {
+  Future<bool> addTo(String abname) async {
+    final mapList = peers.map((e) {
+      var json = e.toJson();
+      // remove password when add to another address book to avoid re-share
+      json.remove('password');
+      json.remove('hash');
+      return json;
+    }).toList();
+    final errMsg = await gFFI.abModel.addPeersTo(mapList, abname);
+    if (errMsg == null) {
+      showToast(translate('Successful'));
+      return true;
+    } else {
+      BotToast.showText(text: errMsg, contentColor: Colors.red);
+      return false;
+    }
+  }
+
+  // if only one address book and it is personal, add to it directly
+  if (gFFI.abModel.addressbooks.length == 1 &&
+      gFFI.abModel.current.isPersonal()) {
+    await addTo(gFFI.abModel.currentName.value);
+    return;
+  }
+
+  RxBool isInProgress = false.obs;
+  final names = gFFI.abModel.addressBooksCanWrite();
+  RxString currentName = gFFI.abModel.currentName.value.obs;
+  TextEditingController controller = TextEditingController();
+  if (gFFI.peerTabModel.currentTab == PeerTabIndex.ab.index) {
+    names.remove(currentName.value);
+  }
+  if (names.isEmpty) {
+    debugPrint('no address book to add peers to, should not happen');
+    return;
+  }
+  if (!names.contains(currentName.value)) {
+    currentName.value = names[0];
+  }
+  gFFI.dialogManager.show((setState, close, context) {
+    submit() async {
+      if (controller.text != gFFI.abModel.translatedName(currentName.value)) {
+        BotToast.showText(
+            text: 'illegal address book name: ${controller.text}',
+            contentColor: Colors.red);
+        return;
+      }
+      isInProgress.value = true;
+      if (await addTo(currentName.value)) {
+        close();
+      }
+      isInProgress.value = false;
+    }
+
+    cancel() {
+      close();
+    }
+
+    return CustomAlertDialog(
+      title: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(IconFont.addressBook, color: MyTheme.accent),
+          Text(translate('Add to address book')).paddingOnly(left: 10),
+        ],
+      ),
+      content: Obx(() => Column(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              // https://github.com/flutter/flutter/issues/145081
+              DropdownMenu(
+                initialSelection: currentName.value,
+                onSelected: (value) {
+                  if (value != null) {
+                    currentName.value = value;
+                  }
+                },
+                dropdownMenuEntries: names
+                    .map((e) => DropdownMenuEntry(
+                        value: e, label: gFFI.abModel.translatedName(e)))
+                    .toList(),
+                inputDecorationTheme: InputDecorationTheme(
+                    isDense: true, border: UnderlineInputBorder()),
+                enableFilter: true,
+                controller: controller,
+              ),
+              // NOT use Offstage to wrap LinearProgressIndicator
+              isInProgress.value ? const LinearProgressIndicator() : Offstage()
+            ],
+          )),
+      actions: [
+        dialogButton(
+          "Cancel",
+          icon: Icon(Icons.close_rounded),
+          onPressed: cancel,
+          isOutline: true,
+        ),
+        dialogButton(
+          "OK",
+          icon: Icon(Icons.done_rounded),
+          onPressed: submit,
+        ),
+      ],
+      onSubmit: submit,
+      onCancel: cancel,
+    );
+  });
+}
+
+void setSharedAbPasswordDialog(String abName, Peer peer) {
+  TextEditingController controller = TextEditingController(text: '');
+  RxBool isInProgress = false.obs;
+  RxBool isInputEmpty = true.obs;
+  bool passwordVisible = false;
+  controller.addListener(() {
+    isInputEmpty.value = controller.text.isEmpty;
+  });
+  gFFI.dialogManager.show((setState, close, context) {
+    change(String password) async {
+      isInProgress.value = true;
+      bool res =
+          await gFFI.abModel.changeSharedPassword(abName, peer.id, password);
+      isInProgress.value = false;
+      if (res) {
+        showToast(translate('Successful'));
+      }
+      close();
+    }
+
+    cancel() {
+      close();
+    }
+
+    return CustomAlertDialog(
+      title: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.key, color: MyTheme.accent),
+          Text(translate(peer.password.isEmpty
+                  ? 'Set shared password'
+                  : 'Change Password'))
+              .paddingOnly(left: 10),
+        ],
+      ),
+      content: Obx(() => Column(children: [
+            TextField(
+              controller: controller,
+              autofocus: true,
+              obscureText: !passwordVisible,
+              decoration: InputDecoration(
+                suffixIcon: IconButton(
+                  icon: Icon(
+                      passwordVisible ? Icons.visibility : Icons.visibility_off,
+                      color: MyTheme.lightTheme.primaryColor),
+                  onPressed: () {
+                    setState(() {
+                      passwordVisible = !passwordVisible;
+                    });
+                  },
+                ),
+              ),
+            ),
+            if (!gFFI.abModel.current.isPersonal())
+              Row(children: [
+                Icon(Icons.info, color: Colors.amber).marginOnly(right: 4),
+                Text(
+                  translate('share_warning_tip'),
+                  style: TextStyle(fontSize: 12),
+                )
+              ]).marginSymmetric(vertical: 10),
+            // NOT use Offstage to wrap LinearProgressIndicator
+            isInProgress.value ? const LinearProgressIndicator() : Offstage()
+          ])),
+      actions: [
+        dialogButton(
+          "Cancel",
+          icon: Icon(Icons.close_rounded),
+          onPressed: cancel,
+          isOutline: true,
+        ),
+        if (peer.password.isNotEmpty)
+          dialogButton(
+            "Remove",
+            icon: Icon(Icons.delete_outline_rounded),
+            onPressed: () => change(''),
+            buttonStyle: ButtonStyle(
+                backgroundColor: MaterialStatePropertyAll(Colors.red)),
+          ),
+        Obx(() => dialogButton(
+              "OK",
+              icon: Icon(Icons.done_rounded),
+              onPressed:
+                  isInputEmpty.value ? null : () => change(controller.text),
+            )),
+      ],
+      onSubmit: isInputEmpty.value ? null : () => change(controller.text),
+      onCancel: cancel,
+    );
+  });
+}
+
+void CommonConfirmDialog(OverlayDialogManager dialogManager, String content,
+    VoidCallback onConfirm) {
+  dialogManager.show((setState, close, context) {
+    submit() {
+      close();
+      onConfirm.call();
+    }
+
+    return CustomAlertDialog(
+      content: Row(
+        children: [
+          Expanded(
+            child: Text(content,
+                style: const TextStyle(fontSize: 15),
+                textAlign: TextAlign.start),
+          ),
+        ],
+      ).marginOnly(bottom: 12),
+      actions: [
+        dialogButton(translate("Cancel"), onPressed: close, isOutline: true),
+        dialogButton(translate("OK"), onPressed: submit),
+      ],
+      onSubmit: submit,
+      onCancel: close,
+    );
+  });
+}
+
+void changeUnlockPinDialog(String oldPin, Function() callback) {
+  final pinController = TextEditingController(text: oldPin);
+  final confirmController = TextEditingController(text: oldPin);
+  String? pinErrorText;
+  String? confirmationErrorText;
+  final maxLength = bind.mainMaxEncryptLen();
+  gFFI.dialogManager.show((setState, close, context) {
+    submit() async {
+      pinErrorText = null;
+      confirmationErrorText = null;
+      final pin = pinController.text.trim();
+      final confirm = confirmController.text.trim();
+      if (pin != confirm) {
+        setState(() {
+          confirmationErrorText =
+              translate('The confirmation is not identical.');
+        });
+        return;
+      }
+      final errorMsg = bind.mainSetUnlockPin(pin: pin);
+      if (errorMsg != '') {
+        setState(() {
+          pinErrorText = translate(errorMsg);
+        });
+        return;
+      }
+      callback.call();
+      close();
+    }
+
+    return CustomAlertDialog(
+      title: Text(translate("Set PIN")),
+      content: Column(
+        children: [
+          DialogTextField(
+            title: 'PIN',
+            controller: pinController,
+            obscureText: true,
+            errorText: pinErrorText,
+            maxLength: maxLength,
+          ),
+          DialogTextField(
+            title: translate('Confirmation'),
+            controller: confirmController,
+            obscureText: true,
+            errorText: confirmationErrorText,
+            maxLength: maxLength,
+          )
+        ],
+      ).marginOnly(bottom: 12),
+      actions: [
+        dialogButton(translate("Cancel"), onPressed: close, isOutline: true),
+        dialogButton(translate("OK"), onPressed: submit),
+      ],
+      onSubmit: submit,
+      onCancel: close,
+    );
+  });
+}
+
+void checkUnlockPinDialog(String correctPin, Function() passCallback) {
+  final controller = TextEditingController();
+  String? errorText;
+  gFFI.dialogManager.show((setState, close, context) {
+    submit() async {
+      final pin = controller.text.trim();
+      if (correctPin != pin) {
+        setState(() {
+          errorText = translate('Wrong PIN');
+        });
+        return;
+      }
+      passCallback.call();
+      close();
+    }
+
+    return CustomAlertDialog(
+      content: Row(
+        children: [
+          Expanded(
+              child: PasswordWidget(
+            title: 'PIN',
+            controller: controller,
+            errorText: errorText,
+            hintText: '',
+          ))
+        ],
+      ).marginOnly(bottom: 12),
+      actions: [
+        dialogButton(translate("Cancel"), onPressed: close, isOutline: true),
+        dialogButton(translate("OK"), onPressed: submit),
+      ],
+      onSubmit: submit,
+      onCancel: close,
+    );
+  });
+}
+
+void confrimDeleteTrustedDevicesDialog(
+    RxList<TrustedDevice> trustedDevices, RxList<Uint8List> selectedDevices) {
+  CommonConfirmDialog(gFFI.dialogManager, '${translate('Confirm Delete')}?',
+      () async {
+    if (selectedDevices.isEmpty) return;
+    if (selectedDevices.length == trustedDevices.length) {
+      await bind.mainClearTrustedDevices();
+      trustedDevices.clear();
+      selectedDevices.clear();
+    } else {
+      final json = jsonEncode(selectedDevices.map((e) => e.toList()).toList());
+      await bind.mainRemoveTrustedDevices(json: json);
+      trustedDevices.removeWhere((element) {
+        return selectedDevices.contains(element.hwid);
+      });
+      selectedDevices.clear();
+    }
+  });
+}
+
+void manageTrustedDeviceDialog() async {
+  RxList<TrustedDevice> trustedDevices = (await TrustedDevice.get()).obs;
+  RxList<Uint8List> selectedDevices = RxList.empty();
+  gFFI.dialogManager.show((setState, close, context) {
+    return CustomAlertDialog(
+      title: Text(translate("Manage trusted devices")),
+      content: trustedDevicesTable(trustedDevices, selectedDevices),
+      actions: [
+        Obx(() => dialogButton(translate("Delete"),
+                onPressed: selectedDevices.isEmpty
+                    ? null
+                    : () {
+                        confrimDeleteTrustedDevicesDialog(
+                          trustedDevices,
+                          selectedDevices,
+                        );
+                      },
+                isOutline: false)
+            .marginOnly(top: 12)),
+        dialogButton(translate("Close"), onPressed: close, isOutline: true)
+            .marginOnly(top: 12),
+      ],
+      onCancel: close,
+    );
+  });
+}
+
+class TrustedDevice {
+  late final Uint8List hwid;
+  late final int time;
+  late final String id;
+  late final String name;
+  late final String platform;
+
+  TrustedDevice.fromJson(Map<String, dynamic> json) {
+    final hwidList = json['hwid'] as List<dynamic>;
+    hwid = Uint8List.fromList(hwidList.cast<int>());
+    time = json['time'];
+    id = json['id'];
+    name = json['name'];
+    platform = json['platform'];
+  }
+
+  String daysRemaining() {
+    final expiry = time + 90 * 24 * 60 * 60 * 1000;
+    final remaining = expiry - DateTime.now().millisecondsSinceEpoch;
+    if (remaining < 0) {
+      return '0';
+    }
+    return (remaining / (24 * 60 * 60 * 1000)).toStringAsFixed(0);
+  }
+
+  static Future<List<TrustedDevice>> get() async {
+    final List<TrustedDevice> devices = List.empty(growable: true);
+    try {
+      final devicesJson = await bind.mainGetTrustedDevices();
+      if (devicesJson.isNotEmpty) {
+        final devicesList = json.decode(devicesJson);
+        if (devicesList is List) {
+          for (var device in devicesList) {
+            devices.add(TrustedDevice.fromJson(device));
+          }
+        }
+      }
+    } catch (e) {
+      print(e.toString());
+    }
+    devices.sort((a, b) => b.time.compareTo(a.time));
+    return devices;
+  }
+}
+
+Widget trustedDevicesTable(
+    RxList<TrustedDevice> devices, RxList<Uint8List> selectedDevices) {
+  RxBool selectAll = false.obs;
+  setSelectAll() {
+    if (selectedDevices.isNotEmpty &&
+        selectedDevices.length == devices.length) {
+      selectAll.value = true;
+    } else {
+      selectAll.value = false;
+    }
+  }
+
+  devices.listen((_) {
+    setSelectAll();
+  });
+  selectedDevices.listen((_) {
+    setSelectAll();
+  });
+  return FittedBox(
+    child: Obx(() => DataTable(
+          columns: [
+            DataColumn(
+                label: Checkbox(
+              value: selectAll.value,
+              onChanged: (value) {
+                if (value == true) {
+                  selectedDevices.clear();
+                  selectedDevices.addAll(devices.map((e) => e.hwid));
+                } else {
+                  selectedDevices.clear();
+                }
+              },
+            )),
+            DataColumn(label: Text(translate('Platform'))),
+            DataColumn(label: Text(translate('ID'))),
+            DataColumn(label: Text(translate('Username'))),
+            DataColumn(label: Text(translate('Days remaining'))),
+          ],
+          rows: devices.map((device) {
+            return DataRow(cells: [
+              DataCell(Checkbox(
+                value: selectedDevices.contains(device.hwid),
+                onChanged: (value) {
+                  if (value == null) return;
+                  if (value) {
+                    selectedDevices.remove(device.hwid);
+                    selectedDevices.add(device.hwid);
+                  } else {
+                    selectedDevices.remove(device.hwid);
+                  }
+                },
+              )),
+              DataCell(Text(device.platform)),
+              DataCell(Text(device.id)),
+              DataCell(Text(device.name)),
+              DataCell(Text(device.daysRemaining())),
+            ]);
+          }).toList(),
+        )),
+  );
 }

@@ -839,6 +839,21 @@ pub fn create_dir(dir: &str) -> ResultType<()> {
 }
 
 #[inline]
+pub fn rename_file(path: &str, new_name: &str) -> ResultType<()> {
+    let path = std::path::Path::new(&path);
+    if path.exists() {
+        let dir = path
+            .parent()
+            .ok_or(anyhow!("Parent directoy of {path:?} not exists"))?;
+        let new_path = dir.join(&new_name);
+        std::fs::rename(&path, &new_path)?;
+        Ok(())
+    } else {
+        bail!("{path:?} not exists");
+    }
+}
+
+#[inline]
 pub fn transform_windows_path(entries: &mut Vec<FileEntry>) {
     for entry in entries {
         entry.name = entry.name.replace('\\', "/");

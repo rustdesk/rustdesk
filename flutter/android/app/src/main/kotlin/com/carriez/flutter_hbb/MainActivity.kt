@@ -7,6 +7,8 @@ package com.carriez.flutter_hbb
  * Inspired by [droidVNC-NG] https://github.com/bk138/droidVNC-NG
  */
 
+import ffi.FFI
+
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
@@ -15,10 +17,20 @@ import android.os.Build
 import android.os.IBinder
 import android.util.Log
 import android.view.WindowManager
+import android.media.MediaCodecInfo
+import android.media.MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface
+import android.media.MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420SemiPlanar
+import android.media.MediaCodecList
+import android.media.MediaFormat
+import android.util.DisplayMetrics
+import androidx.annotation.RequiresApi
+import org.json.JSONArray
+import org.json.JSONObject
 import com.hjq.permissions.XXPermissions
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
+import kotlin.concurrent.thread
 
 
 class MainActivity : FlutterActivity() {
@@ -29,6 +41,9 @@ class MainActivity : FlutterActivity() {
     private val channelTag = "mChannel"
     private val logTag = "mMainActivity"
     private var mainService: MainService? = null
+
+    private var isAudioStart = false
+    private val audioRecordHandle = AudioRecordHandle(this, { false }, { isAudioStart })
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -42,6 +57,7 @@ class MainActivity : FlutterActivity() {
             channelTag
         )
         initFlutterChannel(flutterMethodChannel!!)
+        thread { setCodecInfo() }
     }
 
     override fun onResume() {
@@ -217,10 +233,159 @@ class MainActivity : FlutterActivity() {
                         result.success(false)
                     }
                 }
+                GET_VALUE -> {
+                    if (call.arguments is String) {
+                        if (call.arguments == KEY_IS_SUPPORT_VOICE_CALL) {
+                            result.success(isSupportVoiceCall())
+                        } else {
+                            result.error("-1", "No such key", null)
+                        }
+                    } else {
+                        result.success(null)
+                    }
+                }
+                "on_voice_call_started" -> {
+                    onVoiceCallStarted()
+                }
+                "on_voice_call_closed" -> {
+                    onVoiceCallClosed()
+                }
                 else -> {
                     result.error("-1", "No such method", null)
                 }
             }
         }
+    }
+
+    private fun setCodecInfo() {
+        val codecList = MediaCodecList(MediaCodecList.REGULAR_CODECS)
+        val codecs = codecList.codecInfos
+        val codecArray = JSONArray()
+
+        val windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
+        val wh = getScreenSize(windowManager)
+        var w = wh.first
+        var h = wh.second
+        val align = 64
+        w = (w + align - 1) / align * align
+        h = (h + align - 1) / align * align
+        codecs.forEach { codec ->
+            val codecObject = JSONObject()
+            codecObject.put("name", codec.name)
+            codecObject.put("is_encoder", codec.isEncoder)
+            var hw: Boolean? = null;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                hw = codec.isHardwareAccelerated
+            } else {
+                // https://chromium.googlesource.com/external/webrtc/+/HEAD/sdk/android/src/java/org/webrtc/MediaCodecUtils.java#29
+                // https://chromium.googlesource.com/external/webrtc/+/master/sdk/android/api/org/webrtc/HardwareVideoEncoderFactory.java#229
+                if (listOf("OMX.google.", "OMX.SEC.", "c2.android").any { codec.name.startsWith(it, true) }) {
+                    hw = false
+                } else if (listOf("c2.qti", "OMX.qcom.video", "OMX.Exynos", "OMX.hisi", "OMX.MTK", "OMX.Intel", "OMX.Nvidia").any { codec.name.startsWith(it, true) }) {
+                    hw = true
+                }
+            }
+            if (hw != true) {
+                return@forEach
+            }
+            codecObject.put("hw", hw)
+            var mime_type = ""
+            codec.supportedTypes.forEach { type ->
+                if (listOf("video/avc", "video/hevc").contains(type)) { // "video/x-vnd.on2.vp8", "video/x-vnd.on2.vp9", "video/av01"
+                    mime_type = type;
+                }
+            }
+            if (mime_type.isNotEmpty()) {
+                codecObject.put("mime_type", mime_type)
+                val caps = codec.getCapabilitiesForType(mime_type)
+                if (codec.isEncoder) {
+                    // Encoder‘s max_height and max_width are interchangeable
+                    if (!caps.videoCapabilities.isSizeSupported(w,h) && !caps.videoCapabilities.isSizeSupported(h,w)) {
+                        return@forEach
+                    }
+                }
+                codecObject.put("min_width", caps.videoCapabilities.supportedWidths.lower)
+                codecObject.put("max_width", caps.videoCapabilities.supportedWidths.upper)
+                codecObject.put("min_height", caps.videoCapabilities.supportedHeights.lower)
+                codecObject.put("max_height", caps.videoCapabilities.supportedHeights.upper)
+                val surface = caps.colorFormats.contains(COLOR_FormatSurface);
+                codecObject.put("surface", surface)
+                val nv12 = caps.colorFormats.contains(COLOR_FormatYUV420SemiPlanar)
+                codecObject.put("nv12", nv12)
+                if (!(nv12 || surface)) {
+                    return@forEach
+                }
+                codecObject.put("min_bitrate", caps.videoCapabilities.bitrateRange.lower / 1000)
+                codecObject.put("max_bitrate", caps.videoCapabilities.bitrateRange.upper / 1000)
+                if (!codec.isEncoder) {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                        codecObject.put("low_latency", caps.isFeatureSupported(MediaCodecInfo.CodecCapabilities.FEATURE_LowLatency))
+                    }
+                }
+                if (!codec.isEncoder) {
+                    return@forEach
+                }
+                codecArray.put(codecObject)
+            }
+        }
+        val result = JSONObject()
+        result.put("version", Build.VERSION.SDK_INT)
+        result.put("w", w)
+        result.put("h", h)
+        result.put("codecs", codecArray)
+        FFI.setCodecInfo(result.toString())
+    }
+
+    private fun onVoiceCallStarted() {
+        var ok = false
+        mainService?.let {
+            ok = it.onVoiceCallStarted()
+        } ?: let {
+            isAudioStart = true
+            ok = audioRecordHandle.onVoiceCallStarted(null)
+        }
+        if (!ok) {
+            // Rarely happens, So we just add log and msgbox here.
+            Log.e(logTag, "onVoiceCallStarted fail")
+            flutterMethodChannel?.invokeMethod("msgbox", mapOf(
+                "type" to "custom-nook-nocancel-hasclose-error",
+                "title" to "Voice call",
+                "text" to "Failed to start voice call."))
+        } else {
+            Log.d(logTag, "onVoiceCallStarted success")
+        }
+    }
+
+    private fun onVoiceCallClosed() {
+        var ok = false
+        mainService?.let {
+            ok = it.onVoiceCallClosed()
+        } ?: let {
+            isAudioStart = false
+            ok = audioRecordHandle.onVoiceCallClosed(null)
+        }
+        if (!ok) {
+            // Rarely happens, So we just add log and msgbox here.
+            Log.e(logTag, "onVoiceCallClosed fail")
+            flutterMethodChannel?.invokeMethod("msgbox", mapOf(
+                "type" to "custom-nook-nocancel-hasclose-error",
+                "title" to "Voice call",
+                "text" to "Failed to stop voice call."))
+        } else {
+            Log.d(logTag, "onVoiceCallClosed success")
+        }
+    }
+
+    override fun onStop() {
+        super.onStop()
+        val disableFloatingWindow = FFI.getLocalOption("disable-floating-window") == "Y"
+        if (!disableFloatingWindow && MainService.isReady) {
+            startService(Intent(this, FloatingWindowService::class.java))
+        }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        stopService(Intent(this, FloatingWindowService::class.java))
     }
 }

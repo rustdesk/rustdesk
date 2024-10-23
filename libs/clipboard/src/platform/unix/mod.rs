@@ -383,13 +383,11 @@ impl ClipboardContext {
                 let file_contents_id = fmt_lst
                     .iter()
                     .find(|(_, name)| name == FILECONTENTS_FORMAT_NAME)
-                    .map(|(id, _)| *id)
-                    .unwrap();
+                    .map(|(id, _)| *id)?;
                 let file_descriptor_id = fmt_lst
                     .iter()
                     .find(|(_, name)| name == FILEDESCRIPTORW_FORMAT_NAME)
-                    .map(|(id, _)| *id)
-                    .unwrap();
+                    .map(|(id, _)| *id)?;
 
                 add_remote_format(FILECONTENTS_FORMAT_NAME, file_contents_id);
                 add_remote_format(FILEDESCRIPTORW_FORMAT_NAME, file_descriptor_id);

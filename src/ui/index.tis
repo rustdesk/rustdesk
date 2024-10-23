@@ -210,13 +210,13 @@ class Enhancements: Reactor.Component {
 
     function render() {
         var has_hwcodec = handler.has_hwcodec();
-        var has_gpucodec = handler.has_gpucodec();
+        var has_vram = handler.has_vram();
         var support_remove_wallpaper = handler.support_remove_wallpaper();
         var me = this;
         self.timer(1ms, function() { me.toggleMenuState() });
         return <li>{translate('Enhancements')}
             <menu #enhancements-menu>
-                {(has_hwcodec || has_gpucodec) ? <li #enable-hwcodec><span>{svg_checkmark}</span>{translate("Enable hardware codec")}</li> : ""}
+                {(has_hwcodec || has_vram) ? <li #enable-hwcodec><span>{svg_checkmark}</span>{translate("Enable hardware codec")}</li> : ""}
                 <li #enable-abr><span>{svg_checkmark}</span>{translate("Adaptive bitrate")} (beta)</li>
                 <li #screen-recording>{translate("Recording")}</li>
                 {support_remove_wallpaper ? <li #allow-remove-wallpaper><span>{svg_checkmark}</span>{translate("Remove wallpaper during incoming sessions")}</li> : ""}
@@ -240,20 +240,28 @@ class Enhancements: Reactor.Component {
     event click $(menu#enhancements-menu>li) (_, me) {
         var v = me.id;
         if (v.indexOf("enable-") == 0) {
-            handler.set_option(v, handler.get_option(v) != 'N' ? 'N' : '');
+            var set_value = handler.get_option(v) != 'N' ? 'N' : '';
+            handler.set_option(v, set_value);
+            if (v == "enable-hwcodec" && set_value == '') {
+                handler.check_hwcodec();
+            }
         } else if (v.indexOf("allow-") == 0) {
             handler.set_option(v, handler.get_option(v) == 'Y' ? '' : 'Y');
         } else if (v == 'screen-recording') {
-            var dir = handler.get_option("video-save-directory");
-            if (!dir) dir = handler.default_video_save_directory();
+            var show_root_dir = is_win && handler.is_installed();
+            var user_dir = handler.video_save_directory(false);
+            var root_dir = show_root_dir ? handler.video_save_directory(true) : "";
             var ts0 = handler.get_option("enable-record-session") == '' ? { checked: true } : {};
             var ts1 = handler.get_option("allow-auto-record-incoming") == 'Y' ? { checked: true } : {};
+            var ts2 = handler.get_local_option("allow-auto-record-outgoing") == 'Y' ? { checked: true } : {};
             msgbox("custom-recording", translate('Recording'),
                 <div .form>
                     <div><button|checkbox(enable_record_session) {ts0}>{translate('Enable recording session')}</button></div>
                     <div><button|checkbox(auto_record_incoming) {ts1}>{translate('Automatically record incoming sessions')}</button></div>
+                    <div><button|checkbox(auto_record_outgoing) {ts2}>{translate('Automatically record outgoing sessions')}</button></div>
                     <div>
-                        <div style="word-wrap:break-word"><span>{translate("Directory")}:&nbsp;&nbsp;</span><span #folderPath>{dir}</span></div>
+                        {show_root_dir ? <div style="word-wrap:break-word"><span>{translate("Incoming")}:&nbsp;&nbsp;</span><span>{root_dir}</span></div> : ""}
+                        <div style="word-wrap:break-word"><span>{translate(show_root_dir ? "Outgoing" : "Directory")}:&nbsp;&nbsp;</span><span #folderPath>{user_dir}</span></div>
                         <div> <button #select_directory .link>{translate('Change')}</button> </div>
                     </div>
                 </div>
@@ -261,7 +269,8 @@ class Enhancements: Reactor.Component {
                 if (!res) return;
                 handler.set_option("enable-record-session", res.enable_record_session ? '' : 'N');
                 handler.set_option("allow-auto-record-incoming", res.auto_record_incoming ? 'Y' : '');
-                handler.set_option("video-save-directory", $(#folderPath).text);
+                handler.set_local_option("allow-auto-record-outgoing", res.auto_record_outgoing ? 'Y' : '');
+                handler.set_local_option("video-save-directory", $(#folderPath).text);
             });
         }
         this.toggleMenuState();
@@ -376,7 +385,7 @@ class MyIdMenu: Reactor.Component {
             <div>Fingerprint: " + handler.get_fingerprint() + " \
             <div .link .custom-event url='https://rustdesk.com/privacy.html'>" + translate("Privacy Statement") + "</div> \
             <div .link .custom-event url='https://rustdesk.com'>" + translate("Website") + "</div> \
-	    <div style='background: #2c8cff; color: white; padding: 1em; margin-top: 1em;'>Copyright &copy; " + new Date().getFullYear() + " Purslane Ltd.\
+	    <div style='background: #2c8cff; color: white; padding: 1em; margin-top: 1em;'>Copyright &copy; 2024 Purslane Ltd.\
             <br />" + handler.get_license() + " \
             <p style='font-weight: bold'>" + translate("Slogan_tip") + "</p>\
             </div>\
@@ -437,11 +446,11 @@ class MyIdMenu: Reactor.Component {
                 var key = (res.key || "").trim();
                 if (id == old_id && relay == old_relay && key == old_key && api == old_api) return;
                 if (id) {
-                    var err = handler.test_if_valid_server(id);
+                    var err = handler.test_if_valid_server(id, true);
                     if (err) return translate("ID Server") + ": " + err;
                 }
                 if (relay) {
-                    var err = handler.test_if_valid_server(relay);
+                    var err = handler.test_if_valid_server(relay, true);
                     if (err) return translate("Relay Server") + ": " + err;
                 }
                 if (api) {
@@ -461,7 +470,7 @@ class MyIdMenu: Reactor.Component {
             var old_username = socks5[1] || "";
             var old_password = socks5[2] || "";
             msgbox("custom-server", "Socks5 Proxy", <div .form .set-password> 
-            <div><span>{translate("Hostname")}:</span><input|text .outline-focus name='proxy' value={old_proxy} /></div>
+            <div><span>{translate("Server")}:</span><input|text .outline-focus name='proxy' value={old_proxy} /></div>
             <div><span>{translate("Username")}:</span><input|text name='username' value={old_username} /></div>
             <div><span>{translate("Password")}:</span><PasswordComponent value={old_password} /></div>
             </div>
@@ -472,7 +481,7 @@ class MyIdMenu: Reactor.Component {
                 var password = (res.password || "").trim();
                 if (proxy == old_proxy && username == old_username && password == old_password) return;
                 if (proxy) {
-                    var err = handler.test_if_valid_server(proxy);
+                    var err = handler.test_if_valid_server(proxy, false);
                     if (err) return translate("Server") + ": " + err;
                 }
                 handler.set_socks(proxy, username, password);
@@ -1143,7 +1152,7 @@ function showSettings() {
 function checkConnectStatus() {
     handler.check_mouse_time(); // trigger connection status updater
     self.timer(1s, function() {
-        var tmp = !!handler.get_option("stop-service");
+        var tmp = handler.get_option("stop-service") == "Y";
         if (tmp != service_stopped) {
             service_stopped = tmp;
             app.update();
@@ -1202,7 +1211,7 @@ function self.onMouse(evt) {
 }
 
 function check_if_overlay() {
-    if (!handler.get_option('allow-remote-config-modification')) {
+    if (handler.get_option('allow-remote-config-modification') != 'Y') {
         var time0 = getTime();
         handler.check_mouse_time();
         self.timer(120ms, function() {

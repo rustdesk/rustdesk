@@ -1,10 +1,10 @@
 [package]
 name = "rustdesk"
-version = "1.2.4"
+version = "1.3.2"
 authors = ["rustdesk <info@rustdesk.com>"]
 edition = "2021"
 build= "build.rs"
-description = "Open Source Remote Desktop Access Software"
+description = "RustDesk Remote Desktop"
 default-run = "rustdesk"
 rust-version = "1.75"
 
@@ -19,19 +19,14 @@ path = "src/naming.rs"
 [features]
 inline = []
 cli = []
-flutter_texture_render = []
-appimage = []
-flatpak = []
 use_samplerate = ["samplerate"]
 use_rubato = ["rubato"]
 use_dasp = ["dasp"]
 flutter = ["flutter_rust_bridge"]
 default = ["use_dasp"]
 hwcodec = ["scrap/hwcodec"]
-gpucodec = ["scrap/gpucodec"]
+vram = ["scrap/vram"]
 mediacodec = ["scrap/mediacodec"]
-linux_headless = ["pam" ]
-virtual_display_driver = ["virtual_display"]
 plugin_framework = []
 linux-pkg-config = ["magnum-opus/linux-pkg-config", "scrap/linux-pkg-config"]
 unix-file-copy-paste = [
@@ -45,7 +40,8 @@ unix-file-copy-paste = [
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-whoami = "1.4"
+async-trait = "0.1"
+whoami = "1.5.0"
 scrap = { path = "libs/scrap", features = ["wayland"] }
 hbb_common = { path = "libs/hbb_common" }
 serde_derive = "1.0"
@@ -64,14 +60,13 @@ samplerate = { version = "0.2", optional = true }
 uuid = { version = "1.3", features = ["v4"] }
 clap = "4.2"
 rpassword = "7.2"
-base64 = "0.21"
 num_cpus = "1.15"
 bytes = { version = "1.4", features = ["serde"] }
 default-net = "0.14"
 wol-rs = "1.0"
 flutter_rust_bridge = { version = "=1.80", features = ["uuid"], optional = true}
 errno = "0.3"
-rdev = { git = "https://github.com/fufesou/rdev" }
+rdev = { git = "https://github.com/rustdesk-org/rdev" }
 url = { version = "2.3", features = ["serde"] }
 crossbeam-queue = "0.3"
 hex = "0.4"
@@ -94,16 +89,32 @@ sys-locale = "0.3"
 enigo = { path = "libs/enigo", features = [ "with_serde" ] }
 clipboard = { path = "libs/clipboard" }
 ctrlc = "3.2"
-arboard = { git = "https://github.com/fufesou/arboard", branch = "feat/x11_set_conn_timeout", features = ["wayland-data-control"] }
+# arboard = { version = "3.4.0", features = ["wayland-data-control"] }
+arboard = { git = "https://github.com/rustdesk-org/arboard", features = ["wayland-data-control"] }
+clipboard-master = { git = "https://github.com/rustdesk-org/clipboard-master" }
+
 system_shutdown = "4.0"
 qrcode-generator = "4.1"
 
 [target.'cfg(target_os = "windows")'.dependencies]
-winapi = { version = "0.3", features = ["winuser", "wincrypt", "shellscalingapi", "pdh", "synchapi", "memoryapi", "shellapi"] }
+winapi = { version = "0.3", features = [
+    "winuser",
+    "wincrypt",
+    "shellscalingapi",
+    "pdh",
+    "synchapi",
+    "memoryapi",
+    "shellapi",
+    "devguid",
+    "setupapi",
+    "cguid",
+    "cfgmgr32",
+    "ioapiset",
+] }
 winreg = "0.11"
 windows-service = "0.6"
-virtual_display = { path = "libs/virtual_display", optional = true }
-impersonate_system = { git = "https://github.com/21pages/impersonate-system" }
+virtual_display = { path = "libs/virtual_display" }
+impersonate_system = { git = "https://github.com/rustdesk-org/impersonate-system" }
 shared_memory = "0.12"
 tauri-winrt-notification = "0.1.2"
 runas = "1.2"
@@ -127,43 +138,46 @@ image = "0.24"
 keepawake = { git = "https://github.com/rustdesk-org/keepawake-rs" }
 
 [target.'cfg(any(target_os = "windows", target_os = "linux"))'.dependencies]
-wallpaper = { git = "https://github.com/21pages/wallpaper.rs" }
+wallpaper = { git = "https://github.com/rustdesk-org/wallpaper.rs" }
 
 [target.'cfg(any(target_os = "macos", target_os = "windows"))'.dependencies]
 # https://github.com/rustdesk/rustdesk-server-pro/issues/189, using native-tls for better tls support
-reqwest = { git = "https://github.com/rustdesk-org/reqwest", features = ["blocking", "json", "native-tls", "gzip"], default-features=false }
+reqwest = { git = "https://github.com/rustdesk-org/reqwest", features = ["blocking", "socks", "json", "native-tls", "gzip"], default-features=false }
 
 [target.'cfg(not(any(target_os = "macos", target_os = "windows")))'.dependencies]
-reqwest = { git = "https://github.com/rustdesk-org/reqwest", features = ["blocking", "json", "rustls-tls", "rustls-tls-native-roots", "gzip"], default-features=false }
+reqwest = { git = "https://github.com/rustdesk-org/reqwest", features = ["blocking", "socks", "json", "rustls-tls", "rustls-tls-native-roots", "gzip"], default-features=false }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 psimple = { package = "libpulse-simple-binding", version = "2.27" }
 pulse = { package = "libpulse-binding", version = "2.27" }
 rust-pulsectl = { git = "https://github.com/open-trade/pulsectl" }
 async-process = "1.7"
-mouce = { git="https://github.com/fufesou/mouce.git" }
-evdev = { git="https://github.com/fufesou/evdev" }
+evdev = { git="https://github.com/rustdesk-org/evdev" }
 dbus = "0.9"
 dbus-crossroads = "0.5"
-pam = { git="https://github.com/fufesou/pam", optional = true }
+pam = { git="https://github.com/rustdesk-org/pam" }
 users = { version = "0.11" }
 x11-clipboard = {git="https://github.com/clslaid/x11-clipboard", branch = "feat/store-batch", optional = true}
 x11rb =  {version = "0.12", features = ["all-extensions"], optional = true}
 percent-encoding = {version = "2.3", optional = true}
 once_cell = {version = "1.18", optional = true}
+nix = { version = "0.29", features = ["term", "process"]}
+gtk = "0.18"
+termios = "0.3"
 
 [target.'cfg(target_os = "android")'.dependencies]
 android_logger = "0.13"
 jni = "0.21"
-android-wakelock = { git = "https://github.com/21pages/android-wakelock" }
+android-wakelock = { git = "https://github.com/rustdesk-org/android-wakelock" }
 
 [workspace]
 members = ["libs/scrap", "libs/hbb_common", "libs/enigo", "libs/clipboard", "libs/virtual_display", "libs/virtual_display/dylib", "libs/portable"]
 exclude = ["vdi/host", "examples/custom_plugin"]
 
 [package.metadata.winres]
-LegalCopyright = "Copyright © 2024 Purslane Ltd."
+LegalCopyright = "Copyright © 2024 Purslane Ltd. All rights reserved."
 ProductName = "RustDesk"
+FileDescription = "RustDesk Remote Desktop"
 OriginalFilename = "rustdesk.exe"
 
 [target.'cfg(target_os="windows")'.build-dependencies]

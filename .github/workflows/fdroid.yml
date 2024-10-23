@@ -1,0 +1,39 @@
+name: Fdroid version file generation
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+      - '[0-9]+.[0-9]+.[0-9]+'
+      - 'v[0-9]+.[0-9]+.[0-9]+-[0-9]+'
+      - '[0-9]+.[0-9]+.[0-9]+-[0-9]+'
+
+jobs:
+  # https://gitlab.com/fdroid/fdroiddata/-/blob/master/metadata/com.carriez.flutter_hbb.yml
+  # Finds latest release and transforms F-Droid version code from version as follows:
+  # X.Y.Z-A => X * 1e6 + Y * 1e4 + Z * 1e2 + A
+  update-fdroid-version-file:
+    name: Publish RustDesk version file for F-Droid updater
+    runs-on: ubuntu-latest
+    steps:
+      - name: Generate RustDesk version file
+        run: |
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            UPSTREAM_VERNAME="${GITHUB_REF##refs/tags/}"
+            UPSTREAM_VERNAME="${UPSTREAM_VERNAME##v}"
+          else
+            UPSTREAM_VERNAME="$(curl https://api.github.com/repos/rustdesk/rustdesk/releases/latest  | jq -r .tag_name | sed 's/^v//')"
+          fi
+          UPSTREAM_VERCODE="$(echo "$UPSTREAM_VERNAME" | tr '.' ' ' | tr '-' ' ' | while read -r MAJOR MINOR PATCH REV; do [ -z "$MAJOR" ] && MAJOR=0; [ -z "$MINOR" ] && MINOR=0; [ -z "$PATCH" ] && PATCH=0; [ -z "$REV" ] && REV=0; echo "$(( 1000000 * $MAJOR + 10000 * $MINOR + 100 * $PATCH + $REV ))"; done)"
+          echo "versionName=$UPSTREAM_VERNAME"  > rustdesk-version.txt
+          echo "versionCode=$UPSTREAM_VERCODE" >> rustdesk-version.txt
+        shell: bash
+
+      - name: Publish RustDesk version file
+        uses: softprops/action-gh-release@v1
+        with:
+          prerelease: true
+          tag_name: "fdroid-version"
+          files: |
+            ./rustdesk-version.txt

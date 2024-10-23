@@ -8,6 +8,9 @@ pub use windows::*;
 #[cfg(windows)]
 pub mod windows;
 
+#[cfg(windows)]
+pub mod win_device;
+
 #[cfg(target_os = "macos")]
 pub mod macos;
 
@@ -17,15 +20,17 @@ pub mod delegate;
 #[cfg(target_os = "linux")]
 pub mod linux;
 
-#[cfg(all(target_os = "linux", feature = "linux_headless"))]
-#[cfg(not(any(feature = "flatpak", feature = "appimage")))]
+#[cfg(target_os = "linux")]
 pub mod linux_desktop_manager;
+
+#[cfg(target_os = "linux")]
+pub mod gtk_sudo;
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use hbb_common::{message_proto::CursorData, ResultType};
 use std::sync::{Arc, Mutex};
 #[cfg(not(any(target_os = "macos", target_os = "android", target_os = "ios")))]
-const SERVICE_INTERVAL: u64 = 300;
+pub const SERVICE_INTERVAL: u64 = 300;
 
 lazy_static::lazy_static! {
     static ref INSTALLING_SERVICE: Arc<Mutex<bool>>= Default::default();
@@ -98,12 +103,16 @@ impl WakeLock {
     }
 }
 
+#[cfg(not(target_os = "ios"))]
 pub fn get_wakelock(_display: bool) -> WakeLock {
     hbb_common::log::info!("new wakelock, require display on: {_display}");
     #[cfg(target_os = "android")]
     return crate::platform::WakeLock::new("server");
+    // display: keep screen on
+    // idle: keep cpu on
+    // sleep: prevent system from sleeping, even manually
     #[cfg(not(target_os = "android"))]
-    return crate::platform::WakeLock::new(_display, true, true);
+    return crate::platform::WakeLock::new(_display, true, false);
 }
 
 pub(crate) struct InstallingService; // please use new
@@ -120,6 +129,12 @@ impl Drop for InstallingService {
     fn drop(&mut self) {
         *INSTALLING_SERVICE.lock().unwrap() = false;
     }
+}
+
+#[cfg(any(target_os = "android", target_os = "ios"))]
+#[inline]
+pub fn is_prelogin() -> bool {
+    false
 }
 
 #[cfg(test)]

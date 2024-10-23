@@ -3,6 +3,7 @@
     package="com.carriez.flutter_hbb">
 
     <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
@@ -80,6 +81,11 @@
             android:name=".MainService"
             android:enabled="true"
             android:foregroundServiceType="mediaProjection" />
+
+        <service
+            android:name=".FloatingWindowService"
+            android:enabled="true" />
+
         <!--
  Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java

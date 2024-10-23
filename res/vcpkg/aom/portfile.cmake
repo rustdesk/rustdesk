@@ -11,10 +11,10 @@ vcpkg_add_to_path(${PERL_PATH})
 vcpkg_from_git(
     OUT_SOURCE_PATH SOURCE_PATH
     URL "https://aomedia.googlesource.com/aom"
-    REF 6054fae218eda6e53e1e3b4f7ef0fff4877c7bf1 # v3.7.0
+    REF 8ad484f8a18ed1853c094e7d3a4e023b2a92df28 # 3.9.1
     PATCHES
-        aom-rename-static.diff
         aom-uninitialized-pointer.diff
+        aom-avx2.diff
         # Can be dropped when https://bugs.chromium.org/p/aomedia/issues/detail?id=3029 is merged into the upstream
         aom-install.diff
 )
@@ -46,6 +46,13 @@ vcpkg_cmake_install()
 vcpkg_copy_pdbs()
 
 vcpkg_fixup_pkgconfig()
+
+if(VCPKG_TARGET_IS_WINDOWS)
+  vcpkg_replace_string("${CURRENT_PACKAGES_DIR}/lib/pkgconfig/aom.pc" " -lm" "")
+  if(NOT VCPKG_BUILD_TYPE)
+    vcpkg_replace_string("${CURRENT_PACKAGES_DIR}/debug/lib/pkgconfig/aom.pc" " -lm" "")
+  endif()
+endif()
 
 # Move cmake configs
 vcpkg_cmake_config_fixup(CONFIG_PATH lib/cmake/${PORT})

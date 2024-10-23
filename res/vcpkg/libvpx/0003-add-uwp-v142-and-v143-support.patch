@@ -85,19 +85,19 @@ index 58bb66b..b4cad6c 100644
                  fi
              fi
 diff --git a/configure b/configure
-index ae289f7..78f5fc1 100644
+index b212e07..1a9fa98 100755
 --- a/configure
 +++ b/configure
-@@ -103,6 +103,8 @@ all_platforms="${all_platforms} arm64-darwin20-gcc"
- all_platforms="${all_platforms} arm64-darwin21-gcc"
+@@ -104,6 +104,8 @@ all_platforms="${all_platforms} arm64-darwin21-gcc"
  all_platforms="${all_platforms} arm64-darwin22-gcc"
+ all_platforms="${all_platforms} arm64-darwin23-gcc"
  all_platforms="${all_platforms} arm64-linux-gcc"
 +all_platforms="${all_platforms} arm64-uwp-vs16"
 +all_platforms="${all_platforms} arm64-uwp-vs17"
  all_platforms="${all_platforms} arm64-win64-gcc"
  all_platforms="${all_platforms} arm64-win64-vs15"
  all_platforms="${all_platforms} arm64-win64-vs16"
-@@ -112,6 +114,8 @@ all_platforms="${all_platforms} armv7-darwin-gcc"    #neon Cortex-A8
+@@ -115,6 +117,8 @@ all_platforms="${all_platforms} armv7-darwin-gcc"    #neon Cortex-A8
  all_platforms="${all_platforms} armv7-linux-rvct"    #neon Cortex-A8
  all_platforms="${all_platforms} armv7-linux-gcc"     #neon Cortex-A8
  all_platforms="${all_platforms} armv7-none-rvct"     #neon Cortex-A8
@@ -106,7 +106,7 @@ index ae289f7..78f5fc1 100644
  all_platforms="${all_platforms} armv7-win32-gcc"
  all_platforms="${all_platforms} armv7-win32-vs14"
  all_platforms="${all_platforms} armv7-win32-vs15"
-@@ -143,6 +147,8 @@ all_platforms="${all_platforms} x86-linux-gcc"
+@@ -146,6 +150,8 @@ all_platforms="${all_platforms} x86-linux-gcc"
  all_platforms="${all_platforms} x86-linux-icc"
  all_platforms="${all_platforms} x86-os2-gcc"
  all_platforms="${all_platforms} x86-solaris-gcc"
@@ -115,7 +115,7 @@ index ae289f7..78f5fc1 100644
  all_platforms="${all_platforms} x86-win32-gcc"
  all_platforms="${all_platforms} x86-win32-vs14"
  all_platforms="${all_platforms} x86-win32-vs15"
-@@ -167,6 +173,8 @@ all_platforms="${all_platforms} x86_64-iphonesimulator-gcc"
+@@ -171,6 +177,8 @@ all_platforms="${all_platforms} x86_64-iphonesimulator-gcc"
  all_platforms="${all_platforms} x86_64-linux-gcc"
  all_platforms="${all_platforms} x86_64-linux-icc"
  all_platforms="${all_platforms} x86_64-solaris-gcc"
@@ -124,7 +124,7 @@ index ae289f7..78f5fc1 100644
  all_platforms="${all_platforms} x86_64-win64-gcc"
  all_platforms="${all_platforms} x86_64-win64-vs14"
  all_platforms="${all_platforms} x86_64-win64-vs15"
-@@ -491,11 +499,10 @@ process_targets() {
+@@ -503,11 +511,10 @@ process_targets() {
      ! enabled multithread && DIST_DIR="${DIST_DIR}-nomt"
      ! enabled install_docs && DIST_DIR="${DIST_DIR}-nodocs"
      DIST_DIR="${DIST_DIR}-${tgt_isa}-${tgt_os}"
@@ -140,7 +140,7 @@ index ae289f7..78f5fc1 100644
      if [ -f "${source_path}/build/make/version.sh" ]; then
          ver=`"$source_path/build/make/version.sh" --bare "$source_path"`
          DIST_DIR="${DIST_DIR}-${ver}"
-@@ -584,6 +591,10 @@ process_detect() {
+@@ -596,6 +603,10 @@ process_detect() {
  
              # Specialize windows and POSIX environments.
              case $toolchain in

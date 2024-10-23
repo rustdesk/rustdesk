@@ -1,6 +1,5 @@
 use std::{
     collections::VecDeque,
-    os::windows::raw::HANDLE,
     sync::{Arc, Mutex},
     time::Instant,
 };
@@ -9,7 +8,7 @@ use winapi::{
     um::{
         handleapi::CloseHandle,
         pdh::{
-            PdhAddCounterA, PdhCloseQuery, PdhCollectQueryData, PdhCollectQueryDataEx,
+            PdhAddEnglishCounterA, PdhCloseQuery, PdhCollectQueryData, PdhCollectQueryDataEx,
             PdhGetFormattedCounterValue, PdhOpenQueryA, PDH_FMT_COUNTERVALUE, PDH_FMT_DOUBLE,
             PDH_HCOUNTER, PDH_HQUERY,
         },
@@ -17,7 +16,7 @@ use winapi::{
         sysinfoapi::VerSetConditionMask,
         winbase::{VerifyVersionInfoW, INFINITE, WAIT_OBJECT_0},
         winnt::{
-            OSVERSIONINFOEXW, VER_BUILDNUMBER, VER_GREATER_EQUAL, VER_MAJORVERSION,
+            HANDLE, OSVERSIONINFOEXW, VER_BUILDNUMBER, VER_GREATER_EQUAL, VER_MAJORVERSION,
             VER_MINORVERSION, VER_SERVICEPACKMAJOR, VER_SERVICEPACKMINOR,
         },
     },
@@ -71,9 +70,9 @@ pub fn start_cpu_performance_monitor() {
         }
         let _query = RAIIPDHQuery(query);
         let mut counter: PDH_HCOUNTER = std::mem::zeroed();
-        ret = PdhAddCounterA(query, COUNTER_PATH.as_ptr() as _, 0, &mut counter);
+        ret = PdhAddEnglishCounterA(query, COUNTER_PATH.as_ptr() as _, 0, &mut counter);
         if ret != 0 {
-            log::error!("PdhAddCounterA failed: 0x{:X}", ret);
+            log::error!("PdhAddEnglishCounterA failed: 0x{:X}", ret);
             return;
         }
         ret = PdhCollectQueryData(query);

@@ -1,0 +1,21 @@
+﻿<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+	<Fragment>
+		<?include ../Includes.wxi?>
+
+		<Binary Id="Custom_Actions_Dll" SourceFile="$(var.CustomActions.TargetDir)$(var.CustomActions.TargetName).dll" />
+
+		<CustomAction Id="CustomActionHello" DllEntry="CustomActionHello" Impersonate="yes" Execute="immediate" Return="ignore" BinaryRef="Custom_Actions_Dll"/>
+		<CustomAction Id="RemoveInstallFolder" DllEntry="RemoveInstallFolder" Impersonate="no" Execute="deferred" Return="ignore" BinaryRef="Custom_Actions_Dll"/>
+		<CustomAction Id="TerminateProcesses" DllEntry="TerminateProcesses" Impersonate="yes" Execute="immediate" Return="ignore" BinaryRef="Custom_Actions_Dll"/>
+		<CustomAction Id="TerminateBrokers" DllEntry="TerminateProcesses" Impersonate="yes" Execute="immediate" Return="ignore" BinaryRef="Custom_Actions_Dll"/>
+		<CustomAction Id="AddFirewallRules" DllEntry="AddFirewallRules" Impersonate="no" Execute="deferred" Return="ignore" BinaryRef="Custom_Actions_Dll"/>
+		<CustomAction Id="RemoveFirewallRules" DllEntry="AddFirewallRules" Impersonate="no" Execute="deferred" Return="ignore" BinaryRef="Custom_Actions_Dll"/>
+		<CustomAction Id="SetPropertyIsServiceRunning" DllEntry="SetPropertyIsServiceRunning" Impersonate="yes" Execute="immediate" Return="ignore" BinaryRef="Custom_Actions_Dll"/>
+		<CustomAction Id="CreateStartService" DllEntry="CreateStartService" Impersonate="no" Execute="deferred" Return="ignore" BinaryRef="Custom_Actions_Dll"/>
+		<CustomAction Id="TryStopDeleteService" DllEntry="TryStopDeleteService" Impersonate="no" Execute="deferred" Return="ignore" BinaryRef="Custom_Actions_Dll"/>
+		<CustomAction Id="TryDeleteStartupShortcut" DllEntry="TryDeleteStartupShortcut" Impersonate="yes" Execute="immediate" Return="ignore" BinaryRef="Custom_Actions_Dll"/>
+		<CustomAction Id="SetPropertyServiceStop" DllEntry="SetPropertyFromConfig" Impersonate="yes" Execute="immediate" Return="ignore" BinaryRef="Custom_Actions_Dll"/>
+		<CustomAction Id="AddRegSoftwareSASGeneration" DllEntry="AddRegSoftwareSASGeneration" Impersonate="no" Execute="deferred" Return="ignore" BinaryRef="Custom_Actions_Dll"/>
+		<CustomAction Id="RemoveAmyuniIdd" DllEntry="RemoveAmyuniIdd" Impersonate="no" Execute="deferred" Return="ignore" BinaryRef="Custom_Actions_Dll"/>
+	</Fragment>
+</Wix>

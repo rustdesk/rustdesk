@@ -143,11 +143,6 @@ class _WidgetOPState extends State<WidgetOP> {
   String _url = '';
 
   @override
-  void initState() {
-    super.initState();
-  }
-
-  @override
   void dispose() {
     super.dispose();
     _updateTimer?.cancel();
@@ -455,7 +450,7 @@ Future<bool?> loginDialog() async {
           }
           if (isEmailVerification != null) {
             if (isMobile) {
-              if (close != null) close(false);
+              if (close != null) close(null);
               verificationCodeDialog(
                   resp.user, resp.secret, isEmailVerification);
             } else {
@@ -712,6 +707,11 @@ Future<bool?> verificationCodeDialog(
           dialogButton("Verify", onPressed: getOnSubmit()),
         ]);
   });
+  // For verification code, desktop update other models in login dialog, mobile need to close login dialog first,
+  // otherwise the soft keyboard will jump out on each key press, so mobile update in verification code dialog.
+  if (isMobile && res == true) {
+    await UserModel.updateOtherModels();
+  }
 
   return res;
 }

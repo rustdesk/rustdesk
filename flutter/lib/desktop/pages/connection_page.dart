@@ -2,10 +2,9 @@
 
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 
-import 'package:auto_size_text/auto_size_text.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_hbb/common/widgets/connection_page_title.dart';
 import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/models/state_model.dart';
 import 'package:get/get.dart';
@@ -21,7 +20,10 @@ import '../../models/platform_model.dart';
 import '../widgets/button.dart';
 
 class OnlineStatusWidget extends StatefulWidget {
-  const OnlineStatusWidget({Key? key}) : super(key: key);
+  const OnlineStatusWidget({Key? key, this.onSvcStatusChanged})
+      : super(key: key);
+
+  final VoidCallback? onSvcStatusChanged;
 
   @override
   State<OnlineStatusWidget> createState() => _OnlineStatusWidgetState();
@@ -34,7 +36,7 @@ class _OnlineStatusWidgetState extends State<OnlineStatusWidget> {
   Timer? _updateTimer;
 
   double get em => 14.0;
-  double get height => em * 3;
+  double? get height => bind.isIncomingOnly() ? null : em * 3;
 
   void onUsePublicServerGuide() {
     const url = "https://rustdesk.com/pricing.html";
@@ -61,96 +63,118 @@ class _OnlineStatusWidgetState extends State<OnlineStatusWidget> {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      height: height,
-      child: Obx(() => Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Container(
-                height: 8,
-                width: 8,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(4),
-                  color: _svcStopped.value ||
-                          stateGlobal.svcStatus.value == SvcStatus.connecting
-                      ? kColorWarn
-                      : (stateGlobal.svcStatus.value == SvcStatus.ready
-                          ? Color.fromARGB(255, 50, 190, 166)
-                          : Color.fromARGB(255, 224, 79, 95)),
-                ),
-              ).marginSymmetric(horizontal: em),
-              Text(
-                  _svcStopped.value
-                      ? translate("Service is not running")
-                      : stateGlobal.svcStatus.value == SvcStatus.connecting
-                          ? translate("connecting_status")
-                          : stateGlobal.svcStatus.value == SvcStatus.notReady
-                              ? translate("not_ready_status")
-                              : translate('Ready'),
-                  style: TextStyle(fontSize: em)),
-              // stop
-              Offstage(
-                offstage: !_svcStopped.value,
-                child: InkWell(
-                        onTap: () async {
-                          await start_service(true);
-                        },
-                        child: Text(translate("Start service"),
+    final isIncomingOnly = bind.isIncomingOnly();
+    startServiceWidget() => Offstage(
+          offstage: !_svcStopped.value,
+          child: InkWell(
+                  onTap: () async {
+                    await start_service(true);
+                  },
+                  child: Text(translate("Start service"),
+                      style: TextStyle(
+                          decoration: TextDecoration.underline, fontSize: em)))
+              .marginOnly(left: em),
+        );
+
+    setupServerWidget() => Flexible(
+          child: Offstage(
+            offstage: !(!_svcStopped.value &&
+                stateGlobal.svcStatus.value == SvcStatus.ready &&
+                _svcIsUsingPublicServer.value),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Text(', ', style: TextStyle(fontSize: em)),
+                Flexible(
+                  child: InkWell(
+                    onTap: onUsePublicServerGuide,
+                    child: Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            translate('setup_server_tip'),
                             style: TextStyle(
                                 decoration: TextDecoration.underline,
-                                fontSize: em)))
-                    .marginOnly(left: em),
-              ),
-              // ready && public
-              Flexible(
-                child: Offstage(
-                  offstage: !(!_svcStopped.value &&
-                      stateGlobal.svcStatus.value == SvcStatus.ready &&
-                      _svcIsUsingPublicServer.value),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      Text(', ', style: TextStyle(fontSize: em)),
-                      Flexible(
-                        child: InkWell(
-                          onTap: onUsePublicServerGuide,
-                          child: Row(
-                            children: [
-                              Flexible(
-                                child: Text(
-                                  translate('setup_server_tip'),
-                                  style: TextStyle(
-                                      decoration: TextDecoration.underline,
-                                      fontSize: em),
-                                ),
-                              ),
-                            ],
+                                fontSize: em),
                           ),
                         ),
-                      )
-                    ],
+                      ],
+                    ),
                   ),
-                ),
-              )
-            ],
-          )),
-    ).paddingOnly(right: bind.isQs() ? 8 : 0);
+                )
+              ],
+            ),
+          ),
+        );
+
+    basicWidget() => Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Container(
+              height: 8,
+              width: 8,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(4),
+                color: _svcStopped.value ||
+                        stateGlobal.svcStatus.value == SvcStatus.connecting
+                    ? kColorWarn
+                    : (stateGlobal.svcStatus.value == SvcStatus.ready
+                        ? Color.fromARGB(255, 50, 190, 166)
+                        : Color.fromARGB(255, 224, 79, 95)),
+              ),
+            ).marginSymmetric(horizontal: em),
+            Container(
+              width: isIncomingOnly ? 226 : null,
+              child: _buildConnStatusMsg(),
+            ),
+            // stop
+            if (!isIncomingOnly) startServiceWidget(),
+            // ready && public
+            // No need to show the guide if is custom client.
+            if (!isIncomingOnly) setupServerWidget(),
+          ],
+        );
+
+    return Container(
+      height: height,
+      child: Obx(() => isIncomingOnly
+          ? Column(
+              children: [
+                basicWidget(),
+                Align(
+                        child: startServiceWidget(),
+                        alignment: Alignment.centerLeft)
+                    .marginOnly(top: 2.0, left: 22.0),
+              ],
+            )
+          : basicWidget()),
+    ).paddingOnly(right: isIncomingOnly ? 8 : 0);
+  }
+
+  _buildConnStatusMsg() {
+    widget.onSvcStatusChanged?.call();
+    return Text(
+      _svcStopped.value
+          ? translate("Service is not running")
+          : stateGlobal.svcStatus.value == SvcStatus.connecting
+              ? translate("connecting_status")
+              : stateGlobal.svcStatus.value == SvcStatus.notReady
+                  ? translate("not_ready_status")
+                  : translate('Ready'),
+      style: TextStyle(fontSize: em),
+    );
   }
 
   updateStatus() async {
     final status =
         jsonDecode(await bind.mainGetConnectStatus()) as Map<String, dynamic>;
     final statusNum = status['status_num'] as int;
-    final preStatus = stateGlobal.svcStatus.value;
     if (statusNum == 0) {
       stateGlobal.svcStatus.value = SvcStatus.connecting;
     } else if (statusNum == -1) {
       stateGlobal.svcStatus.value = SvcStatus.notReady;
     } else if (statusNum == 1) {
       stateGlobal.svcStatus.value = SvcStatus.ready;
-      if (preStatus != SvcStatus.ready) {
-        gFFI.userModel.refreshCurrentUser();
-      }
     } else {
       stateGlobal.svcStatus.value = SvcStatus.notReady;
     }
@@ -184,14 +208,14 @@ class _ConnectionPageState extends State<ConnectionPage>
   void initState() {
     super.initState();
     if (_idController.text.isEmpty) {
-      () async {
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
         final lastRemoteId = await bind.mainGetLastRemoteId();
         if (lastRemoteId != _idController.id) {
           setState(() {
             _idController.id = lastRemoteId;
           });
         }
-      }();
+      });
     }
     Get.put<IDTextEditingController>(_idController);
     windowManager.addListener(this);
@@ -216,7 +240,7 @@ class _ConnectionPageState extends State<ConnectionPage>
     if (eventName == 'minimize') {
       isWindowMinimized = true;
     } else if (eventName == 'maximize' || eventName == 'restore') {
-      if (isWindowMinimized && Platform.isWindows) {
+      if (isWindowMinimized && isWindows) {
         // windows can't update when minimized.
         Get.forceAppUpdate();
       }
@@ -233,8 +257,9 @@ class _ConnectionPageState extends State<ConnectionPage>
   @override
   void onWindowLeaveFullScreen() {
     // Restore edge border to default edge size.
-    stateGlobal.resizeEdgeSize.value =
-        stateGlobal.isMaximized.isTrue ? kMaximizeEdgeSize : kWindowEdgeSize;
+    stateGlobal.resizeEdgeSize.value = stateGlobal.isMaximized.isTrue
+        ? kMaximizeEdgeSize
+        : windowResizeEdgeSize;
   }
 
   @override
@@ -245,6 +270,7 @@ class _ConnectionPageState extends State<ConnectionPage>
 
   @override
   Widget build(BuildContext context) {
+    final isOutgoingOnly = bind.isOutgoingOnly();
     return Column(
       children: [
         Expanded(
@@ -260,8 +286,8 @@ class _ConnectionPageState extends State<ConnectionPage>
             Expanded(child: PeerTabPage()),
           ],
         ).paddingOnly(left: 12.0)),
-        const Divider(height: 1),
-        OnlineStatusWidget()
+        if (!isOutgoingOnly) const Divider(height: 1),
+        if (!isOutgoingOnly) OnlineStatusWidget()
       ],
     );
   }
@@ -297,36 +323,7 @@ class _ConnectionPageState extends State<ConnectionPage>
       child: Ink(
         child: Column(
           children: [
-            Row(
-              children: [
-                Expanded(
-                    child: Row(
-                  children: [
-                    AutoSizeText(
-                      translate('Control Remote Desktop'),
-                      maxLines: 1,
-                      style: Theme.of(context)
-                          .textTheme
-                          .titleLarge
-                          ?.merge(TextStyle(height: 1)),
-                    ).marginOnly(right: 4),
-                    Tooltip(
-                      waitDuration: Duration(milliseconds: 0),
-                      message: translate("id_input_tip"),
-                      child: Icon(
-                        Icons.help_outline_outlined,
-                        size: 16,
-                        color: Theme.of(context)
-                            .textTheme
-                            .titleLarge
-                            ?.color
-                            ?.withOpacity(0.5),
-                      ),
-                    ),
-                  ],
-                )),
-              ],
-            ).marginOnly(bottom: 15),
+            getConnectionPageTitle(context, false).marginOnly(bottom: 15),
             Row(
               children: [
                 Expanded(
@@ -343,6 +340,7 @@ class _ConnectionPageState extends State<ConnectionPage>
                         platform: '',
                         tags: [],
                         hash: '',
+                        password: '',
                         forceAlwaysRelay: false,
                         rdpPort: '',
                         rdpUsername: '',

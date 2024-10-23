@@ -7,16 +7,26 @@ use std::{
     },
 };
 
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+use crate::clipboard::{update_clipboard, ClipboardSide, CLIPBOARD_INTERVAL};
+#[cfg(not(any(target_os = "ios")))]
+use crate::{audio_service, ConnInner, CLIENT_SERVER};
+use crate::{
+    client::{
+        self, new_voice_call_request, Client, Data, Interface, MediaData, MediaSender,
+        QualityStatus, MILLI1, SEC30,
+    },
+    common::get_default_sound_input,
+    ui_session_interface::{InvokeUiSession, Session},
+};
 #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
 use clipboard::ContextSend;
 use crossbeam_queue::ArrayQueue;
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
-use hbb_common::sleep;
 #[cfg(not(target_os = "ios"))]
 use hbb_common::tokio::sync::mpsc::error::TryRecvError;
 use hbb_common::{
     allow_err,
-    config::{PeerConfig, TransferSerde},
+    config::{self, PeerConfig, TransferSerde},
     fs::{
         self, can_enable_overwrite_detection, get_job, get_string, new_send_confirm,
         DigestCheckResult, RemoveJobMeta,
@@ -36,17 +46,6 @@ use hbb_common::{
 #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
 use hbb_common::{tokio::sync::Mutex as TokioMutex, ResultType};
 use scrap::CodecFormat;
-
-use crate::client::{
-    new_voice_call_request, Client, MediaData, MediaSender, QualityStatus, MILLI1, SEC30,
-};
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
-use crate::common::{self, update_clipboard};
-use crate::common::{get_default_sound_input, set_sound_input};
-use crate::ui_session_interface::{InvokeUiSession, Session};
-#[cfg(not(any(target_os = "ios")))]
-use crate::{audio_service, ConnInner, CLIENT_SERVER};
-use crate::{client::Data, client::Interface};
 
 pub struct Remote<T: InvokeUiSession> {
     handler: Session<T>,
@@ -71,9 +70,25 @@ pub struct Remote<T: InvokeUiSession> {
     frame_count_map: Arc<RwLock<HashMap<usize, usize>>>,
     video_format: CodecFormat,
     elevation_requested: bool,
-    fps_control_map: HashMap<usize, FpsControl>,
-    decode_fps_map: Arc<RwLock<HashMap<usize, usize>>>,
+    fps_control: FpsControl,
+    decode_fps: Arc<RwLock<Option<usize>>>,
     chroma: Arc<RwLock<Option<Chroma>>>,
+    peer_info: ParsedPeerInfo,
+}
+
+#[derive(Default)]
+struct ParsedPeerInfo {
+    platform: String,
+    is_installed: bool,
+    idd_impl: String,
+}
+
+impl ParsedPeerInfo {
+    fn is_support_virtual_display(&self) -> bool {
+        self.is_installed
+            && self.platform == "Windows"
+            && (self.idd_impl == "rustdesk_idd" || self.idd_impl == "amyuni_idd")
+    }
 }
 
 impl<T: InvokeUiSession> Remote<T> {
@@ -85,7 +100,7 @@ impl<T: InvokeUiSession> Remote<T> {
         receiver: mpsc::UnboundedReceiver<Data>,
         sender: mpsc::UnboundedSender<Data>,
         frame_count_map: Arc<RwLock<HashMap<usize, usize>>>,
-        decode_fps: Arc<RwLock<HashMap<usize, usize>>>,
+        decode_fps: Arc<RwLock<Option<usize>>>,
         chroma: Arc<RwLock<Option<Chroma>>>,
     ) -> Self {
         Self {
@@ -110,9 +125,10 @@ impl<T: InvokeUiSession> Remote<T> {
             stop_voice_call_sender: None,
             voice_call_request_timestamp: None,
             elevation_requested: false,
-            fps_control_map: Default::default(),
-            decode_fps_map: decode_fps,
+            fps_control: Default::default(),
+            decode_fps,
             chroma,
+            peer_info: Default::default(),
         }
     }
 
@@ -134,7 +150,7 @@ impl<T: InvokeUiSession> Remote<T> {
         )
         .await
         {
-            Ok((mut peer, direct, pk)) => {
+            Ok(((mut peer, direct, pk), (feedback, rendezvous_server))) => {
                 self.handler
                     .connection_round_state
                     .lock()
@@ -172,6 +188,8 @@ impl<T: InvokeUiSession> Remote<T> {
                 let mut status_timer =
                     crate::rustdesk_interval(time::interval(Duration::new(1, 0)));
                 let mut fps_instant = Instant::now();
+
+                let _keep_it = client::hc_connection(feedback, rendezvous_server, token).await;
 
                 loop {
                     tokio::select! {
@@ -320,7 +338,7 @@ impl<T: InvokeUiSession> Remote<T> {
                     let server_file_transfer_enabled =
                         *self.handler.server_file_transfer_enabled.read().unwrap();
                     let file_transfer_enabled =
-                        self.handler.lc.read().unwrap().enable_file_transfer.v;
+                        self.handler.lc.read().unwrap().enable_file_copy_paste.v;
                     let view_only = self.handler.lc.read().unwrap().view_only.v;
                     let stop = is_stopping_allowed
                         && (view_only
@@ -335,6 +353,7 @@ impl<T: InvokeUiSession> Remote<T> {
                     } else {
                         if let Err(e) = ContextSend::make_sure_enabled() {
                             log::error!("failed to restart clipboard context: {}", e);
+                            // to-do: Show msgbox with "Don't show again" option
                         };
                         log::debug!("Send system clipboard message to remote");
                         let msg = crate::clipboard_file::clip_2_msg(clip);
@@ -387,14 +406,15 @@ impl<T: InvokeUiSession> Remote<T> {
         if self.handler.is_file_transfer() || self.handler.is_port_forward() {
             return None;
         }
-        // Switch to default input device
-        let default_sound_device = get_default_sound_input();
-        if let Some(device) = default_sound_device {
-            set_sound_input(device);
-        }
         // iOS does not have this server.
         #[cfg(not(any(target_os = "ios")))]
         {
+            // NOTE:
+            // The client server and --server both use the same sound input device.
+            // It's better to distinguish the server side and client side.
+            // But it' not necessary for now, because it's not a common case.
+            // And it is immediately known when the input device is changed.
+            crate::audio_service::set_voice_call_input_device(get_default_sound_input(), false);
             // Create a channel to receive error or closed message
             let (tx, rx) = std::sync::mpsc::channel();
             let (tx_audio_data, mut rx_audio_data) =
@@ -421,6 +441,7 @@ impl<T: InvokeUiSession> Remote<T> {
                                 client_conn_inner,
                                 false,
                             );
+                            crate::audio_service::set_voice_call_input_device(None, true);
                             break;
                         }
                         _ => {}
@@ -797,10 +818,27 @@ impl<T: InvokeUiSession> Remote<T> {
                     }
                 }
             }
-            Data::RecordScreen(start, display, w, h, id) => {
-                let _ = self
-                    .video_sender
-                    .send(MediaData::RecordScreen(start, display, w, h, id));
+            Data::RenameFile((id, path, new_name, is_remote)) => {
+                if is_remote {
+                    let mut msg_out = Message::new();
+                    let mut file_action = FileAction::new();
+                    file_action.set_rename(FileRename {
+                        id,
+                        path,
+                        new_name,
+                        ..Default::default()
+                    });
+                    msg_out.set_file_action(file_action);
+                    allow_err!(peer.send(&msg_out).await);
+                } else {
+                    let err = fs::rename_file(&path, &new_name)
+                        .err()
+                        .map(|e| e.to_string());
+                    self.handle_job_status(id, -1, err);
+                }
+            }
+            Data::RecordScreen(start) => {
+                let _ = self.video_sender.send(MediaData::RecordScreen(start));
             }
             Data::ElevateDirect => {
                 let mut request = ElevationRequest::new();
@@ -842,6 +880,9 @@ impl<T: InvokeUiSession> Remote<T> {
                 self.handler
                     .on_voice_call_closed("Closed manually by the peer");
                 allow_err!(peer.send(&msg).await);
+            }
+            Data::ResetDecoder(display) => {
+                self.video_sender.send(MediaData::Reset(display)).ok();
             }
             _ => {}
         }
@@ -915,19 +956,24 @@ impl<T: InvokeUiSession> Remote<T> {
         true
     }
 
-    async fn send_opts_after_login(&self, peer: &mut Stream) {
-        if let Some(opts) = self
-            .handler
-            .lc
-            .read()
-            .unwrap()
-            .get_option_message_after_login()
-        {
-            let mut misc = Misc::new();
-            misc.set_option(opts);
-            let mut msg_out = Message::new();
-            msg_out.set_misc(misc);
-            allow_err!(peer.send(&msg_out).await);
+    async fn send_toggle_virtual_display_msg(&self, peer: &mut Stream) {
+        if !self.peer_info.is_support_virtual_display() {
+            return;
+        }
+        let lc = self.handler.lc.read().unwrap();
+        let displays = lc.get_option("virtual-display");
+        for d in displays.split(',') {
+            if let Ok(index) = d.parse::<i32>() {
+                let mut misc = Misc::new();
+                misc.set_toggle_virtual_display(ToggleVirtualDisplay {
+                    display: index,
+                    on: true,
+                    ..Default::default()
+                });
+                let mut msg_out = Message::new();
+                msg_out.set_misc(misc);
+                allow_err!(peer.send(&msg_out).await);
+            }
         }
     }
 
@@ -937,6 +983,11 @@ impl<T: InvokeUiSession> Remote<T> {
             && lc.get_toggle_option("privacy-mode")
         {
             let impl_key = lc.get_option("privacy-mode-impl-key");
+            if impl_key == crate::privacy_mode::PRIVACY_MODE_IMPL_WIN_VIRTUAL_DISPLAY
+                && !self.peer_info.is_support_virtual_display()
+            {
+                return;
+            }
             let mut misc = Misc::new();
             misc.set_toggle_privacy_mode(TogglePrivacyMode {
                 impl_key,
@@ -968,72 +1019,90 @@ impl<T: InvokeUiSession> Remote<T> {
         if custom_fps < 5 || custom_fps > 120 {
             custom_fps = 30;
         }
-        let decode_fps_read = self.decode_fps_map.read().unwrap();
-        for (display, decode_fps) in decode_fps_read.iter() {
-            let video_queue_map_read = self.video_queue_map.read().unwrap();
-            let Some(video_queue) = video_queue_map_read.get(display) else {
-                continue;
-            };
-
-            if !self.fps_control_map.contains_key(display) {
-                self.fps_control_map.insert(*display, FpsControl::default());
+        let ctl = &mut self.fps_control;
+        let len = self
+            .video_queue_map
+            .read()
+            .unwrap()
+            .iter()
+            .map(|v| v.1.len())
+            .max()
+            .unwrap_or_default();
+        let decode_fps = self.decode_fps.read().unwrap().clone();
+        let Some(mut decode_fps) = decode_fps else {
+            return;
+        };
+        if cfg!(feature = "flutter") {
+            let active_displays = ctl
+                .last_active_time
+                .iter()
+                .filter(|t| t.1.elapsed().as_secs() < 5)
+                .count();
+            if active_displays > 1 {
+                decode_fps = decode_fps / active_displays;
             }
-            let Some(ctl) = self.fps_control_map.get_mut(display) else {
-                return;
-            };
+        }
+        let mut limited_fps = if direct {
+            decode_fps * 9 / 10 // 30 got 27
+        } else {
+            decode_fps * 4 / 5 // 30 got 24
+        };
+        if limited_fps > custom_fps {
+            limited_fps = custom_fps;
+        }
+        let last_auto_fps = self.handler.lc.read().unwrap().last_auto_fps.clone();
+        let should_decrease = (len > 1
+            && last_auto_fps.clone().unwrap_or(custom_fps as _) > limited_fps)
+            || len > std::cmp::max(1, limited_fps / 2);
 
-            let len = video_queue.len();
-            let decode_fps = *decode_fps;
-            let mut limited_fps = if direct {
-                decode_fps * 9 / 10 // 30 got 27
-            } else {
-                decode_fps * 4 / 5 // 30 got 24
-            };
-            if limited_fps > custom_fps {
-                limited_fps = custom_fps;
-            }
-            let should_decrease = len > 1 && ctl.last_auto_fps.unwrap_or(0) > limited_fps as i32;
-
-            // increase judgement
-            if len <= 1 {
+        // increase judgement
+        if len <= 1 {
+            if ctl.idle_counter < usize::MAX {
                 ctl.idle_counter += 1;
-            } else {
-                ctl.idle_counter = 0;
             }
-            let mut should_increase = false;
-            if let Some(last_auto_fps) = ctl.last_auto_fps {
-                // ever set
-                if last_auto_fps + 3 <= limited_fps as i32 && ctl.idle_counter > 3 {
-                    // limited_fps is 5 larger than last set, and idle time is more than 3 seconds
-                    should_increase = true;
-                }
+        } else {
+            ctl.idle_counter = 0;
+        }
+        let mut should_increase = false;
+        if let Some(last_auto_fps) = last_auto_fps.clone() {
+            // ever set
+            if last_auto_fps + 3 <= limited_fps && ctl.idle_counter > 3 {
+                // limited_fps is 3 larger than last set, and idle time is more than 3 seconds
+                should_increase = true;
             }
-            if ctl.last_auto_fps.is_none() || should_decrease || should_increase {
-                // limited_fps to ensure decoding is faster than encoding
-                let mut auto_fps = limited_fps as i32;
-                if auto_fps < 1 {
-                    auto_fps = 1;
-                }
-                // send custom fps
-                let mut misc = Misc::new();
-                misc.set_option(OptionMessage {
-                    custom_fps: auto_fps,
-                    ..Default::default()
-                });
-                let mut msg = Message::new();
-                msg.set_misc(misc);
-                self.sender.send(Data::Message(msg)).ok();
-                ctl.last_queue_size = len;
-                ctl.last_auto_fps = Some(auto_fps);
+        }
+        if last_auto_fps.is_none() || should_decrease || should_increase {
+            // limited_fps to ensure decoding is faster than encoding
+            let mut auto_fps = limited_fps;
+            if should_decrease && limited_fps < len {
+                auto_fps = limited_fps / 2;
             }
-            // send refresh
-            if ctl.refresh_times < 10 // enough
-                && (len > video_queue.capacity() / 2
-                        && (ctl.refresh_times == 0 || ctl.last_refresh_instant.elapsed().as_secs() > 30))
+            if auto_fps < 1 {
+                auto_fps = 1;
+            }
+            let mut misc = Misc::new();
+            misc.set_option(OptionMessage {
+                custom_fps: auto_fps as _,
+                ..Default::default()
+            });
+            let mut msg = Message::new();
+            msg.set_misc(misc);
+            self.sender.send(Data::Message(msg)).ok();
+            log::info!("Set fps to {}", auto_fps);
+            ctl.last_queue_size = len;
+            self.handler.lc.write().unwrap().last_auto_fps = Some(auto_fps);
+        }
+        // send refresh
+        for (display, video_queue) in self.video_queue_map.read().unwrap().iter() {
+            let tolerable = std::cmp::min(decode_fps, video_queue.capacity() / 2);
+            if ctl.refresh_times < 20 // enough
+                    && (video_queue.len() > tolerable
+                            && (ctl.refresh_times == 0 || ctl.last_refresh_instant.elapsed().as_secs() > 10))
             {
                 // Refresh causes client set_display, left frames cause flickering.
                 while let Some(_) = video_queue.pop() {}
                 self.handler.refresh_video(*display as _);
+                log::info!("Refresh display {} to reduce delay", display);
                 ctl.refresh_times += 1;
                 ctl.last_refresh_instant = Instant::now();
             }
@@ -1048,7 +1117,7 @@ impl<T: InvokeUiSession> Remote<T> {
                         self.first_frame = true;
                         self.handler.close_success();
                         self.handler.adapt_size();
-                        self.send_opts_after_login(peer).await;
+                        self.send_toggle_virtual_display_msg(peer).await;
                         self.send_toggle_privacy_mode_msg(peer).await;
                     }
                     let incoming_format = CodecFormat::from(&vf);
@@ -1081,6 +1150,9 @@ impl<T: InvokeUiSession> Remote<T> {
                         }
                         self.video_sender.send(MediaData::VideoQueue(display)).ok();
                     }
+                    self.fps_control
+                        .last_active_time
+                        .insert(display, Instant::now());
                 }
                 Some(message::Union::Hash(hash)) => {
                     self.handler
@@ -1089,11 +1161,18 @@ impl<T: InvokeUiSession> Remote<T> {
                 }
                 Some(message::Union::LoginResponse(lr)) => match lr.union {
                     Some(login_response::Union::Error(err)) => {
+                        if err == client::REQUIRE_2FA {
+                            self.handler.lc.write().unwrap().enable_trusted_devices =
+                                lr.enable_trusted_devices;
+                        }
                         if !self.handler.handle_login_error(&err) {
                             return false;
                         }
                     }
                     Some(login_response::Union::PeerInfo(pi)) => {
+                        let peer_version = pi.version.clone();
+                        let peer_platform = pi.platform.clone();
+                        self.set_peer_info(&pi);
                         self.handler.handle_peer_info(pi);
                         self.check_clipboard_file_context();
                         if !(self.handler.is_file_transfer() || self.handler.is_port_forward()) {
@@ -1111,20 +1190,24 @@ impl<T: InvokeUiSession> Remote<T> {
                             // To make sure current text clipboard data is updated.
                             #[cfg(not(any(target_os = "android", target_os = "ios")))]
                             if let Some(mut rx) = rx {
-                                timeout(common::CLIPBOARD_INTERVAL, rx.recv()).await.ok();
+                                timeout(CLIPBOARD_INTERVAL, rx.recv()).await.ok();
                             }
 
                             #[cfg(not(any(target_os = "android", target_os = "ios")))]
-                            if let Some(msg_out) = Client::get_current_text_clipboard_msg() {
-                                let sender = self.sender.clone();
-                                let permission_config = self.handler.get_permission_config();
-                                tokio::spawn(async move {
-                                    // due to clipboard service interval time
-                                    sleep(common::CLIPBOARD_INTERVAL as f32 / 1_000.).await;
-                                    if permission_config.is_text_clipboard_required() {
-                                        sender.send(Data::Message(msg_out)).ok();
-                                    }
-                                });
+                            if self.handler.lc.read().unwrap().sync_init_clipboard.v {
+                                if let Some(msg_out) = crate::clipboard::get_current_clipboard_msg(
+                                    &peer_version,
+                                    &peer_platform,
+                                    crate::clipboard::ClipboardSide::Client,
+                                ) {
+                                    let sender = self.sender.clone();
+                                    let permission_config = self.handler.get_permission_config();
+                                    tokio::spawn(async move {
+                                        if permission_config.is_text_clipboard_required() {
+                                            sender.send(Data::Message(msg_out)).ok();
+                                        }
+                                    });
+                                }
                             }
 
                             // on connection established client
@@ -1133,7 +1216,7 @@ impl<T: InvokeUiSession> Remote<T> {
                             crate::plugin::handle_listen_event(
                                 crate::plugin::EVENT_ON_CONN_CLIENT.to_owned(),
                                 self.handler.get_id(),
-                            )
+                            );
                         }
 
                         if self.handler.is_file_transfer() {
@@ -1156,7 +1239,7 @@ impl<T: InvokeUiSession> Remote<T> {
                 Some(message::Union::Clipboard(cb)) => {
                     if !self.handler.lc.read().unwrap().disable_clipboard.v {
                         #[cfg(not(any(target_os = "android", target_os = "ios")))]
-                        update_clipboard(cb, Some(&crate::client::get_old_clipboard_text()));
+                        update_clipboard(vec![cb], ClipboardSide::Client);
                         #[cfg(any(target_os = "android", target_os = "ios"))]
                         {
                             let content = if cb.compress {
@@ -1168,6 +1251,12 @@ impl<T: InvokeUiSession> Remote<T> {
                                 self.handler.clipboard(content);
                             }
                         }
+                    }
+                }
+                Some(message::Union::MultiClipboards(_mcb)) => {
+                    if !self.handler.lc.read().unwrap().disable_clipboard.v {
+                        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+                        update_clipboard(_mcb.clipboards, ClipboardSide::Client);
                     }
                 }
                 #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
@@ -1330,17 +1419,17 @@ impl<T: InvokeUiSession> Remote<T> {
                         // https://github.com/rustdesk/rustdesk/issues/3703#issuecomment-1474734754
                         match p.permission.enum_value() {
                             Ok(Permission::Keyboard) => {
+                                *self.handler.server_keyboard_enabled.write().unwrap() = p.enabled;
                                 #[cfg(feature = "flutter")]
                                 #[cfg(not(any(target_os = "android", target_os = "ios")))]
                                 crate::flutter::update_text_clipboard_required();
-                                *self.handler.server_keyboard_enabled.write().unwrap() = p.enabled;
                                 self.handler.set_permission("keyboard", p.enabled);
                             }
                             Ok(Permission::Clipboard) => {
+                                *self.handler.server_clipboard_enabled.write().unwrap() = p.enabled;
                                 #[cfg(feature = "flutter")]
                                 #[cfg(not(any(target_os = "android", target_os = "ios")))]
                                 crate::flutter::update_text_clipboard_required();
-                                *self.handler.server_clipboard_enabled.write().unwrap() = p.enabled;
                                 self.handler.set_permission("clipboard", p.enabled);
                             }
                             Ok(Permission::Audio) => {
@@ -1369,7 +1458,7 @@ impl<T: InvokeUiSession> Remote<T> {
                     Some(misc::Union::SwitchDisplay(s)) => {
                         self.handler.handle_peer_switch_display(&s);
                         self.video_sender
-                            .send(MediaData::Reset(s.display as _))
+                            .send(MediaData::Reset(Some(s.display as _)))
                             .ok();
                         if s.width > 0 && s.height > 0 {
                             self.handler.set_display(
@@ -1504,7 +1593,9 @@ impl<T: InvokeUiSession> Remote<T> {
                         log::info!("update supported encoding:{:?}", e);
                         self.handler.lc.write().unwrap().supported_encoding = e;
                     }
-
+                    Some(misc::Union::FollowCurrentDisplay(d_idx)) => {
+                        self.handler.set_current_display(d_idx);
+                    }
                     _ => {}
                 },
                 Some(message::Union::TestDelay(t)) => {
@@ -1527,7 +1618,7 @@ impl<T: InvokeUiSession> Remote<T> {
                 },
                 Some(message::Union::MessageBox(msgbox)) => {
                     let mut link = msgbox.link;
-                    if let Some(v) = hbb_common::config::HELPER_URL.get(&link as &str) {
+                    if let Some(v) = config::HELPER_URL.get(&link as &str) {
                         link = v.to_string();
                     } else {
                         log::warn!("Message box ignore link {} for security", &link);
@@ -1572,6 +1663,25 @@ impl<T: InvokeUiSession> Remote<T> {
             }
         }
         true
+    }
+
+    fn set_peer_info(&mut self, pi: &PeerInfo) {
+        self.peer_info.platform = pi.platform.clone();
+        if let Ok(platform_additions) =
+            serde_json::from_str::<HashMap<String, serde_json::Value>>(&pi.platform_additions)
+        {
+            self.peer_info.is_installed = platform_additions
+                .get("is_installed")
+                .map(|v| v.as_bool())
+                .flatten()
+                .unwrap_or(false);
+            self.peer_info.idd_impl = platform_additions
+                .get("idd_impl")
+                .map(|v| v.as_str())
+                .flatten()
+                .unwrap_or_default()
+                .to_string();
+        }
     }
 
     async fn handle_back_notification(&mut self, notification: BackNotification) -> bool {
@@ -1758,7 +1868,7 @@ impl<T: InvokeUiSession> Remote<T> {
         ))]
         {
             let enabled = *self.handler.server_file_transfer_enabled.read().unwrap()
-                && self.handler.lc.read().unwrap().enable_file_transfer.v;
+                && self.handler.lc.read().unwrap().enable_file_copy_paste.v;
             ContextSend::enable(enabled);
         }
     }
@@ -1780,8 +1890,8 @@ impl<T: InvokeUiSession> Remote<T> {
             return;
         };
 
-        let is_stopping_allowed = clip.is_stopping_allowed_from_peer();
-        let file_transfer_enabled = self.handler.lc.read().unwrap().enable_file_transfer.v;
+        let is_stopping_allowed = clip.is_beginning_message();
+        let file_transfer_enabled = self.handler.lc.read().unwrap().enable_file_copy_paste.v;
         let stop = is_stopping_allowed && !file_transfer_enabled;
         log::debug!(
                 "Process clipboard message from server peer, stop: {}, is_stopping_allowed: {}, file_transfer_enabled: {}",
@@ -1833,8 +1943,8 @@ struct FpsControl {
     last_queue_size: usize,
     refresh_times: usize,
     last_refresh_instant: Instant,
-    last_auto_fps: Option<i32>,
     idle_counter: usize,
+    last_active_time: HashMap<usize, Instant>,
 }
 
 impl Default for FpsControl {
@@ -1843,8 +1953,8 @@ impl Default for FpsControl {
             last_queue_size: Default::default(),
             refresh_times: Default::default(),
             last_refresh_instant: Instant::now(),
-            last_auto_fps: None,
             idle_counter: 0,
+            last_active_time: Default::default(),
         }
     }
 }

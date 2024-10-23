@@ -205,14 +205,15 @@ void showServerSettingsWithValue(
                     )
                   ] +
                   [
-                    TextFormField(
-                      controller: relayCtrl,
-                      decoration: InputDecoration(
-                          labelText: translate('Relay Server'),
-                          errorText: relayServerMsg.value.isEmpty
-                              ? null
-                              : relayServerMsg.value),
-                    )
+                    if (isAndroid)
+                      TextFormField(
+                        controller: relayCtrl,
+                        decoration: InputDecoration(
+                            labelText: translate('Relay Server'),
+                            errorText: relayServerMsg.value.isEmpty
+                                ? null
+                                : relayServerMsg.value),
+                      )
                   ] +
                   [
                     TextFormField(
@@ -282,13 +283,4 @@ void setPrivacyModeDialog(
               .toList()),
     );
   }, backDismiss: true, clickMaskDismiss: true);
-}
-
-Future<String?> validateAsync(String value) async {
-  value = value.trim();
-  if (value.isEmpty) {
-    return null;
-  }
-  final res = await bind.mainTestIfValidServer(server: value);
-  return res.isEmpty ? null : res;
 }

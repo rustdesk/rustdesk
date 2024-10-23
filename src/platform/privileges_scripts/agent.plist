@@ -16,11 +16,13 @@
             <key>AfterInitialDemand</key>
             <false />
         </dict>
+        <key>ThrottleInterval</key>
+        <integer>1</integer>
         <key>RunAtLoad</key>
         <true />
         <key>ProgramArguments</key>
         <array>
-            <string>/Applications/RustDesk.app/Contents/MacOS/rustdesk</string>
+            <string>/Applications/RustDesk.app/Contents/MacOS/RustDesk</string>
             <string>--server</string>
         </array>
         <key>WorkingDirectory</key>

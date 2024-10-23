@@ -1,7 +1,6 @@
 {
   "name": "opus",
-  "version": "1.4",
-  "port-version": 1,
+  "version": "1.5.2",
   "description": "Totally open, royalty-free, highly versatile audio codec",
   "homepage": "https://github.com/xiph/opus",
   "license": "BSD-3-Clause",
@@ -16,8 +15,8 @@
     }
   ],
   "features": {
-    "avx": {
-      "description": "Builds the library with avx instruction set"
+    "avx2": {
+      "description": "Builds the library with avx2 instruction set"
     }
   }
 }
