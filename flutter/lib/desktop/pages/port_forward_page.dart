@@ -33,6 +33,7 @@ class PortForwardPage extends StatefulWidget {
     required this.isRDP,
     required this.isSharedPassword,
     this.forceRelay,
+    this.connToken,
   }) : super(key: key);
   final String id;
   final String? password;
@@ -40,6 +41,7 @@ class PortForwardPage extends StatefulWidget {
   final bool isRDP;
   final bool? forceRelay;
   final bool? isSharedPassword;
+  final String? connToken;
 
   @override
   State<PortForwardPage> createState() => _PortForwardPageState();
@@ -62,6 +64,7 @@ class _PortForwardPageState extends State<PortForwardPage>
         password: widget.password,
         isSharedPassword: widget.isSharedPassword,
         forceRelay: widget.forceRelay,
+        connToken: widget.connToken,
         isRdp: widget.isRDP);
     Get.put<FFI>(_ffi, tag: 'pf_${widget.id}');
     debugPrint("Port forward page init success with id ${widget.id}");

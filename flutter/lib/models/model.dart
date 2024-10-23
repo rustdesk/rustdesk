@@ -375,7 +375,7 @@ class FfiModel with ChangeNotifier {
       } else if (name == 'plugin_option') {
         handleOption(evt);
       } else if (name == "sync_peer_hash_password_to_personal_ab") {
-        if (desktopType == DesktopType.main || isWeb) {
+        if (desktopType == DesktopType.main || isWeb || isMobile) {
           final id = evt['id'];
           final hash = evt['hash'];
           if (id != null && hash != null) {
@@ -2462,6 +2462,7 @@ class FFI {
     String? switchUuid,
     String? password,
     bool? isSharedPassword,
+    String? connToken,
     bool? forceRelay,
     int? tabWindowId,
     int? display,
@@ -2498,6 +2499,7 @@ class FFI {
         forceRelay: forceRelay ?? false,
         password: password ?? '',
         isSharedPassword: isSharedPassword ?? false,
+        connToken: connToken,
       );
     } else if (display != null) {
       if (displays == null) {
