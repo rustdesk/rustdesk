@@ -130,7 +130,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Show quality monitor", "Hiện thị chất lượng của màn hình"),
         ("Disable clipboard", "Tắt clipboard"),
         ("Lock after session end", "Khóa sau khi kết thúc phiên kết nối"),
-        ("Insert", "Cài"),
+        ("Insert Ctrl + Alt + Del", "Cài Ctrl + Alt + Del"),
         ("Insert Lock", "Cài khóa"),
         ("Refresh", "Làm mới"),
         ("ID does not exist", "ID không tồn tại"),
@@ -653,6 +653,5 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Upload folder", ""),
         ("Upload files", ""),
         ("Clipboard is synchronized", ""),
-        ("Insert Ctrl + Alt + Del", ""),
     ].iter().cloned().collect();
 }

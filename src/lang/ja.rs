@@ -130,7 +130,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Show quality monitor", "品質モニターを表示"),
         ("Disable clipboard", "クリップボードを無効化"),
         ("Lock after session end", "セッション終了後にロックする"),
-        ("Insert", "送信"),
+        ("Insert Ctrl + Alt + Del", "Ctrl + Alt + Del 送信"),
         ("Insert Lock", "ロック命令を送信"),
         ("Refresh", "更新"),
         ("ID does not exist", "IDが存在しません"),
@@ -653,6 +653,5 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Upload folder", ""),
         ("Upload files", ""),
         ("Clipboard is synchronized", ""),
-        ("Insert Ctrl + Alt + Del", ""),
     ].iter().cloned().collect();
 }

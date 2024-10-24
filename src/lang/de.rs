@@ -130,7 +130,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Show quality monitor", "Qualitätsüberwachung anzeigen"),
         ("Disable clipboard", "Zwischenablage deaktivieren"),
         ("Lock after session end", "Nach Sitzungsende sperren"),
-        ("Insert", "Einfügen"),
+        ("Insert Ctrl + Alt + Del", "Einfügen Ctrl + Alt + Del"),
         ("Insert Lock", "Win+L (Sperren) senden"),
         ("Refresh", "Aktualisieren"),
         ("ID does not exist", "Diese ID existiert nicht."),
@@ -653,6 +653,5 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Upload folder", "Ordner hochladen"),
         ("Upload files", "Dateien hochladen"),
         ("Clipboard is synchronized", "Zwischenablage ist synchronisiert"),
-        ("Insert Ctrl + Alt + Del", "Strg + Alt + Entf senden"),
     ].iter().cloned().collect();
 }

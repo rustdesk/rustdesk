@@ -130,7 +130,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Show quality monitor", "품질 모니터 보기"),
         ("Disable clipboard", "클립보드 비활성화"),
         ("Lock after session end", "세션 종료 후 화면 잠금"),
-        ("Insert", "입력"),
+        ("Insert Ctrl + Alt + Del", "Ctrl + Alt + Del 입력"),
         ("Insert Lock", "원격 입력 잠금"),
         ("Refresh", "새로고침"),
         ("ID does not exist", "ID가 존재하지 않습니다"),
@@ -653,6 +653,5 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Upload folder", ""),
         ("Upload files", ""),
         ("Clipboard is synchronized", ""),
-        ("Insert Ctrl + Alt + Del", ""),
     ].iter().cloned().collect();
 }
