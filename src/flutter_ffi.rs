@@ -121,6 +121,7 @@ pub fn session_add_sync(
     force_relay: bool,
     password: String,
     is_shared_password: bool,
+    conn_token: Option<String>,
 ) -> SyncReturn<String> {
     if let Err(e) = session_add(
         &session_id,
@@ -132,6 +133,7 @@ pub fn session_add_sync(
         force_relay,
         password,
         is_shared_password,
+        conn_token,
     ) {
         SyncReturn(format!("Failed to add session with id {}, {}", &id, e))
     } else {
@@ -1338,6 +1340,14 @@ pub fn session_request_voice_call(session_id: SessionID) {
 pub fn session_close_voice_call(session_id: SessionID) {
     if let Some(session) = sessions::get_session_by_session_id(&session_id) {
         session.close_voice_call();
+    }
+}
+
+pub fn session_get_conn_token(session_id: SessionID) -> SyncReturn<Option<String>> {
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
+        SyncReturn(session.get_conn_token())
+    } else {
+        SyncReturn(None)
     }
 }
 

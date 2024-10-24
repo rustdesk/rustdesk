@@ -1490,6 +1490,10 @@ impl<T: InvokeUiSession> Session<T> {
         msg.set_misc(misc);
         self.send(Data::Message(msg));
     }
+
+    pub fn get_conn_token(&self) -> Option<String> {
+        self.lc.read().unwrap().get_conn_token()
+    }
 }
 
 pub trait InvokeUiSession: Send + Sync + Clone + 'static + Sized + Default {

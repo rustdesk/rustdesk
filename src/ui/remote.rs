@@ -506,7 +506,7 @@ impl sciter::EventHandler for SciterSession {
 impl SciterSession {
     pub fn new(cmd: String, id: String, password: String, args: Vec<String>) -> Self {
         let force_relay = args.contains(&"--relay".to_string());
-        let mut session: Session<SciterHandler> = Session {
+        let session: Session<SciterHandler> = Session {
             password: password.clone(),
             args,
             server_keyboard_enabled: Arc::new(RwLock::new(true)),
@@ -529,7 +529,7 @@ impl SciterSession {
             .lc
             .write()
             .unwrap()
-            .initialize(id, conn_type, None, force_relay, None, None);
+            .initialize(id, conn_type, None, force_relay, None, None, None);
 
         Self(session)
     }
