@@ -64,9 +64,9 @@ pub type Sender = mpsc::UnboundedSender<(Instant, Arc<Message>)>;
 
 lazy_static::lazy_static! {
     static ref LOGIN_FAILURES: [Arc::<Mutex<HashMap<String, (i32, i32, i32)>>>; 2] = Default::default();
-    static ref SESSIONS: Arc::<Mutex<HashMap<String, Session>>> = Default::default();
+    static ref SESSIONS: Arc::<Mutex<HashMap<SessionKey, Session>>> = Default::default();
     static ref ALIVE_CONNS: Arc::<Mutex<Vec<i32>>> = Default::default();
-    pub static ref AUTHED_CONNS: Arc::<Mutex<Vec<(i32, AuthConnType)>>> = Default::default();
+    pub static ref AUTHED_CONNS: Arc::<Mutex<Vec<(i32, AuthConnType, SessionKey)>>> = Default::default();
     static ref SWITCH_SIDES_UUID: Arc::<Mutex<HashMap<String, (Instant, uuid::Uuid)>>> = Default::default();
     static ref WAKELOCK_SENDER: Arc::<Mutex<std::sync::mpsc::Sender<(usize, usize)>>> = Arc::new(Mutex::new(start_wakelock_thread()));
 }
@@ -140,13 +140,20 @@ enum MessageInput {
     BlockOffPlugin(String),
 }
 
-#[derive(Clone, Debug)]
-struct Session {
+#[derive(Clone, Debug, Hash, Eq, PartialEq)]
+pub struct SessionKey {
+    peer_id: String,
     name: String,
     session_id: u64,
+}
+
+#[derive(Clone, Debug)]
+struct Session {
     last_recv_time: Arc<Mutex<Instant>>,
     random_password: String,
     tfa: bool,
+    conn_type: AuthConnType,
+    conn_id: i32,
 }
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -1131,6 +1138,7 @@ impl Connection {
         self.authed_conn_id = Some(self::raii::AuthedConnID::new(
             self.inner.id(),
             auth_conn_type,
+            self.session_key(),
         ));
         self.post_conn_audit(
             json!({"peer": ((&self.lr.my_id, &self.lr.my_name)), "type": conn_type}),
@@ -1541,14 +1549,14 @@ impl Connection {
         if password::temporary_enabled() {
             let password = password::temporary_password();
             if self.validate_one_password(password.clone()) {
-                SESSIONS.lock().unwrap().insert(
-                    self.lr.my_id.clone(),
+                raii::AuthedConnID::insert_session(
+                    self.session_key(),
                     Session {
-                        name: self.lr.my_name.clone(),
-                        session_id: self.lr.session_id,
                         last_recv_time: self.last_recv_time.clone(),
                         random_password: password,
                         tfa: false,
+                        conn_type: self.conn_type(),
+                        conn_id: self.inner.id(),
                     },
                 );
                 return true;
@@ -1570,21 +1578,19 @@ impl Connection {
         let session = SESSIONS
             .lock()
             .unwrap()
-            .get(&self.lr.my_id)
+            .get(&self.session_key())
             .map(|s| s.to_owned());
         // last_recv_time is a mutex variable shared with connection, can be updated lively.
         if let Some(mut session) = session {
-            if session.name == self.lr.my_name
-                && session.session_id == self.lr.session_id
-                && !self.lr.password.is_empty()
+            if !self.lr.password.is_empty()
                 && (tfa && session.tfa
                     || !tfa && self.validate_one_password(session.random_password.clone()))
             {
                 session.last_recv_time = self.last_recv_time.clone();
-                SESSIONS
-                    .lock()
-                    .unwrap()
-                    .insert(self.lr.my_id.clone(), session);
+                session.conn_id = self.inner.id();
+                session.conn_type = self.conn_type();
+                raii::AuthedConnID::insert_session(self.session_key(), session);
+                log::info!("is recent session");
                 return true;
             }
         }
@@ -1844,23 +1850,22 @@ impl Connection {
                         let session = SESSIONS
                             .lock()
                             .unwrap()
-                            .get(&self.lr.my_id)
+                            .get(&self.session_key())
                             .map(|s| s.to_owned());
                         if let Some(mut session) = session {
                             session.tfa = true;
-                            SESSIONS
-                                .lock()
-                                .unwrap()
-                                .insert(self.lr.my_id.clone(), session);
+                            session.conn_id = self.inner.id();
+                            session.conn_type = self.conn_type();
+                            raii::AuthedConnID::insert_session(self.session_key(), session);
                         } else {
-                            SESSIONS.lock().unwrap().insert(
-                                self.lr.my_id.clone(),
+                            raii::AuthedConnID::insert_session(
+                                self.session_key(),
                                 Session {
-                                    name: self.lr.my_name.clone(),
-                                    session_id: self.lr.session_id,
                                     last_recv_time: self.last_recv_time.clone(),
                                     random_password: "".to_owned(),
                                     tfa: true,
+                                    conn_type: self.conn_type(),
+                                    conn_id: self.inner.id(),
                                 },
                             );
                         }
@@ -2159,12 +2164,8 @@ impl Connection {
                                 _ => {}
                             }
                             if let Some(job_id) = job_id {
-                                self.send(fs::new_error(
-                                    job_id,
-                                    "one-way-file-transfer-tip",
-                                    0,
-                                ))
-                                .await;
+                                self.send(fs::new_error(job_id, "one-way-file-transfer-tip", 0))
+                                    .await;
                                 return true;
                             }
                         }
@@ -2399,7 +2400,10 @@ impl Connection {
                     }
                     Some(misc::Union::CloseReason(_)) => {
                         self.on_close("Peer close", true).await;
-                        SESSIONS.lock().unwrap().remove(&self.lr.my_id);
+                        raii::AuthedConnID::remove_session_if_last_duplication(
+                            self.inner.id(),
+                            self.session_key(),
+                        );
                         return false;
                     }
 
@@ -3159,7 +3163,7 @@ impl Connection {
         let mut msg_out = Message::new();
         msg_out.set_misc(misc);
         self.send(msg_out).await;
-        SESSIONS.lock().unwrap().remove(&self.lr.my_id);
+        raii::AuthedConnID::remove_session_if_last_duplication(self.inner.id(), self.session_key());
     }
 
     fn read_dir(&mut self, dir: &str, include_hidden: bool) {
@@ -3311,6 +3315,26 @@ impl Connection {
                 msg_out.set_misc(misc);
                 self.send(msg_out).await;
             }
+        }
+    }
+
+    #[inline]
+    fn conn_type(&self) -> AuthConnType {
+        if self.file_transfer.is_some() {
+            AuthConnType::FileTransfer
+        } else if self.port_forward_socket.is_some() {
+            AuthConnType::PortForward
+        } else {
+            AuthConnType::Remote
+        }
+    }
+
+    #[inline]
+    fn session_key(&self) -> SessionKey {
+        SessionKey {
+            peer_id: self.lr.my_id.clone(),
+            name: self.lr.my_name.clone(),
+            session_id: self.lr.session_id,
         }
     }
 }
@@ -3810,15 +3834,18 @@ mod raii {
     pub struct AuthedConnID(i32, AuthConnType);
 
     impl AuthedConnID {
-        pub fn new(id: i32, conn_type: AuthConnType) -> Self {
-            AUTHED_CONNS.lock().unwrap().push((id, conn_type));
+        pub fn new(conn_id: i32, conn_type: AuthConnType, session_key: SessionKey) -> Self {
+            AUTHED_CONNS
+                .lock()
+                .unwrap()
+                .push((conn_id, conn_type, session_key));
             Self::check_wake_lock();
             use std::sync::Once;
             static _ONCE: Once = Once::new();
             _ONCE.call_once(|| {
                 shutdown_hooks::add_shutdown_hook(connection_shutdown_hook);
             });
-            Self(id, conn_type)
+            Self(conn_id, conn_type)
         }
 
         fn check_wake_lock() {
@@ -3843,6 +3870,53 @@ mod raii {
                 .filter(|c| c.1 == AuthConnType::Remote || c.1 == AuthConnType::FileTransfer)
                 .count()
         }
+
+        pub fn remove_session_if_last_duplication(conn_id: i32, key: SessionKey) {
+            let contains = SESSIONS.lock().unwrap().contains_key(&key);
+            if contains {
+                let another = AUTHED_CONNS
+                    .lock()
+                    .unwrap()
+                    .iter()
+                    .any(|c| c.0 != conn_id && c.2 == key && c.1 != AuthConnType::PortForward);
+                if !another {
+                    // Keep the session if there is another connection with same peer_id and session_id.
+                    SESSIONS.lock().unwrap().remove(&key);
+                    log::info!("remove session");
+                } else {
+                    log::info!("skip remove session");
+                }
+            }
+        }
+
+        pub fn insert_session(key: SessionKey, session: Session) {
+            let mut insert = true;
+            if session.conn_type == AuthConnType::PortForward {
+                // port forward doesn't update last received time
+                let other_alive_conns = AUTHED_CONNS
+                    .lock()
+                    .unwrap()
+                    .iter()
+                    .filter(|c| {
+                        c.2 == key && c.1 != AuthConnType::PortForward // port forward doesn't remove itself
+                    })
+                    .map(|c| c.0)
+                    .collect::<Vec<_>>();
+                let another = SESSIONS.lock().unwrap().get(&key).map(|s| {
+                    other_alive_conns.contains(&s.conn_id)
+                        && s.tfa == session.tfa
+                        && s.conn_type != AuthConnType::PortForward
+                }) == Some(true);
+                if another {
+                    insert = false;
+                    log::info!("skip insert session for port forward");
+                }
+            }
+            if insert {
+                log::info!("insert session for {:?}", session.conn_type);
+                SESSIONS.lock().unwrap().insert(key, session);
+            }
+        }
     }
 
     impl Drop for AuthedConnID {
@@ -3850,7 +3924,7 @@ mod raii {
             if self.1 == AuthConnType::Remote {
                 scrap::codec::Encoder::update(scrap::codec::EncodingUpdate::Remove(self.0));
             }
-            AUTHED_CONNS.lock().unwrap().retain(|&c| c.0 != self.0);
+            AUTHED_CONNS.lock().unwrap().retain(|c| c.0 != self.0);
             let remote_count = AUTHED_CONNS
                 .lock()
                 .unwrap()

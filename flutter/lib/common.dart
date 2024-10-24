@@ -2304,16 +2304,19 @@ connectMainDesktop(String id,
     required bool isRDP,
     bool? forceRelay,
     String? password,
+    String? connToken,
     bool? isSharedPassword}) async {
   if (isFileTransfer) {
     await rustDeskWinManager.newFileTransfer(id,
         password: password,
         isSharedPassword: isSharedPassword,
+        connToken: connToken,
         forceRelay: forceRelay);
   } else if (isTcpTunneling || isRDP) {
     await rustDeskWinManager.newPortForward(id, isRDP,
         password: password,
         isSharedPassword: isSharedPassword,
+        connToken: connToken,
         forceRelay: forceRelay);
   } else {
     await rustDeskWinManager.newRemoteDesktop(id,
@@ -2333,6 +2336,7 @@ connect(BuildContext context, String id,
     bool isRDP = false,
     bool forceRelay = false,
     String? password,
+    String? connToken,
     bool? isSharedPassword}) async {
   if (id == '') return;
   if (!isDesktop || desktopType == DesktopType.main) {
@@ -2374,6 +2378,7 @@ connect(BuildContext context, String id,
         'password': password,
         'isSharedPassword': isSharedPassword,
         'forceRelay': forceRelay,
+        'connToken': connToken,
       });
     }
   } else {
