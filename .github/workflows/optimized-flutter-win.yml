@@ -1,4 +1,4 @@
-name: Build Client ONLY for Windows
+name: Optimized windows client
 
 on:
   workflow_dispatch:
