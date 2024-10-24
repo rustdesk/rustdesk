@@ -10,39 +10,15 @@ on:
         type: string
         default: "nightly"
 
-  workflow_call:
-    inputs:
-      upload-artifact:
-        type: boolean
-        default: true
-      upload-tag:
-        type: string
-        default: "nightly"
-
 env:
   SCITER_RUST_VERSION: "1.75" # https://github.com/rustdesk/rustdesk/discussions/7503, also 1.78 has ABI change which causes our sciter version not working, https://blog.rust-lang.org/2024/03/30/i128-layout-update.html
   RUST_VERSION: "1.75" # sciter failed on m1 with 1.78 because of https://blog.rust-lang.org/2024/03/30/i128-layout-update.html
-  #CARGO_NDK_VERSION: "3.1.2"
-  #SCITER_ARMV7_CMAKE_VERSION: "3.29.7"
-  #SCITER_NASM_DEBVERSION: "2.14-1"
   LLVM_VERSION: "15.0.6"
   FLUTTER_VERSION: "3.19.6"
-  #ANDROID_FLUTTER_VERSION: "3.13.9" # >= 3.16 is very slow on my android phone, but work well on most of others. We may switch to new flutter after changing to texture rendering (I believe it can solve my problem).
   FLUTTER_RUST_BRIDGE_VERSION: "1.80.1"
-  # for arm64 linux because official Dart SDK does not work
-  #FLUTTER_ELINUX_VERSION: "3.16.9"
   TAG_NAME: "${{ inputs.upload-tag }}"
-  #VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
-  # vcpkg version: 2024.07.12
   VCPKG_COMMIT_ID: "1de2026f28ead93ff1773e6e680387643e914ea1"
   VERSION: "1.3.2"
-  #NDK_VERSION: "r27b"
-  #signing keys env variable checks
-  #ANDROID_SIGNING_KEY: "${{ secrets.ANDROID_SIGNING_KEY }}"
-  #MACOS_P12_BASE64: "${{ secrets.MACOS_P12_BASE64 }}"
-  # To make a custom build with your own servers set the below secret values
-  RS_PUB_KEY: "${{ secrets.RS_PUB_KEY }}" #not in use
-  RENDEZVOUS_SERVER: "${{ secrets.RENDEZVOUS_SERVER }}"
   API_SERVER: "${{ secrets.API_SERVER }}"
   UPLOAD_ARTIFACT: "${{ inputs.upload-artifact }}"
   SIGN_BASE_URL: "${{ secrets.SIGN_BASE_URL }}"
@@ -233,38 +209,3 @@ jobs:
           files: |
             ./SignOutput/${{ env.CLIENT_EXECUTABLE }}-*.msi
             ./SignOutput/${{ env.CLIENT_EXECUTABLE }}-*.exe
-
-  publish_unsigned:
-    needs:
-      - build-for-windows-flutter
-    runs-on: ubuntu-latest
-    if: ${{ inputs.upload-artifact }}
-    steps:
-      - name: Download artifacts
-        uses: actions/download-artifact@master
-        with:
-          name: ${{ env.CLIENT_EXECUTABLE }}-unsigned-macos-x86_64
-          path: ./
-
-      - name: Download Artifacts
-        uses: actions/download-artifact@master
-        with:
-          name: ${{ env.CLIENT_EXECUTABLE }}-unsigned-macos-aarch64
-          path: ./
-
-      - name: Download Artifacts
-        uses: actions/download-artifact@master
-        with:
-          name: ${{ env.CLIENT_EXECUTABLE }}-unsigned-windows-x86_64
-          path: ./windows-x86_64/
-
-      - name: Combine unsigned app
-        run: |
-          tar czf ${{ env.CLIENT_EXECUTABLE }}-${{ env.VERSION }}-unsigned.tar.gz *.dmg windows-x86_64
-
-      - name: Publish unsigned app
-        uses: softprops/action-gh-release@v1
-        with:
-          prerelease: true
-          tag_name: ${{ env.TAG_NAME }}
-          files: ${{ env.CLIENT_EXECUTABLE }}-${{ env.VERSION }}-unsigned.tar.gz
