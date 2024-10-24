@@ -130,7 +130,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Show quality monitor", "Rādīt kvalitātes monitoru"),
         ("Disable clipboard", "Atspējot starpliktuvi"),
         ("Lock after session end", "Bloķēt pēc sesijas beigām"),
-        ("Insert", "Ievietot"),
+        ("Insert Ctrl + Alt + Del", "Ievietot Ctrl + Alt + Del"),
         ("Insert Lock", "Ievietot Bloķēt"),
         ("Refresh", "Atsvaidzināt"),
         ("ID does not exist", "ID neeksistē"),
@@ -653,6 +653,5 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Upload folder", "Augšupielādēt mapi"),
         ("Upload files", "Augšupielādēt failus"),
         ("Clipboard is synchronized", "Starpliktuve ir sinhronizēta"),
-        ("Insert Ctrl + Alt + Del", ""),
     ].iter().cloned().collect();
 }

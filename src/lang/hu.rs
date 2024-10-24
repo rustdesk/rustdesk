@@ -130,7 +130,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Show quality monitor", ""),
         ("Disable clipboard", "Közös vágólap kikapcsolása"),
         ("Lock after session end", "Távoli fiók zárolása a munkamenet végén"),
-        ("Insert", ""),
+        ("Insert Ctrl + Alt + Del", "Illessze be a Ctrl + Alt + Del"),
         ("Insert Lock", "Távoli fiók zárolása"),
         ("Refresh", "Frissítés"),
         ("ID does not exist", "Az azonosító nem létezik"),
@@ -653,6 +653,5 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Upload folder", ""),
         ("Upload files", ""),
         ("Clipboard is synchronized", ""),
-        ("Insert Ctrl + Alt + Del", ""),
     ].iter().cloned().collect();
 }
