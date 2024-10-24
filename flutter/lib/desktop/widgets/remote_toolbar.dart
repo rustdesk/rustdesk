@@ -305,7 +305,7 @@ class RemoteMenuEntry {
   }) {
     return MenuEntryButton<String>(
       childBuilder: (TextStyle? style) => Text(
-        '${translate("Insert Ctrl + Alt + Del")',
+        translate("Insert Ctrl + Alt + Del"),
         style: style,
       ),
       proc: () {
