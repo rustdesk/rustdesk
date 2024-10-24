@@ -10,7 +10,7 @@ import datetime
 length_count = 4
 # encoding
 encoding = 'utf-8'
-clientExecutable = 'PLLassist'
+clientExecutable = 'rustdesk' #'PLLassist'
 
 # output: {path: (compressed_data, file_md5)}
 

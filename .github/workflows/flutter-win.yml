@@ -46,6 +46,7 @@ env:
   API_SERVER: "${{ secrets.API_SERVER }}"
   UPLOAD_ARTIFACT: "${{ inputs.upload-artifact }}"
   SIGN_BASE_URL: "${{ secrets.SIGN_BASE_URL }}"
+  CLIENT_EXECUTABLE: "rustdesk"
 
 jobs:
   build-RustDeskTempTopMostWindow:
