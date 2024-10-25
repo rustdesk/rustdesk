@@ -391,6 +391,7 @@ pub struct PeerInfoSerde {
 }
 
 #[derive(Debug, Default, Serialize, Deserialize, Clone, PartialEq)]
+
 pub struct TransferSerde {
     #[serde(default, deserialize_with = "deserialize_vec_string")]
     pub write_jobs: Vec<String>,
