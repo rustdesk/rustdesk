@@ -638,7 +638,7 @@ class FfiModel with ChangeNotifier {
       {bool? hasCancel}) {
     msgBox(sessionId, type, title, text, link, dialogManager,
         hasCancel: hasCancel,
-        reconnect: reconnect,
+        reconnect: hasRetry ? reconnect : null,
         reconnectTimeout: hasRetry ? _reconnects : null);
     _timer?.cancel();
     if (hasRetry) {

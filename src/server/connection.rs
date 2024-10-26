@@ -760,10 +760,7 @@ impl Connection {
         }
         if let Err(err) = conn.try_port_forward_loop(&mut rx_from_cm).await {
             conn.on_close(&err.to_string(), false).await;
-            raii::AuthedConnID::remove_session_if_last_duplication(
-                conn.inner.id(),
-                conn.session_key(),
-            );
+            raii::AuthedConnID::check_remove_session(conn.inner.id(), conn.session_key());
         }
 
         conn.post_conn_audit(json!({
@@ -2377,7 +2374,7 @@ impl Connection {
                     }
                     Some(misc::Union::CloseReason(_)) => {
                         self.on_close("Peer close", true).await;
-                        raii::AuthedConnID::remove_session_if_last_duplication(
+                        raii::AuthedConnID::check_remove_session(
                             self.inner.id(),
                             self.session_key(),
                         );
@@ -3140,7 +3137,7 @@ impl Connection {
         let mut msg_out = Message::new();
         msg_out.set_misc(misc);
         self.send(msg_out).await;
-        raii::AuthedConnID::remove_session_if_last_duplication(self.inner.id(), self.session_key());
+        raii::AuthedConnID::check_remove_session(self.inner.id(), self.session_key());
     }
 
     fn read_dir(&mut self, dir: &str, include_hidden: bool) {
@@ -3292,17 +3289,6 @@ impl Connection {
                 msg_out.set_misc(misc);
                 self.send(msg_out).await;
             }
-        }
-    }
-
-    #[inline]
-    fn conn_type(&self) -> AuthConnType {
-        if self.file_transfer.is_some() {
-            AuthConnType::FileTransfer
-        } else if self.port_forward_socket.is_some() {
-            AuthConnType::PortForward
-        } else {
-            AuthConnType::Remote
         }
     }
 
@@ -3848,20 +3834,24 @@ mod raii {
                 .count()
         }
 
-        pub fn remove_session_if_last_duplication(conn_id: i32, key: SessionKey) {
+        pub fn check_remove_session(conn_id: i32, key: SessionKey) {
             let mut lock = SESSIONS.lock().unwrap();
             let contains = lock.contains_key(&key);
             if contains {
-                let another = AUTHED_CONNS
+                // If there are 2 connections with the same peer_id and session_id, a remote connection and a file transfer or port forward connection,
+                // If any of the connections is closed allowing retry, this will not be called;
+                // If the file transfer/port forward connection is closed with no retry, the session should be kept for remote control menu action;
+                // If the remote connection is closed with no retry, keep the session is not reasonable in case there is a retry button in the remote side, and ignore network fluctuations.
+                let another_remote = AUTHED_CONNS
                     .lock()
                     .unwrap()
                     .iter()
-                    .any(|c| c.0 != conn_id && c.2 == key);
-                if !another {
-                    // Keep the session if there is another connection with same peer_id and session_id.
+                    .any(|c| c.0 != conn_id && c.2 == key && c.1 == AuthConnType::Remote);
+                if !another_remote {
                     lock.remove(&key);
                     log::info!("remove session");
                 } else {
+                    // Keep the session if there is another remote connection with same peer_id and session_id.
                     log::info!("skip remove session");
                 }
             }
