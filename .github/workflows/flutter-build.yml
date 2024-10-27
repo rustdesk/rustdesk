@@ -443,7 +443,8 @@ jobs:
             rustdesk*-aarch64.dmg
 
   build-rustdesk-ios:
-    if: ${{ inputs.upload-artifact }}
+    #if: ${{ inputs.upload-artifact }}
+    if: false
     name: build rustdesk ios ipa
     runs-on: ${{ matrix.job.os }}
     strategy:
@@ -1111,7 +1112,8 @@ jobs:
   build-rustdesk-android-universal:
     needs: [build-rustdesk-android]
     name: build rustdesk android universal apk
-    if: ${{ inputs.upload-artifact }}
+    #if: ${{ inputs.upload-artifact }}
+    if: false
     runs-on: ubuntu-20.04
     env:
       reltype: release
