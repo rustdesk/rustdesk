@@ -82,6 +82,7 @@ class RustdeskImpl {
       required bool forceRelay,
       required String password,
       required bool isSharedPassword,
+      String? connToken,
       dynamic hint}) {
     return js.context.callMethod('setByName', [
       'session_add_sync',
@@ -173,18 +174,12 @@ class RustdeskImpl {
   }
 
   Future<void> sessionRecordScreen(
-      {required UuidValue sessionId,
-      required bool start,
-      required int display,
-      required int width,
-      required int height,
-      dynamic hint}) {
+      {required UuidValue sessionId, required bool start, dynamic hint}) {
     throw UnimplementedError("sessionRecordScreen");
   }
 
-  Future<void> sessionRecordStatus(
-      {required UuidValue sessionId, required bool status, dynamic hint}) {
-    throw UnimplementedError("sessionRecordStatus");
+  bool sessionGetIsRecording({required UuidValue sessionId, dynamic hint}) {
+    return false;
   }
 
   Future<void> sessionReconnect(
@@ -707,7 +702,8 @@ class RustdeskImpl {
 
   Future<void> sessionSendSelectedSessionId(
       {required UuidValue sessionId, required String sid, dynamic hint}) {
-    throw UnimplementedError("sessionSendSelectedSessionId");
+    return Future(
+        () => js.context.callMethod('setByName', ['selected_sid', sid]));
   }
 
   Future<List<String>> mainGetSoundInputs({dynamic hint}) {
@@ -1826,6 +1822,10 @@ class RustdeskImpl {
   Future<void> sessionSelectFiles(
       {required UuidValue sessionId, dynamic hint}) {
     return Future(() => js.context.callMethod('setByName', ['select_files']));
+  }
+
+  String? sessionGetConnToken({required UuidValue sessionId, dynamic hint}) {
+    throw UnimplementedError("sessionGetConnToken");
   }
 
   void dispose() {}
