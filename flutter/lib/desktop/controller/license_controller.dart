@@ -5,6 +5,7 @@ import 'package:get/get.dart';
 import 'package:get_storage/get_storage.dart';
 
 class LicenseController extends GetxController {
+  static LicenseController get to => Get.find();
   var isCheckingActivation = true.obs;
   var isLicenseValid = false.obs;
   final storage = GetStorage();

@@ -45,6 +45,9 @@ Future<void> main(List<String> args) async {
   earlyAssert();
   WidgetsFlutterBinding.ensureInitialized();
 
+  await GetStorage.init();
+  Get.put<LicenseController>(LicenseController(), permanent: true);
+
   debugPrint("launch args: $args");
   kBootArgs = List.from(args);
 
@@ -128,8 +131,6 @@ Future<void> initEnv(String appType) async {
 void runMainApp(bool startService) async {
   // register uni links
   await initEnv(kAppTypeMain);
-  await GetStorage.init();
-  Get.put<LicenseController>(LicenseController(), permanent: true);
 
   // trigger connection status updater
   await bind.mainCheckConnectStatus();
