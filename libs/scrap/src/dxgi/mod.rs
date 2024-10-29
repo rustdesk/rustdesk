@@ -7,10 +7,11 @@ use winapi::{
     shared::{
         dxgi::*,
         dxgi1_2::*,
+        dxgiformat::DXGI_FORMAT_B8G8R8A8_UNORM,
         dxgitype::*,
         minwindef::{DWORD, FALSE, TRUE, UINT},
         ntdef::LONG,
-        windef::HMONITOR,
+        windef::{HMONITOR, RECT},
         winerror::*,
         // dxgiformat::{DXGI_FORMAT, DXGI_FORMAT_B8G8R8A8_UNORM, DXGI_FORMAT_420_OPAQUE},
     },
@@ -57,6 +58,7 @@ pub struct Capturer {
     saved_raw_data: Vec<u8>, // for faster compare and copy
     output_texture: bool,
     adapter_desc1: DXGI_ADAPTER_DESC1,
+    rotate: Rotate,
 }
 
 impl Capturer {
@@ -151,6 +153,7 @@ impl Capturer {
                 (*duplication).GetDesc(&mut desc);
             }
         }
+        let rotate = Self::create_rotations(device.0, context.0, &display);
 
         Ok(Capturer {
             device,
@@ -168,7 +171,141 @@ impl Capturer {
             saved_raw_data: Vec::new(),
             output_texture: false,
             adapter_desc1,
+            rotate,
         })
+    }
+
+    fn create_rotations(
+        device: *mut ID3D11Device,
+        context: *mut ID3D11DeviceContext,
+        display: &Display,
+    ) -> Rotate {
+        let mut video_context: *mut ID3D11VideoContext = ptr::null_mut();
+        let mut video_device: *mut ID3D11VideoDevice = ptr::null_mut();
+        let mut video_processor_enum: *mut ID3D11VideoProcessorEnumerator = ptr::null_mut();
+        let mut video_processor: *mut ID3D11VideoProcessor = ptr::null_mut();
+        let processor_rotation = match display.rotation() {
+            DXGI_MODE_ROTATION_ROTATE90 => Some(D3D11_VIDEO_PROCESSOR_ROTATION_90),
+            DXGI_MODE_ROTATION_ROTATE180 => Some(D3D11_VIDEO_PROCESSOR_ROTATION_180),
+            DXGI_MODE_ROTATION_ROTATE270 => Some(D3D11_VIDEO_PROCESSOR_ROTATION_270),
+            _ => None,
+        };
+        if let Some(processor_rotation) = processor_rotation {
+            println!("create rotations");
+            if !device.is_null() && !context.is_null() {
+                unsafe {
+                    (*context).QueryInterface(
+                        &IID_ID3D11VideoContext,
+                        &mut video_context as *mut *mut _ as *mut *mut _,
+                    );
+                    if !video_context.is_null() {
+                        (*device).QueryInterface(
+                            &IID_ID3D11VideoDevice,
+                            &mut video_device as *mut *mut _ as *mut *mut _,
+                        );
+                        if !video_device.is_null() {
+                            let (input_width, input_height) = match display.rotation() {
+                                DXGI_MODE_ROTATION_ROTATE90 | DXGI_MODE_ROTATION_ROTATE270 => {
+                                    (display.height(), display.width())
+                                }
+                                _ => (display.width(), display.height()),
+                            };
+                            let (output_width, output_height) = (display.width(), display.height());
+                            let content_desc = D3D11_VIDEO_PROCESSOR_CONTENT_DESC {
+                                InputFrameFormat: D3D11_VIDEO_FRAME_FORMAT_PROGRESSIVE,
+                                InputFrameRate: DXGI_RATIONAL {
+                                    Numerator: 30,
+                                    Denominator: 1,
+                                },
+                                InputWidth: input_width as _,
+                                InputHeight: input_height as _,
+                                OutputFrameRate: DXGI_RATIONAL {
+                                    Numerator: 30,
+                                    Denominator: 1,
+                                },
+                                OutputWidth: output_width as _,
+                                OutputHeight: output_height as _,
+                                Usage: D3D11_VIDEO_USAGE_PLAYBACK_NORMAL,
+                            };
+                            (*video_device).CreateVideoProcessorEnumerator(
+                                &content_desc,
+                                &mut video_processor_enum,
+                            );
+                            if !video_processor_enum.is_null() {
+                                let mut caps: D3D11_VIDEO_PROCESSOR_CAPS = mem::zeroed();
+                                if S_OK == (*video_processor_enum).GetVideoProcessorCaps(&mut caps)
+                                {
+                                    if caps.FeatureCaps
+                                        & D3D11_VIDEO_PROCESSOR_FEATURE_CAPS_ROTATION
+                                        != 0
+                                    {
+                                        (*video_device).CreateVideoProcessor(
+                                            video_processor_enum,
+                                            0,
+                                            &mut video_processor,
+                                        );
+                                        if !video_processor.is_null() {
+                                            (*video_context).VideoProcessorSetStreamRotation(
+                                                video_processor,
+                                                0,
+                                                TRUE,
+                                                processor_rotation,
+                                            );
+                                            (*video_context)
+                                                .VideoProcessorSetStreamAutoProcessingMode(
+                                                    video_processor,
+                                                    0,
+                                                    FALSE,
+                                                );
+                                            (*video_context).VideoProcessorSetStreamFrameFormat(
+                                                video_processor,
+                                                0,
+                                                D3D11_VIDEO_FRAME_FORMAT_PROGRESSIVE,
+                                            );
+                                            (*video_context).VideoProcessorSetStreamSourceRect(
+                                                video_processor,
+                                                0,
+                                                TRUE,
+                                                &RECT {
+                                                    left: 0,
+                                                    top: 0,
+                                                    right: input_width as _,
+                                                    bottom: input_height as _,
+                                                },
+                                            );
+                                            (*video_context).VideoProcessorSetStreamDestRect(
+                                                video_processor,
+                                                0,
+                                                TRUE,
+                                                &RECT {
+                                                    left: 0,
+                                                    top: 0,
+                                                    right: output_width as _,
+                                                    bottom: output_height as _,
+                                                },
+                                            );
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        let video_context = ComPtr(video_context);
+        let video_device = ComPtr(video_device);
+        let video_processor_enum = ComPtr(video_processor_enum);
+        let video_processor = ComPtr(video_processor);
+        let rotated_texture = ComPtr(ptr::null_mut());
+        Rotate {
+            video_context,
+            video_device,
+            video_processor_enum,
+            video_processor,
+            texture: (rotated_texture, false),
+        }
     }
 
     pub fn is_gdi(&self) -> bool {
@@ -253,17 +390,7 @@ impl Capturer {
 
     pub fn frame<'a>(&'a mut self, timeout: UINT) -> io::Result<Frame<'a>> {
         if self.output_texture {
-            let rotation = match self.display.rotation() {
-                DXGI_MODE_ROTATION_IDENTITY | DXGI_MODE_ROTATION_UNSPECIFIED => 0,
-                DXGI_MODE_ROTATION_ROTATE90 => 90,
-                DXGI_MODE_ROTATION_ROTATE180 => 180,
-                DXGI_MODE_ROTATION_ROTATE270 => 270,
-                _ => {
-                    // Unsupported rotation, try anyway
-                    0
-                }
-            };
-            Ok(Frame::Texture((self.get_texture(timeout)?, rotation)))
+            Ok(Frame::Texture(self.get_texture(timeout)?))
         } else {
             let width = self.width;
             let height = self.height;
@@ -338,7 +465,7 @@ impl Capturer {
         }
     }
 
-    fn get_texture(&mut self, timeout: UINT) -> io::Result<*mut c_void> {
+    fn get_texture(&mut self, timeout: UINT) -> io::Result<(*mut c_void, usize)> {
         unsafe {
             if self.duplication.0.is_null() {
                 return Err(std::io::ErrorKind::AddrNotAvailable.into());
@@ -362,7 +489,86 @@ impl Capturer {
             );
             let texture = ComPtr(texture);
             self.texture = texture;
-            Ok(self.texture.0 as *mut c_void)
+
+            let mut final_texture = self.texture.0 as *mut c_void;
+            let mut rotation = match self.display.rotation() {
+                DXGI_MODE_ROTATION_ROTATE90 => 90,
+                DXGI_MODE_ROTATION_ROTATE180 => 180,
+                DXGI_MODE_ROTATION_ROTATE270 => 270,
+                _ => 0,
+            };
+            if rotation != 0
+                && !self.texture.is_null()
+                && !self.rotate.video_context.is_null()
+                && !self.rotate.video_device.is_null()
+                && !self.rotate.video_processor_enum.is_null()
+                && !self.rotate.video_processor.is_null()
+            {
+                let mut desc: D3D11_TEXTURE2D_DESC = mem::zeroed();
+                (*self.texture.0).GetDesc(&mut desc);
+                if rotation == 90 || rotation == 270 {
+                    let tmp = desc.Width;
+                    desc.Width = desc.Height;
+                    desc.Height = tmp;
+                }
+                if !self.rotate.texture.1 {
+                    self.rotate.texture.1 = true;
+                    let mut rotated_texture: *mut ID3D11Texture2D = ptr::null_mut();
+                    desc.MiscFlags = D3D11_RESOURCE_MISC_SHARED;
+                    (*self.device.0).CreateTexture2D(&desc, ptr::null(), &mut rotated_texture);
+                    self.rotate.texture.0 = ComPtr(rotated_texture);
+                }
+                if !self.rotate.texture.0.is_null()
+                    && desc.Width == self.width as u32
+                    && desc.Height == self.height as u32
+                {
+                    let input_view_desc = D3D11_VIDEO_PROCESSOR_INPUT_VIEW_DESC {
+                        FourCC: 0,
+                        ViewDimension: D3D11_VPIV_DIMENSION_TEXTURE2D,
+                        Texture2D: D3D11_TEX2D_VPIV {
+                            ArraySlice: 0,
+                            MipSlice: 0,
+                        },
+                    };
+                    let mut input_view = ptr::null_mut();
+                    (*self.rotate.video_device.0).CreateVideoProcessorInputView(
+                        self.texture.0 as *mut _,
+                        self.rotate.video_processor_enum.0 as *mut _,
+                        &input_view_desc,
+                        &mut input_view,
+                    );
+                    if !input_view.is_null() {
+                        let input_view = ComPtr(input_view);
+                        let mut output_view_desc: D3D11_VIDEO_PROCESSOR_OUTPUT_VIEW_DESC =
+                            mem::zeroed();
+                        output_view_desc.ViewDimension = D3D11_VPOV_DIMENSION_TEXTURE2D;
+                        output_view_desc.u.Texture2D_mut().MipSlice = 0;
+                        let mut output_view = ptr::null_mut();
+                        (*self.rotate.video_device.0).CreateVideoProcessorOutputView(
+                            self.rotate.texture.0 .0 as *mut _,
+                            self.rotate.video_processor_enum.0 as *mut _,
+                            &output_view_desc,
+                            &mut output_view,
+                        );
+                        if !output_view.is_null() {
+                            let output_view = ComPtr(output_view);
+                            let mut stream_data: D3D11_VIDEO_PROCESSOR_STREAM = mem::zeroed();
+                            stream_data.Enable = TRUE;
+                            stream_data.pInputSurface = input_view.0;
+                            (*self.rotate.video_context.0).VideoProcessorBlt(
+                                self.rotate.video_processor.0,
+                                output_view.0,
+                                0,
+                                1,
+                                &stream_data,
+                            );
+                            final_texture = self.rotate.texture.0 .0 as *mut c_void;
+                            rotation = 0;
+                        }
+                    }
+                }
+            }
+            Ok((final_texture, rotation))
         }
     }
 
@@ -665,4 +871,12 @@ fn wrap_hresult(x: HRESULT) -> io::Result<()> {
         }
     })
     .into())
+}
+
+struct Rotate {
+    video_context: ComPtr<ID3D11VideoContext>,
+    video_device: ComPtr<ID3D11VideoDevice>,
+    video_processor_enum: ComPtr<ID3D11VideoProcessorEnumerator>,
+    video_processor: ComPtr<ID3D11VideoProcessor>,
+    texture: (ComPtr<ID3D11Texture2D>, bool),
 }

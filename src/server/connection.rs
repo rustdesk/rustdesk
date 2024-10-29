@@ -3838,6 +3838,12 @@ mod raii {
             let mut lock = SESSIONS.lock().unwrap();
             let contains = lock.contains_key(&key);
             if contains {
+                // No two remote connections with the same session key, just for ensure.
+                let is_remote = AUTHED_CONNS
+                    .lock()
+                    .unwrap()
+                    .iter()
+                    .any(|c| c.0 == conn_id && c.1 == AuthConnType::Remote);
                 // If there are 2 connections with the same peer_id and session_id, a remote connection and a file transfer or port forward connection,
                 // If any of the connections is closed allowing retry, this will not be called;
                 // If the file transfer/port forward connection is closed with no retry, the session should be kept for remote control menu action;
@@ -3847,7 +3853,7 @@ mod raii {
                     .unwrap()
                     .iter()
                     .any(|c| c.0 != conn_id && c.2 == key && c.1 == AuthConnType::Remote);
-                if !another_remote {
+                if is_remote || !another_remote {
                     lock.remove(&key);
                     log::info!("remove session");
                 } else {
