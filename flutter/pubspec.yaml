@@ -106,6 +106,7 @@ dependencies:
   qr_flutter: ^4.1.0
   extended_text: 13.0.0
   shared_preferences: ^2.0.18
+  get_storage:
 
 dev_dependencies:
   icons_launcher: ^2.0.4

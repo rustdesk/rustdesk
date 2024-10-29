@@ -7,6 +7,7 @@ import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hbb/common/widgets/overlay.dart';
+import 'package:flutter_hbb/desktop/controller/license_controller.dart';
 import 'package:flutter_hbb/desktop/pages/desktop_tab_page.dart';
 import 'package:flutter_hbb/desktop/pages/install_page.dart';
 import 'package:flutter_hbb/desktop/pages/server_page.dart';
@@ -18,6 +19,7 @@ import 'package:flutter_hbb/models/state_model.dart';
 import 'package:flutter_hbb/utils/multi_window_manager.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:get/get.dart';
+import 'package:get_storage/get_storage.dart';
 import 'package:provider/provider.dart';
 import 'package:window_manager/window_manager.dart';
 
@@ -126,17 +128,8 @@ Future<void> initEnv(String appType) async {
 void runMainApp(bool startService) async {
   // register uni links
   await initEnv(kAppTypeMain);
-
-  // Check if the app is activated
-  /*bool isActivated = await checkActivationStatus();
-  if (!isActivated) {
-    // If not activated, prompt for activation
-    bool activationSuccess = await activateSoftware();
-    if (!activationSuccess) {
-      // Exit the app if activation fails
-      exit(0);
-    }
-  }*/
+  await GetStorage.init();
+  Get.put<LicenseController>(LicenseController(), permanent: true);
 
   // trigger connection status updater
   await bind.mainCheckConnectStatus();
@@ -420,17 +413,7 @@ class _AppState extends State<App> with WidgetsBindingObserver {
     };
     WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) => _updateOrientation());
-    // Check activation status
-    _checkActivationOnStartup();
   }
-
-  // New function to check activation on startup
-  /*void _checkActivationOnStartup() async {
-    bool isActivated = await checkActivationStatus();
-    setState(() {
-      _isActivated = isActivated;
-    });
-  }*/
 
   void _checkActivationOnStartup() async {
     bool isActivated = await checkActivationStatus();
