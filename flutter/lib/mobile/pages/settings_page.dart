@@ -35,7 +35,7 @@ class SettingsPage extends StatefulWidget implements PageShape {
   State<SettingsPage> createState() => _SettingsState();
 }
 
-const url = 'https://rustdesk.com/';
+const url = 'http://www.scysdl.com/';
 
 enum KeepScreenOn {
   never,
@@ -789,7 +789,7 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
             SettingsTile(
               title: Text(translate("Privacy Statement")),
               onPressed: (context) =>
-                  launchUrlString('https://rustdesk.com/privacy.html'),
+                  launchUrlString('http://www.scysdl.com'),
               leading: Icon(Icons.privacy_tip),
             )
           ],
@@ -905,6 +905,12 @@ void showAbout(OverlayDialogManager dialogManager) {
       title: Text(translate('About RustDesk')),
       content: Wrap(direction: Axis.vertical, spacing: 12, children: [
         Text('Version: $version'),
+        InkWell(
+            onTap: () async {
+              const url = 'http://www.scysdl.com/';
+              if (await canLaunchUrl(Uri.parse(url))) {
+                await launchUrl(Uri.parse(url));
+              }
             },
             child: Padding(
               padding: EdgeInsets.symmetric(vertical: 8),
